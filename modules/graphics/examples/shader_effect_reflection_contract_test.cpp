@@ -38,6 +38,19 @@
 #include <string>
 #include <vector>
 
+#include "CNA/ProjectGraphicsProfile.hpp"
+
+namespace
+{
+/// plans/plan_opengl4_modern_graphics.md GL4-0004: HiDef as the PROGRAM's profile --
+/// it samples a volume texture, which Reach does not have, so under the
+/// default Reach device this test died on a profile refusal before its first check. It is set
+/// here rather than on the GraphicsDeviceManager because `Game`'s own GraphicsDevice exists before
+/// that manager does (plans/plan_dx9.md D9-103).
+const CNA::ProjectGraphicsProfileEXT kProfileOptIn{
+    Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef};
+}
+
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 
@@ -49,6 +62,10 @@ namespace
     constexpr const char* kRendererName = "D3D12";
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr const char* kRendererName = "EasyGL";
+#elif defined(CNA_RENDERER_OPENGL4)
+    // plans/plan_opengl4_modern_graphics.md GL4-0005: OPENGL4 declares the EasyGL contract --
+    // the reference it is being brought to parity with.
+    constexpr const char* kRendererName = "OpenGL4";
 #else
 #error "ShaderEffect reflection contract requires EasyGL, DirectX 11, or DirectX 12"
 #endif
@@ -78,7 +95,7 @@ namespace
                           VertexElementUsage::TextureCoordinate, 1),
         });
 
-#if defined(CNA_RENDERER_EASYGL)
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_OPENGL4)
     const char* kVertexShader = R"GLSL(#version 300 es
 precision highp float;
 layout(location = 0) in vec3 inPosition;

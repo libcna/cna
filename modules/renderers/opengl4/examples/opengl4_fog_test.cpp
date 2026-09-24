@@ -16,7 +16,7 @@
 //
 // Checks A-C port easygl_basiceffect_fog_test.cpp's own already-cross-renderer-verified oracle
 // verbatim for the new coloredParams3d (stride 16) program: fog disabled -> pure geometry colour;
-// 50% fog (Z=0 with FogStart=-0.9/FogEnd=0.9) -> an exact purple blend; full fog (Z=FogStart)
+// 50% fog (Z=0 with FogStart=0.9/FogEnd=-0.9) -> an exact purple blend; full fog (Z=FogStart)
 // -> exact fog colour.
 //
 // Checks D-H use a simpler, still-exact, effect-agnostic proof for the remaining 5 shader
@@ -64,8 +64,13 @@ using namespace Microsoft::Xna::Framework::Graphics;
 namespace
 {
     constexpr int kSize = 64;
-    constexpr float kFogStart = -0.9f;
-    constexpr float kFogEnd = 0.9f;
+    // plans/plan_opengl4_modern_graphics.md GL4-0017: FNA's fog factor with View=Identity is
+    // saturate((z + FogStart) / (FogStart - FogEnd)), so FogStart=0.9/FogEnd=-0.9 gives 50% fog at
+    // Z=0 and full fog at Z=FogStart=0.9 -- the same two oracles the former -0.9/0.9 pair gave, but
+    // with every quad inside XNA's [0, w] clip-depth range. The former full-fog quads sat at
+    // Z=-0.9, which XNA clips; they only rendered while OpenGL4 kept GL's [-w, w] range.
+    constexpr float kFogStart = 0.9f;
+    constexpr float kFogEnd = -0.9f;
     const Color kFogCyan(0, 255, 255, 255);
 
     // Skinned vertex: matches OpenGL4VertexBufferRenderer::ApplyLayout's stride-52 case.
@@ -155,7 +160,7 @@ protected:
                       "Check A: fog disabled -> pure geometry colour (blue)");
             }
 
-            // B: fog 50%, Z=0, FogStart=-0.9/FogEnd=0.9/FogColor=red -> purple mix (128,0,128).
+            // B: fog 50%, Z=0, FogStart=0.9/FogEnd=-0.9/FogColor=red -> purple mix (128,0,128).
             {
                 dev.Clear(Color::Black);
                 BasicEffect fx(dev);
@@ -173,10 +178,10 @@ protected:
                 const Color got = ReadCentre(dev);
                 const int r = got.getRProperty(), g = got.getGProperty(), b = got.getBProperty();
                 Check(std::abs(r - 128) <= 30 && g < 30 && std::abs(b - 128) <= 30,
-                      "Check B: 50% fog (Z=0, FogStart=-0.9/FogEnd=0.9) -> purple mix (128,0,128)");
+                      "Check B: 50% fog (Z=0, FogStart=0.9/FogEnd=-0.9) -> purple mix (128,0,128)");
             }
 
-            // C: full fog, Z=FogStart=-0.9 -> exact fog colour (red).
+            // C: full fog, Z=FogStart=0.9 -> exact fog colour (red).
             {
                 dev.Clear(Color::Black);
                 BasicEffect fx(dev);

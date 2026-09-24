@@ -55,6 +55,22 @@
       "stage": "fragment",
       "format": "wgsl",
       "entry_point": "main"
+    },
+    {
+      "symbol": "kForwardDesktopVertexSource",
+      "source": "forward.desktop.vert.glsl",
+      "language": "glsl",
+      "stage": "vertex",
+      "format": "text",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kForwardDesktopFragmentSource",
+      "source": "forward.desktop.frag.glsl",
+      "language": "glsl",
+      "stage": "fragment",
+      "format": "text",
+      "entry_point": "main"
     }
   ]
 }

@@ -22,7 +22,7 @@ struct PayloadProvenance
 };
 
 inline constexpr std::string_view kPackageName = "modern_resource_interop";
-inline constexpr std::string_view kManifestSha256 = "43c324c35e8bed4d1fc76ee2eb4ce15d98a8a7bb3b1748715dd49275773cda98";
+inline constexpr std::string_view kManifestSha256 = "41ce3f1491ee79842f8e40502116ddf304ca4e174bf74059c3edc69147c40715";
 inline constexpr std::string_view kCompiler = "shaderc shared library";
 inline constexpr std::string_view kCompilerSoname = "libshaderc.so.1";
 inline constexpr std::string_view kCompilerSha256 = "31400b359d2f4b4a43168978412a72913474725befb87966068cfac1922ac6c9";
@@ -155,12 +155,30 @@ fn main() {
 }
 )CNA_SHADER";
 
-inline constexpr std::array<PayloadProvenance, 5> kPayloads = {{
+inline constexpr std::string_view kDesktopComputeSource =
+    R"CNA_SHADER(#version 430 core
+
+layout(local_size_x = 1) in;
+layout(std430, binding = 1) buffer Output
+{
+    vec4 color;
+};
+
+uniform sampler2D uSource;
+
+void main()
+{
+    color = texelFetch(uSource, ivec2(0, 0), 0);
+}
+)CNA_SHADER";
+
+inline constexpr std::array<PayloadProvenance, 6> kPayloads = {{
     {"kEasyGlComputeSource", "easygl.comp.glsl", "cd7380983a1261a8b6020cec1189cbaf038d6bd806cfa7ec02acec4768da9db2", "glsl-es", "glsl-es", "compute", "text", "main"},
     {"kVulkanComputeSpirV", "vulkan.comp.glsl", "768d50394ec64da734b943feb2e878561f986b1cad0f29248358fb360aee8c24", "spirv", "vulkan-glsl", "compute", "spirv", "main"},
     {"kVulkanComputeWgsl", "vulkan.comp.glsl", "768d50394ec64da734b943feb2e878561f986b1cad0f29248358fb360aee8c24", "wgsl", "vulkan-glsl", "compute", "wgsl", "main"},
     {"kVulkanUnsignedSamplerComputeSpirV", "vulkan_uint.comp.glsl", "9e9513f1899bcf28313802e264d59336462bac756c283d692508d2acb6ac630b", "spirv", "vulkan-glsl", "compute", "spirv", "main"},
     {"kVulkanUnsignedSamplerComputeWgsl", "vulkan_uint.comp.glsl", "9e9513f1899bcf28313802e264d59336462bac756c283d692508d2acb6ac630b", "wgsl", "vulkan-glsl", "compute", "wgsl", "main"},
+    {"kDesktopComputeSource", "desktop.comp.glsl", "56c5996ee4bfea94077909e9220ea57f1e4307c71333d5b74e2b2107f2d8a70b", "glsl", "glsl", "compute", "text", "main"},
 }};
 
 } // namespace CNA::Tests::ModernResourceInterop

@@ -55,6 +55,7 @@
 #include <memory>
 #include <vector>
 
+
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 
@@ -205,6 +206,11 @@ public:
 int main()
 {
     OpenGL4ShaderEffect3DTest game;
+    // plans/plan_opengl4_modern_graphics.md GL4-0004: this test reads the back buffer, which is
+    // HiDef-only (SOFTWARE-213). It has no GraphicsDeviceManager, so the profile goes on the
+    // Game's own device -- a project-profile opt-in only reaches a device through that manager.
+    game.getGraphicsDeviceProperty().SetGraphicsProfileEXT(
+        Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
     game.Run();
     return game.getResult();
 }

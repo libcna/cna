@@ -161,6 +161,14 @@ namespace
     constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
     constexpr const char* kRendererName = "EASYGL";
+#elif defined(CNA_RENDERER_OPENGL4)
+    // plans/plan_opengl4_modern_graphics.md GL4-0005: OPENGL4 declares the EasyGL contract --
+    // the reference it is being brought to parity with.
+    constexpr RtContract kRtContract = RtContract::Exact;
+    constexpr bool kCubeSupported = true;
+    constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
+    constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
+    constexpr const char* kRendererName = "OPENGL4";
 #elif defined(CNA_RENDERER_VULKAN)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr bool kCubeSupported = true;

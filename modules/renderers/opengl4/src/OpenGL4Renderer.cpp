@@ -1,15 +1,24 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/OpenGL4/OpenGL4Renderer.hpp"
+#include "CNA/Internal/Renderers/OpenGL4/OpenGL4Modern.hpp"
+#include "CNA/Logger.hpp"
+#include "CNA/Platform/PlatformException.hpp"
 #include "CNA/ShaderLanguageEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
-#include <iostream>
+#include <functional>
+#include <sstream>
 #include <stdexcept>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -19,11 +28,17 @@ namespace CNA::Internal::Renderers::OpenGL4
 {
     namespace
     {
+        // plans/plan_opengl4_modern_graphics.md GL4-0002: OpenGL4's public floor is desktop 4.1 core
+        // (the highest core version macOS exposes). Newer facilities are discovered at runtime and
+        // used only behind a live check.
+        constexpr int kRequiredMajor = 4;
+        constexpr int kRequiredMinor = 1;
+
         CNA::Platform::GlContextDescription RequestedContext()
         {
             CNA::Platform::GlContextDescription description;
-            description.majorVersion = 4;
-            description.minorVersion = 1;
+            description.majorVersion = kRequiredMajor;
+            description.minorVersion = kRequiredMinor;
             description.profile = CNA::Platform::GlProfile::Core;
             description.depthBits = 24;
             description.stencilBits = 8;
@@ -31,1168 +46,10 @@ namespace CNA::Internal::Renderers::OpenGL4
             return description;
         }
 
-        GLenum ToGLPrimitive(PrimitiveType pt)
-        {
-            switch (pt)
-            {
-            case PrimitiveType::TriangleList:  return GL_TRIANGLES;
-            case PrimitiveType::TriangleStrip: return GL_TRIANGLE_STRIP;
-            case PrimitiveType::LineList:      return GL_LINES;
-            case PrimitiveType::LineStrip:     return GL_LINE_STRIP;
-            case PrimitiveType::PointListEXT:  return GL_POINTS;
-            default:
-                throw System::InvalidOperationException("Unrecognized primitive type!");
-            }
-        }
-
-        int VertexCountForPrimitives(PrimitiveType pt, int primitiveCount)
-        {
-            switch (pt)
-            {
-            case PrimitiveType::TriangleList:  return primitiveCount * 3;
-            case PrimitiveType::TriangleStrip: return primitiveCount + 2;
-            case PrimitiveType::LineList:      return primitiveCount * 2;
-            case PrimitiveType::LineStrip:     return primitiveCount + 1;
-            case PrimitiveType::PointListEXT:  return primitiveCount;
-            default:
-                throw System::InvalidOperationException("Unrecognized primitive type!");
-            }
-        }
-
-        // ---- Built-in GLSL 410 core shaders -----------------------------------------------
-
-        const char* kSpriteVertSrc = R"GLSL(
-#version 410 core
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aUV;
-layout(location = 2) in vec4 aColor;
-uniform mat4 uProjection;
-out vec2 vUV;
-out vec4 vColor;
-void main()
-{
-    vUV = aUV;
-    vColor = aColor;
-    gl_Position = uProjection * vec4(aPos, 0.0, 1.0);
-}
-)GLSL";
-
-        const char* kSpriteFragSrc = R"GLSL(
-#version 410 core
-in vec2 vUV;
-in vec4 vColor;
-uniform sampler2D uTexture;
-out vec4 fragColor;
-void main()
-{
-    fragColor = texture(uTexture, vUV) * vColor;
-}
-)GLSL";
-
-        const char* kColored3DVertSrc = R"GLSL(
-#version 410 core
-layout(location = 0) in vec3 aPos;
-layout(location = 1) in vec4 aColor;
-uniform mat4 uWorldViewProj;
-// plans/plan_gltf.md GLTF-475: the same two uniforms kColoredTextured3DVertSrc already has, and for the
-// same reason -- `vColor = aColor` unconditionally made this program paint whatever attribute
-// location 1 happens to hold. That is a colour only on the stride-16 and stride-24 records; on the
-// PBR and skinned ones location 1 is the NORMAL, so a BasicEffect draw on a stride-48 buffer
-// rendered the normal vector as the surface colour (measured: rgba(0,0,255) for a normal of
-// (0,0,1) where SOFTWARE, OPENGL2 and LLGL all rendered the effect's red DiffuseColor).
-//
-// Reading the effect's own switch instead is what those three renderers do, and it fixes the whole
-// family rather than one stride: with VertexColorEnabled false the attribute is not read at all.
-// The legacy no-GpuDrawParams route sets white/true, which is exactly today's `vColor = aColor`.
-uniform vec4 uDiffuseColor;
-uniform bool uVertexColorEnabled;
-out vec4 vColor;
-void main()
-{
-    vColor = uVertexColorEnabled ? (aColor * uDiffuseColor) : uDiffuseColor;
-    gl_Position = uWorldViewProj * vec4(aPos, 1.0);
-}
-)GLSL";
-
-        const char* kColored3DFragSrc = R"GLSL(
-#version 410 core
-in vec4 vColor;
-out vec4 fragColor;
-void main()
-{
-    fragColor = vColor;
-}
-)GLSL";
-
-        // plans/plan_opengl4.md GL4-25: coloredParams3d (VertexPositionColor, stride 16) -- a SEPARATE
-        // program from kColored3DProgram_ above (which stays exactly as-is, used only by the
-        // GpuDrawParams-free DrawColoredPrimitives/DrawIndexedColoredPrimitives fast path that
-        // GraphicsDevice::DrawUserPrimitives(VertexPositionColor*, ...) and the generic
-        // unrecognized-stride fallback both go through). This new program is a real, dedicated
-        // stride-16 case in BindProgramForStride, closing a parity gap with
-        // EasyGLRenderer::EnsureColored3DProgram (DiffuseColor/VertexColorEnabled/
-        // AlphaTest/fog were previously silently unavailable to any stride-16 draw issued via a
-        // real Effect.Apply(), unlike every other stride, since BindProgramForStride had no
-        // stride-16 case at all and always fell back to the params-free path above). Ported
-        // formula from EasyGLRenderer::EnsureColored3DProgram (uDiffuseColor multiply
-        // gated by uVertexColorEnabled, alpha-test discard, fog).
-        const char* kColoredParams3DVertSrc = R"GLSL(
-#version 410 core
-layout(location = 0) in vec3 aPos;
-layout(location = 1) in vec4 aColor;
-uniform mat4 uWorldViewProj;
-uniform vec4 uFogVector;
-out vec4 vColor;
-out float vFogFactor;
-void main()
-{
-    gl_Position = uWorldViewProj * vec4(aPos, 1.0);
-    vColor = aColor;
-    // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a
-    // true VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes
-    // the third column of World*View (CPU-side, GpuDrawParams::fogVector). vFogFactor is the
-    // inverse "keep" (mix(uFogColor, colour, vFogFactor)), so 1 - saturate(dot(pos, uFogVector)).
-    // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the
-    // fogStart==fogEnd degenerate case (=> keep 0, fully fogged) -- all handled CPU-side,
-    // matching FNA and EasyGLRenderer's own head-of-tree programs exactly.
-    vFogFactor = 1.0 - clamp(dot(vec4(aPos, 1.0), uFogVector), 0.0, 1.0);
-}
-)GLSL";
-
-        const char* kColoredParams3DFragSrc = R"GLSL(
-#version 410 core
-in vec4 vColor;
-in float vFogFactor;
-uniform vec4 uDiffuseColor;
-uniform bool uVertexColorEnabled;
-uniform vec4 uAlphaTest;
-uniform vec3 uFogColor;
-uniform vec3 uSrgb;
-out vec4 fragColor;
-
-vec3 cnaSrgbToLinear(vec3 c)
-{
-    vec3 lo = c / 12.92;
-    vec3 hi = pow((c + 0.055) / 1.055, vec3(2.4));
-    return mix(lo, hi, step(vec3(0.04045), c));
-}
-
-vec3 cnaLinearToSrgb(vec3 c)
-{
-    vec3 lo = c * 12.92;
-    vec3 hi = 1.055 * pow(max(c, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055;
-    return mix(lo, hi, step(vec3(0.0031308), c));
-}
-void main()
-{
-    vec4 vc = uVertexColorEnabled ? vColor : vec4(1.0);
-    fragColor = vc * uDiffuseColor;
-
-    float alpha = fragColor.a;
-    bool passTest = (uAlphaTest.y > 0.0) ? (abs(alpha - uAlphaTest.x) < uAlphaTest.y) : (alpha < uAlphaTest.x);
-    float w = passTest ? uAlphaTest.z : uAlphaTest.w;
-    if (w < 0.0) discard;
-
-    fragColor.rgb = mix(uFogColor, fragColor.rgb, vFogFactor);
-}
-)GLSL";
-
-        // plans/plan_opengl4.md GL4-13: textured3d (VertexPositionTexture, stride 20). Algorithmic
-        // reference: VulkanRenderer's textured3d.vert/frag.glsl (no Y-flip -- OpenGL's own
-        // NDC convention needs none, unlike Vulkan's flipped clip space). plans/plan_opengl4.md GL4-25
-        // added real fog (REMED-GFX-010 fog-vector form, matching EasyGLRenderer's own
-        // EnsureTextured3DProgram -- see kColoredParams3DVertSrc's own comment for the full
-        // derivation, not re-explained per shader).
-        const char* kTextured3DVertSrc = R"GLSL(
-#version 410 core
-layout(location = 0) in vec3 aPos;
-layout(location = 1) in vec2 aUV;
-uniform mat4 uWorldViewProj;
-uniform vec4 uFogVector;
-out vec2 vUV;
-out float vFogFactor;
-void main()
-{
-    vUV = aUV;
-    gl_Position = uWorldViewProj * vec4(aPos, 1.0);
-    vFogFactor = 1.0 - clamp(dot(vec4(aPos, 1.0), uFogVector), 0.0, 1.0);
-}
-)GLSL";
-
-        // plans/plan_opengl4.md GL4-19: AlphaTestEffect's discard test and DualTextureEffect's second
-        // sampler are both folded into the SAME textured3d/colored_textured3d programs (not new
-        // stride cases) -- both effects reuse VertexPositionTexture/VertexPositionColorTexture
-        // unchanged (DualTextureEffect samples both textures with the SAME UV set in real XNA,
-        // no separate UV1 attribute). Ported from VulkanRenderer's alpha_test3d.frag.glsl
-        // (discard formula) and dual_texture3d.frag.glsl (the "tex1.rgb*=2.0; result=tex1*tex2"
-        // 2x-modulate blend). uAlphaTest defaults to {0,0,1,1} (GpuDrawParams' own documented
-        // "always pass, never discard" default), so this is a genuine no-op for every other
-        // effect's draws.
-        const char* kTextured3DFragSrc = R"GLSL(
-#version 410 core
-in vec2 vUV;
-in float vFogFactor;
-uniform sampler2D uTexture;
-uniform sampler2D uTexture2;
-uniform vec4 uDiffuseColor;
-uniform bool uTextureEnabled;
-uniform bool uDualTextureEnabled;
-uniform vec4 uAlphaTest;
-uniform vec3 uFogColor;
-out vec4 fragColor;
-void main()
-{
-    vec4 tex = uTextureEnabled ? texture(uTexture, vUV) : vec4(1.0);
-    if (uDualTextureEnabled)
-    {
-        vec4 tex2 = texture(uTexture2, vUV);
-        tex.rgb *= 2.0;
-        tex *= tex2;
-    }
-    vec4 result = tex * uDiffuseColor;
-
-    float alpha = result.a;
-    bool passTest = (uAlphaTest.y > 0.0) ? (abs(alpha - uAlphaTest.x) < uAlphaTest.y) : (alpha < uAlphaTest.x);
-    float w = passTest ? uAlphaTest.z : uAlphaTest.w;
-    if (w < 0.0) discard;
-
-    result.rgb = mix(uFogColor, result.rgb, vFogFactor);
-    fragColor = result;
-}
-)GLSL";
-
-        // colored_textured3d (VertexPositionColorTexture, stride 24). plans/plan_opengl4.md GL4-25
-        // added real fog (see kColoredParams3DVertSrc's own comment for the formula derivation).
-        const char* kColoredTextured3DVertSrc = R"GLSL(
-#version 410 core
-layout(location = 0) in vec3 aPos;
-layout(location = 1) in vec4 aColor;
-layout(location = 2) in vec2 aUV;
-uniform mat4 uWorldViewProj;
-uniform vec4 uDiffuseColor;
-uniform bool uVertexColorEnabled;
-uniform vec4 uFogVector;
-out vec2 vUV;
-out vec4 vTint;
-out float vFogFactor;
-void main()
-{
-    vUV = aUV;
-    vTint = uVertexColorEnabled ? (aColor * uDiffuseColor) : uDiffuseColor;
-    gl_Position = uWorldViewProj * vec4(aPos, 1.0);
-    vFogFactor = 1.0 - clamp(dot(vec4(aPos, 1.0), uFogVector), 0.0, 1.0);
-}
-)GLSL";
-
-        const char* kColoredTextured3DFragSrc = R"GLSL(
-#version 410 core
-in vec2 vUV;
-in vec4 vTint;
-in float vFogFactor;
-uniform sampler2D uTexture;
-uniform sampler2D uTexture2;
-uniform bool uTextureEnabled;
-uniform bool uDualTextureEnabled;
-uniform vec4 uAlphaTest;
-uniform vec3 uFogColor;
-out vec4 fragColor;
-void main()
-{
-    vec4 tex = uTextureEnabled ? texture(uTexture, vUV) : vec4(1.0);
-    if (uDualTextureEnabled)
-    {
-        vec4 tex2 = texture(uTexture2, vUV);
-        tex.rgb *= 2.0;
-        tex *= tex2;
-    }
-    vec4 result = tex * vTint;
-
-    float alpha = result.a;
-    bool passTest = (uAlphaTest.y > 0.0) ? (abs(alpha - uAlphaTest.x) < uAlphaTest.y) : (alpha < uAlphaTest.x);
-    float w = passTest ? uAlphaTest.z : uAlphaTest.w;
-    if (w < 0.0) discard;
-
-    result.rgb = mix(uFogColor, result.rgb, vFogFactor);
-    fragColor = result;
-}
-)GLSL";
-
-        // lit_textured3d (VertexPositionNormalTexture, stride 32) -- BasicEffect's default
-        // 3-directional-light rig. Ported from VulkanRenderer's lit_textured3d.vert/
-        // frag.glsl: FNA's Lighting.fxh ComputeLights() (ambient + per-light Lambertian diffuse +
-        // Blinn-Phong specular, EmissiveColor added post-multiply, specular added post-texture
-        // scaled by alpha). plans/plan_opengl4.md GL4-25 added real fog (see kColoredParams3DVertSrc's
-        // own comment for the formula derivation). World's inverse-transpose upper-left 3x3 is
-        // used for the normal matrix (not MVP's), matching EnvironmentMapEffect's own
-        // already-correct pattern -- an MVP-based transform would bake View/Projection into the
-        // normal.
-        const char* kLitTextured3DVertSrc = R"GLSL(
-#version 410 core
-layout(location = 0) in vec3 aPos;
-layout(location = 1) in vec3 aNormal;
-layout(location = 2) in vec2 aUV;
-uniform mat4 uWorldViewProj;
-uniform mat4 uWorld;
-uniform vec4 uFogVector;
-out vec2 vUV;
-out vec3 vNormal;
-out vec3 vWorldPos;
-out float vFogFactor;
-void main()
-{
-    vUV = aUV;
-    mat3 normalMatrix = transpose(inverse(mat3(uWorld)));
-    vNormal = normalize(normalMatrix * aNormal);
-    vWorldPos = (uWorld * vec4(aPos, 1.0)).xyz;
-    gl_Position = uWorldViewProj * vec4(aPos, 1.0);
-    vFogFactor = 1.0 - clamp(dot(vec4(aPos, 1.0), uFogVector), 0.0, 1.0);
-}
-)GLSL";
-
-        const char* kLitTextured3DFragSrc = R"GLSL(
-#version 410 core
-in vec2 vUV;
-in vec3 vNormal;
-in vec3 vWorldPos;
-in float vFogFactor;
-uniform sampler2D uTexture;
-uniform bool uTextureEnabled;
-uniform bool uLightingEnabled;
-uniform vec4 uDiffuseColor;
-uniform vec3 uAmbientColor;
-uniform vec3 uLight0Dir;
-uniform vec3 uLight0Diffuse;
-uniform vec3 uLight0Specular;
-uniform vec3 uLight1Dir;
-uniform vec3 uLight1Diffuse;
-uniform vec3 uLight1Specular;
-uniform vec3 uLight2Dir;
-uniform vec3 uLight2Diffuse;
-uniform vec3 uLight2Specular;
-uniform vec3 uEmissiveColor;
-uniform vec3 uEyePosition;
-uniform vec3 uSpecularColor;
-uniform float uSpecularPower;
-uniform vec3 uFogColor;
-out vec4 fragColor;
-
-// Guards against normalize(0,0,0) on a disabled/unconfigured DirectionalLight -- a real bug
-// found while porting WebGPU's own lit3d shader (plans/plan_webgpu.md): normalize() on a true zero
-// vector is undefined and can poison the whole light sum with NaN.
-vec3 safeNormalize(vec3 v)
-{
-    float len = length(v);
-    return len > 1e-6 ? (v / len) : vec3(0.0, -1.0, 0.0);
-}
-
-void main()
-{
-    vec4 tex = uTextureEnabled ? texture(uTexture, vUV) : vec4(1.0);
-    vec4 color;
-    if (uLightingEnabled)
-    {
-        vec3 N = normalize(vNormal);
-        vec3 E = normalize(uEyePosition - vWorldPos);
-        vec3 nL0 = safeNormalize(uLight0Dir);
-        vec3 nL1 = safeNormalize(uLight1Dir);
-        vec3 nL2 = safeNormalize(uLight2Dir);
-        // Direction fields point FROM the light, so negate for the dot with N.
-        float dotL0 = dot(N, -nL0); float zeroL0 = step(0.0, dotL0); float NdotL0 = max(dotL0, 0.0);
-        float dotL1 = dot(N, -nL1); float zeroL1 = step(0.0, dotL1); float NdotL1 = max(dotL1, 0.0);
-        float dotL2 = dot(N, -nL2); float zeroL2 = step(0.0, dotL2); float NdotL2 = max(dotL2, 0.0);
-        vec3 lightSum = uAmbientColor + NdotL0 * uLight0Diffuse + NdotL1 * uLight1Diffuse + NdotL2 * uLight2Diffuse;
-        vec3 h0 = normalize(E - nL0); float spec0 = pow(max(dot(h0, N), 0.0) * zeroL0, uSpecularPower);
-        vec3 h1 = normalize(E - nL1); float spec1 = pow(max(dot(h1, N), 0.0) * zeroL1, uSpecularPower);
-        vec3 h2 = normalize(E - nL2); float spec2 = pow(max(dot(h2, N), 0.0) * zeroL2, uSpecularPower);
-        vec3 specularRGB = (spec0 * uLight0Specular + spec1 * uLight1Specular + spec2 * uLight2Specular) * uSpecularColor;
-        // EmissiveColor is added after the light-sum*DiffuseColor multiply, not scaled by it
-        // (matches FNA's Lighting.fxh: result.Diffuse = sum*DiffuseColor + EmissiveColor).
-        vec3 lit = lightSum * uDiffuseColor.rgb + uEmissiveColor;
-        color = vec4(lit, uDiffuseColor.a) * tex;
-        // Specular is added after the texture*diffuse multiply, scaled by the resulting alpha
-        // (FNA's AddSpecular macro), never by the texture directly.
-        color.rgb += specularRGB * color.a;
-    }
-    else
-    {
-        color = uDiffuseColor * tex;
-    }
-    color.rgb = mix(uFogColor, color.rgb, vFogFactor);
-    fragColor = color;
-}
-)GLSL";
-
-        // plans/plan_opengl4.md GL4-29: lit_textured3d's own per-vertex-lit sibling -- real XNA's
-        // BasicEffect defaults PreferPerPixelLighting=false (per-vertex/Gouraud-shaded lighting),
-        // the opposite of what kLitTextured3DVertSrc/FragSrc above render unconditionally.
-        // Identical Blinn-Phong math to kLitTextured3DFragSrc (same formula, same inputs), just
-        // computed once per vertex and Gouraud-interpolated via vLitRGB/vSpecularRGB instead of
-        // being re-evaluated per fragment. Selected by BindProgramForStride instead of
-        // litTextured3DProgram_ when params.lightingEnabled && !params.preferPerPixelLighting
-        // (XNA's own default) -- only meaningfully distinct while lighting is actually on, so this
-        // variant always computes lighting unconditionally (no uLightingEnabled branch needed,
-        // unlike kLitTextured3DFragSrc, since it's never bound with lighting off). Ported from
-        // EasyGLRenderer::EnsureLit3DVertexLitProgram's GLSL ES 300 source (desktop GLSL 410
-        // core translation only).
-        const char* kLitTextured3DVertexLitVertSrc = R"GLSL(
-#version 410 core
-layout(location = 0) in vec3 aPos;
-layout(location = 1) in vec3 aNormal;
-layout(location = 2) in vec2 aUV;
-uniform mat4 uWorldViewProj;
-uniform mat4 uWorld;
-uniform vec4 uDiffuseColor;
-uniform vec3 uAmbientColor;
-uniform vec3 uLight0Dir;
-uniform vec3 uLight0Diffuse;
-uniform vec3 uLight0Specular;
-uniform vec3 uLight1Dir;
-uniform vec3 uLight1Diffuse;
-uniform vec3 uLight1Specular;
-uniform vec3 uLight2Dir;
-uniform vec3 uLight2Diffuse;
-uniform vec3 uLight2Specular;
-uniform vec3 uEmissiveColor;
-uniform vec3 uEyePosition;
-uniform vec3 uSpecularColor;
-uniform float uSpecularPower;
-uniform vec4 uFogVector;
-out vec2 vUV;
-out float vFogFactor;
-out vec3 vLitRGB;
-out vec3 vSpecularRGB;
-
-vec3 safeNormalize(vec3 v)
-{
-    float len = length(v);
-    return len > 1e-6 ? (v / len) : vec3(0.0, -1.0, 0.0);
-}
-
-void main()
-{
-    vUV = aUV;
-    mat3 normalMatrix = transpose(inverse(mat3(uWorld)));
-    vec3 N = normalize(normalMatrix * aNormal);
-    vec3 worldPos = (uWorld * vec4(aPos, 1.0)).xyz;
-    vec3 E = normalize(uEyePosition - worldPos);
-    gl_Position = uWorldViewProj * vec4(aPos, 1.0);
-    vec3 nL0 = safeNormalize(uLight0Dir);
-    vec3 nL1 = safeNormalize(uLight1Dir);
-    vec3 nL2 = safeNormalize(uLight2Dir);
-    float dotL0 = dot(N, -nL0); float zeroL0 = step(0.0, dotL0); float NdotL0 = max(dotL0, 0.0);
-    float dotL1 = dot(N, -nL1); float zeroL1 = step(0.0, dotL1); float NdotL1 = max(dotL1, 0.0);
-    float dotL2 = dot(N, -nL2); float zeroL2 = step(0.0, dotL2); float NdotL2 = max(dotL2, 0.0);
-    vec3 lightSum = uAmbientColor + NdotL0 * uLight0Diffuse + NdotL1 * uLight1Diffuse + NdotL2 * uLight2Diffuse;
-    vLitRGB = lightSum * uDiffuseColor.rgb + uEmissiveColor;
-    vec3 h0 = normalize(E - nL0); float spec0 = pow(max(dot(h0, N), 0.0) * zeroL0, uSpecularPower);
-    vec3 h1 = normalize(E - nL1); float spec1 = pow(max(dot(h1, N), 0.0) * zeroL1, uSpecularPower);
-    vec3 h2 = normalize(E - nL2); float spec2 = pow(max(dot(h2, N), 0.0) * zeroL2, uSpecularPower);
-    vSpecularRGB = (spec0 * uLight0Specular + spec1 * uLight1Specular + spec2 * uLight2Specular) * uSpecularColor;
-    vFogFactor = 1.0 - clamp(dot(vec4(aPos, 1.0), uFogVector), 0.0, 1.0);
-}
-)GLSL";
-
-        const char* kLitTextured3DVertexLitFragSrc = R"GLSL(
-#version 410 core
-in vec2 vUV;
-in float vFogFactor;
-in vec3 vLitRGB;
-in vec3 vSpecularRGB;
-uniform sampler2D uTexture;
-uniform bool uTextureEnabled;
-uniform vec4 uDiffuseColor;
-uniform vec3 uFogColor;
-out vec4 fragColor;
-void main()
-{
-    vec4 tex = uTextureEnabled ? texture(uTexture, vUV) : vec4(1.0);
-    vec4 color = vec4(vLitRGB, uDiffuseColor.a) * tex;
-    color.rgb += vSpecularRGB * color.a;
-    color.rgb = mix(uFogColor, color.rgb, vFogFactor);
-    fragColor = color;
-}
-)GLSL";
-
-        // plans/plan_opengl4.md GL4-21: env_map3d (VertexPositionNormalTexture, stride 32) --
-        // EnvironmentMapEffect's own dedicated program, selected instead of lit_textured3d when
-        // GpuDrawParams::envMapping is set (BindProgramForStride branches on it before the stride
-        // switch, matching EasyGLRenderer::SelectProgram's own envMapping-overrides-stride
-        // dispatch order). Ported from EasyGLRenderer::EnsureEnvMapped3DProgram's GLSL ES
-        // 300 source (near-verbatim translation to desktop GLSL 410 core -- no ES precision
-        // qualifiers, otherwise identical), cross-verified against VulkanRenderer's
-        // env_map3d.frag.glsl (per-fragment Fresnel instead of EasyGL's per-vertex Gouraud
-        // interpolation -- a documented, accepted, strictly-more-accurate deviation kept here in
-        // its EasyGL per-vertex form since this is the closer sibling GLSL renderer to port from).
-        // Real XNA EnvironmentMapEffect.fx formula (src/CNA/Internal/Renderers/DirectX9/shaders/xna/
-        // EnvironmentMapEffect.fx): reflection vector reflect(-eyeVector, worldNormal); Fresnel
-        // blend factor pow(max(1-|dot(eye,normal)|,0), FresnelFactor)*EnvironmentMapAmount; final
-        // colour is a LERP (not additive) between the lit diffuse*texture colour and the
-        // alpha-scaled cubemap sample, plus a separately alpha-scaled specular term -- see
-        // docs/environmentmapeffect-support.md for the two real formula bugs (additive-not-lerp,
-        // missing alpha scaling) found and fixed while porting this to 3 other renderers.
-        const char* kEnvMap3DVertSrc = R"GLSL(
-#version 410 core
-layout(location = 0) in vec3 aPos;
-layout(location = 1) in vec3 aNormal;
-layout(location = 2) in vec2 aUV;
-uniform mat4 uWorldViewProj;
-uniform mat4 uWorld;
-uniform vec3 uEyePosition;
-uniform float uEnvMapAmount;
-uniform bool uFresnelEnabled;
-uniform float uFresnelFactor;
-uniform vec4 uFogVector;
-out vec3 vWorldNormal;
-out vec3 vEyeDir;
-out vec2 vUV;
-out float vFresnel;
-out float vFogFactor;
-void main()
-{
-    gl_Position = uWorldViewProj * vec4(aPos, 1.0);
-    vec3 worldPos = (uWorld * vec4(aPos, 1.0)).xyz;
-    mat3 normalMatrix = transpose(inverse(mat3(uWorld)));
-    vec3 worldNormal = normalize(normalMatrix * aNormal);
-    vec3 eyeVector = normalize(uEyePosition - worldPos);
-    vWorldNormal = worldNormal;
-    vEyeDir = eyeVector;
-    vUV = aUV;
-    // Fresnel is computed per-vertex in real XNA, then Gouraud-interpolated across the triangle.
-    float viewAngle = dot(eyeVector, worldNormal);
-    vFresnel = uFresnelEnabled
-        ? pow(max(1.0 - abs(viewAngle), 0.0), uFresnelFactor) * uEnvMapAmount
-        : uEnvMapAmount;
-    // REMED-GFX-010: see kColoredParams3DVertSrc's own comment for the fog-vector formula.
-    vFogFactor = 1.0 - clamp(dot(vec4(aPos, 1.0), uFogVector), 0.0, 1.0);
-}
-)GLSL";
-
-        const char* kEnvMap3DFragSrc = R"GLSL(
-#version 410 core
-in vec3 vWorldNormal;
-in vec3 vEyeDir;
-in vec2 vUV;
-in float vFresnel;
-in float vFogFactor;
-uniform sampler2D uTexture;
-uniform bool uTextureEnabled;
-uniform samplerCube uEnvMap;
-uniform vec4 uDiffuseColor;
-uniform vec3 uEmissiveColor;
-uniform vec3 uLight0Dir;
-uniform vec3 uLight0Diffuse;
-uniform vec3 uLight1Dir;
-uniform vec3 uLight1Diffuse;
-uniform vec3 uLight2Dir;
-uniform vec3 uLight2Diffuse;
-uniform vec3 uEnvMapSpecular;
-uniform vec3 uFogColor;
-out vec4 fragColor;
-void main()
-{
-    vec3 N = normalize(vWorldNormal);
-    vec3 E = normalize(vEyeDir);
-    float NdotL0 = max(dot(N, -uLight0Dir), 0.0);
-    float NdotL1 = max(dot(N, -uLight1Dir), 0.0);
-    float NdotL2 = max(dot(N, -uLight2Dir), 0.0);
-    vec3 lightSum = uLight0Diffuse * NdotL0 + uLight1Diffuse * NdotL1 + uLight2Diffuse * NdotL2;
-    // EmissiveColor is pre-combined with AmbientLightColor*DiffuseColor by
-    // EnvironmentMapEffect::FillGpuDrawParams -- added after the light-sum*DiffuseColor multiply,
-    // matching FNA's Lighting.fxh.
-    vec3 litRGB = lightSum * uDiffuseColor.rgb + uEmissiveColor;
-    vec4 texColor = uTextureEnabled ? texture(uTexture, vUV) : vec4(1.0);
-    vec3 reflDir = reflect(-E, N);
-    vec4 envSample = texture(uEnvMap, reflDir);
-    vec3 baseColor = litRGB * texColor.rgb;
-    float combinedAlpha = uDiffuseColor.a * texColor.a;
-    vec3 rgb = mix(baseColor, envSample.rgb * combinedAlpha, vFresnel) +
-               uEnvMapSpecular * envSample.a * combinedAlpha;
-    rgb = mix(uFogColor, rgb, vFogFactor);
-    fragColor = vec4(rgb, combinedAlpha);
-}
-)GLSL";
-
-        // plans/plan_opengl4.md GL4-22: skinned3d (VertexPositionNormalTextureSkinned, stride 52/56) --
-        // SkinnedEffect's own dedicated program, selected instead of lit_textured3d/env_map3d/
-        // textured3d/colored_textured3d for stride 52/56 draws. Ported near-verbatim from
-        // EasyGLRenderer::EnsureSkinnedProgram's GLSL ES 300 source (desktop GLSL 410 core
-        // translation only), which itself already matches real XNA SkinnedEffect.fx's Skin()
-        // function: skinMat = sum of the first WeightsPerVertex (1, 2, or 4) uBones[index]*weight
-        // pairs (never all 4 unconditionally -- a real bug, Task 895, found and fixed while
-        // porting this effect to the other renderers), position transformed by the full skinMat,
-        // normal by its upper-left 3x3. The lighting formula itself reuses lit_textured3d's own
-        // already-correct 3-light Lambertian-diffuse + Blinn-Phong-specular + EmissiveColor
-        // formula (EmissiveColor pre-folds AmbientLightColor*DiffuseColor via
-        // SkinnedEffect::FillGpuDrawParams, same as lit_textured3d/env_map3d), plus a vertex-color
-        // modulate (VertexColorEnabled) exercised via the stride-56 aColor attribute. Real fog
-        // support landed later, GL4-25 (see kColoredParams3DVertSrc's own comment for the formula).
-        //
-        // NOTE (matches EasyGL's own established formula, not independently re-derived here):
-        // the skinned normal is only rotated by the bone skinning matrix (mat3(skinMat)), not
-        // additionally by World's own rotation -- correct for the identity/translation-only World
-        // matrices this effect's own test scenarios use, but would under-rotate lighting for a
-        // rotated World on a skinned mesh. This is a pre-existing, cross-renderer (EasyGL/Vulkan/
-        // Bgfx) limitation carried over here for consistency, not something to fix in isolation.
-        const char* kSkinned3DVertSrc = R"GLSL(
-#version 410 core
-layout(location = 0) in vec3 aPos;
-layout(location = 1) in vec3 aNormal;
-layout(location = 2) in vec2 aUV;
-layout(location = 3) in vec4 aBoneWeights;
-layout(location = 4) in uvec4 aBoneIndices;
-layout(location = 5) in vec4 aColor;
-uniform mat4 uWorldViewProj;
-uniform mat4 uWorld;
-uniform mat4 uBones[72];
-uniform int uWeightsPerVertex;
-uniform vec4 uFogVector;
-out vec3 vNormal;
-out vec2 vUV;
-out vec3 vWorldPos;
-out vec4 vColor;
-out float vFogFactor;
-void main()
-{
-    mat4 skinMat = uBones[aBoneIndices.x] * aBoneWeights.x;
-    if (uWeightsPerVertex >= 2)
-        skinMat += uBones[aBoneIndices.y] * aBoneWeights.y;
-    if (uWeightsPerVertex >= 4)
-    {
-        skinMat += uBones[aBoneIndices.z] * aBoneWeights.z;
-        skinMat += uBones[aBoneIndices.w] * aBoneWeights.w;
-    }
-    vec4 skinnedPos = skinMat * vec4(aPos, 1.0);
-    gl_Position = uWorldViewProj * skinnedPos;
-    vec3 skinnedNormal = mat3(skinMat) * aNormal;
-    float len = length(skinnedNormal);
-    // Guards against a near-zero blended normal (e.g. two opposing bone rotations cancelling
-    // out) -- normalize(0,0,0) is undefined and would poison the whole light sum with NaN.
-    vNormal = (len > 1e-6) ? (skinnedNormal / len) : aNormal;
-    vUV = aUV;
-    vWorldPos = (uWorld * skinnedPos).xyz;
-    vColor = aColor;
-    // REMED-GFX-010: see kColoredParams3DVertSrc's own comment. Skinned: dot the POST-skin
-    // position, since FNA's Skin() mutates vin.Position before ComputeFogFactor runs.
-    vFogFactor = 1.0 - clamp(dot(skinnedPos, uFogVector), 0.0, 1.0);
-}
-)GLSL";
-
-        const char* kSkinned3DFragSrc = R"GLSL(
-#version 410 core
-in vec3 vNormal;
-in vec2 vUV;
-in vec3 vWorldPos;
-in vec4 vColor;
-in float vFogFactor;
-uniform sampler2D uTexture;
-uniform bool uTextureEnabled;
-uniform bool uVertexColorEnabled;
-uniform vec4 uDiffuseColor;
-uniform vec3 uLight0Dir;
-uniform vec3 uLight0Diffuse;
-uniform vec3 uLight0Specular;
-uniform vec3 uLight1Dir;
-uniform vec3 uLight1Diffuse;
-uniform vec3 uLight1Specular;
-uniform vec3 uLight2Dir;
-uniform vec3 uLight2Diffuse;
-uniform vec3 uLight2Specular;
-uniform vec3 uEmissiveColor;
-uniform vec3 uEyePosition;
-uniform vec3 uSpecularColor;
-uniform float uSpecularPower;
-uniform vec3 uFogColor;
-out vec4 fragColor;
-
-vec3 safeNormalize(vec3 v)
-{
-    float len = length(v);
-    return len > 1e-6 ? (v / len) : vec3(0.0, -1.0, 0.0);
-}
-
-void main()
-{
-    vec4 tex = uTextureEnabled ? texture(uTexture, vUV) : vec4(1.0);
-    vec3 N = normalize(vNormal);
-    vec3 E = normalize(uEyePosition - vWorldPos);
-    vec3 nL0 = safeNormalize(uLight0Dir);
-    vec3 nL1 = safeNormalize(uLight1Dir);
-    vec3 nL2 = safeNormalize(uLight2Dir);
-    float dotL0 = dot(N, -nL0); float zeroL0 = step(0.0, dotL0); float NdotL0 = max(dotL0, 0.0);
-    float dotL1 = dot(N, -nL1); float zeroL1 = step(0.0, dotL1); float NdotL1 = max(dotL1, 0.0);
-    float dotL2 = dot(N, -nL2); float zeroL2 = step(0.0, dotL2); float NdotL2 = max(dotL2, 0.0);
-    vec3 lightSum = NdotL0 * uLight0Diffuse + NdotL1 * uLight1Diffuse + NdotL2 * uLight2Diffuse;
-    vec3 h0 = normalize(E - nL0); float spec0 = pow(max(dot(h0, N), 0.0) * zeroL0, uSpecularPower);
-    vec3 h1 = normalize(E - nL1); float spec1 = pow(max(dot(h1, N), 0.0) * zeroL1, uSpecularPower);
-    vec3 h2 = normalize(E - nL2); float spec2 = pow(max(dot(h2, N), 0.0) * zeroL2, uSpecularPower);
-    vec3 specularRGB = (spec0 * uLight0Specular + spec1 * uLight1Specular + spec2 * uLight2Specular) * uSpecularColor;
-    vec3 lit = lightSum * uDiffuseColor.rgb + uEmissiveColor;
-    vec4 color = vec4(lit, uDiffuseColor.a) * tex;
-    color.rgb += specularRGB * color.a;
-    if (uVertexColorEnabled) color *= vColor;
-    color.rgb = mix(uFogColor, color.rgb, vFogFactor);
-    fragColor = color;
-}
-)GLSL";
-
-        // plans/plan_opengl4.md GL4-29: skinned3d's own per-vertex-lit sibling, mirroring
-        // kLitTextured3DVertexLitVertSrc/FragSrc's technique exactly -- real XNA's SkinnedEffect
-        // also defaults PreferPerPixelLighting=false, same as BasicEffect. The skinning itself is
-        // unchanged from kSkinned3DVertSrc above; only WHERE lighting is evaluated moves (once per
-        // vertex, Gouraud-interpolated, instead of once per fragment). No separate uAmbientColor
-        // uniform here, matching kSkinned3DFragSrc's own shape: SkinnedEffect::FillGpuDrawParams
-        // already pre-folds ambient into uEmissiveColor. Ported from
-        // EasyGLRenderer::EnsureSkinnedVertexLitProgram's GLSL ES 300 source (desktop GLSL
-        // 410 core translation only).
-        const char* kSkinned3DVertexLitVertSrc = R"GLSL(
-#version 410 core
-layout(location = 0) in vec3 aPos;
-layout(location = 1) in vec3 aNormal;
-layout(location = 2) in vec2 aUV;
-layout(location = 3) in vec4 aBoneWeights;
-layout(location = 4) in uvec4 aBoneIndices;
-layout(location = 5) in vec4 aColor;
-uniform mat4 uWorldViewProj;
-uniform mat4 uWorld;
-uniform mat4 uBones[72];
-uniform int uWeightsPerVertex;
-uniform vec4 uDiffuseColor;
-uniform vec3 uLight0Dir;
-uniform vec3 uLight0Diffuse;
-uniform vec3 uLight0Specular;
-uniform vec3 uLight1Dir;
-uniform vec3 uLight1Diffuse;
-uniform vec3 uLight1Specular;
-uniform vec3 uLight2Dir;
-uniform vec3 uLight2Diffuse;
-uniform vec3 uLight2Specular;
-uniform vec3 uEmissiveColor;
-uniform vec3 uEyePosition;
-uniform vec3 uSpecularColor;
-uniform float uSpecularPower;
-uniform vec4 uFogVector;
-out vec2 vUV;
-out vec4 vColor;
-out float vFogFactor;
-out vec3 vLitRGB;
-out vec3 vSpecularRGB;
-
-vec3 safeNormalize(vec3 v)
-{
-    float len = length(v);
-    return len > 1e-6 ? (v / len) : vec3(0.0, -1.0, 0.0);
-}
-
-void main()
-{
-    mat4 skinMat = uBones[aBoneIndices.x] * aBoneWeights.x;
-    if (uWeightsPerVertex >= 2)
-        skinMat += uBones[aBoneIndices.y] * aBoneWeights.y;
-    if (uWeightsPerVertex >= 4)
-    {
-        skinMat += uBones[aBoneIndices.z] * aBoneWeights.z;
-        skinMat += uBones[aBoneIndices.w] * aBoneWeights.w;
-    }
-    vec4 skinnedPos = skinMat * vec4(aPos, 1.0);
-    gl_Position = uWorldViewProj * skinnedPos;
-    vec3 skinnedNormal = mat3(skinMat) * aNormal;
-    float len = length(skinnedNormal);
-    vec3 N = (len > 1e-6) ? (skinnedNormal / len) : aNormal;
-    vUV = aUV;
-    vColor = aColor;
-    vec3 worldPos = (uWorld * skinnedPos).xyz;
-    vec3 E = normalize(uEyePosition - worldPos);
-    vec3 nL0 = safeNormalize(uLight0Dir);
-    vec3 nL1 = safeNormalize(uLight1Dir);
-    vec3 nL2 = safeNormalize(uLight2Dir);
-    float dotL0 = dot(N, -nL0); float zeroL0 = step(0.0, dotL0); float NdotL0 = max(dotL0, 0.0);
-    float dotL1 = dot(N, -nL1); float zeroL1 = step(0.0, dotL1); float NdotL1 = max(dotL1, 0.0);
-    float dotL2 = dot(N, -nL2); float zeroL2 = step(0.0, dotL2); float NdotL2 = max(dotL2, 0.0);
-    vec3 lightSum = NdotL0 * uLight0Diffuse + NdotL1 * uLight1Diffuse + NdotL2 * uLight2Diffuse;
-    vLitRGB = lightSum * uDiffuseColor.rgb + uEmissiveColor;
-    vec3 h0 = normalize(E - nL0); float spec0 = pow(max(dot(h0, N), 0.0) * zeroL0, uSpecularPower);
-    vec3 h1 = normalize(E - nL1); float spec1 = pow(max(dot(h1, N), 0.0) * zeroL1, uSpecularPower);
-    vec3 h2 = normalize(E - nL2); float spec2 = pow(max(dot(h2, N), 0.0) * zeroL2, uSpecularPower);
-    vSpecularRGB = (spec0 * uLight0Specular + spec1 * uLight1Specular + spec2 * uLight2Specular) * uSpecularColor;
-    vFogFactor = 1.0 - clamp(dot(skinnedPos, uFogVector), 0.0, 1.0);
-}
-)GLSL";
-
-        const char* kSkinned3DVertexLitFragSrc = R"GLSL(
-#version 410 core
-in vec2 vUV;
-in vec4 vColor;
-in float vFogFactor;
-in vec3 vLitRGB;
-in vec3 vSpecularRGB;
-uniform sampler2D uTexture;
-uniform bool uTextureEnabled;
-uniform bool uVertexColorEnabled;
-uniform vec4 uDiffuseColor;
-uniform vec3 uFogColor;
-out vec4 fragColor;
-void main()
-{
-    vec4 tex = uTextureEnabled ? texture(uTexture, vUV) : vec4(1.0);
-    vec4 color = vec4(vLitRGB, uDiffuseColor.a) * tex;
-    color.rgb += vSpecularRGB * color.a;
-    if (uVertexColorEnabled) color *= vColor;
-    color.rgb = mix(uFogColor, color.rgb, vFogFactor);
-    fragColor = color;
-}
-)GLSL";
-
-        // plans/plan_opengl4.md GL4-23: pbr3d (VertexPositionNormalTangentTexture, stride 48) and
-        // pbr_skinned3d (stride 68, PBR + bone skinning combined) -- PbrEffect/SkinnedPbrEffect's
-        // own dedicated programs. Ported near-verbatim from EasyGLRenderer's
-        // EnsurePbrProgram()/EnsurePbrSkinnedProgram() GLSL ES 300 source, which is itself the
-        // real glTF 2.0 spec's own reference metallic-roughness BRDF (GGX normal distribution,
-        // Smith-Schlick-GGX visibility, Schlick Fresnel) -- cross-verified against
-        // VulkanRenderer's pbr3d.frag.glsl and BgfxRenderer's fs_pbr3d.sc, both
-        // byte-for-byte identical in their PbrLight() math, before writing any OpenGL4 code.
-        // 5 texture units: 0=base colour, 1=normal map (tangent-space RGB), 2=metallic-roughness
-        // (glTF packing: G=roughness, B=metallic), 3=emissive, 4=occlusion (R channel). All 5 are
-        // sampled unconditionally every fragment (unlike DualTextureEffect/EnvironmentMapEffect's
-        // uniform-gated optional samplers) -- BindProgramForStride always binds a real texture to
-        // every unit, falling back to defaultWhiteTexture_/defaultFlatNormalTexture_ when the
-        // corresponding GpuDrawParams::pbr*Map pointer is null.
-        const char* kPbr3DVertSrc = R"GLSL(
-#version 410 core
-layout(location = 0) in vec3 aPos;
-layout(location = 1) in vec3 aNormal;
-layout(location = 2) in vec4 aTangent;
-layout(location = 3) in vec2 aUV;
-uniform mat4 uWorldViewProj;
-uniform mat4 uWorld;
-uniform vec4 uFogVector;
-out vec3 vNormal;
-out vec3 vTangent;
-out float vBitangentSign;
-out vec2 vUV;
-out vec3 vWorldPos;
-// plans/plan_gltf.md GLTF-462/GLTF-463: COLOR_0, carried by the stride-60 and stride-80 records.
-layout(location = 6) in vec4 aColor;
-out vec4 vColor;
-out float vFogFactor;
-float cnaDirectionHandedness(mat3 m)
-{
-    return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
-}
-void main()
-{
-    gl_Position = uWorldViewProj * vec4(aPos, 1.0);
-    // In-shader inverse-transpose normal matrix, matching this renderer's own established
-    // lit_textured3d/env_map3d convention (rather than EasyGL's CPU-precomputed uNormalMatrix
-    // uniform, which would need a new C++-side cofactor helper this renderer doesn't otherwise
-    // have) -- numerically equivalent for any World matrix, uniform-scale or not.
-    mat3 normalMatrix = transpose(inverse(mat3(uWorld)));
-    vNormal = normalMatrix * aNormal;
-    vTangent = mat3(uWorld) * aTangent.xyz;
-    vBitangentSign = aTangent.w * cnaDirectionHandedness(mat3(uWorld));
-    vUV = aUV;
-    vColor = aColor;
-    vWorldPos = (uWorld * vec4(aPos, 1.0)).xyz;
-    // REMED-GFX-010: see kColoredParams3DVertSrc's own comment for the fog-vector formula.
-    vFogFactor = 1.0 - clamp(dot(vec4(aPos, 1.0), uFogVector), 0.0, 1.0);
-}
-)GLSL";
-
-        const char* kPbrSkinned3DVertSrc = R"GLSL(
-#version 410 core
-layout(location = 0) in vec3 aPos;
-layout(location = 1) in vec3 aNormal;
-layout(location = 2) in vec4 aTangent;
-layout(location = 3) in vec2 aUV;
-layout(location = 4) in vec4 aBoneWeights;
-layout(location = 5) in uvec4 aBoneIndices;
-uniform mat4 uWorldViewProj;
-uniform mat4 uWorld;
-uniform mat4 uBones[72];
-uniform int uWeightsPerVertex;
-uniform vec4 uFogVector;
-out vec3 vNormal;
-out vec3 vTangent;
-out float vBitangentSign;
-out vec2 vUV;
-out vec3 vWorldPos;
-// plans/plan_gltf.md GLTF-462/GLTF-463: COLOR_0, carried by the stride-60 and stride-80 records.
-layout(location = 6) in vec4 aColor;
-out vec4 vColor;
-out float vFogFactor;
-vec3 cnaSkinNormal(mat3 m, vec3 n)
-{
-    vec3 c0 = m[0], c1 = m[1], c2 = m[2];
-    vec3 co0 = cross(c1, c2), co1 = cross(c2, c0), co2 = cross(c0, c1);
-    float det = dot(c0, co0);
-    vec3 transformed = mat3(co0, co1, co2) * n;
-    return abs(det) > 1e-6 ? transformed * sign(det) : m * n;
-}
-float cnaDirectionHandedness(mat3 m)
-{
-    return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
-}
-void main()
-{
-    mat4 skinMat = uBones[aBoneIndices.x] * aBoneWeights.x;
-    if (uWeightsPerVertex >= 2)
-        skinMat += uBones[aBoneIndices.y] * aBoneWeights.y;
-    if (uWeightsPerVertex >= 4)
-    {
-        skinMat += uBones[aBoneIndices.z] * aBoneWeights.z;
-        skinMat += uBones[aBoneIndices.w] * aBoneWeights.w;
-    }
-    vec4 skinnedPos = skinMat * vec4(aPos, 1.0);
-    gl_Position = uWorldViewProj * skinnedPos;
-    vec3 skinnedNormal = cnaSkinNormal(mat3(skinMat), aNormal);
-    vec3 skinnedTangent = mat3(skinMat) * aTangent.xyz;
-    mat3 normalMatrix = transpose(inverse(mat3(uWorld)));
-    vNormal = normalMatrix * skinnedNormal;
-    vTangent = mat3(uWorld) * skinnedTangent;
-    vBitangentSign = aTangent.w * cnaDirectionHandedness(mat3(uWorld))
-                                * cnaDirectionHandedness(mat3(skinMat));
-    vUV = aUV;
-    vColor = aColor;
-    vWorldPos = (uWorld * skinnedPos).xyz;
-    vFogFactor = 1.0 - clamp(dot(skinnedPos, uFogVector), 0.0, 1.0);
-}
-)GLSL";
-
-        const char* kPbr3DFragSrc = R"GLSL(
-#version 410 core
-in vec3 vNormal;
-in vec3 vTangent;
-in float vBitangentSign;
-in vec2 vUV;
-in vec3 vWorldPos;
-in vec4 vColor;
-uniform float uVertexColorEnabled;
-in float vFogFactor;
-uniform sampler2D uTexture;
-uniform sampler2D uNormalMap;
-uniform sampler2D uMetallicRoughnessMap;
-uniform sampler2D uEmissiveMap;
-uniform sampler2D uOcclusionMap;
-uniform sampler2D uSpecularMap;
-uniform sampler2D uSpecularColorMap;
-uniform vec4 uDiffuseColor;
-uniform vec3 uAmbientColor;
-uniform vec3 uEmissiveColor;
-uniform float uMetallicFactor;
-uniform float uRoughnessFactor;
-uniform float uNormalScale;
-uniform float uOcclusionStrength;
-uniform vec3 uLight0Dir;
-uniform vec3 uLight0Diffuse;
-uniform vec3 uLight1Dir;
-uniform vec3 uLight1Diffuse;
-uniform vec3 uLight2Dir;
-uniform vec3 uLight2Diffuse;
-uniform vec3 uEyePosition;
-uniform vec4 uAlphaTest;
-uniform vec3 uFogColor;
-uniform vec4 uSrgb;
-uniform vec4 uDielectricFresnel;
-uniform vec4 uSpecularFresnelInputs;
-uniform vec4 uTextureTransformRows[10];
-uniform vec4 uSpecularTextureTransformRows[4];
-out vec4 fragColor;
-
-vec3 cnaSrgbToLinear(vec3 c)
-{
-    vec3 lo = c / 12.92;
-    vec3 hi = pow((c + 0.055) / 1.055, vec3(2.4));
-    return mix(lo, hi, step(vec3(0.04045), c));
-}
-
-vec3 cnaLinearToSrgb(vec3 c)
-{
-    vec3 lo = c * 12.92;
-    vec3 hi = 1.055 * pow(max(c, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055;
-    return mix(lo, hi, step(vec3(0.0031308), c));
-}
-
-vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, vec3 F90, float roughness, float metallic)
-{
-    vec3 H = normalize(V + L);
-    float NdotL = max(dot(N, L), 0.0);
-    float NdotV = max(dot(N, V), 1e-4);
-    float NdotH = max(dot(N, H), 0.0);
-    float VdotH = max(dot(V, H), 0.0);
-
-    float a2 = pow(roughness, 4.0);
-    float dTerm = (NdotH * NdotH * (a2 - 1.0) + 1.0);
-    float D = a2 / (3.14159265 * dTerm * dTerm + 1e-7);
-
-    float k = (roughness + 1.0);
-    k = k * k / 8.0;
-    float G = (NdotV / (NdotV * (1.0 - k) + k)) * (NdotL / (NdotL * (1.0 - k) + k));
-
-    vec3 F = F0 + (F90 - F0) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
-
-    vec3 specular = (D * G * F) / max(4.0 * NdotV * NdotL, 1e-4);
-    vec3 diffuseColor = albedo * (1.0 - metallic);
-    vec3 kd = vec3(1.0) - F;
-    return (kd * diffuseColor / 3.14159265 + specular) * lightColor * NdotL;
-}
-
-vec2 cnaPbrTransformUV(vec2 uv, int slot)
-{
-    vec3 value = vec3(uv, 1.0);
-    return vec2(dot(value, uTextureTransformRows[slot * 2].xyz),
-                dot(value, uTextureTransformRows[slot * 2 + 1].xyz));
-}
-
-vec2 cnaPbrSpecularTransformUV(vec2 uv, int slot)
-{
-    vec3 value = vec3(uv, 1.0);
-    return vec2(dot(value, uSpecularTextureTransformRows[slot * 2].xyz),
-                dot(value, uSpecularTextureTransformRows[slot * 2 + 1].xyz));
-}
-
-void main()
-{
-    vec4 baseColorTex = texture(uTexture, cnaPbrTransformUV(vUV, 0));
-    vec3 baseColor = mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), uSrgb.x);
-    // plans/plan_gltf.md GLTF-465. §3.7.2.1: COLOR_0 "acts as an additional linear multiplier to base
-    // color". LINEAR is why there is no transfer function here -- the attribute is a normalized
-    // integer already in linear space, unlike the base-colour TEXTURE -- and both RGB and alpha are
-    // multiplied because §3.9.2's base colour is an RGBA product.
-    vec4 cnaVertexColor = uVertexColorEnabled > 0.5 ? vColor : vec4(1.0);
-    vec3 albedo = baseColor * uDiffuseColor.rgb * cnaVertexColor.rgb;
-    float alpha = baseColorTex.a * uDiffuseColor.a * cnaVertexColor.a;
-    bool passesAlphaTest = (uAlphaTest.y > 0.0)
-        ? (abs(alpha - uAlphaTest.x) < uAlphaTest.y)
-        : (alpha < uAlphaTest.x);
-    if ((passesAlphaTest ? uAlphaTest.z : uAlphaTest.w) < 0.0) discard;
-
-    vec3 N = normalize(vNormal);
-    vec3 T = normalize(vTangent - N * dot(N, vTangent));
-    vec3 B = cross(N, T) * vBitangentSign;
-    mat3 TBN = mat3(T, B, N);
-    vec3 sampledNormal = texture(uNormalMap, cnaPbrTransformUV(vUV, 1)).rgb * 2.0 - 1.0;
-    sampledNormal.xy *= uNormalScale;
-    vec3 finalNormal = normalize(TBN * sampledNormal);
-
-    vec4 mr = texture(uMetallicRoughnessMap, cnaPbrTransformUV(vUV, 2));
-    float roughness = clamp(mr.g * uRoughnessFactor, 0.045, 1.0);
-    float metallic = clamp(mr.b * uMetallicFactor, 0.0, 1.0);
-
-    vec3 V = normalize(uEyePosition - vWorldPos);
-    float specularWeight = uSpecularFresnelInputs.w
-        * texture(uSpecularMap, cnaPbrSpecularTransformUV(vUV, 0)).a;
-    vec3 specularColorTex = texture(
-        uSpecularColorMap, cnaPbrSpecularTransformUV(vUV, 1)).rgb;
-    specularColorTex = mix(
-        specularColorTex, cnaSrgbToLinear(specularColorTex), uSrgb.w);
-    vec3 dielectricF0 = min(
-        uSpecularFresnelInputs.xyz * specularColorTex, vec3(1.0)) * specularWeight;
-    vec3 F0 = mix(dielectricF0, albedo, metallic);
-    vec3 F90 = mix(vec3(specularWeight), vec3(1.0), metallic);
-
-    vec3 Lo = vec3(0.0);
-    Lo += PbrLight(finalNormal, V, normalize(-uLight0Dir), uLight0Diffuse, albedo, F0, F90, roughness, metallic);
-    Lo += PbrLight(finalNormal, V, normalize(-uLight1Dir), uLight1Diffuse, albedo, F0, F90, roughness, metallic);
-    Lo += PbrLight(finalNormal, V, normalize(-uLight2Dir), uLight2Diffuse, albedo, F0, F90, roughness, metallic);
-
-    float occlusionSample = texture(uOcclusionMap, cnaPbrTransformUV(vUV, 4)).r;
-    float occlusion = 1.0 + uOcclusionStrength * (occlusionSample - 1.0);
-    vec3 ambient = uAmbientColor * albedo * occlusion;
-    vec3 emissiveSample = texture(uEmissiveMap, cnaPbrTransformUV(vUV, 3)).rgb;
-    emissiveSample = mix(emissiveSample, cnaSrgbToLinear(emissiveSample), uSrgb.y);
-    vec3 emissive = uEmissiveColor * emissiveSample;
-
-    vec3 fogLinear = mix(uFogColor, cnaSrgbToLinear(uFogColor), uSrgb.z);
-    vec3 rgb = mix(fogLinear, ambient + Lo + emissive, vFogFactor);
-    rgb = mix(rgb, cnaLinearToSrgb(rgb), uSrgb.z);
-    fragColor = vec4(rgb, alpha);
-}
-)GLSL";
-
-        // XNA TextureFilter ordinal -> (GL min filter, GL mag filter). plans/plan_opengl4.md GL4-18:
-        // real mip-aware GL min-filter tokens for every "Mip*" variant now that
-        // OpenGL4TextureRenderer::UpdatePixelsLevel() lets a texture genuinely have mip levels
-        // beyond 0 -- a mip-mapped texture sampled with a non-mip min filter would only ever
-        // read level 0 regardless of how many levels were uploaded. Matches
-        // EasyGLRenderer::ApplySamplerState's own identical mapping table exactly; safe to
-        // apply unconditionally even to a single-level (levelCount_==1) texture, since GL treats
-        // base_level==max_level as a complete single-level mipmap chain regardless of the min
-        // filter's own *_MIPMAP_* qualifier.
-        // XNA: Linear=0, Point=1, Anisotropic=2, LinearMipPoint=3, PointMipLinear=4,
-        //      MinLinearMagPointMipLinear=5, MinLinearMagPointMipPoint=6,
-        //      MinPointMagLinearMipLinear=7, MinPointMagLinearMipPoint=8
-        void FilterToGL(int filter, GLint& minFilter, GLint& magFilter)
-        {
-            switch (filter)
-            {
-            case 1: // Point -- nearest neighbour, no mipmaps
-                minFilter = GL_NEAREST; magFilter = GL_NEAREST; break;
-            case 2: // Anisotropic
-                minFilter = GL_LINEAR_MIPMAP_LINEAR; magFilter = GL_LINEAR; break;
-            case 3: // LinearMipPoint
-                minFilter = GL_LINEAR_MIPMAP_NEAREST; magFilter = GL_LINEAR; break;
-            case 4: // PointMipLinear
-                minFilter = GL_NEAREST_MIPMAP_LINEAR; magFilter = GL_NEAREST; break;
-            case 5: // MinLinearMagPointMipLinear
-                minFilter = GL_LINEAR_MIPMAP_LINEAR; magFilter = GL_NEAREST; break;
-            case 6: // MinLinearMagPointMipPoint
-                minFilter = GL_LINEAR_MIPMAP_NEAREST; magFilter = GL_NEAREST; break;
-            case 7: // MinPointMagLinearMipLinear
-                minFilter = GL_NEAREST_MIPMAP_LINEAR; magFilter = GL_LINEAR; break;
-            case 8: // MinPointMagLinearMipPoint
-                minFilter = GL_NEAREST_MIPMAP_NEAREST; magFilter = GL_LINEAR; break;
-            default: // Linear -- bilinear, no mipmaps
-                minFilter = GL_LINEAR; magFilter = GL_LINEAR; break;
-            }
-        }
-
-        GLint AddressModeToGL(int mode)
-        {
-            switch (mode)
-            {
-            case 0: return GL_REPEAT;          // Wrap
-            case 2: return GL_MIRRORED_REPEAT;  // Mirror
-            default: return GL_CLAMP_TO_EDGE;   // Clamp
-            }
-        }
-
-        // plans/plan_opengl4.md GL4-14: maps a Microsoft::Xna::Framework::Graphics::DepthFormat
-        // ordinal to the GL renderbuffer internal format and framebuffer attachment point a
-        // render target's depth/stencil buffer should use. Returns false for DepthFormat::None,
-        // meaning no depth/stencil attachment should be created at all -- mirrors
-        // EasyGLRenderer's own MapDepthFormat.
-        bool MapDepthFormatGL4(int depthFormat, GLenum& outInternalFormat, GLenum& outAttachment)
-        {
-            switch (depthFormat)
-            {
-            case 1: // DepthFormat::Depth16
-                outInternalFormat = GL_DEPTH_COMPONENT16;
-                outAttachment = GL_DEPTH_ATTACHMENT;
-                return true;
-            case 2: // DepthFormat::Depth24
-                outInternalFormat = GL_DEPTH_COMPONENT24;
-                outAttachment = GL_DEPTH_ATTACHMENT;
-                return true;
-            case 3: // DepthFormat::Depth24Stencil8
-                outInternalFormat = GL_DEPTH24_STENCIL8;
-                outAttachment = GL_DEPTH_STENCIL_ATTACHMENT;
-                return true;
-            default: // DepthFormat::None
-                return false;
-            }
-        }
-
-        int CalculateRenderTargetMipLevelsGL4(int w, int h)
-        {
-            int levels = 1;
-            while (w > 1 || h > 1) { w = std::max(1, w / 2); h = std::max(1, h / 2); ++levels; }
-            return levels;
-        }
-
-        // plans/plan_opengl4.md GL4-16: XNA Blend enum -> GL blend factor token.
-        // Blend: One=0, Zero=1, SourceColor=2, InverseSourceColor=3, SourceAlpha=4,
-        //        InverseSourceAlpha=5, DestinationColor=6, InverseDestinationColor=7,
-        //        DestinationAlpha=8, InverseDestinationAlpha=9, BlendFactor=10,
-        //        InverseBlendFactor=11, SourceAlphaSaturation=12
+        // XNA Blend enum -> GL blend factor. Blend: One=0, Zero=1, SourceColor=2,
+        // InverseSourceColor=3, SourceAlpha=4, InverseSourceAlpha=5, DestinationColor=6,
+        // InverseDestinationColor=7, DestinationAlpha=8, InverseDestinationAlpha=9, BlendFactor=10,
+        // InverseBlendFactor=11, SourceAlphaSaturation=12.
         GLenum ToGLBlendFactor(int xnaBlend)
         {
             switch (xnaBlend)
@@ -1209,12 +66,11 @@ void main()
             case 10: return GL_CONSTANT_COLOR;
             case 11: return GL_ONE_MINUS_CONSTANT_COLOR;
             case 12: return GL_SRC_ALPHA_SATURATE;
-            default: return GL_ONE; // Blend::One = 0
+            default: return GL_ONE;
             }
         }
 
-        // XNA BlendFunction enum -> GL blend equation token. Add=0, Subtract=1,
-        // ReverseSubtract=2, Min=3, Max=4.
+        // XNA BlendFunction: Add=0, Subtract=1, ReverseSubtract=2, Min=3, Max=4.
         GLenum ToGLBlendEquation(int xnaBlendFunc)
         {
             switch (xnaBlendFunc)
@@ -1223,12 +79,12 @@ void main()
             case 2: return GL_FUNC_REVERSE_SUBTRACT;
             case 3: return GL_MIN;
             case 4: return GL_MAX;
-            default: return GL_FUNC_ADD; // BlendFunction::Add = 0
+            default: return GL_FUNC_ADD;
             }
         }
 
-        // XNA CompareFunction enum -> GL compare-func token. Always=0, Never=1, Less=2,
-        // LessEqual=3, Equal=4, GreaterEqual=5, Greater=6, NotEqual=7.
+        // XNA CompareFunction: Always=0, Never=1, Less=2, LessEqual=3, Equal=4, GreaterEqual=5,
+        // Greater=6, NotEqual=7.
         GLenum ToGLCompareFunc(int xnaCompare)
         {
             switch (xnaCompare)
@@ -1240,12 +96,13 @@ void main()
             case 5: return GL_GEQUAL;
             case 6: return GL_GREATER;
             case 7: return GL_NOTEQUAL;
-            default: return GL_ALWAYS; // CompareFunction::Always = 0
+            default: return GL_ALWAYS;
             }
         }
 
-        // XNA StencilOperation enum -> GL stencil-op token. Keep=0, Zero=1, Replace=2,
-        // Increment=3, Decrement=4, IncrementSaturation=5, DecrementSaturation=6, Invert=7.
+        // XNA StencilOperation: Keep=0, Zero=1, Replace=2, Increment=3, Decrement=4,
+        // IncrementSaturation=5, DecrementSaturation=6, Invert=7. XNA's Increment/Decrement wrap;
+        // the *Saturation pair clamps -- GL's INCR_WRAP/DECR_WRAP and INCR/DECR respectively.
         GLenum ToGLStencilOp(int xnaOp)
         {
             switch (xnaOp)
@@ -1257,9 +114,274 @@ void main()
             case 5: return GL_INCR;
             case 6: return GL_DECR;
             case 7: return GL_INVERT;
-            default: return GL_KEEP; // StencilOperation::Keep = 0
+            default: return GL_KEEP;
             }
         }
+
+        // TextureAddressMode: Wrap=0 -> GL_REPEAT, Clamp=1 -> GL_CLAMP_TO_EDGE, Mirror=2.
+        GLint ToGLWrap(int mode)
+        {
+            switch (mode)
+            {
+            case 1: return GL_CLAMP_TO_EDGE;
+            case 2: return GL_MIRRORED_REPEAT;
+            default: return GL_REPEAT;
+            }
+        }
+
+        // REMED-GFX-175: every TextureFilter ordinal names a MIP component as well as min and mag.
+        // Linear is min/mag/mip LINEAR and Point is min/mag/mip POINT -- FNA's decomposition tables
+        // and FNA3D's GL driver agree. Mapping Linear/Point onto plain GL_LINEAR/GL_NEAREST (as
+        // this renderer did before GL4-0015) drops the mip term, so a texture with a real chain
+        // never mip-filtered under the default filter every game gets. Safe because every
+        // sampleable kind clamps GL_TEXTURE_MAX_LEVEL to its real level count.
+        void FilterOrdinalToGL(int filter, GLint& minFilter, GLint& magFilter)
+        {
+            switch (filter)
+            {
+            case 1: minFilter = GL_NEAREST_MIPMAP_NEAREST; magFilter = GL_NEAREST; break; // Point
+            case 2: minFilter = GL_LINEAR_MIPMAP_LINEAR;   magFilter = GL_LINEAR;  break; // Anisotropic
+            case 3: minFilter = GL_LINEAR_MIPMAP_NEAREST;  magFilter = GL_LINEAR;  break; // LinearMipPoint
+            case 4: minFilter = GL_NEAREST_MIPMAP_LINEAR;  magFilter = GL_NEAREST; break; // PointMipLinear
+            case 5: minFilter = GL_LINEAR_MIPMAP_LINEAR;   magFilter = GL_NEAREST; break; // MinLinearMagPointMipLinear
+            case 6: minFilter = GL_LINEAR_MIPMAP_NEAREST;  magFilter = GL_NEAREST; break; // MinLinearMagPointMipPoint
+            case 7: minFilter = GL_NEAREST_MIPMAP_LINEAR;  magFilter = GL_LINEAR;  break; // MinPointMagLinearMipLinear
+            case 8: minFilter = GL_NEAREST_MIPMAP_NEAREST; magFilter = GL_LINEAR;  break; // MinPointMagLinearMipPoint
+            default: minFilter = GL_LINEAR_MIPMAP_LINEAR;  magFilter = GL_LINEAR;  break; // Linear
+            }
+        }
+
+        // DepthFormat -> renderbuffer storage and attachment point (None has none).
+        bool MapDepthFormat(int depthFormat, GLenum& outFormat, GLenum& outAttachment)
+        {
+            using Microsoft::Xna::Framework::Graphics::DepthFormat;
+            switch (static_cast<DepthFormat>(depthFormat))
+            {
+            case DepthFormat::Depth16:
+                outFormat = GL_DEPTH_COMPONENT16;
+                outAttachment = GL_DEPTH_ATTACHMENT;
+                return true;
+            case DepthFormat::Depth24:
+                outFormat = GL_DEPTH_COMPONENT24;
+                outAttachment = GL_DEPTH_ATTACHMENT;
+                return true;
+            case DepthFormat::Depth24Stencil8:
+                outFormat = GL_DEPTH24_STENCIL8;
+                outAttachment = GL_DEPTH_STENCIL_ATTACHMENT;
+                return true;
+            case DepthFormat::None:
+            default:
+                return false;
+            }
+        }
+
+        std::string FramebufferStatusName(GLenum status)
+        {
+            switch (status)
+            {
+            case GL_FRAMEBUFFER_COMPLETE: return "GL_FRAMEBUFFER_COMPLETE";
+            case GL_FRAMEBUFFER_UNDEFINED: return "GL_FRAMEBUFFER_UNDEFINED";
+            case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT: return "GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT";
+            case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
+                return "GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT";
+            case GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER: return "GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER";
+            case GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER: return "GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER";
+            case GL_FRAMEBUFFER_UNSUPPORTED: return "GL_FRAMEBUFFER_UNSUPPORTED";
+            case GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE: return "GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE";
+            case GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS:
+                return "GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS";
+            default:
+            {
+                std::ostringstream os;
+                os << "0x" << std::hex << status;
+                return os.str();
+            }
+            }
+        }
+
+        std::string DrainGlErrorsDescribed()
+        {
+            std::ostringstream result;
+            for (int i = 0; i < 64; ++i)
+            {
+                const GLenum error = glGetError();
+                if (error == GL_NO_ERROR) break;
+                if (result.tellp() > 0) result << ", ";
+                result << "0x" << std::hex << error << std::dec;
+            }
+            return result.str();
+        }
+
+        /// XNA converts the signed MaxAnisotropy property to UInt32 before applying the device cap.
+        float ClampedMaxAnisotropy(int maxAnisotropy, float cap)
+        {
+            const float requested = static_cast<float>(static_cast<std::uint32_t>(maxAnisotropy));
+            float clamped = (cap > 0.0f && requested > cap) ? cap : requested;
+            if (clamped < 1.0f) clamped = 1.0f;
+            return clamped;
+        }
+
+        // ---- Thread-context lease (REMED: the frame and a background content load share one
+        // context, so each must own it exclusively while it issues GL). -----------------------
+
+        class OpenGL4ThreadContextLease final : public IRendererThreadContextLease
+        {
+        public:
+            explicit OpenGL4ThreadContextLease(std::function<void()> release)
+                : release_(std::move(release))
+            {
+            }
+
+            ~OpenGL4ThreadContextLease() override { release_(); }
+
+        private:
+            std::function<void()> release_;
+        };
+
+        struct ThreadContextLeaseState
+        {
+            std::size_t depth = 0;
+            CNA::Platform::GlContextBinding previousBinding;
+            RendererThreadContextLeaseRelease release =
+                RendererThreadContextLeaseRelease::RestorePreviousBinding;
+        };
+
+        std::unordered_map<const void*, ThreadContextLeaseState>& ThreadContextLeaseStates()
+        {
+            static thread_local std::unordered_map<const void*, ThreadContextLeaseState> states;
+            return states;
+        }
+
+        // ---- GL debug output (A8). ------------------------------------------------------------
+
+        const char* DebugSourceName(GLenum source)
+        {
+            switch (source)
+            {
+            case GL_DEBUG_SOURCE_API: return "api";
+            case GL_DEBUG_SOURCE_WINDOW_SYSTEM: return "window-system";
+            case GL_DEBUG_SOURCE_SHADER_COMPILER: return "shader-compiler";
+            case GL_DEBUG_SOURCE_THIRD_PARTY: return "third-party";
+            case GL_DEBUG_SOURCE_APPLICATION: return "application";
+            default: return "other";
+            }
+        }
+
+        const char* DebugTypeName(GLenum type)
+        {
+            switch (type)
+            {
+            case GL_DEBUG_TYPE_ERROR: return "error";
+            case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR: return "deprecated";
+            case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR: return "undefined-behavior";
+            case GL_DEBUG_TYPE_PORTABILITY: return "portability";
+            case GL_DEBUG_TYPE_PERFORMANCE: return "performance";
+            case GL_DEBUG_TYPE_MARKER: return "marker";
+            default: return "other";
+            }
+        }
+
+        const char* DebugSeverityName(GLenum severity)
+        {
+            switch (severity)
+            {
+            case GL_DEBUG_SEVERITY_HIGH: return "high";
+            case GL_DEBUG_SEVERITY_MEDIUM: return "medium";
+            case GL_DEBUG_SEVERITY_LOW: return "low";
+            default: return "notification";
+            }
+        }
+
+        // plans/plan_opengl4_modern_graphics.md GL4-0016: an error, undefined behaviour or a
+        // high-severity message is printed on stderr with the fixed "[OpenGL4 GL Error]" prefix,
+        // which the OpenGL4 CTest registrations treat as a failure (FAIL_REGULAR_EXPRESSION) -- the
+        // same output-gate shape as Vulkan's "[Vulkan Validation]" gate, because a message
+        // reported during teardown is out of reach of any in-process assertion. Everything else
+        // (performance, portability, driver notes) is informational and goes to the log only.
+        void CNA_GL4_APIENTRY DebugMessageCallback(GLenum source, GLenum type, GLuint id,
+                                                   GLenum severity, GLsizei /*length*/,
+                                                   const GLchar4* message,
+                                                   const void* userParam)
+        {
+            // A shader that fails to compile is reported to its caller through the program's info
+            // log (ShaderEffect's compile error, or the stock program's own "[OpenGL4 GL Error]"
+            // line); a game's broken GLSL is not a renderer defect, so the compiler's copy of the
+            // message stays off the error channel.
+            const bool serious = source != GL_DEBUG_SOURCE_SHADER_COMPILER &&
+                                 (type == GL_DEBUG_TYPE_ERROR ||
+                                  type == GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR ||
+                                  severity == GL_DEBUG_SEVERITY_HIGH);
+            std::ostringstream os;
+            os << (serious ? "[OpenGL4 GL Error] " : "[OpenGL4 GL Debug] ")
+               << DebugSourceName(source) << '/' << DebugTypeName(type) << '/'
+               << DebugSeverityName(severity) << " id=" << id << ": "
+               << (message != nullptr ? message : "(null)");
+            if (serious)
+                CNA::Logger::Error(os.str(), CNA::LogCategory::RENDER);
+            else if (source == GL_DEBUG_SOURCE_APPLICATION && type == GL_DEBUG_TYPE_MARKER)
+                // GL4-0027: a GraphicsDevice::SetStringMarkerEXT marker, echoed at debug level.
+                CNA::Logger::Debug(std::string("[OpenGL4 Marker] ") +
+                                       (message != nullptr ? message : ""),
+                                   CNA::LogCategory::RENDER);
+            else if (userParam != nullptr)
+                CNA::Logger::Debug(os.str(), CNA::LogCategory::RENDER);
+        }
+
+        [[nodiscard]] bool DebugOutputRequested()
+        {
+            if (const char* value = std::getenv("CNA_OPENGL4_DEBUG_OUTPUT"))
+                return value[0] != '\0' && value[0] != '0';
+#if defined(NDEBUG)
+            return false;
+#else
+            return true;
+#endif
+        }
+
+        /// CNA_OPENGL4_DEBUG_OUTPUT=verbose also logs the informational messages (performance,
+        /// portability, driver notes); by default only the serious ones reach the log.
+        [[nodiscard]] bool VerboseDebugOutputRequested()
+        {
+            const char* value = std::getenv("CNA_OPENGL4_DEBUG_OUTPUT");
+            return value != nullptr && std::strcmp(value, "verbose") == 0;
+        }
+    }
+
+    // ------------------------------------------------------------------------------------
+    // GLSL adaptation
+    // ------------------------------------------------------------------------------------
+
+    std::string AdaptGlslEs300ForDesktopCore(const std::string& source)
+    {
+        static const std::string versionLine = "#version 300 es";
+        const auto versionPos = source.find(versionLine);
+        if (versionPos == std::string::npos)
+            return source;
+        // Only a genuine directive: the version line must start the source's first non-blank line.
+        for (std::size_t i = 0; i < versionPos; ++i)
+            if (source[i] != ' ' && source[i] != '\t' && source[i] != '\r' && source[i] != '\n')
+                return source;
+
+        std::string result = source;
+        const std::string replacement = "#version 410 core";
+        result.replace(versionPos, versionLine.size(), replacement);
+
+        // GLSL ES requires a default float precision and desktop GLSL does not need one. The
+        // statement that immediately follows the version line is blanked -- its TEXT removed, its
+        // line kept -- so every compiler diagnostic still names the line the author wrote (a
+        // ShaderEffect's structured diagnostics report it). Any later precision statement is legal
+        // desktop GLSL and is kept.
+        std::size_t lineEnd = result.find('\n', versionPos);
+        if (lineEnd == std::string::npos)
+            return result;
+        const std::size_t next = lineEnd + 1;
+        if (result.compare(next, 10, "precision ") == 0)
+        {
+            const std::size_t precisionEnd = result.find('\n', next);
+            result.erase(next, precisionEnd == std::string::npos ? std::string::npos
+                                                                 : precisionEnd - next);
+        }
+        return result;
     }
 
     // ------------------------------------------------------------------------------------
@@ -1269,7 +391,8 @@ void main()
     OpenGL4RawProgram::~OpenGL4RawProgram() { Destroy(); }
 
     OpenGL4RawProgram::OpenGL4RawProgram(OpenGL4RawProgram&& other) noexcept
-        : program_(other.program_), error_(std::move(other.error_))
+        : program_(other.program_), error_(std::move(other.error_)),
+          integerAttributeMask_(other.integerAttributeMask_)
     {
         other.program_ = 0;
     }
@@ -1281,6 +404,7 @@ void main()
             Destroy();
             program_ = other.program_;
             error_ = std::move(other.error_);
+            integerAttributeMask_ = other.integerAttributeMask_;
             other.program_ = 0;
         }
         return *this;
@@ -1293,6 +417,49 @@ void main()
             gl4_glDeleteProgram(program_);
             program_ = 0;
         }
+        integerAttributeMask_ = 0;
+    }
+
+    namespace
+    {
+        std::string ShaderLog(GLuint shader)
+        {
+            GLint length = 0;
+            gl4_glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &length);
+            std::string log(static_cast<std::size_t>(std::max(length, 1)), '\0');
+            gl4_glGetShaderInfoLog(shader, static_cast<GLsizei>(log.size()), nullptr, log.data());
+            log.resize(std::strlen(log.c_str()));
+            return log;
+        }
+
+        std::string ProgramLog(GLuint program)
+        {
+            GLint length = 0;
+            gl4_glGetProgramiv(program, GL_INFO_LOG_LENGTH, &length);
+            std::string log(static_cast<std::size_t>(std::max(length, 1)), '\0');
+            gl4_glGetProgramInfoLog(program, static_cast<GLsizei>(log.size()), nullptr, log.data());
+            log.resize(std::strlen(log.c_str()));
+            return log;
+        }
+
+        GLuint CompileStage(GLenum stage, const std::string& source, std::string& error)
+        {
+            const GLuint shader = gl4_glCreateShader(stage);
+            const char* text = source.c_str();
+            gl4_glShaderSource(shader, 1, &text, nullptr);
+            gl4_glCompileShader(shader);
+            GLint ok = 0;
+            gl4_glGetShaderiv(shader, GL_COMPILE_STATUS, &ok);
+            if (!ok)
+            {
+                // The driver's own log carries "0:LINE(COL)" positions; the stage prefix is what
+                // ShaderDiagnosticEXT::parseCompilerLog keys the stage on.
+                error = std::string(stage == GL_VERTEX_SHADER ? "VS: " : "FS: ") + ShaderLog(shader);
+                gl4_glDeleteShader(shader);
+                return 0;
+            }
+            return shader;
+        }
     }
 
     bool OpenGL4RawProgram::Compile(const std::string& vertSrc, const std::string& fragSrc)
@@ -1300,34 +467,12 @@ void main()
         Destroy();
         error_.clear();
 
-        const GLuint vs = gl4_glCreateShader(GL_VERTEX_SHADER);
-        const char* vsSrc = vertSrc.c_str();
-        gl4_glShaderSource(vs, 1, &vsSrc, nullptr);
-        gl4_glCompileShader(vs);
-        GLint vsOk = 0;
-        gl4_glGetShaderiv(vs, GL_COMPILE_STATUS, &vsOk);
-        if (!vsOk)
+        const GLuint vs = CompileStage(GL_VERTEX_SHADER, vertSrc, error_);
+        if (vs == 0) return false;
+        const GLuint fs = CompileStage(GL_FRAGMENT_SHADER, fragSrc, error_);
+        if (fs == 0)
         {
-            char log[1024] = {};
-            gl4_glGetShaderInfoLog(vs, sizeof(log), nullptr, log);
-            error_ = std::string("vertex shader: ") + log;
             gl4_glDeleteShader(vs);
-            return false;
-        }
-
-        const GLuint fs = gl4_glCreateShader(GL_FRAGMENT_SHADER);
-        const char* fsSrc = fragSrc.c_str();
-        gl4_glShaderSource(fs, 1, &fsSrc, nullptr);
-        gl4_glCompileShader(fs);
-        GLint fsOk = 0;
-        gl4_glGetShaderiv(fs, GL_COMPILE_STATUS, &fsOk);
-        if (!fsOk)
-        {
-            char log[1024] = {};
-            gl4_glGetShaderInfoLog(fs, sizeof(log), nullptr, log);
-            error_ = std::string("fragment shader: ") + log;
-            gl4_glDeleteShader(vs);
-            gl4_glDeleteShader(fs);
             return false;
         }
 
@@ -1335,24 +480,41 @@ void main()
         gl4_glAttachShader(prog, vs);
         gl4_glAttachShader(prog, fs);
         gl4_glLinkProgram(prog);
-
         GLint linkOk = 0;
         gl4_glGetProgramiv(prog, GL_LINK_STATUS, &linkOk);
-
-        // Shaders may be deleted once linked -- the program keeps its own compiled copy.
         gl4_glDeleteShader(vs);
         gl4_glDeleteShader(fs);
-
         if (!linkOk)
         {
-            char log[1024] = {};
-            gl4_glGetProgramInfoLog(prog, sizeof(log), nullptr, log);
-            error_ = std::string("link: ") + log;
+            error_ = std::string("Link: ") + ProgramLog(prog);
             gl4_glDeleteProgram(prog);
             return false;
         }
-
         program_ = prog;
+
+        // GL4-0023: remember which inputs are integer-typed; a draw feeds those through
+        // glVertexAttribIPointer. Every stock program and every XNA-ported effect declares float
+        // inputs only (Direct3D 9 vertex inputs are float registers), so this is 0 for them.
+        integerAttributeMask_ = 0;
+        GLint attributeCount = 0, maxNameLength = 0;
+        gl4_glGetProgramiv(prog, GL_ACTIVE_ATTRIBUTES, &attributeCount);
+        gl4_glGetProgramiv(prog, GL_ACTIVE_ATTRIBUTE_MAX_LENGTH, &maxNameLength);
+        std::vector<GLchar4> name(static_cast<std::size_t>(std::max(maxNameLength, 1)) + 1);
+        for (GLint index = 0; index < attributeCount; ++index)
+        {
+            GLint size = 0;
+            GLenum type = 0;
+            gl4_glGetActiveAttrib(prog, static_cast<GLuint>(index),
+                                  static_cast<GLsizei>(name.size()), nullptr, &size, &type,
+                                  name.data());
+            const bool integer = type == GL_INT || type == GL_INT_VEC2 || type == GL_INT_VEC3 ||
+                                 type == GL_INT_VEC4 || type == GL_UNSIGNED_INT ||
+                                 type == GL_UNSIGNED_INT_VEC2 || type == GL_UNSIGNED_INT_VEC3 ||
+                                 type == GL_UNSIGNED_INT_VEC4;
+            const GLint location = gl4_glGetAttribLocation(prog, name.data());
+            if (integer && location >= 0 && location < 32)
+                integerAttributeMask_ |= 1u << static_cast<unsigned int>(location);
+        }
         return true;
     }
 
@@ -1363,250 +525,272 @@ void main()
 
     int OpenGL4RawProgram::UniformLocation(const char* name) const
     {
+        if (program_ == 0) return -1;
         return gl4_glGetUniformLocation(program_, name);
     }
 
     // ------------------------------------------------------------------------------------
-    // OpenGL4TextureRenderer
+    // OpenGL4EffectRenderer
     // ------------------------------------------------------------------------------------
 
-    OpenGL4TextureRenderer::OpenGL4TextureRenderer(const ImageData& data)
-        : width_(data.width), height_(data.height),
-          levelCount_(data.mipLevels > 0 ? data.mipLevels : 1)
+    OpenGL4EffectRenderer::~OpenGL4EffectRenderer()
     {
-        glGenTextures(1, &texture_);
-        glBindTexture(GL_TEXTURE_2D, texture_);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width_, height_, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-                     data.pixels.empty() ? nullptr : data.pixels.data());
-        // plans/plan_opengl4.md GL4-18: clamp GL_TEXTURE_MAX_LEVEL to the real level count -- otherwise
-        // a mipmap-requiring TextureFilter (e.g. Anisotropic) treats this as an incomplete
-        // mipmap chain (GL's own default max level is 1000) and renders solid black, even for an
-        // ordinary single-level (levelCount_==1) texture that never uploads anything beyond
-        // level 0. Matches EasyGLTextureRenderer's own identical Task-924 fix.
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, levelCount_ - 1);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-
-    OpenGL4TextureRenderer::~OpenGL4TextureRenderer()
-    {
-        if (texture_ != 0)
-            glDeleteTextures(1, &texture_);
-    }
-
-    void OpenGL4TextureRenderer::BindGL(int /*unit*/) const
-    {
-        glBindTexture(GL_TEXTURE_2D, texture_);
-    }
-
-    void OpenGL4TextureRenderer::UpdatePixels(const uint8_t* rgba, int stride)
-    {
-        glBindTexture(GL_TEXTURE_2D, texture_);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        const int expectedStride = width_ * 4;
-        if (stride == expectedStride || stride <= 0)
-        {
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width_, height_, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
-        }
+        // GL4-0021: deleted here, inside the scope, not by the member's destructor afterwards.
+        const auto ownContext = EnterOwnContext();
+        if (ownContext)
+            program_.Reset();
         else
+            program_.Abandon();
+    }
+
+    bool OpenGL4EffectRenderer::CompileProgram(const std::string& vertSrc, const std::string& fragSrc)
+    {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return false;
+        rtFlipVUploaded_ = false;
+        return program_.Compile(AdaptGlslEs300ForDesktopCore(vertSrc),
+                                AdaptGlslEs300ForDesktopCore(fragSrc));
+    }
+
+    void OpenGL4EffectRenderer::Bind()
+    {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
+        if (program_.IsValid())
+            program_.Use();
+        InstallTextureArrays();
+    }
+
+    void OpenGL4EffectRenderer::InstallTextureArrays() const
+    {
+        bool any = false;
+        for (std::size_t unit = 0; unit < textureArrays_.size(); ++unit)
         {
-            // Row-by-row upload when the caller's row pitch doesn't match a tightly packed
-            // width*4 buffer.
-            for (int y = 0; y < height_; ++y)
-            {
-                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, y, width_, 1, GL_RGBA, GL_UNSIGNED_BYTE,
-                                 rgba + static_cast<std::size_t>(y) * stride);
-            }
+            const auto* native =
+                dynamic_cast<const OpenGL4Texture2DArrayRenderer*>(textureArrays_[unit].get());
+            if (native == nullptr) continue;
+            gl4_glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(unit));
+            glBindTexture(GL_TEXTURE_2D_ARRAY, native->GLHandle());
+            any = true;
         }
-        glBindTexture(GL_TEXTURE_2D, 0);
+        if (any) gl4_glActiveTexture(GL_TEXTURE0);
     }
 
-    void OpenGL4TextureRenderer::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
+    const OpenGL4Texture2DArrayRenderer* OpenGL4EffectRenderer::TextureArrayAtEXT(
+        const int unit) const
     {
-        glBindTexture(GL_TEXTURE_2D, texture_);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        // Level 0 is allocated at construction (glTexSubImage2D via UpdatePixels); every other
-        // level's storage is never pre-allocated, so this must use glTexImage2D, not
-        // glTexSubImage2D, matching EasyGLTextureRenderer::UpdatePixelsLevel's identical approach.
-        glTexImage2D(GL_TEXTURE_2D, level, GL_RGBA8, levelW, levelH, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
-        glBindTexture(GL_TEXTURE_2D, 0);
+        if (unit < 0 || unit >= static_cast<int>(textureArrays_.size())) return nullptr;
+        return dynamic_cast<const OpenGL4Texture2DArrayRenderer*>(
+            textureArrays_[static_cast<std::size_t>(unit)].get());
     }
 
-    // ------------------------------------------------------------------------------------
-    // OpenGL4Texture3DRenderer
-    // ------------------------------------------------------------------------------------
-
-    OpenGL4Texture3DRenderer::OpenGL4Texture3DRenderer(int w, int h, int depth, bool mipMap)
-        : width_(w), height_(h), depth_(depth),
-          levelCount_(mipMap ? CalculateRenderTargetMipLevelsGL4(std::max(w, depth), h) : 1)
+    bool OpenGL4EffectRenderer::BindTexture2DArrayEXT(
+        const int unit, std::shared_ptr<ITexture2DArrayRenderer> texture)
     {
-        glGenTextures(1, &texture_);
-        glBindTexture(GL_TEXTURE_3D, texture_);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        // Allocate storage for every mip level up front (not just level 0): SetData's box
-        // writes use gl4_glTexSubImage3D, which requires the target level to already have a
-        // defined image -- matches EasyGLTexture3DRenderer's own identical pre-allocation loop
-        // (and OpenGL4RenderTargetRenderer's/OpenGL4RenderTargetCubeRenderer's established
-        // OpenGL4 precedent for the same reason).
-        int levelW = w, levelH = h, levelD = depth;
-        for (int level = 0; level < levelCount_; ++level)
+        if (unit < 0 || unit >= static_cast<int>(textureArrays_.size())) return false;
+        if (texture != nullptr &&
+            dynamic_cast<const OpenGL4Texture2DArrayRenderer*>(texture.get()) == nullptr)
+            return false;
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return false;
+        textureArrays_[static_cast<std::size_t>(unit)] = std::move(texture);
+        if (textureArrays_[static_cast<std::size_t>(unit)] == nullptr)
         {
-            gl4_glTexImage3D(GL_TEXTURE_3D, level, GL_RGBA8, levelW, levelH, levelD, 0,
-                             GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-            levelW = std::max(1, levelW / 2);
-            levelH = std::max(1, levelH / 2);
-            levelD = std::max(1, levelD / 2);
+            gl4_glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(unit));
+            glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+            gl4_glActiveTexture(GL_TEXTURE0);
+            return true;
         }
-        // plans/plan_opengl4.md GL4-18/GL4-20: clamp GL_TEXTURE_MAX_LEVEL to the real level count --
-        // same "incomplete mipmap chain renders black" reason OpenGL4TextureRenderer already
-        // fixed for Texture2D; EasyGLTexture3DRenderer does not set this at all, so this is
-        // deliberately stricter than the EasyGL reference.
-        glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAX_LEVEL, levelCount_ - 1);
-        glBindTexture(GL_TEXTURE_3D, 0);
-    }
-
-    OpenGL4Texture3DRenderer::~OpenGL4Texture3DRenderer()
-    {
-        if (texture_ != 0)
-            glDeleteTextures(1, &texture_);
-    }
-
-    void OpenGL4Texture3DRenderer::BindGL(int /*unit*/) const
-    {
-        glBindTexture(GL_TEXTURE_3D, texture_);
-    }
-
-    bool OpenGL4Texture3DRenderer::SetData(int level, int x, int y, int z, int w, int h, int depth,
-                                          const void* data, int /*dataLength*/)
-    {
-        glBindTexture(GL_TEXTURE_3D, texture_);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        gl4_glTexSubImage3D(GL_TEXTURE_3D, level, x, y, z, w, h, depth, GL_RGBA, GL_UNSIGNED_BYTE, data);
-        glBindTexture(GL_TEXTURE_3D, 0);
+        InstallTextureArrays();
         return true;
     }
 
-    bool OpenGL4Texture3DRenderer::GetData(int level, int x, int y, int z, int w, int h, int depth,
-                                          void* data, int dataLength) const
+    void OpenGL4EffectRenderer::MakeProgramCurrent()
     {
-        if (w <= 0 || h <= 0 || depth <= 0) return false;
-        const std::size_t sizeBytes = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) *
-                                       static_cast<std::size_t>(depth) * 4;
-        if (static_cast<std::size_t>(dataLength) < sizeBytes)
-            throw std::out_of_range("CNA OpenGL4: Texture3D::GetData: dataLength too small for the requested region");
+        if (program_.IsValid())
+            program_.Use();
+    }
 
-        // Desktop GL 4.x has no per-slice readback shortcut for a 3D texture other than an FBO
-        // attached to each Z layer -- mirrors EasyGLTexture3DRenderer::GetData's own per-slice
-        // gl4_glFramebufferTextureLayer + glReadPixels loop (GLES3 lacks glGetTexImage; this
-        // renderer uses the identical FBO approach for consistency with
-        // OpenGL4RenderTargetCubeRenderer's own established per-face FBO readback convention,
-        // even though desktop GL does have glGetTexImage as an alternative). No Y-flip -- this
-        // is a plain texture, not a framebuffer-origin render target.
-        GLint prevFbo = 0;
-        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo);
+    void OpenGL4EffectRenderer::Unbind()
+    {
+        // The next bind or sprite flush installs its own program.
+    }
 
-        GLuint readFbo = 0;
-        gl4_glGenFramebuffers(1, &readFbo);
-        gl4_glBindFramebuffer(GL_FRAMEBUFFER, readFbo);
-        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    bool OpenGL4EffectRenderer::IsValid() const
+    {
+        return program_.IsValid();
+    }
 
-        auto* dest = static_cast<uint8_t*>(data);
-        const std::size_t sliceBytes = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4;
-        for (int slice = z; slice < z + depth; ++slice)
+    std::string OpenGL4EffectRenderer::GetCompileError() const
+    {
+        return program_.GetError();
+    }
+
+    void OpenGL4EffectRenderer::SetUniformFloat(const char* name, float value)
+    {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
+        MakeProgramCurrent();
+        const int loc = program_.UniformLocation(name);
+        if (loc >= 0) gl4_glUniform1f(loc, value);
+    }
+
+    void OpenGL4EffectRenderer::SetUniformInt(const char* name, int value)
+    {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
+        MakeProgramCurrent();
+        const int loc = program_.UniformLocation(name);
+        if (loc >= 0) gl4_glUniform1i(loc, value);
+    }
+
+    void OpenGL4EffectRenderer::SetUniformVec2(const char* name, float x, float y)
+    {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
+        MakeProgramCurrent();
+        const int loc = program_.UniformLocation(name);
+        if (loc >= 0) gl4_glUniform2f(loc, x, y);
+    }
+
+    void OpenGL4EffectRenderer::SetUniformVec3(const char* name, float x, float y, float z)
+    {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
+        MakeProgramCurrent();
+        const int loc = program_.UniformLocation(name);
+        if (loc >= 0) gl4_glUniform3f(loc, x, y, z);
+    }
+
+    void OpenGL4EffectRenderer::SetUniformVec4(const char* name, float x, float y, float z, float w)
+    {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
+        MakeProgramCurrent();
+        const int loc = program_.UniformLocation(name);
+        if (loc >= 0) gl4_glUniform4f(loc, x, y, z, w);
+    }
+
+    void OpenGL4EffectRenderer::SetUniformMat4(const char* name, const float* matrix)
+    {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
+        MakeProgramCurrent();
+        const int loc = program_.UniformLocation(name);
+        if (loc >= 0) gl4_glUniformMatrix4fv(loc, 1, GL_FALSE, matrix);
+    }
+
+    int OpenGL4EffectRenderer::ArrayUniformLocation(const char* name) const
+    {
+        // GLSL names an array uniform by its first element; whether a driver also accepts the bare
+        // array name is the driver's choice. Asking for both is the difference between an SSAO
+        // kernel that occludes and one that silently stays at the origin.
+        const int direct = program_.UniformLocation(name);
+        if (direct >= 0) return direct;
+        return program_.UniformLocation((std::string(name) + "[0]").c_str());
+    }
+
+    void OpenGL4EffectRenderer::SetUniformFloatArray(const char* name, const float* values, int count)
+    {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
+        MakeProgramCurrent();
+        const int loc = ArrayUniformLocation(name);
+        if (loc >= 0 && count > 0) gl4_glUniform1fv(loc, count, values);
+    }
+
+    void OpenGL4EffectRenderer::SetUniformVec2Array(const char* name, const float* values, int count)
+    {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
+        MakeProgramCurrent();
+        const int loc = ArrayUniformLocation(name);
+        if (loc >= 0 && count > 0) gl4_glUniform2fv(loc, count, values);
+    }
+
+    void OpenGL4EffectRenderer::SetUniformVec3Array(const char* name, const float* values, int count)
+    {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
+        MakeProgramCurrent();
+        const int loc = ArrayUniformLocation(name);
+        if (loc >= 0 && count > 0) gl4_glUniform3fv(loc, count, values);
+    }
+
+    void OpenGL4EffectRenderer::SetUniformMat4Array(const char* name, const float* matrices, int count)
+    {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
+        MakeProgramCurrent();
+        const int loc = ArrayUniformLocation(name);
+        if (loc >= 0 && count > 0) gl4_glUniformMatrix4fv(loc, count, GL_FALSE, matrices);
+    }
+
+    void OpenGL4EffectRenderer::BindTexture(int unit, ITextureRenderer* texture)
+    {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
+        if (!texture) return;
+        texture->BindGL(unit);
+        gl4_glActiveTexture(GL_TEXTURE0);
+
+        // REMED-GFX-147: a custom ShaderEffect's GLSL belongs to the game, so the renderer cannot
+        // rewrite its sampling -- but it can say what is being sampled. A shader that declares
+        // `uniform vec4 uRtFlipV;` gets the same render-target orientation flag the stock effects
+        // get; one that does not pays nothing.
+        UpdateRtFlipV(unit, SampledRowOrderIsBottomUp(texture) ? 1.0f : 0.0f);
+    }
+
+    void OpenGL4EffectRenderer::UpdateRtFlipV(const int unit, const float flip)
+    {
+        if (unit < 0 || unit >= 4) return;
+        if (rtFlipV_[unit] == flip && rtFlipVUploaded_) return;
+        rtFlipV_[unit] = flip;
+        MakeProgramCurrent();
+        const int loc = program_.UniformLocation("uRtFlipV");
+        if (loc >= 0)
         {
-            gl4_glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texture_, level, slice);
-            glReadPixels(x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, dest);
-            dest += sliceBytes;
+            gl4_glUniform4f(loc, rtFlipV_[0], rtFlipV_[1], rtFlipV_[2], rtFlipV_[3]);
+            rtFlipVUploaded_ = true;
         }
-
-        gl4_glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
-        gl4_glDeleteFramebuffers(1, &readFbo);
-        return true;
     }
 
-    // ------------------------------------------------------------------------------------
-    // OpenGL4TextureCubeRenderer
-    // ------------------------------------------------------------------------------------
-
-    namespace
+    bool OpenGL4EffectRenderer::BindStorageTexture2DEXT(
+        const int unit, std::shared_ptr<IStorageTexture2DRenderer> texture)
     {
-        constexpr GLenum kTextureCubeFaceTargetsGL4[6] = {
-            GL_TEXTURE_CUBE_MAP_POSITIVE_X + 0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + 1,
-            GL_TEXTURE_CUBE_MAP_POSITIVE_X + 2, GL_TEXTURE_CUBE_MAP_POSITIVE_X + 3,
-            GL_TEXTURE_CUBE_MAP_POSITIVE_X + 4, GL_TEXTURE_CUBE_MAP_POSITIVE_X + 5,
-        };
-    }
-
-    OpenGL4TextureCubeRenderer::OpenGL4TextureCubeRenderer(int size, bool mipMap)
-        : size_(size), levelCount_(mipMap ? CalculateRenderTargetMipLevelsGL4(size, size) : 1)
-    {
-        glGenTextures(1, &texture_);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, texture_);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        // Allocate storage for every face x every mip level up front, same rationale as
-        // OpenGL4RenderTargetCubeRenderer::CreateResources / OpenGL4Texture3DRenderer above.
-        for (GLenum faceTarget : kTextureCubeFaceTargetsGL4)
+        if (unit < 0) return false;
+        const OpenGL4StorageTexture2DRenderer* native = nullptr;
+        if (texture != nullptr)
         {
-            int levelSize = size_;
-            for (int level = 0; level < levelCount_; ++level)
-            {
-                glTexImage2D(faceTarget, level, GL_RGBA8, levelSize, levelSize, 0, GL_RGBA,
-                            GL_UNSIGNED_BYTE, nullptr);
-                levelSize = std::max(1, levelSize / 2);
-            }
+            native = dynamic_cast<const OpenGL4StorageTexture2DRenderer*>(texture.get());
+            if (native == nullptr) return false;
         }
-        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL, levelCount_ - 1);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-    }
-
-    OpenGL4TextureCubeRenderer::~OpenGL4TextureCubeRenderer()
-    {
-        if (texture_ != 0)
-            glDeleteTextures(1, &texture_);
-    }
-
-    void OpenGL4TextureCubeRenderer::BindGL(int /*unit*/) const
-    {
-        glBindTexture(GL_TEXTURE_CUBE_MAP, texture_);
-    }
-
-    bool OpenGL4TextureCubeRenderer::SetData(int face, int level, int x, int y, int w, int h,
-                                            const void* data, int /*dataLength*/)
-    {
-        if (face < 0 || face >= 6) return false;
-        glBindTexture(GL_TEXTURE_CUBE_MAP, texture_);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        glTexSubImage2D(kTextureCubeFaceTargetsGL4[face], level, x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, data);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return false;
+        gl4_glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(unit));
+        glBindTexture(GL_TEXTURE_2D, native != nullptr ? native->GLHandle() : 0);
+        gl4_glActiveTexture(GL_TEXTURE0);
+        // Its rows are stored top-down like an uploaded Texture2D's, never a target's.
+        UpdateRtFlipV(unit, 0.0f);
         return true;
     }
 
-    bool OpenGL4TextureCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
-                                            void* data, int dataLength) const
+    void OpenGL4EffectRenderer::BindTextureCube(int unit, ITextureCubeRenderer* texture)
     {
-        if (face < 0 || face >= 6 || w <= 0 || h <= 0) return false;
-        const std::size_t sizeBytes = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4;
-        if (static_cast<std::size_t>(dataLength) < sizeBytes)
-            throw std::out_of_range("CNA OpenGL4: TextureCube::GetData: dataLength too small for the requested region");
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
+        if (!texture) return;
+        texture->BindGL(unit);
+        gl4_glActiveTexture(GL_TEXTURE0);
+    }
 
-        GLint prevFbo = 0;
-        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo);
-
-        GLuint readFbo = 0;
-        gl4_glGenFramebuffers(1, &readFbo);
-        gl4_glBindFramebuffer(GL_FRAMEBUFFER, readFbo);
-        gl4_glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                                   kTextureCubeFaceTargetsGL4[face], texture_, level);
-
-        // No Y-flip -- unlike OpenGL4RenderTargetCubeRenderer::GetData (a framebuffer-origin
-        // render target), this is a plain texture; matches EasyGLTextureCubeRenderer::GetData's
-        // own non-flipped convention.
-        glPixelStorei(GL_PACK_ALIGNMENT, 1);
-        glReadPixels(x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, data);
-
-        gl4_glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
-        gl4_glDeleteFramebuffers(1, &readFbo);
-        return true;
+    void OpenGL4EffectRenderer::BindTexture3D(int unit, ITexture3DRenderer* texture)
+    {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
+        if (!texture) return;
+        texture->BindGL(unit);
+        gl4_glActiveTexture(GL_TEXTURE0);
     }
 
     // ------------------------------------------------------------------------------------
@@ -1620,26 +804,36 @@ void main()
 
     OpenGL4OcclusionQueryRenderer::~OpenGL4OcclusionQueryRenderer()
     {
-        if (query_ != 0)
+        const auto ownContext = EnterOwnContext();   // GL4-0021
+        if (ownContext && query_ != 0)
             gl4_glDeleteQueries(1, &query_);
     }
 
     void OpenGL4OcclusionQueryRenderer::Begin()
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
         if (query_ == 0) return;
         resultCached_ = false;
+        issued_ = false;
         gl4_glBeginQuery(GL_SAMPLES_PASSED, query_);
     }
 
     void OpenGL4OcclusionQueryRenderer::End()
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
         if (query_ == 0) return;
         gl4_glEndQuery(GL_SAMPLES_PASSED);
+        // A query that has ended always becomes available, including one no fragment reached.
+        issued_ = true;
     }
 
     bool OpenGL4OcclusionQueryRenderer::IsComplete() const
     {
-        if (query_ == 0) return false;
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return false;
+        if (query_ == 0 || !issued_) return false;
         if (resultCached_) return true;
         GLuint available = 0;
         gl4_glGetQueryObjectuiv(query_, GL_QUERY_RESULT_AVAILABLE, &available);
@@ -1653,376 +847,10 @@ void main()
 
     int OpenGL4OcclusionQueryRenderer::PixelCount() const
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return 0;
         if (!IsComplete()) return 0;
         return cachedResult_;
-    }
-
-    // ------------------------------------------------------------------------------------
-    // OpenGL4RenderTargetRenderer
-    // ------------------------------------------------------------------------------------
-
-    OpenGL4RenderTargetRenderer::OpenGL4RenderTargetRenderer(int w, int h, int depthFormat,
-                                                            bool mipMap, int multiSampleCount)
-        : width_(w), height_(h), depthFormat_(depthFormat), mipMap_(mipMap),
-          multiSampleCount_(multiSampleCount)
-    {
-        levelCount_ = mipMap_ ? CalculateRenderTargetMipLevelsGL4(w, h) : 1;
-        CreateResources();
-    }
-
-    OpenGL4RenderTargetRenderer::~OpenGL4RenderTargetRenderer()
-    {
-        DestroyResources();
-    }
-
-    void OpenGL4RenderTargetRenderer::CreateResources()
-    {
-        // Clamp to GL_MAX_SAMPLES so glRenderbufferStorageMultisample never errors, mirroring
-        // EasyGLRenderTargetRenderer::CreateResources / FNA3D's OPENGL_GetMaxMultiSampleCount.
-        if (multiSampleCount_ > 0)
-        {
-            GLint maxSamples = 0;
-            glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
-            if (maxSamples > 0 && multiSampleCount_ > static_cast<int>(maxSamples))
-                multiSampleCount_ = static_cast<int>(maxSamples);
-        }
-
-        glGenTextures(1, &colorTexture_);
-        glBindTexture(GL_TEXTURE_2D, colorTexture_);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        // Pre-allocate GPU storage for every mip level up front (not just level 0): the mip
-        // chain is regenerated from level 0 via glGenerateMipmap when the target is unbound
-        // (see UnbindAsRenderTarget), mirroring FNA3D's OPENGL_ResolveTarget behavior -- without
-        // this loop, levels 1+ would have no defined image and glGenerateMipmap's writes would
-        // target GL-incomplete storage.
-        {
-            int levelW = width_, levelH = height_;
-            for (int level = 0; level < levelCount_; ++level)
-            {
-                glTexImage2D(GL_TEXTURE_2D, level, GL_RGBA8, levelW, levelH, 0, GL_RGBA,
-                             GL_UNSIGNED_BYTE, nullptr);
-                levelW = std::max(1, levelW / 2);
-                levelH = std::max(1, levelH / 2);
-            }
-        }
-        glBindTexture(GL_TEXTURE_2D, 0);
-
-        gl4_glGenFramebuffers(1, &fbo_);
-        gl4_glBindFramebuffer(GL_FRAMEBUFFER, fbo_);
-
-        if (multiSampleCount_ > 0)
-        {
-            // Render into a multisampled color renderbuffer; colorTexture_ is only ever the
-            // single-sample resolve target, written by UnbindAsRenderTarget()'s blit, never
-            // rendered into directly (glReadPixels/sampling a multisample attachment directly
-            // is disallowed by GL).
-            gl4_glGenRenderbuffers(1, &msaaColorRenderbuffer_);
-            gl4_glBindRenderbuffer(GL_RENDERBUFFER, msaaColorRenderbuffer_);
-            gl4_glRenderbufferStorageMultisample(GL_RENDERBUFFER, multiSampleCount_, GL_RGBA8,
-                                                 width_, height_);
-            gl4_glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER,
-                                          msaaColorRenderbuffer_);
-
-            gl4_glGenFramebuffers(1, &resolveFbo_);
-            gl4_glBindFramebuffer(GL_FRAMEBUFFER, resolveFbo_);
-            gl4_glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-                                       colorTexture_, 0);
-            gl4_glBindFramebuffer(GL_FRAMEBUFFER, fbo_);
-        }
-        else
-        {
-            gl4_glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-                                       colorTexture_, 0);
-        }
-
-        {
-            GLenum depthInternalFormat = 0, depthAttachment = 0;
-            if (MapDepthFormatGL4(depthFormat_, depthInternalFormat, depthAttachment))
-            {
-                gl4_glGenRenderbuffers(1, &depthRenderbuffer_);
-                gl4_glBindRenderbuffer(GL_RENDERBUFFER, depthRenderbuffer_);
-                if (multiSampleCount_ > 0)
-                    gl4_glRenderbufferStorageMultisample(GL_RENDERBUFFER, multiSampleCount_,
-                                                         depthInternalFormat, width_, height_);
-                else
-                    gl4_glRenderbufferStorage(GL_RENDERBUFFER, depthInternalFormat, width_, height_);
-                gl4_glFramebufferRenderbuffer(GL_FRAMEBUFFER, depthAttachment, GL_RENDERBUFFER,
-                                              depthRenderbuffer_);
-            }
-        }
-
-        gl4_glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    }
-
-    void OpenGL4RenderTargetRenderer::DestroyResources()
-    {
-        if (depthRenderbuffer_) gl4_glDeleteRenderbuffers(1, &depthRenderbuffer_);
-        if (msaaColorRenderbuffer_) gl4_glDeleteRenderbuffers(1, &msaaColorRenderbuffer_);
-        if (resolveFbo_) gl4_glDeleteFramebuffers(1, &resolveFbo_);
-        if (fbo_) gl4_glDeleteFramebuffers(1, &fbo_);
-        if (colorTexture_) glDeleteTextures(1, &colorTexture_);
-        depthRenderbuffer_ = msaaColorRenderbuffer_ = resolveFbo_ = fbo_ = colorTexture_ = 0;
-    }
-
-    void OpenGL4RenderTargetRenderer::BindGL(int /*unit*/) const
-    {
-        glBindTexture(GL_TEXTURE_2D, colorTexture_);
-    }
-
-    void OpenGL4RenderTargetRenderer::BindAsRenderTarget()
-    {
-        gl4_glBindFramebuffer(GL_FRAMEBUFFER, fbo_);
-    }
-
-    void OpenGL4RenderTargetRenderer::UnbindAsRenderTarget()
-    {
-        // Resolve the multisampled color renderbuffer into colorTexture_ before mips (if any)
-        // are regenerated from it, matching FNA3D's OPENGL_ResolveTarget resolve-then-mipmap
-        // order.
-        if (multiSampleCount_ > 0)
-        {
-            gl4_glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo_);
-            gl4_glBindFramebuffer(GL_DRAW_FRAMEBUFFER, resolveFbo_);
-            gl4_glBlitFramebuffer(0, 0, width_, height_, 0, 0, width_, height_,
-                                  GL_COLOR_BUFFER_BIT, GL_LINEAR);
-        }
-        if (levelCount_ > 1)
-        {
-            glBindTexture(GL_TEXTURE_2D, colorTexture_);
-            gl4_glGenerateMipmap(GL_TEXTURE_2D);
-        }
-        gl4_glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    }
-
-    bool OpenGL4RenderTargetRenderer::GetData(int level, int x, int y, int w, int h,
-                                             void* data, int dataLength) const
-    {
-        if (w <= 0 || h <= 0) return false;
-        const std::size_t sizeBytes = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4;
-        if (static_cast<std::size_t>(dataLength) < sizeBytes)
-            throw std::out_of_range("CNA OpenGL4: RenderTarget2D::GetData: dataLength too small for the requested region");
-
-        // Reads from the single-sample, sampleable colour texture (already resolved-into by
-        // UnbindAsRenderTarget() when this target is MSAA) via a throwaway FBO attaching the
-        // exact requested mip level -- fbo_/resolveFbo_ only ever have level 0 attached, so an
-        // arbitrary level read needs its own attachment rather than reusing either of them.
-        GLint prevFbo = 0;
-        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo);
-
-        GLuint readFbo = 0;
-        gl4_glGenFramebuffers(1, &readFbo);
-        gl4_glBindFramebuffer(GL_FRAMEBUFFER, readFbo);
-        gl4_glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-                                   colorTexture_, level);
-
-        const int levelH = std::max(1, height_ >> level);
-
-        // OpenGL's origin is bottom-left; flip Y using this level's own height (never the
-        // window's) so the caller gets top-left-origin game coordinates, matching
-        // OpenGL4Renderer::ReadBackbuffer's own convention.
-        const int glY = levelH - y - h;
-        glPixelStorei(GL_PACK_ALIGNMENT, 1);
-        auto* pixels = static_cast<uint8_t*>(data);
-        glReadPixels(x, glY, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-
-        const int rowBytes = w * 4;
-        std::vector<uint8_t> tmp(rowBytes);
-        for (int row = 0; row < h / 2; ++row)
-        {
-            uint8_t* a = pixels + static_cast<std::size_t>(row) * rowBytes;
-            uint8_t* b = pixels + static_cast<std::size_t>(h - 1 - row) * rowBytes;
-            std::memcpy(tmp.data(), a, rowBytes);
-            std::memcpy(a, b, rowBytes);
-            std::memcpy(b, tmp.data(), rowBytes);
-        }
-
-        gl4_glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
-        gl4_glDeleteFramebuffers(1, &readFbo);
-        return true;
-    }
-
-    // ------------------------------------------------------------------------------------
-    // OpenGL4RenderTargetCubeRenderer
-    // ------------------------------------------------------------------------------------
-
-    OpenGL4RenderTargetCubeRenderer::OpenGL4RenderTargetCubeRenderer(int size, int depthFormat,
-                                                                    bool mipMap, int multiSampleCount)
-        : size_(size), depthFormat_(depthFormat), mipMap_(mipMap),
-          multiSampleCount_(multiSampleCount)
-    {
-        levelCount_ = mipMap_ ? CalculateRenderTargetMipLevelsGL4(size, size) : 1;
-        CreateResources();
-    }
-
-    OpenGL4RenderTargetCubeRenderer::~OpenGL4RenderTargetCubeRenderer()
-    {
-        DestroyResources();
-    }
-
-    void OpenGL4RenderTargetCubeRenderer::CreateResources()
-    {
-        if (multiSampleCount_ > 0)
-        {
-            GLint maxSamples = 0;
-            glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
-            if (maxSamples > 0 && multiSampleCount_ > static_cast<int>(maxSamples))
-                multiSampleCount_ = static_cast<int>(maxSamples);
-        }
-
-        glGenTextures(1, &cubeTexture_);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, cubeTexture_);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        // Allocate storage for all 6 faces, all mip levels up front (see
-        // OpenGL4RenderTargetRenderer::CreateResources for why -- glGenerateMipmap's writes need
-        // every level to already have defined storage).
-        for (int face = 0; face < 6; ++face)
-        {
-            int levelSize = size_;
-            for (int level = 0; level < levelCount_; ++level)
-            {
-                glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, level, GL_RGBA8, levelSize,
-                             levelSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-                levelSize = std::max(1, levelSize / 2);
-            }
-        }
-        glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-
-        gl4_glGenFramebuffers(1, &fbo_);
-        gl4_glBindFramebuffer(GL_FRAMEBUFFER, fbo_);
-
-        if (multiSampleCount_ > 0)
-        {
-            // One shared multisample colour renderbuffer, reused across all 6 faces (only one
-            // face is ever rendered into at a time) -- resolveFbo_ is re-attached to whichever
-            // face was most recently bound (see BindAsRenderTargetFace) so
-            // UnbindAsRenderTarget's blit resolves into the correct face.
-            gl4_glGenRenderbuffers(1, &msaaColorRenderbuffer_);
-            gl4_glBindRenderbuffer(GL_RENDERBUFFER, msaaColorRenderbuffer_);
-            gl4_glRenderbufferStorageMultisample(GL_RENDERBUFFER, multiSampleCount_, GL_RGBA8,
-                                                 size_, size_);
-            gl4_glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER,
-                                          msaaColorRenderbuffer_);
-            gl4_glGenFramebuffers(1, &resolveFbo_);
-        }
-
-        GLenum depthInternalFormat = 0, depthAttachment = 0;
-        if (MapDepthFormatGL4(depthFormat_, depthInternalFormat, depthAttachment))
-        {
-            gl4_glGenRenderbuffers(1, &depthRenderbuffer_);
-            gl4_glBindRenderbuffer(GL_RENDERBUFFER, depthRenderbuffer_);
-            if (multiSampleCount_ > 0)
-                gl4_glRenderbufferStorageMultisample(GL_RENDERBUFFER, multiSampleCount_,
-                                                     depthInternalFormat, size_, size_);
-            else
-                gl4_glRenderbufferStorage(GL_RENDERBUFFER, depthInternalFormat, size_, size_);
-            gl4_glBindFramebuffer(GL_FRAMEBUFFER, fbo_);
-            gl4_glFramebufferRenderbuffer(GL_FRAMEBUFFER, depthAttachment, GL_RENDERBUFFER,
-                                          depthRenderbuffer_);
-        }
-
-        gl4_glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    }
-
-    void OpenGL4RenderTargetCubeRenderer::DestroyResources()
-    {
-        if (depthRenderbuffer_) gl4_glDeleteRenderbuffers(1, &depthRenderbuffer_);
-        if (msaaColorRenderbuffer_) gl4_glDeleteRenderbuffers(1, &msaaColorRenderbuffer_);
-        if (resolveFbo_) gl4_glDeleteFramebuffers(1, &resolveFbo_);
-        if (fbo_) gl4_glDeleteFramebuffers(1, &fbo_);
-        if (cubeTexture_) glDeleteTextures(1, &cubeTexture_);
-        depthRenderbuffer_ = msaaColorRenderbuffer_ = resolveFbo_ = fbo_ = cubeTexture_ = 0;
-    }
-
-    void OpenGL4RenderTargetCubeRenderer::BindGL(int /*unit*/) const
-    {
-        glBindTexture(GL_TEXTURE_CUBE_MAP, cubeTexture_);
-    }
-
-    void OpenGL4RenderTargetCubeRenderer::BindAsRenderTargetFace(int face)
-    {
-        lastFace_ = face;
-        gl4_glBindFramebuffer(GL_FRAMEBUFFER, fbo_);
-        if (multiSampleCount_ == 0)
-        {
-            // Non-MSAA: fbo_'s colour attachment IS cubeTexture_ -- re-attach the requested face
-            // (0=+X .. 5=-Z) directly, since all faces share this one FBO/texture.
-            gl4_glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                                       GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, cubeTexture_, 0);
-        }
-        // MSAA: fbo_'s colour attachment is the shared msaaColorRenderbuffer_, which is
-        // face-agnostic -- nothing to re-attach on bind; the face only matters when
-        // UnbindAsRenderTarget resolves into cubeTexture_'s specific face image.
-    }
-
-    void OpenGL4RenderTargetCubeRenderer::UnbindAsRenderTarget()
-    {
-        if (multiSampleCount_ > 0)
-        {
-            gl4_glBindFramebuffer(GL_FRAMEBUFFER, resolveFbo_);
-            gl4_glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                                       GL_TEXTURE_CUBE_MAP_POSITIVE_X + lastFace_, cubeTexture_, 0);
-            gl4_glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo_);
-            gl4_glBindFramebuffer(GL_DRAW_FRAMEBUFFER, resolveFbo_);
-            gl4_glBlitFramebuffer(0, 0, size_, size_, 0, 0, size_, size_, GL_COLOR_BUFFER_BIT,
-                                  GL_LINEAR);
-        }
-        if (levelCount_ > 1)
-        {
-            glBindTexture(GL_TEXTURE_CUBE_MAP, cubeTexture_);
-            gl4_glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
-        }
-        gl4_glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    }
-
-    bool OpenGL4RenderTargetCubeRenderer::SetData(int face, int level, int x, int y, int w, int h,
-                                                 const void* data, int /*dataLength*/)
-    {
-        if (face < 0 || face >= 6) return false;
-        glBindTexture(GL_TEXTURE_CUBE_MAP, cubeTexture_);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, level, x, y, w, h, GL_RGBA,
-                        GL_UNSIGNED_BYTE, data);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-        return true;
-    }
-
-    bool OpenGL4RenderTargetCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
-                                                 void* data, int dataLength) const
-    {
-        if (face < 0 || face >= 6 || w <= 0 || h <= 0) return false;
-        const std::size_t sizeBytes = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4;
-        if (static_cast<std::size_t>(dataLength) < sizeBytes)
-            throw std::out_of_range("CNA OpenGL4: RenderTargetCube::GetData: dataLength too small for the requested region");
-
-        GLint prevFbo = 0;
-        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo);
-
-        GLuint readFbo = 0;
-        gl4_glGenFramebuffers(1, &readFbo);
-        gl4_glBindFramebuffer(GL_FRAMEBUFFER, readFbo);
-        gl4_glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                                   GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, cubeTexture_, level);
-
-        const int levelSize = std::max(1, size_ >> level);
-        const int glY = levelSize - y - h;
-        glPixelStorei(GL_PACK_ALIGNMENT, 1);
-        auto* pixels = static_cast<uint8_t*>(data);
-        glReadPixels(x, glY, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-
-        const int rowBytes = w * 4;
-        std::vector<uint8_t> tmp(rowBytes);
-        for (int row = 0; row < h / 2; ++row)
-        {
-            uint8_t* a = pixels + static_cast<std::size_t>(row) * rowBytes;
-            uint8_t* b = pixels + static_cast<std::size_t>(h - 1 - row) * rowBytes;
-            std::memcpy(tmp.data(), a, rowBytes);
-            std::memcpy(a, b, rowBytes);
-            std::memcpy(b, tmp.data(), rowBytes);
-        }
-
-        gl4_glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
-        gl4_glDeleteFramebuffers(1, &readFbo);
-        return true;
     }
 
     // ------------------------------------------------------------------------------------
@@ -2038,6 +866,8 @@ void main()
 
     OpenGL4VertexBufferRenderer::~OpenGL4VertexBufferRenderer()
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021
+        if (!ownContext) return;
         if (vbo_ != 0) gl4_glDeleteBuffers(1, &vbo_);
         if (vao_ != 0) gl4_glDeleteVertexArrays(1, &vao_);
     }
@@ -2049,202 +879,226 @@ void main()
             int componentCount;
             GLenum type;
             bool normalized;
-            bool isInteger;
         };
 
-        // plans/plan_opengl4.md GL4-33: maps XNA's VertexElementFormat to the GL attribute shape needed
-        // to bind it -- component count, GL scalar type, whether values are normalized to
-        // [0,1]/[-1,1], and whether the attribute must be read as a true integer
-        // (glVertexAttribIPointer) rather than converted to float (glVertexAttribPointer). Ported
-        // from EasyGLRenderer's own DescribeVertexElementFormat (Task 1080) verbatim.
+        // Task 1080 / SOFTWARE-130 / FX-127: XNA's VertexElementFormat -> GL attribute shape. Every
+        // stock and effect input is a floating-point shader register, so all formats -- including
+        // Byte4 BLENDINDICES, which XNA also permits as Vector4 -- bind through the converting
+        // float path; the skinned programs cast to int when they index the palette.
         VertexAttribFormat DescribeVertexElementFormat(VertexElementFormat format)
         {
             switch (format)
             {
-            case VertexElementFormat::Single:           return { 1, GL_FLOAT,         false, false };
-            case VertexElementFormat::Vector2:          return { 2, GL_FLOAT,         false, false };
-            case VertexElementFormat::Vector3:          return { 3, GL_FLOAT,         false, false };
-            case VertexElementFormat::Vector4:          return { 4, GL_FLOAT,         false, false };
-            case VertexElementFormat::Color:            return { 4, GL_UNSIGNED_BYTE, true,  false };
-            case VertexElementFormat::Byte4:            return { 4, GL_UNSIGNED_BYTE, false, true  };
-            case VertexElementFormat::Short2:           return { 2, GL_SHORT,         false, false };
-            case VertexElementFormat::Short4:           return { 4, GL_SHORT,         false, false };
-            case VertexElementFormat::NormalizedShort2: return { 2, GL_SHORT,         true,  false };
-            case VertexElementFormat::NormalizedShort4: return { 4, GL_SHORT,         true,  false };
-            case VertexElementFormat::HalfVector2:      return { 2, GL_HALF_FLOAT,    false, false };
-            case VertexElementFormat::HalfVector4:      return { 4, GL_HALF_FLOAT,    false, false };
+            case VertexElementFormat::Single:           return { 1, GL_FLOAT,         false };
+            case VertexElementFormat::Vector2:          return { 2, GL_FLOAT,         false };
+            case VertexElementFormat::Vector3:          return { 3, GL_FLOAT,         false };
+            case VertexElementFormat::Vector4:          return { 4, GL_FLOAT,         false };
+            case VertexElementFormat::Color:            return { 4, GL_UNSIGNED_BYTE, true  };
+            case VertexElementFormat::Byte4:            return { 4, GL_UNSIGNED_BYTE, false };
+            case VertexElementFormat::Short2:           return { 2, GL_SHORT,         false };
+            case VertexElementFormat::Short4:           return { 4, GL_SHORT,         false };
+            case VertexElementFormat::NormalizedShort2: return { 2, GL_SHORT,         true  };
+            case VertexElementFormat::NormalizedShort4: return { 4, GL_SHORT,         true  };
+            case VertexElementFormat::HalfVector2:      return { 2, GL_HALF_FLOAT,    false };
+            case VertexElementFormat::HalfVector4:      return { 4, GL_HALF_FLOAT,    false };
             }
-            return { 3, GL_FLOAT, false, false };
+            throw System::NotSupportedException(
+                "OpenGL4: the VertexDeclaration contains an unknown VertexElementFormat.");
+        }
+
+        void SetFloatAttribute(GLuint location, int size, GLenum type, bool normalized,
+                               std::size_t stride, std::size_t offset)
+        {
+            gl4_glEnableVertexAttribArray(location);
+            gl4_glVertexAttribPointer(location, size, type, normalized ? GL_TRUE : GL_FALSE,
+                                      static_cast<GLsizei>(stride),
+                                      reinterpret_cast<const void*>(offset));
         }
     }
 
     void OpenGL4VertexBufferRenderer::SetVertexDeclaration(const VertexDeclaration& vertexDeclaration)
     {
-        declaration_.Remember(vertexDeclaration);
+        declarationElements_ = vertexDeclaration.GetVertexElements();
     }
 
     void OpenGL4VertexBufferRenderer::ApplyLayout(std::size_t stride)
     {
-        const auto s = static_cast<GLsizei>(stride);
         gl4_glBindVertexArray(vao_);
         gl4_glBindBuffer(GL_ARRAY_BUFFER, vbo_);
 
-        const std::vector<VertexElement>& declarationElements = declaration_.GetElements();
-        if (!declarationElements.empty())
+        // The VAO starts from a known state: every location off and every divisor zero, so a
+        // previous declaration or draw can never leave a location this layout does not name enabled.
+        for (GLuint location = 0; location < 16; ++location)
         {
-            // plans/plan_opengl4.md GL4-33: generic layout binding driven by the caller's own
-            // VertexDeclaration -- attribute location = the element's own index within the
-            // declaration's element list, matching EasyGLVertexBufferRenderer::ApplyLayout's own
-            // Task 1080 convention. Covers layouts that don't match any of the fixed strides the
-            // switch below recognizes (needed by hardware instancing's per-instance buffer).
-            for (std::size_t i = 0; i < declarationElements.size(); ++i)
+            gl4_glDisableVertexAttribArray(location);
+            gl4_glVertexAttribDivisor(location, 0);
+        }
+
+        if (!declarationElements_.empty())
+        {
+            // Task 1080: generic layout from the caller's own VertexDeclaration -- attribute
+            // location N is element N, the "layout(location=N) == Nth field of the ported HLSL
+            // input struct" convention every custom effect relies on.
+            for (std::size_t i = 0; i < declarationElements_.size() && i < 16; ++i)
             {
-                const VertexElement& element = declarationElements[i];
+                const VertexElement& element = declarationElements_[i];
                 const VertexAttribFormat desc =
                     DescribeVertexElementFormat(element.getVertexElementFormatProperty());
-                const auto location = static_cast<GLuint>(i);
-                const void* offset = reinterpret_cast<void*>(
-                    static_cast<std::uintptr_t>(element.getOffsetProperty()));
-                gl4_glEnableVertexAttribArray(location);
-                if (desc.isInteger)
-                    gl4_glVertexAttribIPointer(location, desc.componentCount, desc.type, s, offset);
-                else
-                    gl4_glVertexAttribPointer(location, desc.componentCount, desc.type,
-                                              desc.normalized ? GL_TRUE : GL_FALSE, s, offset);
+                SetFloatAttribute(static_cast<GLuint>(i), desc.componentCount, desc.type,
+                                  desc.normalized, stride,
+                                  static_cast<std::size_t>(element.getOffsetProperty()));
             }
             gl4_glBindVertexArray(0);
             return;
         }
 
+        const std::size_t s = stride;
         switch (stride)
         {
-        case 16:
-            // VertexPositionColor (packed): float3 position + ubyte4 color
-            gl4_glEnableVertexAttribArray(0);
-            gl4_glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, s, (void*)0);
-            gl4_glEnableVertexAttribArray(1);
-            gl4_glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, s, (void*)12);
+        case 16:  // VertexPositionColor
+            SetFloatAttribute(0, 3, GL_FLOAT, false, s, 0);
+            SetFloatAttribute(1, 4, GL_UNSIGNED_BYTE, true, s, 12);
             break;
-        case 20:
-            // VertexPositionTexture (packed): float3 position + float2 texcoord
-            gl4_glEnableVertexAttribArray(0);
-            gl4_glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, s, (void*)0);
-            gl4_glEnableVertexAttribArray(1);
-            gl4_glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, s, (void*)12);
+        case 20:  // VertexPositionTexture
+            SetFloatAttribute(0, 3, GL_FLOAT, false, s, 0);
+            SetFloatAttribute(1, 2, GL_FLOAT, false, s, 12);
             break;
-        case 24:
-            // VertexPositionColorTexture (packed): float3 position + ubyte4 color + float2 texcoord
-            gl4_glEnableVertexAttribArray(0);
-            gl4_glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, s, (void*)0);
-            gl4_glEnableVertexAttribArray(1);
-            gl4_glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, s, (void*)12);
-            gl4_glEnableVertexAttribArray(2);
-            gl4_glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, s, (void*)16);
+        case 24:  // VertexPositionColorTexture
+            SetFloatAttribute(0, 3, GL_FLOAT, false, s, 0);
+            SetFloatAttribute(1, 4, GL_UNSIGNED_BYTE, true, s, 12);
+            SetFloatAttribute(2, 2, GL_FLOAT, false, s, 16);
             break;
-        case 32:
-            // VertexPositionNormalTexture (packed): float3 position + float3 normal + float2 texcoord
-            gl4_glEnableVertexAttribArray(0);
-            gl4_glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, s, (void*)0);
-            gl4_glEnableVertexAttribArray(1);
-            gl4_glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, s, (void*)12);
-            gl4_glEnableVertexAttribArray(2);
-            gl4_glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, s, (void*)24);
+        case 32:  // VertexPositionNormalTexture
+            SetFloatAttribute(0, 3, GL_FLOAT, false, s, 0);
+            SetFloatAttribute(1, 3, GL_FLOAT, false, s, 12);
+            SetFloatAttribute(2, 2, GL_FLOAT, false, s, 24);
             break;
-        case 52:
-        case 56:
-            // plans/plan_opengl4.md GL4-22: VertexPositionNormalTextureSkinned (packed): float3 position
-            // + float3 normal + float2 texcoord + float4 blend weight + ubyte4 blend indices
-            // (+ ubyte4 normalized color for stride 56, matching EasyGLRenderer's own
-            // stride-52/56 cases). BlendIndices (location 4) uses the true integer attribute path
-            // (glVertexAttribIPointer, not glVertexAttribPointer) since it's read as uvec4 bone
-            // indices in the shader, not float-converted color/weight data.
-            gl4_glEnableVertexAttribArray(0);
-            gl4_glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, s, (void*)0);
-            gl4_glEnableVertexAttribArray(1);
-            gl4_glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, s, (void*)12);
-            gl4_glEnableVertexAttribArray(2);
-            gl4_glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, s, (void*)24);
-            gl4_glEnableVertexAttribArray(3);
-            gl4_glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, s, (void*)32);
-            gl4_glEnableVertexAttribArray(4);
-            gl4_glVertexAttribIPointer(4, 4, GL_UNSIGNED_BYTE, s, (void*)48);
-            if (stride == 56)
-            {
-                gl4_glEnableVertexAttribArray(5);
-                gl4_glVertexAttribPointer(5, 4, GL_UNSIGNED_BYTE, GL_TRUE, s, (void*)52);
-            }
+        case 48:  // VertexPositionNormalTangentTexture (PbrEffect)
+            SetFloatAttribute(0, 3, GL_FLOAT, false, s, 0);
+            SetFloatAttribute(1, 3, GL_FLOAT, false, s, 12);
+            SetFloatAttribute(2, 4, GL_FLOAT, false, s, 24);
+            SetFloatAttribute(3, 2, GL_FLOAT, false, s, 40);
             break;
-        case 48:
-        // plans/plan_gltf.md GLTF-462: stride 60 is the rigid PBR record with a second UV set at 48 and a
-        // packed COLOR_0 at 56. Its first four fields are byte-identical to stride 48, and without
-        // this case it reached the position-only default below -- a dual-UV or vertex-coloured PBR
-        // mesh drew with no normal, no tangent and no UV at all. The two trailing slots stay unbound
-        // because this renderer's PBR shader samples one UV set and reads no colour attribute;
-        // GLTF-465 owns consuming them.
-        case 60:
-        // plans/plan_gltf.md GLTF-463: strides 76 and 80 are the skinned PBR record with UV1 and, for 80,
-        // a packed COLOR_0 appended; their first six fields are byte-identical to stride 68, and the
-        // colour is bound below so the shader can multiply it.
-        case 76:
-        case 80:
-        case 68:
-            // plans/plan_opengl4.md GL4-23: VertexPositionNormalTangentTexture (packed): float3
-            // position + float3 normal + float4 tangent (xyz + bitangent-handedness sign in w)
-            // + float2 texcoord (+ float4 blend weight + ubyte4 blend indices for the stride-68
-            // PBR+skinned combo -- locations 0-3 stay byte-identical to stride 48, matching
-            // GL4-22's own stride-52-to-56 "append, don't insert" precedent), matching
-            // EasyGLRenderer's own stride-48/68 cases.
-            gl4_glEnableVertexAttribArray(0);
-            gl4_glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, s, (void*)0);
-            gl4_glEnableVertexAttribArray(1);
-            gl4_glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, s, (void*)12);
-            gl4_glEnableVertexAttribArray(2);
-            gl4_glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, s, (void*)24);
-            gl4_glEnableVertexAttribArray(3);
-            gl4_glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, s, (void*)40);
-            if (stride == 68 || stride == 76 || stride == 80)
-            {
-                gl4_glEnableVertexAttribArray(4);
-                gl4_glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, s, (void*)48);
-                gl4_glEnableVertexAttribArray(5);
-                gl4_glVertexAttribIPointer(5, 4, GL_UNSIGNED_BYTE, s, (void*)64);
-            }
-            // plans/plan_gltf.md GLTF-465: the two colour-carrying PBR records bind COLOR_0 at location 6,
-            // which the PBR shaders declare and gate on uVertexColorEnabled. An uncoloured
-            // stride-60/80 buffer has opaque white there -- the multiplier's identity -- so the gate
-            // is the intent and the fill is the safety net.
-            if (stride == 60 || stride == 80)
-            {
-                gl4_glEnableVertexAttribArray(6);
-                gl4_glVertexAttribPointer(6, 4, GL_UNSIGNED_BYTE, GL_TRUE, s,
-                                          (void*)(stride == 60 ? 56 : 76));
-            }
+        case 60:  // GLTF-182/183/462: rigid PBR dual-UV record with packed COLOR_0
+            SetFloatAttribute(0, 3, GL_FLOAT, false, s, 0);
+            SetFloatAttribute(1, 3, GL_FLOAT, false, s, 12);
+            SetFloatAttribute(2, 4, GL_FLOAT, false, s, 24);
+            SetFloatAttribute(3, 2, GL_FLOAT, false, s, 40);
+            SetFloatAttribute(4, 2, GL_FLOAT, false, s, 48);
+            SetFloatAttribute(5, 4, GL_UNSIGNED_BYTE, true, s, 56);
+            break;
+        case 52:  // VertexPositionNormalTextureSkinned
+            SetFloatAttribute(0, 3, GL_FLOAT, false, s, 0);
+            SetFloatAttribute(1, 3, GL_FLOAT, false, s, 12);
+            SetFloatAttribute(2, 2, GL_FLOAT, false, s, 24);
+            SetFloatAttribute(3, 4, GL_FLOAT, false, s, 32);
+            SetFloatAttribute(4, 4, GL_UNSIGNED_BYTE, false, s, 48);
+            break;
+        case 56:  // CNB-67: skinned record with a trailing colour
+            SetFloatAttribute(0, 3, GL_FLOAT, false, s, 0);
+            SetFloatAttribute(1, 3, GL_FLOAT, false, s, 12);
+            SetFloatAttribute(2, 2, GL_FLOAT, false, s, 24);
+            SetFloatAttribute(3, 4, GL_FLOAT, false, s, 32);
+            SetFloatAttribute(4, 4, GL_UNSIGNED_BYTE, false, s, 48);
+            SetFloatAttribute(5, 4, GL_UNSIGNED_BYTE, true, s, 52);
+            break;
+        case 68:  // PBR + skinning
+            SetFloatAttribute(0, 3, GL_FLOAT, false, s, 0);
+            SetFloatAttribute(1, 3, GL_FLOAT, false, s, 12);
+            SetFloatAttribute(2, 4, GL_FLOAT, false, s, 24);
+            SetFloatAttribute(3, 2, GL_FLOAT, false, s, 40);
+            SetFloatAttribute(4, 4, GL_FLOAT, false, s, 48);
+            SetFloatAttribute(5, 4, GL_UNSIGNED_BYTE, false, s, 64);
+            break;
+        case 76:  // GLTF-182/183: skinned PBR with UV1
+            SetFloatAttribute(0, 3, GL_FLOAT, false, s, 0);
+            SetFloatAttribute(1, 3, GL_FLOAT, false, s, 12);
+            SetFloatAttribute(2, 4, GL_FLOAT, false, s, 24);
+            SetFloatAttribute(3, 2, GL_FLOAT, false, s, 40);
+            SetFloatAttribute(4, 4, GL_FLOAT, false, s, 48);
+            SetFloatAttribute(5, 4, GL_UNSIGNED_BYTE, false, s, 64);
+            SetFloatAttribute(6, 2, GL_FLOAT, false, s, 68);
+            break;
+        case 80:  // GLTF-463: skinned PBR with UV1 and COLOR_0
+            SetFloatAttribute(0, 3, GL_FLOAT, false, s, 0);
+            SetFloatAttribute(1, 3, GL_FLOAT, false, s, 12);
+            SetFloatAttribute(2, 4, GL_FLOAT, false, s, 24);
+            SetFloatAttribute(3, 2, GL_FLOAT, false, s, 40);
+            SetFloatAttribute(4, 4, GL_FLOAT, false, s, 48);
+            SetFloatAttribute(5, 4, GL_UNSIGNED_BYTE, false, s, 64);
+            SetFloatAttribute(6, 2, GL_FLOAT, false, s, 68);
+            SetFloatAttribute(7, 4, GL_UNSIGNED_BYTE, true, s, 76);
             break;
         default:
-            // Unknown layout (not yet ported to this renderer, plans/plan_opengl4.md remaining work):
-            // bind position-only as a safe fallback, matching EasyGL's own precedent.
-            gl4_glEnableVertexAttribArray(0);
-            gl4_glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, s, (void*)0);
-            break;
+            // GLTF-157: a stride does not describe which attributes exist. Binding an unknown
+            // record as position-only left the other locations stale and rendered normals, UVs or
+            // skin weights from unrelated buffers. A custom layout reaches the declaration path.
+            gl4_glBindVertexArray(0);
+            throw System::NotSupportedException(
+                "OpenGL4VertexBufferRenderer::ApplyLayout: unsupported vertex stride " +
+                std::to_string(stride) +
+                " without a VertexDeclaration; the upload is refused rather than bound as "
+                "position-only.");
         }
-
         gl4_glBindVertexArray(0);
     }
 
-    void OpenGL4VertexBufferRenderer::SetData(const void* data, int vertex_count, std::size_t stride_in_bytes)
+    void OpenGL4VertexBufferRenderer::Upload(const void* data, std::size_t byteCount,
+                                             SetDataOptions options)
+    {
+        gl4_glBindBuffer(GL_ARRAY_BUFFER, vbo_);
+        // FX-131: storage is sized by the buffer's CAPACITY. XNA fixes a VertexBuffer's VertexCount
+        // at construction and SetData writes a PREFIX, so a short upload must not shrink what a
+        // later draw is entitled to read.
+        const std::size_t total = static_cast<std::size_t>(std::max(capacity_, 0)) * strideInBytes_;
+        if (options == SetDataOptions::Discard)
+        {
+            // Orphan: new storage without waiting for draws still reading the old contents.
+            gl4_glBufferData(GL_ARRAY_BUFFER,
+                             static_cast<GLsizeiptr4>(std::max(total, byteCount)),
+                             nullptr, GL_DYNAMIC_DRAW);
+            if (byteCount > 0)
+                gl4_glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr4>(byteCount), data);
+            gpuAllocated_ = true;
+        }
+        else if (options == SetDataOptions::NoOverwrite && gpuAllocated_)
+        {
+            if (byteCount > 0)
+                gl4_glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr4>(byteCount), data);
+        }
+        else if (total > byteCount)
+        {
+            gl4_glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr4>(total), nullptr,
+                             GL_DYNAMIC_DRAW);
+            if (byteCount > 0)
+                gl4_glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr4>(byteCount), data);
+            gpuAllocated_ = true;
+        }
+        else
+        {
+            gl4_glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr4>(byteCount), data,
+                             GL_DYNAMIC_DRAW);
+            gpuAllocated_ = true;
+        }
+    }
+
+    void OpenGL4VertexBufferRenderer::SetData(const void* data, int vertex_count,
+                                              std::size_t stride_in_bytes)
     {
         SetDataWithOptions(data, vertex_count, stride_in_bytes, SetDataOptions::None);
     }
 
     void OpenGL4VertexBufferRenderer::SetDataWithOptions(const void* data, int vertex_count,
-                                                        std::size_t stride_in_bytes, SetDataOptions /*options*/)
+                                                         std::size_t stride_in_bytes,
+                                                         SetDataOptions options)
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
         vertexCount_ = vertex_count;
         strideInBytes_ = stride_in_bytes;
-        const auto byteCount = static_cast<GLsizeiptr4>(static_cast<std::size_t>(vertex_count) * stride_in_bytes);
-
-        gl4_glBindBuffer(GL_ARRAY_BUFFER, vbo_);
-        gl4_glBufferData(GL_ARRAY_BUFFER, byteCount, data, GL_DYNAMIC_DRAW);
+        const std::size_t byteCount =
+            static_cast<std::size_t>(std::max(vertex_count, 0)) * stride_in_bytes;
+        Upload(data, byteCount, options);
         ApplyLayout(stride_in_bytes);
     }
 
@@ -2253,15 +1107,66 @@ void main()
     // ------------------------------------------------------------------------------------
 
     OpenGL4IndexBufferRenderer::OpenGL4IndexBufferRenderer(int indexCapacity, bool thirtyTwoBit)
-        : capacity_(indexCapacity)
-        , thirtyTwoBit_(thirtyTwoBit)
+        : capacity_(indexCapacity), thirtyTwoBit_(thirtyTwoBit)
     {
         gl4_glGenBuffers(1, &ibo_);
     }
 
     OpenGL4IndexBufferRenderer::~OpenGL4IndexBufferRenderer()
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021
+        if (!ownContext) return;
         if (ibo_ != 0) gl4_glDeleteBuffers(1, &ibo_);
+    }
+
+    void OpenGL4IndexBufferRenderer::Upload(const void* data, int indexCount,
+                                            std::size_t elementSize, SetDataOptions options)
+    {
+        indexCount_ = indexCount;
+        const std::size_t byteCount = static_cast<std::size_t>(std::max(indexCount, 0)) * elementSize;
+        const auto* bytes = static_cast<const std::uint8_t*>(data);
+        if (bytes != nullptr)
+            cpuData_.assign(bytes, bytes + byteCount);
+        else
+            cpuData_.assign(byteCount, 0);
+
+        // GL_ELEMENT_ARRAY_BUFFER is VAO state in a core profile; upload with no VAO bound so this
+        // cannot rebind another buffer's element array.
+        gl4_glBindVertexArray(0);
+        gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_);
+        const std::size_t total = static_cast<std::size_t>(std::max(capacity_, 0)) * elementSize;
+        if (options == SetDataOptions::Discard)
+        {
+            gl4_glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+                             static_cast<GLsizeiptr4>(std::max(total, byteCount)), nullptr,
+                             GL_DYNAMIC_DRAW);
+            if (byteCount > 0)
+                gl4_glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0,
+                                    static_cast<GLsizeiptr4>(byteCount), data);
+            gpuAllocated_ = true;
+        }
+        else if (options == SetDataOptions::NoOverwrite && gpuAllocated_)
+        {
+            if (byteCount > 0)
+                gl4_glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0,
+                                    static_cast<GLsizeiptr4>(byteCount), data);
+        }
+        else if (total > byteCount)
+        {
+            gl4_glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLsizeiptr4>(total), nullptr,
+                             GL_DYNAMIC_DRAW);
+            if (byteCount > 0)
+                gl4_glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0,
+                                    static_cast<GLsizeiptr4>(byteCount), data);
+            gpuAllocated_ = true;
+        }
+        else
+        {
+            gl4_glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLsizeiptr4>(byteCount), data,
+                             GL_DYNAMIC_DRAW);
+            gpuAllocated_ = true;
+        }
+        gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     }
 
     void OpenGL4IndexBufferRenderer::SetData16(const void* data, int index_count)
@@ -2269,12 +1174,12 @@ void main()
         SetData16WithOptions(data, index_count, SetDataOptions::None);
     }
 
-    void OpenGL4IndexBufferRenderer::SetData16WithOptions(const void* data, int index_count, SetDataOptions /*options*/)
+    void OpenGL4IndexBufferRenderer::SetData16WithOptions(const void* data, int index_count,
+                                                          SetDataOptions options)
     {
-        indexCount_ = index_count;
-        const auto byteCount = static_cast<GLsizeiptr4>(static_cast<std::size_t>(index_count) * sizeof(uint16_t));
-        gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_);
-        gl4_glBufferData(GL_ELEMENT_ARRAY_BUFFER, byteCount, data, GL_DYNAMIC_DRAW);
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
+        Upload(data, index_count, sizeof(std::uint16_t), options);
     }
 
     void OpenGL4IndexBufferRenderer::SetData32(const void* data, int index_count)
@@ -2282,362 +1187,335 @@ void main()
         SetData32WithOptions(data, index_count, SetDataOptions::None);
     }
 
-    void OpenGL4IndexBufferRenderer::SetData32WithOptions(const void* data, int index_count, SetDataOptions /*options*/)
+    void OpenGL4IndexBufferRenderer::SetData32WithOptions(const void* data, int index_count,
+                                                          SetDataOptions options)
     {
-        indexCount_ = index_count;
-        const auto byteCount = static_cast<GLsizeiptr4>(static_cast<std::size_t>(index_count) * sizeof(uint32_t));
-        gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_);
-        gl4_glBufferData(GL_ELEMENT_ARRAY_BUFFER, byteCount, data, GL_DYNAMIC_DRAW);
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
+        Upload(data, index_count, sizeof(std::uint32_t), options);
     }
 
     // ------------------------------------------------------------------------------------
-    // OpenGL4SpriteBatchRenderer
-    // ------------------------------------------------------------------------------------
-
-    OpenGL4SpriteBatchRenderer::OpenGL4SpriteBatchRenderer(OpenGL4Renderer& owner)
-        : owner_(&owner)
-    {
-        gl4_glGenVertexArrays(1, &vao_);
-        gl4_glGenBuffers(1, &vbo_);
-        gl4_glGenBuffers(1, &ibo_);
-
-        gl4_glBindVertexArray(vao_);
-        gl4_glBindBuffer(GL_ARRAY_BUFFER, vbo_);
-        gl4_glEnableVertexAttribArray(0);
-        gl4_glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(SpriteVertex), (void*)offsetof(SpriteVertex, x));
-        gl4_glEnableVertexAttribArray(1);
-        gl4_glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(SpriteVertex), (void*)offsetof(SpriteVertex, u));
-        gl4_glEnableVertexAttribArray(2);
-        gl4_glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(SpriteVertex), (void*)offsetof(SpriteVertex, r));
-        gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_);
-        gl4_glBindVertexArray(0);
-    }
-
-    OpenGL4SpriteBatchRenderer::~OpenGL4SpriteBatchRenderer()
-    {
-        gl4_glDeleteBuffers(1, &vbo_);
-        gl4_glDeleteBuffers(1, &ibo_);
-        gl4_glDeleteVertexArrays(1, &vao_);
-    }
-
-    void OpenGL4SpriteBatchRenderer::Begin()
-    {
-        // SpriteBatch::Begin() (the public XNA-facing class) calls SetTransformMatrix()/
-        // SetSamplerFilter()/SetSamplerAddressMode() BEFORE this Begin() runs (see
-        // SpriteBatch.cpp) -- resetting those fields here would silently discard whatever the
-        // caller just requested. Matches EasyGLSpriteBatchRenderer::Begin()'s own precedent,
-        // which only flips the begun_ flag.
-        begun_ = true;
-    }
-
-    void OpenGL4SpriteBatchRenderer::End()
-    {
-        FlushBatch();
-        begun_ = false;
-    }
-
-    void OpenGL4SpriteBatchRenderer::SetCustomEffect(Effect* effect)
-    {
-        // plans/plan_opengl4.md GL4-32: flush any already-batched sprites under the PREVIOUS effect
-        // (built-in or a different custom one) before switching, mirroring
-        // EasyGLSpriteBatchRenderer::SetCustomEffect's own identical guard.
-        if (customEffect_ != effect)
-        {
-            FlushBatch();
-            customEffect_ = effect;
-        }
-    }
-
-    void OpenGL4SpriteBatchRenderer::Draw(const ITextureRenderer& texture, float x, float y)
-    {
-        const int w = texture.GetWidth();
-        const int h = texture.GetHeight();
-        Draw(texture, Rectangle((int)x, (int)y, w, h), Rectangle(0, 0, w, h), Color::White);
-    }
-
-    void OpenGL4SpriteBatchRenderer::Draw(const ITextureRenderer& texture,
-                                         const Rectangle& destinationRectangle,
-                                         const Rectangle& sourceRectangle,
-                                         const Color& color)
-    {
-        Draw(texture, destinationRectangle, sourceRectangle, color, 0.0f, Vector2(0, 0), SpriteEffects::None, 0.0f);
-    }
-
-    void OpenGL4SpriteBatchRenderer::Draw(const ITextureRenderer& texture,
-                                         const Rectangle& destinationRectangle,
-                                         const Rectangle& sourceRectangle,
-                                         const Color& color,
-                                         float rotation,
-                                         const Vector2& origin,
-                                         SpriteEffects effects,
-                                         float layerDepth)
-    {
-        if (!begun_) throw std::runtime_error("Draw called before Begin()");
-
-        if (currentTexture_ != nullptr && currentTexture_ != &texture)
-            FlushBatch();
-        currentTexture_ = &texture;
-
-        const float texW = static_cast<float>(texture.GetWidth());
-        const float texH = static_cast<float>(texture.GetHeight());
-
-        // No [0,1] clamp -- matches FNA's own straight-through divide (SpriteBatch.cs); a
-        // sourceRectangle extending past the texture bounds intentionally lets the sampler's
-        // TextureAddressMode govern edge sampling.
-        float u1 = (float)sourceRectangle.X / texW;
-        float v1 = (float)sourceRectangle.Y / texH;
-        float u2 = (float)(sourceRectangle.X + sourceRectangle.Width) / texW;
-        float v2 = (float)(sourceRectangle.Y + sourceRectangle.Height) / texH;
-
-        if ((int)effects & (int)SpriteEffects::FlipHorizontally) std::swap(u1, u2);
-        if ((int)effects & (int)SpriteEffects::FlipVertically) std::swap(v1, v2);
-
-        const float r = (float)color.getRProperty() / 255.0f;
-        const float g = (float)color.getGProperty() / 255.0f;
-        const float b = (float)color.getBProperty() / 255.0f;
-        const float a = (float)color.getAProperty() / 255.0f;
-
-        const float dx = (float)destinationRectangle.X;
-        const float dy = (float)destinationRectangle.Y;
-        const float dw = (float)destinationRectangle.Width;
-        const float dh = (float)destinationRectangle.Height;
-
-        const float sw = (float)sourceRectangle.Width;
-        const float sh = (float)sourceRectangle.Height;
-
-        const float ox = origin.X;
-        const float oy = origin.Y;
-
-        const float scaleX = sw != 0.0f ? dw / sw : 0.0f;
-        const float scaleY = sh != 0.0f ? dh / sh : 0.0f;
-
-        const float p0x = (0.0f - ox) * scaleX, p0y = (0.0f - oy) * scaleY;
-        const float p1x = (sw - ox) * scaleX,   p1y = (0.0f - oy) * scaleY;
-        const float p2x = (sw - ox) * scaleX,   p2y = (sh - oy) * scaleY;
-        const float p3x = (0.0f - ox) * scaleX, p3y = (sh - oy) * scaleY;
-
-        const float cosR = std::cos(rotation);
-        const float sinR = std::sin(rotation);
-
-        auto rotateAndTranslate = [&](float px, float py, float& rx, float& ry)
-        {
-            rx = dx + px * cosR - py * sinR;
-            ry = dy + px * sinR + py * cosR;
-        };
-
-        float v0x, v0y, v1x, v1y, v2x, v2y, v3x, v3y;
-        rotateAndTranslate(p0x, p0y, v0x, v0y);
-        rotateAndTranslate(p1x, p1y, v1x, v1y);
-        rotateAndTranslate(p2x, p2y, v2x, v2y);
-        rotateAndTranslate(p3x, p3y, v3x, v3y);
-
-        const auto base = static_cast<uint16_t>(pendingVertices_.size());
-
-        pendingVertices_.push_back({v0x, v0y, u1, v1, r, g, b, a});
-        pendingVertices_.push_back({v1x, v1y, u2, v1, r, g, b, a});
-        pendingVertices_.push_back({v2x, v2y, u2, v2, r, g, b, a});
-        pendingVertices_.push_back({v3x, v3y, u1, v2, r, g, b, a});
-
-        pendingIndices_.push_back(base + 0);
-        pendingIndices_.push_back(base + 1);
-        pendingIndices_.push_back(base + 2);
-        pendingIndices_.push_back(base + 2);
-        pendingIndices_.push_back(base + 3);
-        pendingIndices_.push_back(base + 0);
-    }
-
-    void OpenGL4SpriteBatchRenderer::FlushBatch()
-    {
-        if (pendingVertices_.empty()) return;
-
-        // plans/plan_opengl4.md GL4-14: size the viewport/ortho projection off the currently-bound
-        // RenderTarget2D when one is bound, not unconditionally off the window's physical size
-        // -- a SpriteBatch::Draw() into a bound RT smaller than the window would otherwise get a
-        // window-sized viewport, offsetting/clipping its own draws (same fix
-        // EasyGLRenderer::FlushBatch's own GetCurrentRenderTarget2DSize check applies).
-        int logW = 0, logH = 0;
-        if (owner_->GetCurrentRenderTarget2DSize(logW, logH) && logW > 0 && logH > 0)
-        {
-            glViewport(0, 0, logW, logH);
-        }
-        else
-        {
-            int physW = 0, physH = 0;
-            owner_->GetPhysicalSize(physW, physH);
-            owner_->GetLogicalSize(logW, logH);
-            if (physW > 0 && physH > 0)
-                glViewport(0, 0, physW, physH);
-            if (logW <= 0 || logH <= 0) { logW = physW; logH = physH; }
-        }
-
-        const Matrix orthoM = Matrix::CreateOrthographicOffCenter(
-            0.0f, static_cast<float>(logW), static_cast<float>(logH), 0.0f, -1.0f, 1.0f);
-        const Matrix combined = transform_ * orthoM;
-        float ortho[16];
-        combined.ToColumnMajor(ortho);
-
-        // plans/plan_opengl4.md GL4-32: bind the SAME compiled program the custom ShaderEffect itself
-        // owns (Effect::GetEffectRendererPtr(), overridden by ShaderEffect) instead of the
-        // built-in sprite program -- mirrors EasyGLSpriteBatchRenderer::FlushBatch's own
-        // customEffect_ dispatch (Task 1077's "bind the same program" fix, applied here from the
-        // start). "projection" is this codebase's established custom-2D-effect uniform-name
-        // convention (see easygl_shader_effect_test.cpp); the built-in program's own
-        // "uProjection"/"uTexture" names are this renderer's private internal naming, unrelated to
-        // what a caller-authored shader declares.
-        OpenGL4RawProgram* prog = &owner_->GetOrCreateSpriteProgram();
-        if (customEffect_)
-        {
-            auto* renderer = dynamic_cast<OpenGL4EffectRenderer*>(customEffect_->GetEffectRendererPtr());
-            if (renderer && renderer->IsValid())
-                prog = &renderer->GetProgram();
-            customEffect_->Apply();
-        }
-
-        prog->Use();
-        if (customEffect_)
-        {
-            const int projLoc = prog->UniformLocation("projection");
-            if (projLoc >= 0) gl4_glUniformMatrix4fv(projLoc, 1, GL_FALSE, ortho);
-        }
-        else
-        {
-            const int projLoc = prog->UniformLocation("uProjection");
-            if (projLoc >= 0) gl4_glUniformMatrix4fv(projLoc, 1, GL_FALSE, ortho);
-            const int texLoc = prog->UniformLocation("uTexture");
-            if (texLoc >= 0) gl4_glUniform1i(texLoc, 0);
-        }
-
-        glDisable(GL_DEPTH_TEST);
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-        gl4_glActiveTexture(GL_TEXTURE0);
-        currentTexture_->BindGL();
-        owner_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
-
-        gl4_glBindVertexArray(vao_);
-        gl4_glBindBuffer(GL_ARRAY_BUFFER, vbo_);
-        gl4_glBufferData(GL_ARRAY_BUFFER,
-                         static_cast<GLsizeiptr4>(pendingVertices_.size() * sizeof(SpriteVertex)),
-                         pendingVertices_.data(), GL_STREAM_DRAW);
-        gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_);
-        gl4_glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                         static_cast<GLsizeiptr4>(pendingIndices_.size() * sizeof(uint16_t)),
-                         pendingIndices_.data(), GL_STREAM_DRAW);
-
-        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(pendingIndices_.size()), GL_UNSIGNED_SHORT, nullptr);
-
-        gl4_glBindVertexArray(0);
-
-        pendingVertices_.clear();
-        pendingIndices_.clear();
-        currentTexture_ = nullptr;
-    }
-
-    // ------------------------------------------------------------------------------------
-    // OpenGL4Renderer
+    // OpenGL4Renderer -- context, presentation, capabilities
     // ------------------------------------------------------------------------------------
 
     OpenGL4Renderer::OpenGL4Renderer(const GraphicsRendererCreateArgs& args)
-        : platformContext_(std::make_unique<PlatformGlContextOwner>(
+        : platformContext_(std::make_shared<PlatformGlContextOwner>(
               RequirePlatformGlContext(args.glContext, "OPENGL4"),
               RequirePlatformGlWindow(args.surface, "OPENGL4"), RequestedContext()))
-        , surface_(args.surface)
-        , virtualWidth_(args.virtualWidth)
-        , virtualHeight_(args.virtualHeight)
-        , presentationMode_(args.presentationMode)
+        , threadContextLeaseControl_(std::make_shared<ThreadContextLeaseControl>())
+        , surfaceState_(args.surface, args.virtualWidth, args.virtualHeight, args.presentationMode)
         , swapInterval_(args.swapInterval)
-        // GraphicsRendererCreateArgs::multiSampleCount uses 1 = "no MSAA" (matches
-        // EasyGLRenderer's own sampleCount_ convention); this renderer's own internal
-        // convention is 0 = disabled (matching OpenGL4RenderTargetRenderer's multiSampleCount_).
-        , msaaSampleCount_(args.multiSampleCount > 1 ? args.multiSampleCount : 0)
+        , sampleCount_(args.multiSampleCount > 1 ? args.multiSampleCount : 1)
+        , backBufferDepthFormat_(args.depthStencilFormat)
     {
-        // Real desktop OpenGL 4.1 core profile -- unlike EasyGLRenderer, which requests
-        // OpenGL ES 3.0 / WebGL2. 4.1 is the highest core version
-        // macOS's own GL driver ever exposes, so it is the widest-portable "real OpenGL 4" floor;
-        // Linux/Windows drivers report whatever higher core version they actually support once
-        // the context is current (see the version string logged below).
+        threadContextLeaseControl_->platformContext = platformContext_;
+        bound_->depthFormat = backBufferDepthFormat_;
+
         if (!GL4::LoadGL4Functions(platformContext_->GetLoader()))
-            throw std::runtime_error("OpenGL4: failed to resolve required GL 4.x core entry points");
+            throw std::runtime_error("OpenGL4: failed to resolve required GL 4.1 core entry points");
+
+        // A7: the platform may grant something other than what was asked (a GLX fallback context,
+        // a compatibility profile). Report the context OPENGL4 actually got and refuse anything
+        // below the 4.1 core floor, rather than quietly running as some other GL.
+        GLint major = 0, minor = 0, profileMask = 0;
+        glGetIntegerv(GL_MAJOR_VERSION, &major);
+        glGetIntegerv(GL_MINOR_VERSION, &minor);
+        glGetIntegerv(GL_CONTEXT_PROFILE_MASK, &profileMask);
+        const auto* versionString = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+        const auto* rendererString = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
+        const bool versionOk = major > kRequiredMajor ||
+                               (major == kRequiredMajor && minor >= kRequiredMinor);
+        const bool coreProfile = (profileMask & GL_CONTEXT_CORE_PROFILE_BIT) != 0;
+        if (!versionOk || !coreProfile)
+        {
+            throw std::runtime_error(
+                std::string("OpenGL4: this renderer requires a desktop OpenGL ") +
+                std::to_string(kRequiredMajor) + "." + std::to_string(kRequiredMinor) +
+                " core profile context; the platform granted OpenGL " + std::to_string(major) +
+                "." + std::to_string(minor) + (coreProfile ? " core" : " non-core") + " (\"" +
+                (versionString != nullptr ? versionString : "unknown") + "\")");
+        }
 
         modernCapabilities_ = GL4::DiscoverModernCapabilities(platformContext_->GetLoader());
+        EnableDebugOutput();
 
-        const auto* versionStr = glGetString(GL_VERSION);
-        std::cout << "OpenGL4Renderer initialized with OpenGL "
-                  << (versionStr ? reinterpret_cast<const char*>(versionStr) : "(unknown)") << std::endl;
+        // GLB-40: desktop core requires this explicitly or gl_PointSize is ignored for GL_POINTS.
+        glEnable(GL_PROGRAM_POINT_SIZE);
+
+        // Wine's 63/128-pixel displacement is used unless the rasterizer's subpixel precision
+        // cannot represent it below half a pixel.
+        GLint subpixelBits = 0;
+        glGetIntegerv(GL_SUBPIXEL_BITS, &subpixelBits);
+        if (subpixelBits > 1 && subpixelBits < 24)
+        {
+            const float representableBelowHalf = 1.0f - std::ldexp(1.0f, 1 - subpixelBits);
+            xnaPixelCenterScale_ = std::min(xnaPixelCenterScale_, representableBelowHalf);
+        }
+
+        GLint maxDrawBuffers = 1, maxColorAttachments = 1;
+        glGetIntegerv(GL_MAX_DRAW_BUFFERS, &maxDrawBuffers);
+        glGetIntegerv(GL_MAX_COLOR_ATTACHMENTS, &maxColorAttachments);
+        maxMrtTargets_ = std::max(1, std::min({4, static_cast<int>(maxDrawBuffers),
+                                              static_cast<int>(maxColorAttachments)}));
+
+        // Anisotropic filtering: core in 4.6, an extension before it. The ceiling is queried once;
+        // a raised GL_INVALID_ENUM means the driver has neither.
+        DrainGlErrors();
+        GLfloat maxAniso = 1.0f;
+        glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &maxAniso);
+        if (GlOperationSucceeded() && maxAniso > 1.0f)
+            maxAnisotropy_ = maxAniso;
+
+        // A startup diagnostic belongs in the logger (stderr), never on the program's stdout.
+        CNA::Logger::Info(std::string("OpenGL4Renderer initialized with OpenGL ") +
+                              (versionString != nullptr ? versionString : "(unknown)") + " on " +
+                              (rendererString != nullptr ? rendererString : "(unknown)") +
+                              (debugOutputEnabled_ ? " (GL debug output on)" : ""),
+                          CNA::LogCategory::RENDER);
 
         platformContext_->SetSwapInterval(swapInterval_);
 
-        // Anisotropic filtering is an extension until GL 4.6
-        // (EXT/ARB_texture_filter_anisotropic), so the driver's real ceiling is queried once
-        // here: drain any pending error, ask, and treat a raised GL_INVALID_ENUM as "not
-        // supported" (maxAnisotropy_ stays 1). SupportsCapability answers from this value and
-        // ApplySamplerState only uploads the sampler parameter when the driver accepted the
-        // query, so an unsupporting driver never sees the unknown pname at all.
-        while (glGetError() != GL_NO_ERROR) {}
-        GLfloat maxAniso = 1.0f;
-        glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &maxAniso);
-        if (glGetError() == GL_NO_ERROR && maxAniso > 1.0f)
-            maxAnisotropy_ = maxAniso;
-
         gl4_glGenSamplers(kMaxSamplerSlots, samplers_);
+        for (int slot = 0; slot < kMaxSamplerSlots; ++slot)
+            gl4_glBindSampler(static_cast<GLuint>(slot), samplers_[slot]);
 
         glEnable(GL_DEPTH_TEST);
-        glDepthFunc(GL_LESS);
+        glDepthFunc(GL_LEQUAL);
 
-        if (msaaSampleCount_ > 0)
+        if (sampleCount_ > 1)
         {
             int physW = 0, physH = 0;
-            surface_.GetDrawableSize(physW, physH);
+            surfaceState_.GetDrawableSize(physW, physH);
             CreateMsaaBuffers(physW, physH);
             gl4_glBindFramebuffer(GL_FRAMEBUFFER, msaaFbo_);
         }
-        IGraphicsRenderer::RegisterForWindow(surface_.GetWindowId(), this);
+        IGraphicsRenderer::RegisterForWindow(surfaceState_.GetWindowId(), this);
     }
 
     OpenGL4Renderer::~OpenGL4Renderer()
     {
-        IGraphicsRenderer::UnregisterForWindow(surface_.GetWindowId());
+        IGraphicsRenderer::UnregisterForWindow(surfaceState_.GetWindowId());
+        try
+        {
+            platformContext_->MakeCurrent();
+        }
+        catch (...)
+        {
+        }
+#if defined(CNA_OPENGL4_COMPILED_EFFECTS)
+        // In the body, not left to member destruction: the MojoShader context is a raw pointer
+        // and needs this GL context current, and compiled effects that outlive this renderer must
+        // give their native state back before that context goes (OpenGL4CompiledEffects.cpp).
+        ReleaseCompiledEffectResourcesEXT();
+#endif
         gl4_glDeleteSamplers(kMaxSamplerSlots, samplers_);
-        if (defaultWhiteTexture_) glDeleteTextures(1, &defaultWhiteTexture_);
-        if (defaultFlatNormalTexture_) glDeleteTextures(1, &defaultFlatNormalTexture_);
+        if (computeSampler_) gl4_glDeleteSamplers(1, &computeSampler_);
+        for (unsigned int* texture : {&defaultWhiteTexture_, &defaultBlackTexture_,
+                                      &defaultBlackCubeTexture_, &defaultFlatNormalTexture_})
+            if (*texture) glDeleteTextures(1, texture);
+        if (negativeBaseVertexIbo_) gl4_glDeleteBuffers(1, &negativeBaseVertexIbo_);
         if (mrtFbo_) gl4_glDeleteFramebuffers(1, &mrtFbo_);
+        DestroyMsaaBuffers();
+        // Programs are members and release while the context (declared first) is still current.
+    }
+
+    void OpenGL4Renderer::EnableDebugOutput()
+    {
+        GLint flags = 0;
+        glGetIntegerv(GL_CONTEXT_FLAGS, &flags);
+        const bool debugContext = (flags & GL_CONTEXT_FLAG_DEBUG_BIT) != 0;
+        if (gl4_glDebugMessageCallback == nullptr || gl4_glDebugMessageControl == nullptr)
+            return;
+        if (!debugContext && !DebugOutputRequested())
+            return;
+        glEnable(GL_DEBUG_OUTPUT);
+        // Synchronous, so the message is reported on the thread and inside the call that caused it.
+        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+        // The user parameter only carries the verbosity: non-null logs informational messages too.
+        static const int kVerbose = 1;
+        const bool verbose = VerboseDebugOutputRequested();
+        gl4_glDebugMessageCallback(&DebugMessageCallback, verbose ? &kVerbose : nullptr);
+        gl4_glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
+        if (!verbose)
+            gl4_glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_NOTIFICATION, 0,
+                                      nullptr, GL_FALSE);
+        // GL4-0027: the application's own markers are delivered whatever the verbosity.
+        gl4_glDebugMessageControl(GL_DEBUG_SOURCE_APPLICATION, GL_DEBUG_TYPE_MARKER, GL_DONT_CARE,
+                                  0, nullptr, GL_TRUE);
+        // Debug groups are this renderer's own markers, not diagnostics.
+        gl4_glDebugMessageControl(GL_DONT_CARE, GL_DEBUG_TYPE_PUSH_GROUP, GL_DONT_CARE, 0, nullptr,
+                                  GL_FALSE);
+        gl4_glDebugMessageControl(GL_DONT_CARE, GL_DEBUG_TYPE_POP_GROUP, GL_DONT_CARE, 0, nullptr,
+                                  GL_FALSE);
+        debugOutputEnabled_ = true;
+    }
+
+    void OpenGL4Renderer::EnsureCallingThreadContext()
+    {
+        // ContentManager may create graphics resources on a loading thread (the XNA Marble Maze
+        // sample does), so the device context is made current on the calling thread first. The
+        // loader's function pointers are process-wide, so nothing else needs initialising.
+        // GL4-0021: every GL-issuing entry point asks, because with two GraphicsDevices the other
+        // one's context may be current -- and only switches when it is not already this one.
+        platformContext_->EnsureCurrent();
+    }
+
+    std::unique_ptr<IRendererThreadContextLease> OpenGL4Renderer::AcquireThreadContextLeaseEXT(
+        const RendererThreadContextLeaseRelease release)
+    {
+        // A mutual exclusion between a frame and a background content load: both issue GL through
+        // one context, and a load's bind/upload pair split by the frame's own binds lands on
+        // whatever the frame bound.
+        const auto control = threadContextLeaseControl_;
+        control->mutex.lock();
+        const auto releaseLease = [control]() noexcept {
+            auto& states = ThreadContextLeaseStates();
+            const auto it = states.find(control.get());
+            if (it == states.end() || it->second.depth == 0)
+            {
+                CNA::Logger::Error("OpenGL4 renderer context lease released without matching "
+                                   "acquisition", CNA::LogCategory::RENDER);
+                return;
+            }
+            --it->second.depth;
+            if (it->second.depth == 0)
+            {
+                try
+                {
+                    control->platformContext->RestoreBinding(it->second.previousBinding,
+                                                             it->second.release);
+                }
+                catch (const std::exception& error)
+                {
+                    CNA::Logger::Error(std::string("Failed to release OpenGL4 context ownership: ") +
+                                           error.what(), CNA::LogCategory::RENDER);
+                }
+                states.erase(it);
+            }
+            control->mutex.unlock();
+        };
+        try
+        {
+            auto& state = ThreadContextLeaseStates()[control.get()];
+            if (state.depth == 0)
+            {
+                state.previousBinding = control->platformContext->GetCurrentBinding();
+                state.release = release;
+                EnsureCallingThreadContext();
+            }
+            ++state.depth;
+        }
+        catch (...)
+        {
+            ThreadContextLeaseStates().erase(control.get());
+            control->mutex.unlock();
+            throw;
+        }
+        try
+        {
+            return std::make_unique<OpenGL4ThreadContextLease>(releaseLease);
+        }
+        catch (...)
+        {
+            releaseLease();
+            throw;
+        }
+    }
+
+    void OpenGL4Renderer::DestroyMsaaBuffers()
+    {
         if (msaaDepthRbo_) gl4_glDeleteRenderbuffers(1, &msaaDepthRbo_);
         if (msaaColorRbo_) gl4_glDeleteRenderbuffers(1, &msaaColorRbo_);
         if (msaaFbo_) gl4_glDeleteFramebuffers(1, &msaaFbo_);
+        msaaDepthRbo_ = msaaColorRbo_ = msaaFbo_ = 0;
+        msaaW_ = msaaH_ = 0;
+        msaaStorageDepthFormat_ = -1;
     }
 
     void OpenGL4Renderer::CreateMsaaBuffers(int w, int h)
     {
         GLint maxSamples = 0;
         glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
-        if (maxSamples > 0 && msaaSampleCount_ > static_cast<int>(maxSamples))
-            msaaSampleCount_ = static_cast<int>(maxSamples);
+        if (maxSamples > 0 && sampleCount_ > static_cast<int>(maxSamples))
+            sampleCount_ = static_cast<int>(maxSamples);
 
+        // SOFTWARE-181: the attachment set is rebuilt atomically so a Reset can add or remove
+        // depth/stencil without leaving a stale attachment behind.
+        DestroyMsaaBuffers();
+        gl4_glGenFramebuffers(1, &msaaFbo_);
+        gl4_glGenRenderbuffers(1, &msaaColorRbo_);
+        gl4_glBindRenderbuffer(GL_RENDERBUFFER, msaaColorRbo_);
+        gl4_glRenderbufferStorageMultisample(GL_RENDERBUFFER, sampleCount_, GL_RGBA8, w, h);
+        gl4_glBindFramebuffer(GL_FRAMEBUFFER, msaaFbo_);
+        gl4_glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER,
+                                      msaaColorRbo_);
+        GLenum depthStorage = 0, depthAttachment = 0;
+        if (MapDepthFormat(backBufferDepthFormat_, depthStorage, depthAttachment))
+        {
+            gl4_glGenRenderbuffers(1, &msaaDepthRbo_);
+            gl4_glBindRenderbuffer(GL_RENDERBUFFER, msaaDepthRbo_);
+            gl4_glRenderbufferStorageMultisample(GL_RENDERBUFFER, sampleCount_, depthStorage, w, h);
+            gl4_glFramebufferRenderbuffer(GL_FRAMEBUFFER, depthAttachment, GL_RENDERBUFFER,
+                                          msaaDepthRbo_);
+        }
+        gl4_glBindRenderbuffer(GL_RENDERBUFFER, 0);
+        const GLenum status = gl4_glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        if (status != GL_FRAMEBUFFER_COMPLETE)
+            throw std::runtime_error("OpenGL4: multisample backbuffer is incomplete (" +
+                                     FramebufferStatusName(status) + ") for DepthFormat ordinal " +
+                                     std::to_string(backBufferDepthFormat_));
         msaaW_ = w;
         msaaH_ = h;
-        if (!msaaFbo_) gl4_glGenFramebuffers(1, &msaaFbo_);
-        if (!msaaColorRbo_) gl4_glGenRenderbuffers(1, &msaaColorRbo_);
-        if (!msaaDepthRbo_) gl4_glGenRenderbuffers(1, &msaaDepthRbo_);
-
-        gl4_glBindRenderbuffer(GL_RENDERBUFFER, msaaColorRbo_);
-        gl4_glRenderbufferStorageMultisample(GL_RENDERBUFFER, msaaSampleCount_, GL_RGBA8, w, h);
-        gl4_glBindRenderbuffer(GL_RENDERBUFFER, msaaDepthRbo_);
-        gl4_glRenderbufferStorageMultisample(GL_RENDERBUFFER, msaaSampleCount_, GL_DEPTH24_STENCIL8, w, h);
-
-        gl4_glBindFramebuffer(GL_FRAMEBUFFER, msaaFbo_);
-        gl4_glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, msaaColorRbo_);
-        gl4_glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, msaaDepthRbo_);
+        msaaStorageDepthFormat_ = backBufferDepthFormat_;
     }
 
-    void OpenGL4Renderer::BindDefaultFramebufferOrMsaa()
+    int OpenGL4Renderer::ApplyMultiSampleCount(int requestedMultiSampleCount)
     {
-        if (msaaSampleCount_ > 0)
+        EnsureCallingThreadContext();
+        int newSampleCount = 1;
+        if (requestedMultiSampleCount > 1)
         {
-            // Recreate the MSAA FBO if the window was resized since the last time it was built.
+            GLint maxSamples = 0;
+            glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+            int candidate = 1;
+            while (candidate <= requestedMultiSampleCount / 2) candidate *= 2;
+            if (maxSamples > 1)
+                newSampleCount = std::min(candidate, static_cast<int>(maxSamples));
+        }
+        if (newSampleCount == sampleCount_)
+        {
+            if (bound_->height == 0) BindDefaultFramebuffer();
+            return GetMultiSampleCount();
+        }
+        sampleCount_ = newSampleCount;
+        DestroyMsaaBuffers();
+        if (bound_->height == 0)
+        {
+            if (sampleCount_ > 1)
+            {
+                int physW = 0, physH = 0;
+                surfaceState_.GetDrawableSize(physW, physH);
+                CreateMsaaBuffers(physW, physH);
+                gl4_glBindFramebuffer(GL_FRAMEBUFFER, msaaFbo_);
+            }
+            else
+            {
+                gl4_glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            }
+        }
+        ApplyCurrentDepthStencilAvailability();
+        return GetMultiSampleCount();
+    }
+
+    void OpenGL4Renderer::BindDefaultFramebuffer()
+    {
+        if (sampleCount_ > 1)
+        {
             int physW = 0, physH = 0;
-            surface_.GetDrawableSize(physW, physH);
-            if (physW != msaaW_ || physH != msaaH_)
+            surfaceState_.GetDrawableSize(physW, physH);
+            if (msaaFbo_ == 0 || physW != msaaW_ || physH != msaaH_ ||
+                msaaStorageDepthFormat_ != backBufferDepthFormat_)
                 CreateMsaaBuffers(physW, physH);
             gl4_glBindFramebuffer(GL_FRAMEBUFFER, msaaFbo_);
         }
@@ -2649,7 +1527,8 @@ void main()
 
     void OpenGL4Renderer::ResolveMsaa()
     {
-        if (msaaSampleCount_ <= 0) return;
+        if (sampleCount_ <= 1 || msaaFbo_ == 0) return;
+        const ScopedScissorTestDisabled fullSurface;
         gl4_glBindFramebuffer(GL_READ_FRAMEBUFFER, msaaFbo_);
         gl4_glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
         gl4_glBlitFramebuffer(0, 0, msaaW_, msaaH_, 0, 0, msaaW_, msaaH_, GL_COLOR_BUFFER_BIT,
@@ -2660,40 +1539,38 @@ void main()
     {
         switch (capability)
         {
-        // Real vertex/index buffers, 3D draw routes, depth/stencil clears and state (GL4-1..16).
         case CNA::GraphicsCapability::ThreeD: return true;
-        // A real 24-bit depth / 8-bit stencil buffer on the window and on FBO render targets.
         case CNA::GraphicsCapability::DepthStencilBuffer: return true;
-        // Real backbuffer and render-target MSAA via multisample renderbuffers + blit resolve
-        // (GL4-17). The GL 4.x core spec requires GL_MAX_SAMPLES >= 4, so a 4.1-core context can
-        // never answer no.
+        // Backbuffer and render-target MSAA; GL 4.x core guarantees GL_MAX_SAMPLES >= 4.
         case CNA::GraphicsCapability::MultiSampleAntiAliasing: return true;
-        // Real MRT: up to 8 colour attachments with a real glDrawBuffers call (GL4-15).
+        // Up to four independently writable targets, the XNA/FNA ceiling (GL4-0012).
         case CNA::GraphicsCapability::MultipleRenderTargets: return true;
-        // Device/driver-dependent: an extension until GL 4.6, so answered from the ceiling the
-        // running driver actually granted at context creation.
+        // Driver-granted: an extension before GL 4.6.
         case CNA::GraphicsCapability::AnisotropicFiltering: return maxAnisotropy_ > 1.0f;
-        // Real glPolygonMode(GL_FRONT_AND_BACK, GL_LINE) -- desktop core GL keeps the entry
-        // point EasyGL's ES target has to emulate (GL4-16).
+        // Native glPolygonMode, which keeps culling, clipping, depth bias, MSAA and two-sided
+        // stencil across every triangle route -- what a GL_LINES expansion cannot promise.
         case CNA::GraphicsCapability::WireFrame: return true;
-        // Real GL_SAMPLES_PASSED query objects with exact passed-sample counts (GL4-24).
+        // GL_SAMPLES_PASSED with an exact passed-sample count.
         case CNA::GraphicsCapability::OcclusionQuery: return true;
-        // Real caller-supplied GLSL compilation via CreateEffectRenderer (GL4-30/32).
         case CNA::GraphicsCapability::CustomEffects: return true;
-        // Real GL_TEXTURE_3D storage with per-slice FBO readback (GL4-20).
         case CNA::GraphicsCapability::Texture3D: return true;
-        // REMED-GFX-201: not implemented. ApplyLayout binds ONE GL_ARRAY_BUFFER and reads every
-        // attribute out of it at stride offsets; there is no second per-vertex stream to bind,
-        // and the Ex draw routes refuse a wider binding set up front.
-        case CNA::GraphicsCapability::MultiStreamVertexInput: return false;
-        // Real hardware instancing (GL4-33): glDrawElementsInstanced/glVertexAttribDivisor are
-        // core in every 4.x context, and DrawInstancedPrimitivesEx drives them unconditionally.
+        // GL4-0013: every per-vertex stream is bound at its own locations with its own VBO,
+        // stride and offset, exactly as EasyGL's REMED-GFX-201 route does.
+        case CNA::GraphicsCapability::MultiStreamVertexInput: return true;
         case CNA::GraphicsCapability::Instancing: return true;
         case CNA::GraphicsCapability::StencilBuffer: return true;
         case CNA::GraphicsCapability::AdditiveBlending: return true;
+        // Derived by GraphicsDevice from the dedicated renderer queries (SupportsCompiledEffects,
+        // the render-target format probe, SupportsHalfFloatTextureLinearFilteringEXT,
+        // SupportsComputeShadersEXT, SupportsIndirectDrawEXT); this switch is never asked.
+        case CNA::GraphicsCapability::CompiledEffects:
+        case CNA::GraphicsCapability::FloatRenderTargets:
+        case CNA::GraphicsCapability::HalfFloatRenderTargets:
+        case CNA::GraphicsCapability::HalfFloatTextureLinearFiltering:
+        case CNA::GraphicsCapability::ComputeShaders:
+        case CNA::GraphicsCapability::IndirectDraw:
+            return false;
         }
-        // Unreachable for current members; a future member lands here (after the -Wswitch
-        // warning above) and is reported unsupported until this renderer explicitly claims it.
         return false;
     }
 
@@ -2701,42 +1578,76 @@ void main()
     {
         if (language != static_cast<int>(CNA::ShaderLanguageEXT::GlslDesktop))
             return false;
+        if (stage == static_cast<int>(CNA::ShaderStageEXT::Compute))
+            return SupportsComputeShadersEXT();
         return stage == static_cast<int>(CNA::ShaderStageEXT::Vertex) ||
                stage == static_cast<int>(CNA::ShaderStageEXT::Fragment);
     }
 
-    void OpenGL4Renderer::Clear(float r, float g, float b, float a)
-    {
-        glClearColor(r, g, b, a);
-        glClear(GL_COLOR_BUFFER_BIT);
-    }
-
     void OpenGL4Renderer::Present()
     {
-        if (msaaSampleCount_ > 0) ResolveMsaa();
+        EnsureCallingThreadContext();   // GL4-0021
+        if (sampleCount_ > 1) ResolveMsaa();
         platformContext_->SwapBuffers();
-        if (msaaSampleCount_ > 0) gl4_glBindFramebuffer(GL_FRAMEBUFFER, msaaFbo_);
+        if (sampleCount_ > 1 && bound_->height == 0)
+            gl4_glBindFramebuffer(GL_FRAMEBUFFER, msaaFbo_);
+    }
+
+    void OpenGL4Renderer::SetVirtualResolution(int width, int height)
+    {
+        surfaceState_.SetVirtualResolution(width, height);
+    }
+
+    void OpenGL4Renderer::SetPresentationMode(int mode)
+    {
+        surfaceState_.SetPresentationMode(static_cast<CnaPresentationMode>(mode));
+    }
+
+    void OpenGL4Renderer::SetSwapInterval(int interval)
+    {
+        EnsureCallingThreadContext();   // GL4-0021
+        // Recorded as well as forwarded: whether the driver honours an interval is the driver's
+        // business; whether CNA asked for it is this renderer's (REMED-GFX-243).
+        swapInterval_ = interval;
+        platformContext_->SetSwapInterval(interval);
+    }
+
+    void OpenGL4Renderer::UpdatePresentationFormatEXT(int backBufferFormat, int depthStencilFormat,
+                                                      bool isFullScreen)
+    {
+        EnsureCallingThreadContext();   // GL4-0021
+        (void)backBufferFormat;
+        (void)isFullScreen;
+        if (depthStencilFormat < 0 || depthStencilFormat > 3)
+            throw std::out_of_range("OpenGL4: invalid DepthFormat ordinal");
+        backBufferDepthFormat_ = depthStencilFormat;
+        if (bound_->height == 0)
+        {
+            bound_->depthFormat = backBufferDepthFormat_;
+            BindDefaultFramebuffer();
+            ApplyCurrentDepthStencilAvailability();
+            ApplyCurrentDepthBias();
+        }
+    }
+
+    void OpenGL4Renderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        if (surface.windowId != surfaceState_.GetWindowId())
+        {
+            throw CNA::Platform::PlatformException("OpenGL4Renderer::OnSurfaceChanged",
+                                                   "a renderer's platform window identity cannot change");
+        }
+        surfaceState_.Update(surface);
     }
 
     void OpenGL4Renderer::GetPhysicalSize(int& width, int& height) const
     {
-        surface_.GetDrawableSize(width, height);
+        surfaceState_.GetDrawableSize(width, height);
     }
 
     void OpenGL4Renderer::GetLogicalSize(int& width, int& height) const
     {
-        if (virtualHeight_ <= 0)
-        {
-            GetPhysicalSize(width, height);
-            return;
-        }
-        int physW = 0, physH = 0;
-        GetPhysicalSize(physW, physH);
-        height = virtualHeight_;
-        if (presentationMode_ == CnaPresentationMode::FixedHeightDynamicWidth && physH > 0)
-            width = static_cast<int>((double)physW * virtualHeight_ / physH + 0.5);
-        else
-            width = virtualWidth_ > 0 ? virtualWidth_ : physW;
+        surfaceState_.GetLogicalSize(width, height);
     }
 
     void OpenGL4Renderer::GetViewportSize(int& width, int& height)
@@ -2744,1539 +1655,487 @@ void main()
         GetLogicalSize(width, height);
     }
 
-    // Physical counterpart of GetLogicalSize(): which drawable pixels the logical content lands
-    // on. GraphicsDevice::UpdateViewportFromWindow() applies THIS as the device viewport, while
-    // GetViewportSize() only feeds GraphicsDevice.Viewport.Width/Height.
-    //
-    // Without this override the base default (0, 0, GetViewportSize()) applied the LOGICAL size
-    // as physical pixels. This renderer always has a virtual resolution -- GraphicsDevice::Reset()
-    // sets one on every device creation and the default presentation mode is
-    // FixedHeightDynamicWidth -- and its SetViewport() works in drawable pixels, so on any window
-    // whose aspect differs from the virtual one the game rendered into a sub-rectangle and the
-    // rest of the window kept the clear colour. Found and fixed in EasyGL first (reported against
-    // galaxy-eggbert 2026-08-21: resizing the window did not enlarge the game); this renderer had
-    // the identical structure -- logical GetViewportSize(), drawable-space SetViewport(), no
-    // override. Renderers that instead treat the pushed viewport as LOGICAL and rescale it
-    // themselves (Diligent, Sokol, LLGL, SDL_GPU, WebGPU) need no override and have none.
-    //
-    // Mirrors OpenGL2Renderer::ComputeLogicalViewport(), the reference implementation.
     void OpenGL4Renderer::GetDefaultViewportRect(int& x, int& y, int& width, int& height)
     {
-        int physWidth = 0;
-        int physHeight = 0;
-        GetPhysicalSize(physWidth, physHeight);
-
-        x = 0;
-        y = 0;
-        width = std::max(0, physWidth);
-        height = std::max(0, physHeight);
-
-        if (physWidth <= 0 || physHeight <= 0)
-            return;
-
-        // Full drawable, nothing to centre.
-        if (presentationMode_ == CnaPresentationMode::NativeBackBuffer ||
-            presentationMode_ == CnaPresentationMode::FixedHeightDynamicWidth ||
-            presentationMode_ == CnaPresentationMode::Stretch ||
-            virtualWidth_ <= 0 || virtualHeight_ <= 0)
-            return;
-
-        // Letterbox shrinks to fit (bars), Overscan grows to cover (cropping); both centre.
-        const double logicalWidth = static_cast<double>(virtualWidth_);
-        const double logicalHeight = static_cast<double>(virtualHeight_);
-        const double scaleX = static_cast<double>(physWidth) / logicalWidth;
-        const double scaleY = static_cast<double>(physHeight) / logicalHeight;
-        const double scale = (presentationMode_ == CnaPresentationMode::Overscan)
-                                 ? std::max(scaleX, scaleY)
-                                 : std::min(scaleX, scaleY);
-
-        width = static_cast<int>(std::lround(logicalWidth * scale));
-        height = static_cast<int>(std::lround(logicalHeight * scale));
-        x = static_cast<int>(std::lround((static_cast<double>(physWidth) - logicalWidth * scale) * 0.5));
-        y = static_cast<int>(std::lround((static_cast<double>(physHeight) - logicalHeight * scale) * 0.5));
+        surfaceState_.GetDefaultViewportRect(x, y, width, height);
     }
 
     bool OpenGL4Renderer::TransformWindowToLogical(float windowX, float windowY,
-                                                           float& logX, float& logY) const
+                                                   float& logX, float& logY) const
     {
-        if (virtualHeight_ <= 0) return false;
-        int physW = 0, physH = 0;
-        surface_.GetDrawableSize(physW, physH);
-        if (physH <= 0) return false;
-        const float scale = static_cast<float>(virtualHeight_) / static_cast<float>(physH);
-        logX = surface_.WindowToDrawable(windowX) * scale;
-        logY = surface_.WindowToDrawable(windowY) * scale;
-        return true;
+        return surfaceState_.WindowToLogical(windowX, windowY, logX, logY);
     }
 
     bool OpenGL4Renderer::TransformLogicalToWindow(float logX, float logY,
-                                                           float& windowX, float& windowY) const
+                                                   float& windowX, float& windowY) const
     {
-        // Inverse of TransformWindowToLogical: logical = window * (virtualHeight_ / physH), so
-        // window = logical * (physH / virtualHeight_). A pure uniform scale with NO offset,
-        // exact for this renderer's own default FixedHeightDynamicWidth presentation (the logical
-        // viewport always fills the whole physical window, no letterbox bars), matching
-        // EasyGLRenderer::TransformLogicalToWindow's own identical formula/rationale.
-        if (virtualHeight_ <= 0) return false;
-        int physW = 0, physH = 0;
-        surface_.GetDrawableSize(physW, physH);
-        if (physH <= 0) return false;
-        const float invScale = static_cast<float>(physH) / static_cast<float>(virtualHeight_);
-        windowX = surface_.DrawableToWindow(logX * invScale);
-        windowY = surface_.DrawableToWindow(logY * invScale);
+        return surfaceState_.LogicalToWindow(logX, logY, windowX, windowY);
+    }
+
+    bool OpenGL4Renderer::GetBoundRenderTargetSize(int& width, int& height) const
+    {
+        if (!bound_->rt2D && !bound_->cube && bound_->mrtCount == 0) return false;
+        width = bound_->width;
+        height = bound_->height;
         return true;
     }
 
-    void OpenGL4Renderer::SetVirtualResolution(int width, int height)
+    std::unique_ptr<ISpriteBatchRenderer> OpenGL4Renderer::CreateSpriteBatch()
     {
-        virtualWidth_ = width;
-        virtualHeight_ = height;
-    }
-
-    void OpenGL4Renderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
-    {
-        surface_.Update(surface);
-    }
-
-    void OpenGL4Renderer::SetPresentationMode(int mode)
-    {
-        presentationMode_ = static_cast<CnaPresentationMode>(mode);
-    }
-
-    void OpenGL4Renderer::SetSwapInterval(int interval)
-    {
-        swapInterval_ = interval;
-        platformContext_->SetSwapInterval(interval);
-    }
-
-    std::unique_ptr<ITextureRenderer> OpenGL4Renderer::CreateTexture(const ImageData& data)
-    {
-        return std::make_unique<OpenGL4TextureRenderer>(data);
-    }
-
-    std::unique_ptr<ITexture3DRenderer> OpenGL4Renderer::CreateTexture3D(int w, int h, int depth,
-                                                                                bool mipMap, int /*surfaceFormat*/)
-    {
-        // surfaceFormat is currently unused -- matches EasyGLRenderer::CreateTexture3D's
-        // own identical "always RGBA8" behavior (see plans/plan_opengl4.md GL4-20 and
-        // docs/texture3d-texturecube-support.md's documented cross-renderer gap).
-        return std::make_unique<OpenGL4Texture3DRenderer>(w, h, depth, mipMap);
-    }
-
-    std::unique_ptr<ITextureCubeRenderer> OpenGL4Renderer::CreateTextureCube(int size, bool mipMap,
-                                                                                    int /*surfaceFormat*/)
-    {
-        return std::make_unique<OpenGL4TextureCubeRenderer>(size, mipMap);
+        EnsureCallingThreadContext();
+        auto spriteBatch = std::make_unique<OpenGL4SpriteBatchRenderer>(*this);
+        spriteBatch->AttachOwningContext(platformContext_);
+        return spriteBatch;
     }
 
     std::unique_ptr<IOcclusionQueryRenderer> OpenGL4Renderer::CreateOcclusionQuery()
     {
-        return std::make_unique<OpenGL4OcclusionQueryRenderer>();
+        EnsureCallingThreadContext();
+        auto query = std::make_unique<OpenGL4OcclusionQueryRenderer>();
+        query->AttachOwningContext(platformContext_);
+        return query;
     }
 
     std::unique_ptr<IEffectRenderer> OpenGL4Renderer::CreateEffectRenderer(
         const std::string& vertSrc, const std::string& fragSrc)
     {
+        EnsureCallingThreadContext();
         auto renderer = std::make_unique<OpenGL4EffectRenderer>();
+        renderer->AttachOwningContext(platformContext_);
         renderer->CompileProgram(vertSrc, fragSrc);
         return renderer;
     }
 
-    // --- OpenGL4EffectRenderer (plans/plan_opengl4.md GL4-30) ---
-
-    bool OpenGL4EffectRenderer::CompileProgram(const std::string& vertSrc, const std::string& fragSrc)
-    {
-        return program_.Compile(vertSrc, fragSrc);
-    }
-
-    void OpenGL4EffectRenderer::Bind()
-    {
-        if (program_.IsValid())
-            program_.Use();
-    }
-
-    void OpenGL4EffectRenderer::Unbind()
-    {
-        // No explicit "unbind program" concept in raw GL -- the next Use() (built-in shader or
-        // another effect) simply overrides it, matching OpenGL4RawProgram's own convention (every
-        // built-in stride-dispatched shader in BindProgramForStride behaves identically).
-    }
-
-    bool OpenGL4EffectRenderer::IsValid() const
-    {
-        return program_.IsValid();
-    }
-
-    std::string OpenGL4EffectRenderer::GetCompileError() const
-    {
-        return program_.GetError();
-    }
-
-    void OpenGL4EffectRenderer::SetUniformFloat(const char* name, float value)
-    {
-        const int loc = program_.UniformLocation(name);
-        if (loc >= 0) gl4_glUniform1f(loc, value);
-    }
-
-    void OpenGL4EffectRenderer::SetUniformInt(const char* name, int value)
-    {
-        const int loc = program_.UniformLocation(name);
-        if (loc >= 0) gl4_glUniform1i(loc, value);
-    }
-
-    void OpenGL4EffectRenderer::SetUniformVec2(const char* name, float x, float y)
-    {
-        const int loc = program_.UniformLocation(name);
-        if (loc >= 0) gl4_glUniform2f(loc, x, y);
-    }
-
-    void OpenGL4EffectRenderer::SetUniformVec3(const char* name, float x, float y, float z)
-    {
-        const int loc = program_.UniformLocation(name);
-        if (loc >= 0) gl4_glUniform3f(loc, x, y, z);
-    }
-
-    void OpenGL4EffectRenderer::SetUniformVec4(const char* name, float x, float y, float z, float w)
-    {
-        const int loc = program_.UniformLocation(name);
-        if (loc >= 0) gl4_glUniform4f(loc, x, y, z, w);
-    }
-
-    void OpenGL4EffectRenderer::SetUniformMat4(const char* name, const float* matrix)
-    {
-        const int loc = program_.UniformLocation(name);
-        if (loc >= 0) gl4_glUniformMatrix4fv(loc, 1, GL_FALSE, matrix);
-    }
-
-    void OpenGL4EffectRenderer::SetUniformFloatArray(const char* name, const float* values, int count)
-    {
-        const int loc = program_.UniformLocation(name);
-        if (loc >= 0) gl4_glUniform1fv(loc, count, values);
-    }
-
-    void OpenGL4EffectRenderer::SetUniformVec2Array(const char* name, const float* values, int count)
-    {
-        const int loc = program_.UniformLocation(name);
-        if (loc >= 0) gl4_glUniform2fv(loc, count, values);
-    }
-
-    void OpenGL4EffectRenderer::BindTexture(int unit, ITextureRenderer* texture)
-    {
-        if (!texture) return;
-        gl4_glActiveTexture(GL_TEXTURE0 + unit);
-        texture->BindGL();
-        gl4_glActiveTexture(GL_TEXTURE0);
-    }
-
-    void OpenGL4EffectRenderer::BindTextureCube(int unit, ITextureCubeRenderer* texture)
-    {
-        if (!texture) return;
-        gl4_glActiveTexture(GL_TEXTURE0 + unit);
-        texture->BindGL();
-        gl4_glActiveTexture(GL_TEXTURE0);
-    }
-
-    void OpenGL4EffectRenderer::BindTexture3D(int unit, ITexture3DRenderer* texture)
-    {
-        if (!texture) return;
-        gl4_glActiveTexture(GL_TEXTURE0 + unit);
-        texture->BindGL();
-        gl4_glActiveTexture(GL_TEXTURE0);
-    }
-
-    std::unique_ptr<ISpriteBatchRenderer> OpenGL4Renderer::CreateSpriteBatch()
-    {
-        return std::make_unique<OpenGL4SpriteBatchRenderer>(*this);
-    }
-
-    std::unique_ptr<IRenderTargetRenderer> OpenGL4Renderer::CreateRenderTarget2D(
-        int w, int h, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
-    {
-        // preserveContents (RenderTargetUsage::PreserveContents) has no effect on this renderer --
-        // FBO contents are never implicitly discarded between GraphicsDevice::SetRenderTarget
-        // calls, matching EasyGLRenderer's own CreateRenderTarget2D (it accepts and
-        // likewise ignores the same parameter).
-        (void)preserveContents;
-        return std::make_unique<OpenGL4RenderTargetRenderer>(w, h, depthFormat, mipMap, multiSampleCount);
-    }
-
-    void OpenGL4Renderer::SetRenderTarget2D(IRenderTargetRenderer* rt)
-    {
-        // Regenerate the OLD target's mip chain (and resolve its MSAA, if any) before switching
-        // away from it -- mirrors EasyGLRenderer::SetRenderTarget2D's identical ordering.
-        if (currentRt2D_ && currentRt2D_ != rt)
-            currentRt2D_->UnbindAsRenderTarget();
-        if (currentRtCube_)
-            currentRtCube_->UnbindAsRenderTarget();
-        currentRtCube_ = nullptr;
-
-        currentRt2D_ = rt;
-        if (rt)
-        {
-            currentRtHeight_ = rt->GetHeight();
-            rt->BindAsRenderTarget();
-        }
-        else
-        {
-            currentRtHeight_ = 0;
-            BindDefaultFramebufferOrMsaa();
-        }
-    }
-
-    bool OpenGL4Renderer::GetCurrentRenderTarget2DSize(int& width, int& height) const
-    {
-        if (!currentRt2D_) return false;
-        width = currentRt2D_->GetWidth();
-        height = currentRt2D_->GetHeight();
-        return true;
-    }
-
-    std::unique_ptr<IRenderTargetCubeRenderer> OpenGL4Renderer::CreateRenderTargetCube(
-        int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
-    {
-        // REMED-GFX-136: consumed by being deliberately unused, matching
-        // EasyGLRenderer::CreateRenderTargetCube's own reasoning -- the FBO's colour
-        // attachment IS the cube texture and binding an FBO never touches its contents, so a
-        // single-sample face is preserved by construction. The only thing that clears one is the
-        // explicit glClear GraphicsDevice issues (and only issues) for a DiscardContents target.
-        (void) preserveContents;
-        return std::make_unique<OpenGL4RenderTargetCubeRenderer>(size, depthFormat, mipMap, multiSampleCount);
-    }
-
-    void OpenGL4Renderer::SetRenderTargetCubeFace(IRenderTargetCubeRenderer* rt, int face)
-    {
-        if (!rt) { SetRenderTarget2D(nullptr); return; }
-
-        if (currentRt2D_)
-            currentRt2D_->UnbindAsRenderTarget();
-        if (currentRtCube_ && currentRtCube_ != rt)
-            currentRtCube_->UnbindAsRenderTarget();
-        currentRt2D_ = nullptr;
-        currentRtCube_ = rt;
-        currentRtHeight_ = rt->GetSize();
-        rt->BindAsRenderTargetFace(face);
-    }
-
-    void OpenGL4Renderer::SetRenderTargets(
-        const RenderTargetBindingDescriptor* renderTargets, int count)
-    {
-        if (count <= 0) { SetRenderTarget2D(nullptr); return; }
-        if (!renderTargets)
-            throw std::invalid_argument(
-                "OpenGL4 SetRenderTargets: nonzero count requires a binding array.");
-        if (count == 1)
-        {
-            // Every descriptor kind is explicitly consumed: a cube-face binding routes to the
-            // real cube-face setter, never flattened to a RenderTarget2D or to face +X.
-            if (renderTargets[0].IsRenderTargetCubeFace())
-                SetRenderTargetCubeFace(renderTargets[0].GetRenderTargetCube(),
-                                        renderTargets[0].GetCubeFace());
-            else
-                SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
-            return;
-        }
-
-        // MRT: unbind whatever single RT/cube-face was previously active (mip regen if needed).
-        // MRT + per-target mipmaps is not supported here (mirrors
-        // EasyGLRenderer::SetRenderTargets' identical, documented gap) -- MRT targets are
-        // never tracked as currentRt2D_/currentRtCube_, so switching away from MRT mode cannot
-        // regenerate their mips.
-        constexpr int kMaxMRT = 8;
-        if (count > kMaxMRT)
-            throw std::runtime_error(
-                "OpenGL4 SetRenderTargets: requested " + std::to_string(count)
-                + " targets, but this renderer binds at most " + std::to_string(kMaxMRT) + ".");
-
-        std::array<IRenderTargetRenderer*, kMaxMRT> targets{};
-        for (int i = 0; i < count; ++i)
-        {
-            if (renderTargets[i].IsRenderTargetCubeFace())
-                throw std::runtime_error(
-                    "OpenGL4 SetRenderTargets: cube faces in a multi-target set are not "
-                    "implemented by this CNA renderer.");
-            targets[static_cast<std::size_t>(i)] = renderTargets[i].GetRenderTarget2D();
-            if (!targets[static_cast<std::size_t>(i)])
-                throw std::runtime_error(
-                    "OpenGL4 SetRenderTargets: binding " + std::to_string(i)
-                    + " does not carry a RenderTarget2D.");
-        }
-
-        if (currentRt2D_) currentRt2D_->UnbindAsRenderTarget();
-        if (currentRtCube_) currentRtCube_->UnbindAsRenderTarget();
-        currentRt2D_ = nullptr;
-        currentRtCube_ = nullptr;
-
-        if (!mrtFbo_) gl4_glGenFramebuffers(1, &mrtFbo_);
-        gl4_glBindFramebuffer(GL_FRAMEBUFFER, mrtFbo_);
-
-        GLenum drawBufs[kMaxMRT];
-        for (int i = 0; i < count; ++i)
-        {
-            gl4_glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D,
-                                       targets[static_cast<std::size_t>(i)]->GetColorGLHandle(), 0);
-            drawBufs[i] = static_cast<GLenum>(GL_COLOR_ATTACHMENT0 + i);
-        }
-        gl4_glDrawBuffers(count, drawBufs);
-
-        // No depth attachment for MRT (same accepted gap as EasyGLRenderer's own MRT
-        // FBO) -- the viewport reset that follows still needs the first target's height for
-        // SetViewport's Y-flip.
-        currentRtHeight_ = targets[0]->GetHeight();
-    }
-
-    void OpenGL4Renderer::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
-    {
-        int fbH = 0, fbW = 0;
-        GetPhysicalSize(fbW, fbH);
-
-        // glReadPixels cannot sample a multisample attachment directly -- resolve into FBO 0
-        // first (plans/plan_opengl4.md GL4-17), matching EasyGLRenderer::ReadBackbuffer's own
-        // sampleCount_>1 handling. Guarded by currentRtHeight_==0 (no RT bound) since this method
-        // is only ever meant to read the real backbuffer, never an active render target's FBO.
-        const bool resolvingBackbufferMsaa = msaaSampleCount_ > 0 && currentRtHeight_ == 0;
-        if (resolvingBackbufferMsaa)
-        {
-            ResolveMsaa();
-            gl4_glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        }
-
-        // OpenGL's origin is bottom-left; flip Y so the caller gets top-left-origin game
-        // coordinates, matching EasyGLRenderer::ReadBackbuffer's own convention.
-        const int glY = fbH - y - h;
-        glPixelStorei(GL_PACK_ALIGNMENT, 1);
-        glReadPixels(x, glY, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-
-        const int rowBytes = w * 4;
-        std::vector<uint8_t> tmp(rowBytes);
-        for (int row = 0; row < h / 2; ++row)
-        {
-            uint8_t* a = pixels + static_cast<std::size_t>(row) * rowBytes;
-            uint8_t* b = pixels + static_cast<std::size_t>(h - 1 - row) * rowBytes;
-            std::memcpy(tmp.data(), a, rowBytes);
-            std::memcpy(a, b, rowBytes);
-            std::memcpy(b, tmp.data(), rowBytes);
-        }
-
-        // Restore the MSAA FBO as the draw target after reading from FBO 0.
-        if (resolvingBackbufferMsaa) gl4_glBindFramebuffer(GL_FRAMEBUFFER, msaaFbo_);
-    }
-
-    void OpenGL4Renderer::ClearColorAndDepth(float r, float g, float b, float a, float depth)
-    {
-        glClearColor(r, g, b, a);
-        glClearDepth(depth);
-        const GLboolean wasWritable = depthWriteEnabled_ ? GL_TRUE : GL_FALSE;
-        glDepthMask(GL_TRUE);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glDepthMask(wasWritable);
-    }
-
-    void OpenGL4Renderer::ClearDepth(float depth)
-    {
-        glClearDepth(depth);
-        const GLboolean wasWritable = depthWriteEnabled_ ? GL_TRUE : GL_FALSE;
-        glDepthMask(GL_TRUE);
-        glClear(GL_DEPTH_BUFFER_BIT);
-        glDepthMask(wasWritable);
-    }
-
-    void OpenGL4Renderer::ClearStencil(int stencil)
-    {
-        glClearStencil(stencil);
-        glStencilMask(0xFFu);
-        glClear(GL_STENCIL_BUFFER_BIT);
-    }
-
-    void OpenGL4Renderer::ClearDepthAndStencil(float depth, int stencil)
-    {
-        glClearDepth(depth);
-        glClearStencil(stencil);
-        const GLboolean wasWritable = depthWriteEnabled_ ? GL_TRUE : GL_FALSE;
-        glDepthMask(GL_TRUE);
-        glStencilMask(0xFFu);
-        glClear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-        glDepthMask(wasWritable);
-    }
-
-    void OpenGL4Renderer::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
-    {
-        glClearColor(r, g, b, a);
-        glClearStencil(stencil);
-        glStencilMask(0xFFu);
-        glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-    }
-
-    void OpenGL4Renderer::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil)
-    {
-        glClearColor(r, g, b, a);
-        glClearDepth(depth);
-        glClearStencil(stencil);
-        const GLboolean wasWritable = depthWriteEnabled_ ? GL_TRUE : GL_FALSE;
-        glDepthMask(GL_TRUE);
-        glStencilMask(0xFFu);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-        glDepthMask(wasWritable);
-    }
-
-    void OpenGL4Renderer::SetDepthTestEnabled(bool enabled)
-    {
-        if (enabled) glEnable(GL_DEPTH_TEST);
-        else glDisable(GL_DEPTH_TEST);
-    }
-
-    void OpenGL4Renderer::SetBlendEnabled(bool enabled)
-    {
-        if (enabled) glEnable(GL_BLEND);
-        else glDisable(GL_BLEND);
-    }
-
-    void OpenGL4Renderer::SetDepthWriteEnabled(bool enabled)
-    {
-        depthWriteEnabled_ = enabled;
-        glDepthMask(enabled ? GL_TRUE : GL_FALSE);
-    }
-
     std::unique_ptr<IVertexBufferRenderer> OpenGL4Renderer::CreateVertexBuffer(int vertex_capacity)
     {
-        return std::make_unique<OpenGL4VertexBufferRenderer>(vertex_capacity);
+        EnsureCallingThreadContext();
+        auto buffer = std::make_unique<OpenGL4VertexBufferRenderer>(vertex_capacity);
+        buffer->AttachOwningContext(platformContext_);
+        return buffer;
     }
 
     std::unique_ptr<IIndexBufferRenderer> OpenGL4Renderer::CreateIndexBuffer16(int index_capacity)
     {
-        return std::make_unique<OpenGL4IndexBufferRenderer>(index_capacity, /*thirtyTwoBit=*/false);
+        EnsureCallingThreadContext();
+        auto buffer = std::make_unique<OpenGL4IndexBufferRenderer>(index_capacity, false);
+        buffer->AttachOwningContext(platformContext_);
+        return buffer;
     }
 
     std::unique_ptr<IIndexBufferRenderer> OpenGL4Renderer::CreateIndexBuffer32(int index_capacity)
     {
-        return std::make_unique<OpenGL4IndexBufferRenderer>(index_capacity, /*thirtyTwoBit=*/true);
+        EnsureCallingThreadContext();
+        auto buffer = std::make_unique<OpenGL4IndexBufferRenderer>(index_capacity, true);
+        buffer->AttachOwningContext(platformContext_);
+        return buffer;
     }
 
-    /// plans/plan_gltf.md GLTF-475: uploads the colored3d program's tint pair.
-    ///
-    /// @param params The draw's effect state, or null for the legacy colour route, which has none
-    ///        and therefore states the identity (white, attribute enabled).
-    void OpenGL4Renderer::SetColored3DTintEXT(const GpuDrawParams* params)
+    void OpenGL4Renderer::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
     {
-        const float white[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-        const float* diffuse = params != nullptr ? params->diffuseColor : white;
-        const bool vertexColor = params == nullptr || params->vertexColorEnabled;
-        if (colored3DDiffuseLoc_ >= 0)
-            gl4_glUniform4f(colored3DDiffuseLoc_, diffuse[0], diffuse[1], diffuse[2], diffuse[3]);
-        if (colored3DVertexColorLoc_ >= 0)
-            gl4_glUniform1i(colored3DVertexColorLoc_, vertexColor ? 1 : 0);
-    }
-
-    void OpenGL4Renderer::EnsureColored3DProgram()
-    {
-        if (colored3DProgram_.IsValid()) return;
-        if (!colored3DProgram_.Compile(kColored3DVertSrc, kColored3DFragSrc))
-            throw std::runtime_error("OpenGL4: colored3d program failed to compile: " + colored3DProgram_.GetError());
-        colored3DWvpLoc_ = colored3DProgram_.UniformLocation("uWorldViewProj");
-        colored3DDiffuseLoc_ = colored3DProgram_.UniformLocation("uDiffuseColor");
-        colored3DVertexColorLoc_ = colored3DProgram_.UniformLocation("uVertexColorEnabled");
-    }
-
-    void OpenGL4Renderer::EnsureColoredParams3DProgram()
-    {
-        if (coloredParams3DProgram_.IsValid()) return;
-        if (!coloredParams3DProgram_.Compile(kColoredParams3DVertSrc, kColoredParams3DFragSrc))
-            throw std::runtime_error("OpenGL4: coloredParams3d program failed to compile: " + coloredParams3DProgram_.GetError());
-    }
-
-    void OpenGL4Renderer::EnsureTextured3DProgram()
-    {
-        if (textured3DProgram_.IsValid()) return;
-        if (!textured3DProgram_.Compile(kTextured3DVertSrc, kTextured3DFragSrc))
-            throw std::runtime_error("OpenGL4: textured3d program failed to compile: " + textured3DProgram_.GetError());
-    }
-
-    void OpenGL4Renderer::EnsureColoredTextured3DProgram()
-    {
-        if (coloredTextured3DProgram_.IsValid()) return;
-        if (!coloredTextured3DProgram_.Compile(kColoredTextured3DVertSrc, kColoredTextured3DFragSrc))
-            throw std::runtime_error("OpenGL4: colored_textured3d program failed to compile: " + coloredTextured3DProgram_.GetError());
-    }
-
-    void OpenGL4Renderer::EnsureLitTextured3DProgram()
-    {
-        if (litTextured3DProgram_.IsValid()) return;
-        if (!litTextured3DProgram_.Compile(kLitTextured3DVertSrc, kLitTextured3DFragSrc))
-            throw std::runtime_error("OpenGL4: lit_textured3d program failed to compile: " + litTextured3DProgram_.GetError());
-    }
-
-    void OpenGL4Renderer::EnsureLitTextured3DVertexLitProgram()
-    {
-        if (litTextured3DVertexLitProgram_.IsValid()) return;
-        if (!litTextured3DVertexLitProgram_.Compile(kLitTextured3DVertexLitVertSrc, kLitTextured3DVertexLitFragSrc))
-            throw std::runtime_error("OpenGL4: lit_textured3d (vertex-lit) program failed to compile: " +
-                                      litTextured3DVertexLitProgram_.GetError());
-    }
-
-    void OpenGL4Renderer::EnsureEnvMap3DProgram()
-    {
-        if (envMap3DProgram_.IsValid()) return;
-        if (!envMap3DProgram_.Compile(kEnvMap3DVertSrc, kEnvMap3DFragSrc))
-            throw std::runtime_error("OpenGL4: env_map3d program failed to compile: " + envMap3DProgram_.GetError());
-    }
-
-    void OpenGL4Renderer::EnsureSkinned3DProgram()
-    {
-        if (skinned3DProgram_.IsValid()) return;
-        if (!skinned3DProgram_.Compile(kSkinned3DVertSrc, kSkinned3DFragSrc))
-            throw std::runtime_error("OpenGL4: skinned3d program failed to compile: " + skinned3DProgram_.GetError());
-    }
-
-    void OpenGL4Renderer::EnsureSkinned3DVertexLitProgram()
-    {
-        if (skinned3DVertexLitProgram_.IsValid()) return;
-        if (!skinned3DVertexLitProgram_.Compile(kSkinned3DVertexLitVertSrc, kSkinned3DVertexLitFragSrc))
-            throw std::runtime_error("OpenGL4: skinned3d (vertex-lit) program failed to compile: " +
-                                      skinned3DVertexLitProgram_.GetError());
-    }
-
-    void OpenGL4Renderer::EnsurePbr3DProgram()
-    {
-        if (pbr3DProgram_.IsValid()) return;
-        if (!pbr3DProgram_.Compile(kPbr3DVertSrc, kPbr3DFragSrc))
-            throw std::runtime_error("OpenGL4: pbr3d program failed to compile: " + pbr3DProgram_.GetError());
-    }
-
-    void OpenGL4Renderer::EnsurePbrSkinned3DProgram()
-    {
-        if (pbrSkinned3DProgram_.IsValid()) return;
-        if (!pbrSkinned3DProgram_.Compile(kPbrSkinned3DVertSrc, kPbr3DFragSrc))
-            throw std::runtime_error("OpenGL4: pbr_skinned3d program failed to compile: " + pbrSkinned3DProgram_.GetError());
-    }
-
-    void OpenGL4Renderer::EnsureDefaultWhiteTexture()
-    {
-        if (defaultWhiteTexture_ != 0) return;
-        const uint8_t white[4] = {255, 255, 255, 255};
-        glGenTextures(1, &defaultWhiteTexture_);
-        glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture_);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, white);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-
-    void OpenGL4Renderer::EnsureDefaultFlatNormalTexture()
-    {
-        if (defaultFlatNormalTexture_ != 0) return;
-        const uint8_t flatNormal[4] = {128, 128, 255, 255};
-        glGenTextures(1, &defaultFlatNormalTexture_);
-        glBindTexture(GL_TEXTURE_2D, defaultFlatNormalTexture_);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, flatNormal);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-
-    bool OpenGL4Renderer::BindProgramForStride(std::size_t strideInBytes, const Matrix& world, const Matrix& view,
-                                                       const Matrix& projection, const GpuDrawParams& params)
-    {
-        const Matrix wvp = world * view * projection;
-        float wvpCol[16];
-        wvp.ToColumnMajor(wvpCol);
-
-        // plans/plan_opengl4.md GL4-25: uploads the 4 fog uniforms (a no-op via the `loc>=0` guard on
-        // any program whose shader source doesn't declare them, so this is safe to call
-        // unconditionally for every stride case below).
-        const auto setFog = [&](OpenGL4RawProgram& prog) {
-            const int fogVectorLoc = prog.UniformLocation("uFogVector");
-            if (fogVectorLoc >= 0)
-                gl4_glUniform4f(fogVectorLoc, params.fogVector[0], params.fogVector[1],
-                                params.fogVector[2], params.fogVector[3]);
-            const int fogColorLoc = prog.UniformLocation("uFogColor");
-            if (fogColorLoc >= 0) gl4_glUniform3f(fogColorLoc, params.fogColor[0], params.fogColor[1], params.fogColor[2]);
-        };
-
-        // plans/plan_opengl4.md GL4-23: lazily create PbrEffect's fallback textures BEFORE any real
-        // per-draw texture gets bound below -- EnsureDefaultWhiteTexture()/
-        // EnsureDefaultFlatNormalTexture() do their own glBindTexture(GL_TEXTURE_2D, ...) on
-        // whatever unit is currently active, then unbind (GL_TEXTURE_2D -> 0) when done. Calling
-        // them AFTER texture0 was already bound to unit 0 (a real bug found while testing this
-        // task) would clobber/unbind that real base-colour texture on the one draw call where
-        // these fallbacks are first created -- every later PBR draw call is unaffected, since
-        // both Ensure* functions early-return once created.
-        if (params.pbr)
+        EnsureCallingThreadContext();   // GL4-0021
+        if (w <= 0 || h <= 0 || pixels == nullptr) return;
+        GLint previousReadFbo = 0;
+        glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previousReadFbo);
+        if (bound_->height == 0)
         {
-            EnsureDefaultWhiteTexture();
-            EnsureDefaultFlatNormalTexture();
-        }
-
-        // plans/plan_opengl4.md GL4-26: no ApplySamplerState() call is needed here for any texture
-        // unit -- GraphicsDevice::applySamplerStatesToRenderer() already calls
-        // renderer_->ApplySamplerState(slot, ...) for ALL 16 sampler slots, reading each slot's
-        // REAL GraphicsDevice.SamplerStates[slot] value, immediately before every
-        // DrawPrimitivesEx/DrawIndexedPrimitivesEx call reaches this function (every call site in
-        // GraphicsDevice.cpp pairs the two calls back to back). A real, now-fixed bug: this
-        // function used to call ApplySamplerState(slot, 0, 1, 1, 1) (Linear + hardcoded Clamp)
-        // for every bound unit AFTER that real state was already applied, silently overwriting
-        // it -- always Clamp, and ignoring the real per-slot SamplerState entirely, on every
-        // single direct 3D draw. Real XNA's own SamplerState default is Linear+Wrap (not Clamp),
-        // so the old hardcoded value was not just non-dynamic but the wrong default too. Matches
-        // EasyGLRenderer::BindDrawParams's own established convention of never touching
-        // sampler state itself during a 3D draw dispatch, relying solely on the same upstream
-        // GraphicsDevice call.
-        const bool hasTexture0 = params.texture0 != nullptr;
-        if (hasTexture0)
-        {
-            gl4_glActiveTexture(GL_TEXTURE0);
-            params.texture0->BindGL();
-        }
-        // plans/plan_opengl4.md GL4-19: DualTextureEffect's second sampler.
-        const bool hasTexture1 = params.texture1 != nullptr;
-        if (hasTexture1)
-        {
-            gl4_glActiveTexture(GL_TEXTURE1);
-            params.texture1->BindGL();
-        }
-        // plans/plan_opengl4.md GL4-21: EnvironmentMapEffect's cube map -- unit 1, same slot
-        // DualTextureEffect's texture1 uses (the two effects are mutually exclusive per draw, so
-        // there's no conflict), matching EasyGLRenderer::BindDrawParams's own unit choice.
-        const bool hasEnvMap = params.envMapping && params.envMap != nullptr;
-        if (hasEnvMap)
-        {
-            gl4_glActiveTexture(GL_TEXTURE1);
-            params.envMap->BindGL();
-        }
-
-        // plans/plan_opengl4.md GL4-23: PbrEffect's 4 extra texture units (1=normal, 2=metallic-
-        // roughness, 3=emissive, 4=occlusion). Unlike texture1/envMap above, the PBR fragment
-        // shader samples all 5 units unconditionally (no uniform-gated branch), so every unit
-        // always gets a real bound texture -- defaultFlatNormalTexture_/defaultWhiteTexture_ when
-        // the corresponding GpuDrawParams::pbr*Map pointer is null, matching
-        // EasyGLRenderer::BindDrawParams's own fallback convention.
-        if (params.pbr)
-        {
-            gl4_glActiveTexture(GL_TEXTURE1);
-            if (params.pbrNormalMap) params.pbrNormalMap->BindGL();
-            else glBindTexture(GL_TEXTURE_2D, defaultFlatNormalTexture_);
-
-            gl4_glActiveTexture(GL_TEXTURE2);
-            if (params.pbrMetallicRoughnessMap) params.pbrMetallicRoughnessMap->BindGL();
-            else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture_);
-
-            gl4_glActiveTexture(GL_TEXTURE3);
-            if (params.pbrEmissiveMap) params.pbrEmissiveMap->BindGL();
-            else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture_);
-
-            gl4_glActiveTexture(GL_TEXTURE4);
-            if (params.pbrOcclusionMap) params.pbrOcclusionMap->BindGL();
-            else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture_);
-
-            gl4_glActiveTexture(GL_TEXTURE5);
-            if (params.pbrSpecularMap) params.pbrSpecularMap->BindGL();
-            else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture_);
-
-            gl4_glActiveTexture(GL_TEXTURE6);
-            if (params.pbrSpecularColorMap) params.pbrSpecularColorMap->BindGL();
-            else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture_);
-        }
-
-        if (params.pbr && (strideInBytes == 48 || strideInBytes == 60 ||
-                           strideInBytes == 68 || strideInBytes == 76 || strideInBytes == 80))
-        {
-            // plans/plan_gltf.md GLTF-463/GLTF-465: the skinned strides are 68, 76 and 80, and the program
-            // must be chosen by the same predicate that compiles it -- picking pbr3DProgram_ for 76
-            // or 80 would run the rigid shader over a skinned record.
-            const bool skinnedPbr = strideInBytes == 68 || strideInBytes == 76 ||
-                                    strideInBytes == 80;
-            OpenGL4RawProgram& prog = skinnedPbr ? pbrSkinned3DProgram_ : pbr3DProgram_;
-            if (skinnedPbr) EnsurePbrSkinned3DProgram(); else EnsurePbr3DProgram();
-            prog.Use();
-            float worldCol[16];
-            world.ToColumnMajor(worldCol);
-            const auto setM4 = [&](const char* name, const float* m) {
-                const int loc = prog.UniformLocation(name);
-                if (loc >= 0) gl4_glUniformMatrix4fv(loc, 1, GL_FALSE, m);
-            };
-            const auto setV3 = [&](const char* name, const float* v) {
-                const int loc = prog.UniformLocation(name);
-                if (loc >= 0) gl4_glUniform3f(loc, v[0], v[1], v[2]);
-            };
-            setM4("uWorldViewProj", wvpCol);
-            setM4("uWorld", worldCol);
-            if (strideInBytes == 68)
+            if (sampleCount_ > 1)
             {
-                const int bonesLoc = prog.UniformLocation("uBones[0]");
-                if (bonesLoc >= 0 && params.boneCount > 0)
-                    gl4_glUniformMatrix4fv(bonesLoc, params.boneCount, GL_FALSE, params.boneTransforms);
-                const int weightsLoc = prog.UniformLocation("uWeightsPerVertex");
-                if (weightsLoc >= 0) gl4_glUniform1i(weightsLoc, params.weightsPerVertex);
+                // glReadPixels cannot read a multisample attachment: resolve into FBO 0 first.
+                ResolveMsaa();
             }
-            const int diffuseLoc = prog.UniformLocation("uDiffuseColor");
-            if (diffuseLoc >= 0) gl4_glUniform4f(diffuseLoc, params.diffuseColor[0], params.diffuseColor[1],
-                                                 params.diffuseColor[2], params.diffuseColor[3]);
-            setV3("uAmbientColor", params.ambientColor);
-            setV3("uEmissiveColor", params.emissiveColor);
-            // plans/plan_gltf.md GLTF-465: the stride-60 and stride-80 records always carry a colour
-            // slot, so the PBR shaders must be told whether it means anything. A negative location
-            // is a silent no-op, exactly like every other optional uniform here.
-            const int vertexColorLoc = prog.UniformLocation("uVertexColorEnabled");
-            if (vertexColorLoc >= 0)
-                gl4_glUniform1f(vertexColorLoc, params.vertexColorEnabled ? 1.0f : 0.0f);
-            const int metallicLoc = prog.UniformLocation("uMetallicFactor");
-            if (metallicLoc >= 0) gl4_glUniform1f(metallicLoc, params.pbrMetallicFactor);
-            const int roughnessLoc = prog.UniformLocation("uRoughnessFactor");
-            if (roughnessLoc >= 0) gl4_glUniform1f(roughnessLoc, params.pbrRoughnessFactor);
-            const int normalScaleLoc = prog.UniformLocation("uNormalScale");
-            if (normalScaleLoc >= 0) gl4_glUniform1f(normalScaleLoc, params.pbrNormalScale);
-            const int occlusionStrengthLoc = prog.UniformLocation("uOcclusionStrength");
-            if (occlusionStrengthLoc >= 0) gl4_glUniform1f(occlusionStrengthLoc, params.pbrOcclusionStrength);
-            const int srgbLoc = prog.UniformLocation("uSrgb");
-            if (srgbLoc >= 0)
-                gl4_glUniform4f(srgbLoc,
-                                params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
-                                params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f,
-                                params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f,
-                                params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f);
-            const int dielectricFresnelLoc = prog.UniformLocation("uDielectricFresnel");
-            if (dielectricFresnelLoc >= 0)
-                gl4_glUniform4f(dielectricFresnelLoc,
-                                params.pbrDielectricF0[0], params.pbrDielectricF0[1],
-                                params.pbrDielectricF0[2], params.pbrDielectricF90);
-            const int specularFresnelInputsLoc = prog.UniformLocation("uSpecularFresnelInputs");
-            if (specularFresnelInputsLoc >= 0)
-                gl4_glUniform4f(specularFresnelInputsLoc,
-                                params.pbrDielectricF0Unclamped[0],
-                                params.pbrDielectricF0Unclamped[1],
-                                params.pbrDielectricF0Unclamped[2], params.pbrSpecularFactor);
-            for (int row = 0; row < 10; ++row)
-            {
-                const std::string name =
-                    "uTextureTransformRows[" + std::to_string(row) + "]";
-                const int location = prog.UniformLocation(name.c_str());
-                if (location < 0) continue;
-                const float* values = params.pbrTextureTransformRows[row];
-                gl4_glUniform4f(location, values[0], values[1], values[2], values[3]);
-            }
-            for (int row = 0; row < 4; ++row)
-            {
-                const std::string name =
-                    "uSpecularTextureTransformRows[" + std::to_string(row) + "]";
-                const int location = prog.UniformLocation(name.c_str());
-                if (location < 0) continue;
-                const float* values = params.pbrSpecularTextureTransformRows[row];
-                gl4_glUniform4f(location, values[0], values[1], values[2], values[3]);
-            }
-            const int alphaTestLoc = prog.UniformLocation("uAlphaTest");
-            if (alphaTestLoc >= 0)
-                gl4_glUniform4f(alphaTestLoc, params.alphaTest[0], params.alphaTest[1],
-                                params.alphaTest[2], params.alphaTest[3]);
-            setV3("uLight0Dir", params.light0Dir);
-            setV3("uLight0Diffuse", params.light0Diffuse);
-            setV3("uLight1Dir", params.light1Dir);
-            setV3("uLight1Diffuse", params.light1Diffuse);
-            setV3("uLight2Dir", params.light2Dir);
-            setV3("uLight2Diffuse", params.light2Diffuse);
-            setV3("uEyePosition", params.eyePositionWorld);
-            const int texLoc = prog.UniformLocation("uTexture");
-            if (texLoc >= 0) gl4_glUniform1i(texLoc, 0);
-            const int normalMapLoc = prog.UniformLocation("uNormalMap");
-            if (normalMapLoc >= 0) gl4_glUniform1i(normalMapLoc, 1);
-            const int mrLoc = prog.UniformLocation("uMetallicRoughnessMap");
-            if (mrLoc >= 0) gl4_glUniform1i(mrLoc, 2);
-            const int emissiveMapLoc = prog.UniformLocation("uEmissiveMap");
-            if (emissiveMapLoc >= 0) gl4_glUniform1i(emissiveMapLoc, 3);
-            const int occlusionMapLoc = prog.UniformLocation("uOcclusionMap");
-            if (occlusionMapLoc >= 0) gl4_glUniform1i(occlusionMapLoc, 4);
-            const int specularMapLoc = prog.UniformLocation("uSpecularMap");
-            if (specularMapLoc >= 0) gl4_glUniform1i(specularMapLoc, 5);
-            const int specularColorMapLoc = prog.UniformLocation("uSpecularColorMap");
-            if (specularColorMapLoc >= 0) gl4_glUniform1i(specularColorMapLoc, 6);
-            setFog(prog);
-            return true;
+            gl4_glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+            glReadBuffer(GL_BACK);
         }
 
-        if (params.envMapping && strideInBytes == 32)
-        {
-            EnsureEnvMap3DProgram();
-            envMap3DProgram_.Use();
-            float worldCol[16];
-            world.ToColumnMajor(worldCol);
-            const auto setM4 = [&](const char* name, const float* m) {
-                const int loc = envMap3DProgram_.UniformLocation(name);
-                if (loc >= 0) gl4_glUniformMatrix4fv(loc, 1, GL_FALSE, m);
-            };
-            const auto setV3 = [&](const char* name, const float* v) {
-                const int loc = envMap3DProgram_.UniformLocation(name);
-                if (loc >= 0) gl4_glUniform3f(loc, v[0], v[1], v[2]);
-            };
-            const auto setB = [&](const char* name, bool v) {
-                const int loc = envMap3DProgram_.UniformLocation(name);
-                if (loc >= 0) gl4_glUniform1i(loc, v ? 1 : 0);
-            };
-            setM4("uWorldViewProj", wvpCol);
-            setM4("uWorld", worldCol);
-            setV3("uEyePosition", params.eyePositionWorld);
-            const int envAmountLoc = envMap3DProgram_.UniformLocation("uEnvMapAmount");
-            if (envAmountLoc >= 0) gl4_glUniform1f(envAmountLoc, params.envMapAmount);
-            setB("uFresnelEnabled", params.fresnelEnabled);
-            const int fresnelFactorLoc = envMap3DProgram_.UniformLocation("uFresnelFactor");
-            if (fresnelFactorLoc >= 0) gl4_glUniform1f(fresnelFactorLoc, params.fresnelFactor);
-            const int diffuseLoc = envMap3DProgram_.UniformLocation("uDiffuseColor");
-            if (diffuseLoc >= 0) gl4_glUniform4f(diffuseLoc, params.diffuseColor[0], params.diffuseColor[1],
-                                                 params.diffuseColor[2], params.diffuseColor[3]);
-            setB("uTextureEnabled", params.textureEnabled && hasTexture0);
-            setV3("uEmissiveColor", params.emissiveColor);
-            setV3("uLight0Dir", params.light0Dir);
-            setV3("uLight0Diffuse", params.light0Diffuse);
-            setV3("uLight1Dir", params.light1Dir);
-            setV3("uLight1Diffuse", params.light1Diffuse);
-            setV3("uLight2Dir", params.light2Dir);
-            setV3("uLight2Diffuse", params.light2Diffuse);
-            setV3("uEnvMapSpecular", params.envMapSpecular);
-            const int texLoc = envMap3DProgram_.UniformLocation("uTexture");
-            if (texLoc >= 0) gl4_glUniform1i(texLoc, 0);
-            const int envMapLoc = envMap3DProgram_.UniformLocation("uEnvMap");
-            if (envMapLoc >= 0) gl4_glUniform1i(envMapLoc, 1);
-            setFog(envMap3DProgram_);
-            return true;
-        }
-
-        switch (strideInBytes)
-        {
-        case 16: // VertexPositionColor -- plans/plan_opengl4.md GL4-25: real GpuDrawParams-aware case
-        {
-            EnsureColoredParams3DProgram();
-            coloredParams3DProgram_.Use();
-            const int wvpLoc = coloredParams3DProgram_.UniformLocation("uWorldViewProj");
-            if (wvpLoc >= 0) gl4_glUniformMatrix4fv(wvpLoc, 1, GL_FALSE, wvpCol);
-            const int diffuseLoc = coloredParams3DProgram_.UniformLocation("uDiffuseColor");
-            if (diffuseLoc >= 0) gl4_glUniform4f(diffuseLoc, params.diffuseColor[0], params.diffuseColor[1],
-                                                 params.diffuseColor[2], params.diffuseColor[3]);
-            const int vcLoc = coloredParams3DProgram_.UniformLocation("uVertexColorEnabled");
-            if (vcLoc >= 0) gl4_glUniform1i(vcLoc, params.vertexColorEnabled ? 1 : 0);
-            const int alphaTestLoc = coloredParams3DProgram_.UniformLocation("uAlphaTest");
-            if (alphaTestLoc >= 0) gl4_glUniform4f(alphaTestLoc, params.alphaTest[0], params.alphaTest[1],
-                                                   params.alphaTest[2], params.alphaTest[3]);
-            setFog(coloredParams3DProgram_);
-            return true;
-        }
-        case 20: // VertexPositionTexture
-        {
-            EnsureTextured3DProgram();
-            textured3DProgram_.Use();
-            const int wvpLoc = textured3DProgram_.UniformLocation("uWorldViewProj");
-            if (wvpLoc >= 0) gl4_glUniformMatrix4fv(wvpLoc, 1, GL_FALSE, wvpCol);
-            const int diffuseLoc = textured3DProgram_.UniformLocation("uDiffuseColor");
-            if (diffuseLoc >= 0) gl4_glUniform4f(diffuseLoc, params.diffuseColor[0], params.diffuseColor[1],
-                                                 params.diffuseColor[2], params.diffuseColor[3]);
-            const int texEnabledLoc = textured3DProgram_.UniformLocation("uTextureEnabled");
-            if (texEnabledLoc >= 0) gl4_glUniform1i(texEnabledLoc, (params.textureEnabled && hasTexture0) ? 1 : 0);
-            const int texLoc = textured3DProgram_.UniformLocation("uTexture");
-            if (texLoc >= 0) gl4_glUniform1i(texLoc, 0);
-            const int tex2Loc = textured3DProgram_.UniformLocation("uTexture2");
-            if (tex2Loc >= 0) gl4_glUniform1i(tex2Loc, 1);
-            const int dualLoc = textured3DProgram_.UniformLocation("uDualTextureEnabled");
-            if (dualLoc >= 0) gl4_glUniform1i(dualLoc, (params.dualTexture && hasTexture1) ? 1 : 0);
-            const int alphaTestLoc = textured3DProgram_.UniformLocation("uAlphaTest");
-            if (alphaTestLoc >= 0) gl4_glUniform4f(alphaTestLoc, params.alphaTest[0], params.alphaTest[1],
-                                                   params.alphaTest[2], params.alphaTest[3]);
-            setFog(textured3DProgram_);
-            return true;
-        }
-        case 24: // VertexPositionColorTexture
-        {
-            EnsureColoredTextured3DProgram();
-            coloredTextured3DProgram_.Use();
-            const int wvpLoc = coloredTextured3DProgram_.UniformLocation("uWorldViewProj");
-            if (wvpLoc >= 0) gl4_glUniformMatrix4fv(wvpLoc, 1, GL_FALSE, wvpCol);
-            const int diffuseLoc = coloredTextured3DProgram_.UniformLocation("uDiffuseColor");
-            if (diffuseLoc >= 0) gl4_glUniform4f(diffuseLoc, params.diffuseColor[0], params.diffuseColor[1],
-                                                 params.diffuseColor[2], params.diffuseColor[3]);
-            const int vcLoc = coloredTextured3DProgram_.UniformLocation("uVertexColorEnabled");
-            if (vcLoc >= 0) gl4_glUniform1i(vcLoc, params.vertexColorEnabled ? 1 : 0);
-            const int texEnabledLoc = coloredTextured3DProgram_.UniformLocation("uTextureEnabled");
-            if (texEnabledLoc >= 0) gl4_glUniform1i(texEnabledLoc, (params.textureEnabled && hasTexture0) ? 1 : 0);
-            const int texLoc = coloredTextured3DProgram_.UniformLocation("uTexture");
-            if (texLoc >= 0) gl4_glUniform1i(texLoc, 0);
-            const int tex2Loc = coloredTextured3DProgram_.UniformLocation("uTexture2");
-            if (tex2Loc >= 0) gl4_glUniform1i(tex2Loc, 1);
-            const int dualLoc = coloredTextured3DProgram_.UniformLocation("uDualTextureEnabled");
-            if (dualLoc >= 0) gl4_glUniform1i(dualLoc, (params.dualTexture && hasTexture1) ? 1 : 0);
-            const int alphaTestLoc = coloredTextured3DProgram_.UniformLocation("uAlphaTest");
-            if (alphaTestLoc >= 0) gl4_glUniform4f(alphaTestLoc, params.alphaTest[0], params.alphaTest[1],
-                                                   params.alphaTest[2], params.alphaTest[3]);
-            setFog(coloredTextured3DProgram_);
-            return true;
-        }
-        case 32: // VertexPositionNormalTexture
-        {
-            // plans/plan_opengl4.md GL4-29: real XNA's BasicEffect defaults PreferPerPixelLighting=false
-            // (per-vertex/Gouraud-shaded lighting) -- only meaningfully distinct while lighting is
-            // actually on, matching EasyGLRenderer::SelectProgram's own identical gate.
-            const bool vertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
-            if (vertexLit) EnsureLitTextured3DVertexLitProgram(); else EnsureLitTextured3DProgram();
-            OpenGL4RawProgram& prog = vertexLit ? litTextured3DVertexLitProgram_ : litTextured3DProgram_;
-            prog.Use();
-            float worldCol[16];
-            world.ToColumnMajor(worldCol);
-            const auto setM4 = [&](const char* name, const float* m) {
-                const int loc = prog.UniformLocation(name);
-                if (loc >= 0) gl4_glUniformMatrix4fv(loc, 1, GL_FALSE, m);
-            };
-            const auto setV3 = [&](const char* name, const float* v) {
-                const int loc = prog.UniformLocation(name);
-                if (loc >= 0) gl4_glUniform3f(loc, v[0], v[1], v[2]);
-            };
-            const auto setB = [&](const char* name, bool v) {
-                const int loc = prog.UniformLocation(name);
-                if (loc >= 0) gl4_glUniform1i(loc, v ? 1 : 0);
-            };
-            setM4("uWorldViewProj", wvpCol);
-            setM4("uWorld", worldCol);
-            const int diffuseLoc = prog.UniformLocation("uDiffuseColor");
-            if (diffuseLoc >= 0) gl4_glUniform4f(diffuseLoc, params.diffuseColor[0], params.diffuseColor[1],
-                                                 params.diffuseColor[2], params.diffuseColor[3]);
-            setB("uTextureEnabled", params.textureEnabled && hasTexture0);
-            setB("uLightingEnabled", params.lightingEnabled);
-            setV3("uAmbientColor", params.ambientColor);
-            setV3("uLight0Dir", params.light0Dir);
-            setV3("uLight0Diffuse", params.light0Diffuse);
-            setV3("uLight0Specular", params.light0Specular);
-            setV3("uLight1Dir", params.light1Dir);
-            setV3("uLight1Diffuse", params.light1Diffuse);
-            setV3("uLight1Specular", params.light1Specular);
-            setV3("uLight2Dir", params.light2Dir);
-            setV3("uLight2Diffuse", params.light2Diffuse);
-            setV3("uLight2Specular", params.light2Specular);
-            setV3("uEmissiveColor", params.emissiveColor);
-            setV3("uEyePosition", params.eyePositionWorld);
-            setV3("uSpecularColor", params.specularColor);
-            const int specPowerLoc = prog.UniformLocation("uSpecularPower");
-            if (specPowerLoc >= 0) gl4_glUniform1f(specPowerLoc, params.specularPower);
-            const int texLoc = prog.UniformLocation("uTexture");
-            if (texLoc >= 0) gl4_glUniform1i(texLoc, 0);
-            setFog(prog);
-            return true;
-        }
-        case 52: // VertexPositionNormalTextureSkinned
-        case 56: // VertexPositionNormalTextureSkinned + Color
-        {
-            // plans/plan_opengl4.md GL4-29: real XNA's SkinnedEffect also defaults
-            // PreferPerPixelLighting=false, same gate as the stride-32 case above.
-            const bool vertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
-            if (vertexLit) EnsureSkinned3DVertexLitProgram(); else EnsureSkinned3DProgram();
-            OpenGL4RawProgram& prog = vertexLit ? skinned3DVertexLitProgram_ : skinned3DProgram_;
-            prog.Use();
-            float worldCol[16];
-            world.ToColumnMajor(worldCol);
-            const auto setM4 = [&](const char* name, const float* m) {
-                const int loc = prog.UniformLocation(name);
-                if (loc >= 0) gl4_glUniformMatrix4fv(loc, 1, GL_FALSE, m);
-            };
-            const auto setV3 = [&](const char* name, const float* v) {
-                const int loc = prog.UniformLocation(name);
-                if (loc >= 0) gl4_glUniform3f(loc, v[0], v[1], v[2]);
-            };
-            const auto setB = [&](const char* name, bool v) {
-                const int loc = prog.UniformLocation(name);
-                if (loc >= 0) gl4_glUniform1i(loc, v ? 1 : 0);
-            };
-            setM4("uWorldViewProj", wvpCol);
-            setM4("uWorld", worldCol);
-            const int bonesLoc = prog.UniformLocation("uBones[0]");
-            if (bonesLoc >= 0 && params.boneCount > 0)
-                gl4_glUniformMatrix4fv(bonesLoc, params.boneCount, GL_FALSE, params.boneTransforms);
-            const int weightsLoc = prog.UniformLocation("uWeightsPerVertex");
-            if (weightsLoc >= 0) gl4_glUniform1i(weightsLoc, params.weightsPerVertex);
-            const int diffuseLoc = prog.UniformLocation("uDiffuseColor");
-            if (diffuseLoc >= 0) gl4_glUniform4f(diffuseLoc, params.diffuseColor[0], params.diffuseColor[1],
-                                                 params.diffuseColor[2], params.diffuseColor[3]);
-            setB("uTextureEnabled", params.textureEnabled && hasTexture0);
-            setB("uVertexColorEnabled", params.vertexColorEnabled);
-            setV3("uLight0Dir", params.light0Dir);
-            setV3("uLight0Diffuse", params.light0Diffuse);
-            setV3("uLight0Specular", params.light0Specular);
-            setV3("uLight1Dir", params.light1Dir);
-            setV3("uLight1Diffuse", params.light1Diffuse);
-            setV3("uLight1Specular", params.light1Specular);
-            setV3("uLight2Dir", params.light2Dir);
-            setV3("uLight2Diffuse", params.light2Diffuse);
-            setV3("uLight2Specular", params.light2Specular);
-            setV3("uEmissiveColor", params.emissiveColor);
-            setV3("uEyePosition", params.eyePositionWorld);
-            setV3("uSpecularColor", params.specularColor);
-            const int specPowerLoc = prog.UniformLocation("uSpecularPower");
-            if (specPowerLoc >= 0) gl4_glUniform1f(specPowerLoc, params.specularPower);
-            const int texLoc = prog.UniformLocation("uTexture");
-            if (texLoc >= 0) gl4_glUniform1i(texLoc, 0);
-            setFog(prog);
-            return true;
-        }
-        default:
-            return false;
-        }
-    }
-
-    namespace
-    {
-        // plans/plan_opengl4.md GL4-30: binds a ShaderEffect's own compiled program (bypassing the
-        // built-in stride-dispatched shaders) and its World/View/Projection uniforms, matching
-        // the exact uniform names every original XNA sample's own .fx source already declares.
-        // Mirrors EasyGLRenderer's own BindCustomEffectMatrices helper exactly.
-        void BindCustomEffectMatrices(IEffectRenderer& renderer,
-                                      const Matrix& world, const Matrix& view, const Matrix& projection)
-        {
-            renderer.Bind();
-            float worldCol[16], viewCol[16], projCol[16];
-            world.ToColumnMajor(worldCol);
-            view.ToColumnMajor(viewCol);
-            projection.ToColumnMajor(projCol);
-            renderer.SetUniformMat4("World", worldCol);
-            renderer.SetUniformMat4("View", viewCol);
-            renderer.SetUniformMat4("Projection", projCol);
-        }
-    }
-
-    void OpenGL4Renderer::DrawPrimitivesEx(const IVertexBufferRenderer& vb_in,
-                                                  const Matrix& world, const Matrix& view, const Matrix& projection,
-                                                  PrimitiveType primitive, int primitiveCount,
-                                                  const GpuDrawParams& params)
-    {
-        // REMED-GFX-201: one per-vertex stream only on this renderer; refuse a wider binding
-        // set before any program or VAO state is touched, never render from a stream subset.
-        if (HasMultipleVertexStreams(params) || HasMultipleInstanceStreams(params))
-            throw System::NotSupportedException(
-                "OpenGL4: multiple per-vertex or per-instance vertex streams are not supported "
-                "by this renderer (GraphicsCapability::MultiStreamVertexInput is false).");
-        // REMED-GFX-DECL-GUARD: before a program is selected and before any draw is issued.
-        // A custom ShaderEffect binds its attributes generically from the declaration itself
-        // (GL4-33) and is deliberately not guarded, matching EasyGL's own gating.
-        if (params.customEffectRenderer == nullptr)
-            RequireFaithfulDeclarationEXT(vb_in, "ordinary-nonindexed");
-        const auto& vb = static_cast<const OpenGL4VertexBufferRenderer&>(vb_in);
-
-        if (params.customEffectRenderer)
-        {
-            BindCustomEffectMatrices(*params.customEffectRenderer, world, view, projection);
-            const int vertexCount = VertexCountForPrimitives(primitive, primitiveCount);
-            gl4_glBindVertexArray(vb.VaoHandle());
-            glDrawArrays(ToGLPrimitive(primitive), params.vertexStart, vertexCount);
-            gl4_glBindVertexArray(0);
-            return;
-        }
-
-        if (!BindProgramForStride(vb.GetStrideInBytes(), world, view, projection, params))
-        {
-            // plans/plan_gltf.md GLTF-475: this fallback used to call the params-free colour route, which
-            // discarded the effect entirely and made the program paint attribute location 1 -- the
-            // NORMAL on every PBR/skinned record -- as the surface colour. The route name stays
-            // "ordinary-nonindexed" because that is the guard this draw already passed above.
-            DrawColoredPrimitivesInternalEXT(vb_in, world, view, projection, primitive,
-                                             primitiveCount, "ordinary-nonindexed", &params);
-            return;
-        }
-
-        const int vertexCount = VertexCountForPrimitives(primitive, primitiveCount);
-        gl4_glBindVertexArray(vb.VaoHandle());
-        glDrawArrays(ToGLPrimitive(primitive), params.vertexStart, vertexCount);
-        gl4_glBindVertexArray(0);
-    }
-
-    void OpenGL4Renderer::DrawIndexedPrimitivesEx(const IVertexBufferRenderer& vb_in, const IIndexBufferRenderer& ib_in,
-                                                         const Matrix& world, const Matrix& view, const Matrix& projection,
-                                                         PrimitiveType primitive, int primitiveCount,
-                                                         const GpuDrawParams& params)
-    {
-        // REMED-GFX-201: one per-vertex stream only on this renderer; refuse a wider binding
-        // set before any program or VAO state is touched, never render from a stream subset.
-        if (HasMultipleVertexStreams(params) || HasMultipleInstanceStreams(params))
-            throw System::NotSupportedException(
-                "OpenGL4: multiple per-vertex or per-instance vertex streams are not supported "
-                "by this renderer (GraphicsCapability::MultiStreamVertexInput is false).");
-        // REMED-GFX-DECL-GUARD: see DrawPrimitivesEx above.
-        if (params.customEffectRenderer == nullptr)
-            RequireFaithfulDeclarationEXT(vb_in, "ordinary-indexed");
-        const auto& vb = static_cast<const OpenGL4VertexBufferRenderer&>(vb_in);
-        const auto& ib = static_cast<const OpenGL4IndexBufferRenderer&>(ib_in);
-
-        // plans/plan_opengl4.md GL4-31: real 32-bit index buffer support -- honors
-        // IIndexBufferRenderer::IsThirtyTwoBit() instead of hardcoding GL_UNSIGNED_SHORT, matching
-        // every other established renderer's own idxType-selection convention.
-        const GLenum idxType = ib.IsThirtyTwoBit() ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT;
-        const std::size_t idxSize = ib.IsThirtyTwoBit() ? sizeof(uint32_t) : sizeof(uint16_t);
-
-        if (params.customEffectRenderer)
-        {
-            BindCustomEffectMatrices(*params.customEffectRenderer, world, view, projection);
-            const int indexCount = VertexCountForPrimitives(primitive, primitiveCount);
-            const auto byteOffsetCustom = reinterpret_cast<const void*>(
-                static_cast<std::uintptr_t>(params.startIndex) * idxSize);
-            gl4_glBindVertexArray(vb.VaoHandle());
-            gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib.IboHandle());
-            gl4_glDrawElementsBaseVertex(ToGLPrimitive(primitive), indexCount, idxType,
-                                         byteOffsetCustom, params.baseVertex);
-            gl4_glBindVertexArray(0);
-            return;
-        }
-
-        if (!BindProgramForStride(vb.GetStrideInBytes(), world, view, projection, params))
-        {
-            // plans/plan_gltf.md GLTF-475: see DrawPrimitivesEx's fallback.
-            DrawIndexedColoredPrimitivesInternalEXT(vb_in, ib_in, world, view, projection, primitive,
-                                                    primitiveCount, "ordinary-indexed", &params);
-            return;
-        }
-
-        const int indexCount = VertexCountForPrimitives(primitive, primitiveCount);
-        const auto byteOffset = reinterpret_cast<const void*>(
-            static_cast<std::uintptr_t>(params.startIndex) * idxSize);
-        gl4_glBindVertexArray(vb.VaoHandle());
-        gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib.IboHandle());
-        // plans/plan_opengl4.md GL4-27: real GpuDrawParams::baseVertex support -- glDrawElementsBaseVertex
-        // adds params.baseVertex to every fetched index before it indexes into the currently bound
-        // vertex buffer (maps directly to FNA's own D3D9/OpenGL baseVertex parameter), letting
-        // multiple sub-meshes share one large vertex buffer with per-draw index-space-relative
-        // indices, matching every effect's own DrawIndexedPrimitivesEx(..., baseVertex, ...)
-        // contract. params.baseVertex defaults to 0, so this is a genuine no-op for every existing
-        // draw that never set it.
-        gl4_glDrawElementsBaseVertex(ToGLPrimitive(primitive), indexCount, idxType,
-                                     byteOffset, params.baseVertex);
-        gl4_glBindVertexArray(0);
-    }
-
-    void OpenGL4Renderer::DrawInstancedPrimitivesEx(const IVertexBufferRenderer& vb_in, const IIndexBufferRenderer& ib_in,
-                                                           const Matrix& world, const Matrix& view, const Matrix& projection,
-                                                           PrimitiveType primitive, int primitiveCount, int instanceCount,
-                                                           const GpuDrawParams& params)
-    {
-        const auto& vb = static_cast<const OpenGL4VertexBufferRenderer&>(vb_in);
-        const auto& ib = static_cast<const OpenGL4IndexBufferRenderer&>(ib_in);
-
-        // REMED-GFX-201/202: this renderer binds exactly one per-vertex stream plus at most one
-        // per-instance stream. GraphicsDevice already rejects wider shapes for a renderer that
-        // reports no MultiStreamVertexInput; this defensive check keeps the refusal in place even
-        // if a caller reaches the renderer directly, rather than rendering from a stream subset.
-        if (HasMultipleVertexStreams(params) || HasMultipleInstanceStreams(params))
-            throw System::NotSupportedException(
-                "OpenGL4: multiple per-vertex or per-instance vertex streams are not supported "
-                "by this renderer (GraphicsCapability::MultiStreamVertexInput is false).");
-
-        const int indexCount = VertexCountForPrimitives(primitive, primitiveCount);
-        const GLenum idxType = ib.IsThirtyTwoBit() ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT;
-
-        // REMED-GFX-DECL-GUARD: the non-custom-effect instanced path below dispatches by stride.
-        if (params.customEffectRenderer == nullptr)
-            RequireFaithfulDeclarationEXT(vb_in, "instanced");
-
-        if (params.customEffectRenderer)
-        {
-            // plans/plan_opengl4.md GL4-33: hardware instancing with a custom ShaderEffect. The
-            // per-vertex mesh buffer's own attributes are already bound (via ApplyLayout, at
-            // SetData time) into vb's own VAO; bind the *second*, per-instance buffer's own
-            // attributes into that same VAO here, continuing at locations right after the mesh
-            // buffer's own. REMED-GFX-202: the per-instance stream arrives as the
-            // GpuVertexStreamBinding whose instanceFrequency > 0 -- there is no second
-            // representation of "the instance buffer". REMED-GFX-213: the attribute divisor IS
-            // the public InstanceFrequency (GL advances the attribute once per `divisor`
-            // instances, the same rule D3D11's InstanceDataStepRate defines). REMED-GFX-211: the
-            // stream's own VertexOffset (in vertex elements) offsets every attribute pointer by
-            // that many of the stream's OWN records.
-            BindCustomEffectMatrices(*params.customEffectRenderer, world, view, projection);
-
-            gl4_glBindVertexArray(vb.VaoHandle());
-
-            const auto& meshDecl = vb.GetDeclarationElements();
-            const auto baseLocation = static_cast<GLuint>(meshDecl.size());
-            const GpuVertexStreamBinding* instanceStream = FirstInstanceStream(params);
-            if (instanceStream)
-            {
-                const auto& instVb =
-                    static_cast<const OpenGL4VertexBufferRenderer&>(*instanceStream->buffer);
-                const auto& instDecl = instVb.GetDeclarationElements();
-                const auto instStride = static_cast<GLsizei>(instVb.GetStrideInBytes());
-                const auto instBase = static_cast<std::uintptr_t>(instanceStream->vertexOffset)
-                                      * static_cast<std::uintptr_t>(instVb.GetStrideInBytes());
-                const auto divisor =
-                    static_cast<GLuint>(instanceStream->instanceFrequency > 0
-                                            ? instanceStream->instanceFrequency : 1);
-
-                gl4_glBindBuffer(GL_ARRAY_BUFFER, instVb.VboHandle());
-                for (std::size_t i = 0; i < instDecl.size(); ++i)
-                {
-                    const VertexElement& element = instDecl[i];
-                    const VertexAttribFormat desc =
-                        DescribeVertexElementFormat(element.getVertexElementFormatProperty());
-                    const auto location = baseLocation + static_cast<GLuint>(i);
-                    const void* offset = reinterpret_cast<void*>(
-                        instBase + static_cast<std::uintptr_t>(element.getOffsetProperty()));
-                    gl4_glEnableVertexAttribArray(location);
-                    if (desc.isInteger)
-                        gl4_glVertexAttribIPointer(location, desc.componentCount, desc.type, instStride, offset);
-                    else
-                        gl4_glVertexAttribPointer(location, desc.componentCount, desc.type,
-                                                  desc.normalized ? GL_TRUE : GL_FALSE, instStride, offset);
-                    gl4_glVertexAttribDivisor(location, divisor);
-                }
-            }
-
-            gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib.IboHandle());
-            gl4_glDrawElementsInstanced(ToGLPrimitive(primitive), indexCount, idxType, nullptr, instanceCount);
-
-            if (instanceStream)
-            {
-                const auto& instVb =
-                    static_cast<const OpenGL4VertexBufferRenderer&>(*instanceStream->buffer);
-                const auto& instDecl = instVb.GetDeclarationElements();
-                for (std::size_t i = 0; i < instDecl.size(); ++i)
-                {
-                    const auto location = baseLocation + static_cast<GLuint>(i);
-                    gl4_glVertexAttribDivisor(location, 0);
-                    gl4_glDisableVertexAttribArray(location);
-                }
-            }
-
-            gl4_glBindVertexArray(0);
-            return;
-        }
-
-        if (!BindProgramForStride(vb.GetStrideInBytes(), world, view, projection, params))
-        {
-            // plans/plan_opengl4.md GL4-33: unrecognized stride, no custom effect -- fall back to the
-            // colored3d program, mirroring DrawIndexedColoredPrimitives's own fallback shape
-            // (matches EasyGLRenderer::SelectProgram's own `default:` colored-program case, which
-            // always succeeds for any stride rather than failing). plans/plan_gltf.md GLTF-475: the
-            // fallback does read `params` now -- see SetColored3DTintEXT for why it must.
-            EnsureColored3DProgram();
-            const Matrix wvp = world * view * projection;
-            float wvpCol[16];
-            wvp.ToColumnMajor(wvpCol);
-            colored3DProgram_.Use();
-            if (colored3DWvpLoc_ >= 0) gl4_glUniformMatrix4fv(colored3DWvpLoc_, 1, GL_FALSE, wvpCol);
-            SetColored3DTintEXT(&params);
-            gl4_glBindVertexArray(vb.VaoHandle());
-            gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib.IboHandle());
-            gl4_glDrawElementsInstanced(ToGLPrimitive(primitive), indexCount, idxType, nullptr, instanceCount);
-            gl4_glBindVertexArray(0);
-            return;
-        }
-
-        gl4_glBindVertexArray(vb.VaoHandle());
-        gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib.IboHandle());
-        gl4_glDrawElementsInstanced(ToGLPrimitive(primitive), indexCount, idxType, nullptr, instanceCount);
-        gl4_glBindVertexArray(0);
-    }
-
-    OpenGL4RawProgram& OpenGL4Renderer::GetOrCreateSpriteProgram()
-    {
-        if (!spriteProgram_.IsValid())
-        {
-            if (!spriteProgram_.Compile(kSpriteVertSrc, kSpriteFragSrc))
-                throw std::runtime_error("OpenGL4: sprite program failed to compile: " + spriteProgram_.GetError());
-        }
-        return spriteProgram_;
-    }
-
-    /// plans/plan_gltf.md GLTF-475: the colour route's body, with the draw's effect state when there is
-    /// one. The public override below has none and passes null, which reproduces its old formula
-    /// exactly; the two `*PrimitivesEx` fallbacks now pass theirs instead of dropping it.
-    void OpenGL4Renderer::DrawColoredPrimitivesInternalEXT(const IVertexBufferRenderer& vb_in,
-                                                           const Matrix& world, const Matrix& view,
-                                                           const Matrix& projection,
-                                                           PrimitiveType primitive, int primitiveCount,
-                                                           const char* routeName,
-                                                           const GpuDrawParams* params)
-    {
-        // REMED-GFX-DECL-GUARD: this route reads the fixed stride-16 position+colour layout.
-        RequireFaithfulDeclarationEXT(vb_in, routeName);
-        EnsureColored3DProgram();
-        const auto& vb = static_cast<const OpenGL4VertexBufferRenderer&>(vb_in);
-
-        const Matrix wvp = world * view * projection;
-        float wvpCol[16];
-        wvp.ToColumnMajor(wvpCol);
-
-        colored3DProgram_.Use();
-        if (colored3DWvpLoc_ >= 0)
-            gl4_glUniformMatrix4fv(colored3DWvpLoc_, 1, GL_FALSE, wvpCol);
-        SetColored3DTintEXT(params);
-
-        const int vertexCount = VertexCountForPrimitives(primitive, primitiveCount);
-        gl4_glBindVertexArray(vb.VaoHandle());
-        glDrawArrays(ToGLPrimitive(primitive), 0, vertexCount);
-        gl4_glBindVertexArray(0);
-    }
-
-    void OpenGL4Renderer::DrawColoredPrimitives(const IVertexBufferRenderer& vb_in,
-                                                       const Matrix& world, const Matrix& view, const Matrix& projection,
-                                                       PrimitiveType primitive, int primitiveCount)
-    {
-        DrawColoredPrimitivesInternalEXT(vb_in, world, view, projection, primitive, primitiveCount,
-                                         "colored-nonindexed", nullptr);
-    }
-
-    /// plans/plan_gltf.md GLTF-475: see DrawColoredPrimitivesInternalEXT -- the indexed twin.
-    void OpenGL4Renderer::DrawIndexedColoredPrimitivesInternalEXT(
-        const IVertexBufferRenderer& vb_in, const IIndexBufferRenderer& ib_in,
-        const Matrix& world, const Matrix& view, const Matrix& projection,
-        PrimitiveType primitive, int primitiveCount, const char* routeName,
-        const GpuDrawParams* params)
-    {
-        // REMED-GFX-DECL-GUARD: see DrawColoredPrimitives above.
-        RequireFaithfulDeclarationEXT(vb_in, routeName);
-        EnsureColored3DProgram();
-        const auto& vb = static_cast<const OpenGL4VertexBufferRenderer&>(vb_in);
-        const auto& ib = static_cast<const OpenGL4IndexBufferRenderer&>(ib_in);
-
-        const Matrix wvp = world * view * projection;
-        float wvpCol[16];
-        wvp.ToColumnMajor(wvpCol);
-
-        colored3DProgram_.Use();
-        if (colored3DWvpLoc_ >= 0)
-            gl4_glUniformMatrix4fv(colored3DWvpLoc_, 1, GL_FALSE, wvpCol);
-        SetColored3DTintEXT(params);
-
-        const int indexCount = VertexCountForPrimitives(primitive, primitiveCount);
-        gl4_glBindVertexArray(vb.VaoHandle());
-        gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib.IboHandle());
-        // plans/plan_opengl4.md GL4-31: real 32-bit index buffer support.
-        const GLenum idxType = ib.IsThirtyTwoBit() ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT;
-        glDrawElements(ToGLPrimitive(primitive), indexCount, idxType, nullptr);
-        gl4_glBindVertexArray(0);
-    }
-
-    void OpenGL4Renderer::DrawIndexedColoredPrimitives(const IVertexBufferRenderer& vb_in, const IIndexBufferRenderer& ib_in,
-                                                              const Matrix& world, const Matrix& view, const Matrix& projection,
-                                                              PrimitiveType primitive, int primitiveCount)
-    {
-        DrawIndexedColoredPrimitivesInternalEXT(vb_in, ib_in, world, view, projection, primitive,
-                                                primitiveCount, "colored-indexed", nullptr);
-    }
-
-    void OpenGL4Renderer::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)
-    {
-        if (w <= 0 || h <= 0) return; // invalid rect -- leave viewport state unchanged
-
-        // GraphicsDevice::UpdateViewportFromWindow() calls this after every window resize (and
-        // once at device creation) -- without a real override here the GL viewport is left at
-        // whatever the driver's own initial default was, which 3D draws silently depend on
-        // (unlike SpriteBatch's own FlushBatch, which sets glViewport() itself every flush).
-        // OpenGL's viewport origin is bottom-left; convert from top-left XNA coordinates. Use
-        // the bound render target's own height for the flip when one is bound (currentRtHeight_,
-        // plans/plan_opengl4.md GL4-14); fall back to the window's physical height for the default
-        // framebuffer -- matches EasyGLRenderer::SetViewport's own currentRtHeight_-or-
-        // window-height pattern. Using the window's height unconditionally while an RT is bound
-        // would produce a viewport y-offset entirely outside the RT's pixel range whenever the
-        // RT is smaller than the window, discarding every fragment.
-        int fbH = currentRtHeight_;
+        // The bound target's own height when one is bound, the drawable's physical height for
+        // the back buffer -- the logical presentation height cannot invert a physical rectangle.
+        int fbH = bound_->height;
         if (fbH == 0)
         {
-            int physW = 0;
-            GetPhysicalSize(physW, fbH);
+            int physicalWidth = 0;
+            GetPhysicalSize(physicalWidth, fbH);
         }
-        glViewport(x, fbH - y - h, w, h);
-        glDepthRange(minDepth, maxDepth);
+        const int glY = fbH - y - h;
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glReadPixels(x, glY, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+        glPixelStorei(GL_PACK_ALIGNMENT, 4);
+
+        // GL returned bottom-up rows; XNA's contract is top-down.
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * 4;
+        std::vector<uint8_t> tmp(rowBytes);
+        for (int i = 0; i < h / 2; ++i)
+        {
+            uint8_t* top = pixels + static_cast<std::size_t>(i) * rowBytes;
+            uint8_t* bottom = pixels + static_cast<std::size_t>(h - 1 - i) * rowBytes;
+            std::memcpy(tmp.data(), top, rowBytes);
+            std::memcpy(top, bottom, rowBytes);
+            std::memcpy(bottom, tmp.data(), rowBytes);
+        }
+
+        if (bound_->height == 0 && sampleCount_ > 1)
+            gl4_glBindFramebuffer(GL_FRAMEBUFFER, msaaFbo_);
+        else
+            gl4_glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(previousReadFbo));
     }
 
-    void OpenGL4Renderer::ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy)
+    // ------------------------------------------------------------------------------------
+    // Clears -- XNA's Clear covers the whole target and ignores scissor, colour write mask and
+    // depth/stencil write masks; glClear respects all of them, so each is neutralised and put back.
+    // ------------------------------------------------------------------------------------
+
+    void OpenGL4Renderer::ApplyCurrentColorWriteMasks()
     {
-        if (slot < 0 || slot >= kMaxSamplerSlots) return;
-
-        const unsigned int sampler = samplers_[slot];
-        GLint minFilter = GL_LINEAR, magFilter = GL_LINEAR;
-        FilterToGL(filter, minFilter, magFilter);
-        gl4_glSamplerParameteri(sampler, GL_TEXTURE_MIN_FILTER, minFilter);
-        gl4_glSamplerParameteri(sampler, GL_TEXTURE_MAG_FILTER, magFilter);
-        gl4_glSamplerParameteri(sampler, GL_TEXTURE_WRAP_S, AddressModeToGL(addressU));
-        gl4_glSamplerParameteri(sampler, GL_TEXTURE_WRAP_T, AddressModeToGL(addressV));
-        if (filter == 2 && maxAnisotropy_ > 1.0f) // Anisotropic, and the driver has the extension
-            gl4_glSamplerParameterf(sampler, GL_TEXTURE_MAX_ANISOTROPY,
-                                    std::min(static_cast<float>(maxAnisotropy), maxAnisotropy_));
-
-        gl4_glBindSampler(static_cast<GLuint>(slot), sampler);
+        for (int i = 0; i < maxMrtTargets_; ++i)
+        {
+            const int mask = currentColorWriteMasks_[static_cast<std::size_t>(i)];
+            gl4_glColorMaski(static_cast<GLuint>(i),
+                             ColorWriteHasRed(mask) ? GL_TRUE : GL_FALSE,
+                             ColorWriteHasGreen(mask) ? GL_TRUE : GL_FALSE,
+                             ColorWriteHasBlue(mask) ? GL_TRUE : GL_FALSE,
+                             ColorWriteHasAlpha(mask) ? GL_TRUE : GL_FALSE);
+        }
     }
+
+    void OpenGL4Renderer::ForceAllColorWriteMasks()
+    {
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    }
+
+    bool OpenGL4Renderer::HasRestrictedActiveColorWriteMask() const
+    {
+        const int activeCount = bound_->mrtCount > 0 ? bound_->mrtCount : 1;
+        for (int i = 0; i < activeCount; ++i)
+            if (currentColorWriteMasks_[static_cast<std::size_t>(i)] != 15) return true;
+        return false;
+    }
+
+    bool OpenGL4Renderer::DisableScissorForClear()
+    {
+        const bool wasEnabled = glIsEnabled(GL_SCISSOR_TEST) != GL_FALSE;
+        if (wasEnabled) glDisable(GL_SCISSOR_TEST);
+        return wasEnabled;
+    }
+
+    void OpenGL4Renderer::RestoreScissorAfterClear(bool wasEnabled)
+    {
+        if (wasEnabled) glEnable(GL_SCISSOR_TEST);
+    }
+
+    void OpenGL4Renderer::RestoreWriteMasksAfterClear(bool depth, bool stencil)
+    {
+        // REMED-GFX-237: the masks a clear forced open are put back now, not "by the next
+        // ApplyDepthStencilState" -- nothing requires the game to reassign its state first.
+        if (depth)
+            glDepthMask((depthWriteEnabled_ && bound_->depthFormat != 0) ? GL_TRUE : GL_FALSE);
+        if (stencil && stencilEnabled_)
+        {
+            const auto mask = static_cast<GLuint>(stencilWriteMask_);
+            gl4_glStencilMaskSeparate(GL_FRONT, mask);
+            gl4_glStencilMaskSeparate(GL_BACK, mask);
+        }
+    }
+
+    void OpenGL4Renderer::Clear(float r, float g, float b, float a)
+    {
+        EnsureCallingThreadContext();   // GL4-0021
+        // REMED-GFX-142: COLOUR ONLY. Every clear that includes depth has its own entry point.
+        const bool scissorWasEnabled = DisableScissorForClear();
+        glClearColor(r, g, b, a);
+        const bool maskActive = HasRestrictedActiveColorWriteMask();
+        if (maskActive) ForceAllColorWriteMasks();
+        glClear(GL_COLOR_BUFFER_BIT);
+        if (maskActive) ApplyCurrentColorWriteMasks();
+        RestoreScissorAfterClear(scissorWasEnabled);
+    }
+
+    void OpenGL4Renderer::ClearColorAndDepth(float r, float g, float b, float a, float depth)
+    {
+        EnsureCallingThreadContext();   // GL4-0021
+        const bool scissorWasEnabled = DisableScissorForClear();
+        glClearColor(r, g, b, a);
+        glClearDepth(depth);
+        glDepthMask(GL_TRUE);
+        const bool maskActive = HasRestrictedActiveColorWriteMask();
+        if (maskActive) ForceAllColorWriteMasks();
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        if (maskActive) ApplyCurrentColorWriteMasks();
+        RestoreWriteMasksAfterClear(true, false);
+        RestoreScissorAfterClear(scissorWasEnabled);
+    }
+
+    void OpenGL4Renderer::ClearDepth(float depth)
+    {
+        EnsureCallingThreadContext();   // GL4-0021
+        const bool scissorWasEnabled = DisableScissorForClear();
+        glClearDepth(depth);
+        glDepthMask(GL_TRUE);
+        glClear(GL_DEPTH_BUFFER_BIT);
+        RestoreWriteMasksAfterClear(true, false);
+        RestoreScissorAfterClear(scissorWasEnabled);
+    }
+
+    void OpenGL4Renderer::ClearStencil(int stencil)
+    {
+        EnsureCallingThreadContext();   // GL4-0021
+        const bool scissorWasEnabled = DisableScissorForClear();
+        glClearStencil(stencil);
+        glStencilMask(0xFFFFFFFFu);
+        glClear(GL_STENCIL_BUFFER_BIT);
+        RestoreWriteMasksAfterClear(false, true);
+        RestoreScissorAfterClear(scissorWasEnabled);
+    }
+
+    void OpenGL4Renderer::ClearDepthAndStencil(float depth, int stencil)
+    {
+        EnsureCallingThreadContext();   // GL4-0021
+        const bool scissorWasEnabled = DisableScissorForClear();
+        glClearDepth(depth);
+        glClearStencil(stencil);
+        glDepthMask(GL_TRUE);
+        glStencilMask(0xFFFFFFFFu);
+        glClear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+        RestoreWriteMasksAfterClear(true, true);
+        RestoreScissorAfterClear(scissorWasEnabled);
+    }
+
+    void OpenGL4Renderer::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
+    {
+        EnsureCallingThreadContext();   // GL4-0021
+        const bool scissorWasEnabled = DisableScissorForClear();
+        glClearColor(r, g, b, a);
+        glClearStencil(stencil);
+        glStencilMask(0xFFFFFFFFu);
+        const bool maskActive = HasRestrictedActiveColorWriteMask();
+        if (maskActive) ForceAllColorWriteMasks();
+        glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+        if (maskActive) ApplyCurrentColorWriteMasks();
+        // EasyGL's twin of this route does not put the stencil write mask back; REMED-GFX-237's
+        // rule is that every clear does, and a later StencilWriteMask=0 draw depends on it.
+        RestoreWriteMasksAfterClear(false, true);
+        RestoreScissorAfterClear(scissorWasEnabled);
+    }
+
+    void OpenGL4Renderer::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth,
+                                                    int stencil)
+    {
+        EnsureCallingThreadContext();   // GL4-0021
+        const bool scissorWasEnabled = DisableScissorForClear();
+        glClearColor(r, g, b, a);
+        glClearDepth(depth);
+        glClearStencil(stencil);
+        glDepthMask(GL_TRUE);
+        glStencilMask(0xFFFFFFFFu);
+        const bool maskActive = HasRestrictedActiveColorWriteMask();
+        if (maskActive) ForceAllColorWriteMasks();
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+        RestoreWriteMasksAfterClear(true, true);
+        if (maskActive) ApplyCurrentColorWriteMasks();
+        RestoreScissorAfterClear(scissorWasEnabled);
+    }
+
+    void OpenGL4Renderer::SetDepthTestEnabled(bool enabled)
+    {
+        EnsureCallingThreadContext();   // GL4-0021
+        depthEnabled_ = enabled;
+        if (enabled && bound_->depthFormat != 0) glEnable(GL_DEPTH_TEST);
+        else glDisable(GL_DEPTH_TEST);
+        if (enabled)
+        {
+            glDepthFunc(GL_LEQUAL);
+            depthWriteEnabled_ = true;
+            glDepthMask(bound_->depthFormat != 0 ? GL_TRUE : GL_FALSE);
+        }
+    }
+
+    void OpenGL4Renderer::SetBlendEnabled(bool enabled)
+    {
+        EnsureCallingThreadContext();   // GL4-0021
+        if (enabled)
+        {
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        }
+        else
+        {
+            glDisable(GL_BLEND);
+        }
+    }
+
+    void OpenGL4Renderer::SetDepthWriteEnabled(bool enabled)
+    {
+        EnsureCallingThreadContext();   // GL4-0021
+        depthWriteEnabled_ = enabled;
+        glDepthMask((enabled && bound_->depthFormat != 0) ? GL_TRUE : GL_FALSE);
+    }
+
+    // ------------------------------------------------------------------------------------
+    // Render state
+    // ------------------------------------------------------------------------------------
 
     void OpenGL4Renderer::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
-                                                 int colorDstBlend, int alphaDstBlend,
-                                                 int colorBlendFunc, int alphaBlendFunc,
-                                                 const BlendWriteState& writeState)
+                                          int colorDstBlend, int alphaDstBlend,
+                                          int colorBlendFunc, int alphaBlendFunc,
+                                          const BlendWriteState& writeState)
     {
-        // Blend::One=0, Blend::Zero=1 -> the Opaque preset (src=One, dst=Zero) is XNA's own
-        // encoding of "no blending", matching EasyGLRenderer::ApplyBlendState's identical
-        // derivation (there's no separate BlendState.Enabled flag in the XNA API).
+        EnsureCallingThreadContext();   // GL4-0021
+        // Blend::One=0 and Blend::Zero=1: the Opaque preset (One/Zero on both channels) is XNA's
+        // encoding of "no blending" -- there is no BlendState.Enabled.
         const bool blendEnabled = !(colorSrcBlend == 0 && colorDstBlend == 1 &&
                                     alphaSrcBlend == 0 && alphaDstBlend == 1);
         if (blendEnabled) glEnable(GL_BLEND); else glDisable(GL_BLEND);
-        if (blendEnabled)
-        {
-            gl4_glBlendFuncSeparate(ToGLBlendFactor(colorSrcBlend), ToGLBlendFactor(colorDstBlend),
-                                    ToGLBlendFactor(alphaSrcBlend), ToGLBlendFactor(alphaDstBlend));
-            gl4_glBlendEquationSeparate(ToGLBlendEquation(colorBlendFunc),
-                                        ToGLBlendEquation(alphaBlendFunc));
-        }
-        // REMED-GFX-077: per-MRT-slot ColorWriteChannels via the GL 3.0+ core indexed mask --
-        // always available on this renderer's 4.1-core-minimum context, so no capability split is
-        // needed (unlike EasyGL's ES profile). The XNA bit layout (bit0=R,1=G,2=B,3=A) maps
-        // directly.
+        // The factors and equations are written unconditionally, so disabling blending never
+        // leaves a previous state's equation behind for a later Opaque -> blended transition.
+        gl4_glBlendFuncSeparate(ToGLBlendFactor(colorSrcBlend), ToGLBlendFactor(colorDstBlend),
+                                ToGLBlendFactor(alphaSrcBlend), ToGLBlendFactor(alphaDstBlend));
+        gl4_glBlendEquationSeparate(ToGLBlendEquation(colorBlendFunc),
+                                    ToGLBlendEquation(alphaBlendFunc));
         for (int i = 0; i < 4; ++i)
-        {
-            const int cwc = writeState.colorWriteChannels[i];
-            gl4_glColorMaski(static_cast<GLuint>(i),
-                             ColorWriteHasRed(cwc)   ? GL_TRUE : GL_FALSE,
-                             ColorWriteHasGreen(cwc) ? GL_TRUE : GL_FALSE,
-                             ColorWriteHasBlue(cwc)  ? GL_TRUE : GL_FALSE,
-                             ColorWriteHasAlpha(cwc) ? GL_TRUE : GL_FALSE);
-        }
-        // BlendState.MultiSampleMask: expressible via glSampleMaski + GL_SAMPLE_MASK, but left at
-        // the all-ones default here -- the same documented capability gap
-        // EasyGLRenderer::ApplyBlendState records; the value reaches the renderer and only
-        // the (rare) non-default path is unimplemented, never silently dropped.
+            currentColorWriteMasks_[static_cast<std::size_t>(i)] = writeState.colorWriteChannels[i];
+        ApplyCurrentColorWriteMasks();
+        // SOFTWARE-110: XNA/FNA apply this 32-bit mask to sample coverage; GL 3.2 core has the
+        // exact operation. Enabled even for all-ones so a later change cannot inherit a mask.
+        glEnable(GL_SAMPLE_MASK);
+        gl4_glSampleMaski(0u, static_cast<GLbitfield>(writeState.multiSampleMask));
     }
 
     void OpenGL4Renderer::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
-                                                         int depthFunc,
-                                                         bool stencilEnable, int stencilFunc,
-                                                         int stencilPass, int stencilFail, int stencilDepthFail,
-                                                         int stencilMask, int stencilWriteMask, int referenceStencil,
-                                                         bool twoSidedStencilMode,
-                                                         int ccwStencilFunc, int ccwStencilPass,
-                                                         int ccwStencilFail, int ccwStencilDepthFail)
+                                                 int depthFunc,
+                                                 bool stencilEnable, int stencilFunc,
+                                                 int stencilPass, int stencilFail,
+                                                 int stencilDepthFail,
+                                                 int stencilMask, int stencilWriteMask,
+                                                 int referenceStencil,
+                                                 bool twoSidedStencilMode,
+                                                 int ccwStencilFunc, int ccwStencilPass,
+                                                 int ccwStencilFail, int ccwStencilDepthFail)
     {
-        if (depthEnable) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
-        glDepthMask(depthWriteEnable ? GL_TRUE : GL_FALSE);
+        EnsureCallingThreadContext();   // GL4-0021
+        depthEnabled_ = depthEnable;
         depthWriteEnabled_ = depthWriteEnable;
-        if (depthEnable) glDepthFunc(ToGLCompareFunc(depthFunc));
+        if (depthEnable && bound_->depthFormat != 0) glEnable(GL_DEPTH_TEST);
+        else glDisable(GL_DEPTH_TEST);
+        glDepthMask((depthWriteEnable && bound_->depthFormat != 0) ? GL_TRUE : GL_FALSE);
+        if (depthEnable)
+            glDepthFunc(ToGLCompareFunc(depthFunc));
 
-        if (stencilEnable) glEnable(GL_STENCIL_TEST); else glDisable(GL_STENCIL_TEST);
-        if (stencilEnable)
+        // Recorded even while the test is off: the reference survives a disabled state, and
+        // SetReferenceStencil and topology changes reissue these tuples.
+        stencilEnabled_ = stencilEnable;
+        stencilWriteMask_ = stencilWriteMask;
+        stencilTwoSided_ = twoSidedStencilMode;
+        stencilFunc_ = stencilFunc;
+        stencilPass_ = stencilPass;
+        stencilFail_ = stencilFail;
+        stencilDepthFail_ = stencilDepthFail;
+        stencilCcwFunc_ = ccwStencilFunc;
+        stencilCcwPass_ = ccwStencilPass;
+        stencilCcwFail_ = ccwStencilFail;
+        stencilCcwDepthFail_ = ccwStencilDepthFail;
+        stencilReadMask_ = stencilMask;
+        referenceStencil_ = referenceStencil;
+        stencilPrimitiveUsesTwoSided_ = twoSidedStencilMode;
+
+        if (stencilEnable && bound_->depthFormat == 3) glEnable(GL_STENCIL_TEST);
+        else glDisable(GL_STENCIL_TEST);
+        if (!stencilEnable) return;
+
+        const auto readMask = static_cast<GLuint>(stencilMask);
+        const auto writeMask = static_cast<GLuint>(stencilWriteMask);
+        if (twoSidedStencilMode)
         {
-            const GLenum glSFail = ToGLStencilOp(stencilFail);
-            const GLenum glDFail = ToGLStencilOp(stencilDepthFail);
-            const GLenum glPass  = ToGLStencilOp(stencilPass);
-            if (twoSidedStencilMode)
-            {
-                gl4_glStencilFuncSeparate(GL_FRONT, ToGLCompareFunc(stencilFunc),
-                                          referenceStencil, static_cast<GLuint>(stencilMask));
-                gl4_glStencilOpSeparate(GL_FRONT, glSFail, glDFail, glPass);
-                gl4_glStencilMaskSeparate(GL_FRONT, static_cast<GLuint>(stencilWriteMask));
-
-                gl4_glStencilFuncSeparate(GL_BACK, ToGLCompareFunc(ccwStencilFunc),
-                                          referenceStencil, static_cast<GLuint>(stencilMask));
-                gl4_glStencilOpSeparate(GL_BACK, ToGLStencilOp(ccwStencilFail),
-                                        ToGLStencilOp(ccwStencilDepthFail),
-                                        ToGLStencilOp(ccwStencilPass));
-                gl4_glStencilMaskSeparate(GL_BACK, static_cast<GLuint>(stencilWriteMask));
-            }
-            else
-            {
-                glStencilFunc(ToGLCompareFunc(stencilFunc), referenceStencil,
-                             static_cast<GLuint>(stencilMask));
-                glStencilOp(glSFail, glDFail, glPass);
-                glStencilMask(static_cast<GLuint>(stencilWriteMask));
-            }
+            // XNA's front faces are CLOCKWISE on screen and GL keeps its default GL_CCW front face,
+            // so XNA's ordinary tuple belongs to GL_BACK and its CounterClockwiseStencil* tuple to
+            // GL_FRONT. Before GL4-0017 this renderer had them the other way round -- which is why
+            // DepthStencilState_StencilTwoSided failed on it and passes on EasyGL.
+            gl4_glStencilFuncSeparate(GL_BACK, ToGLCompareFunc(stencilFunc), referenceStencil,
+                                      readMask);
+            gl4_glStencilOpSeparate(GL_BACK, ToGLStencilOp(stencilFail),
+                                    ToGLStencilOp(stencilDepthFail), ToGLStencilOp(stencilPass));
+            gl4_glStencilMaskSeparate(GL_BACK, writeMask);
+            gl4_glStencilFuncSeparate(GL_FRONT, ToGLCompareFunc(ccwStencilFunc), referenceStencil,
+                                      readMask);
+            gl4_glStencilOpSeparate(GL_FRONT, ToGLStencilOp(ccwStencilFail),
+                                    ToGLStencilOp(ccwStencilDepthFail),
+                                    ToGLStencilOp(ccwStencilPass));
+            gl4_glStencilMaskSeparate(GL_FRONT, writeMask);
+        }
+        else
+        {
+            glStencilFunc(ToGLCompareFunc(stencilFunc), referenceStencil, readMask);
+            glStencilOp(ToGLStencilOp(stencilFail), ToGLStencilOp(stencilDepthFail),
+                        ToGLStencilOp(stencilPass));
+            glStencilMask(writeMask);
         }
     }
 
-    void OpenGL4Renderer::ApplyRasterizerState(int cullMode, int fillMode,
-                                                       bool scissorTestEnable,
-                                                       float depthBias,
-                                                       float slopeScaleDepthBias)
+    void OpenGL4Renderer::ApplyStencilPrimitiveTopology(PrimitiveType primitive)
     {
-        // CullMode: None=0, CullClockwiseFace=1, CullCounterClockwiseFace=2. OpenGL's default
-        // front face is CCW, so CW faces are back faces.
+        if (!stencilEnabled_ || !stencilTwoSided_) return;
+        // Direct3D 9 applies the CCW tuple only to counter-clockwise TRIANGLES; lines and points
+        // use the ordinary tuple, while GL's separate face state still reaches line rasterization
+        // (as GL_FRONT). So the ordinary tuple goes on both faces for a non-triangle draw.
+        const bool useTwoSided = primitive == PrimitiveType::TriangleList ||
+                                 primitive == PrimitiveType::TriangleStrip;
+        if (stencilPrimitiveUsesTwoSided_ == useTwoSided) return;
+        stencilPrimitiveUsesTwoSided_ = useTwoSided;
+        const auto readMask = static_cast<GLuint>(stencilReadMask_);
+        const auto writeMask = static_cast<GLuint>(stencilWriteMask_);
+        if (!useTwoSided)
+        {
+            glStencilFunc(ToGLCompareFunc(stencilFunc_), referenceStencil_, readMask);
+            glStencilOp(ToGLStencilOp(stencilFail_), ToGLStencilOp(stencilDepthFail_),
+                        ToGLStencilOp(stencilPass_));
+            glStencilMask(writeMask);
+            return;
+        }
+        gl4_glStencilFuncSeparate(GL_BACK, ToGLCompareFunc(stencilFunc_), referenceStencil_, readMask);
+        gl4_glStencilOpSeparate(GL_BACK, ToGLStencilOp(stencilFail_), ToGLStencilOp(stencilDepthFail_),
+                                ToGLStencilOp(stencilPass_));
+        gl4_glStencilMaskSeparate(GL_BACK, writeMask);
+        gl4_glStencilFuncSeparate(GL_FRONT, ToGLCompareFunc(stencilCcwFunc_), referenceStencil_,
+                                  readMask);
+        gl4_glStencilOpSeparate(GL_FRONT, ToGLStencilOp(stencilCcwFail_),
+                                ToGLStencilOp(stencilCcwDepthFail_), ToGLStencilOp(stencilCcwPass_));
+        gl4_glStencilMaskSeparate(GL_FRONT, writeMask);
+    }
+
+    void OpenGL4Renderer::SetReferenceStencil(int value)
+    {
+        EnsureCallingThreadContext();   // GL4-0021
+        referenceStencil_ = value;
+        // GL sets function, reference and mask together, so a new reference means reissuing the
+        // remembered functions. Nothing to reissue while the test is off; the value is kept.
+        if (!stencilEnabled_) return;
+        const auto readMask = static_cast<GLuint>(stencilReadMask_);
+        if (stencilPrimitiveUsesTwoSided_)
+        {
+            gl4_glStencilFuncSeparate(GL_BACK, ToGLCompareFunc(stencilFunc_), referenceStencil_,
+                                      readMask);
+            gl4_glStencilFuncSeparate(GL_FRONT, ToGLCompareFunc(stencilCcwFunc_), referenceStencil_,
+                                      readMask);
+        }
+        else
+        {
+            glStencilFunc(ToGLCompareFunc(stencilFunc_), referenceStencil_, readMask);
+        }
+    }
+
+    void OpenGL4Renderer::ApplyCurrentDepthStencilAvailability()
+    {
+        const bool hasDepth = bound_->depthFormat != 0;
+        const bool hasStencil = bound_->depthFormat == 3;
+        if (depthEnabled_ && hasDepth) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
+        glDepthMask((depthWriteEnabled_ && hasDepth) ? GL_TRUE : GL_FALSE);
+        if (stencilEnabled_ && hasStencil) glEnable(GL_STENCIL_TEST); else glDisable(GL_STENCIL_TEST);
+    }
+
+    void OpenGL4Renderer::ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
+                                               float depthBias, float slopeScaleDepthBias)
+    {
+        EnsureCallingThreadContext();   // GL4-0021
+        // CullMode: None=0, CullClockwiseFace=1, CullCounterClockwiseFace=2. GL's front face stays
+        // GL_CCW, and XNA's CLOCKWISE faces are GL's back faces (screen-space winding is the same
+        // in both APIs), so CullClockwiseFace culls GL_BACK.
         if (cullMode == 0)
         {
             glDisable(GL_CULL_FACE);
@@ -4286,54 +2145,398 @@ void main()
             glEnable(GL_CULL_FACE);
             glCullFace(cullMode == 1 ? GL_BACK : GL_FRONT);
         }
-
         if (scissorTestEnable) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);
+        // SOFTWARE-178: native polygon mode keeps the operation after clipping and culling and
+        // gives it polygon offset, MSAA and two-sided stencil.
+        fillModeWireframe_ = fillMode == 1;
+        glPolygonMode(GL_FRONT_AND_BACK, fillModeWireframe_ ? GL_LINE : GL_FILL);
+        depthBias_ = depthBias;
+        slopeScaleDepthBias_ = slopeScaleDepthBias;
+        ApplyCurrentDepthBias();
+    }
 
-        // FillMode: Solid=0, WireFrame=1. Desktop core-profile GL keeps a real glPolygonMode
-        // (only GL_FRONT_AND_BACK is valid for `face` in a core-profile context, which is exactly
-        // what XNA's single FillMode value needs -- unlike EasyGL's ES target, which has no
-        // glPolygonMode at all and instead re-expands triangles into GL_LINES at draw time).
-        glPolygonMode(GL_FRONT_AND_BACK, fillMode == 1 ? GL_LINE : GL_FILL);
+    void OpenGL4Renderer::ApplyCurrentDepthBias()
+    {
+        // FNA exposes constant DepthBias in normalized depth units; GL's polygon-offset `units` are
+        // minimum-resolvable depth steps, so the active depth format decides the conversion --
+        // FNA3D's 16/24-bit scale table. Passing the XNA value through raw (as this renderer did
+        // before GL4-0017) is indistinguishable from no bias at all.
+        float depthScale = 0.0f;
+        switch (bound_->depthFormat)
+        {
+        case 1: depthScale = 65535.0f; break;
+        case 2:
+        case 3: depthScale = 16777215.0f; break;
+        default: break;
+        }
+        const bool enabled = slopeScaleDepthBias_ != 0.0f || depthBias_ != 0.0f;
+        if (enabled)
+        {
+            glEnable(GL_POLYGON_OFFSET_FILL);
+            glEnable(GL_POLYGON_OFFSET_LINE);
+        }
+        else
+        {
+            glDisable(GL_POLYGON_OFFSET_FILL);
+            glDisable(GL_POLYGON_OFFSET_LINE);
+        }
+        glPolygonOffset(slopeScaleDepthBias_, depthBias_ * depthScale);
+    }
 
-        // DepthBias/SlopeScaleDepthBias map directly onto real GL polygon offset (matches this
-        // project's own established Vulkan/EasyGL convention: glPolygonOffset(slopeScale, bias)).
-        // Always enabled -- factor=0/units=0 is a genuine no-op in GL, no need to conditionally
-        // disable it.
-        glEnable(GL_POLYGON_OFFSET_FILL);
-        glPolygonOffset(slopeScaleDepthBias, depthBias);
+    void OpenGL4Renderer::ApplyRasterizerMultiSampleState(bool enabled)
+    {
+        EnsureCallingThreadContext();   // GL4-0021
+        if (enabled) glEnable(GL_MULTISAMPLE);
+        else glDisable(GL_MULTISAMPLE);
     }
 
     void OpenGL4Renderer::SetBlendFactor(float r, float g, float b, float a)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         gl4_glBlendColor(r, g, b, a);
     }
 
     void OpenGL4Renderer::SetScissorRect(int x, int y, int w, int h)
     {
-        if (w <= 0 || h <= 0) return; // invalid rect -- leave scissor state unchanged
-
-        // OpenGL's scissor origin is bottom-left; convert from top-left XNA coordinates using
-        // the same currentRtHeight_-or-window-height pattern as SetViewport (plans/plan_opengl4.md
-        // GL4-14/GL4-16).
-        int fbH = currentRtHeight_;
+        EnsureCallingThreadContext();   // GL4-0021
+        // SOFTWARE-310: a zero width or height is a valid XNA scissor that must reach glScissor,
+        // whose empty box rejects every fragment. Before GL4-0017 this returned early for it.
+        if (w < 0 || h < 0) return;
+        int fbH = bound_->height;
         if (fbH == 0)
         {
             int physW = 0;
             GetPhysicalSize(physW, fbH);
         }
         glScissor(x, fbH - y - h, w, h);
-        // Does NOT enable/disable the scissor test itself -- that is controlled exclusively by
-        // ApplyRasterizerState via RasterizerState.ScissorTestEnable, matching
-        // EasyGLRenderer::SetScissorRect's identical division of responsibility.
+        // The scissor TEST is RasterizerState.ScissorTestEnable's alone (ApplyRasterizerState).
+    }
+
+    void OpenGL4Renderer::SetGlViewport(int x, int y, int width, int height)
+    {
+        glViewport(x, y, width, height);
+        glViewportShadow_ = {true, x, y, width, height};
+    }
+
+    void OpenGL4Renderer::GetGlViewport(int& x, int& y, int& width, int& height) const
+    {
+        if (!glViewportShadow_.known)
+        {
+            GLint viewport[4] = {0, 0, 0, 0};
+            glGetIntegerv(GL_VIEWPORT, viewport);
+            glViewportShadow_ = {true, viewport[0], viewport[1], viewport[2], viewport[3]};
+        }
+        x = glViewportShadow_.x;
+        y = glViewportShadow_.y;
+        width = glViewportShadow_.width;
+        height = glViewportShadow_.height;
+    }
+
+    void OpenGL4Renderer::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)
+    {
+        EnsureCallingThreadContext();   // GL4-0021
+        if (w <= 0 || h <= 0) return;
+        // GL's viewport origin is bottom-left: flip against the bound target's height, or the
+        // drawable's for the back buffer.
+        int fbH = bound_->height;
+        if (fbH == 0)
+        {
+            int physW = 0;
+            GetPhysicalSize(physW, fbH);
+        }
+        SetGlViewport(x, fbH - y - h, w, h);
+        glDepthRange(minDepth, maxDepth);
+        // Recorded while the presentation rectangle this call was derived from is still current:
+        // the SpriteBatch flush must tell a game's sub-viewport from a default viewport that a
+        // later resize has made stale.
+        if (bound_->height == 0)
+        {
+            int defX = 0, defY = 0, defW = 0, defH = 0;
+            GetDefaultViewportRect(defX, defY, defW, defH);
+            viewportIsDefault_ = defW > 0 && defH > 0 && x == defX && y == defY && w == defW &&
+                                 h == defH;
+        }
+        else
+        {
+            viewportIsDefault_ = x == 0 && y == 0 && w == bound_->width && h == bound_->height;
+        }
+        viewportMinDepth_ = minDepth;
+        viewportMaxDepth_ = maxDepth;
+    }
+
+    // ------------------------------------------------------------------------------------
+    // Samplers -- one sampler object per XNA slot, bound to its own unit, whose complete state is
+    // a function of the latest application (REMED-GFX-174, FX-092).
+    // ------------------------------------------------------------------------------------
+
+    void OpenGL4Renderer::ApplySamplerState(int slot, int filter, int addressU, int addressV,
+                                            int maxAnisotropy)
+    {
+        EnsureCallingThreadContext();   // GL4-0021
+        if (slot < 0 || slot >= kMaxSamplerSlots) return;
+        const GLuint sampler = samplers_[slot];
+        samplerFilters_[static_cast<std::size_t>(slot)] = filter;
+        GLint minFilter = GL_LINEAR, magFilter = GL_LINEAR;
+        FilterOrdinalToGL(filter, minFilter, magFilter);
+        gl4_glSamplerParameteri(sampler, GL_TEXTURE_MIN_FILTER, minFilter);
+        gl4_glSamplerParameteri(sampler, GL_TEXTURE_MAG_FILTER, magFilter);
+        // REMED-GFX-174: anisotropy is a component of the ordinal and is written on every
+        // application, or one Anisotropic draw leaves the long-lived slot object anisotropic.
+        if (maxAnisotropy_ > 1.0f)
+        {
+            const float clamped = filter == 2 ? ClampedMaxAnisotropy(maxAnisotropy, maxAnisotropy_)
+                                              : 1.0f;
+            gl4_glSamplerParameterf(sampler, GL_TEXTURE_MAX_ANISOTROPY, clamped);
+        }
+        gl4_glSamplerParameteri(sampler, GL_TEXTURE_WRAP_S, ToGLWrap(addressU));
+        gl4_glSamplerParameteri(sampler, GL_TEXTURE_WRAP_T, ToGLWrap(addressV));
+        // FX-092: the rest of the object's state is also a function of THIS call. W follows U
+        // (every XNA preset sets all three axes alike); the mip range and bias return to XNA's
+        // defaults, which a device-driven application then overwrites via ApplySamplerMipState and
+        // ApplySamplerAddressW. XNA has no comparison sampler, so comparison stays off.
+        gl4_glSamplerParameteri(sampler, GL_TEXTURE_WRAP_R, ToGLWrap(addressU));
+        gl4_glSamplerParameterf(sampler, GL_TEXTURE_MIN_LOD, 0.0f);
+        gl4_glSamplerParameterf(sampler, GL_TEXTURE_MAX_LOD, 1000.0f);
+        gl4_glSamplerParameterf(sampler, GL_TEXTURE_LOD_BIAS, 0.0f);
+        gl4_glSamplerParameteri(sampler, GL_TEXTURE_COMPARE_MODE, GL_NONE);
+        gl4_glBindSampler(static_cast<GLuint>(slot), sampler);
+    }
+
+    void OpenGL4Renderer::ApplySamplerMipState(int slot, int maxMipLevel, float lodBias)
+    {
+        EnsureCallingThreadContext();   // GL4-0021
+        if (slot < 0 || slot >= kMaxSamplerSlots) return;
+        const GLuint sampler = samplers_[slot];
+        // XNA's MaxMipLevel is the MOST detailed level the sampler may use: a lower bound on the
+        // LOD, i.e. GL_TEXTURE_MIN_LOD. XNA writes the signed property through D3D9's DWORD
+        // channel, so a negative value converts to UInt32 and clamps rather than becoming zero.
+        constexpr std::uint32_t kGlDefaultMaxLod = 1000u;
+        const auto requested = static_cast<std::uint32_t>(maxMipLevel);
+        gl4_glSamplerParameterf(sampler, GL_TEXTURE_MIN_LOD,
+                                static_cast<float>(std::min(requested, kGlDefaultMaxLod)));
+        gl4_glSamplerParameterf(sampler, GL_TEXTURE_LOD_BIAS, lodBias);
+        gl4_glBindSampler(static_cast<GLuint>(slot), sampler);
+    }
+
+    void OpenGL4Renderer::ApplySamplerAddressW(int slot, int addressW)
+    {
+        EnsureCallingThreadContext();   // GL4-0021
+        if (slot < 0 || slot >= kMaxSamplerSlots) return;
+        gl4_glSamplerParameteri(samplers_[slot], GL_TEXTURE_WRAP_R, ToGLWrap(addressW));
+        gl4_glBindSampler(static_cast<GLuint>(slot), samplers_[slot]);
+    }
+
+    // ------------------------------------------------------------------------------------
+    // Render targets
+    // ------------------------------------------------------------------------------------
+
+    void OpenGL4Renderer::FinalizeCurrentMRT()
+    {
+        if (bound_->mrtCount <= 0) return;
+        const int count = bound_->mrtCount;
+        bound_->mrtCount = 0;
+        bound_->mrtFramebuffer = 0;
+        bound_->width = 0;
+        bound_->height = 0;
+        for (int i = 0; i < count; ++i)
+        {
+            const OpenGL4MrtBinding target = bound_->mrt[static_cast<std::size_t>(i)];
+            bound_->mrt[static_cast<std::size_t>(i)] = {};
+            if (target.rt2D)
+                target.rt2D->UnbindAsRenderTarget();
+            else if (target.cube)
+                target.cube->UnbindMRTFace(target.cubeFace);
+        }
+    }
+
+    void OpenGL4Renderer::SetRenderTarget2D(IRenderTargetRenderer* rt)
+    {
+        EnsureCallingThreadContext();   // GL4-0021
+        FinalizeCurrentMRT();
+        // Resolve MSAA and regenerate mips for the target being left, before switching away.
+        if (bound_->rt2D && bound_->rt2D != rt) bound_->rt2D->UnbindAsRenderTarget();
+        if (bound_->cube) bound_->cube->UnbindAsRenderTarget();
+        bound_->cube = nullptr;
+        bound_->rt2D = rt;
+        if (rt)
+        {
+            bound_->width = rt->GetWidth();
+            bound_->height = rt->GetHeight();
+            if (const auto* target = dynamic_cast<const OpenGL4RenderTargetRenderer*>(rt))
+                bound_->depthFormat = target->GetDepthFormatEXT();
+            else
+                bound_->depthFormat = 0;
+            rt->BindAsRenderTarget();
+        }
+        else
+        {
+            bound_->width = 0;
+            bound_->height = 0;
+            bound_->depthFormat = backBufferDepthFormat_;
+            BindDefaultFramebuffer();
+        }
+        ApplyCurrentDepthStencilAvailability();
+        ApplyCurrentDepthBias();
+    }
+
+    void OpenGL4Renderer::SetRenderTargetCubeFace(IRenderTargetCubeRenderer* rt, int face)
+    {
+        EnsureCallingThreadContext();   // GL4-0021
+        if (!rt) { SetRenderTarget2D(nullptr); return; }
+        FinalizeCurrentMRT();
+        if (bound_->rt2D) bound_->rt2D->UnbindAsRenderTarget();
+        // A different face of the same cube is a different subresource: finalize the bound face
+        // before the next bind overwrites its record, or face-to-face sequences lose every
+        // intermediate resolve and mip generation.
+        if (bound_->cube) bound_->cube->UnbindAsRenderTarget();
+        bound_->rt2D = nullptr;
+        bound_->cube = rt;
+        bound_->width = rt->GetSize();
+        bound_->height = rt->GetSize();
+        if (const auto* target = dynamic_cast<const OpenGL4RenderTargetCubeRenderer*>(rt))
+            bound_->depthFormat = target->GetDepthFormatEXT();
+        else
+            bound_->depthFormat = 0;
+        rt->BindAsRenderTargetFace(face);
+        ApplyCurrentDepthStencilAvailability();
+        ApplyCurrentDepthBias();
+    }
+
+    void OpenGL4Renderer::SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
+                                           int count)
+    {
+        EnsureCallingThreadContext();   // GL4-0021
+        if (count <= 0)
+        {
+            SetRenderTarget2D(nullptr);
+            return;
+        }
+        if (!renderTargets)
+            throw std::invalid_argument(
+                "OpenGL4 SetRenderTargets: nonzero count requires a binding array.");
+        if (count == 1)
+        {
+            if (renderTargets[0].IsRenderTargetCubeFace())
+                SetRenderTargetCubeFace(renderTargets[0].GetRenderTargetCube(),
+                                        renderTargets[0].GetCubeFace());
+            else
+                SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
+            return;
+        }
+        if (count > maxMrtTargets_)
+            throw std::runtime_error("OpenGL4 SetRenderTargets: requested " +
+                                     std::to_string(count) + " targets, but this context supports " +
+                                     std::to_string(maxMrtTargets_) + ".");
+
+        std::array<OpenGL4MrtBinding, 4> targets{};
+        for (int i = 0; i < count; ++i)
+        {
+            auto& slot = targets[static_cast<std::size_t>(i)];
+            if (renderTargets[i].IsRenderTargetCubeFace())
+            {
+                slot.cube = dynamic_cast<OpenGL4RenderTargetCubeRenderer*>(
+                    renderTargets[i].GetRenderTargetCube());
+                slot.cubeFace = renderTargets[i].GetCubeFace();
+                if (!slot.cube)
+                    throw std::runtime_error("OpenGL4 SetRenderTargets: binding " + std::to_string(i) +
+                                             " is not an OpenGL4 RenderTargetCube face.");
+            }
+            else
+            {
+                slot.rt2D = dynamic_cast<OpenGL4RenderTargetRenderer*>(
+                    renderTargets[i].GetRenderTarget2D());
+                if (!slot.rt2D)
+                    throw std::runtime_error("OpenGL4 SetRenderTargets: binding " + std::to_string(i) +
+                                             " is not an OpenGL4 RenderTarget2D.");
+            }
+            if (renderTargets[i].GetWidth() != renderTargets[0].GetWidth() ||
+                renderTargets[i].GetHeight() != renderTargets[0].GetHeight())
+                throw std::runtime_error(
+                    "OpenGL4 SetRenderTargets: render targets must have matching dimensions.");
+            if (renderTargets[i].GetAppliedMultiSampleCount() !=
+                renderTargets[0].GetAppliedMultiSampleCount())
+                throw std::runtime_error(
+                    "OpenGL4 SetRenderTargets: render targets must have matching applied sample "
+                    "counts.");
+            for (int previous = 0; previous < i; ++previous)
+                if (renderTargets[i].IsSameSubresource(renderTargets[previous]))
+                    throw std::runtime_error(
+                        "OpenGL4 SetRenderTargets: the same render-target subresource cannot "
+                        "occupy multiple slots.");
+        }
+
+        const std::string errorsBeforeSetup = DrainGlErrorsDescribed();
+        if (!errorsBeforeSetup.empty())
+            throw std::runtime_error(
+                "OpenGL4 SetRenderTargets: GL errors were pending before MRT setup: " +
+                errorsBeforeSetup);
+
+        FinalizeCurrentMRT();
+        if (bound_->rt2D) bound_->rt2D->UnbindAsRenderTarget();
+        if (bound_->cube) bound_->cube->UnbindAsRenderTarget();
+        bound_->rt2D = nullptr;
+        bound_->cube = nullptr;
+
+        if (!mrtFbo_) gl4_glGenFramebuffers(1, &mrtFbo_);
+        gl4_glBindFramebuffer(GL_FRAMEBUFFER, mrtFbo_);
+        // Every attachment point is replaced, including slots and depth the previous set owned:
+        // the FBO is reused, but its identity never stands in for the ordered target set.
+        for (int i = 0; i < 4; ++i)
+            gl4_glFramebufferRenderbuffer(GL_FRAMEBUFFER, static_cast<GLenum>(GL_COLOR_ATTACHMENT0 + i),
+                                          GL_RENDERBUFFER, 0);
+        for (const GLenum attachment : {GL_DEPTH_ATTACHMENT, GL_STENCIL_ATTACHMENT,
+                                        GL_DEPTH_STENCIL_ATTACHMENT})
+            gl4_glFramebufferRenderbuffer(GL_FRAMEBUFFER, attachment, GL_RENDERBUFFER, 0);
+
+        std::array<GLenum, 4> drawBuffers{};
+        for (int i = 0; i < count; ++i)
+        {
+            const auto attachment = static_cast<GLenum>(GL_COLOR_ATTACHMENT0 + i);
+            const auto& slot = targets[static_cast<std::size_t>(i)];
+            if (slot.rt2D)
+                slot.rt2D->AttachColorToMRT(mrtFbo_, attachment);
+            else
+                slot.cube->AttachColorToMRT(mrtFbo_, attachment, slot.cubeFace);
+            drawBuffers[static_cast<std::size_t>(i)] = attachment;
+        }
+        if (targets[0].rt2D)
+            targets[0].rt2D->AttachDepthToMRT(mrtFbo_);
+        else
+            targets[0].cube->AttachDepthToMRT(mrtFbo_);
+        gl4_glDrawBuffers(count, drawBuffers.data());
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+
+        const GLenum status = gl4_glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        const std::string setupErrors = DrainGlErrorsDescribed();
+        if (status != GL_FRAMEBUFFER_COMPLETE || !setupErrors.empty())
+        {
+            BindDefaultFramebuffer();
+            bound_->width = 0;
+            bound_->height = 0;
+            throw std::runtime_error("OpenGL4 SetRenderTargets: MRT framebuffer setup failed for " +
+                                     std::to_string(count) + " targets; status=" +
+                                     FramebufferStatusName(status) + "; GL errors=" +
+                                     (setupErrors.empty() ? std::string("none") : setupErrors));
+        }
+
+        bound_->mrt = targets;
+        bound_->mrtCount = count;
+        bound_->mrtFramebuffer = mrtFbo_;
+        bound_->width = renderTargets[0].GetWidth();
+        bound_->height = renderTargets[0].GetHeight();
+        bound_->depthFormat = targets[0].rt2D ? targets[0].rt2D->GetDepthFormatEXT()
+                                              : targets[0].cube->GetDepthFormatEXT();
+        ApplyCurrentColorWriteMasks();
+        ApplyCurrentDepthStencilAvailability();
+        ApplyCurrentDepthBias();
     }
 }
 
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_OPENGL4
-    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
-    // namespace so several renderer archives can link into one binary, then defined
-    // below with a qualified name -- the body keeps its place unchanged.
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own namespace so
+    // several renderer archives can link into one binary.
     namespace OpenGL4 { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }
 
     std::unique_ptr<IGraphicsRenderer> OpenGL4::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)

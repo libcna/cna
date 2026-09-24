@@ -72,7 +72,7 @@ namespace
             // renderers still binding white here, and it now binds the measured opaque black.
             // plans/plan_webgpu_modern_graphics.md WMG-0025 adds WebGPU, which had no null-texture
             // handling at all until it gained the same 1x1 opaque-black 2D and cube.
-            if (!CNA_RENDERER_IS(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12, Vulkan,
+            if (!CNA_RENDERER_IS(Software, OpenGL33, OpenGL4, OpenGLES3, DirectX11, DirectX12, Vulkan,
                                  WebGPU))
                 GTEST_SKIP() << "needs a stock-effect raster path whose missing slots are pinned";
 
@@ -224,7 +224,7 @@ TEST_F(StockEffectNullTextureTest, SkinnedEffectSamplesOpaqueBlack)
         // plans/plan_graphics_shared_cleanup.md follow-up GSC-F1: EasyGL's per-pixel SkinnedEffect program
         // draws this red-textured, ambient-only quad white (per-vertex and every other renderer here
         // draw red), which is a lighting defect of that program rather than the missing-texture rule.
-        if (perPixel && CNA_RENDERER_IS(OpenGL33, OpenGLES3))
+        if (perPixel && CNA_RENDERER_IS(OpenGL33, OpenGL4, OpenGLES3))
             continue;
         SCOPED_TRACE(perPixel ? "per pixel" : "per vertex");
         effect.setPreferPerPixelLightingProperty(perPixel);

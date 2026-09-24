@@ -155,7 +155,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// plans/plan_runtimerenderer.md RTR-P9-5: the same set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool MultiStreamOracle()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan,
+    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, OpenGL4, WebGL1, WebGL2, WebGPU, Vulkan,
                            DirectX9, DirectX11, DirectX12, SdlGpu, Software);
 }
 
@@ -175,7 +175,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// plans/plan_runtimerenderer.md RTR-P9-5: the same set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool BindingOffsetOracle()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX11, DirectX12,
+    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, OpenGL4, WebGL1, WebGL2, DirectX11, DirectX12,
                            Vulkan, WebGPU, SdlGpu, Software);
 }
 
@@ -2246,7 +2246,7 @@ TEST_F(InstancedDrawMultiStreamTest, OrdinaryAndInstancedRoutesAgreeOnVertexColo
         << "VertexColorEnabled = true with a bound COLOR0 stream and a white DiffuseColor must "
            "produce the stream's own colour on the ORDINARY route";
 
-    if (CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Vulkan, WebGPU,
+    if (CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, OpenGL4, WebGL1, WebGL2, Vulkan, WebGPU,
                         DirectX11, DirectX12))
     {
         // EasyGL and bgfx always honoured it; Vulkan and WebGPU were corrected by REMED-GFX-212, which

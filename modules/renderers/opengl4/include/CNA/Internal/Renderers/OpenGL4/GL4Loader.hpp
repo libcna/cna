@@ -198,6 +198,547 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
 #define GL_CAVEAT_SUPPORT 0x82B8
 #endif
 
+    // plans/plan_opengl4_modern_graphics.md GL4-0009: tokens the EasyGL-parity draw, format and
+    // debug paths need. Guarded because a modern <GL/gl.h> (Mesa includes glext.h) already
+    // defines them while a GL-1.1-vintage header (Windows) does not.
+#ifndef GL_SAMPLE_MASK
+#define GL_SAMPLE_MASK 0x8E51
+#endif
+#ifndef GL_PROGRAM_POINT_SIZE
+#define GL_PROGRAM_POINT_SIZE 0x8642
+#endif
+#ifndef GL_SUBPIXEL_BITS
+#define GL_SUBPIXEL_BITS 0x0D50
+#endif
+#ifndef GL_CONTEXT_PROFILE_MASK
+#define GL_CONTEXT_PROFILE_MASK 0x9126
+#endif
+#ifndef GL_CONTEXT_CORE_PROFILE_BIT
+#define GL_CONTEXT_CORE_PROFILE_BIT 0x00000001
+#endif
+#ifndef GL_CONTEXT_FLAGS
+#define GL_CONTEXT_FLAGS 0x821E
+#endif
+#ifndef GL_CONTEXT_FLAG_DEBUG_BIT
+#define GL_CONTEXT_FLAG_DEBUG_BIT 0x00000002
+#endif
+#ifndef GL_DEBUG_OUTPUT_SYNCHRONOUS
+#define GL_DEBUG_OUTPUT_SYNCHRONOUS 0x8242
+#endif
+#ifndef GL_DEBUG_SOURCE_API
+#define GL_DEBUG_SOURCE_API 0x8246
+#endif
+#ifndef GL_DEBUG_SOURCE_WINDOW_SYSTEM
+#define GL_DEBUG_SOURCE_WINDOW_SYSTEM 0x8247
+#endif
+#ifndef GL_DEBUG_SOURCE_SHADER_COMPILER
+#define GL_DEBUG_SOURCE_SHADER_COMPILER 0x8248
+#endif
+#ifndef GL_DEBUG_SOURCE_THIRD_PARTY
+#define GL_DEBUG_SOURCE_THIRD_PARTY 0x8249
+#endif
+#ifndef GL_DEBUG_SOURCE_APPLICATION
+#define GL_DEBUG_SOURCE_APPLICATION 0x824A
+#endif
+#ifndef GL_DEBUG_SOURCE_OTHER
+#define GL_DEBUG_SOURCE_OTHER 0x824B
+#endif
+#ifndef GL_DEBUG_TYPE_ERROR
+#define GL_DEBUG_TYPE_ERROR 0x824C
+#endif
+#ifndef GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR
+#define GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR 0x824D
+#endif
+#ifndef GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR
+#define GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR 0x824E
+#endif
+#ifndef GL_DEBUG_TYPE_PORTABILITY
+#define GL_DEBUG_TYPE_PORTABILITY 0x824F
+#endif
+#ifndef GL_DEBUG_TYPE_PERFORMANCE
+#define GL_DEBUG_TYPE_PERFORMANCE 0x8250
+#endif
+#ifndef GL_DEBUG_TYPE_OTHER
+#define GL_DEBUG_TYPE_OTHER 0x8251
+#endif
+#ifndef GL_DEBUG_TYPE_MARKER
+#define GL_DEBUG_TYPE_MARKER 0x8268
+#endif
+#ifndef GL_DEBUG_TYPE_PUSH_GROUP
+#define GL_DEBUG_TYPE_PUSH_GROUP 0x8269
+#endif
+#ifndef GL_DEBUG_TYPE_POP_GROUP
+#define GL_DEBUG_TYPE_POP_GROUP 0x826A
+#endif
+#ifndef GL_DEBUG_SEVERITY_HIGH
+#define GL_DEBUG_SEVERITY_HIGH 0x9146
+#endif
+#ifndef GL_DEBUG_SEVERITY_MEDIUM
+#define GL_DEBUG_SEVERITY_MEDIUM 0x9147
+#endif
+#ifndef GL_DEBUG_SEVERITY_LOW
+#define GL_DEBUG_SEVERITY_LOW 0x9148
+#endif
+#ifndef GL_DEBUG_SEVERITY_NOTIFICATION
+#define GL_DEBUG_SEVERITY_NOTIFICATION 0x826B
+#endif
+#ifndef GL_DONT_CARE
+#define GL_DONT_CARE 0x1100
+#endif
+#ifndef GL_TEXTURE_SWIZZLE_R
+#define GL_TEXTURE_SWIZZLE_R 0x8E42
+#endif
+#ifndef GL_TEXTURE_SWIZZLE_G
+#define GL_TEXTURE_SWIZZLE_G 0x8E43
+#endif
+#ifndef GL_TEXTURE_SWIZZLE_B
+#define GL_TEXTURE_SWIZZLE_B 0x8E44
+#endif
+#ifndef GL_TEXTURE_SWIZZLE_A
+#define GL_TEXTURE_SWIZZLE_A 0x8E45
+#endif
+#ifndef GL_MAX_DRAW_BUFFERS
+#define GL_MAX_DRAW_BUFFERS 0x8824
+#endif
+#ifndef GL_MAX_COLOR_ATTACHMENTS
+#define GL_MAX_COLOR_ATTACHMENTS 0x8CDF
+#endif
+#ifndef GL_COMPRESSED_RGBA_S3TC_DXT1_EXT
+#define GL_COMPRESSED_RGBA_S3TC_DXT1_EXT 0x83F1
+#endif
+#ifndef GL_COMPRESSED_RGBA_S3TC_DXT3_EXT
+#define GL_COMPRESSED_RGBA_S3TC_DXT3_EXT 0x83F2
+#endif
+#ifndef GL_COMPRESSED_RGBA_S3TC_DXT5_EXT
+#define GL_COMPRESSED_RGBA_S3TC_DXT5_EXT 0x83F3
+#endif
+#ifndef GL_RGB565
+#define GL_RGB565 0x8D62
+#endif
+#ifndef GL_RGBA8_SNORM
+#define GL_RGBA8_SNORM 0x8F97
+#endif
+#ifndef GL_RG8_SNORM
+#define GL_RG8_SNORM 0x8F95
+#endif
+#ifndef GL_RGB10_A2
+#define GL_RGB10_A2 0x8059
+#endif
+#ifndef GL_RG16
+#define GL_RG16 0x822C
+#endif
+#ifndef GL_RGBA16
+#define GL_RGBA16 0x805B
+#endif
+#ifndef GL_R8
+#define GL_R8 0x8229
+#endif
+#ifndef GL_R32F
+#define GL_R32F 0x822E
+#endif
+#ifndef GL_RG32F
+#define GL_RG32F 0x8230
+#endif
+#ifndef GL_R16F
+#define GL_R16F 0x822D
+#endif
+#ifndef GL_RG16F
+#define GL_RG16F 0x822F
+#endif
+#ifndef GL_RG
+#define GL_RG 0x8227
+#endif
+#ifndef GL_RGB5_A1
+#define GL_RGB5_A1 0x8057
+#endif
+#ifndef GL_RGBA4
+#define GL_RGBA4 0x8056
+#endif
+#ifndef GL_UNSIGNED_SHORT_5_6_5
+#define GL_UNSIGNED_SHORT_5_6_5 0x8363
+#endif
+#ifndef GL_UNSIGNED_SHORT_5_5_5_1
+#define GL_UNSIGNED_SHORT_5_5_5_1 0x8034
+#endif
+#ifndef GL_UNSIGNED_SHORT_1_5_5_5_REV
+#define GL_UNSIGNED_SHORT_1_5_5_5_REV 0x8366
+#endif
+#ifndef GL_UNSIGNED_SHORT_4_4_4_4
+#define GL_UNSIGNED_SHORT_4_4_4_4 0x8033
+#endif
+#ifndef GL_UNSIGNED_SHORT_4_4_4_4_REV
+#define GL_UNSIGNED_SHORT_4_4_4_4_REV 0x8365
+#endif
+#ifndef GL_UNSIGNED_INT_2_10_10_10_REV
+#define GL_UNSIGNED_INT_2_10_10_10_REV 0x8368
+#endif
+#ifndef GL_BGRA
+#define GL_BGRA 0x80E1
+#endif
+#ifndef GL_BGR
+#define GL_BGR 0x80E0
+#endif
+#ifndef GL_DEPTH_COMPONENT32F
+#define GL_DEPTH_COMPONENT32F 0x8CAC
+#endif
+#ifndef GL_DEPTH32F_STENCIL8
+#define GL_DEPTH32F_STENCIL8 0x8CAD
+#endif
+#ifndef GL_DEPTH_STENCIL
+#define GL_DEPTH_STENCIL 0x84F9
+#endif
+#ifndef GL_UNSIGNED_INT_24_8
+#define GL_UNSIGNED_INT_24_8 0x84FA
+#endif
+#ifndef GL_TEXTURE_BASE_LEVEL
+#define GL_TEXTURE_BASE_LEVEL 0x813C
+#endif
+#ifndef GL_TEXTURE_MAX_LEVEL
+#define GL_TEXTURE_MAX_LEVEL 0x813D
+#endif
+#ifndef GL_TEXTURE_LOD_BIAS
+#define GL_TEXTURE_LOD_BIAS 0x8501
+#endif
+#ifndef GL_TEXTURE_WRAP_R
+#define GL_TEXTURE_WRAP_R 0x8072
+#endif
+#ifndef GL_TEXTURE_MIN_LOD
+#define GL_TEXTURE_MIN_LOD 0x813A
+#endif
+#ifndef GL_TEXTURE_MAX_LOD
+#define GL_TEXTURE_MAX_LOD 0x813B
+#endif
+#ifndef GL_MAX_TEXTURE_LOD_BIAS
+#define GL_MAX_TEXTURE_LOD_BIAS 0x84FD
+#endif
+#ifndef GL_UNPACK_IMAGE_HEIGHT
+#define GL_UNPACK_IMAGE_HEIGHT 0x806E
+#endif
+#ifndef GL_PACK_IMAGE_HEIGHT
+#define GL_PACK_IMAGE_HEIGHT 0x806C
+#endif
+#ifndef GL_UNPACK_SKIP_IMAGES
+#define GL_UNPACK_SKIP_IMAGES 0x806D
+#endif
+#ifndef GL_PACK_SKIP_IMAGES
+#define GL_PACK_SKIP_IMAGES 0x806B
+#endif
+#ifndef GL_PIXEL_PACK_BUFFER
+#define GL_PIXEL_PACK_BUFFER 0x88EB
+#endif
+#ifndef GL_PIXEL_UNPACK_BUFFER
+#define GL_PIXEL_UNPACK_BUFFER 0x88EC
+#endif
+#ifndef GL_TEXTURE_2D_ARRAY
+#define GL_TEXTURE_2D_ARRAY 0x8C1A
+#endif
+#ifndef GL_COPY_READ_BUFFER
+#define GL_COPY_READ_BUFFER 0x8F36
+#endif
+#ifndef GL_COPY_WRITE_BUFFER
+#define GL_COPY_WRITE_BUFFER 0x8F37
+#endif
+#ifndef GL_UNIFORM_BUFFER
+#define GL_UNIFORM_BUFFER 0x8A11
+#endif
+#ifndef GL_TEXTURE_COMPARE_MODE
+#define GL_TEXTURE_COMPARE_MODE 0x884C
+#endif
+#ifndef GL_TEXTURE_COMPARE_FUNC
+#define GL_TEXTURE_COMPARE_FUNC 0x884D
+#endif
+#ifndef GL_COMPARE_REF_TO_TEXTURE
+#define GL_COMPARE_REF_TO_TEXTURE 0x884E
+#endif
+#ifndef GL_POLYGON_OFFSET_LINE
+#define GL_POLYGON_OFFSET_LINE 0x2A02
+#endif
+#ifndef GL_POLYGON_OFFSET_POINT
+#define GL_POLYGON_OFFSET_POINT 0x2A01
+#endif
+#ifndef GL_TEXTURE_CUBE_MAP_SEAMLESS
+#define GL_TEXTURE_CUBE_MAP_SEAMLESS 0x884F
+#endif
+#ifndef GL_READ_FRAMEBUFFER_BINDING
+#define GL_READ_FRAMEBUFFER_BINDING 0x8CAA
+#endif
+#ifndef GL_DRAW_FRAMEBUFFER_BINDING
+#define GL_DRAW_FRAMEBUFFER_BINDING 0x8CA6
+#endif
+#ifndef GL_TEXTURE_BINDING_2D
+#define GL_TEXTURE_BINDING_2D 0x8069
+#endif
+#ifndef GL_ACTIVE_ATTRIBUTES
+#define GL_ACTIVE_ATTRIBUTES 0x8B89
+#endif
+#ifndef GL_ACTIVE_ATTRIBUTE_MAX_LENGTH
+#define GL_ACTIVE_ATTRIBUTE_MAX_LENGTH 0x8B8A
+#endif
+#ifndef GL_INT_VEC2
+#define GL_INT_VEC2 0x8B53
+#define GL_INT_VEC3 0x8B54
+#define GL_INT_VEC4 0x8B55
+#endif
+#ifndef GL_UNSIGNED_INT_VEC2
+#define GL_UNSIGNED_INT_VEC2 0x8DC6
+#define GL_UNSIGNED_INT_VEC3 0x8DC7
+#define GL_UNSIGNED_INT_VEC4 0x8DC8
+#endif
+#ifndef GL_TEXTURE_BINDING_CUBE_MAP
+#define GL_TEXTURE_BINDING_CUBE_MAP 0x8514
+#endif
+#ifndef GL_TEXTURE_BINDING_3D
+#define GL_TEXTURE_BINDING_3D 0x806A
+#endif
+#ifndef GL_ACTIVE_TEXTURE
+#define GL_ACTIVE_TEXTURE 0x84E0
+#endif
+#ifndef GL_CURRENT_PROGRAM
+#define GL_CURRENT_PROGRAM 0x8B8D
+#endif
+#ifndef GL_VERTEX_ARRAY_BINDING
+#define GL_VERTEX_ARRAY_BINDING 0x85B5
+#endif
+#ifndef GL_ARRAY_BUFFER_BINDING
+#define GL_ARRAY_BUFFER_BINDING 0x8894
+#endif
+#ifndef GL_ELEMENT_ARRAY_BUFFER_BINDING
+#define GL_ELEMENT_ARRAY_BUFFER_BINDING 0x8895
+#endif
+#ifndef GL_RENDERBUFFER_BINDING
+#define GL_RENDERBUFFER_BINDING 0x8CA7
+#endif
+#ifndef GL_SAMPLER_BINDING
+#define GL_SAMPLER_BINDING 0x8919
+#endif
+#ifndef GL_FRAMEBUFFER_UNDEFINED
+#define GL_FRAMEBUFFER_UNDEFINED 0x8219
+#endif
+#ifndef GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT
+#define GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT 0x8CD6
+#endif
+#ifndef GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT
+#define GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT 0x8CD7
+#endif
+#ifndef GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER
+#define GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER 0x8CDB
+#endif
+#ifndef GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER
+#define GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER 0x8CDC
+#endif
+#ifndef GL_FRAMEBUFFER_UNSUPPORTED
+#define GL_FRAMEBUFFER_UNSUPPORTED 0x8CDD
+#endif
+#ifndef GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE
+#define GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE 0x8D56
+#endif
+#ifndef GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS
+#define GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS 0x8DA8
+#endif
+#ifndef GL_INVALID_FRAMEBUFFER_OPERATION
+#define GL_INVALID_FRAMEBUFFER_OPERATION 0x0506
+#endif
+#ifndef GL_MAX_VERTEX_ATTRIBS
+#define GL_MAX_VERTEX_ATTRIBS 0x8869
+#endif
+#ifndef GL_TEXTURE_2D_MULTISAMPLE
+#define GL_TEXTURE_2D_MULTISAMPLE 0x9100
+#endif
+#ifndef GL_RED_INTEGER
+#define GL_RED_INTEGER 0x8D94
+#endif
+// plans/plan_opengl4_modern_graphics.md GL4-0012: the texture/render-target layer's per-format
+// sample-count query (GL_SAMPLES through glGetInternalformativ) and the pixel-buffer bindings its
+// transfers set aside and restore.
+#ifndef GL_SAMPLES
+#define GL_SAMPLES 0x80A9
+#endif
+#ifndef GL_PIXEL_PACK_BUFFER_BINDING
+#define GL_PIXEL_PACK_BUFFER_BINDING 0x88ED
+#endif
+#ifndef GL_PIXEL_UNPACK_BUFFER_BINDING
+#define GL_PIXEL_UNPACK_BUFFER_BINDING 0x88EF
+#endif
+// plans/plan_opengl4_modern_graphics.md GL4-0025: compute, shader-storage and uniform buffers,
+// memory barriers, image load/store, timer queries and the limits Workstream B reports.
+#ifndef GL_RGBA8
+#define GL_RGBA8 0x8058
+#endif
+#ifndef GL_R16
+#define GL_R16 0x822A
+#endif
+#ifndef GL_RG8
+#define GL_RG8 0x822B
+#endif
+#ifndef GL_TEXTURE_BINDING_2D_ARRAY
+#define GL_TEXTURE_BINDING_2D_ARRAY 0x8C1D
+#endif
+#ifndef GL_COMPUTE_SHADER
+#define GL_COMPUTE_SHADER 0x91B9
+#endif
+#ifndef GL_SHADER_STORAGE_BUFFER
+#define GL_SHADER_STORAGE_BUFFER 0x90D2
+#endif
+#ifndef GL_SHADER_STORAGE_BUFFER_BINDING
+#define GL_SHADER_STORAGE_BUFFER_BINDING 0x90D3
+#endif
+#ifndef GL_UNIFORM_BUFFER_BINDING
+#define GL_UNIFORM_BUFFER_BINDING 0x8A28
+#endif
+#ifndef GL_DRAW_INDIRECT_BUFFER
+#define GL_DRAW_INDIRECT_BUFFER 0x8F3F
+#endif
+#ifndef GL_DRAW_INDIRECT_BUFFER_BINDING
+#define GL_DRAW_INDIRECT_BUFFER_BINDING 0x8F43
+#endif
+#ifndef GL_TIME_ELAPSED
+#define GL_TIME_ELAPSED 0x88BF
+#endif
+#ifndef GL_TIMESTAMP
+#define GL_TIMESTAMP 0x8E28
+#endif
+#ifndef GL_QUERY_COUNTER_BITS
+#define GL_QUERY_COUNTER_BITS 0x8864
+#endif
+#ifndef GL_MAX_COMPUTE_WORK_GROUP_COUNT
+#define GL_MAX_COMPUTE_WORK_GROUP_COUNT 0x91BE
+#endif
+#ifndef GL_MAX_COMPUTE_WORK_GROUP_SIZE
+#define GL_MAX_COMPUTE_WORK_GROUP_SIZE 0x91BF
+#endif
+#ifndef GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS
+#define GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS 0x90EB
+#endif
+#ifndef GL_MAX_VERTEX_SHADER_STORAGE_BLOCKS
+#define GL_MAX_VERTEX_SHADER_STORAGE_BLOCKS 0x90D6
+#endif
+#ifndef GL_MAX_COMPUTE_SHADER_STORAGE_BLOCKS
+#define GL_MAX_COMPUTE_SHADER_STORAGE_BLOCKS 0x90DB
+#endif
+#ifndef GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS
+#define GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS 0x90DD
+#endif
+#ifndef GL_MAX_SHADER_STORAGE_BLOCK_SIZE
+#define GL_MAX_SHADER_STORAGE_BLOCK_SIZE 0x90DE
+#endif
+#ifndef GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT
+#define GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT 0x90DF
+#endif
+#ifndef GL_MAX_UNIFORM_BLOCK_SIZE
+#define GL_MAX_UNIFORM_BLOCK_SIZE 0x8A30
+#endif
+#ifndef GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT
+#define GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT 0x8A34
+#endif
+#ifndef GL_MAX_COMPUTE_UNIFORM_BLOCKS
+#define GL_MAX_COMPUTE_UNIFORM_BLOCKS 0x91BB
+#endif
+#ifndef GL_MAX_UNIFORM_BUFFER_BINDINGS
+#define GL_MAX_UNIFORM_BUFFER_BINDINGS 0x8A2F
+#endif
+#ifndef GL_MAX_COMPUTE_IMAGE_UNIFORMS
+#define GL_MAX_COMPUTE_IMAGE_UNIFORMS 0x91BD
+#endif
+#ifndef GL_MAX_IMAGE_UNITS
+#define GL_MAX_IMAGE_UNITS 0x8F38
+#endif
+#ifndef GL_MAX_COMPUTE_TEXTURE_IMAGE_UNITS
+#define GL_MAX_COMPUTE_TEXTURE_IMAGE_UNITS 0x91BC
+#endif
+#ifndef GL_MAX_TEXTURE_IMAGE_UNITS
+#define GL_MAX_TEXTURE_IMAGE_UNITS 0x8872
+#endif
+#ifndef GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS
+#define GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS 0x8B4C
+#endif
+#ifndef GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS
+#define GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS 0x8B4D
+#endif
+#ifndef GL_MAX_VERTEX_ATTRIB_BINDINGS
+#define GL_MAX_VERTEX_ATTRIB_BINDINGS 0x82DA
+#endif
+#ifndef GL_MAX_COLOR_ATTACHMENTS
+#define GL_MAX_COLOR_ATTACHMENTS 0x8CDF
+#endif
+#ifndef GL_MAX_ARRAY_TEXTURE_LAYERS
+#define GL_MAX_ARRAY_TEXTURE_LAYERS 0x88FF
+#endif
+#ifndef GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT
+#define GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT 0x00000001
+#endif
+#ifndef GL_ELEMENT_ARRAY_BARRIER_BIT
+#define GL_ELEMENT_ARRAY_BARRIER_BIT 0x00000002
+#endif
+#ifndef GL_UNIFORM_BARRIER_BIT
+#define GL_UNIFORM_BARRIER_BIT 0x00000004
+#endif
+#ifndef GL_TEXTURE_FETCH_BARRIER_BIT
+#define GL_TEXTURE_FETCH_BARRIER_BIT 0x00000008
+#endif
+#ifndef GL_SHADER_IMAGE_ACCESS_BARRIER_BIT
+#define GL_SHADER_IMAGE_ACCESS_BARRIER_BIT 0x00000020
+#endif
+#ifndef GL_COMMAND_BARRIER_BIT
+#define GL_COMMAND_BARRIER_BIT 0x00000040
+#endif
+#ifndef GL_PIXEL_BUFFER_BARRIER_BIT
+#define GL_PIXEL_BUFFER_BARRIER_BIT 0x00000080
+#endif
+#ifndef GL_TEXTURE_UPDATE_BARRIER_BIT
+#define GL_TEXTURE_UPDATE_BARRIER_BIT 0x00000100
+#endif
+#ifndef GL_BUFFER_UPDATE_BARRIER_BIT
+#define GL_BUFFER_UPDATE_BARRIER_BIT 0x00000200
+#endif
+#ifndef GL_FRAMEBUFFER_BARRIER_BIT
+#define GL_FRAMEBUFFER_BARRIER_BIT 0x00000400
+#endif
+#ifndef GL_SHADER_STORAGE_BARRIER_BIT
+#define GL_SHADER_STORAGE_BARRIER_BIT 0x00002000
+#endif
+#ifndef GL_ALL_BARRIER_BITS
+#define GL_ALL_BARRIER_BITS 0xFFFFFFFF
+#endif
+#ifndef GL_READ_ONLY
+#define GL_READ_ONLY 0x88B8
+#endif
+#ifndef GL_WRITE_ONLY
+#define GL_WRITE_ONLY 0x88B9
+#endif
+#ifndef GL_READ_WRITE
+#define GL_READ_WRITE 0x88BA
+#endif
+#ifndef GL_IMAGE_BINDING_NAME
+#define GL_IMAGE_BINDING_NAME 0x8F3A
+#endif
+#ifndef GL_FILTER
+#define GL_FILTER 0x829A
+#endif
+#ifndef GL_FRAMEBUFFER_BLEND
+#define GL_FRAMEBUFFER_BLEND 0x828B
+#endif
+#ifndef GL_MIPMAP
+#define GL_MIPMAP 0x8293
+#endif
+#ifndef GL_FRAGMENT_TEXTURE
+#define GL_FRAGMENT_TEXTURE 0x829F
+#endif
+#ifndef GL_COMPUTE_TEXTURE
+#define GL_COMPUTE_TEXTURE 0x82A0
+#endif
+#ifndef GL_SHADER_IMAGE_LOAD
+#define GL_SHADER_IMAGE_LOAD 0x82A4
+#endif
+#ifndef GL_SHADER_IMAGE_STORE
+#define GL_SHADER_IMAGE_STORE 0x82A5
+#endif
+#ifndef GL_SHADER_IMAGE_ATOMIC
+#define GL_SHADER_IMAGE_ATOMIC 0x82A6
+#endif
+#ifndef GL_NUM_SAMPLE_COUNTS
+#define GL_NUM_SAMPLE_COUNTS 0x9380
+#endif
+
     // ---- Function pointer types for the loaded subset (Khronos-standard PFN names) ----
     using PFNGL4GENBUFFERSPROC              = void (*)(GLsizei, GLuint*);
     using PFNGL4BINDBUFFERPROC              = void (*)(GLenum, GLuint);
@@ -233,6 +774,9 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
     using PFNGL4BINDATTRIBLOCATIONPROC      = void (*)(GLuint, GLuint, const GLchar4*);
 
     using PFNGL4GETUNIFORMLOCATIONPROC      = GLint (*)(GLuint, const GLchar4*);
+    // plans/plan_opengl4_modern_graphics.md GL4-0023: active-attribute reflection (GL 2.0 core).
+    using PFNGL4GETACTIVEATTRIBPROC         = void (*)(GLuint, GLuint, GLsizei, GLsizei*, GLint*, GLenum*, GLchar4*);
+    using PFNGL4GETATTRIBLOCATIONPROC       = GLint (*)(GLuint, const GLchar4*);
     using PFNGL4UNIFORM1IPROC               = void (*)(GLint, GLint);
     using PFNGL4UNIFORM1FPROC               = void (*)(GLint, GLfloat);
     using PFNGL4UNIFORM2FPROC               = void (*)(GLint, GLfloat, GLfloat);
@@ -321,6 +865,65 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
     using PFNGL4DRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEPROC =
         void (*)(GLenum, GLsizei, GLenum, const void*, GLsizei, GLint, GLuint);
     using PFNGL4GETINTERNALFORMATIVPROC          = void (*)(GLenum, GLenum, GLenum, GLsizei, GLint*);
+    using PFNGL4GETINTEGER64VPROC                = void (*)(GLenum, std::int64_t*);
+    using PFNGL4PROGRAMUNIFORM1IPROC             = void (*)(GLuint, GLint, GLint);
+    using PFNGL4PROGRAMUNIFORM1FPROC             = void (*)(GLuint, GLint, GLfloat);
+    using PFNGL4GETQUERYIVPROC                   = void (*)(GLenum, GLenum, GLint*);
+    using PFNGL4COMPRESSEDTEXIMAGE3DPROC         =
+        void (*)(GLenum, GLint, GLenum, GLsizei, GLsizei, GLsizei, GLint, GLsizei, const void*);
+    using PFNGL4COMPRESSEDTEXSUBIMAGE3DPROC      = void (*)(GLenum, GLint, GLint, GLint, GLint,
+                                                            GLsizei, GLsizei, GLsizei, GLenum,
+                                                            GLsizei, const void*);
+    using PFNGL4ISBUFFERPROC                     = GLboolean (*)(GLuint);
+    using PFNGL4ISQUERYPROC                      = GLboolean (*)(GLuint);
+
+    // plans/plan_opengl4_modern_graphics.md GL4-0009: further GL <= 4.1 core entry points the
+    // EasyGL-parity paths need (vector/matrix uniforms for the shared stock programs, instanced
+    // base-vertex and non-indexed instanced draws, the multisample coverage mask, compressed and
+    // typed texture transfers, buffer copies/readback and per-buffer clears). All are core in
+    // every 4.1 context, so a missing one is a broken driver, not a narrower capability.
+    using PFNGL4UNIFORM3FVPROC                   = void (*)(GLint, GLsizei, const GLfloat*);
+    using PFNGL4UNIFORM4FVPROC                   = void (*)(GLint, GLsizei, const GLfloat*);
+    using PFNGL4UNIFORM1IVPROC                   = void (*)(GLint, GLsizei, const GLint*);
+    using PFNGL4UNIFORMMATRIX3FVPROC             = void (*)(GLint, GLsizei, GLboolean, const GLfloat*);
+    using PFNGL4DRAWELEMENTSINSTANCEDBASEVERTEXPROC =
+        void (*)(GLenum, GLsizei, GLenum, const void*, GLsizei, GLint);
+    using PFNGL4DRAWARRAYSINSTANCEDPROC          = void (*)(GLenum, GLint, GLsizei, GLsizei);
+    using PFNGL4SAMPLEMASKIPROC                  = void (*)(GLuint, GLbitfield);
+    using PFNGL4COMPRESSEDTEXIMAGE2DPROC         =
+        void (*)(GLenum, GLint, GLenum, GLsizei, GLsizei, GLint, GLsizei, const void*);
+    using PFNGL4COMPRESSEDTEXSUBIMAGE2DPROC      =
+        void (*)(GLenum, GLint, GLint, GLint, GLsizei, GLsizei, GLenum, GLsizei, const void*);
+    using PFNGL4GETCOMPRESSEDTEXIMAGEPROC        = void (*)(GLenum, GLint, void*);
+    using PFNGL4GETBUFFERSUBDATAPROC             = void (*)(GLenum, GLintptr4, GLsizeiptr4, void*);
+    using PFNGL4COPYBUFFERSUBDATAPROC            =
+        void (*)(GLenum, GLenum, GLintptr4, GLintptr4, GLsizeiptr4);
+    using PFNGL4CLEARBUFFERFVPROC                = void (*)(GLenum, GLint, const GLfloat*);
+    using PFNGL4CLEARBUFFERIVPROC                = void (*)(GLenum, GLint, const GLint*);
+    using PFNGL4CLEARBUFFERFIPROC                = void (*)(GLenum, GLint, GLfloat, GLint);
+    using PFNGL4FRAMEBUFFERTEXTUREPROC           = void (*)(GLenum, GLenum, GLuint, GLint);
+    using PFNGL4GETFRAMEBUFFERATTACHMENTPARAMETERIVPROC = void (*)(GLenum, GLenum, GLenum, GLint*);
+    using PFNGL4GETSAMPLERPARAMETERIVPROC        = void (*)(GLuint, GLenum, GLint*);
+    using PFNGL4ISPROGRAMPROC                    = GLboolean (*)(GLuint);
+
+    // KHR_debug (core in 4.3): optional. The callback type is spelled with the platform calling
+    // convention because the driver invokes it.
+#if defined(_WIN32)
+#define CNA_GL4_APIENTRY __stdcall
+#else
+#define CNA_GL4_APIENTRY
+#endif
+    using GL4DebugProc = void (CNA_GL4_APIENTRY*)(GLenum source, GLenum type, GLuint id,
+                                                  GLenum severity, GLsizei length,
+                                                  const GLchar4* message, const void* userParam);
+    using PFNGL4DEBUGMESSAGECALLBACKPROC         = void (*)(GL4DebugProc, const void*);
+    using PFNGL4DEBUGMESSAGECONTROLPROC          =
+        void (*)(GLenum, GLenum, GLenum, GLsizei, const GLuint*, GLboolean);
+    using PFNGL4DEBUGMESSAGEINSERTPROC           =
+        void (*)(GLenum, GLenum, GLuint, GLenum, GLsizei, const GLchar4*);
+    using PFNGL4PUSHDEBUGGROUPPROC               = void (*)(GLenum, GLuint, GLsizei, const GLchar4*);
+    using PFNGL4POPDEBUGGROUPPROC                = void (*)();
+    using PFNGL4OBJECTLABELPROC                  = void (*)(GLenum, GLuint, GLsizei, const GLchar4*);
 
     // ---- Loaded function pointers ----
     extern PFNGL4GENBUFFERSPROC               gl4_glGenBuffers;
@@ -353,6 +956,8 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
     extern PFNGL4BINDATTRIBLOCATIONPROC       gl4_glBindAttribLocation;
 
     extern PFNGL4GETUNIFORMLOCATIONPROC       gl4_glGetUniformLocation;
+    extern PFNGL4GETACTIVEATTRIBPROC          gl4_glGetActiveAttrib;
+    extern PFNGL4GETATTRIBLOCATIONPROC        gl4_glGetAttribLocation;
     extern PFNGL4UNIFORM1IPROC                gl4_glUniform1i;
     extern PFNGL4UNIFORM1FPROC                gl4_glUniform1f;
     extern PFNGL4UNIFORM2FPROC                gl4_glUniform2f;
@@ -422,6 +1027,51 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
     extern PFNGL4DRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEPROC
         gl4_glDrawElementsInstancedBaseVertexBaseInstance;
     extern PFNGL4GETINTERNALFORMATIVPROC         gl4_glGetInternalformativ;
+    // GL4-0025: 64-bit limit queries and program-object uniforms that do not disturb the bound
+    // program. Optional like the rest of this block; the compute route requires them.
+    extern PFNGL4GETINTEGER64VPROC               gl4_glGetInteger64v;
+    extern PFNGL4PROGRAMUNIFORM1IPROC            gl4_glProgramUniform1i;
+    extern PFNGL4PROGRAMUNIFORM1FPROC            gl4_glProgramUniform1f;
+    /** GL4-0027: the timestamp counter width, asked before a GPU timer is promised. */
+    extern PFNGL4GETQUERYIVPROC                  gl4_glGetQueryiv;
+    /** GL4-0031: name-liveness queries for GL object leak accounting. */
+    extern PFNGL4ISBUFFERPROC                    gl4_glIsBuffer;
+    /** GL4-0031: see gl4_glIsBuffer. */
+    extern PFNGL4ISQUERYPROC                     gl4_glIsQuery;
+    /** GL4-0037: block-compressed texture-array storage (core since 1.3, so mandatory). */
+    extern PFNGL4COMPRESSEDTEXIMAGE3DPROC        gl4_glCompressedTexImage3D;
+    /** GL4-0037: see gl4_glCompressedTexImage3D. */
+    extern PFNGL4COMPRESSEDTEXSUBIMAGE3DPROC     gl4_glCompressedTexSubImage3D;
+
+    // GL4-0009 mandatory additions (see the types above).
+    extern PFNGL4UNIFORM3FVPROC                   gl4_glUniform3fv;
+    extern PFNGL4UNIFORM4FVPROC                   gl4_glUniform4fv;
+    extern PFNGL4UNIFORM1IVPROC                   gl4_glUniform1iv;
+    extern PFNGL4UNIFORMMATRIX3FVPROC             gl4_glUniformMatrix3fv;
+    extern PFNGL4DRAWELEMENTSINSTANCEDBASEVERTEXPROC gl4_glDrawElementsInstancedBaseVertex;
+    extern PFNGL4DRAWARRAYSINSTANCEDPROC          gl4_glDrawArraysInstanced;
+    extern PFNGL4SAMPLEMASKIPROC                  gl4_glSampleMaski;
+    extern PFNGL4COMPRESSEDTEXIMAGE2DPROC         gl4_glCompressedTexImage2D;
+    extern PFNGL4COMPRESSEDTEXSUBIMAGE2DPROC      gl4_glCompressedTexSubImage2D;
+    extern PFNGL4GETCOMPRESSEDTEXIMAGEPROC        gl4_glGetCompressedTexImage;
+    extern PFNGL4GETBUFFERSUBDATAPROC             gl4_glGetBufferSubData;
+    extern PFNGL4COPYBUFFERSUBDATAPROC            gl4_glCopyBufferSubData;
+    extern PFNGL4CLEARBUFFERFVPROC                gl4_glClearBufferfv;
+    extern PFNGL4CLEARBUFFERIVPROC                gl4_glClearBufferiv;
+    extern PFNGL4CLEARBUFFERFIPROC                gl4_glClearBufferfi;
+    extern PFNGL4FRAMEBUFFERTEXTUREPROC           gl4_glFramebufferTexture;
+    extern PFNGL4GETFRAMEBUFFERATTACHMENTPARAMETERIVPROC gl4_glGetFramebufferAttachmentParameteriv;
+    extern PFNGL4GETSAMPLERPARAMETERIVPROC        gl4_glGetSamplerParameteriv;
+    extern PFNGL4ISPROGRAMPROC                    gl4_glIsProgram;
+
+    // GL4-0009 optional KHR_debug entry points; null when the context has neither 4.3 nor the
+    // extension, in which case debug output is reported unavailable rather than faked.
+    extern PFNGL4DEBUGMESSAGECALLBACKPROC         gl4_glDebugMessageCallback;
+    extern PFNGL4DEBUGMESSAGECONTROLPROC          gl4_glDebugMessageControl;
+    extern PFNGL4DEBUGMESSAGEINSERTPROC           gl4_glDebugMessageInsert;
+    extern PFNGL4PUSHDEBUGGROUPPROC               gl4_glPushDebugGroup;
+    extern PFNGL4POPDEBUGGROUPPROC                gl4_glPopDebugGroup;
+    extern PFNGL4OBJECTLABELPROC                  gl4_glObjectLabel;
 
     /// Generic function-pointer-getter type matching the platform GL service callback.
     using GetProcAddressFn = void* (*)(const char* name);

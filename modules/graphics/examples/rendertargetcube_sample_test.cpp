@@ -43,6 +43,8 @@ namespace
     constexpr const char* kRendererName = "SOFTWARE";
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr const char* kRendererName = "EASYGL";
+#elif defined(CNA_RENDERER_OPENGL4)
+    constexpr const char* kRendererName = "OPENGL4";
 #else
     constexpr const char* kRendererName = "renderer";
 #endif

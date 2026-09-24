@@ -330,7 +330,10 @@ if(CNA_BUILD_TESTS)
     # therefore produced a CnaTests that could not compile, which is what blocked the SDL_GPU
     # classic baseline this closeout exists to measure. Found by configuring SDL_GPU, exactly as
     # WMG-0028's twin was found by configuring Vulkan.
-    set(_cna_gl_identities OPENGLES2 OPENGLES3 OPENGL33 OPENGL4 WEBGL1 WEBGL2)
+    # plans/plan_opengl4_modern_graphics.md GL4-0019: the EasyGL identities only. OPENGL4 is its
+    # own renderer family with no easy-gl/meta-gl checkout, so an OPENGL4-only configuration
+    # compiled these suites without their include root.
+    set(_cna_gl_identities OPENGLES2 OPENGLES3 OPENGL33 WEBGL1 WEBGL2)
     set(_cna_have_gl_identity FALSE)
     foreach(_cna_gl IN LISTS _cna_gl_identities)
         if("${_cna_gl}" IN_LIST CNA_RENDERER_IDENTITIES)
@@ -1326,12 +1329,18 @@ if(CNA_BUILD_TESTS)
     if(_cna_unit_tests_audio_environment)
         set(_cna_unit_tests_audio_properties PROPERTIES ${_cna_unit_tests_audio_environment})
     endif()
-    cna_vulkan_validation_gate_applies(_cna_unit_tests_vk_gate)
-    if(_cna_unit_tests_vk_gate)
+    # plans/plan_opengl4_modern_graphics.md GL4-0016: the OpenGL4 GL error gate reaches the
+    # discovered cases through the same hook, alongside the Vulkan gate where both apply.
+    set(_cna_unit_tests_output_gate "")
+    cna_append_vulkan_validation_gate_pattern(_cna_unit_tests_output_gate CnaTests)
+    cna_append_opengl4_gl_error_gate_pattern(_cna_unit_tests_output_gate CnaTests)
+    # One alternation rather than a list: a semicolon inside PROPERTIES would split the pair.
+    string(JOIN "|" _cna_unit_tests_output_gate ${_cna_unit_tests_output_gate})
+    if(_cna_unit_tests_output_gate)
         gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ${_cna_unit_tests_discovery_filter}
-            PROPERTIES FAIL_REGULAR_EXPRESSION "\\[Vulkan Validation\\]"
+            PROPERTIES FAIL_REGULAR_EXPRESSION "${_cna_unit_tests_output_gate}"
                        ${_cna_unit_tests_audio_environment})
     else()
         gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"

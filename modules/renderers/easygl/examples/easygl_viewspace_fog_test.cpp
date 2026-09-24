@@ -153,6 +153,15 @@ class EasyGLViewSpaceFogTest : public Game
         fx.setFogStartProperty(Ref::kFogStart);
         fx.setFogEndProperty(Ref::kFogEnd);
 
+        // SkinnedEffect always samples its Texture, and an unset one reads as XNA's opaque black
+        // (plans/plan_graphics_shared_cleanup.md GSC-0004) -- which would multiply the emissive
+        // blue this discriminator measures down to black. A white texel is the identity.
+        // plans/plan_opengl4_modern_graphics.md GL4-0018.
+        Texture2D white(dev, 1, 1);
+        const Color whiteTexel = Color::White;
+        white.SetData(&whiteTexel, 1);
+        fx.setTextureProperty(&white);
+
         std::vector<Matrix> bones(SkinnedEffect::MaxBones, Matrix::getIdentityProperty());
         bones[0] = Matrix::CreateTranslation(0.0f, 0.0f, boneZ);
         fx.SetBoneTransforms(bones);

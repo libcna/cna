@@ -3,6 +3,7 @@
 
 #include "CNA/Internal/Renderers/EasyGL/GlProfile.hpp"
 
+#include "CNA/Internal/Renderers/Common/GlPresentationSurfaceState.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
@@ -39,54 +40,11 @@ namespace CNA::Internal::Renderers::EasyGL
     /**
      * @brief Platform-neutral presentation metrics consumed by the EasyGL family.
      *
-     * The platform publishes physical drawable pixels plus a logical-to-physical display scale.
-     * This value object derives the client-coordinate dimensions and owns EasyGL's virtual
-     * resolution transform, so resize/DPI behavior can be tested without a native window or GL.
+     * plans/plan_opengl4_modern_graphics.md GL4-0010: the implementation moved to
+     * CNA/Internal/Renderers/Common/GlPresentationSurfaceState.hpp so OpenGL4 applies the same
+     * virtual-resolution and presentation-mode transform rather than a second copy of it.
      */
-    class EasyGLSurfaceState
-    {
-    public:
-        EasyGLSurfaceState(const RendererSurfaceInfo& surface, int virtualWidth,
-                           int virtualHeight, CnaPresentationMode presentationMode);
-
-        /** @brief Replaces the platform snapshot after resize or density change. */
-        void Update(const RendererSurfaceInfo& surface);
-        /** @brief Replaces the virtual game resolution. */
-        void SetVirtualResolution(int width, int height);
-        /** @brief Replaces the presentation policy. */
-        void SetPresentationMode(CnaPresentationMode mode);
-
-        /** @brief Gets the physical drawable extent used by GL framebuffer operations. */
-        void GetDrawableSize(int& width, int& height) const;
-        /** @brief Gets the renderer's logical game extent. */
-        void GetLogicalSize(int& width, int& height) const;
-        /**
-         * @brief Gets the PHYSICAL drawable sub-rectangle the logical extent maps into.
-         *
-         * The counterpart of GetLogicalSize(): that one answers "what resolution does the game
-         * think it is drawing at", this one answers "which drawable pixels does that land on".
-         * They are the same rectangle only when the window happens to match the virtual
-         * resolution's aspect. Identical to the full drawable for FixedHeightDynamicWidth,
-         * NativeBackBuffer and Stretch; only Letterbox/Overscan shrink and centre it.
-         */
-        void GetDefaultViewportRect(int& x, int& y, int& width, int& height) const;
-        /** @brief Converts logical client units into renderer game units. */
-        bool WindowToLogical(float windowX, float windowY,
-                             float& logicalX, float& logicalY) const;
-        /** @brief Converts renderer game units into logical client units. */
-        bool LogicalToWindow(float logicalX, float logicalY,
-                             float& windowX, float& windowY) const;
-        /** @brief Gets the stable platform window identity. */
-        [[nodiscard]] CNA::Platform::WindowId GetWindowId() const { return surface_.windowId; }
-
-    private:
-        void GetClientSize(int& width, int& height) const;
-
-        RendererSurfaceInfo surface_;
-        int virtualWidth_ = 0;
-        int virtualHeight_ = 0;
-        CnaPresentationMode presentationMode_ = CnaPresentationMode::Letterbox;
-    };
+    using EasyGLSurfaceState = GlPresentationSurfaceState;
 
     /**
      * @brief REMED-GFX-168: the one record of which EasyGL render target is currently bound.

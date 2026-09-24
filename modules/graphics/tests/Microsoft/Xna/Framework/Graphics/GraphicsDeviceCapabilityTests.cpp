@@ -117,12 +117,12 @@ struct CapabilityExpectation
 
 // FNA3D has no separate compiled-effects opt-in: MojoShader is already its own graphics
 // dependency, so support is unconditional whenever this renderer is selected at all. SDL_GPU,
-// EasyGL, Vulkan, WebGPU and DirectX 9/11/12 all pull MojoShader in only as an extra,
+// EasyGL, OpenGL4, Vulkan, WebGPU and DirectX 9/11/12 all pull MojoShader in only as an extra,
 // off-by-default dependency none of them otherwise needs (CNA_SDL_GPU_COMPILED_EFFECTS /
-// CNA_EASYGL_COMPILED_EFFECTS / CNA_VULKAN_COMPILED_EFFECTS / CNA_WEBGPU_COMPILED_EFFECTS /
-// CNA_DIRECTX9_COMPILED_EFFECTS / CNA_DIRECTX11_COMPILED_EFFECTS /
+// CNA_EASYGL_COMPILED_EFFECTS / CNA_OPENGL4_COMPILED_EFFECTS / CNA_VULKAN_COMPILED_EFFECTS /
+// CNA_WEBGPU_COMPILED_EFFECTS / CNA_DIRECTX9_COMPILED_EFFECTS / CNA_DIRECTX11_COMPILED_EFFECTS /
 // CNA_DIRECTX12_COMPILED_EFFECTS) -- selecting the renderer alone is not enough to expect the
-// capability true for any of those seven.
+// capability true for any of those eight.
 //
 // plans/plan_webgpu.md WEBGPU-171 added the WebGPU arm. Its route is MojoShader's SPIR-V profile
 // plus the combined-image-sampler rewrite WGSL's shading model requires. WEBGPU-203 removed the
@@ -132,6 +132,7 @@ struct CapabilityExpectation
 #if defined(CNA_RENDERER_FNA3D) || \
     (defined(CNA_RENDERER_SDL_GPU) && defined(CNA_SDL_GPU_COMPILED_EFFECTS)) || \
     (defined(CNA_RENDERER_EASYGL) && defined(CNA_EASYGL_COMPILED_EFFECTS)) || \
+    (defined(CNA_RENDERER_OPENGL4) && defined(CNA_OPENGL4_COMPILED_EFFECTS)) || \
     (defined(CNA_RENDERER_SOFTWARE) && defined(CNA_SOFTWARE_COMPILED_EFFECTS)) || \
     (defined(CNA_RENDERER_VULKAN) && defined(CNA_VULKAN_COMPILED_EFFECTS)) || \
     (defined(CNA_RENDERER_WEBGPU) && defined(CNA_WEBGPU_COMPILED_EFFECTS)) || \
@@ -394,12 +395,12 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     EXPECT_NO_THROW({ (void)gd.SupportsCapability(GraphicsCapability::WireFrame); });
     const bool reported = gd.SupportsCapability(GraphicsCapability::WireFrame);
 
-#if defined(CNA_RENDERER_EASYGL)
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_OPENGL4)
     // SOFTWARE-178: desktop OpenGL always has native polygon mode. GLES/WebGL report the runtime
     // truth of GL_NV_polygon_mode / WEBGL_polygon_mode, so either value is legal there and the
     // positive/refusal arms below verify that the reported value matches the actual draw.
-    if (CNA_RENDERER_IS(OpenGL33))
-        EXPECT_TRUE(reported) << "desktop EasyGL lost core glPolygonMode support";
+    if (CNA_RENDERER_IS(OpenGL33, OpenGL4))
+        EXPECT_TRUE(reported) << "desktop GL lost core glPolygonMode support";
 #elif defined(CNA_RENDERER_WEBGPU)
     // plans/plan_webgpu.md WEBGPU-153: true, for exactly the reason the EasyGL arm above is true and
     // by the same mechanism. WEBGPU-115 asserted false here on the grounds that "wgpu-native has no

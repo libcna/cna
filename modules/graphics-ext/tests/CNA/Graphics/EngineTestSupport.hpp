@@ -6,6 +6,7 @@
 #include "CNA/Graphics/DepthNormalPrepass.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
@@ -21,6 +22,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <string>
 #include <vector>
 
 namespace CnaTest::EngineLayer {
@@ -130,6 +132,55 @@ namespace CnaTest::EngineLayer {
         const ShaderDialectEXT dialect = device.GetShaderDialectEXT();
         return RunsShaderSource(device)
             && (dialect == ShaderDialectEXT::GlslEs || dialect == ShaderDialectEXT::GlslDesktop);
+    }
+
+    /**
+     * @brief Whether a legacy GLSL ES 3.10 compute payload has a form this renderer compiles.
+     *
+     * The string `ComputeShader` constructor hands its text to the renderer unchanged, so a test
+     * that types GLSL ES compute source can run on a GLSL ES renderer as written, and on a desktop
+     * core renderer as the GLSL 4.30 @ref LegacyComputeSource derives from it
+     * (plans/plan_opengl4_modern_graphics.md GL4-0025).
+     *
+     * @param device The device to ask.
+     * @return True for GLSL ES or desktop GLSL compute intake.
+     */
+    [[nodiscard]] inline bool RunsLegacyComputeSource(
+        const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device)
+    {
+        return device.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::GlslEs,
+                                                CNA::ShaderStageEXT::Compute)
+            || device.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::GlslDesktop,
+                                                CNA::ShaderStageEXT::Compute);
+    }
+
+    /**
+     * @brief A legacy GLSL ES 3.10 compute payload in this renderer's own dialect.
+     *
+     * Desktop GLSL 4.30 is the same language for everything these programs use: only the version
+     * line differs, and ES's mandatory precision statements and qualifiers are dropped. A GLSL ES
+     * renderer receives the text unchanged.
+     *
+     * @param device The device the program is for.
+     * @param esSource The `#version 310 es` source.
+     * @return The source to hand to `ComputeShader`.
+     */
+    [[nodiscard]] inline std::string LegacyComputeSource(
+        const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
+        const std::string& esSource)
+    {
+        if (device.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::GlslEs,
+                                             CNA::ShaderStageEXT::Compute))
+            return esSource;
+        const std::string esVersion = "#version 310 es\n";
+        if (esSource.compare(0, esVersion.size(), esVersion) != 0) return esSource;
+        std::string body = esSource.substr(esVersion.size());
+        while (body.compare(0, 10, "precision ") == 0)
+            body.erase(0, body.find('\n') + 1);
+        for (std::size_t at = body.find("highp "); at != std::string::npos;
+             at = body.find("highp ", at))
+            body.erase(at, 6);
+        return "#version 430 core\n" + body;
     }
 
     /**

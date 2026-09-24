@@ -3,6 +3,7 @@
 // context oracle for independently discovered modern features and truthful shader reporting.
 
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/GraphicsRendererType.hpp"
 #include "CNA/ShaderLanguageEXT.hpp"
 #include "CNA/Internal/Renderers/OpenGL4/OpenGL4Renderer.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -13,6 +14,7 @@
 
 #include <cstdio>
 #include <memory>
+#include <string>
 
 using CNA::Internal::Renderers::OpenGL4::OpenGL4Renderer;
 using CNA::Internal::Renderers::OpenGL4::GL4::ClassifyModernCapabilities;
@@ -98,6 +100,16 @@ protected:
               "one missing entry-point group disables only its own feature");
 
         auto& device = getGraphicsDeviceProperty();
+        // plans/plan_opengl4_modern_graphics.md GL4-0035: another runtime-selected renderer is not
+        // an OpenGL4Renderer, and casting it to one would be undefined behaviour.
+        if (device.GetGraphicsRendererType() != CNA::GraphicsRendererType::OpenGL4)
+        {
+            std::printf("SKIP: this run selected %s, not OPENGL4\n",
+                        std::string(device.GetGraphicsRendererName()).c_str());
+            result_ = CNA::Examples::kSkipExitCode;
+            Exit();
+            return;
+        }
         auto& renderer = static_cast<OpenGL4Renderer&>(device.GetRenderer());
         const auto& live = renderer.GetModernCapabilitiesEXT();
         std::printf("OpenGL %d.%d modern facts: compute=%d ssbo=%d image=%d array=%d "
@@ -142,11 +154,21 @@ protected:
                   device.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::GlslDesktop,
                                                    CNA::ShaderStageEXT::Fragment),
               "OpenGL4 accepts desktop GLSL vertex and fragment payloads");
-        Check(!device.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::GlslDesktop,
-                                                CNA::ShaderStageEXT::Compute) &&
+        // plans/plan_opengl4_modern_graphics.md GL4-0025: compute is implemented now, and promised
+        // exactly where the live context can compile the `#version 430 core` payloads CNA ships.
+        const bool live43 = live.contextMajor > 4 ||
+                            (live.contextMajor == 4 && live.contextMinor >= 3);
+        const bool compute = device.SupportsCapability(CNA::GraphicsCapability::ComputeShaders);
+        Check(compute == (live43 && live.computeShadersNative && live.shaderStorageBuffersNative),
+              "OpenGL4 promises compute exactly where a 4.3+ context provides it");
+        Check(device.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::GlslDesktop,
+                                               CNA::ShaderStageEXT::Compute) == compute,
+              "desktop GLSL compute payloads are accepted exactly where compute is promised");
+        Check(!device.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::GlslEs,
+                                                CNA::ShaderStageEXT::Vertex) &&
                   !device.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::GlslEs,
-                                                    CNA::ShaderStageEXT::Vertex),
-              "OpenGL4 does not overclaim unimplemented compute or another GLSL dialect");
+                                                    CNA::ShaderStageEXT::Compute),
+              "OpenGL4 does not claim another GLSL dialect");
 
         Exit();
     }

@@ -73,7 +73,7 @@ namespace
     {
         // WINCLOSE-0020: DirectX11 computes the same rectangle through ComputeD3DPresentationGeometry
         // and letterboxes its readback with it (WINCLOSE-0012).
-        return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, SdlGpu,
+        return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, OpenGL4, WebGL1, WebGL2, SdlGpu,
                                WebGPU, DirectX11, DirectX12);
     }
 

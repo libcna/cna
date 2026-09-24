@@ -131,11 +131,13 @@ namespace
          "params->pbrMetallicRoughnessMap, MetalStockTextureSlot::PbrMetallicRoughness",
          "params->pbrEmissiveMap, MetalStockTextureSlot::PbrEmissive",
          "params->pbrOcclusionMap, MetalStockTextureSlot::PbrOcclusion"},
+        // plans/plan_opengl4_modern_graphics.md GL4-0013: one binder states map, unit and fallback
+        // together for every PBR slot.
         {"opengl4",
-         "params.pbrNormalMap->BindGL(); else glBindTexture(GL_TEXTURE_2D, defaultFlatNormalTexture_)",
-         "params.pbrMetallicRoughnessMap->BindGL(); else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture_)",
-         "params.pbrEmissiveMap->BindGL(); else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture_)",
-         "params.pbrOcclusionMap->BindGL(); else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture_)"},
+         "bindPbrMap(p.loc_pbr_normalmap, 1, params.pbrNormalMap, defaultFlatNormalTexture_, kFlatNormal)",
+         "bindPbrMap(p.loc_pbr_mr, 2, params.pbrMetallicRoughnessMap, defaultWhiteTexture_, kWhite)",
+         "bindPbrMap(p.loc_pbr_emissivemap, 3, params.pbrEmissiveMap, defaultWhiteTexture_, kWhite)",
+         "bindPbrMap(p.loc_pbr_occlusionmap, 4, params.pbrOcclusionMap, defaultWhiteTexture_, kWhite)"},
         {"sdl-gpu",
          "command.normalMap ? command.normalMap.texture : defaultFlatNormalTexture_->Texture()",
          "command.metallicRoughnessMap ? command.metallicRoughnessMap.texture : defaultWhiteTexture_->Texture()",
@@ -261,26 +263,19 @@ namespace
               texture2d<float> emissiveMap [[texture(3)]], sampler emissiveSmp [[sampler(3)]],
               texture2d<float> occlusionMap [[texture(4)]], sampler occlusionSmp [[sampler(4)]])"}}},
         {"opengl4", "GL texture units 0,1,2,3,4",
-         {{R"(gl4_glActiveTexture(GL_TEXTURE0);
-              params.texture0->BindGL())",
-           R"(gl4_glActiveTexture(GL_TEXTURE1);
-              if (params.pbrNormalMap) params.pbrNormalMap->BindGL())",
-           R"(gl4_glActiveTexture(GL_TEXTURE2);
-              if (params.pbrMetallicRoughnessMap) params.pbrMetallicRoughnessMap->BindGL())",
-           R"(gl4_glActiveTexture(GL_TEXTURE3);
-              if (params.pbrEmissiveMap) params.pbrEmissiveMap->BindGL())",
-           R"(gl4_glActiveTexture(GL_TEXTURE4);
-              if (params.pbrOcclusionMap) params.pbrOcclusionMap->BindGL())",
-           R"(gl4_glUniform1i(texLoc, 0))",
-           R"(gl4_glUniform1i(normalMapLoc, 1))",
-           R"(gl4_glUniform1i(mrLoc, 2))",
-           R"(gl4_glUniform1i(emissiveMapLoc, 3))",
-           R"(gl4_glUniform1i(occlusionMapLoc, 4))",
-           R"(uniform sampler2D uTexture;
-              uniform sampler2D uNormalMap;
-              uniform sampler2D uMetallicRoughnessMap;
-              uniform sampler2D uEmissiveMap;
-              uniform sampler2D uOcclusionMap;)"}}},
+         {{R"(u1i(p.loc_texture, 0))",
+           R"(params.texture0->BindGL(0))",
+           R"(bindPbrMap(p.loc_pbr_normalmap, 1, params.pbrNormalMap)",
+           R"(bindPbrMap(p.loc_pbr_mr, 2, params.pbrMetallicRoughnessMap)",
+           R"(bindPbrMap(p.loc_pbr_emissivemap, 3, params.pbrEmissiveMap)",
+           R"(bindPbrMap(p.loc_pbr_occlusionmap, 4, params.pbrOcclusionMap)",
+           R"(u1i(loc, unit);)",
+           R"(texture->BindGL(unit);)",
+           R"(uniform sampler2D uTexture;)",
+           R"(uniform sampler2D uNormalMap;)",
+           R"(uniform sampler2D uMetallicRoughnessMap;)",
+           R"(uniform sampler2D uEmissiveMap;)",
+           R"(uniform sampler2D uOcclusionMap;)"}}},
         {"sdl-gpu", "fragment sampler bindings 0 through 6",
          {{R"(samplerBindings[0].texture = command.texture.texture)",
            R"(samplerBindings[1].texture = command.normalMap ? command.normalMap.texture : defaultFlatNormalTexture_->Texture())",
@@ -371,10 +366,10 @@ namespace
             R"(cna_alpha_test_fails(c.a, pu.alphaTest))",
             R"(discard_fragment())"}}},
         {"opengl4", {{
-            R"(OpenGL4RawProgram& prog = skinnedPbr ? pbrSkinned3DProgram_ : pbr3DProgram_)",
-            R"(gl4_glUniform4f(alphaTestLoc, params.alphaTest[0], params.alphaTest[1], params.alphaTest[2], params.alphaTest[3]))",
-            R"(bool passesAlphaTest = (uAlphaTest.y > 0.0))",
-            R"(if ((passesAlphaTest ? uAlphaTest.z : uAlphaTest.w) < 0.0) discard;)"}}},
+            R"(u4f(p.loc_alphatest, params.alphaTest[0], params.alphaTest[1], params.alphaTest[2], params.alphaTest[3]))",
+            R"("uniform vec4 uAlphaTest;\n")",
+            R"(float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w))",
+            R"("    if(_at<0.0)discard;\n")"}}},
         {"sdl-gpu", {{
             R"(out[4] = p.alphaTest[0])",
             R"(const bool needsAlphaTest = !params.pbr && (params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f))",
@@ -427,10 +422,10 @@ namespace
             R"(sampledNormal.xy *= pu.pbrFactors.z;)",
             R"(float occlusion = 1.0 + pu.pbrFactors.w * (occlusionSample - 1.0);)"}}},
         {"opengl4", {{
-            R"(gl4_glUniform1f(normalScaleLoc, params.pbrNormalScale))",
-            R"(gl4_glUniform1f(occlusionStrengthLoc, params.pbrOcclusionStrength))",
-            R"(sampledNormal.xy *= uNormalScale;)",
-            R"(float occlusion = 1.0 + uOcclusionStrength * (occlusionSample - 1.0);)"}}},
+            R"(u1f(p.loc_pbr_normalscale, params.pbrNormalScale))",
+            R"(u1f(p.loc_pbr_occlstrength, params.pbrOcclusionStrength))",
+            R"("    sampledNormal.xy*=uNormalScale;\n")",
+            R"("    occlusion=1.0+uOcclusionStrength*(occlusion-1.0);\n")"}}},
         {"sdl-gpu", {{
             R"(out[2] = p.pbrNormalScale;)",
             R"(out[3] = p.pbrOcclusionStrength;)",
@@ -506,12 +501,12 @@ namespace
            "occlusionMap.sample(occlusionSmp, cna_pbr_transform_uv(in.uv, 4, pu))"}}, 1},
         {"opengl4",
          "const float* values = params.pbrTextureTransformRows[row]",
-         "uTextureTransformRows[slot * 2 + 1].xyz",
-         {{"texture(uTexture, cnaPbrTransformUV(vUV, 0))",
-           "texture(uNormalMap, cnaPbrTransformUV(vUV, 1))",
-           "texture(uMetallicRoughnessMap, cnaPbrTransformUV(vUV, 2))",
-           "texture(uEmissiveMap, cnaPbrTransformUV(vUV, 3))",
-           "texture(uOcclusionMap, cnaPbrTransformUV(vUV, 4))"}}, 1},
+         "uTextureTransformRows[slot*2+1].xyz",
+         {{"texture(uTexture,cnaSampleUV(cnaPbrTransformUV(\" + baseUv + \",0),uRtFlipV.x))",
+           "texture(uNormalMap,cnaSampleUV(cnaPbrTransformUV(\" + normalUv + \",1),uRtFlipV.y))",
+           "texture(uMetallicRoughnessMap,cnaSampleUV(cnaPbrTransformUV(\" + mrUv + \",2),uRtFlipV.z))",
+           "texture(uEmissiveMap,cnaSampleUV(cnaPbrTransformUV(\" + emissiveUv + \",3),uRtFlipV.w))",
+           "texture(uOcclusionMap,cnaSampleUV(cnaPbrTransformUV(\" + occlusionUv + \",4),uRtFlipVHi.x))"}}, 2},
         // plans/plan_street_sdlgpu.md STREETS-0006: the LOD biases moved into PbrParams (SMG-0032).
         {"sdl-gpu",
          "p.pbrTextureTransformRows[row][component]",
@@ -574,9 +569,9 @@ namespace
          "float3 F90 = mix(float3(pu.dielectricFresnel.w), float3(1.0), metallic)",
          "float3 F = F0 + (F90-F0) *", 1},
         {"opengl4",
-         "vec3 F0 = mix(dielectricF0, albedo, metallic)",
-         "vec3 F90 = mix(vec3(specularWeight), vec3(1.0), metallic)",
-         "vec3 F = F0 + (F90 - F0) *", 1},
+         "vec3 F0=mix(dielectricF0,albedo,metallic)",
+         "vec3 F90=mix(vec3(specularWeight),vec3(1.0),metallic)",
+         "vec3 F=F0+(F90-F0)*", 2},
         {"sdl-gpu",
          "vec3 F0 = mix(dielectricF0, albedo, metallic)",
          "vec3 F90 = mix(vec3(specularWeight), vec3(1.0), metallic)",
@@ -625,9 +620,9 @@ namespace
          "mix(emissiveSample, cna_srgb_to_linear(emissiveSample), pu.srgbFlags.y)",
          "mix(c.rgb, cna_linear_to_srgb(c.rgb), pu.srgbFlags.z)", 1},
         {"opengl4",
-         "mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), uSrgb.x)",
-         "mix(emissiveSample, cnaSrgbToLinear(emissiveSample), uSrgb.y)",
-         "mix(rgb, cnaLinearToSrgb(rgb), uSrgb.z)", 1},
+         "mix(baseColorTex.rgb,cnaSrgbToLinear(baseColorTex.rgb),uSrgb.x)",
+         "mix(emissiveTex,cnaSrgbToLinear(emissiveTex),uSrgb.y)",
+         "mix(FragColor.rgb,cnaLinearToSrgb(FragColor.rgb),uSrgb.z)", 2},
         {"sdl-gpu",
          "mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), pbrp.srgbFlags.x)",
          "mix(emissiveSample, cnaSrgbToLinear(emissiveSample), pbrp.srgbFlags.y)",
@@ -686,10 +681,10 @@ namespace
          "mr.b * pu.pbrFactors.x",
          "occlusionMap.sample(occlusionSmp, cna_pbr_transform_uv(in.uv, 4, pu)).r", 1},
         {"opengl4",
-         "texture(uNormalMap, cnaPbrTransformUV(vUV, 1)).rgb * 2.0 - 1.0",
-         "mr.g * uRoughnessFactor",
-         "mr.b * uMetallicFactor",
-         "texture(uOcclusionMap, cnaPbrTransformUV(vUV, 4)).r", 1},
+         "texture(uNormalMap,cnaSampleUV(cnaPbrTransformUV(\" + normalUv + \",1),uRtFlipV.y)).rgb*2.0-1.0",
+         "mr.g*uRoughnessFactor",
+         "mr.b*uMetallicFactor",
+         "texture(uOcclusionMap,cnaSampleUV(cnaPbrTransformUV(\" + occlusionUv + \",4),uRtFlipVHi.x)).r", 2},
         {"sdl-gpu",
          "texture(uNormalMap, cnaPbrTransformUV(fragUV, 1), pbrp.lodBias0To3.y).rgb * 2.0 - 1.0",
          "mr.g * pbrp.roughnessFactor",
@@ -742,9 +737,9 @@ namespace
          "float alpha = baseColorTex.a * pu.diffuseColor.a",
          "float3 emissive = pu.emissiveColor.xyz * emissiveSample", 1},
         {"opengl4",
-         "vec3 albedo = baseColor * uDiffuseColor.rgb",
-         "float alpha = baseColorTex.a * uDiffuseColor.a",
-         "vec3 emissive = uEmissiveColor * emissiveSample", 1},
+         "vec3 albedo=baseRGB*uDiffuseColor.rgb",
+         "float alpha=baseColorTex.a*uDiffuseColor.a",
+         "vec3 emissive=uEmissiveColor*mix(emissiveTex,cnaSrgbToLinear(emissiveTex),uSrgb.y)", 2},
         {"sdl-gpu",
          "vec3 albedo = baseColor * pc.diffuseColor.rgb",
          "float alpha = baseColorTex.a * pc.diffuseColor.a",
@@ -807,10 +802,10 @@ namespace
          "o.position = t.wvp * skinnedPos"},
         {"opengl4",
          "const Matrix wvp = world * view * projection",
-         "setM4(\"uWorldViewProj\", wvpCol)",
-         "setM4(\"uWorld\", worldCol)",
-         "gl_Position = uWorldViewProj * vec4(aPos, 1.0)",
-         "gl_Position = uWorldViewProj * skinnedPos"},
+         "um4(p.loc_wvp, wvpCol)",
+         "um4(p.loc_world, params.worldColMajor)",
+         "gl_Position=uWVP*cnaPos",
+         "gl_Position=uWVP*cnaPos"},
         // plans/plan_street_sdlgpu.md STREETS-0001: SDL_GPU compiles its PBR vertex shaders twice
         // the same way now (VULKAN-232 below); same evidence, current spelling.
         {"sdl-gpu",
@@ -882,10 +877,9 @@ namespace
         {"opengl4", {{
             "if (cullMode == 0) { glDisable(GL_CULL_FACE); }",
             "glCullFace(cullMode == 1 ? GL_BACK : GL_FRONT)",
-            "if (params.pbr && (strideInBytes == 48 || strideInBytes == 60 || "
-            "strideInBytes == 68 || strideInBytes == 76 || strideInBytes == 80))",
-            "OpenGL4RawProgram& prog = skinnedPbr ? pbrSkinned3DProgram_ : pbr3DProgram_",
-            "if (skinnedPbr) EnsurePbrSkinned3DProgram(); else EnsurePbr3DProgram()"}}},
+            "if (params.pbr && params.skinned) return StockProgramShape::PbrSkinned",
+            "if (params.pbr) return StockProgramShape::Pbr",
+            "OpenGL4StockProgram& p = SelectProgram(layoutStride, params);"}}},
         {"sdl-gpu", {{
             "default: return SDL_GPU_CULLMODE_NONE",
             "cullMode_ = cullMode",
@@ -949,10 +943,10 @@ namespace
          "if (weightsPerVertex >= 2) skinMat += bones[in.boneIndices.y] * in.boneWeights.y",
          "if (weightsPerVertex >= 4) skinMat += bones[in.boneIndices.z] * in.boneWeights.z"},
         {"opengl4",
-         "gl4_glUniformMatrix4fv(bonesLoc, params.boneCount, GL_FALSE, params.boneTransforms)",
-         "gl4_glUniform1i(weightsLoc, params.weightsPerVertex)",
-         "if (uWeightsPerVertex >= 2) skinMat += uBones[aBoneIndices.y] * aBoneWeights.y",
-         "if (uWeightsPerVertex >= 4)"},
+         "gl4_glUniformMatrix4fv(p.loc_bones, params.boneCount, GL_FALSE, params.boneTransforms)",
+         "u1i(p.loc_weightsPerVertex, params.weightsPerVertex)",
+         "if(uWeightsPerVertex>=2) skinMat+=uBones[int(aBoneIndices.y)]*aBoneWeights.y",
+         "if(uWeightsPerVertex>=4) skinMat+=uBones[int(aBoneIndices.z)]*aBoneWeights.z"},
         {"sdl-gpu",
          "out[i] = p.boneTransforms[i]",
          "command.lightUniforms[39] = static_cast<float>(params.weightsPerVertex)",
@@ -979,6 +973,13 @@ namespace
         std::string source = RendererText(renderers / name);
         if (std::string(name) == "directx11" || std::string(name) == "directx12")
             source += RendererText(renderers / "common" / "d3d");
+        // plans/plan_opengl4_modern_graphics.md GL4-0008: EasyGL and OpenGL4 compile one shared
+        // stock-effect GLSL corpus, so their shader evidence lives in that header rather than in
+        // either family's own tree.
+        if (std::string(name) == "easygl" || std::string(name) == "opengl4")
+            source += Normalize(ReadFile(renderers.parent_path() / "graphics" / "include" / "CNA" /
+                                         "Internal" / "Renderers" / "Common" /
+                                         "GlStockShaderSources.hpp"));
         return source;
     }
 }
@@ -1478,10 +1479,9 @@ TEST(GltfRendererPbrFallbackPolicy, OpenGL4SamplesBothKhrMaterialsSpecularTextur
     ASSERT_FALSE(gl4.empty());
 
     for (const char* evidence : {
-             "if (params.pbrSpecularMap) params.pbrSpecularMap->BindGL(); "
-             "else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture_)",
-             "if (params.pbrSpecularColorMap) params.pbrSpecularColorMap->BindGL(); "
-             "else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture_)"})
+             "bindPbrMap(p.loc_pbr_specularmap, 5, params.pbrSpecularMap, defaultWhiteTexture_, kWhite)",
+             "bindPbrMap(p.loc_pbr_specularcolormap, 6, params.pbrSpecularColorMap, "
+             "defaultWhiteTexture_, kWhite)"})
     {
         EXPECT_NE(std::string::npos, gl4.find(Normalize(evidence)))
             << "missing OpenGL specular identity fallback: " << evidence;
@@ -1500,9 +1500,9 @@ TEST(GltfRendererPbrFallbackPolicy, OpenGL4SamplesBothKhrMaterialsSpecularTextur
             << "missing OpenGL specular state: " << evidence;
     }
     EXPECT_NE(std::string::npos, gl4.find(Normalize(
-        "min(uSpecularFresnelInputs.xyz * specularColorTex, vec3(1.0)) * specularWeight")));
+        "min(uSpecularFresnelInputs.xyz*specularColorTex,vec3(1.0))*specularWeight")));
     EXPECT_NE(std::string::npos, gl4.find(Normalize(
-        "mix(vec3(specularWeight), vec3(1.0), metallic)")));
+        "mix(vec3(specularWeight),vec3(1.0),metallic)")));
 }
 
 TEST(GltfRendererPbrFallbackPolicy, ModernDirectXRenderersSampleBothKhrMaterialsSpecularTextures)
@@ -1954,7 +1954,7 @@ TEST(GltfRendererPbrFallbackPolicy, EverySkinnedPbrShaderInverseTransposesTheJoi
         {"directx12", "CnaSkinNormal(skinNormalMat, input.Normal)"},
         {"easygl", "cnaSkinNormal(skinDirectionMat,aNormal)"},
         {"metal", "normalMat * boneNormal"},
-        {"opengl4", "cnaSkinNormal(mat3(skinMat), aNormal)"},
+        {"opengl4", "cnaSkinNormal(skinDirectionMat,aNormal)"},
         {"sdl-gpu", "cnaSkinNormal(skinNormalMat, inNormal)"},
         {"vulkan", "cnaSkinNormal(skinNormalMat, aNormal)"},
         {"webgpu", "normalMatrix * pbrSkinNormal(skinMat3, input.normal)"},
@@ -2040,8 +2040,8 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderComposesDirectionDeterminantsI
          "in.tangent.w * cna_direction_handedness(world3)",
          "* cna_direction_handedness(skinMat3)"},
         {"opengl4",
-         "aTangent.w * cnaDirectionHandedness(mat3(uWorld))",
-         "* cnaDirectionHandedness(mat3(skinMat))"},
+         "aTangent.w*cnaDirectionHandedness(worldDirectionMat)*instanceHandedness",
+         "*cnaDirectionHandedness(skinDirectionMat)"},
         // plans/plan_street_sdlgpu.md STREETS-0001: the VULKAN-232 reasoning below, on SDL_GPU.
         {"sdl-gpu",
          "inTangent.w * cnaDirectionHandedness(mat3(CNA_INSTANCE_WORLD(lp.world)))",
@@ -2268,7 +2268,7 @@ TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyW
         {"directx9", "albedo *= pin.Color.rgb;"},
         {"sdl-gpu", "vec3 albedo = baseColor * pc.diffuseColor.rgb * cnaVertexColor.rgb;"},
         {"software", "if (stride == 60) UnpackColorBytes(raw.At(56), out.r, out.g, out.b, out.a);"},
-        {"opengl4", "vec3 albedo = baseColor * uDiffuseColor.rgb * cnaVertexColor.rgb;"},
+        {"opengl4", "vec3 albedo=baseRGB*uDiffuseColor.rgb*cnaVertexColor.rgb;"},
         {"vulkan", "albedo *= vColor.rgb;"},
         {"directx11", "albedo *= input.Color.rgb;"},
         {"directx12", "albedo *= input.Color.rgb;"},
@@ -2293,7 +2293,7 @@ TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyW
         // SOFTWARE has no separate PBR fragment program: the interpolated vertex colour IS the
         // start of the product, alpha included, and the base colour factor multiplies into it.
         {"software", "float r = pr / invW, g = pg / invW, b = pb / invW, a = pa / invW;"},
-        {"opengl4", "float alpha = baseColorTex.a * uDiffuseColor.a * cnaVertexColor.a;"},
+        {"opengl4", "alpha=baseColorTex.a*uDiffuseColor.a*cnaVertexColor.a;"},
         {"vulkan", "alpha *= vColor.a;"},
         {"directx11", "alpha *= input.Color.a;"},
         {"directx12", "alpha *= input.Color.a;"},
@@ -2317,7 +2317,7 @@ TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyW
         {"directx9", "if (VertexColorFlags.x > 0.5)"},
         {"sdl-gpu", "vec4 cnaVertexColor = (pc.vertexColorEnabled > 0.5) ? fragColor0 : vec4(1.0);"},
         {"software", "params.vertexColorEnabled"},
-        {"opengl4", "vec4 cnaVertexColor = uVertexColorEnabled > 0.5 ? vColor : vec4(1.0);"},
+        {"opengl4", "vec4 cnaVertexColor=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);"},
         {"vulkan", "if (pc.vertexColorEnabled > 0.5)"},
         {"directx11", "if (VertexColorFlags.x > 0.5)"},
         {"directx12", "if (VertexColorFlags.x > 0.5)"},
@@ -2338,7 +2338,7 @@ TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyW
         {"easygl", "p.loc_vertexcolor"},
         // SDL_GPU's PC block already carried the flag -- its own comment called it "unused".
         {"sdl-gpu", "float vertexColorEnabled; // plans/plan_gltf.md GLTF-465: gates the COLOR_0 product below"},
-        {"opengl4", "gl4_glUniform1f(vertexColorLoc, params.vertexColorEnabled ? 1.0f : 0.0f);"},
+        {"opengl4", "u1f(p.loc_vertexcolor, params.vertexColorEnabled ? 1.0f : 0.0f);"},
         {"vulkan", "pc[31] = p.vertexColorEnabled ? 1.f : 0.f;"},
         {"directx11", "perDraw.VertexColorFlags[0] = params.vertexColorEnabled ? 1.0f : 0.0f;"},
         {"directx12", "perDraw.VertexColorFlags[0] = params.vertexColorEnabled ? 1.0f : 0.0f;"},
@@ -2517,7 +2517,7 @@ TEST(GltfRendererPbrFallbackPolicy, EveryStrideGatedPbrRouteAdmitsBothColourCarr
     };
     // Each row is the predicate that decides whether a PBR draw of that stride reaches the PBR
     // shader at all -- not the layout it would then be read with.
-    const std::array<RouteGate, 13> gates{{
+    const std::array<RouteGate, 12> gates{{
         {"webgpu", "the rigid PBR stride check", "if (pbrStride != 48 && pbrStride != 60)"},
         {"webgpu", "the skinned PBR stride check",
          "if (skinnedPbrStride != 68 && skinnedPbrStride != 80)"},
@@ -2543,9 +2543,6 @@ TEST(GltfRendererPbrFallbackPolicy, EveryStrideGatedPbrRouteAdmitsBothColourCarr
          "if (needsPbr && !params.skinned && stride != 48 && stride != 60)"},
         {"directx12", "the skinned PBR stride check",
          "if (needsPbr && params.skinned && stride != 68 && stride != 76 && stride != 80)"},
-        {"opengl4", "the PBR route selector",
-         "if (params.pbr && (strideInBytes == 48 || strideInBytes == 60 ||"
-         "                   strideInBytes == 68 || strideInBytes == 76 || strideInBytes == 80))"},
     }};
 
     for (const RouteGate& gate : gates)
@@ -2570,8 +2567,11 @@ TEST(GltfRendererPbrFallbackPolicy, EveryStrideGatedPbrRouteAdmitsBothColourCarr
         const char* renderer;
         const char* evidence;
     };
-    const std::array<UngatedRoute, 2> ungated{{
+    const std::array<UngatedRoute, 3> ungated{{
         {"easygl", "if (params.pbr && params.skinned) return StockProgramShape::PbrSkinned;"},
+        // plans/plan_opengl4_modern_graphics.md GL4-0013: OpenGL4 selects its stock program from
+        // the effect state, as EasyGL does, so no stride list decides whether a draw is PBR.
+        {"opengl4", "if (params.pbr && params.skinned) return StockProgramShape::PbrSkinned;"},
         {"software", "if (stride == 48 || stride == 60 || stride == 68 || stride == 76 || stride == 80)"},
     }};
     for (const UngatedRoute& route : ungated)

@@ -1,6 +1,8 @@
-# LeakSanitizer suppressions for the X11 platform suites -- plans/plan_native_platform_validation.md
-# NPV-0004. Every entry names a leak that was REPRODUCED WITHOUT ANY CNA CODE, with the program
-# and the byte count that proved it; an entry without that evidence does not belong here.
+# LeakSanitizer suppressions for Mesa under the native platform suites -- first written for X11
+# (plans/plan_native_platform_validation.md NPV-0004), extended to EGL by
+# plans/plan_opengl4_modern_graphics.md GL4-0033. Every entry names a leak that was REPRODUCED
+# WITHOUT ANY CNA CODE, with the program and the byte count that proved it; an entry without that
+# evidence does not belong here.
 #
 # Use:  LSAN_OPTIONS=suppressions=tools/platform/lsan_x11_mesa.supp
 #
@@ -19,3 +21,15 @@ leak:libGLX_mesa.so
 # of the Vulkan surface tests therefore select lavapipe with
 # VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json, and the RADV allocation is recorded as a
 # driver finding instead of being hidden.
+#
+# Mesa's gallium driver (radeonsi) allocates screen-level state on the first draw of a context
+# that only eglTerminate frees. CNA's lazily created default platform is deliberately never
+# destroyed (CurrentPlatform.cpp), so a process that draws through a standalone GraphicsDevice
+# exits without eglTerminate. Measured 2026-09-24, Mesa 25.0.7 radeonsi (Radeon 780M): a CNA-free
+# EGL program (its source is in plans/plan_opengl4_modern_graphics.md GL4-0033) that creates a
+# desktop 4.1 core context, draws one triangle into a framebuffer object and exits without
+# eglTerminate leaks
+# exactly 2,112 bytes in 44 allocations -- on the Wayland and on the surfaceless EGL platform
+# alike -- which is exactly what every OpenGL4 test that draws reported. With eglTerminate, or
+# without the draw, the same program leaks nothing.
+leak:libgallium

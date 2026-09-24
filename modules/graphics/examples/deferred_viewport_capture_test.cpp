@@ -143,6 +143,10 @@ namespace
     constexpr Contract kContract{"VULKAN", Support::Exact, Support::Exact, true, true, true, false};
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", Support::Exact, Support::Exact, true, true, true, true};
+#elif defined(CNA_RENDERER_OPENGL4)
+    // plans/plan_opengl4_modern_graphics.md GL4-0005: OPENGL4 declares the EasyGL contract --
+    // the reference it is being brought to parity with.
+    constexpr Contract kContract{"OPENGL4", Support::Exact, Support::Exact, true, true, true, true};
 #elif defined(CNA_RENDERER_SDL_GPU)
     // SDLGPU-67: the current modular renderer has a real backbuffer proxy/readback path. Exercise
     // it here instead of preserving the obsolete pre-proxy Unsupported expectation.

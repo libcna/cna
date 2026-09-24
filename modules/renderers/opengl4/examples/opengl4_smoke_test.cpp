@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 // plans/plan_opengl4.md GL4-1..GL4-9: end-to-end smoke test for the real desktop OpenGL 4.x
 // core-profile graphics renderer's device/window/context lifecycle and color/depth/stencil
-// clear+present. Real window, a real SDL_GLContext requesting SDL_GL_CONTEXT_PROFILE_CORE
-// (unlike EasyGL's SDL_GL_CONTEXT_PROFILE_ES), and a real 60-frame Clear()+Present() loop.
+// clear+present. Real window, a real core-profile context from the platform's GL service, and a
+// real 60-frame Clear()+Present() loop.
 //
-// Check A -- GameWindow handle returns a real, non-null SDL_Window.
-// Check B -- SDL_GetRenderer(window) is null (this renderer does not use SDL_Renderer).
+// Check A -- GameWindow handle returns a real, non-null native window.
+// Check B -- the context GL reports is a desktop OpenGL 4.x context.
 // Check C -- GetViewportSize() reports a positive width/height matching the real window.
 // Check D -- a real OpenGL4VertexBufferRenderer/OpenGL4IndexBufferRenderer round-trip: SetData()
 //   followed by GetVertexCount()/GetIndexCount() reports the exact count uploaded.
@@ -17,16 +17,19 @@
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SetDataOptions.hpp"
 
+#include "CNA/GraphicsRendererType.hpp"
 #include "CNA/Internal/Renderers/OpenGL4/OpenGL4Renderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
 #include <cstdint>
+#include <string>
 #include <cstdio>
 #include <memory>
 #include <stdexcept>
@@ -58,12 +61,28 @@ protected:
     {
         ++frame_;
         auto& dev = getGraphicsDeviceProperty();
+        // plans/plan_opengl4_modern_graphics.md GL4-0035: in a tree with several renderers the
+        // device may have selected another one at runtime; casting its renderer to OpenGL4Renderer
+        // would then be undefined behaviour, not a test.
+        if (dev.GetGraphicsRendererType() != CNA::GraphicsRendererType::OpenGL4)
+        {
+            std::printf("SKIP: this run selected %s, not OPENGL4\n",
+                        std::string(dev.GetGraphicsRendererName()).c_str());
+            result_ = CNA::Examples::kSkipExitCode;
+            Exit();
+            return;
+        }
         auto& renderer = static_cast<OpenGL4Renderer&>(dev.GetRenderer());
 
         if (frame_ == 1)
         {
-            check(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()) != nullptr, "GameWindow handle returns a real window");
-            check(SDL_GetRenderer(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty())) == nullptr, "SDL_GetRenderer(window) is null (no SDL_Renderer)");
+            check(getWindowProperty().getHandleProperty() != 0, "GameWindow handle returns a real window");
+            // plans/plan_opengl4_modern_graphics.md GL4-0003: platform-neutral replacement for the
+            // former SDL_GetRenderer(window) == nullptr check, which named SDL and could not build
+            // on a native X11/Wayland platform. What it guarded -- that this is a real desktop GL
+            // context rather than something else presenting the window -- is asked of GL itself.
+            const auto& caps = renderer.GetModernCapabilitiesEXT();
+            check(caps.contextMajor >= 4, "the context is a desktop OpenGL 4.x context");
 
             int width = 0;
             int height = 0;
@@ -116,6 +135,9 @@ public:
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(320);
         gdm_->setPreferredBackBufferHeightProperty(240);
+        // The default PreferredDepthStencilFormat is Depth24, which has no stencil, and XNA refuses a
+        // stencil clear without one; the stencil clears below need Depth24Stencil8.
+        gdm_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);
         gdm_->setSynchronizeWithVerticalRetraceProperty(false);
     }
 

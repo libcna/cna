@@ -64,7 +64,7 @@ namespace
 
 TEST(BackBufferFormatContractTest, GenericReadbackPreservesRawBytesAndElementWindows)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGL4, OpenGLES3, DirectX11, DirectX12);
 
     PresentationParameters parameters = RequestedPackedBackbuffer(SurfaceFormat::Color);
     GraphicsDevice device(
@@ -136,7 +136,7 @@ TEST(BackBufferFormatContractTest, GenericReadbackPreservesRawBytesAndElementWin
 
 TEST(BackBufferFormatContractTest, ConstructionReportsAndReadsTheActuallyAppliedFormat)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGL4, OpenGLES3, DirectX11, DirectX12);
 
     PresentationParameters parameters = RequestedPackedBackbuffer(SurfaceFormat::Bgr565);
     GraphicsDevice device(
@@ -149,7 +149,7 @@ TEST(BackBufferFormatContractTest, ConstructionReportsAndReadsTheActuallyApplied
 
 TEST(BackBufferFormatContractTest, ResetAlsoReportsAndReadsTheActuallyAppliedFormat)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGL4, OpenGLES3, DirectX11, DirectX12);
 
     GraphicsDevice device;
     device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
@@ -163,7 +163,7 @@ TEST(BackBufferFormatContractTest, ResetAlsoReportsAndReadsTheActuallyAppliedFor
 
 TEST(BackBufferFormatContractTest, ReadbackRejectsMalformedDestinationAndRectangleRanges)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGL4, OpenGLES3, DirectX11, DirectX12);
 
     PresentationParameters parameters = RequestedPackedBackbuffer(SurfaceFormat::Color);
     GraphicsDevice device(
@@ -193,7 +193,7 @@ TEST(BackBufferFormatContractTest, ReadbackRejectsMalformedDestinationAndRectang
 
 TEST(BackBufferFormatContractTest, ReadbackRejectsAnActiveRenderTarget)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGL4, OpenGLES3, DirectX11, DirectX12);
 
     PresentationParameters parameters = RequestedPackedBackbuffer(SurfaceFormat::Color);
     GraphicsDevice device(

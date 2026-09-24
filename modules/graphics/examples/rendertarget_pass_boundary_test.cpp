@@ -185,6 +185,11 @@ namespace
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, true, true, true, true};
+#elif defined(CNA_RENDERER_OPENGL4)
+    // plans/plan_opengl4_modern_graphics.md GL4-0005: OPENGL4 declares the EasyGL contract --
+    // the reference it is being brought to parity with.
+    constexpr Contract kContract{"OPENGL4", true, Support::Exact, true, Support::Exact,
+                                 true, true, false, true, true, true, true, true};
 #elif defined(CNA_RENDERER_VULKAN)
     // `clearOnPreserveTarget` / `clearAfterDrawWins` were BOTH false here while REMED-GFX-129 was
     // open: `GetOrCreateRTRenderPass` delivered the clear colour through VK_ATTACHMENT_LOAD_OP_CLEAR

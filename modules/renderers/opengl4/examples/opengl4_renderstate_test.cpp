@@ -49,6 +49,7 @@
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -211,9 +212,12 @@ protected:
             dev.setBlendStateProperty(BlendState::Opaque);
             dev.setDepthStencilStateProperty(DepthStencilState::Default);
 
+            // plans/plan_opengl4_modern_graphics.md GL4-0017: both quads inside XNA's [0, w] clip-depth
+            // range. The near quad used to sit at z=-0.5, which Direct3D -- and so XNA -- clips; it
+            // only rendered while OpenGL4 used GL's [-w, w] range instead of converting.
             const VertexPositionColor farVerts[6] = {
-                {Vector3(-1.0f, -1.0f, 0.5f), Color::Red}, {Vector3(-1.0f, 1.0f, 0.5f), Color::Red}, {Vector3(1.0f, -1.0f, 0.5f), Color::Red},
-                {Vector3(-1.0f, 1.0f, 0.5f), Color::Red}, {Vector3(1.0f, 1.0f, 0.5f), Color::Red}, {Vector3(1.0f, -1.0f, 0.5f), Color::Red},
+                {Vector3(-1.0f, -1.0f, 0.75f), Color::Red}, {Vector3(-1.0f, 1.0f, 0.75f), Color::Red}, {Vector3(1.0f, -1.0f, 0.75f), Color::Red},
+                {Vector3(-1.0f, 1.0f, 0.75f), Color::Red}, {Vector3(1.0f, 1.0f, 0.75f), Color::Red}, {Vector3(1.0f, -1.0f, 0.75f), Color::Red},
             };
             VertexBuffer farVb(dev, VertexPositionColor::getVertexDeclarationStatic(), 6, BufferUsage::None);
             farVb.SetData(farVerts, 0, 6);
@@ -227,8 +231,8 @@ protected:
             dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
 
             const VertexPositionColor nearVerts[6] = {
-                {Vector3(-1.0f, -1.0f, -0.5f), Color::Green}, {Vector3(-1.0f, 1.0f, -0.5f), Color::Green}, {Vector3(1.0f, -1.0f, -0.5f), Color::Green},
-                {Vector3(-1.0f, 1.0f, -0.5f), Color::Green}, {Vector3(1.0f, 1.0f, -0.5f), Color::Green}, {Vector3(1.0f, -1.0f, -0.5f), Color::Green},
+                {Vector3(-1.0f, -1.0f, 0.25f), Color::Green}, {Vector3(-1.0f, 1.0f, 0.25f), Color::Green}, {Vector3(1.0f, -1.0f, 0.25f), Color::Green},
+                {Vector3(-1.0f, 1.0f, 0.25f), Color::Green}, {Vector3(1.0f, 1.0f, 0.25f), Color::Green}, {Vector3(1.0f, -1.0f, 0.25f), Color::Green},
             };
             VertexBuffer nearVb(dev, VertexPositionColor::getVertexDeclarationStatic(), 6, BufferUsage::None);
             nearVb.SetData(nearVerts, 0, 6);
@@ -353,6 +357,9 @@ public:
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);
+        // The default PreferredDepthStencilFormat is Depth24, which has no stencil, and XNA refuses a
+        // stencil clear without one; the stencil clears below need Depth24Stencil8.
+        gdm_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);
     }
 };
 

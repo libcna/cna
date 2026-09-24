@@ -59,6 +59,19 @@
 #include <memory>
 #include <vector>
 
+#include "CNA/ProjectGraphicsProfile.hpp"
+
+namespace
+{
+/// plans/plan_opengl4_modern_graphics.md GL4-0004: HiDef as the PROGRAM's profile --
+/// it reads the back buffer, which is HiDef-only since SOFTWARE-213, so under the
+/// default Reach device this test died on a profile refusal before its first check. It is set
+/// here rather than on the GraphicsDeviceManager because `Game`'s own GraphicsDevice exists before
+/// that manager does (plans/plan_dx9.md D9-103).
+const CNA::ProjectGraphicsProfileEXT kProfileOptIn{
+    Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef};
+}
+
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 
@@ -162,9 +175,14 @@ protected:
 
         // Check G: 50%-alpha green sprite over black must land strictly between black and full
         // green -- proves alpha genuinely attenuates colour, not just an on/off gate.
+        // plans/plan_opengl4_modern_graphics.md GL4-0014: SpriteBatch's default BlendState.AlphaBlend
+        // is PREMULTIPLIED (One, InverseSourceAlpha), so the half tint is Color.White * 0.5 --
+        // Color(128,128,128,128). The former Color(255,255,255,128) is an unpremultiplied tint whose
+        // XNA result over black is full green; it only read as half green while this renderer
+        // hard-coded SourceAlpha/InverseSourceAlpha for every batch.
         dev.Clear(Color::Black);
         spriteBatch_->Begin();
-        spriteBatch_->Draw(greenTex_, Rectangle(0, 0, kSize, kSize), Color(255, 255, 255, 128));
+        spriteBatch_->Draw(greenTex_, Rectangle(0, 0, kSize, kSize), Color(128, 128, 128, 128));
         spriteBatch_->End();
         {
             Color c = readPixel(dev, kSize / 2, kSize / 2);

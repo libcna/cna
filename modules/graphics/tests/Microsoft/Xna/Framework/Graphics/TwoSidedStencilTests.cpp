@@ -240,7 +240,7 @@ namespace
 
 TEST(TwoSidedStencilTest, EachCounterClockwiseOperationAppliesOnlyToCounterClockwiseTriangles)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12, Vulkan);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGL4, OpenGLES3, DirectX11, DirectX12, Vulkan);
     GraphicsDevice device = MakeDevice();
     const Surface surface = BackBuffer(device);
 
@@ -254,7 +254,7 @@ TEST(TwoSidedStencilTest, EachCounterClockwiseOperationAppliesOnlyToCounterClock
 
 TEST(TwoSidedStencilTest, CounterClockwiseStencilFunctionSelectsByWinding)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12, Vulkan);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGL4, OpenGLES3, DirectX11, DirectX12, Vulkan);
     GraphicsDevice device = MakeDevice();
     const Surface surface = BackBuffer(device);
 
@@ -276,7 +276,7 @@ TEST(TwoSidedStencilTest, CounterClockwiseStencilFunctionSelectsByWinding)
 
 TEST(TwoSidedStencilTest, DisabledTwoSidedModeAppliesOrdinaryStateToBothWindings)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12, Vulkan);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGL4, OpenGLES3, DirectX11, DirectX12, Vulkan);
     GraphicsDevice device = MakeDevice();
     const Surface surface = BackBuffer(device);
 
@@ -290,7 +290,7 @@ TEST(TwoSidedStencilTest, DisabledTwoSidedModeAppliesOrdinaryStateToBothWindings
 
 TEST(TwoSidedStencilTest, CounterClockwiseStateBelongsToTheWindingCullCounterClockwiseFaceRemoves)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12, Vulkan);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGL4, OpenGLES3, DirectX11, DirectX12, Vulkan);
     GraphicsDevice device = MakeDevice();
     const Surface surface = BackBuffer(device);
     const DepthStencilState state = PerFieldState(Field::Pass);
@@ -305,7 +305,7 @@ TEST(TwoSidedStencilTest, CounterClockwiseStateBelongsToTheWindingCullCounterClo
 
 TEST(TwoSidedStencilTest, RenderTargetUsesTheSameWindingAsTheBackBuffer)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12, Vulkan);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGL4, OpenGLES3, DirectX11, DirectX12, Vulkan);
     GraphicsDevice device = MakeDevice();
     RenderTarget2D target(device, kSize, kSize, false, SurfaceFormat::Color,
                           DepthFormat::Depth24Stencil8, 0, RenderTargetUsage::PreserveContents);

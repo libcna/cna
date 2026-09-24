@@ -160,6 +160,12 @@ namespace
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
                                  Support::Exact, true};
+#elif defined(CNA_RENDERER_OPENGL4)
+    // plans/plan_opengl4_modern_graphics.md GL4-0005: OPENGL4 declares the EasyGL contract --
+    // the reference it is being brought to parity with.
+    constexpr Contract kContract{"OPENGL4", true, Support::Exact, Support::Exact,
+                                 true, Support::Exact, Support::Exact,
+                                 Support::Exact, true};
 #elif defined(CNA_RENDERER_VULKAN)
     // plans/plan_vulkan_parity.md VKPAR-0018: wantHiDefProfile is now true -- the Vulkan
     // renderer supports HiDef, and under Reach this test never reached its subject.

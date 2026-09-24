@@ -22,12 +22,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "OPENGL4")
 
     macro(cna_opengl4_test target src)
         add_executable(${target} ${src})
-        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
-            target_link_libraries(${target} PRIVATE
-                CNA
-                SHARP_RUNTIME SDL3::SDL3)
+        # plans/plan_opengl4_modern_graphics.md GL4-0003: SDL3::SDL3 is linked only where it is
+        # configured, exactly like cna_vulkan_test. OPENGL4 obtains its context through
+        # IPlatformGlContext, so a CNA_ENABLE_SDL=OFF build (native X11/Wayland) is a real OPENGL4
+        # configuration; linking SDL3::SDL3 unconditionally made its generate step fail.
+        # CNA_EXAMPLES_NO_SDL leaves PixelTestGame.hpp's display probe to the selected platform.
+        target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME)
+        if(TARGET SDL3::SDL3)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3)
         else()
-            target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+            target_compile_definitions(${target} PRIVATE CNA_EXAMPLES_NO_SDL)
         endif()
         if(TARGET SDL3::SDL3main)
             target_link_libraries(${target} PRIVATE SDL3::SDL3main)
@@ -205,6 +209,65 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "OPENGL4")
     cna_register_renderer_test(NAME OpenGL4_InstancedModel COMMAND cna_test_opengl4_instancedmodel
         TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plans/plan_opengl4_modern_graphics.md GL4-0005: the shared cross-renderer behavioural parity
+    # fixtures, through this renderer's own example macro -- the same one source per behaviour
+    # EasyGL, WebGPU and SDL_GPU already run (ParityFixtures.cmake).
+    include(${CNA_GRAPHICS_EXAMPLES_DIR}/parity/ParityFixtures.cmake)
+    cna_register_parity_fixtures(
+        BUILDER cna_opengl4_test
+        TARGET_SUFFIX opengl4
+        TEST_PREFIX OpenGL4
+        LABELS "OpenGL4;Parity"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plans/plan_opengl4_modern_graphics.md GL4-0005: EasyGL's own renderer-neutral example sources,
+    # rebuilt unchanged against OPENGL4. EasyGL is the reference family for OpenGL4's classic
+    # surface, so the most direct evidence that OpenGL4 provides an EasyGL capability is that the
+    # program proving it on EasyGL also passes here. The list is generated from EasyGL's own
+    # registrations by tools/opengl4/generate_easygl_parity_corpus.py and keeps each one's
+    # timeout and working directory.
+    include(${CMAKE_CURRENT_LIST_DIR}/EasyGLParityCorpus.cmake)
+    foreach(_cna_gl4_entry IN LISTS CNA_OPENGL4_EASYGL_PARITY_CORPUS)
+        string(REGEX MATCH "^([^|]*)\\|([^|]*)\\|([^|]*)\\|([^|]*)\\|([^|]*)\\|([^|]*)\\|([^|]*)$"
+               _cna_gl4_match "${_cna_gl4_entry}")
+        set(_cna_gl4_name "${CMAKE_MATCH_1}")
+        set(_cna_gl4_target "${CMAKE_MATCH_2}")
+        set(_cna_gl4_source "${CMAKE_MATCH_3}")
+        set(_cna_gl4_timeout "${CMAKE_MATCH_4}")
+        set(_cna_gl4_workdir "${CMAKE_MATCH_5}")
+        separate_arguments(_cna_gl4_libs UNIX_COMMAND "${CMAKE_MATCH_6}")
+        separate_arguments(_cna_gl4_incs UNIX_COMMAND "${CMAKE_MATCH_7}")
+        # An entry whose extra library is not part of this configuration (for example the avatar
+        # tests' CNA_GamerServices) is left out, exactly as EasyGL's own gated block leaves it out.
+        set(_cna_gl4_available TRUE)
+        foreach(_cna_gl4_lib IN LISTS _cna_gl4_libs)
+            if(NOT TARGET ${_cna_gl4_lib})
+                set(_cna_gl4_available FALSE)
+            endif()
+        endforeach()
+        if(NOT _cna_gl4_available)
+            continue()
+        endif()
+        set(_cna_gl4_exe cna_test_opengl4_egp_${_cna_gl4_target})
+        cna_opengl4_test(${_cna_gl4_exe} ${_cna_gl4_source})
+        if(_cna_gl4_libs)
+            target_link_libraries(${_cna_gl4_exe} PRIVATE ${_cna_gl4_libs})
+        endif()
+        if(_cna_gl4_incs)
+            target_include_directories(${_cna_gl4_exe} PRIVATE ${_cna_gl4_incs})
+        endif()
+        if(_cna_gl4_workdir STREQUAL "SOURCE")
+            set(_cna_gl4_wd "${CMAKE_SOURCE_DIR}")
+        else()
+            set(_cna_gl4_wd "${CMAKE_BINARY_DIR}")
+        endif()
+        cna_register_renderer_test(NAME OpenGL4_EasyGLParity_${_cna_gl4_name}
+            COMMAND ${_cna_gl4_exe}
+            TIMEOUT ${_cna_gl4_timeout} WORKING_DIRECTORY "${_cna_gl4_wd}"
+            LABELS "OpenGL4;OpenGL4EasyGLParity"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    endforeach()
+
     if(CNA_CNAEXT)
         # plans/plan_modern.md MOD-2260: deterministic GL 4.1/extension classification plus a live
         # oracle proving optional post-4.1 discovery never becomes a renderer-creation requirement.
@@ -214,9 +277,28 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "OPENGL4")
             COMMAND cna_test_opengl4_modern_feature_discovery
             TIMEOUT 60 LABELS "OpenGL4;ModernGPU"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_opengl4_modern_graphics.md GL4-0032: 3000 cycles creating, using, reading back
+        # and destroying every modern resource; zero GL errors, no RSS/fd/thread growth.
+        # plans/plan_opengl4_modern_graphics.md GL4-0037: the 4.1 floor, obtained from Mesa through
+        # its version override; skips (77) where the override is not honoured.
+        cna_opengl4_test(cna_test_opengl4_gl41_floor opengl4_gl41_floor_test.cpp)
+        cna_register_renderer_test(NAME OpenGL4_Gl41Floor
+            COMMAND cna_test_opengl4_gl41_floor
+            TIMEOUT 60 LABELS "OpenGL4;ModernGPU"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};MESA_GL_VERSION_OVERRIDE=4.1;MESA_GLSL_VERSION_OVERRIDE=410")
+
+        cna_opengl4_test(cna_test_opengl4_modern_stress opengl4_modern_stress_test.cpp)
+        cna_register_renderer_test(NAME OpenGL4_ModernStress
+            COMMAND cna_test_opengl4_modern_stress
+            TIMEOUT 900 LABELS "OpenGL4;ModernGPU"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
     endif()
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot
 # gives root-registered tests (see cmake/TestHelpers.cmake).
 cna_apply_skip_convention()
+# plans/plan_opengl4_modern_graphics.md GL4-0016: a registration may replace FAIL_REGULAR_EXPRESSION
+# after registering; put the OpenGL4 GL error gate back on every test of this directory.
+cna_apply_opengl4_gl_error_gate()

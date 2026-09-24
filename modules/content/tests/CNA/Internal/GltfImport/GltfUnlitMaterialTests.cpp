@@ -246,7 +246,7 @@ TEST(GltfUnlitMaterial, AnUntexturedSkinSamplesGltfWhiteRatherThanAnUnboundTextu
     ASSERT_NE(nullptr, texture) << "an untextured glTF skin must not leave SkinnedEffect.Texture null";
     EXPECT_EQ(1, texture->getWidthProperty());
     EXPECT_EQ(1, texture->getHeightProperty());
-    if (CNA_RENDERER_IS(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12, Vulkan))
+    if (CNA_RENDERER_IS(Software, OpenGL33, OpenGL4, OpenGLES3, DirectX11, DirectX12, Vulkan))
     {
         Microsoft::Xna::Framework::Color texel = Microsoft::Xna::Framework::Color::Transparent;
         texture->GetData(&texel, 1);

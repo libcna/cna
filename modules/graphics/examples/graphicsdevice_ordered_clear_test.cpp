@@ -176,6 +176,12 @@ namespace
     constexpr Contract kContract{"EASYGL", true, true, true, true, true,
                                  true, true, true,
                                  true, true, true, true, false, true, true};
+#elif defined(CNA_RENDERER_OPENGL4)
+    // plans/plan_opengl4_modern_graphics.md GL4-0005: OPENGL4 declares the EasyGL contract --
+    // the reference it is being brought to parity with.
+    constexpr Contract kContract{"OPENGL4", true, true, true, true, true,
+                                 true, true, true,
+                                 true, true, true, true, false, true, true};
 #elif defined(CNA_RENDERER_SOFTWARE)
     constexpr Contract kContract{"SOFTWARE", true, true, true, true, true,
                                  true, true, true,

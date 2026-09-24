@@ -148,6 +148,11 @@ namespace
     // re-attached to the render FBO on every bind.
     constexpr Contract kContract{"EASYGL", true, Support::Exact, true,
                                  Support::Exact, false, false};
+#elif defined(CNA_RENDERER_OPENGL4)
+    // plans/plan_opengl4_modern_graphics.md GL4-0005: OPENGL4 declares the EasyGL contract --
+    // the reference it is being brought to parity with.
+    constexpr Contract kContract{"OPENGL4", true, Support::Exact, true,
+                                 Support::Exact, false, false};
 #elif defined(CNA_RENDERER_VULKAN)
     // Pre-fix: ONE single-layer TRANSIENT_ATTACHMENT image AND no LOAD variant of the MSAA render
     // pass. Post-fix: a six-layer multisampled image with one per-layer view per face, plus a

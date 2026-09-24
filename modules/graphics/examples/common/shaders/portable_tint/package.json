@@ -20,6 +20,22 @@
       "entry_point": "main"
     },
     {
+      "symbol": "kDesktopVertexSource",
+      "source": "desktop.vert.glsl",
+      "language": "glsl",
+      "stage": "vertex",
+      "format": "text",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kDesktopFragmentSource",
+      "source": "desktop.frag.glsl",
+      "language": "glsl",
+      "stage": "fragment",
+      "format": "text",
+      "entry_point": "main"
+    },
+    {
       "symbol": "kVulkanVertexSpirV",
       "source": "vulkan.vert.glsl",
       "language": "spirv",

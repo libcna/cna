@@ -164,6 +164,11 @@ namespace
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, true, false, false};
+#elif defined(CNA_RENDERER_OPENGL4)
+    // plans/plan_opengl4_modern_graphics.md GL4-0005: OPENGL4 declares the EasyGL contract --
+    // the reference it is being brought to parity with.
+    constexpr Contract kContract{"OPENGL4", true, Support::Exact, Support::Exact,
+                                 true, true, Support::Exact, MipTargets::Real, true, true, true, false, false};
 #elif defined(CNA_RENDERER_VULKAN)
     // `msaaCubeTargets` true since plan_vulkan.md VULKAN-216: a cube target's sample count is its
     // OWN. Task 903 piggybacked it on the renderer's global `sampleCount_`, so a cube multisampled

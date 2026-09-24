@@ -126,11 +126,14 @@ namespace {
         return std::vector<std::uint8_t>(begin, begin + sizeof(words));
     }
 
-    /// One compute program as a three-variant package: the generated GLSL ES text, the SPIR-V
-    /// words and the WGSL the generator derives from the same Vulkan GLSL
+    /// One compute program as a four-variant package: the generated GLSL ES and desktop GLSL
+    /// text, the SPIR-V words and the WGSL the generator derives from the same Vulkan GLSL
     /// (plans/plan_webgpu_modern_graphics.md WMG-0005), so every renderer runs the same program.
+    /// The desktop variant is what a desktop core context compiles
+    /// (plans/plan_opengl4_modern_graphics.md GL4-0025).
     template <std::size_t N>
     ShaderPackageEXT ComputePackage(std::string_view label, std::string_view esSource,
+                                    std::string_view desktopSource,
                                     const std::uint32_t (&spirv)[N], std::string_view wgsl,
                                     std::vector<ShaderBindingRequirementEXT> bindings)
     {
@@ -138,6 +141,9 @@ namespace {
             {
                 ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Compute, "main",
                               std::string(label) + ".es.comp.glsl", std::string(esSource)),
+                ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslDesktop, CNA::ShaderStageEXT::Compute,
+                              "main", std::string(label) + ".desktop.comp.glsl",
+                              std::string(desktopSource)),
                 ShaderCodeEXT(CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute, "main",
                               std::string(label) + ".vulkan.comp.glsl", Bytes(spirv)),
                 ShaderCodeEXT(CNA::ShaderLanguageEXT::Wgsl, CNA::ShaderStageEXT::Compute, "main",
@@ -228,6 +234,7 @@ TEST_F(ModernGpuConformance, ADispatchCoversExactlyItsThreeDimensionalGrid)
     constexpr std::size_t kCount = kWidth * kHeight * kDepth;
     constexpr std::uint32_t kUnwritten = 0xFFFFFFFFu;
     ComputeShader grid(gd, ComputePackage("grid", Package::kGridEsSource,
+                                          Package::kGridDesktopSource,
                                           Package::kGridSpirV, Package::kGridWgsl,
                                           {StorageAt("Output", 0)}));
     auto output = Buffer(kCount * sizeof(std::uint32_t), kStorage);
@@ -284,6 +291,7 @@ TEST_F(ModernGpuConformance, UniformsAndUploadsKeepCallOrderAcrossReadModifyWrit
     constexpr std::size_t kCount = 256;
     constexpr int kActive = 200;
     ComputeShader accumulate(gd, ComputePackage("accumulate", Package::kAccumulateEsSource,
+                                                Package::kAccumulateDesktopSource,
                                                 Package::kAccumulateSpirV, Package::kAccumulateWgsl,
                                                 {StorageAt("Input", 0), StorageAt("Accumulator", 1)}));
     auto inputs = Buffer(kCount * sizeof(float), kStorage);
@@ -331,6 +339,7 @@ TEST_F(ModernGpuConformance, ChainedDispatchesSeeEachOthersWritesWithoutABarrier
     // if every dispatch read what the previous one wrote. No ComputeShader::barrier() is called.
     constexpr std::size_t kCount = 512;
     ComputeShader chain(gd, ComputePackage("chain", Package::kChainEsSource,
+                                           Package::kChainDesktopSource,
                                            Package::kChainSpirV, Package::kChainWgsl,
                                            {StorageAt("Source", 0), StorageAt("Destination", 1)}));
     auto a = Buffer(kCount * sizeof(std::uint32_t), kStorage);
@@ -374,6 +383,7 @@ TEST_F(ModernGpuConformance, AcceptedWorkSurvivesDisposalOfItsProgramAndInputs)
     auto output = Buffer(kCount * sizeof(std::uint32_t), kStorage);
     {
         ComputeShader chain(gd, ComputePackage("chain", Package::kChainEsSource,
+                                               Package::kChainDesktopSource,
                                                Package::kChainSpirV, Package::kChainWgsl,
                                                {StorageAt("Source", 0), StorageAt("Destination", 1)}));
         auto input = Buffer(kCount * sizeof(std::uint32_t), kStorage);
@@ -406,6 +416,7 @@ TEST_F(ModernGpuConformance, ManySmallUploadsInOneFrameAreEachConsumedInOrder)
     constexpr std::size_t kCount = 64;
     constexpr int kRounds = 64;
     ComputeShader accumulate(gd, ComputePackage("accumulate", Package::kAccumulateEsSource,
+                                                Package::kAccumulateDesktopSource,
                                                 Package::kAccumulateSpirV, Package::kAccumulateWgsl,
                                                 {StorageAt("Input", 0), StorageAt("Accumulator", 1)}));
     auto inputs = Buffer(kCount * sizeof(float), kStorage);
@@ -499,6 +510,7 @@ TEST_F(ModernGpuConformance, AStorageImageHoldsExactlyWhatComputeWrote)
     }
 
     ComputeShader writer(gd, ComputePackage("image", Package::kImageEsSource,
+                                            Package::kImageDesktopSource,
                                             Package::kImageSpirV, Package::kImageWgsl,
                                             {ShaderBindingRequirementEXT(
                                                 "uImage", 0, ShaderBindingTypeEXT::StorageTexture2D,
@@ -562,6 +574,7 @@ TEST_F(ModernGpuConformance, ClassicDrawingIsUnchangedByInterleavedCompute)
         VertexPositionColor(Vector3(1.0f, -1.0f, 0.25f), Color(0, 60, 180))};
 
     ComputeShader chain(gd, ComputePackage("chain", Package::kChainEsSource,
+                                           Package::kChainDesktopSource,
                                            Package::kChainSpirV, Package::kChainWgsl,
                                            {StorageAt("Source", 0), StorageAt("Destination", 1)}));
     auto a = Buffer(kCount * sizeof(std::uint32_t), kStorage);

@@ -224,6 +224,19 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         set_tests_properties(ModernConformanceShaderPackageReproducibility PROPERTIES
             SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
 
+        # plans/plan_opengl4_modern_graphics.md GL4-0037: the renderer-neutral Texture2DArray
+        # sampling program (GLSL ES, desktop GLSL, SPIR-V and WGSL at set 1 binding 16).
+        add_test(NAME TextureArrayShaderPackageReproducibility
+            COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+                "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/shader_package/generate_shader_package.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/tests/CNA/Graphics/shaders/texture_array/package.json"
+                --output
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/tests/CNA/Graphics/TextureArrayShaderPackage.generated.hpp"
+                --check)
+        set_tests_properties(TextureArrayShaderPackageReproducibility PROPERTIES
+            SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
+
         add_test(NAME GpuInstanceCullerShaderPackageReproducibility
             COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
                 "${Python3_EXECUTABLE}"

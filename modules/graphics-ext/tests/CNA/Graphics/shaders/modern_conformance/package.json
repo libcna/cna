@@ -107,6 +107,38 @@
       "stage": "compute",
       "format": "wgsl",
       "entry_point": "main"
+    },
+    {
+      "symbol": "kGridDesktopSource",
+      "source": "grid.desktop.comp.glsl",
+      "language": "glsl",
+      "stage": "compute",
+      "format": "text",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kAccumulateDesktopSource",
+      "source": "accumulate.desktop.comp.glsl",
+      "language": "glsl",
+      "stage": "compute",
+      "format": "text",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kChainDesktopSource",
+      "source": "chain.desktop.comp.glsl",
+      "language": "glsl",
+      "stage": "compute",
+      "format": "text",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kImageDesktopSource",
+      "source": "image.desktop.comp.glsl",
+      "language": "glsl",
+      "stage": "compute",
+      "format": "text",
+      "entry_point": "main"
     }
   ]
 }
