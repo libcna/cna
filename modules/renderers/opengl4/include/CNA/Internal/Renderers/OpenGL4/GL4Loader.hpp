@@ -559,6 +559,179 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
 #ifndef GL_PIXEL_UNPACK_BUFFER_BINDING
 #define GL_PIXEL_UNPACK_BUFFER_BINDING 0x88EF
 #endif
+// plans/plan_opengl4_modern_graphics.md GL4-0025: compute, shader-storage and uniform buffers,
+// memory barriers, image load/store, timer queries and the limits Workstream B reports.
+#ifndef GL_RGBA8
+#define GL_RGBA8 0x8058
+#endif
+#ifndef GL_R16
+#define GL_R16 0x822A
+#endif
+#ifndef GL_COMPUTE_SHADER
+#define GL_COMPUTE_SHADER 0x91B9
+#endif
+#ifndef GL_SHADER_STORAGE_BUFFER
+#define GL_SHADER_STORAGE_BUFFER 0x90D2
+#endif
+#ifndef GL_SHADER_STORAGE_BUFFER_BINDING
+#define GL_SHADER_STORAGE_BUFFER_BINDING 0x90D3
+#endif
+#ifndef GL_UNIFORM_BUFFER_BINDING
+#define GL_UNIFORM_BUFFER_BINDING 0x8A28
+#endif
+#ifndef GL_DRAW_INDIRECT_BUFFER
+#define GL_DRAW_INDIRECT_BUFFER 0x8F3F
+#endif
+#ifndef GL_DRAW_INDIRECT_BUFFER_BINDING
+#define GL_DRAW_INDIRECT_BUFFER_BINDING 0x8F43
+#endif
+#ifndef GL_TIME_ELAPSED
+#define GL_TIME_ELAPSED 0x88BF
+#endif
+#ifndef GL_TIMESTAMP
+#define GL_TIMESTAMP 0x8E28
+#endif
+#ifndef GL_QUERY_COUNTER_BITS
+#define GL_QUERY_COUNTER_BITS 0x8864
+#endif
+#ifndef GL_MAX_COMPUTE_WORK_GROUP_COUNT
+#define GL_MAX_COMPUTE_WORK_GROUP_COUNT 0x91BE
+#endif
+#ifndef GL_MAX_COMPUTE_WORK_GROUP_SIZE
+#define GL_MAX_COMPUTE_WORK_GROUP_SIZE 0x91BF
+#endif
+#ifndef GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS
+#define GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS 0x90EB
+#endif
+#ifndef GL_MAX_VERTEX_SHADER_STORAGE_BLOCKS
+#define GL_MAX_VERTEX_SHADER_STORAGE_BLOCKS 0x90D6
+#endif
+#ifndef GL_MAX_COMPUTE_SHADER_STORAGE_BLOCKS
+#define GL_MAX_COMPUTE_SHADER_STORAGE_BLOCKS 0x90DB
+#endif
+#ifndef GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS
+#define GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS 0x90DD
+#endif
+#ifndef GL_MAX_SHADER_STORAGE_BLOCK_SIZE
+#define GL_MAX_SHADER_STORAGE_BLOCK_SIZE 0x90DE
+#endif
+#ifndef GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT
+#define GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT 0x90DF
+#endif
+#ifndef GL_MAX_UNIFORM_BLOCK_SIZE
+#define GL_MAX_UNIFORM_BLOCK_SIZE 0x8A30
+#endif
+#ifndef GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT
+#define GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT 0x8A34
+#endif
+#ifndef GL_MAX_COMPUTE_UNIFORM_BLOCKS
+#define GL_MAX_COMPUTE_UNIFORM_BLOCKS 0x91BB
+#endif
+#ifndef GL_MAX_UNIFORM_BUFFER_BINDINGS
+#define GL_MAX_UNIFORM_BUFFER_BINDINGS 0x8A2F
+#endif
+#ifndef GL_MAX_COMPUTE_IMAGE_UNIFORMS
+#define GL_MAX_COMPUTE_IMAGE_UNIFORMS 0x91BD
+#endif
+#ifndef GL_MAX_IMAGE_UNITS
+#define GL_MAX_IMAGE_UNITS 0x8F38
+#endif
+#ifndef GL_MAX_COMPUTE_TEXTURE_IMAGE_UNITS
+#define GL_MAX_COMPUTE_TEXTURE_IMAGE_UNITS 0x91BC
+#endif
+#ifndef GL_MAX_TEXTURE_IMAGE_UNITS
+#define GL_MAX_TEXTURE_IMAGE_UNITS 0x8872
+#endif
+#ifndef GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS
+#define GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS 0x8B4C
+#endif
+#ifndef GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS
+#define GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS 0x8B4D
+#endif
+#ifndef GL_MAX_VERTEX_ATTRIB_BINDINGS
+#define GL_MAX_VERTEX_ATTRIB_BINDINGS 0x82DA
+#endif
+#ifndef GL_MAX_COLOR_ATTACHMENTS
+#define GL_MAX_COLOR_ATTACHMENTS 0x8CDF
+#endif
+#ifndef GL_MAX_ARRAY_TEXTURE_LAYERS
+#define GL_MAX_ARRAY_TEXTURE_LAYERS 0x88FF
+#endif
+#ifndef GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT
+#define GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT 0x00000001
+#endif
+#ifndef GL_ELEMENT_ARRAY_BARRIER_BIT
+#define GL_ELEMENT_ARRAY_BARRIER_BIT 0x00000002
+#endif
+#ifndef GL_UNIFORM_BARRIER_BIT
+#define GL_UNIFORM_BARRIER_BIT 0x00000004
+#endif
+#ifndef GL_TEXTURE_FETCH_BARRIER_BIT
+#define GL_TEXTURE_FETCH_BARRIER_BIT 0x00000008
+#endif
+#ifndef GL_SHADER_IMAGE_ACCESS_BARRIER_BIT
+#define GL_SHADER_IMAGE_ACCESS_BARRIER_BIT 0x00000020
+#endif
+#ifndef GL_COMMAND_BARRIER_BIT
+#define GL_COMMAND_BARRIER_BIT 0x00000040
+#endif
+#ifndef GL_PIXEL_BUFFER_BARRIER_BIT
+#define GL_PIXEL_BUFFER_BARRIER_BIT 0x00000080
+#endif
+#ifndef GL_TEXTURE_UPDATE_BARRIER_BIT
+#define GL_TEXTURE_UPDATE_BARRIER_BIT 0x00000100
+#endif
+#ifndef GL_BUFFER_UPDATE_BARRIER_BIT
+#define GL_BUFFER_UPDATE_BARRIER_BIT 0x00000200
+#endif
+#ifndef GL_FRAMEBUFFER_BARRIER_BIT
+#define GL_FRAMEBUFFER_BARRIER_BIT 0x00000400
+#endif
+#ifndef GL_SHADER_STORAGE_BARRIER_BIT
+#define GL_SHADER_STORAGE_BARRIER_BIT 0x00002000
+#endif
+#ifndef GL_ALL_BARRIER_BITS
+#define GL_ALL_BARRIER_BITS 0xFFFFFFFF
+#endif
+#ifndef GL_READ_ONLY
+#define GL_READ_ONLY 0x88B8
+#endif
+#ifndef GL_WRITE_ONLY
+#define GL_WRITE_ONLY 0x88B9
+#endif
+#ifndef GL_READ_WRITE
+#define GL_READ_WRITE 0x88BA
+#endif
+#ifndef GL_IMAGE_BINDING_NAME
+#define GL_IMAGE_BINDING_NAME 0x8F3A
+#endif
+#ifndef GL_FILTER
+#define GL_FILTER 0x829A
+#endif
+#ifndef GL_FRAMEBUFFER_BLEND
+#define GL_FRAMEBUFFER_BLEND 0x828B
+#endif
+#ifndef GL_MIPMAP
+#define GL_MIPMAP 0x8293
+#endif
+#ifndef GL_FRAGMENT_TEXTURE
+#define GL_FRAGMENT_TEXTURE 0x829F
+#endif
+#ifndef GL_COMPUTE_TEXTURE
+#define GL_COMPUTE_TEXTURE 0x82A0
+#endif
+#ifndef GL_SHADER_IMAGE_LOAD
+#define GL_SHADER_IMAGE_LOAD 0x82A4
+#endif
+#ifndef GL_SHADER_IMAGE_STORE
+#define GL_SHADER_IMAGE_STORE 0x82A5
+#endif
+#ifndef GL_SHADER_IMAGE_ATOMIC
+#define GL_SHADER_IMAGE_ATOMIC 0x82A6
+#endif
+#ifndef GL_NUM_SAMPLE_COUNTS
+#define GL_NUM_SAMPLE_COUNTS 0x9380
+#endif
 
     // ---- Function pointer types for the loaded subset (Khronos-standard PFN names) ----
     using PFNGL4GENBUFFERSPROC              = void (*)(GLsizei, GLuint*);
@@ -686,6 +859,9 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
     using PFNGL4DRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEPROC =
         void (*)(GLenum, GLsizei, GLenum, const void*, GLsizei, GLint, GLuint);
     using PFNGL4GETINTERNALFORMATIVPROC          = void (*)(GLenum, GLenum, GLenum, GLsizei, GLint*);
+    using PFNGL4GETINTEGER64VPROC                = void (*)(GLenum, std::int64_t*);
+    using PFNGL4PROGRAMUNIFORM1IPROC             = void (*)(GLuint, GLint, GLint);
+    using PFNGL4PROGRAMUNIFORM1FPROC             = void (*)(GLuint, GLint, GLfloat);
 
     // plans/plan_opengl4_modern_graphics.md GL4-0009: further GL <= 4.1 core entry points the
     // EasyGL-parity paths need (vector/matrix uniforms for the shared stock programs, instanced
@@ -837,6 +1013,11 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
     extern PFNGL4DRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEPROC
         gl4_glDrawElementsInstancedBaseVertexBaseInstance;
     extern PFNGL4GETINTERNALFORMATIVPROC         gl4_glGetInternalformativ;
+    // GL4-0025: 64-bit limit queries and program-object uniforms that do not disturb the bound
+    // program. Optional like the rest of this block; the compute route requires them.
+    extern PFNGL4GETINTEGER64VPROC               gl4_glGetInteger64v;
+    extern PFNGL4PROGRAMUNIFORM1IPROC            gl4_glProgramUniform1i;
+    extern PFNGL4PROGRAMUNIFORM1FPROC            gl4_glProgramUniform1f;
 
     // GL4-0009 mandatory additions (see the types above).
     extern PFNGL4UNIFORM3FVPROC                   gl4_glUniform3fv;

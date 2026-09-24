@@ -1239,6 +1239,7 @@ namespace CNA::Internal::Renderers::OpenGL4
         ReleaseCompiledEffectResourcesEXT();
 #endif
         gl4_glDeleteSamplers(kMaxSamplerSlots, samplers_);
+        if (computeSampler_) gl4_glDeleteSamplers(1, &computeSampler_);
         for (unsigned int* texture : {&defaultWhiteTexture_, &defaultBlackTexture_,
                                       &defaultBlackCubeTexture_, &defaultFlatNormalTexture_})
             if (*texture) glDeleteTextures(1, texture);
@@ -1503,6 +1504,8 @@ namespace CNA::Internal::Renderers::OpenGL4
     {
         if (language != static_cast<int>(CNA::ShaderLanguageEXT::GlslDesktop))
             return false;
+        if (stage == static_cast<int>(CNA::ShaderStageEXT::Compute))
+            return SupportsComputeShadersEXT();
         return stage == static_cast<int>(CNA::ShaderStageEXT::Vertex) ||
                stage == static_cast<int>(CNA::ShaderStageEXT::Fragment);
     }

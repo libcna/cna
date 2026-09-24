@@ -2,8 +2,9 @@
 // plans/plan_modern.md MOD-1510..MOD-1525: compute shaders and storage buffers, end to end.
 //
 // Every test first asks for the capability it exercises. The legacy string constructor consumes
-// the active renderer's own dialect, so tests whose payload is explicitly GLSL ES additionally
-// require GLSL ES compute-source support. Portable package tests select their own backend payload.
+// the active renderer's own dialect, so a test whose payload is GLSL ES text hands a desktop
+// context the same program as GLSL 4.30 (legacySource), and skips only where the renderer takes
+// neither. Portable package tests select their own backend payload.
 
 #ifdef CNA_CNAEXT
 
@@ -76,6 +77,16 @@ namespace {
             return gd.SupportsShaderLanguageEXT(
                 CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Compute);
         }
+
+        [[nodiscard]] bool supportsLegacyComputeSource() const
+        {
+            return CnaTest::EngineLayer::RunsLegacyComputeSource(gd);
+        }
+
+        [[nodiscard]] std::string legacySource(const std::string& esSource) const
+        {
+            return CnaTest::EngineLayer::LegacyComputeSource(gd, esSource);
+        }
     };
 
     /// Doubles every element of a float buffer. `local_size_x` is 64, so the dispatch count is
@@ -107,6 +118,10 @@ void main() {
                     CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Compute,
                     "main", std::string(kPayloads[0].source),
                     std::string(kEasyGlComputeSource)),
+                ShaderCodeEXT(
+                    CNA::ShaderLanguageEXT::GlslDesktop, CNA::ShaderStageEXT::Compute,
+                    "main", std::string(kPayloads[5].source),
+                    std::string(kDesktopComputeSource)),
                 ShaderCodeEXT(
                     CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute,
                     "main", std::string(kPayloads[1].source),
@@ -145,6 +160,10 @@ void main() {
                     CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Compute,
                     "main", std::string(kPayloads[0].source),
                     std::string(kEasyGlComputeSource)),
+                ShaderCodeEXT(
+                    CNA::ShaderLanguageEXT::GlslDesktop, CNA::ShaderStageEXT::Compute,
+                    "main", std::string(kPayloads[3].source),
+                    std::string(kDesktopComputeSource)),
                 ShaderCodeEXT(
                     CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute,
                     "main", std::string(kPayloads[1].source),
@@ -348,11 +367,11 @@ TEST_F(ComputeTest, ABrokenShaderThrowsWithItsCompilerLog)
 {
     // MOD-1511: the log is the whole value of the failure, so it must reach the caller.
     if (!supported()) GTEST_SKIP() << "this renderer does not support compute shaders";
-    if (!supportsGlslEsComputeSource())
-        GTEST_SKIP() << "this test's legacy payload is GLSL ES, not the renderer's dialect";
+    if (!supportsLegacyComputeSource())
+        GTEST_SKIP() << "this test's legacy payload has no form in the renderer's dialect";
     try
     {
-        ComputeShader broken(gd, "#version 310 es\nthis is not a shader\n");
+        ComputeShader broken(gd, legacySource("#version 310 es\nthis is not a shader\n"));
         FAIL() << "a shader that cannot compile was accepted";
     }
     catch (const std::runtime_error& error)
@@ -379,15 +398,15 @@ TEST_F(ComputeTest, ADispatchDoublesEveryElementOfABuffer)
 {
     // MOD-1513, the row's own example: 1024 floats, doubled.
     if (!supported()) GTEST_SKIP() << "this renderer does not support compute shaders";
-    if (!supportsGlslEsComputeSource())
-        GTEST_SKIP() << "this test's legacy payload is GLSL ES, not the renderer's dialect";
+    if (!supportsLegacyComputeSource())
+        GTEST_SKIP() << "this test's legacy payload has no form in the renderer's dialect";
     constexpr int kCount = 1024;
     StorageBufferT<float> values(gd, kCount);
     std::vector<float> source(kCount);
     for (int i = 0; i < kCount; ++i) source[static_cast<std::size_t>(i)] = static_cast<float>(i);
     values.setData(source);
 
-    ComputeShader doubler(gd, kDoubler);
+    ComputeShader doubler(gd, legacySource(kDoubler));
     EXPECT_TRUE(doubler.isValid());
     EXPECT_TRUE(doubler.getCompileError().empty());
     EXPECT_EQ(doubler.getSelectedLanguageEXT(), CNA::ShaderLanguageEXT::Unknown);
@@ -579,14 +598,14 @@ TEST_F(ComputeTest, ImageBindingEitherWorksOrRefusesWithItsReason)
     // than let the driver reject the binding silently, the wrapper refuses it and says why. On
     // desktop GL the same code binds and the gradient below is asserted exactly.
     if (!supported()) GTEST_SKIP() << "this renderer does not support compute shaders";
-    if (!supportsGlslEsComputeSource())
-        GTEST_SKIP() << "this test's legacy payload is GLSL ES, not the renderer's dialect";
+    if (!supportsLegacyComputeSource())
+        GTEST_SKIP() << "this test's legacy payload has no form in the renderer's dialect";
     constexpr int kSize = 16;
     Texture2D texture(gd, kSize, kSize);
     const std::vector<Color> initial(kSize * kSize, Color::Black);
     texture.SetData(initial.data(), static_cast<int>(initial.size()));
 
-    ComputeShader painter(gd, R"(#version 310 es
+    ComputeShader painter(gd, legacySource(R"(#version 310 es
 layout(local_size_x = 8, local_size_y = 8) in;
 layout(rgba8, binding = 0) writeonly uniform highp image2D uOutput;
 uniform int uSize;
@@ -596,7 +615,7 @@ void main() {
     imageStore(uOutput, at, vec4(float(at.x) / float(uSize - 1),
                                  float(at.y) / float(uSize - 1), 0.0, 1.0));
 }
-)");
+)"));
 
     if (!painter.isImageBindingSupported())
     {
@@ -623,7 +642,7 @@ void main() {
     // Read back through a second dispatch, not through Texture2D::GetData: that answers from the
     // CPU shadow copy the texture was uploaded with, which a GPU-side write never touches.
     StorageBufferT<float> readBack(gd, static_cast<std::size_t>(kSize) * kSize * 4);
-    ComputeShader reader(gd, R"(#version 310 es
+    ComputeShader reader(gd, legacySource(R"(#version 310 es
 layout(local_size_x = 8, local_size_y = 8) in;
 layout(rgba8, binding = 0) readonly uniform highp image2D uInput;
 layout(std430, binding = 1) buffer Output { float texels[]; };
@@ -638,7 +657,7 @@ void main() {
     texels[base + 2] = texel.b;
     texels[base + 3] = texel.a;
 }
-)");
+)"));
     reader.bindImage(0, texture, GraphicsImageAccess::ReadOnly);
     reader.bindStorageBuffer(1, readBack.getBuffer());
     reader.setUniform("uSize", kSize);
@@ -668,20 +687,20 @@ TEST_F(ComputeTest, Texture2DGetDataDoesNotSeeComputeWrites)
     // was uploaded with. If CNA ever gives Texture2D a real GPU read-back this test fails, and the
     // note beside it has to be rewritten.
     if (!supported()) GTEST_SKIP() << "this renderer does not support compute shaders";
-    if (!supportsGlslEsComputeSource())
-        GTEST_SKIP() << "this test's legacy payload is GLSL ES, not the renderer's dialect";
+    if (!supportsLegacyComputeSource())
+        GTEST_SKIP() << "this test's legacy payload has no form in the renderer's dialect";
     constexpr int kSize = 8;
     Texture2D texture(gd, kSize, kSize);
     const std::vector<Color> initial(kSize * kSize, Color::Black);
     texture.SetData(initial.data(), static_cast<int>(initial.size()));
 
-    ComputeShader painter(gd, R"(#version 310 es
+    ComputeShader painter(gd, legacySource(R"(#version 310 es
 layout(local_size_x = 8, local_size_y = 8) in;
 layout(rgba8, binding = 0) writeonly uniform highp image2D uOutput;
 void main() {
     imageStore(uOutput, ivec2(gl_GlobalInvocationID.xy), vec4(1.0, 1.0, 1.0, 1.0));
 }
-)");
+)"));
     if (!painter.isImageBindingSupported())
         GTEST_SKIP() << "this renderer cannot bind an image at all; the point does not arise";
     painter.bindImage(0, texture, GraphicsImageAccess::WriteOnly);
@@ -699,12 +718,12 @@ TEST_F(ComputeTest, UniformsReachTheProgram)
     // MOD-1515: an int and a float, checked by their effect on a buffer rather than by asking the
     // program back -- what matters is that the value the shader read is the value that was set.
     if (!supported()) GTEST_SKIP() << "this renderer does not support compute shaders";
-    if (!supportsGlslEsComputeSource())
-        GTEST_SKIP() << "this test's legacy payload is GLSL ES, not the renderer's dialect";
+    if (!supportsLegacyComputeSource())
+        GTEST_SKIP() << "this test's legacy payload has no form in the renderer's dialect";
     StorageBufferT<float> values(gd, 64);
     values.setData(std::vector<float>(64, 1.0f));
 
-    ComputeShader scaler(gd, R"(#version 310 es
+    ComputeShader scaler(gd, legacySource(R"(#version 310 es
 layout(local_size_x = 64) in;
 layout(std430, binding = 0) buffer Values { float values[]; };
 uniform int uOffset;
@@ -713,7 +732,7 @@ void main() {
     uint index = gl_GlobalInvocationID.x;
     values[index] = values[index] * uScale + float(uOffset);
 }
-)");
+)"));
     scaler.bindStorageBuffer(0, values.getBuffer());
     scaler.setUniform("uOffset", 7);
     scaler.setUniform("uScale", 3.0f);
@@ -727,10 +746,10 @@ TEST_F(ComputeTest, DispatchArgumentsAreValidatedBeforeSubmission)
 {
     // MOD-1523.
     if (!supported()) GTEST_SKIP() << "this renderer does not support compute shaders";
-    if (!supportsGlslEsComputeSource())
-        GTEST_SKIP() << "this test's legacy payload is GLSL ES, not the renderer's dialect";
+    if (!supportsLegacyComputeSource())
+        GTEST_SKIP() << "this test's legacy payload has no form in the renderer's dialect";
     StorageBufferT<float> values(gd, 64);
-    ComputeShader doubler(gd, kDoubler);
+    ComputeShader doubler(gd, legacySource(kDoubler));
     doubler.bindStorageBuffer(0, values.getBuffer());
 
     EXPECT_THROW(doubler.dispatch(0), std::invalid_argument);

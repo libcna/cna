@@ -142,11 +142,21 @@ protected:
                   device.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::GlslDesktop,
                                                    CNA::ShaderStageEXT::Fragment),
               "OpenGL4 accepts desktop GLSL vertex and fragment payloads");
-        Check(!device.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::GlslDesktop,
-                                                CNA::ShaderStageEXT::Compute) &&
+        // plans/plan_opengl4_modern_graphics.md GL4-0025: compute is implemented now, and promised
+        // exactly where the live context can compile the `#version 430 core` payloads CNA ships.
+        const bool live43 = live.contextMajor > 4 ||
+                            (live.contextMajor == 4 && live.contextMinor >= 3);
+        const bool compute = device.SupportsCapability(CNA::GraphicsCapability::ComputeShaders);
+        Check(compute == (live43 && live.computeShadersNative && live.shaderStorageBuffersNative),
+              "OpenGL4 promises compute exactly where a 4.3+ context provides it");
+        Check(device.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::GlslDesktop,
+                                               CNA::ShaderStageEXT::Compute) == compute,
+              "desktop GLSL compute payloads are accepted exactly where compute is promised");
+        Check(!device.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::GlslEs,
+                                                CNA::ShaderStageEXT::Vertex) &&
                   !device.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::GlslEs,
-                                                    CNA::ShaderStageEXT::Vertex),
-              "OpenGL4 does not overclaim unimplemented compute or another GLSL dialect");
+                                                    CNA::ShaderStageEXT::Compute),
+              "OpenGL4 does not claim another GLSL dialect");
 
         Exit();
     }

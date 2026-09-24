@@ -79,9 +79,8 @@ TEST(ComputeCullingTest, TheGpuCullerAgreesWithTheCpuOneBoxForBox)
     CnaTest::EngineLayer::HiDefDevice gd;
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ComputeShaders))
         GTEST_SKIP() << "this renderer does not support compute shaders";
-    if (!gd.SupportsShaderLanguageEXT(
-            CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Compute))
-        GTEST_SKIP() << "this legacy culler payload is GLSL ES, not the renderer's dialect";
+    if (!CnaTest::EngineLayer::RunsLegacyComputeSource(gd))
+        GTEST_SKIP() << "this legacy culler payload has no form in the renderer's dialect";
 
     const Matrix view = Matrix::CreateLookAt(Vector3(0.0f, 10.0f, 30.0f), Vector3::Zero,
                                              Vector3(0.0f, 1.0f, 0.0f));
@@ -121,7 +120,7 @@ TEST(ComputeCullingTest, TheGpuCullerAgreesWithTheCpuOneBoxForBox)
     StorageBufferT<Vector4> planeBuffer(gd, 6);
     planeBuffer.setData(gpuPlanes);
 
-    ComputeShader shader(gd, kCuller);
+    ComputeShader shader(gd, CnaTest::EngineLayer::LegacyComputeSource(gd, kCuller));
     shader.bindStorageBuffer(0, boxBuffer.getBuffer());
     shader.bindStorageBuffer(1, visibleBuffer.getBuffer());
     shader.bindStorageBuffer(2, planeBuffer.getBuffer());

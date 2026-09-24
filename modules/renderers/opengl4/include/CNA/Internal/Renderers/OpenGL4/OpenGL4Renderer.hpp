@@ -583,13 +583,119 @@ namespace CNA::Internal::Renderers::OpenGL4
          *
          * @param language `CNA::ShaderLanguageEXT` ordinal.
          * @param stage `CNA::ShaderStageEXT` ordinal.
-         * @return True for desktop GLSL vertex and fragment payloads.
+         * @return True for desktop GLSL vertex and fragment payloads, and compute payloads where
+         *         SupportsComputeShadersEXT() holds.
          */
         [[nodiscard]] bool SupportsShaderLanguageEXT(int language, int stage) const override;
         /** @brief Returns true because custom-effect source is compiled and executed by OpenGL. */
         [[nodiscard]] bool ExecutesShaderEffectSourceEXT() const override { return true; }
         /** @brief Returns true: a Texture3D bound to a custom effect is a real GL_TEXTURE_3D sampler input. */
         [[nodiscard]] bool SupportsTexture3DSamplingEXT() const override { return true; }
+
+        // --- Modern CNAEXT surface (Workstream B; OpenGL4Modern.cpp) -------------------------
+
+        /**
+         * @brief Whether compute programs, storage buffers and dispatch are implemented here.
+         *
+         * @return True on a 4.3+ core context with native compute and shader-storage buffers:
+         *         every desktop compute payload CNA ships is `#version 430 core`.
+         */
+        [[nodiscard]] bool SupportsComputeShadersEXT() const override;
+        /**
+         * @brief Whether a Texture2D can be bound to a compute program as an image.
+         *
+         * @return True with compute and native image load/store; desktop GL needs no immutable
+         *         storage for it.
+         */
+        [[nodiscard]] bool SupportsComputeImageBindingEXT() const override;
+        /**
+         * @brief Maximum work groups of one dispatch along an axis.
+         *
+         * @param axis 0, 1 or 2.
+         * @return `GL_MAX_COMPUTE_WORK_GROUP_COUNT`, or 0 without compute or for another axis.
+         */
+        [[nodiscard]] int GetMaxComputeWorkGroupCountEXT(int axis) const override;
+        /**
+         * @brief Maximum local size along an axis.
+         *
+         * @param axis 0, 1 or 2.
+         * @return `GL_MAX_COMPUTE_WORK_GROUP_SIZE`, or 0 without compute or for another axis.
+         */
+        [[nodiscard]] int GetMaxComputeWorkGroupSizeEXT(int axis) const override;
+        /** @brief Returns `GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS`, or 0 without compute. */
+        [[nodiscard]] int GetMaxComputeWorkGroupInvocationsEXT() const override;
+        /** @brief Returns `GL_MAX_VERTEX_SHADER_STORAGE_BLOCKS`, or 0 without compute. */
+        [[nodiscard]] int GetMaxVertexShaderStorageBlocksEXT() const override;
+        /** @brief Returns `GL_MAX_SHADER_STORAGE_BLOCK_SIZE`, or 0 without compute. */
+        [[nodiscard]] std::uint64_t GetMaxStorageBufferBytesEXT() const override;
+        /** @brief Returns `GL_MAX_UNIFORM_BLOCK_SIZE`; uniform blocks are core in every 4.x. */
+        [[nodiscard]] std::uint64_t GetMaxUniformBufferBytesEXT() const override;
+        /** @brief Returns the storage blocks one compute program may bind, or 0 without compute. */
+        [[nodiscard]] int GetMaxComputeStorageBufferBindingsEXT() const override;
+        /** @brief Returns the smallest per-stage texture-unit limit of the stages this renderer runs. */
+        [[nodiscard]] int GetMaxSampledTexturesPerShaderStageEXT() const override;
+        /** @brief Returns the compute image-unit limit, or 0 without compute image binding. */
+        [[nodiscard]] int GetMaxStorageImagesPerShaderStageEXT() const override;
+        /** @brief Returns the per-vertex stream ceiling: every stream is its own GL buffer. */
+        [[nodiscard]] int GetMaxVertexInputBindingsEXT() const override;
+        /** @brief Returns `GL_MAX_VERTEX_ATTRIBS`. */
+        [[nodiscard]] int GetMaxVertexInputAttributesEXT() const override;
+        /** @brief Returns the colour attachments one draw writes (the MRT ceiling, at most four). */
+        [[nodiscard]] int GetMaxColorAttachmentsEXT() const override;
+        /** @brief Returns `GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT`, or 0 without compute. */
+        [[nodiscard]] std::uint64_t GetMinStorageBufferOffsetAlignmentEXT() const override;
+        /** @brief Returns `GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT`. */
+        [[nodiscard]] std::uint64_t GetMinUniformBufferOffsetAlignmentEXT() const override;
+        /**
+         * @brief Compiles a desktop GLSL compute program.
+         *
+         * @param computeSrc The source.
+         * @return The program -- also when it failed to build, so its log reaches the caller --
+         *         or null without compute.
+         */
+        std::unique_ptr<IComputeShaderRenderer> CreateComputeShader(
+            const std::string& computeSrc) override;
+        /**
+         * @brief Allocates a storage buffer with the legacy all-purpose usage.
+         *
+         * @param byteSize Bytes to allocate.
+         * @return The buffer, or null without compute or for a zero size.
+         */
+        std::unique_ptr<IStorageBufferRenderer> CreateStorageBuffer(std::size_t byteSize) override;
+        /**
+         * @brief Allocates a buffer for exactly the declared roles.
+         *
+         * @param byteSize Bytes to allocate.
+         * @param usage `CNA::Graphics::StorageBufferUsage` bits.
+         * @param cpuAccess `CNA::Graphics::StorageBufferCpuAccess` bits.
+         * @return The buffer, or null when a declared role is not available here.
+         */
+        std::unique_ptr<IStorageBufferRenderer> CreateStorageBufferEXT(
+            std::size_t byteSize, std::uint32_t usage, std::uint32_t cpuAccess) override;
+        /**
+         * @brief Dispatches a compute program with its recorded bindings.
+         *
+         * @param shader A program created by this renderer.
+         * @param groupsX Work groups along X.
+         * @param groupsY Work groups along Y.
+         * @param groupsZ Work groups along Z.
+         */
+        void DispatchCompute(IComputeShaderRenderer* shader, int groupsX, int groupsY,
+                             int groupsZ) override;
+        /**
+         * @brief Issues exactly the requested `glMemoryBarrier` bits.
+         *
+         * @param barrierBits `CNA::GraphicsMemoryBarrier` bits.
+         */
+        void MemoryBarrierEXT(int barrierBits) override;
+        /**
+         * @brief Binds a storage buffer for the next draw's shaders to read.
+         *
+         * @param binding Shader-storage block binding.
+         * @param buffer A buffer created by this renderer.
+         */
+        void BindStorageBufferForDrawEXT(int binding,
+                                         const IStorageBufferRenderer& buffer) override;
         /**
          * @brief Returns false: every buffered draw is a native GL draw from a bound buffer object.
          *
@@ -1063,6 +1169,8 @@ namespace CNA::Internal::Renderers::OpenGL4
 
         // Sampler objects, one per XNA sampler slot, each bound to its own texture unit.
         unsigned int samplers_[kMaxSamplerSlots] = {};
+        /// Nearest/clamp sampler every sampled compute input reads through (GL4-0025).
+        unsigned int computeSampler_ = 0;
 
 #if defined(CNA_OPENGL4_COMPILED_EFFECTS)
         /// One MojoShader GL context for this renderer's lifetime, created on first use.

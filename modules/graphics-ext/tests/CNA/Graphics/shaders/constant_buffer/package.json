@@ -28,6 +28,14 @@
       "stage": "compute",
       "format": "wgsl",
       "entry_point": "main"
+    },
+    {
+      "symbol": "kDesktopComputeSource",
+      "source": "desktop.comp.glsl",
+      "language": "glsl",
+      "stage": "compute",
+      "format": "text",
+      "entry_point": "main"
     }
   ]
 }

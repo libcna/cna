@@ -775,3 +775,105 @@ clustered case above.
 package). `CNAEXT_NoPosixSetenv` fails on **every** renderer — a source scan finding `setenv`/`unsetenv`
 in `modules/platform/src/Wayland/` and the Wayland platform tests. It is not an OpenGL4 or modern-graphics
 defect, is outside this workstream's scope, and is recorded here rather than changed.
+
+## GL4-0025 — Compute, storage and constant buffers, ordering, limits (B4–B9, B18)
+
+**What OpenGL4 implements** (`OpenGL4Modern.hpp/.cpp`):
+
+- `OpenGL4StorageBufferRenderer` — one GL buffer object per `StorageBuffer`, every usage/CPU-access
+  mask validated. Uploads, `glGetBufferSubData` reads and `glCopyBufferSubData` copies go through the
+  copy binding points, which no draw reads, and restore what was bound there. Overlapping same-buffer
+  copies are refused.
+- `OpenGL4ComputeShaderRenderer`:
+  - Desktop GLSL compute programs; a failed build keeps its `CS:`/`Link:` log for the structured
+    diagnostics.
+  - **Nothing it does touches GL binding state when it is called.** Uniforms go straight to the
+    program object (`glProgramUniform1i/1f`, core 4.1).
+  - Storage, constant-buffer, sampled-texture and image bindings are *recorded*, and the resources
+    they name are held alive. The dispatch installs them, runs, and **restores** everything it
+    changed: the program, the active unit, each unit's 2D texture and sampler object, and each
+    indexed and generic SSBO/UBO binding.
+  - Sampled inputs read through the renderer's own nearest/clamp sampler, not whatever sampler object
+    a draw left on the unit.
+  - An image is bound in the texture's *actual* GL storage format, asked of GL, because the texture
+    layer widens some XNA formats. A storage format that is not an image-unit format is refused with
+    `NotSupportedException`.
+- **Ordering (ADR 0001, B5).**
+  - Every dispatch ends with one `glMemoryBarrier(GL_ALL_BARRIER_BITS)`, so a following dispatch,
+    draw (as vertices, indices, indirect arguments, uniforms or textures) or transfer sees what the
+    dispatch wrote, without the caller naming a barrier. It is a GPU-side barrier, and nothing waits
+    on the CPU: no `glFinish` or `glClientWaitSync` anywhere on the path.
+  - `MemoryBarrierEXT` still translates CNA's bits one by one for explicit requests.
+- **Where compute is promised.** `SupportsComputeShadersEXT` requires the native compute and SSBO facts
+  **and** a 4.3+ context. The native classifier also accepts a 4.2 context with
+  `GL_ARB_compute_shader`, but every desktop compute payload CNA ships is `#version 430 core`, which
+  such a context cannot compile. `SupportsComputeImageBindingEXT` adds image load/store; desktop GL,
+  unlike ES 3.1, needs no immutable storage. `SupportsShaderLanguageEXT(GlslDesktop, Compute)` follows
+  compute.
+- **Limits, all asked of the context:**
+
+  | Limit | Source |
+  |---|---|
+  | work-group count, size, invocations | `GL_MAX_COMPUTE_*` |
+  | vertex SSBO blocks | `GL_MAX_VERTEX_SHADER_STORAGE_BLOCKS` |
+  | storage and uniform block bytes | 64-bit `glGetInteger64v` |
+  | compute SSBO bindings | min(compute blocks, buffer bindings) |
+  | sampled textures per stage | smallest of fragment, vertex and compute units |
+  | storage images per stage | min(compute image uniforms, image units) |
+  | vertex attributes | `GL_MAX_VERTEX_ATTRIBS` |
+  | vertex input bindings | the 16-stream ceiling; each stream is its own buffer (GL4-0013) |
+  | colour attachments | the MRT ceiling |
+  | SSBO and UBO offset alignment | `GL_*_OFFSET_ALIGNMENT` |
+- `BindStorageBufferForDrawEXT` binds the indexed SSBO for the next draw's shaders.
+
+**Shared test changes (B18, "desktop variants").**
+
+- `modern_conformance`, `modern_resource_interop` and `constant_buffer` gain a `#version 430 core`
+  compute variant. Each is the ES text with the version line and ES's precision statements and
+  qualifiers replaced, the convention of the engine layer's own `*.desktop.comp.glsl`.
+- The headers were regenerated with the pinned shaderc and naga; `--check` reproduces them, and their
+  SPIR-V and WGSL payloads are byte-identical. The test packages offer the variant.
+- `ComputeShaderTests`' and `ComputeCullingTests`' legacy GLSL ES string payloads now take
+  `CnaTest::EngineLayer::LegacyComputeSource`, which is the same program as GLSL 4.30 on a desktop
+  core renderer. They skip only where the renderer takes neither dialect.
+- `opengl4_modern_feature_discovery_test` no longer asserts that compute is unclaimed. It asserts
+  that compute is promised exactly where a 4.3+ context provides it.
+
+**New OpenGL4 tests** (`OpenGL4ComputeIsolationTests.cpp`): a dispatch between `effect.Apply()` and
+the draw leaves the effect's texture on its unit, and leaves the draw's storage block on its binding.
+Each case also checks that the dispatch really read or wrote its own binding. **Mutation check:**
+with the dispatch's restore loops disabled, both fail on all 16 pixels; restored, both pass.
+
+**Results** (same binaries, private runner, Radeon 780M):
+
+| Suite | Before (GL4-0024) | After |
+|---|---|---|
+| `CnaGraphicsExtTests` OPENGL4 | 856 / 1 / 105 | **893 / 1 / 68** |
+| `CnaGraphicsExtTests` OPENGLES3 | 954 / 0 / 8 | 954 / 0 / 8 |
+| `CnaGraphicsExtTests` OPENGL33 | 922 / 7 / 33 | 938 / 2 / 22 |
+| `CnaGraphicsTests` OPENGL4 | 2 833 / 0 / 57 | 2 833 / 0 / 57 |
+| `CnaRendererTests` OPENGL4 | 323 / 0 / 10 | 325 / 0 / 10 |
+| CNAEXT oracles OPENGL4 | 21 / 1 / 11 | 22 / 1 / 10 (`CNAEXT_ComputeParticles` runs) |
+| `[OpenGL4 GL Error]` lines | 0 | 0 |
+
+OPENGL33's six `ModernGpuConformance` failures are gone, because the package now has the variant its
+4.6 context compiles. One OPENGL33 case changed from skipped to **failing**:
+`ComputeTest.ImageBindingEitherWorksOrRefusesWithItsReason`. It used to skip as "GLSL ES payload", and
+now runs EasyGL's desktop image path, which reads back zero for every texel.
+
+- The same test passes on OpenGL4.
+- EasyGL's texture is sized `RGBA8` and its `GL_TEXTURE_MAX_LEVEL` is clamped, so texture completeness
+  is not the cause.
+- It is an EasyGL defect newly made visible, not a regression. EasyGL is the reference and outside
+  this workstream, so it is recorded, not changed.
+
+**The remaining 68 OpenGL4 skips:**
+
+| skips | reason | where it is handled |
+|---|---|---|
+| 31 | "lit shaders do not sample shadow maps" | later B task |
+| 15 | clustered effect | later B task |
+| 12 | indirect draw | later B task |
+| 6 | GPU timer | later B task |
+| 1 | Color storage image (format usage unclassified) | later B task |
+| 1 + 1 + 1 | refusal paths for capabilities OpenGL4 has, and SPIR-V-only intake | stay skipped |

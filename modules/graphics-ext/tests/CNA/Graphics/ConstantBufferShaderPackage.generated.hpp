@@ -22,7 +22,7 @@ struct PayloadProvenance
 };
 
 inline constexpr std::string_view kPackageName = "constant_buffer";
-inline constexpr std::string_view kManifestSha256 = "e26d3a3873fa84ccf7c44e437d8d5e5233d0641b0407637549620e735ef3e42e";
+inline constexpr std::string_view kManifestSha256 = "f14e6c8aea6efef8669c209c3eda2ed1f69e1ef075f3f90f2dca0c84f4529adb";
 inline constexpr std::string_view kCompiler = "shaderc shared library";
 inline constexpr std::string_view kCompilerSoname = "libshaderc.so.1";
 inline constexpr std::string_view kCompilerSha256 = "31400b359d2f4b4a43168978412a72913474725befb87966068cfac1922ac6c9";
@@ -106,10 +106,30 @@ fn main() {
 }
 )CNA_SHADER";
 
-inline constexpr std::array<PayloadProvenance, 3> kPayloads = {{
+inline constexpr std::string_view kDesktopComputeSource =
+    R"CNA_SHADER(#version 430 core
+
+layout(local_size_x = 1) in;
+layout(std140, binding = 0) uniform Parameters
+{
+    vec4 value;
+};
+layout(std430, binding = 1) writeonly buffer Output
+{
+    vec4 result;
+};
+
+void main()
+{
+    result = value;
+}
+)CNA_SHADER";
+
+inline constexpr std::array<PayloadProvenance, 4> kPayloads = {{
     {"kEasyGlComputeSource", "easygl.comp.glsl", "b5568238caefe97d53651310fac0422ab449368b19f3aad3836c356108564125", "glsl-es", "glsl-es", "compute", "text", "main"},
     {"kVulkanComputeSpirV", "vulkan.comp.glsl", "4e341b5d1526604c92c88883c4594b23f864423ea1e5b74ed14caf6ccc60c546", "spirv", "vulkan-glsl", "compute", "spirv", "main"},
     {"kVulkanComputeWgsl", "vulkan.comp.glsl", "4e341b5d1526604c92c88883c4594b23f864423ea1e5b74ed14caf6ccc60c546", "wgsl", "vulkan-glsl", "compute", "wgsl", "main"},
+    {"kDesktopComputeSource", "desktop.comp.glsl", "6df209c5b06ed6a91eea31652f55696e0b73b0218d957493ec780de618ab235f", "glsl", "glsl", "compute", "text", "main"},
 }};
 
 } // namespace CNA::Tests::ConstantBuffer

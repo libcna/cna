@@ -22,7 +22,7 @@ struct PayloadProvenance
 };
 
 inline constexpr std::string_view kPackageName = "modern_conformance";
-inline constexpr std::string_view kManifestSha256 = "6f78263cd1cf35b0cd46ae0faee59cee6dfc7ec6d7898c1bdbd5462daa2f3d46";
+inline constexpr std::string_view kManifestSha256 = "3b936c30b652d2a99b1ab089bb701df49b144dde39d301e701a9b7fcc9b2b268";
 inline constexpr std::string_view kCompiler = "shaderc shared library";
 inline constexpr std::string_view kCompilerSoname = "libshaderc.so.1";
 inline constexpr std::string_view kCompilerSha256 = "31400b359d2f4b4a43168978412a72913474725befb87966068cfac1922ac6c9";
@@ -499,7 +499,91 @@ fn main(@builtin(global_invocation_id) gl_GlobalInvocationID: vec3<u32>) {
 }
 )CNA_SHADER";
 
-inline constexpr std::array<PayloadProvenance, 12> kPayloads = {{
+inline constexpr std::string_view kGridDesktopSource =
+    R"CNA_SHADER(#version 430 core
+
+// Every invocation of a 3D dispatch writes its own global id, packed, at its own linear index.
+layout(local_size_x = 4, local_size_y = 2, local_size_z = 2) in;
+layout(std430, binding = 0) writeonly buffer Output
+{
+    uint values[];
+};
+
+uniform int uWidth;
+uniform int uHeight;
+
+void main()
+{
+    uvec3 g = gl_GlobalInvocationID;
+    uint index = g.x + g.y * uint(uWidth) + g.z * uint(uWidth) * uint(uHeight);
+    values[index] = (g.x << 20u) | (g.y << 10u) | g.z;
+}
+)CNA_SHADER";
+
+inline constexpr std::string_view kAccumulateDesktopSource =
+    R"CNA_SHADER(#version 430 core
+
+// Read-modify-write: acc[i] += input[i] * uScale, for i < uCount.
+layout(local_size_x = 64) in;
+layout(std430, binding = 0) readonly buffer Input
+{
+    float inputs[];
+};
+layout(std430, binding = 1) buffer Accumulator
+{
+    float acc[];
+};
+
+uniform int uCount;
+uniform float uScale;
+
+void main()
+{
+    uint i = gl_GlobalInvocationID.x;
+    if (i < uint(uCount))
+        acc[i] = acc[i] + inputs[i] * uScale;
+}
+)CNA_SHADER";
+
+inline constexpr std::string_view kChainDesktopSource =
+    R"CNA_SHADER(#version 430 core
+
+// One link of a chain: dst[i] = src[i] * 2 + 1. Chained dispatches read what the previous one wrote.
+layout(local_size_x = 64) in;
+layout(std430, binding = 0) readonly buffer Source
+{
+    uint src[];
+};
+layout(std430, binding = 1) writeonly buffer Destination
+{
+    uint dst[];
+};
+
+uniform int uCount;
+
+void main()
+{
+    uint i = gl_GlobalInvocationID.x;
+    if (i < uint(uCount))
+        dst[i] = src[i] * 2u + 1u;
+}
+)CNA_SHADER";
+
+inline constexpr std::string_view kImageDesktopSource =
+    R"CNA_SHADER(#version 430 core
+
+// Writes a coordinate pattern into an rgba8 storage image: (x, y, x ^ y, 255) as bytes.
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(rgba8, binding = 0) writeonly uniform image2D uImage;
+
+void main()
+{
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    imageStore(uImage, p, vec4(float(p.x), float(p.y), float(p.x ^ p.y), 255.0) / 255.0);
+}
+)CNA_SHADER";
+
+inline constexpr std::array<PayloadProvenance, 16> kPayloads = {{
     {"kGridEsSource", "grid.es.comp.glsl", "28c6e2e6ecab4d70b968b33766240ce83c16c2274fa0953307190a5d5c6d55bf", "glsl-es", "glsl-es", "compute", "text", "main"},
     {"kGridSpirV", "grid.vulkan.comp.glsl", "ca44c1f5a0fef7c460b8e585720f22480124c339ff6dc27f05aed13fa838c71e", "spirv", "vulkan-glsl", "compute", "spirv", "main"},
     {"kGridWgsl", "grid.vulkan.comp.glsl", "ca44c1f5a0fef7c460b8e585720f22480124c339ff6dc27f05aed13fa838c71e", "wgsl", "vulkan-glsl", "compute", "wgsl", "main"},
@@ -512,6 +596,10 @@ inline constexpr std::array<PayloadProvenance, 12> kPayloads = {{
     {"kImageEsSource", "image.es.comp.glsl", "640b207c30916fae4a3eb5dfdea7a6ec29c8115d035a2ac5d22e5b5498a42526", "glsl-es", "glsl-es", "compute", "text", "main"},
     {"kImageSpirV", "image.vulkan.comp.glsl", "978e15a776f882edc4c61f87fe7623d79efe37180d272d157c550e367c032729", "spirv", "vulkan-glsl", "compute", "spirv", "main"},
     {"kImageWgsl", "image.vulkan.comp.glsl", "978e15a776f882edc4c61f87fe7623d79efe37180d272d157c550e367c032729", "wgsl", "vulkan-glsl", "compute", "wgsl", "main"},
+    {"kGridDesktopSource", "grid.desktop.comp.glsl", "310a18f9eb94b19bb8ee35c3b00bc69baa23470bb2f9f7343d95f2f851e452ed", "glsl", "glsl", "compute", "text", "main"},
+    {"kAccumulateDesktopSource", "accumulate.desktop.comp.glsl", "270ecb2aaea983484e875e3f3ea80eefbf6b1a0d8042bffbb2504a5518ea5733", "glsl", "glsl", "compute", "text", "main"},
+    {"kChainDesktopSource", "chain.desktop.comp.glsl", "4e5771bfa0794232fec85f23fd1f7a8be520b9c62c50d6cc02b5a6ea3221b3d9", "glsl", "glsl", "compute", "text", "main"},
+    {"kImageDesktopSource", "image.desktop.comp.glsl", "84c0159e3f2a2d8577347eae110c2a9f3cd3bd98785d6fca63d89da8de5d3f1a", "glsl", "glsl", "compute", "text", "main"},
 }};
 
 } // namespace CNA::Tests::ModernConformance

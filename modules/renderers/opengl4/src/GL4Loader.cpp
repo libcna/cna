@@ -107,6 +107,9 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
     PFNGL4DRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEPROC
         gl4_glDrawElementsInstancedBaseVertexBaseInstance = nullptr;
     PFNGL4GETINTERNALFORMATIVPROC         gl4_glGetInternalformativ         = nullptr;
+    PFNGL4GETINTEGER64VPROC               gl4_glGetInteger64v               = nullptr;
+    PFNGL4PROGRAMUNIFORM1IPROC            gl4_glProgramUniform1i            = nullptr;
+    PFNGL4PROGRAMUNIFORM1FPROC            gl4_glProgramUniform1f            = nullptr;
 
     PFNGL4UNIFORM3FVPROC                   gl4_glUniform3fv                   = nullptr;
     PFNGL4UNIFORM4FVPROC                   gl4_glUniform4fv                   = nullptr;
@@ -227,6 +230,9 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
         ResolveOptional(getProcAddress, "glDrawElementsInstancedBaseVertexBaseInstance",
                         gl4_glDrawElementsInstancedBaseVertexBaseInstance);
         ResolveOptional(getProcAddress, "glGetInternalformativ", gl4_glGetInternalformativ);
+        ResolveOptional(getProcAddress, "glGetInteger64v", gl4_glGetInteger64v);
+        ResolveOptional(getProcAddress, "glProgramUniform1i", gl4_glProgramUniform1i);
+        ResolveOptional(getProcAddress, "glProgramUniform1f", gl4_glProgramUniform1f);
 
         ModernCapabilityInputs inputs;
         glGetIntegerv(GL_MAJOR_VERSION, &inputs.contextMajor);
@@ -263,9 +269,12 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
         inputs.baseInstanceExtension = hasExtension("GL_ARB_base_instance");
         inputs.internalFormatQuery2Extension = hasExtension("GL_ARB_internalformat_query2");
 
-        inputs.computeEntryPoints = gl4_glDispatchCompute != nullptr;
+        inputs.computeEntryPoints = gl4_glDispatchCompute != nullptr &&
+                                    gl4_glProgramUniform1i != nullptr &&
+                                    gl4_glProgramUniform1f != nullptr;
         inputs.shaderStorageBufferEntryPoints =
-            gl4_glBindBufferBase != nullptr && gl4_glGetIntegeri_v != nullptr;
+            gl4_glBindBufferBase != nullptr && gl4_glGetIntegeri_v != nullptr &&
+            gl4_glGetInteger64v != nullptr;
         inputs.imageLoadStoreEntryPoints =
             gl4_glBindImageTexture != nullptr && gl4_glMemoryBarrier != nullptr;
         inputs.textureArrayEntryPoints =
