@@ -2,7 +2,7 @@
 #pragma once
 
 // plans/plan_opengl4_modern_graphics.md Workstream B: the modern CNA/CNAEXT GPU surface over desktop
-// OpenGL 4.3+ -- storage and constant buffers and compute programs. Every class here
+// OpenGL 4.3+ -- storage and constant buffers, compute programs and GPU timers. Every class here
 // exists only when GL4::DiscoverModernCapabilities found the native feature in the live context;
 // the renderer's Supports*EXT answers are what promise it.
 
@@ -241,5 +241,41 @@ namespace CNA::Internal::Renderers::OpenGL4
         std::vector<BufferBinding> constantBuffers_;
         std::vector<TextureBinding> textures_;
         std::vector<ImageBinding> images_;
+    };
+
+    /**
+     * @brief A GPU timer made of two `GL_TIMESTAMP` queries (GL4-0027).
+     *
+     * Timestamps rather than one `GL_TIME_ELAPSED` query: only one elapsed-time query may be
+     * active at a time in a GL context, so two overlapping or nested CNA timers would collide,
+     * while any number of timestamp pairs can interleave. The difference of two 64-bit
+     * nanosecond counters does not saturate. Polling never blocks: availability is asked before a
+     * result is read.
+     */
+    class OpenGL4GpuTimerRenderer final : public IGpuTimerRenderer, public OpenGL4ContextResource
+    {
+    public:
+        OpenGL4GpuTimerRenderer();
+        /** @brief Deletes the queries in their own context; issues no GL if that context is gone. */
+        ~OpenGL4GpuTimerRenderer() override;
+
+        OpenGL4GpuTimerRenderer(const OpenGL4GpuTimerRenderer&) = delete;
+        OpenGL4GpuTimerRenderer& operator=(const OpenGL4GpuTimerRenderer&) = delete;
+
+        /** @brief Records the opening timestamp; ignored while a range is open. */
+        void Begin() override;
+        /** @brief Records the closing timestamp; ignored when no range is open. */
+        void End() override;
+        /** @brief Returns whether a closed range's timestamps have arrived, without waiting. */
+        [[nodiscard]] bool IsResultAvailable() const override;
+        /** @brief Returns the nanoseconds between the two timestamps, or 0 before they arrive. */
+        [[nodiscard]] std::uint64_t ElapsedNanoseconds() const override;
+
+    private:
+        unsigned int queries_[2] = {0, 0};
+        bool open_ = false;
+        bool closed_ = false;
+        mutable bool cached_ = false;
+        mutable std::uint64_t nanoseconds_ = 0;
     };
 }

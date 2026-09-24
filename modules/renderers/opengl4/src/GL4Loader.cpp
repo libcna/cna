@@ -110,6 +110,7 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
     PFNGL4GETINTEGER64VPROC               gl4_glGetInteger64v               = nullptr;
     PFNGL4PROGRAMUNIFORM1IPROC            gl4_glProgramUniform1i            = nullptr;
     PFNGL4PROGRAMUNIFORM1FPROC            gl4_glProgramUniform1f            = nullptr;
+    PFNGL4GETQUERYIVPROC                  gl4_glGetQueryiv                  = nullptr;
 
     PFNGL4UNIFORM3FVPROC                   gl4_glUniform3fv                   = nullptr;
     PFNGL4UNIFORM4FVPROC                   gl4_glUniform4fv                   = nullptr;
@@ -233,6 +234,7 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
         ResolveOptional(getProcAddress, "glGetInteger64v", gl4_glGetInteger64v);
         ResolveOptional(getProcAddress, "glProgramUniform1i", gl4_glProgramUniform1i);
         ResolveOptional(getProcAddress, "glProgramUniform1f", gl4_glProgramUniform1f);
+        ResolveOptional(getProcAddress, "glGetQueryiv", gl4_glGetQueryiv);
 
         ModernCapabilityInputs inputs;
         glGetIntegerv(GL_MAJOR_VERSION, &inputs.contextMajor);

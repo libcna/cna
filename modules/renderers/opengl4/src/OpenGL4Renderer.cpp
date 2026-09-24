@@ -317,6 +317,11 @@ namespace CNA::Internal::Renderers::OpenGL4
                << (message != nullptr ? message : "(null)");
             if (serious)
                 CNA::Logger::Error(os.str(), CNA::LogCategory::RENDER);
+            else if (source == GL_DEBUG_SOURCE_APPLICATION && type == GL_DEBUG_TYPE_MARKER)
+                // GL4-0027: a GraphicsDevice::SetStringMarkerEXT marker, echoed at debug level.
+                CNA::Logger::Debug(std::string("[OpenGL4 Marker] ") +
+                                       (message != nullptr ? message : ""),
+                                   CNA::LogCategory::RENDER);
             else if (userParam != nullptr)
                 CNA::Logger::Debug(os.str(), CNA::LogCategory::RENDER);
         }
@@ -1269,6 +1274,9 @@ namespace CNA::Internal::Renderers::OpenGL4
         if (!verbose)
             gl4_glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_NOTIFICATION, 0,
                                       nullptr, GL_FALSE);
+        // GL4-0027: the application's own markers are delivered whatever the verbosity.
+        gl4_glDebugMessageControl(GL_DEBUG_SOURCE_APPLICATION, GL_DEBUG_TYPE_MARKER, GL_DONT_CARE,
+                                  0, nullptr, GL_TRUE);
         // Debug groups are this renderer's own markers, not diagnostics.
         gl4_glDebugMessageControl(GL_DONT_CARE, GL_DEBUG_TYPE_PUSH_GROUP, GL_DONT_CARE, 0, nullptr,
                                   GL_FALSE);

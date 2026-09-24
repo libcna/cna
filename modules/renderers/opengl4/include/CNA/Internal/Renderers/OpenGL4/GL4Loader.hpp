@@ -862,6 +862,7 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
     using PFNGL4GETINTEGER64VPROC                = void (*)(GLenum, std::int64_t*);
     using PFNGL4PROGRAMUNIFORM1IPROC             = void (*)(GLuint, GLint, GLint);
     using PFNGL4PROGRAMUNIFORM1FPROC             = void (*)(GLuint, GLint, GLfloat);
+    using PFNGL4GETQUERYIVPROC                   = void (*)(GLenum, GLenum, GLint*);
 
     // plans/plan_opengl4_modern_graphics.md GL4-0009: further GL <= 4.1 core entry points the
     // EasyGL-parity paths need (vector/matrix uniforms for the shared stock programs, instanced
@@ -1018,6 +1019,8 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
     extern PFNGL4GETINTEGER64VPROC               gl4_glGetInteger64v;
     extern PFNGL4PROGRAMUNIFORM1IPROC            gl4_glProgramUniform1i;
     extern PFNGL4PROGRAMUNIFORM1FPROC            gl4_glProgramUniform1f;
+    /** GL4-0027: the timestamp counter width, asked before a GPU timer is promised. */
+    extern PFNGL4GETQUERYIVPROC                  gl4_glGetQueryiv;
 
     // GL4-0009 mandatory additions (see the types above).
     extern PFNGL4UNIFORM3FVPROC                   gl4_glUniform3fv;

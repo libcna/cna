@@ -916,3 +916,49 @@ now runs EasyGL's desktop image path, which reads back zero for every texel.
 | CNAEXT oracles OPENGL4 | 22 / 1 / 10 | 23 / 1 / 9 — `CNAEXT_GpuDriven` (GPU culling → indirect draw) passes |
 | `CnaGraphicsTests` capability/profile/instancing/indirect/limit subset | — | 200 / 0 / 2 |
 | `[OpenGL4 GL Error]` lines | 0 | 0 |
+
+## GL4-0027 — GPU timers and debug markers (B24, B25)
+
+- **Timers are two `GL_TIMESTAMP` queries, not one `GL_TIME_ELAPSED` query.** A GL context allows
+  only one elapsed-time query to be active at a time. Two CNA timers whose ranges overlap — a
+  whole-frame timer around a per-pass one, as `RenderPipeline`'s pass timing does — would make the
+  inner `Begin` a `GL_INVALID_OPERATION`. Timestamp pairs interleave freely.
+  - The difference of two 64-bit nanosecond counters (`glGetQueryObjectui64v`) does not saturate.
+    EasyGL's 32-bit read saturates at 4.29 s.
+  - `IsResultAvailable` asks `GL_QUERY_RESULT_AVAILABLE` of both queries before reading a result, so
+    polling never blocks.
+  - `SupportsGpuTimerEXT` also asks `GL_QUERY_COUNTER_BITS` for `GL_TIMESTAMP` once: GL permits a
+    zero-bit counter, which would make every difference zero.
+  - `GetTimestampPeriodPicosecondsEXT` is 1000, because a `GL_TIMESTAMP` tick is one nanosecond by
+    definition.
+- **Markers.** `SetStringMarkerEXT` inserts `glDebugMessageInsert(APPLICATION, MARKER)`, which capture
+  tools (RenderDoc, apitrace) and the renderer's debug callback both see.
+  - Application markers are delivered whatever the verbosity, and echoed at debug level as
+    `[OpenGL4 Marker] <text>`, never on the error channel.
+  - The public API has only this point marker. A scoped region would be public API expansion, so
+    `glPushDebugGroup`/`glPopDebugGroup` are used only internally: around each compute dispatch
+    ("CNA compute dispatch"), while debug output is on, so a capture shows the one piece of work the
+    renderer issues as a unit of its own.
+- **Tests** `OpenGL4TimingAndMarkerTests.cpp`:
+  - an inner timer inside an outer one both complete, outer ≥ inner > 0, with no GL error;
+  - an unopened or open timer reports nothing;
+  - a marker reaches the GL debug stream exactly once.
+  - **Mutation check:** without the marker enable, the marker case fails.
+
+**Results:**
+
+| Suite | GL4-0026 | GL4-0027 |
+|---|---|---|
+| `CnaGraphicsExtTests` OPENGL4 | 904 / 1 / 57 | **907 / 1 / 54** |
+| CNAEXT oracles OPENGL4 | 23 / 1 / 9 | 24 / 1 / 8 (`CNAEXT_GpuTiming` passes) |
+| `[OpenGL4 GL Error]` lines | 0 | 0 |
+
+The six `CnaGraphicsExtTests` changes that ran before and after, per test:
+
+- Six cases went from skipped to passing: `GpuTimerTest` `AClosedRange…`, `MoreWorkTakesMoreGpuTime`,
+  `PollingBeforeTheGpuFinishes…` and `TheNumberTracksTheWorkloadAcrossThreeSizes` (workload scaling
+  across three sizes), and `PassTimingTest` `EachPassReportsItsOwnNameAndItsOwnTime` and
+  `ThePipelineSurfacesTheChainsTimings`.
+- Three went from passing to skipped, because they are the refusal legs for a renderer *without* a
+  timer: `AnUnsupportedTimerIsInert…`, `AnUnsupportedTimerNeverInventsANumber` and
+  `TurningItOnWhereThereIsNoTimer…`.

@@ -710,6 +710,32 @@ namespace CNA::Internal::Renderers::OpenGL4
          */
         [[nodiscard]] bool SupportsBaseInstanceDrawingEXT() const override;
         /**
+         * @brief Whether GPU time can be measured.
+         *
+         * @return True where timestamp queries resolved and the driver reports a non-zero
+         *         `GL_TIMESTAMP` counter width.
+         */
+        [[nodiscard]] bool SupportsGpuTimerEXT() const override;
+        /**
+         * @brief Creates a timestamp-pair GPU timer.
+         *
+         * @return The timer, or null without GPU timers.
+         */
+        std::unique_ptr<IGpuTimerRenderer> CreateGpuTimerEXT() override;
+        /** @brief Returns 1000: a `GL_TIMESTAMP` tick is one nanosecond; 0 without timers. */
+        [[nodiscard]] std::uint64_t GetTimestampPeriodPicosecondsEXT() const override;
+        /**
+         * @brief Inserts a debug marker into the command stream (`glDebugMessageInsert`).
+         *
+         * @param marker The marker text; null is ignored, as is a context without KHR_debug.
+         */
+        void SetStringMarkerEXT(const char* marker) override;
+        /** @brief CNAEXT. Whether the GL debug callback is installed (Debug builds by default). */
+        CNAEXT [[nodiscard]] bool IsDebugOutputEnabledEXT() const noexcept
+        {
+            return debugOutputEnabled_;
+        }
+        /**
          * @brief Draws with its vertex and instance counts read from @p argumentBuffer.
          *
          * @param vb The first bound vertex buffer.
@@ -1231,6 +1257,8 @@ namespace CNA::Internal::Renderers::OpenGL4
         unsigned int samplers_[kMaxSamplerSlots] = {};
         /// Nearest/clamp sampler every sampled compute input reads through (GL4-0025).
         unsigned int computeSampler_ = 0;
+        /// GL_TIMESTAMP counter width, asked on first use; -1 until then (GL4-0027).
+        mutable int timestampCounterBits_ = -1;
 
 #if defined(CNA_OPENGL4_COMPILED_EFFECTS)
         /// One MojoShader GL context for this renderer's lifetime, created on first use.

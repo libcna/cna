@@ -462,6 +462,71 @@ namespace CNA::Internal::Renderers::OpenGL4
     }
 
     // ------------------------------------------------------------------------------------
+    // OpenGL4GpuTimerRenderer
+    // ------------------------------------------------------------------------------------
+
+    OpenGL4GpuTimerRenderer::OpenGL4GpuTimerRenderer()
+    {
+        gl4_glGenQueries(2, queries_);
+    }
+
+    OpenGL4GpuTimerRenderer::~OpenGL4GpuTimerRenderer()
+    {
+        const auto ownContext = EnterOwnContext();   // GL4-0021
+        if (!ownContext) return;
+        gl4_glDeleteQueries(2, queries_);
+    }
+
+    void OpenGL4GpuTimerRenderer::Begin()
+    {
+        if (open_) return;
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return;
+        gl4_glQueryCounter(queries_[0], GL_TIMESTAMP);
+        open_ = true;
+        closed_ = false;
+        cached_ = false;
+        nanoseconds_ = 0;
+    }
+
+    void OpenGL4GpuTimerRenderer::End()
+    {
+        if (!open_) return;
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return;
+        gl4_glQueryCounter(queries_[1], GL_TIMESTAMP);
+        open_ = false;
+        closed_ = true;
+    }
+
+    bool OpenGL4GpuTimerRenderer::IsResultAvailable() const
+    {
+        if (!closed_) return false;
+        if (cached_) return true;
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return false;
+        // Timestamps complete in command order, so the closing one arriving means both have; both
+        // are still asked, because nothing is gained by trusting that.
+        GLuint available[2] = {0, 0};
+        gl4_glGetQueryObjectuiv(queries_[1], GL_QUERY_RESULT_AVAILABLE, &available[1]);
+        if (available[1] == 0) return false;
+        gl4_glGetQueryObjectuiv(queries_[0], GL_QUERY_RESULT_AVAILABLE, &available[0]);
+        if (available[0] == 0) return false;
+        std::uint64_t begin = 0;
+        std::uint64_t end = 0;
+        gl4_glGetQueryObjectui64v(queries_[0], GL_QUERY_RESULT, &begin);
+        gl4_glGetQueryObjectui64v(queries_[1], GL_QUERY_RESULT, &end);
+        nanoseconds_ = end >= begin ? end - begin : 0;
+        cached_ = true;
+        return true;
+    }
+
+    std::uint64_t OpenGL4GpuTimerRenderer::ElapsedNanoseconds() const
+    {
+        return IsResultAvailable() ? nanoseconds_ : 0;
+    }
+
+    // ------------------------------------------------------------------------------------
     // OpenGL4Renderer -- the modern entry points
     // ------------------------------------------------------------------------------------
 
@@ -642,8 +707,15 @@ namespace CNA::Internal::Renderers::OpenGL4
             gl4_glSamplerParameteri(computeSampler_, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
             gl4_glSamplerParameteri(computeSampler_, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         }
+        // A region a capture tool shows, around the only work this renderer does on its own
+        // initiative rather than as one XNA call; only when debug output is on.
+        const bool group = debugOutputEnabled_ && gl4_glPushDebugGroup != nullptr &&
+                           gl4_glPopDebugGroup != nullptr;
+        if (group)
+            gl4_glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, "CNA compute dispatch");
         native->DispatchEXT(static_cast<unsigned int>(groupsX), static_cast<unsigned int>(groupsY),
                             static_cast<unsigned int>(groupsZ), computeSampler_);
+        if (group) gl4_glPopDebugGroup();
     }
 
     void OpenGL4Renderer::MemoryBarrierEXT(const int barrierBits)
@@ -667,6 +739,45 @@ namespace CNA::Internal::Renderers::OpenGL4
         add(GraphicsMemoryBarrier::Framebuffer, GL_FRAMEBUFFER_BARRIER_BIT);
         add(GraphicsMemoryBarrier::IndirectCommand, GL_COMMAND_BARRIER_BIT);
         if (native != 0) gl4_glMemoryBarrier(native);
+    }
+
+    bool OpenGL4Renderer::SupportsGpuTimerEXT() const
+    {
+        // Timestamp queries are core 3.3, but GL lets an implementation report a zero-bit counter
+        // for GL_TIMESTAMP, which would make every difference zero. Asked once, not assumed.
+        if (!modernCapabilities_.gpuTimersNative || gl4_glGetQueryiv == nullptr) return false;
+        if (timestampCounterBits_ < 0)
+        {
+            GLint bits = 0;
+            gl4_glGetQueryiv(GL_TIMESTAMP, GL_QUERY_COUNTER_BITS, &bits);
+            timestampCounterBits_ = bits;
+        }
+        return timestampCounterBits_ > 0;
+    }
+
+    std::unique_ptr<IGpuTimerRenderer> OpenGL4Renderer::CreateGpuTimerEXT()
+    {
+        EnsureCallingThreadContext();
+        if (!SupportsGpuTimerEXT()) return nullptr;
+        auto timer = std::make_unique<OpenGL4GpuTimerRenderer>();
+        timer->AttachOwningContext(platformContext_);
+        return timer;
+    }
+
+    std::uint64_t OpenGL4Renderer::GetTimestampPeriodPicosecondsEXT() const
+    {
+        // GL_TIMESTAMP counts nanoseconds by definition, whatever the hardware clock underneath.
+        return SupportsGpuTimerEXT() ? UINT64_C(1000) : 0;
+    }
+
+    void OpenGL4Renderer::SetStringMarkerEXT(const char* marker)
+    {
+        if (marker == nullptr || gl4_glDebugMessageInsert == nullptr) return;
+        EnsureCallingThreadContext();
+        // A point in the command stream that capture tools (RenderDoc, apitrace) and the debug
+        // callback both see. The public API has no scoped region, so none is opened here.
+        gl4_glDebugMessageInsert(GL_DEBUG_SOURCE_APPLICATION, GL_DEBUG_TYPE_MARKER, 0,
+                                 GL_DEBUG_SEVERITY_NOTIFICATION, -1, marker);
     }
 
     bool OpenGL4Renderer::SupportsIndirectDrawEXT() const
