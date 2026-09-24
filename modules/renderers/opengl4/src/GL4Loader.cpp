@@ -113,6 +113,8 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
     PFNGL4GETQUERYIVPROC                  gl4_glGetQueryiv                  = nullptr;
     PFNGL4ISBUFFERPROC                    gl4_glIsBuffer                    = nullptr;
     PFNGL4ISQUERYPROC                     gl4_glIsQuery                     = nullptr;
+    PFNGL4COMPRESSEDTEXIMAGE3DPROC        gl4_glCompressedTexImage3D        = nullptr;
+    PFNGL4COMPRESSEDTEXSUBIMAGE3DPROC     gl4_glCompressedTexSubImage3D     = nullptr;
 
     PFNGL4UNIFORM3FVPROC                   gl4_glUniform3fv                   = nullptr;
     PFNGL4UNIFORM4FVPROC                   gl4_glUniform4fv                   = nullptr;
@@ -383,6 +385,8 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
 
         ok &= Resolve(getProcAddress, "glTexImage3D", gl4_glTexImage3D);
         ok &= Resolve(getProcAddress, "glTexSubImage3D", gl4_glTexSubImage3D);
+        ok &= Resolve(getProcAddress, "glCompressedTexImage3D", gl4_glCompressedTexImage3D);
+        ok &= Resolve(getProcAddress, "glCompressedTexSubImage3D", gl4_glCompressedTexSubImage3D);
         ok &= Resolve(getProcAddress, "glFramebufferTextureLayer", gl4_glFramebufferTextureLayer);
 
         ok &= Resolve(getProcAddress, "glGenQueries", gl4_glGenQueries);

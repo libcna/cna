@@ -12,6 +12,7 @@
 #include "CNA/RendererCapabilityProfile.hpp"
 #include "CNA/ShaderLanguageEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <algorithm>
@@ -640,6 +641,203 @@ namespace CNA::Internal::Renderers::OpenGL4
     }
 
     // ------------------------------------------------------------------------------------
+    // OpenGL4Texture2DArrayRenderer (GL4-0037)
+    // ------------------------------------------------------------------------------------
+
+    OpenGL4Texture2DArrayRenderer::OpenGL4Texture2DArrayRenderer(
+        const int width, const int height, const int layerCount, const int mipLevelCount,
+        const int surfaceFormat, const bool filterable)
+        : width_(width), height_(height), layers_(layerCount),
+          levels_(std::max(1, mipLevelCount)), surfaceFormat_(surfaceFormat),
+          compressed_(Detail::IsDxtFormat(surfaceFormat)), filterable_(filterable)
+    {
+        if (!compressed_ && !Detail::MapTextureTransferFormat(surfaceFormat_, true, transfer_))
+            throw std::runtime_error("OpenGL4: no Texture2D storage for SurfaceFormat ordinal " +
+                                     std::to_string(surfaceFormat_));
+        glGenTextures(1, &texture_);
+        const Detail::ScopedTextureBinding scope(GL_TEXTURE_2D_ARRAY, texture_);
+        const Detail::ScopedUnpackState unpack(1);
+        for (int level = 0; level < levels_; ++level)
+        {
+            const int levelWidth = std::max(1, width_ >> level);
+            const int levelHeight = std::max(1, height_ >> level);
+            if (compressed_)
+            {
+                // Zero blocks, not an undefined allocation: a region never written reads back
+                // as zeros, as a TextureCube's does.
+                const std::size_t bytes =
+                    Detail::DxtImageBytes(surfaceFormat_, levelWidth, levelHeight) *
+                    static_cast<std::size_t>(layers_);
+                const std::vector<std::uint8_t> zero(bytes, 0u);
+                gl4_glCompressedTexImage3D(GL_TEXTURE_2D_ARRAY, level,
+                                           Detail::DxtInternalFormat(surfaceFormat_), levelWidth,
+                                           levelHeight, layers_, 0,
+                                           static_cast<GLsizei>(bytes), zero.data());
+                continue;
+            }
+            // Zero declared-format texels, stored the way a Texture2D stores them (a widened
+            // Single still samples as (0, 1, 1, 1), Direct3D 9's expansion).
+            const std::size_t texels = static_cast<std::size_t>(levelWidth) *
+                                       static_cast<std::size_t>(levelHeight) *
+                                       static_cast<std::size_t>(layers_);
+            const std::vector<std::uint8_t> zero(
+                texels * static_cast<std::size_t>(
+                             Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(
+                                 static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(
+                                     surfaceFormat_))),
+                0u);
+            std::vector<std::uint8_t> scratch;
+            const void* upload =
+                Detail::ExpandTexelsForTransfer(surfaceFormat_, zero.data(), texels, scratch);
+            gl4_glTexImage3D(GL_TEXTURE_2D_ARRAY, level,
+                             static_cast<GLint>(transfer_.internalFormat), levelWidth,
+                             levelHeight, layers_, 0, transfer_.pixelFormat, transfer_.pixelType,
+                             upload);
+        }
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_BASE_LEVEL, 0);
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAX_LEVEL, levels_ - 1);
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    }
+
+    OpenGL4Texture2DArrayRenderer::~OpenGL4Texture2DArrayRenderer()
+    {
+        const auto ownContext = EnterOwnContext();   // GL4-0021
+        if (!ownContext || texture_ == 0) return;
+        glDeleteTextures(1, &texture_);
+    }
+
+    std::size_t OpenGL4Texture2DArrayRenderer::RegionBytes(const int width,
+                                                           const int height) const
+    {
+        if (compressed_)
+            return static_cast<std::size_t>((width + 3) / 4) *
+                   static_cast<std::size_t>((height + 3) / 4) *
+                   Detail::DxtBlockBytes(surfaceFormat_);
+        return static_cast<std::size_t>(width) * static_cast<std::size_t>(height) *
+               static_cast<std::size_t>(Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(
+                   static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(surfaceFormat_)));
+    }
+
+    bool OpenGL4Texture2DArrayRenderer::ValidRegion(const int layer, const int mipLevel,
+                                                    const int x, const int y, const int width,
+                                                    const int height, const std::size_t byteCount,
+                                                    int& levelWidth, int& levelHeight) const
+    {
+        if (layer < 0 || layer >= layers_ || mipLevel < 0 || mipLevel >= levels_) return false;
+        levelWidth = std::max(1, width_ >> mipLevel);
+        levelHeight = std::max(1, height_ >> mipLevel);
+        if (x < 0 || y < 0 || width <= 0 || height <= 0 || x > levelWidth - width ||
+            y > levelHeight - height)
+            return false;
+        if (compressed_ &&
+            ((x % 4) != 0 || (y % 4) != 0 ||
+             ((width % 4) != 0 && x + width != levelWidth) ||
+             ((height % 4) != 0 && y + height != levelHeight)))
+            return false;
+        return byteCount == RegionBytes(width, height);
+    }
+
+    bool OpenGL4Texture2DArrayRenderer::SetData(const int layer, const int mipLevel, const int x,
+                                                const int y, const int width, const int height,
+                                                const void* data, const std::size_t byteCount)
+    {
+        int levelWidth = 0;
+        int levelHeight = 0;
+        if (data == nullptr || !ValidRegion(layer, mipLevel, x, y, width, height, byteCount,
+                                            levelWidth, levelHeight))
+            return false;
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return false;
+        DrainGlErrors();
+        const Detail::ScopedTextureBinding scope(GL_TEXTURE_2D_ARRAY, texture_);
+        const Detail::ScopedUnpackState unpack(1);
+        if (compressed_)
+        {
+            gl4_glCompressedTexSubImage3D(GL_TEXTURE_2D_ARRAY, mipLevel, x, y, layer, width,
+                                          height, 1, Detail::DxtInternalFormat(surfaceFormat_),
+                                          static_cast<GLsizei>(byteCount), data);
+        }
+        else
+        {
+            std::vector<std::uint8_t> scratch;
+            const void* upload = Detail::ExpandTexelsForTransfer(
+                surfaceFormat_, data,
+                static_cast<std::size_t>(width) * static_cast<std::size_t>(height), scratch);
+            gl4_glTexSubImage3D(GL_TEXTURE_2D_ARRAY, mipLevel, x, y, layer, width, height, 1,
+                                transfer_.pixelFormat, transfer_.pixelType, upload);
+        }
+        return GlOperationSucceeded();
+    }
+
+    bool OpenGL4Texture2DArrayRenderer::GetData(const int layer, const int mipLevel, const int x,
+                                                const int y, const int width, const int height,
+                                                void* data, const std::size_t byteCount) const
+    {
+        int levelWidth = 0;
+        int levelHeight = 0;
+        if (data == nullptr || !ValidRegion(layer, mipLevel, x, y, width, height, byteCount,
+                                            levelWidth, levelHeight))
+            return false;
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return false;
+        auto* out = static_cast<std::uint8_t*>(data);
+        DrainGlErrors();
+        const Detail::ScopedTextureBinding scope(GL_TEXTURE_2D_ARRAY, texture_);
+        const Detail::ScopedPackState pack(1);
+        if (compressed_)
+        {
+            const std::size_t blockBytes = Detail::DxtBlockBytes(surfaceFormat_);
+            const std::size_t layerBytes =
+                Detail::DxtImageBytes(surfaceFormat_, levelWidth, levelHeight);
+            std::vector<std::uint8_t> level(layerBytes * static_cast<std::size_t>(layers_));
+            gl4_glGetCompressedTexImage(GL_TEXTURE_2D_ARRAY, mipLevel, level.data());
+            if (!GlOperationSucceeded()) return false;
+            const std::size_t columns = static_cast<std::size_t>((levelWidth + 3) / 4);
+            const std::size_t copyColumns = static_cast<std::size_t>((width + 3) / 4);
+            const std::size_t copyRows = static_cast<std::size_t>((height + 3) / 4);
+            const std::uint8_t* slice = level.data() + layerBytes * static_cast<std::size_t>(layer);
+            for (std::size_t row = 0; row < copyRows; ++row)
+            {
+                const std::size_t source =
+                    ((static_cast<std::size_t>(y / 4) + row) * columns +
+                     static_cast<std::size_t>(x / 4)) * blockBytes;
+                std::memcpy(out + row * copyColumns * blockBytes, slice + source,
+                            copyColumns * blockBytes);
+            }
+            return true;
+        }
+
+        const std::size_t transferTexel =
+            static_cast<std::size_t>(transfer_.transferBytesPerTexel);
+        const std::size_t declaredTexel =
+            static_cast<std::size_t>(Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(
+                static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(surfaceFormat_)));
+        const std::size_t layerTexels =
+            static_cast<std::size_t>(levelWidth) * static_cast<std::size_t>(levelHeight);
+        std::vector<std::uint8_t> level(layerTexels * static_cast<std::size_t>(layers_) *
+                                        transferTexel);
+        glGetTexImage(GL_TEXTURE_2D_ARRAY, mipLevel, transfer_.pixelFormat, transfer_.pixelType,
+                      level.data());
+        if (!GlOperationSucceeded()) return false;
+        const std::uint8_t* slice =
+            level.data() + layerTexels * transferTexel * static_cast<std::size_t>(layer);
+        for (int row = 0; row < height; ++row)
+        {
+            const std::size_t source = (static_cast<std::size_t>(y + row) *
+                                            static_cast<std::size_t>(levelWidth) +
+                                        static_cast<std::size_t>(x)) * transferTexel;
+            Detail::CollapseTransferTexels(
+                surfaceFormat_, slice + source, static_cast<std::size_t>(width),
+                out + static_cast<std::size_t>(row) * static_cast<std::size_t>(width) *
+                          declaredTexel);
+        }
+        return true;
+    }
+
+    // ------------------------------------------------------------------------------------
     // OpenGL4GpuTimerRenderer
     // ------------------------------------------------------------------------------------
 
@@ -917,6 +1115,53 @@ namespace CNA::Internal::Renderers::OpenGL4
         add(GraphicsMemoryBarrier::Framebuffer, GL_FRAMEBUFFER_BARRIER_BIT);
         add(GraphicsMemoryBarrier::IndirectCommand, GL_COMMAND_BARRIER_BIT);
         if (native != 0) gl4_glMemoryBarrier(native);
+    }
+
+    std::unique_ptr<ITexture2DArrayRenderer> OpenGL4Renderer::CreateTexture2DArrayEXT(
+        const int width, const int height, const int layerCount, const int mipLevelCount,
+        const int surfaceFormat, const std::uint32_t usage)
+    {
+        EnsureCallingThreadContext();
+        if (!modernCapabilities_.textureArraysNative) return nullptr;
+        // Exactly the Texture2D formats of this renderer, each stored the way a Texture2D is; a
+        // Dxt array needs the blocks natively, because readback returns them.
+        if (ClassifySurfaceFormatEXT(surfaceFormat) != RendererFormatVerdict::Supported)
+            return nullptr;
+        if (Detail::IsDxtFormat(surfaceFormat) && !Detail::ContextHasS3tc()) return nullptr;
+        if (width <= 0 || height <= 0 || layerCount <= 0 || mipLevelCount <= 0 ||
+            width > GetMaxTextureDimension() || height > GetMaxTextureDimension() ||
+            layerCount > GetMaxTextureArrayLayersEXT())
+            return nullptr;
+        constexpr std::uint32_t kFilterable = UINT32_C(1) << 1;
+        auto texture = std::make_unique<OpenGL4Texture2DArrayRenderer>(
+            width, height, layerCount, mipLevelCount, surfaceFormat, (usage & kFilterable) != 0);
+        texture->AttachOwningContext(platformContext_);
+        return texture;
+    }
+
+    void OpenGL4Renderer::RequireFilterableTextureArraysEXT(const IEffectRenderer& effect) const
+    {
+        const auto* native = dynamic_cast<const OpenGL4EffectRenderer*>(&effect);
+        if (native == nullptr) return;
+        for (int unit = 0; unit < kMaxSamplerSlots && unit < 16; ++unit)
+        {
+            const OpenGL4Texture2DArrayRenderer* array = native->TextureArrayAtEXT(unit);
+            // XNA TextureFilter.Point (1) is the one ordinal with neither linear nor mip filtering.
+            if (array != nullptr && !array->IsFilterableEXT() &&
+                samplerFilters_[static_cast<std::size_t>(unit)] != 1)
+            {
+                throw System::NotSupportedException(
+                    "OpenGL4: a Texture2DArray without Filterable usage was paired with a linear, "
+                    "mip or anisotropic sampler in unit " + std::to_string(unit) +
+                    "; declare Texture2DArrayUsage::Filterable or sample it with Point.");
+            }
+        }
+    }
+
+    int OpenGL4Renderer::GetMaxTextureArrayLayersEXT() const
+    {
+        if (!modernCapabilities_.textureArraysNative) return 0;
+        return static_cast<int>(QueryInteger(GL_MAX_ARRAY_TEXTURE_LAYERS));
     }
 
     std::unique_ptr<IStorageTexture2DRenderer> OpenGL4Renderer::CreateStorageTexture2DEXT(

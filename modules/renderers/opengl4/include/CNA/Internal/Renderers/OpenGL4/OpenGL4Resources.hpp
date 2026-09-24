@@ -80,7 +80,8 @@ namespace CNA::Internal::Renderers::OpenGL4
             /**
              * @brief Remembers the active unit's current binding of @p target, then binds @p texture.
              *
-             * @param target GL_TEXTURE_2D, GL_TEXTURE_CUBE_MAP or GL_TEXTURE_3D.
+             * @param target GL_TEXTURE_2D, GL_TEXTURE_CUBE_MAP, GL_TEXTURE_3D or
+             *        GL_TEXTURE_2D_ARRAY.
              * @param texture Texture name to bind.
              */
             ScopedTextureBinding(GLenum target, GLuint texture)
@@ -88,6 +89,7 @@ namespace CNA::Internal::Renderers::OpenGL4
             {
                 const GLenum query = target == GL_TEXTURE_CUBE_MAP ? GL_TEXTURE_BINDING_CUBE_MAP
                                    : target == GL_TEXTURE_3D       ? GL_TEXTURE_BINDING_3D
+                                   : target == GL_TEXTURE_2D_ARRAY ? GL_TEXTURE_BINDING_2D_ARRAY
                                                                    : GL_TEXTURE_BINDING_2D;
                 glGetIntegerv(query, &previous_);
                 glBindTexture(target, texture);

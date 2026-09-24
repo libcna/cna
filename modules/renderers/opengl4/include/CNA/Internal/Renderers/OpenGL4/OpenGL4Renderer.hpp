@@ -30,6 +30,7 @@ namespace Microsoft::Xna::Framework::Graphics
 namespace CNA::Internal::Renderers::OpenGL4
 {
     class OpenGL4Renderer;
+    class OpenGL4Texture2DArrayRenderer;
 #if defined(CNA_OPENGL4_COMPILED_EFFECTS)
     class OpenGL4CompiledEffect;
 #endif
@@ -142,6 +143,27 @@ namespace CNA::Internal::Renderers::OpenGL4
          */
         [[nodiscard]] bool BindStorageTexture2DEXT(
             int unit, std::shared_ptr<IStorageTexture2DRenderer> texture) override;
+        /**
+         * @brief Binds a Texture2DArray for this program to sample (GL4-0037).
+         *
+         * Array unit N is GL texture unit N's `GL_TEXTURE_2D_ARRAY` binding, which never aliases the
+         * unit's `GL_TEXTURE_2D`, cube or volume binding, and samples through XNA sampler slot N as
+         * on Vulkan and WebGPU. The binding belongs to this effect: it is re-installed whenever the
+         * effect binds, and keeps the array alive until the unit is cleared.
+         *
+         * @param unit Array unit, 0-15 (an XNA sampler slot).
+         * @param texture The array, or null to clear the unit.
+         * @return False for a unit outside 0-15 or an array of another renderer family.
+         */
+        [[nodiscard]] bool BindTexture2DArrayEXT(
+            int unit, std::shared_ptr<ITexture2DArrayRenderer> texture) override;
+        /**
+         * @brief The texture array bound to @p unit, if any.
+         *
+         * @param unit Array unit.
+         * @return The array, or null.
+         */
+        CNAEXT [[nodiscard]] const OpenGL4Texture2DArrayRenderer* TextureArrayAtEXT(int unit) const;
 
         /** @brief Returns the program, so a SpriteBatch flush binds the one the setters wrote to. */
         [[nodiscard]] OpenGL4RawProgram& GetProgram() { return program_; }
@@ -163,10 +185,14 @@ namespace CNA::Internal::Renderers::OpenGL4
         [[nodiscard]] int ArrayUniformLocation(const char* name) const;
         /// REMED-GFX-147: records and uploads one unit's render-target row-order flag.
         void UpdateRtFlipV(int unit, float flip);
+        /// GL4-0037: puts this effect's texture arrays on their units.
+        void InstallTextureArrays() const;
 
         OpenGL4RawProgram program_;
         float rtFlipV_[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
         bool rtFlipVUploaded_ = false;
+        /// GL4-0037: this effect's texture arrays, one per XNA sampler slot, held until cleared.
+        std::array<std::shared_ptr<ITexture2DArrayRenderer>, 16> textureArrays_{};
     };
 
     /**
@@ -735,6 +761,35 @@ namespace CNA::Internal::Renderers::OpenGL4
          * @return True where `glDrawElementsInstancedBaseVertexBaseInstance` (core 4.2) resolved.
          */
         [[nodiscard]] bool SupportsBaseInstanceDrawingEXT() const override;
+        /**
+         * @brief Creates a `GL_TEXTURE_2D_ARRAY` in one of this renderer's `Texture2D` formats.
+         *
+         * @param width Level-0 width.
+         * @param height Level-0 height.
+         * @param layerCount Layers; at most GetMaxTextureArrayLayersEXT().
+         * @param mipLevelCount Levels to allocate.
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @param usage `CNA::Graphics::Texture2DArrayUsage` bits.
+         * @return The array, or null for a format a `Texture2D` here does not store (or stores
+         *         only decoded, for Dxt without native S3TC).
+         */
+        std::unique_ptr<ITexture2DArrayRenderer> CreateTexture2DArrayEXT(
+            int width, int height, int layerCount, int mipLevelCount, int surfaceFormat,
+            std::uint32_t usage) override;
+        /** @brief Returns `GL_MAX_ARRAY_TEXTURE_LAYERS`; texture arrays are core since GL 3.0. */
+        [[nodiscard]] int GetMaxTextureArrayLayersEXT() const override;
+        /**
+         * @brief Refuses a draw sampling a non-Filterable array through a filtering sampler.
+         *
+         * `Texture2DArrayUsage::Filterable` is the declaration that linear or mip filtering may be
+         * used; without it only `TextureFilter::Point` may sample the array. GL itself would
+         * filter anyway, but code that did so here would fail on Vulkan, which enforces the
+         * declaration, so it is enforced the same way (GL4-0037).
+         *
+         * @param effect The custom effect about to draw.
+         * @throws System::NotSupportedException for the first unit that breaks the rule.
+         */
+        CNAEXT void RequireFilterableTextureArraysEXT(const IEffectRenderer& effect) const;
         /**
          * @brief Creates a storage texture in one of the fifteen storage-image formats.
          *
@@ -1305,6 +1360,8 @@ namespace CNA::Internal::Renderers::OpenGL4
         unsigned int samplers_[kMaxSamplerSlots] = {};
         /// Nearest/clamp sampler every sampled compute input reads through (GL4-0025).
         unsigned int computeSampler_ = 0;
+        /// XNA TextureFilter ordinal applied to each sampler slot (GL4-0037).
+        std::array<int, kMaxSamplerSlots> samplerFilters_{};
         /// GL_TIMESTAMP counter width, asked on first use; -1 until then (GL4-0027).
         mutable int timestampCounterBits_ = -1;
         /// Per-SurfaceFormat usage answers, asked of the driver once each (GL4-0030).

@@ -570,6 +570,9 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
 #ifndef GL_RG8
 #define GL_RG8 0x822B
 #endif
+#ifndef GL_TEXTURE_BINDING_2D_ARRAY
+#define GL_TEXTURE_BINDING_2D_ARRAY 0x8C1D
+#endif
 #ifndef GL_COMPUTE_SHADER
 #define GL_COMPUTE_SHADER 0x91B9
 #endif
@@ -866,6 +869,11 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
     using PFNGL4PROGRAMUNIFORM1IPROC             = void (*)(GLuint, GLint, GLint);
     using PFNGL4PROGRAMUNIFORM1FPROC             = void (*)(GLuint, GLint, GLfloat);
     using PFNGL4GETQUERYIVPROC                   = void (*)(GLenum, GLenum, GLint*);
+    using PFNGL4COMPRESSEDTEXIMAGE3DPROC         =
+        void (*)(GLenum, GLint, GLenum, GLsizei, GLsizei, GLsizei, GLint, GLsizei, const void*);
+    using PFNGL4COMPRESSEDTEXSUBIMAGE3DPROC      = void (*)(GLenum, GLint, GLint, GLint, GLint,
+                                                            GLsizei, GLsizei, GLsizei, GLenum,
+                                                            GLsizei, const void*);
     using PFNGL4ISBUFFERPROC                     = GLboolean (*)(GLuint);
     using PFNGL4ISQUERYPROC                      = GLboolean (*)(GLuint);
 
@@ -1030,6 +1038,10 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
     extern PFNGL4ISBUFFERPROC                    gl4_glIsBuffer;
     /** GL4-0031: see gl4_glIsBuffer. */
     extern PFNGL4ISQUERYPROC                     gl4_glIsQuery;
+    /** GL4-0037: block-compressed texture-array storage (core since 1.3, so mandatory). */
+    extern PFNGL4COMPRESSEDTEXIMAGE3DPROC        gl4_glCompressedTexImage3D;
+    /** GL4-0037: see gl4_glCompressedTexImage3D. */
+    extern PFNGL4COMPRESSEDTEXSUBIMAGE3DPROC     gl4_glCompressedTexSubImage3D;
 
     // GL4-0009 mandatory additions (see the types above).
     extern PFNGL4UNIFORM3FVPROC                   gl4_glUniform3fv;

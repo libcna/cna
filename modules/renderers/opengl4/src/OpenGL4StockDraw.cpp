@@ -1438,6 +1438,8 @@ namespace CNA::Internal::Renderers::OpenGL4
             static_cast<const OpenGL4VertexBufferRenderer&>(vbIn));
         GpuDrawParams unlitScratch;
         const GpuDrawParams& params = StockParamsFor(vb, paramsIn, unlitScratch);
+        if (params.customEffectRenderer != nullptr)
+            RequireFilterableTextureArraysEXT(*params.customEffectRenderer);   // GL4-0037
         const std::size_t layoutStride = CombinedVertexStrideOr(params, vb.GetStride());
         // REMED-GFX-218: validated before the VAO is touched or a program selected. A custom
         // ShaderEffect owns its own element-order convention and is not checked here.
@@ -1497,6 +1499,8 @@ namespace CNA::Internal::Renderers::OpenGL4
             static_cast<const OpenGL4VertexBufferRenderer&>(vbIn));
         GpuDrawParams unlitScratch;
         const GpuDrawParams& params = StockParamsFor(vb, paramsIn, unlitScratch);
+        if (params.customEffectRenderer != nullptr)
+            RequireFilterableTextureArraysEXT(*params.customEffectRenderer);   // GL4-0037
         const auto& ib = static_cast<const OpenGL4IndexBufferRenderer&>(ibIn);
         const std::size_t layoutStride = CombinedVertexStrideOr(params, vb.GetStride());
         if (params.customEffectRenderer == nullptr)
@@ -1566,6 +1570,8 @@ namespace CNA::Internal::Renderers::OpenGL4
             static_cast<const OpenGL4VertexBufferRenderer&>(vbIn));
         GpuDrawParams unlitScratch;
         const GpuDrawParams& params = StockParamsFor(vb, paramsIn, unlitScratch);
+        if (params.customEffectRenderer != nullptr)
+            RequireFilterableTextureArraysEXT(*params.customEffectRenderer);   // GL4-0037
         const auto& ib = static_cast<const OpenGL4IndexBufferRenderer&>(ibIn);
         const std::size_t layoutStride = CombinedVertexStrideOr(params, vb.GetStride());
         if (params.customEffectRenderer == nullptr)
@@ -1712,6 +1718,8 @@ namespace CNA::Internal::Renderers::OpenGL4
             static_cast<const OpenGL4VertexBufferRenderer&>(vbIn));
         GpuDrawParams unlitScratch;
         const GpuDrawParams& params = StockParamsFor(vb, paramsIn, unlitScratch);
+        if (params.customEffectRenderer != nullptr)
+            RequireFilterableTextureArraysEXT(*params.customEffectRenderer);   // GL4-0037
         const auto* ib = static_cast<const OpenGL4IndexBufferRenderer*>(ibIn);
         const std::size_t layoutStride = CombinedVertexStrideOr(params, vb.GetStride());
         // REMED-GFX-218: validated before the VAO is touched, exactly as on the ordinary routes.

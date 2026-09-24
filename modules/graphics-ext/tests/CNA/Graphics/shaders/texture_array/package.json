@@ -1,0 +1,75 @@
+{
+  "schema": 1,
+  "namespace": "CNA::Tests::TextureArray",
+  "package": "texture_array",
+  "payloads": [
+    {
+      "symbol": "kEsVertexSource",
+      "source": "array.es.vert.glsl",
+      "language": "glsl-es",
+      "stage": "vertex",
+      "format": "text",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kDesktopVertexSource",
+      "source": "array.desktop.vert.glsl",
+      "language": "glsl",
+      "stage": "vertex",
+      "format": "text",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kVulkanVertexSpirV",
+      "source": "array.vulkan.vert.glsl",
+      "language": "spirv",
+      "source_language": "vulkan-glsl",
+      "stage": "vertex",
+      "format": "spirv",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kVulkanVertexWgsl",
+      "source": "array.vulkan.vert.glsl",
+      "language": "wgsl",
+      "source_language": "vulkan-glsl",
+      "stage": "vertex",
+      "format": "wgsl",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kEsFragmentSource",
+      "source": "array.es.frag.glsl",
+      "language": "glsl-es",
+      "stage": "fragment",
+      "format": "text",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kDesktopFragmentSource",
+      "source": "array.desktop.frag.glsl",
+      "language": "glsl",
+      "stage": "fragment",
+      "format": "text",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kVulkanFragmentSpirV",
+      "source": "array.vulkan.frag.glsl",
+      "language": "spirv",
+      "source_language": "vulkan-glsl",
+      "stage": "fragment",
+      "format": "spirv",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kVulkanFragmentWgsl",
+      "source": "array.vulkan.frag.glsl",
+      "language": "wgsl",
+      "source_language": "vulkan-glsl",
+      "stage": "fragment",
+      "format": "wgsl",
+      "entry_point": "main"
+    }
+  ]
+}

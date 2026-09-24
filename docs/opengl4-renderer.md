@@ -89,8 +89,14 @@ API over the live context. Every answer below is asked of the driver, never assu
 - **Limits and format usages** — every `RendererLimit`, and per-format Sampled/Filterable/Blendable/
   Multisample/Storage*/Transfer*/Mipmapped from `glGetInternalformativ`. StorageAtomic is false for
   every format: GLSL image atomics need `r32i`/`r32ui`.
-- **Not implemented, deliberately:** `Texture2DArray` (no renderer-neutral case exercises it;
-  `MaxTextureArrayLayers` is 0), and scRGB/HDR10 display output (sRGB only, the base answer).
+- **Texture arrays** — `GL_TEXTURE_2D_ARRAY` in every `Texture2D` format (Dxt with native S3TC),
+  each layer stored and sampled exactly as a `Texture2D` of its format; exact per-layer, per-mip,
+  sub-rectangle transfers; `ShaderEffect::SetTextureArrayEXT` binds array unit N to GL texture unit
+  N's array target, sampled through XNA sampler slot N (Vulkan's and WebGPU's rule), and the effect
+  keeps the array alive until the unit is cleared. `MaxTextureArrayLayers` is
+  `GL_MAX_ARRAY_TEXTURE_LAYERS`. Core since GL 3.0, so available on the 4.1 floor too
+  (`OpenGL4_Gl41Floor`, a real 4.1 context through Mesa's version override).
+- **Not implemented:** scRGB/HDR10 display output (sRGB only, the base answer).
 
 ## Diagnostics
 
@@ -106,10 +112,10 @@ Measured on an AMD Radeon 780M (Mesa radeonsi, 4.6 core) through
 
 | suite | Wayland (EGL) | X11 (GLX) |
 |---|---|---|
-| `ctest -R '^OpenGL4_'` — OpenGL4's own tests, the 32 shared parity fixtures, 346 EasyGL example sources rebuilt against OpenGL4, and the modern stress run | 406 / 406 | 406 / 406 (openbox managing the private display) |
+| `ctest -R '^OpenGL4_'` — OpenGL4's own tests, the 32 shared parity fixtures, 346 EasyGL example sources rebuilt against OpenGL4, the modern stress run and the forced 4.1 floor | 407 / 407 | 406 / 406 (openbox managing the private display) + `OpenGL4_Gl41Floor` |
 | `CnaGraphicsTests` | 2 833 / 0 / 57 | 2 800 / 0 / 71 (OpenGL4-only build) |
-| `CnaRendererTests` | 336 / 0 / 10 | 232 / 0 / 0 |
-| `CnaGraphicsExtTests` (the modern engine layer) | 955 / 0 / 7 | 956 / 0 / 6 |
+| `CnaRendererTests` | 338 / 0 / 10 | 232 / 0 / 0 (before `GL4-0037`'s two cases) |
+| `CnaGraphicsExtTests` (the modern engine layer) | 960 / 0 / 7 | 956 / 0 / 6 (before `GL4-0037`); `Texture2DArray*` 14 / 14 |
 | CNAEXT example oracles | 32 / 1 / 0 | 34 / 1 / 0 (the failure, on every renderer: `CNAEXT_NoPosixSetenv`, a source scan of the Wayland platform) |
 | AddressSanitizer + UBSan + LeakSanitizer (`build-asan`): OpenGL4's own tests, `CnaGraphicsExtTests`, 3000-cycle stress | 18 / 0 / 0, 956 / 0 / 6, 6 / 6 | — |
 

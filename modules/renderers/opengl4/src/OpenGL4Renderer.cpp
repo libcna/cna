@@ -558,6 +558,51 @@ namespace CNA::Internal::Renderers::OpenGL4
         if (!ownContext) return;
         if (program_.IsValid())
             program_.Use();
+        InstallTextureArrays();
+    }
+
+    void OpenGL4EffectRenderer::InstallTextureArrays() const
+    {
+        bool any = false;
+        for (std::size_t unit = 0; unit < textureArrays_.size(); ++unit)
+        {
+            const auto* native =
+                dynamic_cast<const OpenGL4Texture2DArrayRenderer*>(textureArrays_[unit].get());
+            if (native == nullptr) continue;
+            gl4_glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(unit));
+            glBindTexture(GL_TEXTURE_2D_ARRAY, native->GLHandle());
+            any = true;
+        }
+        if (any) gl4_glActiveTexture(GL_TEXTURE0);
+    }
+
+    const OpenGL4Texture2DArrayRenderer* OpenGL4EffectRenderer::TextureArrayAtEXT(
+        const int unit) const
+    {
+        if (unit < 0 || unit >= static_cast<int>(textureArrays_.size())) return nullptr;
+        return dynamic_cast<const OpenGL4Texture2DArrayRenderer*>(
+            textureArrays_[static_cast<std::size_t>(unit)].get());
+    }
+
+    bool OpenGL4EffectRenderer::BindTexture2DArrayEXT(
+        const int unit, std::shared_ptr<ITexture2DArrayRenderer> texture)
+    {
+        if (unit < 0 || unit >= static_cast<int>(textureArrays_.size())) return false;
+        if (texture != nullptr &&
+            dynamic_cast<const OpenGL4Texture2DArrayRenderer*>(texture.get()) == nullptr)
+            return false;
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return false;
+        textureArrays_[static_cast<std::size_t>(unit)] = std::move(texture);
+        if (textureArrays_[static_cast<std::size_t>(unit)] == nullptr)
+        {
+            gl4_glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(unit));
+            glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+            gl4_glActiveTexture(GL_TEXTURE0);
+            return true;
+        }
+        InstallTextureArrays();
+        return true;
     }
 
     void OpenGL4EffectRenderer::MakeProgramCurrent()
@@ -2230,6 +2275,7 @@ namespace CNA::Internal::Renderers::OpenGL4
         EnsureCallingThreadContext();   // GL4-0021
         if (slot < 0 || slot >= kMaxSamplerSlots) return;
         const GLuint sampler = samplers_[slot];
+        samplerFilters_[static_cast<std::size_t>(slot)] = filter;
         GLint minFilter = GL_LINEAR, magFilter = GL_LINEAR;
         FilterOrdinalToGL(filter, minFilter, magFilter);
         gl4_glSamplerParameteri(sampler, GL_TEXTURE_MIN_FILTER, minFilter);

@@ -2,7 +2,8 @@
 #pragma once
 
 // plans/plan_opengl4_modern_graphics.md Workstream B: the modern CNA/CNAEXT GPU surface over desktop
-// OpenGL 4.3+ -- storage and constant buffers, compute programs, storage textures and GPU timers.
+// OpenGL 4.3+ -- storage and constant buffers, compute programs, storage textures, texture arrays
+// and GPU timers.
 // Every class here
 // exists only when GL4::DiscoverModernCapabilities found the native feature in the live context;
 // the renderer's Supports*EXT answers are what promise it.
@@ -11,6 +12,7 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/OpenGL4/GL4Loader.hpp"
 #include "CNA/Internal/Renderers/OpenGL4/OpenGL4Common.hpp"
+#include "CNA/Internal/Renderers/OpenGL4/OpenGL4Resources.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -358,6 +360,94 @@ namespace CNA::Internal::Renderers::OpenGL4
         int height_ = 0;
         int levels_ = 1;
         OpenGL4StorageImageFormat format_;
+    };
+
+    /**
+     * @brief One `CNA::Graphics::Texture2DArray`: a `GL_TEXTURE_2D_ARRAY` (GL4-0037).
+     *
+     * Core since GL 3.0, so every context this renderer accepts has it. Each layer is stored exactly
+     * as a `Texture2D` of the same SurfaceFormat is -- the same internal format, the same Direct3D 9
+     * channel expansion of one- and two-channel formats, and native S3TC blocks for Dxt1/3/5 --
+     * so a layer samples as that `Texture2D` would. Every declared level of every layer is
+     * allocated, zero-filled, at creation, which keeps the texture complete under any filter.
+     * Readback asks GL for the whole level (`glGetTexImage`/`glGetCompressedTexImage`; the
+     * sub-image queries are 4.5) and returns the addressed layer and rectangle.
+     */
+    class OpenGL4Texture2DArrayRenderer final : public ITexture2DArrayRenderer,
+                                                public OpenGL4ContextResource
+    {
+    public:
+        /**
+         * @brief Allocates every level of every layer.
+         *
+         * @param width Level-0 width.
+         * @param height Level-0 height.
+         * @param layerCount Layers.
+         * @param mipLevelCount Levels.
+         * @param surfaceFormat SurfaceFormat ordinal; the caller has checked it is a `Texture2D`
+         *        format of this renderer, stored natively when it is block-compressed.
+         * @param filterable Whether the array was declared with `Texture2DArrayUsage::Filterable`.
+         */
+        OpenGL4Texture2DArrayRenderer(int width, int height, int layerCount, int mipLevelCount,
+                                      int surfaceFormat, bool filterable);
+        /** @brief Deletes the texture in its own context; issues no GL if that context is gone. */
+        ~OpenGL4Texture2DArrayRenderer() override;
+
+        OpenGL4Texture2DArrayRenderer(const OpenGL4Texture2DArrayRenderer&) = delete;
+        OpenGL4Texture2DArrayRenderer& operator=(const OpenGL4Texture2DArrayRenderer&) = delete;
+
+        /**
+         * @brief Uploads a rectangle of one level of one layer.
+         *
+         * @param layer Layer.
+         * @param mipLevel Level.
+         * @param x Left texel.
+         * @param y Top texel.
+         * @param width Rectangle width.
+         * @param height Rectangle height.
+         * @param data The declared format's bytes, tightly packed (whole 4x4 blocks when
+         *        compressed).
+         * @param byteCount Bytes at @p data; must be exactly the rectangle's.
+         * @return False when the region, the byte count or the context is not valid.
+         */
+        [[nodiscard]] bool SetData(int layer, int mipLevel, int x, int y, int width, int height,
+                                   const void* data, std::size_t byteCount) override;
+        /**
+         * @brief Reads a rectangle of one level of one layer back.
+         *
+         * @param layer Layer.
+         * @param mipLevel Level.
+         * @param x Left texel.
+         * @param y Top texel.
+         * @param width Rectangle width.
+         * @param height Rectangle height.
+         * @param data Receives the declared format's bytes, tightly packed.
+         * @param byteCount Bytes at @p data; must be exactly the rectangle's.
+         * @return False when the region, the byte count or the context is not valid.
+         */
+        [[nodiscard]] bool GetData(int layer, int mipLevel, int x, int y, int width, int height,
+                                   void* data, std::size_t byteCount) const override;
+
+        /** @brief Returns the GL texture name. */
+        CNAEXT [[nodiscard]] unsigned int GLHandle() const noexcept { return texture_; }
+        /** @brief Whether linear or mip filtering may sample it (`Texture2DArrayUsage::Filterable`). */
+        CNAEXT [[nodiscard]] bool IsFilterableEXT() const noexcept { return filterable_; }
+
+    private:
+        [[nodiscard]] bool ValidRegion(int layer, int mipLevel, int x, int y, int width,
+                                       int height, std::size_t byteCount, int& levelWidth,
+                                       int& levelHeight) const;
+        [[nodiscard]] std::size_t RegionBytes(int width, int height) const;
+
+        unsigned int texture_ = 0;
+        int width_ = 0;
+        int height_ = 0;
+        int layers_ = 1;
+        int levels_ = 1;
+        int surfaceFormat_ = 0;
+        bool compressed_ = false;
+        bool filterable_ = false;
+        Detail::TextureTransferFormat transfer_{};
     };
 
     /**

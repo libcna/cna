@@ -280,6 +280,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "OPENGL4")
 
         # plans/plan_opengl4_modern_graphics.md GL4-0032: 3000 cycles creating, using, reading back
         # and destroying every modern resource; zero GL errors, no RSS/fd/thread growth.
+        # plans/plan_opengl4_modern_graphics.md GL4-0037: the 4.1 floor, obtained from Mesa through
+        # its version override; skips (77) where the override is not honoured.
+        cna_opengl4_test(cna_test_opengl4_gl41_floor opengl4_gl41_floor_test.cpp)
+        cna_register_renderer_test(NAME OpenGL4_Gl41Floor
+            COMMAND cna_test_opengl4_gl41_floor
+            TIMEOUT 60 LABELS "OpenGL4;ModernGPU"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};MESA_GL_VERSION_OVERRIDE=4.1;MESA_GLSL_VERSION_OVERRIDE=410")
+
         cna_opengl4_test(cna_test_opengl4_modern_stress opengl4_modern_stress_test.cpp)
         cna_register_renderer_test(NAME OpenGL4_ModernStress
             COMMAND cna_test_opengl4_modern_stress

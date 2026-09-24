@@ -33,7 +33,7 @@ Companion documents this ledger does not duplicate:
 | Branch | `opengl4-modern-graphics` |
 | Baseline | `b2a0a5671c4db9b7ac1564a7ac2bf9ffd88530e1` (`origin/next` = `next`, 2026-09-24) |
 | Workstream A | **COMPLETE** (`GL4-A-GATE`, 2026-09-24) |
-| Workstream B | **COMPLETE** (`GL4-B-GATE`, 2026-09-24) — handed back for merge review |
+| Workstream B | **COMPLETE** (`GL4-B-GATE`, 2026-09-24; Texture2DArray closed by `GL4-0037`) — handed back for merge review |
 
 ---
 
@@ -1430,7 +1430,8 @@ Recorded 2026-09-24. Every Workstream B requirement, with the task that satisfie
 | B3 GLSL versioning (4.30 core for compute, 4.1 floor elsewhere) · bindings · pipeline cache | `GL4-0025`, `GL4-0035` (no GL pipeline objects; nothing measured needed a cache) |
 | B4 compute · B5 memory barriers without `glFinish` · B6 storage buffers · B7 constant buffers · B8 image load/store | `GL4-0025` |
 | B9 limits | `GL4-0025`, `GL4-0030` |
-| B10 storage textures · B11 format-usage queries (`glGetInternalformativ`) · B13 Texture2DArray (not implemented: no renderer-neutral coverage) | `GL4-0030` |
+| B10 storage textures · B11 format-usage queries (`glGetInternalformativ`) | `GL4-0030` |
+| B13 Texture2DArray — renderer-neutral live coverage added first, verified on Vulkan, then implemented | `GL4-0037` |
 | B12 indirect draw · B15 base instance · draw-time SSBOs | `GL4-0025`, `GL4-0026` |
 | B14 instancing, samplers, FBOs, MRT, MSAA under the modern layer | Workstream A; exercised by the engine layer in `CnaGraphicsExtTests` 955 / 0 / 7 |
 | B16 shader payloads / desktop variants of shared packages | `GL4-0025`, `GL4-0029` |
@@ -1473,3 +1474,129 @@ Recorded 2026-09-24. Every Workstream B requirement, with the task that satisfie
 | `CNAEXT_NoPosixSetenv` fails on every renderer (Wayland platform sources) | `GL4-0024` |
 | `CnaContentTests` deletes a committed fixture | `GL4-0018` |
 | Mesa radeonsi's first-draw screen state leaks when `eglTerminate` never runs, which CNA's never-destroyed default platform guarantees (suppressed with evidence) | `GL4-0033` |
+| Vulkan advertises `ByteEXT`/`UShortEXT` for texture-array storage (its per-format answer is the union of `Texture2D` and `StorageTexture2D` storage) and then declines to create the arrays | `GL4-0037` |
+| WebGPU samples a non-`Filterable` `Texture2DArray` through a linear sampler, where Vulkan and OpenGL4 refuse the draw | `GL4-0037` |
+
+## GL4-0037 — Texture2DArray: renderer-neutral live conformance, then OpenGL4 (closes MOD-2261)
+
+`GL4-0030` left `Texture2DArray` unimplemented, reading "only if renderer-neutral coverage exists"
+as "do not implement it". The owner corrected that reading on review: where the coverage is missing,
+**add it first, then implement**. This row does both.
+
+### 1. The renderer-neutral live suite — `Texture2DArrayConformanceTests.cpp`
+
+A new test shader package, `shaders/texture_array`, holds the same program in four forms:
+
+- GLSL ES 3.00 and desktop GLSL 3.30, sampling `sampler2DArray uArray`;
+- Vulkan GLSL at `set = 1, binding = 16`, the texture-array descriptor range Vulkan and WebGPU share,
+  compiled to SPIR-V;
+- WGSL generated from it, which lands on `@group(1) @binding(16)` with its sampler at 48 (= 32 + 16),
+  WebGPU's contract.
+
+The header is regenerated reproducibly, and `TextureArrayShaderPackageReproducibility` joins the
+other package gates.
+
+Every layer is one solid colour and every draw covers the whole target, so no case depends on a
+renderer's clip-space Y convention. The five cases:
+
+| Case | What it proves |
+|---|---|
+| `EveryAdvertisedFormatKeepsItsLayersMipsAndRectanglesExact` | Every format whose storage, sampling, transfer and mip usages are advertised: 3 layers × 2 levels, each with its own bytes, then a sub-rectangle written into one layer. Every layer and level reads back byte-exact, and the other layers are untouched. The patterns survive any exact transfer: finite floats and halves, SNORM without −128, arbitrary compressed blocks. A format the array factory declines with `NotSupportedException` is reported, never Color (see finding 2). |
+| `ThePublishedLayerLimitIsReal` | An array of exactly `MaxTextureArrayLayers` layers is created and holds its last layer; one more is refused. |
+| `EachLayerReachesAShaderEffectThroughUnitZero` | Each of three layers is sampled through `SetTextureArrayEXT(0, …)` with the portable package. |
+| `ABindingOutlivesTheDisposedPublicArrayUntilCleared` | The effect's binding keeps the renderer's array alive after the public object is disposed, until `ClearTextureArrayEXT`. |
+| `AnArrayOutlivingItsDeviceIsReleasedSafely` | The device goes first, the array after it. |
+
+### 2. Verified first on Vulkan, which already implemented arrays
+
+Vulkan, on RADV in the `cmake-build-cnaext` tree, **14 / 14** array tests after two corrections the
+new suite forced on the tests themselves:
+
+1. **Filtering.** Vulkan refuses to sample an array declared without
+   `Texture2DArrayUsage::Filterable` through any non-Point sampler. The public header's own contract
+   is that `Filterable` means "linear or mip filtering *may* be used". The two sampling cases now use
+   `PointClamp`, which every renderer must accept for any array.
+2. **Declined formats.** Vulkan advertises `ByteEXT` (25) and `UShortEXT` (26) with every required
+   usage, then declines to create arrays in them.
+   - Its per-format answer is the union of its `Texture2D` and `StorageTexture2D` storage.
+     `TextureStorage = hasImplementedStorage || storageImage`, and these two are storage-image formats
+     only.
+   - Format usages are published per format, not per resource kind, so the model cannot say
+     "storage texture yes, array no". `Texture2DArray`'s `NotSupportedException` ("advertised … but
+     did not create") is the documented refusal for that case.
+   - The case reports these formats (`declined at creation: 25 26`) instead of failing, and fails
+     only for any other error, or a declined Color.
+   - **Recorded as a Vulkan finding, not changed** (outside this workstream).
+
+The same 20 formats as OpenGL4 round-trip exactly on Vulkan. Its whole `CnaGraphicsExtTests` is
+**935 / 0 / 32** of 967 (`VMG-0019` recorded 928 / 0 / 32 of 960). There are no failures, and every
+skip is a dialect or capability boundary Vulkan already had.
+
+### 3. OpenGL4 (`OpenGL4Texture2DArrayRenderer`, `GL_TEXTURE_2D_ARRAY`)
+
+- **Formats:**
+  - Exactly OpenGL4's twenty `Texture2D` formats, each layer stored exactly as a `Texture2D` of its
+    format: the same internal format, the same Direct3D 9 channel expansion of one- and two-channel
+    formats, and 5551/4444 channel rotation.
+  - Dxt1/3/5 as native S3TC blocks, refused where the context has no S3TC, because readback must
+    return the blocks.
+  - `ByteEXT`/`UShortEXT` are not `Texture2D` formats here, so OpenGL4 neither advertises nor
+    creates them. It does not over-advertise.
+- **Allocation:** every level of every layer is allocated zero-filled at creation (Dxt: zero blocks),
+  with `GL_TEXTURE_MAX_LEVEL` clamped, so the texture is complete under any filter.
+- **Transfers:** `glTexSubImage3D`/`glCompressedTexSubImage3D` for one layer's rectangle. Readback
+  uses `glGetTexImage`/`glGetCompressedTexImage` of the whole level (the sub-image queries are 4.5),
+  then returns the addressed layer and rectangle, collapsed back to the declared layout.
+- **`ShaderEffect::SetTextureArrayEXT`:**
+  - Array unit N is GL texture unit N's `GL_TEXTURE_2D_ARRAY` binding. It never aliases the unit's
+    2D, cube or volume binding (a separate target), and samples through XNA sampler slot N, as
+    Vulkan and WebGPU do.
+  - The binding **belongs to the effect**: it is held until cleared, keeping the array alive, and
+    re-installed whenever the effect binds. Two effects with different arrays on unit 0 each sample
+    their own, as on Vulkan and WebGPU.
+- **The `Filterable` declaration is enforced as Vulkan enforces it.** A draw sampling a
+  non-`Filterable` array through any filter but `TextureFilter.Point` throws `NotSupportedException`.
+  GL itself would filter; code that relied on that here would fail on Vulkan. WebGPU does not check
+  the declaration, which is **recorded as a WebGPU finding, not changed**.
+- **`MaxTextureArrayLayers`** is `GL_MAX_ARRAY_TEXTURE_LAYERS` (8192 on radeonsi) instead of 0.
+  Arrays are core since GL 3.0, so the 4.1 floor is unchanged.
+- **Loader:** `glCompressedTexImage3D`/`glCompressedTexSubImage3D` are added (mandatory, core 1.3),
+  and `Detail::ScopedTextureBinding` learned the array target.
+
+**Tests.**
+
+- **OpenGL4-specific cases**, in `OpenGL4TextureArrayTests.cpp`:
+  - the `Filterable` refusal, with Point and with a `Filterable` declaration both drawing;
+  - per-effect bindings.
+- **Mutation checks:**
+
+  | Change | Tests that fail |
+  |---|---|
+  | installing nothing | both sampling conformance cases |
+  | not retaining the array | the retention case |
+  | skipping the `Filterable` check | the refusal case |
+  | skipping the re-install on `Bind` | the per-effect case |
+- **The forced 4.1 floor**, `OpenGL4_Gl41Floor` (new), registered with
+  `MESA_GL_VERSION_OVERRIDE=4.1` and `MESA_GLSL_VERSION_OVERRIDE=410` in its CTest environment:
+  - Mesa then grants a real **OpenGL 4.1 core** context. The oracle asserts that compute (4.3) is
+    refused, that arrays are published (8192 layers), and that they upload, read back and sample
+    through a `ShaderEffect`; a classic clear still lands.
+  - It skips (77) where the override is not honoured or another renderer was selected.
+  - It passes on Wayland/EGL and X11/GLX.
+
+### 4. Final regression (Radeon 780M, private runner)
+
+| Suite | Before (`GL4-B-GATE`) | After |
+|---|---|---|
+| `CnaGraphicsExtTests` OPENGL4 | 955 / 0 / 7 of 962 | **960 / 0 / 7** of 967 — the five new cases pass, and the skips are the same seven |
+| `CnaGraphicsExtTests` OPENGLES3 / OPENGL33 (EasyGL publishes no arrays) | 954 / 0 / 8, 954 / 1 / 7 | 954 / 0 / 13, 954 / 1 / 12 — the five new cases skip; OPENGL33's failure is the recorded image-binding defect |
+| `CnaGraphicsExtTests` VULKAN | 928 / 0 / 32 of 960 (`VMG-0019`) | **935 / 0 / 32** of 967 |
+| corpus `-R '^OpenGL4_'` OPENGL4 | 406 / 0 | **407 / 0** (+ `OpenGL4_Gl41Floor`) |
+| `CnaRendererTests` OPENGL4 | 336 / 0 / 10 | **338 / 0 / 10** |
+| `CnaGraphicsTests` OPENGL4 | 2 833 / 0 / 57 | 2 833 / 0 / 57 |
+| X11 / GLX: `Texture2DArray*`, `OpenGL4TextureArray.*`, `OpenGL4_Gl41Floor` | — | 14 / 14, 2 / 2, pass |
+| ASan + UBSan + LSan: `Texture2DArray*`, `OpenGL4*` | — | 14 / 14, 20 / 20, no report |
+| `[OpenGL4 GL Error]` lines | 0 | 0 |
+
+With this row `plans/plan_modern.md` `MOD-2261` is ✅: every applicable modern contract runs on
+OpenGL4's own GL entry points.
