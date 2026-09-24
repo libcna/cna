@@ -23,7 +23,7 @@
  * consumer could notice a change — **including an addition**, because a consumer that feature-tests
  * on the revision needs the number to move when the feature arrives, not only when one breaks.
  */
-#define CNA_CNAEXT_ENGINE_VERSION 18
+#define CNA_CNAEXT_ENGINE_VERSION 19
 
 namespace CNA::Graphics {
 

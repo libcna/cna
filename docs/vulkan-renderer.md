@@ -346,8 +346,9 @@ usable compute limits. There is no second queue lifecycle and no asynchronous-co
 This keeps compute, copy and graphics on the one queue that later synchronization rows bring into
 the same deferred public-call ordering domain.
 
-`MOD-2246` adds timestamps without adding a submission domain. Each `GpuTimer` owns one two-slot
-query pool, recycles it across samples, and places reset/begin/end commands into the same monotonic
+`MOD-2246` adds timestamps without adding a submission domain. Each renderer timer owns one
+two-slot query pool (a `GpuTimer` makes one per range in flight, at most four --
+`STREETGL4-0002`), recycles it across samples, and places reset/begin/end commands into the same monotonic
 order as clear, SpriteBatch and 3D work. `poll()` first checks the range's frame fence with
 `vkGetFenceStatus`, then uses explicit query availability and caches the first complete pair. This
 also prevents a new pool's pre-reset undefined payload from becoming a false first sample. It

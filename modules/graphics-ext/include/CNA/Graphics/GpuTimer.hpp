@@ -3,6 +3,8 @@
 
 #ifdef CNA_CNAEXT
 
+#include <array>
+#include <cstddef>
 #include <memory>
 #include <string>
 
@@ -44,6 +46,14 @@ namespace CNA::Graphics {
      * blocks: it returns false until the GPU is finished, which is normally one or two frames after
      * the range closed. A caller wanting a number *now* wants a CPU clock and should say so.
      *
+     * **Ranges overlap in flight.** Reopening the timer before the last range's result has landed
+     * does not discard that result: up to @ref kRangesInFlight closed ranges wait for the GPU at
+     * once, each in its own query, and @ref poll collects them oldest first. A CPU running more
+     * than a frame ahead of the GPU is the normal case of a fast renderer without vsync, and with
+     * one query the range was reopened every frame before its answer could arrive, so no answer
+     * ever did (plans/plan_street_opengl4.md `STREETGL4-0002`). A @ref begin while every query is
+     * still waiting times nothing rather than overwrite one.
+     *
      * **Where the hardware has no timer query it refuses rather than substituting one.** On GL ES
      * that means `GL_EXT_disjoint_timer_query`, which many drivers — software rasterisers in
      * particular — do not ship. A CPU number wearing a GPU name is worse than no number at all,
@@ -53,6 +63,9 @@ namespace CNA::Graphics {
     class GpuTimer final
     {
     public:
+        /** @brief How many closed ranges may wait for the GPU at once. */
+        static constexpr std::size_t kRangesInFlight = 4;
+
         /**
          * @brief Creates a timer, or an unsupported one where the renderer has no timer query.
          *
@@ -60,7 +73,7 @@ namespace CNA::Graphics {
          */
         explicit GpuTimer(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device);
 
-        /** @brief Destroys the timer and its query object. */
+        /** @brief Destroys the timer and its query objects. */
         ~GpuTimer();
 
         /** @brief Not copyable: it owns a device resource. */
@@ -83,7 +96,10 @@ namespace CNA::Graphics {
         [[nodiscard]] const std::string& getUnsupportedReason() const;
 
         /**
-         * @brief Opens the timed range. Does nothing when unsupported or already open.
+         * @brief Opens the timed range.
+         *
+         * Does nothing when unsupported or already open, and times nothing when all
+         * @ref kRangesInFlight earlier ranges are still waiting for the GPU.
          */
         void begin();
 
@@ -93,21 +109,22 @@ namespace CNA::Graphics {
         void end();
 
         /**
-         * @brief Whether the GPU has finished the last closed range.
+         * @brief Whether the GPU has finished the oldest closed range not yet collected.
          *
          * @return True when @ref poll would collect a result without blocking.
          */
         [[nodiscard]] bool isResultAvailable() const;
 
         /**
-         * @brief Collects a finished result if there is one. Never blocks.
+         * @brief Collects every finished result, oldest first. Never blocks.
          *
-         * @return True when a new result was collected, false when the GPU is still working.
+         * @return True when at least one new result was collected, false when the GPU is still
+         * working on every closed range or none is waiting.
          */
         bool poll();
 
         /**
-         * @brief The most recently collected result, in milliseconds.
+         * @brief The newest collected result, in milliseconds.
          *
          * @return The elapsed GPU time, or 0 before the first result lands.
          */
@@ -120,12 +137,20 @@ namespace CNA::Graphics {
         [[nodiscard]] bool isOpen() const;
 
     private:
-        std::unique_ptr<CNA::Internal::Renderers::IGpuTimerRenderer> renderer_;
+        Microsoft::Xna::Framework::Graphics::GraphicsDevice* device_ = nullptr;
+        /// A ring of queries, made on demand: a caller whose results land within a frame only ever
+        /// owns the first.
+        std::array<std::unique_ptr<CNA::Internal::Renderers::IGpuTimerRenderer>, kRangesInFlight>
+            queries_;
+        /// The query timing the open range.
+        std::size_t current_ = 0;
+        /// The oldest closed range not yet collected; the waiting ones follow it round the ring.
+        std::size_t oldest_ = 0;
+        std::size_t pendingCount_ = 0;
         std::string unsupportedReason_;
         double lastMilliseconds_ = 0.0;
         int    sampleCount_      = 0;
         bool   open_             = false;
-        bool   pending_          = false;
     };
 
 /** @} */ // end of cnaext_engine

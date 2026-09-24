@@ -12,7 +12,7 @@ namespace CNA::Graphics {
 
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 
-    GpuTimer::GpuTimer(GraphicsDevice& device)
+    GpuTimer::GpuTimer(GraphicsDevice& device) : device_(&device)
     {
         auto& renderer = device.GetRenderer();
         if (!renderer.SupportsGpuTimerEXT())
@@ -22,15 +22,15 @@ namespace CNA::Graphics {
                 "(the selected device/API exposes no implemented timestamp-query path)";
             return;
         }
-        renderer_ = renderer.CreateGpuTimerEXT();
-        if (!renderer_)
+        queries_[0] = renderer.CreateGpuTimerEXT();
+        if (!queries_[0])
             unsupportedReason_ = "the " + std::string(device.GetGraphicsRendererName())
                                + " renderer reported a GPU timer and then did not create one";
     }
 
     GpuTimer::~GpuTimer() = default;
 
-    bool GpuTimer::isSupported() const { return renderer_ != nullptr; }
+    bool GpuTimer::isSupported() const { return queries_[0] != nullptr; }
 
     const std::string& GpuTimer::getUnsupportedReason() const { return unsupportedReason_; }
 
@@ -38,33 +38,53 @@ namespace CNA::Graphics {
 
     void GpuTimer::begin()
     {
-        if (!renderer_ || open_) return;
-        renderer_->Begin();
+        if (!isSupported() || open_) return;
+        // Every query still holds a range the GPU has not finished. Reopening one would discard
+        // an answer that is on its way, which is how a CPU running ahead of the GPU used to lose
+        // every answer; timing nothing this once keeps the ones in flight.
+        if (pendingCount_ == kRangesInFlight) return;
+        const std::size_t slot =
+            pendingCount_ == 0 ? 0 : (oldest_ + pendingCount_) % kRangesInFlight;
+        if (!queries_[slot])
+        {
+            queries_[slot] = device_->GetRenderer().CreateGpuTimerEXT();
+            if (!queries_[slot]) return;
+        }
+        queries_[slot]->Begin();
+        current_ = slot;
         open_ = true;
     }
 
     void GpuTimer::end()
     {
-        if (!renderer_ || !open_) return;
-        renderer_->End();
+        if (!open_) return;
+        queries_[current_]->End();
         open_ = false;
-        pending_ = true;
+        if (pendingCount_ == 0) oldest_ = current_;
+        ++pendingCount_;
     }
 
     bool GpuTimer::isResultAvailable() const
     {
-        return renderer_ != nullptr && pending_ && renderer_->IsResultAvailable();
+        return pendingCount_ > 0 && queries_[oldest_]->IsResultAvailable();
     }
 
     bool GpuTimer::poll()
     {
-        if (!isResultAvailable()) return false;
-        // Nanoseconds to milliseconds. Done here rather than in the renderer because the renderer's
-        // unit is what the API returns and this one is what a person reads.
-        lastMilliseconds_ = static_cast<double>(renderer_->ElapsedNanoseconds()) / 1.0e6;
-        pending_ = false;
-        ++sampleCount_;
-        return true;
+        // Oldest first: a GPU finishes ranges in the order they were submitted, so the first one
+        // still working is where collecting stops.
+        bool collected = false;
+        while (isResultAvailable())
+        {
+            // Nanoseconds to milliseconds. Done here rather than in the renderer because the
+            // renderer's unit is what the API returns and this one is what a person reads.
+            lastMilliseconds_ = static_cast<double>(queries_[oldest_]->ElapsedNanoseconds()) / 1.0e6;
+            ++sampleCount_;
+            oldest_ = (oldest_ + 1) % kRangesInFlight;
+            --pendingCount_;
+            collected = true;
+        }
+        return collected;
     }
 
     double GpuTimer::getLastMilliseconds() const { return lastMilliseconds_; }

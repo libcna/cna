@@ -14,6 +14,22 @@ something breaks.
 
 ---
 
+## Revision 19 — 2026-09-24
+
+### GPU timer ranges in flight (`STREETGL4-0002`)
+
+- `GpuTimer` keeps up to `GpuTimer::kRangesInFlight` (4) closed ranges waiting for the GPU, one
+  renderer query each, made on demand. `begin()` no longer reopens a query whose result has not
+  been collected: with every query still waiting it times nothing, and `isOpen()` stays false.
+  `poll()` collects every finished range oldest first and `getLastMilliseconds()` is the newest.
+- Before, one query served every range, so a CPU running more than a frame ahead of the GPU --
+  the normal case for a fast renderer without vsync -- discarded each result before it landed and
+  never reported one. cna-street on OpenGL4 showed "GPU timing unavailable" once `STREETGL4-0001`
+  made it fast enough; `PostProcessChain`'s per-pass timings lost theirs the same way.
+
+The C header carries the same engine-layer revision marker. The C ABI remains 0.29.0: no C
+declaration or layout changed.
+
 ## Revision 18 — 2026-09-10
 
 ### Typed constant buffers (`MOD-2230`)

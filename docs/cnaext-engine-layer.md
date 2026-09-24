@@ -1464,11 +1464,15 @@ for (const auto& timing : pipeline.getPassTimingsEXT())
 
 Two properties of the per-pass timing are load-bearing:
 
-- **Results are collected before the frame's ranges open, never after.** A query object holds one
-  result, so reopening it discards what the last range put there. Polling after the chain runs reads
-  ranges submitted moments ago, and reports a number for the first pass — whose work the driver has
-  had time to retire — and *nothing at all* for every pass after it. That failure looks exactly like
-  a working measurement of a one-pass chain.
+- **Results are collected before the frame's ranges open, never after.** A timer keeps at most
+  `GpuTimer::kRangesInFlight` closed ranges waiting, and a range opened with all of them still
+  waiting is not timed. Polling after the chain runs reads ranges submitted moments ago, and reports
+  a number for the first pass — whose work the driver has had time to retire — and *nothing at all*
+  for every pass after it. That failure looks exactly like a working measurement of a one-pass
+  chain.
+- **A result is never discarded to open a range** (`STREETGL4-0002`). With one query per timer,
+  a CPU running more than a frame ahead of the GPU reopened every range before its answer landed
+  and no answer ever did; each waiting range now has its own query.
 - **An unavailable timer produces an empty list, not a list of zeroes**, so a caller can tell "not
   measured here" from "this pass took no time".
 

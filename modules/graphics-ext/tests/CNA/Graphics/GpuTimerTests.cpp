@@ -153,6 +153,81 @@ TEST(GpuTimerTest, PollingBeforeTheGpuFinishesReturnsFalseRatherThanBlocking)
     EXPECT_FALSE(timer.poll());
 }
 
+// ── Ranges in flight (plans/plan_street_opengl4.md STREETGL4-0002) ──────────
+//
+// The documented pattern is begin/end once a frame and poll the next. A CPU running more than a
+// frame ahead of the GPU reopens the timer before the last answer lands, and with one query that
+// reopening discarded the answer -- every frame, so cna-street on a fast renderer reported "GPU
+// timing unavailable" on a GPU that has it.
+
+/// Times fifty clears of @p target as one range.
+void TimeFiftyClears(GraphicsDevice& gd, GpuTimer& timer, RenderTarget2D& target)
+{
+    timer.begin();
+    gd.SetRenderTarget(&target);
+    for (int i = 0; i < 50; ++i) gd.Clear(Color::Blue);
+    gd.SetRenderTarget(nullptr);
+    timer.end();
+}
+
+/// Polls, submitting as an application does, until @p count results have been collected.
+void CollectUntil(GraphicsDevice& gd, GpuTimer& timer, const int count)
+{
+    gd.Present();
+    for (int attempt = 0; attempt < 10000 && timer.getSampleCount() < count; ++attempt)
+    {
+        gd.Clear(Color::Black);
+        (void)timer.poll();
+        if ((attempt % 8) == 7) gd.Present();
+    }
+}
+
+TEST(GpuTimerTest, ARangeReopenedBeforeTheLastResultLandsKeepsThatResult)
+{
+    CnaTest::EngineLayer::HiDefDevice gd;
+    GpuTimer timer(gd);
+    if (!timer.isSupported()) GTEST_SKIP() << timer.getUnsupportedReason();
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
+
+    RenderTarget2D target(gd, 256, 256);
+    TimeFiftyClears(gd, timer, target);
+    TimeFiftyClears(gd, timer, target);   // no poll in between: the first answer is in flight
+    CollectUntil(gd, timer, 2);
+
+    EXPECT_EQ(timer.getSampleCount(), 2)
+        << "reopening the timer discarded the result of the range before it";
+    EXPECT_FALSE(timer.poll()) << "a third result appeared for two ranges";
+}
+
+TEST(GpuTimerTest, WithEveryQueryInFlightARangeTimesNothingRatherThanDiscardOne)
+{
+    CnaTest::EngineLayer::HiDefDevice gd;
+    GpuTimer timer(gd);
+    if (!timer.isSupported()) GTEST_SKIP() << timer.getUnsupportedReason();
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
+
+    RenderTarget2D target(gd, 256, 256);
+    const int inFlight = static_cast<int>(GpuTimer::kRangesInFlight);
+    for (int range = 0; range <= inFlight; ++range)
+    {
+        timer.begin();
+        EXPECT_EQ(timer.isOpen(), range < inFlight) << "range " << range;
+        gd.SetRenderTarget(&target);
+        for (int i = 0; i < 50; ++i) gd.Clear(Color::Blue);
+        gd.SetRenderTarget(nullptr);
+        timer.end();
+    }
+    CollectUntil(gd, timer, inFlight);
+    EXPECT_EQ(timer.getSampleCount(), inFlight);
+    EXPECT_FALSE(timer.poll()) << "the range opened with every query in flight was timed anyway";
+
+    // Collecting freed the queries: the next range is timed again.
+    TimeFiftyClears(gd, timer, target);
+    CollectUntil(gd, timer, inFlight + 1);
+    EXPECT_EQ(timer.getSampleCount(), inFlight + 1);
+    EXPECT_GE(timer.getLastMilliseconds(), 0.0);
+}
+
 TEST(GpuTimerTest, MoreWorkTakesMoreGpuTime)
 {
     // The claim that makes the number a measurement rather than a reading. Asserted as a ratio

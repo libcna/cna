@@ -55,6 +55,7 @@ rest in the driver's `glSamplerParameter*`. EasyGL, sampled the same way, spent 
 | ID | Task | Status |
 |---|---|---|
 | STREETGL4-0001 | OpenGL4 re-wrote and re-bound all sixteen sampler objects before every draw | ✅ |
+| STREETGL4-0002 | `GpuTimer` discarded every result once the CPU ran a frame ahead of the GPU | ✅ |
 
 ---
 
@@ -116,3 +117,55 @@ number -- a platform-contract change for ~1 % of a frame.
 | corpus `-R '^OpenGL4_'` | **407 / 0** |
 | `CnaRendererTests` | **341 / 0 / 10** (the 10 are EasyGL-only), no `[OpenGL4 GL Error]` |
 | `CnaGraphicsExtTests` | **962 / 0 / 7**, no `[OpenGL4 GL Error]` |
+
+---
+
+## STREETGL4-0002 — a GPU timer lost every result once the CPU ran ahead
+
+**Symptom.** With `STREETGL4-0001` in, the street's benchmark on OpenGL4 printed `GPU timing
+unavailable on this renderer`, and every GPU column read -1 -- on a renderer whose timer works
+(`GL4-0027`), and which had reported them all while it was slow. The run on EasyGL straight after
+said the same; the earlier, slower EasyGL run had had its numbers.
+
+**Root cause.** Renderer-neutral: `CNA::Graphics::GpuTimer` owned one renderer query. Its own
+documented pattern is `begin`/`end` once a frame and `poll` the next, and the result "normally
+arrives one or two frames after the range closed" -- but `begin()` reopened that one query whether
+or not its result had been collected, discarding it. A CPU more than a frame ahead of the GPU (a
+fast renderer without vsync: the street at 37 fps on a GPU-bound frame) reopens every range before
+its answer lands, so no answer ever does. `PostProcessChain`'s per-pass timers, the street's stage
+timers and anything else built on `GpuTimer` lost theirs the same way, on every renderer; which
+runs had numbers depended on how far ahead the CPU happened to be.
+
+**Fix.** `GpuTimer` keeps a ring of up to `kRangesInFlight` (4) renderer queries, made on demand
+-- a caller whose results land within a frame still owns only the first. `begin()` takes the query
+after the newest waiting one; with all four still waiting it times nothing (`isOpen()` stays
+false) rather than overwrite one. `poll()` collects every finished range oldest first -- GPUs
+finish in submission order -- and `getLastMilliseconds()` is the newest. The public surface gains
+`kRangesInFlight`, so the engine-layer revision moves to **19** (`docs/cnaext-engine-changelog.md`;
+the C header's marker with it, the C ABI unchanged at 0.29.0).
+
+**Tests** (`GpuTimerTests.cpp`): two ranges closed before either is polled both report; with every
+query in flight the next range is not timed, exactly `kRangesInFlight` results arrive, and after
+collecting them the timer times again. **A/B:** with the single-query `begin()` restored, both
+fail (1 result for 2 ranges; 1 for 4).
+
+**Where it was run:**
+
+| tree / renderer | `GpuTimerTest.*`, `PassTiming*`, `EngineLayerVersion*` |
+|---|---|
+| `cmake-build-opengl4`, OPENGL4 | 17 / 0 / 3 |
+| `cmake-build-opengl4`, OPENGL33 at runtime | 13 / 0 / 3 (without `EngineLayerVersion*`) |
+| `cmake-build-cnaext`, VULKAN | 17 / 0 / 3 |
+
+The three skips are the unsupported-timer cases, on renderers that have a timer.
+`CnaGraphicsExtTests` on OpenGL4 as a whole: 962 / 0 / 7.
+
+**The street after both fixes** (back to back, `--benchmark baseline`):
+
+| | CPU frame | fps | GPU frame |
+|---|---|---|---|
+| OPENGL33 | 29.60 ms | 33.8 | 35.92 ms |
+| OPENGL4 | 26.62 ms | 37.6 | 35.00 ms |
+
+The 18 captures on the final build: identical to EasyGL's (0.000 % of pixels over 8/255 at every
+viewpoint).
