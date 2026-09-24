@@ -7443,7 +7443,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             *this, 1, /*mipMap=*/false,
             static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color));
         const std::array<std::uint8_t, 4> white{255, 255, 255, 255};
-        for (int face = 0; face < 6 && std::getenv("SMGDBG_NOUPLOAD") == nullptr; ++face) // SMGDBG
+        for (int face = 0; face < 6; ++face)
         {
             if (!cube->SetData(face, 0, 0, 0, 1, 1, white.data(), static_cast<int>(white.size())))
                 throw std::runtime_error(

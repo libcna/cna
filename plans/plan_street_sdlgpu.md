@@ -37,6 +37,7 @@ Vulkan is the natural reference: same driver, same GPU.
 | STREETS-0002 | SDL_GPU: no image-based lighting -- the street fell back to a flat hemisphere ambient | ✅ |
 | STREETS-0003 | SDL_GPU: half-float textures reported unfilterable, so FXAA and bloom read the HDR scene with point sampling | ✅ |
 | STREETS-0004 | SDL_GPU: a ShaderEffect's texture units ignored `SamplerStates[unit]` -- SSAO's tiled noise was clamped | ✅ |
+| STREETS-0005 | SDL_GPU: a debugging `getenv("SMGDBG_NOUPLOAD")` left in the white shadow cube's upload | ✅ |
 
 ---
 
@@ -254,3 +255,23 @@ The two renderers now produce the same picture. Nothing in cna-street needed cha
 defect was CNA's, and the street's own capability questions (`SupportsImageBasedLightingEXT`,
 `GetShaderDialectEXT`, `SupportsShadowSamplingEXT`) were asked correctly and answered wrongly or
 not at all.
+
+---
+
+## Follow-ups found during the bring-up (owner brief of 2026-09-24: "fix the four small things")
+
+Four defects STREETS-0001..0004 found but did not cause. Each was confirmed on `next` before it was
+touched.
+
+### STREETS-0005 — a debugging hook in production code
+
+`SdlGpuRenderer::EnsureDefaultShadowCubeEXT` uploaded the white cube a shadow-receiving draw binds
+in place of a missing point-light cube with
+
+```cpp
+for (int face = 0; face < 6 && std::getenv("SMGDBG_NOUPLOAD") == nullptr; ++face) // SMGDBG
+```
+
+-- an investigation switch from SMG-0032 (`74f6296bc`), committed with it. With the variable set,
+every shadow-receiving draw sampled an uninitialised cube. The loop is the plain six faces again.
+The shadow-receiving SDL_GPU and CNAEXT shadow tests pass (13/13).
