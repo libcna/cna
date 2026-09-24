@@ -38,6 +38,7 @@ Vulkan is the natural reference: same driver, same GPU.
 | STREETS-0003 | SDL_GPU: half-float textures reported unfilterable, so FXAA and bloom read the HDR scene with point sampling | ✅ |
 | STREETS-0004 | SDL_GPU: a ShaderEffect's texture units ignored `SamplerStates[unit]` -- SSAO's tiled noise was clamped | ✅ |
 | STREETS-0005 | SDL_GPU: a debugging `getenv("SMGDBG_NOUPLOAD")` left in the white shadow cube's upload | ✅ |
+| STREETS-0006 | Three `GltfRendererPbrFallbackPolicy` cases quoted SDL_GPU PBR code SMG-0032 had since renamed | ✅ |
 
 ---
 
@@ -275,3 +276,17 @@ for (int face = 0; face < 6 && std::getenv("SMGDBG_NOUPLOAD") == nullptr; ++face
 -- an investigation switch from SMG-0032 (`74f6296bc`), committed with it. With the variable set,
 every shadow-receiving draw sampled an uninitialised cube. The loop is the plain six faces again.
 The shadow-receiving SDL_GPU and CNAEXT shadow tests pass (13/13).
+
+### STREETS-0006 — three source-audit tests quoted code that no longer existed
+
+`GltfRendererPbrFallbackPolicy.EveryPbrShaderConsumesAllFiveTextureTransforms`,
+`.EveryPbrShaderUsesTheGltfPackedTextureChannels` and `.SdlGpuSamplesBothKhrMaterialsSpecularTextures`
+failed on `next`: they audit renderer source text, and their SDL_GPU rows still quoted
+`samplerLodBias.slots0To3` / `slots4To7` and `fsInfo.num_samplers = 7`. SMG-0032 moved the stock
+sampler LOD biases into `PbrParams` (`pbrp.lodBias0To3` / `lodBias4To7`) to free a uniform slot for
+shadow reception, and raised the PBR fragment sampler count to 10 (13 since STREETS-0002). The
+behaviour each row describes is unchanged -- every map still sampled through its own transform and
+its own slot's bias, the packed channels, both KHR_materials_specular maps -- so the rows now quote
+the current spelling. The sampler-count evidence is replaced by the two specular maps' own binding
+lines (`samplerBindings[5]` / `[6]`): what the test is about is where those maps bind, and a total
+count goes stale whenever an unrelated sampler is added. `GltfRendererPbrFallbackPolicy` 30/30.
