@@ -107,6 +107,23 @@ namespace CNA::Internal::Renderers
         void ClearCurrent() { service_.MakeCurrent(window_, nullptr); }
 
         /**
+         * @brief Returns whether this owner's context is the one currently bound.
+         * @return True when the platform reports this context as current.
+         */
+        [[nodiscard]] bool IsCurrent() const { return service_.GetCurrentBinding().context == context_; }
+
+        /**
+         * @brief Makes this context current unless it already is.
+         *
+         * The cheap form of MakeCurrent() for an operation that must run in this context: with two
+         * devices, the other one's context may be current when this device's work arrives.
+         */
+        void EnsureCurrent()
+        {
+            if (!IsCurrent()) MakeCurrent();
+        }
+
+        /**
          * @brief Returns the GL binding active on the calling thread.
          * @return The current platform window/context pair, or an empty binding.
          */

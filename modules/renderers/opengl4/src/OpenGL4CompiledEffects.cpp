@@ -270,6 +270,8 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4Renderer::MakeMojoShaderContextCurrentEXT() const
     {
+        // GL4-0021: MojoShader's context record is not the GL context -- the GL one first.
+        platformContext_->EnsureCurrent();
         if (mojoShaderContext_ != nullptr)
             MOJOSHADER_glMakeContextCurrent(mojoShaderContext_);
     }

@@ -500,8 +500,20 @@ namespace CNA::Internal::Renderers::OpenGL4
     // OpenGL4EffectRenderer
     // ------------------------------------------------------------------------------------
 
+    OpenGL4EffectRenderer::~OpenGL4EffectRenderer()
+    {
+        // GL4-0021: deleted here, inside the scope, not by the member's destructor afterwards.
+        const auto ownContext = EnterOwnContext();
+        if (ownContext)
+            program_.Reset();
+        else
+            program_.Abandon();
+    }
+
     bool OpenGL4EffectRenderer::CompileProgram(const std::string& vertSrc, const std::string& fragSrc)
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return false;
         rtFlipVUploaded_ = false;
         return program_.Compile(AdaptGlslEs300ForDesktopCore(vertSrc),
                                 AdaptGlslEs300ForDesktopCore(fragSrc));
@@ -509,6 +521,8 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4EffectRenderer::Bind()
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
         if (program_.IsValid())
             program_.Use();
     }
@@ -536,6 +550,8 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4EffectRenderer::SetUniformFloat(const char* name, float value)
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
         MakeProgramCurrent();
         const int loc = program_.UniformLocation(name);
         if (loc >= 0) gl4_glUniform1f(loc, value);
@@ -543,6 +559,8 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4EffectRenderer::SetUniformInt(const char* name, int value)
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
         MakeProgramCurrent();
         const int loc = program_.UniformLocation(name);
         if (loc >= 0) gl4_glUniform1i(loc, value);
@@ -550,6 +568,8 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4EffectRenderer::SetUniformVec2(const char* name, float x, float y)
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
         MakeProgramCurrent();
         const int loc = program_.UniformLocation(name);
         if (loc >= 0) gl4_glUniform2f(loc, x, y);
@@ -557,6 +577,8 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4EffectRenderer::SetUniformVec3(const char* name, float x, float y, float z)
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
         MakeProgramCurrent();
         const int loc = program_.UniformLocation(name);
         if (loc >= 0) gl4_glUniform3f(loc, x, y, z);
@@ -564,6 +586,8 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4EffectRenderer::SetUniformVec4(const char* name, float x, float y, float z, float w)
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
         MakeProgramCurrent();
         const int loc = program_.UniformLocation(name);
         if (loc >= 0) gl4_glUniform4f(loc, x, y, z, w);
@@ -571,6 +595,8 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4EffectRenderer::SetUniformMat4(const char* name, const float* matrix)
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
         MakeProgramCurrent();
         const int loc = program_.UniformLocation(name);
         if (loc >= 0) gl4_glUniformMatrix4fv(loc, 1, GL_FALSE, matrix);
@@ -588,6 +614,8 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4EffectRenderer::SetUniformFloatArray(const char* name, const float* values, int count)
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
         MakeProgramCurrent();
         const int loc = ArrayUniformLocation(name);
         if (loc >= 0 && count > 0) gl4_glUniform1fv(loc, count, values);
@@ -595,6 +623,8 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4EffectRenderer::SetUniformVec2Array(const char* name, const float* values, int count)
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
         MakeProgramCurrent();
         const int loc = ArrayUniformLocation(name);
         if (loc >= 0 && count > 0) gl4_glUniform2fv(loc, count, values);
@@ -602,6 +632,8 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4EffectRenderer::SetUniformVec3Array(const char* name, const float* values, int count)
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
         MakeProgramCurrent();
         const int loc = ArrayUniformLocation(name);
         if (loc >= 0 && count > 0) gl4_glUniform3fv(loc, count, values);
@@ -609,6 +641,8 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4EffectRenderer::SetUniformMat4Array(const char* name, const float* matrices, int count)
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
         MakeProgramCurrent();
         const int loc = ArrayUniformLocation(name);
         if (loc >= 0 && count > 0) gl4_glUniformMatrix4fv(loc, count, GL_FALSE, matrices);
@@ -616,6 +650,8 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4EffectRenderer::BindTexture(int unit, ITextureRenderer* texture)
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
         if (!texture) return;
         texture->BindGL(unit);
         gl4_glActiveTexture(GL_TEXTURE0);
@@ -643,6 +679,8 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4EffectRenderer::BindTextureCube(int unit, ITextureCubeRenderer* texture)
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
         if (!texture) return;
         texture->BindGL(unit);
         gl4_glActiveTexture(GL_TEXTURE0);
@@ -650,6 +688,8 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4EffectRenderer::BindTexture3D(int unit, ITexture3DRenderer* texture)
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
         if (!texture) return;
         texture->BindGL(unit);
         gl4_glActiveTexture(GL_TEXTURE0);
@@ -666,12 +706,15 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     OpenGL4OcclusionQueryRenderer::~OpenGL4OcclusionQueryRenderer()
     {
-        if (query_ != 0)
+        const auto ownContext = EnterOwnContext();   // GL4-0021
+        if (ownContext && query_ != 0)
             gl4_glDeleteQueries(1, &query_);
     }
 
     void OpenGL4OcclusionQueryRenderer::Begin()
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
         if (query_ == 0) return;
         resultCached_ = false;
         issued_ = false;
@@ -680,6 +723,8 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4OcclusionQueryRenderer::End()
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
         if (query_ == 0) return;
         gl4_glEndQuery(GL_SAMPLES_PASSED);
         // A query that has ended always becomes available, including one no fragment reached.
@@ -688,6 +733,8 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     bool OpenGL4OcclusionQueryRenderer::IsComplete() const
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return false;
         if (query_ == 0 || !issued_) return false;
         if (resultCached_) return true;
         GLuint available = 0;
@@ -702,6 +749,8 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     int OpenGL4OcclusionQueryRenderer::PixelCount() const
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return 0;
         if (!IsComplete()) return 0;
         return cachedResult_;
     }
@@ -719,6 +768,8 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     OpenGL4VertexBufferRenderer::~OpenGL4VertexBufferRenderer()
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021
+        if (!ownContext) return;
         if (vbo_ != 0) gl4_glDeleteBuffers(1, &vbo_);
         if (vao_ != 0) gl4_glDeleteVertexArrays(1, &vao_);
     }
@@ -943,6 +994,8 @@ namespace CNA::Internal::Renderers::OpenGL4
                                                          std::size_t stride_in_bytes,
                                                          SetDataOptions options)
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
         vertexCount_ = vertex_count;
         strideInBytes_ = stride_in_bytes;
         const std::size_t byteCount =
@@ -963,6 +1016,8 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     OpenGL4IndexBufferRenderer::~OpenGL4IndexBufferRenderer()
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021
+        if (!ownContext) return;
         if (ibo_ != 0) gl4_glDeleteBuffers(1, &ibo_);
     }
 
@@ -1024,6 +1079,8 @@ namespace CNA::Internal::Renderers::OpenGL4
     void OpenGL4IndexBufferRenderer::SetData16WithOptions(const void* data, int index_count,
                                                           SetDataOptions options)
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
         Upload(data, index_count, sizeof(std::uint16_t), options);
     }
 
@@ -1035,6 +1092,8 @@ namespace CNA::Internal::Renderers::OpenGL4
     void OpenGL4IndexBufferRenderer::SetData32WithOptions(const void* data, int index_count,
                                                           SetDataOptions options)
     {
+        const auto ownContext = EnterOwnContext();   // GL4-0021: this resource's own context
+        if (!ownContext) return;
         Upload(data, index_count, sizeof(std::uint32_t), options);
     }
 
@@ -1195,7 +1254,9 @@ namespace CNA::Internal::Renderers::OpenGL4
         // ContentManager may create graphics resources on a loading thread (the XNA Marble Maze
         // sample does), so the device context is made current on the calling thread first. The
         // loader's function pointers are process-wide, so nothing else needs initialising.
-        platformContext_->MakeCurrent();
+        // GL4-0021: every GL-issuing entry point asks, because with two GraphicsDevices the other
+        // one's context may be current -- and only switches when it is not already this one.
+        platformContext_->EnsureCurrent();
     }
 
     std::unique_ptr<IRendererThreadContextLease> OpenGL4Renderer::AcquireThreadContextLeaseEXT(
@@ -1421,6 +1482,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4Renderer::Present()
     {
+        EnsureCallingThreadContext();   // GL4-0021
         if (sampleCount_ > 1) ResolveMsaa();
         platformContext_->SwapBuffers();
         if (sampleCount_ > 1 && bound_->height == 0)
@@ -1439,6 +1501,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4Renderer::SetSwapInterval(int interval)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         // Recorded as well as forwarded: whether the driver honours an interval is the driver's
         // business; whether CNA asked for it is this renderer's (REMED-GFX-243).
         swapInterval_ = interval;
@@ -1448,6 +1511,7 @@ namespace CNA::Internal::Renderers::OpenGL4
     void OpenGL4Renderer::UpdatePresentationFormatEXT(int backBufferFormat, int depthStencilFormat,
                                                       bool isFullScreen)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         (void)backBufferFormat;
         (void)isFullScreen;
         if (depthStencilFormat < 0 || depthStencilFormat > 3)
@@ -1515,13 +1579,17 @@ namespace CNA::Internal::Renderers::OpenGL4
     std::unique_ptr<ISpriteBatchRenderer> OpenGL4Renderer::CreateSpriteBatch()
     {
         EnsureCallingThreadContext();
-        return std::make_unique<OpenGL4SpriteBatchRenderer>(*this);
+        auto spriteBatch = std::make_unique<OpenGL4SpriteBatchRenderer>(*this);
+        spriteBatch->AttachOwningContext(platformContext_);
+        return spriteBatch;
     }
 
     std::unique_ptr<IOcclusionQueryRenderer> OpenGL4Renderer::CreateOcclusionQuery()
     {
         EnsureCallingThreadContext();
-        return std::make_unique<OpenGL4OcclusionQueryRenderer>();
+        auto query = std::make_unique<OpenGL4OcclusionQueryRenderer>();
+        query->AttachOwningContext(platformContext_);
+        return query;
     }
 
     std::unique_ptr<IEffectRenderer> OpenGL4Renderer::CreateEffectRenderer(
@@ -1529,6 +1597,7 @@ namespace CNA::Internal::Renderers::OpenGL4
     {
         EnsureCallingThreadContext();
         auto renderer = std::make_unique<OpenGL4EffectRenderer>();
+        renderer->AttachOwningContext(platformContext_);
         renderer->CompileProgram(vertSrc, fragSrc);
         return renderer;
     }
@@ -1536,23 +1605,30 @@ namespace CNA::Internal::Renderers::OpenGL4
     std::unique_ptr<IVertexBufferRenderer> OpenGL4Renderer::CreateVertexBuffer(int vertex_capacity)
     {
         EnsureCallingThreadContext();
-        return std::make_unique<OpenGL4VertexBufferRenderer>(vertex_capacity);
+        auto buffer = std::make_unique<OpenGL4VertexBufferRenderer>(vertex_capacity);
+        buffer->AttachOwningContext(platformContext_);
+        return buffer;
     }
 
     std::unique_ptr<IIndexBufferRenderer> OpenGL4Renderer::CreateIndexBuffer16(int index_capacity)
     {
         EnsureCallingThreadContext();
-        return std::make_unique<OpenGL4IndexBufferRenderer>(index_capacity, false);
+        auto buffer = std::make_unique<OpenGL4IndexBufferRenderer>(index_capacity, false);
+        buffer->AttachOwningContext(platformContext_);
+        return buffer;
     }
 
     std::unique_ptr<IIndexBufferRenderer> OpenGL4Renderer::CreateIndexBuffer32(int index_capacity)
     {
         EnsureCallingThreadContext();
-        return std::make_unique<OpenGL4IndexBufferRenderer>(index_capacity, true);
+        auto buffer = std::make_unique<OpenGL4IndexBufferRenderer>(index_capacity, true);
+        buffer->AttachOwningContext(platformContext_);
+        return buffer;
     }
 
     void OpenGL4Renderer::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         if (w <= 0 || h <= 0 || pixels == nullptr) return;
         GLint previousReadFbo = 0;
         glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previousReadFbo);
@@ -1657,6 +1733,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4Renderer::Clear(float r, float g, float b, float a)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         // REMED-GFX-142: COLOUR ONLY. Every clear that includes depth has its own entry point.
         const bool scissorWasEnabled = DisableScissorForClear();
         glClearColor(r, g, b, a);
@@ -1669,6 +1746,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4Renderer::ClearColorAndDepth(float r, float g, float b, float a, float depth)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         const bool scissorWasEnabled = DisableScissorForClear();
         glClearColor(r, g, b, a);
         glClearDepth(depth);
@@ -1683,6 +1761,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4Renderer::ClearDepth(float depth)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         const bool scissorWasEnabled = DisableScissorForClear();
         glClearDepth(depth);
         glDepthMask(GL_TRUE);
@@ -1693,6 +1772,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4Renderer::ClearStencil(int stencil)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         const bool scissorWasEnabled = DisableScissorForClear();
         glClearStencil(stencil);
         glStencilMask(0xFFFFFFFFu);
@@ -1703,6 +1783,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4Renderer::ClearDepthAndStencil(float depth, int stencil)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         const bool scissorWasEnabled = DisableScissorForClear();
         glClearDepth(depth);
         glClearStencil(stencil);
@@ -1715,6 +1796,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4Renderer::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         const bool scissorWasEnabled = DisableScissorForClear();
         glClearColor(r, g, b, a);
         glClearStencil(stencil);
@@ -1732,6 +1814,7 @@ namespace CNA::Internal::Renderers::OpenGL4
     void OpenGL4Renderer::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth,
                                                     int stencil)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         const bool scissorWasEnabled = DisableScissorForClear();
         glClearColor(r, g, b, a);
         glClearDepth(depth);
@@ -1748,6 +1831,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4Renderer::SetDepthTestEnabled(bool enabled)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         depthEnabled_ = enabled;
         if (enabled && bound_->depthFormat != 0) glEnable(GL_DEPTH_TEST);
         else glDisable(GL_DEPTH_TEST);
@@ -1761,6 +1845,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4Renderer::SetBlendEnabled(bool enabled)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         if (enabled)
         {
             glEnable(GL_BLEND);
@@ -1774,6 +1859,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4Renderer::SetDepthWriteEnabled(bool enabled)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         depthWriteEnabled_ = enabled;
         glDepthMask((enabled && bound_->depthFormat != 0) ? GL_TRUE : GL_FALSE);
     }
@@ -1787,6 +1873,7 @@ namespace CNA::Internal::Renderers::OpenGL4
                                           int colorBlendFunc, int alphaBlendFunc,
                                           const BlendWriteState& writeState)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         // Blend::One=0 and Blend::Zero=1: the Opaque preset (One/Zero on both channels) is XNA's
         // encoding of "no blending" -- there is no BlendState.Enabled.
         const bool blendEnabled = !(colorSrcBlend == 0 && colorDstBlend == 1 &&
@@ -1818,6 +1905,7 @@ namespace CNA::Internal::Renderers::OpenGL4
                                                  int ccwStencilFunc, int ccwStencilPass,
                                                  int ccwStencilFail, int ccwStencilDepthFail)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         depthEnabled_ = depthEnable;
         depthWriteEnabled_ = depthWriteEnable;
         if (depthEnable && bound_->depthFormat != 0) glEnable(GL_DEPTH_TEST);
@@ -1909,6 +1997,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4Renderer::SetReferenceStencil(int value)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         referenceStencil_ = value;
         // GL sets function, reference and mask together, so a new reference means reissuing the
         // remembered functions. Nothing to reissue while the test is off; the value is kept.
@@ -1939,6 +2028,7 @@ namespace CNA::Internal::Renderers::OpenGL4
     void OpenGL4Renderer::ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
                                                float depthBias, float slopeScaleDepthBias)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         // CullMode: None=0, CullClockwiseFace=1, CullCounterClockwiseFace=2. GL's front face stays
         // GL_CCW, and XNA's CLOCKWISE faces are GL's back faces (screen-space winding is the same
         // in both APIs), so CullClockwiseFace culls GL_BACK.
@@ -1991,17 +2081,20 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4Renderer::ApplyRasterizerMultiSampleState(bool enabled)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         if (enabled) glEnable(GL_MULTISAMPLE);
         else glDisable(GL_MULTISAMPLE);
     }
 
     void OpenGL4Renderer::SetBlendFactor(float r, float g, float b, float a)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         gl4_glBlendColor(r, g, b, a);
     }
 
     void OpenGL4Renderer::SetScissorRect(int x, int y, int w, int h)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         // SOFTWARE-310: a zero width or height is a valid XNA scissor that must reach glScissor,
         // whose empty box rejects every fragment. Before GL4-0017 this returned early for it.
         if (w < 0 || h < 0) return;
@@ -2037,6 +2130,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4Renderer::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         if (w <= 0 || h <= 0) return;
         // GL's viewport origin is bottom-left: flip against the bound target's height, or the
         // drawable's for the back buffer.
@@ -2074,6 +2168,7 @@ namespace CNA::Internal::Renderers::OpenGL4
     void OpenGL4Renderer::ApplySamplerState(int slot, int filter, int addressU, int addressV,
                                             int maxAnisotropy)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         if (slot < 0 || slot >= kMaxSamplerSlots) return;
         const GLuint sampler = samplers_[slot];
         GLint minFilter = GL_LINEAR, magFilter = GL_LINEAR;
@@ -2104,6 +2199,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4Renderer::ApplySamplerMipState(int slot, int maxMipLevel, float lodBias)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         if (slot < 0 || slot >= kMaxSamplerSlots) return;
         const GLuint sampler = samplers_[slot];
         // XNA's MaxMipLevel is the MOST detailed level the sampler may use: a lower bound on the
@@ -2119,6 +2215,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4Renderer::ApplySamplerAddressW(int slot, int addressW)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         if (slot < 0 || slot >= kMaxSamplerSlots) return;
         gl4_glSamplerParameteri(samplers_[slot], GL_TEXTURE_WRAP_R, ToGLWrap(addressW));
         gl4_glBindSampler(static_cast<GLuint>(slot), samplers_[slot]);
@@ -2149,6 +2246,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4Renderer::SetRenderTarget2D(IRenderTargetRenderer* rt)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         FinalizeCurrentMRT();
         // Resolve MSAA and regenerate mips for the target being left, before switching away.
         if (bound_->rt2D && bound_->rt2D != rt) bound_->rt2D->UnbindAsRenderTarget();
@@ -2178,6 +2276,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4Renderer::SetRenderTargetCubeFace(IRenderTargetCubeRenderer* rt, int face)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         if (!rt) { SetRenderTarget2D(nullptr); return; }
         FinalizeCurrentMRT();
         if (bound_->rt2D) bound_->rt2D->UnbindAsRenderTarget();
@@ -2201,6 +2300,7 @@ namespace CNA::Internal::Renderers::OpenGL4
     void OpenGL4Renderer::SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
                                            int count)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         if (count <= 0)
         {
             SetRenderTarget2D(nullptr);

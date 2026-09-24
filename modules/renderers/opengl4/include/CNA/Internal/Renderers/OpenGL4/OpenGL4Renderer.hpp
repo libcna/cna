@@ -76,6 +76,10 @@ namespace CNA::Internal::Renderers::OpenGL4
         [[nodiscard]] int UniformLocation(const char* name) const;
         /** @brief Returns the GL program name. */
         [[nodiscard]] unsigned int Handle() const { return program_; }
+        /** @brief Deletes the program now; its context must be current. */
+        void Reset() { Destroy(); }
+        /** @brief Forgets the program without any GL call: its context is already gone. */
+        void Abandon() noexcept { program_ = 0; }
 
     private:
         void Destroy();
@@ -90,11 +94,11 @@ namespace CNA::Internal::Renderers::OpenGL4
      * GLSL ES 3.00 source (the CNAEXT engine layer's authored profile) is adapted to desktop core
      * before compilation; desktop GLSL passes through unchanged.
      */
-    class OpenGL4EffectRenderer final : public IEffectRenderer
+    class OpenGL4EffectRenderer final : public IEffectRenderer, public OpenGL4ContextResource
     {
     public:
         OpenGL4EffectRenderer() = default;
-        ~OpenGL4EffectRenderer() override = default;
+        ~OpenGL4EffectRenderer() override;
 
         OpenGL4EffectRenderer(const OpenGL4EffectRenderer&) = delete;
         OpenGL4EffectRenderer& operator=(const OpenGL4EffectRenderer&) = delete;
@@ -148,7 +152,8 @@ namespace CNA::Internal::Renderers::OpenGL4
      * Desktop GL reports an exact passed-sample count, which is XNA's own desktop
      * `OcclusionQuery.PixelCount()` semantics.
      */
-    class OpenGL4OcclusionQueryRenderer final : public IOcclusionQueryRenderer
+    class OpenGL4OcclusionQueryRenderer final : public IOcclusionQueryRenderer,
+                                                public OpenGL4ContextResource
     {
     public:
         OpenGL4OcclusionQueryRenderer();
@@ -178,7 +183,8 @@ namespace CNA::Internal::Renderers::OpenGL4
      * rebinds the locations to the program's semantics for the draw and restores this layout
      * afterwards (plans/plan_opengl4_modern_graphics.md GL4-0013).
      */
-    class OpenGL4VertexBufferRenderer final : public IVertexBufferRenderer
+    class OpenGL4VertexBufferRenderer final : public IVertexBufferRenderer,
+                                              public OpenGL4ContextResource
     {
     public:
         /**
@@ -231,7 +237,8 @@ namespace CNA::Internal::Renderers::OpenGL4
     };
 
     /** @brief `OpenGL4`-backed index buffer, 16- or 32-bit. */
-    class OpenGL4IndexBufferRenderer final : public IIndexBufferRenderer
+    class OpenGL4IndexBufferRenderer final : public IIndexBufferRenderer,
+                                             public OpenGL4ContextResource
     {
     public:
         /**
@@ -282,7 +289,8 @@ namespace CNA::Internal::Renderers::OpenGL4
      * device Viewport, render-target orientation and XNA's 2 048-sprite submission ceiling
      * (plans/plan_opengl4_modern_graphics.md GL4-0014).
      */
-    class OpenGL4SpriteBatchRenderer final : public ISpriteBatchRenderer
+    class OpenGL4SpriteBatchRenderer final : public ISpriteBatchRenderer,
+                                             public OpenGL4ContextResource
     {
     public:
         /** @brief One sprite vertex: position (with layer depth), UV and colour. */

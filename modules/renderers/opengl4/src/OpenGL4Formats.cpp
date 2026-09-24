@@ -693,24 +693,36 @@ namespace CNA::Internal::Renderers::OpenGL4
     // Each creator first makes the renderer's context current on the calling thread: ContentManager
     // may construct graphics resources on a loading thread.
 
+    namespace
+    {
+        /// GL4-0021: a resource remembers the context its names were created in.
+        template <typename Resource>
+        std::unique_ptr<Resource> OwnedByContext(std::unique_ptr<Resource> resource,
+                                                 const std::shared_ptr<PlatformGlContextOwner>& context)
+        {
+            resource->AttachOwningContext(context);
+            return resource;
+        }
+    }
+
     std::unique_ptr<ITextureRenderer> OpenGL4Renderer::CreateTexture(const ImageData& data)
     {
         EnsureCallingThreadContext();
-        return std::make_unique<OpenGL4TextureRenderer>(data);
+        return OwnedByContext(std::make_unique<OpenGL4TextureRenderer>(data), platformContext_);
     }
 
     std::unique_ptr<ITexture3DRenderer> OpenGL4Renderer::CreateTexture3D(
         int w, int h, int depth, bool mipMap, int surfaceFormat)
     {
         EnsureCallingThreadContext();
-        return std::make_unique<OpenGL4Texture3DRenderer>(w, h, depth, mipMap, surfaceFormat);
+        return OwnedByContext(std::make_unique<OpenGL4Texture3DRenderer>(w, h, depth, mipMap, surfaceFormat), platformContext_);
     }
 
     std::unique_ptr<ITextureCubeRenderer> OpenGL4Renderer::CreateTextureCube(
         int size, bool mipMap, int surfaceFormat)
     {
         EnsureCallingThreadContext();
-        return std::make_unique<OpenGL4TextureCubeRenderer>(size, mipMap, surfaceFormat);
+        return OwnedByContext(std::make_unique<OpenGL4TextureCubeRenderer>(size, mipMap, surfaceFormat), platformContext_);
     }
 
     std::unique_ptr<IRenderTargetRenderer> OpenGL4Renderer::CreateRenderTarget2D(
@@ -725,9 +737,9 @@ namespace CNA::Internal::Renderers::OpenGL4
         // REMED-GFX-168: `bound_` is handed over weakly so the target can clear its own slot when
         // it is destroyed while still bound, without keeping the binding record alive past the
         // renderer.
-        return std::make_unique<OpenGL4RenderTargetRenderer>(
+        return OwnedByContext(std::make_unique<OpenGL4RenderTargetRenderer>(
             w, h, depthFormat, std::weak_ptr<OpenGL4BoundTarget>(bound_), mipMap,
-            multiSampleCount, static_cast<int>(SurfaceFormat::Color));
+            multiSampleCount, static_cast<int>(SurfaceFormat::Color)), platformContext_);
     }
 
     std::unique_ptr<IRenderTargetRenderer> OpenGL4Renderer::CreateRenderTarget2DEXT(
@@ -746,9 +758,9 @@ namespace CNA::Internal::Renderers::OpenGL4
                 " is not supported as a render target on this GL context. Query "
                 "GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT() first.");
         }
-        return std::make_unique<OpenGL4RenderTargetRenderer>(
+        return OwnedByContext(std::make_unique<OpenGL4RenderTargetRenderer>(
             w, h, depthFormat, std::weak_ptr<OpenGL4BoundTarget>(bound_), mipMap,
-            multiSampleCount, surfaceFormat);
+            multiSampleCount, surfaceFormat), platformContext_);
     }
 
     std::unique_ptr<IRenderTargetCubeRenderer> OpenGL4Renderer::CreateRenderTargetCube(
@@ -759,9 +771,9 @@ namespace CNA::Internal::Renderers::OpenGL4
         // its own multisample colour renderbuffer (REMED-GFX-141), so binding one still touches
         // nothing and there is no load action to carry a usage decision.
         (void)preserveContents;
-        return std::make_unique<OpenGL4RenderTargetCubeRenderer>(
+        return OwnedByContext(std::make_unique<OpenGL4RenderTargetCubeRenderer>(
             size, depthFormat, std::weak_ptr<OpenGL4BoundTarget>(bound_), mipMap,
-            multiSampleCount, static_cast<int>(SurfaceFormat::Color));
+            multiSampleCount, static_cast<int>(SurfaceFormat::Color)), platformContext_);
     }
 
     std::unique_ptr<IRenderTargetCubeRenderer> OpenGL4Renderer::CreateRenderTargetCubeEXT(
@@ -777,9 +789,9 @@ namespace CNA::Internal::Renderers::OpenGL4
                 " is not supported as a cube render target on this GL context. Query "
                 "GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT() first.");
         }
-        return std::make_unique<OpenGL4RenderTargetCubeRenderer>(
+        return OwnedByContext(std::make_unique<OpenGL4RenderTargetCubeRenderer>(
             size, depthFormat, std::weak_ptr<OpenGL4BoundTarget>(bound_), mipMap,
-            multiSampleCount, surfaceFormat);
+            multiSampleCount, surfaceFormat), platformContext_);
     }
 
     // --- OpenGL4Renderer: format classification --------------------------------------------------

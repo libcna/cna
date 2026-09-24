@@ -1251,6 +1251,7 @@ namespace CNA::Internal::Renderers::OpenGL4
                                                 const Matrix& projection, PrimitiveType primitive,
                                                 int primitiveCount)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         ApplyStencilPrimitiveTopology(primitive);
         EnsureStockProgram(progColored_, StockProgramShape::Colored, false);
         const auto& vb = static_cast<const OpenGL4VertexBufferRenderer&>(vbIn);
@@ -1282,6 +1283,7 @@ namespace CNA::Internal::Renderers::OpenGL4
                                                        const Matrix& projection,
                                                        PrimitiveType primitive, int primitiveCount)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         ApplyStencilPrimitiveTopology(primitive);
         EnsureStockProgram(progColored_, StockProgramShape::Colored, false);
         const auto& vb = static_cast<const OpenGL4VertexBufferRenderer&>(vbIn);
@@ -1314,6 +1316,7 @@ namespace CNA::Internal::Renderers::OpenGL4
                                            PrimitiveType primitive, int primitiveCount,
                                            const GpuDrawParams& paramsIn)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         ApplyStencilPrimitiveTopology(primitive);
 #if defined(CNA_OPENGL4_COMPILED_EFFECTS)
         // plans/plan_opengl4_modern_graphics.md GL4-0020: a compiled effect's vertex layout is
@@ -1370,6 +1373,7 @@ namespace CNA::Internal::Renderers::OpenGL4
                                                   const Matrix& projection, PrimitiveType primitive,
                                                   int primitiveCount, const GpuDrawParams& paramsIn)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         ApplyStencilPrimitiveTopology(primitive);
 #if defined(CNA_OPENGL4_COMPILED_EFFECTS)
         // GL4-0020: see DrawPrimitivesEx.
@@ -1434,6 +1438,7 @@ namespace CNA::Internal::Renderers::OpenGL4
                                                     PrimitiveType primitive, int primitiveCount,
                                                     int instanceCount, const GpuDrawParams& paramsIn)
     {
+        EnsureCallingThreadContext();   // GL4-0021
         ApplyStencilPrimitiveTopology(primitive);
 #if defined(CNA_OPENGL4_COMPILED_EFFECTS)
         // GL4-0020 (plans/plan_fx.md FX-082): every per-instance stream keeps its real

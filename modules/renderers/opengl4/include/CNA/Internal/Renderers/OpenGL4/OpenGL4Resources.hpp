@@ -470,7 +470,8 @@ namespace CNA::Internal::Renderers::OpenGL4
     }
 
     /** @brief `OpenGL4`-backed plain `Texture2D`. */
-    class OpenGL4TextureRenderer final : public ITextureRenderer
+    class OpenGL4TextureRenderer final : public ITextureRenderer,
+                                         public OpenGL4ContextResource
     {
     public:
         /**
@@ -578,7 +579,8 @@ namespace CNA::Internal::Renderers::OpenGL4
     };
 
     /** @brief `OpenGL4`-backed plain (non-render-target) `TextureCube`. */
-    class OpenGL4TextureCubeRenderer final : public ITextureCubeRenderer
+    class OpenGL4TextureCubeRenderer final : public ITextureCubeRenderer,
+                                             public OpenGL4ContextResource
     {
     public:
         /**
@@ -734,7 +736,8 @@ namespace CNA::Internal::Renderers::OpenGL4
     };
 
     /** @brief `OpenGL4`-backed plain (non-render-target) `Texture3D` (volume texture). */
-    class OpenGL4Texture3DRenderer final : public ITexture3DRenderer
+    class OpenGL4Texture3DRenderer final : public ITexture3DRenderer,
+                                           public OpenGL4ContextResource
     {
     public:
         /**
@@ -863,7 +866,8 @@ namespace CNA::Internal::Renderers::OpenGL4
      * @brief `OpenGL4`-backed `RenderTarget2D`: an FBO whose colour attachment is also the texture
      * the target is later sampled as.
      */
-    class OpenGL4RenderTargetRenderer final : public IRenderTargetRenderer
+    class OpenGL4RenderTargetRenderer final : public IRenderTargetRenderer,
+                                              public OpenGL4ContextResource
     {
     public:
         /**
@@ -1020,7 +1024,8 @@ namespace CNA::Internal::Renderers::OpenGL4
     };
 
     /** @brief `OpenGL4`-backed `RenderTargetCube`. */
-    class OpenGL4RenderTargetCubeRenderer final : public IRenderTargetCubeRenderer
+    class OpenGL4RenderTargetCubeRenderer final : public IRenderTargetCubeRenderer,
+                                                  public OpenGL4ContextResource
     {
     public:
         /**

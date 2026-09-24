@@ -98,9 +98,18 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     OpenGL4SpriteBatchRenderer::~OpenGL4SpriteBatchRenderer()
     {
+        // GL4-0021: everything deleted here, inside the batch's own context; a context that is
+        // already gone took these names with it.
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext)
+        {
+            program_.Abandon();
+            return;
+        }
         if (ibo_ != 0) gl4_glDeleteBuffers(1, &ibo_);
         if (vbo_ != 0) gl4_glDeleteBuffers(1, &vbo_);
         if (vao_ != 0) gl4_glDeleteVertexArrays(1, &vao_);
+        program_.Reset();
     }
 
     void OpenGL4SpriteBatchRenderer::Begin()
@@ -153,6 +162,8 @@ namespace CNA::Internal::Renderers::OpenGL4
     void OpenGL4SpriteBatchRenderer::FlushBatch()
     {
         if (pendingVertices_.empty()) return;
+        const auto ownContext = EnterOwnContext();   // GL4-0021: the batch's own context
+        if (!ownContext) return;
 
         // Task 1077: a custom effect draws with the SAME program the Effect owns, so the uniforms
         // its ShaderEffect::SetUniform* calls wrote are the ones the draw reads. Apply() runs here,

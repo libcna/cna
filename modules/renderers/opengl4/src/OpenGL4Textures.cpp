@@ -140,7 +140,9 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     OpenGL4TextureRenderer::~OpenGL4TextureRenderer()
     {
-        if (texture_ != 0)
+        // GL4-0021: deleted in its own context; a context that is already gone took the name with it.
+        const auto ownContext = EnterOwnContext();
+        if (ownContext && texture_ != 0)
             glDeleteTextures(1, &texture_);
     }
 
@@ -240,6 +242,9 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4TextureRenderer::UpdatePixels(const uint8_t* data, int /*stride*/)
     {
+        // GL4-0021: this resource's names live in its own context.
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return;
         if (Detail::IsDxtFormat(surfaceFormat_))
         {
             if (data == nullptr)
@@ -257,6 +262,9 @@ namespace CNA::Internal::Renderers::OpenGL4
     void OpenGL4TextureRenderer::UpdatePixelsLevel(const int level, const uint8_t* data,
                                                    const int levelW, const int levelH)
     {
+        // GL4-0021: this resource's names live in its own context.
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return;
         if (Detail::IsDxtFormat(surfaceFormat_) && level >= 0 && level < mipLevels_ &&
             data != nullptr)
         {
@@ -281,6 +289,9 @@ namespace CNA::Internal::Renderers::OpenGL4
                                          const int w, const int h,
                                          void* data, const int dataLength) const
     {
+        // GL4-0021: this resource's names live in its own context.
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return false;
         if (!Detail::IsDxtFormat(surfaceFormat_))
             return false;
         if (data == nullptr || level < 0 || level >= mipLevels_ || x < 0 || y < 0 || w <= 0 ||
@@ -410,7 +421,8 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     OpenGL4TextureCubeRenderer::~OpenGL4TextureCubeRenderer()
     {
-        if (texture_ != 0)
+        const auto ownContext = EnterOwnContext();   // GL4-0021
+        if (ownContext && texture_ != 0)
             glDeleteTextures(1, &texture_);
     }
 
@@ -429,6 +441,9 @@ namespace CNA::Internal::Renderers::OpenGL4
                                              const int y, const int w, const int h,
                                              const void* data, const int dataLength)
     {
+        // GL4-0021: this resource's names live in its own context.
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return false;
         if (static_cast<SurfaceFormat>(surfaceFormat_) != SurfaceFormat::Color)
             return false;
         return SetDataBytesEXT(face, level, x, y, w, h, data, dataLength);
@@ -438,6 +453,9 @@ namespace CNA::Internal::Renderers::OpenGL4
                                                      const int y, const int w, const int h,
                                                      const void* data, const int dataLength)
     {
+        // GL4-0021: this resource's names live in its own context.
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return false;
         if (Detail::IsDxtFormat(surfaceFormat_))
             return false;
         // REMED-GFX-135: every refusal is a `false` the shared layer can tell apart from a
@@ -468,6 +486,9 @@ namespace CNA::Internal::Renderers::OpenGL4
                                                           const int w, const int h,
                                                           const void* data, const int dataLength)
     {
+        // GL4-0021: this resource's names live in its own context.
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return false;
         if (!Detail::IsDxtFormat(surfaceFormat_))
             return false;
         if (face < 0 || face >= 6 || data == nullptr || w <= 0 || h <= 0)
@@ -534,6 +555,9 @@ namespace CNA::Internal::Renderers::OpenGL4
                                                           const int w, const int h,
                                                           void* data, const int dataLength) const
     {
+        // GL4-0021: this resource's names live in its own context.
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return false;
         if (!Detail::IsDxtFormat(surfaceFormat_) || face < 0 || face >= 6 || data == nullptr ||
             level < 0 || level >= levelCount_ || w <= 0 || h <= 0)
             return false;
@@ -575,6 +599,9 @@ namespace CNA::Internal::Renderers::OpenGL4
                                              const int y, const int w, const int h,
                                              void* data, const int dataLength) const
     {
+        // GL4-0021: this resource's names live in its own context.
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return false;
         // REMED-GFX-130: every refusal is a `false`, never a fabricated transparent-black face.
         if (face < 0 || face >= 6 || data == nullptr || level < 0 || w <= 0 || h <= 0)
             return false;
@@ -613,6 +640,9 @@ namespace CNA::Internal::Renderers::OpenGL4
                                                      const int y, const int w, const int h,
                                                      void* data, const int dataLength) const
     {
+        // GL4-0021: this resource's names live in its own context.
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return false;
         if (Detail::IsDxtFormat(surfaceFormat_) || face < 0 || face >= 6 || data == nullptr ||
             level < 0 || level >= levelCount_ || w <= 0 || h <= 0)
             return false;
@@ -706,7 +736,8 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     OpenGL4Texture3DRenderer::~OpenGL4Texture3DRenderer()
     {
-        if (texture_ != 0)
+        const auto ownContext = EnterOwnContext();   // GL4-0021
+        if (ownContext && texture_ != 0)
             glDeleteTextures(1, &texture_);
     }
 
@@ -720,6 +751,9 @@ namespace CNA::Internal::Renderers::OpenGL4
                                            const int w, const int h, const int depth,
                                            const void* data, const int dataLength)
     {
+        // GL4-0021: this resource's names live in its own context.
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return false;
         // The public Texture3D element path is Color-only; typed data arrives through
         // SetDataBytesEXT.
         if (static_cast<SurfaceFormat>(surfaceFormat_) != SurfaceFormat::Color)
@@ -732,6 +766,9 @@ namespace CNA::Internal::Renderers::OpenGL4
                                                    const int depth, const void* data,
                                                    const int dataLength)
     {
+        // GL4-0021: this resource's names live in its own context.
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return false;
         if (data == nullptr || w <= 0 || h <= 0 || depth <= 0)
             return false;
         if (level < 0 || level >= levelCount_)
@@ -768,6 +805,9 @@ namespace CNA::Internal::Renderers::OpenGL4
                                            const int w, const int h, const int depth,
                                            void* data, const int dataLength) const
     {
+        // GL4-0021: this resource's names live in its own context.
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return false;
         if (static_cast<SurfaceFormat>(surfaceFormat_) != SurfaceFormat::Color)
             return false;
         return GetDataBytesEXT(level, x, y, z, w, h, depth, data, dataLength);
@@ -778,6 +818,9 @@ namespace CNA::Internal::Renderers::OpenGL4
                                                    const int depth, void* data,
                                                    const int dataLength) const
     {
+        // GL4-0021: this resource's names live in its own context.
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return false;
         if (data == nullptr || level < 0 || level >= levelCount_ || w <= 0 || h <= 0 || depth <= 0)
             return false;
         const int levelWidth = std::max(1, width_ >> level);

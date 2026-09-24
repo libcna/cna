@@ -9,11 +9,14 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/PlatformGlRendererState.hpp"
 #include "CNA/Internal/Renderers/OpenGL4/GL4Loader.hpp"
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <string>
+#include <utility>
 
 namespace CNA::Internal::Renderers::OpenGL4
 {
@@ -119,6 +122,125 @@ namespace CNA::Internal::Renderers::OpenGL4
     {
         return glGetError() == GL_NO_ERROR;
     }
+
+    /**
+     * @brief The GL context an OpenGL4 resource's names belong to.
+     *
+     * plans/plan_opengl4_modern_graphics.md GL4-0021: GL object names are per context. With two
+     * GraphicsDevices -- two contexts -- the other device's context may be current when this
+     * resource is written, read or destroyed, and a GL call then reaches a DIFFERENT object that
+     * happens to carry the same name (or raises GL_INVALID_VALUE). Every GL-issuing resource
+     * operation therefore enters its own context for its duration and puts the previous binding
+     * back. The reference is weak: a resource never keeps its renderer's context alive, and once
+     * that context is gone its names died with it, so the resource issues no GL at all.
+     */
+    class OpenGL4OwningContext
+    {
+    public:
+        /** @brief The binding for one operation; converts to false when the context is gone. */
+        class Scope
+        {
+        public:
+            /**
+             * @brief Enters @p owner's context when it is not already current.
+             *
+             * @param owner The context owner, or null when the resource was never attached.
+             * @param attached Whether the resource was ever attached to a context.
+             */
+            Scope(std::shared_ptr<PlatformGlContextOwner> owner, bool attached)
+                : owner_(std::move(owner)), live_(!attached || owner_ != nullptr)
+            {
+                if (owner_ != nullptr && !owner_->IsCurrent())
+                {
+                    previous_ = owner_->GetCurrentBinding();
+                    owner_->MakeCurrent();
+                    switched_ = true;
+                }
+            }
+
+            ~Scope()
+            {
+                if (!switched_) return;
+                try
+                {
+                    owner_->RestoreBinding(previous_,
+                                           RendererThreadContextLeaseRelease::RestorePreviousBinding);
+                }
+                catch (...)
+                {
+                }
+            }
+
+            Scope(const Scope&) = delete;
+            Scope& operator=(const Scope&) = delete;
+
+            /** @brief Whether GL may be issued for the resource in this scope. */
+            explicit operator bool() const noexcept { return live_; }
+
+        private:
+            std::shared_ptr<PlatformGlContextOwner> owner_;
+            CNA::Platform::GlContextBinding previous_;
+            bool live_ = true;
+            bool switched_ = false;
+        };
+
+        /**
+         * @brief Records the context this resource's names were created in.
+         *
+         * @param owner The creating renderer's context owner.
+         */
+        void Attach(std::weak_ptr<PlatformGlContextOwner> owner)
+        {
+            owner_ = std::move(owner);
+            attached_ = true;
+        }
+
+        /**
+         * @brief Enters the owning context for one operation.
+         *
+         * @return A scope that is false when the owning context no longer exists. A resource that
+         *         was never attached runs in whatever context is current, as before GL4-0021.
+         */
+        [[nodiscard]] Scope Enter() const { return Scope(owner_.lock(), attached_); }
+
+    private:
+        std::weak_ptr<PlatformGlContextOwner> owner_;
+        bool attached_ = false;
+    };
+
+    /**
+     * @brief Base of every OpenGL4 resource that owns GL names (GL4-0021).
+     */
+    class OpenGL4ContextResource
+    {
+    public:
+        /**
+         * @brief Binds this resource to the context its names were created in.
+         *
+         * @param owner The creating renderer's context owner.
+         */
+        void AttachOwningContext(std::weak_ptr<PlatformGlContextOwner> owner)
+        {
+            owningContext_.Attach(std::move(owner));
+        }
+
+    protected:
+        OpenGL4ContextResource() = default;
+        ~OpenGL4ContextResource() = default;
+
+        /**
+         * @brief Enters this resource's own context for the enclosing operation.
+         *
+         * @return The scope; false when the context -- and every name this resource held -- is gone.
+         */
+        [[nodiscard]] OpenGL4OwningContext::Scope EnterOwnContext() const
+        {
+            return owningContext_.Enter();
+        }
+
+    private:
+        OpenGL4OwningContext owningContext_;
+    };
 
     /**
      * @brief Turns the scissor test off for one scope and restores it afterwards.

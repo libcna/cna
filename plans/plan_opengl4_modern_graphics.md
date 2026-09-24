@@ -550,3 +550,41 @@ builds, so both sides of the guard stay compiled.
 | `CnaGraphicsTests` | 2 815 / 0 / 75 | **2 833 / 0 / 57** — the 15 compiled-effect skips now run and pass; `SupportsCompiledEffectsOnlyOnCompletedBackends` passes |
 | `cna_mojoshader_effect_probe` | — | 1 / 1, built without SDL |
 | `[OpenGL4 GL Error]` lines | 0 | 0 |
+
+## GL4-0021 — Each device's GL work stays in its own context
+
+**Found by the GL error output of `GL4-0016`,** not by any assertion: `CnaGraphicsExtTests`'
+`MultiDeviceTest` (two `GraphicsDevice`s, two contexts) produced 105
+`[OpenGL4 GL Error] api/error/high id=1: GL_INVALID_VALUE in glDeleteProgram` while passing — the
+tests compare memory estimates, which cannot see where GL calls land. OpenGL4 made its context
+current only when *creating* a resource, so the first device's later work — render-target binds,
+clears, uploads, uniform writes, deletions — ran in whichever context was current, the second
+device's after it was created. `GL_INVALID_VALUE` is the lucky outcome; an unrelated object that
+happens to carry the same name in the other context is the unlucky one.
+
+**Fix.** `PlatformGlContextOwner` gains `IsCurrent()`/`EnsureCurrent()`. OpenGL4's
+`EnsureCallingThreadContext()` uses the cheap form (it used to call `MakeCurrent` unconditionally)
+and every GL-issuing renderer entry point calls it (33: draws, clears, state, samplers, targets,
+presentation, readback). Every resource that owns GL names (textures, cube/volume textures, render
+targets, vertex/index buffers, occlusion queries, custom-effect programs, the SpriteBatch) derives
+from `OpenGL4ContextResource`, is attached to its creating renderer's context by a **weak**
+reference, and enters that context for each GL-issuing operation, restoring the previous binding
+afterwards. A resource whose context is already gone issues no GL at all — its names died with the
+context. The compiled-effect runtime's MojoShader switch now also ensures the GL context.
+
+**Tests** (`OpenGL4MultiDeviceTests.cpp`, with an in-process capture of `[OpenGL4 GL Error]` lines):
+interleaved clears into two devices' targets land in the right targets; destroying one device's
+target and device while the other is current leaves the other's target intact; renderer resources
+outliving their device release without GL. **With the fix disabled all three fail** — the second
+case measurably corrupts the surviving device's render target: the first device's deletions,
+issued in the second context, destroyed the second device's own objects.
+
+| suite | after `GL4-0020` | now |
+|---|---|---|
+| corpus, Wayland / X11 (openbox) | 405 / 0, 405 / 0 | 405 / 0, 405 / 0 |
+| `CnaRendererTests`, Wayland / X11 | 318 / 0 / 10, 214 / 0 / 0 | **321 / 0 / 10**, **217 / 0 / 0** |
+| `CnaGraphicsTests` | 2 833 / 0 / 57 | 2 833 / 0 / 57 |
+| `CnaGraphicsExtTests` (B) | 856 / 1 / 105, **105 GL errors** | 856 / 1 / 105, **0 GL errors** |
+
+EasyGL has the same single-context assumption (its renderer, too, only switches context when
+creating resources); recorded here, not changed.

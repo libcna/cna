@@ -113,7 +113,10 @@ namespace CNA::Internal::Renderers::OpenGL4
         // REMED-GFX-168: detach first, before any GL name is released, so there is no instant at
         // which the binding record names this object while its storage is partly gone.
         DetachFromBinding();
-        DestroyResources();
+        // GL4-0021: released in its own context; a context that is already gone took them with it.
+        const auto ownContext = EnterOwnContext();
+        if (ownContext)
+            DestroyResources();
     }
 
     /**
@@ -327,6 +330,9 @@ namespace CNA::Internal::Renderers::OpenGL4
                                               const int w, const int h,
                                               void* data, const int dataLength) const
     {
+        // GL4-0021: this resource's names live in its own context.
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return false;
         // MOD-108: a float target's texels are 2, 4, 8 or 16 bytes wide; reading one back as RGBA8
         // would clamp exactly the above-1.0 values the format was chosen to keep.
         Detail::RenderTargetColorStorage colorStorage{};
@@ -464,12 +470,18 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     void OpenGL4RenderTargetRenderer::UpdatePixels(const uint8_t* data, const int stride)
     {
+        // GL4-0021: this resource's names live in its own context.
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return;
         UploadPixelsLevel(0, data, width_, height_, stride);
     }
 
     void OpenGL4RenderTargetRenderer::UpdatePixelsLevel(const int level, const uint8_t* data,
                                                         const int levelW, const int levelH)
     {
+        // GL4-0021: this resource's names live in its own context.
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return;
         Detail::RenderTargetColorStorage storage{};
         if (!Detail::MapRenderTargetColorFormat(surfaceFormat_, storage))
             throw std::runtime_error(
@@ -492,7 +504,9 @@ namespace CNA::Internal::Renderers::OpenGL4
     OpenGL4RenderTargetCubeRenderer::~OpenGL4RenderTargetCubeRenderer()
     {
         DetachFromBinding();
-        DestroyResources();
+        const auto ownContext = EnterOwnContext();   // GL4-0021
+        if (ownContext)
+            DestroyResources();
     }
 
     /**
@@ -755,6 +769,9 @@ namespace CNA::Internal::Renderers::OpenGL4
                                                   const int y, const int w, const int h,
                                                   const void* data, const int dataLength)
     {
+        // GL4-0021: this resource's names live in its own context.
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return false;
         return SetDataBytesEXT(face, level, x, y, w, h, data, dataLength);
     }
 
@@ -763,6 +780,9 @@ namespace CNA::Internal::Renderers::OpenGL4
                                                           const int w, const int h,
                                                           const void* data, const int dataLength)
     {
+        // GL4-0021: this resource's names live in its own context.
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return false;
         if (face < 0 || face >= 6 || data == nullptr || w <= 0 || h <= 0)
             return false;
         if (level < 0 || level >= levelCount_)
@@ -795,6 +815,9 @@ namespace CNA::Internal::Renderers::OpenGL4
                                                   const int y, const int w, const int h,
                                                   void* data, const int dataLength) const
     {
+        // GL4-0021: this resource's names live in its own context.
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return false;
         return GetDataBytesEXT(face, level, x, y, w, h, data, dataLength);
     }
 
@@ -803,6 +826,9 @@ namespace CNA::Internal::Renderers::OpenGL4
                                                           const int w, const int h,
                                                           void* data, const int dataLength) const
     {
+        // GL4-0021: this resource's names live in its own context.
+        const auto ownContext = EnterOwnContext();
+        if (!ownContext) return false;
         if (face < 0 || face >= 6 || data == nullptr || w <= 0 || h <= 0)
             return false;
         if (level < 0 || level >= levelCount_)
