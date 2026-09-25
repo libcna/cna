@@ -1,8 +1,10 @@
 # Physical Windows 11 and DirectX bring-up
 
 Status: native MSVC and physical Intel GPU baseline established on 2026-09-25. The
-Windows DirectX parity campaign is active on `win11-directx-modern`; its DX11 classic
-phase begins with WIN11-0009 and WIN11-0010 below. Full classic/modern parity remains open.
+Windows DirectX parity campaign is active on `win11-directx-modern`. DX11 and DX12
+classic normal-validation gates are complete; DX11 modern CNAEXT evaluation is active.
+The large DX12 descriptor fixture under Intel GPU-based validation remains a recorded
+exception (WIN11-0025). Modern parity and application validation remain open.
 
 ## Stable source and machine baseline
 
@@ -482,3 +484,23 @@ selection of those ten cases. The normal classic capability gate is met on
 physical Intel. The high-cardinality GBV-only TDR remains a separately
 recorded Intel validation limitation under WIN11-0025; no claim is made that
 that fixture passes GBV, and the DRED evidence must travel with integration.
+
+## Native DX11 modern CNAEXT campaign, 2026-09-25
+
+WIN11-0027: configured `C:\rv\build\cna-win11-dx11-modern` with the native
+Visual Studio 17 2022 x64/v143 generator, `CNA_PLATFORM=WIN32`,
+`CNA_GRAPHICS_RENDERER=DIRECTX11`, `CNA_CNAEXT=ON`, `CNA_BUILD_TESTS=ON`,
+`CNA_BUILD_EXAMPLES=ON`, `CNA_ENABLE_SDL=OFF`, NULL audio, video/font/Draco
+off, and `CNA_SHARP_RUNTIME_ROOT=C:/rv/src/sharp-runtime`. The first
+`cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --parallel 4
+--target CnaGraphicsExtTests` exposed MSVC C2026: three generated shader
+source literals in each of the clustered-forward and post-process package
+headers exceeded MSVC 19.43's per-literal limit. The generator now splits
+UTF-8 payloads on complete lines below 12,000 bytes into adjacent raw
+literals. Rebuilt generated headers preserve their exact concatenated source
+bytes. The same build exposed one test translation unit's missing `<algorithm>`
+for `std::clamp`. After those fixes the modern test executable built cleanly;
+its original inventory is **969 cases in 124 suites**. Build logs:
+`C:\rv\logs\dx11-modern-gtest-build-3.log`; inventory:
+`C:\rv\logs\dx11-modern-gtest-list.txt`. No system tool or dependency was
+installed, and no GPU result is inferred from this compilation fix.
