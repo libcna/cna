@@ -57,7 +57,8 @@ whose reflection-driven route builds four bind groups a draw. The fix is a new b
 one uniform arena per flush bound with dynamic offsets, cached texture/sampler bind groups, and
 fewer submits (timestamps and resolves carried by the flush that is already happening) -- across
 the stock families and the ShaderEffect route. That is a redesign, left for a decision rather
-than started here.
+than started here; it is written up, with the measurements, code pointers and constraints, as
+[`plan_webgpu_perf.md`](plan_webgpu_perf.md).
 
 ## Status
 

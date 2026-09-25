@@ -76,6 +76,8 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 - [`plan_vulkan.md`](plan_vulkan.md) — Vulkan renderer parity, correctness, validation and
   EasyGL-equivalence plan.
 - [`plan_webgpu.md`](plan_webgpu.md) — WebGPU.
+- [`plan_webgpu_perf.md`](plan_webgpu_perf.md) — WebGPU's per-draw CPU cost: the open
+  binding-model redesign (uniform arena with dynamic offsets, cached bind groups, fewer submits).
 
 ### Retired renderers — historical plans
 
