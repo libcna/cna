@@ -71,6 +71,105 @@ namespace CNA::Graphics {
                                   CNA::ShaderStageEXT::Compute, "main",
                                   "clustered_light_compute/assign.vulkan.comp.wgsl",
                                   std::string(kAssignVulkanComputeWgsl)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                  CNA::ShaderStageEXT::Compute, "main",
+                                  "clustered_light_compute/assign.directx.comp.hlsl", R"(
+RWByteAddressBuffer CnaLights : register(u0);
+RWByteAddressBuffer CnaMatrix : register(u1);
+RWByteAddressBuffer CnaCounts : register(u2);
+RWByteAddressBuffer CnaIndices : register(u3);
+cbuffer ClusteredLightParameters : register(b4)
+{
+    int4 uGrid;
+    int4 uOutput;
+    float4 uDepth;
+};
+
+float cnaMatrix(int index)
+{
+    return asfloat(CnaMatrix.Load(index * 4));
+}
+
+float3 cnaUnproject(float x, float y, float z)
+{
+    float4 p;
+    p.x = cnaMatrix(0) * x + cnaMatrix(4) * y + cnaMatrix(8) * z + cnaMatrix(12);
+    p.y = cnaMatrix(1) * x + cnaMatrix(5) * y + cnaMatrix(9) * z + cnaMatrix(13);
+    p.z = cnaMatrix(2) * x + cnaMatrix(6) * y + cnaMatrix(10) * z + cnaMatrix(14);
+    p.w = cnaMatrix(3) * x + cnaMatrix(7) * y + cnaMatrix(11) * z + cnaMatrix(15);
+    return abs(p.w) <= 1e-9 ? p.xyz : p.xyz / p.w;
+}
+
+float3 cnaAtDistance(float3 atNear, float3 atFar, float distance)
+{
+    float span = atNear.z - atFar.z;
+    if (abs(span) <= 1e-9) return atNear;
+    float t = (atNear.z + distance) / span;
+    return float3(atNear.xy + (atFar.xy - atNear.xy) * t, -distance);
+}
+
+float cnaSliceDistance(int slice)
+{
+    if (slice == 0) return uDepth.x;
+    if (slice == uGrid.z) return uDepth.y;
+    return uDepth.x * pow(uDepth.y / uDepth.x, float(slice) / float(uGrid.z));
+}
+
+[numthreads(64, 1, 1)]
+void main(uint3 dispatchId : SV_DispatchThreadID)
+{
+    int cluster = int(dispatchId.x);
+    if (cluster >= uOutput.y) return;
+
+    uint tilesX = uint(uGrid.x);
+    uint tilesY = uint(uGrid.y);
+    int x = int(dispatchId.x % tilesX);
+    int y = int((dispatchId.x / tilesX) % tilesY);
+    int slice = int(dispatchId.x / (tilesX * tilesY));
+    float u0 = 2.0 * float(x) / float(uGrid.x) - 1.0;
+    float u1 = 2.0 * float(x + 1) / float(uGrid.x) - 1.0;
+    float v0 = 2.0 * float(y) / float(uGrid.y) - 1.0;
+    float v1 = 2.0 * float(y + 1) / float(uGrid.y) - 1.0;
+    float d0 = cnaSliceDistance(slice);
+    float d1 = cnaSliceDistance(slice + 1);
+
+    float3 minimum = float3(3.4028235e38, 3.4028235e38, 3.4028235e38);
+    float3 maximum = -minimum;
+    for (int i = 0; i < 2; ++i)
+    {
+        float u = i == 0 ? u0 : u1;
+        for (int j = 0; j < 2; ++j)
+        {
+            float v = j == 0 ? v0 : v1;
+            float3 atNear = cnaUnproject(u, v, 0.0);
+            float3 atFar = cnaUnproject(u, v, 1.0);
+            for (int k = 0; k < 2; ++k)
+            {
+                float3 p = cnaAtDistance(atNear, atFar, k == 0 ? d0 : d1);
+                minimum = min(minimum, p);
+                maximum = max(maximum, p);
+            }
+        }
+    }
+
+    int found = 0;
+    for (int light = 0; light < uGrid.w; ++light)
+    {
+        float4 sphere = asfloat(CnaLights.Load4(light * 16));
+        if (sphere.w <= 0.0) continue;
+        float3 nearest = clamp(sphere.xyz, minimum, maximum);
+        float3 delta = sphere.xyz - nearest;
+        if (dot(delta, delta) > sphere.w * sphere.w) continue;
+        if (found < uOutput.x)
+            CnaIndices.Store((cluster * uOutput.x + found) * 4, uint(light));
+        ++found;
+    }
+
+    CnaCounts.Store(cluster * 4, uint(min(found, uOutput.x)));
+    if (found > uOutput.x)
+        CnaCounts.Store(uOutput.y * 4, 1);
+}
+)"),
                 },
                 {CNA::ShaderStageEXT::Compute},
                 {

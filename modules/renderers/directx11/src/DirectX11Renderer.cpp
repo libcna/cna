@@ -4,7 +4,10 @@
 #include "CNA/Internal/Renderers/DirectX11/DirectX11Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11Buffers.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11IndirectBuffer.hpp"
+#include "CNA/Internal/Renderers/DirectX11/D3D11ComputeShader.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11Textures.hpp"
+#include "CNA/Internal/Renderers/DirectX11/D3D11Texture2DArray.hpp"
+#include "CNA/Internal/Renderers/DirectX11/D3D11StorageTexture2D.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11RenderTargets.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11OcclusionQuery.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11EffectRenderer.hpp"
@@ -1487,7 +1490,9 @@ namespace CNA::Internal::Renderers::DirectX11
         return device_ != nullptr &&
                language == static_cast<int>(CNA::ShaderLanguageEXT::Hlsl) &&
                (stage == static_cast<int>(CNA::ShaderStageEXT::Vertex) ||
-                stage == static_cast<int>(CNA::ShaderStageEXT::Fragment));
+                stage == static_cast<int>(CNA::ShaderStageEXT::Fragment) ||
+                (stage == static_cast<int>(CNA::ShaderStageEXT::Compute) &&
+                 SupportsComputeShadersEXT()));
     }
 
     bool DirectX11Renderer::SupportsGpuTimerEXT() const
@@ -1509,13 +1514,101 @@ namespace CNA::Internal::Renderers::DirectX11
     std::unique_ptr<IStorageBufferRenderer> DirectX11Renderer::CreateStorageBufferEXT(
         std::size_t byteSize, std::uint32_t usage, std::uint32_t cpuAccess)
     {
-        constexpr std::uint32_t supportedUsage = UINT32_C(0x0E);
-        if (!SupportsIndirectDrawEXT() || usage == 0 || (usage & ~supportedUsage) != 0 ||
+        constexpr std::uint32_t supportedUsage = UINT32_C(0x4F);
+        if (usage == 0 || (usage & ~supportedUsage) != 0 ||
             (cpuAccess & ~UINT32_C(0x03)) != 0 || byteSize == 0 ||
-            byteSize > static_cast<std::size_t>(std::numeric_limits<UINT>::max() - 3))
+            byteSize > static_cast<std::size_t>(std::numeric_limits<UINT>::max() - 15) ||
+            ((usage & UINT32_C(0x01)) != 0 &&
+             (!SupportsComputeShadersEXT() || byteSize > GetMaxStorageBufferBytesEXT())) ||
+            ((usage & UINT32_C(0x08)) != 0 && !SupportsIndirectDrawEXT()) ||
+            ((usage & UINT32_C(0x40)) != 0 &&
+             byteSize > GetMaxUniformBufferBytesEXT()))
             return nullptr;
         return std::make_unique<D3D11IndirectBuffer>(
             device_.Get(), context_.Get(), byteSize, usage, cpuAccess);
+    }
+
+    bool DirectX11Renderer::SupportsComputeShadersEXT() const
+    {
+        return device_ != nullptr && featureLevel_ >= D3D_FEATURE_LEVEL_11_0;
+    }
+
+    std::unique_ptr<IComputeShaderRenderer> DirectX11Renderer::CreateComputeShader(
+        const std::string& computeSrc)
+    {
+        if (!SupportsComputeShadersEXT()) return nullptr;
+        auto shader = std::make_unique<D3D11ComputeShader>(device_.Get(), context_.Get());
+        shader->CompileProgram(computeSrc);
+        return shader;
+    }
+
+    std::unique_ptr<IStorageBufferRenderer> DirectX11Renderer::CreateStorageBuffer(
+        std::size_t byteSize)
+    {
+        if (!SupportsComputeShadersEXT()) return nullptr;
+        return CreateStorageBufferEXT(byteSize, UINT32_C(0x0F), UINT32_C(0x03));
+    }
+
+    void DirectX11Renderer::DispatchCompute(
+        IComputeShaderRenderer* shader, int groupsX, int groupsY, int groupsZ)
+    {
+        auto* native = dynamic_cast<D3D11ComputeShader*>(shader);
+        if (!native || groupsX <= 0 || groupsY <= 0 || groupsZ <= 0 ||
+            groupsX > GetMaxComputeWorkGroupCountEXT(0) ||
+            groupsY > GetMaxComputeWorkGroupCountEXT(1) ||
+            groupsZ > GetMaxComputeWorkGroupCountEXT(2))
+            throw std::invalid_argument("D3D11 compute dispatch has an invalid program or size");
+        native->Dispatch(groupsX, groupsY, groupsZ);
+    }
+
+    int DirectX11Renderer::GetMaxComputeWorkGroupCountEXT(int axis) const
+    {
+        return SupportsComputeShadersEXT() && axis >= 0 && axis < 3
+            ? D3D11_CS_DISPATCH_MAX_THREAD_GROUPS_PER_DIMENSION : 0;
+    }
+
+    int DirectX11Renderer::GetMaxComputeWorkGroupSizeEXT(int axis) const
+    {
+        if (!SupportsComputeShadersEXT()) return 0;
+        switch (axis)
+        {
+        case 0: return D3D11_CS_THREAD_GROUP_MAX_X;
+        case 1: return D3D11_CS_THREAD_GROUP_MAX_Y;
+        case 2: return D3D11_CS_THREAD_GROUP_MAX_Z;
+        default: return 0;
+        }
+    }
+
+    int DirectX11Renderer::GetMaxComputeWorkGroupInvocationsEXT() const
+    {
+        return SupportsComputeShadersEXT()
+            ? D3D11_CS_THREAD_GROUP_MAX_THREADS_PER_GROUP : 0;
+    }
+
+    std::uint64_t DirectX11Renderer::GetMaxStorageBufferBytesEXT() const
+    {
+        return SupportsComputeShadersEXT() ? UINT64_C(128) * 1024 * 1024 : 0;
+    }
+
+    std::uint64_t DirectX11Renderer::GetMaxUniformBufferBytesEXT() const
+    {
+        return device_ != nullptr
+            ? static_cast<std::uint64_t>(D3D11_REQ_CONSTANT_BUFFER_ELEMENT_COUNT) * 16 : 0;
+    }
+
+    int DirectX11Renderer::GetMaxComputeStorageBufferBindingsEXT() const
+    {
+        return SupportsComputeShadersEXT() ? D3D11_PS_CS_UAV_REGISTER_COUNT : 0;
+    }
+
+    std::uint64_t DirectX11Renderer::GetMinStorageBufferOffsetAlignmentEXT() const
+    {
+        return SupportsComputeShadersEXT() ? 4 : 0;
+    }
+
+    std::uint64_t DirectX11Renderer::GetMinUniformBufferOffsetAlignmentEXT() const
+    {
+        return device_ != nullptr ? 16 : 0;
     }
 
     bool DirectX11Renderer::LoadsCompressedContentNativelyEXT() const
@@ -1526,6 +1619,140 @@ namespace CNA::Internal::Renderers::DirectX11
     std::unique_ptr<ITextureRenderer> DirectX11Renderer::CreateTexture(const ImageData& data)
     {
         return std::make_unique<D3D11TextureRenderer>(this, data);
+    }
+
+    std::unique_ptr<ITexture2DArrayRenderer> DirectX11Renderer::CreateTexture2DArrayEXT(
+        int width, int height, int layerCount, int mipLevelCount,
+        int surfaceFormat, std::uint32_t usage)
+    {
+        if (!device_ || !context_ || width <= 0 || height <= 0 ||
+            width > D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION ||
+            height > D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION ||
+            layerCount <= 0 || layerCount > GetMaxTextureArrayLayersEXT() ||
+            mipLevelCount <= 0 || mipLevelCount > D3D11_REQ_MIP_LEVELS ||
+            ClassifySurfaceFormatEXT(surfaceFormat) != RendererFormatVerdict::Supported)
+            return nullptr;
+        const auto support = GetSurfaceFormatUsageSupportEXT(surfaceFormat);
+        constexpr std::uint32_t sampled = static_cast<std::uint32_t>(
+            CNA::RendererFormatUsage::Sampled);
+        constexpr std::uint32_t filterable = static_cast<std::uint32_t>(
+            CNA::RendererFormatUsage::Filterable);
+        if ((support.supportedUsages & sampled) == 0 ||
+            ((usage & UINT32_C(0x02)) != 0 &&
+             (support.supportedUsages & filterable) == 0))
+            return nullptr;
+        return std::make_unique<D3D11Texture2DArray>(
+            device_.Get(), context_.Get(), width, height, layerCount,
+            mipLevelCount, surfaceFormat, usage);
+    }
+
+    std::unique_ptr<IStorageTexture2DRenderer> DirectX11Renderer::CreateStorageTexture2DEXT(
+        int width, int height, int mipLevelCount, int surfaceFormat, std::uint32_t usage)
+    {
+        using CNA::RendererFormatUsage;
+        if (!device_ || !context_ || !SupportsComputeShadersEXT() ||
+            surfaceFormat != static_cast<int>(
+                Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color) ||
+            width <= 0 || height <= 0 ||
+            width > D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION ||
+            height > D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION ||
+            mipLevelCount <= 0 || mipLevelCount > D3D11_REQ_MIP_LEVELS ||
+            (usage & UINT32_C(0x03)) == 0 || (usage & ~UINT32_C(0x3F)) != 0)
+            return nullptr;
+        const auto support = GetSurfaceFormatUsageSupportEXT(surfaceFormat);
+        std::uint32_t required = 0;
+        if (usage & UINT32_C(0x01))
+            required |= static_cast<std::uint32_t>(RendererFormatUsage::StorageRead);
+        if (usage & UINT32_C(0x02))
+            required |= static_cast<std::uint32_t>(RendererFormatUsage::StorageWrite);
+        if (usage & UINT32_C(0x04))
+            required |= static_cast<std::uint32_t>(RendererFormatUsage::Sampled);
+        if (usage & UINT32_C(0x08))
+            required |= static_cast<std::uint32_t>(RendererFormatUsage::Filterable);
+        if (usage & UINT32_C(0x10))
+            required |= static_cast<std::uint32_t>(RendererFormatUsage::TransferSource);
+        if (usage & UINT32_C(0x20))
+            required |= static_cast<std::uint32_t>(RendererFormatUsage::TransferDestination);
+        if (mipLevelCount > 1)
+            required |= static_cast<std::uint32_t>(RendererFormatUsage::Mipmapped);
+        if ((support.supportedUsages & required) != required)
+            return nullptr;
+        return std::make_unique<D3D11StorageTexture2D>(
+            device_.Get(), context_.Get(), width, height, mipLevelCount, usage);
+    }
+
+    int DirectX11Renderer::GetMaxTextureArrayLayersEXT() const
+    {
+        if (!device_) return 0;
+        if (featureLevel_ >= D3D_FEATURE_LEVEL_11_0)
+            return D3D11_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION;
+        return featureLevel_ >= D3D_FEATURE_LEVEL_10_0 ? 512 : 0;
+    }
+
+    int DirectX11Renderer::GetMaxSampledTexturesPerShaderStageEXT() const
+    {
+        return device_ ? D3DCommon::D3DProgramReflection::kMaxShaderResources : 0;
+    }
+
+    int DirectX11Renderer::GetMaxStorageImagesPerShaderStageEXT() const
+    {
+        if (!SupportsComputeShadersEXT()) return 0;
+        const auto support = GetSurfaceFormatUsageSupportEXT(static_cast<int>(
+            Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color));
+        return (support.supportedUsages & static_cast<std::uint32_t>(
+            CNA::RendererFormatUsage::StorageWrite)) != 0
+            ? D3D11_PS_CS_UAV_REGISTER_COUNT : 0;
+    }
+
+    CNA::RendererFormatSupport DirectX11Renderer::GetSurfaceFormatUsageSupportEXT(
+        int surfaceFormat) const
+    {
+        using CNA::RendererFormatUsage;
+        constexpr std::uint32_t classified =
+            static_cast<std::uint32_t>(RendererFormatUsage::Sampled) |
+            static_cast<std::uint32_t>(RendererFormatUsage::Filterable) |
+            static_cast<std::uint32_t>(RendererFormatUsage::StorageRead) |
+            static_cast<std::uint32_t>(RendererFormatUsage::StorageWrite) |
+            static_cast<std::uint32_t>(RendererFormatUsage::TransferSource) |
+            static_cast<std::uint32_t>(RendererFormatUsage::TransferDestination) |
+            static_cast<std::uint32_t>(RendererFormatUsage::Mipmapped);
+        if (!device_ ||
+            ClassifySurfaceFormatEXT(surfaceFormat) != RendererFormatVerdict::Supported)
+            return {classified, 0};
+        const DXGI_FORMAT format = D3DCommon::SurfaceFormatToDxgi(surfaceFormat);
+        UINT native = 0;
+        // A format without SHADER_SAMPLE still permits point-only sampling;
+        // that bit decides Filterable below rather than basic Sampled support.
+        constexpr UINT required = D3D11_FORMAT_SUPPORT_TEXTURE2D;
+        if (format == DXGI_FORMAT_UNKNOWN ||
+            FAILED(device_->CheckFormatSupport(format, &native)) ||
+            (native & required) != required || !DeviceKeepsFormatBytesEXT(format))
+            return {classified, 0};
+        std::uint32_t supported =
+            static_cast<std::uint32_t>(RendererFormatUsage::Sampled) |
+            static_cast<std::uint32_t>(RendererFormatUsage::TransferSource) |
+            static_cast<std::uint32_t>(RendererFormatUsage::TransferDestination);
+        if ((native & D3D11_FORMAT_SUPPORT_MIP) != 0)
+            supported |= static_cast<std::uint32_t>(RendererFormatUsage::Mipmapped);
+        if ((native & D3D11_FORMAT_SUPPORT_SHADER_SAMPLE) != 0)
+            supported |= static_cast<std::uint32_t>(RendererFormatUsage::Filterable);
+        if (surfaceFormat == static_cast<int>(
+                Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color) &&
+            SupportsComputeShadersEXT() &&
+            (native & D3D11_FORMAT_SUPPORT_TYPED_UNORDERED_ACCESS_VIEW) != 0)
+        {
+            D3D11_FEATURE_DATA_FORMAT_SUPPORT2 typed{};
+            typed.InFormat = format;
+            if (SUCCEEDED(device_->CheckFeatureSupport(
+                    D3D11_FEATURE_FORMAT_SUPPORT2, &typed, sizeof(typed))))
+            {
+                if ((typed.OutFormatSupport2 & D3D11_FORMAT_SUPPORT2_UAV_TYPED_LOAD) != 0)
+                    supported |= static_cast<std::uint32_t>(RendererFormatUsage::StorageRead);
+                if ((typed.OutFormatSupport2 & D3D11_FORMAT_SUPPORT2_UAV_TYPED_STORE) != 0)
+                    supported |= static_cast<std::uint32_t>(RendererFormatUsage::StorageWrite);
+            }
+        }
+        return {classified, supported};
     }
 
     std::unique_ptr<ITexture3DRenderer> DirectX11Renderer::CreateTexture3D(

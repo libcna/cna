@@ -194,6 +194,28 @@ namespace {
                 ShaderCodeEXT(ShaderLanguageEXT::Wgsl, ShaderStageEXT::Fragment, "main",
                               "array.vulkan.frag.glsl -> wgsl",
                               std::string(Package::kVulkanFragmentWgsl)),
+                ShaderCodeEXT(ShaderLanguageEXT::Hlsl, ShaderStageEXT::Vertex, "main",
+                              "array.dx11.vert.hlsl", R"(
+                    struct Input { float3 position : POSITION; };
+                    struct Output { float4 position : SV_POSITION; float layer : TEXCOORD0; };
+                    Output main(Input input)
+                    {
+                        Output output;
+                        output.position = float4(input.position.xy, 0.0, 1.0);
+                        output.layer = input.position.z;
+                        return output;
+                    }
+                )"),
+                ShaderCodeEXT(ShaderLanguageEXT::Hlsl, ShaderStageEXT::Fragment, "main",
+                              "array.dx11.frag.hlsl", R"(
+                    Texture2DArray<float4> uArray : register(t0);
+                    SamplerState arraySampler : register(s0);
+                    float4 main(float4 position : SV_POSITION, float layer : TEXCOORD0)
+                        : SV_TARGET
+                    {
+                        return uArray.SampleLevel(arraySampler, float3(0.5, 0.5, layer), 0);
+                    }
+                )"),
             },
             {ShaderStageEXT::Vertex, ShaderStageEXT::Fragment},
             {ShaderBindingRequirementEXT("uArray", 0, ShaderBindingTypeEXT::SampledTexture2DArray,
@@ -370,6 +392,43 @@ TEST(Texture2DArrayConformance, ThePublishedLayerLimitIsReal)
                                                              SurfaceFormat::Color,
                                                              kTransferUsage)),
                  System::NotSupportedException);
+}
+
+TEST(Texture2DArrayConformance, APartialBlockAtAnOddMipEdgePreservesOtherBlocks)
+{
+    CnaTest::EngineLayer::HiDefDevice gd;
+    if (ArrayLayerLimit(gd) < 2)
+        GTEST_SKIP() << "this renderer publishes no texture arrays";
+    if (!AdvertisesTransfers(gd, SurfaceFormat::Dxt1))
+        GTEST_SKIP() << "this renderer does not publish DXT1 array transfers";
+
+    Texture2DArray array(gd, Texture2DArrayDescriptor(
+        12, 8, 2, 2, SurfaceFormat::Dxt1, kTransferUsage));
+    std::array<std::uint8_t, 16> first{};
+    std::array<std::uint8_t, 16> other{};
+    std::array<std::uint8_t, 8> replacement{};
+    for (std::size_t i = 0; i < first.size(); ++i)
+    {
+        first[i] = static_cast<std::uint8_t>(i + 1);
+        other[i] = static_cast<std::uint8_t>(i + 71);
+        if (i < replacement.size())
+            replacement[i] = static_cast<std::uint8_t>(i + 151);
+    }
+    array.setData(0, 1, nullptr, first.data(), first.size());
+    array.setData(1, 1, nullptr, other.data(), other.size());
+    const Rectangle edge(4, 0, 2, 4);
+    array.setData(0, 1, &edge, replacement.data(), replacement.size());
+
+    std::array<std::uint8_t, 16> actualFirst{};
+    std::array<std::uint8_t, 16> actualOther{};
+    std::array<std::uint8_t, 8> actualEdge{};
+    array.getData(0, 1, nullptr, actualFirst.data(), actualFirst.size());
+    array.getData(1, 1, nullptr, actualOther.data(), actualOther.size());
+    array.getData(0, 1, &edge, actualEdge.data(), actualEdge.size());
+    std::copy(replacement.begin(), replacement.end(), first.begin() + 8);
+    EXPECT_EQ(first, actualFirst);
+    EXPECT_EQ(other, actualOther);
+    EXPECT_EQ(replacement, actualEdge);
 }
 
 TEST(Texture2DArrayConformance, EachLayerReachesAShaderEffectThroughUnitZero)

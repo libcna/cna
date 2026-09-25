@@ -13,15 +13,79 @@ namespace CNA::Internal::Renderers::DirectX11
         : device_(device), context_(context), byteSize_(byteSize), usage_(usage),
           cpuAccess_(cpuAccess)
     {
+        const bool storage = (usage & UINT32_C(0x01)) != 0;
+        const bool indirect = (usage & UINT32_C(0x08)) != 0;
+        const bool constant = (usage & UINT32_C(0x40)) != 0;
+        const std::size_t alignment = constant ? 16u : 4u;
         if (!device || !context || byteSize == 0 ||
-            byteSize > static_cast<std::size_t>(std::numeric_limits<UINT>::max() - 3))
+            byteSize > static_cast<std::size_t>(
+                std::numeric_limits<UINT>::max() - (alignment - 1)))
             throw std::invalid_argument("D3D11 indirect buffer: invalid device or size");
         D3D11_BUFFER_DESC description{};
-        description.ByteWidth = static_cast<UINT>((byteSize + 3u) & ~std::size_t{3});
+        description.ByteWidth = static_cast<UINT>(
+            (byteSize + alignment - 1) & ~(alignment - 1));
         description.Usage = D3D11_USAGE_DEFAULT;
-        description.MiscFlags = D3D11_RESOURCE_MISC_DRAWINDIRECT_ARGS;
+        if (storage)
+        {
+            description.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
+            description.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS;
+        }
+        else if (indirect)
+            description.MiscFlags = D3D11_RESOURCE_MISC_DRAWINDIRECT_ARGS;
         if (FAILED(device_->CreateBuffer(&description, nullptr, buffer_.GetAddressOf())))
-            throw std::runtime_error("D3D11 indirect buffer: native allocation failed");
+            throw std::runtime_error("D3D11 storage buffer: native allocation failed");
+
+        if (storage)
+        {
+            D3D11_UNORDERED_ACCESS_VIEW_DESC view{};
+            view.Format = DXGI_FORMAT_R32_TYPELESS;
+            view.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
+            view.Buffer.NumElements = description.ByteWidth / 4;
+            view.Buffer.Flags = D3D11_BUFFER_UAV_FLAG_RAW;
+            if (FAILED(device_->CreateUnorderedAccessView(
+                    buffer_.Get(), &view, storageUav_.GetAddressOf())))
+                throw std::runtime_error("D3D11 storage buffer: raw UAV creation failed");
+        }
+
+        if (storage && indirect)
+        {
+            description.BindFlags = 0;
+            description.MiscFlags = D3D11_RESOURCE_MISC_DRAWINDIRECT_ARGS;
+            if (FAILED(device_->CreateBuffer(
+                    &description, nullptr, indirectBuffer_.GetAddressOf())))
+                throw std::runtime_error("D3D11 storage buffer: indirect view allocation failed");
+        }
+
+        if (constant)
+        {
+            description.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+            description.MiscFlags = 0;
+            if (FAILED(device_->CreateBuffer(
+                    &description, nullptr, constantBuffer_.GetAddressOf())))
+                throw std::runtime_error("D3D11 storage buffer: constant view allocation failed");
+        }
+    }
+
+    ID3D11Buffer* D3D11IndirectBuffer::GetBufferEXT() const
+    {
+        if ((usage_ & UINT32_C(0x08)) == 0) return nullptr;
+        if (indirectBuffer_)
+        {
+            context_->CopyResource(indirectBuffer_.Get(), buffer_.Get());
+            return indirectBuffer_.Get();
+        }
+        return buffer_.Get();
+    }
+
+    ID3D11Buffer* D3D11IndirectBuffer::GetConstantBufferEXT() const
+    {
+        if ((usage_ & UINT32_C(0x40)) == 0) return nullptr;
+        if (constantBuffer_)
+        {
+            context_->CopyResource(constantBuffer_.Get(), buffer_.Get());
+            return constantBuffer_.Get();
+        }
+        return buffer_.Get();
     }
 
     void D3D11IndirectBuffer::SetData(const void* data, std::size_t byteSize)

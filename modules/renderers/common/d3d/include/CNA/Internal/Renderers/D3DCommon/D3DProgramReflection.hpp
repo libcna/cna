@@ -37,9 +37,12 @@ namespace CNA::Internal::Renderers::D3DCommon
          * @param bytecode Compiled DXBC bytes.
          * @param bytecodeSize Number of bytes in @p bytecode.
          * @param error Receives a diagnostic when reflection or layout validation fails.
+         * @param allowComputeUavs Accept compute shader UAV records, which are bound separately
+         *                         from this reflection's constant and sampled-texture records.
          * @return True when every reflected core resource can be represented.
          */
-        bool AddShader(const void* bytecode, std::size_t bytecodeSize, std::string& error);
+        bool AddShader(const void* bytecode, std::size_t bytecodeSize, std::string& error,
+                       bool allowComputeUavs = false);
 
         /** @brief Writes one reflected float parameter. */
         void SetFloat(const char* name, float value);

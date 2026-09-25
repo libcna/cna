@@ -2,6 +2,8 @@
 #include "CNA/Internal/Renderers/DirectX11/D3D11EffectRenderer.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11RenderTargets.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11Textures.hpp"
+#include "CNA/Internal/Renderers/DirectX11/D3D11Texture2DArray.hpp"
+#include "CNA/Internal/Renderers/DirectX11/D3D11StorageTexture2D.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -250,6 +252,41 @@ namespace CNA::Internal::Renderers::DirectX11
             {TextureKind::Texture3D, texture, true};
     }
 
+    bool D3D11EffectRenderer::BindTexture2DArrayEXT(
+        int unit, std::shared_ptr<ITexture2DArrayRenderer> texture)
+    {
+        if (unit < 0 || unit >= static_cast<int>(textures_.size()))
+            return false;
+        auto* native = texture ? dynamic_cast<D3D11Texture2DArray*>(texture.get()) : nullptr;
+        if (texture && (!native || native->GetDeviceEXT() != device_.Get()))
+            return false;
+        auto& binding = textures_[static_cast<std::size_t>(unit)];
+        binding.kind = texture ? TextureKind::Texture2DArray : TextureKind::None;
+        binding.texture = native;
+        binding.explicitlySet = true;
+        binding.retainedStorage.reset();
+        binding.retainedArray = std::move(texture);
+        return true;
+    }
+
+    bool D3D11EffectRenderer::BindStorageTexture2DEXT(
+        int unit, std::shared_ptr<IStorageTexture2DRenderer> texture)
+    {
+        if (unit < 0 || unit >= static_cast<int>(textures_.size()))
+            return false;
+        auto* native = texture ? dynamic_cast<D3D11StorageTexture2D*>(texture.get()) : nullptr;
+        if (texture && (!native || native->GetDeviceEXT() != device_.Get() ||
+                        !native->GetShaderResourceViewEXT()))
+            return false;
+        auto& binding = textures_[static_cast<std::size_t>(unit)];
+        binding.kind = texture ? TextureKind::StorageTexture2D : TextureKind::None;
+        binding.texture = native;
+        binding.explicitlySet = true;
+        binding.retainedArray.reset();
+        binding.retainedStorage = std::move(texture);
+        return true;
+    }
+
     void D3D11EffectRenderer::SetViewportSizeEXT(float width, float height)
     {
         reflection_.SetVec2("vpSize", width, height);
@@ -322,6 +359,16 @@ namespace CNA::Internal::Renderers::DirectX11
             case TextureKind::Texture3D:
                 if (const auto* texture = dynamic_cast<const D3D11Texture3DRenderer*>(
                         static_cast<ITexture3DRenderer*>(binding.texture)))
+                    return texture->GetShaderResourceViewEXT();
+                break;
+            case TextureKind::Texture2DArray:
+                if (const auto* texture = dynamic_cast<const D3D11Texture2DArray*>(
+                        static_cast<ITexture2DArrayRenderer*>(binding.texture)))
+                    return texture->GetShaderResourceViewEXT();
+                break;
+            case TextureKind::StorageTexture2D:
+                if (const auto* texture = dynamic_cast<const D3D11StorageTexture2D*>(
+                        static_cast<IStorageTexture2DRenderer*>(binding.texture)))
                     return texture->GetShaderResourceViewEXT();
                 break;
             case TextureKind::None:

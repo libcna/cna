@@ -19,6 +19,7 @@
 
 #include <array>
 #include <map>
+#include <memory>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -51,6 +52,22 @@ namespace CNA::Internal::Renderers::DirectX11
         void BindTexture(int unit, ITextureRenderer* texture) override;
         void BindTextureCube(int unit, ITextureCubeRenderer* texture) override;
         void BindTexture3D(int unit, ITexture3DRenderer* texture) override;
+        /**
+         * @brief Binds a sampled array while retaining its renderer-owned storage.
+         * @param unit Pixel-shader texture register.
+         * @param texture Array record, or null to clear the register.
+         * @return True when the slot and native device match.
+         */
+        [[nodiscard]] bool BindTexture2DArrayEXT(
+            int unit, std::shared_ptr<ITexture2DArrayRenderer> texture) override;
+        /**
+         * @brief Binds a storage texture through a sampled pixel-shader slot.
+         * @param unit Pixel-shader texture register.
+         * @param texture Storage record, or null to clear the register.
+         * @return True when the texture has a native sampled view on this device.
+         */
+        [[nodiscard]] bool BindStorageTexture2DEXT(
+            int unit, std::shared_ptr<IStorageTexture2DRenderer> texture) override;
 
         /** @brief Writes the reflected `vpSize` parameter used by the SpriteBatch convention. */
         void SetViewportSizeEXT(float width, float height);
@@ -73,6 +90,8 @@ namespace CNA::Internal::Renderers::DirectX11
             Texture2D,
             TextureCube,
             Texture3D,
+            Texture2DArray,
+            StorageTexture2D,
         };
 
         struct TextureBinding
@@ -80,6 +99,8 @@ namespace CNA::Internal::Renderers::DirectX11
             TextureKind kind = TextureKind::None;
             void* texture = nullptr;
             bool explicitlySet = false;
+            std::shared_ptr<ITexture2DArrayRenderer> retainedArray;
+            std::shared_ptr<IStorageTexture2DRenderer> retainedStorage;
         };
 
         using InputLayoutKey = std::tuple<

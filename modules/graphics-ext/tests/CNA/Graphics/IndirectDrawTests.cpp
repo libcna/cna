@@ -15,6 +15,8 @@
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/GraphicsMemoryBarrier.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
+#include "CNA/Graphics/ComputeShader.hpp"
+#include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "CNA/IndirectDrawArguments.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -230,6 +232,51 @@ TEST(IndirectDrawTest, AForeignDeviceArgumentBufferIsRefusedBeforeSubmission)
             PrimitiveType::TriangleList, *arguments.getRendererEXT(), 0),
         System::NotSupportedException);
     drawDevice.SetVertexBuffer(nullptr);
+}
+
+TEST(IndirectDrawTest, DirectX11ComputeWritesArgumentsConsumedByTheGpuDraw)
+{
+    CnaTest::EngineLayer::HiDefDevice device;
+    if (device.GetGraphicsRendererName() != "DIRECTX11")
+        GTEST_SKIP() << "this raw HLSL producer targets DirectX 11";
+    ASSERT_TRUE(device.SupportsCapability(GraphicsCapability::ComputeShaders));
+    ASSERT_TRUE(CanRunIndirect(device));
+    ASSERT_TRUE(device.SupportsShaderLanguageEXT(
+        CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Compute));
+
+    StorageBuffer arguments(device, sizeof(IndirectDrawArguments));
+    const CNA::Graphics::ShaderCodeEXT source(
+        CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Compute,
+        "main", "D3D11IndirectProducer.hlsl", R"(
+RWByteAddressBuffer Args : register(u0);
+[numthreads(1, 1, 1)]
+void main(uint3 id : SV_DispatchThreadID)
+{
+    Args.Store(0, 3);
+    Args.Store(4, 1);
+    Args.Store(8, 0);
+    Args.Store(12, 0);
+}
+)");
+    CNA::Graphics::ComputeShader producer(device, source);
+    producer.bindStorageBuffer(0, arguments);
+    producer.dispatch(1);
+
+    const auto triangle = CoveringTriangle();
+    VertexBuffer vertices(device, 3);
+    vertices.SetData(triangle.data(), 3);
+    BasicEffect effect(device);
+    effect.VertexColorEnabled = true;
+    RenderTarget2D target(device, kSize, kSize);
+    device.SetVertexBuffer(&vertices);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    effect.Apply();
+    device.DrawPrimitivesIndirectEXT(
+        PrimitiveType::TriangleList, *arguments.getRendererEXT(), 0);
+    device.SetRenderTarget(nullptr);
+    EXPECT_GT(CountLitPixels(target), 0);
+    device.SetVertexBuffer(nullptr);
 }
 
 TEST(IndirectDrawTest, TheCountsReallyComeFromTheBuffer)

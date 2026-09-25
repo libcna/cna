@@ -8,12 +8,12 @@
 
 namespace CNA::Internal::Renderers::DirectX11
 {
-    /** @brief D3D11 buffer used for GPU-fetched indirect arguments and byte transfers. */
+    /** @brief D3D11 byte buffer for storage, constants, indirect draws and transfers. */
     class D3D11IndirectBuffer final : public IStorageBufferRenderer
     {
     public:
         /**
-         * @brief Allocates a native indirect-argument buffer.
+         * @brief Allocates native buffers for the declared GPU roles.
          * @param device Owning D3D11 device.
          * @param context Immediate context used for transfers.
          * @param byteSize Logical allocation size.
@@ -82,10 +82,23 @@ namespace CNA::Internal::Renderers::DirectX11
          */
         [[nodiscard]] std::uint32_t GetCpuAccessEXT() const override { return cpuAccess_; }
         /**
-         * @brief Returns the native indirect-argument buffer.
-         * @return Device-owned D3D11 buffer handle.
+         * @brief Returns an indirect-argument buffer with the latest GPU contents.
+         * @return Device-owned D3D11 argument handle.
          */
-        [[nodiscard]] ID3D11Buffer* GetBufferEXT() const { return buffer_.Get(); }
+        [[nodiscard]] ID3D11Buffer* GetBufferEXT() const;
+        /**
+         * @brief Returns the raw storage UAV, when Storage usage was declared.
+         * @return Native unordered-access view, or null.
+         */
+        [[nodiscard]] ID3D11UnorderedAccessView* GetUnorderedAccessViewEXT() const
+        {
+            return storageUav_.Get();
+        }
+        /**
+         * @brief Returns a constant buffer with the latest GPU contents.
+         * @return Native constant-buffer handle, or null.
+         */
+        [[nodiscard]] ID3D11Buffer* GetConstantBufferEXT() const;
         /**
          * @brief Returns the device that owns the native buffer.
          * @return Device identity for cross-device validation.
@@ -96,6 +109,9 @@ namespace CNA::Internal::Renderers::DirectX11
         Microsoft::WRL::ComPtr<ID3D11Device> device_;
         Microsoft::WRL::ComPtr<ID3D11DeviceContext> context_;
         Microsoft::WRL::ComPtr<ID3D11Buffer> buffer_;
+        Microsoft::WRL::ComPtr<ID3D11Buffer> indirectBuffer_;
+        Microsoft::WRL::ComPtr<ID3D11Buffer> constantBuffer_;
+        Microsoft::WRL::ComPtr<ID3D11UnorderedAccessView> storageUav_;
         std::size_t byteSize_ = 0;
         std::uint32_t usage_ = 0;
         std::uint32_t cpuAccess_ = 0;

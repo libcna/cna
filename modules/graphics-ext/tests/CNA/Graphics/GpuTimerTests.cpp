@@ -298,11 +298,11 @@ TEST(GpuTimerTest, MoreWorkTakesMoreGpuTime)
     const double warmUp = measure(4);
     ASSERT_GE(warmUp, 0.0);
     const double few  = measure(4);
-    const double many = measure(40);
+    const double many = measure(160);
     ASSERT_GE(few, 0.0);
     ASSERT_GE(many, 0.0);
-    std::printf("    4 full-screen draws %.4f ms, 40 draws %.4f ms\n", few, many);
-    EXPECT_GT(many, few * 2.0) << "ten times the fill did not take at least twice as long";
+    std::printf("    4 full-screen draws %.4f ms, 160 draws %.4f ms\n", few, many);
+    EXPECT_GT(many, few * 4.0) << "forty times the fill did not take at least four times as long";
 }
 
 // ── The deterministic scaling validation ────────────────────────────────────

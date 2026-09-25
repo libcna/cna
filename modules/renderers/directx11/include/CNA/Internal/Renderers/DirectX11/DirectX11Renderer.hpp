@@ -182,10 +182,10 @@ namespace CNA::Internal::Renderers::DirectX11
         }
 
         /**
-         * @brief Reports the HLSL stages this renderer compiles from shader packages.
+         * @brief Reports the HLSL graphics and compute stages compiled from shader packages.
          * @param language ShaderLanguageEXT ordinal.
          * @param stage ShaderStageEXT ordinal.
-         * @return True for implemented HLSL vertex and fragment stages.
+         * @return True for vertex, fragment and supported compute stages.
          */
         [[nodiscard]] bool SupportsShaderLanguageEXT(int language, int stage) const override;
 
@@ -232,6 +232,77 @@ namespace CNA::Internal::Renderers::DirectX11
          */
         std::unique_ptr<IStorageBufferRenderer> CreateStorageBufferEXT(
             std::size_t byteSize, std::uint32_t usage, std::uint32_t cpuAccess) override;
+
+        /**
+         * @brief Reports native shader-model-5 compute support.
+         * @return True for a live feature-level-11 device.
+         */
+        [[nodiscard]] bool SupportsComputeShadersEXT() const override;
+        /**
+         * @brief Compiles one HLSL compute shader.
+         * @param computeSrc HLSL shader source with main entry point.
+         * @return Native compute program, or null when unsupported.
+         */
+        std::unique_ptr<IComputeShaderRenderer> CreateComputeShader(
+            const std::string& computeSrc) override;
+        /**
+         * @brief Creates the legacy compatible storage/transfer/indirect buffer.
+         * @param byteSize Logical allocation size.
+         * @return Native buffer, or null when unsupported.
+         */
+        std::unique_ptr<IStorageBufferRenderer> CreateStorageBuffer(
+            std::size_t byteSize) override;
+        /**
+         * @brief Submits a native D3D11 compute dispatch.
+         * @param shader Bound native program.
+         * @param groupsX X work groups.
+         * @param groupsY Y work groups.
+         * @param groupsZ Z work groups.
+         */
+        void DispatchCompute(IComputeShaderRenderer* shader, int groupsX,
+                             int groupsY, int groupsZ) override;
+        /**
+         * @brief Returns the feature-level-11 dispatch group count limit.
+         * @param axis Axis ordinal, zero to two.
+         * @return Limit, or zero for an invalid axis or unsupported device.
+         */
+        [[nodiscard]] int GetMaxComputeWorkGroupCountEXT(int axis) const override;
+        /**
+         * @brief Returns the feature-level-11 local work-group size limit.
+         * @param axis Axis ordinal, zero to two.
+         * @return Limit, or zero for an invalid axis or unsupported device.
+         */
+        [[nodiscard]] int GetMaxComputeWorkGroupSizeEXT(int axis) const override;
+        /**
+         * @brief Returns the largest local compute invocation count.
+         * @return Native shader-model-5 limit, or zero when unsupported.
+         */
+        [[nodiscard]] int GetMaxComputeWorkGroupInvocationsEXT() const override;
+        /**
+         * @brief Returns the guaranteed maximum single storage-buffer size.
+         * @return Maximum byte count, or zero when unsupported.
+         */
+        [[nodiscard]] std::uint64_t GetMaxStorageBufferBytesEXT() const override;
+        /**
+         * @brief Returns the native D3D11 constant-buffer size limit.
+         * @return Maximum byte count, or zero when unsupported.
+         */
+        [[nodiscard]] std::uint64_t GetMaxUniformBufferBytesEXT() const override;
+        /**
+         * @brief Returns the number of compute UAV buffer registers.
+         * @return Native register count, or zero when unsupported.
+         */
+        [[nodiscard]] int GetMaxComputeStorageBufferBindingsEXT() const override;
+        /**
+         * @brief Reports the required raw storage-view byte alignment.
+         * @return Four bytes for a live compute device, otherwise zero.
+         */
+        [[nodiscard]] std::uint64_t GetMinStorageBufferOffsetAlignmentEXT() const override;
+        /**
+         * @brief Reports the D3D11 constant-buffer byte alignment.
+         * @return Sixteen bytes for a live device, otherwise zero.
+         */
+        [[nodiscard]] std::uint64_t GetMinUniformBufferOffsetAlignmentEXT() const override;
 
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;
@@ -355,6 +426,53 @@ namespace CNA::Internal::Renderers::DirectX11
          */
         [[nodiscard]] bool LoadsCompressedContentNativelyEXT() const override;
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
+        /**
+         * @brief Creates a sampled D3D11 texture array with layer and mip transfers.
+         * @param width Level-zero width.
+         * @param height Level-zero height.
+         * @param layerCount Number of array slices.
+         * @param mipLevelCount Number of mip levels.
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @param usage Portable array usage bits.
+         * @return The native array, or null when the description is unsupported.
+         */
+        std::unique_ptr<ITexture2DArrayRenderer> CreateTexture2DArrayEXT(
+            int width, int height, int layerCount, int mipLevelCount,
+            int surfaceFormat, std::uint32_t usage) override;
+        /**
+         * @brief Creates a typed D3D11 storage image in the supported Color format.
+         * @param width Level-zero width.
+         * @param height Level-zero height.
+         * @param mipLevelCount Allocated mip count.
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @param usage Portable storage-texture usage bits.
+         * @return Native storage image, or null for unsupported descriptions.
+         */
+        std::unique_ptr<IStorageTexture2DRenderer> CreateStorageTexture2DEXT(
+            int width, int height, int mipLevelCount,
+            int surfaceFormat, std::uint32_t usage) override;
+        /**
+         * @brief Reports the D3D11 sampled-array slice limit.
+         * @return Array-layer count for the selected feature level.
+         */
+        [[nodiscard]] int GetMaxTextureArrayLayersEXT() const override;
+        /**
+         * @brief Reports the implemented ShaderEffect sampling limit.
+         * @return Sixteen sampled-texture slots on a live device.
+         */
+        [[nodiscard]] int GetMaxSampledTexturesPerShaderStageEXT() const override;
+        /**
+         * @brief Reports compute UAV registers shared by images and buffers.
+         * @return Eight when the Color storage-image path is available, otherwise zero.
+         */
+        [[nodiscard]] int GetMaxStorageImagesPerShaderStageEXT() const override;
+        /**
+         * @brief Reports native format usages implemented by this renderer.
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return Known and supported usage masks.
+         */
+        [[nodiscard]] CNA::RendererFormatSupport GetSurfaceFormatUsageSupportEXT(
+            int surfaceFormat) const override;
         std::unique_ptr<ITexture3DRenderer> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<ITextureCubeRenderer> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2D(int w, int h, int depthFormat,

@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <sstream>
 #include <stdexcept>
 #include <string_view>
@@ -148,10 +149,18 @@ namespace CNA::Graphics
                         }
                         break;
                     case ShaderBindingTypeEXT::StorageTexture2D:
-                        if (binding.getStage() == CNA::ShaderStageEXT::Compute
-                            && !device.SupportsRendererFeatureEXT(
-                                CNA::RendererFeature::ComputeImageBinding))
-                            AddFailure(failures, prefix + "requires ComputeImageBinding");
+                        if (binding.getStage() == CNA::ShaderStageEXT::Compute)
+                        {
+                            if (!device.SupportsCapability(
+                                    CNA::GraphicsCapability::ComputeShaders))
+                                AddFailure(failures, prefix + "requires ComputeShaders");
+                            const auto limit = device.GetRendererLimitEXT(
+                                CNA::RendererLimit::MaxStorageImagesPerShaderStage);
+                            if (!limit.known || limit.value == 0 ||
+                                static_cast<std::uint64_t>(binding.getBinding()) >= limit.value)
+                                AddFailure(failures, prefix +
+                                    "exceeds compute storage-image bindings");
+                        }
                         break;
                     case ShaderBindingTypeEXT::ConstantBuffer:
                     {

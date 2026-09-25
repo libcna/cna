@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/D3DCommon/D3DProgramReflection.hpp"
 
+#include <d3d11.h>
 #include <d3dcompiler.h>
 #include <wrl/client.h>
 
@@ -41,7 +42,8 @@ namespace CNA::Internal::Renderers::D3DCommon
     }
 
     bool D3DProgramReflection::AddShader(
-        const void* bytecode, const std::size_t bytecodeSize, std::string& error)
+        const void* bytecode, const std::size_t bytecodeSize, std::string& error,
+        const bool allowComputeUavs)
     {
         if (bytecode == nullptr || bytecodeSize == 0)
         {
@@ -123,6 +125,24 @@ namespace CNA::Internal::Renderers::D3DCommon
                     samplers_[slot] = true;
                 samplerCount_ = std::max(
                     samplerCount_, static_cast<int>(binding.BindPoint + binding.BindCount));
+                continue;
+            }
+
+            if (allowComputeUavs &&
+                (binding.Type == D3D_SIT_UAV_RWTYPED ||
+                 binding.Type == D3D_SIT_UAV_RWSTRUCTURED ||
+                 binding.Type == D3D_SIT_UAV_RWBYTEADDRESS ||
+                 binding.Type == D3D_SIT_UAV_APPEND_STRUCTURED ||
+                 binding.Type == D3D_SIT_UAV_CONSUME_STRUCTURED ||
+                 binding.Type == D3D_SIT_UAV_RWSTRUCTURED_WITH_COUNTER))
+            {
+                if (binding.BindCount == 0 ||
+                    binding.BindCount > D3D11_PS_CS_UAV_REGISTER_COUNT ||
+                    binding.BindPoint > D3D11_PS_CS_UAV_REGISTER_COUNT - binding.BindCount)
+                {
+                    error = "Runtime HLSL compute UAV register range exceeds 8 slots";
+                    return false;
+                }
                 continue;
             }
 

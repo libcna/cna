@@ -534,16 +534,16 @@ This is an implementation inventory from `IGraphicsRenderer` and the current
 DirectX11 renderer, not a completed modern gate. Rows with missing code are
 open engineering work even when a test correctly skips for the absent feature.
 
-| Current CNAEXT contract area | DX11 status after WIN11-0028 |
+| Current CNAEXT contract area | DX11 status during WIN11-0032 |
 |---|---|
-| Graphics-device lifecycle, classic/modern draw sequencing, MSAA/MRT, float targets and readback | Existing native paths; classic corpus passed. Modern state isolation remains to test. |
+| Graphics-device lifecycle, classic/modern draw sequencing, MSAA/MRT, float targets and readback | Existing native paths; classic corpus passed. Focused pixel readback proves pixel SRV -> compute UAV -> pixel SRV sequencing on one resource. Broader modern state isolation remains open. |
 | HLSL vertex/fragment ShaderEffect intake, reflection, named uniforms and 2D/cube/volume SRVs | Native compiler and binding path exists. Explicit HLSL stage reporting and package-selection test added; stock CNAEXT shader packages mostly lack HLSL variants. Volume sampling's separate capability flag remains false pending pixel proof. |
 | Modern vertex/index input, multiple streams and instancing | Existing native draw paths. Base-instance support is not yet advertised; direct first-instance behavior remains to implement and test. |
 | GPU elapsed-time queries | Native D3D11 timestamp/disjoint query path, with physical Intel workload and in-flight range tests passed (WIN11-0029). |
-| Indirect indexed/nonindexed draws and argument-only/transfer buffers | Native GPU-fetched draw path, with physical Intel count/offset and byte-transfer tests passed (WIN11-0029). Storage/constant buffer roles remain unimplemented. |
-| Compute shaders, dispatch, shader storage and constant-buffer binding | Representable by D3D11; renderer currently reports no compute support and does not create a compute program or UAV-backed storage buffer. |
-| Storage textures, compute images, compute sampled textures, compute/graphics hazards | Representable by D3D11; not implemented in this renderer. |
-| Sampled Texture2DArray and layer/mip transfers | Representable by D3D11; no renderer array record/factory or sampled binding yet. |
+| Indirect indexed/nonindexed draws and argument-only/transfer buffers | Native GPU-fetched draw path, with physical Intel count/offset and byte-transfer tests passed. Storage and constant buffer roles now use native mirrors copied in GPU order (WIN11-0030). |
+| Compute shaders, dispatch, shader storage and constant-buffer binding | Native HLSL cs_5_0, dispatch, raw UAV buffers, constant buffers and sampled Texture2D/RenderTarget2D execute on Intel. Full 974-case refreshed run after production HLSL variants: 733 pass, 241 skip, 0 fail. |
+| Storage textures, compute images, compute sampled textures, compute/graphics hazards | Native Color storage-image read/write, exact mip/rectangle transfer, sampled storage-image binding and PS SRV/compute UAV hazard restoration pass focused Intel tests. Mutable classic Texture2D image binding remains unimplemented and is not advertised. Storage-image factory is Color-only. |
+| Sampled Texture2DArray and layer/mip transfers | Native array SRV, all 20 core SurfaceFormat transfers, 2,048-layer limit, ShaderEffect sampling and retained lifetime pass focused Intel tests. Odd block-compressed mip-edge partial transfer regression added. |
 | Shadow reception and image-based lighting in modern effects | Interface correctly reports false; DX11 stock PBR shader does not yet consume shadow/IBL bindings. |
 | GPU debug markers and modern resource-limit reporting | Marker override absent; most modern limits retain interface defaults. Native D3D11 capabilities need measured values when the corresponding paths are implemented. |
 
@@ -574,3 +574,86 @@ completed through the private desktop with `CNA_D3D11_DEBUG_LAYER=1`:
 zero warnings/errors. The modern conformance tally was one case/three checks
 run and seven skipped. These counts precede the separate compute implementation
 and must not be used as its acceptance result.
+
+WIN11-0030: added a native `cs_5_0` compute program with HLSL diagnostics and
+reflection, an eight-slot UAV binding path, native dispatch, sampled 2D and
+render-target inputs, and retained shader resources. Storage buffers use raw
+D3D11 UAVs. Their indirect and constant roles use separate native mirrors
+copied in GPU order from the main byte buffer: D3D11 rejected partial
+`UpdateSubresource` boxes on a constant buffer (debug ID 288), while the
+byte-addressable main buffer preserves exact partial transfers. GPU-written
+indirect draw arguments and constant-buffer updates passed focused hardware
+tests. `AutoExposureEXT` and `ClusteredLightCompute` now offer HLSL compute
+variants; both compiled offline with Windows SDK `fxc.exe`. The clustered
+shader's `pow` compile warning applies to the guarded positive near/far
+ratio, not a D3D11 debug-layer warning.
+
+The first compute-enabled full private-desktop Intel run registered **974
+tests from 125 suites**, with **713 pass, 253 skip, 8 fail** in 1,401,012 ms
+(`C:\rv\logs\dx11-modern-compute-full-1.log`). Seven failures were
+`AutoExposureTest.*`, whose production shader package then lacked HLSL; one
+was `GpuTimerTest.MoreWorkTakesMoreGpuTime`, whose 4-vs-40-draw 2x threshold
+was unstable on this driver. No D3D11 debug message appeared. The test now
+compares 4 vs 160 full-screen draws with a 4x minimum; a focused hardware
+run measured 0.2157 vs 22.2407 ms and passed. After adding the two HLSL
+variants, the 23-case focused run passed all seven auto-exposure tests, all
+ten clustered-light CPU/GPU parity cases, and the timer test. Its only
+failure was the separate compressed-array mip defect described in WIN11-0031
+(`C:\rv\logs\dx11-modern-compute-array-focused-1.log`). The complete refreshed
+run selected Intel `8086:46A6`, software adapter flag 0, feature level
+`0xB100`, and registered **974 tests**: **733 pass, 241 skip, 0 fail**
+in 1,411,149 ms, with zero D3D11 debug-layer warnings/errors
+(`C:\rv\logs\dx11-modern-compute-array-full-2.log`). The modern
+conformance tally was seven cases/21 checks run and one skipped.
+
+WIN11-0031: the D3D11 texture-array factory publishes device-checked
+sampling, filtering, transfer, mip and layer limits. The renderer record
+owns a native Texture2D array and SRV, with exact per-layer/per-mip rectangle
+uploads and readbacks. ShaderEffect binds and retains that record after the
+public array is disposed. A portable conformance package now has an HLSL
+vertex/fragment variant. The first Intel focused run exposed D3D11 debug
+IDs 288, 101 and 104: block-compressed 4x2 mips allow a complete-mip upload
+only without a destination box, and cannot be created as standalone staging
+textures. The fix uploads complete BC mips without a box and stages a full
+mip chain before mapping the requested mip. Rerun:
+`C:\rv\logs\dx11-modern-array-focused-2.log`, **5/5 pass**, 20 core
+formats round-tripped exactly, all three layers and both mips, 2,048-layer
+boundary, sampling, retained binding, device-before-array destruction, and
+zero D3D11 debug warnings/errors. Both runs selected Intel `8086:46A6`,
+`software=0`, feature level `0xB100`, debug layer enabled.
+
+WIN11-0032: the D3D11 Color storage-image path owns a typed UAV, optional
+sampled SRV and per-mip transfer staging. Native compute binds it by the
+declared read/write access and retains it through dispatch; ShaderEffect
+retains sampled bindings through public disposal. The device checks typed
+UAV load/store support before advertising the corresponding usages. Generic
+shader-package selection now checks the storage-image binding limit and
+compute support, because `ComputeImageBinding` describes the separate mutable
+classic Texture2D image path and remains false here. The first 13-case
+focused run had one package-selection failure and D3D11 debug ID 2097372:
+the HLSL typed UAV declaration used `float4` where the R8G8B8A8_UNORM
+view requires `unorm float4`. The corrected shader declaration and package
+precondition passed **14/14** focused Intel cases with zero debug-layer
+messages (`C:\rv\logs\dx11-modern-storage-array-focused-2.log`).
+This includes typed UAV read into a storage buffer, image write followed
+by exact CPU readback, and a pixel-sampling/compute-write/pixel-sampling
+sequence with color readback. The sampled array corpus now also includes an
+odd block-compressed mip-edge partial transfer: the renderer preserves the
+unmodified blocks by staging and reuploading the complete mip. The full
+Intel Debug suite completed through the private desktop with **980 tests
+from 125 suites: 740 pass, 240 truthful skip, 0 fail** in 1,407,882 ms.
+All eight modern conformance cases and 22 checks ran; none skipped. The
+selected adapter log printed Intel `8086:46A6`, `software=0` 679 times,
+feature level `0xB100`; the D3D11 debug layer reported zero messages.
+The binary exited zero and `git diff --check` was clean. Exact commands:
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsExtTests --parallel 4
+$env:CNA_D3D11_DEBUG_LAYER = '1'
+& C:\rv\work\private_desktop_awake.exe 7200000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no' *> C:\rv\logs\dx11-modern-storage-array-full-3.log
+```
+
+The 240 skips remain open DX11 modern work, chiefly missing production
+HLSL variants, stock-effect shadow/IBL sampling, and vertex-stage storage
+lookups. This full run validates WIN11-0030 through WIN11-0032; it is not
+the final DX11 modern capability gate.

@@ -130,6 +130,17 @@ void main() {
                     CNA::ShaderLanguageEXT::Wgsl, CNA::ShaderStageEXT::Compute,
                     "main", std::string(kPayloads[2].source),
                     std::string(kVulkanComputeWgsl)),
+                ShaderCodeEXT(
+                    CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Compute,
+                    "main", "modern_resource_interop.directx.comp.hlsl", R"(
+Texture2D<float4> uSource : register(t0);
+RWByteAddressBuffer Output : register(u1);
+[numthreads(1, 1, 1)]
+void main(uint3 id : SV_DispatchThreadID)
+{
+    Output.Store4(0, asuint(uSource.Load(int3(0, 0, 0))));
+}
+)"),
             },
             {CNA::ShaderStageEXT::Compute},
             {
@@ -172,6 +183,17 @@ void main() {
                     CNA::ShaderLanguageEXT::Wgsl, CNA::ShaderStageEXT::Compute,
                     "main", std::string(kPayloads[2].source),
                     std::string(kVulkanComputeWgsl)),
+                ShaderCodeEXT(
+                    CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Compute,
+                    "main", "constant_buffer.directx.comp.hlsl", R"(
+cbuffer Parameters : register(b0) { float4 value; };
+RWByteAddressBuffer Output : register(u1);
+[numthreads(1, 1, 1)]
+void main(uint3 id : SV_DispatchThreadID)
+{
+    Output.Store4(0, asuint(value));
+}
+)"),
             },
             {CNA::ShaderStageEXT::Compute},
             {
@@ -302,7 +324,8 @@ TEST_F(ComputeTest, PortableOverloadsRejectWrongStagesAndNonMainEntryPoints)
     CNA::ShaderLanguageEXT supportedLanguage = CNA::ShaderLanguageEXT::Unknown;
     for (const auto language : {CNA::ShaderLanguageEXT::SpirV,
                                 CNA::ShaderLanguageEXT::GlslDesktop,
-                                CNA::ShaderLanguageEXT::GlslEs})
+                                CNA::ShaderLanguageEXT::GlslEs,
+                                CNA::ShaderLanguageEXT::Hlsl})
     {
         if (gd.SupportsShaderLanguageEXT(language, CNA::ShaderStageEXT::Compute))
         {

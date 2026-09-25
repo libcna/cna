@@ -61,6 +61,37 @@ namespace CNA::Graphics {
                                   CNA::ShaderStageEXT::Compute, "main",
                                   "auto_exposure/reduction.vulkan.comp.wgsl",
                                   std::string(kReductionVulkanComputeWgsl)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                  CNA::ShaderStageEXT::Compute, "main",
+                                  "auto_exposure/reduction.directx.comp.hlsl", R"(
+Texture2D<float4> uScene : register(t0);
+SamplerState uSceneSampler : register(s0);
+RWByteAddressBuffer Partials : register(u1);
+groupshared float sharedSums[64];
+
+[numthreads(8, 8, 1)]
+void main(uint3 dispatchId : SV_DispatchThreadID,
+          uint3 groupId : SV_GroupID,
+          uint local : SV_GroupIndex)
+{
+    float2 uv = (float2(dispatchId.xy) + 0.5) / float2(64.0, 64.0);
+    float3 colour = uScene.SampleLevel(uSceneSampler, uv, 0).rgb;
+    float luminance = dot(colour, float3(0.2126, 0.7152, 0.0722));
+    sharedSums[local] = log(max(luminance, 1e-4));
+    GroupMemoryBarrierWithGroupSync();
+    for (uint stride = 32; stride > 0; stride >>= 1)
+    {
+        if (local < stride)
+            sharedSums[local] += sharedSums[local + stride];
+        GroupMemoryBarrierWithGroupSync();
+    }
+    if (local == 0)
+    {
+        uint group = groupId.y * 8 + groupId.x;
+        Partials.Store(group * 4, asuint(sharedSums[0]));
+    }
+}
+)"),
                 },
                 {CNA::ShaderStageEXT::Compute},
                 {
