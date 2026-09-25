@@ -3,15 +3,25 @@
 ## SAMPLE-048 EasyGL wireframe boundary (2026-09-25)
 
 The Triangle Picking requalification found that Mesa GLES without `GL_NV_polygon_mode`
-refused the selected triangle's `FillMode::WireFrame` draw. EasyGL now draws a bounded
-unclipped stock single-stream TriangleList as line loops when culling, depth, stencil,
-scissor, bias, MSAA and render targets are absent. Every other unsupported triangle
-route still refuses, and `GraphicsCapability::WireFrame` remains false because the
-context cannot satisfy the general contract. No sample-specific renderer branch was
-added. Six focused `EasyGLUnsupportedWireFrameTest` cases pass under the private GLES3
-GPU runner. The original XNA and CNA frozen Cats frames both have 327 magenta edge
-pixels and agree within eight levels at 99.99% of pixels; system Chrome WebGL2 picks
-the same triangle with `WEBGL_polygon_mode` deliberately hidden (326 magenta pixels).
+refused the selected triangle's `FillMode::WireFrame` draw. The first bounded stock
+line-loop route handled complete triangles, but the owner reproduced a crash on the
+green sphere at the left image edge, and a zoomed native click sweep reproduced it
+on the rebuilt binary: the selected triangle intersected the clip volume. EasyGL
+now clips the stock Position Vector3 + Color triangle in homogeneous space and draws
+the visible polygon boundary as a line loop. Complete triangles retain the original
+three-edge route. Both routes require a single stream and no culling, depth, stencil,
+scissor, bias, MSAA or render target. Every other unsupported triangle route still
+refuses, and `GraphicsCapability::WireFrame` remains false because the context cannot
+satisfy the general contract. No sample-specific renderer branch was added.
+
+Six focused `EasyGLUnsupportedWireFrameTest` cases pass under the private GLES3 GPU
+runner, including clipped-polygon pixel readback. The final native sample survived
+702 clicks across turned, elevated and zoomed camera views plus a dense 540-click
+left-edge sweep. The original XNA and CNA frozen Cats frames both have 327 magenta
+edge pixels and agree within eight levels at 99.99% of pixels; at the extreme left
+edge they have 28/31 magenta pixels and still agree within eight levels at 99.99%.
+System Chrome WebGL2 picks the sphere edge with `WEBGL_polygon_mode` deliberately
+hidden (27 magenta pixels, no runtime exception).
 See `plans/plan_software.md` SOFTWARE-178 and
 `../cna-samples/samples/TrianglePicking/missing.md`. No SharpRuntime change was needed.
 

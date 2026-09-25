@@ -7774,10 +7774,10 @@ if (!ProfileIsEs2ApiGeneration())
     }
 
     void EasyGLRenderer::ApplyStencilPrimitiveTopology(PrimitiveType primitive,
-                                                       bool unclippedLineLoop)
+                                                       bool stockLineLoop)
     {
         if (metagl::IsContextLost()) return;
-        if (!unclippedLineLoop)
+        if (!stockLineLoop)
             RequireSupportedFillModeEXT(primitive);
         if (!stencilEnabled_ || !stencilTwoSided_) return;
 
@@ -7853,7 +7853,7 @@ if (!ProfileIsEs2ApiGeneration())
         // SOFTWARE-178: native polygon mode is the only representation that keeps the operation
         // after clipping and culling and gives it polygon offset, MSAA and two-sided stencil.
         // Unsupported contexts remember the legal XNA state selection and decide at draw time
-        // whether the bounded unclipped line-loop route is valid. Other triangle draws refuse;
+        // whether the bounded stock line-loop route is valid. Other triangle draws refuse;
         // line/point topologies remain unaffected by FillMode.
         fillModeWireframe_ = (fillMode == 1);
         wireframeCullMode_ = cullMode;
@@ -7961,22 +7961,23 @@ if (!ProfileIsEs2ApiGeneration())
 
         throw System::NotSupportedException(
             "EasyGL: FillMode::WireFrame is not supported by this GLES/WebGL context, so the "
-            "triangle draw needs native polygon mode or the bounded unclipped line-loop route. "
+            "triangle draw needs native polygon mode or the bounded stock line-loop route. "
             "This draw qualifies for neither. The context "
             "exposes neither GL_NV_polygon_mode nor WEBGL_polygon_mode. Query GraphicsDevice::"
             "SupportsCapability(GraphicsCapability::WireFrame) and select FillMode::Solid when "
             "it reports false.");
     }
 
-    bool EasyGLRenderer::CanDrawUnclippedWireframeAsLineLoops(
+    bool EasyGLRenderer::CanDrawStockWireframeAsLineLoops(
         const EasyGLVertexBufferRenderer& vb, const Matrix& world,
         const Matrix& view, const Matrix& projection, PrimitiveType primitive,
-        int primitiveCount, const GpuDrawParams& params) const
+        int primitiveCount, const GpuDrawParams& params,
+        std::vector<std::vector<std::array<std::uint8_t, 16>>>& clippedPolygons) const
     {
-        // A triangle entirely inside the clip volume, with no culling, depth, stencil, scissor,
-        // bias or multisampling, has the same three visible edges as a GL_LINE_LOOP. Outside this
-        // bounded case polygon mode is still required: lines cannot reproduce clipped polygon
-        // boundaries or the triangle's rasterizer state. Keep the capability answer false.
+        // With no culling, depth, stencil, scissor, bias or multisampling, a complete triangle
+        // has the same three visible edges as a GL_LINE_LOOP. A clipped PositionColor triangle
+        // is handled below by generating its visible polygon first. Other layouts and rasterizer
+        // states still need native polygon mode. Keep the capability answer false.
         if (!fillModeWireframe_ || nativeWireframeApi_ != NativeWireframeApi::None ||
             primitive != PrimitiveType::TriangleList || primitiveCount <= 0 ||
             wireframeCullMode_ != 0 || wireframeScissorEnabled_ || depthEnabled_ ||
@@ -8011,6 +8012,7 @@ if (!ProfileIsEs2ApiGeneration())
             return false;
 
         const Matrix wvp = world * view * projection;
+        bool entirelyInside = true;
         for (std::size_t i = start; i < start + count; ++i)
         {
             float xyz[3];
@@ -8018,11 +8020,121 @@ if (!ProfileIsEs2ApiGeneration())
             const auto clip = Microsoft::Xna::Framework::Vector4::Transform(
                 Microsoft::Xna::Framework::Vector3(xyz[0], xyz[1], xyz[2]), wvp);
             if (!std::isfinite(clip.X) || !std::isfinite(clip.Y) ||
-                !std::isfinite(clip.Z) || !std::isfinite(clip.W) || clip.W <= 0.0f ||
-                clip.X <= -clip.W || clip.X >= clip.W ||
+                !std::isfinite(clip.Z) || !std::isfinite(clip.W))
+                return false;
+            if (clip.W <= 0.0f || clip.X <= -clip.W || clip.X >= clip.W ||
                 clip.Y <= -clip.W || clip.Y >= clip.W ||
                 clip.Z <= 0.0f || clip.Z >= clip.W)
-                return false;
+                entirelyInside = false;
+        }
+        if (entirelyInside)
+            return true;
+
+        // Polygon mode outlines the polygon AFTER homogeneous clipping, including any newly
+        // created edge along the clip plane. Merely sending the original three edges as lines
+        // loses that edge. For the stock PositionColor layout, clip positions and colours on the
+        // CPU and submit each resulting polygon as a line loop through the same stock program.
+        // Other vertex layouts still need native polygon mode when clipping is involved.
+        const auto color = std::find_if(elements.begin(), elements.end(), [](const auto& element) {
+            return element.getVertexElementUsageProperty() ==
+                       Microsoft::Xna::Framework::Graphics::VertexElementUsage::Color &&
+                   element.getUsageIndexProperty() == 0 &&
+                   element.getVertexElementFormatProperty() ==
+                       Microsoft::Xna::Framework::Graphics::VertexElementFormat::Color &&
+                   element.getOffsetProperty() == 12;
+        });
+        if (stride != 16 || elements.size() != 2 || positionOffset != 0 ||
+            color == elements.end())
+            return false;
+
+        struct ClipVertex
+        {
+            Microsoft::Xna::Framework::Vector3 position;
+            Microsoft::Xna::Framework::Vector4 clip;
+            std::array<float, 4> color;
+        };
+        const auto readVertex = [&](std::size_t index) {
+            const std::uint8_t* bytes = vb.cpu_data_.data() + index * stride;
+            float xyz[3];
+            std::memcpy(xyz, bytes, sizeof(xyz));
+            ClipVertex vertex;
+            vertex.position = Microsoft::Xna::Framework::Vector3(xyz[0], xyz[1], xyz[2]);
+            vertex.clip = Microsoft::Xna::Framework::Vector4::Transform(vertex.position, wvp);
+            for (int channel = 0; channel < 4; ++channel)
+                vertex.color[channel] = static_cast<float>(bytes[12 + channel]);
+            return vertex;
+        };
+        const auto distance = [](const ClipVertex& vertex, int plane) {
+            switch (plane)
+            {
+            case 0: return vertex.clip.X + vertex.clip.W;
+            case 1: return vertex.clip.W - vertex.clip.X;
+            case 2: return vertex.clip.Y + vertex.clip.W;
+            case 3: return vertex.clip.W - vertex.clip.Y;
+            case 4: return vertex.clip.Z + vertex.clip.W;
+            default: return vertex.clip.W - vertex.clip.Z;
+            }
+        };
+        const auto interpolate = [](const ClipVertex& a, const ClipVertex& b, float t) {
+            ClipVertex vertex;
+            vertex.position = a.position + (b.position - a.position) * t;
+            vertex.clip = Microsoft::Xna::Framework::Vector4(
+                a.clip.X + (b.clip.X - a.clip.X) * t,
+                a.clip.Y + (b.clip.Y - a.clip.Y) * t,
+                a.clip.Z + (b.clip.Z - a.clip.Z) * t,
+                a.clip.W + (b.clip.W - a.clip.W) * t);
+            for (int channel = 0; channel < 4; ++channel)
+                vertex.color[channel] = a.color[channel] + (b.color[channel] - a.color[channel]) * t;
+            return vertex;
+        };
+
+        clippedPolygons.reserve(static_cast<std::size_t>(primitiveCount));
+        for (int triangle = 0; triangle < primitiveCount; ++triangle)
+        {
+            std::vector<ClipVertex> polygon;
+            polygon.reserve(9);
+            for (int corner = 0; corner < 3; ++corner)
+                polygon.push_back(readVertex(start + static_cast<std::size_t>(triangle) * 3u +
+                                             static_cast<std::size_t>(corner)));
+
+            for (int plane = 0; plane < 6 && !polygon.empty(); ++plane)
+            {
+                std::vector<ClipVertex> next;
+                next.reserve(9);
+                ClipVertex previous = polygon.back();
+                float previousDistance = distance(previous, plane);
+                for (const auto& current : polygon)
+                {
+                    const float currentDistance = distance(current, plane);
+                    const bool previousInside = previousDistance >= 0.0f;
+                    const bool currentInside = currentDistance >= 0.0f;
+                    if (previousInside != currentInside)
+                    {
+                        const float t = previousDistance /
+                            (previousDistance - currentDistance);
+                        next.push_back(interpolate(previous, current, t));
+                    }
+                    if (currentInside)
+                        next.push_back(current);
+                    previous = current;
+                    previousDistance = currentDistance;
+                }
+                polygon = std::move(next);
+            }
+
+            std::vector<std::array<std::uint8_t, 16>> packed;
+            packed.reserve(polygon.size());
+            for (const auto& vertex : polygon)
+            {
+                std::array<std::uint8_t, 16> bytes{};
+                const float xyz[] = {vertex.position.X, vertex.position.Y, vertex.position.Z};
+                std::memcpy(bytes.data(), xyz, sizeof(xyz));
+                for (int channel = 0; channel < 4; ++channel)
+                    bytes[12 + channel] = static_cast<std::uint8_t>(
+                        std::clamp(std::lround(vertex.color[channel]), 0L, 255L));
+                packed.push_back(bytes);
+            }
+            clippedPolygons.push_back(std::move(packed));
         }
         return true;
     }
@@ -11595,9 +11707,11 @@ if (ProfileIsEs2ApiGeneration())
     {
         if (metagl::IsContextLost()) return;
         const auto& candidateVb = static_cast<const EasyGLVertexBufferRenderer&>(vb_in);
-        const bool unclippedLineLoop = CanDrawUnclippedWireframeAsLineLoops(
-            candidateVb, world, view, projection, primitive, primitiveCount, params);
-        ApplyStencilPrimitiveTopology(primitive, unclippedLineLoop);
+        std::vector<std::vector<std::array<std::uint8_t, 16>>> clippedPolygons;
+        const bool stockLineLoop = CanDrawStockWireframeAsLineLoops(
+            candidateVb, world, view, projection, primitive, primitiveCount, params,
+            clippedPolygons);
+        ApplyStencilPrimitiveTopology(primitive, stockLineLoop);
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         // plans/plan_fx.md FX-062: a compiled effect's vertex layout is arbitrary and validated against
         // the applied pass's own shader reflection (BindCompiledEffectForDrawEXT), not against the
@@ -11672,11 +11786,32 @@ if (ProfileIsEs2ApiGeneration())
         CNA_RENDER_LOG("DrawPrimitivesEx: stride=" << layoutStride
             << " prim=" << static_cast<int>(primitive) << " verts=" << vertex_count);
 
+        TraceBoundTextureUnit("draw-arrays-3d", 0);
+        if (!clippedPolygons.empty())
+        {
+            EasyGLVertexBufferRenderer scratch(16, RegistryPtr());
+            scratch.SetVertexDeclaration(VertexDeclaration(16, vb.GetDeclarationElements()));
+            for (const auto& polygon : clippedPolygons)
+            {
+                if (polygon.size() < 3)
+                    continue;
+                scratch.SetData(polygon.data(), static_cast<int>(polygon.size()), 16);
+                scratch.BindForDraw();
+                const bool scratchSemanticLayout = ConfigureDeclarationForStockProgramEXT(
+                    scratch, 16, params);
+                device.draw_arrays(::easygl::PrimitiveType::LineLoop, 0,
+                                   static_cast<int>(polygon.size()));
+                scratch.UnbindAfterDraw();
+                if (scratchSemanticLayout)
+                    RestoreDeclarationLayoutEXT(scratch);
+            }
+            return;
+        }
+
         vb.BindForDraw();
         const bool semanticLayout = ConfigureDeclarationForStockProgramEXT(
             const_cast<EasyGLVertexBufferRenderer&>(vb), layoutStride, params);
-        TraceBoundTextureUnit("draw-arrays-3d", 0);
-        if (unclippedLineLoop)
+        if (stockLineLoop)
         {
             for (int triangle = 0; triangle < primitiveCount; ++triangle)
                 device.draw_arrays(::easygl::PrimitiveType::LineLoop,

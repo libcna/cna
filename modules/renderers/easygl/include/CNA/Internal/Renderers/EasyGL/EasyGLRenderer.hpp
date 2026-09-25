@@ -1395,7 +1395,7 @@ namespace CNA::Internal::Renderers::EasyGL
         void ApplyCurrentDepthStencilAvailability();
         /** @brief Installs XNA's topology-dependent ordinary or two-sided stencil tuple. */
         void ApplyStencilPrimitiveTopology(PrimitiveType primitive,
-                                           bool unclippedLineLoop = false);
+                                           bool stockLineLoop = false);
         /** @brief Reapplies XNA's normalized constant depth bias for the active depth format. */
         void ApplyCurrentDepthBias();
         void EnsureCallingThreadContext();
@@ -1622,8 +1622,9 @@ namespace CNA::Internal::Renderers::EasyGL
         // GL_LINES loses post-transform culling, polygon depth bias and topology-wide rasterizer
         // state, and it cannot cover SpriteBatch, compiled-effect, multi-stream and instanced paths
         // uniformly. Desktop GL is native; GLES/WebGL use their optional native polygon-mode
-        // extensions. A context with neither reports false; only the bounded unclipped stock
-        // triangle route can draw line loops, and all other triangle draws refuse.
+        // extensions. A context with neither reports false; a bounded stock triangle route
+        // draws complete or homogeneously clipped PositionColor polygons as line loops.
+        // Other unsupported triangle draws refuse.
         enum class NativeWireframeApi
         {
             None,
@@ -1664,10 +1665,11 @@ namespace CNA::Internal::Renderers::EasyGL
         void DetectNativeWireframeApi();
         void SetNativePolygonMode(bool wireframe);
         void RequireSupportedFillModeEXT(PrimitiveType primitive) const;
-        [[nodiscard]] bool CanDrawUnclippedWireframeAsLineLoops(
+        [[nodiscard]] bool CanDrawStockWireframeAsLineLoops(
             const EasyGLVertexBufferRenderer& vb, const Matrix& world,
             const Matrix& view, const Matrix& projection, PrimitiveType primitive,
-            int primitiveCount, const GpuDrawParams& params) const;
+            int primitiveCount, const GpuDrawParams& params,
+            std::vector<std::vector<std::array<std::uint8_t, 16>>>& clippedPolygons) const;
 
         void EnsureColored3DProgram();
         void EnsureTextured3DProgram();

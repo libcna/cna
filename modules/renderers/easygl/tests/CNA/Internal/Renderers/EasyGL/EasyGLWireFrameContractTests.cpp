@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MS-PL
 
-// SOFTWARE-178: GLES/WebGL wireframe is either a native polygon mode or an explicit refusal.
-// An unclipped single-stream stock draw with no culling/depth/stencil/scissor/bias/MSAA can
-// safely draw each complete triangle as a line loop. All other unsupported cases still refuse.
+// SOFTWARE-178: GLES/WebGL wireframe without native polygon mode has a bounded stock route.
+// A stock single-stream PositionColor draw with no rasterizer side effects can clip a triangle
+// and draw its resulting polygon as a line loop. Other unsupported cases still refuse.
 
 #include <array>
+#include <algorithm>
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -169,7 +171,7 @@ TEST_F(EasyGLUnsupportedWireFrameTest,
 }
 
 TEST_F(EasyGLUnsupportedWireFrameTest,
-       UnclippedUserTriangleWithoutRasterizerSideEffectsDrawsThenClippedTriangleRefuses)
+       UnclippedAndClippedPositionColorTrianglesDrawWithoutRasterizerSideEffects)
 {
     auto vertices = Triangle();
     for (auto& vertex : vertices)
@@ -184,10 +186,29 @@ TEST_F(EasyGLUnsupportedWireFrameTest,
         PositionColorDeclaration()));
 
     vertices[0].Position.X = -2.0f;
+    device->Clear(Color::Black);
     ApplyBasicEffect(effect);
-    EXPECT_THROW(device->DrawUserPrimitives(
+    EXPECT_NO_THROW(device->DrawUserPrimitives(
         PrimitiveType::TriangleList, vertices.data(), 0, 1,
-        PositionColorDeclaration()), System::NotSupportedException);
+        PositionColorDeclaration()));
+    const auto viewport = device->getViewportProperty();
+    const std::size_t pixelCount = static_cast<std::size_t>(viewport.getWidthProperty()) *
+                                   static_cast<std::size_t>(viewport.getHeightProperty());
+    std::vector<Color> pixels(pixelCount);
+    device->GetBackBufferData(pixels.data(), static_cast<int>(pixels.size()));
+    const auto whitePixels = std::count_if(pixels.begin(), pixels.end(), [](const Color& pixel) {
+        return pixel.getRProperty() > 200 && pixel.getGProperty() > 200 &&
+               pixel.getBProperty() > 200;
+    });
+    EXPECT_GT(whitePixels, 10);
+    EXPECT_LT(static_cast<std::size_t>(whitePixels), pixelCount / 20);
+
+    for (auto& vertex : vertices)
+        vertex.Position.X -= 3.0f;
+    ApplyBasicEffect(effect);
+    EXPECT_NO_THROW(device->DrawUserPrimitives(
+        PrimitiveType::TriangleList, vertices.data(), 0, 1,
+        PositionColorDeclaration()));
 }
 
 TEST_F(EasyGLUnsupportedWireFrameTest, MultiStreamTriangleRouteRefuses)
