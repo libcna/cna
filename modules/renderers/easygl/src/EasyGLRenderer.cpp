@@ -8139,6 +8139,184 @@ if (!ProfileIsEs2ApiGeneration())
         return true;
     }
 
+    bool EasyGLRenderer::CanDrawStockIndexedWireframeAsLineLoops(
+        const EasyGLVertexBufferRenderer& vb, const EasyGLIndexBufferRenderer& ib,
+        const Matrix& world, const Matrix& view, const Matrix& projection,
+        PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+        std::vector<int>& visibleTriangles,
+        std::vector<std::vector<std::array<std::uint8_t, 24>>>& clippedPolygons) const
+    {
+        // Keep the stock lit shader and depth test. GL_LINE_LOOP does not cull faces,
+        // and clipping a triangle creates a new edge along the clip plane, so both
+        // operations are handled here before submitting lines. Unsupported layouts
+        // and rasterizer states still require native polygon mode.
+        if (!fillModeWireframe_ || nativeWireframeApi_ != NativeWireframeApi::None ||
+            primitive != PrimitiveType::TriangleList || primitiveCount < 0 ||
+            wireframeScissorEnabled_ || stencilEnabled_ ||
+            depthBias_ != 0.0f || slopeScaleDepthBias_ != 0.0f || sampleCount_ > 1 ||
+            bound_->rt2D != nullptr || bound_->cube != nullptr || bound_->mrtCount != 0 ||
+            params.vertexStreamCount > 1 || params.skinned || params.pbr ||
+            params.compiledEffectRuntime != nullptr || params.customEffectRenderer != nullptr ||
+            params.customEffectRequested || params.baseVertex != 0 || params.vertexStart != 0 ||
+            params.startIndex < 0)
+            return false;
+
+        const auto& elements = vb.GetDeclarationElements();
+        if (vb.GetStride() != 24 || elements.size() != 2 ||
+            elements[0].getOffsetProperty() != 0 ||
+            elements[0].getVertexElementUsageProperty() !=
+                Microsoft::Xna::Framework::Graphics::VertexElementUsage::Position ||
+            elements[0].getUsageIndexProperty() != 0 ||
+            elements[0].getVertexElementFormatProperty() !=
+                Microsoft::Xna::Framework::Graphics::VertexElementFormat::Vector3 ||
+            elements[1].getOffsetProperty() != 12 ||
+            elements[1].getVertexElementUsageProperty() !=
+                Microsoft::Xna::Framework::Graphics::VertexElementUsage::Normal ||
+            elements[1].getUsageIndexProperty() != 0 ||
+            elements[1].getVertexElementFormatProperty() !=
+                Microsoft::Xna::Framework::Graphics::VertexElementFormat::Vector3)
+            return false;
+
+        const std::size_t first = static_cast<std::size_t>(params.startIndex);
+        const std::size_t count = static_cast<std::size_t>(primitiveCount) * 3u;
+        const std::size_t indexSize = ib.thirtyTwoBit ? 4u : 2u;
+        const auto& indexBytes = ib.GetCpuBytes();
+        const auto& vertexBytes = vb.cpu_data_;
+        if (first > static_cast<std::size_t>(ib.GetIndexCount()) ||
+            count > static_cast<std::size_t>(ib.GetIndexCount()) - first ||
+            indexBytes.size() / indexSize < first + count ||
+            vertexBytes.size() / 24u < static_cast<std::size_t>(vb.GetVertexCount()))
+            return false;
+
+        struct ClipVertex
+        {
+            Microsoft::Xna::Framework::Vector3 position;
+            Microsoft::Xna::Framework::Vector3 normal;
+            Microsoft::Xna::Framework::Vector4 clip;
+        };
+        const Matrix wvp = world * view * projection;
+        const auto distance = [](const ClipVertex& vertex, int plane) {
+            switch (plane)
+            {
+            case 0: return vertex.clip.X + vertex.clip.W;
+            case 1: return vertex.clip.W - vertex.clip.X;
+            case 2: return vertex.clip.Y + vertex.clip.W;
+            case 3: return vertex.clip.W - vertex.clip.Y;
+            case 4: return vertex.clip.Z;
+            default: return vertex.clip.W - vertex.clip.Z;
+            }
+        };
+        const auto interpolate = [](const ClipVertex& a, const ClipVertex& b, float t) {
+            ClipVertex vertex;
+            vertex.position = a.position + (b.position - a.position) * t;
+            vertex.normal = a.normal + (b.normal - a.normal) * t;
+            vertex.clip = Microsoft::Xna::Framework::Vector4(
+                a.clip.X + (b.clip.X - a.clip.X) * t,
+                a.clip.Y + (b.clip.Y - a.clip.Y) * t,
+                a.clip.Z + (b.clip.Z - a.clip.Z) * t,
+                a.clip.W + (b.clip.W - a.clip.W) * t);
+            return vertex;
+        };
+        visibleTriangles.reserve(static_cast<std::size_t>(primitiveCount));
+        for (int triangle = 0; triangle < primitiveCount; ++triangle)
+        {
+            std::vector<ClipVertex> polygon;
+            polygon.reserve(9);
+            bool entirelyInside = true;
+            for (int corner = 0; corner < 3; ++corner)
+            {
+                const std::size_t indexPosition = first +
+                    static_cast<std::size_t>(triangle) * 3u + static_cast<std::size_t>(corner);
+                std::uint32_t index = 0;
+                if (ib.thirtyTwoBit)
+                    std::memcpy(&index, indexBytes.data() + indexPosition * indexSize, 4);
+                else
+                {
+                    std::uint16_t smallIndex = 0;
+                    std::memcpy(&smallIndex, indexBytes.data() + indexPosition * indexSize, 2);
+                    index = smallIndex;
+                }
+                if (index >= static_cast<std::uint32_t>(vb.GetVertexCount()))
+                    return false;
+                float attributes[6];
+                std::memcpy(attributes, vertexBytes.data() +
+                            static_cast<std::size_t>(index) * 24u, sizeof(attributes));
+                ClipVertex vertex;
+                vertex.position = Microsoft::Xna::Framework::Vector3(
+                    attributes[0], attributes[1], attributes[2]);
+                vertex.normal = Microsoft::Xna::Framework::Vector3(
+                    attributes[3], attributes[4], attributes[5]);
+                vertex.clip = Microsoft::Xna::Framework::Vector4::Transform(vertex.position, wvp);
+                if (!std::isfinite(vertex.clip.X) || !std::isfinite(vertex.clip.Y) ||
+                    !std::isfinite(vertex.clip.Z) || !std::isfinite(vertex.clip.W))
+                    return false;
+                for (int plane = 0; plane < 6; ++plane)
+                    entirelyInside = entirelyInside && distance(vertex, plane) >= 0.0f;
+                polygon.push_back(vertex);
+            }
+
+            if (!entirelyInside)
+            {
+                for (int plane = 0; plane < 6 && !polygon.empty(); ++plane)
+                {
+                    std::vector<ClipVertex> next;
+                    next.reserve(9);
+                    ClipVertex previous = polygon.back();
+                    float previousDistance = distance(previous, plane);
+                    for (const auto& current : polygon)
+                    {
+                        const float currentDistance = distance(current, plane);
+                        const bool previousInside = previousDistance >= 0.0f;
+                        const bool currentInside = currentDistance >= 0.0f;
+                        if (previousInside != currentInside)
+                        {
+                            const float t = previousDistance /
+                                (previousDistance - currentDistance);
+                            next.push_back(interpolate(previous, current, t));
+                        }
+                        if (currentInside)
+                            next.push_back(current);
+                        previous = current;
+                        previousDistance = currentDistance;
+                    }
+                    polygon = std::move(next);
+                }
+            }
+            if (polygon.size() < 3)
+                continue;
+            const auto& a = polygon[0].clip;
+            const auto& b = polygon[1].clip;
+            const auto& c = polygon[2].clip;
+            if (a.W <= 0.0f || b.W <= 0.0f || c.W <= 0.0f)
+                return false;
+            const float signedArea = (b.X / b.W - a.X / a.W) *
+                                         (c.Y / c.W - a.Y / a.W) -
+                                     (b.Y / b.W - a.Y / a.W) *
+                                         (c.X / c.W - a.X / a.W);
+            if ((wireframeCullMode_ == 1 && signedArea <= 0.0f) ||
+                (wireframeCullMode_ == 2 && signedArea >= 0.0f))
+                continue;
+            if (entirelyInside)
+            {
+                visibleTriangles.push_back(triangle);
+                continue;
+            }
+            std::vector<std::array<std::uint8_t, 24>> packed;
+            packed.reserve(polygon.size());
+            for (const auto& vertex : polygon)
+            {
+                std::array<std::uint8_t, 24> bytes{};
+                const float attributes[] = {
+                    vertex.position.X, vertex.position.Y, vertex.position.Z,
+                    vertex.normal.X, vertex.normal.Y, vertex.normal.Z};
+                std::memcpy(bytes.data(), attributes, sizeof(attributes));
+                packed.push_back(bytes);
+            }
+            clippedPolygons.push_back(std::move(packed));
+        }
+        return true;
+    }
+
     void EasyGLRenderer::ApplyRasterizerMultiSampleState(bool enabled)
     {
         if (metagl::IsContextLost()) return;
@@ -11837,7 +12015,14 @@ if (ProfileIsEs2ApiGeneration())
                                                         const GpuDrawParams& params)
     {
         if (metagl::IsContextLost()) return;
-        ApplyStencilPrimitiveTopology(primitive);
+        const auto& candidateVb = static_cast<const EasyGLVertexBufferRenderer&>(vb_in);
+        const auto& candidateIb = static_cast<const EasyGLIndexBufferRenderer&>(ib_in);
+        std::vector<int> visibleWireTriangles;
+        std::vector<std::vector<std::array<std::uint8_t, 24>>> clippedWirePolygons;
+        const bool stockIndexedLineLoop = CanDrawStockIndexedWireframeAsLineLoops(
+            candidateVb, candidateIb, world, view, projection, primitive, primitiveCount,
+            params, visibleWireTriangles, clippedWirePolygons);
+        ApplyStencilPrimitiveTopology(primitive, stockIndexedLineLoop);
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         // plans/plan_fx.md FX-062: see DrawPrimitivesEx's own compiled-effect branch for why this
         // dispatches before RequireDeclarationFitsStockProgramEXT runs.
@@ -11937,9 +12122,42 @@ if (ProfileIsEs2ApiGeneration())
         const int indexSize = ib.thirtyTwoBit ? 4 : 2;
         const void* indexOffset = reinterpret_cast<const void*>(
             static_cast<std::uintptr_t>(params.startIndex) * static_cast<std::uintptr_t>(indexSize));
-        DrawIndexedWithBaseVertexFallback(
-            ib, ToEasyGl(primitive), index_count, idxType2, indexOffset,
-            params.startIndex, params.baseVertex, false, 0);
+        if (stockIndexedLineLoop)
+        {
+            for (int triangle : visibleWireTriangles)
+            {
+                const int triangleStart = params.startIndex + triangle * 3;
+                const void* triangleOffset = reinterpret_cast<const void*>(
+                    static_cast<std::uintptr_t>(triangleStart) *
+                    static_cast<std::uintptr_t>(indexSize));
+                DrawIndexedWithBaseVertexFallback(
+                    ib, ::easygl::PrimitiveType::LineLoop, 3, idxType2, triangleOffset,
+                    triangleStart, 0, false, 0);
+            }
+            if (!clippedWirePolygons.empty())
+            {
+                EasyGLVertexBufferRenderer scratch(24, RegistryPtr());
+                scratch.SetVertexDeclaration(VertexDeclaration(24, vb.GetDeclarationElements()));
+                for (const auto& polygon : clippedWirePolygons)
+                {
+                    scratch.SetData(polygon.data(), static_cast<int>(polygon.size()), 24);
+                    scratch.BindForDraw();
+                    const bool scratchSemanticLayout = ConfigureDeclarationForStockProgramEXT(
+                        scratch, 24, params);
+                    device.draw_arrays(::easygl::PrimitiveType::LineLoop, 0,
+                                       static_cast<int>(polygon.size()));
+                    scratch.UnbindAfterDraw();
+                    if (scratchSemanticLayout)
+                        RestoreDeclarationLayoutEXT(scratch);
+                }
+            }
+        }
+        else
+        {
+            DrawIndexedWithBaseVertexFallback(
+                ib, ToEasyGl(primitive), index_count, idxType2, indexOffset,
+                params.startIndex, params.baseVertex, false, 0);
+        }
         if (multiStream) RestoreSingleStreamAttributes(vao, params);
         vb.UnbindAfterDraw();
         if (semanticLayout)

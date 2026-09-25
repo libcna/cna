@@ -171,6 +171,79 @@ TEST_F(EasyGLUnsupportedWireFrameTest,
 }
 
 TEST_F(EasyGLUnsupportedWireFrameTest,
+       IndexedPositionNormalTrianglesPreserveDepthCullAndClipping)
+{
+    struct PositionNormal { Vector3 position; Vector3 normal; };
+    static_assert(sizeof(PositionNormal) == 24);
+    std::array<PositionNormal, 3> vertices{{
+        {Vector3(-0.75f, -0.75f, 0.5f), Vector3::Backward},
+        {Vector3( 0.75f, -0.50f, 0.5f), Vector3::Backward},
+        {Vector3(-0.25f,  0.75f, 0.5f), Vector3::Backward},
+    }};
+    const VertexDeclaration declaration(24,
+        {VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+         VertexElement(12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0)});
+    const std::array<std::uint16_t, 3> indices{0, 1, 2};
+    VertexBuffer vertexBuffer(*device, declaration, 3, BufferUsage::None);
+    vertexBuffer.SetData(vertices.data(), 3);
+    IndexBuffer indexBuffer(*device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+    indexBuffer.SetData(indices.data(), 3);
+    device->SetVertexBuffer(&vertexBuffer);
+    device->SetIndexBuffer(&indexBuffer);
+    device->setDepthStencilStateProperty(DepthStencilState::Default);
+    BasicEffect effect(*device);
+    effect.World = Matrix::getIdentityProperty();
+    effect.View = Matrix::getIdentityProperty();
+    effect.Projection = Matrix::getIdentityProperty();
+    effect.setDiffuseColorProperty(Vector3::One);
+
+    const auto litPixels = [&] {
+        const auto viewport = device->getViewportProperty();
+        std::vector<Color> pixels(static_cast<std::size_t>(viewport.getWidthProperty()) *
+                                  static_cast<std::size_t>(viewport.getHeightProperty()));
+        device->GetBackBufferData(pixels.data(), static_cast<int>(pixels.size()));
+        return std::count_if(pixels.begin(), pixels.end(), [](const Color& pixel) {
+            return pixel.getRProperty() > 100 || pixel.getGProperty() > 100 ||
+                   pixel.getBProperty() > 100;
+        });
+    };
+    const auto draw = [&] {
+        effect.Apply();
+        device->DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 0, 1);
+    };
+    RasterizerState wire = WireState();
+    device->setRasterizerStateProperty(wire);
+    device->Clear(Color::Black);
+    EXPECT_NO_THROW(draw());
+    const auto wirePixels = litPixels();
+    EXPECT_GT(wirePixels, 10);
+
+    device->setRasterizerStateProperty(RasterizerState::CullNone);
+    device->Clear(Color::Black);
+    EXPECT_NO_THROW(draw());
+    EXPECT_GT(litPixels(), wirePixels * 3);
+
+    RasterizerState cullWire = WireState();
+    cullWire.setCullModeProperty(CullMode::CullCounterClockwiseFace);
+    device->setRasterizerStateProperty(cullWire);
+    device->Clear(Color::Black);
+    EXPECT_NO_THROW(draw());
+    EXPECT_EQ(litPixels(), 0);
+
+    RasterizerState clippedWire = WireState();
+    device->setRasterizerStateProperty(clippedWire);
+    vertices[0].position.X = -2.0f;
+    device->SetVertexBuffer(nullptr);
+    vertexBuffer.SetData(vertices.data(), 3);
+    device->SetVertexBuffer(&vertexBuffer);
+    effect.Apply();
+    device->Clear(Color::Black);
+    EXPECT_NO_THROW(device->DrawIndexedPrimitives(
+        PrimitiveType::TriangleList, 0, 0, 3, 0, 1));
+    EXPECT_GT(litPixels(), 10);
+}
+
+TEST_F(EasyGLUnsupportedWireFrameTest,
        UnclippedAndClippedPositionColorTrianglesDrawWithoutRasterizerSideEffects)
 {
     auto vertices = Triangle();

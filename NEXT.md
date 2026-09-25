@@ -1,5 +1,30 @@
 # NEXT.md
 
+## SAMPLE-055 indexed EasyGL wireframe route (2026-09-25)
+
+The Skinned Model Extensions requalification exposed an additional GLES3 boundary:
+its unchanged XNA sphere primitive draws indexed PositionNormal triangles using
+`FillMode::WireFrame`, default depth and face culling. Mesa GLES3 has no native
+polygon-mode extension. The earlier bounded route served nonindexed PositionColor
+triangles, so this path correctly refused. A first indexed line-loop route still
+refused polygons crossing the view boundary. EasyGL now has a generic bounded
+indexed PositionNormal route that reads the declared 24-byte stock layout,
+clips in homogeneous space, interpolates position and normal, applies face
+culling, and draws the visible polygon boundary using the stock lit program
+and GPU depth test. It refuses unsupported layouts, render targets, MSAA,
+scissor, stencil, depth bias, custom/compiled effects, multiple streams and
+other unrepresented states. `GraphicsCapability::WireFrame` remains false
+without a native polygon-mode API.
+
+All seven `EasyGLUnsupportedWireFrameTest` cases pass under the private
+OPENGLES3 GPU runner. The rebuilt native sample runs animation, moving
+wireframe spheres, bone controls and Escape. Frozen XNA/native sphere captures
+at 0.5 and 0.9 seconds agree within eight RGB levels at 99.92% of pixels,
+with matching foreground bounds. The final WebGL2 gallery bundle also passes
+system Chrome. See `plans/plan_software.md` SOFTWARE-178 and
+`../cna-samples/samples/SkinnedModelExtensions/missing.md`. No sharp-runtime
+change was needed.
+
 ## SAMPLE-048 EasyGL wireframe boundary (2026-09-25)
 
 The Triangle Picking requalification found that Mesa GLES without `GL_NV_polygon_mode`

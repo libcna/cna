@@ -1623,7 +1623,8 @@ namespace CNA::Internal::Renderers::EasyGL
         // state, and it cannot cover SpriteBatch, compiled-effect, multi-stream and instanced paths
         // uniformly. Desktop GL is native; GLES/WebGL use their optional native polygon-mode
         // extensions. A context with neither reports false; a bounded stock triangle route
-        // draws complete or homogeneously clipped PositionColor polygons as line loops.
+        // draws complete or homogeneously clipped PositionColor polygons as line loops, and
+        // complete or clipped indexed PositionNormal polygons with CPU culling and GPU depth testing.
         // Other unsupported triangle draws refuse.
         enum class NativeWireframeApi
         {
@@ -1670,6 +1671,12 @@ namespace CNA::Internal::Renderers::EasyGL
             const Matrix& view, const Matrix& projection, PrimitiveType primitive,
             int primitiveCount, const GpuDrawParams& params,
             std::vector<std::vector<std::array<std::uint8_t, 16>>>& clippedPolygons) const;
+        [[nodiscard]] bool CanDrawStockIndexedWireframeAsLineLoops(
+            const EasyGLVertexBufferRenderer& vb, const EasyGLIndexBufferRenderer& ib,
+            const Matrix& world, const Matrix& view, const Matrix& projection,
+            PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+            std::vector<int>& visibleTriangles,
+            std::vector<std::vector<std::array<std::uint8_t, 24>>>& clippedPolygons) const;
 
         void EnsureColored3DProgram();
         void EnsureTextured3DProgram();
