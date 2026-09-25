@@ -62,6 +62,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
     cna_register_renderer_test(NAME DirectX11_Smoke COMMAND ${_directx11_smoke_cmd}
         TIMEOUT 60 LABELS "DIRECTX11")
 
+    if(CNA_PLATFORM STREQUAL "WIN32")
+        cna_directx11_test(cna_test_directx11_win32_hardware_smoke
+            directx11_win32_hardware_smoke.cpp)
+        cna_register_renderer_test(NAME DirectX11_Win32HardwareSmoke
+            COMMAND $<TARGET_FILE:cna_test_directx11_win32_hardware_smoke>
+            TIMEOUT 60 LABELS "DIRECTX11;Win32")
+    endif()
+
     if(CNA_DIRECTX11_COMPILED_EFFECTS)
         cna_directx11_ctest_command(_directx11_compiled_effects_cmd CnaRendererTests)
         cna_register_renderer_test(NAME DirectX11_CompiledEffects
