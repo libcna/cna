@@ -504,3 +504,73 @@ its original inventory is **969 cases in 124 suites**. Build logs:
 `C:\rv\logs\dx11-modern-gtest-build-3.log`; inventory:
 `C:\rv\logs\dx11-modern-gtest-list.txt`. No system tool or dependency was
 installed, and no GPU result is inferred from this compilation fix.
+
+WIN11-0028: the first full modern binary ran on the private desktop with
+`CNA_D3D11_DEBUG_LAYER=1` and the renderer's explicit
+`D3D_DRIVER_TYPE_HARDWARE` device creation. Exact command:
+
+```powershell
+$env:CNA_D3D11_DEBUG_LAYER='1'
+C:\rv\work\private_desktop_awake.exe 7200000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no'
+```
+
+The original 969 tests finished in 1,380,716 ms: **684 pass, 22 fail, 263
+skip**; log `C:\rv\logs\dx11-modern-gtest-baseline.log`. No D3D11 debug-layer
+warning, error, or corruption was recorded. All 22 failures were tests that
+expected shader behavior or a deeper fallback reason without first checking
+that their GLSL/SPIR-V/WGSL package has an HLSL variant. The groups were:
+AerialPerspective 2, CRT 6, ClusteredForward 1, ContactShadow 3, DepthEffect
+5, EffectPass 1, SSAO 1, and TransparentPhase 3. TransparentPhase threw while
+constructing an unusable shader package before its existing validity check;
+its revised test checks package selection first and now treats an available
+variant that fails compilation as a real failure. These are test precondition
+defects on this renderer, but the missing HLSL shader variants remain genuine
+DX11 modern capability gaps. None is counted as implemented by changing a
+test to skip. A rebuilt rerun is pending.
+
+### DX11 current modern renderer-interface inventory
+
+This is an implementation inventory from `IGraphicsRenderer` and the current
+DirectX11 renderer, not a completed modern gate. Rows with missing code are
+open engineering work even when a test correctly skips for the absent feature.
+
+| Current CNAEXT contract area | DX11 status after WIN11-0028 |
+|---|---|
+| Graphics-device lifecycle, classic/modern draw sequencing, MSAA/MRT, float targets and readback | Existing native paths; classic corpus passed. Modern state isolation remains to test. |
+| HLSL vertex/fragment ShaderEffect intake, reflection, named uniforms and 2D/cube/volume SRVs | Native compiler and binding path exists. Explicit HLSL stage reporting and package-selection test added; stock CNAEXT shader packages mostly lack HLSL variants. Volume sampling's separate capability flag remains false pending pixel proof. |
+| Modern vertex/index input, multiple streams and instancing | Existing native draw paths. Base-instance support is not yet advertised; direct first-instance behavior remains to implement and test. |
+| GPU elapsed-time queries | Native D3D11 timestamp/disjoint query path, with physical Intel workload and in-flight range tests passed (WIN11-0029). |
+| Indirect indexed/nonindexed draws and argument-only/transfer buffers | Native GPU-fetched draw path, with physical Intel count/offset and byte-transfer tests passed (WIN11-0029). Storage/constant buffer roles remain unimplemented. |
+| Compute shaders, dispatch, shader storage and constant-buffer binding | Representable by D3D11; renderer currently reports no compute support and does not create a compute program or UAV-backed storage buffer. |
+| Storage textures, compute images, compute sampled textures, compute/graphics hazards | Representable by D3D11; not implemented in this renderer. |
+| Sampled Texture2DArray and layer/mip transfers | Representable by D3D11; no renderer array record/factory or sampled binding yet. |
+| Shadow reception and image-based lighting in modern effects | Interface correctly reports false; DX11 stock PBR shader does not yet consume shadow/IBL bindings. |
+| GPU debug markers and modern resource-limit reporting | Marker override absent; most modern limits retain interface defaults. Native D3D11 capabilities need measured values when the corresponding paths are implemented. |
+
+WIN11-0029: DX11 now advertises only the HLSL graphics stages it compiles,
+and a portable HLSL shader-package selection/compile test passes. It logs the
+selected DXGI adapter on every device creation; the focused runs print
+`8086:46A6`, `software=0`, feature level `0xB100`, debug layer enabled.
+Native timestamp and disjoint queries supply GPU time in nanoseconds without
+a CPU-clock substitute. D3D11 indirect argument buffers are GPU-fetched by
+`DrawInstancedIndirect`/`DrawIndexedInstancedIndirect`, use the required
+`DRAWINDIRECT_ARGS` resource flag, and retain exact byte-range upload,
+readback and GPU-copy behavior. Cross-device argument records are refused.
+The renderer does not yet advertise storage-buffer or compute support.
+
+Focused private-desktop Intel runs with `CNA_D3D11_DEBUG_LAYER=1`:
+
+| Command filter / log | Result | Evidence |
+|---|---|---|
+| `GpuTimerTest.*:IndirectDrawTest.*:ShaderPackageOverloadTest.NativeHlslPackageCompilesOnADeclaredHlslRenderer` (`dx11-modern-timer-indirect-focused.log`) | 19 selected, 16 pass, 3 truthful opposite-capability skips, 0 fail | GPU timestamp 4/40/160 draw sequence: 0.2159/3.0178/22.3097 ms; same-buffer indirect count and offset probes pass; no debug messages. |
+| The original failure groups (`dx11-modern-baseline-failures-focused.log`) | 43 selected, 20 pass, 23 truthful missing-variant skips, 0 fail | All 22 original failures now check an actually usable shader variant before asserting shader behavior; a declared variant that fails compilation remains a failure. |
+| `IndirectDrawTest.NativeArgumentBufferTransfersKeepExactByteRanges` (`dx11-modern-indirect-transfer.log`) | 1 pass | Non-DWORD partial upload, readback and GPU copy preserve exact bytes; debug layer clean. |
+
+The refreshed binary registered **971 tests**. Its full Intel Iris Xe run
+completed through the private desktop with `CNA_D3D11_DEBUG_LAYER=1`:
+**699 passed, 272 skipped, 0 failed** in 1,401,303 ms. The log is
+`C:\rv\logs\dx11-modern-gtest-rerun-1.log`; selected adapter is repeatedly
+`8086:46A6`, `software=0`, feature level `0xB100`, and the debug layer recorded
+zero warnings/errors. The modern conformance tally was one case/three checks
+run and seven skipped. These counts precede the separate compute implementation
+and must not be used as its acceptance result.

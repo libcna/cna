@@ -66,6 +66,10 @@ namespace {
     {                                                                                        \
         if (!(device).SupportsCapability(CNA::GraphicsCapability::CustomEffects))            \
             GTEST_SKIP() << "this renderer accepts no custom effects";                       \
+        if ((effect).GetSelectedShaderLanguageEXT() == CNA::ShaderLanguageEXT::Unknown        \
+            && (device).SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Hlsl,              \
+                                                   CNA::ShaderStageEXT::Vertex))              \
+            GTEST_SKIP() << "the CRT shader package has no HLSL variant";                   \
         ASSERT_TRUE((effect).IsEffectValid()) << (effect).GetCompileErrorEXT();               \
         CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(device);                                     \
     } while (false)

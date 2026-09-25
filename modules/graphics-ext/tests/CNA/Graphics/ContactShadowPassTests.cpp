@@ -390,6 +390,8 @@ TEST(ContactShadowPassTest, WithoutDepthTheFrameIsCopiedThroughAndTheReasonIsNam
     auto scene = MakeFlatScene(gd, 200);
     RenderTarget2D destination(gd, kSize, kSize);
     ContactShadowPass pass(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the contact-shadow shader package";
     AimTheRay(pass, 12.0f);
 
     PostProcessContext context = MakeContext(scene.get(), nullptr, &destination);
@@ -410,6 +412,8 @@ TEST(ContactShadowPassTest, WithoutAFarPlaneTheStoredDepthHasNoScaleAndThePassRe
     auto depth = MakeContactDepth(gd);
     RenderTarget2D destination(gd, kSize, kSize);
     ContactShadowPass pass(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the contact-shadow shader package";
     AimTheRay(pass, 12.0f);
 
     PostProcessContext context = MakeContext(scene.get(), depth.get(), &destination);
@@ -429,6 +433,8 @@ TEST(ContactShadowPassTest, WithoutAViewMatrixTheLightDirectionCannotBePlacedAnd
     auto depth = MakeContactDepth(gd);
     RenderTarget2D destination(gd, kSize, kSize);
     ContactShadowPass pass(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the contact-shadow shader package";
     AimTheRay(pass, 12.0f);
 
     PostProcessContext context = MakeContext(scene.get(), depth.get(), &destination);

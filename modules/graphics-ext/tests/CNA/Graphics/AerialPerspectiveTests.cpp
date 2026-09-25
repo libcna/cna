@@ -279,6 +279,8 @@ TEST(AerialPerspectiveTest, WithoutDepthTheFrameIsCopiedThroughAndTheReasonIsNam
     auto scene = MakeFlatScene(gd, 200);
     RenderTarget2D destination(gd, kSize, kSize);
     AerialPerspectivePass pass(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the aerial-perspective shader package";
 
     PostProcessContext context = MakeContext(scene.get(), nullptr, &destination);
     pass.apply(context);
@@ -297,6 +299,8 @@ TEST(AerialPerspectiveTest, WithoutCameraMatricesThePassRefuses)
     auto depth = MakeFlatDepth(gd, 5000.0f);
     RenderTarget2D destination(gd, kSize, kSize);
     AerialPerspectivePass pass(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the aerial-perspective shader package";
 
     PostProcessContext context = MakeContext(scene.get(), depth.get(), &destination);
     context.inverseView = Matrix();

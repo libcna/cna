@@ -5,6 +5,7 @@
 
 #include "CNA/LogCategory.hpp"
 #include "CNA/Logger.hpp"
+#include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 
@@ -82,7 +83,12 @@ namespace CNA::Graphics::detail {
             }
         }
         else if (effect == nullptr)
-            message += " The effect was never created -- the renderer accepts no custom effects.";
+        {
+            message += device.SupportsCapability(CNA::GraphicsCapability::CustomEffects)
+                ? " The effect was never created because its package has no usable shader "
+                  "variant for this renderer."
+                : " The effect was never created because this renderer accepts no custom effects.";
+        }
         else
             message += " This renderer keeps no compiler log.";
 

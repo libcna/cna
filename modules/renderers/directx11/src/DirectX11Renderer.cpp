@@ -1,7 +1,9 @@
 // plans/plan_dx.md Phase DIRECTX2/DIRECTX4: D3D11 renderer skeleton + device/swap-chain/back-buffer.
 #include "CNA/Logger.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
 #include "CNA/Internal/Renderers/DirectX11/DirectX11Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11Buffers.hpp"
+#include "CNA/Internal/Renderers/DirectX11/D3D11IndirectBuffer.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11Textures.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11RenderTargets.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11OcclusionQuery.hpp"
@@ -30,6 +32,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iterator>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -38,6 +41,73 @@ namespace CNA::Internal::Renderers::DirectX11
 {
     namespace
     {
+        class D3D11GpuTimerRenderer final : public IGpuTimerRenderer
+        {
+        public:
+            D3D11GpuTimerRenderer(ID3D11Device* device, ID3D11DeviceContext* context)
+                : context_(context)
+            {
+                D3D11_QUERY_DESC description{};
+                description.Query = D3D11_QUERY_TIMESTAMP_DISJOINT;
+                if (FAILED(device->CreateQuery(&description, disjoint_.GetAddressOf())))
+                    throw std::runtime_error("D3D11 GPU timer: disjoint query creation failed");
+                description.Query = D3D11_QUERY_TIMESTAMP;
+                if (FAILED(device->CreateQuery(&description, start_.GetAddressOf())) ||
+                    FAILED(device->CreateQuery(&description, end_.GetAddressOf())))
+                    throw std::runtime_error("D3D11 GPU timer: timestamp query creation failed");
+            }
+
+            void Begin() override
+            {
+                ready_ = false;
+                ended_ = false;
+                context_->Begin(disjoint_.Get());
+                context_->End(start_.Get());
+            }
+
+            void End() override
+            {
+                context_->End(end_.Get());
+                context_->End(disjoint_.Get());
+                ended_ = true;
+            }
+
+            [[nodiscard]] bool IsResultAvailable() const override
+            {
+                if (!ended_) return false;
+                if (ready_) return true;
+                D3D11_QUERY_DATA_TIMESTAMP_DISJOINT disjoint{};
+                UINT64 start = 0;
+                UINT64 end = 0;
+                constexpr UINT flags = D3D11_ASYNC_GETDATA_DONOTFLUSH;
+                if (context_->GetData(disjoint_.Get(), &disjoint, sizeof(disjoint), flags) != S_OK ||
+                    context_->GetData(start_.Get(), &start, sizeof(start), flags) != S_OK ||
+                    context_->GetData(end_.Get(), &end, sizeof(end), flags) != S_OK)
+                    return false;
+                nanoseconds_ = disjoint.Disjoint || disjoint.Frequency == 0 || end < start
+                    ? 0
+                    : static_cast<std::uint64_t>(
+                          static_cast<long double>(end - start) * 1.0e9L /
+                          static_cast<long double>(disjoint.Frequency));
+                ready_ = true;
+                return true;
+            }
+
+            [[nodiscard]] std::uint64_t ElapsedNanoseconds() const override
+            {
+                return IsResultAvailable() ? nanoseconds_ : 0;
+            }
+
+        private:
+            ComPtr<ID3D11DeviceContext> context_;
+            ComPtr<ID3D11Query> disjoint_;
+            ComPtr<ID3D11Query> start_;
+            ComPtr<ID3D11Query> end_;
+            bool ended_ = false;
+            mutable bool ready_ = false;
+            mutable std::uint64_t nanoseconds_ = 0;
+        };
+
         std::string FormatHr(HRESULT hr)
         {
             char buf[32];
@@ -500,6 +570,17 @@ namespace CNA::Internal::Renderers::DirectX11
         hr = dxgiDevice->GetParent(IID_PPV_ARGS(adapter.ReleaseAndGetAddressOf()));
         if (FAILED(hr))
             throw std::runtime_error("IDXGIDevice::GetParent(IDXGIAdapter) failed, hr=" + FormatHr(hr));
+
+        ComPtr<IDXGIAdapter1> adapter1;
+        DXGI_ADAPTER_DESC1 adapterDescription{};
+        if (FAILED(adapter.As(&adapter1)) || FAILED(adapter1->GetDesc1(&adapterDescription)))
+            throw std::runtime_error("D3D11 could not identify its selected DXGI adapter");
+        char adapterIdentity[96];
+        std::snprintf(adapterIdentity, sizeof(adapterIdentity),
+                      "D3D11 selected DXGI adapter PCI %04X:%04X, software=%u",
+                      adapterDescription.VendorId, adapterDescription.DeviceId,
+                      (adapterDescription.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0 ? 1u : 0u);
+        CNA::Logger::Info(adapterIdentity, CNA::LogCategory::RENDER);
 
         hr = adapter->GetParent(IID_PPV_ARGS(factory_.ReleaseAndGetAddressOf()));
         if (FAILED(hr))
@@ -1399,6 +1480,42 @@ namespace CNA::Internal::Renderers::DirectX11
         UINT support = 0;
         return SUCCEEDED(device_->CheckFormatSupport(DXGI_FORMAT_R16G16B16A16_FLOAT, &support)) &&
                (support & D3D11_FORMAT_SUPPORT_SHADER_SAMPLE) != 0;
+    }
+
+    bool DirectX11Renderer::SupportsShaderLanguageEXT(int language, int stage) const
+    {
+        return device_ != nullptr &&
+               language == static_cast<int>(CNA::ShaderLanguageEXT::Hlsl) &&
+               (stage == static_cast<int>(CNA::ShaderStageEXT::Vertex) ||
+                stage == static_cast<int>(CNA::ShaderStageEXT::Fragment));
+    }
+
+    bool DirectX11Renderer::SupportsGpuTimerEXT() const
+    {
+        return device_ != nullptr && featureLevel_ >= D3D_FEATURE_LEVEL_10_0;
+    }
+
+    std::unique_ptr<IGpuTimerRenderer> DirectX11Renderer::CreateGpuTimerEXT()
+    {
+        if (!SupportsGpuTimerEXT()) return nullptr;
+        return std::make_unique<D3D11GpuTimerRenderer>(device_.Get(), context_.Get());
+    }
+
+    bool DirectX11Renderer::SupportsIndirectDrawEXT() const
+    {
+        return device_ != nullptr && featureLevel_ >= D3D_FEATURE_LEVEL_11_0;
+    }
+
+    std::unique_ptr<IStorageBufferRenderer> DirectX11Renderer::CreateStorageBufferEXT(
+        std::size_t byteSize, std::uint32_t usage, std::uint32_t cpuAccess)
+    {
+        constexpr std::uint32_t supportedUsage = UINT32_C(0x0E);
+        if (!SupportsIndirectDrawEXT() || usage == 0 || (usage & ~supportedUsage) != 0 ||
+            (cpuAccess & ~UINT32_C(0x03)) != 0 || byteSize == 0 ||
+            byteSize > static_cast<std::size_t>(std::numeric_limits<UINT>::max() - 3))
+            return nullptr;
+        return std::make_unique<D3D11IndirectBuffer>(
+            device_.Get(), context_.Get(), byteSize, usage, cpuAccess);
     }
 
     bool DirectX11Renderer::LoadsCompressedContentNativelyEXT() const
@@ -2476,7 +2593,8 @@ namespace CNA::Internal::Renderers::DirectX11
     void DirectX11Renderer::DrawPrimitivesExImpl(
         const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
         const Matrix& world, const Matrix& view, const Matrix& projection,
-        PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
+        PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+        ID3D11Buffer* indirectArguments, UINT indirectByteOffset)
     {
         // DX-62/DX-63/DX-64/DX-65/DX-66/DX-67: real effect-aware variant dispatch.
         const auto& d3dVb = static_cast<const D3D11VertexBufferRenderer&>(vb);
@@ -2505,7 +2623,14 @@ namespace CNA::Internal::Renderers::DirectX11
             context_->IASetPrimitiveTopology(ToD3D11Topology(primitive));
             const UINT elementCount = static_cast<UINT>(
                 VertexCountForPrimitives(primitive, primitiveCount));
-            if (ib != nullptr)
+            if (indirectArguments != nullptr)
+            {
+                if (ib != nullptr)
+                    context_->DrawIndexedInstancedIndirect(indirectArguments, indirectByteOffset);
+                else
+                    context_->DrawInstancedIndirect(indirectArguments, indirectByteOffset);
+            }
+            else if (ib != nullptr)
                 context_->DrawIndexed(elementCount, static_cast<UINT>(params.startIndex),
                                       static_cast<INT>(params.baseVertex));
             else
@@ -2544,7 +2669,14 @@ namespace CNA::Internal::Renderers::DirectX11
             context_->IASetPrimitiveTopology(ToD3D11Topology(primitive));
             const UINT elementCount = static_cast<UINT>(
                 VertexCountForPrimitives(primitive, primitiveCount));
-            if (ib != nullptr)
+            if (indirectArguments != nullptr)
+            {
+                if (ib != nullptr)
+                    context_->DrawIndexedInstancedIndirect(indirectArguments, indirectByteOffset);
+                else
+                    context_->DrawInstancedIndirect(indirectArguments, indirectByteOffset);
+            }
+            else if (ib != nullptr)
                 context_->DrawIndexed(elementCount, static_cast<UINT>(params.startIndex),
                                       static_cast<INT>(params.baseVertex));
             else
@@ -3288,8 +3420,11 @@ namespace CNA::Internal::Renderers::DirectX11
             // each fetched index). Previously both were hardcoded 0, so any indexed draw at a
             // non-zero offset silently read from the start of the buffers.
             const UINT indexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
-            context_->DrawIndexed(indexCount, static_cast<UINT>(params.startIndex),
-                                  static_cast<INT>(params.baseVertex));
+            if (indirectArguments != nullptr)
+                context_->DrawIndexedInstancedIndirect(indirectArguments, indirectByteOffset);
+            else
+                context_->DrawIndexed(indexCount, static_cast<UINT>(params.startIndex),
+                                      static_cast<INT>(params.baseVertex));
         }
         else
         {
@@ -3298,7 +3433,10 @@ namespace CNA::Internal::Renderers::DirectX11
             // non-zero startVertex silently re-rendered vertices from index 0 (the root cause of the
             // DirectX11_Pbr_VertexColor quad-D no-draw: DrawPrimitives(..., 6, 2) drew vertices 0..5).
             const UINT vertexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
-            context_->Draw(vertexCount, static_cast<UINT>(params.vertexStart));
+            if (indirectArguments != nullptr)
+                context_->DrawInstancedIndirect(indirectArguments, indirectByteOffset);
+            else
+                context_->Draw(vertexCount, static_cast<UINT>(params.vertexStart));
         }
     }
 
@@ -3315,6 +3453,34 @@ namespace CNA::Internal::Renderers::DirectX11
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
         DrawPrimitivesExImpl(vb, &ib, world, view, projection, primitive, primitiveCount, params);
+    }
+
+    void DirectX11Renderer::DrawPrimitivesIndirectEXT(
+        const IVertexBufferRenderer& vb, const Matrix& world, const Matrix& view,
+        const Matrix& projection, PrimitiveType primitive,
+        const IStorageBufferRenderer& argumentBuffer, int argumentByteOffset,
+        const GpuDrawParams& params)
+    {
+        const auto* d3dBuffer = dynamic_cast<const D3D11IndirectBuffer*>(&argumentBuffer);
+        if (d3dBuffer == nullptr || d3dBuffer->GetDeviceEXT() != device_.Get() ||
+            argumentByteOffset < 0)
+            throw System::NotSupportedException("DirectX11 indirect draw needs a native argument buffer.");
+        DrawPrimitivesExImpl(vb, nullptr, world, view, projection, primitive, 0, params,
+                             d3dBuffer->GetBufferEXT(), static_cast<UINT>(argumentByteOffset));
+    }
+
+    void DirectX11Renderer::DrawIndexedPrimitivesIndirectEXT(
+        const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
+        const Matrix& world, const Matrix& view, const Matrix& projection,
+        PrimitiveType primitive, const IStorageBufferRenderer& argumentBuffer,
+        int argumentByteOffset, const GpuDrawParams& params)
+    {
+        const auto* d3dBuffer = dynamic_cast<const D3D11IndirectBuffer*>(&argumentBuffer);
+        if (d3dBuffer == nullptr || d3dBuffer->GetDeviceEXT() != device_.Get() ||
+            argumentByteOffset < 0)
+            throw System::NotSupportedException("DirectX11 indexed indirect draw needs a native argument buffer.");
+        DrawPrimitivesExImpl(vb, &ib, world, view, projection, primitive, 0, params,
+                             d3dBuffer->GetBufferEXT(), static_cast<UINT>(argumentByteOffset));
     }
 
     void DirectX11Renderer::DrawInstancedPrimitivesEx(

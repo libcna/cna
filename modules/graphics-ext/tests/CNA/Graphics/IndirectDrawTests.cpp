@@ -29,6 +29,7 @@
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "EngineTestSupport.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -122,6 +123,36 @@ TEST(IndirectDrawTest, TheCommandBarrierIsItsOwnBitAndIsPartOfAll)
                                 GraphicsMemoryBarrier::IndirectCommand));
 }
 
+TEST(IndirectDrawTest, NativeArgumentBufferTransfersKeepExactByteRanges)
+{
+    CnaTest::EngineLayer::HiDefDevice device;
+    if (!CanRunIndirect(device)) GTEST_SKIP() << "this renderer has no indirect draw route";
+
+    const StorageBufferDescriptor descriptor(
+        48,
+        StorageBufferUsage::IndirectArguments | StorageBufferUsage::TransferSource |
+            StorageBufferUsage::TransferDestination,
+        StorageBufferCpuAccess::Read | StorageBufferCpuAccess::Write);
+    StorageBuffer source(device, descriptor);
+    StorageBuffer destination(device, descriptor);
+    std::array<std::uint8_t, 48> expected{};
+    for (std::size_t index = 0; index < expected.size(); ++index)
+        expected[index] = static_cast<std::uint8_t>(index * 5u + 3u);
+    source.setBytes(expected.data(), expected.size());
+
+    const std::array<std::uint8_t, 7> patch{91, 82, 73, 64, 55, 46, 37};
+    source.setBytes(5, patch.data(), patch.size());
+    std::copy(patch.begin(), patch.end(), expected.begin() + 5);
+    std::array<std::uint8_t, 48> actual{};
+    source.getBytes(actual.data(), actual.size());
+    EXPECT_EQ(actual, expected);
+
+    source.copyTo(destination, 3, 17, 13);
+    std::array<std::uint8_t, 13> copied{};
+    destination.getBytes(17, copied.data(), copied.size());
+    EXPECT_TRUE(std::equal(copied.begin(), copied.end(), expected.begin() + 3));
+}
+
 TEST(IndirectDrawTest, ARendererWithoutTheCapabilityRefusesByName)
 {
     CnaTest::EngineLayer::HiDefDevice device;
@@ -174,6 +205,31 @@ TEST(IndirectDrawTest, ADrawWithNothingBoundStillRefusesBeforeTheGpuSeesIt)
     EXPECT_THROW(device.DrawPrimitivesIndirectEXT(PrimitiveType::TriangleList,
                                                   *arguments.getRendererEXT(), 0),
                  std::runtime_error);
+}
+
+TEST(IndirectDrawTest, AForeignDeviceArgumentBufferIsRefusedBeforeSubmission)
+{
+    CnaTest::EngineLayer::HiDefDevice drawDevice;
+    CnaTest::EngineLayer::HiDefDevice bufferDevice;
+    if (drawDevice.GetGraphicsRendererName() != "DIRECTX11")
+        GTEST_SKIP() << "this native device-isolation probe targets DirectX 11";
+    if (!CanRunIndirect(drawDevice) || !CanRunIndirect(bufferDevice))
+        GTEST_SKIP() << "this renderer has no indirect draw route";
+
+    StorageBuffer arguments(
+        bufferDevice, CpuIndirectDescriptor(sizeof(IndirectDrawArguments)));
+    const auto triangle = CoveringTriangle();
+    VertexBuffer vertices(drawDevice, 3);
+    vertices.SetData(triangle.data(), 3);
+    BasicEffect effect(drawDevice);
+    effect.VertexColorEnabled = true;
+    drawDevice.SetVertexBuffer(&vertices);
+    effect.Apply();
+    EXPECT_THROW(
+        drawDevice.DrawPrimitivesIndirectEXT(
+            PrimitiveType::TriangleList, *arguments.getRendererEXT(), 0),
+        System::NotSupportedException);
+    drawDevice.SetVertexBuffer(nullptr);
 }
 
 TEST(IndirectDrawTest, TheCountsReallyComeFromTheBuffer)

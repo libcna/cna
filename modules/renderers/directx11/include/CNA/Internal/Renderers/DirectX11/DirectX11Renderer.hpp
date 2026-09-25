@@ -182,6 +182,14 @@ namespace CNA::Internal::Renderers::DirectX11
         }
 
         /**
+         * @brief Reports the HLSL stages this renderer compiles from shader packages.
+         * @param language ShaderLanguageEXT ordinal.
+         * @param stage ShaderStageEXT ordinal.
+         * @return True for implemented HLSL vertex and fragment stages.
+         */
+        [[nodiscard]] bool SupportsShaderLanguageEXT(int language, int stage) const override;
+
+        /**
          * @brief Reports the complete runtime-backed D3D11 capability surface.
          *
          * @param capability Capability to query.
@@ -198,6 +206,32 @@ namespace CNA::Internal::Renderers::DirectX11
          * @return True when the device reports filtered sampling of R16G16B16A16_FLOAT.
          */
         [[nodiscard]] bool SupportsHalfFloatTextureLinearFilteringEXT() const override;
+
+        /**
+         * @brief Reports native D3D11 disjoint timestamp-query support.
+         * @return True when this device can issue timestamp queries.
+         */
+        [[nodiscard]] bool SupportsGpuTimerEXT() const override;
+        /**
+         * @brief Creates a native GPU elapsed-time query for this device.
+         * @return A timestamp query, or null when unsupported.
+         */
+        std::unique_ptr<IGpuTimerRenderer> CreateGpuTimerEXT() override;
+
+        /**
+         * @brief Reports native GPU-fetched indirect draw support.
+         * @return True when indirect draw commands can be issued.
+         */
+        [[nodiscard]] bool SupportsIndirectDrawEXT() const override;
+        /**
+         * @brief Creates a buffer for indirect arguments and byte transfers.
+         * @param byteSize Logical allocation size in bytes.
+         * @param usage Declared portable usage bits.
+         * @param cpuAccess Declared portable CPU access bits.
+         * @return Native buffer, or null for unsupported roles or sizes.
+         */
+        std::unique_ptr<IStorageBufferRenderer> CreateStorageBufferEXT(
+            std::size_t byteSize, std::uint32_t usage, std::uint32_t cpuAccess) override;
 
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;
@@ -474,6 +508,40 @@ namespace CNA::Internal::Renderers::DirectX11
                                        PrimitiveType primitive, int primitiveCount, int instanceCount,
                                        const GpuDrawParams& params) override;
 
+        /**
+         * @brief Draws nonindexed primitives using GPU-fetched argument words.
+         * @param vb Bound vertex buffer.
+         * @param world World transform.
+         * @param view View transform.
+         * @param projection Projection transform.
+         * @param primitive Primitive topology.
+         * @param argumentBuffer Native indirect-argument buffer.
+         * @param argumentByteOffset Aligned byte offset of the command.
+         * @param params Effect and graphics-state parameters.
+         */
+        void DrawPrimitivesIndirectEXT(
+            const IVertexBufferRenderer& vb, const Matrix& world, const Matrix& view,
+            const Matrix& projection, PrimitiveType primitive,
+            const IStorageBufferRenderer& argumentBuffer, int argumentByteOffset,
+            const GpuDrawParams& params) override;
+        /**
+         * @brief Draws indexed primitives using GPU-fetched argument words.
+         * @param vb Bound vertex buffer.
+         * @param ib Bound index buffer.
+         * @param world World transform.
+         * @param view View transform.
+         * @param projection Projection transform.
+         * @param primitive Primitive topology.
+         * @param argumentBuffer Native indirect-argument buffer.
+         * @param argumentByteOffset Aligned byte offset of the command.
+         * @param params Effect and graphics-state parameters.
+         */
+        void DrawIndexedPrimitivesIndirectEXT(
+            const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
+            const Matrix& world, const Matrix& view, const Matrix& projection,
+            PrimitiveType primitive, const IStorageBufferRenderer& argumentBuffer,
+            int argumentByteOffset, const GpuDrawParams& params) override;
+
         // ---- IGraphicsRenderer: real (Phase DX9, DX-70/DX-71/DX-72) ----
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
 
@@ -533,7 +601,9 @@ namespace CNA::Internal::Renderers::DirectX11
         void DrawPrimitivesExImpl(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                   PrimitiveType primitive, int primitiveCount,
-                                  const GpuDrawParams& params);
+                                  const GpuDrawParams& params,
+                                  ID3D11Buffer* indirectArguments = nullptr,
+                                  UINT indirectByteOffset = 0);
 
         [[nodiscard]] Matrix ApplyXnaPixelCenterEXT(const Matrix& transform) const;
 

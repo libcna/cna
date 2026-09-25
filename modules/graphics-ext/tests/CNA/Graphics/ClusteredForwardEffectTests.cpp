@@ -841,6 +841,7 @@ TEST(ClusteredForwardEffectTest, ATransmissiveMaterialWithoutAnOpaqueFrameIsRefu
     // never implemented.
     CnaTest::EngineLayer::HiDefDevice gd;
     ClusteredForwardEffect effect(gd);
+    if (!effect.isSupported()) GTEST_SKIP() << "this renderer cannot run the clustered effect";
 
     const ClusteredLightGrid grid = MakeGrid();
     ClusteredLightAssignment assignment;

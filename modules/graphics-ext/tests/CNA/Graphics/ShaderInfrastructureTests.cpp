@@ -784,6 +784,30 @@ TEST(ShaderPackageOverloadTest, LegacyShaderEffectReportsNoExplicitSelectedLangu
     EXPECT_EQ(effect.GetSelectedShaderLanguageEXT(), CNA::ShaderLanguageEXT::Unknown);
 }
 
+TEST(ShaderPackageOverloadTest, NativeHlslPackageCompilesOnADeclaredHlslRenderer)
+{
+    CnaTest::EngineLayer::HiDefDevice device;
+    if (!device.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                          CNA::ShaderStageEXT::Vertex) ||
+        !device.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                          CNA::ShaderStageEXT::Fragment))
+        GTEST_SKIP() << "this renderer does not consume HLSL graphics stages";
+
+    const ShaderPackageEXT package(
+        {
+            ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Vertex,
+                          "main", "native.vert.hlsl",
+                          "float4 main(float4 position : POSITION) : SV_POSITION { return position; }"),
+            ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Fragment,
+                          "main", "native.frag.hlsl",
+                          "float4 main() : SV_Target { return float4(1, 0, 0, 1); }"),
+        },
+        {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment});
+    ShaderEffect effect(device, package);
+    EXPECT_EQ(effect.GetSelectedShaderLanguageEXT(), CNA::ShaderLanguageEXT::Hlsl);
+    EXPECT_TRUE(effect.IsEffectValid()) << effect.GetCompileErrorEXT();
+}
+
 TEST(ShaderPackageOverloadTest, DerivedEffectCanRetainLegacyFallbackWhenNoVariantExists)
 {
     CnaTest::EngineLayer::HiDefDevice device;
