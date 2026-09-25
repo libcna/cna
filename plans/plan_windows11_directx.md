@@ -294,3 +294,191 @@ adapter with `software=0`; no WARP result is used as the verdict.
 | Custom ShaderEffect | `ShaderEffect_ReflectionContract` passes; its two missing-input probes cause the classified native ID 163 messages. |
 | Occlusion queries | `OcclusionQuery_Cycle`, `_VisibleQuad`, `_OccludedQuad` pass. |
 | Resource lifetime and device disposal | `Resource_*`, `Buffer_Disposed`, `DeviceResetEvents` pass, including deferred sources and bound-target lifetime. |
+
+## DX12 classic hardware campaign
+
+WIN11-0020: full native Debug build passed in `C:\rv\build\cna-win11-dx12-debug`
+(262 parity executables). The first full private-desktop hardware run selected
+Intel Iris Xe `8086:46A6`, feature level `0xC100` (12_1), with
+`CNA_D3D12_ADAPTER=hardware`, debug layer on, DRED on and GPU validation off:
+
+```powershell
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='0'
+C:\rv\work\private_desktop_awake.exe 7200000 'ctest --test-dir C:\rv\build\cna-win11-dx12-debug -C Debug -L DIRECTX12 --output-on-failure --parallel 1'
+```
+
+Result: **258/262 passed**, 4 failed, 575.56 seconds. Baseline CTest output is
+`C:\rv\logs\dx12-hardware-classic-baseline.log`, and its complete
+`LastTest.log` was preserved as
+`C:\rv\logs\dx12-hardware-baseline-lasttest.log`. Failures:
+
+| Fixture | Classification | Evidence |
+|---|---|---|
+| `CubeVolume_SetDataContract` | Test contract stale | All six RenderTargetCube faces accept and return exact uploads; fixture still required refusal. |
+| `CompressedTexture_StorageContract` | DX12 renderer | `Texture2D::GetData` refuses native BC block readback after a valid upload. |
+| `DrawRangeValidation` | Generic validation gate for DX12 | Six buffered range values are rejected by managed guards although measured XNA forwards them to native D3D. |
+| `PresentationModeContract` | Test observation error | Fixture asks DX12's logical-coordinate `ReadBackbuffer` for physical pixels; its geometry and coordinate transforms pass. |
+
+The full log has only classified D3D12 debug warnings: `Deferred_Scissor`
+intentionally applies a zero-size scissor (ID 695, three messages), and `MRT`
+binds fewer outputs than its four-output pixel shader declares (ID 679, ten
+messages). The controlled device-removal/recreation fixtures run with DRED;
+there is no unplanned device removal or DRED fault in the baseline. The
+historically WARP-sensitive `TextureFilterMipContract` and
+`DescriptorCapacityContract` both pass on the physical Intel adapter; WARP was
+not selected for this result. The four failures remain open pending focused
+hardware reruns and the shared parity-fixture expansion.
+
+WIN11-0021: focused physical Intel rerun passed the four baseline failures:
+`CubeVolume_SetDataContract` 61/61, compressed DXT storage 30/30,
+`DrawRangeValidation` 13/13, and `PresentationModeContract` 8/8, with no
+unexpected debug messages. The compressed 2D readback now copies the complete
+BC subresource through the driver's D3D12 copyable footprint and extracts the
+requested block rows; this verifies real GPU bytes, including sub-4x4 mip tails.
+The render-target cube fixture now requires exact uploads on all six faces.
+DX12 forwards buffered ranges to native D3D12 as measured XNA does. The
+presentation fixture temporarily uses identity presentation geometry while
+observing physical pixels, preserving the renderer's logical readback contract.
+
+WIN11-0022: registered 32 renderer-neutral classic parity fixtures plus
+`InstancedTexturedDraw` and `DrawLineTopology`. Initial window-attached run
+passed 11/34. Most failures were fixture geometry: Win32's actual 800x480
+client area exceeded the fixed 128-256 pixel test canvas under
+`NativeBackBuffer`, so the fixtures sampled the wrong physical regions. Five
+representative failures passed unchanged with
+`CNA_FORCE_HEADLESS_DEVICE_EXT=DIRECTX12`; the complete exact-sized offscreen
+run then passed **33/34** on the same Intel hardware. The one genuine DX12 gap
+was rich stock-effect instancing, which rejected an implicit four-column
+64-byte matrix stream. DX12 now reads those columns from its existing upload
+shadow and issues effect-aware GPU draws per instance; the plain colored path
+retains native `DrawIndexedInstanced`. The focused rich fixture passed **37/37**
+with no D3D12 debug messages. The 34 parity CTest registrations now request
+the exact-sized offscreen device. Swap-chain presentation is still covered by
+the separate window-attached Win32 tests. Full rebuilt-suite and stress
+results are pending.
+
+WIN11-0023: complete rebuilt native Debug label passed **296/296** in
+349.00 seconds on Intel `8086:46A6` with hardware selection, D3D12 debug
+layer and DRED on, GPU validation off. The complete CTest log contains 296
+sections, zero internal `[FAIL]` or `[SKIP]`, no timeout and no unplanned
+device removal. Its 17 D3D12 debug warnings are all deliberate fixture probes:
+empty scissor ID 695 (3), buffer overrun probes IDs 210/213 (3/1), and a
+four-output shader bound with fewer MRT slots ID 679 (10). There were no
+other debug-layer warnings or errors. Exact command is WIN11-0020's command,
+now against the 296-case tree; log:
+`C:\rv\logs\dx12-classic-full-hardware.log`.
+
+The private-desktop window-attached `cna_stress_directx12_win32_present.exe
+--frames 3000` passed with 3,001 observed frames, 130 resizes, 20 minimizes,
+120 resource-churn rounds, 281 backbuffer reads and 120 target reads. Warm to
+end process handles 478 to 476, private bytes 69 to 71 MiB. D3D12 debug
+corruption/error/warning totals all zero. RTV descriptors live 2, peak 3;
+SRV descriptors live 1, peak 2. Debug layer, DRED and explicit hardware
+adapter were enabled; log `C:\rv\logs\dx12-win32-stress-3000.log`.
+
+WIN11-0024: targeted GPU-based validation on Intel exposed a failure in the
+large `DescriptorCapacityContract` fixture. Legs A-C passed, including 256
+simultaneously live textured/sampled resources. Leg D's repeated draw/read
+loop then encountered a GPU hang and device removal, and later legs failed
+because the device was removed. DRED reported `DXGI_ERROR_DEVICE_HUNG`,
+breadcrumb node 16 first incomplete operation 6 (`DISPATCH`, likely GPU
+validation instrumentation because this classic fixture issues no compute),
+node 24 at 34/37 operations with first incomplete operation 15, and a page
+fault at `0x0000B802062F0000` involving two recently freed D3D12 resources
+(allocation type 34). A process dump was preserved at
+`C:\rv\artifacts\dx12-gbv-descriptor-capacity.dmp`; full log:
+`C:\rv\logs\dx12-classic-gpu-validation.log`. `InstancedTexturedDraw` also
+exceeded its 180-second CTest limit under GPU validation after passing the
+normal Debug run 37/37. Seven of the nine targeted cases passed. The cause
+of the descriptor test's GPU-validation removal remains under investigation;
+DX12 classic is **not yet closed**. DRED logging now includes command-list,
+queue and allocation names where the runtime supplies them, and CNA names
+its main D3D12 lists and texture/buffer/target resources for a focused rerun.
+
+WIN11-0025: the same physical Intel device passed four smaller GPU-validation
+cases (`DescriptorAllocator`, `Resource_BoundDispose`,
+`Resource_DeferredSourceLifetime`, `Parity_instanced_draw`) with debug layer and
+DRED enabled and no removal; log `C:\rv\logs\dx12-gbv-small-lifetime.log`.
+The descriptor-capacity fixture gained an optional `--legs` diagnostic selector;
+ordinary CTest still runs every leg. Under Intel GPU validation, D alone,
+C+D, and A+D passed; A+B+C+D reproduced the hang at D. The named DRED rerun
+identified two recently freed `CNA Texture2D resource` objects at the page
+fault VA. Its first incomplete `DISPATCH` belonged to the debug layer's own
+GBV queue, and an application frame list's first incomplete operation was a
+resource barrier; log `C:\rv\logs\dx12-gbv-descriptor-legs-abcd-names.log`.
+Explicit WARP, used solely as a differential, completed D after A+B+C without
+a device removal, but failed B/C sampler expectations, so it is not used as a
+parity verdict; log `C:\rv\logs\dx12-gbv-descriptor-legs-abcd-warp-differential.log`.
+Clearing reclaimed SRV descriptors after their fence did not alter the Intel
+failure and was reverted. The repeat was stopped at 90 seconds after DRED
+capture; no more high-cardinality GBV reruns are planned on this physical GPU.
+Microsoft's GBV guidance recommends smaller resource sets because GBV can slow
+execution substantially, and states that it injects Dispatch calls and may
+use an asynchronous validation queue:
+https://learn.microsoft.com/en-us/windows/win32/direct3d12/using-d3d12-debug-layer-gpu-based-validation .
+The precise Intel GBV page-fault cause is **not proven**; preserve this as an
+environment/driver investigation item, not a renderer pass. Routine Debug
+hardware parity and the 3,000-frame stress result remain clean. Smaller
+targeted GBV cases are the practical validation profile for this machine.
+
+### DX12 classic capability matrix (physical Intel, Debug)
+
+The 296-case label has zero external/internal failures or skips, with GPU
+validation off and the D3D12 debug layer and DRED on. All rows use the
+hardware adapter `8086:46A6`, except the expressly labeled WARP differential
+above. The large-GBV issue in WIN11-0025 remains separate from ordinary
+classic conformance.
+
+| Capability | Evidence / boundary |
+|---|---|
+| GraphicsDevice, adapter and capability reporting | `DeviceValidation`, `GraphicsAdapterQueryContract`, `RendererCapabilityTruth` pass; explicit hardware selection reports feature level 12_1. |
+| Presentation, Present, resize, shutdown | `Win32HardwareSmoke`, `PresentationModeContract`, `Resource_PresentLifecycle`, `DeviceResetEvents` pass; 3,001-frame Win32 stress includes 130 resizes and 20 minimizes. |
+| Backbuffer and readback | `Backbuffer_PassOrder`, `BackbufferReadbackDimension`, `RenderTarget_BackbufferConsumer` pass; stress reads 281 backbuffers. |
+| Viewport and scissor | `Deferred_Viewport`, `Deferred_Scissor`, `RenderTarget_ViewportScissorReset`, `SpriteBatch_CustomViewport` pass. |
+| Rasterizer, culling and wireframe | `RasterizerState_CullMode*`, `FrontFaceWinding`, `Parity_fill_mode_wireframe` pass. |
+| Blend equations, factors, write masks | `BlendState_*`, `ColorWriteChannels*`, `Parity_blend_states` pass with the scalar alpha-factor fix; invalid destination `SourceAlphaSaturation` is rejected. |
+| Depth, stencil, two-sided stencil | `DepthStencilState_*`, `GraphicsDevice_ReferenceStencil`, `Parity_stencil_*` pass. |
+| Vertex declarations and multi-stream binding | `Parity_vertex_semantics`, `Parity_multi_stream_split`, `DrawUserPrimitives_CustomVD` pass. |
+| Vertex/index buffers and range validation | `Buffer_*`, `DrawRangeValidation`, `DrawUserIndexedPrimitives_*`, dynamic buffer stress pass. |
+| Instancing and primitive topologies | `Parity_instanced_draw`, `InstancedTexturedDraw` 37/37 and `DrawLineTopology` pass. Rich stock-effect instancing uses ordered per-instance GPU draws; simple color instancing remains native. |
+| Texture2D, TextureCube, Texture3D | `Texture2D_*`, `TextureCube_*`, `Texture3D_*`, `CubeVolume_SetDataContract` pass, including all six cube faces. |
+| Formats, compression, mips | `SurfaceFormat_*`, `CompressedTexture_StorageContract` 30/30, `Parity_compressed_cube`, texture/cube/volume mip fixtures pass. Compressed 2D readback uses the native copyable footprint. |
+| Samplers, filtering, address modes | `Sampler*`, `TextureFilter*`, anisotropy, `Parity_sampler_*` and descriptor capacity pass on Intel without GBV. |
+| RenderTarget2D/Cube, MRT, MSAA | `RenderTarget*`, `MRT`, `Parity_render_target_mip`, `Parity_hdr_render_target`, `Parity_backbuffer_msaa` pass; stress checks 120 targets. |
+| SpriteBatch and SpriteFont | `SpriteBatch_*`, `SpriteFont_*`, `Parity_sprite_*` pass. |
+| Basic/AlphaTest/DualTexture effects | Named effect suites and light/alpha/UV parity fixtures pass. |
+| EnvironmentMap/Skinned effects | Named effect suites and `Parity_env_map_terms`/`Parity_skinned_terms` pass. |
+| Custom ShaderEffect | `ShaderEffect_ReflectionContract` passes, including invalid-declaration diagnostics. |
+| Occlusion queries | `OcclusionQuery_Cycle`, `_VisibleQuad`, `_OccludedQuad` pass. |
+| Resource lifetime and device disposal | `Resource_*`, `Buffer_Disposed`, `DeviceResetEvents`, descriptor allocator tests, 3,001-frame churn pass. The large Intel GBV descriptor-capacity exception is WIN11-0025. |
+
+WIN11-0026: after restoring the original descriptor allocator and adding DRED
+wide-name decoding, the complete native Debug build passed. The final normal
+hardware label passed **296/296** in 286.70 seconds with debug layer and DRED
+on, GBV off; `LastTest.log` has 296 sections, zero internal `[FAIL]`/`[SKIP]`,
+zero unplanned removals, and only the 17 classified deliberate warnings
+(IDs 210 x3, 213 x1, 679 x10, 695 x3). Exact test command:
+
+```powershell
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='0'
+C:\rv\work\private_desktop_awake.exe 7200000 'ctest --test-dir C:\rv\build\cna-win11-dx12-debug -C Debug -L DIRECTX12 --output-on-failure --parallel 1'
+```
+
+Log: `C:\rv\logs\dx12-classic-final-hardware.log`. With GBV on, a bounded
+ten-case physical Intel subset passed **10/10**, zero internal fails/skips,
+zero removals, and only MRT's ten deliberate ID 679 warnings. It covers
+descriptor allocation, bound/disposed and deferred source lifetime, 2D and
+compressed texture readback, render-target roundtrip/mips, MRT, custom effect
+reflection, and instancing. Log:
+`C:\rv\logs\dx12-classic-gbv-bounded-final.log`. The command used the same
+environment with `CNA_D3D12_GPU_VALIDATION='1'` and an exact-name CTest `-R`
+selection of those ten cases. The normal classic capability gate is met on
+physical Intel. The high-cardinality GBV-only TDR remains a separately
+recorded Intel validation limitation under WIN11-0025; no claim is made that
+that fixture passes GBV, and the DRED evidence must travel with integration.

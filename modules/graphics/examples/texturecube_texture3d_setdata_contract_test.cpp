@@ -217,7 +217,7 @@ namespace
     // matching its Texture3D path and the public TextureCube LevelCount contract.
     constexpr Contract kContract{"DIRECTX12", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
-                                 Support::Unsupported, true};
+                                 Support::Exact, true};
 #else
 #error "REMED-GFX-135: this renderer has no declared TextureCube/Texture3D SetData contract."
 #endif

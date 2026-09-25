@@ -521,6 +521,12 @@ namespace CNA::Internal::Renderers::DirectX12
                                        PrimitiveType primitive, int primitiveCount, int instanceCount,
                                        const GpuDrawParams& params) override;
 
+        /** @brief Forwards buffered draw ranges to native D3D12 without host-memory staging. */
+        [[nodiscard]] bool RequiresManagedBufferedDrawRangeValidationEXT() const noexcept override
+        {
+            return false;
+        }
+
         // ---- CNAEXT (DX-102/DX-103/DX-104/DX-105): real device-lifetime accessors for tests and
         // for whichever Phase DX12 task lands next (DX-106 onward) to build on without duplicating
         // this renderer's own device/heap/command-list/fence creation. ----

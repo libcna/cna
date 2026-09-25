@@ -361,6 +361,7 @@ namespace CNA::Internal::Renderers::DirectX12
             D3D12_RESOURCE_STATE_RENDER_TARGET, &colorClear, IID_PPV_ARGS(colorResource_.ReleaseAndGetAddressOf()));
         if (FAILED(hr))
             throw std::runtime_error("D3D12RenderTargetRenderer: CreateCommittedResource(color) failed, hr=" + FormatHr(hr));
+        colorResource_->SetName(L"CNA RenderTarget2D color");
 
         owner_->GetResourceStateTrackerEXT().TrackResource(colorResource_.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
 
@@ -399,6 +400,7 @@ namespace CNA::Internal::Renderers::DirectX12
                 D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(resolveResource_.ReleaseAndGetAddressOf()));
             if (FAILED(hr))
                 throw std::runtime_error("D3D12RenderTargetRenderer: CreateCommittedResource(resolve) failed, hr=" + FormatHr(hr));
+            resolveResource_->SetName(L"CNA RenderTarget2D resolve");
             owner_->GetResourceStateTrackerEXT().TrackResource(resolveResource_.Get(), D3D12_RESOURCE_STATE_COMMON);
         }
 
@@ -437,6 +439,7 @@ namespace CNA::Internal::Renderers::DirectX12
                 D3D12_RESOURCE_STATE_DEPTH_WRITE, &depthClear, IID_PPV_ARGS(depthResource_.ReleaseAndGetAddressOf()));
             if (FAILED(hr))
                 throw std::runtime_error("D3D12RenderTargetRenderer: CreateCommittedResource(depth) failed, hr=" + FormatHr(hr));
+            depthResource_->SetName(L"CNA RenderTarget2D depth");
             owner_->GetResourceStateTrackerEXT().TrackResource(depthResource_.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
 
             dsv_ = owner_->AllocateDsvDescriptorEXT();

@@ -100,6 +100,29 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
     # that probe, and 235 never include it. The probe is now SDL-free where SDL is absent, and the
     # fixtures that genuinely drive an SDL_Window keep REQUIRES_SDL.
     cna_register_d3d_parity_tests()
+
+    include(${CNA_GRAPHICS_EXAMPLES_DIR}/parity/ParityFixtures.cmake)
+    cna_register_parity_fixtures(
+        BUILDER cna_directx12_test
+        TARGET_SUFFIX directx12
+        TEST_PREFIX DirectX12
+        LABELS "Parity;DIRECTX12"
+        ENVIRONMENT "CNA_FORCE_HEADLESS_DEVICE_EXT=DIRECTX12"
+        TIMEOUT 120)
+
+    cna_directx12_test(cna_test_directx12_instanced_textured
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/instanced_textured_draw_test.cpp)
+    cna_register_renderer_test(NAME DirectX12_InstancedTexturedDraw
+        COMMAND $<TARGET_FILE:cna_test_directx12_instanced_textured>
+        TIMEOUT 180 LABELS "Parity;DIRECTX12"
+        ENVIRONMENT "CNA_FORCE_HEADLESS_DEVICE_EXT=DIRECTX12")
+
+    cna_directx12_test(cna_test_directx12_draw_line_topology
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/draw_line_topology_test.cpp)
+    cna_register_renderer_test(NAME DirectX12_DrawLineTopology
+        COMMAND $<TARGET_FILE:cna_test_directx12_draw_line_topology>
+        TIMEOUT 180 LABELS "Parity;DIRECTX12"
+        ENVIRONMENT "CNA_FORCE_HEADLESS_DEVICE_EXT=DIRECTX12")
 endif()
 
 cna_apply_skip_convention()

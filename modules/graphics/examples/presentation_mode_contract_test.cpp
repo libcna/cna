@@ -176,6 +176,20 @@ class PresentationModeContractTest final : public Game
             static_cast<std::size_t>(physicalWidth) * physicalHeight * 4u, 0);
 #if defined(CNA_RENDERER_DIRECTX11)
         ReadPhysicalBackbuffer(renderer, physicalWidth, physicalHeight, pixels.data());
+#elif defined(CNA_RENDERER_DIRECTX12)
+        // DX12 ReadBackbuffer samples logical coordinates. Select identity presentation
+        // geometry for this fixture's physical-surface observation, then restore the mode.
+        renderer.SetPresentationMode(static_cast<int>(CnaPresentationMode::NativeBackBuffer));
+        try
+        {
+            renderer.ReadBackbuffer(0, 0, physicalWidth, physicalHeight, pixels.data());
+        }
+        catch (...)
+        {
+            renderer.SetPresentationMode(static_cast<int>(mode));
+            throw;
+        }
+        renderer.SetPresentationMode(static_cast<int>(mode));
 #else
         renderer.ReadBackbuffer(0, 0, physicalWidth, physicalHeight, pixels.data());
 #endif

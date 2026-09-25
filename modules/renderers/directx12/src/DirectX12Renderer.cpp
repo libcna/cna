@@ -23,6 +23,7 @@
 #include "System/NotSupportedException.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -103,8 +104,9 @@ namespace CNA::Internal::Renderers::DirectX12
         {
             const int bytes = WideCharToMultiByte(CP_UTF8, 0, text, -1, nullptr, 0, nullptr, nullptr);
             if (bytes <= 1) return {};
-            std::string out(static_cast<std::size_t>(bytes - 1), '\0');
+            std::string out(static_cast<std::size_t>(bytes), '\0');
             WideCharToMultiByte(CP_UTF8, 0, text, -1, out.data(), bytes, nullptr, nullptr);
+            out.resize(static_cast<std::size_t>(bytes - 1));
             return out;
         }
 
@@ -820,6 +822,14 @@ namespace CNA::Internal::Renderers::DirectX12
                 std::string line = "D3D12 DRED breadcrumb node " + std::to_string(nodeIndex) +
                                    ": " + std::to_string(completed) + " of " +
                                    std::to_string(node->BreadcrumbCount) + " operations completed";
+                if (node->pCommandListDebugNameA)
+                    line += ", command list " + std::string(node->pCommandListDebugNameA);
+                else if (node->pCommandListDebugNameW)
+                    line += ", command list " + NarrowAdapterDescription(node->pCommandListDebugNameW);
+                if (node->pCommandQueueDebugNameA)
+                    line += ", queue " + std::string(node->pCommandQueueDebugNameA);
+                else if (node->pCommandQueueDebugNameW)
+                    line += ", queue " + NarrowAdapterDescription(node->pCommandQueueDebugNameW);
                 // The first operation that did not complete is the one the removal interrupted.
                 if (node->pCommandHistory != nullptr && completed < node->BreadcrumbCount)
                     line += ", first incomplete op " +
@@ -839,11 +849,17 @@ namespace CNA::Internal::Renderers::DirectX12
             for (const D3D12_DRED_ALLOCATION_NODE* node = pageFault.pHeadExistingAllocationNode;
                  node != nullptr && allocations < 16; node = node->pNext, ++allocations)
                 line += "; existing allocation type " +
-                        std::to_string(static_cast<int>(node->AllocationType));
+                        std::to_string(static_cast<int>(node->AllocationType)) +
+                        (node->ObjectNameA ? ", name " + std::string(node->ObjectNameA)
+                                           : (node->ObjectNameW ? ", name " + NarrowAdapterDescription(node->ObjectNameW)
+                                                                : ""));
             for (const D3D12_DRED_ALLOCATION_NODE* node = pageFault.pHeadRecentFreedAllocationNode;
                  node != nullptr && allocations < 32; node = node->pNext, ++allocations)
                 line += "; recently freed allocation type " +
-                        std::to_string(static_cast<int>(node->AllocationType));
+                        std::to_string(static_cast<int>(node->AllocationType)) +
+                        (node->ObjectNameA ? ", name " + std::string(node->ObjectNameA)
+                                           : (node->ObjectNameW ? ", name " + NarrowAdapterDescription(node->ObjectNameW)
+                                                                : ""));
             CNA::Logger::Error(line, CNA::LogCategory::RENDER);
         }
 #endif
@@ -859,6 +875,7 @@ namespace CNA::Internal::Renderers::DirectX12
         HRESULT hr = device_->CreateCommandQueue(&desc, IID_PPV_ARGS(commandQueue_.ReleaseAndGetAddressOf()));
         if (FAILED(hr))
             throw std::runtime_error("ID3D12Device::CreateCommandQueue failed, hr=" + FormatHr(hr));
+        commandQueue_->SetName(L"CNA DirectX12 graphics queue");
     }
 
     void DirectX12Renderer::CreateDescriptorHeapResources()
@@ -898,6 +915,8 @@ namespace CNA::Internal::Renderers::DirectX12
                 IID_PPV_ARGS(frameCommandLists_[i].ReleaseAndGetAddressOf()));
             if (FAILED(hr))
                 throw std::runtime_error("ID3D12Device::CreateCommandList (frame) failed, hr=" + FormatHr(hr));
+            const std::wstring listName = L"CNA DirectX12 frame command list " + std::to_wstring(i);
+            frameCommandLists_[i]->SetName(listName.c_str());
             hr = frameCommandLists_[i]->Close();
             if (FAILED(hr))
                 throw std::runtime_error("ID3D12GraphicsCommandList::Close (frame initial) failed, hr=" + FormatHr(hr));
@@ -915,6 +934,7 @@ namespace CNA::Internal::Renderers::DirectX12
             IID_PPV_ARGS(commandList_.ReleaseAndGetAddressOf()));
         if (FAILED(hr))
             throw std::runtime_error("ID3D12Device::CreateCommandList failed, hr=" + FormatHr(hr));
+        commandList_->SetName(L"CNA DirectX12 immediate command list");
 
         hr = commandList_->Close();
         if (FAILED(hr))
@@ -1524,6 +1544,7 @@ namespace CNA::Internal::Renderers::DirectX12
                 nullptr, IID_PPV_ARGS(chunk.resource.ReleaseAndGetAddressOf()));
             if (FAILED(hr))
                 throw std::runtime_error("D3D12 frame constant arena creation failed, hr=" + FormatHr(hr));
+            chunk.resource->SetName(L"CNA frame constant upload arena");
             const D3D12_RANGE noRead{0, 0};
             hr = chunk.resource->Map(0, &noRead, reinterpret_cast<void**>(&chunk.mapped));
             if (FAILED(hr))
@@ -1560,6 +1581,7 @@ namespace CNA::Internal::Renderers::DirectX12
             nullptr, IID_PPV_ARGS(chunk.resource.ReleaseAndGetAddressOf()));
         if (FAILED(hr))
             throw std::runtime_error("D3D12 frame upload ring creation failed, hr=" + FormatHr(hr));
+        chunk.resource->SetName(L"CNA frame texture/buffer upload arena");
 
         const D3D12_RANGE noRead{0, 0};
         hr = chunk.resource->Map(0, &noRead, reinterpret_cast<void**>(&chunk.mapped));
@@ -2470,6 +2492,7 @@ namespace CNA::Internal::Renderers::DirectX12
                                                     D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
                                                     IID_PPV_ARGS(rb.GetAddressOf()))))
             return {};
+        rb->SetName(L"CNA D3D12 immediate texture readback");
 
         D3D12_TEXTURE_COPY_LOCATION dst{};
         dst.pResource = rb.Get();
@@ -4537,6 +4560,92 @@ namespace CNA::Internal::Renderers::DirectX12
             return;
         }
 #endif
+        const bool stockEffectNeedsFullShader = params.textureEnabled || params.texture0 != nullptr ||
+            params.lightingEnabled || params.fogEnabled || params.dualTexture ||
+            params.envMapping || params.skinned || params.pbr ||
+            params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f;
+        if (stockEffectNeedsFullShader)
+        {
+            struct InstanceColumn
+            {
+                const GpuVertexStreamBinding* stream;
+                const D3D12VertexBufferRenderer* buffer;
+                int byteOffset;
+            };
+            std::array<InstanceColumn, 4> columns{};
+            int columnCount = 0;
+            GpuDrawParams ordinary = params;
+            ordinary.instanceCount = 1;
+            ordinary.vertexStreamCount = 0;
+            for (int streamIndex = 0; streamIndex < params.vertexStreamCount; ++streamIndex)
+            {
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(streamIndex)];
+                if (stream.instanceFrequency == 0)
+                {
+                    ordinary.vertexStreams[static_cast<std::size_t>(ordinary.vertexStreamCount++)] = stream;
+                    continue;
+                }
+                const auto* buffer = static_cast<const D3D12VertexBufferRenderer*>(stream.buffer);
+                if (buffer == nullptr)
+                    throw System::NotSupportedException("DirectX12 instancing requires a per-instance buffer.");
+                const auto& elements = buffer->GetDeclarationEXT().GetElements();
+                if (elements.empty())
+                {
+                    if (stream.strideInBytes != 64)
+                        throw System::NotSupportedException(
+                            "DirectX12 cannot infer four instance-matrix columns from this stride.");
+                    for (int index = 0; index < 4 && columnCount < 4; ++index)
+                        columns[static_cast<std::size_t>(columnCount++)] = {&stream, buffer, index * 16};
+                }
+                else
+                {
+                    for (const auto& element : elements)
+                    {
+                        if (columnCount == 4)
+                            break;
+                        if (element.getVertexElementFormatProperty() !=
+                            Microsoft::Xna::Framework::Graphics::VertexElementFormat::Vector4)
+                            throw System::NotSupportedException(
+                                "DirectX12 instance-matrix columns must be Vector4 elements.");
+                        columns[static_cast<std::size_t>(columnCount++)] = {
+                            &stream, buffer, element.getOffsetProperty()};
+                    }
+                }
+            }
+            if (columnCount != 4 || ordinary.vertexStreamCount == 0)
+                throw System::NotSupportedException(
+                    "DirectX12 stock instancing requires four instance-matrix columns and a vertex stream.");
+            for (int instance = 0; instance < instanceCount; ++instance)
+            {
+                std::array<float, 16> values{};
+                for (int column = 0; column < 4; ++column)
+                {
+                    const auto& entry = columns[static_cast<std::size_t>(column)];
+                    const int record = entry.stream->vertexOffset +
+                        instance / entry.stream->instanceFrequency;
+                    const int stride = entry.stream->strideInBytes;
+                    if (record < 0 || record >= entry.buffer->GetVertexCount() || stride <= 0)
+                        throw System::NotSupportedException(
+                            "DirectX12 instance-matrix read exceeds the bound vertex buffer.");
+                    const std::size_t offset = static_cast<std::size_t>(record) * stride +
+                        static_cast<std::size_t>(entry.byteOffset);
+                    const auto& bytes = entry.buffer->GetCpuDataEXT();
+                    if (offset + sizeof(float) * 4 > bytes.size())
+                        throw System::NotSupportedException(
+                            "DirectX12 instance-matrix column exceeds the upload shadow.");
+                    std::memcpy(values.data() + column * 4, bytes.data() + offset,
+                                sizeof(float) * 4);
+                }
+                const Matrix instanceWorld(
+                    values[0], values[1], values[2], values[3],
+                    values[4], values[5], values[6], values[7],
+                    values[8], values[9], values[10], values[11],
+                    values[12], values[13], values[14], values[15]);
+                DrawPrimitivesExImpl(vb, &ib, instanceWorld * world, view, projection,
+                                     primitive, primitiveCount, ordinary);
+            }
+            return;
+        }
         std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> combinedElements;
         std::vector<D3DVertexInputElement> inputElements;
         BuildVertexInputLayout(params, true, combinedElements, inputElements);

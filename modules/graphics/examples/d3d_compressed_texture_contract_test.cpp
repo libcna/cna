@@ -309,7 +309,15 @@ public:
 
 int main()
 {
-    D3DCompressedTextureContract game;
-    game.Run();
-    return game.Result();
+    try
+    {
+        D3DCompressedTextureContract game;
+        game.Run();
+        return game.Result();
+    }
+    catch (const std::exception& e)
+    {
+        std::fprintf(stderr, "[FAIL] compressed texture contract: %s\n", e.what());
+        return 1;
+    }
 }

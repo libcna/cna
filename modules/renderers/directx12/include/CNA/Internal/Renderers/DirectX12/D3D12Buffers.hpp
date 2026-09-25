@@ -51,6 +51,11 @@ namespace CNA::Internal::Renderers::DirectX12
         [[nodiscard]] int GetCapacityEXT() const { return capacity_; }
         /// Byte stride of the most recent SetData() call, 0 before the first call (CNAEXT).
         [[nodiscard]] std::size_t GetStrideEXT() const { return stride_; }
+        /** @brief Returns the upload shadow used for device recovery and stock instancing. */
+        [[nodiscard]] const std::vector<std::uint8_t>& GetCpuDataEXT() const noexcept
+        {
+            return cpuData_;
+        }
         /// Raw GPU-resident ID3D12Resource* (CNAEXT -- Phase DX-111's draw path / readback tests).
         [[nodiscard]] ID3D12Resource* GetResourceEXT() const { return buffer_.Get(); }
         /// D3D12_VERTEX_BUFFER_VIEW for IASetVertexBuffers() (CNAEXT -- Phase DX-111).

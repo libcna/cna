@@ -3,6 +3,8 @@
 
 #include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DVertexFormatHelper.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -132,14 +134,19 @@ namespace CNA::Internal::Renderers::DirectX12
              || desc.colorWriteMasks[2] != desc.colorWriteMasks[0]
              || desc.colorWriteMasks[3] != desc.colorWriteMasks[0]) ? TRUE : FALSE;
         D3D12_RENDER_TARGET_BLEND_DESC rtTemplate{};
+        const int saturated = static_cast<int>(
+            Microsoft::Xna::Framework::Graphics::Blend::SourceAlphaSaturation);
+        if (desc.colorDstBlend == saturated || desc.alphaDstBlend == saturated)
+            throw System::NotSupportedException(
+                "D3D12 does not support SourceAlphaSaturation as a destination blend factor.");
         rtTemplate.BlendEnable = DeriveBlendEnable(
             desc.colorSrcBlend, desc.colorDstBlend,
             desc.alphaSrcBlend, desc.alphaDstBlend);
         rtTemplate.SrcBlend = static_cast<D3D12_BLEND>(BlendToD3D11(desc.colorSrcBlend));
         rtTemplate.DestBlend = static_cast<D3D12_BLEND>(BlendToD3D11(desc.colorDstBlend));
         rtTemplate.BlendOp = static_cast<D3D12_BLEND_OP>(BlendFunctionToD3D11(desc.colorBlendFunc));
-        rtTemplate.SrcBlendAlpha = static_cast<D3D12_BLEND>(BlendToD3D11(desc.alphaSrcBlend));
-        rtTemplate.DestBlendAlpha = static_cast<D3D12_BLEND>(BlendToD3D11(desc.alphaDstBlend));
+        rtTemplate.SrcBlendAlpha = static_cast<D3D12_BLEND>(AlphaBlendToD3D11(desc.alphaSrcBlend));
+        rtTemplate.DestBlendAlpha = static_cast<D3D12_BLEND>(AlphaBlendToD3D11(desc.alphaDstBlend));
         rtTemplate.BlendOpAlpha = static_cast<D3D12_BLEND_OP>(BlendFunctionToD3D11(desc.alphaBlendFunc));
         rtTemplate.LogicOpEnable = FALSE;
         rtTemplate.LogicOp = D3D12_LOGIC_OP_NOOP;
