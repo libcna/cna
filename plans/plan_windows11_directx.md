@@ -1,8 +1,8 @@
 # Physical Windows 11 and DirectX bring-up
 
-Status: first native MSVC and physical Intel GPU baseline established on 2026-09-25. This
-ledger stops at build, bounded tests, Win32, and hardware smoke. Full DirectX parity,
-CNAEXT parity, sharp-runtime hardening, and samples are later workstreams.
+Status: native MSVC and physical Intel GPU baseline established on 2026-09-25. The
+Windows DirectX parity campaign is active on `win11-directx-modern`; its DX11 classic
+phase begins with WIN11-0009 and WIN11-0010 below. Full classic/modern parity remains open.
 
 ## Stable source and machine baseline
 
@@ -55,6 +55,8 @@ artifact and is not part of CNA.
 | WIN11-0006 | Built and ran DirectX 11 on physical Intel GPU with debug layer. New repeatable Win32 smoke verifies hardware adapter, swap chain, clear, sprite draw, Present loop, resize, and zero debug errors; one existing native smoke check and post-resize pixel placement remain defects below. |
 | WIN11-0007 | Built and ran DirectX 12 on physical Intel GPU with debug layer and DRED. Windowless smoke passed 25/25 checks. Win32 presentation stress passed 221 frames, 10 resizes, a minimize, clear/draw/Present, and zero debug warnings or errors. GPU-based validation was disabled for this initial smoke. |
 | WIN11-0008 | Recorded the bounded Windows test baseline and deferred work below; no samples or broad sharp-runtime work started. |
+| WIN11-0009 | Reclassified the DX11 smoke C6 failure as a test setup defect: `GraphicsDeviceManager` defaults to `Depth24`, whose stencil is intentionally hidden by the renderer. The native binding check now requests `Depth24Stencil8`, then verifies the cached object and dynamic reference; 21/21 checks pass on Intel. |
+| WIN11-0010 | Fixed DX11 swap-chain resize restoring a full physical viewport instead of the current presentation rectangle. At 497x301 physical / 320x240 logical, the viewport now restores to (48,0,401,301); a 32x32 sprite at (8,8) reads back as exactly 1024 red pixels within x=8..39, y=8..39. Private-desktop Intel run passes with zero D3D11 debug corruption/errors/warnings. |
 
 ## Initial test results
 
@@ -84,8 +86,8 @@ At close, build trees occupied 15.86 GiB (core), 1.09 GiB (DX11), and 1.07 GiB
 
 | Area | Evidence / next step |
 |---|---|
-| DX11 classic parity | Existing `DirectX11_Smoke` C6 fails: depth-stencil object and dynamic reference are not bound on the immediate context as the test expects. Investigate during DX11 parity. |
-| DX11 classic parity | After a real Win32 swap-chain resize to 497x301, the 32x32 sprite requested at (8,8) still renders but its red pixels appear at x=0..1, y=8..39 in a 320x240 readback. Pre-resize pixel at (16,16) is correct. Investigate viewport, scissor, coordinate transform, and readback behavior; do not claim post-resize pixel parity yet. |
+| DX11 classic parity | C6 is resolved as a test setup defect by WIN11-0009. The default `Depth24` intentionally masks stencil; the test now requests `Depth24Stencil8`. |
+| DX11 classic parity | Post-resize sprite coordinates are resolved by WIN11-0010. The exact logical pixel rectangle now survives the 497x301 physical resize with the D3D11 debug layer clean. Full classic corpus and stress remain open. |
 | DX12 classic parity | Smoke passes; most registered parity executables were not built or run. Full parity campaign remains open. |
 | DX11 modern CNAEXT | Not evaluated in this bring-up. |
 | DX12 modern CNAEXT | Not evaluated in this bring-up. |
@@ -97,3 +99,22 @@ At close, build trees occupied 15.86 GiB (core), 1.09 GiB (DX11), and 1.07 GiB
 No Linux-only file is required for this baseline. No system-wide software installation is
 required. This branch remains independent of the parallel Debian workstream; integration
 from that branch must be evaluated later.
+
+## Native DX11 classic campaign, 2026-09-25
+
+WIN11-0009 and WIN11-0010 used the existing `C:\rv\build\cna-win11-dx11-debug`
+Visual Studio x64 Debug tree. Exact focused commands, with `CNA_D3D11_DEBUG_LAYER=1`, were:
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx11-debug --config Debug --parallel 4 --target cna_test_directx11_smoke cna_test_directx11_win32_hardware_smoke
+C:\rv\work\private_desktop.exe 120000 'C:\rv\build\cna-win11-dx11-debug\Debug\cna_test_directx11_smoke.exe'
+C:\rv\work\private_desktop.exe 120000 'C:\rv\build\cna-win11-dx11-debug\Debug\cna_test_directx11_win32_hardware_smoke.exe'
+```
+
+The first command built both targets. `DirectX11_Smoke` passed 21/21 native checks;
+the Win32 hardware smoke passed every check with adapter Intel Iris Xe `8086:46A6`,
+`software=0`, feature level `0xB100` (11_1), debug layer enabled and zero recorded
+corruption, errors, or warnings. The second smoke reads back the complete logical
+320x240 image after the physical resize and verifies all 1024 sprite pixels, not only
+that some red pixels survived. The full parity build and feature matrix are next; these
+two focused passes alone are not a classic parity gate.

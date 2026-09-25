@@ -600,11 +600,16 @@ namespace CNA::Internal::Renderers::DirectX11
         ID3D11RenderTargetView* rtv = GetBackBufferDrawRtv();
         context_->OMSetRenderTargets(1, &rtv, depthStencilView_.Get());
 
+        // ResizeBuffers recreates the back buffer after GraphicsDevice's window-size
+        // notification. Restore the presentation rectangle here as well: the logical
+        // viewport can remain 320x240 while a resized window needs new letterbox bars.
+        const auto geometry = D3DCommon::ComputeD3DPresentationGeometry(
+            width_, height_, virtualWidth_, virtualHeight_, presentationMode_);
         D3D11_VIEWPORT vp{};
-        vp.TopLeftX = 0.0f;
-        vp.TopLeftY = 0.0f;
-        vp.Width = static_cast<float>(width_);
-        vp.Height = static_cast<float>(height_);
+        vp.TopLeftX = static_cast<float>(std::lround(geometry.x));
+        vp.TopLeftY = static_cast<float>(std::lround(geometry.y));
+        vp.Width = static_cast<float>(std::lround(geometry.width));
+        vp.Height = static_cast<float>(std::lround(geometry.height));
         vp.MinDepth = 0.0f;
         vp.MaxDepth = 1.0f;
         context_->RSSetViewports(1, &vp);

@@ -133,6 +133,19 @@ namespace
                 int redPixels = 0;
                 if (frames_ == 8)
                 {
+                    D3D11_VIEWPORT nativeViewport{};
+                    UINT viewportCount = 1;
+                    renderer_->GetContextEXT()->RSGetViewports(&viewportCount, &nativeViewport);
+                    const auto& logicalViewport = device.getViewportProperty();
+                    int presentX = 0, presentY = 0, presentWidth = 0, presentHeight = 0;
+                    renderer_->GetDefaultViewportRect(presentX, presentY, presentWidth, presentHeight);
+                    std::printf("post_resize_native_viewport=%.1f,%.1f %.1fx%.1f "
+                                "logical_viewport=%d,%d %dx%d presentation=%d,%d %dx%d\n",
+                                nativeViewport.TopLeftX, nativeViewport.TopLeftY,
+                                nativeViewport.Width, nativeViewport.Height,
+                                logicalViewport.getXProperty(), logicalViewport.getYProperty(),
+                                logicalViewport.getWidthProperty(), logicalViewport.getHeightProperty(),
+                                presentX, presentY, presentWidth, presentHeight);
                     int width = 0;
                     int height = 0;
                     renderer_->GetViewportSize(width, height);
@@ -159,8 +172,9 @@ namespace
                     Check(inside[0] == 255 && inside[1] == 0 && inside[2] == 0 && blueClear,
                           "sprite draw and clear reach the swap-chain back buffer");
                 else
-                    Check(redPixels > 0 && blueClear,
-                          "sprite draw and clear still execute after swap-chain resize");
+                    Check(inside[0] == 255 && inside[1] == 0 && inside[2] == 0 &&
+                              redPixels == 32 * 32 && blueClear,
+                          "sprite retains logical coordinates after swap-chain resize");
                 ++drawChecks_;
             }
 

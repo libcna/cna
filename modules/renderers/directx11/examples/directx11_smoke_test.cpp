@@ -178,6 +178,8 @@ public:
         graphicsDeviceManager_ = std::make_unique<GraphicsDeviceManager>(this);
         graphicsDeviceManager_->setPreferredBackBufferWidthProperty(64);
         graphicsDeviceManager_->setPreferredBackBufferHeightProperty(64);
+        graphicsDeviceManager_->setPreferredDepthStencilFormatProperty(
+            Graphics::DepthFormat::Depth24Stencil8);
     }
 
     [[nodiscard]] int GetResult() const
