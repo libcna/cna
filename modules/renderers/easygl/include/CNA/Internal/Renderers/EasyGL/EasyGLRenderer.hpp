@@ -1394,7 +1394,8 @@ namespace CNA::Internal::Renderers::EasyGL
         /** @brief Enables only the depth/stencil planes selected for the active destination. */
         void ApplyCurrentDepthStencilAvailability();
         /** @brief Installs XNA's topology-dependent ordinary or two-sided stencil tuple. */
-        void ApplyStencilPrimitiveTopology(PrimitiveType primitive);
+        void ApplyStencilPrimitiveTopology(PrimitiveType primitive,
+                                           bool unclippedLineLoop = false);
         /** @brief Reapplies XNA's normalized constant depth bias for the active depth format. */
         void ApplyCurrentDepthBias();
         void EnsureCallingThreadContext();
@@ -1621,7 +1622,8 @@ namespace CNA::Internal::Renderers::EasyGL
         // GL_LINES loses post-transform culling, polygon depth bias and topology-wide rasterizer
         // state, and it cannot cover SpriteBatch, compiled-effect, multi-stream and instanced paths
         // uniformly. Desktop GL is native; GLES/WebGL use their optional native polygon-mode
-        // extensions. A context with neither reports false and refuses triangle draws.
+        // extensions. A context with neither reports false; only the bounded unclipped stock
+        // triangle route can draw line loops, and all other triangle draws refuse.
         enum class NativeWireframeApi
         {
             None,
@@ -1631,6 +1633,8 @@ namespace CNA::Internal::Renderers::EasyGL
         };
         NativeWireframeApi nativeWireframeApi_ = NativeWireframeApi::None;
         bool fillModeWireframe_ = false;
+        int wireframeCullMode_ = 2;
+        bool wireframeScissorEnabled_ = false;
         // GLB-41: the polygon mode last sent to the context. The rasterizer state is re-applied
         // before every draw, and the mode itself almost never changes; empty means "not known for
         // this context", so DetectNativeWireframeApi() clears it and the next application writes.
@@ -1660,6 +1664,10 @@ namespace CNA::Internal::Renderers::EasyGL
         void DetectNativeWireframeApi();
         void SetNativePolygonMode(bool wireframe);
         void RequireSupportedFillModeEXT(PrimitiveType primitive) const;
+        [[nodiscard]] bool CanDrawUnclippedWireframeAsLineLoops(
+            const EasyGLVertexBufferRenderer& vb, const Matrix& world,
+            const Matrix& view, const Matrix& projection, PrimitiveType primitive,
+            int primitiveCount, const GpuDrawParams& params) const;
 
         void EnsureColored3DProgram();
         void EnsureTextured3DProgram();
@@ -1961,7 +1969,7 @@ namespace CNA::Internal::Renderers::EasyGL
         // AnisotropicFiltering/MultiSampleAntiAliasing re-query the same live GL state the
         // startup capability dump (EnsureGL()) already prints, since they're cheap, idempotent GL
         // queries -- no need to cache them. WireFrame is true only when the active context exposes
-        // a native polygon-mode API; otherwise triangle draws are refused instead of approximated.
+        // a native polygon-mode API; the bounded line-loop route does not claim general support.
         // Everything else CNA::GraphicsCapability currently enumerates is genuinely supported
         // here, so falls through to the shared default (true).
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;

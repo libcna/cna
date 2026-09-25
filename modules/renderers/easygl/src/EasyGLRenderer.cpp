@@ -51,6 +51,7 @@ namespace CNA::Internal::Renderers::EasyGL
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "System/NotSupportedException.hpp"
 #include <bit>
 #include <cstddef>
@@ -7772,10 +7773,12 @@ if (!ProfileIsEs2ApiGeneration())
         }
     }
 
-    void EasyGLRenderer::ApplyStencilPrimitiveTopology(PrimitiveType primitive)
+    void EasyGLRenderer::ApplyStencilPrimitiveTopology(PrimitiveType primitive,
+                                                       bool unclippedLineLoop)
     {
         if (metagl::IsContextLost()) return;
-        RequireSupportedFillModeEXT(primitive);
+        if (!unclippedLineLoop)
+            RequireSupportedFillModeEXT(primitive);
         if (!stencilEnabled_ || !stencilTwoSided_) return;
 
         // Direct3D 9 applies the CCW tuple only to counter-clockwise triangles. Two-sided stencil
@@ -7849,9 +7852,12 @@ if (!ProfileIsEs2ApiGeneration())
         device.set_scissor_test_enabled(scissorTestEnable);
         // SOFTWARE-178: native polygon mode is the only representation that keeps the operation
         // after clipping and culling and gives it polygon offset, MSAA and two-sided stencil.
-        // Unsupported contexts remember the legal XNA state selection and refuse only a later
-        // triangle draw; line/point topologies remain unaffected by FillMode.
+        // Unsupported contexts remember the legal XNA state selection and decide at draw time
+        // whether the bounded unclipped line-loop route is valid. Other triangle draws refuse;
+        // line/point topologies remain unaffected by FillMode.
         fillModeWireframe_ = (fillMode == 1);
+        wireframeCullMode_ = cullMode;
+        wireframeScissorEnabled_ = scissorTestEnable;
         SetNativePolygonMode(fillModeWireframe_);
         // FNA exposes constant DepthBias in normalized depth coordinates. GL instead defines the
         // polygon-offset `units` argument in minimum-resolvable depth increments, so the active
@@ -7955,10 +7961,70 @@ if (!ProfileIsEs2ApiGeneration())
 
         throw System::NotSupportedException(
             "EasyGL: FillMode::WireFrame is not supported by this GLES/WebGL context, so the "
-            "triangle draw is refused instead of being approximated with GL_LINES. The context "
+            "triangle draw needs native polygon mode or the bounded unclipped line-loop route. "
+            "This draw qualifies for neither. The context "
             "exposes neither GL_NV_polygon_mode nor WEBGL_polygon_mode. Query GraphicsDevice::"
             "SupportsCapability(GraphicsCapability::WireFrame) and select FillMode::Solid when "
             "it reports false.");
+    }
+
+    bool EasyGLRenderer::CanDrawUnclippedWireframeAsLineLoops(
+        const EasyGLVertexBufferRenderer& vb, const Matrix& world,
+        const Matrix& view, const Matrix& projection, PrimitiveType primitive,
+        int primitiveCount, const GpuDrawParams& params) const
+    {
+        // A triangle entirely inside the clip volume, with no culling, depth, stencil, scissor,
+        // bias or multisampling, has the same three visible edges as a GL_LINE_LOOP. Outside this
+        // bounded case polygon mode is still required: lines cannot reproduce clipped polygon
+        // boundaries or the triangle's rasterizer state. Keep the capability answer false.
+        if (!fillModeWireframe_ || nativeWireframeApi_ != NativeWireframeApi::None ||
+            primitive != PrimitiveType::TriangleList || primitiveCount <= 0 ||
+            wireframeCullMode_ != 0 || wireframeScissorEnabled_ || depthEnabled_ ||
+            stencilEnabled_ || depthBias_ != 0.0f || slopeScaleDepthBias_ != 0.0f ||
+            sampleCount_ > 1 || bound_->rt2D != nullptr || bound_->cube != nullptr ||
+            bound_->mrtCount != 0 || params.vertexStreamCount > 1 || params.skinned ||
+            params.pbr || params.compiledEffectRuntime != nullptr ||
+            params.customEffectRenderer != nullptr || params.customEffectRequested ||
+            params.vertexStart < 0)
+            return false;
+
+        const auto& elements = vb.GetDeclarationElements();
+        const auto position = std::find_if(elements.begin(), elements.end(),
+            [](const auto& element) {
+                return element.getVertexElementUsageProperty() ==
+                           Microsoft::Xna::Framework::Graphics::VertexElementUsage::Position &&
+                       element.getUsageIndexProperty() == 0 &&
+                       element.getVertexElementFormatProperty() ==
+                           Microsoft::Xna::Framework::Graphics::VertexElementFormat::Vector3;
+            });
+        if (position == elements.end() || position->getOffsetProperty() < 0)
+            return false;
+
+        const std::size_t stride = vb.GetStride();
+        const std::size_t positionOffset = static_cast<std::size_t>(position->getOffsetProperty());
+        const std::size_t start = static_cast<std::size_t>(params.vertexStart);
+        const std::size_t count = static_cast<std::size_t>(primitiveCount) * 3u;
+        if (stride == 0 || positionOffset > stride || sizeof(float) * 3u > stride - positionOffset ||
+            start > static_cast<std::size_t>(vb.GetVertexCount()) ||
+            count > static_cast<std::size_t>(vb.GetVertexCount()) - start ||
+            vb.cpu_data_.size() / stride < start + count)
+            return false;
+
+        const Matrix wvp = world * view * projection;
+        for (std::size_t i = start; i < start + count; ++i)
+        {
+            float xyz[3];
+            std::memcpy(xyz, vb.cpu_data_.data() + i * stride + positionOffset, sizeof(xyz));
+            const auto clip = Microsoft::Xna::Framework::Vector4::Transform(
+                Microsoft::Xna::Framework::Vector3(xyz[0], xyz[1], xyz[2]), wvp);
+            if (!std::isfinite(clip.X) || !std::isfinite(clip.Y) ||
+                !std::isfinite(clip.Z) || !std::isfinite(clip.W) || clip.W <= 0.0f ||
+                clip.X <= -clip.W || clip.X >= clip.W ||
+                clip.Y <= -clip.W || clip.Y >= clip.W ||
+                clip.Z <= 0.0f || clip.Z >= clip.W)
+                return false;
+        }
+        return true;
     }
 
     void EasyGLRenderer::ApplyRasterizerMultiSampleState(bool enabled)
@@ -11528,7 +11594,10 @@ if (ProfileIsEs2ApiGeneration())
                                                  const GpuDrawParams& params)
     {
         if (metagl::IsContextLost()) return;
-        ApplyStencilPrimitiveTopology(primitive);
+        const auto& candidateVb = static_cast<const EasyGLVertexBufferRenderer&>(vb_in);
+        const bool unclippedLineLoop = CanDrawUnclippedWireframeAsLineLoops(
+            candidateVb, world, view, projection, primitive, primitiveCount, params);
+        ApplyStencilPrimitiveTopology(primitive, unclippedLineLoop);
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         // plans/plan_fx.md FX-062: a compiled effect's vertex layout is arbitrary and validated against
         // the applied pass's own shader reflection (BindCompiledEffectForDrawEXT), not against the
@@ -11607,7 +11676,16 @@ if (ProfileIsEs2ApiGeneration())
         const bool semanticLayout = ConfigureDeclarationForStockProgramEXT(
             const_cast<EasyGLVertexBufferRenderer&>(vb), layoutStride, params);
         TraceBoundTextureUnit("draw-arrays-3d", 0);
-        device.draw_arrays(ToEasyGl(primitive), params.vertexStart, vertex_count);
+        if (unclippedLineLoop)
+        {
+            for (int triangle = 0; triangle < primitiveCount; ++triangle)
+                device.draw_arrays(::easygl::PrimitiveType::LineLoop,
+                                   params.vertexStart + 3 * triangle, 3);
+        }
+        else
+        {
+            device.draw_arrays(ToEasyGl(primitive), params.vertexStart, vertex_count);
+        }
         if (multiStream) RestoreSingleStreamAttributes(vao, params);
         vb.UnbindAfterDraw();
         if (semanticLayout)

@@ -1,5 +1,20 @@
 # NEXT.md
 
+## SAMPLE-048 EasyGL wireframe boundary (2026-09-25)
+
+The Triangle Picking requalification found that Mesa GLES without `GL_NV_polygon_mode`
+refused the selected triangle's `FillMode::WireFrame` draw. EasyGL now draws a bounded
+unclipped stock single-stream TriangleList as line loops when culling, depth, stencil,
+scissor, bias, MSAA and render targets are absent. Every other unsupported triangle
+route still refuses, and `GraphicsCapability::WireFrame` remains false because the
+context cannot satisfy the general contract. No sample-specific renderer branch was
+added. Six focused `EasyGLUnsupportedWireFrameTest` cases pass under the private GLES3
+GPU runner. The original XNA and CNA frozen Cats frames both have 327 magenta edge
+pixels and agree within eight levels at 99.99% of pixels; system Chrome WebGL2 picks
+the same triangle with `WEBGL_polygon_mode` deliberately hidden (326 magenta pixels).
+See `plans/plan_software.md` SOFTWARE-178 and
+`../cna-samples/samples/TrianglePicking/missing.md`. No SharpRuntime change was needed.
+
 ## XNA-ENUM-001 runtime type-surface closure (2026-09-20)
 
 The Microsoft XNA 4.0 runtime XML census now reports 331/331 documented

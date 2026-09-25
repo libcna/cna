@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 
 // SOFTWARE-178: GLES/WebGL wireframe is either a native polygon mode or an explicit refusal.
-// The retired GL_LINES expansion only looked correct for a single unclipped, uncullable,
-// zero-bias triangle; it could not preserve the polygon operation's actual rasterizer semantics.
+// An unclipped single-stream stock draw with no culling/depth/stencil/scissor/bias/MSAA can
+// safely draw each complete triangle as a line loop. All other unsupported cases still refuse.
 
 #include <array>
 #include <cstdint>
@@ -166,6 +166,28 @@ TEST_F(EasyGLUnsupportedWireFrameTest,
     EXPECT_NO_THROW(device->DrawUserPrimitives(
         PrimitiveType::LineList, vertices.data(), 0, 1,
         PositionColorDeclaration()));
+}
+
+TEST_F(EasyGLUnsupportedWireFrameTest,
+       UnclippedUserTriangleWithoutRasterizerSideEffectsDrawsThenClippedTriangleRefuses)
+{
+    auto vertices = Triangle();
+    for (auto& vertex : vertices)
+        vertex.Position.Z = 0.5f;
+
+    device->setDepthStencilStateProperty(DepthStencilState::None);
+    device->setRasterizerStateProperty(WireState());
+    BasicEffect effect(*device);
+    ApplyBasicEffect(effect);
+    EXPECT_NO_THROW(device->DrawUserPrimitives(
+        PrimitiveType::TriangleList, vertices.data(), 0, 1,
+        PositionColorDeclaration()));
+
+    vertices[0].Position.X = -2.0f;
+    ApplyBasicEffect(effect);
+    EXPECT_THROW(device->DrawUserPrimitives(
+        PrimitiveType::TriangleList, vertices.data(), 0, 1,
+        PositionColorDeclaration()), System::NotSupportedException);
 }
 
 TEST_F(EasyGLUnsupportedWireFrameTest, MultiStreamTriangleRouteRefuses)
