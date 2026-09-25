@@ -12,6 +12,8 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/NotSupportedException.hpp"
 
 #if defined(CNA_RENDERER_DIRECTX11)
 #include "CNA/Internal/Renderers/DirectX11/D3D11Textures.hpp"
@@ -180,7 +182,7 @@ class D3DCompressedTextureContract final : public Game
             const Microsoft::Xna::Framework::Rectangle unaligned(2, 0, 4, 4);
             texture.SetData(0, &unaligned, green.data(), 0, static_cast<int>(green.size()));
         }
-        catch (const std::out_of_range& e)
+        catch (const System::ArgumentException& e)
         {
             rejected = std::string(e.what()).find("block-aligned") != std::string::npos;
         }
@@ -217,22 +219,18 @@ class D3DCompressedTextureContract final : public Game
 
         const auto red = MakeBlocks(formatCase.surfaceFormat, {kRed565});
         texture.SetData(CubeMapFace::PositiveX, red.data(), static_cast<int>(red.size()));
-        std::array<Color, 16> pixels{};
+        std::vector<std::uint8_t> pixels(red.size(), 0xCD);
         texture.GetData(CubeMapFace::PositiveX, pixels.data(), static_cast<int>(pixels.size()));
-        const bool decoded = std::all_of(pixels.begin(), pixels.end(), [](const Color& pixel) {
-            return pixel.getRProperty() == 255 && pixel.getGProperty() == 0 &&
-                   pixel.getBProperty() == 0 && pixel.getAProperty() == 255;
-        });
+        const bool exact = pixels == red;
         const auto green = MakeBlocks(formatCase.surfaceFormat, {kGreen565});
         texture.SetData(CubeMapFace::PositiveX, 2, nullptr, green.data(), 0,
                         static_cast<int>(green.size()));
-        Color tail;
-        texture.GetData(CubeMapFace::PositiveX, 2, nullptr, &tail, 0, 1);
-        const bool tailDecoded = tail.getRProperty() == 0 && tail.getGProperty() == 255 &&
-            tail.getBProperty() == 0 && tail.getAProperty() == 255;
-        Check(decoded && tailDecoded,
+        std::vector<std::uint8_t> tail(green.size(), 0xCD);
+        texture.GetData(CubeMapFace::PositiveX, 2, nullptr, tail.data(), 0,
+                        static_cast<int>(tail.size()));
+        Check(exact && tail == green,
               std::string(formatCase.name) +
-                  " TextureCube decodes level 0 and its sub-4x4 mip tail");
+                  " TextureCube returns exact blocks at level 0 and its sub-4x4 mip tail");
     }
 
     void RunTexture3D(ActiveRenderer& renderer, GraphicsDevice& device,
@@ -244,54 +242,19 @@ class D3DCompressedTextureContract final : public Game
                     formatCase.name, querySucceeded ? 1 : 0, supportsTexture3D ? 1 : 0);
         Check(querySucceeded && supportsTexture3D,
               std::string(formatCase.name) + " native feature query includes 3D BC resources");
-
+        // The Direct3D device accepts BC volumes, but CNA's XNA GraphicsProfile contract
+        // deliberately excludes compressed Texture3D formats. Check the public refusal.
+        bool rejected = false;
         try
         {
             Texture3D texture(device, 4, 4, 2, true, formatCase.surfaceFormat);
-#if defined(CNA_RENDERER_DIRECTX11)
-            auto* native = dynamic_cast<CNA::Internal::Renderers::DirectX11::D3D11Texture3DRenderer*>(
-                &texture.GetRenderer());
-            D3D11_TEXTURE3D_DESC desc{};
-            if (native != nullptr) native->GetTextureEXT()->GetDesc(&desc);
-            const bool nativeFormat = native != nullptr && desc.Format == formatCase.dxgiFormat;
-#else
-            auto* native = dynamic_cast<CNA::Internal::Renderers::DirectX12::D3D12Texture3DRenderer*>(
-                &texture.GetRenderer());
-            const bool nativeFormat = native != nullptr &&
-                native->GetResourceEXT()->GetDesc().Format == formatCase.dxgiFormat;
-#endif
-            Check(nativeFormat,
-                  std::string(formatCase.name) + " Texture3D uses its native BC DXGI format");
-
-            const auto slices = MakeBlocks(formatCase.surfaceFormat, {kRed565, kGreen565});
-            texture.SetDataPointerEXT(0, 0, 0, 4, 4, 0, 2,
-                                     slices.data(), static_cast<int>(slices.size()));
-            std::array<Color, 32> pixels{};
-            texture.GetData(pixels.data(), static_cast<int>(pixels.size()));
-            bool decoded = true;
-            for (std::size_t i = 0; i < pixels.size(); ++i)
-            {
-                const bool redSlice = i < 16;
-                decoded = decoded && pixels[i].getRProperty() == (redSlice ? 255 : 0) &&
-                    pixels[i].getGProperty() == (redSlice ? 0 : 255) &&
-                    pixels[i].getBProperty() == 0 && pixels[i].getAProperty() == 255;
-            }
-            const auto tailBlock = MakeBlocks(formatCase.surfaceFormat, {kBlue565});
-            texture.SetDataPointerEXT(2, 0, 0, 1, 1, 0, 1,
-                                     tailBlock.data(), static_cast<int>(tailBlock.size()));
-            Color tail;
-            texture.GetData(2, 0, 0, 1, 1, 0, 1, &tail, 0, 1);
-            const bool tailDecoded = tail.getRProperty() == 0 && tail.getGProperty() == 0 &&
-                tail.getBProperty() == 255 && tail.getAProperty() == 255;
-            Check(decoded && tailDecoded,
-                  std::string(formatCase.name) +
-                      " Texture3D decodes slices and its sub-4x4 mip tail");
         }
-        catch (const std::exception& e)
+        catch (const System::NotSupportedException&)
         {
-            Check(false, std::string(formatCase.name) +
-                             " Texture3D compressed transfer threw: " + e.what());
+            rejected = true;
         }
+        Check(rejected, std::string(formatCase.name) +
+                        " compressed Texture3D is rejected by the public GraphicsProfile contract");
     }
 
 protected:

@@ -508,7 +508,13 @@ class SpriteBatch3DOrderTest : public Game
         r.pixels.assign(static_cast<std::size_t>(dest.w) * dest.h, Color(0xCD, 0xCD, 0xCD, 0xCD));
         try
         {
-            if (dest.rt) dest.rt->GetData(r.pixels.data(), 0, static_cast<int>(r.pixels.size()));
+            if (dest.rt)
+            {
+                // The readback is the observation boundary for this bind cycle.
+                // Resolve the target before asking its public GetData method for pixels.
+                dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+                dest.rt->GetData(r.pixels.data(), 0, static_cast<int>(r.pixels.size()));
+            }
             else         dev.GetBackBufferData(r.pixels.data(), 0, static_cast<int>(r.pixels.size()));
         }
         catch (const System::NotSupportedException&) { r.threwNotSupported = true; }

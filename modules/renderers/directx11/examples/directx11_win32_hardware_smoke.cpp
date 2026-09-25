@@ -14,6 +14,7 @@
 #include <array>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <exception>
 #include <memory>
 #include <vector>
@@ -33,6 +34,11 @@ namespace
     public:
         HardwareSmoke()
         {
+            if (const char* requested = std::getenv("CNA_DX11_STRESS_FRAMES"))
+            {
+                const long parsed = std::strtol(requested, nullptr, 10);
+                if (parsed >= 10 && parsed <= 10000) frameTarget_ = static_cast<int>(parsed);
+            }
             graphics_ = std::make_unique<GraphicsDeviceManager>(this);
             graphics_->setPreferredBackBufferWidthProperty(320);
             graphics_->setPreferredBackBufferHeightProperty(240);
@@ -46,9 +52,9 @@ namespace
             if (renderer_)
                 renderer_->DrainDebugMessagesEXT();
             const auto totals = D3DDebugLayerLog::Totals();
-            std::printf("frames=%d draw_checks=%d resize_observed=%d debug_layer=%d "
+            std::printf("frames=%d draw_checks=%d resize_observed=%d resize_count=%d debug_layer=%d "
                         "messages corruption=%llu error=%llu warning=%llu\n",
-                        frames_, drawChecks_, resizeObserved_ ? 1 : 0,
+                        frames_, drawChecks_, resizeObserved_ ? 1 : 0, resizeCount_,
                         renderer_ && renderer_->IsDebugLayerEnabledEXT() ? 1 : 0,
                         static_cast<unsigned long long>(totals.corruption),
                         static_cast<unsigned long long>(totals.error),
@@ -56,10 +62,11 @@ namespace
             for (const auto& message : D3DDebugLayerLog::Recent())
                 std::printf("debug_message severity=%d id=%d %s\n", message.severity,
                             message.id, message.description.c_str());
-            Check(frames_ >= 10 && drawChecks_ >= 2 && resizeObserved_,
+            Check(frames_ >= frameTarget_ && drawChecks_ >= 2 && resizeObserved_ &&
+                      (frameTarget_ == 10 || resizeCount_ >= frameTarget_ / 200),
                   "draw, presentation loop, and swap-chain resize completed");
-            Check(totals.corruption == 0 && totals.error == 0,
-                  "debug layer recorded no corruption or error");
+            Check(totals.corruption == 0 && totals.error == 0 && totals.warning == 0,
+                  "debug layer recorded no corruption, error, or warning");
             std::printf("result=%s failures=%d\n", failures_ == 0 ? "PASS" : "FAIL", failures_);
             return failures_ == 0 ? 0 : 1;
         }
@@ -121,7 +128,8 @@ namespace
                          Color::White);
             batch_->End();
 
-            if (frames_ == 2 || frames_ == 8)
+            if (frames_ == 2 || frames_ == 8 ||
+                (frameTarget_ > 10 && frames_ > 8 && frames_ % 100 == 0))
             {
                 std::uint8_t inside[4]{};
                 std::uint8_t outside[4]{};
@@ -171,17 +179,22 @@ namespace
                 if (frames_ == 2)
                     Check(inside[0] == 255 && inside[1] == 0 && inside[2] == 0 && blueClear,
                           "sprite draw and clear reach the swap-chain back buffer");
-                else
+                else if (frames_ == 8)
                     Check(inside[0] == 255 && inside[1] == 0 && inside[2] == 0 &&
                               redPixels == 32 * 32 && blueClear,
                           "sprite retains logical coordinates after swap-chain resize");
+                else
+                    Check(inside[0] == 255 && inside[1] == 0 && inside[2] == 0 && blueClear,
+                          "sprite remains in logical coordinates during repeated resize");
                 ++drawChecks_;
             }
 
             HWND window = reinterpret_cast<HWND>(getWindowProperty().getHandleProperty());
-            if (frames_ == 3)
+            if (frames_ == 3 ||
+                (frameTarget_ > 10 && frames_ > 10 && frames_ % 150 == 0))
             {
-                RECT outer{0, 0, 497, 301};
+                const bool alternate = frames_ > 10 && (frames_ / 150) % 2 == 1;
+                RECT outer{0, 0, alternate ? 499 : 497, alternate ? 303 : 301};
                 const DWORD style = static_cast<DWORD>(GetWindowLongPtrW(window, GWL_STYLE));
                 const DWORD exStyle = static_cast<DWORD>(GetWindowLongPtrW(window, GWL_EXSTYLE));
                 AdjustWindowRectEx(&outer, style, FALSE, exStyle);
@@ -206,10 +219,18 @@ namespace
                         backBuffer->GetDesc(&desc);
                         resizeObserved_ |= client.right == 497 && client.bottom == 301 &&
                                            desc.Width == 497 && desc.Height == 301;
+                        if (desc.Width == static_cast<UINT>(client.right) &&
+                            desc.Height == static_cast<UINT>(client.bottom) &&
+                            (client.right != lastClientWidth_ || client.bottom != lastClientHeight_))
+                        {
+                            ++resizeCount_;
+                            lastClientWidth_ = client.right;
+                            lastClientHeight_ = client.bottom;
+                        }
                     }
                 }
             }
-            if (++frames_ >= 10)
+            if (++frames_ >= frameTarget_)
                 Exit();
         }
 
@@ -226,7 +247,11 @@ namespace
         std::unique_ptr<SpriteBatch> batch_;
         DirectX11Renderer* renderer_ = nullptr;
         int frames_ = 0;
+        int frameTarget_ = 10;
         int drawChecks_ = 0;
+        int resizeCount_ = 0;
+        int lastClientWidth_ = 0;
+        int lastClientHeight_ = 0;
         int failures_ = 0;
         bool resizeObserved_ = false;
     };

@@ -45,6 +45,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <algorithm>
 #include <array>
@@ -399,12 +400,44 @@ protected:
             const std::string name = factorNames[i];
             expectState((name + " color-source").c_str(), factors[i], Blend::Zero,
                         BlendFunction::Add, Blend::One, Blend::Zero, BlendFunction::Add);
-            expectState((name + " color-destination").c_str(), Blend::Zero, factors[i],
-                        BlendFunction::Add, Blend::One, Blend::Zero, BlendFunction::Add);
+            const bool directX = device.GetGraphicsRendererName() == "DIRECTX11" ||
+                                 device.GetGraphicsRendererName() == "DIRECTX12";
+            if (directX && factors[i] == Blend::SourceAlphaSaturation)
+            {
+                bool rejected = false;
+                try
+                {
+                    (void)render(Blend::Zero, factors[i], BlendFunction::Add,
+                                 Blend::One, Blend::Zero, BlendFunction::Add);
+                }
+                catch (const System::NotSupportedException&)
+                {
+                    rejected = true;
+                }
+                Require(rejected, "D3D rejects SourceAlphaSaturation as a destination color factor");
+            }
+            else
+                expectState((name + " color-destination").c_str(), Blend::Zero, factors[i],
+                            BlendFunction::Add, Blend::One, Blend::Zero, BlendFunction::Add);
             expectState((name + " alpha-source").c_str(), Blend::One, Blend::Zero,
                         BlendFunction::Add, factors[i], Blend::Zero, BlendFunction::Add);
-            expectState((name + " alpha-destination").c_str(), Blend::One, Blend::Zero,
-                        BlendFunction::Add, Blend::Zero, factors[i], BlendFunction::Add);
+            if (directX && factors[i] == Blend::SourceAlphaSaturation)
+            {
+                bool rejected = false;
+                try
+                {
+                    (void)render(Blend::One, Blend::Zero, BlendFunction::Add,
+                                 Blend::Zero, factors[i], BlendFunction::Add);
+                }
+                catch (const System::NotSupportedException&)
+                {
+                    rejected = true;
+                }
+                Require(rejected, "D3D rejects SourceAlphaSaturation as a destination alpha factor");
+            }
+            else
+                expectState((name + " alpha-destination").c_str(), Blend::One, Blend::Zero,
+                            BlendFunction::Add, Blend::Zero, factors[i], BlendFunction::Add);
         }
 
         const std::array<BlendFunction, 5> functions{

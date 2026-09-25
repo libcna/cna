@@ -60,6 +60,10 @@ namespace CNA::Internal::Renderers::DirectX11
         [[nodiscard]] int GetCapacityEXT() const { return capacity_; }
         /// Byte stride of the most recent SetData() call, 0 before the first call (CNAEXT).
         [[nodiscard]] std::size_t GetStrideEXT() const { return stride_; }
+        /** @brief Returns the upload shadow used for device recovery and instance-matrix reads.
+         * @return The current buffer bytes in vertex order.
+         */
+        [[nodiscard]] const std::vector<std::uint8_t>& GetCpuDataEXT() const noexcept { return cpuData_; }
         /// Raw ID3D11Buffer* for draw-call binding (Phase DIRECTX8) (CNAEXT).
         [[nodiscard]] ID3D11Buffer* GetBufferEXT() const { return buffer_.Get(); }
 

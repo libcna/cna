@@ -1,6 +1,9 @@
 // plans/plan_dx.md Phase DIRECTX7 (DX-50/DX-51/DX-52).
 #include "CNA/Internal/Renderers/DirectX11/D3D11StateObjectCache.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
+#include "System/NotSupportedException.hpp"
+
+#include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
 
 #include <cstdio>
 #include <stdexcept>
@@ -29,6 +32,14 @@ namespace CNA::Internal::Renderers::DirectX11
         auto it = cache_.find(key);
         if (it != cache_.end()) return it->second;
 
+        // D3D11 permits SRC_ALPHA_SAT only as a source color factor. Reject the two
+        // destination slots before CreateBlendState so the debug layer stays clean.
+        const int saturated = static_cast<int>(
+            Microsoft::Xna::Framework::Graphics::Blend::SourceAlphaSaturation);
+        if (colorDstBlend == saturated || alphaDstBlend == saturated)
+            throw System::NotSupportedException(
+                "D3D11 does not support SourceAlphaSaturation as a destination blend factor.");
+
         // REMED-GFX-077: XNA ColorWriteChannels (R=1,G=2,B=4,A=8) is bit-identical to
         // D3D11_COLOR_WRITE_ENABLE_* (RED=1,GREEN=2,BLUE=4,ALPHA=8, ALL=15), so the raw ordinal
         // masked to 0xF is the RenderTargetWriteMask directly. Independent per-target masks
@@ -54,8 +65,8 @@ namespace CNA::Internal::Renderers::DirectX11
         rtTemplate.SrcBlend = D3DCommon::BlendToD3D11(colorSrcBlend);
         rtTemplate.DestBlend = D3DCommon::BlendToD3D11(colorDstBlend);
         rtTemplate.BlendOp = D3DCommon::BlendFunctionToD3D11(colorBlendFunc);
-        rtTemplate.SrcBlendAlpha = D3DCommon::BlendToD3D11(alphaSrcBlend);
-        rtTemplate.DestBlendAlpha = D3DCommon::BlendToD3D11(alphaDstBlend);
+        rtTemplate.SrcBlendAlpha = D3DCommon::AlphaBlendToD3D11(alphaSrcBlend);
+        rtTemplate.DestBlendAlpha = D3DCommon::AlphaBlendToD3D11(alphaDstBlend);
         rtTemplate.BlendOpAlpha = D3DCommon::BlendFunctionToD3D11(alphaBlendFunc);
 
         desc.RenderTarget[0] = rtTemplate;

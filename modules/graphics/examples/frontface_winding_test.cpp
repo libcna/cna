@@ -727,6 +727,8 @@ class FrontFaceWindingTest : public Game
         case Entry::Strip:
             break;   // handled above
         }
+        dev.SetVertexBuffer(nullptr);
+        dev.setIndicesProperty(nullptr);
     }
 
     /**

@@ -193,6 +193,7 @@ namespace CNA::Internal::Renderers::DirectX11
     void D3D11RenderTargetRenderer::BindAsRenderTarget()
     {
         ID3D11RenderTargetView* rtv = rtv_.Get();
+        if (owner_) owner_->UnbindOutputAliasesEXT(&rtv, 1, dsv_.Get());
         context_->OMSetRenderTargets(1, &rtv, dsv_.Get());
 
         D3D11_VIEWPORT vp{};
@@ -466,6 +467,7 @@ namespace CNA::Internal::Renderers::DirectX11
         if (face < 0 || face >= 6) return;
         activeFace_ = face;
         ID3D11RenderTargetView* rtv = rtv_[face].Get();
+        if (owner_) owner_->UnbindOutputAliasesEXT(&rtv, 1, dsv_.Get());
         context_->OMSetRenderTargets(1, &rtv, dsv_.Get());
 
         D3D11_VIEWPORT vp{};

@@ -53,9 +53,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
     endmacro()
 
     # GLTF-386: accept both version spellings emitted by genuine DXVK builds.
-    cna_register_renderer_test(NAME DirectX11_DxvkGate
-        COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/test-run-wine-dxvk-gate.sh
-        TIMEOUT 10 LABELS "DIRECTX11")
+    # Native Windows has neither bash nor DXVK, so this launcher gate only belongs
+    # to the cross-compiled Wine lane.
+    if(CMAKE_CROSSCOMPILING)
+        cna_register_renderer_test(NAME DirectX11_DxvkGate
+            COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/test-run-wine-dxvk-gate.sh
+            TIMEOUT 10 LABELS "DIRECTX11")
+    endif()
 
     cna_directx11_test(cna_test_directx11_smoke directx11_smoke_test.cpp)
     cna_directx11_ctest_command(_directx11_smoke_cmd cna_test_directx11_smoke)
@@ -85,6 +89,28 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
     # that probe, and 235 never include it. The probe is now SDL-free where SDL is absent, and the
     # fixtures that genuinely drive an SDL_Window keep REQUIRES_SDL.
     cna_register_d3d_parity_tests()
+
+    # Keep the shared classic parity corpus executable on native D3D11 too. The
+    # DirectX-specific list above does not include its multistream/instancing probes.
+    include(${CNA_GRAPHICS_EXAMPLES_DIR}/parity/ParityFixtures.cmake)
+    cna_register_parity_fixtures(
+        BUILDER cna_directx11_test
+        TARGET_SUFFIX directx11
+        TEST_PREFIX DirectX11
+        LABELS "Parity;DIRECTX11"
+        TIMEOUT 120)
+
+    cna_directx11_test(cna_test_directx11_instanced_textured
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/instanced_textured_draw_test.cpp)
+    cna_register_renderer_test(NAME DirectX11_InstancedTexturedDraw
+        COMMAND $<TARGET_FILE:cna_test_directx11_instanced_textured>
+        TIMEOUT 180 LABELS "Parity;DIRECTX11")
+
+    cna_directx11_test(cna_test_directx11_draw_line_topology
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/draw_line_topology_test.cpp)
+    cna_register_renderer_test(NAME DirectX11_DrawLineTopology
+        COMMAND $<TARGET_FILE:cna_test_directx11_draw_line_topology>
+        TIMEOUT 180 LABELS "Parity;DIRECTX11")
 endif()
 
 cna_apply_skip_convention()

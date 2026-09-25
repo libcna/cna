@@ -7,6 +7,7 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 #include <array>
@@ -123,9 +124,8 @@ protected:
                   static_cast<CNA::GraphicsCapability>(1000)),
               "unknown future capability defaults to false rather than being advertised");
         Check(!renderer.SupportsComputeShadersEXT() &&
-                  !renderer.SupportsIndirectDrawEXT() &&
-                  !renderer.SupportsHalfFloatTextureLinearFilteringEXT(),
-              "unimplemented modern DirectX extensions remain explicitly unavailable");
+                  !renderer.SupportsIndirectDrawEXT(),
+              "unimplemented compute and indirect DirectX extensions remain unavailable");
 
         std::printf("=== %d/%d PASS ===\n", passed_, passed_ + failed_);
         Exit();
@@ -138,6 +138,7 @@ public:
         graphics_->setPreferredBackBufferWidthProperty(96);
         graphics_->setPreferredBackBufferHeightProperty(64);
         graphics_->setPreferMultiSamplingProperty(true);
+        graphics_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
     }
 
     [[nodiscard]] int Result() const { return failed_ == 0 ? 0 : 1; }

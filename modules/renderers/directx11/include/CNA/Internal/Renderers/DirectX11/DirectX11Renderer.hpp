@@ -412,6 +412,15 @@ namespace CNA::Internal::Renderers::DirectX11
         /// OMSetRenderTargets()/viewport call, this only updates what Clear() (and friends) target
         /// next, since D3D11 has no single "currently bound FBO" the renderer can query back.
         void TrackCurrentRenderTargetEXT(ID3D11RenderTargetView* const* rtvs, int count, ID3D11DepthStencilView* dsv);
+        /**
+         * @brief Unbinds shader resource views that alias upcoming output attachments.
+         *
+         * @param rtvs Color attachments to bind.
+         * @param count Number of color attachments.
+         * @param dsv Depth attachment to bind, if any.
+         */
+        void UnbindOutputAliasesEXT(ID3D11RenderTargetView* const* rtvs, int count,
+                                    ID3D11DepthStencilView* dsv);
         /// CNAEXT (Phase DIRECTX6): restores the real back-buffer OM binding + viewport, and Clear()'s
         /// tracking to match. Called by D3D11RenderTargetRenderer/D3D11RenderTargetCubeRenderer's
         /// own UnbindAsRenderTarget() (after any MSAA resolve / mip regeneration they still need
@@ -429,6 +438,12 @@ namespace CNA::Internal::Renderers::DirectX11
         [[nodiscard]] std::weak_ptr<void> GetLifetimeTokenEXT() const noexcept
         {
             return lifetimeToken_;
+        }
+
+        /** @brief Forwards buffered draw ranges to the GPU without host-memory staging. */
+        [[nodiscard]] bool RequiresManagedBufferedDrawRangeValidationEXT() const noexcept override
+        {
+            return false;
         }
 
         // ---- IGraphicsRenderer: real (Phase DIRECTX8, DX-61) ----

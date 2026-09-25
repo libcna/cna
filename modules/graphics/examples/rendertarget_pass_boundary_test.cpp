@@ -234,10 +234,10 @@ namespace
                                  true, true, false, true, true, true, true, true};
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr Contract kContract{"DIRECTX11", true, Support::Exact, true, Support::Exact,
-                                 true, true, false, true, true, true, true, false};
+                                 true, true, false, true, true, true, true, true};
 #elif defined(CNA_RENDERER_DIRECTX12)
     constexpr Contract kContract{"DIRECTX12", true, Support::Exact, true, Support::Exact,
-                                 true, true, false, true, true, true, true, false};
+                                 true, true, false, true, true, true, true, true};
 #else
 #error "REMED-GFX-140: this renderer has no declared render-target pass-boundary contract."
 #endif

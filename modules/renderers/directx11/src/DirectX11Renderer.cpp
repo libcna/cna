@@ -17,11 +17,13 @@
 #include "CNA/Internal/Renderers/D3DCommon/D3DPresentation.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DRasterizationConvention.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -145,6 +147,26 @@ namespace CNA::Internal::Renderers::DirectX11
         {
             combinedElements.clear();
             inputElements.clear();
+            const auto streamElements = [](const D3D11VertexBufferRenderer& buffer,
+                                           int strideInBytes)
+            {
+                auto elements = buffer.GetDeclarationEXT().GetElements();
+                if (!elements.empty())
+                    return elements;
+                const auto inferred = CNA::Internal::Graphics::InferredLayoutForStride(
+                    strideInBytes,
+                    CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
+                if (!inferred.known)
+                    throw System::NotSupportedException(
+                        "DirectX11 cannot infer a vertex declaration for this buffer stride.");
+                for (std::size_t index = 0; index < inferred.count; ++index)
+                {
+                    const auto& input = inferred.elements[index];
+                    elements.emplace_back(input.offset, input.format, input.usage,
+                                          input.usageIndex);
+                }
+                return elements;
+            };
             for (int i = 0; i < params.vertexStreamCount; ++i)
             {
                 const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
@@ -152,11 +174,12 @@ namespace CNA::Internal::Renderers::DirectX11
                     continue;
                 const auto* buffer =
                     static_cast<const D3D11VertexBufferRenderer*>(stream.buffer);
-                if (buffer == nullptr || buffer->GetDeclarationEXT().GetElements().empty())
+                if (buffer == nullptr)
                     throw System::NotSupportedException(
-                        "DirectX11 multi-stream input requires every per-vertex buffer to carry "
-                        "a VertexDeclaration.");
-                const auto& elements = buffer->GetDeclarationEXT().GetElements();
+                        "DirectX11 multi-stream input requires a per-vertex buffer.");
+                const auto elements = streamElements(
+                    *buffer, stream.strideInBytes > 0 ? stream.strideInBytes
+                                                      : static_cast<int>(buffer->GetStrideEXT()));
                 for (std::size_t elementIndex = 0; elementIndex < elements.size(); ++elementIndex)
                 {
                     auto combined = elements[elementIndex];
@@ -187,6 +210,7 @@ namespace CNA::Internal::Renderers::DirectX11
 
             if (!includeInstanceStreams)
                 return;
+            int instanceColumn = 0;
             for (int i = 0; i < params.vertexStreamCount; ++i)
             {
                 const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
@@ -194,14 +218,23 @@ namespace CNA::Internal::Renderers::DirectX11
                     continue;
                 const auto* buffer =
                     static_cast<const D3D11VertexBufferRenderer*>(stream.buffer);
-                if (buffer == nullptr || buffer->GetDeclarationEXT().GetElements().empty())
+                if (buffer == nullptr)
                     throw System::NotSupportedException(
-                        "DirectX11 instancing requires every per-instance buffer to carry a "
-                        "VertexDeclaration.");
-                for (const auto& element : buffer->GetDeclarationEXT().GetElements())
+                        "DirectX11 instancing requires a per-instance buffer.");
+                for (const auto& element : streamElements(
+                         *buffer, stream.strideInBytes > 0 ? stream.strideInBytes
+                                                           : static_cast<int>(buffer->GetStrideEXT())))
                 {
+                    auto nativeElement = element;
+                    const bool worldColumn = instanceColumn < 4;
+                    if (worldColumn)
+                    {
+                        nativeElement.setVertexElementUsageProperty(
+                            Microsoft::Xna::Framework::Graphics::VertexElementUsage::TextureCoordinate);
+                        nativeElement.setUsageIndexProperty(++instanceColumn);
+                    }
                     inputElements.push_back(
-                        {element, stream.slot, stream.instanceFrequency, true});
+                        {nativeElement, stream.slot, stream.instanceFrequency, worldColumn});
                 }
             }
         }
@@ -1552,6 +1585,7 @@ namespace CNA::Internal::Renderers::DirectX11
         const int w = first ? first->GetWidth() : width_;
         const int h = first ? first->GetHeight() : height_;
 
+        UnbindOutputAliasesEXT(rtvs, n, dsv);
         context_->OMSetRenderTargets(static_cast<UINT>(n), rtvs, dsv);
 
         D3D11_VIEWPORT vp{};
@@ -1822,6 +1856,60 @@ namespace CNA::Internal::Renderers::DirectX11
             height = viewport.Height * static_cast<float>(logicalHeight) /
                 static_cast<float>(presentationHeight);
         }
+    }
+
+    void DirectX11Renderer::UnbindOutputAliasesEXT(
+        ID3D11RenderTargetView* const* rtvs, int count, ID3D11DepthStencilView* dsv)
+    {
+        std::vector<ID3D11Resource*> outputs;
+        outputs.reserve(static_cast<std::size_t>(std::max(0, count)) + (dsv ? 1u : 0u));
+        for (int i = 0; i < count; ++i)
+        {
+            if (!rtvs[i]) continue;
+            ID3D11Resource* resource = nullptr;
+            rtvs[i]->GetResource(&resource);
+            outputs.push_back(resource);
+        }
+        if (dsv)
+        {
+            ID3D11Resource* resource = nullptr;
+            dsv->GetResource(&resource);
+            outputs.push_back(resource);
+        }
+        if (outputs.empty()) return;
+
+        const auto clearStage = [&](auto getViews, auto setViews)
+        {
+            ID3D11ShaderResourceView* views[D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT]{};
+            (context_.Get()->*getViews)(0, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT, views);
+            for (UINT slot = 0; slot < D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT; ++slot)
+            {
+                if (!views[slot]) continue;
+                ID3D11Resource* sampled = nullptr;
+                views[slot]->GetResource(&sampled);
+                const bool alias = std::find(outputs.begin(), outputs.end(), sampled) != outputs.end();
+                sampled->Release();
+                views[slot]->Release();
+                if (alias)
+                {
+                    ID3D11ShaderResourceView* empty = nullptr;
+                    (context_.Get()->*setViews)(slot, 1, &empty);
+                }
+            }
+        };
+        clearStage(&ID3D11DeviceContext::VSGetShaderResources,
+                   &ID3D11DeviceContext::VSSetShaderResources);
+        clearStage(&ID3D11DeviceContext::PSGetShaderResources,
+                   &ID3D11DeviceContext::PSSetShaderResources);
+        clearStage(&ID3D11DeviceContext::GSGetShaderResources,
+                   &ID3D11DeviceContext::GSSetShaderResources);
+        clearStage(&ID3D11DeviceContext::HSGetShaderResources,
+                   &ID3D11DeviceContext::HSSetShaderResources);
+        clearStage(&ID3D11DeviceContext::DSGetShaderResources,
+                   &ID3D11DeviceContext::DSSetShaderResources);
+        clearStage(&ID3D11DeviceContext::CSGetShaderResources,
+                   &ID3D11DeviceContext::CSSetShaderResources);
+        for (ID3D11Resource* resource : outputs) resource->Release();
     }
 
     void DirectX11Renderer::TrackCurrentRenderTargetEXT(
@@ -3262,13 +3350,97 @@ namespace CNA::Internal::Renderers::DirectX11
             return;
         }
 #endif
+        const bool stockEffectNeedsFullShader = params.textureEnabled || params.texture0 != nullptr ||
+            params.lightingEnabled || params.fogEnabled || params.dualTexture ||
+            params.envMapping || params.skinned || params.pbr ||
+            params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f;
+        if (stockEffectNeedsFullShader)
+        {
+            struct InstanceColumn
+            {
+                const GpuVertexStreamBinding* stream;
+                const D3D11VertexBufferRenderer* buffer;
+                int byteOffset;
+            };
+            std::array<InstanceColumn, 4> columns{};
+            int columnCount = 0;
+            GpuDrawParams ordinary = params;
+            ordinary.instanceCount = 1;
+            ordinary.vertexStreamCount = 0;
+            for (int streamIndex = 0; streamIndex < params.vertexStreamCount; ++streamIndex)
+            {
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(streamIndex)];
+                if (stream.instanceFrequency == 0)
+                {
+                    ordinary.vertexStreams[static_cast<std::size_t>(ordinary.vertexStreamCount++)] = stream;
+                    continue;
+                }
+                const auto* buffer = static_cast<const D3D11VertexBufferRenderer*>(stream.buffer);
+                if (buffer == nullptr)
+                    throw System::NotSupportedException("DirectX11 instancing requires a per-instance buffer.");
+                const auto& elements = buffer->GetDeclarationEXT().GetElements();
+                if (elements.empty())
+                {
+                    if (stream.strideInBytes != 64)
+                        throw System::NotSupportedException(
+                            "DirectX11 cannot infer four instance-matrix columns from this stride.");
+                    for (int index = 0; index < 4 && columnCount < 4; ++index)
+                        columns[static_cast<std::size_t>(columnCount++)] = {&stream, buffer, index * 16};
+                }
+                else
+                {
+                    for (const auto& element : elements)
+                    {
+                        if (columnCount == 4)
+                            break;
+                        if (element.getVertexElementFormatProperty() !=
+                            Microsoft::Xna::Framework::Graphics::VertexElementFormat::Vector4)
+                            throw System::NotSupportedException(
+                                "DirectX11 instance-matrix columns must be Vector4 elements.");
+                        columns[static_cast<std::size_t>(columnCount++)] = {
+                            &stream, buffer, element.getOffsetProperty()};
+                    }
+                }
+            }
+            if (columnCount != 4 || ordinary.vertexStreamCount == 0)
+                throw System::NotSupportedException(
+                    "DirectX11 stock instancing requires four instance-matrix columns and a vertex stream.");
+            for (int instance = 0; instance < instanceCount; ++instance)
+            {
+                std::array<float, 16> matrixValues{};
+                for (int column = 0; column < 4; ++column)
+                {
+                    const auto& entry = columns[static_cast<std::size_t>(column)];
+                    const int divisor = entry.stream->instanceFrequency;
+                    const int record = entry.stream->vertexOffset + instance / divisor;
+                    const int stride = entry.stream->strideInBytes;
+                    if (record < 0 || record >= entry.buffer->GetVertexCount() || stride <= 0)
+                        throw System::NotSupportedException(
+                            "DirectX11 instance-matrix read exceeds the bound vertex buffer.");
+                    const std::size_t byteOffset = static_cast<std::size_t>(record) * stride +
+                        static_cast<std::size_t>(entry.byteOffset);
+                    const auto& bytes = entry.buffer->GetCpuDataEXT();
+                    if (byteOffset + sizeof(float) * 4 > bytes.size())
+                        throw System::NotSupportedException(
+                            "DirectX11 instance-matrix column exceeds the upload shadow.");
+                    std::memcpy(matrixValues.data() + column * 4, bytes.data() + byteOffset,
+                                sizeof(float) * 4);
+                }
+                const Matrix instanceWorld(
+                    matrixValues[0], matrixValues[1], matrixValues[2], matrixValues[3],
+                    matrixValues[4], matrixValues[5], matrixValues[6], matrixValues[7],
+                    matrixValues[8], matrixValues[9], matrixValues[10], matrixValues[11],
+                    matrixValues[12], matrixValues[13], matrixValues[14], matrixValues[15]);
+                DrawPrimitivesExImpl(vb, &ib, instanceWorld * world, view, projection,
+                                     primitive, primitiveCount, ordinary);
+            }
+            return;
+        }
         std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> combinedElements;
         std::vector<D3DCommon::D3DVertexInputElement> inputElements;
         BuildVertexInputLayout(params, true, combinedElements, inputElements);
-        // plans/plan_directx12_parity.md DX12-0028 (shared with DirectX12): the stock instanced effect reads each instance's World
-        // matrix from TextureCoordinate1..4 of the per-instance stream (INSTANCEWORLD0..3, DX-222). A
-        // declaration without all four was only refused when input-layout creation failed -- a generic
-        // runtime_error, and a debug-layer error (ID 65) for a draw the game can be told about plainly.
+        // The stock shader reads four INSTANCEWORLD columns. CNA's instance-matrix convention
+        // assigns them by declaration order, so the public semantics may vary between callers.
         {
             bool instanceColumns[4] = {false, false, false, false};
             for (const auto& input : inputElements)
@@ -3277,14 +3449,16 @@ namespace CNA::Internal::Renderers::DirectX11
                 if (input.instanceWorldSemantic &&
                     input.element.getVertexElementUsageProperty() ==
                         Microsoft::Xna::Framework::Graphics::VertexElementUsage::TextureCoordinate &&
+                    input.element.getVertexElementFormatProperty() ==
+                        Microsoft::Xna::Framework::Graphics::VertexElementFormat::Vector4 &&
                     usageIndex >= 1 && usageIndex <= 4)
                     instanceColumns[usageIndex - 1] = true;
             }
             if (!(instanceColumns[0] && instanceColumns[1] && instanceColumns[2] && instanceColumns[3]))
                 throw System::NotSupportedException(
                     "DirectX11Renderer::DrawInstancedPrimitivesEx: the stock instanced effect reads each "
-                    "instance's World matrix from TextureCoordinate1..4 of the per-instance stream, "
-                    "and the bound declaration does not provide all four");
+                    "instance's World matrix from four Vector4 columns in the per-instance "
+                    "streams, and the bound declarations do not provide all four");
         }
         const bool hasColor = D3DCommon::DeclarationHasElement(
             combinedElements,

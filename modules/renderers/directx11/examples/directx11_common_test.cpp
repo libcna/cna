@@ -56,6 +56,12 @@ int main()
           "Blend::SourceAlpha -> D3D11_BLEND_SRC_ALPHA");
     check(BlendToD3D11(static_cast<int>(Blend::InverseSourceAlpha)) == D3D11_BLEND_INV_SRC_ALPHA,
           "Blend::InverseSourceAlpha -> D3D11_BLEND_INV_SRC_ALPHA");
+    check(AlphaBlendToD3D11(static_cast<int>(Blend::SourceColor)) == D3D11_BLEND_SRC_ALPHA,
+          "alpha SourceColor uses the source alpha component");
+    check(AlphaBlendToD3D11(static_cast<int>(Blend::DestinationColor)) == D3D11_BLEND_DEST_ALPHA,
+          "alpha DestinationColor uses the destination alpha component");
+    check(AlphaBlendToD3D11(static_cast<int>(Blend::SourceAlphaSaturation)) == D3D11_BLEND_ONE,
+          "alpha SourceAlphaSaturation is one");
     check(BlendFunctionToD3D11(static_cast<int>(BlendFunction::ReverseSubtract)) == D3D11_BLEND_OP_REV_SUBTRACT,
           "BlendFunction::ReverseSubtract -> D3D11_BLEND_OP_REV_SUBTRACT");
     check(CompareFunctionToD3D11(static_cast<int>(CompareFunction::LessEqual)) == D3D11_COMPARISON_LESS_EQUAL,

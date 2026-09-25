@@ -10,12 +10,18 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#if defined(CNA_RENDERER_DIRECTX11)
+#include "CNA/Internal/Renderers/DirectX11/DirectX11Renderer.hpp"
+#include <wrl/client.h>
+#endif
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <limits>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -97,6 +103,48 @@ class PresentationModeContractTest final : public Game
         return box;
     }
 
+#if defined(CNA_RENDERER_DIRECTX11)
+    static void ReadPhysicalBackbuffer(
+        CNA::Internal::Renderers::IGraphicsRenderer& renderer,
+        int width, int height, std::uint8_t* pixels)
+    {
+        auto& d3d = static_cast<CNA::Internal::Renderers::DirectX11::DirectX11Renderer&>(renderer);
+        ID3D11RenderTargetView* boundRtv = nullptr;
+        d3d.GetContextEXT()->OMGetRenderTargets(1, &boundRtv, nullptr);
+        Microsoft::WRL::ComPtr<ID3D11RenderTargetView> rtv;
+        rtv.Attach(boundRtv);
+        if (!rtv)
+            throw std::runtime_error("DirectX11 physical backbuffer has no bound render target");
+        Microsoft::WRL::ComPtr<ID3D11Resource> resource;
+        rtv->GetResource(resource.GetAddressOf());
+        Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
+        if (FAILED(resource.As(&texture)))
+            throw std::runtime_error("DirectX11 backbuffer is not a 2D texture");
+        D3D11_TEXTURE2D_DESC desc{};
+        texture->GetDesc(&desc);
+        if (desc.SampleDesc.Count != 1 || desc.Width < static_cast<UINT>(width) ||
+            desc.Height < static_cast<UINT>(height))
+            throw std::runtime_error("DirectX11 physical readback surface shape is unexpected");
+        desc.Usage = D3D11_USAGE_STAGING;
+        desc.BindFlags = 0;
+        desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        desc.MiscFlags = 0;
+        Microsoft::WRL::ComPtr<ID3D11Texture2D> staging;
+        if (FAILED(d3d.GetDeviceEXT()->CreateTexture2D(&desc, nullptr, staging.GetAddressOf())))
+            throw std::runtime_error("DirectX11 physical staging texture creation failed");
+        d3d.GetContextEXT()->CopyResource(staging.Get(), texture.Get());
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        if (FAILED(d3d.GetContextEXT()->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &mapped)))
+            throw std::runtime_error("DirectX11 physical staging texture map failed");
+        for (int row = 0; row < height; ++row)
+            std::memcpy(pixels + static_cast<std::size_t>(row) * width * 4u,
+                        static_cast<const std::uint8_t*>(mapped.pData) +
+                            static_cast<std::size_t>(row) * mapped.RowPitch,
+                        static_cast<std::size_t>(width) * 4u);
+        d3d.GetContextEXT()->Unmap(staging.Get(), 0);
+    }
+#endif
+
     Box RenderMode(CnaPresentationMode mode, int physicalWidth, int physicalHeight,
                    int& logicalWidth, int& logicalHeight,
                    int& viewportX, int& viewportY, int& viewportWidth, int& viewportHeight)
@@ -120,12 +168,17 @@ class PresentationModeContractTest final : public Game
             : logicalHeight;
         SpriteBatch batch(device);
         batch.Begin();
-        batch.Draw(*white_, Rectangle(0, 0, spriteWidth, spriteHeight), Color::White);
+        batch.Draw(*white_, Microsoft::Xna::Framework::Rectangle(
+            0, 0, spriteWidth, spriteHeight), Color::White);
         batch.End();
 
         std::vector<std::uint8_t> pixels(
             static_cast<std::size_t>(physicalWidth) * physicalHeight * 4u, 0);
+#if defined(CNA_RENDERER_DIRECTX11)
+        ReadPhysicalBackbuffer(renderer, physicalWidth, physicalHeight, pixels.data());
+#else
         renderer.ReadBackbuffer(0, 0, physicalWidth, physicalHeight, pixels.data());
+#endif
         return WhiteBox(pixels, physicalWidth, physicalHeight);
     }
 

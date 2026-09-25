@@ -221,7 +221,7 @@ namespace
                                  true, false, Support::Exact, MipTargets::LevelsWithoutStorage, true, true, false, false, true};
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr Contract kContract{"DIRECTX11", true, Support::Exact, Support::Exact,
-                                 true, true, Support::Exact, MipTargets::Real, true, true, false, false, false};
+                                 true, true, Support::Exact, MipTargets::Real, true, true, true, false, false};
 #elif defined(CNA_RENDERER_DIRECTX12)
     // `rtCubeSetData` true since plans/plan_directx12_parity.md DX12-0014: D3D12RenderTargetCubeRenderer
     // uploads SetData into its sampleable cube instead of inheriting the interface's refusal, and an
@@ -1198,8 +1198,7 @@ class RenderTargetCubeGetDataContractTest : public Game
      * @brief W1 -- how a face UPLOADED through the inherited TextureCube::SetData relates to the
      *        same face read back.
      *
-     * EasyGL implements this upload; other renderers inherit the deterministic refusal.
-     * Where it is implemented, the round trip is measured rather than assumed because rendered
+     * Where this renderer implements upload, the round trip is measured rather than assumed because rendered
      * and uploaded writers need not share row orientation. Current EasyGL normalizes both writers
      * to the same top-row-first public order.
      */

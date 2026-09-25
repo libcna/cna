@@ -172,9 +172,26 @@ protected:
             Texture2D t(dev, 2, 2, false, SurfaceFormat::ColorBgraEXT);
         });
 #endif
-        expectThrows("TextureCube ColorSrgbEXT", [&]{
-            TextureCube t(dev, 2, false, SurfaceFormat::ColorSrgbEXT);
-        });
+        const auto cubeSrgbVerdict = dev.GetRenderer().ClassifyTextureCubeFormatEXT(
+            static_cast<int>(SurfaceFormat::ColorSrgbEXT));
+        if (cubeSrgbVerdict == CNA::Internal::Renderers::RendererFormatVerdict::Supported)
+        {
+            expectNoThrow("TextureCube ColorSrgbEXT", [&]{
+                TextureCube t(dev, 2, false, SurfaceFormat::ColorSrgbEXT);
+            });
+        }
+        else if (cubeSrgbVerdict == CNA::Internal::Renderers::RendererFormatVerdict::Unsupported)
+        {
+            expectThrowsNotSupported("TextureCube ColorSrgbEXT", [&]{
+                TextureCube t(dev, 2, false, SurfaceFormat::ColorSrgbEXT);
+            });
+        }
+        else
+        {
+            expectThrows("TextureCube ColorSrgbEXT", [&]{
+                TextureCube t(dev, 2, false, SurfaceFormat::ColorSrgbEXT);
+            });
+        }
         if (hasTexture3D)
         {
             expectThrowsNotSupported("Texture3D ColorSrgbEXT", [&]{

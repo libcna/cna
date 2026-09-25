@@ -211,13 +211,13 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr Contract kContract{"DIRECTX11", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
-                                 Support::Unsupported, false};
+                                 Support::Exact, true};
 #elif defined(CNA_RENDERER_DIRECTX12)
     // DX-260: D3D12 allocates the complete cube mip chain and supports exact per-level transfers,
     // matching its Texture3D path and the public TextureCube LevelCount contract.
     constexpr Contract kContract{"DIRECTX12", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
-                                 Support::Unsupported, false};
+                                 Support::Unsupported, true};
 #else
 #error "REMED-GFX-135: this renderer has no declared TextureCube/Texture3D SetData contract."
 #endif
