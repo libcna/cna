@@ -145,6 +145,7 @@ namespace CNA::Platform::Sdl3 {
                 motion.y = source.motion.y;
                 motion.deltaX = source.motion.xrel;
                 motion.deltaY = source.motion.yrel;
+                motion.synthesizedFromTouch = source.motion.which == SDL_TOUCH_MOUSEID;
                 destination = motion;
                 return true;
             }
@@ -159,6 +160,7 @@ namespace CNA::Platform::Sdl3 {
                 button.clicks = source.button.clicks;
                 button.x = source.button.x;
                 button.y = source.button.y;
+                button.synthesizedFromTouch = source.button.which == SDL_TOUCH_MOUSEID;
                 destination = button;
                 return true;
             }

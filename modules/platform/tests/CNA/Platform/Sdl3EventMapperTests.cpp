@@ -333,6 +333,25 @@ TEST(Sdl3EventMapperTests, MouseButtonCarriesButtonPressStateAndClickCount)
     EXPECT_EQ(button.clicks, 2);
 }
 
+TEST(Sdl3EventMapperTests, MouseEventsRetainWhetherSdlSynthesizedThemFromTouch)
+{
+    for (const SDL_MouseID sourceId : {SDL_MouseID{1}, SDL_TOUCH_MOUSEID})
+    {
+        SDL_Event motionSource = MakeEvent(SDL_EVENT_MOUSE_MOTION);
+        motionSource.motion.which = sourceId;
+        PlatformEvent mapped;
+        ASSERT_TRUE(MapSdlEvent(motionSource, mapped));
+        EXPECT_EQ(std::get<MouseMotionEvent>(mapped).synthesizedFromTouch,
+                  sourceId == SDL_TOUCH_MOUSEID);
+
+        SDL_Event buttonSource = MakeEvent(SDL_EVENT_MOUSE_BUTTON_DOWN);
+        buttonSource.button.which = sourceId;
+        ASSERT_TRUE(MapSdlEvent(buttonSource, mapped));
+        EXPECT_EQ(std::get<MouseButtonEvent>(mapped).synthesizedFromTouch,
+                  sourceId == SDL_TOUCH_MOUSEID);
+    }
+}
+
 TEST(Sdl3EventMapperTests, WheelKeepsHostConfiguredDirection)
 {
     // SDL has already applied the host's natural-scrolling preference to x/y. The direction

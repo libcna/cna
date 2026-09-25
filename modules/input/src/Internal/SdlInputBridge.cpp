@@ -554,7 +554,8 @@ namespace CNA::Internal::Input
                 InputManager::SetMousePosition(static_cast<int>(position.X), static_cast<int>(position.Y));
                 InputManager::AddMouseRelativeDelta(value.deltaX, value.deltaY);
                 if (Microsoft::Xna::Framework::Input::Touch::TouchPanel::
-                        getMouseTouchEmulationEnabledEXT() && emulated_mouse_touch_down())
+                        getMouseTouchEmulationEnabledEXT() && emulated_mouse_touch_down() &&
+                    !value.synthesizedFromTouch)
                 {
                     emit_emulated_mouse_touch(
                         Microsoft::Xna::Framework::Input::Touch::TouchLocationState::Moved, position);
@@ -580,7 +581,7 @@ namespace CNA::Internal::Input
                 }
                 if (value.button == 1 &&
                     Microsoft::Xna::Framework::Input::Touch::TouchPanel::
-                        getMouseTouchEmulationEnabledEXT())
+                        getMouseTouchEmulationEnabledEXT() && !value.synthesizedFromTouch)
                 {
                     namespace Touch = Microsoft::Xna::Framework::Input::Touch;
                     if (value.pressed && !emulated_mouse_touch_down())

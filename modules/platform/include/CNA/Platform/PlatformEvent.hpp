@@ -158,6 +158,8 @@ namespace CNA::Platform {
         float deltaX = 0.0f;
         /** @brief Vertical movement since the previous motion event. */
         float deltaY = 0.0f;
+        /** @brief SDL generated this mouse event from a real touch contact. */
+        bool synthesizedFromTouch = false;
     };
 
     /** @brief A mouse button was pressed or released. */
@@ -175,6 +177,8 @@ namespace CNA::Platform {
         float x = 0.0f;
         /** @brief Pointer y position at the time of the event. */
         float y = 0.0f;
+        /** @brief SDL generated this mouse event from a real touch contact. */
+        bool synthesizedFromTouch = false;
     };
 
     /** @brief The mouse wheel was scrolled. */

@@ -15,6 +15,8 @@ using CNA::Internal::Input::InputManager;
 using CNA::Internal::Input::PlatformInputBridge;
 using CNA::Platform::MouseButtonEvent;
 using CNA::Platform::MouseMotionEvent;
+using CNA::Platform::TouchEvent;
+using CNA::Platform::TouchEventKind;
 using namespace Microsoft::Xna::Framework::Input::Touch;
 
 namespace
@@ -180,4 +182,57 @@ TEST_F(MouseTouchEmulationTest, ResetForTestsClearsTheOptIn)
     InputManager::ResetAllForTests();
 
     EXPECT_FALSE(TouchPanel::getMouseTouchEmulationEnabledEXT());
+}
+
+TEST_F(MouseTouchEmulationTest, SdlTouchMouseEventsDoNotCreateADuplicateFinger)
+{
+    TouchPanel::setMouseTouchEmulationEnabledEXT(true);
+    TouchPanel::setEnabledGesturesProperty(GestureType::Pinch | GestureType::PinchComplete);
+
+    TouchEvent first{};
+    first.fingerId = 10;
+    first.kind = TouchEventKind::Down;
+    first.x = 0.4f;
+    first.y = 0.5f;
+    first.clientWidth = DisplaySize;
+    first.clientHeight = DisplaySize;
+    PlatformInputBridge::ProcessEvent(first);
+
+    MouseMotionEvent syntheticMotion{};
+    syntheticMotion.x = 320.0f;
+    syntheticMotion.y = 400.0f;
+    syntheticMotion.synthesizedFromTouch = true;
+    PlatformInputBridge::ProcessEvent(syntheticMotion);
+    MouseButtonEvent syntheticPress{};
+    syntheticPress.button = 1;
+    syntheticPress.pressed = true;
+    syntheticPress.x = 320.0f;
+    syntheticPress.y = 400.0f;
+    syntheticPress.synthesizedFromTouch = true;
+    PlatformInputBridge::ProcessEvent(syntheticPress);
+    ASSERT_EQ(TouchPanel::GetState().getCountProperty(), 1);
+
+    TouchEvent second = first;
+    second.fingerId = 11;
+    second.x = 0.6f;
+    PlatformInputBridge::ProcessEvent(second);
+    ASSERT_EQ(TouchPanel::GetState().getCountProperty(), 2);
+
+    first.kind = TouchEventKind::Motion;
+    first.x = 0.3f;
+    first.deltaX = -0.1f;
+    PlatformInputBridge::ProcessEvent(first);
+    syntheticMotion.x = 240.0f;
+    PlatformInputBridge::ProcessEvent(syntheticMotion);
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const GestureSample pinch = TouchPanel::ReadGesture();
+    EXPECT_EQ(pinch.getGestureTypeProperty(), GestureType::Pinch);
+    EXPECT_FLOAT_EQ(pinch.getPositionProperty().X, 240.0f);
+    EXPECT_FLOAT_EQ(pinch.getPosition2Property().X, 480.0f);
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+
+    MouseButtonEvent syntheticRelease = syntheticPress;
+    syntheticRelease.pressed = false;
+    PlatformInputBridge::ProcessEvent(syntheticRelease);
+    EXPECT_EQ(TouchPanel::GetState().getCountProperty(), 2);
 }
