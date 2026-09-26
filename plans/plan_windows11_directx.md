@@ -4,7 +4,8 @@ Status: native MSVC and physical Intel GPU baseline established on 2026-09-25. T
 Windows DirectX parity campaign is active on `win11-directx-modern`. DX11 and
 DX12 classic have both been revalidated after adding plural cube-face MRT.
 DX11 modern CNAEXT has completed its full Intel test run. DX12 modern
-CNAEXT evaluation is active; implementation remains open. Opt-in compiled
+CNAEXT passed a full Intel test run after its feature implementation; a
+post-diagnostics repeat is active. Opt-in compiled
 XNA effects now pass their DX11 and DX12 renderer suites on Intel (WIN11-0066).
 DX12 modern GPU timestamps and pass timing now pass focused hardware tests
 (WIN11-0067). Native DX12 sampled texture arrays now pass exact-transfer,
@@ -18,7 +19,7 @@ now pass focused physical Intel and targeted GPU-validation tests (WIN11-0071).
 DX12 base-instance drawing now passes native, custom ShaderEffect, and opt-in
 compiled-effect pixel tests, including divided instance streams (WIN11-0072).
 The large DX12 descriptor fixture under Intel GPU-based validation remains a recorded
-exception (WIN11-0025). Modern parity and application validation remain open.
+exception (WIN11-0025). Cross-D3D stress and application validation remain open.
 
 ## Stable source and machine baseline
 
@@ -2750,3 +2751,37 @@ $exe='C:\rv\build\cna-win11-dx11-asan\Debug\CnaGraphicsExtTests.exe'
 $commandLine='"'+$exe+'" --gtest_color=no --gtest_filter='+$filter
 & C:\rv\work\private_desktop_awake.exe 1800000 $commandLine *> C:\rv\logs\dx11-modern-asan-focused-1.log
 ```
+
+### WIN11-0075: Current DirectX modern interface audit
+
+The current `IGraphicsRenderer` and its resource interfaces were compared
+with both DirectX renderer declarations and the renderer-neutral CNAEXT
+tests. This matrix names the complete applicable modern member families;
+inherited defaults are listed explicitly instead of being silently counted
+as implementations. It is an interface and capability audit, while the
+complete post-WIN11-0073 DX12 binary is still running.
+
+| Current renderer member family | DX11 verdict | DX12 verdict |
+|---|---|---|
+| HLSL shader dialect, vertex/fragment/compute source selection, ShaderEffect compilation and diagnostics (`GetShaderDialectEXT`, `SupportsShaderLanguageEXT`, `ExecutesShaderEffectSourceEXT`) | Native HLSL and stock/package source, physical pixel tests pass. | Native HLSL and stock/package source, physical pixel tests pass. |
+| Sampled 2D/cube/volume resources and format verdicts (`ClassifySurfaceFormatEXT`, `ClassifyTextureCubeFormatEXT`, `ClassifyTexture3DFormatEXT`, `ClassifyColorTransferFormatEXT`, compressed 2D/cube transfer verdicts, `LoadsCompressedContentNativelyEXT`, `GetSurfaceFormatUsageSupportEXT`, `SupportsTexture3DSamplingEXT`) | Native DXGI format checks and exact transfers; cube verdict inherits the 2D storage answer because the cube uses the same 2D format route. | Same, with D3D12 format-support queries; cube verdict likewise inherits the 2D storage answer. |
+| Render targets, cube faces, MRT, MSAA and format verdicts (`CreateRenderTarget2DEXT`, `CreateRenderTargetCubeEXT`, `ClassifyRenderTargetFormatEXT`, `ClassifyRenderTargetCubeFormatEXT`, applied format/sample queries) | Native and classic/modern pixel tested; inherited cube verdict delegates to the same 2D-face renderability. | Native and classic/modern pixel tested; inherited cube verdict delegates to the same 2D-face renderability. |
+| `Texture2DArray`, layer limits and shader bindings (`CreateTexture2DArrayEXT`, `BindTexture2DArrayEXT`, `GetMaxTextureArrayLayersEXT`) | Native array upload/readback and HLSL sampling tested. | Native array upload/readback and HLSL sampling tested, including targeted GBV. |
+| Typed storage images and ordinary `Texture2D` compute image binding (`CreateStorageTexture2DEXT`, `BindStorageTexture2DEXT`, `SupportsComputeImageBindingEXT`, storage-image limit) | Device-format-gated typed UAVs, six float formats, mips/rectangles, compute-to-graphics and recovery tested. | Same contracts through native D3D12 typed UAVs and resource transitions, including targeted GBV. |
+| Storage/constant buffers, graphics-stage SRVs and exact transfers (`CreateStorageBufferEXT`, `BindStorageBufferForDrawEXT`, range upload/readback, `CopyToEXT`, immutable usage/CPU-access masks, vertex-stage block count, storage/uniform limits and alignments) | Native buffers, HLSL bindings, GPU readback and clustered graphics tested. | Native descriptor-backed buffers, HLSL bindings, GPU readback and clustered graphics tested, including targeted GBV. |
+| Compute program, dispatch and barrier contract (`CreateComputeShader`, compile/diagnostics, scalar uniforms, constant/storage/image/sampled bindings, direct-binding verdict, `DispatchCompute`, `MemoryBarrierEXT`, workgroup limits) | Native CS 5.0 and immediate-context hazard unbinding; the inherited barrier is inert because dispatch/graphics bindings and the D3D11 context order the tested accesses. | Native CS 5.0, explicit resource-state transitions before/after dispatch; the inherited barrier is inert because those transitions already order the tested storage/image/indirect accesses. Chained dispatch and render/compute/render pass. |
+| GPU-fetched indirect draws and logical base instance (`SupportsIndirectDrawEXT`, both indirect entry points, `SupportsBaseInstanceDrawingEXT`) | Native indirect buffers/draws and absolute instance ID/stream mapping tested. | Native `ExecuteIndirect`, command signatures, retention and absolute instance ID/stream mapping tested, including GBV. |
+| Stock shadows, cascades, punctual lights, IBL, PBR/skinning (`SupportsShadowSamplingEXT`, `SupportsImageBasedLightingEXT`) | Native shader variants and physical pixel oracles pass. | Native shader variants and physical pixel oracles pass, including targeted GBV. |
+| GPU timers and timestamp period (`SupportsGpuTimerEXT`, `CreateGpuTimerEXT`, `GetTimestampPeriodPicosecondsEXT`) | Native D3D11 timestamp/disjoint queries measure elapsed GPU time. The inherited period limit is zero because D3D11 exposes frequency only through an asynchronous per-measurement disjoint result, not a stable synchronous device limit. | Native timestamp heap/readback measures elapsed GPU time; the period limit now derives from the direct queue's frequency and is tested before/after recreation. |
+| Debug markers (`SetStringMarkerEXT`) | Native `ID3DUserDefinedAnnotation` marker, UTF-8 conversion and context recovery tested. | Native PIX command-list marker when `WinPixEventRuntime.dll` is present; absent runtime is an explicit local dependency boundary, with debug-clean test on the official DLL. |
+| Modern vertex/index input, stage texture/attachment limits, compressed loading, half-float filtering | Native limits and capability/format probes, instancing and MRT pixel tested. | Native limits and capability/format probes, instancing and MRT pixel tested. |
+| Presentation format, swap interval, graphics profile and device-loss entry points | Native DXGI swap chain and resize, applied formats/MSAA, profile limits, `CanBeginDrawEXT` lost-device check. | Same, with DRED evidence and explicit hardware adapter choice. |
+| Display color space (`GetDisplayColorSpaceEXT`, `SetDisplayColorSpaceEXT`) | Inherited sRGB answer and sRGB-only setter are truthful; CNA Win32 has no HDR presentation opt-in. | Same. |
+| Partial/alternate-window present (`PresentRegionEXT`) | Inherited explicit refusal; no mature EasyGL implementation to match. Generic CNA optional XNA overload debt. | Same. |
+| Remaining inherited helpers (`GetAdditionalLimitationsTextEXT`, cube/profile-size delegates, managed draw-range validation) | Common text/default delegates retain their documented semantics; native paths validate their draw ranges. | Same. |
+
+The optional MojoShader compiled XNA effect path is separately opt-in and
+physically tested on both renderers under WIN11-0066 and WIN11-0072; neither
+default build advertises it. No public CNAEXT shader intake was added. The
+high-cardinality Intel GPU-validation TDR from WIN11-0025 is still a recorded
+environment/driver investigation item; smaller targeted GBV cases are clean.
