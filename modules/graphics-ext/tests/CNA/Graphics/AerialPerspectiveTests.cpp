@@ -20,6 +20,7 @@
 #include "CNA/Graphics/DepthNormalPrepass.hpp"
 #include "CNA/Graphics/FullscreenPass.hpp"
 #include "CNA/Graphics/PostProcessContext.hpp"
+#include "../../../src/shaders/post_process/PostProcessHlsl.generated.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -34,6 +35,7 @@
 #include <cstdio>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -195,7 +197,12 @@ TEST(AerialPerspectiveTest, TheShaderAgreesWithTheCpuTwinOnAirMass)
     CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_GLSL_SHADER_SOURCE(gd);
+    const bool hlsl = gd.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                                    CNA::ShaderStageEXT::Vertex)
+                   && gd.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                                    CNA::ShaderStageEXT::Fragment);
+    if (!hlsl && !CnaTest::EngineLayer::RunsGlslShaderSource(gd))
+        GTEST_SKIP() << "this renderer has no aerial air-mass probe shader dialect";
 
     constexpr const char* kVertexSource = R"(#version 300 es
 precision highp float;
@@ -226,7 +233,43 @@ void main() {
 }
 )";
 
-    ShaderEffect probe(gd, kVertexSource, source);
+    constexpr const char* kHlslVertexSource = R"(
+cbuffer SpriteParameters : register(b0) { float2 viewportSize; };
+struct Input { float2 position : POSITION; float2 texcoord : TEXCOORD; float4 color : COLOR; };
+float4 main(Input input) : SV_Position
+{
+    float2 ndc = input.position / viewportSize * 2.0f - 1.0f;
+    return float4(ndc.x, -ndc.y, 0.0f, 1.0f);
+}
+)";
+    std::string hlslSource;
+    if (hlsl)
+    {
+        const std::string_view production =
+            CNA::Graphics::detail::PostProcessHlslGenerated::
+                kAerialPerspectiveFragmentHlsl;
+        const std::size_t begin = production.find("float cnaAirMass(");
+        const std::size_t end = production.find("float3 cnaAtmosphereTransmittance(", begin);
+        ASSERT_NE(begin, std::string_view::npos);
+        ASSERT_NE(end, std::string_view::npos);
+        hlslSource.assign(production.substr(begin, end - begin));
+        hlslSource += R"(
+cbuffer ProbeParameters : register(b4)
+{
+    float3 uDirection;
+    float uDistance;
+    float uScaleHeight;
+    float uScale;
+};
+float4 main(float4 position : SV_Position) : SV_Target0
+{
+    float mass = cnaAerialAirMass(uDirection, uDistance, uScaleHeight);
+    return float4(saturate(mass / uScale), 0.0f, 0.0f, 1.0f);
+}
+)";
+    }
+    ShaderEffect probe(gd, hlsl ? kHlslVertexSource : kVertexSource,
+                       hlsl ? hlslSource : source);
     ASSERT_TRUE(probe.IsEffectValid());
 
     Texture2D dummy(gd, 1, 1);

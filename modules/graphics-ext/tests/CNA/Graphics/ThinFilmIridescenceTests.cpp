@@ -12,6 +12,7 @@
 
 #include "CNA/Graphics/FullscreenPass.hpp"
 #include "CNA/Graphics/ThinFilmIridescence.hpp"
+#include "../../../src/shaders/clustered_forward/ClusteredForwardHlsl.generated.hpp"
 #include "EngineTestSupport.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -22,6 +23,7 @@
 
 #include <cmath>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -184,11 +186,51 @@ void main() {
 TEST(ThinFilmIridescenceTest, TheShaderMatchesTheCpuReference)
 {
     CnaTest::EngineLayer::HiDefDevice gd;
-    CNA_SKIP_WITHOUT_GLSL_SHADER_SOURCE(gd);
+    const bool hlsl = gd.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                                    CNA::ShaderStageEXT::Vertex)
+                   && gd.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                                    CNA::ShaderStageEXT::Fragment);
+    if (!hlsl && !CnaTest::EngineLayer::RunsGlslShaderSource(gd))
+        GTEST_SKIP() << "this renderer has no thin-film probe shader dialect";
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
-    ShaderEffect effect(gd, kVertexSource, MakeProbeSource());
+    constexpr const char* kHlslVertexSource = R"(
+cbuffer SpriteParameters : register(b0) { float2 viewportSize; };
+struct Input { float2 position : POSITION; float2 texcoord : TEXCOORD; float4 color : COLOR; };
+float4 main(Input input) : SV_Position
+{
+    float2 ndc = input.position / viewportSize * 2.0f - 1.0f;
+    return float4(ndc.x, -ndc.y, 0.0f, 1.0f);
+}
+)";
+    std::string hlslSource;
+    if (hlsl)
+    {
+        const std::string production =
+            CNA::Graphics::detail::ClusteredForwardHlslGenerated::FragmentSource();
+        const std::size_t begin = production.find("float3 cnaFilmSchlick(");
+        const std::size_t end = production.find("float cnaDistribution(", begin);
+        ASSERT_NE(begin, std::string::npos);
+        ASSERT_NE(end, std::string::npos);
+        hlslSource.assign(production, begin, end - begin);
+        hlslSource += R"(
+cbuffer ProbeParameters : register(b4)
+{
+    float uCosTheta;
+    float uThickness;
+    float uScale;
+};
+float4 main(float4 position : SV_Position) : SV_Target0
+{
+    float3 film = cnaThinFilmIridescence(
+        1.0f, 1.3f, uCosTheta, uThickness, float3(0.04f, 0.04f, 0.04f));
+    return float4(saturate(film * uScale), 1.0f);
+}
+)";
+    }
+    ShaderEffect effect(gd, hlsl ? kHlslVertexSource : kVertexSource,
+                        hlsl ? hlslSource : MakeProbeSource());
     ASSERT_TRUE(effect.IsEffectValid()) << effect.GetCompileErrorEXT();
 
     constexpr int kSize = 8;

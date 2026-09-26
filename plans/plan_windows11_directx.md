@@ -1487,3 +1487,30 @@ $env:CNA_D3D11_DEBUG_LAYER='1'
 Build log: `C:\rv\logs\dx11-marker-hlsl-relink-1.log`. The combined three-case
 physical run passed **3/3**, zero skips/failures, four explicit Intel adapter
 selections (the marker case recreates its device), and zero D3D11 diagnostics.
+
+## HLSL CPU/GPU reference probes on DX11, 2026-09-26
+
+WIN11-0054: two renderer-neutral numeric reference tests previously ran only
+their GLSL source and skipped DX11 despite the production HLSL shader
+packages being present. The aerial air-mass test now extracts the production
+`cnaAirMass`/`cnaAerialAirMass` HLSL helpers; the thin-film test extracts the
+production `cnaFilm*`/`cnaThinFilmIridescence` helpers. Each supplies a small
+existing-HLSL-intake fragment probe and retains its original GLSL path. Both
+CPU-versus-GPU pixel comparisons passed on physical Intel with the D3D11
+debug layer enabled, **2/2**, zero warnings/errors. Their source compiled in
+the DX11 and DX12 Debug test targets. The existing DX12 classic build has
+`CNA_CNAEXT` disabled, so its filtered executable registered **0** modern
+cases; that is build evidence only, not DX12 runtime validation.
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsExtTests --parallel 8
+cmake --build C:\rv\build\cna-win11-dx12-debug --config Debug --target CnaGraphicsExtTests --parallel 8
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=AerialPerspectiveTest.TheShaderAgreesWithTheCpuTwinOnAirMass:ThinFilmIridescenceTest.TheShaderMatchesTheCpuReference:D3D11NativeComputeTest.DebugMarkersFollowTheImmediateContextAcrossRecovery' *> C:\rv\logs\dx11-marker-hlsl-focused-1.log
+```
+
+DX12 cross-build log: `C:\rv\logs\dx12-cross-build-after-hlsl-probes-1.log`;
+the zero-case DX12 invocation is
+`C:\rv\logs\dx12-hlsl-probes-cross-1.log`. The last full DX11 modern tally
+above predates the two newly executable numeric probes; a complete rebuilt
+suite has not been rerun solely for these test-input changes.
