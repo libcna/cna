@@ -192,7 +192,6 @@ namespace CNA::Graphics {
         RenderTarget2D* volume = pool_.acquire(kSliceCount * kSliceResolution, kSliceResolution,
                                                SurfaceFormat::Color, DepthFormat::None, 0);
 
-        buildEffect_->Apply();
         const bool haveShadow = shadowMap_ != nullptr && shadowMap_->getShadowTexture() != nullptr;
         Matrix lightViewProjection = Matrix::getIdentityProperty();
         if (haveShadow)
@@ -224,11 +223,11 @@ namespace CNA::Graphics {
         buildEffect_->SetUniformFloatArray("uVolumetricBuildScalars",
                                            buildScalars.data(),
                                            static_cast<int>(buildScalars.size()));
+        buildEffect_->Apply();
 
         fullscreen_->draw(context.source, volume, buildEffect_.get(),
                           kSliceCount * kSliceResolution, kSliceResolution);
 
-        resolveEffect_->Apply();
         resolveEffect_->SetUniformInt("uDepthSampler", 1);
         resolveEffect_->SetTexture(1, *context.sourceDepth);
         resolveEffect_->SetUniformInt("uVolumeSampler", 2);
@@ -243,6 +242,7 @@ namespace CNA::Graphics {
         resolveEffect_->SetUniformFloatArray("uVolumetricResolveScalars",
                                              resolveScalars.data(),
                                              static_cast<int>(resolveScalars.size()));
+        resolveEffect_->Apply();
 
         fullscreen_->draw(context.source, context.destination, resolveEffect_.get(),
                           context.width, context.height);

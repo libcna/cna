@@ -110,7 +110,13 @@ namespace CNA::Internal::Renderers::DirectX11
             return;
 
         BindProgramEXT(true);
+    }
 
+    bool D3D11EffectRenderer::BindSpriteEXT()
+    {
+        if (!valid_)
+            return false;
+        BindProgramEXT(true);
         using Microsoft::Xna::Framework::Graphics::VertexElement;
         using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
         using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
@@ -120,8 +126,10 @@ namespace CNA::Internal::Renderers::DirectX11
             {VertexElement(16, VertexElementFormat::Vector4, VertexElementUsage::Color, 0), 0, 0, false},
         };
         const auto layout = GetOrCreateInputLayoutEXT({}, spriteElements);
-        if (layout)
-            context_->IASetInputLayout(layout.Get());
+        if (!layout)
+            return false;
+        context_->IASetInputLayout(layout.Get());
+        return true;
     }
 
     void D3D11EffectRenderer::BindProgramEXT(const bool preserveImplicitTexture0)
@@ -290,6 +298,7 @@ namespace CNA::Internal::Renderers::DirectX11
     void D3D11EffectRenderer::SetViewportSizeEXT(float width, float height)
     {
         reflection_.SetVec2("vpSize", width, height);
+        reflection_.SetVec2("viewportSize", width, height);
     }
 
     ComPtr<ID3D11InputLayout> D3D11EffectRenderer::GetOrCreateInputLayoutEXT(

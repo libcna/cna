@@ -120,7 +120,6 @@ bool cnaContactOccluded(float rayViewDepth, float sceneViewDepth, float bias, fl
 
         const int steps = std::clamp(stepCount_, kMinSteps, kMaxSteps);
 
-        effect_->Apply();
         effect_->SetUniformInt("uDepthSampler", 1);
         effect_->SetTexture(1, *context.sourceDepth);
         std::array<float, 32> matrices{};
@@ -146,7 +145,8 @@ bool cnaContactOccluded(float rayViewDepth, float sceneViewDepth, float bias, fl
         effect_->SetUniformVec3Array("uContactDirections", direction.data(), 1);
         effect_->SetUniformVec2Array("uContactVectors", depthSize.data(), 1);
         effect_->SetUniformFloatArray("uContactScalars", scalars.data(),
-                                      static_cast<int>(scalars.size()));
+                                       static_cast<int>(scalars.size()));
+        effect_->Apply();
 
         fullscreen_->draw(context.source, context.destination, effect_.get(),
                           context.width, context.height);

@@ -879,7 +879,8 @@ TEST(SsrPassTest, SupportAsksTheTwoPartQuestion)
     const bool hasPackageLanguage = supportsPair(CNA::ShaderLanguageEXT::SpirV) ||
                                     supportsPair(CNA::ShaderLanguageEXT::Wgsl) ||
                                     supportsPair(CNA::ShaderLanguageEXT::GlslDesktop) ||
-                                    supportsPair(CNA::ShaderLanguageEXT::GlslEs);
+                                    supportsPair(CNA::ShaderLanguageEXT::GlslEs) ||
+                                    supportsPair(CNA::ShaderLanguageEXT::Hlsl);
     const bool expected = gd.SupportsCapability(CNA::GraphicsCapability::CustomEffects) &&
                           hasPackageLanguage;
     EXPECT_EQ(pass.isSupported(gd), expected);

@@ -1485,6 +1485,15 @@ namespace CNA::Internal::Renderers::DirectX11
                (support & D3D11_FORMAT_SUPPORT_SHADER_SAMPLE) != 0;
     }
 
+    bool DirectX11Renderer::SupportsTexture3DSamplingEXT() const
+    {
+        if (!device_) return false;
+        UINT support = 0;
+        return SUCCEEDED(device_->CheckFormatSupport(DXGI_FORMAT_R8G8B8A8_UNORM, &support)) &&
+            (support & (D3D11_FORMAT_SUPPORT_TEXTURE3D | D3D11_FORMAT_SUPPORT_SHADER_SAMPLE)) ==
+                (D3D11_FORMAT_SUPPORT_TEXTURE3D | D3D11_FORMAT_SUPPORT_SHADER_SAMPLE);
+    }
+
     bool DirectX11Renderer::SupportsShaderLanguageEXT(int language, int stage) const
     {
         return device_ != nullptr &&

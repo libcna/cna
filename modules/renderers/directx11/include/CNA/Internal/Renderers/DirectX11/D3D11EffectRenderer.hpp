@@ -69,8 +69,11 @@ namespace CNA::Internal::Renderers::DirectX11
         [[nodiscard]] bool BindStorageTexture2DEXT(
             int unit, std::shared_ptr<IStorageTexture2DRenderer> texture) override;
 
-        /** @brief Writes the reflected `vpSize` parameter used by the SpriteBatch convention. */
+        /** @brief Writes the reflected viewport-size aliases used by SpriteBatch shaders. */
         void SetViewportSizeEXT(float width, float height);
+
+        /** @brief Binds the completed effect parameters and SpriteBatch vertex layout. */
+        [[nodiscard]] bool BindSpriteEXT();
 
         /**
          * @brief Binds this effect for a non-sprite draw using the caller's complete input layout.

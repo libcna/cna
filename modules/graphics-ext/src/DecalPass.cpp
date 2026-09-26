@@ -93,7 +93,6 @@ namespace CNA::Graphics {
         if (axisLength > 1e-6f) axis = Vector3(axis.X / axisLength, axis.Y / axisLength,
                                                axis.Z / axisLength);
 
-        effect_->Apply();
         effect_->SetUniformInt("uDecalSampler", 1);
         effect_->SetTexture(1, *decal);
         if (normals_ != nullptr)
@@ -119,6 +118,7 @@ namespace CNA::Graphics {
         effect_->SetUniformVec3Array("uDecalVectors", vectors.data(), 2);
         effect_->SetUniformFloatArray("uDecalScalars", scalars.data(),
                                       static_cast<int>(scalars.size()));
+        effect_->Apply();
 
         // NonPremultiplied, and not the Opaque every post-process pass uses: a decal composites
         // onto the frame rather than replacing it, and its own alpha is the mask that decides

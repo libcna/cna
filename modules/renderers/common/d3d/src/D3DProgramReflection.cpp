@@ -247,12 +247,21 @@ namespace CNA::Internal::Renderers::D3DCommon
         const auto found = uniforms_.find(CanonicalName(name));
         if (found == uniforms_.end())
             return;
-        const std::int32_t nativeValue = value;
         for (const auto& location : found->second)
         {
             auto& buffer = constantBuffers_[location.bufferSlot].data;
-            if (location.offset + sizeof(nativeValue) <= buffer.size())
+            if (location.offset + sizeof(std::int32_t) > buffer.size())
+                continue;
+            if (location.variableType == D3D_SVT_FLOAT)
+            {
+                const float nativeValue = static_cast<float>(value);
                 std::memcpy(buffer.data() + location.offset, &nativeValue, sizeof(nativeValue));
+            }
+            else
+            {
+                const std::int32_t nativeValue = value;
+                std::memcpy(buffer.data() + location.offset, &nativeValue, sizeof(nativeValue));
+            }
         }
     }
 
@@ -366,7 +375,7 @@ namespace CNA::Internal::Renderers::D3DCommon
             {
                 for (int column = 0; column < columns; ++column)
                 {
-                    const int sourceIndex = column * 4 + row;
+                    const int sourceIndex = row * 4 + column;
                     const int destinationIndex = location.variableClass == D3D_SVC_MATRIX_ROWS
                         ? row * 4 + column : column * 4 + row;
                     if (static_cast<std::size_t>(destinationIndex + 1) * sizeof(float) <= stride)

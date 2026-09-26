@@ -71,13 +71,13 @@ namespace CNA::Graphics {
         const float number = settings != nullptr ? settings->getDOFFNumber()       : fNumber_;
         const float radius = settings != nullptr ? settings->getDOFMaxRadius()     : maxRadius_;
 
-        effect_->Apply();
         effect_->SetUniformInt("uDepthSampler", 1);
         effect_->SetTexture(1, *context.sourceDepth);
         const std::array dofScalars{
             context.farPlane, focus, length, number, radius, packedDepth_ ? 1.0f : 0.0f};
         effect_->SetUniformFloatArray("uDofScalars", dofScalars.data(),
                                       static_cast<int>(dofScalars.size()));
+        effect_->Apply();
 
         fullscreen_->draw(context.source, context.destination, effect_.get(),
                           context.width, context.height);

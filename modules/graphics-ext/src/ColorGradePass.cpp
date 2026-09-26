@@ -153,7 +153,6 @@ namespace CNA::Graphics {
         ScopedSamplerStateOverride samplerScope(
             *chosen->getGraphicsDeviceProperty(), 1, lutSampler);
 
-        chosen->Apply();
         const float lutSize = static_cast<float>(useVolume ? volumeLutSize_ : lutSize_);
         const float tetrahedral = interpolation_ == LutInterpolation::Tetrahedral ? 1.0f : 0.0f;
         chosen->SetUniformVec4("uColorGradeParams", lutSize, strength, tetrahedral, 0.0f);
@@ -167,6 +166,8 @@ namespace CNA::Graphics {
             chosen->SetUniformInt("uLutSampler", 1);
             chosen->SetTexture(1, *lut_);
         }
+
+        chosen->Apply();
 
         fullscreen_->draw(context.source, context.destination, chosen,
                           context.width, context.height);

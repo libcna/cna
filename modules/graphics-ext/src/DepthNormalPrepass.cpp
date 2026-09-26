@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "shaders/depth_normal_prepass/DepthNormalPrepassHlsl.generated.hpp"
 #include "shaders/depth_normal_prepass/DepthNormalPrepassShaderPackage.generated.hpp"
 
 #include <algorithm>
@@ -24,6 +25,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace CNA::Graphics {
@@ -112,8 +114,7 @@ float cnaUnpackDepth(vec4 channels) {
                 : TextStage{kPrepassVulkanFragmentWgsl,
                             "depth_normal_prepass/prepass.vulkan.frag.wgsl"};
 
-            return ShaderPackageEXT(
-                {
+            std::vector<ShaderCodeEXT> variants{
                     ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslEs,
                                   CNA::ShaderStageEXT::Vertex, "main", esVertex.label,
                                   std::string(esVertex.source)),
@@ -140,7 +141,20 @@ float cnaUnpackDepth(vec4 channels) {
                     ShaderCodeEXT(CNA::ShaderLanguageEXT::Wgsl,
                                   CNA::ShaderStageEXT::Fragment, "main", wgslFragment.label,
                                   std::string(wgslFragment.source)),
-                },
+                };
+            using namespace CNA::Graphics::detail::DepthNormalPrepassHlslGenerated;
+            variants.emplace_back(
+                CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Vertex, "main",
+                skinned ? "depth_normal_prepass/skinned.hlsl"
+                        : "depth_normal_prepass/rigid.hlsl",
+                std::string(skinned ? kSkinnedVertexHlsl : kRigidVertexHlsl));
+            variants.emplace_back(
+                CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Fragment, "main",
+                velocityOutputs ? "depth_normal_prepass/prepass_velocity.hlsl"
+                                : "depth_normal_prepass/prepass.hlsl",
+                std::string(velocityOutputs ? kVelocityFragmentHlsl : kPrepassFragmentHlsl));
+            return ShaderPackageEXT(
+                std::move(variants),
                 {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment});
         }
 

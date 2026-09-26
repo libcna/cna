@@ -206,6 +206,11 @@ namespace CNA::Internal::Renderers::DirectX11
          * @return True when the device reports filtered sampling of R16G16B16A16_FLOAT.
          */
         [[nodiscard]] bool SupportsHalfFloatTextureLinearFilteringEXT() const override;
+        /**
+         * @brief Reports sampled volume-texture support for ShaderEffect pixel programs.
+         * @return True when the selected device supports Color Texture3D sampling.
+         */
+        [[nodiscard]] bool SupportsTexture3DSamplingEXT() const override;
 
         /**
          * @brief Reports native D3D11 disjoint timestamp-query support.

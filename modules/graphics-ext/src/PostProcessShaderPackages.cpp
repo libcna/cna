@@ -5,6 +5,7 @@
 #ifdef CNA_CNAEXT
 
 #include "CNA/Graphics/ShaderCodeEXT.hpp"
+#include "shaders/post_process/PostProcessHlsl.generated.hpp"
 #include "shaders/post_process/PostProcessShaderPackage.generated.hpp"
 
 #include <cstddef>
@@ -52,8 +53,7 @@ namespace CNA::Graphics::detail
                 CNA::ShaderStageEXT::Fragment);
             for (ShaderBindingRequirementEXT& requirement : additionalRequirements)
                 requirements.push_back(std::move(requirement));
-            return ShaderPackageEXT(
-                {
+            std::vector<ShaderCodeEXT> variants{
                     ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslEs,
                                   CNA::ShaderStageEXT::Vertex, "main",
                                   "post_process/fullscreen.es.vert.glsl",
@@ -89,7 +89,22 @@ namespace CNA::Graphics::detail
                     ShaderCodeEXT(CNA::ShaderLanguageEXT::Wgsl,
                                   CNA::ShaderStageEXT::Fragment, "main",
                                   wgslFragment.label, std::string(wgslFragment.source)),
-                },
+                };
+            const std::string_view hlslFragment =
+                PostProcessHlslGenerated::FindFragment(vulkanFragment.label);
+            if (!hlslFragment.empty())
+            {
+                variants.emplace_back(
+                    CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Vertex,
+                    "main", "post_process/fullscreen.hlsl",
+                    std::string(PostProcessHlslGenerated::kFullscreenVertexHlsl));
+                variants.emplace_back(
+                    CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Fragment,
+                    "main", std::string(vulkanFragment.label) + " -> hlsl",
+                    std::string(hlslFragment));
+            }
+            return ShaderPackageEXT(
+                std::move(variants),
                 {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment},
                 std::move(requirements));
         }

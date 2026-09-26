@@ -168,7 +168,6 @@ namespace CNA::Graphics {
         RenderTarget2D* occlusion = pool_.acquire(occlusionWidth, occlusionHeight,
                                                   SurfaceFormat::Color, DepthFormat::None, 0);
 
-        occlusionEffect_->Apply();
         occlusionEffect_->SetUniformInt("uNormalSampler", 1);
         occlusionEffect_->SetTexture(1, *context.sourceNormals);
         occlusionEffect_->SetUniformInt("uNoiseSampler", 2);
@@ -193,11 +192,11 @@ namespace CNA::Graphics {
         occlusionEffect_->SetUniformVec2Array("uSsaoVectors", noiseScale.data(), 1);
         occlusionEffect_->SetUniformFloatArray("uSsaoScalars", ssaoScalars.data(),
                                                static_cast<int>(ssaoScalars.size()));
+        occlusionEffect_->Apply();
 
         fullscreen_->draw(context.sourceDepth, occlusion, occlusionEffect_.get(),
                           occlusionWidth, occlusionHeight);
 
-        composeEffect_->Apply();
         composeEffect_->SetUniformInt("uOcclusionSampler", 1);
         composeEffect_->SetTexture(1, *occlusion);
         // The blur folded into the compose pass steps by the occlusion buffer's texels, which at
@@ -208,6 +207,7 @@ namespace CNA::Graphics {
         const std::array composeScalars{intensity};
         composeEffect_->SetUniformVec2Array("uSsaoComposeVectors", texelSize.data(), 1);
         composeEffect_->SetUniformFloatArray("uSsaoComposeScalars", composeScalars.data(), 1);
+        composeEffect_->Apply();
 
         fullscreen_->draw(context.source, context.destination, composeEffect_.get(),
                           context.width, context.height);

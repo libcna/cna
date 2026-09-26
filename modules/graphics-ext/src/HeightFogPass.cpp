@@ -67,7 +67,6 @@ namespace CNA::Graphics {
             return;
         }
 
-        effect_->Apply();
         effect_->SetUniformInt("uDepthSampler", 1);
         effect_->SetTexture(1, *context.sourceDepth);
         std::array<float, 32> fogMatrices{};
@@ -80,6 +79,7 @@ namespace CNA::Graphics {
         effect_->SetUniformVec3Array("uFogVectors", fogColor.data(), 1);
         effect_->SetUniformFloatArray("uFogScalars", fogScalars.data(),
                                       static_cast<int>(fogScalars.size()));
+        effect_->Apply();
 
         fullscreen_->draw(context.source, context.destination, effect_.get(),
                           context.width, context.height);

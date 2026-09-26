@@ -5,6 +5,7 @@
 
 #include "CNA/Graphics/ShaderCodeEXT.hpp"
 #include "CNA/Graphics/ShaderPackageEXT.hpp"
+#include "TransparencyHlsl.generated.hpp"
 #include "TransparencyShaderPackage.generated.hpp"
 
 #include <cstddef>
@@ -32,7 +33,9 @@ namespace CNA::Tests::Transparency
             const std::string_view wgslVertex,
             const std::string_view esFragment, const std::string_view desktopFragment,
             const std::uint32_t (&vulkanFragment)[VulkanFragmentSize],
-            const std::string_view wgslFragment, const char* label)
+            const std::string_view wgslFragment,
+            const std::string_view hlslVertex, const std::string_view hlslFragment,
+            const char* label)
         {
             using CNA::Graphics::ShaderCodeEXT;
             using namespace CNA::Tests::TransparencyGenerated;
@@ -70,6 +73,14 @@ namespace CNA::Tests::Transparency
                                   CNA::ShaderStageEXT::Fragment, "main",
                                   std::string(label) + ".wgsl.frag.wgsl",
                                   std::string(wgslFragment)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                  CNA::ShaderStageEXT::Vertex, "main",
+                                  std::string(label) + ".hlsl.vert.hlsl",
+                                  std::string(hlslVertex)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                  CNA::ShaderStageEXT::Fragment, "main",
+                                  std::string(label) + ".hlsl.frag.hlsl",
+                                  std::string(hlslFragment)),
                 },
                 {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment});
         }
@@ -86,6 +97,8 @@ namespace CNA::Tests::Transparency
                                      kEmitterDesktopFragmentSource,
                                      kEmitterVulkanFragmentSpirV,
                                      kEmitterVulkanFragmentWgsl,
+                                     CNA::Tests::TransparencyHlslGenerated::kBasicVertexHlsl,
+                                     CNA::Tests::TransparencyHlslGenerated::kEmitterFragmentHlsl,
                                      "transparency/emitter");
     }
 
@@ -100,6 +113,8 @@ namespace CNA::Tests::Transparency
                                      kFlatDesktopFragmentSource,
                                      kFlatVulkanFragmentSpirV,
                                      kFlatVulkanFragmentWgsl,
+                                     CNA::Tests::TransparencyHlslGenerated::kBasicVertexHlsl,
+                                     CNA::Tests::TransparencyHlslGenerated::kFlatFragmentHlsl,
                                      "transparency/flat");
     }
 
@@ -114,6 +129,8 @@ namespace CNA::Tests::Transparency
                                      kWeightProbeDesktopFragmentSource,
                                      kWeightProbeVulkanFragmentSpirV,
                                      kWeightProbeVulkanFragmentWgsl,
+                                     CNA::Tests::TransparencyHlslGenerated::kDirectVertexHlsl,
+                                     CNA::Tests::TransparencyHlslGenerated::kWeightProbeFragmentHlsl,
                                      "transparency/weight_probe");
     }
 }
