@@ -4,7 +4,9 @@
 #include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <stdexcept>
 
@@ -12,6 +14,8 @@ namespace CNA::Internal::Renderers::DirectX12
 {
     namespace
     {
+        std::atomic<std::uint64_t> nextTextureResourceSerial{1};
+
         std::string FormatHr(HRESULT hr)
         {
             char buf[32];
@@ -141,7 +145,14 @@ namespace CNA::Internal::Renderers::DirectX12
         }
         if (FAILED(hr))
             throw std::runtime_error("D3D12TextureRenderer: CreateCommittedResource failed, hr=" + FormatHr(hr));
-        texture_->SetName(L"CNA Texture2D resource");
+        // DRED can report multiple freed textures at one fault address; a serial identifies
+        // which creation each name belongs to after its COM object has been released.
+        const std::uint64_t serial = nextTextureResourceSerial.fetch_add(1, std::memory_order_relaxed);
+        const std::wstring resourceName = L"CNA Texture2D resource #" + std::to_wstring(serial);
+        texture_->SetName(resourceName.c_str());
+        if (std::getenv("CNA_D3D12_TEXTURE_TRACE") != nullptr)
+            std::fprintf(stderr, "[D3D12-TEX] create serial=%llu resource=%p\n",
+                         static_cast<unsigned long long>(serial), texture_.Get());
 
         renderer_->GetResourceStateTrackerEXT().TrackResource(texture_.Get(), D3D12_RESOURCE_STATE_COPY_DEST);
 

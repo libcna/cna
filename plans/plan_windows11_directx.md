@@ -2853,3 +2853,57 @@ and `CNA_MODERN_INTEROP_STRESS_CYCLES=1000`; the targeted DX12 GBV run used
 `CNA_D3D12_GPU_VALIDATION=1` and 10 cycles. The high-cardinality Intel GBV
 descriptor fixture exception under WIN11-0025 remains unresolved by these
 bounded validations and is not counted as a passing case.
+
+### WIN11-0077: Reproduce and narrow Intel GBV descriptor device removal
+
+The classic DX12 descriptor-capacity executable was rebuilt from the current
+source tree after the modern work, using the native Debug x64/v143 tree and
+`--parallel 12`. On physical Intel `8086:46A6`, the ordinary debug-layer/DRED
+run of legs A+B+C+D passed **15/15** with GPU-based validation off. With GBV
+on, B+C+D passed **4/4**, A+C+D **13/13**, and A+B+D **14/14**. Only the
+combined A+B+C+D history reproduced the original device removal in D after
+all preceding legs passed. This isolates an interaction among A's repeated
+texture population/release, B's sampler states and C's 256 live textured
+draws; none of the three smaller combinations is a sufficient trigger.
+
+The combined GBV run was time-boxed to 90 seconds. DRED again reported
+`DXGI_ERROR_DEVICE_HUNG`, the same page-fault VA `0x0000B802062F0000`,
+and two recently freed `Texture2D` allocations. To identify them, native
+Texture2D resources now carry a monotonically increasing DRED name;
+`CNA_D3D12_TEXTURE_TRACE=1` optionally prints creation serial and COM
+pointer without changing the resource or descriptor lifetime. The named
+reproduction identifies `CNA Texture2D resource #1608`, created at the
+end of A, and `#1919`, created during C, as the two recently freed
+allocations. D created new resources `#2125` and `#2126`. Thus DRED points
+to released A/C resources, not D's new texture. This does **not** yet prove
+whether the application reused a stale descriptor, or the Intel GBV
+instrumentation still referenced an already completed application submission.
+The normal path passes, and no global wait or weakened fixture was added.
+
+Exact diagnostic shape, with `BCD`, `ACD`, `ABD` or `ABCD` substituted for
+`<legs>`; the normal control sets GBV to `0` and omits the optional trace:
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx12-debug --config Debug --target cna_test_directx12_descriptor_capacity --parallel 12
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='1'
+$env:CNA_D3D12_TEXTURE_TRACE='1'
+$exe='C:\rv\build\cna-win11-dx12-debug\Debug\cna_test_directx12_descriptor_capacity.exe'
+$commandLine='"'+$exe+'" --legs ABCD'
+& C:\rv\work\private_desktop_awake.exe 90000 $commandLine *> C:\rv\logs\dx12-descriptor-abcd-current-gbv-named-1.log
+$code=$LASTEXITCODE
+Add-Content C:\rv\logs\dx12-descriptor-abcd-current-gbv-named-1.log "[RUNNER] exit code $code"
+exit $code
+```
+
+Logs: `C:\rv\logs\dx12-descriptor-bcd-current-normal-1.log`,
+`C:\rv\logs\dx12-descriptor-bcd-current-gbv-1.log`,
+`C:\rv\logs\dx12-descriptor-acd-current-gbv-1.log`,
+`C:\rv\logs\dx12-descriptor-abd-current-gbv-1.log`,
+`C:\rv\logs\dx12-descriptor-abcd-current-gbv-1.log`,
+`C:\rv\logs\dx12-descriptor-abcd-current-gbv-named-1.log`, and
+`C:\rv\logs\dx12-descriptor-abcd-current-normal-named-1.log`.
+The named failing run exited 124 after its time box. The GBV exception
+remains open, so full DX12 classic GPU-validation acceptance is not claimed.
