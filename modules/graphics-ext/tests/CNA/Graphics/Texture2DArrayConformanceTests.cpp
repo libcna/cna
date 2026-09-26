@@ -43,6 +43,9 @@
 #include "System/NotSupportedException.hpp"
 #include "EngineTestSupport.hpp"
 #include "TextureArrayShaderPackage.generated.hpp"
+#if defined(CNA_RENDERER_DIRECTX12)
+#include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
+#endif
 
 #include <array>
 #include <cstdint>
@@ -328,7 +331,7 @@ TEST(Texture2DArrayConformance, EveryAdvertisedFormatKeepsItsLayersMipsAndRectan
         }
 
         // A sub-rectangle of layer 1, level 0: the right half, which is whole 4x4 blocks too.
-        const Rectangle rightHalf(kWidth / 2, 0, kWidth / 2, kHeight);
+        const Microsoft::Xna::Framework::Rectangle rightHalf(kWidth / 2, 0, kWidth / 2, kHeight);
         const std::size_t halfBytes = RectangleBytes(format, kWidth / 2, kHeight);
         const std::vector<std::uint8_t> half = Pattern(format, halfBytes, 97);
         array.setData(1, 0, &rightHalf, half.data(), halfBytes);
@@ -416,7 +419,7 @@ TEST(Texture2DArrayConformance, APartialBlockAtAnOddMipEdgePreservesOtherBlocks)
     }
     array.setData(0, 1, nullptr, first.data(), first.size());
     array.setData(1, 1, nullptr, other.data(), other.size());
-    const Rectangle edge(4, 0, 2, 4);
+    const Microsoft::Xna::Framework::Rectangle edge(4, 0, 2, 4);
     array.setData(0, 1, &edge, replacement.data(), replacement.size());
 
     std::array<std::uint8_t, 16> actualFirst{};
@@ -506,5 +509,31 @@ TEST(Texture2DArrayConformance, AnArrayOutlivingItsDeviceIsReleasedSafely)
     gd.reset();                          // the device -- and its context or queue -- first
     EXPECT_NO_THROW(array.reset());      // then the array: nothing may reach a dead device
 }
+
+#if defined(CNA_RENDERER_DIRECTX12)
+TEST(D3D12Texture2DArrayTest, LayersAndCompressedMipsSurviveDeviceRecreation)
+{
+    CnaTest::EngineLayer::HiDefDevice device;
+    auto& renderer = dynamic_cast<CNA::Internal::Renderers::DirectX12::DirectX12Renderer&>(
+        device.GetRenderer());
+    Texture2DArray color(device, Texture2DArrayDescriptor(
+        4, 4, 2, 2, SurfaceFormat::Color, kTransferUsage));
+    Texture2DArray blocks(device, Texture2DArrayDescriptor(
+        12, 8, 2, 2, SurfaceFormat::Dxt1, kTransferUsage));
+    const std::vector<std::uint8_t> colorBytes = Solid(Color::Blue, 4);
+    const std::vector<std::uint8_t> blockBytes = Pattern(SurfaceFormat::Dxt1, 16, 41);
+    color.setData(1, 1, nullptr, colorBytes.data(), colorBytes.size());
+    blocks.setData(0, 1, nullptr, blockBytes.data(), blockBytes.size());
+
+    renderer.RecreateDeviceEXT();
+
+    std::vector<std::uint8_t> actualColor(colorBytes.size());
+    std::vector<std::uint8_t> actualBlocks(blockBytes.size());
+    color.getData(1, 1, nullptr, actualColor.data(), actualColor.size());
+    blocks.getData(0, 1, nullptr, actualBlocks.data(), actualBlocks.size());
+    EXPECT_EQ(actualColor, colorBytes);
+    EXPECT_EQ(actualBlocks, blockBytes);
+}
+#endif
 
 #endif // CNA_CNAEXT

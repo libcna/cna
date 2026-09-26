@@ -7,7 +7,8 @@ DX11 modern CNAEXT has completed its full Intel test run. DX12 modern
 CNAEXT evaluation is active; implementation remains open. Opt-in compiled
 XNA effects now pass their DX11 and DX12 renderer suites on Intel (WIN11-0066).
 DX12 modern GPU timestamps and pass timing now pass focused hardware tests
-(WIN11-0067).
+(WIN11-0067). Native DX12 sampled texture arrays now pass exact-transfer,
+shader-binding, recovery, and targeted GPU-validation tests (WIN11-0068).
 The large DX12 descriptor fixture under Intel GPU-based validation remains a recorded
 exception (WIN11-0025). Modern parity and application validation remain open.
 
@@ -2356,3 +2357,58 @@ $env:CNA_D3D12_GPU_VALIDATION='1'
 
 Modern DX12 sampled Texture2DArray, writable storage images, and shadow/IBL
 remain open.
+
+### WIN11-0068: Native DX12 sampled Texture2DArray
+
+The physical Intel baseline skipped all six `Texture2DArrayConformance.*`
+cases because DX12 published zero array layers
+(`C:\rv\logs\dx12-modern-texture-array-baseline-1.log`). DX12 now creates a
+native `TEXTURE2D` array and shader-resource view, exposes its real layer and
+sampled-texture limits, binds the array through ShaderEffect HLSL register
+`t(unit)`, and retains the renderer record and GPU resource through queued
+draws. The array stores each layer and mip in its own D3D12 subresource,
+performs GPU uploads and readbacks, and restores CPU-written data after device
+recreation. Format usage is queried from `D3D12_FEATURE_FORMAT_SUPPORT`;
+storage-image reads and writes remain unadvertised until implemented.
+
+The first hardware run passed four of six cases. Two exact BC readbacks failed
+with D3D12 debug ID 858. `GetCopyableFootprints` reported a 4x4 copy footprint
+for a logical 4x2 BC mip, and 8x4 for a logical 6x4 BC mip. The readback buffer
+had incorrectly used those smaller logical dimensions. It now uses the native
+footprint for compressed subresources and extracts the requested blocks from
+the aligned mapped rows. The observed error was in readback; no GPU-wide wait
+was added to uploads or binding.
+
+Final focused physical Intel Iris Xe `8086:46A6`, feature-level 12_1 results:
+**6/6** renderer-neutral array conformance cases, including 20 exact-format
+round trips, BC odd-edge partial writes, ShaderEffect sampling of each layer,
+binding lifetime, and device teardown
+(`C:\rv\logs\dx12-modern-texture-array-full-1.log`). A new native recovery
+regression passed **1/1**, restoring both Color and BC mip bytes across
+`RecreateDeviceEXT`
+(`C:\rv\logs\dx12-modern-texture-array-recovery-1.log`). Targeted D3D12
+GPU-based validation passed **4/4** array transfer, BC edge, shader sampling,
+and binding lifetime cases, plus the recovery case **1/1**
+(`C:\rv\logs\dx12-modern-texture-array-gbv-1.log` and the recovery log).
+Every run explicitly selected hardware; D3D12 debug layer and DRED were on;
+the listed final runs produced no debug warning/error, validation error,
+device removal, or DRED fault. The whole modern suite is a separate follow-up
+measurement, not included in these focused counts.
+The shared conformance source also rebuilt in the DX11 modern tree and passed
+**6/6** on physical Intel `8086:46A6` with the D3D11 debug layer enabled
+(`C:\rv\logs\dx11-modern-post-array-conformance-1.log`).
+
+```powershell
+cmake -S C:\rv\src\cna -B C:\rv\build\cna-win11-dx12-modern
+cmake --build C:\rv\build\cna-win11-dx12-modern --config Debug --target CnaGraphicsExtTests --parallel 8
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='0'
+& C:\rv\work\private_desktop_awake.exe 900000 '"C:\rv\build\cna-win11-dx12-modern\Debug\CnaGraphicsExtTests.exe" --gtest_filter=Texture2DArrayConformance.*'
+$env:CNA_D3D12_GPU_VALIDATION='1'
+& C:\rv\work\private_desktop_awake.exe 900000 '"C:\rv\build\cna-win11-dx12-modern\Debug\CnaGraphicsExtTests.exe" --gtest_filter=Texture2DArrayConformance.EveryAdvertisedFormatKeepsItsLayersMipsAndRectanglesExact:Texture2DArrayConformance.APartialBlockAtAnOddMipEdgePreservesOtherBlocks:Texture2DArrayConformance.EachLayerReachesAShaderEffectThroughUnitZero:Texture2DArrayConformance.ABindingOutlivesTheDisposedPublicArrayUntilCleared'
+& C:\rv\work\private_desktop_awake.exe 900000 '"C:\rv\build\cna-win11-dx12-modern\Debug\CnaGraphicsExtTests.exe" --gtest_filter=D3D12Texture2DArrayTest.*'
+```
+
+Writable DX12 storage images and modern shadow/IBL visibility remain open.

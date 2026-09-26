@@ -52,6 +52,14 @@ namespace CNA::Internal::Renderers::DirectX12
         void BindTexture(int unit, ITextureRenderer* texture) override;
         void BindTextureCube(int unit, ITextureCubeRenderer* texture) override;
         void BindTexture3D(int unit, ITexture3DRenderer* texture) override;
+        /**
+         * @brief Binds a sampled texture array while retaining its renderer record.
+         * @param unit HLSL texture register.
+         * @param texture Array record, or null to clear the binding.
+         * @return True when the requested array belongs to this renderer.
+         */
+        [[nodiscard]] bool BindTexture2DArrayEXT(
+            int unit, std::shared_ptr<ITexture2DArrayRenderer> texture) override;
 
         /**
          * @brief Writes the reflected `vpSize` and `viewportSize` parameters used by sprite shaders.
@@ -101,6 +109,7 @@ namespace CNA::Internal::Renderers::DirectX12
             Texture2D,
             TextureCube,
             Texture3D,
+            Texture2DArray,
         };
 
         struct TextureBinding

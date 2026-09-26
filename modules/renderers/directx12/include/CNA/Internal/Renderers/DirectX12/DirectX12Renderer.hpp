@@ -308,6 +308,13 @@ namespace CNA::Internal::Renderers::DirectX12
         /** @brief Classifies core XNA surface formats backed by native D3D12 storage, asking the device. */
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
         /**
+         * @brief Reports native sampled, transfer, mip and filter support for an XNA format.
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return Known and supported usage bits for the selected physical device.
+         */
+        [[nodiscard]] CNA::RendererFormatSupport GetSurfaceFormatUsageSupportEXT(
+            int surfaceFormat) const override;
+        /**
          * @brief Classifies the classic uncompressed volume formats D3D12Texture3DRenderer stores.
          * @param surfaceFormat SurfaceFormat ordinal.
          * @return Supported when the device can create the format as a 3D texture, Unsupported when it
@@ -354,6 +361,23 @@ namespace CNA::Internal::Renderers::DirectX12
         std::unique_ptr<ITextureCubeRenderer> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
         /// DX-122: real D3D12Texture3DRenderer, no longer the inherited default (-> nullptr).
         std::unique_ptr<ITexture3DRenderer> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
+        /**
+         * @brief Creates a sampled native texture array with per-layer transfers.
+         * @param width Level-zero width.
+         * @param height Level-zero height.
+         * @param layerCount Layer count.
+         * @param mipLevelCount Allocated mip levels.
+         * @param surfaceFormat XNA SurfaceFormat ordinal.
+         * @param usage Texture2DArrayUsage mask.
+         * @return Renderer-owned array, or null when unsupported.
+         */
+        std::unique_ptr<ITexture2DArrayRenderer> CreateTexture2DArrayEXT(
+            int width, int height, int layerCount, int mipLevelCount,
+            int surfaceFormat, std::uint32_t usage) override;
+        /** @brief Returns the D3D12 texture-array layer limit, or zero without a device. */
+        [[nodiscard]] int GetMaxTextureArrayLayersEXT() const override;
+        /** @brief Returns the reflected shader-resource register count. */
+        [[nodiscard]] int GetMaxSampledTexturesPerShaderStageEXT() const override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
         /// DX-120: real D3D12OcclusionQueryRenderer, no longer the inherited default (-> nullptr).
         std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;

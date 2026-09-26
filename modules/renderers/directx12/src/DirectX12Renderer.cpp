@@ -17,6 +17,7 @@
 #include "CNA/Internal/Renderers/DirectX12/D3D12CompiledEffect.hpp"
 #endif
 #include "CNA/Internal/Renderers/DirectX12/D3D12Texture3D.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12Texture2DArray.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DDebugLayerLog.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"
@@ -2878,6 +2879,40 @@ namespace CNA::Internal::Renderers::DirectX12
         return RendererFormatVerdict::Defer;
     }
 
+    CNA::RendererFormatSupport DirectX12Renderer::GetSurfaceFormatUsageSupportEXT(
+        int surfaceFormat) const
+    {
+        using CNA::RendererFormatUsage;
+        constexpr std::uint32_t known =
+            static_cast<std::uint32_t>(RendererFormatUsage::Sampled) |
+            static_cast<std::uint32_t>(RendererFormatUsage::Filterable) |
+            static_cast<std::uint32_t>(RendererFormatUsage::TransferSource) |
+            static_cast<std::uint32_t>(RendererFormatUsage::TransferDestination) |
+            static_cast<std::uint32_t>(RendererFormatUsage::Mipmapped) |
+            static_cast<std::uint32_t>(RendererFormatUsage::StorageRead) |
+            static_cast<std::uint32_t>(RendererFormatUsage::StorageWrite);
+        if (!device_ || ClassifySurfaceFormatEXT(surfaceFormat) != RendererFormatVerdict::Supported)
+            return {known, 0};
+        D3D12_FEATURE_DATA_FORMAT_SUPPORT native{};
+        native.Format = D3DCommon::SurfaceFormatToDxgi(surfaceFormat);
+        if (native.Format == DXGI_FORMAT_UNKNOWN ||
+            FAILED(device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &native,
+                                                sizeof(native))) ||
+            (native.Support1 & (D3D12_FORMAT_SUPPORT1_TEXTURE2D |
+                                D3D12_FORMAT_SUPPORT1_SHADER_LOAD)) !=
+                (D3D12_FORMAT_SUPPORT1_TEXTURE2D | D3D12_FORMAT_SUPPORT1_SHADER_LOAD))
+            return {known, 0};
+        std::uint32_t supported =
+            static_cast<std::uint32_t>(RendererFormatUsage::Sampled) |
+            static_cast<std::uint32_t>(RendererFormatUsage::TransferSource) |
+            static_cast<std::uint32_t>(RendererFormatUsage::TransferDestination);
+        if ((native.Support1 & D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE) != 0)
+            supported |= static_cast<std::uint32_t>(RendererFormatUsage::Filterable);
+        if ((native.Support1 & D3D12_FORMAT_SUPPORT1_MIP) != 0)
+            supported |= static_cast<std::uint32_t>(RendererFormatUsage::Mipmapped);
+        return {known, supported};
+    }
+
     RendererFormatVerdict DirectX12Renderer::ClassifyTexture3DFormatEXT(int surfaceFormat) const
     {
         // DX12-0016 (WINCLOSE-0013): the interface default defers to the framework's Color-only volume
@@ -3208,6 +3243,38 @@ namespace CNA::Internal::Renderers::DirectX12
         int w, int h, int depth, bool mipMap, int surfaceFormat)
     {
         return std::make_unique<D3D12Texture3DRenderer>(this, w, h, depth, mipMap, surfaceFormat);
+    }
+
+    std::unique_ptr<ITexture2DArrayRenderer> DirectX12Renderer::CreateTexture2DArrayEXT(
+        int width, int height, int layerCount, int mipLevelCount,
+        int surfaceFormat, std::uint32_t usage)
+    {
+        if (!device_ || width <= 0 || height <= 0 ||
+            width > GetMaxTextureDimension() || height > GetMaxTextureDimension() ||
+            layerCount <= 0 || layerCount > GetMaxTextureArrayLayersEXT() ||
+            mipLevelCount <= 0 || mipLevelCount > D3D12_REQ_MIP_LEVELS ||
+            (usage & 1u) == 0 || (usage & ~0x0Fu) != 0)
+            return nullptr;
+        const auto support = GetSurfaceFormatUsageSupportEXT(surfaceFormat);
+        constexpr std::uint32_t sampled =
+            static_cast<std::uint32_t>(CNA::RendererFormatUsage::Sampled);
+        constexpr std::uint32_t filterable =
+            static_cast<std::uint32_t>(CNA::RendererFormatUsage::Filterable);
+        if ((support.supportedUsages & sampled) == 0 ||
+            ((usage & 2u) != 0 && (support.supportedUsages & filterable) == 0))
+            return nullptr;
+        return std::make_unique<D3D12Texture2DArray>(
+            this, width, height, layerCount, mipLevelCount, surfaceFormat, usage);
+    }
+
+    int DirectX12Renderer::GetMaxTextureArrayLayersEXT() const
+    {
+        return device_ ? D3D12_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION : 0;
+    }
+
+    int DirectX12Renderer::GetMaxSampledTexturesPerShaderStageEXT() const
+    {
+        return device_ ? D3DCommon::D3DProgramReflection::kMaxShaderResources : 0;
     }
 
     std::unique_ptr<ISpriteBatchRenderer> DirectX12Renderer::CreateSpriteBatch()

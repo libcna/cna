@@ -5,6 +5,7 @@
 #include "CNA/Internal/Renderers/DirectX12/D3D12TextureCube.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Textures.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Texture3D.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12Texture2DArray.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -230,6 +231,18 @@ namespace CNA::Internal::Renderers::DirectX12
              texture, true, std::move(retained)};
     }
 
+    bool D3D12EffectRenderer::BindTexture2DArrayEXT(
+        int unit, std::shared_ptr<ITexture2DArrayRenderer> texture)
+    {
+        if (unit < 0 || unit >= static_cast<int>(textures_.size())) return false;
+        auto* native = texture ? dynamic_cast<D3D12Texture2DArray*>(texture.get()) : nullptr;
+        if (texture && (!native || native->GetOwnerEXT() != owner_.Get())) return false;
+        textures_[static_cast<std::size_t>(unit)] =
+            {texture ? TextureKind::Texture2DArray : TextureKind::None,
+             native, true, std::move(texture)};
+        return true;
+    }
+
     ID3D12PipelineState* D3D12EffectRenderer::GetOrCreatePipelineStateEXT(
         D3D12PipelineStateDesc desc)
     {
@@ -300,6 +313,14 @@ namespace CNA::Internal::Renderers::DirectX12
             case TextureKind::Texture3D:
                 if (const auto* texture = dynamic_cast<const D3D12Texture3DRenderer*>(
                         static_cast<ITexture3DRenderer*>(binding.texture)))
+                {
+                    owner_->RetainFrameObjectEXT(texture->GetResourceEXT());
+                    return texture->GetShaderResourceViewGpuHandleEXT();
+                }
+                break;
+            case TextureKind::Texture2DArray:
+                if (const auto* texture = dynamic_cast<const D3D12Texture2DArray*>(
+                        static_cast<ITexture2DArrayRenderer*>(binding.texture)))
                 {
                     owner_->RetainFrameObjectEXT(texture->GetResourceEXT());
                     return texture->GetShaderResourceViewGpuHandleEXT();
