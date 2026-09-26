@@ -1289,8 +1289,8 @@ identical bytes, SHA-256
 `B87690404BDF4CC2186480DC0F6F356627753EAB162B9A5C68F47043918D6927`.
 Both the DX11 modern and DX12 Debug
 `CnaGraphicsExtTests` targets built successfully after the shared D3D change.
-The complete DX11 modern executable is undergoing another regression run;
-record its exact result below when finished.
+The complete DX11 modern executable was rerun after this change; its result
+is recorded below.
 
 ```powershell
 $fxc = 'C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\fxc.exe'
@@ -1299,4 +1299,64 @@ cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraph
 $env:CNA_D3D11_DEBUG_LAYER='1'
 & C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ShadowVisibilityTest.*:CascadedShadowVisibilityTest.*:PunctualShadowVisibilityTest.*' *> C:\rv\logs\dx11-shadow-suite-2.log
 cmake --build C:\rv\build\cna-win11-dx12-debug --config Debug --target CnaGraphicsExtTests --parallel 8
+```
+
+The post-shadow complete DX11 modern run finished with **984 tests from 126
+suites: 968 pass, 16 skip, 0 fail** in 1,970,221 ms
+(`C:\rv\logs\dx11-modern-full-after-shadow-1.log`). The executable recorded
+683 selections of the physical Intel Iris Xe `8086:46A6`, `software=0`;
+the D3D11 debug layer was enabled and reported no warnings, errors, or
+corruption messages. The 16 skipped cases and their names are preserved in
+the log's final summary. They include conditional tests for absent
+capabilities, renderer-specific probes, and the raw `Texture2D` compute-image
+path, which is still an open DX11 modern capability. This run predates the IBL
+change below.
+
+```powershell
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 7200000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no' *> C:\rv\logs\dx11-modern-full-after-shadow-1.log
+```
+
+## DX11 PBR image-based lighting on physical Intel, 2026-09-26
+
+WIN11-0050: stock DX11 PbrEffect and SkinnedPbrEffect previously advertised
+no image-based lighting support, even though their renderer-neutral draw
+parameters already carried the complete irradiance cube, prefiltered specular
+cube, BRDF LUT, mip count, and intensity. Added the existing split-sum formula
+to their shader-model-5 modern pixel variants, using t10/t11/t12, s10/s11/s12,
+and a 16-byte b4 control buffer. The shader selects a modern variant for an
+IBL-only draw as well as for a shadowed draw. The environment adds to the
+ambient term, so a shadow affects the direct term only. Every stock draw
+rebinds thirteen pixel SRV slots and five vertex/pixel constant-buffer slots;
+the renderer clears and recreates the IBL buffer with the device. The classic
+stock bytecode is unchanged; the shared DX12 target still builds.
+
+Five renderer-neutral visual tests cover all three split-sum products,
+intensity and detach isolation, world-normal cube-face selection, skinned PBR,
+roughness-selected prefiltered mip, and IBL with a directional shadow. They
+passed **5/5** on physical Intel `8086:46A6`, feature level `11_1`, debug
+layer enabled (`C:\rv\logs\dx11-ibl-focused-1.log`). The combined shadow and
+IBL suite passed **36/36**, no skips or failures, 36 physical Intel
+selections, and zero D3D11 debug-layer warning/error/corruption messages
+(`C:\rv\logs\dx11-ibl-shadow-suite-1.log`). The affected DX11
+`CnaGraphicsExtTests` and `CnaGraphicsTests` targets built, and the DX12 Debug
+`CnaGraphicsExtTests` target built after the shared shader declarations.
+
+The nine generated modern pixel variants were rebuilt with native Windows
+SDK FXC `10.0.22621.5040`, with zero compiler warnings/errors. A second run
+reproduced the checked-in header byte for byte, SHA-256
+`3B7F420F4C1B62CC8B6CE8ED4E3904140D61E8C1D9D05D27934291BB6F7DBA2D`
+(`C:\rv\logs\dx11-ibl-fxc-repro-1.log`). The full 989-case modern DX11
+executable has not yet been rerun with IBL; the focused 36-case result above
+is the evidence for this change.
+
+```powershell
+$fxc = 'C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\fxc.exe'
+py -3 tools/shader_package/generate_d3d_modern_stock_hlsl.py --fxc $fxc *> C:\rv\logs\dx11-ibl-fxc-repro-1.log
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsExtTests --parallel 8
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsTests --parallel 8
+cmake --build C:\rv\build\cna-win11-dx12-debug --config Debug --target CnaGraphicsExtTests --parallel 8
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=IblVisibilityTest.*' *> C:\rv\logs\dx11-ibl-focused-1.log
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=IblVisibilityTest.*:ShadowVisibilityTest.*:CascadedShadowVisibilityTest.*:PunctualShadowVisibilityTest.*' *> C:\rv\logs\dx11-ibl-shadow-suite-1.log
 ```

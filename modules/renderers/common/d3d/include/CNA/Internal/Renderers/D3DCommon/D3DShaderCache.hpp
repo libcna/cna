@@ -115,15 +115,15 @@ namespace CNA::Internal::Renderers::D3DCommon
         Skinned3dColoredShadow,
         /** @brief Shadowed SkinnedEffect with colour and floating-point blend indices. */
         Skinned3dColoredFloatIndicesShadow,
-        /** @brief PBR with directional and punctual shadow sampling. */
+        /** @brief PBR with directional/punctual shadows and image-based lighting. */
         Pbr3dShadow,
-        /** @brief Shadowed PBR with two texture-coordinate streams. */
+        /** @brief Modern-lit PBR with two texture-coordinate streams. */
         Pbr3dDualUvShadow,
-        /** @brief Skinned PBR with directional and punctual shadow sampling. */
+        /** @brief Skinned PBR with directional/punctual shadows and image-based lighting. */
         PbrSkinned3dShadow,
-        /** @brief Shadowed skinned PBR with two texture-coordinate streams. */
+        /** @brief Modern-lit skinned PBR with two texture-coordinate streams. */
         PbrSkinned3dDualUvShadow,
-        /** @brief Shadowed skinned PBR with colour and two texture-coordinate streams. */
+        /** @brief Modern-lit skinned PBR with colour and two texture-coordinate streams. */
         PbrSkinned3dDualUvColorShadow,
     };
 

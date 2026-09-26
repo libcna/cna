@@ -21,6 +21,7 @@ Texture2D    uSpecularColorMap         : register(t6);
 SamplerState uSpecularColorMapSampler  : register(s6);
 #ifdef CNA_MODERN_SHADOWS
 #include "shadow_sampling.hlsl"
+#include "ibl_sampling.hlsl"
 #endif
 
 cbuffer PerDraw : register(b0)
@@ -193,6 +194,9 @@ float4 main(PSInput input) : SV_Target
     float occlusion = uOcclusionMap.Sample(uOcclusionMapSampler, CnaPbrTransformUv(CNA_PBR_UV(4), 4)).r;
     occlusion = 1.0 + PbrMapScales.y * (occlusion - 1.0);
     float3 ambient = AmbientMetallic.xyz * albedo * occlusion;
+#ifdef CNA_MODERN_SHADOWS
+    ambient += CnaIblAmbient(finalNormal, V, albedo, F0, roughness, metallic, occlusion);
+#endif
     float3 emissiveSample = uEmissiveMap.Sample(uEmissiveMapSampler, CnaPbrTransformUv(CNA_PBR_UV(3), 3)).rgb;
     emissiveSample = lerp(emissiveSample, CnaSrgbToLinear(emissiveSample), PbrMapScales.w);
     float3 emissive = EmissiveRoughness.xyz * emissiveSample;

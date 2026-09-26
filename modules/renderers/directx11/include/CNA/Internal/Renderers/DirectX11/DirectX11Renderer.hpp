@@ -213,8 +213,19 @@ namespace CNA::Internal::Renderers::DirectX11
          * @return True when the selected device supports Color Texture3D sampling.
          */
         [[nodiscard]] bool SupportsTexture3DSamplingEXT() const override;
-        /** @brief Reports native stock-effect shadow sampling on a live D3D11 device. */
+        /**
+         * @brief Reports native stock-effect shadow sampling on a live D3D11 device.
+         * @return True when shader model 5 is available for stock shadow reception.
+         */
         [[nodiscard]] bool SupportsShadowSamplingEXT() const override
+        {
+            return device_ != nullptr && featureLevel_ >= D3D_FEATURE_LEVEL_11_0;
+        }
+        /**
+         * @brief Reports PBR split-sum environment sampling on a live D3D11 device.
+         * @return True when shader model 5 is available for PBR environment reception.
+         */
+        [[nodiscard]] bool SupportsImageBasedLightingEXT() const override
         {
             return device_ != nullptr && featureLevel_ >= D3D_FEATURE_LEVEL_11_0;
         }
@@ -979,9 +990,11 @@ namespace CNA::Internal::Renderers::DirectX11
         ComPtr<ID3D11Buffer> pbrPerDrawConstantBuffer_;
         ComPtr<ID3D11Buffer> pbrLightsConstantBuffer_;
         ComPtr<ID3D11Buffer> shadowConstantBuffer_;
+        ComPtr<ID3D11Buffer> iblConstantBuffer_;
         ID3D11Buffer* GetOrCreatePbrPerDrawConstantBufferEXT();
         ID3D11Buffer* GetOrCreatePbrLightsConstantBufferEXT();
         ID3D11Buffer* GetOrCreateShadowConstantBufferEXT();
+        ID3D11Buffer* GetOrCreateIblConstantBufferEXT();
 
         // plans/plan_cnj.md CNB-58 follow-up: lazily-created 1x1 fallback SRVs for PbrEffect's optional
         // normal/metallic-roughness/emissive/occlusion maps when GpuDrawParams leaves the

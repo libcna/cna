@@ -343,4 +343,14 @@ namespace CNA::Internal::Renderers::D3DCommon
     static_assert(sizeof(D3DShadowConstants) == 132 * sizeof(float));
     static_assert(offsetof(D3DShadowConstants, Directional) == 96 * sizeof(float));
     static_assert(offsetof(D3DShadowConstants, PunctualTexelY) == 128 * sizeof(float));
+
+    /** @brief Split-sum environment controls bound to PBR pixel shader register b4. */
+    struct alignas(16) D3DIblConstants
+    {
+        float Enabled;
+        float PrefilteredMipCount;
+        float Intensity;
+        float Padding;
+    };
+    static_assert(sizeof(D3DIblConstants) == 16);
 }

@@ -883,6 +883,7 @@ namespace CNA::Internal::Renderers::DirectX11
         pbrPerDrawConstantBuffer_.Reset();
         pbrLightsConstantBuffer_.Reset();
         shadowConstantBuffer_.Reset();
+        iblConstantBuffer_.Reset();
         defaultWhiteSrv_.Reset();
         defaultWhiteTexture_.Reset();
         defaultFlatNormalSrv_.Reset();
@@ -2791,6 +2792,25 @@ namespace CNA::Internal::Renderers::DirectX11
         return shadowConstantBuffer_.Get();
     }
 
+    ID3D11Buffer* DirectX11Renderer::GetOrCreateIblConstantBufferEXT()
+    {
+        if (!iblConstantBuffer_)
+        {
+            D3D11_BUFFER_DESC desc{};
+            desc.ByteWidth = sizeof(D3DCommon::D3DIblConstants);
+            desc.Usage = D3D11_USAGE_DYNAMIC;
+            desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+            desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+            const HRESULT hr = device_->CreateBuffer(
+                &desc, nullptr, iblConstantBuffer_.ReleaseAndGetAddressOf());
+            if (FAILED(hr))
+                throw std::runtime_error(
+                    "DirectX11Renderer: IBL constant buffer creation failed, hr=" +
+                    FormatHr(hr));
+        }
+        return iblConstantBuffer_.Get();
+    }
+
     ID3D11ShaderResourceView* DirectX11Renderer::GetOrCreateDefaultWhiteSrvEXT()
     {
         if (!defaultWhiteSrv_)
@@ -3044,10 +3064,13 @@ namespace CNA::Internal::Renderers::DirectX11
         // The stride-only rule remains solely for internal buffers that carry no declaration.
         const bool needsLitTextured = hasNormal && !needsAlphaTest && !needsDualTex
                                      && !needsEnvMap && !needsPbr && !needsSkinned;
-        const bool useShadowShader =
+        const bool haveIbl = needsPbr && params.iblEnabled &&
+            params.iblIrradiance != nullptr &&
+            params.iblPrefilteredSpecular != nullptr && params.iblBrdfLut != nullptr;
+        const bool useModernLightingShader =
             (needsLitTextured || needsSkinned || needsPbr) &&
             ((params.shadowsEnabled && params.shadowMap != nullptr) ||
-             params.punctualKind != 0);
+             params.punctualKind != 0 || haveIbl);
 
         if (needsAlphaTest && params.texture0 != nullptr && !hasTexCoord)
             throw std::runtime_error(
@@ -3132,7 +3155,7 @@ namespace CNA::Internal::Renderers::DirectX11
             // Declaration-less legacy buffers retain the canonical stride-56 fallback.
             const bool colored = hasDeclaration ? hasColor : stride == 56;
             const bool vertexLit = params.lightingEnabled && !params.preferPerPixelLighting
-                                   && !useShadowShader;
+                                   && !useModernLightingShader;
             if (usesFloatBoneIndices)
                 variant = colored
                     ? (vertexLit ? D3DCommon::D3DShaderVariant::Skinned3dVertexLitColoredFloatIndices
@@ -3150,13 +3173,13 @@ namespace CNA::Internal::Renderers::DirectX11
             // Same real-default fix for BasicEffect's lit-textured bucket.
             variant = hasTexCoord
                 ? (hasColor
-                    ? ((params.lightingEnabled && !params.preferPerPixelLighting && !useShadowShader)
+                    ? ((params.lightingEnabled && !params.preferPerPixelLighting && !useModernLightingShader)
                         ? D3DCommon::D3DShaderVariant::LitTextured3dVertexLitColored
                         : D3DCommon::D3DShaderVariant::LitTextured3dColored)
-                    : ((params.lightingEnabled && !params.preferPerPixelLighting && !useShadowShader)
+                    : ((params.lightingEnabled && !params.preferPerPixelLighting && !useModernLightingShader)
                         ? D3DCommon::D3DShaderVariant::LitTextured3dVertexLit
                         : D3DCommon::D3DShaderVariant::LitTextured3d))
-                : ((params.lightingEnabled && !params.preferPerPixelLighting && !useShadowShader)
+                : ((params.lightingEnabled && !params.preferPerPixelLighting && !useModernLightingShader)
                     ? D3DCommon::D3DShaderVariant::LitUntextured3dVertexLit
                     : D3DCommon::D3DShaderVariant::LitUntextured3d);
         else
@@ -3181,7 +3204,7 @@ namespace CNA::Internal::Renderers::DirectX11
                     std::to_string(stride) + " for the colored/textured bundle (plans/plan_dx.md DX-62)");
         }
 
-        if (useShadowShader)
+        if (useModernLightingShader)
         {
             using D3DCommon::D3DShaderVariant;
             switch (variant)
@@ -3218,9 +3241,9 @@ namespace CNA::Internal::Renderers::DirectX11
         // + t1 (TextureCube). PBR needs seven slots: the five core maps plus KHR_materials_specular
         // strength/colour at t5/t6. Every other variant only ever binds t0 -- higher entries stay
         // null, which is harmless for a shader that does not declare them. Always bind the full
-        // ten-wide range (unused slots explicitly null) so no variant can see a stale SRV left
-        // by a previous, differently-shaped draw call (same discipline as cbs[4] below).
-        ID3D11ShaderResourceView* srvs[10] = {};
+        // thirteen-wide range (unused slots explicitly null) so no variant can see a stale SRV
+        // left by a previous, differently-shaped draw call (same discipline as cbs[5] below).
+        ID3D11ShaderResourceView* srvs[13] = {};
         if (needsDualTex)
         {
             // WINCLOSE-0018: XNA samples an unbound slot as opaque black, not white.
@@ -3280,7 +3303,7 @@ namespace CNA::Internal::Renderers::DirectX11
                                       : GetOrCreateDefaultOpaqueBlackSrvEXT();
         }
 
-        if (useShadowShader)
+        if (useModernLightingShader)
         {
             srvs[7] = params.shadowsEnabled ? GetSrvForTextureEXT(params.shadowMap) : nullptr;
             srvs[8] = params.punctualKind == 1
@@ -3288,10 +3311,16 @@ namespace CNA::Internal::Renderers::DirectX11
             srvs[9] = params.punctualKind == 2
                 ? GetSrvForTextureEXT(params.punctualShadowMap) : nullptr;
         }
+        if (haveIbl)
+        {
+            srvs[10] = GetSrvForTextureCubeEXT(params.iblIrradiance);
+            srvs[11] = GetSrvForTextureCubeEXT(params.iblPrefilteredSpecular);
+            srvs[12] = GetSrvForTextureEXT(params.iblBrdfLut);
+        }
 
-        // 4 contiguous slots (b0/b1/b2/b3) always fully rebound below (unused slots explicitly null)
+        // 5 contiguous slots (b0 through b4) always fully rebound below (unused slots explicitly null)
         // so no variant can see a stale buffer left bound by a previous, different-shaped draw.
-        ID3D11Buffer* cbs[4] = {};
+        ID3D11Buffer* cbs[5] = {};
 
         if (needsAlphaTest)
         {
@@ -3756,7 +3785,7 @@ namespace CNA::Internal::Renderers::DirectX11
             cbs[1] = fogCB;
         }
 
-        if (useShadowShader)
+        if (useModernLightingShader)
         {
             const bool haveDirectional = params.shadowsEnabled && params.shadowMap != nullptr;
             const int cascadeCount = haveDirectional && params.cascadeCount > 0
@@ -3802,6 +3831,22 @@ namespace CNA::Internal::Renderers::DirectX11
             RebindSamplerEXT(8);
             RebindSamplerEXT(9);
         }
+        if (needsPbr && useModernLightingShader)
+        {
+            D3DCommon::D3DIblConstants ibl{};
+            ibl.Enabled = haveIbl ? 1.0f : 0.0f;
+            ibl.PrefilteredMipCount = static_cast<float>(
+                params.iblPrefilteredMipCount > 0 ? params.iblPrefilteredMipCount : 1);
+            ibl.Intensity = params.iblIntensity;
+            cbs[4] = GetOrCreateIblConstantBufferEXT();
+            UpdateDynamicConstantBufferEXT(cbs[4], &ibl, sizeof(ibl));
+            if (haveIbl)
+            {
+                RebindSamplerEXT(10);
+                RebindSamplerEXT(11);
+                RebindSamplerEXT(12);
+            }
+        }
 
         BindVertexStreams(context_.Get(), d3dVb, params);
         if (ib != nullptr)
@@ -3814,12 +3859,12 @@ namespace CNA::Internal::Renderers::DirectX11
         context_->VSSetShader(vs, nullptr, 0);
         context_->PSSetShader(ps, nullptr, 0);
 
-        // Always rebind the full 4-slot-cbuffer/10-slot-SRV range (unused slots explicitly null,
+        // Always rebind the full 5-slot-cbuffer/13-slot-SRV range (unused slots explicitly null,
         // see cbs'/srvs' own declaration comments above) -- no variant can see a stale binding
         // left by whatever differently-shaped draw call ran immediately before this one.
-        context_->VSSetConstantBuffers(0, 4, cbs);
-        context_->PSSetConstantBuffers(0, 4, cbs);
-        context_->PSSetShaderResources(0, 10, srvs);
+        context_->VSSetConstantBuffers(0, 5, cbs);
+        context_->PSSetConstantBuffers(0, 5, cbs);
+        context_->PSSetShaderResources(0, 13, srvs);
 
         if (ib != nullptr)
         {

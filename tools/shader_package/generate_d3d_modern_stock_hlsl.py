@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile the D3D stock-shadow pixel variants with the native Windows FXC."""
+"""Compile the D3D stock modern-lighting pixel variants with native Windows FXC."""
 
 from __future__ import annotations
 
