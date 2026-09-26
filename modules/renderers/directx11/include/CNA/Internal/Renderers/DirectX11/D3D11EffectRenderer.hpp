@@ -132,6 +132,7 @@ namespace CNA::Internal::Renderers::DirectX11
             TextureKind kind = TextureKind::None;
             void* texture = nullptr;
             bool explicitlySet = false;
+            std::shared_ptr<void> retainedClassic;
             std::shared_ptr<ITexture2DArrayRenderer> retainedArray;
             std::shared_ptr<IStorageTexture2DRenderer> retainedStorage;
         };

@@ -304,24 +304,30 @@ namespace CNA::Internal::Renderers::DirectX11
     {
         if (unit < 0 || unit >= static_cast<int>(textures_.size()))
             return;
+        std::shared_ptr<void> retained = texture ? texture->shared_from_this() : nullptr;
         textures_[static_cast<std::size_t>(unit)] =
-            {TextureKind::Texture2D, texture, true};
+            {texture ? TextureKind::Texture2D : TextureKind::None,
+             texture, true, std::move(retained)};
     }
 
     void D3D11EffectRenderer::BindTextureCube(const int unit, ITextureCubeRenderer* texture)
     {
         if (unit < 0 || unit >= static_cast<int>(textures_.size()))
             return;
+        std::shared_ptr<void> retained = texture ? texture->shared_from_this() : nullptr;
         textures_[static_cast<std::size_t>(unit)] =
-            {TextureKind::TextureCube, texture, true};
+            {texture ? TextureKind::TextureCube : TextureKind::None,
+             texture, true, std::move(retained)};
     }
 
     void D3D11EffectRenderer::BindTexture3D(int unit, ITexture3DRenderer* texture)
     {
         if (unit < 0 || unit >= static_cast<int>(textures_.size()))
             return;
+        std::shared_ptr<void> retained = texture ? texture->shared_from_this() : nullptr;
         textures_[static_cast<std::size_t>(unit)] =
-            {TextureKind::Texture3D, texture, true};
+            {texture ? TextureKind::Texture3D : TextureKind::None,
+             texture, true, std::move(retained)};
     }
 
     bool D3D11EffectRenderer::BindTexture2DArrayEXT(
@@ -336,6 +342,7 @@ namespace CNA::Internal::Renderers::DirectX11
         binding.kind = texture ? TextureKind::Texture2DArray : TextureKind::None;
         binding.texture = native;
         binding.explicitlySet = true;
+        binding.retainedClassic.reset();
         binding.retainedStorage.reset();
         binding.retainedArray = std::move(texture);
         return true;
@@ -354,6 +361,7 @@ namespace CNA::Internal::Renderers::DirectX11
         binding.kind = texture ? TextureKind::StorageTexture2D : TextureKind::None;
         binding.texture = native;
         binding.explicitlySet = true;
+        binding.retainedClassic.reset();
         binding.retainedArray.reset();
         binding.retainedStorage = std::move(texture);
         return true;

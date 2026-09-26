@@ -1005,3 +1005,38 @@ $env:CNA_D3D11_DEBUG_LAYER='1'
 & C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ParticleSystemTest.*' *> C:\rv\logs\dx11-particle-hlsl-focused-2.log
 & C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=GpuInstanceCullerTest.*:ParticleSystemTest.*:D3D11NativeComputeTest.*' *> C:\rv\logs\dx11-particle-hlsl-related-1.log
 ```
+
+## DX11 ShaderEffect classic-texture lifetime, 2026-09-26
+
+WIN11-0040: the separate renderer lifetime issue exposed by WIN11-0039
+was reproduced with a direct DX11 effect regression. Before the fix,
+binding a `Texture2D` and destroying its public wrapper immediately expired
+the internal renderer object's weak reference; a subsequent `Apply()` could
+dereference the stale raw pointer
+(`C:\rv\logs\dx11-effect-texture-lifetime-baseline.log`). The D3D11 effect
+now retains the internal record for bound classic 2D, cube, and 3D textures.
+Rebinding or binding a texture array/storage texture releases the previous
+classic binding, and effect disposal releases the final binding. Public
+texture wrappers are not kept alive by this private ownership.
+
+Two physical Intel pixel regressions validate 2D texture replacement and
+cube-plus-volume sampling **after their public wrappers are destroyed**;
+they also check the old renderer record expires after replacement and both
+remaining records expire after effect disposal. Both pass on PCI
+`8086:46A6`, `software=0`, feature level 11_1, with zero D3D11 debug
+warnings/errors (`C:\rv\logs\dx11-effect-texture-lifetime-focused-2.log`).
+The related effects, particle, culler, and compute run passed **37/37** with
+33 explicit Intel selections, zero skip/fail, and zero debug warnings/errors
+(`C:\rv\logs\dx11-effect-texture-lifetime-related-1.log`). The relinked
+classic `ShaderEffectTest`, `EffectApplyTest`, and `DrawRouteValidation` run
+passed **22/22** (`C:\rv\logs\dx11-effect-texture-classic-focused.log`);
+its intentionally invalid test shaders printed expected compiler diagnostics.
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsExtTests --parallel 4
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsTests --parallel 4
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=D3D11EffectTextureLifetimeTest.*' *> C:\rv\logs\dx11-effect-texture-lifetime-focused-2.log
+& C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=D3D11EffectTextureLifetimeTest.*:ParticleSystemTest.*:GpuInstanceCullerTest.*:D3D11NativeComputeTest.*:ShaderPackageOverloadTest.*' *> C:\rv\logs\dx11-effect-texture-lifetime-related-1.log
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsTests.exe --gtest_color=no --gtest_filter=ShaderEffectTest.*:EffectApplyTest.*:DrawRouteValidation.*' *> C:\rv\logs\dx11-effect-texture-classic-focused.log
+```
