@@ -5,6 +5,7 @@
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Buffers.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Textures.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12StorageBuffer.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12RenderTargets.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12SpriteBatch.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12OcclusionQuery.hpp"
@@ -3011,6 +3012,16 @@ namespace CNA::Internal::Renderers::DirectX12
     std::unique_ptr<ITextureRenderer> DirectX12Renderer::CreateTexture(const ImageData& data)
     {
         return std::make_unique<D3D12TextureRenderer>(this, data);
+    }
+
+    std::unique_ptr<IStorageBufferRenderer> DirectX12Renderer::CreateStorageBufferEXT(
+        std::size_t byteSize, std::uint32_t usage, std::uint32_t cpuAccess)
+    {
+        constexpr std::uint32_t supportedUsage = UINT32_C(0x06);
+        if (!device_ || byteSize == 0 || usage == 0 ||
+            (usage & ~supportedUsage) != 0 || (cpuAccess & ~UINT32_C(0x03)) != 0)
+            return nullptr;
+        return std::make_unique<D3D12StorageBuffer>(this, byteSize, usage, cpuAccess);
     }
 
     std::unique_ptr<ITextureCubeRenderer> DirectX12Renderer::CreateTextureCube(

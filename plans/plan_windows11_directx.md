@@ -2007,3 +2007,54 @@ $filter='D3D11EffectTextureLifetimeTest.*:LutInterpolationTest.TheVolumeLayoutGi
 DX12 compute, storage resources, indirect drawing, texture arrays, GPU
 timers, and modern PBR shadow/IBL paths remain separate implementation work;
 the truthful skips above do not close that gate.
+
+### WIN11-0063: DX12 native storage-buffer transfer foundation
+
+`DirectX12Renderer::CreateStorageBufferEXT` now accepts the current portable
+transfer-source/transfer-destination roles without advertising compute or
+storage-shader support. `D3D12StorageBuffer` owns a device-local DEFAULT-heap
+buffer, records CPU uploads through the existing frame upload ring, records
+GPU copies without submitting or waiting, and uses the existing explicit
+immediate-list/fence path only for a caller-requested CPU readback. The
+resource-state tracker owns every COPY_SOURCE/COPY_DEST transition. In-flight
+buffers and same-buffer copy scratch allocations are retained by the frame
+fence. Non-overlapping same-buffer copies stage through a temporary GPU buffer
+so source and destination states never conflict. CPU-known contents survive a
+simulated device recreation; GPU-only content remains undefined after a real
+device loss, as the resource contract permits.
+
+The initial GPU-validation run caught one genuine new warning, D3D12 debug
+message **1328**: a DEFAULT-heap scratch buffer requested `COPY_DEST` as its
+initial state, which D3D12 ignored because buffers begin in `COMMON`. The
+scratch allocation now starts in `COMMON` and makes a tracked transition to
+`COPY_DEST` before use. The final run has **zero** debug-layer warnings/errors,
+device removals, or DRED faults.
+
+On physical Intel Iris Xe `8086:46A6`, with explicit hardware selection,
+D3D12 debug layer, DRED, and GPU-based validation all enabled, the final
+targeted run passed **4/4** in **5,335 ms**
+(`C:\rv\logs\dx12-modern-transfer-final-gbv-2.log`). It includes three new
+native tests: odd-byte upload/copy and same-buffer copy, **4,096** queued
+upload/copy rounds with no GPU wait or submission before explicit readback,
+and device recreation with data restoration. The existing renderer-neutral
+`ModernGpuConformance.BufferRangesCopiesAndLargeUploadsAreExact` changed from
+skip to pass; it covers exact partial writes, odd-offset GPU copy and a 4 MiB
+round-trip. The final log has five Intel adapter selections (the recreation
+test selects it twice), zero WARP/software selections, four GPU-validation
+device starts, and zero validation warnings/errors. Build:
+`C:\rv\logs\dx12-modern-transfer-build-5.log`.
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx12-modern --config Debug --target CnaGraphicsExtTests --parallel 6
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='1'
+$filter='D3D12StorageBufferTest.*:ModernGpuConformance.BufferRangesCopiesAndLargeUploadsAreExact'
+& C:\rv\work\private_desktop_awake.exe 900000 "C:\rv\build\cna-win11-dx12-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=$filter"
+```
+
+This is a foundation for the next native DX12 compute/storage task. The
+compute capability remains false, storage/constant/indirect buffer roles are
+still refused, and the full modern skip count from WIN11-0062 is therefore not
+yet a new conformance count.

@@ -363,6 +363,16 @@ namespace CNA::Internal::Renderers::DirectX12
         /// (the caller checks IsValid()/GetCompileError()).
         std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,
                                                              const std::string& fragSrc) override;
+        /**
+         * @brief Creates a native buffer for declared transfer-only usage.
+         * @param byteSize Logical byte count.
+         * @param usage Portable usage bits; currently transfer source/destination only.
+         * @param cpuAccess Portable CPU read/write intent.
+         * @return Native buffer, or null for roles not yet implemented by DX12.
+         */
+        std::unique_ptr<IStorageBufferRenderer> CreateStorageBufferEXT(
+            std::size_t byteSize, std::uint32_t usage,
+            std::uint32_t cpuAccess) override;
 #if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
         /** @brief Creates a compiled XNA effect through CNA's MojoShader HLSL backend. */
         std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(
