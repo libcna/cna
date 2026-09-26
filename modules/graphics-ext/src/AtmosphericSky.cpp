@@ -12,6 +12,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "shaders/atmospheric_sky/AtmosphericSkyShaderPackage.generated.hpp"
+#include "shaders/SceneHlsl.generated.hpp"
 
 #include <algorithm>
 #include <array>
@@ -169,6 +170,16 @@ vec3 cnaAerialPerspective(vec3 colour, vec3 viewDirection, vec3 sunDirection, fl
                                   CNA::ShaderStageEXT::Fragment, "main",
                                   "atmospheric_sky/sky.vulkan.frag.wgsl",
                                   std::string(kVulkanFragmentWgsl)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                  CNA::ShaderStageEXT::Vertex, "main",
+                                  "atmospheric_sky/sky.vulkan.vert.spv -> hlsl",
+                                  std::string(CNA::Graphics::detail::SceneHlslGenerated::FindStage(
+                                      "atmospheric_sky/sky.vulkan.vert.spv"))),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                  CNA::ShaderStageEXT::Fragment, "main",
+                                  "atmospheric_sky/sky.vulkan.frag.spv -> hlsl",
+                                  std::string(CNA::Graphics::detail::SceneHlslGenerated::FindStage(
+                                      "atmospheric_sky/sky.vulkan.frag.spv"))),
                 },
                 {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment},
                 {ShaderBindingRequirementEXT(

@@ -51,6 +51,7 @@ def translate(
     source: Path, glslang: Path, spirv_cross: Path, fxc: Path | None,
     scratch: Path, vertex_semantics: tuple[str, ...] = ("POSITION", "TEXCOORD", "COLOR"),
     first_fragment_cbuffer_slot: int = 1,
+    flip_vertex_y: bool = True,
 ) -> str:
     vertex = source.name.endswith(".vert.glsl")
     stage = "vert" if vertex else "frag"
@@ -63,7 +64,8 @@ def translate(
         "--hlsl-auto-binding", "cbv",
     ]
     if vertex:
-        cross_command.append("--flip-vert-y")
+        if flip_vertex_y:
+            cross_command.append("--flip-vert-y")
         for location, semantic in enumerate(vertex_semantics):
             cross_command += [
                 "--set-hlsl-vertex-input-semantic", str(location), semantic]

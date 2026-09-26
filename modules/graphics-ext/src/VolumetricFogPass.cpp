@@ -17,6 +17,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "shaders/volumetric_fog/VolumetricFogShaderPackage.generated.hpp"
+#include "shaders/SceneHlsl.generated.hpp"
 
 #include <algorithm>
 #include <array>
@@ -105,6 +106,16 @@ namespace CNA::Graphics {
                     ShaderCodeEXT(CNA::ShaderLanguageEXT::Wgsl,
                                   CNA::ShaderStageEXT::Fragment, "main",
                                   wgslFragment.label, std::string(wgslFragment.source)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                  CNA::ShaderStageEXT::Vertex, "main",
+                                  "volumetric_fog/fullscreen.vulkan.vert.spv -> hlsl",
+                                  std::string(CNA::Graphics::detail::SceneHlslGenerated::FindStage(
+                                      "volumetric_fog/fullscreen.vulkan.vert.spv"))),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                  CNA::ShaderStageEXT::Fragment, "main",
+                                  std::string(vulkanFragment.label) + " -> hlsl",
+                                  std::string(CNA::Graphics::detail::SceneHlslGenerated::FindStage(
+                                      vulkanFragment.label))),
                 },
                 {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment},
                 std::move(requirements));

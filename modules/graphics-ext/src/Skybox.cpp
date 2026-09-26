@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "shaders/skybox/SkyboxShaderPackage.generated.hpp"
+#include "shaders/SceneHlsl.generated.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -82,6 +83,16 @@ namespace CNA::Graphics {
                                   CNA::ShaderStageEXT::Fragment, "main",
                                   "skybox/skybox.vulkan.frag.wgsl",
                                   std::string(kVulkanFragmentWgsl)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                  CNA::ShaderStageEXT::Vertex, "main",
+                                  "skybox/skybox.vulkan.vert.spv -> hlsl",
+                                  std::string(CNA::Graphics::detail::SceneHlslGenerated::FindStage(
+                                      "skybox/skybox.vulkan.vert.spv"))),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                  CNA::ShaderStageEXT::Fragment, "main",
+                                  "skybox/skybox.vulkan.frag.spv -> hlsl",
+                                  std::string(CNA::Graphics::detail::SceneHlslGenerated::FindStage(
+                                      "skybox/skybox.vulkan.frag.spv"))),
                 },
                 {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment},
                 {ShaderBindingRequirementEXT(

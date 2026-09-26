@@ -733,3 +733,54 @@ Color `Texture3D` shader-sample capability. Later DX11 modern work still
 includes other production shader packages, base-instance drawing,
 vertex-stage storage lookup, shadows, IBL, and
 GPU markers; WIN11-0033 alone does not close the modern gate.
+
+WIN11-0034: the existing atmospheric-sky, skybox, directional/punctual/skinned
+shadow-caster, and volumetric-fog packages now carry FXC-checked HLSL variants.
+`tools/shader_package/generate_scene_hlsl.py` translates their 12 current
+Vulkan GLSL stages with the same local glslang/SPIRV-Cross toolchain and emits
+`SceneHlsl.generated.hpp` deterministically. The skybox cube binding is
+remapped from its Vulkan descriptor 5 to ShaderEffect texture/sampler slot 1;
+the generator rejects an unexpected binding or vertex Y convention. No new
+public shader intake or package API was added. The production package variants
+are selected only on an HLSL renderer.
+
+The first Intel-focused run executed 40 scene cases: 35 pass, 5 fail, zero
+debug-layer warnings/errors (`C:\rv\logs\dx11-scene-hlsl-focused-1.log`).
+All five failures were skybox pixel cases with a black frame. A temporary
+magenta fragment shader still produced black, separating rasterization from
+cube-map binding. Skybox's Vulkan vertex source already negates clip Y;
+SPIRV-Cross's additional Y flip reversed winding, so D3D11 culled the
+fullscreen quad. Disabling that second flip for skybox alone made its five
+pixel cases pass (`C:\rv\logs\dx11-skybox-y-focused.log`). The combined final
+focused run then passed **41/41** on Intel with zero D3D11 debug warnings/errors
+(`C:\rv\logs\dx11-scene-hlsl-focused-2.log`), including atmospheric colour
+against the CPU model, six skybox faces, HDR sky, shadow-map setup, volumetric
+lighting/occlusion, and render-pipeline sky integration. Shadow reception in
+stock lit effects is still unsupported and remains a distinct task; these
+package tests do not claim that later gate.
+
+```powershell
+python tools/shader_package/generate_scene_hlsl.py --glslang C:\rv\build\glslang-win11\StandAlone\Release\glslang.exe --spirv-cross C:\rv\build\spirv-cross-win11\Release\spirv-cross.exe --fxc 'C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\fxc.exe'
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsExtTests --parallel 4
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=AtmosphericSkyTest.*:SkyboxTest.*:SkyboxRenderTest.*:ShadowMapTest.*:VolumetricFogTest.*:RenderPipelineTest.TheSkyIsDrawnInsideBeginAndReportsItself' *> C:\rv\logs\dx11-scene-hlsl-focused-2.log
+```
+
+The complete DX11 modern suite then ran 980 cases from 125 suites in
+1,831,693 ms: **892 pass, 88 skip, 0 fail**
+(`C:\rv\logs\dx11-scene-hlsl-full-1.log`). That is 14 additional executed
+passes and 14 fewer skips than the WIN11-0033 complete run. The full log has
+679 explicit selections of Intel Iris Xe PCI 8086:46A6 with `software=0`;
+D3D11 debug layer was enabled and emitted zero warning/error messages. Its
+remaining 88 skips are listed by exact test name in the log and remain open
+modern work or deliberate opposite-capability controls. The full command was:
+
+```powershell
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 7200000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no' *> C:\rv\logs\dx11-scene-hlsl-full-1.log
+```
+
+The generator was syntax-checked, rerun with FXC, and produced the identical
+SHA-256 `51fb39fb850c4ec86195fa0ff3b0ccd013973a7f1f757d1e9e1e465357487f01`.
+The shadow-caster stages compile and their map setup/ownership tests pass;
+lit shadow reception and a rendered caster-depth oracle remain separate work.

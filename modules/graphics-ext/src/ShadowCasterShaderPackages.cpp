@@ -4,6 +4,7 @@
 #ifdef CNA_CNAEXT
 
 #include "shaders/shadow_caster/ShadowCasterShaderPackage.generated.hpp"
+#include "shaders/SceneHlsl.generated.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -97,6 +98,16 @@ namespace CNA::Graphics::detail
                     ShaderCodeEXT(CNA::ShaderLanguageEXT::Wgsl,
                                   CNA::ShaderStageEXT::Fragment, "main", wgslFragment.label,
                                   std::string(wgslFragment.source)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                  CNA::ShaderStageEXT::Vertex, "main",
+                                  std::string(vulkanVertex.label) + " -> hlsl",
+                                  std::string(CNA::Graphics::detail::SceneHlslGenerated::FindStage(
+                                      vulkanVertex.label))),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                  CNA::ShaderStageEXT::Fragment, "main",
+                                  std::string(vulkanFragment.label) + " -> hlsl",
+                                  std::string(CNA::Graphics::detail::SceneHlslGenerated::FindStage(
+                                      vulkanFragment.label))),
                 },
                 {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment});
         }
