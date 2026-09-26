@@ -1097,3 +1097,22 @@ $env:CNA_D3D11_DEBUG_LAYER='1'
 & C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ClusteredForwardEffectTest.*' *> C:\rv\logs\dx11-clustered-forward-suite-1.log
 & C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ClusteredLightBufferTest.*' *> C:\rv\logs\dx11-clustered-light-buffer-baseline-1.log
 ```
+
+## DX11 clustered light-buffer GPU probes, 2026-09-26
+
+WIN11-0043: added HLSL equivalents for the three existing GLSL-only
+`ClusteredLightBufferTest` pixel probes. The HLSL path fetches packed RGBA8
+texels without filtering, reconstructs every float field and the cluster
+offset/index list, and preserves the existing deliberately-wrong comparison
+control. Before this change DX11 passed four CPU cases and skipped all three
+GPU cases. Now **7/7 pass**, zero skip/fail, seven explicit physical Intel
+`8086:46A6` selections, and zero D3D11 debug warnings/errors
+(`C:\rv\logs\dx11-clustered-light-buffer-suite-1.log`). Existing GLSL
+probe sources remain selected on GLSL renderers.
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsExtTests --parallel 8
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ClusteredLightBufferTest.TheShaderReadsBackEveryFieldOfEveryLight' *> C:\rv\logs\dx11-clustered-light-buffer-probe-1.log
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ClusteredLightBufferTest.*' *> C:\rv\logs\dx11-clustered-light-buffer-suite-1.log
+```
