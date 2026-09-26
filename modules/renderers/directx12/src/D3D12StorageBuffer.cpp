@@ -217,7 +217,7 @@ namespace CNA::Internal::Renderers::DirectX12
         std::size_t byteSize)
     {
         auto* target = dynamic_cast<D3D12StorageBuffer*>(&destination);
-        if (!target || target->device_.Get() != device_.Get() ||
+        if (!target || target->renderer_.Get() != renderer_.Get() ||
             (usage_ & kTransferSource) == 0 ||
             (target->usage_ & kTransferDestination) == 0 ||
             !FitsRange(byteSize_, sourceByteOffset, byteSize) ||

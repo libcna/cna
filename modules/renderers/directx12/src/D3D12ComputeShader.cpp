@@ -227,7 +227,7 @@ namespace CNA::Internal::Renderers::DirectX12
         auto& held = storageBuffers_[static_cast<std::size_t>(binding)];
         if (!buffer) { held.reset(); return; }
         auto* native = dynamic_cast<D3D12StorageBuffer*>(buffer);
-        if (!native || native->GetDeviceEXT() != device_.Get() ||
+        if (!native || native->GetOwnerEXT() != renderer_.Get() ||
             (native->GetUsageEXT() & UINT32_C(0x01)) == 0 ||
             native->GetUavIndexEXT() == D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex)
             throw std::invalid_argument(
@@ -242,7 +242,7 @@ namespace CNA::Internal::Renderers::DirectX12
         auto& held = constantBuffers_[static_cast<std::size_t>(binding)];
         if (!buffer) { held.reset(); return true; }
         auto* native = dynamic_cast<D3D12StorageBuffer*>(buffer);
-        if (!native || native->GetDeviceEXT() != device_.Get() ||
+        if (!native || native->GetOwnerEXT() != renderer_.Get() ||
             (native->GetUsageEXT() & UINT32_C(0x40)) == 0)
             return false;
         held = buffer->shared_from_this();

@@ -30,6 +30,9 @@
 #include "System/NotSupportedException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "EngineTestSupport.hpp"
+#if defined(CNA_RENDERER_DIRECTX12)
+#include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
+#endif
 
 #include <algorithm>
 #include <array>
@@ -37,6 +40,7 @@
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -209,12 +213,13 @@ TEST(IndirectDrawTest, ADrawWithNothingBoundStillRefusesBeforeTheGpuSeesIt)
                  std::runtime_error);
 }
 
-TEST(IndirectDrawTest, AForeignDeviceArgumentBufferIsRefusedBeforeSubmission)
+TEST(IndirectDrawTest, AForeignDirectXDeviceArgumentBufferIsRefusedBeforeSubmission)
 {
     CnaTest::EngineLayer::HiDefDevice drawDevice;
     CnaTest::EngineLayer::HiDefDevice bufferDevice;
-    if (drawDevice.GetGraphicsRendererName() != "DIRECTX11")
-        GTEST_SKIP() << "this native device-isolation probe targets DirectX 11";
+    const std::string_view renderer = drawDevice.GetGraphicsRendererName();
+    if (renderer != "DIRECTX11" && renderer != "DIRECTX12")
+        GTEST_SKIP() << "this native device-isolation probe targets DirectX";
     if (!CanRunIndirect(drawDevice) || !CanRunIndirect(bufferDevice))
         GTEST_SKIP() << "this renderer has no indirect draw route";
 
@@ -234,11 +239,12 @@ TEST(IndirectDrawTest, AForeignDeviceArgumentBufferIsRefusedBeforeSubmission)
     drawDevice.SetVertexBuffer(nullptr);
 }
 
-TEST(IndirectDrawTest, DirectX11ComputeWritesArgumentsConsumedByTheGpuDraw)
+TEST(IndirectDrawTest, DirectXComputeWritesArgumentsConsumedByTheGpuDraw)
 {
     CnaTest::EngineLayer::HiDefDevice device;
-    if (device.GetGraphicsRendererName() != "DIRECTX11")
-        GTEST_SKIP() << "this raw HLSL producer targets DirectX 11";
+    const std::string_view renderer = device.GetGraphicsRendererName();
+    if (renderer != "DIRECTX11" && renderer != "DIRECTX12")
+        GTEST_SKIP() << "this raw HLSL producer targets DirectX";
     ASSERT_TRUE(device.SupportsCapability(GraphicsCapability::ComputeShaders));
     ASSERT_TRUE(CanRunIndirect(device));
     ASSERT_TRUE(device.SupportsShaderLanguageEXT(
@@ -438,6 +444,58 @@ TEST(IndirectDrawTest, TheIndexedRouteRefusesWithoutAnIndexBuffer)
                  std::runtime_error);
     device.SetVertexBuffer(nullptr);
 }
+
+#if defined(CNA_RENDERER_DIRECTX12)
+TEST(IndirectDrawTest, D3D12CommandSignaturesAreRecreatedWithTheDevice)
+{
+    CnaTest::EngineLayer::HiDefDevice device;
+    auto& renderer = dynamic_cast<CNA::Internal::Renderers::DirectX12::DirectX12Renderer&>(
+        device.GetRenderer());
+    const auto triangle = CoveringTriangle();
+    VertexBuffer vertices(device, 3);
+    vertices.SetData(triangle.data(), 3);
+    const std::array<std::uint16_t, 3> order{0, 1, 2};
+    IndexBuffer indices(device, 3);
+    indices.SetData(order.data(), 3);
+    BasicEffect effect(device);
+    effect.VertexColorEnabled = true;
+    RenderTarget2D target(device, kSize, kSize);
+    IndirectDrawArguments draw{};
+    draw.VertexCount = 3;
+    draw.InstanceCount = 1;
+    IndirectDrawIndexedArguments indexed{};
+    indexed.IndexCount = 3;
+    indexed.InstanceCount = 1;
+    StorageBuffer drawArguments(device, CpuIndirectDescriptor(sizeof(draw)));
+    StorageBuffer indexedArguments(device, CpuIndirectDescriptor(sizeof(indexed)));
+    drawArguments.setBytes(&draw, sizeof(draw));
+    indexedArguments.setBytes(&indexed, sizeof(indexed));
+
+    const auto render = [&](bool useIndices) {
+        device.SetVertexBuffer(&vertices);
+        if (useIndices) device.SetIndexBuffer(&indices);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+        effect.Apply();
+        if (useIndices)
+            device.DrawIndexedPrimitivesIndirectEXT(
+                PrimitiveType::TriangleList, *indexedArguments.getRendererEXT(), 0);
+        else
+            device.DrawPrimitivesIndirectEXT(
+                PrimitiveType::TriangleList, *drawArguments.getRendererEXT(), 0);
+        device.SetRenderTarget(nullptr);
+        device.SetIndexBuffer(nullptr);
+        device.SetVertexBuffer(nullptr);
+        return CountLitPixels(target);
+    };
+
+    EXPECT_EQ(render(false), kSize * kSize);
+    EXPECT_EQ(render(true), kSize * kSize);
+    renderer.RecreateDeviceEXT();
+    EXPECT_EQ(render(false), kSize * kSize);
+    EXPECT_EQ(render(true), kSize * kSize);
+}
+#endif
 
 } // namespace
 

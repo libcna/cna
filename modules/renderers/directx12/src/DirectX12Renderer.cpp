@@ -1,6 +1,7 @@
 // plans/plan_dx.md Phase DX17: frame-scoped D3D12 command recording with persistently mapped
 // per-frame upload rings and explicit immediate-list boundaries for CPU readbacks.
 #include "CNA/Logger.hpp"
+#include "CNA/IndirectDrawArguments.hpp"
 #include "CNA/ShaderLanguageEXT.hpp"
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Buffers.hpp"
@@ -66,12 +67,33 @@ namespace CNA::Internal::Renderers::DirectX12
     namespace
     {
         constexpr std::size_t kDefaultFrameUploadChunkSize = 1u * 1024u * 1024u;
+        static_assert(sizeof(CNA::IndirectDrawArguments) == sizeof(D3D12_DRAW_ARGUMENTS));
+        static_assert(sizeof(CNA::IndirectDrawIndexedArguments) ==
+                      sizeof(D3D12_DRAW_INDEXED_ARGUMENTS));
 
         std::string FormatHr(HRESULT hr)
         {
             char buf[32];
             std::snprintf(buf, sizeof(buf), "0x%08lX", static_cast<unsigned long>(hr));
             return buf;
+        }
+
+        const D3D12StorageBuffer& RequireIndirectBuffer(
+            const IStorageBufferRenderer& buffer, DirectX12Renderer* owner,
+            int byteOffset, std::size_t commandBytes)
+        {
+            const auto* native = dynamic_cast<const D3D12StorageBuffer*>(&buffer);
+            if (!native || native->GetOwnerEXT() != owner ||
+                !native->GetResourceEXT() ||
+                (native->GetUsageEXT() & UINT32_C(0x08)) == 0)
+                throw System::NotSupportedException(
+                    "D3D12 indirect drawing requires a same-device argument buffer");
+            if (byteOffset < 0 || (byteOffset & 3) != 0 ||
+                static_cast<std::size_t>(byteOffset) > native->GetByteSize() ||
+                commandBytes > native->GetByteSize() -
+                               static_cast<std::size_t>(byteOffset))
+                throw std::out_of_range("D3D12 indirect argument range is invalid");
+            return *native;
         }
 
         // Every live renderer's info queue, so a diagnostic handler can read the message that made
@@ -1795,6 +1817,8 @@ namespace CNA::Internal::Renderers::DirectX12
         UnregisterLiveDebugQueue(infoQueue_);
         D3DCommon::D3DDebugLayerLog::UnregisterLiveQueue(this);
         infoQueue_.Reset();
+        indirectDrawSignature_.Reset();
+        indirectIndexedSignature_.Reset();
         device_.Reset();
         factory_.Reset();
 
@@ -3060,7 +3084,7 @@ namespace CNA::Internal::Renderers::DirectX12
         IComputeShaderRenderer* shader, int groupsX, int groupsY, int groupsZ)
     {
         auto* native = dynamic_cast<D3D12ComputeShader*>(shader);
-        if (!native || native->GetDeviceEXT() != device_.Get() ||
+        if (!native || native->GetOwnerEXT() != this ||
             groupsX <= 0 || groupsY <= 0 || groupsZ <= 0 ||
             groupsX > GetMaxComputeWorkGroupCountEXT(0) ||
             groupsY > GetMaxComputeWorkGroupCountEXT(1) ||
@@ -3126,13 +3150,51 @@ namespace CNA::Internal::Renderers::DirectX12
     {
         const auto* native = dynamic_cast<const D3D12StorageBuffer*>(&buffer);
         if (binding < 0 || binding >= GetMaxVertexShaderStorageBlocksEXT() ||
-            !native || native->GetDeviceEXT() != device_.Get() ||
+            !native || native->GetOwnerEXT() != this ||
             (native->GetUsageEXT() & UINT32_C(0x01)) == 0 ||
             native->GetSrvIndexEXT() == D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex)
             throw System::NotSupportedException(
                 "D3D12 draw storage binding requires a same-device raw storage buffer "
                 "and a t-register from zero through fifteen.");
         drawStorageBuffers_[static_cast<std::size_t>(binding)] = buffer.shared_from_this();
+    }
+
+    bool DirectX12Renderer::SupportsIndirectDrawEXT() const
+    {
+        return device_ != nullptr && featureLevel_ >= D3D_FEATURE_LEVEL_11_0;
+    }
+
+    ID3D12CommandSignature* DirectX12Renderer::GetOrCreateIndirectSignatureEXT(bool indexed)
+    {
+        auto& signature = indexed ? indirectIndexedSignature_ : indirectDrawSignature_;
+        if (signature) return signature.Get();
+
+        D3D12_INDIRECT_ARGUMENT_DESC argument{};
+        argument.Type = indexed ? D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED
+                                : D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
+        D3D12_COMMAND_SIGNATURE_DESC description{};
+        description.ByteStride = indexed ? sizeof(D3D12_DRAW_INDEXED_ARGUMENTS)
+                                         : sizeof(D3D12_DRAW_ARGUMENTS);
+        description.NumArgumentDescs = 1;
+        description.pArgumentDescs = &argument;
+        const HRESULT hr = device_->CreateCommandSignature(
+            &description, nullptr, IID_PPV_ARGS(signature.ReleaseAndGetAddressOf()));
+        if (FAILED(hr))
+            throw std::runtime_error(
+                "D3D12 indirect command signature creation failed: " + FormatHr(hr));
+        return signature.Get();
+    }
+
+    void DirectX12Renderer::ExecuteIndirectDrawEXT(
+        ID3D12GraphicsCommandList* commands, ID3D12Resource* arguments,
+        UINT64 byteOffset, bool indexed)
+    {
+        ID3D12CommandSignature* signature = GetOrCreateIndirectSignatureEXT(indexed);
+        RetainFrameObjectEXT(arguments);
+        RetainFrameObjectEXT(signature);
+        resourceStates_.TransitionTo(
+            commands, arguments, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+        commands->ExecuteIndirect(signature, 1, arguments, byteOffset, nullptr, 0);
     }
 
     std::unique_ptr<ITextureCubeRenderer> DirectX12Renderer::CreateTextureCube(
@@ -3677,7 +3739,8 @@ namespace CNA::Internal::Renderers::DirectX12
     void DirectX12Renderer::DrawPrimitivesExImpl(
         const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
         const Matrix& world, const Matrix& view, const Matrix& projection,
-        PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
+        PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+        ID3D12Resource* indirectArguments, UINT64 indirectByteOffset)
     {
         // GLTF-394: reject line/point topology before declaration/target/PSO work can mask the reason.
         const D3D12_PRIMITIVE_TOPOLOGY nativeTopology = ToD3D12Topology(primitive);
@@ -3704,7 +3767,8 @@ namespace CNA::Internal::Renderers::DirectX12
         {
             RecordCompiledEffectDrawEXT(
                 d3dVb, ib, primitive, primitiveCount, 1, params,
-                *params.compiledEffectRuntime);
+                *params.compiledEffectRuntime, nullptr, nullptr,
+                indirectArguments, indirectByteOffset);
             return;
         }
 #endif
@@ -3841,15 +3905,21 @@ namespace CNA::Internal::Renderers::DirectX12
                         handle);
             }
 
-            const UINT elementCount = static_cast<UINT>(
-                VertexCountForPrimitives(primitive, primitiveCount));
-            if (ib != nullptr)
-                cmdList->DrawIndexedInstanced(
-                    elementCount, 1, static_cast<UINT>(params.startIndex),
-                    static_cast<INT>(params.baseVertex), 0);
+            if (indirectArguments != nullptr)
+                ExecuteIndirectDrawEXT(cmdList, indirectArguments, indirectByteOffset,
+                                       ib != nullptr);
             else
-                cmdList->DrawInstanced(
-                    elementCount, 1, static_cast<UINT>(params.vertexStart), 0);
+            {
+                const UINT elementCount = static_cast<UINT>(
+                    VertexCountForPrimitives(primitive, primitiveCount));
+                if (ib != nullptr)
+                    cmdList->DrawIndexedInstanced(
+                        elementCount, 1, static_cast<UINT>(params.startIndex),
+                        static_cast<INT>(params.baseVertex), 0);
+                else
+                    cmdList->DrawInstanced(
+                        elementCount, 1, static_cast<UINT>(params.vertexStart), 0);
+            }
 
             return;
         }
@@ -4692,7 +4762,10 @@ namespace CNA::Internal::Renderers::DirectX12
                 cmdList->SetGraphicsRootDescriptorTable(numCbvs + numSrvs + i, samplerHandles[i]);
         }
 
-        if (ib != nullptr)
+        if (indirectArguments != nullptr)
+            ExecuteIndirectDrawEXT(cmdList, indirectArguments, indirectByteOffset,
+                                   ib != nullptr);
+        else if (ib != nullptr)
         {
             // REMED-GFX-020 (renderer parity with D3D11): honor the XNA DrawIndexedPrimitives
             // startIndex/baseVertex offsets (StartIndexLocation / BaseVertexLocation) instead of
@@ -4727,6 +4800,34 @@ namespace CNA::Internal::Renderers::DirectX12
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
         DrawPrimitivesExImpl(vb, &ib, world, view, projection, primitive, primitiveCount, params);
+    }
+
+    void DirectX12Renderer::DrawPrimitivesIndirectEXT(
+        const IVertexBufferRenderer& vb, const Matrix& world, const Matrix& view,
+        const Matrix& projection, PrimitiveType primitive,
+        const IStorageBufferRenderer& argumentBuffer, int argumentByteOffset,
+        const GpuDrawParams& params)
+    {
+        const auto& native = RequireIndirectBuffer(
+            argumentBuffer, this, argumentByteOffset,
+            sizeof(D3D12_DRAW_ARGUMENTS));
+        DrawPrimitivesExImpl(
+            vb, nullptr, world, view, projection, primitive, 0, params,
+            native.GetResourceEXT(), static_cast<UINT64>(argumentByteOffset));
+    }
+
+    void DirectX12Renderer::DrawIndexedPrimitivesIndirectEXT(
+        const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
+        const Matrix& world, const Matrix& view, const Matrix& projection,
+        PrimitiveType primitive, const IStorageBufferRenderer& argumentBuffer,
+        int argumentByteOffset, const GpuDrawParams& params)
+    {
+        const auto& native = RequireIndirectBuffer(
+            argumentBuffer, this, argumentByteOffset,
+            sizeof(D3D12_DRAW_INDEXED_ARGUMENTS));
+        DrawPrimitivesExImpl(
+            vb, &ib, world, view, projection, primitive, 0, params,
+            native.GetResourceEXT(), static_cast<UINT64>(argumentByteOffset));
     }
 
     void DirectX12Renderer::DrawInstancedPrimitivesEx(

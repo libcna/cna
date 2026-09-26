@@ -103,6 +103,11 @@ namespace CNA::Internal::Renderers::DirectX12
          * @return Current device, or null while device resources are released.
          */
         [[nodiscard]] ID3D12Device* GetDeviceEXT() const noexcept { return device_.Get(); }
+        /**
+         * @brief Returns the renderer that owns dispatch recording and resource states.
+         * @return Live owning renderer.
+         */
+        [[nodiscard]] DirectX12Renderer* GetOwnerEXT() const { return renderer_.Get(); }
         /** @brief Releases the old device's PSO and root signature. */
         void ReleaseDeviceResourcesEXT() noexcept override;
         /** @brief Recreates the PSO from retained bytecode while preserving uniforms and bindings. */

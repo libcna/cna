@@ -7,9 +7,11 @@
 #include "CNA/Graphics/StorageBuffer.hpp"
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
 #include "EngineTestSupport.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -160,6 +162,37 @@ void main(uint3 id : SV_DispatchThreadID) { Values.Store(0, 42); }
     constantAlias.bindStorageBuffer(0, buffer);
     constantAlias.bindConstantBuffer(0, buffer);
     EXPECT_THROW(constantAlias.dispatch(1), std::invalid_argument);
+}
+
+TEST(D3D12ComputeBindingTest, ForeignRendererRecordsAreRejectedBeforeGpuRecording)
+{
+    CnaTest::EngineLayer::HiDefDevice firstDevice;
+    CnaTest::EngineLayer::HiDefDevice secondDevice;
+    auto& first = dynamic_cast<DirectX12Renderer&>(firstDevice.GetRenderer());
+    auto& second = dynamic_cast<DirectX12Renderer&>(secondDevice.GetRenderer());
+    const std::string source = R"(
+RWByteAddressBuffer Values : register(u0);
+[numthreads(1, 1, 1)]
+void main(uint3 id : SV_DispatchThreadID) { Values.Store(0, 42); }
+)";
+    auto program = first.CreateComputeShader(source);
+    auto foreignProgram = second.CreateComputeShader(source);
+    ASSERT_TRUE(program->IsValid());
+    ASSERT_TRUE(foreignProgram->IsValid());
+    std::shared_ptr<CNA::Internal::Renderers::IStorageBufferRenderer> foreign(
+        second.CreateStorageBufferEXT(256, UINT32_C(0x47), UINT32_C(0x03)));
+    std::shared_ptr<CNA::Internal::Renderers::IStorageBufferRenderer> local(
+        first.CreateStorageBufferEXT(256, UINT32_C(0x47), UINT32_C(0x03)));
+    ASSERT_NE(foreign, nullptr);
+    ASSERT_NE(local, nullptr);
+
+    EXPECT_THROW(program->BindStorageBuffer(0, foreign.get()), std::invalid_argument);
+    EXPECT_FALSE(program->BindConstantBufferEXT(0, foreign.get()));
+    EXPECT_THROW(first.BindStorageBufferForDrawEXT(0, *foreign),
+                 System::NotSupportedException);
+    EXPECT_THROW(first.DispatchCompute(foreignProgram.get(), 1, 1, 1),
+                 std::invalid_argument);
+    EXPECT_FALSE(foreign->CopyToEXT(*local, 0, 0, 4));
 }
 
 #endif // CNA_RENDERER_DIRECTX12 && CNA_CNAEXT

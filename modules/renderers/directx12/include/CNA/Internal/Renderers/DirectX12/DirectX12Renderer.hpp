@@ -364,11 +364,11 @@ namespace CNA::Internal::Renderers::DirectX12
         std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,
                                                              const std::string& fragSrc) override;
         /**
-         * @brief Creates a native buffer for declared transfer-only usage.
+         * @brief Creates a native buffer for declared storage, transfer, constant or indirect usage.
          * @param byteSize Logical byte count.
-         * @param usage Portable usage bits; currently transfer source/destination only.
+         * @param usage Portable usage bits supported by this renderer.
          * @param cpuAccess Portable CPU read/write intent.
-         * @return Native buffer, or null for roles not yet implemented by DX12.
+         * @return Native buffer, or null for roles not implemented by DX12.
          */
         std::unique_ptr<IStorageBufferRenderer> CreateStorageBufferEXT(
             std::size_t byteSize, std::uint32_t usage,
@@ -455,6 +455,11 @@ namespace CNA::Internal::Renderers::DirectX12
          */
         void BindStorageBufferForDrawEXT(
             int binding, const IStorageBufferRenderer& buffer) override;
+        /**
+         * @brief Reports native GPU-fetched draw arguments through ExecuteIndirect.
+         * @return True when a live D3D12 device can create draw command signatures.
+         */
+        [[nodiscard]] bool SupportsIndirectDrawEXT() const override;
 #if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
         /** @brief Creates a compiled XNA effect through CNA's MojoShader HLSL backend. */
         std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(
@@ -474,7 +479,9 @@ namespace CNA::Internal::Renderers::DirectX12
             ICompiledEffectRuntime& runtime,
             const ITextureRenderer* spriteBatchSlotZeroTexture = nullptr,
             const Microsoft::Xna::Framework::Graphics::TextureCollection*
-                spriteBatchTextures = nullptr);
+                spriteBatchTextures = nullptr,
+            ID3D12Resource* indirectArguments = nullptr,
+            UINT64 indirectByteOffset = 0);
 #endif
 
         /// DX-117: real D3D12RenderTargetRenderer, no longer the inherited default (-> nullptr).
@@ -644,6 +651,39 @@ namespace CNA::Internal::Renderers::DirectX12
                                      const Matrix& world, const Matrix& view, const Matrix& projection,
                                      PrimitiveType primitive, int primitiveCount,
                                      const GpuDrawParams& params) override;
+        /**
+         * @brief Draws using a four-word GPU command from a same-device indirect buffer.
+         * @param vb Bound vertex buffer.
+         * @param world World transform.
+         * @param view View transform.
+         * @param projection Projection transform.
+         * @param primitive Primitive topology.
+         * @param argumentBuffer Native buffer declaring IndirectArguments usage.
+         * @param argumentByteOffset Aligned byte offset of the draw command.
+         * @param params Complete effect and stream bindings.
+         */
+        void DrawPrimitivesIndirectEXT(
+            const IVertexBufferRenderer& vb, const Matrix& world, const Matrix& view,
+            const Matrix& projection, PrimitiveType primitive,
+            const IStorageBufferRenderer& argumentBuffer, int argumentByteOffset,
+            const GpuDrawParams& params) override;
+        /**
+         * @brief Draws indexed geometry using a five-word GPU command.
+         * @param vb Bound vertex buffer.
+         * @param ib Bound index buffer.
+         * @param world World transform.
+         * @param view View transform.
+         * @param projection Projection transform.
+         * @param primitive Primitive topology.
+         * @param argumentBuffer Native buffer declaring IndirectArguments usage.
+         * @param argumentByteOffset Aligned byte offset of the indexed command.
+         * @param params Complete effect and stream bindings.
+         */
+        void DrawIndexedPrimitivesIndirectEXT(
+            const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
+            const Matrix& world, const Matrix& view, const Matrix& projection,
+            PrimitiveType primitive, const IStorageBufferRenderer& argumentBuffer,
+            int argumentByteOffset, const GpuDrawParams& params) override;
 
         /// DX-111/DX-222: real instanced3d dispatch. Every bound declaration, input slot,
         /// instance step rate and stream-local offset enters the shared pipeline-state cache.
@@ -1153,7 +1193,13 @@ namespace CNA::Internal::Renderers::DirectX12
         /// DrawPrimitivesExImpl(vb, ib-or-null, ...) shape exactly).
         void DrawPrimitivesExImpl(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
-                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                                  ID3D12Resource* indirectArguments = nullptr,
+                                  UINT64 indirectByteOffset = 0);
+        ID3D12CommandSignature* GetOrCreateIndirectSignatureEXT(bool indexed);
+        void ExecuteIndirectDrawEXT(ID3D12GraphicsCommandList* commands,
+                                    ID3D12Resource* arguments, UINT64 byteOffset,
+                                    bool indexed);
 
         /// plans/plan_dx.md DX-202: copies every tracked XNA render-state ordinal into @p psoDesc. This used
         /// to be the same thirteen assignments written out at each of the three draw sites, which is
@@ -1176,6 +1222,8 @@ namespace CNA::Internal::Renderers::DirectX12
 
         // Device lifetime (plans/plan_dx.md design decision 11's own grouping, reused for D3D12).
         ComPtr<ID3D12Device> device_;
+        ComPtr<ID3D12CommandSignature> indirectDrawSignature_;
+        ComPtr<ID3D12CommandSignature> indirectIndexedSignature_;
         ComPtr<IDXGIFactory4> factory_;
         ComPtr<ID3D12CommandQueue> commandQueue_;
         D3D_FEATURE_LEVEL featureLevel_ = D3D_FEATURE_LEVEL_11_0;

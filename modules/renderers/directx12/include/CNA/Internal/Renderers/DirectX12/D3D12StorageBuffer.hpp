@@ -86,6 +86,11 @@ namespace CNA::Internal::Renderers::DirectX12
         /** @brief Returns the native device this buffer belongs to. */
         [[nodiscard]] ID3D12Device* GetDeviceEXT() const noexcept { return device_.Get(); }
         /**
+         * @brief Returns the renderer that owns resource state and command submission.
+         * @return Live owning renderer.
+         */
+        [[nodiscard]] DirectX12Renderer* GetOwnerEXT() const { return renderer_.Get(); }
+        /**
          * @brief Returns the stable raw UAV index when storage use was declared.
          * @return Descriptor index, or the invalid index when storage use is absent.
          */

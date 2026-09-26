@@ -893,7 +893,8 @@ namespace CNA::Internal::Renderers::DirectX12
         const GpuDrawParams& params,
         ICompiledEffectRuntime& runtime,
         const ITextureRenderer* spriteBatchSlotZeroTexture,
-        const Microsoft::Xna::Framework::Graphics::TextureCollection* spriteBatchTextures)
+        const Microsoft::Xna::Framework::Graphics::TextureCollection* spriteBatchTextures,
+        ID3D12Resource* indirectArguments, UINT64 indirectByteOffset)
     {
         auto* effect = dynamic_cast<D3D12CompiledEffect*>(&runtime);
         if (effect == nullptr || effect->context_ != mojoShaderContext_.get())
@@ -1164,15 +1165,21 @@ namespace CNA::Internal::Renderers::DirectX12
             commandList->SetGraphicsRootDescriptorTable(
                 sampler.root, heaps_->sampler.GpuHandle(sampler.descriptor));
 
-        const UINT count = static_cast<UINT>(ElementCount(primitive, primitiveCount));
-        const UINT instances = static_cast<UINT>(std::max(1, instanceCount));
-        if (indexBuffer != nullptr)
-            commandList->DrawIndexedInstanced(
-                count, instances, static_cast<UINT>(params.startIndex),
-                static_cast<INT>(params.baseVertex), 0);
+        if (indirectArguments != nullptr)
+            ExecuteIndirectDrawEXT(commandList, indirectArguments, indirectByteOffset,
+                                   indexBuffer != nullptr);
         else
-            commandList->DrawInstanced(
-                count, instances, static_cast<UINT>(params.vertexStart), 0);
+        {
+            const UINT count = static_cast<UINT>(ElementCount(primitive, primitiveCount));
+            const UINT instances = static_cast<UINT>(std::max(1, instanceCount));
+            if (indexBuffer != nullptr)
+                commandList->DrawIndexedInstanced(
+                    count, instances, static_cast<UINT>(params.startIndex),
+                    static_cast<INT>(params.baseVertex), 0);
+            else
+                commandList->DrawInstanced(
+                    count, instances, static_cast<UINT>(params.vertexStart), 0);
+        }
     }
 }
 

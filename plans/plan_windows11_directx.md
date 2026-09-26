@@ -2140,3 +2140,86 @@ $filter='D3D12ComputeRecoveryTest.*:D3D12ComputeBindingTest.*:ComputeTest.ADispa
 
 Modern storage textures, Texture2DArray, indirect drawing, GPU timing and
 modern IBL/shadow capability work remain separate implementation tasks.
+
+### WIN11-0065: DX12 native indirect drawing and renderer ownership
+
+The DX12 renderer now exposes `SupportsIndirectDrawEXT` on a live feature-level
+11+ device and accepts the existing `IndirectArguments` storage-buffer role.
+It lazily creates 16-byte draw and 20-byte indexed-draw command signatures,
+records native `ExecuteIndirect` on the frame command list, and transitions the
+argument buffer to `INDIRECT_ARGUMENT` through the resource-state tracker.
+The buffer and command signature remain retained until the frame fence.
+The stock effect, HLSL ShaderEffect, and opt-in compiled-effect draw paths all
+use the same GPU-fetched argument call; no draw inserts a global GPU wait.
+Before recording, the renderer checks ownership, usage, four-byte alignment,
+and the complete argument range. Both signatures are released and recreated
+with the D3D12 device.
+
+The first expanded culler/particle run passed 34 tests, skipped one inverse
+capability probe, and failed one new foreign-device regression
+(`C:\rv\logs\dx12-modern-indirect-culler-particle-final-1.log`). The
+failure was genuine: two renderer instances can receive the same
+`ID3D12Device*`, so comparing COM device pointers did not distinguish their
+resource-state trackers. The buffer was accepted, then the receiving tracker
+reported an unregistered resource. Native StorageBuffer and ComputeShader
+records now expose their owning renderer; indirect draws, graphics storage
+binding, compute dispatch/binding and GPU buffer copies reject records owned
+by another renderer before GPU recording. A direct ownership regression covers
+these paths.
+
+On physical Intel Iris Xe `8086:46A6` with explicit hardware selection,
+D3D12 debug layer and DRED, the final combined indirect/culler/particle run
+passed **35/36**, with only the inverse unsupported-capability probe skipped,
+zero failures and **31** Intel adapter selections
+(`C:\rv\logs\dx12-modern-indirect-culler-particle-final-2.log`). This run
+includes GPU compute writing indirect draw arguments, indexed and nonindexed
+draws, offset/count validation, repeated instance culling, and particle draws.
+The additional foreign-renderer compute-binding regression passed **1/1**
+with two Intel selections (`dx12-modern-indirect-owner-test-1.log`). Targeted
+GPU-based validation passed **5/5** with six Intel selections and no
+debug-layer or GPU-validation messages (`dx12-modern-indirect-gbv-1.log`).
+The command-signature device-recreation regression passed **1/1**, selecting
+Intel twice (`dx12-modern-indirect-recovery-1.log`). None of these runs
+selected WARP or a software adapter, and no device removal or DRED fault was
+reported.
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx12-modern --config Debug --target CnaGraphicsExtTests --parallel 6
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='0'
+$filter='IndirectDrawTest.*:GpuInstanceCullerTest.*:ParticleSystemTest.*'
+& C:\rv\work\private_desktop_awake.exe 900000 "C:\rv\build\cna-win11-dx12-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=$filter"
+$env:CNA_D3D12_GPU_VALIDATION='1'
+$filter='D3D12ComputeBindingTest.ForeignRendererRecordsAreRejectedBeforeGpuRecording:GpuInstanceCullerTest.RepeatedCullAndIndirectDrawKeepTheLatestVisibleList:IndirectDrawTest.DirectXComputeWritesArgumentsConsumedByTheGpuDraw:IndirectDrawTest.TheIndexedRouteReadsItsOwnFiveWordCommand:ParticleSystemTest.TheParticlesReachTheFrame'
+& C:\rv\work\private_desktop_awake.exe 900000 "C:\rv\build\cna-win11-dx12-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=$filter"
+```
+
+The rebuilt complete DX12 modern binary then ran **1,003 tests from 131 suites**
+in **2,047,637 ms**: **930 pass, 73 skip, 0 fail**
+(`C:\rv\logs\dx12-modern-full-post-indirect-1.log`). There were **707**
+physical Intel `8086:46A6` adapter selections, zero WARP/software selections,
+zero debug-layer warnings/errors, zero device removals or DRED faults. D3D12
+debug layer and DRED were enabled; GPU-based validation was disabled for this
+large routine suite. At approximately tests 400 and 900, the test process
+remained near 43.3 MiB private memory and 393 handles (working set about
+78-79 MiB, 7-8 threads). The 73 skips include backend-specific inverse probes
+and still-missing DX12 GPU timing, storage images, Texture2DArray and modern
+shadow/IBL support. They are not a claim of complete modern DX12 parity.
+
+The two renamed renderer-neutral indirect tests were rebuilt for DX11 and
+passed **2/2** on physical Intel, with three `8086:46A6`, `software=0`
+selections, feature level `11_1`, D3D11 debug layer enabled and zero warnings
+or errors (`C:\rv\logs\dx11-modern-indirect-shared-regression-1.log`).
+
+```powershell
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='0'
+& C:\rv\work\private_desktop_awake.exe 4800000 'C:\rv\build\cna-win11-dx12-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no' *> C:\rv\logs\dx12-modern-full-post-indirect-1.log
+$env:CNA_D3D11_DEBUG_LAYER='1'
+$filter='IndirectDrawTest.AForeignDirectXDeviceArgumentBufferIsRefusedBeforeSubmission:IndirectDrawTest.DirectXComputeWritesArgumentsConsumedByTheGpuDraw'
+& C:\rv\work\private_desktop_awake.exe 900000 "C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=$filter" *> C:\rv\logs\dx11-modern-indirect-shared-regression-1.log
+```
