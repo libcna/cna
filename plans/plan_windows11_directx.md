@@ -1179,3 +1179,31 @@ $env:CNA_D3D11_DEBUG_LAYER='1'
 & C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ComputeTest.ABrokenShaderThrowsWithItsCompilerLog:ComputeTest.ADispatchDoublesEveryElementOfABuffer:ComputeTest.UniformsReachTheProgram:ComputeTest.DispatchArgumentsAreValidatedBeforeSubmission' *> C:\rv\logs\dx11-compute-core-focused-1.log
 & C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ComputeTest.*' *> C:\rv\logs\dx11-compute-core-suite-1.log
 ```
+
+## DX11 raw Texture2D compute-image capability truth, 2026-09-26
+
+WIN11-0047: `ComputeTest.ImageBindingEitherWorksOrRefusesWithItsReason`
+previously skipped DX11 solely for a missing HLSL test payload. It now
+compiles native HLSL and verifies that the unsupported raw `Texture2D`
+compute-image bind refuses with the selected renderer name and usable
+`StorageTexture2D`/`StorageBuffer` alternatives. The generic exception no
+longer incorrectly blames GL ES on DirectX; its specific immutable-texture
+explanation remains on GL ES. The companion `Texture2D::GetData`-after-image-
+write test skips on DX11 for its actual unsupported raw image capability,
+rather than for test-source dialect. Typed storage-image GPU read/write remains
+covered by `D3D11NativeComputeTest`.
+
+Focused run: one pass, one capability-truthful skip
+(`C:\rv\logs\dx11-image-binding-focused-1.log`). Full `ComputeTest.*`:
+**14 pass, 3 skip, 0 fail** on physical Intel `8086:46A6`, 18 explicit
+adapter selections, D3D11 debug layer zero warnings/errors
+(`C:\rv\logs\dx11-image-binding-compute-suite-1.log`). The other two skips
+are the unsupported-renderer refusal case on a capable adapter and a
+Vulkan-only SPIR-V sampler rejection.
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsExtTests --parallel 8
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ComputeTest.ImageBindingEitherWorksOrRefusesWithItsReason:ComputeTest.Texture2DGetDataDoesNotSeeComputeWrites' *> C:\rv\logs\dx11-image-binding-focused-1.log
+& C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ComputeTest.*' *> C:\rv\logs\dx11-image-binding-compute-suite-1.log
+```

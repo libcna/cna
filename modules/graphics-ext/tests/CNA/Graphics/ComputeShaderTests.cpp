@@ -642,20 +642,17 @@ TEST_F(ComputeTest, TextureInteropRejectsDisposedForeignAndInvalidAccessBeforeBa
 
 TEST_F(ComputeTest, ImageBindingEitherWorksOrRefusesWithItsReason)
 {
-    // MOD-1514/MOD-1504, written to assert something on both kinds of context rather than to skip
-    // on one. GL ES 3.1 requires an immutable texture for glBindImageTexture and CNA allocates its
-    // textures mutably, so an ES context with full compute support cannot bind one -- and rather
-    // than let the driver reject the binding silently, the wrapper refuses it and says why. On
-    // desktop GL the same code binds and the gradient below is asserted exactly.
+    // MOD-1514/MOD-1504: a raw Texture2D image either works or names the renderer and a usable
+    // storage alternative. GL ES's immutable allocation rule is more specific and is checked too.
     if (!supported()) GTEST_SKIP() << "this renderer does not support compute shaders";
-    if (!supportsLegacyComputeSource())
-        GTEST_SKIP() << "this test's legacy payload has no form in the renderer's dialect";
+    if (!supportsComputeSource())
+        GTEST_SKIP() << "this test has no payload in the renderer's compute dialect";
     constexpr int kSize = 16;
     Texture2D texture(gd, kSize, kSize);
     const std::vector<Color> initial(kSize * kSize, Color::Black);
     texture.SetData(initial.data(), static_cast<int>(initial.size()));
 
-    ComputeShader painter(gd, legacySource(R"(#version 310 es
+    const std::string glslPainter = R"(#version 310 es
 layout(local_size_x = 8, local_size_y = 8) in;
 layout(rgba8, binding = 0) writeonly uniform highp image2D uOutput;
 uniform int uSize;
@@ -665,7 +662,21 @@ void main() {
     imageStore(uOutput, at, vec4(float(at.x) / float(uSize - 1),
                                  float(at.y) / float(uSize - 1), 0.0, 1.0));
 }
-)"));
+)";
+    constexpr const char* hlslPainter = R"(
+RWTexture2D<float4> uOutput : register(u0);
+cbuffer PainterParameters : register(b0) { int uSize; };
+[numthreads(8, 8, 1)]
+void main(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint2 at = dispatchId.xy;
+    if (at.x >= uint(uSize) || at.y >= uint(uSize)) return;
+    uOutput[at] = float4(float(at.x) / float(uSize - 1),
+                         float(at.y) / float(uSize - 1), 0.0f, 1.0f);
+}
+)";
+    ComputeShader painter(gd, supportsLegacyComputeSource()
+        ? legacySource(glslPainter) : std::string(hlslPainter));
 
     if (!painter.isImageBindingSupported())
     {
@@ -677,7 +688,12 @@ void main() {
         catch (const System::NotSupportedException& error)
         {
             const std::string message = error.what();
-            EXPECT_NE(message.find("immutable"), std::string::npos) << message;
+            EXPECT_NE(message.find(gd.GetGraphicsRendererName()), std::string::npos) << message;
+            if (gd.GetShaderDialectEXT() ==
+                CNA::Internal::Renderers::ShaderDialectEXT::GlslEs)
+                EXPECT_NE(message.find("immutable"), std::string::npos) << message;
+            EXPECT_NE(message.find("StorageTexture2D"), std::string::npos)
+                << "the refusal does not name a typed image alternative: " << message;
             EXPECT_NE(message.find("StorageBuffer"), std::string::npos)
                 << "the refusal does not say what to do instead: " << message;
         }
@@ -692,7 +708,7 @@ void main() {
     // Read back through a second dispatch, not through Texture2D::GetData: that answers from the
     // CPU shadow copy the texture was uploaded with, which a GPU-side write never touches.
     StorageBufferT<float> readBack(gd, static_cast<std::size_t>(kSize) * kSize * 4);
-    ComputeShader reader(gd, legacySource(R"(#version 310 es
+    const std::string glslReader = R"(#version 310 es
 layout(local_size_x = 8, local_size_y = 8) in;
 layout(rgba8, binding = 0) readonly uniform highp image2D uInput;
 layout(std430, binding = 1) buffer Output { float texels[]; };
@@ -707,7 +723,23 @@ void main() {
     texels[base + 2] = texel.b;
     texels[base + 3] = texel.a;
 }
-)"));
+)";
+    constexpr const char* hlslReader = R"(
+RWTexture2D<float4> uInput : register(u0);
+RWByteAddressBuffer Output : register(u1);
+cbuffer ReaderParameters : register(b0) { int uSize; };
+[numthreads(8, 8, 1)]
+void main(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint2 at = dispatchId.xy;
+    if (at.x >= uint(uSize) || at.y >= uint(uSize)) return;
+    float4 texel = uInput[at];
+    uint byteOffset = (at.y * uint(uSize) + at.x) * 16;
+    Output.Store4(byteOffset, asuint(texel));
+}
+)";
+    ComputeShader reader(gd, supportsLegacyComputeSource()
+        ? legacySource(glslReader) : std::string(hlslReader));
     reader.bindImage(0, texture, GraphicsImageAccess::ReadOnly);
     reader.bindStorageBuffer(1, readBack.getBuffer());
     reader.setUniform("uSize", kSize);
@@ -737,22 +769,32 @@ TEST_F(ComputeTest, Texture2DGetDataDoesNotSeeComputeWrites)
     // was uploaded with. If CNA ever gives Texture2D a real GPU read-back this test fails, and the
     // note beside it has to be rewritten.
     if (!supported()) GTEST_SKIP() << "this renderer does not support compute shaders";
-    if (!supportsLegacyComputeSource())
-        GTEST_SKIP() << "this test's legacy payload has no form in the renderer's dialect";
+    if (!gd.GetRenderer().SupportsComputeImageBindingEXT())
+        GTEST_SKIP() << "this renderer cannot write a raw Texture2D from compute";
+    if (!supportsComputeSource())
+        GTEST_SKIP() << "this test has no payload in the renderer's compute dialect";
     constexpr int kSize = 8;
     Texture2D texture(gd, kSize, kSize);
     const std::vector<Color> initial(kSize * kSize, Color::Black);
     texture.SetData(initial.data(), static_cast<int>(initial.size()));
 
-    ComputeShader painter(gd, legacySource(R"(#version 310 es
+    const std::string glsl = R"(#version 310 es
 layout(local_size_x = 8, local_size_y = 8) in;
 layout(rgba8, binding = 0) writeonly uniform highp image2D uOutput;
 void main() {
     imageStore(uOutput, ivec2(gl_GlobalInvocationID.xy), vec4(1.0, 1.0, 1.0, 1.0));
 }
-)"));
-    if (!painter.isImageBindingSupported())
-        GTEST_SKIP() << "this renderer cannot bind an image at all; the point does not arise";
+)";
+    constexpr const char* hlsl = R"(
+RWTexture2D<float4> uOutput : register(u0);
+[numthreads(8, 8, 1)]
+void main(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uOutput[dispatchId.xy] = float4(1.0f, 1.0f, 1.0f, 1.0f);
+}
+)";
+    ComputeShader painter(gd, supportsLegacyComputeSource()
+        ? legacySource(glsl) : std::string(hlsl));
     painter.bindImage(0, texture, GraphicsImageAccess::WriteOnly);
     painter.dispatch(1, 1);
     painter.barrier(GraphicsMemoryBarrier::TextureFetch);
