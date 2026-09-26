@@ -1360,3 +1360,30 @@ $env:CNA_D3D11_DEBUG_LAYER='1'
 & C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=IblVisibilityTest.*' *> C:\rv\logs\dx11-ibl-focused-1.log
 & C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=IblVisibilityTest.*:ShadowVisibilityTest.*:CascadedShadowVisibilityTest.*:PunctualShadowVisibilityTest.*' *> C:\rv\logs\dx11-ibl-shadow-suite-1.log
 ```
+
+## DX11 modern vertex and MRT limits, 2026-09-26
+
+WIN11-0051: the public renderer capability profile reported zero for maximum
+vertex input bindings, vertex attributes, and colour attachments because DX11
+used the common unclassified defaults. Its live draw paths already bind at
+most 16 vertex streams, shader-model-5 input layouts accept 32 elements, and
+`GraphicsDevice::SetRenderTargets` enforces XNA's four-target public ceiling
+inside D3D11's eight-target native capacity. The DX11 renderer now reports
+16/32/4 on a live device and zero before device creation. A native limit probe
+checks all three values through `GraphicsDevice::GetRendererLimitEXT()`.
+
+The focused probe passed **1/1** on physical Intel Iris Xe `8086:46A6`,
+feature level `11_1`, D3D11 debug enabled, with no debug-layer warnings or
+errors (`C:\rv\logs\dx11-limit-focused-1.log`). DX11 and DX12 Debug
+`CnaGraphicsExtTests` targets both built; the shared test source remains
+renderer-selective (`C:\rv\logs\dx11-limit-build-1.log`,
+`C:\rv\logs\dx12-build-after-dx11-limits-1.log`). This changes capability
+reporting only; the earlier 984-case DX11 run remains the draw-path regression
+evidence.
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsExtTests --parallel 8
+cmake --build C:\rv\build\cna-win11-dx12-debug --config Debug --target CnaGraphicsExtTests --parallel 8
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=D3D11NativeComputeTest.VertexAndColorLimitsMatchTheNativeDrawPaths' *> C:\rv\logs\dx11-limit-focused-1.log
+```

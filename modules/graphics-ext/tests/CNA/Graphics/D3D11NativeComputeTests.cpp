@@ -37,6 +37,26 @@
 #include "CNA/Internal/Renderers/DirectX11/DirectX11Renderer.hpp"
 #endif
 
+TEST(D3D11NativeComputeTest, VertexAndColorLimitsMatchTheNativeDrawPaths)
+{
+    CnaTest::EngineLayer::HiDefDevice device;
+    if (device.GetGraphicsRendererName() != "DIRECTX11")
+        GTEST_SKIP() << "this native limit probe targets DirectX 11";
+
+    const auto bindings = device.GetRendererLimitEXT(
+        CNA::RendererLimit::MaxVertexInputBindings);
+    const auto attributes = device.GetRendererLimitEXT(
+        CNA::RendererLimit::MaxVertexInputAttributes);
+    const auto colors = device.GetRendererLimitEXT(
+        CNA::RendererLimit::MaxColorAttachments);
+    ASSERT_TRUE(bindings.known);
+    ASSERT_TRUE(attributes.known);
+    ASSERT_TRUE(colors.known);
+    EXPECT_EQ(bindings.value, 16u);
+    EXPECT_EQ(attributes.value, 32u);
+    EXPECT_EQ(colors.value, 4u);
+}
+
 TEST(D3D11NativeComputeTest, AComputeWriteRoundTripsThroughGpuStorage)
 {
     CnaTest::EngineLayer::HiDefDevice device;

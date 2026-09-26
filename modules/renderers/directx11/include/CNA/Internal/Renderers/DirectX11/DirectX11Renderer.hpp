@@ -334,6 +334,30 @@ namespace CNA::Internal::Renderers::DirectX11
          */
         [[nodiscard]] int GetMaxComputeStorageBufferBindingsEXT() const override;
         /**
+         * @brief Reports the vertex stream ceiling implemented by CNA's D3D11 draw paths.
+         * @return Sixteen on a live device, otherwise zero.
+         */
+        [[nodiscard]] int GetMaxVertexInputBindingsEXT() const override
+        {
+            return device_ != nullptr ? kMaxVertexStreams : 0;
+        }
+        /**
+         * @brief Reports the shader-model-5 input-layout element limit.
+         * @return Thirty-two on a live device, otherwise zero.
+         */
+        [[nodiscard]] int GetMaxVertexInputAttributesEXT() const override
+        {
+            return device_ != nullptr ? D3D11_IA_VERTEX_INPUT_STRUCTURE_ELEMENT_COUNT : 0;
+        }
+        /**
+         * @brief Reports XNA's four-target limit within the native D3D11 MRT capacity.
+         * @return Four on a live device, otherwise zero.
+         */
+        [[nodiscard]] int GetMaxColorAttachmentsEXT() const override
+        {
+            return device_ != nullptr ? 4 : 0;
+        }
+        /**
          * @brief Reports the required raw storage-view byte alignment.
          * @return Four bytes for a live compute device, otherwise zero.
          */
