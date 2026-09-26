@@ -3062,3 +3062,48 @@ $exe='C:\rv\build\cna-win11-dx12-debug\Debug\cna_test_directx12_descriptor_capac
 $commandLine='"'+$exe+'" --legs ABCD'
 & C:\rv\work\private_desktop_awake.exe 90000 $commandLine *> C:\rv\logs\dx12-descriptor-abcd-intel-gbv-state-tracking-on-control-1.log
 ```
+
+### WIN11-0081: Differentially retain DRED fault resources under full Intel GBV
+
+To distinguish an address-lifetime failure from mere validation cost, a
+temporary `D3D12TextureRenderer` diagnostic retained the COM object of
+specific named textures without keeping their CNA wrapper or descriptor
+allocation alive. On the same physical Intel adapter, with **default full
+GBV**, debug layer and DRED enabled, retaining both DRED-named resources
+`#1608` and `#1919` let A+B+C+D pass **15/15**. Retaining **only #1608**
+also passed 15/15; retaining **only #1919** also passed 15/15. Each run
+selected `8086:46A6` and exited 0. This changed only the COM resource
+lifetime, not barriers, descriptor indices, test expectations or GBV mode.
+Logs: `C:\rv\logs\dx12-descriptor-abcd-intel-gbv-retain-two-textures-diagnostic-1.log`,
+`C:\rv\logs\dx12-descriptor-abcd-intel-gbv-retain-a-texture-diagnostic-1.log`,
+and `C:\rv\logs\dx12-descriptor-abcd-intel-gbv-retain-c-texture-diagnostic-1.log`.
+
+The specificity control retained adjacent **#1607**, which DRED had not
+named. A+B+C still passed but D removed the device at the **same GPU VA**
+`0x0000B802062F0000`; DRED then named recently freed `#1608`, `#1918`,
+and a vertex buffer at that VA. The 20-second private runner exited 124.
+This rules out the simple explanation that retaining any one small texture
+is sufficient to avoid the failure. It still does not distinguish an
+application lifetime error from full GBV's asynchronous state-validation
+instrumentation or an Intel driver defect. Disabling only GBV state tracking
+(WIN11-0080) passed with these resources freed while descriptor validation
+remained active. There is no evidence here to justify a global GPU wait,
+unbounded resource retention, or relaxed test. Control log:
+`C:\rv\logs\dx12-descriptor-abcd-intel-gbv-retain-unrelated-texture-diagnostic-1.log`.
+
+The retention code was removed after the experiment, the original DX12
+fixture target rebuilt with `--parallel 16`, and `git diff --check` found
+no remaining renderer/test changes. Full GBV high-cardinality acceptance
+remains open; ordinary Intel classic/modern suites and bounded targeted
+GBV tests retain their previously recorded clean results.
+
+```powershell
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='1'
+$env:CNA_D3D12_DIAG_RETAIN_FAULT_TEXTURES='1' # temporary diagnostic build only
+$exe='C:\rv\build\cna-win11-dx12-debug\Debug\cna_test_directx12_descriptor_capacity.exe'
+$commandLine='"'+$exe+'" --legs ABCD'
+& C:\rv\work\private_desktop_awake.exe 20000 $commandLine *> C:\rv\logs\dx12-descriptor-abcd-intel-gbv-retain-two-textures-diagnostic-1.log
+```
