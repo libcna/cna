@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-#if defined(CNA_RENDERER_DIRECTX11) && defined(CNA_CNAEXT)
+// Keep this source path stable for existing build trees; these HLSL probes cover both DirectX renderers.
+#if (defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_DIRECTX12)) && defined(CNA_CNAEXT)
 
 #include <gtest/gtest.h>
 
@@ -156,4 +157,4 @@ float4 main(float4 position : SV_Position) : SV_Target0
     EXPECT_TRUE(volumeRenderer.expired());
 }
 
-#endif // CNA_RENDERER_DIRECTX11 && CNA_CNAEXT
+#endif // (CNA_RENDERER_DIRECTX11 || CNA_RENDERER_DIRECTX12) && CNA_CNAEXT

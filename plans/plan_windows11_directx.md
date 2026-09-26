@@ -1893,3 +1893,117 @@ DX12 capabilities (especially compute, storage, arrays, indirect draw, GPU
 timing and modern shadow/IBL) and shader packages excluded by the false HLSL
 answer. They must be reclassified after HLSL selection is corrected; this
 initial skip total is not a final capability verdict.
+
+### WIN11-0062: DX12 HLSL shader packages and truthful resource capabilities
+
+The first focused HLSL change made `DirectX12Renderer::SupportsShaderLanguageEXT`
+report the native HLSL vertex and fragment compiler path. The original eleven
+CRT/depth tests then selected their HLSL variants but read black pixels. The
+generated vertex shaders consume `viewportSize` in b0; the DX12 effect renderer
+had filled only the `vpSize` alias. Publishing both names, as the validated
+DX11 effect renderer already does, passed all **35/35** CRT/depth/package
+focused tests on the physical Intel adapter
+(`C:\rv\logs\dx12-modern-viewport-hlsl-focused-1.log`).
+
+The complete binary with only those HLSL/viewport corrections ran **991 tests
+from 126 suites** in **1,909,155 ms**: **846 pass, 21 fail, 124 skip**
+(`C:\rv\logs\dx12-modern-full-post-hlsl-1.log`). There were **689** explicit
+Intel `8086:46A6` hardware selections, no WARP/software selection, and no
+D3D12 debug warning/error, device removal, or DRED fault. All 21 new failures
+had one cause: 16 clustered-forward tests and five clustered-light-buffer
+tests attempted `StorageBufferUsage::Storage`, although DX12 has no modern
+storage/compute implementation yet. `ShaderPackageEXT` checked the compute
+capability for compute-stage storage bindings only; `StorageBuffer` correctly
+requires a real storage creation route for the usage in every stage. The
+package selector now checks that dependency for fragment/vertex storage as
+well, while `ClusteredLightBuffer` builds its optional storage mirror only
+when a storage route exists. The textural light-buffer path remains active.
+This is a capability-contract fix: the clustered-forward HLSL effect cannot
+truthfully run until the DX12 storage and draw binding implementation lands.
+
+The same source review found additional DX12 modern gaps with working native
+paths. The renderer now reports HLSL vertex/fragment support, RGBA8 volume
+sampling after a native D3D12 format-support query, and the already implemented
+vertex-stream/attribute/MRT limits **16/32/4**. `D3D12EffectRenderer` also now
+retains the renderer records of classic 2D/cube/volume textures that an effect
+has bound. Previously it stored only raw pointers, which could dangle when the
+public texture wrapper was destroyed before the next draw. The renderer's
+frame-fence COM retention still protects GPU work after submission; the new
+effect ownership protects the CPU-side pointer until rebind or disposal.
+
+The rebuilt `CnaGraphicsExtTests` passed the targeted physical Intel run:
+**76 tests from 8 suites; 60 pass, 16 skip, 0 fail** in **138,808 ms**.
+The 16 skips are precisely the clustered-forward effect cases that need the
+still-unimplemented DX12 storage/compute route. All seven clustered-light
+buffer tests ran and passed, including the three shader pixel probes. Both
+shared DirectX effect texture-lifetime regressions passed, as did the volume
+LUT shader pixel test and the new 16/32/4 limit test. The log records **63**
+Intel hardware selections, zero software/WARP selections, and zero DX12 debug
+or DRED fault messages:
+`C:\rv\logs\dx12-modern-capability-focused-1.log`. Build log:
+`C:\rv\logs\dx12-modern-post-capability-build-1.log`.
+
+```powershell
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='0'
+$filter='CRTEffectTest.*:DepthEffectTest.*:ClusteredForwardEffectTest.*:ClusteredLightBufferTest.*:ShaderPackageSelectionEXTTest.FragmentStorageRequiresAnAvailableBufferRoute:DirectXEffectTextureLifetimeTest.*:DirectX12ModernCapabilityTest.*:LutInterpolationTest.TheVolumeLayoutGivesTheSameAnswerAsTheStrip'
+& C:\rv\work\private_desktop_awake.exe 1800000 "C:\rv\build\cna-win11-dx12-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=$filter" *> C:\rv\logs\dx12-modern-capability-focused-1.log
+```
+
+The focused binary temporarily registered the shared lifetime suite as
+`DirectXEffectTextureLifetimeTest`; its source path and original
+`D3D11EffectTextureLifetimeTest` registration were restored afterward for
+existing Visual Studio build trees and test filters. A final named regression
+run remains pending.
+
+The complete post-capability DX12 modern binary ran **995 tests from 128
+suites** in **2,223,915 ms**: **855 pass, 0 fail, 140 skip**
+(`C:\rv\logs\dx12-modern-full-post-capability-1.log`). It selected the
+physical Intel `8086:46A6` adapter **693** times with
+`CNA_D3D12_ADAPTER=hardware`, D3D12 debug layer and DRED enabled, GPU-based
+validation disabled. There were zero WARP/software selections, debug-layer
+warnings/errors, device removals, or DRED faults. The 140 skips are
+capability/backend guards, dominated by as-yet-unimplemented compute/storage,
+array textures, modern shadow/IBL, GPU timing, and indirect features; they are
+not a completed DX12 modern conformance result.
+
+After restoring the existing lifetime-test source path and name, the DX12
+`CnaGraphicsExtTests` target rebuilt successfully
+(`C:\rv\logs\dx12-modern-restored-test-name-build-1.log`). Six focused
+physical Intel tests passed in 9,205 ms, including both shared texture
+lifetime cases, HLSL package selection, volume sampling, the DX12 limit
+report, and fragment-storage capability refusal
+(`C:\rv\logs\dx12-modern-restored-name-targeted-1.log`). The same shared
+change on DX11 passed **11** focused tests with **one expected skip** in
+22,185 ms on Intel `8086:46A6`, `software=0`, feature level `11_1`, D3D11
+debug layer enabled and no warnings/errors
+(`C:\rv\logs\dx11-modern-shared-capability-regression-1.log`). The one skip
+is the inverse fragment-storage refusal probe, because DX11 has a real
+storage/compute route.
+
+Targeted DX12 GPU-based validation then ran **6/6 pass** in 29,876 ms on
+physical Intel with the debug layer, DRED, and GPU-based validation all
+enabled (`C:\rv\logs\dx12-modern-hlsl-gbv-1.log`). It covered HLSL effect
+selection, CRT/depth pixel paths, volume sampling, and both texture-lifetime
+paths. It emitted zero debug-layer warnings/errors, device removals or DRED
+faults. This targeted result does not clear the previously recorded large
+descriptor fixture exception under GPU-based validation (WIN11-0025).
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx12-modern --config Debug --target CnaGraphicsExtTests --parallel 6
+$env:CNA_D3D12_ADAPTER='hardware'; $env:CNA_D3D12_DEBUG_LAYER='1'; $env:CNA_D3D12_DRED='1'; $env:CNA_D3D12_GPU_VALIDATION='0'
+$filter='D3D11EffectTextureLifetimeTest.*:ShaderPackageSelectionEXTTest.FragmentStorageRequiresAnAvailableBufferRoute:DirectX12ModernCapabilityTest.*:LutInterpolationTest.TheVolumeLayoutGivesTheSameAnswerAsTheStrip:ShaderPackageOverloadTest.NativeHlslPackageCompilesOnADeclaredHlslRenderer'
+& C:\rv\work\private_desktop_awake.exe 600000 "C:\rv\build\cna-win11-dx12-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=$filter"
+$env:CNA_D3D11_DEBUG_LAYER='1'
+$filter='D3D11EffectTextureLifetimeTest.*:ShaderPackageSelectionEXTTest.FragmentStorageRequiresAnAvailableBufferRoute:ShaderPackageSelectionEXTTest.RequiredVertexStorageBindingIsCapabilityChecked:ShaderPackageOverloadTest.AnHlslDialectDeclaresItsExecutableGraphicsStages:ClusteredLightBufferTest.*'
+& C:\rv\work\private_desktop_awake.exe 600000 "C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=$filter"
+$env:CNA_D3D12_ADAPTER='hardware'; $env:CNA_D3D12_DEBUG_LAYER='1'; $env:CNA_D3D12_DRED='1'; $env:CNA_D3D12_GPU_VALIDATION='1'
+$filter='D3D11EffectTextureLifetimeTest.*:LutInterpolationTest.TheVolumeLayoutGivesTheSameAnswerAsTheStrip:CRTEffectTest.ApertureGrilleSelectsRedGreenBlueColumns:DepthEffectTest.Bayer8x8UsesAllSixtyFourOrderedThresholds:ShaderPackageOverloadTest.NativeHlslPackageCompilesOnADeclaredHlslRenderer'
+& C:\rv\work\private_desktop_awake.exe 900000 "C:\rv\build\cna-win11-dx12-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=$filter"
+```
+
+DX12 compute, storage resources, indirect drawing, texture arrays, GPU
+timers, and modern PBR shadow/IBL paths remain separate implementation work;
+the truthful skips above do not close that gate.

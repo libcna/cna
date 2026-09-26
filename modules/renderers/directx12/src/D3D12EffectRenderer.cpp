@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <utility>
 
 namespace CNA::Internal::Renderers::DirectX12
 {
@@ -158,24 +159,30 @@ namespace CNA::Internal::Renderers::DirectX12
     {
         if (unit < 0 || unit >= static_cast<int>(textures_.size()))
             return;
+        std::shared_ptr<void> retained = texture ? texture->shared_from_this() : nullptr;
         textures_[static_cast<std::size_t>(unit)] =
-            {TextureKind::Texture2D, texture, true};
+            {texture ? TextureKind::Texture2D : TextureKind::None,
+             texture, true, std::move(retained)};
     }
 
     void D3D12EffectRenderer::BindTextureCube(const int unit, ITextureCubeRenderer* texture)
     {
         if (unit < 0 || unit >= static_cast<int>(textures_.size()))
             return;
+        std::shared_ptr<void> retained = texture ? texture->shared_from_this() : nullptr;
         textures_[static_cast<std::size_t>(unit)] =
-            {TextureKind::TextureCube, texture, true};
+            {texture ? TextureKind::TextureCube : TextureKind::None,
+             texture, true, std::move(retained)};
     }
 
     void D3D12EffectRenderer::BindTexture3D(int unit, ITexture3DRenderer* texture)
     {
         if (unit < 0 || unit >= static_cast<int>(textures_.size()))
             return;
+        std::shared_ptr<void> retained = texture ? texture->shared_from_this() : nullptr;
         textures_[static_cast<std::size_t>(unit)] =
-            {TextureKind::Texture3D, texture, true};
+            {texture ? TextureKind::Texture3D : TextureKind::None,
+             texture, true, std::move(retained)};
     }
 
     ID3D12PipelineState* D3D12EffectRenderer::GetOrCreatePipelineStateEXT(
@@ -262,5 +269,6 @@ namespace CNA::Internal::Renderers::DirectX12
     void D3D12EffectRenderer::SetViewportSizeEXT(float width, float height)
     {
         reflection_.SetVec2("vpSize", width, height);
+        reflection_.SetVec2("viewportSize", width, height);
     }
 }

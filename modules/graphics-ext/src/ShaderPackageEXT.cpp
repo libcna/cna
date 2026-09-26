@@ -134,8 +134,7 @@ namespace CNA::Graphics
                         break;
                     }
                     case ShaderBindingTypeEXT::StorageBuffer:
-                        if (binding.getStage() == CNA::ShaderStageEXT::Compute
-                            && !device.SupportsCapability(
+                        if (!device.SupportsCapability(
                                 CNA::GraphicsCapability::ComputeShaders))
                             AddFailure(failures, prefix + "requires ComputeShaders");
                         if (binding.getStage() == CNA::ShaderStageEXT::Vertex)

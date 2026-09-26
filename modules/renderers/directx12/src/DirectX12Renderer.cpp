@@ -1,6 +1,7 @@
 // plans/plan_dx.md Phase DX17: frame-scoped D3D12 command recording with persistently mapped
 // per-frame upload rings and explicit immediate-list boundaries for CPU readbacks.
 #include "CNA/Logger.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Buffers.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Textures.hpp"
@@ -2935,6 +2936,26 @@ namespace CNA::Internal::Renderers::DirectX12
     bool DirectX12Renderer::IsCompressedTransferFormatEXT(int surfaceFormat) const
     {
         return D3DCommon::IsXnaBlockCompressedSurfaceFormat(surfaceFormat);
+    }
+
+    bool DirectX12Renderer::SupportsShaderLanguageEXT(int language, int stage) const
+    {
+        return device_ != nullptr &&
+               language == static_cast<int>(CNA::ShaderLanguageEXT::Hlsl) &&
+               (stage == static_cast<int>(CNA::ShaderStageEXT::Vertex) ||
+                stage == static_cast<int>(CNA::ShaderStageEXT::Fragment));
+    }
+
+    bool DirectX12Renderer::SupportsTexture3DSamplingEXT() const
+    {
+        if (!device_) return false;
+        D3D12_FEATURE_DATA_FORMAT_SUPPORT support{};
+        support.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        constexpr auto required = static_cast<D3D12_FORMAT_SUPPORT1>(
+            D3D12_FORMAT_SUPPORT1_TEXTURE3D | D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE);
+        return SUCCEEDED(device_->CheckFeatureSupport(
+                   D3D12_FEATURE_FORMAT_SUPPORT, &support, sizeof(support))) &&
+               (support.Support1 & required) == required;
     }
 
     bool DirectX12Renderer::SupportsCapability(CNA::GraphicsCapability capability) const

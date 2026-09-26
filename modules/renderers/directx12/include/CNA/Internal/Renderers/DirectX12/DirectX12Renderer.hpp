@@ -166,6 +166,45 @@ namespace CNA::Internal::Renderers::DirectX12
         }
 
         /**
+         * @brief Reports the HLSL graphics stages consumed by the native shader compiler.
+         * @param language Shader language ordinal.
+         * @param stage Shader stage ordinal.
+         * @return True for HLSL vertex and fragment source on a live D3D12 device.
+         */
+        [[nodiscard]] bool SupportsShaderLanguageEXT(int language, int stage) const override;
+
+        /**
+         * @brief Reports whether the device can sample the native volume textures this renderer creates.
+         * @return True when the live device supports sampled RGBA8 volume textures.
+         */
+        [[nodiscard]] bool SupportsTexture3DSamplingEXT() const override;
+
+        /**
+         * @brief Reports the sixteen vertex streams consumed by this renderer's draw path.
+         * @return Sixteen on a live device, otherwise zero.
+         */
+        [[nodiscard]] int GetMaxVertexInputBindingsEXT() const override
+        {
+            return device_ != nullptr ? kMaxVertexStreams : 0;
+        }
+        /**
+         * @brief Reports the native input-layout element ceiling.
+         * @return Thirty-two on a live device, otherwise zero.
+         */
+        [[nodiscard]] int GetMaxVertexInputAttributesEXT() const override
+        {
+            return device_ != nullptr ? D3D12_IA_VERTEX_INPUT_STRUCTURE_ELEMENT_COUNT : 0;
+        }
+        /**
+         * @brief Reports XNA's four-target limit in the validated native MRT path.
+         * @return Four on a live device, otherwise zero.
+         */
+        [[nodiscard]] int GetMaxColorAttachmentsEXT() const override
+        {
+            return device_ != nullptr ? 4 : 0;
+        }
+
+        /**
          * @brief Reports the complete runtime-backed D3D12 capability surface.
          *
          * @param capability Capability to query.

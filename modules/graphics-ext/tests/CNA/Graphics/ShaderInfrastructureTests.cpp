@@ -17,6 +17,7 @@
 #include "CNA/Graphics/ShaderEffectFactory.hpp"
 #include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/RendererCapabilityProfile.hpp"
 #include "CNA/ShaderDiagnosticEXT.hpp"
 #include "EngineTestSupport.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -40,6 +41,25 @@ using CNA::Graphics::ShaderPackageEXT;
 using CNA::Graphics::ShaderPackageSelectionEXT;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::ShaderEffect;
+
+#ifdef CNA_RENDERER_DIRECTX12
+TEST(DirectX12ModernCapabilityTest, PublishedVertexAndColorLimitsMatchTheNativeDrawPaths)
+{
+    CnaTest::EngineLayer::HiDefDevice device;
+    const auto bindings = device.GetRendererLimitEXT(
+        CNA::RendererLimit::MaxVertexInputBindings);
+    const auto attributes = device.GetRendererLimitEXT(
+        CNA::RendererLimit::MaxVertexInputAttributes);
+    const auto colors = device.GetRendererLimitEXT(
+        CNA::RendererLimit::MaxColorAttachments);
+    ASSERT_TRUE(bindings.known);
+    ASSERT_TRUE(attributes.known);
+    ASSERT_TRUE(colors.known);
+    EXPECT_EQ(bindings.value, 16u);
+    EXPECT_EQ(attributes.value, 32u);
+    EXPECT_EQ(colors.value, 4u);
+}
+#endif
 
 // =====================================================================================
 // MOD-2215: owned structured shader diagnostics
@@ -681,6 +701,43 @@ TEST(ShaderPackageSelectionEXTTest, DuplicateLiveStageIsAmbiguousAndNeverChosen)
     EXPECT_NE(selection.getDiagnostic().find("second"), std::string::npos);
 }
 
+TEST(ShaderPackageSelectionEXTTest, FragmentStorageRequiresAnAvailableBufferRoute)
+{
+    CnaTest::EngineLayer::HiDefDevice device;
+    if (device.SupportsCapability(CNA::GraphicsCapability::ComputeShaders))
+        GTEST_SKIP() << "this renderer has a storage-buffer creation route";
+
+    CNA::ShaderLanguageEXT language = CNA::ShaderLanguageEXT::Unknown;
+    for (const auto candidate : {CNA::ShaderLanguageEXT::SpirV,
+                                 CNA::ShaderLanguageEXT::Wgsl,
+                                 CNA::ShaderLanguageEXT::Hlsl,
+                                 CNA::ShaderLanguageEXT::GlslDesktop,
+                                 CNA::ShaderLanguageEXT::GlslEs})
+    {
+        if (device.SupportsShaderLanguageEXT(candidate, CNA::ShaderStageEXT::Fragment))
+        {
+            language = candidate;
+            break;
+        }
+    }
+    if (language == CNA::ShaderLanguageEXT::Unknown)
+        GTEST_SKIP() << "this renderer has no selectable fragment language";
+
+    std::vector<ShaderCodeEXT> variants;
+    if (language == CNA::ShaderLanguageEXT::SpirV)
+        variants.emplace_back(language, CNA::ShaderStageEXT::Fragment, "main", "fragment",
+                              std::vector<std::uint8_t>{1, 2, 3, 4});
+    else
+        variants.emplace_back(language, CNA::ShaderStageEXT::Fragment, "main", "fragment", "source");
+    const auto selection = ShaderPackageEXT(
+        std::move(variants), {CNA::ShaderStageEXT::Fragment},
+        {ShaderBindingRequirementEXT("lights", 6, ShaderBindingTypeEXT::StorageBuffer,
+                                     CNA::ShaderStageEXT::Fragment)}).selectFor(device);
+
+    EXPECT_FALSE(selection.isUsable());
+    EXPECT_NE(selection.getDiagnostic().find("requires ComputeShaders"), std::string::npos);
+}
+
 TEST(ShaderPackageSelectionEXTTest, RequiredVertexStorageBindingIsCapabilityChecked)
 {
     CnaTest::EngineLayer::HiDefDevice device;
@@ -805,6 +862,21 @@ TEST(ShaderPackageOverloadTest, NativeHlslPackageCompilesOnADeclaredHlslRenderer
     ShaderEffect effect(device, package);
     EXPECT_EQ(effect.GetSelectedShaderLanguageEXT(), CNA::ShaderLanguageEXT::Hlsl);
     EXPECT_TRUE(effect.IsEffectValid()) << effect.GetCompileErrorEXT();
+}
+
+TEST(ShaderPackageOverloadTest, AnHlslDialectDeclaresItsExecutableGraphicsStages)
+{
+    CnaTest::EngineLayer::HiDefDevice device;
+    if (device.GetShaderDialectEXT() !=
+        CNA::Internal::Renderers::ShaderDialectEXT::Hlsl)
+        GTEST_SKIP() << "this renderer does not compile HLSL shader sources";
+
+    EXPECT_TRUE(device.SupportsShaderLanguageEXT(
+        CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Vertex));
+    EXPECT_TRUE(device.SupportsShaderLanguageEXT(
+        CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Fragment));
+    EXPECT_FALSE(device.SupportsShaderLanguageEXT(
+        CNA::ShaderLanguageEXT::Dxil, CNA::ShaderStageEXT::Vertex));
 }
 
 TEST(ShaderPackageOverloadTest, DerivedEffectCanRetainLegacyFallbackWhenNoVariantExists)

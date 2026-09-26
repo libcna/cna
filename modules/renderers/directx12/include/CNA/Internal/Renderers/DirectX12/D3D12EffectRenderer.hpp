@@ -17,6 +17,7 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <string>
 
 namespace CNA::Internal::Renderers::DirectX12
@@ -51,7 +52,11 @@ namespace CNA::Internal::Renderers::DirectX12
         void BindTextureCube(int unit, ITextureCubeRenderer* texture) override;
         void BindTexture3D(int unit, ITexture3DRenderer* texture) override;
 
-        /** @brief Writes the reflected `vpSize` parameter used by the SpriteBatch convention. */
+        /**
+         * @brief Writes the reflected `vpSize` and `viewportSize` parameters used by sprite shaders.
+         * @param width Current logical viewport width.
+         * @param height Current logical viewport height.
+         */
         void SetViewportSizeEXT(float width, float height);
 
         /** @brief Returns the most recently resolved custom PSO, if any. */
@@ -94,6 +99,7 @@ namespace CNA::Internal::Renderers::DirectX12
             TextureKind kind = TextureKind::None;
             void* texture = nullptr;
             bool explicitlySet = false;
+            std::shared_ptr<void> retainedClassic;
         };
 
         D3D12RendererReference owner_;

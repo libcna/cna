@@ -178,7 +178,8 @@ namespace CNA::Graphics {
                                                  CNA::ShaderStageEXT::Fragment)
             || device_.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Hlsl,
                                                  CNA::ShaderStageEXT::Fragment);
-        if (descriptorContractDevice)
+        if (descriptorContractDevice &&
+            device_.SupportsCapability(CNA::GraphicsCapability::ComputeShaders))
         {
             const auto makeStorage = [this](const void* data, const std::size_t byteSize) {
                 auto buffer = std::make_unique<StorageBuffer>(
