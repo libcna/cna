@@ -482,6 +482,13 @@ namespace CNA::Internal::Renderers::DirectX11
         if (owner_) owner_->TrackCurrentRenderTargetEXT(&rtv, 1, dsv_.Get());
     }
 
+    ID3D11RenderTargetView* D3D11RenderTargetCubeRenderer::PrepareMRTFaceEXT(int face)
+    {
+        if (face < 0 || face >= 6) return nullptr;
+        activeFace_ = face;
+        return rtv_[face].Get();
+    }
+
     void D3D11RenderTargetCubeRenderer::ResolveMsaaEXT()
     {
         if (!isMsaa_ || !resolveTexture_ || activeFace_ < 0) return;
@@ -587,7 +594,7 @@ namespace CNA::Internal::Renderers::DirectX11
         return GetData(face, level, x, y, w, h, data, dataLength);
     }
 
-    void D3D11RenderTargetCubeRenderer::UnbindAsRenderTarget()
+    void D3D11RenderTargetCubeRenderer::ResolveAndGenerateMipsEXT()
     {
         ResolveMsaaEXT();
         if (mipMap_ && srv_)
@@ -595,6 +602,11 @@ namespace CNA::Internal::Renderers::DirectX11
             context_->GenerateMips(srv_.Get());
         }
         activeFace_ = -1;
+    }
+
+    void D3D11RenderTargetCubeRenderer::UnbindAsRenderTarget()
+    {
+        ResolveAndGenerateMipsEXT();
         if (owner_) owner_->RestoreBackBufferRenderTargetEXT();
     }
 }

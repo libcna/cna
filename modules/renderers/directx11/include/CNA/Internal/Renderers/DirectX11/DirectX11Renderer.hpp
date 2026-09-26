@@ -879,12 +879,11 @@ namespace CNA::Internal::Renderers::DirectX11
         // ran when the set was replaced/unbound (the real gap this task closes). Non-owning, same
         // lifetime reasoning as currentCustomRT_.
         D3D11RenderTargetRenderer* currentMRTTargets_[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};
+        D3D11RenderTargetCubeRenderer* currentMRTCubes_[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};
         int currentMRTCount_ = 0;
-        /// DX-143: if an MRT set is currently tracked, finalizes each of its targets for real
-        /// (MSAA resolve + mip regeneration, via D3D11RenderTargetRenderer::ResolveAndGenerateMipsEXT())
-        /// then clears the tracking -- called at the very start of SetRenderTarget2D()/
-        /// SetRenderTargets() so every path through either function finalizes a prior MRT bind
-        /// before doing anything else. No-op if no MRT set is currently tracked.
+        /// Finalizes every active MRT attachment, including selected cube faces, after detaching
+        /// the set from the output merger. Clears the tracking before the next 2D, cube-face, or
+        /// plural binding; no-op when no MRT set is active.
         void FlushPendingMRTResolveEXT();
 
         // Phase DIRECTX6 (DX-44): sampler-state cache shared by ApplySamplerState().

@@ -898,6 +898,8 @@ namespace CNA::Internal::Renderers::DirectX11
         currentMRTCount_ = 0;
         for (auto& target : currentMRTTargets_)
             target = nullptr;
+        for (auto& target : currentMRTCubes_)
+            target = nullptr;
         currentRTVCount_ = 0;
         for (auto& rtv : currentColorRTVs_)
             rtv = nullptr;
@@ -1896,10 +1898,13 @@ namespace CNA::Internal::Renderers::DirectX11
     void DirectX11Renderer::FlushPendingMRTResolveEXT()
     {
         if (currentMRTCount_ <= 0) return;
+        RestoreBackBufferRenderTargetEXT();
         for (int i = 0; i < currentMRTCount_; ++i)
         {
             if (currentMRTTargets_[i]) currentMRTTargets_[i]->ResolveAndGenerateMipsEXT();
+            if (currentMRTCubes_[i]) currentMRTCubes_[i]->ResolveAndGenerateMipsEXT();
             currentMRTTargets_[i] = nullptr;
+            currentMRTCubes_[i] = nullptr;
         }
         currentMRTCount_ = 0;
     }
@@ -1920,6 +1925,7 @@ namespace CNA::Internal::Renderers::DirectX11
 
     void DirectX11Renderer::SetRenderTargetCubeFace(IRenderTargetCubeRenderer* rt, int face)
     {
+        FlushPendingMRTResolveEXT();
         FlushPendingCubeResolveEXT();
         if (!rt)
         {
@@ -2012,26 +2018,31 @@ namespace CNA::Internal::Renderers::DirectX11
                 renderTargets[0].GetCubeFace());
             return;
         }
-        for (int i = 0; i < count; ++i)
-            if (renderTargets[i].IsRenderTargetCubeFace())
-                throw std::runtime_error(
-                    "DirectX11Renderer::SetRenderTargets: cube faces in a multi-target "
-                    "set are not implemented by this CNA renderer.");
-
         const int n = std::min(count, static_cast<int>(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT));
         ID3D11RenderTargetView* rtvs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};
+        ID3D11DepthStencilView* dsv = nullptr;
         for (int i = 0; i < n; ++i)
         {
-            auto* d3drt = static_cast<D3D11RenderTargetRenderer*>(
-                renderTargets[i].GetRenderTarget2D());
-            rtvs[i] = d3drt ? d3drt->GetRTVEXT() : nullptr;
+            if (renderTargets[i].IsRenderTargetCubeFace())
+            {
+                auto* cube = static_cast<D3D11RenderTargetCubeRenderer*>(
+                    renderTargets[i].GetRenderTargetCube());
+                rtvs[i] = cube ? cube->PrepareMRTFaceEXT(renderTargets[i].GetCubeFace()) : nullptr;
+                if (i == 0) dsv = cube ? cube->GetDSVEXT() : nullptr;
+            }
+            else
+            {
+                auto* target = static_cast<D3D11RenderTargetRenderer*>(
+                    renderTargets[i].GetRenderTarget2D());
+                rtvs[i] = target ? target->GetRTVEXT() : nullptr;
+                if (i == 0) dsv = target ? target->GetDSVEXT() : nullptr;
+            }
+            if (!rtvs[i])
+                throw std::runtime_error("DirectX11Renderer::SetRenderTargets: missing color attachment view.");
         }
 
-        auto* first = static_cast<D3D11RenderTargetRenderer*>(
-            renderTargets[0].GetRenderTarget2D());
-        ID3D11DepthStencilView* dsv = first ? first->GetDSVEXT() : nullptr;
-        const int w = first ? first->GetWidth() : width_;
-        const int h = first ? first->GetHeight() : height_;
+        const int w = renderTargets[0].GetWidth();
+        const int h = renderTargets[0].GetHeight();
 
         UnbindOutputAliasesEXT(rtvs, n, dsv);
         context_->OMSetRenderTargets(static_cast<UINT>(n), rtvs, dsv);
@@ -2053,8 +2064,13 @@ namespace CNA::Internal::Renderers::DirectX11
         // genuinely runs when this MRT set is replaced/unbound, not silently skipped).
         currentMRTCount_ = n;
         for (int i = 0; i < n; ++i)
-            currentMRTTargets_[i] = static_cast<D3D11RenderTargetRenderer*>(
-                renderTargets[i].GetRenderTarget2D());
+        {
+            currentMRTTargets_[i] = renderTargets[i].IsRenderTargetCubeFace()
+                ? nullptr : static_cast<D3D11RenderTargetRenderer*>(renderTargets[i].GetRenderTarget2D());
+            currentMRTCubes_[i] = renderTargets[i].IsRenderTargetCubeFace()
+                ? static_cast<D3D11RenderTargetCubeRenderer*>(renderTargets[i].GetRenderTargetCube())
+                : nullptr;
+        }
     }
 
     void DirectX11Renderer::ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy)
@@ -2432,8 +2448,17 @@ namespace CNA::Internal::Renderers::DirectX11
     void DirectX11Renderer::NotifyRenderTargetCubeDestroyedEXT(
         D3D11RenderTargetCubeRenderer* target) noexcept
     {
-        if (currentCubeRT_ != target) return;
-        currentCubeRT_ = nullptr;
+        bool wasBound = currentCubeRT_ == target;
+        if (wasBound) currentCubeRT_ = nullptr;
+        for (int i = 0; i < currentMRTCount_; ++i)
+        {
+            if (currentMRTCubes_[i] == target)
+            {
+                currentMRTCubes_[i] = nullptr;
+                wasBound = true;
+            }
+        }
+        if (!wasBound) return;
         try { RestoreBackBufferRenderTargetEXT(); }
         catch (...)
         {

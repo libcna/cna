@@ -31,8 +31,12 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
@@ -50,6 +54,7 @@ using Microsoft::Xna::Framework::Graphics::CubeMapFace;
 using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
+using Microsoft::Xna::Framework::Graphics::RenderTargetBinding;
 using Microsoft::Xna::Framework::Graphics::RenderTargetCube;
 using Microsoft::Xna::Framework::Graphics::RenderTargetUsage;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
@@ -84,6 +89,13 @@ namespace
     {
         std::vector<Color> pixels(static_cast<std::size_t>(kSize) * kSize, Color(0, 0, 0, 0));
         target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+        return pixels[0];
+    }
+
+    [[nodiscard]] Color FirstTexel(RenderTargetCube& target, CubeMapFace face)
+    {
+        std::vector<Color> pixels(static_cast<std::size_t>(kSize) * kSize, Color(0, 0, 0, 0));
+        target.GetData(face, pixels.data(), static_cast<int>(pixels.size()));
         return pixels[0];
     }
 }
@@ -320,3 +332,138 @@ TEST(RenderTargetSemantics, EachRenderTargetCubeFaceKeepsItsOwnContent)
                "last colour, and all six would read back as face 5";
     }
 }
+
+#if defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_DIRECTX12)
+TEST(RenderTargetSemantics, DirectXPluralTargetsAcceptCubeFacesInEitherSlot)
+{
+    Microsoft::Xna::Framework::Graphics::PresentationParameters parameters;
+    GraphicsDevice device(
+        Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty(),
+        Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef, parameters);
+    RenderTarget2D flat(device, kSize, kSize, false, SurfaceFormat::Color,
+                        DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+    RenderTargetCube first(device, kSize, false, SurfaceFormat::Color,
+                           DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+    RenderTargetCube second(device, kSize, false, SurfaceFormat::Color,
+                            DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+
+    const Color red(201, 23, 41, 255);
+    const Color green(27, 205, 53, 255);
+    const Color blue(37, 59, 211, 255);
+    device.SetRenderTargets({RenderTargetBinding(&flat),
+                             RenderTargetBinding(&first, CubeMapFace::PositiveX)});
+    device.Clear(red);
+    device.SetRenderTargets({});
+
+    Color flatPixel = FirstTexel(flat);
+    Color firstPixel = FirstTexel(first, CubeMapFace::PositiveX);
+    EXPECT_EQ(flatPixel.getPackedValueProperty(), red.getPackedValueProperty());
+    EXPECT_EQ(firstPixel.getPackedValueProperty(), red.getPackedValueProperty());
+
+    device.SetRenderTargets({RenderTargetBinding(&first, CubeMapFace::NegativeZ),
+                             RenderTargetBinding(&flat)});
+    device.Clear(green);
+    device.SetRenderTargets({});
+    firstPixel = FirstTexel(first, CubeMapFace::NegativeZ);
+    flatPixel = FirstTexel(flat);
+    EXPECT_EQ(firstPixel.getPackedValueProperty(), green.getPackedValueProperty());
+    EXPECT_EQ(flatPixel.getPackedValueProperty(), green.getPackedValueProperty());
+
+    device.SetRenderTargets({RenderTargetBinding(&first, CubeMapFace::PositiveY),
+                             RenderTargetBinding(&second, CubeMapFace::NegativeX)});
+    device.Clear(blue);
+    device.SetRenderTargets({});
+    firstPixel = FirstTexel(first, CubeMapFace::PositiveY);
+    Color secondPixel = FirstTexel(second, CubeMapFace::NegativeX);
+    EXPECT_EQ(firstPixel.getPackedValueProperty(), blue.getPackedValueProperty());
+    EXPECT_EQ(secondPixel.getPackedValueProperty(), blue.getPackedValueProperty());
+
+    firstPixel = FirstTexel(first, CubeMapFace::PositiveX);
+    EXPECT_EQ(firstPixel.getPackedValueProperty(), red.getPackedValueProperty());
+    firstPixel = FirstTexel(first, CubeMapFace::NegativeZ);
+    EXPECT_EQ(firstPixel.getPackedValueProperty(), green.getPackedValueProperty());
+}
+
+TEST(RenderTargetSemantics, DirectXPluralCubeFacesResolveMsaaAndRegenerateMips)
+{
+    Microsoft::Xna::Framework::Graphics::PresentationParameters parameters;
+    GraphicsDevice device(
+        Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty(),
+        Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef, parameters);
+    RenderTargetCube cube(device, kSize, true, SurfaceFormat::Color,
+                          DepthFormat::None, 4, RenderTargetUsage::PreserveContents);
+    RenderTarget2D flat(device, kSize, kSize, true, SurfaceFormat::Color,
+                        DepthFormat::None, 4, RenderTargetUsage::PreserveContents);
+    ASSERT_GT(cube.getLevelCountProperty(), 1);
+    const int cubeSamples = EffectiveSamples(cube.getMultiSampleCountProperty());
+    const int flatSamples = EffectiveSamples(flat.getMultiSampleCountProperty());
+    if (cubeSamples == 1 || flatSamples == 1)
+        GTEST_SKIP() << "this adapter did not grant multisampling to both Color targets";
+    ASSERT_EQ(cubeSamples, flatSamples);
+
+    const Color purple(101, 41, 203, 255);
+    const Color green(31, 199, 61, 255);
+    const Color blue(43, 67, 223, 255);
+    device.SetRenderTargets({RenderTargetBinding(&cube, CubeMapFace::PositiveX),
+                             RenderTargetBinding(&flat)});
+    device.Clear(purple);
+    device.SetRenderTargets({});
+    EXPECT_EQ(FirstTexel(cube, CubeMapFace::PositiveX).getPackedValueProperty(),
+              purple.getPackedValueProperty());
+    EXPECT_EQ(FirstTexel(flat).getPackedValueProperty(), purple.getPackedValueProperty());
+    std::vector<Color> mipPixels(static_cast<std::size_t>(kSize / 2) * (kSize / 2));
+    cube.GetData(CubeMapFace::PositiveX, 1, nullptr, mipPixels.data(), 0,
+                 static_cast<int>(mipPixels.size()));
+    EXPECT_EQ(mipPixels[0].getPackedValueProperty(), purple.getPackedValueProperty());
+
+    device.SetRenderTargets({RenderTargetBinding(&flat),
+                             RenderTargetBinding(&cube, CubeMapFace::NegativeZ)});
+    device.Clear(green);
+    device.SetRenderTarget(&cube, CubeMapFace::PositiveY);
+    device.Clear(blue);
+    device.SetRenderTarget(static_cast<RenderTargetCube*>(nullptr), CubeMapFace::PositiveX);
+    EXPECT_EQ(FirstTexel(cube, CubeMapFace::NegativeZ).getPackedValueProperty(),
+              green.getPackedValueProperty());
+    EXPECT_EQ(FirstTexel(cube, CubeMapFace::PositiveY).getPackedValueProperty(),
+              blue.getPackedValueProperty());
+    EXPECT_EQ(FirstTexel(cube, CubeMapFace::PositiveX).getPackedValueProperty(),
+              purple.getPackedValueProperty());
+    cube.GetData(CubeMapFace::NegativeZ, 1, nullptr, mipPixels.data(), 0,
+                 static_cast<int>(mipPixels.size()));
+    EXPECT_EQ(mipPixels[0].getPackedValueProperty(), green.getPackedValueProperty());
+}
+
+TEST(RenderTargetSemantics, DirectXPluralCubeDestructionDetachesItsNativeBinding)
+{
+    Microsoft::Xna::Framework::Graphics::PresentationParameters parameters;
+    GraphicsDevice device(
+        Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty(),
+        Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef, parameters);
+    RenderTarget2D flat(device, kSize, kSize, false, SurfaceFormat::Color,
+                        DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+    const Color firstColor(83, 191, 53, 255);
+    const Color secondColor(193, 47, 113, 255);
+
+    auto cube = std::make_unique<RenderTargetCube>(
+        device, kSize, false, SurfaceFormat::Color, DepthFormat::None, 0,
+        RenderTargetUsage::PreserveContents);
+    device.SetRenderTargets({RenderTargetBinding(cube.get(), CubeMapFace::PositiveZ),
+                             RenderTargetBinding(&flat)});
+    device.Clear(firstColor);
+    cube.reset();
+    EXPECT_TRUE(device.GetRenderTargets().empty());
+    device.SetRenderTargets({});
+    EXPECT_EQ(FirstTexel(flat).getPackedValueProperty(), firstColor.getPackedValueProperty());
+
+    cube = std::make_unique<RenderTargetCube>(
+        device, kSize, false, SurfaceFormat::Color, DepthFormat::None, 0,
+        RenderTargetUsage::PreserveContents);
+    device.SetRenderTargets({RenderTargetBinding(&flat),
+                             RenderTargetBinding(cube.get(), CubeMapFace::NegativeY)});
+    device.Clear(secondColor);
+    cube.reset();
+    EXPECT_TRUE(device.GetRenderTargets().empty());
+    device.SetRenderTargets({});
+    EXPECT_EQ(FirstTexel(flat).getPackedValueProperty(), secondColor.getPackedValueProperty());
+}
+#endif

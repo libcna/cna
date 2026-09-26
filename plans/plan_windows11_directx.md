@@ -1,8 +1,10 @@
 # Physical Windows 11 and DirectX bring-up
 
 Status: native MSVC and physical Intel GPU baseline established on 2026-09-25. The
-Windows DirectX parity campaign is active on `win11-directx-modern`. DX11 and DX12
-classic normal-validation gates are complete; DX11 modern CNAEXT evaluation is active.
+Windows DirectX parity campaign is active on `win11-directx-modern`. DX11
+classic has been revalidated after adding plural cube-face MRT; DX12 classic
+has the corresponding known gap and is open again. DX11 modern CNAEXT
+evaluation is active.
 The large DX12 descriptor fixture under Intel GPU-based validation remains a recorded
 exception (WIN11-0025). Modern parity and application validation remain open.
 
@@ -289,7 +291,7 @@ adapter with `software=0`; no WARP result is used as the verdict.
 | Texture2D, cube and volume transfers | `Texture2D_*`, `TextureCube_*`, `Texture3D_*`, `CubeVolume_*DataContract` pass. |
 | Formats and compressed textures | `SurfaceFormat_*`, `CompressedTexture_StorageContract`, `Parity_compressed_cube` pass. Public HiDef rejects compressed `Texture3D` construction. |
 | Mips and samplers | Texture/cube/volume mip round trips, `Sampler*`, `TextureFilter*`, address modes, anisotropy and `Parity_sampler_*` pass. |
-| RenderTarget2D/Cube, MRT, MSAA | `RenderTarget*`, `MRT`, `Parity_render_target_mip`, `Parity_hdr_render_target`, `Parity_backbuffer_msaa` pass. |
+| RenderTarget2D/Cube, MRT, MSAA | `RenderTarget*`, `MRT`, `Parity_render_target_mip`, `Parity_hdr_render_target`, `Parity_backbuffer_msaa` pass; mixed 2D/cube and plural cube-face MRT, MSAA resolves, mip regeneration, and bound cube destruction pass under WIN11-0055. |
 | SpriteBatch and SpriteFont | `SpriteBatch_*`, `SpriteFont_*`, `Parity_sprite_*` pass, including resize placement and sort/state ordering. |
 | BasicEffect, AlphaTestEffect, DualTextureEffect | Named effect suites plus light/alpha/UV parity fixtures pass. |
 | EnvironmentMapEffect and SkinnedEffect | Named effect suites and `Parity_env_map_terms`/`Parity_skinned_terms` pass. |
@@ -449,7 +451,7 @@ classic conformance.
 | Texture2D, TextureCube, Texture3D | `Texture2D_*`, `TextureCube_*`, `Texture3D_*`, `CubeVolume_SetDataContract` pass, including all six cube faces. |
 | Formats, compression, mips | `SurfaceFormat_*`, `CompressedTexture_StorageContract` 30/30, `Parity_compressed_cube`, texture/cube/volume mip fixtures pass. Compressed 2D readback uses the native copyable footprint. |
 | Samplers, filtering, address modes | `Sampler*`, `TextureFilter*`, anisotropy, `Parity_sampler_*` and descriptor capacity pass on Intel without GBV. |
-| RenderTarget2D/Cube, MRT, MSAA | `RenderTarget*`, `MRT`, `Parity_render_target_mip`, `Parity_hdr_render_target`, `Parity_backbuffer_msaa` pass; stress checks 120 targets. |
+| RenderTarget2D/Cube, MRT, MSAA | Existing `RenderTarget*`, `MRT`, `Parity_render_target_mip`, `Parity_hdr_render_target`, `Parity_backbuffer_msaa` pass; stress checks 120 targets. Plural MRT containing cube faces is a newly identified gap and is not covered by those earlier passes. |
 | SpriteBatch and SpriteFont | `SpriteBatch_*`, `SpriteFont_*`, `Parity_sprite_*` pass. |
 | Basic/AlphaTest/DualTexture effects | Named effect suites and light/alpha/UV parity fixtures pass. |
 | EnvironmentMap/Skinned effects | Named effect suites and `Parity_env_map_terms`/`Parity_skinned_terms` pass. |
@@ -1558,11 +1560,53 @@ checks the extension flags against the public capability answers. Its
 Focused CTest on the physical Intel Iris Xe passed **2/2**, feature level
 `11_1`, D3D11 debug on and zero debug-layer messages
 (`C:\rv\logs\dx11-classic-oracle-focused-1.log`). This result classifies
-the two whole-label failures; a complete post-correction label is still
-required before restoring the classic gate.
+the two whole-label failures. The complete post-correction result is recorded
+under WIN11-0055 below.
 
 ```powershell
 cmake --build C:\rv\build\cna-win11-dx11-debug --config Debug --target cna_test_directx11_shader_effect_reflection cna_test_directx11_renderer_capability_truth --parallel 4
 $env:CNA_D3D11_DEBUG_LAYER='1'
 & C:\rv\work\private_desktop_awake.exe 600000 'ctest --test-dir C:\rv\build\cna-win11-dx11-debug -C Debug -V -R ^DirectX11_(ShaderEffect_ReflectionContract|RendererCapabilityTruth)$ --parallel 1' *> C:\rv\logs\dx11-classic-oracle-focused-1.log
+```
+
+## DX11 classic plural cube-face MRT, 2026-09-26
+
+WIN11-0055: code review found that both DirectX renderers rejected a cube
+face in a plural `GraphicsDevice::SetRenderTargets` call, despite the public
+binding API and the EasyGL reference supporting it. Three renderer-neutral
+classic tests now cover mixed 2D/cube attachments in either order, two
+different cube faces at once, independent previous-face colours, MSAA resolve
+and cube mip regeneration when leaving MRT, and destruction of a bound cube
+in either slot. They use HiDef because Reach has a one-target ceiling. The
+initial DX11 run reproduced the explicit renderer exception
+(`C:\rv\logs\dx11-cube-mrt-baseline-2.log`); this was a real renderer gap,
+not a capability limitation.
+
+DX11 now prepares each cube face as an MRT attachment, selects the first
+attachment's depth view and dimensions, tracks cube and 2D attachments per
+slot, detaches the output views before resolves, and resolves/generates cube
+mips when the set is replaced. It also flushes before switching to a single
+cube face and clears tracked cube pointers if the public target is destroyed
+while bound. The new **3/3** focused tests and **43/43** related render-target
+tests passed on Intel Iris Xe `8086:46A6`, `software=0`, feature level `11_1`
+with D3D11 debug enabled and zero warning/error/corruption messages
+(`C:\rv\logs\dx11-cube-mrt-focused-3.log`,
+`C:\rv\logs\dx11-cube-mrt-classic-related-1.log`).
+
+The complete post-WIN11-0057 classic `DIRECTX11` CTest label then passed
+**298/298** in 170.01 seconds (`C:\rv\logs\dx11-cube-mrt-classic-label-2.log`).
+Its `LastTest.log` contains 539 explicit Intel hardware selections and no
+software-adapter selection, internal failure, skip, or D3D11 debug-layer
+warning/error/corruption. The full DX11 classic tree and the affected modern
+DX11 test target built after the change. This restores the DX11 classic
+normal-validation gate. The analogous DX12 plural cube-face MRT gap remains
+open and must be closed before DX12 classic is declared complete again.
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx11-debug --config Debug --parallel 4
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsTests --parallel 8
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-debug\Debug\CnaGraphicsTests.exe --gtest_color=no --gtest_filter=RenderTargetSemantics.DirectXPlural*' *> C:\rv\logs\dx11-cube-mrt-focused-3.log
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-debug\Debug\CnaGraphicsTests.exe --gtest_color=no --gtest_filter=RenderTargetSemantics.*:GraphicsProfileResourceCeilingTest.*:RenderTargetBindingTest.*' *> C:\rv\logs\dx11-cube-mrt-classic-related-1.log
+& C:\rv\work\private_desktop_awake.exe 7200000 'ctest --test-dir C:\rv\build\cna-win11-dx11-debug -C Debug -L DIRECTX11 --output-on-failure --parallel 1' *> C:\rv\logs\dx11-cube-mrt-classic-label-2.log
 ```
