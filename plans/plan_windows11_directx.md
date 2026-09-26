@@ -960,3 +960,48 @@ $env:CNA_D3D11_DEBUG_LAYER='1'
 & C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=GpuInstanceCullerTest.RepeatedCullAndIndirectDrawKeepTheLatestVisibleList' 2>&1 | Out-File C:\rv\logs\dx11-culler-hlsl-churn-1.log
 & C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=GpuInstanceCullerTest.*' *> C:\rv\logs\dx11-culler-hlsl-focused-2.log
 ```
+
+## DX11 GPU particle shader packages, 2026-09-26
+
+WIN11-0039: the current particle compute, vertex, and fragment GLSL stages
+now have deterministic, FXC-checked HLSL variants in their existing packages.
+The compute simulation's externally supplied constant buffer is assigned
+`b1`, matching `ParticleSystem::update`; its storage buffer uses `u0`. The
+draw stage reads that buffer at vertex `t7`. Pixel uniforms use `b4` so
+their buffer cannot collide with the three vertex-stage uniform buffers.
+The generator retains source SHA-256 values and was rerun with the same
+header SHA-256
+`12740aeca51732bcedc49b3e47c491930ca6af8405d1435bc23033acd1665086`.
+No public shader intake or CNAEXT API changed.
+
+The first Intel Iris Xe run exposed **one genuine generic CNA lifetime/order
+defect** among 15 particle tests: `ParticleSystem::draw` called
+`ShaderEffect::Apply()` before replacing a depth texture that belonged to
+the previous invocation. D3D11 resolves the prior raw texture binding at
+`Apply()`, and the prior local `Texture2D` had already been destroyed, yielding
+`Access violation - no RTTI data!`
+(`C:\rv\logs\dx11-particle-hlsl-focused-1.log`). Moving `Apply()` after all
+uniform and texture updates avoids accessing stale state and follows the
+effect's input-before-apply ordering. The formerly failing soft-particle
+oracle then measured brightness **0** at the touching wall versus **16,320**
+with the wall farther away
+(`C:\rv\logs\dx11-particle-hlsl-soft-focused-1.log`). The final complete
+particle suite passed **15/15**, zero fail/skip
+(`C:\rv\logs\dx11-particle-hlsl-focused-2.log`). Its GPU/CPU simulation
+agreement and zero-direction fallback tests both executed on hardware.
+
+A joint Intel run of particle, culler, and native compute tests passed
+**31/31**, zero fail/skip, with **27** explicit adapter selections of
+`8086:46A6`, `software=0`, and **zero D3D11 debug warnings/errors**
+(`C:\rv\logs\dx11-particle-hlsl-related-1.log`). The DX11 effect renderer's
+independent raw-pointer texture binding lifetime is a separate renderer issue
+to close before the modern lifetime gate; moving `Apply()` does not by itself
+prove arbitrary retained-texture disposal safe.
+
+```powershell
+python tools/shader_package/generate_particle_hlsl.py --glslang C:\rv\build\glslang-win11\StandAlone\Release\glslang.exe --spirv-cross C:\rv\build\spirv-cross-win11\Release\spirv-cross.exe --fxc 'C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\fxc.exe'
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsExtTests --parallel 4
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ParticleSystemTest.*' *> C:\rv\logs\dx11-particle-hlsl-focused-2.log
+& C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=GpuInstanceCullerTest.*:ParticleSystemTest.*:D3D11NativeComputeTest.*' *> C:\rv\logs\dx11-particle-hlsl-related-1.log
+```
