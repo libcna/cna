@@ -46,6 +46,19 @@ namespace CNA::Internal::Renderers::DirectX11
         [[nodiscard]] ID3D11Texture2D* GetTextureEXT() const { return texture_.Get(); }
         /// Raw SRV for Phase DIRECTX8's shader texture binding (CNAEXT).
         [[nodiscard]] ID3D11ShaderResourceView* GetShaderResourceViewEXT() const { return srv_.Get(); }
+        /**
+         * @brief Returns the optional mip-zero typed image view for compute access.
+         * @return Native UAV, or null when this texture format cannot be used as an image.
+         */
+        [[nodiscard]] ID3D11UnorderedAccessView* GetUnorderedAccessViewEXT() const
+        {
+            return uav_.Get();
+        }
+        /**
+         * @brief Returns the device that owns this texture.
+         * @return Owning D3D11 device.
+         */
+        [[nodiscard]] ID3D11Device* GetDeviceEXT() const { return device_.Get(); }
 
         void ReleaseDeviceResourcesEXT() noexcept override;
         void RecreateDeviceResourcesEXT() override;
@@ -61,6 +74,7 @@ namespace CNA::Internal::Renderers::DirectX11
         ComPtr<ID3D11DeviceContext> context_;
         ComPtr<ID3D11Texture2D> texture_;
         ComPtr<ID3D11ShaderResourceView> srv_;
+        ComPtr<ID3D11UnorderedAccessView> uav_;
         int width_ = 0;
         int height_ = 0;
         int mipLevels_ = 1;

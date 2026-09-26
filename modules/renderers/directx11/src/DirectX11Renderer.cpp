@@ -1612,6 +1612,17 @@ namespace CNA::Internal::Renderers::DirectX11
         return device_ != nullptr && featureLevel_ >= D3D_FEATURE_LEVEL_11_0;
     }
 
+    bool DirectX11Renderer::SupportsComputeImageBindingEXT() const
+    {
+        if (!SupportsComputeShadersEXT()) return false;
+        const auto support = GetSurfaceFormatUsageSupportEXT(static_cast<int>(
+            Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color));
+        constexpr std::uint32_t required =
+            static_cast<std::uint32_t>(CNA::RendererFormatUsage::StorageRead) |
+            static_cast<std::uint32_t>(CNA::RendererFormatUsage::StorageWrite);
+        return (support.supportedUsages & required) == required;
+    }
+
     std::unique_ptr<IComputeShaderRenderer> DirectX11Renderer::CreateComputeShader(
         const std::string& computeSrc)
     {

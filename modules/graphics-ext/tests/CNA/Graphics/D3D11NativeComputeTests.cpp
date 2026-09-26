@@ -34,6 +34,7 @@
 #include "CNA/Internal/Renderers/DirectX11/D3D11EffectRenderer.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11IndirectBuffer.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11StorageTexture2D.hpp"
+#include "CNA/Internal/Renderers/DirectX11/D3D11Textures.hpp"
 #include "CNA/Internal/Renderers/DirectX11/DirectX11Renderer.hpp"
 #endif
 
@@ -262,6 +263,110 @@ float4 main(float4 position : SV_Position, float4 color : COLOR0) : SV_Target0
     EXPECT_FLOAT_EQ(doubledAgain, 1.0f);
 #endif
 }
+
+TEST(D3D11NativeComputeTest, ComputeImageWriteReachesTheNextGraphicsDraw)
+{
+    using Microsoft::Xna::Framework::Color;
+    using Microsoft::Xna::Framework::Vector3;
+    using Microsoft::Xna::Framework::Graphics::DepthStencilState;
+    using Microsoft::Xna::Framework::Graphics::PrimitiveType;
+    using Microsoft::Xna::Framework::Graphics::RasterizerState;
+    using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
+    using Microsoft::Xna::Framework::Graphics::ShaderEffect;
+    using Microsoft::Xna::Framework::Graphics::Texture2D;
+    using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
+    CnaTest::EngineLayer::HiDefDevice device;
+    if (device.GetGraphicsRendererName() != "DIRECTX11")
+        GTEST_SKIP() << "this native image and graphics probe targets DirectX 11";
+    if (!device.SupportsRendererFeatureEXT(CNA::RendererFeature::ComputeImageBinding))
+        GTEST_SKIP() << "this D3D11 adapter has no typed Color image read and write";
+
+    Texture2D image(device, 1, 1);
+    const Color black = Color::Black;
+    image.SetData(&black, 1);
+    const CNA::Graphics::ShaderCodeEXT computeSource(
+        CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Compute,
+        "main", "D3D11ColorImageWrite.hlsl", R"HLSL(
+RWTexture2D<unorm float4> Output : register(u0);
+[numthreads(1, 1, 1)]
+void main(uint3 id : SV_DispatchThreadID)
+{
+    Output[id.xy] = float4(0.25f, 0.5f, 0.75f, 1.0f);
+}
+)HLSL");
+    CNA::Graphics::ComputeShader compute(device, computeSource);
+    compute.bindImage(0, image, CNA::GraphicsImageAccess::WriteOnly);
+    compute.dispatch(1);
+
+    ShaderEffect effect(device, R"HLSL(
+Texture2D<float4> Source : register(t0);
+SamplerState SourceSampler : register(s0);
+struct Input { float3 position : POSITION; float4 color : COLOR; };
+struct Output { float4 position : SV_Position; float4 color : COLOR0; };
+Output main(Input input)
+{
+    Output output;
+    output.position = float4(input.position, 1.0f);
+    output.color = Source.SampleLevel(SourceSampler, float2(0.5f, 0.5f), 0.0f);
+    return output;
+}
+)HLSL", R"HLSL(
+float4 main(float4 position : SV_Position, float4 color : COLOR0) : SV_Target0
+{
+    return color;
+}
+)HLSL");
+    ASSERT_TRUE(effect.IsEffectValid()) << effect.GetCompileErrorEXT();
+    effect.SetTexture(0, image);
+    device.getSamplerStatesProperty()[0] =
+        Microsoft::Xna::Framework::Graphics::SamplerState::PointClamp;
+    constexpr int size = 64;
+    RenderTarget2D target(device, size, size);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    const std::array<VertexPositionColor, 3> triangle{
+        VertexPositionColor(Vector3(-1.0f, -1.0f, 0.0f), Color::White),
+        VertexPositionColor(Vector3(-1.0f, 3.0f, 0.0f), Color::White),
+        VertexPositionColor(Vector3(3.0f, -1.0f, 0.0f), Color::White),
+    };
+    effect.Apply();
+    device.DrawUserPrimitives(PrimitiveType::TriangleList, triangle.data(), 0, 1);
+    device.SetRenderTarget(nullptr);
+    std::array<Color, size * size> pixels{};
+    target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+    const Color centre = pixels[(size / 2) * size + size / 2];
+    EXPECT_NEAR(centre.getRProperty(), 64, 2);
+    EXPECT_NEAR(centre.getGProperty(), 128, 2);
+    EXPECT_NEAR(centre.getBProperty(), 191, 2);
+}
+
+TEST(D3D11NativeComputeTest, SameTextureCannotBeSampledAndBoundAsAnImage)
+{
+    CnaTest::EngineLayer::HiDefDevice device;
+    if (device.GetGraphicsRendererName() != "DIRECTX11")
+        GTEST_SKIP() << "this native image hazard probe targets DirectX 11";
+    if (!device.SupportsRendererFeatureEXT(CNA::RendererFeature::ComputeImageBinding))
+        GTEST_SKIP() << "this D3D11 adapter has no typed Color image read and write";
+    Microsoft::Xna::Framework::Graphics::Texture2D image(device, 1, 1);
+    const CNA::Graphics::ShaderCodeEXT source(
+        CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Compute,
+        "main", "D3D11ImageAlias.hlsl", R"HLSL(
+Texture2D<float4> Source : register(t0);
+RWTexture2D<unorm float4> Output : register(u0);
+[numthreads(1, 1, 1)]
+void main(uint3 id : SV_DispatchThreadID)
+{
+    Output[id.xy] = Source.Load(uint3(id.xy, 0));
+}
+)HLSL");
+    CNA::Graphics::ComputeShader compute(device, source);
+    compute.bindTexture(0, "Source", image);
+    compute.bindImage(0, image, CNA::GraphicsImageAccess::ReadWrite);
+    EXPECT_THROW(compute.dispatch(1), std::invalid_argument);
+}
+
 TEST(D3D11NativeComputeTest, StorageImageTransfersPreserveMipsAndRectangles)
 {
     using CNA::Graphics::StorageTexture2D;
@@ -375,8 +480,14 @@ TEST(D3D11NativeComputeTest, StorageImagePackageUsesItsOwnLimit)
         CNA::RendererLimit::MaxStorageImagesPerShaderStage);
     if (!limit.known || limit.value == 0)
         GTEST_SKIP() << "this D3D11 adapter has no typed Color storage image";
-    EXPECT_FALSE(device.SupportsRendererFeatureEXT(
-        CNA::RendererFeature::ComputeImageBinding));
+    const auto colorSupport = device.GetRendererSurfaceFormatSupportEXT(
+        Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color);
+    constexpr auto imageAccess = static_cast<CNA::RendererFormatUsage>(
+        static_cast<std::uint32_t>(CNA::RendererFormatUsage::StorageRead) |
+        static_cast<std::uint32_t>(CNA::RendererFormatUsage::StorageWrite));
+    EXPECT_EQ(device.SupportsRendererFeatureEXT(
+                  CNA::RendererFeature::ComputeImageBinding),
+              colorSupport.Supports(imageAccess));
     const CNA::Graphics::ShaderPackageEXT package(
         {CNA::Graphics::ShaderCodeEXT(
             CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Compute,
@@ -397,6 +508,99 @@ void main(uint3 id : SV_DispatchThreadID)
 }
 
 #ifdef CNA_RENDERER_DIRECTX11
+TEST(D3D11NativeComputeTest, ImageBindingRetainsTextureAfterPublicDestruction)
+{
+    using CNA::Internal::Renderers::DirectX11::D3D11TextureRenderer;
+    using CNA::Internal::Renderers::DirectX11::DirectX11Renderer;
+    using Microsoft::Xna::Framework::Graphics::Texture2D;
+    CnaTest::EngineLayer::HiDefDevice device;
+    auto* renderer = dynamic_cast<DirectX11Renderer*>(&device.GetRenderer());
+    ASSERT_NE(renderer, nullptr);
+    if (!renderer->SupportsComputeImageBindingEXT())
+        GTEST_SKIP() << "this D3D11 adapter has no typed Color image read and write";
+
+    auto image = std::make_unique<Texture2D>(device, 1, 1);
+    auto* native = dynamic_cast<D3D11TextureRenderer*>(&image->GetRenderer());
+    ASSERT_NE(native, nullptr);
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> resource = native->GetTextureEXT();
+    ASSERT_NE(resource, nullptr);
+    const CNA::Graphics::ShaderCodeEXT source(
+        CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Compute,
+        "main", "D3D11RetainedImage.hlsl", R"HLSL(
+RWTexture2D<unorm float4> Output : register(u0);
+[numthreads(1, 1, 1)]
+void main(uint3 id : SV_DispatchThreadID)
+{
+    Output[id.xy] = float4(1.0f, 0.0f, 0.0f, 1.0f);
+}
+)HLSL");
+    CNA::Graphics::ComputeShader compute(device, source);
+    compute.bindImage(0, *image, CNA::GraphicsImageAccess::WriteOnly);
+    image.reset();
+    compute.dispatch(1);
+
+    D3D11_TEXTURE2D_DESC description{};
+    resource->GetDesc(&description);
+    description.Usage = D3D11_USAGE_STAGING;
+    description.BindFlags = 0;
+    description.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    description.MiscFlags = 0;
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> staging;
+    ASSERT_TRUE(SUCCEEDED(renderer->GetDeviceEXT()->CreateTexture2D(
+        &description, nullptr, staging.GetAddressOf())));
+    renderer->GetContextEXT()->CopyResource(staging.Get(), resource.Get());
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    ASSERT_TRUE(SUCCEEDED(renderer->GetContextEXT()->Map(
+        staging.Get(), 0, D3D11_MAP_READ, 0, &mapped)));
+    const auto* pixel = static_cast<const std::uint8_t*>(mapped.pData);
+    EXPECT_EQ(pixel[0], 255);
+    EXPECT_EQ(pixel[1], 0);
+    EXPECT_EQ(pixel[2], 0);
+    EXPECT_EQ(pixel[3], 255);
+    renderer->GetContextEXT()->Unmap(staging.Get(), 0);
+}
+
+TEST(D3D11NativeComputeTest, ImageViewWorksAfterDeviceRecovery)
+{
+    using CNA::Internal::Renderers::DirectX11::D3D11TextureRenderer;
+    using CNA::Internal::Renderers::DirectX11::DirectX11Renderer;
+    CnaTest::EngineLayer::HiDefDevice device;
+    auto* renderer = dynamic_cast<DirectX11Renderer*>(&device.GetRenderer());
+    ASSERT_NE(renderer, nullptr);
+    if (!renderer->SupportsComputeImageBindingEXT())
+        GTEST_SKIP() << "this D3D11 adapter has no typed Color image read and write";
+    Microsoft::Xna::Framework::Graphics::Texture2D image(device, 1, 1);
+    auto* native = dynamic_cast<D3D11TextureRenderer*>(&image.GetRenderer());
+    ASSERT_NE(native, nullptr);
+    ASSERT_NE(native->GetUnorderedAccessViewEXT(), nullptr);
+
+    renderer->DebugSimulateContextLoss();
+    renderer->DebugRestoreContext();
+    ASSERT_NE(native->GetUnorderedAccessViewEXT(), nullptr);
+    EXPECT_EQ(native->GetDeviceEXT(), renderer->GetDeviceEXT());
+
+    const CNA::Graphics::ShaderCodeEXT source(
+        CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Compute,
+        "main", "D3D11RecoveredImage.hlsl", R"HLSL(
+RWTexture2D<unorm float4> Output : register(u0);
+[numthreads(1, 1, 1)]
+void main(uint3 id : SV_DispatchThreadID)
+{
+    Output[id.xy] = float4(0.0f, 1.0f, 0.0f, 1.0f);
+}
+)HLSL");
+    CNA::Graphics::ComputeShader compute(device, source);
+    compute.bindImage(0, image, CNA::GraphicsImageAccess::WriteOnly);
+    compute.dispatch(1);
+    std::array<std::uint8_t, 4> pixel{};
+    ASSERT_TRUE(native->GetData(0, 0, 0, 1, 1, pixel.data(),
+                                static_cast<int>(pixel.size())));
+    EXPECT_EQ(pixel[0], 0);
+    EXPECT_EQ(pixel[1], 255);
+    EXPECT_EQ(pixel[2], 0);
+    EXPECT_EQ(pixel[3], 255);
+}
+
 TEST(D3D11NativeComputeTest, ComputeImageWriteRestoresAliasingPixelShaderResource)
 {
     using CNA::Internal::Renderers::DirectX11::D3D11ComputeShader;

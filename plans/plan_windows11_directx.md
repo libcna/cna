@@ -1387,3 +1387,65 @@ cmake --build C:\rv\build\cna-win11-dx12-debug --config Debug --target CnaGraphi
 $env:CNA_D3D11_DEBUG_LAYER='1'
 & C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=D3D11NativeComputeTest.VertexAndColorLimitsMatchTheNativeDrawPaths' *> C:\rv\logs\dx11-limit-focused-1.log
 ```
+
+## DX11 ordinary Texture2D compute-image binding, 2026-09-26
+
+WIN11-0052: Direct3D 11 had a real typed Color UAV path for dedicated
+`StorageTexture2D`, but `ComputeShader::bindImage` inherited the no-op raw
+`Texture2D` binding and reported the whole capability unavailable. Ordinary
+Color textures now allocate a mip-zero UAV when the physical device advertises
+both typed UAV loads and stores; the sampled SRV remains available. The
+renderer reports `ComputeImageBinding` only under that same format/device
+condition. A native compute program retains the texture's renderer record,
+binds its UAV at the requested register, clears competing storage bindings,
+and rejects simultaneous sampled/input and image/UAV bindings of the same
+texture before dispatch. Its existing graphics SRV unbind/restore rule applies
+to the new UAV as well. The texture's UAV is released and recreated with the
+device; a driver that rejects optional UAV allocation still gets the ordinary
+sampled texture, while `bindImage` rejects that particular texture by name.
+Other formats and render-target texture records remain outside this raw image
+path; the dedicated typed storage texture remains available for those uses.
+
+The first physical run of the renderer-neutral image test passed its pixels
+but D3D11's debug layer reported one **real** resource type mismatch: the
+test declared `RWTexture2D<float4>` against an `R8G8B8A8_UNORM` UAV. The HLSL
+test payloads now declare `RWTexture2D<unorm float4>`, matching the existing
+native storage-image tests. The repeated three-case focused run passed with
+zero D3D11 diagnostics (`C:\rv\logs\dx11-image-binding-focused-2.log`);
+the original warning is preserved in
+`C:\rv\logs\dx11-image-binding-focused-1.log`.
+
+On physical Intel Iris Xe `8086:46A6`, feature level `11_1`, debug layer on:
+the complete compute and native DX11 compute group passed **27**, skipped
+**2** renderer-opposite cases, failed **0** from **29** tests, with zero D3D11
+debug-layer warning/error/corruption messages and 31 physical adapter
+selections
+(`C:\rv\logs\dx11-image-binding-compute-suite-2.log`). The new tests verify
+compute write followed by graphics texture sampling and render-target
+readback, rejection of simultaneous SRV/UAV aliasing, GPU work after the
+public texture is destroyed, and functional UAV recreation after simulated
+device loss. The shadow/IBL visual group remained **36/36** clean
+(`C:\rv\logs\dx11-image-binding-shadow-ibl-regression-1.log`), and the
+classic `Texture2D*` group passed **71/71** with zero debug messages
+and 31 physical adapter selections
+(`C:\rv\logs\dx11-image-binding-classic-texture-suite-1.log`). The existing
+16-cycle `DirectX11_ContextRecoveryContract` CTest passed on physical Intel
+after this change (`C:\rv\logs\dx11-image-binding-recovery-verbose-1.log`).
+Both DX11 and DX12 Debug modern test targets built after the shared test
+payload correction (`C:\rv\logs\dx11-image-binding-build-5.log`,
+`C:\rv\logs\dx12-build-after-dx11-image-binding-2.log`). The public
+`Texture2D::GetData` CPU-shadow behavior is unchanged; its existing compute
+test confirms that path does not report GPU writes. A complete modern DX11
+run after this change remains to be performed at the DX11 modern gate.
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsExtTests --parallel 8
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsTests --parallel 8
+cmake --build C:\rv\build\cna-win11-dx12-debug --config Debug --target CnaGraphicsExtTests --parallel 8
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target cna_test_directx11_context_recovery_contract --parallel 8
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ComputeTest.*:D3D11NativeComputeTest.*' *> C:\rv\logs\dx11-image-binding-compute-suite-2.log
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=IblVisibilityTest.*:ShadowVisibilityTest.*:CascadedShadowVisibilityTest.*:PunctualShadowVisibilityTest.*' *> C:\rv\logs\dx11-image-binding-shadow-ibl-regression-1.log
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsTests.exe --gtest_color=no --gtest_filter=Texture2D*' *> C:\rv\logs\dx11-image-binding-classic-texture-suite-1.log
+& C:\rv\work\private_desktop_awake.exe 600000 'ctest --test-dir C:\rv\build\cna-win11-dx11-modern -C Debug -V -R ^DirectX11_ContextRecoveryContract$' *> C:\rv\logs\dx11-image-binding-recovery-verbose-1.log
+```

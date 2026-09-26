@@ -61,6 +61,14 @@ namespace CNA::Internal::Renderers::DirectX11
             int unit, std::shared_ptr<IStorageTexture2DRenderer> texture,
             int accessMode) override;
         /**
+         * @brief Retains an ordinary Texture2D as a typed compute image.
+         * @param unit HLSL UAV register.
+         * @param texture Native texture, or null to clear it.
+         * @param accessMode GraphicsImageAccess ordinal.
+         */
+        void BindImageTexture(int unit, ITextureRenderer* texture,
+                              int accessMode) override;
+        /**
          * @brief Retains and binds a read-only constant buffer.
          * @param binding HLSL constant-buffer register.
          * @param buffer Native constant record, or null to clear it.
@@ -110,6 +118,7 @@ namespace CNA::Internal::Renderers::DirectX11
         std::array<Microsoft::WRL::ComPtr<ID3D11Buffer>, kConstantSlots> uniformBuffers_{};
         std::array<std::shared_ptr<IStorageBufferRenderer>, kUavSlots> storageBuffers_{};
         std::array<std::shared_ptr<IStorageTexture2DRenderer>, kUavSlots> storageTextures_{};
+        std::array<std::shared_ptr<ITextureRenderer>, kUavSlots> imageTextures_{};
         std::array<std::shared_ptr<IStorageBufferRenderer>, kConstantSlots> constantBuffers_{};
         std::array<std::shared_ptr<ITextureRenderer>, kTextureSlots> textures_{};
         D3DCommon::D3DProgramReflection reflection_;

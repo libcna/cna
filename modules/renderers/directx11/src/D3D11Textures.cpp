@@ -146,6 +146,7 @@ namespace CNA::Internal::Renderers::DirectX11
 
     void D3D11TextureRenderer::CreateDeviceResources()
     {
+        uav_.Reset();
         D3D11_TEXTURE2D_DESC desc{};
         desc.Width = static_cast<UINT>(width_);
         desc.Height = static_cast<UINT>(height_);
@@ -155,14 +156,37 @@ namespace CNA::Internal::Renderers::DirectX11
         desc.SampleDesc.Count = 1;
         desc.Usage = D3D11_USAGE_DEFAULT;
         desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        const auto imageSupport = owner_->GetSurfaceFormatUsageSupportEXT(surfaceFormat_);
+        constexpr std::uint32_t imageAccess =
+            static_cast<std::uint32_t>(CNA::RendererFormatUsage::StorageRead) |
+            static_cast<std::uint32_t>(CNA::RendererFormatUsage::StorageWrite);
+        const bool allowImage = !compressed_ &&
+            surfaceFormat_ == static_cast<int>(
+                Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color) &&
+            (imageSupport.supportedUsages & imageAccess) == imageAccess;
+        if (allowImage)
+            desc.BindFlags |= D3D11_BIND_UNORDERED_ACCESS;
 
         HRESULT hr = device_->CreateTexture2D(&desc, nullptr, texture_.GetAddressOf());
+        if (FAILED(hr) && allowImage)
+        {
+            desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+            hr = device_->CreateTexture2D(&desc, nullptr, texture_.GetAddressOf());
+        }
         if (FAILED(hr))
             throw std::runtime_error("D3D11TextureRenderer: CreateTexture2D failed, hr=" + FormatHr(hr));
 
         hr = device_->CreateShaderResourceView(texture_.Get(), nullptr, srv_.GetAddressOf());
         if (FAILED(hr))
             throw std::runtime_error("D3D11TextureRenderer: CreateShaderResourceView failed, hr=" + FormatHr(hr));
+        if ((desc.BindFlags & D3D11_BIND_UNORDERED_ACCESS) != 0)
+        {
+            D3D11_UNORDERED_ACCESS_VIEW_DESC view{};
+            view.Format = dxgiFormat_;
+            view.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
+            view.Texture2D.MipSlice = 0;
+            device_->CreateUnorderedAccessView(texture_.Get(), &view, uav_.GetAddressOf());
+        }
     }
 
     void D3D11TextureRenderer::StoreLevel(
@@ -211,6 +235,7 @@ namespace CNA::Internal::Renderers::DirectX11
 
     void D3D11TextureRenderer::ReleaseDeviceResourcesEXT() noexcept
     {
+        uav_.Reset();
         srv_.Reset();
         texture_.Reset();
         context_.Reset();

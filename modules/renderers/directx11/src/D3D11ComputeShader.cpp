@@ -35,6 +35,7 @@ namespace CNA::Internal::Renderers::DirectX11
         uniformBuffers_ = {};
         storageBuffers_ = {};
         storageTextures_ = {};
+        imageTextures_ = {};
         constantBuffers_ = {};
         textures_ = {};
         reflection_.Reset();
@@ -131,6 +132,7 @@ namespace CNA::Internal::Renderers::DirectX11
             throw std::invalid_argument("D3D11 compute storage buffer is not native to this device");
         retained = buffer->shared_from_this();
         storageTextures_[static_cast<std::size_t>(binding)].reset();
+        imageTextures_[static_cast<std::size_t>(binding)].reset();
     }
 
     bool D3D11ComputeShader::BindStorageTexture2DEXT(
@@ -154,7 +156,30 @@ namespace CNA::Internal::Renderers::DirectX11
             return false;
         retained = std::move(texture);
         storageBuffers_[static_cast<std::size_t>(unit)].reset();
+        imageTextures_[static_cast<std::size_t>(unit)].reset();
         return true;
+    }
+
+    void D3D11ComputeShader::BindImageTexture(
+        int unit, ITextureRenderer* texture, int accessMode)
+    {
+        if (unit < 0 || unit >= static_cast<int>(kUavSlots) ||
+            accessMode < 0 || accessMode > 2)
+            throw std::invalid_argument("D3D11 compute image binding has an invalid slot or access");
+        auto& retained = imageTextures_[static_cast<std::size_t>(unit)];
+        if (texture == nullptr)
+        {
+            retained.reset();
+            return;
+        }
+        auto* native = dynamic_cast<D3D11TextureRenderer*>(texture);
+        if (native == nullptr || native->GetDeviceEXT() != device_.Get() ||
+            native->GetUnorderedAccessViewEXT() == nullptr)
+            throw std::invalid_argument(
+                "D3D11 compute image binding requires a same-device Color Texture2D with a typed UAV");
+        retained = texture->shared_from_this();
+        storageBuffers_[static_cast<std::size_t>(unit)].reset();
+        storageTextures_[static_cast<std::size_t>(unit)].reset();
     }
 
     bool D3D11ComputeShader::BindConstantBufferEXT(
@@ -225,12 +250,20 @@ namespace CNA::Internal::Renderers::DirectX11
             else if (storageTextures_[slot])
                 nativeUavs[slot] = static_cast<D3D11StorageTexture2D*>(
                     storageTextures_[slot].get())->GetUnorderedAccessViewEXT();
+            else if (imageTextures_[slot])
+                nativeUavs[slot] = static_cast<D3D11TextureRenderer*>(
+                    imageTextures_[slot].get())->GetUnorderedAccessViewEXT();
         }
 
         std::array<ID3D11ShaderResourceView*, kTextureSlots> nativeTextures{};
         std::array<ID3D11SamplerState*, D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT> samplers{};
         for (std::size_t slot = 0; slot < kTextureSlots; ++slot)
         {
+            if (textures_[slot] && std::any_of(
+                    imageTextures_.begin(), imageTextures_.end(),
+                    [&](const auto& image) { return image == textures_[slot]; }))
+                throw std::invalid_argument(
+                    "D3D11 compute cannot bind the same Texture2D as sampled input and image");
             if (auto* texture = dynamic_cast<D3D11TextureRenderer*>(textures_[slot].get()))
                 nativeTextures[slot] = texture->GetShaderResourceViewEXT();
             else if (auto* target = dynamic_cast<D3D11RenderTargetRenderer*>(textures_[slot].get()))

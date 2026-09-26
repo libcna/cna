@@ -664,7 +664,7 @@ void main() {
 }
 )";
     constexpr const char* hlslPainter = R"(
-RWTexture2D<float4> uOutput : register(u0);
+RWTexture2D<unorm float4> uOutput : register(u0);
 cbuffer PainterParameters : register(b0) { int uSize; };
 [numthreads(8, 8, 1)]
 void main(uint3 dispatchId : SV_DispatchThreadID)
@@ -725,7 +725,7 @@ void main() {
 }
 )";
     constexpr const char* hlslReader = R"(
-RWTexture2D<float4> uInput : register(u0);
+RWTexture2D<unorm float4> uInput : register(u0);
 RWByteAddressBuffer Output : register(u1);
 cbuffer ReaderParameters : register(b0) { int uSize; };
 [numthreads(8, 8, 1)]
@@ -786,7 +786,7 @@ void main() {
 }
 )";
     constexpr const char* hlsl = R"(
-RWTexture2D<float4> uOutput : register(u0);
+RWTexture2D<unorm float4> uOutput : register(u0);
 [numthreads(8, 8, 1)]
 void main(uint3 dispatchId : SV_DispatchThreadID)
 {

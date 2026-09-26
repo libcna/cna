@@ -279,6 +279,11 @@ namespace CNA::Internal::Renderers::DirectX11
          */
         [[nodiscard]] bool SupportsComputeShadersEXT() const override;
         /**
+         * @brief Reports whether ordinary Color Texture2D resources can be bound as compute images.
+         * @return True when the selected device supports typed Color UAV reads and writes.
+         */
+        [[nodiscard]] bool SupportsComputeImageBindingEXT() const override;
+        /**
          * @brief Compiles one HLSL compute shader.
          * @param computeSrc HLSL shader source with main entry point.
          * @return Native compute program, or null when unsupported.
