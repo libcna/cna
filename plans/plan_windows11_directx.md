@@ -1136,3 +1136,22 @@ cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraph
 $env:CNA_D3D11_DEBUG_LAYER='1'
 & C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=PrepassReconstructionTest.*' *> C:\rv\logs\dx11-prepass-reconstruction-suite-1.log
 ```
+
+## DX11 contact-shadow CPU/GPU predicate, 2026-09-26
+
+WIN11-0045: the single contact-shadow CPU/GPU predicate comparison previously
+skipped DX11 solely because the test supplied inline GLSL. Added its HLSL
+equivalent with the same four uniform operands and strict bias/thickness
+bounds. All 12 deliberately varied hit/miss cases pass on the physical Intel
+GPU. The complete `ContactShadowPassTest.*` suite now passes **24/24**, zero
+skip/fail, 17 explicit Intel `8086:46A6` selections, and zero D3D11 debug
+warnings/errors (`C:\rv\logs\dx11-contact-shadow-suite-1.log`). This includes
+actual horizontal and vertical contact pixels, intensity, fallbacks, and
+composition. GLSL renderers retain the original test shader.
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsExtTests --parallel 8
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ContactShadowPassTest.TheShaderAgreesWithTheCpuTwinOnEveryCase' *> C:\rv\logs\dx11-contact-shadow-probe-1.log
+& C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ContactShadowPassTest.*' *> C:\rv\logs\dx11-contact-shadow-suite-1.log
+```
