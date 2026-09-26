@@ -201,6 +201,10 @@ TEST(EffectPassTest, AnAdaptedEffectRunsInsideAChain)
         || (gd.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Wgsl,
                                          CNA::ShaderStageEXT::Vertex)
             && gd.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Wgsl,
+                                            CNA::ShaderStageEXT::Fragment))
+        || (gd.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                         CNA::ShaderStageEXT::Vertex)
+            && gd.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Hlsl,
                                             CNA::ShaderStageEXT::Fragment));
     if (!hasPortableCrtVariant)
         GTEST_SKIP() << "this renderer has no CRTEffect package variant";

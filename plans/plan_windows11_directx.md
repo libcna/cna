@@ -840,3 +840,19 @@ $env:CNA_D3D11_DEBUG_LAYER='1'
 The remaining modern DX11 gate still includes lit shadow reception, IBL,
 vertex-stage storage and clustered/particle/culling compute shader packages.
 WIN11-0035 does not close that gate.
+
+WIN11-0036: `EffectPassTest.AnAdaptedEffectRunsInsideAChain` had a stale
+renderer-language gate that listed GLSL, SPIR-V, and WGSL but omitted HLSL.
+The CRT package already contains FXC-checked HLSL stages, and the independent
+CRT pixel oracles were already passing on D3D11. The gate now recognizes the
+existing HLSL vertex/fragment pair. On physical Intel Iris Xe `8086:46A6`,
+`software=0`, the previously skipped adapter test and all 15 CRT tests pass:
+**16 pass, zero fail, zero skip** with the D3D11 debug layer enabled and zero
+debug warnings/errors (`C:\rv\logs\dx11-crt-effectpass-focused.log`).
+No renderer or public API code changed for WIN11-0036.
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsExtTests --parallel 4
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=EffectPassTest.AnAdaptedEffectRunsInsideAChain:CRTEffectTest.*' 2>&1 | Out-File C:\rv\logs\dx11-crt-effectpass-focused.log
+```
