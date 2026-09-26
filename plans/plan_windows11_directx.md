@@ -533,21 +533,42 @@ test to skip. A rebuilt rerun is pending.
 ### DX11 current modern renderer-interface inventory
 
 This is an implementation inventory from `IGraphicsRenderer` and the current
-DirectX11 renderer, not a completed modern gate. Rows with missing code are
-open engineering work even when a test correctly skips for the absent feature.
+DirectX11 renderer through WIN11-0059, not a completed modern gate. The full
+post-WIN11-0059 run and repeated lifetime sampling are still in progress.
 
-| Current CNAEXT contract area | DX11 status during WIN11-0032 |
+| Current CNAEXT contract area | DX11 status through WIN11-0059 |
 |---|---|
-| Graphics-device lifecycle, classic/modern draw sequencing, MSAA/MRT, float targets and readback | Existing native paths; classic corpus passed. Focused pixel readback proves pixel SRV -> compute UAV -> pixel SRV sequencing on one resource. Broader modern state isolation remains open. |
-| HLSL vertex/fragment ShaderEffect intake, reflection, named uniforms and 2D/cube/volume SRVs | Native compiler and binding path exists. Explicit HLSL stage reporting and package-selection test added; stock CNAEXT shader packages mostly lack HLSL variants. Volume sampling's separate capability flag remains false pending pixel proof. |
-| Modern vertex/index input, multiple streams and instancing | Existing native draw paths. Base-instance support is not yet advertised; direct first-instance behavior remains to implement and test. |
+| Graphics-device lifecycle, classic/modern draw sequencing, MSAA/MRT, float targets and readback | Native paths pass the complete classic labels and pre-WIN11-0059 modern corpus. Modern GPU conformance covers classic/compute interleaving and exact transfers. Repeated lifetime sampling remains open. |
+| HLSL vertex/fragment ShaderEffect intake, reflection, named uniforms and 2D/cube/volume SRVs | Native HLSL compiler, package variants, reflection, diagnostics, and sampled volume textures are implemented and pass physical Intel tests (WIN11-0033, WIN11-0034, WIN11-0042 through WIN11-0047). |
+| Modern vertex/index input, multiple streams and instancing | Native paths and logical base-instance mapping pass pixel and 2,048-draw churn regressions (WIN11-0035). |
 | GPU elapsed-time queries | Native D3D11 timestamp/disjoint query path, with physical Intel workload and in-flight range tests passed (WIN11-0029). |
 | Indirect indexed/nonindexed draws and argument-only/transfer buffers | Native GPU-fetched draw path, with physical Intel count/offset and byte-transfer tests passed. Storage and constant buffer roles now use native mirrors copied in GPU order (WIN11-0030). |
-| Compute shaders, dispatch, shader storage and constant-buffer binding | Native HLSL cs_5_0, dispatch, raw UAV buffers, constant buffers and sampled Texture2D/RenderTarget2D execute on Intel. Full 974-case refreshed run after production HLSL variants: 733 pass, 241 skip, 0 fail. |
+| Compute shaders, dispatch, shader storage and constant-buffer binding | Native HLSL cs_5_0, dispatch, raw UAV buffers, constant buffers, sampled textures and render/compute state isolation execute on Intel. Full pre-WIN11-0059 modern run: 982 pass, 13 truthful skip, 0 fail. |
 | Storage textures, compute images, compute sampled textures, compute/graphics hazards | Native typed UAV storage-image read/write, exact mip/rectangle transfer, sampled storage-image binding and PS SRV/compute UAV hazard restoration pass on Intel. WIN11-0059 extends the storage-image factory and ordinary `Texture2D` image binding from Color to supported uncompressed formats; six float formats passed exact byte transfer and `Single` passed native compute write/readback. |
 | Sampled Texture2DArray and layer/mip transfers | Native array SRV, all 20 core SurfaceFormat transfers, 2,048-layer limit, ShaderEffect sampling and retained lifetime pass focused Intel tests. Odd block-compressed mip-edge partial transfer regression added. |
-| Shadow reception and image-based lighting in modern effects | Interface correctly reports false; DX11 stock PBR shader does not yet consume shadow/IBL bindings. |
-| GPU debug markers and modern resource-limit reporting | Marker override absent; most modern limits retain interface defaults. Native D3D11 capabilities need measured values when the corresponding paths are implemented. |
+| Shadow reception and image-based lighting in modern effects | Native stock Basic/Skinned/PBR shadow reception and PBR/skinned-PBR IBL pass physical pixel tests (WIN11-0049, WIN11-0050). |
+| GPU debug markers and modern resource-limit reporting | Native D3D11 annotation marker stream and measured vertex/MRT/storage/compute limits are implemented (WIN11-0051, WIN11-0053); timestamp queries provide GPU elapsed time. |
+
+The current `IGraphicsRenderer` CNAEXT member groups have the following
+device-specific classification. This supplements the scenario matrix above;
+each row names the current interface entry points or public resource family
+so a future source change can be compared against this inventory.
+
+| Current member group | DX11 classification and boundary |
+|---|---|
+| `GetShaderDialectEXT`, `SupportsShaderLanguageEXT`, `ExecutesShaderEffectSourceEXT`, `CreateEffectRenderer`; `ShaderCodeEXT`/`ShaderPackageEXT`/`ShaderEffectFactory` | Implemented for HLSL vertex, fragment and compute payloads. Other declared package languages are not D3D11 inputs; DXIL binary is not part of this shader-model-5 compiler path. |
+| `CreateComputeShader`, `DispatchCompute`, `SupportsComputeShadersEXT`, `MemoryBarrierEXT`; `ComputeShader` | Implemented with native HLSL compute dispatch. The ordered D3D11 immediate context makes `MemoryBarrierEXT` inert; compute-write/graphics-read and graphics/compute sequencing have pixel and readback probes. |
+| `CreateStorageBuffer`, `CreateStorageBufferEXT`, `BindStorageBufferForDrawEXT`; `StorageBuffer` and `ConstantBuffer` | Implemented for declared storage, transfer, indirect and constant roles. Raw UAV/SRV and constant-buffer bindings are checked at the same-device boundary. |
+| `CreateStorageTexture2DEXT`, `SupportsComputeImageBindingEXT`, `GetSurfaceFormatUsageSupportEXT`; `StorageTexture2D` and ordinary `Texture2D` image binding | Implemented for uncompressed formats with device-reported typed UAV access; compressed and unsupported typed formats are refused through format usage reporting. Six float formats have exact transfer evidence; `Single` has compute/readback and context-recovery evidence for ordinary textures. |
+| `CreateTexture2DArrayEXT`, `GetMaxTextureArrayLayersEXT`, `SupportsTexture3DSamplingEXT`; `Texture2DArray`, volume/cube sampled views | Implemented with native SRVs, layer/mip transfers and ShaderEffect sampling. Format claims follow the selected device. |
+| `CreateRenderTarget2DEXT`, `CreateRenderTargetCubeEXT`, `SetRenderTargets`; float targets, MRT and MSAA | Implemented; classic full labels and modern HDR/IBL/shadow scenes exercise them. |
+| `SupportsIndirectDrawEXT`, `DrawPrimitivesIndirectEXT`, `DrawIndexedPrimitivesIndirectEXT`, `SupportsBaseInstanceDrawingEXT` | Implemented with GPU-fetched arguments and CNA's logical first-instance mapping, including 2,048-draw churn. |
+| `SupportsShadowSamplingEXT`, `SupportsImageBasedLightingEXT`; modern stock effects and passes | Implemented for current HLSL packages, including Basic/Skinned/PBR shadows and PBR/skinned-PBR split-sum IBL. |
+| `SupportsGpuTimerEXT`, `CreateGpuTimerEXT`, `GetTimestampPeriodPicosecondsEXT`, `SetStringMarkerEXT` | Native timestamp/disjoint queries and D3D11 annotation markers are implemented. The separate fixed timestamp-period query remains zero because D3D11 supplies frequency per disjoint query, rather than a fixed device-wide period. |
+| Modern limit members: compute groups/sizes/invocations, storage/uniform byte counts and alignments, storage/sampled image counts, vertex input counts, MRT count | Implemented from native and enforced CNA limits on a live device; limit probes and bound-resource tests pass. |
+| Format classifier/transfer/loader members (`Classify*FormatEXT`, `IsCompressed*TransferFormatEXT`, `LoadsCompressedContentNativelyEXT`) | Implemented for the current D3D11 texture/target paths and native compressed loads; unsupported formats are rejected before resource creation. |
+| `GetDisplayColorSpaceEXT`, `SetDisplayColorSpaceEXT` | Truthful sRGB-only default. Current CNA presentation platform has no HDR swap-chain opt-in, so HDR presentation is outside this backend's current applicable contract even though float render targets and HDR postprocessing execute. |
+| `PresentRegionEXT`, `GetAdditionalLimitationsTextEXT` | The former explicitly refuses non-default region/foreign-window presentation; EasyGL also has no such path. The latter needs no extra text because resource and language limitations are separately classified by the explicit capability and format queries. |
 
 WIN11-0029: DX11 now advertises only the HLSL graphics stages it compiles,
 and a portable HLSL shader-package selection/compile test passes. It logs the
@@ -1719,4 +1740,96 @@ $env:CNA_D3D11_DEBUG_LAYER='1'
 & C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ComputeTest.*:D3D11NativeComputeTest.*:StorageTexture2DTest.*:ModernGpuConformance.*' *> C:\rv\logs\dx11-typed-storage-related-modern-1.log
 & C:\rv\work\private_desktop_awake.exe 1200000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsTests.exe --gtest_color=no --gtest_filter=*Texture2D*:*SurfaceFormat*' *> C:\rv\logs\dx11-typed-storage-classic-textures-1.log
 & C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=D3D11NativeComputeTest.TypedFloatStorageImagesPreserveExactTransferBytes:D3D11NativeComputeTest.SingleStorageImageComputeWriteAndReadback:D3D11NativeComputeTest.OrdinarySingleTextureIsWritableAsTypedImage' *> C:\rv\logs\dx11-typed-storage-focused-recovery-1.log
+```
+
+WIN11-0060 validation: the complete post-WIN11-0059 modern DX11 executable
+passed **998 tests from 127 suites: 985 pass, 13 skip, 0 fail** in
+2,552,603 ms (`C:\rv\logs\dx11-modern-full-post-float-uav-1.log`). The
+13 names in the log are unsupported-capability inverse tests and GLSL/GL
+driver diagnostic probes; none is an implemented DX11 capability being
+hidden. The executable selected physical Intel Iris Xe `8086:46A6`,
+`software=0`, **700** times, never selected another adapter, and reported
+zero D3D11 debug warning/error/corruption or device removal. A 254-sample
+process trace showed private bytes **26.5 MiB initially, 357.7 MiB peak,
+40.1 MiB at the end**; threads fell from 15 to 7. Process handles rose from
+415 to 984 (peak 1,092), so the lifetime question is still open despite the
+successful tests. A separate 149-sample GUI trace observed GDI objects at
+44 both early and late, and USER objects at 35 then 34, excluding progressive
+growth in those two handle classes. Logs:
+`C:\rv\logs\dx11-modern-full-post-float-uav-resources-1.csv` and
+`C:\rv\logs\dx11-modern-full-post-float-uav-gui-1.csv`. A repeated
+single-process typed storage-image stress followed; the full-suite handle
+increase alone remains unclassified until effect/resource repetition.
+
+The `TypedFloatStorageImagesPreserveExactTransferBytes` hardware test then
+completed **250/250** single-process repetitions with D3D11 debug enabled,
+250 Intel hardware selections and zero diagnostics
+(`C:\rv\logs\dx11-typed-storage-repeat-250-1.log`). Each repetition
+creates six typed UAV textures and checks full and partial uploads/readbacks,
+for 1,500 texture allocations and thousands of transfers. In 521 resource
+samples, handles began at 416 and ended at 391 (sampled peak 444); private
+bytes began at 17.0 MiB, ended at 23.0 MiB and peaked at 53.2 MiB; GDI
+objects stayed at 44 (`C:\rv\logs\dx11-typed-storage-repeat-250-resources-1.csv`).
+No progressive growth appeared in this repeated texture/transfer path.
+
+```powershell
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 7200000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no' *> C:\rv\logs\dx11-modern-full-post-float-uav-1.log
+& C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=D3D11NativeComputeTest.TypedFloatStorageImagesPreserveExactTransferBytes --gtest_repeat=250 --gtest_brief=1' *> C:\rv\logs\dx11-typed-storage-repeat-250-1.log
+```
+
+The remaining full-suite handle rise was isolated rather than waived.
+`D3D11EffectTextureLifetimeTest.*` completed **100 repetitions of both
+tests, 200/200 pass**, 200 physical Intel selections and zero D3D11 debug
+diagnostics (`C:\rv\logs\dx11-effect-lifetime-repeat-100-1.log`). Process
+handles rose 423 to 589 while private bytes rose only 18.3 to 28.4 MiB;
+GDI was 44 at both ends and USER returned 41 to 34
+(`C:\rv\logs\dx11-effect-lifetime-repeat-100-resources-1.csv`). The 2D
+and cube/volume tests separately each passed **50/50** yet each increased
+handles **418 to 453**. Disabling the D3D11 debug layer explicitly for the
+2D repetition still increased handles **419 to 453**, so the debug runtime
+is not the cause. A temporary CNA destructor experiment calling
+`ClearState()` and `Flush()` also left about the same 50-cycle growth; it
+was reverted and is not in any CNA commit. Logs:
+`dx11-effect-lifetime-2d-repeat-50-1.log`,
+`dx11-effect-lifetime-cube-volume-repeat-50-1.log`,
+`dx11-effect-lifetime-2d-repeat-50-nodebug-1.log`, and
+`dx11-effect-lifetime-2d-clearstate-repeat-50-1.log`, with corresponding
+`-resources-1.csv` files under `C:\rv\logs`.
+
+An external read-only Windows handle-type probe at
+`C:\rv\work\handle_audit` counted native Event handles **210 to 245**
+between two snapshots 21 two-test rounds apart; the other enumerated handle
+types stayed constant. The relevant logs are
+`C:\rv\logs\dx11-effect-handle-types-mid-1.log` and
+`C:\rv\logs\dx11-effect-handle-types-late-1.log`. A separate native
+shader-only probe compiled HLSL VS+PS **200 times**, 400 compilations total,
+with handles fixed at 67 (`C:\rv\logs\shader-compile-200-handle-probe.log`).
+
+Most decisively, a standalone native D3D11 program outside CNA selected
+hardware Intel `8086:46A6`, feature level `11_1`, and repeated device
+creation/destruction **100 times**. Device creation alone held handles at
+**182** throughout (`C:\rv\logs\d3d11-native-device-only-100.log`). Adding
+one native shader draw per device increased handles **179 to 278**, exactly
+one per cycle despite `ClearState()` and `Flush()`; adding GPU readback gave
+**180 to 279**. The same draw with D3D11 debug enabled gave **182 to 281**
+(`d3d11-native-draw-100.log`, `d3d11-native-draw-readback-100.log`,
+`d3d11-native-draw-debug-100.log` under `C:\rv\logs`). Finally, explicitly
+selected WARP `1414:008C`, `software=1`, performed the identical 100 native
+draw cycles with handles fixed at **125**
+(`C:\rv\logs\d3d11-native-draw-explicit-warp-100.log`). WARP is only a
+differential reference here; physical Intel remains authoritative for CNA.
+This is classified as a **physical Intel driver 32.0.101.7085 native D3D11
+per-device draw Event-handle retention**, not an unexplained CNA ownership
+failure. Long-running single-device presentation and transfer stress remains
+stable; repeated drawn-device creation on this driver accumulates one native
+Event handle per device until process exit. No CNA workaround such as a
+global GPU idle or altered resource ownership is justified by the evidence.
+
+```powershell
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=D3D11EffectTextureLifetimeTest.* --gtest_repeat=100 --gtest_brief=1' *> C:\rv\logs\dx11-effect-lifetime-repeat-100-1.log
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\handle-audit\Release\d3d11_event_probe.exe 100 0 0 hardware' *> C:\rv\logs\d3d11-native-device-only-100.log
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\handle-audit\Release\d3d11_event_probe.exe 100 1 0 hardware' *> C:\rv\logs\d3d11-native-draw-100.log
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\handle-audit\Release\d3d11_event_probe.exe 100 1 0 warp' *> C:\rv\logs\d3d11-native-draw-explicit-warp-100.log
 ```
