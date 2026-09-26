@@ -576,7 +576,7 @@ namespace CNA::Internal::Renderers::DirectX12
         GpuDrawParams params;
         for (int pass = 0; pass < passCount; ++pass)
         {
-            technique->getPassesProperty()[pass].Apply();
+            technique->getPassesProperty()[pass]->Apply();
             owner_->RecordCompiledEffectDrawEXT(
                 vb_, &ib_, PrimitiveType::TriangleList,
                 static_cast<int>(pendingIndices_.size() / 3), 1, params, *runtime,

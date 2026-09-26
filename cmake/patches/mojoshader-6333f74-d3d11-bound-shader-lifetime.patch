@@ -1,0 +1,21 @@
+diff --git a/mojoshader_d3d11.c b/mojoshader_d3d11.c
+--- a/mojoshader_d3d11.c
++++ b/mojoshader_d3d11.c
+@@ -801,6 +801,17 @@ void MOJOSHADER_d3d11DeleteShader(
+             shader->refcount--;
+         else
+         {
++            if (ctx->vertexShader == shader)
++            {
++                ctx->vertexShader = NULL;
++                ctx->vertexNeedsBound = 1;
++            } // if
++            if (ctx->pixelShader == shader)
++            {
++                ctx->pixelShader = NULL;
++                ctx->pixelNeedsBound = 1;
++            } // if
++
+             if (shader->ubo != NULL)
+             {
+                 ID3D11Buffer_Release((ID3D11Buffer*) shader->ubo);

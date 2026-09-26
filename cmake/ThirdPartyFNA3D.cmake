@@ -159,7 +159,8 @@ function(cna_configure_mojoshader)
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-static-sdl-shadercross.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-sdlgpu-spirv-transform.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-sdlgpu-program-identity.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-centroid-color-clamp.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-centroid-color-clamp.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-d3d11-bound-shader-lifetime.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
 

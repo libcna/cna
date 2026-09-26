@@ -471,7 +471,7 @@ namespace CNA::Internal::Renderers::DirectX11
         GpuDrawParams params;
         for (int pass = 0; pass < passCount; ++pass)
         {
-            technique->getPassesProperty()[pass].Apply();
+            technique->getPassesProperty()[pass]->Apply();
             owner_->BindCompiledEffectForDrawEXT(
                 vb_, params, *runtime, currentTexture_, &deviceTextures);
             context_->DrawIndexed(static_cast<UINT>(pendingIndices_.size()), 0, 0);

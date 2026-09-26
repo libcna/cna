@@ -43,31 +43,30 @@ foreach(CNA_FNA3D_MOJOSHADER_PATCH IN LISTS CNA_FNA3D_MOJOSHADER_PATCH_FILE)
 endforeach()
 file(WRITE "${CNA_FNA3D_MOJOSHADER_COMBINED}" "${CNA_FNA3D_MOJOSHADER_COMBINED_TEXT}")
 
-# "Already applied?" needs two answers, because neither alone is sound. Reverse-checking the series
-# does not work at all once two patches edit the same lines -- patch A's post-image is patch B's
-# pre-image, so no single file state satisfies both halves of the combined diff. Instead:
-#
-#   * the series must not apply FORWARD. On a pristine tree it would; on a fully patched one every
-#     hunk's context is gone, so `--check` fails. This reads the files themselves, which is what
-#     makes it survive FetchContent's update step restoring the checkout underneath us.
-#   * the stamp must name this exact series. That is what separates "fully applied" from
-#     "half-applied by an older revision of the list", which also fails to apply forward.
+# The patch series overlaps itself, so neither a forward nor a reverse check of the concatenated
+# diff can identify its final state. Keep the hash of both the patch inputs and the resulting
+# tracked-file diff. FetchContent can restore the submodule while leaving an untracked stamp.
 file(SHA256 "${CNA_FNA3D_MOJOSHADER_COMBINED}" CNA_FNA3D_MOJOSHADER_SERIES_HASH)
 set(CNA_FNA3D_MOJOSHADER_STAMP
     "${CNA_FNA3D_MOJOSHADER_SOURCE_DIR}/.cna-mojoshader-patch-series.sha256")
 
 execute_process(
     COMMAND "${CNA_FNA3D_MOJOSHADER_PATCH_GIT_EXECUTABLE}" -C
-            "${CNA_FNA3D_MOJOSHADER_SOURCE_DIR}" apply --check
-            "${CNA_FNA3D_MOJOSHADER_COMBINED}"
-    RESULT_VARIABLE CNA_FNA3D_MOJOSHADER_SERIES_STILL_APPLIES
-    OUTPUT_QUIET
-    ERROR_QUIET
+            "${CNA_FNA3D_MOJOSHADER_SOURCE_DIR}" diff --binary HEAD
+    RESULT_VARIABLE CNA_FNA3D_MOJOSHADER_DIFF_RESULT
+    OUTPUT_VARIABLE CNA_FNA3D_MOJOSHADER_CURRENT_DIFF
 )
-if(EXISTS "${CNA_FNA3D_MOJOSHADER_STAMP}" AND NOT CNA_FNA3D_MOJOSHADER_SERIES_STILL_APPLIES EQUAL 0)
+if(NOT CNA_FNA3D_MOJOSHADER_DIFF_RESULT EQUAL 0)
+    message(FATAL_ERROR "CNA: could not inspect MojoShader's tracked-file diff")
+endif()
+string(SHA256 CNA_FNA3D_MOJOSHADER_CURRENT_DIFF_HASH
+       "${CNA_FNA3D_MOJOSHADER_CURRENT_DIFF}")
+if(EXISTS "${CNA_FNA3D_MOJOSHADER_STAMP}" AND
+   NOT CNA_FNA3D_MOJOSHADER_CURRENT_DIFF STREQUAL "")
     file(READ "${CNA_FNA3D_MOJOSHADER_STAMP}" CNA_FNA3D_MOJOSHADER_STAMPED_HASH)
     string(STRIP "${CNA_FNA3D_MOJOSHADER_STAMPED_HASH}" CNA_FNA3D_MOJOSHADER_STAMPED_HASH)
-    if(CNA_FNA3D_MOJOSHADER_STAMPED_HASH STREQUAL CNA_FNA3D_MOJOSHADER_SERIES_HASH)
+    if(CNA_FNA3D_MOJOSHADER_STAMPED_HASH STREQUAL
+       "${CNA_FNA3D_MOJOSHADER_SERIES_HASH}:${CNA_FNA3D_MOJOSHADER_CURRENT_DIFF_HASH}")
         message(STATUS "CNA: MojoShader patch series already applied -- skipping")
         return()
     endif()
@@ -87,18 +86,36 @@ if(NOT CNA_FNA3D_MOJOSHADER_RESTORE_RESULT EQUAL 0)
         "series.")
 endif()
 
+# Later patches modify lines introduced by earlier ones, so apply them in order. `git apply`
+# checks every hunk in one patch against the tree before changing it; concatenating the series
+# into one patch makes those overlapping hunks fail even on the pinned pristine source.
+foreach(CNA_FNA3D_MOJOSHADER_PATCH IN LISTS CNA_FNA3D_MOJOSHADER_PATCH_FILE)
+    execute_process(
+        COMMAND "${CNA_FNA3D_MOJOSHADER_PATCH_GIT_EXECUTABLE}" -C
+                "${CNA_FNA3D_MOJOSHADER_SOURCE_DIR}" apply "${CNA_FNA3D_MOJOSHADER_PATCH}"
+        RESULT_VARIABLE CNA_FNA3D_MOJOSHADER_PATCH_APPLY_RESULT
+    )
+    if(NOT CNA_FNA3D_MOJOSHADER_PATCH_APPLY_RESULT EQUAL 0)
+        message(FATAL_ERROR
+            "CNA: failed to apply ${CNA_FNA3D_MOJOSHADER_PATCH} to FNA3D's MojoShader "
+            "submodule -- the pinned revisions may no longer match the patches.")
+    endif()
+endforeach()
+
 execute_process(
     COMMAND "${CNA_FNA3D_MOJOSHADER_PATCH_GIT_EXECUTABLE}" -C
-            "${CNA_FNA3D_MOJOSHADER_SOURCE_DIR}" apply "${CNA_FNA3D_MOJOSHADER_COMBINED}"
-    RESULT_VARIABLE CNA_FNA3D_MOJOSHADER_PATCH_APPLY_RESULT
+            "${CNA_FNA3D_MOJOSHADER_SOURCE_DIR}" diff --binary HEAD
+    RESULT_VARIABLE CNA_FNA3D_MOJOSHADER_DIFF_RESULT
+    OUTPUT_VARIABLE CNA_FNA3D_MOJOSHADER_CURRENT_DIFF
 )
-if(NOT CNA_FNA3D_MOJOSHADER_PATCH_APPLY_RESULT EQUAL 0)
-    message(FATAL_ERROR
-        "CNA: failed to apply the MojoShader patch series to FNA3D's MojoShader submodule -- the "
-        "pinned FNA3D/MojoShader revisions may no longer match the patches.")
+if(NOT CNA_FNA3D_MOJOSHADER_DIFF_RESULT EQUAL 0 OR
+   CNA_FNA3D_MOJOSHADER_CURRENT_DIFF STREQUAL "")
+    message(FATAL_ERROR "CNA: MojoShader patch series left no tracked-file changes")
 endif()
-
-file(WRITE "${CNA_FNA3D_MOJOSHADER_STAMP}" "${CNA_FNA3D_MOJOSHADER_SERIES_HASH}\n")
+string(SHA256 CNA_FNA3D_MOJOSHADER_CURRENT_DIFF_HASH
+       "${CNA_FNA3D_MOJOSHADER_CURRENT_DIFF}")
+file(WRITE "${CNA_FNA3D_MOJOSHADER_STAMP}"
+     "${CNA_FNA3D_MOJOSHADER_SERIES_HASH}:${CNA_FNA3D_MOJOSHADER_CURRENT_DIFF_HASH}\n")
 
 list(LENGTH CNA_FNA3D_MOJOSHADER_PATCH_FILE CNA_FNA3D_MOJOSHADER_PATCH_COUNT)
 message(STATUS

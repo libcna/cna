@@ -4,7 +4,8 @@ Status: native MSVC and physical Intel GPU baseline established on 2026-09-25. T
 Windows DirectX parity campaign is active on `win11-directx-modern`. DX11 and
 DX12 classic have both been revalidated after adding plural cube-face MRT.
 DX11 modern CNAEXT has completed its full Intel test run. DX12 modern
-CNAEXT evaluation is active; implementation remains open.
+CNAEXT evaluation is active; implementation remains open. Opt-in compiled
+XNA effects now pass their DX11 and DX12 renderer suites on Intel (WIN11-0066).
 The large DX12 descriptor fixture under Intel GPU-based validation remains a recorded
 exception (WIN11-0025). Modern parity and application validation remain open.
 
@@ -2223,3 +2224,84 @@ $env:CNA_D3D11_DEBUG_LAYER='1'
 $filter='IndirectDrawTest.AForeignDirectXDeviceArgumentBufferIsRefusedBeforeSubmission:IndirectDrawTest.DirectXComputeWritesArgumentsConsumedByTheGpuDraw'
 & C:\rv\work\private_desktop_awake.exe 900000 "C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=$filter" *> C:\rv\logs\dx11-modern-indirect-shared-regression-1.log
 ```
+
+### WIN11-0066: Opt-in compiled effects on both DirectX renderers
+
+Both optional compiled-effect configurations use native Win32/MSVC x64 Debug,
+SDL disabled, `CNA_GRAPHICS_RENDERER=DIRECTX11` or `DIRECTX12`, and the matching
+`CNA_DIRECTX11_COMPILED_EFFECTS=ON` or `CNA_DIRECTX12_COMPILED_EFFECTS=ON`.
+Their build trees are `C:\rv\build\cna-win11-dx11-compiled` and
+`C:\rv\build\cna-win11-dx12-compiled`. They build FNA3D's pinned MojoShader
+submodule and `CnaRendererTests` without a system-wide installation.
+
+The initial optional configuration could not apply the existing 117 MojoShader
+patches: later patches edit lines introduced by earlier patches, but the
+application script concatenated the diffs into one `git apply`. The script now
+applies each patch in order and stamps both the patch-series hash and the
+resulting tracked-file diff. An isolated checkout passed first application,
+idempotent repetition and a clean-source restoration test
+(`C:\rv\logs\mojoshader-patch-script-{1,2,3}.log`). Both real build trees
+applied **118 patches** after this task's new patch; repeat configurations
+reported `already applied -- skipping`
+(`dx11-compiled-config-vendor-lifetime-1.log`,
+`dx12-compiled-config-vendor-lifetime-1.log`,
+`dx11-compiled-vendor-idempotence-1.log`,
+`dx12-compiled-vendor-idempotence-1.log`). Both test targets built.
+
+The optional SpriteBatch paths in both renderers had a compile error: an
+`EffectPass*` was called with `.` instead of `->`. After correcting that,
+the first focused runs showed DX11 **16 pass / 1 skip / 1 fail** and DX12
+**17 pass / 1 skip / 1 fail**. The shared compiled-effect contract requires
+`GraphicsProfile::HiDef`; these test fixtures constructed the convenience
+`GraphicsDevice`, which selects `Reach`. Explicit HiDef fixtures removed this
+test setup mismatch and made the cube/volume sampler cases run instead of skip.
+DX12 then passed **19/19**. DX11 still had one real clone-lifetime failure:
+MojoShader's D3D11 context retained raw pointers to a bound shader after a
+cloned effect destroyed that shader. Applying the surviving source effect
+dereferenced the freed shader in `MOJOSHADER_d3d11UnmapUniformBufferMemory`.
+Three later DX11 draw tests failed only after that access violation in the
+same process and passed when isolated. The new MojoShader patch clears a
+context's bound vertex/pixel pointers and marks the corresponding stage for
+rebinding before the final shader reference is freed. No private diagnostic
+handler remains in the committed tests.
+
+With the versioned patch reapplied from clean source, the focused DX11 suite
+passed **18/18** (`C:\rv\logs\dx11-compiled-effects-vendor-lifetime-final-1.log`)
+and DX12 passed **19/19**
+(`C:\rv\logs\dx12-compiled-effects-vendor-lifetime-final-1.log`). Every device
+selected physical Intel Iris Xe `8086:46A6`, D3D11 feature level 11_1 or
+D3D12 feature level 12_1, with no WARP selection. Both debug layers reported
+**0 corruption / 0 error / 0 warning**. DX12 DRED was enabled and reported no
+device removal. DX12 GPU-based validation passed **3/3** selected clone,
+multi-pass SpriteBatch and render-target-source cases with no validation
+message (`C:\rv\logs\dx12-compiled-effects-gbv-1.log`).
+
+The broader optional DX11 `CnaRendererTests` binary passed **236/236**
+(`C:\rv\logs\dx11-compiled-renderer-full-1.log`). Its three debug-layer errors
+are expected and confined to
+`D3DDebugLayerCaptureTest.AnApiMisuseOnTheRenderersDeviceIsRecordedAsAnError`,
+which deliberately calls `CreateTexture2D` with zero dimensions to test error
+capture; the focused compiled-effect run above has zero diagnostics. The DX12
+binary passed **236/236** on hardware with zero debug messages and no DRED
+fault (`C:\rv\logs\dx12-compiled-renderer-full-hardware-1.log`). That DX12
+run excluded the deliberate debug-error capture test and adapter-selection/
+configuration suites that intentionally select WARP for policy testing.
+
+```powershell
+cmake -S C:\rv\src\cna -B C:\rv\build\cna-win11-dx11-compiled
+cmake -S C:\rv\src\cna -B C:\rv\build\cna-win11-dx12-compiled
+cmake --build C:\rv\build\cna-win11-dx11-compiled --config Debug --target CnaRendererTests --parallel 3
+cmake --build C:\rv\build\cna-win11-dx12-compiled --config Debug --target CnaRendererTests --parallel 3
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 900000 '"C:\rv\build\cna-win11-dx11-compiled\Debug\CnaRendererTests.exe" --gtest_color=no --gtest_filter=DirectX11CompiledEffectTest.*:DirectX11CompiledEffectDrawTest.*'
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='0'
+& C:\rv\work\private_desktop_awake.exe 900000 '"C:\rv\build\cna-win11-dx12-compiled\Debug\CnaRendererTests.exe" --gtest_color=no --gtest_filter=DirectX12CompiledEffectTest.*:DirectX12CompiledEffectDrawTest.*'
+$env:CNA_D3D12_GPU_VALIDATION='1'
+& C:\rv\work\private_desktop_awake.exe 900000 '"C:\rv\build\cna-win11-dx12-compiled\Debug\CnaRendererTests.exe" --gtest_color=no --gtest_filter=DirectX12CompiledEffectTest.CapabilityAndPublicRuntimeContract:DirectX12CompiledEffectDrawTest.SharedSpriteBatchMultiPassContract:DirectX12CompiledEffectDrawTest.SharedRenderTargetSourceContract'
+```
+
+This completes optional compiled XNA effect coverage for this task. DX12
+modern Texture2DArray, storage images, GPU timing, and shadow/IBL remain open.
