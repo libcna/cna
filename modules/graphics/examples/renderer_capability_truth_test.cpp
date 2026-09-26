@@ -123,9 +123,11 @@ protected:
         Check(!renderer.SupportsCapability(
                   static_cast<CNA::GraphicsCapability>(1000)),
               "unknown future capability defaults to false rather than being advertised");
-        Check(!renderer.SupportsComputeShadersEXT() &&
-                  !renderer.SupportsIndirectDrawEXT(),
-              "unimplemented compute and indirect DirectX extensions remain unavailable");
+        Check(renderer.SupportsComputeShadersEXT() ==
+                  device.SupportsCapability(CNA::GraphicsCapability::ComputeShaders) &&
+                  renderer.SupportsIndirectDrawEXT() ==
+                  device.SupportsCapability(CNA::GraphicsCapability::IndirectDraw),
+              "compute and indirect extension flags agree with public capability reporting");
 
         std::printf("=== %d/%d PASS ===\n", passed_, passed_ + failed_);
         Exit();

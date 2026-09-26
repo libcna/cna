@@ -179,9 +179,9 @@ cbuffer TransformBlock : register(b3)
 VSOut main(VSIn input)
 {
     VSOut output;
-    float4 position = mul(World, float4(input.position, 1.0));
-    position = mul(View, position);
-    output.position = mul(Projection, position);
+    float4 position = mul(float4(input.position, 1.0), World);
+    position = mul(position, View);
+    output.position = mul(position, Projection);
     output.color = input.color;
     output.uv = input.uv;
     output.signal = input.signal * input.normal.z;

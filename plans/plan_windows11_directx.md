@@ -1535,3 +1535,34 @@ does not change that source path.
 cmake --build C:\rv\build\cna-win11-dx11-debug --config Debug --parallel 4
 cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsExtTests --parallel 4
 ```
+
+## DX11 classic expectations after modern capability work, 2026-09-26
+
+WIN11-0057: the first complete classic `DIRECTX11` label after the cube MRT
+change ran **298 cases, 296 pass, 2 fail** on physical Intel with D3D11 debug
+enabled (`C:\rv\logs\dx11-cube-mrt-classic-label-1.log`). The new cube MRT
+path and 296 other cases passed. `ShaderEffect_ReflectionContract` failed
+only its translated-world pixel check (8/9 internal checks): its HLSL used
+`mul(World, position)`, although an XNA row-vector translation resides in
+`M41`. The shared D3D reflection now correctly preserves the XNA matrix
+values for the shader; the fixture must multiply `mul(position, World)` and
+then View/Projection in that order. With this test-input correction the
+translated pixel is `(163,207,246,255)` as expected and all **9/9** internal
+checks pass. No renderer matrix code was changed.
+
+`RendererCapabilityTruth` passed 21/22 checks and failed only a historical
+assertion that DX11 compute and indirect extension flags were both false.
+They are now native, functional and correctly advertised; the fixture
+checks the extension flags against the public capability answers. Its
+**22/22** checks pass without weakening the unknown-capability refusal.
+Focused CTest on the physical Intel Iris Xe passed **2/2**, feature level
+`11_1`, D3D11 debug on and zero debug-layer messages
+(`C:\rv\logs\dx11-classic-oracle-focused-1.log`). This result classifies
+the two whole-label failures; a complete post-correction label is still
+required before restoring the classic gate.
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx11-debug --config Debug --target cna_test_directx11_shader_effect_reflection cna_test_directx11_renderer_capability_truth --parallel 4
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 600000 'ctest --test-dir C:\rv\build\cna-win11-dx11-debug -C Debug -V -R ^DirectX11_(ShaderEffect_ReflectionContract|RendererCapabilityTruth)$ --parallel 1' *> C:\rv\logs\dx11-classic-oracle-focused-1.log
+```
