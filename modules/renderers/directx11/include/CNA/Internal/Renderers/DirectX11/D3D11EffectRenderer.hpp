@@ -18,6 +18,7 @@
 #include <wrl/client.h>
 
 #include <array>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <string>
@@ -98,6 +99,23 @@ namespace CNA::Internal::Renderers::DirectX11
             const std::vector<D3DCommon::D3DVertexInputElement>& inputElements,
             bool& usesLogicalIdStream);
 
+        /**
+         * @brief Returns the native t-registers that the vertex stage reads as byte buffers.
+         * @return Bit mask of storage input slots zero through fifteen.
+         */
+        [[nodiscard]] std::uint32_t GetVertexStorageSlotsEXT() const
+        {
+            return vertexStorageSlots_;
+        }
+        /**
+         * @brief Returns the native t-registers that the pixel stage reads as byte buffers.
+         * @return Bit mask of storage input slots zero through fifteen.
+         */
+        [[nodiscard]] std::uint32_t GetPixelStorageSlotsEXT() const
+        {
+            return pixelStorageSlots_;
+        }
+
     private:
         enum class TextureKind
         {
@@ -142,6 +160,9 @@ namespace CNA::Internal::Renderers::DirectX11
         std::map<InputLayoutKey, ComPtr<ID3D11InputLayout>> baseInstanceInputLayouts_;
         std::string vertexSource_;
         bool hasInstanceIdInput_ = false;
+        std::uint32_t vertexTextureSlots_ = 0;
+        std::uint32_t vertexStorageSlots_ = 0;
+        std::uint32_t pixelStorageSlots_ = 0;
         D3DCommon::D3DProgramReflection reflection_;
         std::array<ComPtr<ID3D11Buffer>,
                    D3DCommon::D3DProgramReflection::kMaxConstantBuffers> constantBuffers_{};

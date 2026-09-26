@@ -95,6 +95,14 @@ namespace CNA::Internal::Renderers::DirectX11
             return storageUav_.Get();
         }
         /**
+         * @brief Returns the raw shader-resource view for a declared storage buffer.
+         * @return Native sampled byte-buffer view, or null without Storage usage.
+         */
+        [[nodiscard]] ID3D11ShaderResourceView* GetShaderResourceViewEXT() const
+        {
+            return storageSrv_.Get();
+        }
+        /**
          * @brief Returns a constant buffer with the latest GPU contents.
          * @return Native constant-buffer handle, or null.
          */
@@ -112,6 +120,7 @@ namespace CNA::Internal::Renderers::DirectX11
         Microsoft::WRL::ComPtr<ID3D11Buffer> indirectBuffer_;
         Microsoft::WRL::ComPtr<ID3D11Buffer> constantBuffer_;
         Microsoft::WRL::ComPtr<ID3D11UnorderedAccessView> storageUav_;
+        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> storageSrv_;
         std::size_t byteSize_ = 0;
         std::uint32_t usage_ = 0;
         std::uint32_t cpuAccess_ = 0;

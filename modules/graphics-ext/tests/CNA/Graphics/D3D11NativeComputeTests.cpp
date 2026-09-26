@@ -11,7 +11,17 @@
 #include "CNA/GraphicsImageAccess.hpp"
 #include "CNA/RendererCapabilityProfile.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "System/NotSupportedException.hpp"
 #include "EngineTestSupport.hpp"
 
 #include <algorithm>
@@ -22,6 +32,7 @@
 #ifdef CNA_RENDERER_DIRECTX11
 #include "CNA/Internal/Renderers/DirectX11/D3D11ComputeShader.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11EffectRenderer.hpp"
+#include "CNA/Internal/Renderers/DirectX11/D3D11IndirectBuffer.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11StorageTexture2D.hpp"
 #include "CNA/Internal/Renderers/DirectX11/DirectX11Renderer.hpp"
 #endif
@@ -53,6 +64,7 @@ void main(uint3 id : SV_DispatchThreadID)
     uint byteOffset = id.x * 4;
     Values.Store(byteOffset, Values.Load(byteOffset) * 2);
 }
+
 )");
     CNA::Graphics::ComputeShader shader(device, source);
     shader.bindStorageBuffer(0, buffer);
@@ -64,6 +76,172 @@ void main(uint3 id : SV_DispatchThreadID)
         EXPECT_EQ(actual[i], input[i] * 2) << "element " << i;
 }
 
+TEST(D3D11NativeComputeTest, ComputeWriteReachesVertexStorageRead)
+{
+    using Microsoft::Xna::Framework::Color;
+    using Microsoft::Xna::Framework::Vector3;
+    using Microsoft::Xna::Framework::Graphics::DepthStencilState;
+    using Microsoft::Xna::Framework::Graphics::PrimitiveType;
+    using Microsoft::Xna::Framework::Graphics::RasterizerState;
+    using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
+    using Microsoft::Xna::Framework::Graphics::ShaderEffect;
+    using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
+    CnaTest::EngineLayer::HiDefDevice device;
+    if (device.GetGraphicsRendererName() != "DIRECTX11")
+        GTEST_SKIP() << "this raw vertex-storage probe targets DirectX 11";
+    ASSERT_GE(device.GetRenderer().GetMaxVertexShaderStorageBlocksEXT(), 7);
+
+    CNA::Graphics::StorageBuffer buffer(device, 16);
+    const float input = 0.25f;
+    buffer.setBytes(&input, sizeof(input));
+    const CNA::Graphics::ShaderCodeEXT computeSource(
+        CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Compute,
+        "main", "D3D11VertexStorageWrite.hlsl", R"HLSL(
+RWByteAddressBuffer Values : register(u0);
+[numthreads(1, 1, 1)]
+void main(uint3 id : SV_DispatchThreadID)
+{
+    Values.Store(0, asuint(asfloat(Values.Load(0)) * 2.0f));
+}
+)HLSL");
+    CNA::Graphics::ComputeShader compute(device, computeSource);
+    compute.bindStorageBuffer(0, buffer);
+    compute.dispatch(1);
+
+    ShaderEffect effect(device, R"HLSL(
+ByteAddressBuffer Values : register(t6);
+struct Input { float3 position : POSITION; float4 color : COLOR; };
+struct Output { float4 position : SV_Position; float4 color : COLOR0; };
+Output main(Input input)
+{
+    Output output;
+    output.position = float4(input.position, 1.0f);
+    output.color = float4(asfloat(Values.Load(0)), 0.0f, 0.0f, 1.0f);
+    return output;
+}
+)HLSL", R"HLSL(
+float4 main(float4 position : SV_Position, float4 color : COLOR0) : SV_Target0
+{
+    return color;
+}
+)HLSL");
+    ASSERT_TRUE(effect.IsEffectValid()) << effect.GetCompileErrorEXT();
+
+    constexpr int size = 64;
+    RenderTarget2D target(device, size, size);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    const std::array<VertexPositionColor, 3> triangle{
+        VertexPositionColor(Vector3(-1.0f, -1.0f, 0.0f), Color::White),
+        VertexPositionColor(Vector3(-1.0f, 3.0f, 0.0f), Color::White),
+        VertexPositionColor(Vector3(3.0f, -1.0f, 0.0f), Color::White),
+    };
+    effect.Apply();
+    EXPECT_THROW(
+        device.DrawUserPrimitives(
+            PrimitiveType::TriangleList, triangle.data(), 0, 1),
+        System::NotSupportedException);
+    device.GetRenderer().BindStorageBufferForDrawEXT(6, *buffer.getRendererEXT());
+    device.DrawUserPrimitives(PrimitiveType::TriangleList, triangle.data(), 0, 1);
+    device.SetRenderTarget(nullptr);
+
+    std::array<Color, size * size> pixels{};
+    target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+    const Color centre = pixels[(size / 2) * size + size / 2];
+    EXPECT_NEAR(centre.getRProperty(), 128, 3);
+    EXPECT_EQ(centre.getGProperty(), 0);
+    EXPECT_EQ(centre.getBProperty(), 0);
+
+    ShaderEffect pixelEffect(device, R"HLSL(
+struct Input { float3 position : POSITION; float4 color : COLOR; };
+struct Output { float4 position : SV_Position; float4 color : COLOR0; };
+Output main(Input input)
+{
+    Output output;
+    output.position = float4(input.position, 1.0f);
+    output.color = input.color;
+    return output;
+}
+)HLSL", R"HLSL(
+ByteAddressBuffer Values : register(t6);
+float4 main(float4 position : SV_Position, float4 color : COLOR0) : SV_Target0
+{
+    return float4(0.0f, asfloat(Values.Load(0)), 0.0f, 1.0f);
+}
+)HLSL");
+    ASSERT_TRUE(pixelEffect.IsEffectValid()) << pixelEffect.GetCompileErrorEXT();
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    pixelEffect.Apply();
+    device.DrawUserPrimitives(PrimitiveType::TriangleList, triangle.data(), 0, 1);
+    device.SetRenderTarget(nullptr);
+    target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+    const Color pixelStageCentre = pixels[(size / 2) * size + size / 2];
+    EXPECT_EQ(pixelStageCentre.getRProperty(), 0);
+    EXPECT_NEAR(pixelStageCentre.getGProperty(), 128, 3);
+    EXPECT_EQ(pixelStageCentre.getBProperty(), 0);
+
+    Microsoft::Xna::Framework::Graphics::Texture2D sampled(device, 1, 1);
+    const Color blue = Color::Blue;
+    sampled.SetData(&blue, 1);
+    ShaderEffect textureEffect(device, R"HLSL(
+Texture2D<float4> Source : register(t0);
+SamplerState SourceSampler : register(s0);
+struct Input { float3 position : POSITION; float4 color : COLOR; };
+struct Output { float4 position : SV_Position; float4 color : COLOR0; };
+Output main(Input input)
+{
+    Output output;
+    output.position = float4(input.position, 1.0f);
+    output.color = Source.SampleLevel(SourceSampler, float2(0.5f, 0.5f), 0.0f);
+    return output;
+}
+)HLSL", R"HLSL(
+float4 main(float4 position : SV_Position, float4 color : COLOR0) : SV_Target0
+{
+    return color;
+}
+)HLSL");
+    ASSERT_TRUE(textureEffect.IsEffectValid()) << textureEffect.GetCompileErrorEXT();
+    textureEffect.SetTexture(0, sampled);
+    device.getSamplerStatesProperty()[0] =
+        Microsoft::Xna::Framework::Graphics::SamplerState::PointClamp;
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    textureEffect.Apply();
+    device.DrawUserPrimitives(PrimitiveType::TriangleList, triangle.data(), 0, 1);
+    device.SetRenderTarget(nullptr);
+    target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+    const Color textureStageCentre = pixels[(size / 2) * size + size / 2];
+    EXPECT_EQ(textureStageCentre.getRProperty(), 0);
+    EXPECT_EQ(textureStageCentre.getGProperty(), 0);
+    EXPECT_EQ(textureStageCentre.getBProperty(), 255);
+
+#ifdef CNA_RENDERER_DIRECTX11
+    auto* renderer = dynamic_cast<
+        CNA::Internal::Renderers::DirectX11::DirectX11Renderer*>(
+            &device.GetRenderer());
+    auto* native = dynamic_cast<
+        CNA::Internal::Renderers::DirectX11::D3D11IndirectBuffer*>(
+            buffer.getRendererEXT());
+    ASSERT_NE(renderer, nullptr);
+    ASSERT_NE(native, nullptr);
+    ID3D11ShaderResourceView* expected = native->GetShaderResourceViewEXT();
+    renderer->GetContextEXT()->VSSetShaderResources(6, 1, &expected);
+    compute.dispatch(1);
+    ID3D11ShaderResourceView* restored = nullptr;
+    renderer->GetContextEXT()->VSGetShaderResources(6, 1, &restored);
+    EXPECT_EQ(restored, expected);
+    if (restored) restored->Release();
+    ID3D11ShaderResourceView* empty = nullptr;
+    renderer->GetContextEXT()->VSSetShaderResources(6, 1, &empty);
+    float doubledAgain = 0.0f;
+    buffer.getBytes(&doubledAgain, sizeof(doubledAgain));
+    EXPECT_FLOAT_EQ(doubledAgain, 1.0f);
+#endif
+}
 TEST(D3D11NativeComputeTest, StorageImageTransfersPreserveMipsAndRectangles)
 {
     using CNA::Graphics::StorageTexture2D;

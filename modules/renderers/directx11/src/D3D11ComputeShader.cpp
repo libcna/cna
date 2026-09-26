@@ -241,6 +241,8 @@ namespace CNA::Internal::Renderers::DirectX11
 
         std::array<ID3D11ShaderResourceView*, kTextureSlots> previousPixelResources{};
         std::array<ID3D11ShaderResourceView*, kTextureSlots> emptyPixelResources{};
+        std::array<ID3D11ShaderResourceView*, kTextureSlots> previousVertexResources{};
+        std::array<ID3D11ShaderResourceView*, kTextureSlots> emptyVertexResources{};
         if (std::any_of(nativeUavs.begin(), nativeUavs.end(),
                         [](const auto* view) { return view != nullptr; }))
         {
@@ -250,6 +252,10 @@ namespace CNA::Internal::Renderers::DirectX11
                                            previousPixelResources.data());
             context_->PSSetShaderResources(0, static_cast<UINT>(kTextureSlots),
                                            emptyPixelResources.data());
+            context_->VSGetShaderResources(0, static_cast<UINT>(kTextureSlots),
+                                           previousVertexResources.data());
+            context_->VSSetShaderResources(0, static_cast<UINT>(kTextureSlots),
+                                           emptyVertexResources.data());
         }
 
         Bind();
@@ -281,7 +287,15 @@ namespace CNA::Internal::Renderers::DirectX11
             context_->PSSetShaderResources(0, static_cast<UINT>(kTextureSlots),
                                            previousPixelResources.data());
         }
+        if (std::any_of(previousVertexResources.begin(), previousVertexResources.end(),
+                        [](const auto* view) { return view != nullptr; }))
+        {
+            context_->VSSetShaderResources(0, static_cast<UINT>(kTextureSlots),
+                                           previousVertexResources.data());
+        }
         for (auto* view : previousPixelResources)
+            if (view) view->Release();
+        for (auto* view : previousVertexResources)
             if (view) view->Release();
     }
 }

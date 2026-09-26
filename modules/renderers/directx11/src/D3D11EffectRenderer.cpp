@@ -21,6 +21,46 @@ namespace CNA::Internal::Renderers::DirectX11
             std::snprintf(buf, sizeof(buf), "0x%08lX", static_cast<unsigned long>(hr));
             return buf;
         }
+
+        bool ReflectStageResources(ID3DBlob* bytecode, std::uint32_t& textures,
+                                   std::uint32_t& storage, std::string& error)
+        {
+            ComPtr<ID3D11ShaderReflection> shader;
+            if (FAILED(D3DReflect(bytecode->GetBufferPointer(), bytecode->GetBufferSize(),
+                                  __uuidof(ID3D11ShaderReflection),
+                                  reinterpret_cast<void**>(shader.GetAddressOf()))) ||
+                !shader)
+            {
+                error = "DirectX11 could not reflect ShaderEffect stage resources.";
+                return false;
+            }
+            D3D11_SHADER_DESC description{};
+            if (FAILED(shader->GetDesc(&description)))
+            {
+                error = "DirectX11 could not inspect ShaderEffect stage resources.";
+                return false;
+            }
+            for (UINT index = 0; index < description.BoundResources; ++index)
+            {
+                D3D11_SHADER_INPUT_BIND_DESC binding{};
+                if (FAILED(shader->GetResourceBindingDesc(index, &binding)))
+                    continue;
+                if (binding.Type != D3D_SIT_TEXTURE &&
+                    binding.Type != D3D_SIT_BYTEADDRESS)
+                    continue;
+                if (binding.BindCount == 0 || binding.BindPoint >= 16 ||
+                    binding.BindCount > 16 - binding.BindPoint)
+                {
+                    error = "DirectX11 ShaderEffect resource register exceeds 16 slots.";
+                    return false;
+                }
+                auto& mask = binding.Type == D3D_SIT_TEXTURE ? textures : storage;
+                for (UINT slot = binding.BindPoint;
+                     slot < binding.BindPoint + binding.BindCount; ++slot)
+                    mask |= UINT32_C(1) << slot;
+            }
+            return true;
+        }
     }
 
     D3D11EffectRenderer::D3D11EffectRenderer(ID3D11Device* device, ID3D11DeviceContext* context)
@@ -45,6 +85,9 @@ namespace CNA::Internal::Renderers::DirectX11
             R"(:\s*SV_InstanceID\b)", std::regex_constants::icase);
         hasInstanceIdInput_ = std::regex_search(vertSrc, instanceIdSemantic);
         reflection_.Reset();
+        vertexTextureSlots_ = 0;
+        vertexStorageSlots_ = 0;
+        pixelStorageSlots_ = 0;
         constantBuffers_ = {};
         textures_ = {};
 
@@ -78,6 +121,12 @@ namespace CNA::Internal::Renderers::DirectX11
                 vsBytecode_->GetBufferPointer(), vsBytecode_->GetBufferSize(), compileError_) ||
             !reflection_.AddShader(
                 psBytecode_->GetBufferPointer(), psBytecode_->GetBufferSize(), compileError_))
+            return false;
+        std::uint32_t unusedPixelTextures = 0;
+        if (!ReflectStageResources(vsBytecode_.Get(), vertexTextureSlots_,
+                                   vertexStorageSlots_, compileError_) ||
+            !ReflectStageResources(psBytecode_.Get(), unusedPixelTextures,
+                                   pixelStorageSlots_, compileError_))
             return false;
 
         hr = device_->CreateVertexShader(vsBytecode_->GetBufferPointer(), vsBytecode_->GetBufferSize(),
@@ -175,6 +224,13 @@ namespace CNA::Internal::Renderers::DirectX11
         for (int slot = 0; slot < reflection_.GetShaderResourceCount(); ++slot)
             srvs[static_cast<std::size_t>(slot)] = ResolveTextureSrvEXT(slot);
         const UINT resourceCount = static_cast<UINT>(reflection_.GetShaderResourceCount());
+        std::array<ID3D11ShaderResourceView*,
+                   D3DCommon::D3DProgramReflection::kMaxShaderResources> vertexSrvs{};
+        for (int slot = 0; slot < static_cast<int>(vertexSrvs.size()); ++slot)
+            if ((vertexTextureSlots_ & (UINT32_C(1) << slot)) != 0)
+                vertexSrvs[static_cast<std::size_t>(slot)] = ResolveTextureSrvEXT(slot);
+        context_->VSSetShaderResources(
+            0, static_cast<UINT>(vertexSrvs.size()), vertexSrvs.data());
         if (resourceCount > 0)
         {
             if (!preserveImplicitTexture0 || textures_[0].explicitlySet)

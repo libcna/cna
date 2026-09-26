@@ -112,6 +112,18 @@ namespace CNA::Internal::Renderers::D3DCommon
                 continue;
             }
 
+            if (binding.Type == D3D_SIT_BYTEADDRESS)
+            {
+                if (binding.BindCount == 0 ||
+                    binding.BindCount > kMaxShaderResources ||
+                    binding.BindPoint > kMaxShaderResources - binding.BindCount)
+                {
+                    error = "Runtime HLSL byte-buffer register range exceeds 16 slots";
+                    return false;
+                }
+                continue;
+            }
+
             if (binding.Type == D3D_SIT_SAMPLER)
             {
                 if (binding.BindCount == 0 || binding.BindCount > kMaxSamplers ||

@@ -856,3 +856,66 @@ cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraph
 $env:CNA_D3D11_DEBUG_LAYER='1'
 & C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=EffectPassTest.AnAdaptedEffectRunsInsideAChain:CRTEffectTest.*' 2>&1 | Out-File C:\rv\logs\dx11-crt-effectpass-focused.log
 ```
+
+## DX11 vertex shader storage inputs, 2026-09-26
+
+WIN11-0037: D3D11 raw storage buffers now have both UAV and SRV views. Custom
+HLSL ShaderEffect reflection recognizes `ByteAddressBuffer` slots independently
+for vertex and pixel stages; the renderer binds only the requested raw SRVs
+alongside sampled textures, then clears them after a draw. Native compute
+dispatch saves, clears, and restores vertex SRVs while it writes UAVs, extending
+the existing pixel-stage hazard handling. The renderer reports 16 vertex
+storage slots only on an active feature-level-11 device and retains bound
+buffers across draw submission. Device recreation releases those bindings.
+
+A physical Intel pixel regression performs a compute write, vertex storage
+read, pixel storage read, vertex texture sample, another compute write with a
+previous vertex SRV bound, and CPU readback. It also checks that a required
+but unbound draw storage slot is rejected. The focused run passed **1/1**
+(`C:\rv\logs\dx11-vertex-storage-focused-5.log`). A related run of compute,
+shader-package, GPU culling, particles, and indirect draw tests completed
+**32 pass, 11 skip, 0 fail** across 43 cases
+(`C:\rv\logs\dx11-vertex-storage-related-1.log`). The six GPU culler cases
+still skipped because its production package had no HLSL variant; the three
+particle GPU cases likewise lacked HLSL packages. These skips are follow-up
+work, not a claim of native execution. Both runs selected physical Intel Iris Xe
+PCI `8086:46A6`, `software=0`, feature level 11_1 and emitted zero D3D11
+debug-layer warnings/errors. Build log:
+`C:\rv\logs\dx11-vertex-storage-build-6.log`.
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsExtTests --parallel 4
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=D3D11NativeComputeTest.ComputeWriteReachesVertexStorageRead' 2>&1 | Out-File C:\rv\logs\dx11-vertex-storage-focused-5.log
+& C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=D3D11NativeComputeTest.*:ShaderPackageSelectionEXTTest.RequiredVertexStorageBindingIsCapabilityChecked:GpuInstanceCullerTest.*:ParticleSystemTest.*:IndirectDrawTest.*' 2>&1 | Out-File C:\rv\logs\dx11-vertex-storage-related-1.log
+```
+
+The complete rebuilt DX11 CNAEXT binary ran **981 tests from 125 suites** in
+1,880,878 ms: **894 pass, 87 skip, 0 fail**
+(`C:\rv\logs\dx11-vertex-storage-full-1.log`). It selected the physical
+Intel adapter PCI `8086:46A6` with `software=0` **680 times**, never selected
+WARP, and emitted **zero D3D11 debug warnings/errors**. The new storage pixel
+regression passed in both focused and complete runs. The 87 skips include
+capability-opposite controls and still-open modern shader/effect work; they
+are not counted as passes. This full binary does not include the separate
+culler HLSL package work.
+
+```powershell
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 7200000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no' 2>&1 | Out-File C:\rv\logs\dx11-vertex-storage-full-1.log
+```
+
+After relinking the classic graphics binary, its affected `ShaderEffectTest`,
+`EffectApplyTest`, and `DrawRouteValidation` cases passed **22/22** on the
+physical Intel adapter, with **22** explicit hardware selections and zero
+D3D11 debug warnings/errors
+(`C:\rv\logs\dx11-vertex-storage-classic-focused.log`; build log
+`C:\rv\logs\dx11-vertex-storage-classic-build.log`). The ShaderEffect tests
+intentionally compile an invalid source in a negative case; its expected
+compiler diagnostic is not a D3D11 debug-layer error.
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsTests --parallel 4
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsTests.exe --gtest_color=no --gtest_filter=ShaderEffectTest.*:EffectApplyTest.*:DrawRouteValidation.*' 2>&1 | Out-File C:\rv\logs\dx11-vertex-storage-classic-focused.log
+```

@@ -871,6 +871,7 @@ namespace CNA::Internal::Renderers::DirectX11
         perDrawConstantBuffer_.Reset();
         logicalInstanceIdBuffer_.Reset();
         logicalInstanceIdCapacity_ = 0;
+        drawStorageBuffers_.fill(nullptr);
         fogConstantBuffer_.Reset();
         lightingConstantBuffer_.Reset();
         alphaTestConstantBuffer_.Reset();
@@ -1532,6 +1533,61 @@ namespace CNA::Internal::Renderers::DirectX11
                featureLevel_ >= D3D_FEATURE_LEVEL_11_0;
     }
 
+    int DirectX11Renderer::GetMaxVertexShaderStorageBlocksEXT() const
+    {
+        return device_ != nullptr && featureLevel_ >= D3D_FEATURE_LEVEL_11_0
+            ? static_cast<int>(drawStorageBuffers_.size()) : 0;
+    }
+
+    void DirectX11Renderer::BindStorageBufferForDrawEXT(
+        int binding, const IStorageBufferRenderer& buffer)
+    {
+        const auto* native = dynamic_cast<const D3D11IndirectBuffer*>(&buffer);
+        if (binding < 0 || binding >= GetMaxVertexShaderStorageBlocksEXT() ||
+            native == nullptr || native->GetDeviceEXT() != device_.Get() ||
+            native->GetShaderResourceViewEXT() == nullptr)
+            throw System::NotSupportedException(
+                "DirectX11 draw storage binding needs a same-device raw storage buffer "
+                "and a t-register from zero through fifteen.");
+        drawStorageBuffers_[static_cast<std::size_t>(binding)] =
+            buffer.shared_from_this();
+    }
+
+    void DirectX11Renderer::BindStorageInputsForEffectEXT(
+        const D3D11EffectRenderer& effect)
+    {
+        const std::uint32_t vertex = effect.GetVertexStorageSlotsEXT();
+        const std::uint32_t pixel = effect.GetPixelStorageSlotsEXT();
+        for (std::size_t slot = 0; slot < drawStorageBuffers_.size(); ++slot)
+        {
+            const std::uint32_t bit = UINT32_C(1) << slot;
+            if (((vertex | pixel) & bit) == 0)
+                continue;
+            const auto* native = dynamic_cast<const D3D11IndirectBuffer*>(
+                drawStorageBuffers_[slot].get());
+            if (native == nullptr || native->GetShaderResourceViewEXT() == nullptr)
+                throw System::NotSupportedException(
+                    "DirectX11 ShaderEffect uses an unbound raw storage t-register " +
+                    std::to_string(slot) + '.');
+            ID3D11ShaderResourceView* srv = native->GetShaderResourceViewEXT();
+            if ((vertex & bit) != 0)
+                context_->VSSetShaderResources(static_cast<UINT>(slot), 1, &srv);
+            if ((pixel & bit) != 0)
+                context_->PSSetShaderResources(static_cast<UINT>(slot), 1, &srv);
+        }
+    }
+
+    void DirectX11Renderer::ClearStorageInputsAfterEffectEXT(
+        const D3D11EffectRenderer& effect)
+    {
+        ID3D11ShaderResourceView* empty[16]{};
+        context_->VSSetShaderResources(0, 16, empty);
+        const std::uint32_t pixel = effect.GetPixelStorageSlotsEXT();
+        for (UINT slot = 0; slot < 16; ++slot)
+            if ((pixel & (UINT32_C(1) << slot)) != 0)
+                context_->PSSetShaderResources(slot, 1, empty);
+    }
+
     std::unique_ptr<IStorageBufferRenderer> DirectX11Renderer::CreateStorageBufferEXT(
         std::size_t byteSize, std::uint32_t usage, std::uint32_t cpuAccess)
     {
@@ -2022,6 +2078,7 @@ namespace CNA::Internal::Renderers::DirectX11
             samplerLodBias_[slot]);
         ID3D11SamplerState* raw = sampler.Get();
         context_->PSSetSamplers(static_cast<UINT>(slot), 1, &raw);
+        context_->VSSetSamplers(static_cast<UINT>(slot), 1, &raw);
     }
 
     std::unique_ptr<IOcclusionQueryRenderer> DirectX11Renderer::CreateOcclusionQuery()
@@ -2907,6 +2964,7 @@ namespace CNA::Internal::Renderers::DirectX11
                 throw System::NotSupportedException(
                     "DirectX11 could not match the ShaderEffect vertex signature to the bound "
                     "VertexDeclaration.");
+            BindStorageInputsForEffectEXT(*customEffect);
 
             BindVertexStreams(context_.Get(), d3dVb, params);
             if (ib != nullptr)
@@ -2929,6 +2987,7 @@ namespace CNA::Internal::Renderers::DirectX11
                                       static_cast<INT>(params.baseVertex));
             else
                 context_->Draw(elementCount, static_cast<UINT>(params.vertexStart));
+            ClearStorageInputsAfterEffectEXT(*customEffect);
             return;
         }
 
@@ -3838,6 +3897,7 @@ namespace CNA::Internal::Renderers::DirectX11
                 throw System::NotSupportedException(
                     "DirectX11 could not match the instanced ShaderEffect vertex signature "
                     "to the bound vertex streams: " + customEffect->GetCompileError());
+            BindStorageInputsForEffectEXT(*customEffect);
 
             if (logicalIdStreamActive)
             {
@@ -3889,6 +3949,7 @@ namespace CNA::Internal::Renderers::DirectX11
             context_->IASetPrimitiveTopology(ToD3D11Topology(primitive));
             drawWithFirstInstance(static_cast<UINT>(
                 VertexCountForPrimitives(primitive, primitiveCount)));
+            ClearStorageInputsAfterEffectEXT(*customEffect);
             return;
         }
         if (instanceStream == nullptr)

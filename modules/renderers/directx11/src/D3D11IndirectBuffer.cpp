@@ -27,7 +27,8 @@ namespace CNA::Internal::Renderers::DirectX11
         description.Usage = D3D11_USAGE_DEFAULT;
         if (storage)
         {
-            description.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
+            description.BindFlags = D3D11_BIND_UNORDERED_ACCESS |
+                                    D3D11_BIND_SHADER_RESOURCE;
             description.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS;
         }
         else if (indirect)
@@ -45,6 +46,15 @@ namespace CNA::Internal::Renderers::DirectX11
             if (FAILED(device_->CreateUnorderedAccessView(
                     buffer_.Get(), &view, storageUav_.GetAddressOf())))
                 throw std::runtime_error("D3D11 storage buffer: raw UAV creation failed");
+
+            D3D11_SHADER_RESOURCE_VIEW_DESC sampled{};
+            sampled.Format = DXGI_FORMAT_R32_TYPELESS;
+            sampled.ViewDimension = D3D11_SRV_DIMENSION_BUFFEREX;
+            sampled.BufferEx.NumElements = description.ByteWidth / 4;
+            sampled.BufferEx.Flags = D3D11_BUFFEREX_SRV_FLAG_RAW;
+            if (FAILED(device_->CreateShaderResourceView(
+                    buffer_.Get(), &sampled, storageSrv_.GetAddressOf())))
+                throw std::runtime_error("D3D11 storage buffer: raw SRV creation failed");
         }
 
         if (storage && indirect)

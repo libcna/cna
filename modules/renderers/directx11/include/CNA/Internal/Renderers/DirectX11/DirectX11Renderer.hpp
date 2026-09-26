@@ -15,6 +15,7 @@
 #include <wrl/client.h>
 
 #include <cstddef>
+#include <array>
 #include <functional>
 #include <memory>
 #include <unordered_map>
@@ -36,6 +37,7 @@ namespace CNA::Internal::Renderers::DirectX11
     class D3D11RenderTargetRenderer;
     class D3D11RenderTargetCubeRenderer;
     class D3D11VertexBufferRenderer;
+    class D3D11EffectRenderer;
 #if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
     class D3D11CompiledEffect;
 #endif
@@ -233,6 +235,18 @@ namespace CNA::Internal::Renderers::DirectX11
          * @return True when this D3D11 device supports instanced input.
          */
         [[nodiscard]] bool SupportsBaseInstanceDrawingEXT() const override;
+        /**
+         * @brief Reports how many raw storage-buffer registers a vertex shader can read.
+         * @return Sixteen on a live feature-level-11 device, otherwise zero.
+         */
+        [[nodiscard]] int GetMaxVertexShaderStorageBlocksEXT() const override;
+        /**
+         * @brief Retains a native raw buffer for a following custom graphics draw.
+         * @param binding Vertex or pixel shader t-register, zero through fifteen.
+         * @param buffer Storage buffer owned by this D3D11 device.
+         */
+        void BindStorageBufferForDrawEXT(
+            int binding, const IStorageBufferRenderer& buffer) override;
         /**
          * @brief Creates a buffer for indirect arguments and byte transfers.
          * @param byteSize Logical allocation size in bytes.
@@ -702,6 +716,8 @@ namespace CNA::Internal::Renderers::DirectX11
 #endif
 
     private:
+        void BindStorageInputsForEffectEXT(const D3D11EffectRenderer& effect);
+        void ClearStorageInputsAfterEffectEXT(const D3D11EffectRenderer& effect);
         std::shared_ptr<void> lifetimeToken_ = std::make_shared<int>(0);
 
         void CreateDeviceResources();
@@ -919,6 +935,8 @@ namespace CNA::Internal::Renderers::DirectX11
         ComPtr<ID3D11Buffer> perDrawConstantBuffer_;
         ComPtr<ID3D11Buffer> logicalInstanceIdBuffer_;
         UINT logicalInstanceIdCapacity_ = 0;
+        std::array<std::shared_ptr<const IStorageBufferRenderer>, 16>
+            drawStorageBuffers_{};
         ComPtr<ID3D11Buffer> fogConstantBuffer_;
         ID3D11Buffer* GetOrCreatePerDrawConstantBufferEXT();
         ID3D11Buffer* GetOrCreateFogConstantBufferEXT();
