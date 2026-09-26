@@ -6,6 +6,8 @@ DX12 classic have both been revalidated after adding plural cube-face MRT.
 DX11 modern CNAEXT has completed its full Intel test run. DX12 modern
 CNAEXT evaluation is active; implementation remains open. Opt-in compiled
 XNA effects now pass their DX11 and DX12 renderer suites on Intel (WIN11-0066).
+DX12 modern GPU timestamps and pass timing now pass focused hardware tests
+(WIN11-0067).
 The large DX12 descriptor fixture under Intel GPU-based validation remains a recorded
 exception (WIN11-0025). Modern parity and application validation remain open.
 
@@ -2305,3 +2307,52 @@ $env:CNA_D3D12_GPU_VALIDATION='1'
 
 This completes optional compiled XNA effect coverage for this task. DX12
 modern Texture2DArray, storage images, GPU timing, and shadow/IBL remain open.
+
+### WIN11-0067: Native DX12 GPU timestamps and asynchronous pass timing
+
+The current `IGpuTimerRenderer` contract requires real GPU nanoseconds and
+nonblocking completion. Before this task, physical Intel DX12 reported no
+timer support: the `GpuTimerTest.*:PassTimingTest.*` run had **8 pass / 8 skip**
+(`C:\rv\logs\dx12-modern-gpu-timer-baseline-1.log`). The DX12 renderer now
+checks its direct queue's timestamp frequency, records two native timestamp
+queries in the existing frame command list, resolves them into a readback
+buffer, and checks the frame fence before mapping. No timer operation submits
+a frame or waits for the GPU. The timestamp heap and readback buffer are
+retained until the frame fence; device recreation releases and rebuilds them.
+A pending range invalidated by recreation becomes a completed zero-duration
+sample, allowing the public four-slot `GpuTimer` ring to resume.
+
+The same 16 renderer-neutral timing tests now report **13 pass / 3 skip / 0
+fail** (`C:\rv\logs\dx12-modern-gpu-timer-first-1.log`). All three skips
+are inverse probes for an unsupported timer. GPU time follows the workload:
+four, 40 and 160 full-screen draws measured **0.4253, 4.1308 and 16.4845 ms**
+respectively; the encompassing CPU wall times were **5.5159, 41.9994 and
+93.7890 ms**. Named Tonemap and FXAA pass timing and final-image isolation
+also pass. A rebuilt combined run of all 18 tests finished at **15 pass / 3
+inverse-capability skips / 0 fail**
+(`C:\rv\logs\dx12-modern-gpu-timer-combined-final-1.log`). Two DX12-specific regressions passed **2/2**: disposing a queued
+timer adds no GPU wait/submission and still allows Present, and a pending
+range plus a later fresh range survive explicit device recreation
+(`C:\rv\logs\dx12-modern-gpu-timer-recovery-2.log`). Targeted GPU-based
+validation passed **4/4** across native lifetime/recovery, public timing and
+named pass timing (`C:\rv\logs\dx12-modern-gpu-timer-gbv-1.log`). All runs
+selected hardware Intel Iris Xe `8086:46A6`, feature level 12_1, with
+`CNA_D3D12_ADAPTER=hardware`, debug layer and DRED enabled. No debug/GPU
+validation warning, error, device removal or DRED fault appeared. The full
+1,003-test modern binary was last run after WIN11-0065, so these are focused
+post-timer counts, not a new full-suite claim.
+
+```powershell
+cmake -S C:\rv\src\cna -B C:\rv\build\cna-win11-dx12-modern
+cmake --build C:\rv\build\cna-win11-dx12-modern --config Debug --target cna_graphics_ext_test_objects CnaGraphicsExtTests --parallel 4
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='0'
+& C:\rv\work\private_desktop_awake.exe 900000 '"C:\rv\build\cna-win11-dx12-modern\Debug\CnaGraphicsExtTests.exe" --gtest_color=no --gtest_filter=GpuTimerTest.*:PassTimingTest.*:D3D12GpuTimerTest.*'
+$env:CNA_D3D12_GPU_VALIDATION='1'
+& C:\rv\work\private_desktop_awake.exe 900000 '"C:\rv\build\cna-win11-dx12-modern\Debug\CnaGraphicsExtTests.exe" --gtest_color=no --gtest_filter=D3D12GpuTimerTest.*:GpuTimerTest.AClosedRangeEventuallyReportsANonNegativeTime:PassTimingTest.EachPassReportsItsOwnNameAndItsOwnTime'
+```
+
+Modern DX12 sampled Texture2DArray, writable storage images, and shadow/IBL
+remain open.

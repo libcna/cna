@@ -11,6 +11,7 @@
 #include "CNA/Internal/Renderers/DirectX12/D3D12RenderTargets.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12SpriteBatch.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12OcclusionQuery.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12GpuTimer.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12EffectRenderer.hpp"
 #if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
 #include "CNA/Internal/Renderers/DirectX12/D3D12CompiledEffect.hpp"
@@ -3217,6 +3218,19 @@ namespace CNA::Internal::Renderers::DirectX12
     std::unique_ptr<IOcclusionQueryRenderer> DirectX12Renderer::CreateOcclusionQuery()
     {
         return std::make_unique<D3D12OcclusionQueryRenderer>(this);
+    }
+
+    bool DirectX12Renderer::SupportsGpuTimerEXT() const
+    {
+        UINT64 frequency = 0;
+        return commandQueue_ && SUCCEEDED(commandQueue_->GetTimestampFrequency(&frequency)) &&
+               frequency != 0;
+    }
+
+    std::unique_ptr<IGpuTimerRenderer> DirectX12Renderer::CreateGpuTimerEXT()
+    {
+        if (!SupportsGpuTimerEXT()) return nullptr;
+        return std::make_unique<D3D12GpuTimer>(this);
     }
 
     std::unique_ptr<IEffectRenderer> DirectX12Renderer::CreateEffectRenderer(

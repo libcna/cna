@@ -357,6 +357,16 @@ namespace CNA::Internal::Renderers::DirectX12
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
         /// DX-120: real D3D12OcclusionQueryRenderer, no longer the inherited default (-> nullptr).
         std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
+        /**
+         * @brief Reports whether the direct queue exposes native GPU timestamps.
+         * @return True when GPU timestamp queries can be created.
+         */
+        [[nodiscard]] bool SupportsGpuTimerEXT() const override;
+        /**
+         * @brief Creates a native D3D12 GPU timestamp timer.
+         * @return A timestamp query timer, or null when unsupported.
+         */
+        std::unique_ptr<IGpuTimerRenderer> CreateGpuTimerEXT() override;
         /// DX-121: real D3D12EffectRenderer, no longer the inherited default (-> nullptr). Mirrors
         /// DirectX11Renderer::CreateEffectRenderer's own convention: if both sources are
         /// non-empty, compiles immediately and returns the renderer regardless of compile success
