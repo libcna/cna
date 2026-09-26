@@ -52,6 +52,7 @@
 using namespace CNA::Testing::Renderers;
 
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/RendererCapabilityProfile.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -75,6 +76,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SetDataOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
@@ -2061,4 +2063,205 @@ TEST_F(InstancedDrawRangeTest, D3DHonorsBindingOffsetsAndInstanceFrequency)
     // plans/plan_runtimerenderer.md RTR-P9-5: the same contract, pinned on the two D3D renderers.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11, DirectX12);
     RunBindingOffsetAndFrequencyOracle();
+}
+
+TEST_F(InstancedDrawRangeTest, D3D11BaseInstanceSelectsAbsoluteInstanceRecords)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11);
+    ASSERT_TRUE(device.SupportsRendererFeatureEXT(CNA::RendererFeature::BaseInstanceDrawing));
+    RequireInstancedRendering();
+
+    const GridLayout layout = BackbufferLayout();
+    const InstancedFixture fixture = BuildFixture(layout);
+    constexpr int kElementCount = kSlotCount * kVerticesPerSlot;
+    VertexBuffer meshBuffer(
+        device, PositionColorDeclaration(), kElementCount, BufferUsage::None);
+    meshBuffer.SetData(fixture.mesh.data(), kElementCount);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, kElementCount, BufferUsage::None);
+    indexBuffer.SetData(fixture.indices.data(), kElementCount);
+    DynamicVertexBuffer instanceBuffer(
+        device, InstanceMatrixDeclaration(), static_cast<int>(fixture.instances.size()),
+        BufferUsage::None);
+    instanceBuffer.SetDataRaw(
+        fixture.instances.data(), static_cast<int>(fixture.instances.size()),
+        static_cast<int>(sizeof(InstanceMatrix)));
+    BasicEffect effect(device);
+    device.SetIndexBuffer(&indexBuffer);
+
+    const auto draw = [&](const int firstInstance) {
+        ApplyInstancedEffect(effect);
+        device.Clear(Color::Black);
+        device.SetVertexBuffers({
+            VertexBufferBinding(&meshBuffer, 0, 0),
+            VertexBufferBinding(&instanceBuffer, 0, 2),
+        });
+        device.DrawInstancedPrimitivesBaseInstanceEXT(
+            PrimitiveType::TriangleList, 0, 0, kElementCount, 9, 1, 2,
+            firstInstance);
+        return CaptureBackbuffer(device, layout.width, layout.height);
+    };
+
+    const auto expectRows = [&](const FrameSnapshot& pixels, const bool secondRow,
+                                const char* label) {
+        EXPECT_GT(CountLitInCell(pixels, layout, 3, 1, Color::Black), 0)
+            << label << DescribeLitCellMap(pixels, layout, Color::Black);
+        for (int row : {0, 2, 3})
+            EXPECT_EQ(row == 2 && secondRow ? true : false,
+                      CountLitInCell(pixels, layout, 3, row, Color::Black) > 0)
+                << label << ": wrong logical instance record in row " << row
+                << DescribeLitCellMap(pixels, layout, Color::Black);
+        ExpectColumnsExclusive(
+            pixels, layout, ExpectedRange{3, 1}, Color::Black, label);
+    };
+
+    const FrameSnapshot aligned = draw(2);
+    expectRows(aligned, false, "first instance 2");
+    const FrameSnapshot straddling = draw(3);
+    expectRows(straddling, true, "first instance 3");
+    const FrameSnapshot returned = draw(2);
+    expectRows(returned, false, "first instance 2 after another offset");
+
+    effect.setFogEnabledProperty(true);
+    effect.setFogStartProperty(1000.0f);
+    effect.setFogEndProperty(2000.0f);
+    const FrameSnapshot stockFallback = draw(3);
+    expectRows(stockFallback, true, "fogged stock effect first instance 3");
+}
+
+TEST_F(InstancedDrawRangeTest, D3D11BaseInstanceReachesCustomShaderInstanceId)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11);
+    ASSERT_TRUE(device.SupportsRendererFeatureEXT(CNA::RendererFeature::BaseInstanceDrawing));
+    RequireInstancedRendering();
+
+    const GridLayout layout = BackbufferLayout();
+    const InstancedFixture fixture = BuildFixture(layout);
+    constexpr int kElementCount = kSlotCount * kVerticesPerSlot;
+    VertexBuffer meshBuffer(
+        device, PositionColorDeclaration(), kElementCount, BufferUsage::None);
+    meshBuffer.SetData(fixture.mesh.data(), kElementCount);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, kElementCount, BufferUsage::None);
+    indexBuffer.SetData(fixture.indices.data(), kElementCount);
+    device.SetVertexBuffer(&meshBuffer);
+    device.SetIndexBuffer(&indexBuffer);
+
+    Microsoft::Xna::Framework::Graphics::ShaderEffect effect(
+        device,
+        R"HLSL(struct Input { float3 position : POSITION; float4 color : COLOR;
+                           uint instance : SV_InstanceID; };
+               struct Output { float4 position : SV_Position; float4 color : COLOR0; };
+               Output main(Input input) {
+                   Output output;
+                   output.position = float4(input.position, 1.0f);
+                   output.position.y -= float(input.instance) * 0.5f;
+                   output.color = input.color;
+                   return output;
+               })HLSL",
+        R"HLSL(float4 main(float4 position : SV_Position, float4 color : COLOR0)
+                    : SV_Target0 { return color; })HLSL");
+    ASSERT_TRUE(effect.IsEffectValid()) << effect.GetCompileErrorEXT();
+    const auto draw = [&](const int firstInstance) {
+        device.Clear(Color::Black);
+        effect.Apply();
+        device.DrawInstancedPrimitivesBaseInstanceEXT(
+            PrimitiveType::TriangleList, 0, 0, kElementCount, 9, 1, 2,
+            firstInstance);
+        return CaptureBackbuffer(device, layout.width, layout.height);
+    };
+    const auto expectRows = [&](const FrameSnapshot& pixels, const int firstInstance) {
+        for (int row = 0; row < kRowCount; ++row)
+            EXPECT_EQ(row == firstInstance || row == firstInstance + 1,
+                      CountLitInCell(pixels, layout, 3, row, Color::Black) > 0)
+                << "SV_InstanceID selected the wrong logical instance in row " << row
+                << DescribeLitCellMap(pixels, layout, Color::Black);
+        ExpectColumnsExclusive(
+            pixels, layout, ExpectedRange{3, 1}, Color::Black,
+            "custom ShaderEffect base-instance draw");
+    };
+    expectRows(draw(1), 1);
+    expectRows(draw(0), 0);
+    expectRows(draw(1), 1);
+}
+
+TEST_F(InstancedDrawRangeTest, D3D11BaseInstanceCombinesShaderIdAndDividedStream)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11);
+    ASSERT_TRUE(device.SupportsRendererFeatureEXT(CNA::RendererFeature::BaseInstanceDrawing));
+    RequireInstancedRendering();
+
+    const GridLayout layout = BackbufferLayout();
+    const InstancedFixture fixture = BuildFixture(layout);
+    constexpr int kElementCount = kSlotCount * kVerticesPerSlot;
+    VertexBuffer meshBuffer(device, PositionColorDeclaration(), kElementCount, BufferUsage::None);
+    meshBuffer.SetData(fixture.mesh.data(), kElementCount);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, kElementCount, BufferUsage::None);
+    indexBuffer.SetData(fixture.indices.data(), kElementCount);
+    DynamicVertexBuffer instanceBuffer(
+        device, InstanceMatrixDeclaration(), static_cast<int>(fixture.instances.size()),
+        BufferUsage::None);
+    instanceBuffer.SetDataRaw(
+        fixture.instances.data(), static_cast<int>(fixture.instances.size()),
+        static_cast<int>(sizeof(InstanceMatrix)));
+    device.SetVertexBuffers({
+        VertexBufferBinding(&meshBuffer, 0, 0),
+        VertexBufferBinding(&instanceBuffer, 0, 2),
+    });
+    device.SetIndexBuffer(&indexBuffer);
+
+    Microsoft::Xna::Framework::Graphics::ShaderEffect effect(
+        device,
+        R"HLSL(struct Input { float3 position : POSITION; float4 color : COLOR;
+                           float4 translation : INSTANCEWORLD3;
+                           uint instance : SV_InstanceID; };
+               struct Output { float4 position : SV_Position; float4 color : COLOR0; };
+               Output main(Input input) {
+                   Output output;
+                   output.position = float4(input.position, 1.0f);
+                   output.position.y += input.translation.y;
+                   output.color = float4(input.instance == 3 ? 1.0f : 0.0f,
+                                         input.instance == 4 ? 1.0f : 0.0f, 0.0f, 1.0f);
+                   return output;
+               })HLSL",
+        R"HLSL(float4 main(float4 position : SV_Position, float4 color : COLOR0)
+                    : SV_Target0 { return color; })HLSL");
+    ASSERT_TRUE(effect.IsEffectValid()) << effect.GetCompileErrorEXT();
+    device.Clear(Color::Black);
+    effect.Apply();
+    device.DrawInstancedPrimitivesBaseInstanceEXT(
+        PrimitiveType::TriangleList, 0, 0, kElementCount, 9, 1, 2, 3);
+
+    const FrameSnapshot pixels = CaptureBackbuffer(device, layout.width, layout.height);
+    EXPECT_TRUE(pixels.HasRgbWithin(
+        static_cast<int>(layout.ColumnCenterX(3)),
+        static_cast<int>(layout.RowCenterY(1)), 3, Color::Red));
+    EXPECT_TRUE(pixels.HasRgbWithin(
+        static_cast<int>(layout.ColumnCenterX(3)),
+        static_cast<int>(layout.RowCenterY(2)), 3, Color::Lime));
+    for (const int row : {0, 3})
+        EXPECT_EQ(0, CountLitInCell(pixels, layout, 3, row, Color::Black))
+            << "wrong divided instance record or shader ID in row " << row
+            << DescribeLitCellMap(pixels, layout, Color::Black);
+    ExpectColumnsExclusive(
+        pixels, layout, ExpectedRange{3, 1}, Color::Black,
+        "custom ShaderEffect combined base-instance draw");
+
+    for (int iteration = 0; iteration < 2048; ++iteration)
+    {
+        device.Clear(Color::Black);
+        effect.Apply();
+        device.DrawInstancedPrimitivesBaseInstanceEXT(
+            PrimitiveType::TriangleList, 0, 0, kElementCount, 9, 1, 2,
+            (iteration & 1) == 0 ? 2 : 3);
+    }
+    const FrameSnapshot afterChurn =
+        CaptureBackbuffer(device, layout.width, layout.height);
+    EXPECT_TRUE(afterChurn.HasRgbWithin(
+        static_cast<int>(layout.ColumnCenterX(3)),
+        static_cast<int>(layout.RowCenterY(1)), 3, Color::Red));
+    EXPECT_TRUE(afterChurn.HasRgbWithin(
+        static_cast<int>(layout.ColumnCenterX(3)),
+        static_cast<int>(layout.RowCenterY(2)), 3, Color::Lime));
 }

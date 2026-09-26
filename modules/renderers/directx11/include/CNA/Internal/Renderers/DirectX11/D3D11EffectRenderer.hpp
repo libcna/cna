@@ -86,6 +86,18 @@ namespace CNA::Internal::Renderers::DirectX11
             const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaration,
             const std::vector<D3DCommon::D3DVertexInputElement>& inputElements);
 
+        /**
+         * @brief Binds a vertex variant that reads the absolute logical instance ID from the first private input slot.
+         * @param declaration Combined per-vertex declaration.
+         * @param inputElements Explicit slotted input elements.
+         * @param usesLogicalIdStream Set when the vertex shader consumes the private ID stream.
+         * @return True when the required input layout and shader variant are valid.
+         */
+        [[nodiscard]] bool BindForBaseInstanceDrawEXT(
+            const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaration,
+            const std::vector<D3DCommon::D3DVertexInputElement>& inputElements,
+            bool& usesLogicalIdStream);
+
     private:
         enum class TextureKind
         {
@@ -113,16 +125,23 @@ namespace CNA::Internal::Renderers::DirectX11
         void BindProgramEXT(bool preserveImplicitTexture0);
         [[nodiscard]] ComPtr<ID3D11InputLayout> GetOrCreateInputLayoutEXT(
             const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaration,
-            const std::vector<D3DCommon::D3DVertexInputElement>& inputElements);
+            const std::vector<D3DCommon::D3DVertexInputElement>& inputElements,
+            bool logicalInstanceId = false);
+        [[nodiscard]] bool EnsureBaseInstanceVertexShaderEXT();
         [[nodiscard]] ID3D11ShaderResourceView* ResolveTextureSrvEXT(int slot) const;
 
         ComPtr<ID3D11Device> device_;
         ComPtr<ID3D11DeviceContext> context_;
         ComPtr<ID3D11VertexShader> vs_;
+        ComPtr<ID3D11VertexShader> baseInstanceVs_;
         ComPtr<ID3D11PixelShader> ps_;
         ComPtr<ID3DBlob> vsBytecode_;
+        ComPtr<ID3DBlob> baseInstanceVsBytecode_;
         ComPtr<ID3DBlob> psBytecode_;
         std::map<InputLayoutKey, ComPtr<ID3D11InputLayout>> inputLayouts_;
+        std::map<InputLayoutKey, ComPtr<ID3D11InputLayout>> baseInstanceInputLayouts_;
+        std::string vertexSource_;
+        bool hasInstanceIdInput_ = false;
         D3DCommon::D3DProgramReflection reflection_;
         std::array<ComPtr<ID3D11Buffer>,
                    D3DCommon::D3DProgramReflection::kMaxConstantBuffers> constantBuffers_{};

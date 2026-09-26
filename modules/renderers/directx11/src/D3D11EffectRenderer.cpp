@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <regex>
 #include <stdexcept>
 
 namespace CNA::Internal::Renderers::DirectX11
@@ -32,10 +33,17 @@ namespace CNA::Internal::Renderers::DirectX11
         compileError_.clear();
         valid_ = false;
         vs_.Reset();
+        baseInstanceVs_.Reset();
         ps_.Reset();
         vsBytecode_.Reset();
+        baseInstanceVsBytecode_.Reset();
         psBytecode_.Reset();
         inputLayouts_.clear();
+        baseInstanceInputLayouts_.clear();
+        vertexSource_ = vertSrc;
+        static const std::regex instanceIdSemantic(
+            R"(:\s*SV_InstanceID\b)", std::regex_constants::icase);
+        hasInstanceIdInput_ = std::regex_search(vertSrc, instanceIdSemantic);
         reflection_.Reset();
         constantBuffers_ = {};
         textures_ = {};
@@ -303,28 +311,70 @@ namespace CNA::Internal::Renderers::DirectX11
 
     ComPtr<ID3D11InputLayout> D3D11EffectRenderer::GetOrCreateInputLayoutEXT(
         const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaration,
-        const std::vector<D3DCommon::D3DVertexInputElement>& inputElements)
+        const std::vector<D3DCommon::D3DVertexInputElement>& inputElements,
+        const bool logicalInstanceId)
     {
         const InputLayoutKey key{
             D3DCommon::VertexDeclarationCacheKey(declaration),
             D3DCommon::VertexInputLayoutCacheKey(inputElements)};
-        if (const auto found = inputLayouts_.find(key); found != inputLayouts_.end())
+        auto& layouts = logicalInstanceId ? baseInstanceInputLayouts_ : inputLayouts_;
+        if (const auto found = layouts.find(key); found != layouts.end())
             return found->second;
 
         std::vector<D3D11_INPUT_ELEMENT_DESC> translated;
         const bool translatedOk = !inputElements.empty()
             ? D3DCommon::InputElementsForLayout(inputElements, translated)
             : D3DCommon::InputElementsForDeclaration(declaration, translated);
+        if (logicalInstanceId)
+            translated.push_back({"CNA_LOGICAL_INSTANCE_ID", 0, DXGI_FORMAT_R32_UINT,
+                                  static_cast<UINT>(kMaxVertexStreams), 0,
+                                  D3D11_INPUT_PER_INSTANCE_DATA, 1});
         ComPtr<ID3D11InputLayout> layout;
-        if (translatedOk && vsBytecode_)
+        ID3DBlob* bytecode = logicalInstanceId
+            ? baseInstanceVsBytecode_.Get() : vsBytecode_.Get();
+        if (translatedOk && bytecode)
         {
             device_->CreateInputLayout(
                 translated.data(), static_cast<UINT>(translated.size()),
-                vsBytecode_->GetBufferPointer(), vsBytecode_->GetBufferSize(),
+                bytecode->GetBufferPointer(), bytecode->GetBufferSize(),
                 layout.ReleaseAndGetAddressOf());
         }
-        inputLayouts_.emplace(key, layout);
+        layouts.emplace(key, layout);
         return layout;
+    }
+
+    bool D3D11EffectRenderer::EnsureBaseInstanceVertexShaderEXT()
+    {
+        if (baseInstanceVs_)
+            return true;
+        static const std::regex instanceIdSemantic(
+            R"(:\s*SV_InstanceID\b)", std::regex_constants::icase);
+        const std::string source = std::regex_replace(
+            vertexSource_, instanceIdSemantic, ": CNA_LOGICAL_INSTANCE_ID");
+        ComPtr<ID3DBlob> errors;
+        const HRESULT compileResult = D3DCompile(
+            source.data(), source.size(), "ShaderEffect_base_instance_vs", nullptr, nullptr,
+            "main", "vs_5_0", D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3,
+            0, baseInstanceVsBytecode_.ReleaseAndGetAddressOf(), errors.GetAddressOf());
+        if (FAILED(compileResult))
+        {
+            compileError_ = errors
+                ? std::string(static_cast<const char*>(errors->GetBufferPointer()),
+                              errors->GetBufferSize())
+                : ("D3DCompile (base-instance vertex) failed, hr=" + FormatHr(compileResult));
+            return false;
+        }
+        const HRESULT createResult = device_->CreateVertexShader(
+            baseInstanceVsBytecode_->GetBufferPointer(),
+            baseInstanceVsBytecode_->GetBufferSize(), nullptr,
+            baseInstanceVs_.ReleaseAndGetAddressOf());
+        if (FAILED(createResult))
+        {
+            compileError_ = "CreateVertexShader (base-instance) failed, hr=" +
+                FormatHr(createResult);
+            return false;
+        }
+        return true;
     }
 
     bool D3D11EffectRenderer::BindForDrawEXT(
@@ -337,6 +387,29 @@ namespace CNA::Internal::Renderers::DirectX11
         if (!layout)
             return false;
         BindProgramEXT(false);
+        context_->IASetInputLayout(layout.Get());
+        return true;
+    }
+
+    bool D3D11EffectRenderer::BindForBaseInstanceDrawEXT(
+        const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaration,
+        const std::vector<D3DCommon::D3DVertexInputElement>& inputElements,
+        bool& usesLogicalIdStream)
+    {
+        usesLogicalIdStream = hasInstanceIdInput_;
+        if (!hasInstanceIdInput_)
+            return BindForDrawEXT(declaration, inputElements);
+        if (!valid_ || !EnsureBaseInstanceVertexShaderEXT())
+            return false;
+        const auto layout = GetOrCreateInputLayoutEXT(
+            declaration, inputElements, true);
+        if (!layout)
+        {
+            compileError_ = "DirectX11 could not create the base-instance input layout.";
+            return false;
+        }
+        BindProgramEXT(false);
+        context_->VSSetShader(baseInstanceVs_.Get(), nullptr, 0);
         context_->IASetInputLayout(layout.Get());
         return true;
     }

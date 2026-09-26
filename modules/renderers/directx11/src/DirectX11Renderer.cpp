@@ -314,7 +314,7 @@ namespace CNA::Internal::Renderers::DirectX11
 
         void BindVertexStreams(
             ID3D11DeviceContext* context, const D3D11VertexBufferRenderer& fallback,
-            const GpuDrawParams& params)
+            const GpuDrawParams& params, int logicalInstance = -1)
         {
             ID3D11Buffer* buffers[kMaxVertexStreams]{};
             UINT strides[kMaxVertexStreams]{};
@@ -338,8 +338,12 @@ namespace CNA::Internal::Renderers::DirectX11
                         ? stream.strideInBytes : buffer.GetStrideEXT());
                     buffers[stream.slot] = buffer.GetBufferEXT();
                     strides[stream.slot] = stride;
-                    offsets[stream.slot] = static_cast<UINT>(
-                        static_cast<std::size_t>(std::max(stream.vertexOffset, 0)) * stride);
+                    std::size_t elementOffset = static_cast<std::size_t>(
+                        std::max(stream.vertexOffset, 0));
+                    if (logicalInstance >= 0 && stream.instanceFrequency > 0)
+                        elementOffset += static_cast<std::size_t>(
+                            logicalInstance / stream.instanceFrequency);
+                    offsets[stream.slot] = static_cast<UINT>(elementOffset * stride);
                 }
             }
 
@@ -865,6 +869,8 @@ namespace CNA::Internal::Renderers::DirectX11
         currentBlendState_.Reset();
         currentDepthStencilState_.Reset();
         perDrawConstantBuffer_.Reset();
+        logicalInstanceIdBuffer_.Reset();
+        logicalInstanceIdCapacity_ = 0;
         fogConstantBuffer_.Reset();
         lightingConstantBuffer_.Reset();
         alphaTestConstantBuffer_.Reset();
@@ -1518,6 +1524,12 @@ namespace CNA::Internal::Renderers::DirectX11
     bool DirectX11Renderer::SupportsIndirectDrawEXT() const
     {
         return device_ != nullptr && featureLevel_ >= D3D_FEATURE_LEVEL_11_0;
+    }
+
+    bool DirectX11Renderer::SupportsBaseInstanceDrawingEXT() const
+    {
+        return device_ != nullptr && context_ != nullptr &&
+               featureLevel_ >= D3D_FEATURE_LEVEL_11_0;
     }
 
     std::unique_ptr<IStorageBufferRenderer> DirectX11Renderer::CreateStorageBufferEXT(
@@ -3724,18 +3736,66 @@ namespace CNA::Internal::Renderers::DirectX11
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, int instanceCount, const GpuDrawParams& params)
     {
-        // DX-68: matches VulkanRenderer::DrawInstancedPrimitivesEx's own fallback -- no
-        // per-instance VB means this isn't really an instanced draw at all.
         // REMED-GFX-202: the per-instance stream is now the lowest-slot entry of the shared
         // GpuVertexStreamBinding array whose InstanceFrequency is greater than zero.
         const auto* instanceStream = FirstInstanceStream(params);
-        if (instanceStream == nullptr)
-        {
-            DrawIndexedPrimitivesEx(vb, ib, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
+        if (params.firstInstance < 0)
+            throw System::NotSupportedException(
+                "DirectX11 instancing requires a non-negative first instance.");
         const auto& d3dVb = static_cast<const D3D11VertexBufferRenderer&>(vb);
         const auto& d3dIb = static_cast<const D3D11IndexBufferRenderer&>(ib);
+        bool logicalIdStreamActive = false;
+        const auto drawWithFirstInstance = [&](const UINT indexCount)
+        {
+            const UINT startIndex = static_cast<UINT>(params.startIndex);
+            const INT baseVertex = static_cast<INT>(params.baseVertex);
+            if (instanceStream == nullptr || params.firstInstance == 0)
+            {
+                context_->DrawIndexedInstanced(
+                    indexCount, static_cast<UINT>(std::max(1, instanceCount)),
+                    startIndex, baseVertex,
+                    logicalIdStreamActive ? 0u : static_cast<UINT>(params.firstInstance));
+                return;
+            }
+
+            // D3D11 applies StartInstanceLocation after InstanceDataStepRate. Rebase every
+            // stream at a logical index that aligns to all its frequencies, then submit the
+            // entire remaining range in one draw. Only the leading unaligned instances need
+            // individual draws; this also keeps frequency-one streams on the fast path.
+            for (int instance = 0; instance < instanceCount; ++instance)
+            {
+                const int logicalInstance = params.firstInstance + instance;
+                bool allStreamsAligned = true;
+                for (int i = 0; i < params.vertexStreamCount; ++i)
+                {
+                    const int frequency = params.vertexStreams[
+                        static_cast<std::size_t>(i)].instanceFrequency;
+                    if (frequency > 0 && logicalInstance % frequency != 0)
+                    {
+                        allStreamsAligned = false;
+                        break;
+                    }
+                }
+                BindVertexStreams(
+                    context_.Get(), d3dVb, params, logicalInstance);
+                if (logicalIdStreamActive)
+                {
+                    ID3D11Buffer* idBuffer = logicalInstanceIdBuffer_.Get();
+                    const UINT stride = sizeof(UINT);
+                    const UINT offset = static_cast<UINT>(instance) * stride;
+                    context_->IASetVertexBuffers(
+                        static_cast<UINT>(kMaxVertexStreams), 1,
+                        &idBuffer, &stride, &offset);
+                }
+                context_->DrawIndexedInstanced(
+                    indexCount,
+                    allStreamsAligned
+                        ? static_cast<UINT>(instanceCount - instance) : 1u,
+                    startIndex, baseVertex, 0);
+                if (allStreamsAligned)
+                    break;
+            }
+        };
 #if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
         if (params.compiledEffectRuntime != nullptr)
         {
@@ -3744,14 +3804,102 @@ namespace CNA::Internal::Renderers::DirectX11
             BindVertexStreams(context_.Get(), d3dVb, params);
             context_->IASetIndexBuffer(d3dIb.GetBufferEXT(), d3dIb.GetFormatEXT(), 0);
             context_->IASetPrimitiveTopology(ToD3D11Topology(primitive));
-            context_->DrawIndexedInstanced(
-                static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount)),
-                static_cast<UINT>(std::max(1, instanceCount)),
-                static_cast<UINT>(params.startIndex),
-                static_cast<INT>(params.baseVertex), 0);
+            drawWithFirstInstance(static_cast<UINT>(
+                VertexCountForPrimitives(primitive, primitiveCount)));
             return;
         }
 #endif
+        if (params.customEffectRequested)
+        {
+            auto* customEffect = dynamic_cast<D3D11EffectRenderer*>(params.customEffectRenderer);
+            if (customEffect == nullptr || !customEffect->IsValid())
+                throw System::NotSupportedException(
+                    "DirectX11 custom instancing requires a valid D3D11 ShaderEffect.");
+
+            std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> combinedElements;
+            std::vector<D3DCommon::D3DVertexInputElement> inputElements;
+            BuildVertexInputLayout(
+                params, instanceStream != nullptr, combinedElements, inputElements);
+            const auto& declaration = combinedElements.empty()
+                ? d3dVb.GetDeclarationEXT().GetElements() : combinedElements;
+            float worldValues[16];
+            float viewValues[16];
+            float projectionValues[16];
+            world.ToColumnMajor(worldValues);
+            view.ToColumnMajor(viewValues);
+            projection.ToColumnMajor(projectionValues);
+            customEffect->SetUniformMat4("World", worldValues);
+            customEffect->SetUniformMat4("View", viewValues);
+            customEffect->SetUniformMat4("Projection", projectionValues);
+            if (params.firstInstance > 0
+                    ? !customEffect->BindForBaseInstanceDrawEXT(
+                          declaration, inputElements, logicalIdStreamActive)
+                    : !customEffect->BindForDrawEXT(declaration, inputElements))
+                throw System::NotSupportedException(
+                    "DirectX11 could not match the instanced ShaderEffect vertex signature "
+                    "to the bound vertex streams: " + customEffect->GetCompileError());
+
+            if (logicalIdStreamActive)
+            {
+                const UINT requested = static_cast<UINT>(instanceCount);
+                constexpr UINT maxCapacity =
+                    (std::numeric_limits<UINT>::max)() / sizeof(UINT);
+                if (requested > maxCapacity)
+                    throw System::NotSupportedException(
+                        "DirectX11 base-instance ID stream exceeds the D3D11 buffer size.");
+                if (logicalInstanceIdCapacity_ < requested)
+                {
+                    const UINT doubled = logicalInstanceIdCapacity_ <= maxCapacity / 2
+                        ? logicalInstanceIdCapacity_ * 2u : maxCapacity;
+                    const UINT capacity = (std::max)(requested, doubled);
+                    D3D11_BUFFER_DESC desc{};
+                    desc.ByteWidth = capacity * sizeof(UINT);
+                    desc.Usage = D3D11_USAGE_DYNAMIC;
+                    desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+                    desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+                    ComPtr<ID3D11Buffer> buffer;
+                    if (FAILED(device_->CreateBuffer(&desc, nullptr, buffer.GetAddressOf())))
+                        throw std::runtime_error(
+                            "DirectX11 could not allocate the logical instance ID stream.");
+                    logicalInstanceIdBuffer_ = std::move(buffer);
+                    logicalInstanceIdCapacity_ = capacity;
+                }
+                D3D11_MAPPED_SUBRESOURCE mapped{};
+                if (FAILED(context_->Map(logicalInstanceIdBuffer_.Get(), 0,
+                                         D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+                    throw std::runtime_error(
+                        "DirectX11 could not update the logical instance ID stream.");
+                auto* ids = static_cast<UINT*>(mapped.pData);
+                for (UINT instance = 0; instance < requested; ++instance)
+                    ids[instance] = static_cast<UINT>(params.firstInstance) + instance;
+                context_->Unmap(logicalInstanceIdBuffer_.Get(), 0);
+            }
+
+            BindVertexStreams(context_.Get(), d3dVb, params);
+            if (logicalIdStreamActive)
+            {
+                ID3D11Buffer* idBuffer = logicalInstanceIdBuffer_.Get();
+                const UINT stride = sizeof(UINT);
+                const UINT offset = 0;
+                context_->IASetVertexBuffers(
+                    static_cast<UINT>(kMaxVertexStreams), 1,
+                    &idBuffer, &stride, &offset);
+            }
+            context_->IASetIndexBuffer(d3dIb.GetBufferEXT(), d3dIb.GetFormatEXT(), 0);
+            context_->IASetPrimitiveTopology(ToD3D11Topology(primitive));
+            drawWithFirstInstance(static_cast<UINT>(
+                VertexCountForPrimitives(primitive, primitiveCount)));
+            return;
+        }
+        if (instanceStream == nullptr)
+        {
+            // With no per-instance data the stock shader still needs one submission per
+            // requested instance for blend/stencil side effects.
+            for (int instance = 0; instance < instanceCount; ++instance)
+                DrawIndexedPrimitivesEx(
+                    vb, ib, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
         const bool stockEffectNeedsFullShader = params.textureEnabled || params.texture0 != nullptr ||
             params.lightingEnabled || params.fogEnabled || params.dualTexture ||
             params.envMapping || params.skinned || params.pbr ||
@@ -3814,7 +3962,8 @@ namespace CNA::Internal::Renderers::DirectX11
                 {
                     const auto& entry = columns[static_cast<std::size_t>(column)];
                     const int divisor = entry.stream->instanceFrequency;
-                    const int record = entry.stream->vertexOffset + instance / divisor;
+                    const int record = entry.stream->vertexOffset +
+                        (params.firstInstance + instance) / divisor;
                     const int stride = entry.stream->strideInBytes;
                     if (record < 0 || record >= entry.buffer->GetVertexCount() || stride <= 0)
                         throw System::NotSupportedException(
@@ -3909,16 +4058,10 @@ namespace CNA::Internal::Renderers::DirectX11
         context_->PSSetConstantBuffers(0, 1, &perDrawCB);
 
         const UINT indexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
-        const UINT instCount = static_cast<UINT>(std::max(1, instanceCount));
         // REMED-GFX-123: honor the public startIndex/baseVertex on the instanced path too (both
-        // were hardcoded to zero). Exactly what REMED-GFX-020 did for this renderer's ordinary
-        // indexed draw: StartIndexLocation is an index-ELEMENT offset, BaseVertexLocation is added
-        // to every decoded index once. StartInstanceLocation stays 0 -- the per-instance stream's
-        // own start is the byte offset applied at IASetVertexBuffers above, so adding it here too
-        // would apply the same public offset twice.
-        context_->DrawIndexedInstanced(indexCount, instCount,
-                                       static_cast<UINT>(params.startIndex),
-                                       static_cast<INT>(params.baseVertex), 0);
+        // were hardcoded to zero). The per-instance stream's VertexOffset is applied at
+        // IASetVertexBuffers; StartInstanceLocation is a separate logical instance index.
+        drawWithFirstInstance(indexCount);
     }
 }
 

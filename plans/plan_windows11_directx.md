@@ -784,3 +784,59 @@ The generator was syntax-checked, rerun with FXC, and produced the identical
 SHA-256 `51fb39fb850c4ec86195fa0ff3b0ccd013973a7f1f757d1e9e1e465357487f01`.
 The shadow-caster stages compile and their map setup/ownership tests pass;
 lit shadow reception and a rendered caster-depth oracle remain separate work.
+
+## DX11 logical base-instance drawing, 2026-09-26
+
+WIN11-0035: `SupportsBaseInstanceDrawingEXT()` now reports support on a live
+D3D11 feature-level-11 device. The public CNA argument is a **logical** instance
+index: each bound instance stream consumes record
+`VertexOffset + floor(logicalInstance / InstanceFrequency)`. An initial physical
+Intel pixel probe disproved passing that argument straight to D3D11
+`StartInstanceLocation`: with frequency two, the native call selected record
+two for logical instance two, while CNA requires record one. The renderer now
+rebases each stream's input-assembler byte offset independently. It submits
+leading unaligned instances individually and batches the remainder once the
+logical index aligns to every active instance frequency. The stock CPU fallback
+also uses the logical index before dividing by frequency.
+
+A second Intel probe showed that a custom HLSL vertex shader's `SV_InstanceID`
+still began at zero with a nonzero native start location. For a custom effect
+that consumes this semantic, a lazily compiled private vertex variant changes
+only the input semantic to `CNA_LOGICAL_INSTANCE_ID`; a persistent growable
+D3D11 vertex buffer supplies the absolute IDs through the first private IA
+slot (16, after CNA's 16 public slots). Ordinary draws use the original shader.
+No public HLSL intake or API was added. The buffer is reset on D3D11 device
+recreation and is updated with `WRITE_DISCARD` instead of allocated for every
+draw. A shader that does not consume `SV_InstanceID` needs no private ID stream.
+
+The new deterministic pixel regressions cover frequency two at aligned and
+unaligned starts, a stock fog fallback, shader ID consumption without an
+instance stream, an ordinary/offset/ordinary transition, and a custom shader
+combining both mechanisms. The last case also alternates two offsets over
+**2,048 draws** and verifies its final pixels. All three focused cases pass
+on Intel Iris Xe PCI `8086:46A6`, `software=0`, feature level 11_1 with the
+D3D11 debug layer enabled and **zero warnings/errors**
+(`C:\rv\logs\dx11-base-instance-churn-final.log`). The complete existing
+`InstancedDrawRangeTest` suite before the final churn addition ran 22 cases:
+**21 pass, one EasyGL-only skip, zero fail**
+(`C:\rv\logs\dx11-base-instance-instanced-suite-final.log`). Related modern
+effect, compute, indirect, and mock-capability tests ran 33 cases:
+**31 pass, two deliberate skips, zero fail**
+(`C:\rv\logs\dx11-base-instance-ext-focused-final.log`), again with zero
+D3D11 debug warnings/errors. The initial failing pixel probes are saved as
+`dx11-base-instance-focused-1.log` and `-2.log`; the corrected probes are
+`-3.log`, `-5.log`, and the final churn log. A broad graphics run reached
+391 cases without a failure, then was stopped because a later source change
+made that executable stale; it is not counted as a completed suite.
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsTests CnaGraphicsExtTests --parallel 4
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsTests.exe --gtest_color=no --gtest_filter=InstancedDrawRangeTest.*' 2>&1 | Out-File C:\rv\logs\dx11-base-instance-instanced-suite-final.log
+& C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ShaderEffectFactoryTest.*:D3D11NativeComputeTest.*:IndirectDrawTest.*:EffectPassTest.*:BaseInstanceDrawTest.*' 2>&1 | Out-File C:\rv\logs\dx11-base-instance-ext-focused-final.log
+& C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsTests.exe --gtest_color=no --gtest_filter=InstancedDrawRangeTest.D3D11BaseInstance*' 2>&1 | Out-File C:\rv\logs\dx11-base-instance-churn-final.log
+```
+
+The remaining modern DX11 gate still includes lit shadow reception, IBL,
+vertex-stage storage and clustered/particle/culling compute shader packages.
+WIN11-0035 does not close that gate.

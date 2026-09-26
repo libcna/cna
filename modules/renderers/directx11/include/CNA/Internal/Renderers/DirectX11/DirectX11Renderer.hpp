@@ -229,6 +229,11 @@ namespace CNA::Internal::Renderers::DirectX11
          */
         [[nodiscard]] bool SupportsIndirectDrawEXT() const override;
         /**
+         * @brief Reports native start-instance support for indexed instanced draws.
+         * @return True when this D3D11 device supports instanced input.
+         */
+        [[nodiscard]] bool SupportsBaseInstanceDrawingEXT() const override;
+        /**
          * @brief Creates a buffer for indirect arguments and byte transfers.
          * @param byteSize Logical allocation size in bytes.
          * @param usage Declared portable usage bits.
@@ -912,6 +917,8 @@ namespace CNA::Internal::Renderers::DirectX11
         // Map(WRITE_DISCARD)/Unmap on every DrawColoredPrimitives() call rather than recreated per
         // draw (mirrors D3D11Buffers.hpp's own "grow, never recreate" discipline).
         ComPtr<ID3D11Buffer> perDrawConstantBuffer_;
+        ComPtr<ID3D11Buffer> logicalInstanceIdBuffer_;
+        UINT logicalInstanceIdCapacity_ = 0;
         ComPtr<ID3D11Buffer> fogConstantBuffer_;
         ID3D11Buffer* GetOrCreatePerDrawConstantBufferEXT();
         ID3D11Buffer* GetOrCreateFogConstantBufferEXT();
