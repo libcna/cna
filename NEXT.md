@@ -1,5 +1,28 @@
 # NEXT.md
 
+## SAMPLE-070 browser StorageDevice persistence (2026-09-26)
+
+The Role Playing Game port exposed a general browser StorageDevice defect: saves
+went to Emscripten's process-local home directory and disappeared on page
+reload. The storage module now links IDBFS and installs a preRun hook that
+mounts `/cna-storage`, loads its IndexedDB contents before `main()`, and
+uses `autoPersist` for subsequent writes. `StorageDevice` selects this root
+on Emscripten; failure to mount or populate reports a disconnected device
+instead of treating an ephemeral write as a durable save. The directory is
+separate from applications' existing `/save` mounts, and Node Emscripten
+runners retain process-local storage when IndexedDB is absent. No public XNA
+API or sample-specific branch was added.
+
+The focused native `CnaStorageTests` passed 14/14. The rebuilt nonthreaded
+SAMPLE-070 WebGL2 game saved both original XML files in real Chrome over
+ordinary static HTTP, reloaded the page, offered the saved game in the Load
+picker, and restored gameplay and the statistics screen. The final Firefox
+build passed menu, quest, map, statistics, NPC and 600 additional frames
+without an abort or page error. Native OPENGLES3 gameplay and fresh-process
+save/load also passed. See `../cna-samples/samples/RolePlayingGame/missing.md`
+and `/rv/tmp/samples/SAMPLE-070-RolePlayingGame_4_0_Win_Xbox/evidence/requal-20260926/`.
+No SharpRuntime source change was needed.
+
 ## SAMPLE-055 indexed EasyGL wireframe route (2026-09-25)
 
 The Skinned Model Extensions requalification exposed an additional GLES3 boundary:

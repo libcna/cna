@@ -12,6 +12,15 @@
 #include <cstdlib>
 #include <optional>
 
+#if defined(__EMSCRIPTEN__)
+#  include <emscripten.h>
+// The storage module's preRun hook sets this only after IDBFS has populated
+// /cna-storage from IndexedDB. Refuse an in-memory-only save if that failed.
+EM_JS(int, CnaBrowserStorageReady, (), {
+    return Module.cnaStorageReady === true ? 1 : 0;
+});
+#endif
+
 #if defined(_WIN32)
 // Contained in this translation unit deliberately: <windows.h> in a header is what produced the
 // ERROR / min / max macro collisions recorded as WINNATIVE-F5 and F11.
@@ -106,7 +115,6 @@ namespace Microsoft::Xna::Framework::Storage
     const std::string& StorageDevice::EnsureStorageRoot()
     {
         if (storageRootInitialized_) return storageRoot_;
-        storageRootInitialized_ = true;
 
         const std::string app = appName_.empty() ? "game" : appName_;
 
@@ -114,7 +122,16 @@ namespace Microsoft::Xna::Framework::Storage
         // conventional per-user data root directly, then ensure it exists before returning it.
         // This also makes saved games follow the same policy under SDL3, HEADLESS and TERMINAL.
         fs::path root;
-#if defined(__ANDROID__)
+#if defined(__EMSCRIPTEN__)
+        // The link-time preRun hook mounts and populates this directory before main(). It is
+        // separate from /save, which existing applications may manage for other file APIs.
+        if (!CnaBrowserStorageReady())
+        {
+            throw StorageDeviceNotConnectedException(
+                "Persistent browser storage is unavailable.");
+        }
+        root = fs::path("/cna-storage") / app;
+#elif defined(__ANDROID__)
         // Android does not define HOME and its working directory is not writable. Ask the
         // System-layer storage policy for the current package's private files directory, then
         // retain StorageDevice's normal per-game identity beneath it. Clear the host override
@@ -157,6 +174,7 @@ namespace Microsoft::Xna::Framework::Storage
                     "create_directories", root, code)));
         }
         storageRoot_ = CNA::Internal::PathToGenericUtf8(root);
+        storageRootInitialized_ = true;
         return storageRoot_;
     }
 
