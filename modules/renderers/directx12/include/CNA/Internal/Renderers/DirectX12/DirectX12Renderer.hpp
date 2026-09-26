@@ -450,6 +450,11 @@ namespace CNA::Internal::Renderers::DirectX12
          */
         [[nodiscard]] bool SupportsComputeShadersEXT() const override;
         /**
+         * @brief Reports whether ordinary Color Texture2D resources can be bound as typed UAVs.
+         * @return True when native compute and Color typed load/store are available.
+         */
+        [[nodiscard]] bool SupportsComputeImageBindingEXT() const override;
+        /**
          * @brief Returns the native dispatch limit along one axis.
          * @param axis Zero for X, one for Y, two for Z.
          * @return The maximum work-group count, or zero for an invalid axis.

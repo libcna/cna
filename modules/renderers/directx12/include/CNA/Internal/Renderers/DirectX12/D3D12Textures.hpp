@@ -82,6 +82,21 @@ namespace CNA::Internal::Renderers::DirectX12
         /// REMED-GFX-177: the stable shader-visible-heap slot index this texture owns (CNAEXT).
         [[nodiscard]] std::uint32_t GetShaderResourceViewIndexEXT() const { return srvIndex_; }
 
+        /**
+         * @brief Returns the native typed UAV handle for an ordinary compute image.
+         * @return A current-heap handle, or an empty handle when this format has no UAV.
+         */
+        [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetUnorderedAccessViewGpuHandleEXT() const
+        {
+            return heaps_ && uavIndex_ != D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex
+                ? heaps_->cbvSrvUav.GpuHandle(uavIndex_) : D3D12_GPU_DESCRIPTOR_HANDLE{};
+        }
+        /**
+         * @brief Returns supported RendererFormatUsage storage-read/write bits for this texture.
+         * @return The access mask established when the native UAV was created.
+         */
+        [[nodiscard]] std::uint32_t GetImageAccessEXT() const noexcept { return imageAccess_; }
+
         void ReleaseDeviceResourcesEXT() noexcept override;
         void RecreateDeviceResourcesEXT() override;
 
@@ -97,6 +112,8 @@ namespace CNA::Internal::Renderers::DirectX12
         /// Kept alive independently of renderer_ so the destructor can always free the slot.
         std::shared_ptr<D3D12DescriptorHeaps> heaps_;
         std::uint32_t srvIndex_ = D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex;
+        std::uint32_t uavIndex_ = D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex;
+        std::uint32_t imageAccess_ = 0;
         int width_ = 0;
         int height_ = 0;
         int mipLevels_ = 1;

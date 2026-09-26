@@ -11,6 +11,7 @@
 #include "CNA/GraphicsImageAccess.hpp"
 #include "CNA/RendererCapabilityProfile.hpp"
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12Textures.hpp"
 #include "EngineTestSupport.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -20,9 +21,11 @@
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
@@ -490,6 +493,119 @@ float4 main(float4 position : SV_POSITION) : SV_TARGET
     for (const Color& pixel : pixels)
         EXPECT_EQ(pixel.getPackedValueProperty(), Color::Lime.getPackedValueProperty());
     effect.ClearStorageTextureEXT(0);
+}
+
+TEST(D3D12OrdinaryImageTest, ComputeWriteReachesClassicSpriteBatch)
+{
+    using Microsoft::Xna::Framework::Color;
+    using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
+    using Microsoft::Xna::Framework::Graphics::SpriteBatch;
+    using Microsoft::Xna::Framework::Graphics::Texture2D;
+    CnaTest::EngineLayer::HiDefDevice device;
+    ASSERT_TRUE(device.SupportsRendererFeatureEXT(CNA::RendererFeature::ComputeImageBinding));
+    Texture2D image(device, 1, 1);
+    ComputeShader writer(device, R"(
+RWTexture2D<unorm float4> Output : register(u0);
+[numthreads(1, 1, 1)]
+void main(uint3 id : SV_DispatchThreadID)
+{
+    Output[id.xy] = float4(0, 1, 0, 1);
+}
+)");
+    writer.bindImage(0, image, CNA::GraphicsImageAccess::WriteOnly);
+    writer.dispatch(1);
+
+    RenderTarget2D target(device, 4, 4);
+    SpriteBatch sprites(device);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    sprites.Begin();
+    sprites.Draw(image, Microsoft::Xna::Framework::Rectangle(0, 0, 4, 4), Color::White);
+    sprites.End();
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+    std::array<Color, 16> pixels{};
+    target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+    for (const Color& pixel : pixels)
+        EXPECT_EQ(pixel.getPackedValueProperty(), Color::Lime.getPackedValueProperty());
+}
+
+TEST(D3D12OrdinaryImageTest, SingleTypedUavSurvivesExplicitDeviceRecreation)
+{
+    using Microsoft::Xna::Framework::Graphics::Texture2D;
+    CnaTest::EngineLayer::HiDefDevice device;
+    auto& renderer = dynamic_cast<DirectX12Renderer&>(device.GetRenderer());
+    constexpr auto access = static_cast<CNA::RendererFormatUsage>(
+        static_cast<std::uint32_t>(CNA::RendererFormatUsage::StorageRead) |
+        static_cast<std::uint32_t>(CNA::RendererFormatUsage::StorageWrite));
+    if (!device.GetRendererSurfaceFormatSupportEXT(SurfaceFormat::Single).Supports(access))
+        GTEST_SKIP() << "the physical adapter has no typed R32_FLOAT UAV load/store";
+    Texture2D image(device, 1, 1, false, SurfaceFormat::Single);
+    auto& native = dynamic_cast<CNA::Internal::Renderers::DirectX12::D3D12TextureRenderer&>(
+        image.GetRenderer());
+    ASSERT_NE(native.GetUnorderedAccessViewGpuHandleEXT().ptr, 0u);
+    renderer.RecreateDeviceEXT();
+    ASSERT_NE(native.GetUnorderedAccessViewGpuHandleEXT().ptr, 0u);
+    EXPECT_EQ(native.GetImageAccessEXT() & static_cast<std::uint32_t>(access),
+              static_cast<std::uint32_t>(access));
+    ComputeShader writer(device, R"(
+RWTexture2D<float> Output : register(u0);
+[numthreads(1, 1, 1)]
+void main(uint3 id : SV_DispatchThreadID) { Output[id.xy] = 2.75f; }
+)");
+    writer.bindImage(0, image, CNA::GraphicsImageAccess::WriteOnly);
+    writer.dispatch(1);
+    float actual = 0.0f;
+    ASSERT_TRUE(native.GetData(0, 0, 0, 1, 1, &actual, sizeof(actual)));
+    EXPECT_EQ(actual, 2.75f);
+}
+
+TEST(D3D12OrdinaryImageTest, WritableAliasesAndSampledAliasingAreRejected)
+{
+    using Microsoft::Xna::Framework::Graphics::Texture2D;
+    CnaTest::EngineLayer::HiDefDevice device;
+    Texture2D image(device, 1, 1);
+    ComputeShader writer(device, R"(
+Texture2D<float4> Source : register(t0);
+RWTexture2D<unorm float4> Output : register(u0);
+[numthreads(1, 1, 1)]
+void main(uint3 id : SV_DispatchThreadID)
+{
+    Output[id.xy] = Source.Load(uint3(id.xy, 0));
+}
+)");
+    writer.bindTexture(0, "Source", image);
+    writer.bindImage(0, image, CNA::GraphicsImageAccess::ReadWrite);
+    EXPECT_THROW(writer.dispatch(1), std::invalid_argument);
+
+    ComputeShader duplicate(device, R"(
+RWTexture2D<unorm float4> Output : register(u0);
+[numthreads(1, 1, 1)]
+void main(uint3 id : SV_DispatchThreadID) { Output[id.xy] = 1.0; }
+)");
+    duplicate.bindImage(0, image, CNA::GraphicsImageAccess::WriteOnly);
+    duplicate.bindImage(1, image, CNA::GraphicsImageAccess::WriteOnly);
+    EXPECT_THROW(duplicate.dispatch(1), std::invalid_argument);
+}
+
+TEST(D3D12OrdinaryImageTest, BindingKeepsDisposedPublicTextureAliveThroughDispatch)
+{
+    using Microsoft::Xna::Framework::Graphics::Texture2D;
+    CnaTest::EngineLayer::HiDefDevice device;
+    auto image = std::make_unique<Texture2D>(device, 1, 1);
+    auto* native = dynamic_cast<CNA::Internal::Renderers::DirectX12::D3D12TextureRenderer*>(
+        &image->GetRenderer());
+    ASSERT_NE(native, nullptr);
+    ComputeShader writer(device, R"(
+RWTexture2D<unorm float4> Output : register(u0);
+[numthreads(1, 1, 1)]
+void main(uint3 id : SV_DispatchThreadID) { Output[id.xy] = float4(1, 0, 0, 1); }
+)");
+    writer.bindImage(0, *image, CNA::GraphicsImageAccess::WriteOnly);
+    image.reset();
+    writer.dispatch(1);
+    std::array<std::uint8_t, 4> actual{};
+    ASSERT_TRUE(native->GetData(0, 0, 0, 1, 1, actual.data(), actual.size()));
+    EXPECT_EQ(actual, (std::array<std::uint8_t, 4>{255, 0, 0, 255}));
 }
 
 #endif // CNA_RENDERER_DIRECTX12 && CNA_CNAEXT

@@ -64,8 +64,6 @@ namespace CNA::Internal::Renderers::DirectX12
         ResolveSurfaceFormat(surfaceFormat_, dxgiFormat_, bytesPerTexel_, compressed_,
                              bytesPerBlock_);
         cpuLevels_.resize(static_cast<std::size_t>(mipLevels_));
-        CreateDeviceResources();
-
         if (!data.pixels.empty())
         {
             const int rowUnits = compressed_ ? (width_ + 3) / 4 : width_;
@@ -77,18 +75,34 @@ namespace CNA::Internal::Renderers::DirectX12
                 throw std::invalid_argument(
                     "D3D12TextureRenderer: level-zero pixel buffer is too small for SurfaceFormat::" +
                     std::string(D3DCommon::SurfaceFormatName(surfaceFormat_)) + ".");
-            StoreLevel(0, data.pixels.data(), width_, height_, static_cast<int>(rowBytes));
-            UploadRegion(0, cpuLevels_[0].data(), width_, height_, static_cast<int>(rowBytes));
         }
-        else
+        CreateDeviceResources();
+        try
         {
-            TransitionToShaderReadableEXT();
+            if (!data.pixels.empty())
+            {
+                const int rowUnits = compressed_ ? (width_ + 3) / 4 : width_;
+                const int unitBytes = compressed_ ? bytesPerBlock_ : bytesPerTexel_;
+                const std::size_t rowBytes = static_cast<std::size_t>(rowUnits) * unitBytes;
+                StoreLevel(0, data.pixels.data(), width_, height_, static_cast<int>(rowBytes));
+                UploadRegion(0, cpuLevels_[0].data(), width_, height_, static_cast<int>(rowBytes));
+            }
+            else
+            {
+                TransitionToShaderReadableEXT();
+            }
+        }
+        catch (...)
+        {
+            ReleaseDeviceResourcesEXT();
+            throw;
         }
         renderer_->RegisterRecoverableResourceEXT(this);
     }
 
     void D3D12TextureRenderer::CreateDeviceResources()
     {
+        imageAccess_ = 0;
         D3D12_HEAP_PROPERTIES heapProps{};
         heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
 
@@ -102,6 +116,15 @@ namespace CNA::Internal::Renderers::DirectX12
         desc.SampleDesc.Count = 1;
         desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN; // driver-chosen tiled layout, standard for TEXTURE2D
 
+        constexpr std::uint32_t imageAccess =
+            static_cast<std::uint32_t>(CNA::RendererFormatUsage::StorageRead) |
+            static_cast<std::uint32_t>(CNA::RendererFormatUsage::StorageWrite);
+        const std::uint32_t availableImageAccess = !compressed_
+            ? renderer_->GetSurfaceFormatUsageSupportEXT(surfaceFormat_).supportedUsages & imageAccess
+            : 0;
+        if (availableImageAccess != 0)
+            desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
         // COPY_DEST is a legal initial state for a DEFAULT-heap texture that (per this renderer's own
         // constructor flow) is about to receive its level-0 upload -- and, when there IS no initial
         // pixel data, gets deliberately transitioned to kTextureShaderReadableState below rather
@@ -109,6 +132,13 @@ namespace CNA::Internal::Renderers::DirectX12
         HRESULT hr = renderer_->GetDeviceEXT()->CreateCommittedResource(
             &heapProps, D3D12_HEAP_FLAG_NONE, &desc,
             D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(texture_.GetAddressOf()));
+        if (FAILED(hr) && availableImageAccess != 0)
+        {
+            desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+            hr = renderer_->GetDeviceEXT()->CreateCommittedResource(
+                &heapProps, D3D12_HEAP_FLAG_NONE, &desc,
+                D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(texture_.GetAddressOf()));
+        }
         if (FAILED(hr))
             throw std::runtime_error("D3D12TextureRenderer: CreateCommittedResource failed, hr=" + FormatHr(hr));
         texture_->SetName(L"CNA Texture2D resource");
@@ -121,12 +151,34 @@ namespace CNA::Internal::Renderers::DirectX12
         srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         srvDesc.Texture2D.MipLevels = static_cast<UINT>(mipLevels_);
 
-        heaps_ = renderer_->GetDescriptorHeapsEXT();
-        srvIndex_ = renderer_->CreateCbvSrvUavDescriptorEXT(
-            [&](D3D12_CPU_DESCRIPTOR_HANDLE cpu)
+        try
+        {
+            heaps_ = renderer_->GetDescriptorHeapsEXT();
+            srvIndex_ = renderer_->CreateCbvSrvUavDescriptorEXT(
+                [&](D3D12_CPU_DESCRIPTOR_HANDLE cpu)
+                {
+                    renderer_->GetDeviceEXT()->CreateShaderResourceView(texture_.Get(), &srvDesc, cpu);
+                });
+            if ((desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS) != 0)
             {
-                renderer_->GetDeviceEXT()->CreateShaderResourceView(texture_.Get(), &srvDesc, cpu);
-            });
+                D3D12_UNORDERED_ACCESS_VIEW_DESC uav{};
+                uav.Format = dxgiFormat_;
+                uav.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+                uav.Texture2D.MipSlice = 0;
+                uavIndex_ = renderer_->CreateCbvSrvUavDescriptorEXT(
+                    [&](D3D12_CPU_DESCRIPTOR_HANDLE cpu)
+                    {
+                        renderer_->GetDeviceEXT()->CreateUnorderedAccessView(
+                            texture_.Get(), nullptr, &uav, cpu);
+                    });
+                imageAccess_ = availableImageAccess;
+            }
+        }
+        catch (...)
+        {
+            ReleaseDeviceResourcesEXT();
+            throw;
+        }
 
     }
 
@@ -238,7 +290,11 @@ namespace CNA::Internal::Renderers::DirectX12
             renderer_->GetResourceStateTrackerEXT().UntrackResource(texture_.Get());
         if (heaps_ && srvIndex_ != D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex)
             heaps_->cbvSrvUav.Free(srvIndex_);
+        if (heaps_ && uavIndex_ != D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex)
+            heaps_->cbvSrvUav.Free(uavIndex_);
         srvIndex_ = D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex;
+        uavIndex_ = D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex;
+        imageAccess_ = 0;
         heaps_.reset();
         texture_.Reset();
     }

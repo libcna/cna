@@ -11,7 +11,8 @@ DX12 modern GPU timestamps and pass timing now pass focused hardware tests
 shader-binding, recovery, and targeted GPU-validation tests (WIN11-0068).
 Native DX12 storage textures now pass typed-UAV transfer, compute/readback,
 compute-to-graphics, lifetime, recovery, and targeted GPU-validation tests
-(WIN11-0069).
+(WIN11-0069). Ordinary `Texture2D` typed-UAV compute image binding also passes
+physical Intel validation (WIN11-0070).
 The large DX12 descriptor fixture under Intel GPU-based validation remains a recorded
 exception (WIN11-0025). Modern parity and application validation remain open.
 
@@ -2451,8 +2452,11 @@ and the renderer-neutral storage-image pixel oracle
 selected Intel hardware explicitly on every device creation, used the D3D12
 debug layer and DRED, and produced zero test failures, skips, D3D12 debug or
 GPU-validation warnings/errors, device-removal events, or DRED faults. The
-modern full-suite run initiated before WIN11-0069 uses the pre-storage binary
-and does not establish this task's full-suite status. A post-storage complete
+modern full-suite run initiated before WIN11-0069 used the pre-storage binary
+and does not establish this task's full-suite status. It completed **1,006
+tests: 944 pass, 62 skip, 0 fail** in 2,628,913 ms, with 712 physical Intel
+adapter selections, zero WARP selections, and zero D3D12 diagnostics
+(`C:\rv\logs\dx12-modern-full-post-array-1.log`). A post-storage complete
 run is still required. Ordinary classic `Texture2D` compute-image binding and
 modern DX12 shadow/IBL visibility remain separate tasks.
 
@@ -2471,4 +2475,55 @@ $env:CNA_D3D12_GPU_VALIDATION='1'
 $filter='D3D12StorageTextureTest.EveryAdvertisedTypedUavFormatTransfersExactRectangles:D3D12StorageTextureTest.TypedFloatImageFeedsComputeAndSurvivesRecovery:D3D12StorageTextureTest.ComputeOutputIsSampledByGraphicsInTheSameFrame:ModernGpuConformance.AStorageImageHoldsExactlyWhatComputeWrote'
 $commandLine='"'+$exe+'" --gtest_color=no --gtest_filter='+$filter
 & C:\rv\work\private_desktop_awake.exe 900000 $commandLine *> C:\rv\logs\dx12-modern-storage-gbv-1.log
+```
+
+### WIN11-0070: Ordinary Texture2D compute images on DX12
+
+The DX12 ordinary `Texture2D` record now allocates a typed UAV alongside its
+sampled SRV for uncompressed formats whose selected device advertises typed
+load or store. A failed optional UAV allocation preserves classic texture
+creation without publishing image access for that particular record. The UAV
+descriptor is freed through the fence-aware descriptor allocator, recreated
+after device recreation, and resolved against the current heap at binding
+time. The compute shader retains the renderer texture record, verifies its
+device and requested access, shares UAV slots with storage buffers and
+storage textures, rejects duplicate writable aliases and sampled/UAV aliasing,
+and transitions output back to shader-readable state. The renderer now
+advertises `ComputeImageBinding` only when Color typed load and store and
+native compute are available. An undersized initial pixel payload is rejected
+before native allocation, and exceptional upload cleanup releases descriptors
+and resource-state tracking.
+
+The final focused executable passed **6/6** on physical Intel Iris Xe
+`8086:46A6`, feature level `12_1`: renderer-neutral image write/readback,
+the existing public `Texture2D` CPU-shadow behavior, compute write followed
+by classic SpriteBatch sampling, `Single` typed UAV write/readback after
+explicit `RecreateDeviceEXT`, writable and sampled aliases rejected before
+GPU recording, and compute binding retaining an image after public destruction
+(`C:\rv\logs\dx12-modern-ordinary-image-focused-final.log`). Targeted
+GPU-based validation passed **3/3** for renderer-neutral image binding,
+compute-to-SpriteBatch sampling, and typed float image recovery
+(`C:\rv\logs\dx12-modern-ordinary-image-gbv-final.log`). Both runs used the
+physical Intel hardware adapter explicitly, D3D12 debug layer and DRED;
+there were no skips, test failures, D3D12 warnings/errors, GPU-validation
+errors, unexpected device removals, or DRED faults. The recreation message
+comes from the explicit test call. A complete modern DX12 run was launched
+before the final constructor exception-cleanup edit; its result is separately
+recorded when it finishes. DX12 stock-effect shadow reception and IBL remain
+open.
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx12-modern --target CnaGraphicsExtTests --config Debug --parallel 12
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='0'
+$exe='C:\rv\build\cna-win11-dx12-modern\Debug\CnaGraphicsExtTests.exe'
+$filter='D3D12OrdinaryImageTest.*:ComputeTest.ImageBindingEitherWorksOrRefusesWithItsReason:ComputeTest.Texture2DGetDataDoesNotSeeComputeWrites'
+$commandLine='"'+$exe+'" --gtest_color=no --gtest_filter='+$filter
+& C:\rv\work\private_desktop_awake.exe 900000 $commandLine *> C:\rv\logs\dx12-modern-ordinary-image-focused-final.log
+$env:CNA_D3D12_GPU_VALIDATION='1'
+$filter='D3D12OrdinaryImageTest.ComputeWriteReachesClassicSpriteBatch:D3D12OrdinaryImageTest.SingleTypedUavSurvivesExplicitDeviceRecreation:ComputeTest.ImageBindingEitherWorksOrRefusesWithItsReason'
+$commandLine='"'+$exe+'" --gtest_color=no --gtest_filter='+$filter
+& C:\rv\work\private_desktop_awake.exe 900000 $commandLine *> C:\rv\logs\dx12-modern-ordinary-image-gbv-final.log
 ```
