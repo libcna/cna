@@ -2907,3 +2907,57 @@ Logs: `C:\rv\logs\dx12-descriptor-bcd-current-normal-1.log`,
 `C:\rv\logs\dx12-descriptor-abcd-current-normal-named-1.log`.
 The named failing run exited 124 after its time box. The GBV exception
 remains open, so full DX12 classic GPU-validation acceptance is not claimed.
+
+### WIN11-0078: Restore the current DX12 classic descriptor fixture and full corpus
+
+The first full classic rebuild after modern DX12 work compiled successfully,
+then ran **295/296** CTest cases on physical Intel with debug layer and DRED
+on. The only failed executable was `DirectX12_DescriptorAllocator`:
+**50/57** internal checks. Its seven failures were stale expectations from
+before ordinary `Texture2D` could own a typed UAV for compute images:
+one texture on this Intel format now owns one SRV and one UAV. The renderer's
+observed counts were internally consistent (two descriptors allocated,
+freed, and recovered; 300 live textures required 600 descriptors and a
+1,024-slot heap). This was a native fixture contract mismatch, not a
+renderer allocation failure. Original run:
+`C:\rv\logs\dx12-classic-current-full-hardware-1.log`.
+
+The fixture now derives descriptors per texture from the actual image-access
+support (one or two), checks that every owned GPU handle is distinct and
+non-null, verifies both slots recycle without bumping the cursor, checks
+the smallest doubling capacity that covers the live set, verifies both SRV
+and UAV handles move with heap growth, and checks both descriptors are freed
+after device recreation. It adds no skip or relaxed capacity bound. The
+focused Debug physical-Intel run passed **57/57** with zero Direct3D debug
+warnings/errors or DRED fault:
+`C:\rv\logs\dx12-descriptor-allocator-current-fixed-1.log`.
+
+The final full native Debug build passed, and the second complete CTest
+`DIRECTX12` label passed **296/296**, actual runner exit code **0**, in
+292.58 seconds. The preserved `LastTest.log` has 296 test sections, zero
+internal `[FAIL]`/`[SKIP]`, **540 explicit Intel `8086:46A6` hardware
+selections**, zero WARP/software-adapter selections, zero D3D12 debug
+errors, zero unplanned device removals and zero DRED faults. Its 17
+warnings are the same intentional fixture probes classified earlier:
+empty scissor ID 695 (3), XNA-forwarded draw-range overrun IDs 210 (3)
+and 213 (1), and unbound MRT outputs ID 679 (10). A separate application
+logger error in the render-target pass-boundary fixture is the expected
+`Present`-while-bound refusal asserted by that passing test. Logs:
+`C:\rv\logs\dx12-classic-current-full-hardware-2.log` and
+`C:\rv\logs\dx12-classic-current-final-lasttest.log`.
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx12-debug --config Debug --parallel 8
+cmake --build C:\rv\build\cna-win11-dx12-debug --config Debug --target cna_test_directx12_descriptor_allocator --parallel 12
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='0'
+& C:\rv\work\private_desktop_awake.exe 7200000 'ctest --test-dir C:\rv\build\cna-win11-dx12-debug -C Debug -L DIRECTX12 --output-on-failure --parallel 1' *> C:\rv\logs\dx12-classic-current-full-hardware-2.log
+$code=$LASTEXITCODE
+Add-Content C:\rv\logs\dx12-classic-current-full-hardware-2.log "[RUNNER] exit code $code"
+exit $code
+```
+
+The high-cardinality Intel GBV removal in WIN11-0077 remains a separate
+open issue; routine hardware classic parity is green after this correction.
