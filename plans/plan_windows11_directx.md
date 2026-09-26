@@ -3,8 +3,8 @@
 Status: native MSVC and physical Intel GPU baseline established on 2026-09-25. The
 Windows DirectX parity campaign is active on `win11-directx-modern`. DX11 and
 DX12 classic have both been revalidated after adding plural cube-face MRT.
-DX11 modern CNAEXT evaluation is active; DX12 modern implementation remains
-open.
+DX11 modern CNAEXT has completed its full Intel test run. DX12 modern
+CNAEXT evaluation is active; implementation remains open.
 The large DX12 descriptor fixture under Intel GPU-based validation remains a recorded
 exception (WIN11-0025). Modern parity and application validation remain open.
 
@@ -1833,3 +1833,63 @@ $env:CNA_D3D11_DEBUG_LAYER='1'
 & C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\handle-audit\Release\d3d11_event_probe.exe 100 1 0 hardware' *> C:\rv\logs\d3d11-native-draw-100.log
 & C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\handle-audit\Release\d3d11_event_probe.exe 100 1 0 warp' *> C:\rv\logs\d3d11-native-draw-explicit-warp-100.log
 ```
+
+## DX12 modern CNAEXT campaign, 2026-09-26
+
+WIN11-0061 is the source and physical-device baseline before modern DX12
+implementation. The new `C:\rv\build\cna-win11-dx12-modern` tree uses Visual
+Studio 17 2022, x64, v143, Debug, `CNA_PLATFORM=WIN32`,
+`CNA_AUDIO_PLATFORM=NULL`, `CNA_GRAPHICS_RENDERER=DIRECTX12`,
+`CNA_CNAEXT=ON`, `CNA_ENABLE_SDL=OFF`, `CNA_ENABLE_VIDEO=OFF`,
+`CNA_ENABLE_FONT_PIPELINE=OFF`, `CNA_ENABLE_NET=ON`, `CNA_ENABLE_DRACO=OFF`,
+`CNA_BUILD_TESTS=ON`, `CNA_BUILD_EXAMPLES=ON`, and `CNA_USE_CCACHE=OFF`.
+`CnaGraphicsExtTests` built successfully with six MSVC jobs. The process had
+about 5 GiB free physical RAM near the end of compilation. Existing test
+sources emitted C4834 ignored-`nodiscard` warnings; the build had no errors.
+
+```powershell
+cmake -S C:\rv\src\cna -B C:\rv\build\cna-win11-dx12-modern -G 'Visual Studio 17 2022' -A x64 -T v143 -DCNA_PLATFORM=WIN32 -DCNA_AUDIO_PLATFORM=NULL -DCNA_GRAPHICS_RENDERER=DIRECTX12 -DCNA_CNAEXT=ON -DCNA_ENABLE_SDL=OFF -DCNA_ENABLE_VIDEO=OFF -DCNA_ENABLE_FONT_PIPELINE=OFF -DCNA_ENABLE_NET=ON -DCNA_ENABLE_DRACO=OFF -DCNA_BUILD_TESTS=ON -DCNA_BUILD_EXAMPLES=ON -DCNA_USE_CCACHE=OFF
+cmake --build C:\rv\build\cna-win11-dx12-modern --config Debug --target CnaGraphicsExtTests --parallel 6
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='0'
+& C:\rv\work\private_desktop_awake.exe 7200000 'C:\rv\build\cna-win11-dx12-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no' *> C:\rv\logs\dx12-modern-full-initial-1.log
+```
+
+The initial binary ran **990 tests from 126 suites** in **1,490,944 ms**:
+**684 pass, 11 fail, 295 skip**. Its log identifies physical Intel Iris Xe
+`8086:46A6` on **688** explicit selections by
+`CNA_D3D12_ADAPTER=hardware`, D3D feature level `12_1`, debug layer enabled,
+DRED enabled, and GPU-based validation disabled. There were **zero** WARP or
+software-adapter selections and **zero** D3D12 debug warning/error,
+device-removal or DRED-fault messages. The run exited with code 1 because of
+the 11 Google Test failures. The log is
+`C:\rv\logs\dx12-modern-full-initial-1.log`; the build log is
+`C:\rv\logs\dx12-modern-first-build-1.log`. C: had about 275.7 GiB free
+after this build and run; observed test-process handles returned to about
+401 between device-heavy cases, with private bytes around 33-35 MiB.
+
+| Current renderer-interface group | DX12 state at the initial source baseline |
+|---|---|
+| HLSL vertex/fragment `ShaderEffect` | Native `D3DCompile` and reflected graphics PSO path exists. `GetShaderDialectEXT` reports HLSL, but `SupportsShaderLanguageEXT` inherits false, so HLSL shader packages are not selected. |
+| Compute shader, dispatch, storage/constant buffers, storage textures and image binding | Native modern entry points are absent; capability and limits remain false/zero. |
+| Sampled `Texture2DArray` | Native modern factory and binding are absent; array limit remains zero. |
+| Classic 2D/cube/volume textures, float targets, MRT, MSAA and readback | Implemented in the classic DX12 path and physically validated before this phase. The modern per-format usage query still inherits unknown masks. |
+| Volume sampling in a custom effect | `D3D12EffectRenderer::BindTexture3D` consumes the native volume SRV; the modern `SupportsTexture3DSamplingEXT` query still inherits false. |
+| Native indirect draw, base instance, GPU timer, GPU marker | Modern entry points and capability queries are absent/false. |
+| Modern stock effect shadow reception and IBL | Modern capability queries remain false; shader behavior needs implementation and pixel evidence. |
+| Modern limits, HDR presentation and region presentation | Explicit limit queries inherit zero. Presentation reports truthful sRGB-only default; region presentation inherits refusal. |
+
+All 11 failures are one DX12 capability-reporting defect: six `CRTEffectTest`
+pixel cases and five `DepthEffectTest` pixel cases. The initial binary did not
+select their available HLSL shader packages because the DX12 language query
+returned false; it then passed GLSL fallback source to `D3DCompile`, which
+rejected `#version` and `precision`. All 11 corresponding cases passed on
+DX11 with the HLSL packages. These are genuine DX12 modern source-selection
+failures, not missing shader variants or pixel-test oracle changes. The 295
+initial skips combine backend-specific inverse tests, unavailable modern
+DX12 capabilities (especially compute, storage, arrays, indirect draw, GPU
+timing and modern shadow/IBL) and shader packages excluded by the false HLSL
+answer. They must be reclassified after HLSL selection is corrected; this
+initial skip total is not a final capability verdict.
