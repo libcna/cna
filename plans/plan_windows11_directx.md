@@ -19,7 +19,9 @@ now pass focused physical Intel and targeted GPU-validation tests (WIN11-0071).
 DX12 base-instance drawing now passes native, custom ShaderEffect, and opt-in
 compiled-effect pixel tests, including divided instance streams (WIN11-0072).
 The large DX12 descriptor fixture under Intel GPU-based validation remains a recorded
-exception (WIN11-0025). Application validation remains open.
+exception: disabling only GBV's resource-state checks makes its A+B+C+D history pass,
+while default full GBV still removes the device (WIN11-0080). Application validation
+remains open.
 
 ## Stable source and machine baseline
 
@@ -2998,4 +3000,65 @@ $env:CNA_D3D12_DEBUG_LAYER='1'
 $env:CNA_D3D12_DRED='1'
 $env:CNA_D3D12_GPU_VALIDATION='0'
 & C:\rv\work\private_desktop_awake.exe 900000 'ctest --test-dir C:\rv\build\cna-win11-dx12-modern -C Debug -R "^(CNAEXT_Settings_Compile_Run|Ascii_Quantizer)$" --output-on-failure --parallel 1' *> C:\rv\logs\dx12-modern-applicable-examples-1.log
+```
+
+### WIN11-0080: Isolate the Intel high-cardinality GBV removal to resource-state validation
+
+The existing `DescriptorCapacityContract --legs ABCD` Intel-GBV removal was
+reproduced again on the WIN11-0079 source with normal GBV flags. A 90-second
+private-desktop run completed all A/B/C checks and then removed the device
+in D with `DXGI_ERROR_DEVICE_HUNG`. DRED reported the same page-fault VA
+`0x0000B802062F0000` and the same recently freed `Texture2D` serials
+`#1919` (C) and `#1608` (A). No incompatible-state or deleted-descriptor
+GBV message preceded the device removal. The runner exited 124 after the
+failed device blocked shutdown:
+`C:\rv\logs\dx12-descriptor-abcd-intel-gbv-state-tracking-on-control-1.log`.
+
+A **temporary diagnostic-only** call to
+`ID3D12Debug2::SetGPUBasedValidationFlags(
+D3D12_GPU_BASED_VALIDATION_FLAGS_DISABLE_STATE_TRACKING)` was made after
+enabling GBV and before creating the device. With the same physical Intel
+adapter, A+B+C+D passed **15/15**, exit 0, with D3D12 debug layer, DRED,
+and GBV still enabled:
+`C:\rv\logs\dx12-descriptor-abcd-intel-gbv-state-tracking-off-1.log`.
+Microsoft documents that this flag disables GBV resource-state validation
+but **continues validating descriptors and descriptor heaps**:
+<https://learn.microsoft.com/en-us/windows/win32/api/d3d12sdklayers/ne-d3d12sdklayers-d3d12_gpu_based_validation_flags>.
+The diagnostic renderer patch was reverted and the original target rebuilt;
+no default validation policy or shipping path was relaxed. The comparison
+isolates the trigger to full GBV resource-state checking or its additional
+GPU work; it does **not** prove that CNA's barriers are correct or that the
+Intel driver is solely at fault. Microsoft's GBV documentation explicitly
+notes injected operations, large performance cost for resource-rich
+workloads, and asynchronous diagnostics:
+<https://learn.microsoft.com/en-us/windows/win32/direct3d12/using-d3d12-debug-layer-gpu-based-validation>.
+
+An explicit secondary WARP+GBV differential selected software adapter
+`Microsoft Basic Render Driver 1414:008C` via `CNA_D3D12_ADAPTER=warp`.
+There was no device removal, and D1 passed. B1 failed 12 sampler checks
+and C1 failed 112, so the complete WARP run was **13/15**, exit 1. WARP
+is not hardware acceptance evidence, and those mismatches remain separate
+contract/implementation questions:
+`C:\rv\logs\dx12-descriptor-abcd-current-warp-gbv-differential-1.log`.
+
+To locate the Intel failure inside D, a temporary fixture variant with only
+one repeated draw passed 15/15 under full GBV, whereas a 64-draw variant
+removed the device. With all 256 draws restored and one temporary progress
+line after each completed readback, exactly **60 D draws completed** before
+the same DRED fault. These fixture edits were reverted, and the original
+target was rebuilt with `--parallel 16`. Diagnostic logs:
+`C:\rv\logs\dx12-descriptor-abcd-intel-gbv-d1-diagnostic-1.log`,
+`C:\rv\logs\dx12-descriptor-abcd-intel-gbv-d64-diagnostic-1.log`, and
+`C:\rv\logs\dx12-descriptor-abcd-intel-gbv-d-progress-diagnostic-1.log`.
+The one/64-draw variants were localization experiments, not replacement
+acceptance tests. The high-cardinality **full GBV** exception is still open.
+
+```powershell
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='1'
+$exe='C:\rv\build\cna-win11-dx12-debug\Debug\cna_test_directx12_descriptor_capacity.exe'
+$commandLine='"'+$exe+'" --legs ABCD'
+& C:\rv\work\private_desktop_awake.exe 90000 $commandLine *> C:\rv\logs\dx12-descriptor-abcd-intel-gbv-state-tracking-on-control-1.log
 ```
