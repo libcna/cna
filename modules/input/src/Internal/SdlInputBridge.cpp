@@ -432,6 +432,12 @@ namespace
         const float height = static_cast<float>(Touch::TouchPanel::getDisplayHeightProperty());
         if (width <= 0.0f || height <= 0.0f) return;
 
+        // A touch cannot leave its display. The pointer can, so bound only its
+        // emulated touch position while leaving Mouse.GetState() unchanged.
+        const Microsoft::Xna::Framework::Vector2 touchPosition(
+            std::clamp(position.X, 0.0f, width),
+            std::clamp(position.Y, 0.0f, height));
+
         const bool released = state == Touch::TouchLocationState::Released;
         const int id = released
             ? find_touch_id(kEmulatedMouseFinger).value_or(get_or_create_touch_id(kEmulatedMouseFinger))
@@ -440,18 +446,20 @@ namespace
         const Microsoft::Xna::Framework::Vector2 previous = emulated_mouse_touch_position();
         const Microsoft::Xna::Framework::Vector2 delta =
             state == Touch::TouchLocationState::Moved
-                ? Microsoft::Xna::Framework::Vector2(position.X - previous.X, position.Y - previous.Y)
+                ? Microsoft::Xna::Framework::Vector2(touchPosition.X - previous.X,
+                                                      touchPosition.Y - previous.Y)
                 : Microsoft::Xna::Framework::Vector2();
-        emulated_mouse_touch_position() = position;
+        emulated_mouse_touch_position() = touchPosition;
 
         if (state == Touch::TouchLocationState::Pressed)
         {
             Touch::TouchPanel::setTouchDeviceExistsProperty(true);
         }
 
-        Touch::TouchPanel::INTERNAL_setTouchState(id, state, position, 1.0f);
+        Touch::TouchPanel::INTERNAL_setTouchState(id, state, touchPosition, 1.0f);
         Touch::TouchPanel::INTERNAL_onTouchEvent(
-            id, state, position.X / width, position.Y / height, delta.X / width, delta.Y / height);
+            id, state, touchPosition.X / width, touchPosition.Y / height,
+            delta.X / width, delta.Y / height);
 
         if (released) touch_ids().erase(kEmulatedMouseFinger);
     }
@@ -586,7 +594,6 @@ namespace CNA::Internal::Input
                     namespace Touch = Microsoft::Xna::Framework::Input::Touch;
                     if (value.pressed && !emulated_mouse_touch_down())
                     {
-                        emulated_mouse_touch_position() = position;
                         emulated_mouse_touch_down() = true;
                         emit_emulated_mouse_touch(Touch::TouchLocationState::Pressed, position);
                     }

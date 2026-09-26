@@ -99,6 +99,47 @@ TEST_F(MouseTouchEmulationTest, MotionWhileHeldReportsAMovedTouch)
     EXPECT_FLOAT_EQ(touches[0].getPositionProperty().Y, 130.0f);
 }
 
+TEST_F(MouseTouchEmulationTest, AnOutsideWindowDragUsesOnlyTouchDisplayCoordinates)
+{
+    TouchPanel::setDisplayWidthProperty(800);
+    TouchPanel::setDisplayHeightProperty(480);
+    TouchPanel::setMouseTouchEmulationEnabledEXT(true);
+
+    PlatformInputBridge::ProcessEvent(buttonEvent(true, 400.0f, 240.0f));
+    PlatformInputBridge::ProcessEvent(motionEvent(1200.0f, 900.0f, 800.0f, 660.0f));
+    TouchCollection touches = TouchPanel::GetState();
+    ASSERT_EQ(touches.getCountProperty(), 1);
+    EXPECT_EQ(touches[0].getStateProperty(), TouchLocationState::Moved);
+    EXPECT_FLOAT_EQ(touches[0].getPositionProperty().X, 800.0f);
+    EXPECT_FLOAT_EQ(touches[0].getPositionProperty().Y, 480.0f);
+    EXPECT_EQ(InputManager::GetMouseState().getXProperty(), 1200);
+    EXPECT_EQ(InputManager::GetMouseState().getYProperty(), 900);
+
+    PlatformInputBridge::ProcessEvent(motionEvent(-100.0f, -200.0f, -1300.0f, -1100.0f));
+    touches = TouchPanel::GetState();
+    EXPECT_FLOAT_EQ(touches[0].getPositionProperty().X, 0.0f);
+    EXPECT_FLOAT_EQ(touches[0].getPositionProperty().Y, 0.0f);
+
+    PlatformInputBridge::ProcessEvent(buttonEvent(false, -100.0f, -200.0f));
+    touches = TouchPanel::GetState();
+    EXPECT_EQ(touches[0].getStateProperty(), TouchLocationState::Released);
+    EXPECT_FLOAT_EQ(touches[0].getPositionProperty().X, 0.0f);
+    EXPECT_FLOAT_EQ(touches[0].getPositionProperty().Y, 0.0f);
+}
+
+TEST_F(MouseTouchEmulationTest, APressOutsideWindowIsClampedToTouchDisplay)
+{
+    TouchPanel::setDisplayWidthProperty(800);
+    TouchPanel::setDisplayHeightProperty(480);
+    TouchPanel::setMouseTouchEmulationEnabledEXT(true);
+
+    PlatformInputBridge::ProcessEvent(buttonEvent(true, -50.0f, 1000.0f));
+    const TouchCollection touches = TouchPanel::GetState();
+    ASSERT_EQ(touches.getCountProperty(), 1);
+    EXPECT_FLOAT_EQ(touches[0].getPositionProperty().X, 0.0f);
+    EXPECT_FLOAT_EQ(touches[0].getPositionProperty().Y, 480.0f);
+}
+
 TEST_F(MouseTouchEmulationTest, MotionWithTheButtonUpReportsNothing)
 {
     TouchPanel::setMouseTouchEmulationEnabledEXT(true);
