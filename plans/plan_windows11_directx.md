@@ -13,6 +13,8 @@ Native DX12 storage textures now pass typed-UAV transfer, compute/readback,
 compute-to-graphics, lifetime, recovery, and targeted GPU-validation tests
 (WIN11-0069). Ordinary `Texture2D` typed-UAV compute image binding also passes
 physical Intel validation (WIN11-0070).
+DX12 stock-effect shadow reception, punctual and cascaded shadows, and PBR IBL
+now pass focused physical Intel and targeted GPU-validation tests (WIN11-0071).
 The large DX12 descriptor fixture under Intel GPU-based validation remains a recorded
 exception (WIN11-0025). Modern parity and application validation remain open.
 
@@ -2526,4 +2528,46 @@ $env:CNA_D3D12_GPU_VALIDATION='1'
 $filter='D3D12OrdinaryImageTest.ComputeWriteReachesClassicSpriteBatch:D3D12OrdinaryImageTest.SingleTypedUavSurvivesExplicitDeviceRecreation:ComputeTest.ImageBindingEitherWorksOrRefusesWithItsReason'
 $commandLine='"'+$exe+'" --gtest_color=no --gtest_filter='+$filter
 & C:\rv\work\private_desktop_awake.exe 900000 $commandLine *> C:\rv\logs\dx12-modern-ordinary-image-gbv-final.log
+```
+
+### WIN11-0071: DX12 stock-effect shadows and image-based lighting
+
+DX12 now selects the existing HLSL shadow variants for BasicEffect,
+SkinnedEffect, PbrEffect, and SkinnedPbrEffect when directional, punctual, or
+environment lighting is active. The draw path uploads the same b3 shadow and
+b4 IBL constants used by the validated DX11 path and binds all thirteen
+declared texture/sampler registers with 2D or cube views as appropriate.
+Unused root CBV slots receive valid addresses. DX12 reports shadow sampling
+and image-based lighting only for a live device at feature level 11_0 or
+higher. This activates existing renderer-neutral pixel tests; no test oracle
+or public API was changed.
+
+The Debug build of `CnaGraphicsExtTests` passed. The focused native run passed
+**36/36** from four suites: cascaded, punctual, and directional shadow
+visibility, plus IBL. It reported **36 explicit Intel Iris Xe `8086:46A6`
+hardware selections**, feature level `12_1`, zero skips/failures, zero
+D3D12 debug warnings/errors, zero device removals or DRED faults, and no WARP
+selection (`C:\rv\logs\dx12-shadow-ibl-focused-1.log`). Targeted GPU-based
+validation passed **5/5** with five explicit Intel selections, zero
+skips/failures and zero validation/debug/DRED errors
+(`C:\rv\logs\dx12-shadow-ibl-gbv-1.log`). The two expensive instrumented
+cases took 174,592 ms (cascades) and 148,558 ms (PBR shadow); targeted
+validation, rather than the full thousand-test suite under GBV, remains the
+practical policy. The ordinary-image full run launched before this task is
+separate; a complete post-shadow/IBL run is still required.
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx12-modern --config Debug --target CnaGraphicsExtTests --parallel 8
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='0'
+$exe='C:\rv\build\cna-win11-dx12-modern\Debug\CnaGraphicsExtTests.exe'
+$filter='ShadowVisibilityTest.*:CascadedShadowVisibilityTest.*:PunctualShadowVisibilityTest.*:IblVisibilityTest.*'
+$commandLine='"'+$exe+'" --gtest_color=no --gtest_filter='+$filter
+& C:\rv\work\private_desktop_awake.exe 900000 $commandLine *> C:\rv\logs\dx12-shadow-ibl-focused-1.log
+$env:CNA_D3D12_GPU_VALIDATION='1'
+$filter='CascadedShadowVisibilityTest.EveryCascadeCountProducesTheSameShadow:PunctualShadowVisibilityTest.APointLightsCubeShadowDarkensWhatItOccludes:ShadowVisibilityTest.PbrEffectReceivesTheShadowOnItsDirectTermOnly:IblVisibilityTest.PbrEffectSamplesAllThreeProductsAndHonorsIntensity:IblVisibilityTest.AShadowBlocksDirectLightButPreservesTheEnvironment'
+$commandLine='"'+$exe+'" --gtest_color=no --gtest_filter='+$filter
+& C:\rv\work\private_desktop_awake.exe 900000 $commandLine *> C:\rv\logs\dx12-shadow-ibl-gbv-1.log
 ```

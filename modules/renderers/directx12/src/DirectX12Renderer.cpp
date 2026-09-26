@@ -4102,6 +4102,13 @@ namespace CNA::Internal::Renderers::DirectX12
         // The stride-only rule remains solely for internal buffers that carry no declaration.
         const bool needsLitTextured = hasNormal && !needsAlphaTest && !needsDualTex
                                      && !needsEnvMap && !needsPbr && !needsSkinned;
+        const bool haveIbl = needsPbr && params.iblEnabled &&
+            params.iblIrradiance != nullptr &&
+            params.iblPrefilteredSpecular != nullptr && params.iblBrdfLut != nullptr;
+        const bool useModernLightingShader =
+            (needsLitTextured || needsSkinned || needsPbr) &&
+            ((params.shadowsEnabled && params.shadowMap != nullptr) ||
+             params.punctualKind != 0 || haveIbl);
 
         // env_map3d.vert.hlsl's VSInput is Position+Normal+UV (32 bytes), same as lit_textured3d.
         if (needsEnvMap && stride != 32)
@@ -4221,7 +4228,8 @@ namespace CNA::Internal::Renderers::DirectX12
             // A COLOR0 declaration routes to the *Colored sibling independently of record stride.
             // Declaration-less legacy buffers retain the canonical stride-56 fallback.
             const bool colored = hasDeclaration ? hasColor : stride == 56;
-            const bool vertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
+            const bool vertexLit = params.lightingEnabled && !params.preferPerPixelLighting
+                                   && !useModernLightingShader;
             if (usesFloatBoneIndices)
                 variant = colored
                     ? (vertexLit ? D3DShaderVariant::Skinned3dVertexLitColoredFloatIndices
@@ -4243,13 +4251,13 @@ namespace CNA::Internal::Renderers::DirectX12
             // Same real-default fix for BasicEffect's lit-textured bucket.
             variant = hasTexCoord
                 ? (hasColor
-                    ? ((params.lightingEnabled && !params.preferPerPixelLighting)
+                    ? ((params.lightingEnabled && !params.preferPerPixelLighting && !useModernLightingShader)
                         ? D3DShaderVariant::LitTextured3dVertexLitColored
                         : D3DShaderVariant::LitTextured3dColored)
-                    : ((params.lightingEnabled && !params.preferPerPixelLighting)
+                    : ((params.lightingEnabled && !params.preferPerPixelLighting && !useModernLightingShader)
                         ? D3DShaderVariant::LitTextured3dVertexLit
                         : D3DShaderVariant::LitTextured3d))
-                : ((params.lightingEnabled && !params.preferPerPixelLighting)
+                : ((params.lightingEnabled && !params.preferPerPixelLighting && !useModernLightingShader)
                     ? D3DShaderVariant::LitUntextured3dVertexLit
                     : D3DShaderVariant::LitUntextured3d);
             hasTexture = true;
@@ -4281,6 +4289,29 @@ namespace CNA::Internal::Renderers::DirectX12
                     std::to_string(stride) + " for the colored/textured bundle (plans/plan_dx.md DX-111)");
         }
 
+        if (useModernLightingShader)
+        {
+            switch (variant)
+            {
+                case D3DShaderVariant::LitTextured3d: variant = D3DShaderVariant::LitTextured3dShadow; break;
+                case D3DShaderVariant::LitTextured3dColored: variant = D3DShaderVariant::LitTextured3dColoredShadow; break;
+                case D3DShaderVariant::LitUntextured3d: variant = D3DShaderVariant::LitUntextured3dShadow; break;
+                case D3DShaderVariant::Skinned3d: variant = D3DShaderVariant::Skinned3dShadow; break;
+                case D3DShaderVariant::Skinned3dFloatIndices: variant = D3DShaderVariant::Skinned3dFloatIndicesShadow; break;
+                case D3DShaderVariant::Skinned3dColored: variant = D3DShaderVariant::Skinned3dColoredShadow; break;
+                case D3DShaderVariant::Skinned3dColoredFloatIndices: variant = D3DShaderVariant::Skinned3dColoredFloatIndicesShadow; break;
+                case D3DShaderVariant::Pbr3d: variant = D3DShaderVariant::Pbr3dShadow; break;
+                case D3DShaderVariant::Pbr3dDualUv: variant = D3DShaderVariant::Pbr3dDualUvShadow; break;
+                case D3DShaderVariant::PbrSkinned3d: variant = D3DShaderVariant::PbrSkinned3dShadow; break;
+                case D3DShaderVariant::PbrSkinned3dDualUv: variant = D3DShaderVariant::PbrSkinned3dDualUvShadow; break;
+                case D3DShaderVariant::PbrSkinned3dDualUvColor: variant = D3DShaderVariant::PbrSkinned3dDualUvColorShadow; break;
+                default: throw std::logic_error("D3D12 stock lighting shader has no modern variant");
+            }
+            hasTexture = true;
+            numCbvs = 5;
+            numSrvs = 13;
+        }
+
         const int numSamplers = numSrvs; // DX-119: one real, runtime-settable sampler descriptor
                                           // table per texture slot, s0.. matching t0..
 
@@ -4306,14 +4337,11 @@ namespace CNA::Internal::Renderers::DirectX12
         // cbAddresses[i] is bound to root CBV parameter i (b0, b1, ...) -- see each branch below for
         // which struct/register each variant actually needs, field-for-field matching the real HLSL
         // cbuffer declarations (D3DConstantBuffers.hpp).
-        D3D12_GPU_VIRTUAL_ADDRESS cbAddresses[3] = {0, 0, 0};
-        // params.texture0/texture1 for the (up to 2) SRVs most variants bind -- dual_texture3d uses
-        // the 2nd slot for a 2nd Texture2D; env_map3d uses it for a TextureCube instead
-        // (srvCubeTexture below), which is why it isn't part of this Texture2D-only array. Sized 7
-        // for PBR's five core maps plus KHR_materials_specular strength/colour at t5/t6.
-        const ITextureRenderer* srvTextures[7] = {
-            params.texture0, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
-        const ITextureCubeRenderer* srvCubeTexture = nullptr; // only set by the needsEnvMap branch
+        D3D12_GPU_VIRTUAL_ADDRESS cbAddresses[5] = {0, 0, 0, 0, 0};
+        // Stock effects use up to thirteen texture slots: seven PBR material maps, three shadow
+        // maps, and three IBL maps. Cube slots have their own typed array.
+        const ITextureRenderer* srvTextures[13] = {params.texture0};
+        const ITextureCubeRenderer* srvCubes[13] = {};
 
         if (needsAlphaTest)
         {
@@ -4472,7 +4500,7 @@ namespace CNA::Internal::Renderers::DirectX12
             cbAddresses[2] = envAddress;
 
             srvTextures[0] = params.texture0;
-            srvCubeTexture = params.envMap;
+            srvCubes[1] = params.envMap;
         }
         else if (needsPbr)
         {
@@ -4799,6 +4827,73 @@ namespace CNA::Internal::Renderers::DirectX12
             cbAddresses[1] = AllocateFrameConstantDataEXT(&fog, sizeof(fog));
         }
 
+        if (useModernLightingShader)
+        {
+            const bool haveDirectional = params.shadowsEnabled && params.shadowMap != nullptr;
+            const int cascadeCount = haveDirectional && params.cascadeCount > 0
+                ? std::min(params.cascadeCount, 4) : 0;
+            const int punctualKind = params.punctualKind >= 1 && params.punctualKind <= 2
+                ? params.punctualKind : 0;
+            const bool havePoint = punctualKind == 1 && params.punctualShadowCube != nullptr;
+            const bool haveSpot = punctualKind == 2 && params.punctualShadowMap != nullptr;
+
+            D3DCommon::D3DShadowConstants shadow{};
+            std::copy_n(params.lightViewProjColMajor, 16, shadow.LightViewProj);
+            std::copy_n(params.cascadeMatricesColMajor, 64, shadow.CascadeMatrices);
+            std::copy_n(params.punctualViewProjColMajor, 16, shadow.PunctualViewProj);
+            shadow.Directional[0] = haveDirectional ? 1.0f : 0.0f;
+            shadow.Directional[1] = params.shadowDepthBias;
+            shadow.Directional[2] = static_cast<float>(std::clamp(params.shadowPcfRadius, 0, 2));
+            shadow.Directional[3] = static_cast<float>(cascadeCount);
+            const int shadowWidth = haveDirectional ? params.shadowMap->GetWidth() : 1;
+            const int shadowHeight = haveDirectional ? params.shadowMap->GetHeight() : 1;
+            shadow.ShadowTexelBlendDebug[0] = shadowWidth > 0 ? 1.0f / static_cast<float>(shadowWidth) : 0.0f;
+            shadow.ShadowTexelBlendDebug[1] = shadowHeight > 0 ? 1.0f / static_cast<float>(shadowHeight) : 0.0f;
+            shadow.ShadowTexelBlendDebug[2] = params.cascadeBlendBand;
+            shadow.ShadowTexelBlendDebug[3] = params.cascadeDebugTint ? 1.0f : 0.0f;
+            std::copy_n(params.cascadeSplits, 4, shadow.CascadeSplits);
+            std::copy_n(params.cascadeViewZRow, 4, shadow.CascadeViewZ);
+            std::copy_n(params.punctualPosition, 3, shadow.PunctualPositionRange);
+            shadow.PunctualPositionRange[3] = params.punctualRange > 0.0f ? params.punctualRange : 1.0f;
+            std::copy_n(params.punctualDirection, 3, shadow.PunctualDirectionKind);
+            shadow.PunctualDirectionKind[3] = static_cast<float>(punctualKind);
+            std::copy_n(params.punctualDiffuse, 3, shadow.PunctualDiffuseHasShadow);
+            shadow.PunctualDiffuseHasShadow[3] = (havePoint || haveSpot) ? 1.0f : 0.0f;
+            shadow.PunctualConeBiasTexelX[0] = params.punctualCosInner;
+            shadow.PunctualConeBiasTexelX[1] = params.punctualCosOuter;
+            shadow.PunctualConeBiasTexelX[2] = params.punctualShadowBias;
+            const int spotWidth = haveSpot ? params.punctualShadowMap->GetWidth() : 1;
+            const int spotHeight = haveSpot ? params.punctualShadowMap->GetHeight() : 1;
+            shadow.PunctualConeBiasTexelX[3] = spotWidth > 0 ? 1.0f / static_cast<float>(spotWidth) : 0.0f;
+            shadow.PunctualTexelY[0] = spotHeight > 0 ? 1.0f / static_cast<float>(spotHeight) : 0.0f;
+            cbAddresses[3] = AllocateFrameConstantDataEXT(&shadow, sizeof(shadow));
+        }
+        if (needsPbr && useModernLightingShader)
+        {
+            D3DCommon::D3DIblConstants ibl{};
+            ibl.Enabled = haveIbl ? 1.0f : 0.0f;
+            ibl.PrefilteredMipCount = static_cast<float>(
+                params.iblPrefilteredMipCount > 0 ? params.iblPrefilteredMipCount : 1);
+            ibl.Intensity = params.iblIntensity;
+            cbAddresses[4] = AllocateFrameConstantDataEXT(&ibl, sizeof(ibl));
+        }
+        for (int i = 1; i < numCbvs; ++i)
+            if (cbAddresses[i] == 0)
+                cbAddresses[i] = cbAddresses[0];
+
+        if (useModernLightingShader)
+        {
+            srvTextures[7] = params.shadowsEnabled ? params.shadowMap : nullptr;
+            srvCubes[8] = params.punctualKind == 1 ? params.punctualShadowCube : nullptr;
+            srvTextures[9] = params.punctualKind == 2 ? params.punctualShadowMap : nullptr;
+            if (haveIbl)
+            {
+                srvCubes[10] = params.iblIrradiance;
+                srvCubes[11] = params.iblPrefilteredSpecular;
+                srvTextures[12] = params.iblBrdfLut;
+            }
+        }
+
         // DX-111 (dual_texture3d): each texture register (t0, t1, ...) is its own single-descriptor
         // root table parameter now (D3D12RootSignatureCache's own updated layout -- see that file's
         // doc comment for the real empirical finding that a single multi-descriptor table, populated
@@ -4818,26 +4913,28 @@ namespace CNA::Internal::Renderers::DirectX12
         // fallback records an upload.
         for (int i = 0; i < numSrvs; ++i)
         {
-            if (i == 1 && needsEnvMap)
+            const bool cubeSlot = (i == 1 && needsEnvMap) ||
+                (useModernLightingShader && (i == 8 || i == 10 || i == 11));
+            if (cubeSlot)
             {
-                if (srvCubeTexture == nullptr)
-                    srvCubeTexture = GetOrCreateDefaultOpaqueBlackCubeEXT();
+                if (srvCubes[i] == nullptr)
+                    srvCubes[i] = GetOrCreateDefaultOpaqueBlackCubeEXT();
             }
             else if (srvTextures[i] == nullptr)
             {
-                srvTextures[i] = needsPbr ? GetOrCreateDefaultWhiteTextureEXT()
-                                          : GetOrCreateDefaultOpaqueBlackTextureEXT();
+                srvTextures[i] = needsPbr && i <= 6
+                    ? GetOrCreateDefaultWhiteTextureEXT()
+                    : GetOrCreateDefaultOpaqueBlackTextureEXT();
             }
         }
 
-        D3D12_GPU_DESCRIPTOR_HANDLE srvHandles[7]{};
+        D3D12_GPU_DESCRIPTOR_HANDLE srvHandles[13]{};
         for (int i = 0; i < numSrvs; ++i)
         {
-            // env_map3d's 2nd slot (t1) is a TextureCube, not a Texture2D -- srvCubeTexture is only
-            // ever set by the needsEnvMap branch above, every other variant's 2nd slot (if any) is a
-            // plain Texture2D via srvTextures[1] (dual_texture3d).
-            srvHandles[i] = (i == 1 && needsEnvMap)
-                ? GetSrvGpuHandleForTextureCubeEXT(srvCubeTexture)
+            const bool cubeSlot = (i == 1 && needsEnvMap) ||
+                (useModernLightingShader && (i == 8 || i == 10 || i == 11));
+            srvHandles[i] = cubeSlot
+                ? GetSrvGpuHandleForTextureCubeEXT(srvCubes[i])
                 : GetSrvGpuHandleForTextureEXT(srvTextures[i]);
         }
 
@@ -4892,7 +4989,7 @@ namespace CNA::Internal::Renderers::DirectX12
             // Resolve once to create every missing descriptor before reading the heap object. A
             // later slot can grow and replace the heap, invalidating both its old object and every
             // GPU handle obtained from it, so resolve all handles again after allocation settles.
-            D3D12_GPU_DESCRIPTOR_HANDLE samplerHandles[7]{};
+            D3D12_GPU_DESCRIPTOR_HANDLE samplerHandles[13]{};
             for (int i = 0; i < numSrvs; ++i)
                 (void)GetSamplerGpuHandleEXT(i);
             for (int i = 0; i < numSrvs; ++i)

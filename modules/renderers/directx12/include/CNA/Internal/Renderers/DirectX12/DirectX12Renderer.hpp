@@ -180,6 +180,23 @@ namespace CNA::Internal::Renderers::DirectX12
         [[nodiscard]] bool SupportsTexture3DSamplingEXT() const override;
 
         /**
+         * @brief Reports native stock-effect shadow sampling on a live D3D12 device.
+         * @return True when shader model 5 is available for stock shadow reception.
+         */
+        [[nodiscard]] bool SupportsShadowSamplingEXT() const override
+        {
+            return device_ != nullptr && featureLevel_ >= D3D_FEATURE_LEVEL_11_0;
+        }
+        /**
+         * @brief Reports PBR split-sum environment sampling on a live D3D12 device.
+         * @return True when shader model 5 is available for PBR environment reception.
+         */
+        [[nodiscard]] bool SupportsImageBasedLightingEXT() const override
+        {
+            return device_ != nullptr && featureLevel_ >= D3D_FEATURE_LEVEL_11_0;
+        }
+
+        /**
          * @brief Reports the sixteen vertex streams consumed by this renderer's draw path.
          * @return Sixteen on a live device, otherwise zero.
          */
