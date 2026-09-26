@@ -4,8 +4,8 @@ Status: native MSVC and physical Intel GPU baseline established on 2026-09-25. T
 Windows DirectX parity campaign is active on `win11-directx-modern`. DX11 and
 DX12 classic have both been revalidated after adding plural cube-face MRT.
 DX11 modern CNAEXT has completed its full Intel test run. DX12 modern
-CNAEXT passed a full Intel test run after its feature implementation; a
-post-diagnostics repeat is active. Opt-in compiled
+CNAEXT passed a 1,018-case full Intel run after its feature and diagnostic
+implementation (WIN11-0076). Opt-in compiled
 XNA effects now pass their DX11 and DX12 renderer suites on Intel (WIN11-0066).
 DX12 modern GPU timestamps and pass timing now pass focused hardware tests
 (WIN11-0067). Native DX12 sampled texture arrays now pass exact-transfer,
@@ -19,7 +19,7 @@ now pass focused physical Intel and targeted GPU-validation tests (WIN11-0071).
 DX12 base-instance drawing now passes native, custom ShaderEffect, and opt-in
 compiled-effect pixel tests, including divided instance streams (WIN11-0072).
 The large DX12 descriptor fixture under Intel GPU-based validation remains a recorded
-exception (WIN11-0025). Cross-D3D stress and application validation remain open.
+exception (WIN11-0025). Application validation remains open.
 
 ## Stable source and machine baseline
 
@@ -2758,8 +2758,8 @@ The current `IGraphicsRenderer` and its resource interfaces were compared
 with both DirectX renderer declarations and the renderer-neutral CNAEXT
 tests. This matrix names the complete applicable modern member families;
 inherited defaults are listed explicitly instead of being silently counted
-as implementations. It is an interface and capability audit, while the
-complete post-WIN11-0073 DX12 binary is still running.
+as implementations. At audit time the complete post-WIN11-0073 DX12 binary
+was still running; WIN11-0076 records its final result.
 
 | Current renderer member family | DX11 verdict | DX12 verdict |
 |---|---|---|
@@ -2785,3 +2785,71 @@ physically tested on both renderers under WIN11-0066 and WIN11-0072; neither
 default build advertises it. No public CNAEXT shader intake was added. The
 high-cardinality Intel GPU-validation TDR from WIN11-0025 is still a recorded
 environment/driver investigation item; smaller targeted GBV cases are clean.
+
+### WIN11-0076: Full current DX12 modern run and cross-D3D state stress
+
+The complete post-WIN11-0073 DX12 modern binary passed **994/1,018** Google
+Tests from 136 suites in 2,675,182 ms; **24 truthful skips, 0 failures**,
+and actual runner exit code **0**. The 24 skips are inverse capability
+checks (unsupported compute/indirect/timer cases), DX11-only tests,
+Vulkan/GL-specific tests, or format-specific fixtures that do not apply to
+this device. The log records **729 explicit Intel `8086:46A6` hardware adapter
+selections**, no WARP/software-adapter selection, D3D12 debug layer and DRED
+enabled, GPU-based validation disabled for this full run, zero D3D12 debug
+errors/warnings, zero unexpected device removals and zero DRED faults:
+`C:\rv\logs\dx12-modern-full-post-diagnostics-1.log`. The previous
+PowerShell redirection wrapper's status-1 ambiguity in WIN11-0073 was resolved
+by capturing the native `$LASTEXITCODE` immediately after the private runner;
+the final gtest summary and process exit are both successful. Fifteen process
+samples taken during the suite range from 60.44 to 159.89 MiB working set,
+26.95 to 138.57 MiB private bytes, and 394 to 451 handles; counts receded
+after the larger scene groups instead of growing monotonically. Sample CSV:
+`C:\rv\logs\dx12-modern-full-post-diagnostics-resources-1.csv`.
+
+The existing renderer-neutral `ModernGpuConformance.ClassicDrawingIsUnchangedByInterleavedCompute`
+now accepts an optional `CNA_MODERN_INTEROP_STRESS_CYCLES` value from 1 to
+1,000 (default 1) and repeats its unchanged pixel oracle for four target
+shapes: single-sample discard/preserve, MSAA and MRT. It compares plain
+classic draw frames with classic draw/compute/classic draw frames and checks
+colour, additive blend, depth rejection, unchanged classic device state and
+compute output. At 1,000 cycles it performs 4,000 shape cycles, 8,000
+frame readbacks, 12,000 compute dispatches and 8,002 assertions.
+
+Native Debug on the physical Intel GPU passed the default case on DX11
+(10/10 assertions) and DX12 (10/10), and the 1,000-cycle stress case on
+DX11 (8,002/8,002 in 9,892 ms) and DX12 (8,002/8,002 in 20,919 ms).
+Both debug layers emitted zero warnings/errors. D3D12 DRED had no fault.
+The DX12 10-cycle representative run with GPU-based validation **enabled**
+passed 82/82 assertions, zero GBV/debug/DRED messages. The focused MSVC
+AddressSanitizer builds passed the same 1,000-cycle test on DX11
+(8,002/8,002 in 23,660 ms) and DX12 (8,002/8,002 in 104,031 ms), with
+zero sanitizer findings and zero Direct3D debug messages. All runs explicitly
+selected hardware; the DX12 runs required `CNA_D3D12_ADAPTER=hardware` and
+never fell back to WARP. Logs:
+`C:\rv\logs\dx11-modern-interleave-default-1.log`,
+`C:\rv\logs\dx11-modern-interleave-stress-1000-1.log`,
+`C:\rv\logs\dx11-modern-interleave-asan-stress-1000-1.log`,
+`C:\rv\logs\dx12-modern-interleave-default-1.log`,
+`C:\rv\logs\dx12-modern-interleave-stress-1000-1.log`,
+`C:\rv\logs\dx12-modern-interleave-gbv-10-1.log`, and
+`C:\rv\logs\dx12-modern-interleave-asan-stress-1000-1.log`.
+
+```powershell
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='0'
+$exe='C:\rv\build\cna-win11-dx12-modern\Debug\CnaGraphicsExtTests.exe'
+$commandLine='"'+$exe+'" --gtest_color=no'
+& C:\rv\work\private_desktop_awake.exe 4800000 $commandLine *> C:\rv\logs\dx12-modern-full-post-diagnostics-1.log
+$code=$LASTEXITCODE
+Add-Content C:\rv\logs\dx12-modern-full-post-diagnostics-1.log "[RUNNER] exit code $code"
+exit $code
+```
+
+The focused stress command used the corresponding DX11 or DX12 normal/ASan
+`CnaGraphicsExtTests.exe`, `--gtest_filter=ModernGpuConformance.ClassicDrawingIsUnchangedByInterleavedCompute`,
+and `CNA_MODERN_INTEROP_STRESS_CYCLES=1000`; the targeted DX12 GBV run used
+`CNA_D3D12_GPU_VALIDATION=1` and 10 cycles. The high-cardinality Intel GBV
+descriptor fixture exception under WIN11-0025 remains unresolved by these
+bounded validations and is not counted as a passing case.

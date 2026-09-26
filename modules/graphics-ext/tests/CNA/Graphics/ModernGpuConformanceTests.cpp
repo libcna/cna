@@ -47,6 +47,7 @@
 #include "ModernConformanceShaderPackage.generated.hpp"
 
 #include <cstdint>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -608,6 +609,17 @@ TEST_F(ModernGpuConformance, ClassicDrawingIsUnchangedByInterleavedCompute)
     if (Lacks(gd.SupportsCapability(GraphicsCapability::ThreeD), "3D"))
         GTEST_SKIP() << "this renderer has no 3D pipeline";
 
+    const int cycles = [] {
+        const char* value = std::getenv("CNA_MODERN_INTEROP_STRESS_CYCLES");
+        if (value == nullptr || value[0] == '\0') return 1;
+        char* end = nullptr;
+        const long parsed = std::strtol(value, &end, 10);
+        if (end == value || *end != '\0' || parsed < 1 || parsed > 1000)
+            throw std::invalid_argument(
+                "CNA_MODERN_INTEROP_STRESS_CYCLES must be between 1 and 1000");
+        return static_cast<int>(parsed);
+    }();
+
     constexpr int kSize = 32;
     constexpr std::size_t kCount = 256;
     BasicEffect effect(gd);
@@ -657,29 +669,34 @@ TEST_F(ModernGpuConformance, ClassicDrawingIsUnchangedByInterleavedCompute)
             return pixels;
         };
 
-        const auto plain = frame(false);
-        const auto mixed = frame(true);
-        int differing = 0;
-        for (std::size_t i = 0; i < plain.size(); ++i)
-            differing += plain[i] != mixed[i] ? 1 : 0;
-        Check(differing == 0, shape + ": " + std::to_string(differing) +
-                                  " pixels differ once compute is interleaved with the classic "
-                                  "draws");
-        // The frame must have drawn both triangles and depth-rejected the far one where they
-        // overlap, or the comparison proves nothing about either attachment.
-        int red = 0, blue = 0, both = 0;
-        for (const Color& c : plain)
+        for (int cycle = 0; cycle < cycles; ++cycle)
         {
-            const bool r = c.getRProperty() > 150;
-            const bool bl = c.getBProperty() > 150;
-            red += r ? 1 : 0;
-            blue += bl ? 1 : 0;
-            both += (r && bl) ? 1 : 0;
+            const auto plain = frame(false);
+            const auto mixed = frame(true);
+            int differing = 0;
+            for (std::size_t i = 0; i < plain.size(); ++i)
+                differing += plain[i] != mixed[i] ? 1 : 0;
+            Check(differing == 0, shape + " cycle " + std::to_string(cycle) + ": " +
+                                      std::to_string(differing) +
+                                      " pixels differ once compute is interleaved with the classic "
+                                      "draws");
+            // The frame must have drawn both triangles and depth-rejected the far one where they
+            // overlap, or the comparison proves nothing about either attachment.
+            int red = 0, blue = 0, both = 0;
+            for (const Color& c : plain)
+            {
+                const bool r = c.getRProperty() > 150;
+                const bool bl = c.getBProperty() > 150;
+                red += r ? 1 : 0;
+                blue += bl ? 1 : 0;
+                both += (r && bl) ? 1 : 0;
+            }
+            Check(red > 0 && blue > 0 && both == 0,
+                  shape + " cycle " + std::to_string(cycle) +
+                      ": the classic frame drew both triangles with the far one depth-tested "
+                      "away (red " + std::to_string(red) + ", blue " +
+                      std::to_string(blue) + ", both " + std::to_string(both) + " pixels)");
         }
-        Check(red > 0 && blue > 0 && both == 0,
-              shape + ": the classic frame drew both triangles with the far one depth-tested away "
-                      "(red " + std::to_string(red) + ", blue " + std::to_string(blue) +
-                  ", both " + std::to_string(both) + " pixels)");
     };
 
     {
