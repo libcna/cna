@@ -1514,3 +1514,24 @@ the zero-case DX12 invocation is
 `C:\rv\logs\dx12-hlsl-probes-cross-1.log`. The last full DX11 modern tally
 above predates the two newly executable numeric probes; a complete rebuilt
 suite has not been rerun solely for these test-input changes.
+
+## DX11 modern test compilation in classic builds, 2026-09-26
+
+WIN11-0056: the first complete DX11 classic rebuild after the modern work
+failed while compiling `D3D11EffectTextureLifetimeTests.cpp` with `CNA_CNAEXT`
+disabled. This test file's outer guard checked only the DX11 renderer, but it
+uses `CnaTest::EngineLayer::HiDefDevice`, which exists only when `CNA_CNAEXT`
+is enabled. The file now requires both definitions. This is a test
+configuration defect, not a rendering failure. The original compiler errors
+are in `C:\rv\logs\dx11-cube-mrt-full-build-1.log`. The entire classic DX11
+Debug build then passed with CNAEXT off
+(`C:\rv\logs\dx11-cube-mrt-full-build-2.log`), and the modern DX11 test
+target passed its build with CNAEXT on
+(`C:\rv\logs\dx11-modern-lifetime-guard-build-1.log`). The previous full
+modern run executed the guarded tests in its enabled configuration; the guard
+does not change that source path.
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx11-debug --config Debug --parallel 4
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsExtTests --parallel 4
+```

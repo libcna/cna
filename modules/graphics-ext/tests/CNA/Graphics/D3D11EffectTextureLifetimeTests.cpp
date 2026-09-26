@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-#ifdef CNA_RENDERER_DIRECTX11
+#if defined(CNA_RENDERER_DIRECTX11) && defined(CNA_CNAEXT)
 
 #include <gtest/gtest.h>
 
@@ -156,4 +156,4 @@ float4 main(float4 position : SV_Position) : SV_Target0
     EXPECT_TRUE(volumeRenderer.expired());
 }
 
-#endif
+#endif // CNA_RENDERER_DIRECTX11 && CNA_CNAEXT
