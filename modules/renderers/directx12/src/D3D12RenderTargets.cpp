@@ -848,6 +848,14 @@ namespace CNA::Internal::Renderers::DirectX12
                                             dsv_, dsvFormat_, depthResource_.Get());
     }
 
+    D3D12_CPU_DESCRIPTOR_HANDLE D3D12RenderTargetCubeRenderer::PrepareMrtFaceEXT(int face)
+    {
+        if (face < 0 || face >= 6)
+            throw std::out_of_range("D3D12RenderTargetCubeRenderer: invalid cube face");
+        activeFace_ = face;
+        return rtv_[face];
+    }
+
     void D3D12RenderTargetCubeRenderer::ResolveMsaaEXT()
     {
         if (!isMsaa_ || !resolveResource_ || !owner_ || activeFace_ < 0) return;

@@ -2070,9 +2070,17 @@ namespace CNA::Internal::Renderers::DirectX12
     void DirectX12Renderer::NotifyRenderTargetCubeDestroyedEXT(
         IRenderTargetCubeRenderer* target) noexcept
     {
-        if (currentCubeRT_ != target) return;
-        currentCubeRT_ = nullptr;
-        UnbindOffscreenColorTargetEXT();
+        bool wasBound = currentCubeRT_ == target;
+        if (wasBound) currentCubeRT_ = nullptr;
+        for (int i = 0; i < currentMrtCount_; ++i)
+        {
+            if (currentMrtCubes_[i] == target)
+            {
+                currentMrtCubes_[i] = nullptr;
+                wasBound = true;
+            }
+        }
+        if (wasBound) UnbindOffscreenColorTargetEXT();
     }
 
     D3D12_GPU_DESCRIPTOR_HANDLE DirectX12Renderer::GetSrvGpuHandleForTextureEXT(const ITextureRenderer* tex)
@@ -2291,25 +2299,44 @@ namespace CNA::Internal::Renderers::DirectX12
                 renderTargets[0].GetCubeFace());
             return;
         }
-        for (int i = 0; i < count; ++i)
-            if (renderTargets[i].IsRenderTargetCubeFace())
-                throw std::runtime_error(
-                    "DirectX12Renderer::SetRenderTargets: cube faces in a multi-target "
-                    "set are not implemented by this CNA renderer.");
-
         ID3D12Resource* resources[8];
         D3D12_CPU_DESCRIPTOR_HANDLE rtvs[8];
         const int n = std::min(count, 8);
-        D3D12RenderTargetRenderer* first = nullptr;
+        D3D12_CPU_DESCRIPTOR_HANDLE firstDsv{};
+        DXGI_FORMAT firstDsvFormat = DXGI_FORMAT_UNKNOWN;
+        ID3D12Resource* firstDepthResource = nullptr;
         for (int i = 0; i < n; ++i)
         {
-            auto* rt = dynamic_cast<D3D12RenderTargetRenderer*>(
-                renderTargets[i].GetRenderTarget2D());
-            if (!rt)
-                throw std::runtime_error("DirectX12Renderer::SetRenderTargets: target is not a real D3D12RenderTargetRenderer");
-            resources[i] = rt->GetColorResourceEXT();
-            rtvs[i] = rt->GetRtvEXT();
-            if (i == 0) first = rt;
+            if (renderTargets[i].IsRenderTargetCubeFace())
+            {
+                auto* cube = dynamic_cast<D3D12RenderTargetCubeRenderer*>(
+                    renderTargets[i].GetRenderTargetCube());
+                if (!cube)
+                    throw std::runtime_error("DirectX12Renderer::SetRenderTargets: invalid cube attachment");
+                resources[i] = cube->GetColorResourceEXT();
+                rtvs[i] = cube->PrepareMrtFaceEXT(renderTargets[i].GetCubeFace());
+                if (i == 0)
+                {
+                    firstDsv = cube->GetDsvEXT();
+                    firstDsvFormat = cube->GetDsvFormatEXT();
+                    firstDepthResource = cube->GetDepthResourceEXT();
+                }
+            }
+            else
+            {
+                auto* target = dynamic_cast<D3D12RenderTargetRenderer*>(
+                    renderTargets[i].GetRenderTarget2D());
+                if (!target)
+                    throw std::runtime_error("DirectX12Renderer::SetRenderTargets: invalid 2D attachment");
+                resources[i] = target->GetColorResourceEXT();
+                rtvs[i] = target->GetRtvEXT();
+                if (i == 0)
+                {
+                    firstDsv = target->GetDsvEXT();
+                    firstDsvFormat = target->GetDsvFormatEXT();
+                    firstDepthResource = target->GetDepthResourceEXT();
+                }
+            }
         }
         // plans/plan_dx.md DX-255: XNA takes the depth-stencil buffer from render target 0, exactly as
         // DirectX11Renderer::SetRenderTargets() already does. Omitting it here is what made every
@@ -2322,9 +2349,7 @@ namespace CNA::Internal::Renderers::DirectX12
         BindOffscreenColorTargetsEXT(resources, rtvs, n, resources[0]->GetDesc().Format,
                                      renderTargets[0].GetWidth(),
                                      renderTargets[0].GetHeight(),
-                                     first ? first->GetDsvEXT() : D3D12_CPU_DESCRIPTOR_HANDLE{},
-                                     first ? first->GetDsvFormatEXT() : DXGI_FORMAT_UNKNOWN,
-                                     first ? first->GetDepthResourceEXT() : nullptr);
+                                     firstDsv, firstDsvFormat, firstDepthResource);
 
         // DX-255: and remember the set, so each target's own UnbindAsRenderTarget() (MSAA resolve,
         // mip regeneration) runs when it is replaced. currentCustomRT_ cannot hold N targets; this
@@ -2332,7 +2357,12 @@ namespace CNA::Internal::Renderers::DirectX12
         // never had -- so an MRT set's targets were never finalized here at all.
         currentMrtCount_ = std::min(n, kMaxMrtTargets);
         for (int i = 0; i < currentMrtCount_; ++i)
-            currentMrtTargets_[i] = renderTargets[i].GetRenderTarget2D();
+        {
+            currentMrtTargets_[i] = renderTargets[i].IsRenderTargetCubeFace()
+                ? nullptr : renderTargets[i].GetRenderTarget2D();
+            currentMrtCubes_[i] = renderTargets[i].IsRenderTargetCubeFace()
+                ? renderTargets[i].GetRenderTargetCube() : nullptr;
+        }
     }
 
     void DirectX12Renderer::FlushPendingMrtResolveEXT()
@@ -2341,11 +2371,21 @@ namespace CNA::Internal::Renderers::DirectX12
         // Copy and clear first: UnbindAsRenderTarget() calls back into this renderer
         // (RestoreBackBufferRenderTargetEXT), and re-entering this function must find nothing to do.
         IRenderTargetRenderer* targets[kMaxMrtTargets] = {};
+        IRenderTargetCubeRenderer* cubes[kMaxMrtTargets] = {};
         const int n = currentMrtCount_;
-        for (int i = 0; i < n; ++i) targets[i] = currentMrtTargets_[i];
+        for (int i = 0; i < n; ++i)
+        {
+            targets[i] = currentMrtTargets_[i];
+            cubes[i] = currentMrtCubes_[i];
+            currentMrtTargets_[i] = nullptr;
+            currentMrtCubes_[i] = nullptr;
+        }
         currentMrtCount_ = 0;
         for (int i = 0; i < n; ++i)
+        {
             if (targets[i]) targets[i]->UnbindAsRenderTarget();
+            if (cubes[i]) cubes[i]->UnbindAsRenderTarget();
+        }
     }
 
     void DirectX12Renderer::Clear(float r, float g, float b, float a)

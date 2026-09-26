@@ -343,7 +343,7 @@ TEST(RenderTargetSemantics, DirectXPluralTargetsAcceptCubeFacesInEitherSlot)
     RenderTarget2D flat(device, kSize, kSize, false, SurfaceFormat::Color,
                         DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
     RenderTargetCube first(device, kSize, false, SurfaceFormat::Color,
-                           DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+                           DepthFormat::Depth24Stencil8, 0, RenderTargetUsage::PreserveContents);
     RenderTargetCube second(device, kSize, false, SurfaceFormat::Color,
                             DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
 
@@ -362,7 +362,7 @@ TEST(RenderTargetSemantics, DirectXPluralTargetsAcceptCubeFacesInEitherSlot)
 
     device.SetRenderTargets({RenderTargetBinding(&first, CubeMapFace::NegativeZ),
                              RenderTargetBinding(&flat)});
-    device.Clear(green);
+    device.Clear(green, 1.0f);
     device.SetRenderTargets({});
     firstPixel = FirstTexel(first, CubeMapFace::NegativeZ);
     flatPixel = FirstTexel(flat);

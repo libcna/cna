@@ -1330,6 +1330,7 @@ namespace CNA::Internal::Renderers::DirectX12
         /// of the two mechanisms owns a given bind.
         static constexpr int kMaxMrtTargets = kMaxExtraMrtTargets + 1;
         IRenderTargetRenderer* currentMrtTargets_[kMaxMrtTargets] = {};
+        IRenderTargetCubeRenderer* currentMrtCubes_[kMaxMrtTargets] = {};
         int currentMrtCount_ = 0;
 
     };

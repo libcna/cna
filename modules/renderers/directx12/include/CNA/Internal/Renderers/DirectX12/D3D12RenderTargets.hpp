@@ -248,6 +248,19 @@ namespace CNA::Internal::Renderers::DirectX12
         void UnbindAsRenderTarget() override;
         [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
 
+        /**
+         * @brief Selects a cube face for a plural MRT binding without replacing the other attachments.
+         * @param face Cube face index from zero through five.
+         * @return That face's render-target descriptor.
+         */
+        [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE PrepareMrtFaceEXT(int face);
+        /** @brief Returns this cube's depth-stencil descriptor for a slot-zero MRT binding. */
+        [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE GetDsvEXT() const { return dsv_; }
+        /** @brief Returns this cube's depth-stencil descriptor format. */
+        [[nodiscard]] DXGI_FORMAT GetDsvFormatEXT() const { return dsvFormat_; }
+        /** @brief Returns this cube's shared depth-stencil resource. */
+        [[nodiscard]] ID3D12Resource* GetDepthResourceEXT() const { return depthResource_.Get(); }
+
         /// The resource actually bound for rendering (CNAEXT) -- the MSAA array itself when
         /// `GetMultiSampleCount() > 0`; use `GetSampleableColorResourceEXT()` instead for
         /// readback/sampling, which is always the resolved single-sample resource.
