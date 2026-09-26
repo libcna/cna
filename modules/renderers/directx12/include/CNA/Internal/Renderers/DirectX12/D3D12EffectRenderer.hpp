@@ -78,9 +78,19 @@ namespace CNA::Internal::Renderers::DirectX12
 
         /** @brief Returns the most recently resolved custom PSO, if any. */
         [[nodiscard]] ID3D12PipelineState* GetPipelineStateEXT() const { return pso_.Get(); }
-        /** @brief Resolves a custom PSO through the renderer's complete state cache. */
+        /**
+         * @brief Resolves a custom PSO through the renderer's complete state cache.
+         * @param desc Current draw state and vertex layout.
+         * @param logicalInstanceId Use the vertex variant fed by absolute instance IDs.
+         * @return Cached native pipeline, or null when compilation or creation fails.
+         */
         [[nodiscard]] ID3D12PipelineState* GetOrCreatePipelineStateEXT(
-            D3D12PipelineStateDesc desc);
+            D3D12PipelineStateDesc desc, bool logicalInstanceId = false);
+        /**
+         * @brief Reports whether the vertex source consumes SV_InstanceID.
+         * @return True when a logical-ID stream is needed for base-instance draws.
+         */
+        [[nodiscard]] bool HasInstanceIdInputEXT() const noexcept { return hasInstanceIdInput_; }
         /** @brief Returns this program's reflected root signature. */
         [[nodiscard]] ID3D12RootSignature* GetRootSignatureEXT() const { return rootSignature_.Get(); }
         /** @brief Copies a reflected cbuffer into a frame-owned range and returns its GPU address. */
@@ -134,6 +144,7 @@ namespace CNA::Internal::Renderers::DirectX12
         ComPtr<ID3D12PipelineState> pso_;
         ComPtr<ID3D12RootSignature> rootSignature_;
         ComPtr<ID3DBlob> vsBytecode_;
+        ComPtr<ID3DBlob> baseInstanceVsBytecode_;
         ComPtr<ID3DBlob> psBytecode_;
         D3DCommon::D3DProgramReflection reflection_;
         std::uint32_t storageSlots_ = 0;
@@ -141,6 +152,9 @@ namespace CNA::Internal::Renderers::DirectX12
         std::array<TextureBinding,
                    D3DCommon::D3DProgramReflection::kMaxShaderResources> textures_{};
         std::uint64_t programId_ = 0;
+        std::uint64_t baseInstanceProgramId_ = 0;
+        std::string vertexSource_;
+        bool hasInstanceIdInput_ = false;
         std::string compileError_;
         bool valid_ = false;
     };

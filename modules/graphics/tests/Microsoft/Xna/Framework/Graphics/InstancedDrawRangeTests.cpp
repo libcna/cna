@@ -2065,9 +2065,9 @@ TEST_F(InstancedDrawRangeTest, D3DHonorsBindingOffsetsAndInstanceFrequency)
     RunBindingOffsetAndFrequencyOracle();
 }
 
-TEST_F(InstancedDrawRangeTest, D3D11BaseInstanceSelectsAbsoluteInstanceRecords)
+TEST_F(InstancedDrawRangeTest, D3DBaseInstanceSelectsAbsoluteInstanceRecords)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11, DirectX12);
     ASSERT_TRUE(device.SupportsRendererFeatureEXT(CNA::RendererFeature::BaseInstanceDrawing));
     RequireInstancedRendering();
 
@@ -2129,9 +2129,9 @@ TEST_F(InstancedDrawRangeTest, D3D11BaseInstanceSelectsAbsoluteInstanceRecords)
     expectRows(stockFallback, true, "fogged stock effect first instance 3");
 }
 
-TEST_F(InstancedDrawRangeTest, D3D11BaseInstanceReachesCustomShaderInstanceId)
+TEST_F(InstancedDrawRangeTest, D3DBaseInstanceReachesCustomShaderInstanceId)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11, DirectX12);
     ASSERT_TRUE(device.SupportsRendererFeatureEXT(CNA::RendererFeature::BaseInstanceDrawing));
     RequireInstancedRendering();
 
@@ -2185,9 +2185,9 @@ TEST_F(InstancedDrawRangeTest, D3D11BaseInstanceReachesCustomShaderInstanceId)
     expectRows(draw(1), 1);
 }
 
-TEST_F(InstancedDrawRangeTest, D3D11BaseInstanceCombinesShaderIdAndDividedStream)
+TEST_F(InstancedDrawRangeTest, D3DBaseInstanceCombinesShaderIdAndDividedStream)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11, DirectX12);
     ASSERT_TRUE(device.SupportsRendererFeatureEXT(CNA::RendererFeature::BaseInstanceDrawing));
     RequireInstancedRendering();
 
@@ -2264,4 +2264,46 @@ TEST_F(InstancedDrawRangeTest, D3D11BaseInstanceCombinesShaderIdAndDividedStream
     EXPECT_TRUE(afterChurn.HasRgbWithin(
         static_cast<int>(layout.ColumnCenterX(3)),
         static_cast<int>(layout.RowCenterY(2)), 3, Color::Lime));
+}
+
+TEST_F(InstancedDrawRangeTest, D3DBaseInstanceWithoutInstanceStreamRepeatsTheDraw)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11, DirectX12);
+    ASSERT_TRUE(device.SupportsRendererFeatureEXT(CNA::RendererFeature::BaseInstanceDrawing));
+    RequireInstancedRendering();
+
+    const GridLayout layout = BackbufferLayout();
+    const InstancedFixture fixture = BuildFixture(layout);
+    constexpr int kElementCount = kSlotCount * kVerticesPerSlot;
+    VertexBuffer meshBuffer(device, PositionColorDeclaration(), kElementCount, BufferUsage::None);
+    meshBuffer.SetData(fixture.mesh.data(), kElementCount);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, kElementCount, BufferUsage::None);
+    indexBuffer.SetData(fixture.indices.data(), kElementCount);
+    BasicEffect effect(device);
+    effect.VertexColorEnabled = false;
+    effect.setDiffuseColorProperty(Vector3(0.2f, 0.2f, 0.2f));
+    effect.setAlphaProperty(1.0f);
+    device.SetVertexBuffer(&meshBuffer);
+    device.SetIndexBuffer(&indexBuffer);
+    device.setBlendStateProperty(BlendState::Additive);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+
+    const auto draw = [&](int instanceCount)
+    {
+        device.Clear(Color::Black);
+        effect.Apply();
+        device.DrawInstancedPrimitivesBaseInstanceEXT(
+            PrimitiveType::TriangleList, 0, 0, kElementCount,
+            3 * kVerticesPerSlot, 1, instanceCount, 2);
+        const FrameSnapshot frame = CaptureBackbuffer(device, layout.width, layout.height);
+        return frame.At(static_cast<int>(layout.ColumnCenterX(3)),
+                        static_cast<int>(layout.RowCenterY(0))).getRProperty();
+    };
+
+    const int once = draw(1);
+    const int twice = draw(2);
+    ASSERT_GT(once, 0);
+    EXPECT_NEAR(twice, 2 * once, 3);
 }

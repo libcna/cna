@@ -530,6 +530,14 @@ namespace CNA::Internal::Renderers::DirectX12
          * @return True when a live D3D12 device can create draw command signatures.
          */
         [[nodiscard]] bool SupportsIndirectDrawEXT() const override;
+        /**
+         * @brief Reports native start-instance support for instanced draws.
+         * @return True when a live device can draw from an absolute instance index.
+         */
+        [[nodiscard]] bool SupportsBaseInstanceDrawingEXT() const override
+        {
+            return device_ != nullptr && featureLevel_ >= D3D_FEATURE_LEVEL_11_0;
+        }
 #if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
         /** @brief Creates a compiled XNA effect through CNA's MojoShader HLSL backend. */
         std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(
@@ -1265,7 +1273,8 @@ namespace CNA::Internal::Renderers::DirectX12
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                   PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
                                   ID3D12Resource* indirectArguments = nullptr,
-                                  UINT64 indirectByteOffset = 0);
+                                  UINT64 indirectByteOffset = 0,
+                                  int instanceCount = 1);
         ID3D12CommandSignature* GetOrCreateIndirectSignatureEXT(bool indexed);
         void ExecuteIndirectDrawEXT(ID3D12GraphicsCommandList* commands,
                                     ID3D12Resource* arguments, UINT64 byteOffset,

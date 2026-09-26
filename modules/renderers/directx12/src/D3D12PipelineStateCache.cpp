@@ -85,6 +85,17 @@ namespace CNA::Internal::Renderers::DirectX12
             inputElements = InputElementsForStrideD3D12(desc.strideInBytes, inputElementCount);
         }
 
+        if (desc.logicalInstanceIdStream && inputElements != nullptr)
+        {
+            if (translatedElements.empty())
+                translatedElements.assign(inputElements, inputElements + inputElementCount);
+            translatedElements.push_back({
+                "CNA_LOGICAL_INSTANCE_ID", 0, DXGI_FORMAT_R32_UINT,
+                16, 0, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1});
+            inputElements = translatedElements.data();
+            inputElementCount = static_cast<UINT>(translatedElements.size());
+        }
+
         if (!device || !rootSignature || !vsBytes || !psBytes || !inputElements)
         {
             cache_[key] = pso; // Cache the (null) failure too, same convention as D3D12RootSignatureCache.

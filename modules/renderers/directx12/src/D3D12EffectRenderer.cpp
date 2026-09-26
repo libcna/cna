@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <regex>
 #include <utility>
 
 namespace CNA::Internal::Renderers::DirectX12
@@ -78,12 +79,18 @@ namespace CNA::Internal::Renderers::DirectX12
         pso_.Reset();
         rootSignature_.Reset();
         vsBytecode_.Reset();
+        baseInstanceVsBytecode_.Reset();
         psBytecode_.Reset();
         reflection_.Reset();
         storageSlots_ = 0;
         storageResourceCount_ = 0;
         textures_ = {};
         programId_ = 0;
+        baseInstanceProgramId_ = 0;
+        vertexSource_ = vertSrc;
+        static const std::regex instanceIdSemantic(
+            R"(:\s*SV_InstanceID\b)", std::regex_constants::icase);
+        hasInstanceIdInput_ = std::regex_search(vertSrc, instanceIdSemantic);
 
         const UINT flags = D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3;
 
@@ -259,14 +266,43 @@ namespace CNA::Internal::Renderers::DirectX12
     }
 
     ID3D12PipelineState* D3D12EffectRenderer::GetOrCreatePipelineStateEXT(
-        D3D12PipelineStateDesc desc)
+        D3D12PipelineStateDesc desc, bool logicalInstanceId)
     {
         (void) owner_.Get();
         if (!valid_ || !rootSignature_ || !vsBytecode_ || !psBytecode_)
             return nullptr;
-        desc.customProgramId = programId_;
-        desc.customVertexShaderBytecode = vsBytecode_->GetBufferPointer();
-        desc.customVertexShaderBytecodeSize = vsBytecode_->GetBufferSize();
+        ID3DBlob* vertexBytecode = vsBytecode_.Get();
+        if (logicalInstanceId && hasInstanceIdInput_)
+        {
+            if (!baseInstanceVsBytecode_)
+            {
+                static const std::regex instanceIdSemantic(
+                    R"(:\s*SV_InstanceID\b)", std::regex_constants::icase);
+                const std::string source = std::regex_replace(
+                    vertexSource_, instanceIdSemantic, ": CNA_LOGICAL_INSTANCE_ID");
+                ComPtr<ID3DBlob> errors;
+                const HRESULT result = D3DCompile(
+                    source.data(), source.size(), "ShaderEffect_base_instance_vs",
+                    nullptr, nullptr, "main", "vs_5_0",
+                    D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3,
+                    0, baseInstanceVsBytecode_.GetAddressOf(), errors.GetAddressOf());
+                if (FAILED(result))
+                {
+                    compileError_ = errors
+                        ? std::string(static_cast<const char*>(errors->GetBufferPointer()),
+                                      errors->GetBufferSize())
+                        : ("D3DCompile (base-instance vertex) failed, hr=" + FormatHr(result));
+                    return nullptr;
+                }
+                baseInstanceProgramId_ = NextD3D12CustomProgramIdEXT();
+            }
+            vertexBytecode = baseInstanceVsBytecode_.Get();
+            desc.logicalInstanceIdStream = true;
+        }
+        desc.customProgramId = desc.logicalInstanceIdStream
+            ? baseInstanceProgramId_ : programId_;
+        desc.customVertexShaderBytecode = vertexBytecode->GetBufferPointer();
+        desc.customVertexShaderBytecodeSize = vertexBytecode->GetBufferSize();
         desc.customPixelShaderBytecode = psBytecode_->GetBufferPointer();
         desc.customPixelShaderBytecodeSize = psBytecode_->GetBufferSize();
         pso_ = owner_->psoCache_.GetOrCreate(device_, rootSignature_.Get(), desc);

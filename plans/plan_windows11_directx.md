@@ -15,6 +15,8 @@ compute-to-graphics, lifetime, recovery, and targeted GPU-validation tests
 physical Intel validation (WIN11-0070).
 DX12 stock-effect shadow reception, punctual and cascaded shadows, and PBR IBL
 now pass focused physical Intel and targeted GPU-validation tests (WIN11-0071).
+DX12 base-instance drawing now passes native, custom ShaderEffect, and opt-in
+compiled-effect pixel tests, including divided instance streams (WIN11-0072).
 The large DX12 descriptor fixture under Intel GPU-based validation remains a recorded
 exception (WIN11-0025). Modern parity and application validation remain open.
 
@@ -2570,4 +2572,71 @@ $env:CNA_D3D12_GPU_VALIDATION='1'
 $filter='CascadedShadowVisibilityTest.EveryCascadeCountProducesTheSameShadow:PunctualShadowVisibilityTest.APointLightsCubeShadowDarkensWhatItOccludes:ShadowVisibilityTest.PbrEffectReceivesTheShadowOnItsDirectTermOnly:IblVisibilityTest.PbrEffectSamplesAllThreeProductsAndHonorsIntensity:IblVisibilityTest.AShadowBlocksDirectLightButPreservesTheEnvironment'
 $commandLine='"'+$exe+'" --gtest_color=no --gtest_filter='+$filter
 & C:\rv\work\private_desktop_awake.exe 900000 $commandLine *> C:\rv\logs\dx12-shadow-ibl-gbv-1.log
+```
+
+### WIN11-0072: DX12 absolute instance selection across draw routes
+
+The post-ordinary-image complete DX12 modern binary, launched before
+WIN11-0071 and the last ordinary-texture constructor cleanup, finished
+**1,016 tests from 135 suites in 2,573,361 ms: 956 pass, 60 skip, 0 fail**
+(`C:\rv\logs\dx12-modern-full-post-ordinary-image-1.log`). It selected
+physical Intel Iris Xe `8086:46A6` **725 times** with debug layer and DRED;
+zero WARP selections, D3D12 debug warnings/errors, unexpected device
+removals, or DRED faults. Its 60 skips include the 36 shadow/IBL cases that
+WIN11-0071 subsequently enabled, so this run is a baseline, not final
+post-shadow conformance.
+
+The modern interface's `SupportsBaseInstanceDrawingEXT` was still false on
+DX12 despite native indexed instancing. Enabling the three existing DX11
+pixel oracles on DX12 first produced **3/3 genuine DX12 failures**:
+`StartInstanceLocation` selected the wrong record from a divided instance
+stream; `SV_InstanceID` began at zero rather than CNA's absolute logical
+index; and the custom instanced path omitted its instance-stream input layout
+(D3D12 debug ID 65). The renderer now rebases instance views at their
+absolute logical record, batches from an index aligned to every bound
+frequency, and supplies a frame-owned UINT input stream to a separately
+cached HLSL vertex variant when `SV_InstanceID` needs the absolute value.
+Its stock CPU expansion and optional MojoShader compiled-effect path also
+select records using `firstInstance`. With no instance stream, the stock path
+submits every requested instance so blend/stencil effects are preserved.
+Range and upload-size guards reject invalid logical IDs before recording.
+
+After these fixes, the complete `InstancedDrawRangeTest.*` DX12 run passed
+**22 pass / 1 skip / 0 fail** in 53,338 ms, with **23 explicit Intel hardware
+selections** and zero D3D12 debug messages or DRED faults
+(`C:\rv\logs\dx12-base-instance-range-final-2.log`). The skip is the
+EasyGL-only differential. This includes 2,048 alternating custom base-instance
+draws, absolute record selection at frequency two, shader ID plus divided
+stream, and additive blending with no instance stream. Targeted DX12 GPU-based
+validation passed **3/3** (`C:\rv\logs\dx12-base-instance-gbv-final.log`).
+The optional DX12 compiled-effect build passed **3/3** focused draw tests,
+including a new two-instance divided-stream pixel oracle, with zero debug
+messages (`C:\rv\logs\dx12-base-instance-compiled-focused-1.log`); that
+new oracle also passed **1/1** under GPU-based validation
+(`C:\rv\logs\dx12-base-instance-compiled-gbv-1.log`). The four shared
+base-instance cases passed on DX11 physical Intel hardware with debug layer
+(`C:\rv\logs\dx11-base-instance-shared-final.log` and
+`C:\rv\logs\dx11-base-instance-no-stream-1.log`). A complete DX12 modern
+run from the final post-0072 executable is still required.
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx12-modern --config Debug --target CnaGraphicsTests CnaGraphicsExtTests --parallel 12
+cmake --build C:\rv\build\cna-win11-dx12-compiled --config Debug --target CnaRendererTests --parallel 12
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsTests --parallel 12
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='0'
+$exe='C:\rv\build\cna-win11-dx12-modern\Debug\CnaGraphicsTests.exe'
+$commandLine='"'+$exe+'" --gtest_color=no --gtest_filter=InstancedDrawRangeTest.*'
+& C:\rv\work\private_desktop_awake.exe 900000 $commandLine *> C:\rv\logs\dx12-base-instance-range-final-2.log
+$env:CNA_D3D12_GPU_VALIDATION='1'
+$filter='InstancedDrawRangeTest.D3DBaseInstanceSelectsAbsoluteInstanceRecords:InstancedDrawRangeTest.D3DBaseInstanceReachesCustomShaderInstanceId:InstancedDrawRangeTest.D3DBaseInstanceWithoutInstanceStreamRepeatsTheDraw'
+$commandLine='"'+$exe+'" --gtest_color=no --gtest_filter='+$filter
+& C:\rv\work\private_desktop_awake.exe 900000 $commandLine *> C:\rv\logs\dx12-base-instance-gbv-final.log
+$exe='C:\rv\build\cna-win11-dx12-compiled\Debug\CnaRendererTests.exe'
+$env:CNA_D3D12_GPU_VALIDATION='0'
+$filter='DirectX12CompiledEffectDrawTest.BaseInstanceSelectsDividedCompiledEffectStream:DirectX12CompiledEffectDrawTest.SharedInstancingDrawContract:DirectX12CompiledEffectDrawTest.SharedDrawMatrixContract'
+$commandLine='"'+$exe+'" --gtest_color=no --gtest_filter='+$filter
+& C:\rv\work\private_desktop_awake.exe 900000 $commandLine *> C:\rv\logs\dx12-base-instance-compiled-focused-1.log
 ```

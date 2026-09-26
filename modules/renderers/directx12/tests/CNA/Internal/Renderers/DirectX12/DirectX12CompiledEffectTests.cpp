@@ -109,6 +109,72 @@ TEST(DirectX12CompiledEffectDrawTest, SharedInstancingDrawContract)
     CNA::TestSupport::RunCompiledEffectInstancingDrawContract(device);
 }
 
+TEST(DirectX12CompiledEffectDrawTest, BaseInstanceSelectsDividedCompiledEffectStream)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+
+    HiDefGraphicsDevice device;
+    ASSERT_TRUE(device.SupportsRendererFeatureEXT(CNA::RendererFeature::BaseInstanceDrawing));
+    Effect effect(device, CNA::TestSupport::BuildSyntheticDrawableEffect(true));
+    auto& parameters = effect.getParametersProperty();
+    parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
+    parameters["Tint"]->SetValue(Vector4(0.5f, 0.25f, 0.75f, 1.0f));
+    parameters["StreamMix"]->SetValue(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+    EffectPass& pass = *effect.getTechniquesProperty()[0]->getPassesProperty()[1];
+
+    struct PositionVertex { float x, y, z; };
+    struct OffsetVertex { float x, y, z, w; };
+    const VertexDeclaration positions(static_cast<int>(sizeof(PositionVertex)), {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+    });
+    const VertexDeclaration offsets(static_cast<int>(sizeof(OffsetVertex)), {
+        VertexElement(0, VertexElementFormat::Vector4,
+                      VertexElementUsage::TextureCoordinate, 0),
+    });
+    const PositionVertex quad[6] = {
+        {-1.0f, 1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f}, {0.0f, -1.0f, 0.0f},
+        {-1.0f, 1.0f, 0.0f}, {0.0f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f},
+    };
+    const OffsetVertex perInstance[3] = {
+        {-2.0f, 0.0f, 0.0f, 0.0f},
+        {0.0f, 0.0f, 0.0f, 0.0f},
+        {1.0f, 0.0f, 0.0f, 0.0f},
+    };
+    const std::uint16_t indices[6] = {0, 1, 2, 3, 4, 5};
+    VertexBuffer positionBuffer(device, positions, 6, BufferUsage::None);
+    positionBuffer.SetDataRaw(quad, 6, static_cast<int>(sizeof(PositionVertex)));
+    VertexBuffer instanceBuffer(device, offsets, 3, BufferUsage::None);
+    instanceBuffer.SetDataRaw(perInstance, 3, static_cast<int>(sizeof(OffsetVertex)));
+    IndexBuffer indexBuffer(device, IndexElementSize::SixteenBits, 6, BufferUsage::None);
+    indexBuffer.SetData(indices, 6);
+
+    RenderTarget2D target(device, 8, 8);
+    device.SetRenderTarget(&target);
+    device.Clear(Color(9, 19, 29, 255));
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setBlendStateProperty(BlendState::Opaque);
+    pass.Apply();
+    device.SetVertexBuffers({VertexBufferBinding(&positionBuffer, 0, 0),
+                             VertexBufferBinding(&instanceBuffer, 0, 2)});
+    device.setIndicesProperty(&indexBuffer);
+    device.DrawInstancedPrimitivesBaseInstanceEXT(
+        PrimitiveType::TriangleList, 0, 0, 6, 0, 2, 2, 3);
+    device.setIndicesProperty(nullptr);
+    device.SetVertexBuffer(nullptr);
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    Color left(0, 0, 0, 0);
+    Color right(0, 0, 0, 0);
+    const Microsoft::Xna::Framework::Rectangle leftProbe(2, 4, 1, 1);
+    const Microsoft::Xna::Framework::Rectangle rightProbe(6, 4, 1, 1);
+    target.GetData(0, &leftProbe, &left, 0, 1);
+    target.GetData(0, &rightProbe, &right, 0, 1);
+    EXPECT_NEAR(left.getRProperty(), 128, 3);
+    EXPECT_NEAR(right.getRProperty(), 128, 3);
+}
+
 TEST(DirectX12CompiledEffectDrawTest, SharedSpriteBatchContract)
 {
     HiDefGraphicsDevice device;

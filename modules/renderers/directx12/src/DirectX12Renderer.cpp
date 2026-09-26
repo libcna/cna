@@ -271,7 +271,8 @@ namespace CNA::Internal::Renderers::DirectX12
 
         void BindVertexStreams(
             ID3D12GraphicsCommandList* commandList,
-            const D3D12VertexBufferRenderer& fallback, const GpuDrawParams& params)
+            const D3D12VertexBufferRenderer& fallback, const GpuDrawParams& params,
+            int logicalInstance = -1)
         {
             D3D12_VERTEX_BUFFER_VIEW views[kMaxVertexStreams]{};
             if (params.vertexStreamCount == 0)
@@ -289,12 +290,62 @@ namespace CNA::Internal::Renderers::DirectX12
                     const auto& buffer =
                         *static_cast<const D3D12VertexBufferRenderer*>(stream.buffer);
                     views[stream.slot] = buffer.GetViewEXT();
-                    AdvanceVertexBufferView(views[stream.slot], stream.vertexOffset);
+                    std::int64_t elementOffset = stream.vertexOffset;
+                    if (logicalInstance >= 0 && stream.instanceFrequency > 0)
+                        elementOffset += logicalInstance / stream.instanceFrequency;
+                    if (elementOffset > (std::numeric_limits<int>::max)())
+                        throw System::NotSupportedException(
+                            "DirectX12 instance stream offset exceeds the native view range.");
+                    AdvanceVertexBufferView(views[stream.slot],
+                                            static_cast<int>(elementOffset));
                 }
             }
 
             commandList->IASetVertexBuffers(
                 0, static_cast<UINT>(kMaxVertexStreams), views);
+        }
+
+        void DrawIndexedInstances(
+            ID3D12GraphicsCommandList* commandList,
+            const D3D12VertexBufferRenderer& fallback, const GpuDrawParams& params,
+            UINT indexCount, int instanceCount,
+            const D3D12_VERTEX_BUFFER_VIEW* logicalIds = nullptr)
+        {
+            for (int instance = 0; instance < instanceCount; ++instance)
+            {
+                const std::int64_t logical =
+                    static_cast<std::int64_t>(params.firstInstance) + instance;
+                if (logical < 0 || logical > (std::numeric_limits<int>::max)())
+                    throw System::NotSupportedException(
+                        "DirectX12 first instance exceeds the supported logical range.");
+                bool aligned = true;
+                for (int stream = 0; stream < params.vertexStreamCount; ++stream)
+                {
+                    const int frequency = params.vertexStreams[
+                        static_cast<std::size_t>(stream)].instanceFrequency;
+                    if (frequency > 0 && logical % frequency != 0)
+                    {
+                        aligned = false;
+                        break;
+                    }
+                }
+                BindVertexStreams(commandList, fallback, params,
+                                  static_cast<int>(logical));
+                if (logicalIds != nullptr)
+                {
+                    D3D12_VERTEX_BUFFER_VIEW view = *logicalIds;
+                    const UINT byteOffset = static_cast<UINT>(instance) * sizeof(UINT);
+                    view.BufferLocation += byteOffset;
+                    view.SizeInBytes -= byteOffset;
+                    commandList->IASetVertexBuffers(16, 1, &view);
+                }
+                commandList->DrawIndexedInstanced(
+                    indexCount, aligned ? static_cast<UINT>(instanceCount - instance) : 1u,
+                    static_cast<UINT>(params.startIndex),
+                    static_cast<INT>(params.baseVertex), 0);
+                if (aligned)
+                    break;
+            }
         }
 
         /// D3D12_PRIMITIVE_TOPOLOGY is D3D_PRIMITIVE_TOPOLOGY under the hood -- same underlying enum
@@ -3884,7 +3935,8 @@ namespace CNA::Internal::Renderers::DirectX12
         const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
-        ID3D12Resource* indirectArguments, UINT64 indirectByteOffset)
+        ID3D12Resource* indirectArguments, UINT64 indirectByteOffset,
+        int instanceCount)
     {
         // GLTF-394: reject line/point topology before declaration/target/PSO work can mask the reason.
         const D3D12_PRIMITIVE_TOPOLOGY nativeTopology = ToD3D12Topology(primitive);
@@ -3898,12 +3950,15 @@ namespace CNA::Internal::Renderers::DirectX12
         const std::size_t fallbackStride =
             d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
         const bool multiStream = HasMultipleVertexStreams(params);
+        const bool customInstanceStream = params.customEffectRequested &&
+            FirstInstanceStream(params) != nullptr;
         std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> combinedElements;
         std::vector<D3DVertexInputElement> inputElements;
-        if (multiStream)
-            BuildVertexInputLayout(params, false, combinedElements, inputElements);
+        if (multiStream || customInstanceStream)
+            BuildVertexInputLayout(params, customInstanceStream,
+                                   combinedElements, inputElements);
         const std::size_t stride = CombinedVertexStrideOr(params, fallbackStride);
-        const auto& vertexElements = multiStream
+        const auto& vertexElements = multiStream || customInstanceStream
             ? combinedElements : d3dVb.GetDeclarationEXT().GetElements();
 
 #if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
@@ -3941,19 +3996,39 @@ namespace CNA::Internal::Renderers::DirectX12
             customState.vertexInputElements = inputElements;
             customState.topologyType = static_cast<int>(ToD3D12TopologyType(primitive));
             FillPsoStateFromCurrentEXT(customState);
+            const bool logicalIdStream = params.firstInstance > 0 &&
+                customEffect->HasInstanceIdInputEXT();
             ID3D12PipelineState* customPso = customEffect->GetOrCreatePipelineStateEXT(
-                std::move(customState));
+                std::move(customState), logicalIdStream);
             ID3D12RootSignature* customRootSignature = customEffect->GetRootSignatureEXT();
             if (customPso == nullptr || customRootSignature == nullptr)
                 throw System::NotSupportedException(
                     "DirectX12 could not match the ShaderEffect vertex signature and current "
-                    "pipeline state to the bound VertexDeclaration.");
+                    "pipeline state to the bound VertexDeclaration: " +
+                    customEffect->GetCompileError());
 
             const int constantBufferCount = customEffect->GetConstantBufferCountEXT();
             const int shaderResourceCount = customEffect->GetShaderResourceCountEXT();
             const std::uint32_t storageSlots = customEffect->GetStorageSlotsEXT();
             const int samplerCount = customEffect->GetSamplerCountEXT();
             ID3D12GraphicsCommandList* cmdList = GetFrameCommandListEXT();
+            D3D12_VERTEX_BUFFER_VIEW logicalIdView{};
+            if (logicalIdStream)
+            {
+                if (static_cast<std::uint64_t>(instanceCount) >
+                    (std::numeric_limits<UINT>::max)() / sizeof(UINT))
+                    throw System::NotSupportedException(
+                        "DirectX12 logical instance ID stream exceeds the native buffer size.");
+                const std::size_t byteCount = static_cast<std::size_t>(instanceCount) * sizeof(UINT);
+                const auto allocation = AllocateFrameUploadEXT(byteCount, alignof(UINT));
+                auto* ids = reinterpret_cast<UINT*>(allocation.mapped);
+                for (int instance = 0; instance < instanceCount; ++instance)
+                    ids[instance] = static_cast<UINT>(params.firstInstance + instance);
+                logicalIdView.BufferLocation =
+                    allocation.resource->GetGPUVirtualAddress() + allocation.offset;
+                logicalIdView.SizeInBytes = static_cast<UINT>(byteCount);
+                logicalIdView.StrideInBytes = sizeof(UINT);
+            }
             RetainFrameObjectEXT(customPso);
             RetainFrameObjectEXT(customRootSignature);
             RetainFrameObjectEXT(d3dVb.GetResourceEXT());
@@ -4057,9 +4132,16 @@ namespace CNA::Internal::Renderers::DirectX12
                 const UINT elementCount = static_cast<UINT>(
                     VertexCountForPrimitives(primitive, primitiveCount));
                 if (ib != nullptr)
-                    cmdList->DrawIndexedInstanced(
-                        elementCount, 1, static_cast<UINT>(params.startIndex),
-                        static_cast<INT>(params.baseVertex), 0);
+                {
+                    if (instanceCount > 1 || params.firstInstance > 0)
+                        DrawIndexedInstances(cmdList, d3dVb, params, elementCount,
+                                             instanceCount,
+                                             logicalIdStream ? &logicalIdView : nullptr);
+                    else
+                        cmdList->DrawIndexedInstanced(
+                            elementCount, 1, static_cast<UINT>(params.startIndex),
+                            static_cast<INT>(params.baseVertex), 0);
+                }
                 else
                     cmdList->DrawInstanced(
                         elementCount, 1, static_cast<UINT>(params.vertexStart), 0);
@@ -5076,6 +5158,11 @@ namespace CNA::Internal::Renderers::DirectX12
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, int instanceCount, const GpuDrawParams& params)
     {
+        if (instanceCount <= 0 || params.firstInstance < 0 ||
+            static_cast<std::int64_t>(params.firstInstance) + instanceCount - 1 >
+                (std::numeric_limits<int>::max)())
+            throw System::NotSupportedException(
+                "DirectX12 instancing requires a positive count and a valid first instance.");
         // GLTF-394: reject line/point topology before fallback/stream/target work can mask the reason.
         const D3D12_PRIMITIVE_TOPOLOGY nativeTopology = ToD3D12Topology(primitive);
         // Matches DirectX11Renderer::DrawInstancedPrimitivesEx's own fallback -- no per-instance
@@ -5083,9 +5170,18 @@ namespace CNA::Internal::Renderers::DirectX12
         // REMED-GFX-202: the per-instance stream is the lowest-slot entry of the shared
         // GpuVertexStreamBinding array whose InstanceFrequency is greater than zero.
         const auto* instanceStream = FirstInstanceStream(params);
+        if (params.customEffectRequested)
+        {
+            DrawPrimitivesExImpl(vb, &ib, world, view, projection,
+                                 primitive, primitiveCount, params,
+                                 nullptr, 0, instanceCount);
+            return;
+        }
         if (instanceStream == nullptr)
         {
-            DrawIndexedPrimitivesEx(vb, ib, world, view, projection, primitive, primitiveCount, params);
+            for (int instance = 0; instance < instanceCount; ++instance)
+                DrawIndexedPrimitivesEx(
+                    vb, ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
         if (!boundColorResource_)
@@ -5167,7 +5263,8 @@ namespace CNA::Internal::Renderers::DirectX12
                 {
                     const auto& entry = columns[static_cast<std::size_t>(column)];
                     const int record = entry.stream->vertexOffset +
-                        instance / entry.stream->instanceFrequency;
+                        (params.firstInstance + instance) /
+                            entry.stream->instanceFrequency;
                     const int stride = entry.stream->strideInBytes;
                     if (record < 0 || record >= entry.buffer->GetVertexCount() || stride <= 0)
                         throw System::NotSupportedException(
@@ -5287,14 +5384,8 @@ namespace CNA::Internal::Renderers::DirectX12
         cmdList->SetGraphicsRootConstantBufferView(0, perDrawAddress);
 
         const UINT indexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
-        const UINT instCount = static_cast<UINT>(std::max(1, instanceCount));
-        // REMED-GFX-123: honor the public startIndex/baseVertex on the instanced path too (both
-        // were hardcoded to zero), exactly as this renderer's ordinary indexed draw already does
-        // since REMED-GFX-020. StartInstanceLocation stays 0 -- the per-instance stream's own start
-        // is already in its view above, so adding it here would apply the same offset twice.
-        cmdList->DrawIndexedInstanced(indexCount, instCount,
-                                      static_cast<UINT>(params.startIndex),
-                                      static_cast<INT>(params.baseVertex), 0);
+        DrawIndexedInstances(cmdList, d3dVb, params, indexCount,
+                             std::max(1, instanceCount));
 
     }
 }

@@ -1173,9 +1173,43 @@ namespace CNA::Internal::Renderers::DirectX12
             const UINT count = static_cast<UINT>(ElementCount(primitive, primitiveCount));
             const UINT instances = static_cast<UINT>(std::max(1, instanceCount));
             if (indexBuffer != nullptr)
-                commandList->DrawIndexedInstanced(
-                    count, instances, static_cast<UINT>(params.startIndex),
-                    static_cast<INT>(params.baseVertex), 0);
+            {
+                if (params.firstInstance < 0 ||
+                    static_cast<std::int64_t>(params.firstInstance) + instances - 1 >
+                        (std::numeric_limits<int>::max)())
+                    throw System::NotSupportedException(
+                        "DirectX12 compiled effect: first instance exceeds the native range.");
+                for (UINT instance = 0; instance < instances; ++instance)
+                {
+                    const int logical = params.firstInstance + static_cast<int>(instance);
+                    bool aligned = true;
+                    for (const Stream& stream : streams)
+                        if (stream.instanceFrequency > 0 &&
+                            logical % stream.instanceFrequency != 0)
+                            aligned = false;
+
+                    for (const Stream& stream : streams)
+                    {
+                        D3D12_VERTEX_BUFFER_VIEW view = stream.buffer->GetViewEXT();
+                        const std::int64_t offset =
+                            static_cast<std::int64_t>(stream.vertexOffset) +
+                            (stream.instanceFrequency > 0
+                                ? logical / stream.instanceFrequency : 0);
+                        if (offset > (std::numeric_limits<int>::max)())
+                            throw System::NotSupportedException(
+                                "DirectX12 compiled effect: instance stream offset exceeds the native range.");
+                        AdvanceVertexBufferView(view, static_cast<int>(offset));
+                        commandList->IASetVertexBuffers(
+                            static_cast<UINT>(stream.slot), 1, &view);
+                    }
+                    commandList->DrawIndexedInstanced(
+                        count, aligned ? instances - instance : 1u,
+                        static_cast<UINT>(params.startIndex),
+                        static_cast<INT>(params.baseVertex), 0);
+                    if (aligned)
+                        break;
+                }
+            }
             else
                 commandList->DrawInstanced(
                     count, instances, static_cast<UINT>(params.vertexStart), 0);
