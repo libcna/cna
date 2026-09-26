@@ -1116,3 +1116,23 @@ $env:CNA_D3D11_DEBUG_LAYER='1'
 & C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ClusteredLightBufferTest.TheShaderReadsBackEveryFieldOfEveryLight' *> C:\rv\logs\dx11-clustered-light-buffer-probe-1.log
 & C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ClusteredLightBufferTest.*' *> C:\rv\logs\dx11-clustered-light-buffer-suite-1.log
 ```
+
+## DX11 depth-prepass reconstruction probes, 2026-09-26
+
+WIN11-0044: the two prepass reconstruction pixel tests previously skipped
+DX11 because their final verdict shader was inline GLSL only. Added an HLSL
+verdict that decodes the actual packed/float depth texture, maps D3D texture
+UV back to the camera's Y convention, and reconstructs the view position with
+the same inverse-projection rule used by the current screen-space shaders.
+Both tests now pass on physical Intel Iris Xe `8086:46A6`, `software=0`, with
+the D3D11 debug layer enabled, zero skips/failures, and zero debug
+warnings/errors (`C:\rv\logs\dx11-prepass-reconstruction-suite-1.log`). The
+first requires more than 100 quad pixels to be classified in the correct
+quadrant with none mirrored; the second checks that unwritten sky is far depth
+rather than camera depth. The GLSL verdict remains in use for GLSL renderers.
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsExtTests --parallel 8
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=PrepassReconstructionTest.*' *> C:\rv\logs\dx11-prepass-reconstruction-suite-1.log
+```
