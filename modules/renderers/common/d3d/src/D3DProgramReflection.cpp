@@ -233,6 +233,24 @@ namespace CNA::Internal::Renderers::D3DCommon
                     });
                 if (!duplicate)
                     locations.push_back(location);
+
+                // SPIRV-Cross flattens ShadowMatrices.uWorld and
+                // ShadowMatrices.uLightViewProjection into matrices_* HLSL names. ShaderEffect
+                // callers still set the package's original public uniform names.
+                if (std::strcmp(bufferDesc.Name, "ShadowMatrices") == 0 &&
+                    std::strncmp(variableDesc.Name, "matrices_", 9) == 0)
+                {
+                    auto& aliases = uniforms_[CanonicalName(variableDesc.Name + 9)];
+                    const bool aliasPresent = std::any_of(
+                        aliases.begin(), aliases.end(), [&](const UniformLocation& existing)
+                        {
+                            return existing.bufferSlot == location.bufferSlot &&
+                                   existing.offset == location.offset &&
+                                   existing.size == location.size;
+                        });
+                    if (!aliasPresent)
+                        aliases.push_back(location);
+                }
             }
         }
 

@@ -213,6 +213,11 @@ namespace CNA::Internal::Renderers::DirectX11
          * @return True when the selected device supports Color Texture3D sampling.
          */
         [[nodiscard]] bool SupportsTexture3DSamplingEXT() const override;
+        /** @brief Reports native stock-effect shadow sampling on a live D3D11 device. */
+        [[nodiscard]] bool SupportsShadowSamplingEXT() const override
+        {
+            return device_ != nullptr && featureLevel_ >= D3D_FEATURE_LEVEL_11_0;
+        }
 
         /**
          * @brief Reports native D3D11 disjoint timestamp-query support.
@@ -973,8 +978,10 @@ namespace CNA::Internal::Renderers::DirectX11
         // unchanged -- D3DBoneConstants is shape-identical to skinned3d's own BoneBlock.
         ComPtr<ID3D11Buffer> pbrPerDrawConstantBuffer_;
         ComPtr<ID3D11Buffer> pbrLightsConstantBuffer_;
+        ComPtr<ID3D11Buffer> shadowConstantBuffer_;
         ID3D11Buffer* GetOrCreatePbrPerDrawConstantBufferEXT();
         ID3D11Buffer* GetOrCreatePbrLightsConstantBufferEXT();
+        ID3D11Buffer* GetOrCreateShadowConstantBufferEXT();
 
         // plans/plan_cnj.md CNB-58 follow-up: lazily-created 1x1 fallback SRVs for PbrEffect's optional
         // normal/metallic-roughness/emissive/occlusion maps when GpuDrawParams leaves the

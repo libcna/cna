@@ -10,6 +10,9 @@
 
 Texture2D    uTexture        : register(t0);
 SamplerState uTextureSampler : register(s0);
+#ifdef CNA_MODERN_SHADOWS
+#include "shadow_sampling.hlsl"
+#endif
 
 cbuffer PerDraw : register(b0)
 {
@@ -64,6 +67,10 @@ float4 main(PSInput input) : SV_Target
     float3 lightSum = Light0Diffuse * NdotL0
                      + Light1DiffPad.xyz * NdotL1
                      + Light2DiffPad.xyz * NdotL2;
+#ifdef CNA_MODERN_SHADOWS
+    float shadow = CnaShadowFactor(input.WorldPos);
+    lightSum = lightSum * shadow + CnaPunctualLight(input.WorldPos, N);
+#endif
     float3 litRGB = lightSum * DiffuseColor.rgb + EmissiveColor.rgb;
     float specularPower = SpecularColorPower.w;
     float3 h0 = normalize(E - normalize(Light0Dir));        float spec0 = pow(max(dot(h0, N), 0.0) * zeroL0, specularPower);
@@ -71,11 +78,17 @@ float4 main(PSInput input) : SV_Target
     float3 h2 = normalize(E - normalize(Light2DirPad.xyz)); float spec2 = pow(max(dot(h2, N), 0.0) * zeroL2, specularPower);
     float3 specularRGB = (spec0 * Light0SpecPad.xyz + spec1 * Light1SpecPad.xyz
                           + spec2 * Light2SpecPad.xyz) * SpecularColorPower.xyz;
+#ifdef CNA_MODERN_SHADOWS
+    specularRGB *= shadow;
+#endif
 
     float4 tex = (TextureEnabled > 0.5) ? uTexture.Sample(uTextureSampler, input.UV) * Texture0ChannelMask + Texture0ChannelFill : float4(1.0, 1.0, 1.0, 1.0);
     float4 vc = (VertexColorEnabled > 0.5) ? input.Color : float4(1.0, 1.0, 1.0, 1.0);
 
     float4 outColor = float4(litRGB * tex.rgb, DiffuseColor.a * tex.a * vc.a);
+#ifdef CNA_MODERN_SHADOWS
+    outColor.rgb *= CnaCascadeDebugTint(input.WorldPos);
+#endif
     outColor.rgb += specularRGB * outColor.a;
     outColor.rgb *= vc.rgb;
     outColor.rgb = lerp(FogColor.xyz, outColor.rgb, input.FogFactor);

@@ -101,6 +101,30 @@ namespace CNA::Internal::Renderers::D3DCommon
         /// with VertexColorEnabled off, which XNA draws in DiffuseColor. Reuses Colored3d's pixel
         /// shader. Appended last for the same reason as Sprite3d.
         Colored3dPositionOnly,
+        /** @brief Per-pixel BasicEffect with directional and punctual shadow sampling. */
+        LitTextured3dShadow,
+        /** @brief Shadowed BasicEffect with a vertex-colour input. */
+        LitTextured3dColoredShadow,
+        /** @brief Shadowed BasicEffect with no texture-coordinate input. */
+        LitUntextured3dShadow,
+        /** @brief Per-pixel SkinnedEffect with shadow sampling. */
+        Skinned3dShadow,
+        /** @brief Shadowed SkinnedEffect with floating-point blend indices. */
+        Skinned3dFloatIndicesShadow,
+        /** @brief Shadowed SkinnedEffect with a vertex-colour input. */
+        Skinned3dColoredShadow,
+        /** @brief Shadowed SkinnedEffect with colour and floating-point blend indices. */
+        Skinned3dColoredFloatIndicesShadow,
+        /** @brief PBR with directional and punctual shadow sampling. */
+        Pbr3dShadow,
+        /** @brief Shadowed PBR with two texture-coordinate streams. */
+        Pbr3dDualUvShadow,
+        /** @brief Skinned PBR with directional and punctual shadow sampling. */
+        PbrSkinned3dShadow,
+        /** @brief Shadowed skinned PBR with two texture-coordinate streams. */
+        PbrSkinned3dDualUvShadow,
+        /** @brief Shadowed skinned PBR with colour and two texture-coordinate streams. */
+        PbrSkinned3dDualUvColorShadow,
     };
 
     /// Returns the compiled DXBC bytecode (pointer + length) for a variant's vertex shader stage.

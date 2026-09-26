@@ -174,7 +174,11 @@ namespace CNA::Graphics {
             if (supported_)
             {
                 casterEffect_->Apply();
+                // The desktop/ES caster calls this uFaceViewProjection; the portable Vulkan,
+                // WebGPU and HLSL stages call the same matrix uLightViewProjection.
                 casterEffect_->SetUniformMat4("uFaceViewProjection",
+                                              &faceViewProjection_[faceIndex].M11);
+                casterEffect_->SetUniformMat4("uLightViewProjection",
                                               &faceViewProjection_[faceIndex].M11);
                 const Matrix identity = Matrix::getIdentityProperty();
                 casterEffect_->SetUniformMat4("uWorld", &identity.M11);

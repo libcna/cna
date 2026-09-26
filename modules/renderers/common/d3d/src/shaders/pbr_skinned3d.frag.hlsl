@@ -19,6 +19,9 @@ Texture2D    uSpecularMap              : register(t5);
 SamplerState uSpecularMapSampler       : register(s5);
 Texture2D    uSpecularColorMap         : register(t6);
 SamplerState uSpecularColorMapSampler  : register(s6);
+#ifdef CNA_MODERN_SHADOWS
+#include "shadow_sampling.hlsl"
+#endif
 
 cbuffer PerDraw : register(b0)
 {
@@ -75,7 +78,7 @@ static const float kPi = 3.14159265;
 float3 CnaSrgbToLinear(float3 color)
 {
     float3 low = color / 12.92;
-    float3 high = pow((color + 0.055) / 1.055, float3(2.4, 2.4, 2.4));
+    float3 high = pow(max((color + 0.055) / 1.055, 0.0), float3(2.4, 2.4, 2.4));
     return lerp(low, high, step(float3(0.04045, 0.04045, 0.04045), color));
 }
 
@@ -182,6 +185,10 @@ float4 main(PSInput input) : SV_Target
     Lo += PbrLight(finalNormal, V, normalize(-Light0DirPad.xyz), Light0DiffusePad.xyz, albedo, F0, F90, roughness, metallic);
     Lo += PbrLight(finalNormal, V, normalize(-Light1DirPad.xyz), Light1DiffusePad.xyz, albedo, F0, F90, roughness, metallic);
     Lo += PbrLight(finalNormal, V, normalize(-Light2DirPad.xyz), Light2DiffusePad.xyz, albedo, F0, F90, roughness, metallic);
+#ifdef CNA_MODERN_SHADOWS
+    Lo *= CnaShadowFactor(input.WorldPos);
+    Lo += CnaPunctualLight(input.WorldPos, finalNormal) * albedo;
+#endif
 
     float occlusion = uOcclusionMap.Sample(uOcclusionMapSampler, CnaPbrTransformUv(CNA_PBR_UV(4), 4)).r;
     occlusion = 1.0 + PbrMapScales.y * (occlusion - 1.0);
@@ -191,6 +198,9 @@ float4 main(PSInput input) : SV_Target
     float3 emissive = EmissiveRoughness.xyz * emissiveSample;
 
     float4 outColor = float4(ambient + Lo + emissive, alpha);
+#ifdef CNA_MODERN_SHADOWS
+    outColor.rgb *= CnaCascadeDebugTint(input.WorldPos);
+#endif
     float3 fogLinear = lerp(FogColor.xyz, CnaSrgbToLinear(FogColor.xyz), FogColor.w);
     outColor.rgb = lerp(fogLinear, outColor.rgb, input.FogFactor);
     outColor.rgb = lerp(outColor.rgb, CnaLinearToSrgb(outColor.rgb), FogColor.w);

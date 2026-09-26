@@ -1241,3 +1241,62 @@ cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraph
 & C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ShaderPackageSelectionEXTTest.RequiredVertexStorageBindingIsCapabilityChecked:ShaderPackageSelectionEXTTest.ConstantBuffersHaveOnlyThePublishedComputeRoute:ShaderDiagnosticsTest.AWorkingShaderReportsNothing' *> C:\rv\logs\dx11-shader-infrastructure-hlsl-focused-1.log
 & C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ShaderPackageSelectionEXTTest.*:ShaderDiagnosticsTest.*' *> C:\rv\logs\dx11-shader-infrastructure-hlsl-suite-1.log
 ```
+
+## DX11 stock shadow reception on physical Intel, 2026-09-26
+
+WIN11-0049: `SupportsShadowSamplingEXT()` had been false because DX11's stock
+BasicEffect, SkinnedEffect, PbrEffect, and SkinnedPbrEffect pixel shaders did not
+sample the directional or punctual shadow maps. Added HLSL directional, atlas
+cascade, point cube, and spot sampling with PCF, depth bias, cascade blend/tint,
+and punctual attenuation. The 132-float b3 constant buffer follows the existing
+`GpuDrawParams` layout used by Vulkan; t7/t8/t9 and s7/s8/s9 carry the three
+shadow resources and samplers. The pixel shader switches to a shadow-capable
+variant only for a draw that requests directional or punctual lighting, and the
+DX11 path clears all ten stock SRV slots and four cbuffer slots at each draw to
+avoid state leaking into subsequent classic/modern draws. The existing classic
+shader bytecode is unchanged.
+
+The first directional visibility run found the caster map entirely white.
+The generated HLSL calls the `ShadowMatrices` members `matrices_*`, while
+`ShadowMap`/`ShaderEffect` set the package's original `u*` uniform names.
+`D3DProgramReflection` now accepts the original names as aliases specifically
+for the `ShadowMatrices` cbuffer while preserving the reflected HLSL names.
+A diagnostic readback changed from centre/corner 1/1 to 0.6/1 after this fix.
+The initial 31-case shadow suite then had one failure: the point cube caster
+sent `uFaceViewProjection`, the GL name, but the portable Vulkan/HLSL program
+uses `uLightViewProjection`. `CubeShadowMap` now sets both names so the existing
+language packages receive the same face matrix. The focused point-shadow test
+passed and the rerun of the full shadow visibility group passed **31/31** with
+31 selections of physical Intel Iris Xe `8086:46A6`, `software=0`, no skips,
+and zero D3D11 debug-layer warning/error/corruption messages
+(`C:\rv\logs\dx11-shadow-suite-2.log`). The suite covers BasicEffect,
+SkinnedEffect, PBR, skinned PBR, cascades, point and spot shadows, disabled-map
+isolation, PCF softness, bias, placement and skinned caster pose.
+
+The nine new shadow pixel variants are generated with native Windows SDK
+10.0.22621 FXC by `generate_d3d_modern_stock_hlsl.py`, leaving the historical
+Wine-dependent generator unused. The selected `fxc.exe` is file version
+`10.0.22621.5040`, SHA-256
+`799A0EB81B4368902515D9C83F40DA7F41BB4E2064D2E87F12506B8667C45C0C`.
+A second native generation reproduced the
+initial header byte for byte (SHA-256
+`7D65C10A953D04B6F899574B07E4C3E670C9BF3DFF9E2347A93F03A2AFC05E2D`).
+FXC initially warned X3571 on the existing PBR sRGB-to-linear `pow` branch
+for negative input; clamping only the unselected high branch's base removed
+the undefined operation without changing the valid high branch. Final FXC
+generation reported zero warnings/errors. Repeating final generation yielded
+identical bytes, SHA-256
+`B87690404BDF4CC2186480DC0F6F356627753EAB162B9A5C68F47043918D6927`.
+Both the DX11 modern and DX12 Debug
+`CnaGraphicsExtTests` targets built successfully after the shared D3D change.
+The complete DX11 modern executable is undergoing another regression run;
+record its exact result below when finished.
+
+```powershell
+$fxc = 'C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\fxc.exe'
+py -3 tools/shader_package/generate_d3d_modern_stock_hlsl.py --fxc $fxc *> C:\rv\logs\dx11-shadow-fxc-final.log
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsExtTests --parallel 8
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ShadowVisibilityTest.*:CascadedShadowVisibilityTest.*:PunctualShadowVisibilityTest.*' *> C:\rv\logs\dx11-shadow-suite-2.log
+cmake --build C:\rv\build\cna-win11-dx12-debug --config Debug --target CnaGraphicsExtTests --parallel 8
+```

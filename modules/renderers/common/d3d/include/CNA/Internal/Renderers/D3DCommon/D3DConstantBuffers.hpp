@@ -322,4 +322,25 @@ namespace CNA::Internal::Renderers::D3DCommon
     static_assert(offsetof(D3DPbrLightConstants, FogColor) == 112, "D3DPbrLightConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DPbrLightConstants, FogVector) == 128, "D3DPbrLightConstants field offset mismatch vs HLSL");
     static_assert(sizeof(D3DPbrLightConstants) % 16 == 0, "D3D11 constant buffer ByteWidth must be a 16-byte multiple");
+
+    /// Parameters shared by the directional, cascade, point and spot shadow pixel paths.
+    /// The order matches shadow_sampling.hlsl's CnaShadowParams at register b3.
+    struct alignas(16) D3DShadowConstants
+    {
+        float LightViewProj[16];
+        float CascadeMatrices[4 * 16];
+        float PunctualViewProj[16];
+        float Directional[4];
+        float ShadowTexelBlendDebug[4];
+        float CascadeSplits[4];
+        float CascadeViewZ[4];
+        float PunctualPositionRange[4];
+        float PunctualDirectionKind[4];
+        float PunctualDiffuseHasShadow[4];
+        float PunctualConeBiasTexelX[4];
+        float PunctualTexelY[4];
+    };
+    static_assert(sizeof(D3DShadowConstants) == 132 * sizeof(float));
+    static_assert(offsetof(D3DShadowConstants, Directional) == 96 * sizeof(float));
+    static_assert(offsetof(D3DShadowConstants, PunctualTexelY) == 128 * sizeof(float));
 }

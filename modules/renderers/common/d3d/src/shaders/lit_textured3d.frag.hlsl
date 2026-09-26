@@ -3,6 +3,9 @@
 
 Texture2D    uTexture        : register(t0);
 SamplerState uTextureSampler : register(s0);
+#ifdef CNA_MODERN_SHADOWS
+#include "shadow_sampling.hlsl"
+#endif
 
 cbuffer PerDraw : register(b0)
 {
@@ -76,8 +79,16 @@ float4 main(PSInput input) : SV_Target
         float dotL0 = dot(N, -nL0); float zeroL0 = step(0.0, dotL0); float NdotL0 = max(dotL0, 0.0);
         float dotL1 = dot(N, -nL1); float zeroL1 = step(0.0, dotL1); float NdotL1 = max(dotL1, 0.0);
         float dotL2 = dot(N, -nL2); float zeroL2 = step(0.0, dotL2); float NdotL2 = max(dotL2, 0.0);
+#ifdef CNA_MODERN_SHADOWS
+        float shadow = CnaShadowFactor(input.WorldPos);
+        float3 lightSum = AmbientColor +
+                          (NdotL0 * Light0Diffuse + NdotL1 * Light1DiffusePad.xyz +
+                           NdotL2 * Light2DiffusePad.xyz) * shadow +
+                          CnaPunctualLight(input.WorldPos, N);
+#else
         float3 lightSum = AmbientColor + NdotL0 * Light0Diffuse
                          + NdotL1 * Light1DiffusePad.xyz + NdotL2 * Light2DiffusePad.xyz;
+#endif
         // Half-vector Blinn-Phong specular (FNA's Lighting.fxh ComputeLights), gated by the same
         // zeroL "does this light face the surface" term used for diffuse. Material SpecularColor
         // is applied once to the summed per-light contribution, not per-light.
@@ -86,10 +97,16 @@ float4 main(PSInput input) : SV_Target
         float3 h2 = normalize(E - nL2); float spec2 = pow(max(dot(h2, N), 0.0) * zeroL2, SpecularColorPower.w);
         float3 specularRGB = (spec0 * Light0SpecularPad.xyz + spec1 * Light1SpecularPad.xyz
                               + spec2 * Light2SpecularPad.xyz) * SpecularColorPower.xyz;
+#ifdef CNA_MODERN_SHADOWS
+        specularRGB *= shadow;
+#endif
         // EmissiveColor is added after the light-sum*DiffuseColor multiply, not scaled by it
         // (matches FNA's Lighting.fxh: result.Diffuse = sum*DiffuseColor + EmissiveColor).
         float3 lit = lightSum * input.Tint.rgb + EmissiveColorPad.xyz;
         color = float4(lit, input.Tint.a) * tex * vertexColor;
+#ifdef CNA_MODERN_SHADOWS
+        color.rgb *= CnaCascadeDebugTint(input.WorldPos);
+#endif
         // Specular is added after the texture*diffuse multiply, scaled by the resulting alpha
         // (FNA's AddSpecular macro), never by the texture directly.
         color.rgb += specularRGB * color.a;

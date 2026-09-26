@@ -882,6 +882,7 @@ namespace CNA::Internal::Renderers::DirectX11
         skinnedExtraConstantBuffer_.Reset();
         pbrPerDrawConstantBuffer_.Reset();
         pbrLightsConstantBuffer_.Reset();
+        shadowConstantBuffer_.Reset();
         defaultWhiteSrv_.Reset();
         defaultWhiteTexture_.Reset();
         defaultFlatNormalSrv_.Reset();
@@ -2771,6 +2772,25 @@ namespace CNA::Internal::Renderers::DirectX11
         return pbrLightsConstantBuffer_.Get();
     }
 
+    ID3D11Buffer* DirectX11Renderer::GetOrCreateShadowConstantBufferEXT()
+    {
+        if (!shadowConstantBuffer_)
+        {
+            D3D11_BUFFER_DESC desc{};
+            desc.ByteWidth = sizeof(D3DCommon::D3DShadowConstants);
+            desc.Usage = D3D11_USAGE_DYNAMIC;
+            desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+            desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+            const HRESULT hr = device_->CreateBuffer(
+                &desc, nullptr, shadowConstantBuffer_.ReleaseAndGetAddressOf());
+            if (FAILED(hr))
+                throw std::runtime_error(
+                    "DirectX11Renderer: shadow constant buffer creation failed, hr=" +
+                    FormatHr(hr));
+        }
+        return shadowConstantBuffer_.Get();
+    }
+
     ID3D11ShaderResourceView* DirectX11Renderer::GetOrCreateDefaultWhiteSrvEXT()
     {
         if (!defaultWhiteSrv_)
@@ -3024,6 +3044,10 @@ namespace CNA::Internal::Renderers::DirectX11
         // The stride-only rule remains solely for internal buffers that carry no declaration.
         const bool needsLitTextured = hasNormal && !needsAlphaTest && !needsDualTex
                                      && !needsEnvMap && !needsPbr && !needsSkinned;
+        const bool useShadowShader =
+            (needsLitTextured || needsSkinned || needsPbr) &&
+            ((params.shadowsEnabled && params.shadowMap != nullptr) ||
+             params.punctualKind != 0);
 
         if (needsAlphaTest && params.texture0 != nullptr && !hasTexCoord)
             throw std::runtime_error(
@@ -3107,7 +3131,8 @@ namespace CNA::Internal::Renderers::DirectX11
             // A COLOR0 declaration routes to the *Colored sibling independently of record stride.
             // Declaration-less legacy buffers retain the canonical stride-56 fallback.
             const bool colored = hasDeclaration ? hasColor : stride == 56;
-            const bool vertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
+            const bool vertexLit = params.lightingEnabled && !params.preferPerPixelLighting
+                                   && !useShadowShader;
             if (usesFloatBoneIndices)
                 variant = colored
                     ? (vertexLit ? D3DCommon::D3DShaderVariant::Skinned3dVertexLitColoredFloatIndices
@@ -3125,13 +3150,13 @@ namespace CNA::Internal::Renderers::DirectX11
             // Same real-default fix for BasicEffect's lit-textured bucket.
             variant = hasTexCoord
                 ? (hasColor
-                    ? ((params.lightingEnabled && !params.preferPerPixelLighting)
+                    ? ((params.lightingEnabled && !params.preferPerPixelLighting && !useShadowShader)
                         ? D3DCommon::D3DShaderVariant::LitTextured3dVertexLitColored
                         : D3DCommon::D3DShaderVariant::LitTextured3dColored)
-                    : ((params.lightingEnabled && !params.preferPerPixelLighting)
+                    : ((params.lightingEnabled && !params.preferPerPixelLighting && !useShadowShader)
                         ? D3DCommon::D3DShaderVariant::LitTextured3dVertexLit
                         : D3DCommon::D3DShaderVariant::LitTextured3d))
-                : ((params.lightingEnabled && !params.preferPerPixelLighting)
+                : ((params.lightingEnabled && !params.preferPerPixelLighting && !useShadowShader)
                     ? D3DCommon::D3DShaderVariant::LitUntextured3dVertexLit
                     : D3DCommon::D3DShaderVariant::LitUntextured3d);
         else
@@ -3156,6 +3181,27 @@ namespace CNA::Internal::Renderers::DirectX11
                     std::to_string(stride) + " for the colored/textured bundle (plans/plan_dx.md DX-62)");
         }
 
+        if (useShadowShader)
+        {
+            using D3DCommon::D3DShaderVariant;
+            switch (variant)
+            {
+                case D3DShaderVariant::LitTextured3d: variant = D3DShaderVariant::LitTextured3dShadow; break;
+                case D3DShaderVariant::LitTextured3dColored: variant = D3DShaderVariant::LitTextured3dColoredShadow; break;
+                case D3DShaderVariant::LitUntextured3d: variant = D3DShaderVariant::LitUntextured3dShadow; break;
+                case D3DShaderVariant::Skinned3d: variant = D3DShaderVariant::Skinned3dShadow; break;
+                case D3DShaderVariant::Skinned3dFloatIndices: variant = D3DShaderVariant::Skinned3dFloatIndicesShadow; break;
+                case D3DShaderVariant::Skinned3dColored: variant = D3DShaderVariant::Skinned3dColoredShadow; break;
+                case D3DShaderVariant::Skinned3dColoredFloatIndices: variant = D3DShaderVariant::Skinned3dColoredFloatIndicesShadow; break;
+                case D3DShaderVariant::Pbr3d: variant = D3DShaderVariant::Pbr3dShadow; break;
+                case D3DShaderVariant::Pbr3dDualUv: variant = D3DShaderVariant::Pbr3dDualUvShadow; break;
+                case D3DShaderVariant::PbrSkinned3d: variant = D3DShaderVariant::PbrSkinned3dShadow; break;
+                case D3DShaderVariant::PbrSkinned3dDualUv: variant = D3DShaderVariant::PbrSkinned3dDualUvShadow; break;
+                case D3DShaderVariant::PbrSkinned3dDualUvColor: variant = D3DShaderVariant::PbrSkinned3dDualUvColorShadow; break;
+                default: throw std::logic_error("DirectX11 shadow shader has no stock variant");
+            }
+        }
+
         ID3D11VertexShader* vs = GetStockVertexShaderEXT(variant);
         ID3D11PixelShader* ps = GetStockPixelShaderEXT(variant);
         if (!vs || !ps)
@@ -3172,10 +3218,9 @@ namespace CNA::Internal::Renderers::DirectX11
         // + t1 (TextureCube). PBR needs seven slots: the five core maps plus KHR_materials_specular
         // strength/colour at t5/t6. Every other variant only ever binds t0 -- higher entries stay
         // null, which is harmless for a shader that does not declare them. Always bind the full
-        // seven-wide range (unused slots explicitly null) so no variant can see a stale SRV left
-        // by a previous, differently-shaped draw call (same discipline as cbs[3] below).
-        ID3D11ShaderResourceView* srvs[7] = {
-            nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+        // ten-wide range (unused slots explicitly null) so no variant can see a stale SRV left
+        // by a previous, differently-shaped draw call (same discipline as cbs[4] below).
+        ID3D11ShaderResourceView* srvs[10] = {};
         if (needsDualTex)
         {
             // WINCLOSE-0018: XNA samples an unbound slot as opaque black, not white.
@@ -3235,9 +3280,18 @@ namespace CNA::Internal::Renderers::DirectX11
                                       : GetOrCreateDefaultOpaqueBlackSrvEXT();
         }
 
-        // 3 contiguous slots (b0/b1/b2) always fully rebound below (unused slots explicitly null)
+        if (useShadowShader)
+        {
+            srvs[7] = params.shadowsEnabled ? GetSrvForTextureEXT(params.shadowMap) : nullptr;
+            srvs[8] = params.punctualKind == 1
+                ? GetSrvForTextureCubeEXT(params.punctualShadowCube) : nullptr;
+            srvs[9] = params.punctualKind == 2
+                ? GetSrvForTextureEXT(params.punctualShadowMap) : nullptr;
+        }
+
+        // 4 contiguous slots (b0/b1/b2/b3) always fully rebound below (unused slots explicitly null)
         // so no variant can see a stale buffer left bound by a previous, different-shaped draw.
-        ID3D11Buffer* cbs[3] = { nullptr, nullptr, nullptr };
+        ID3D11Buffer* cbs[4] = {};
 
         if (needsAlphaTest)
         {
@@ -3702,6 +3756,53 @@ namespace CNA::Internal::Renderers::DirectX11
             cbs[1] = fogCB;
         }
 
+        if (useShadowShader)
+        {
+            const bool haveDirectional = params.shadowsEnabled && params.shadowMap != nullptr;
+            const int cascadeCount = haveDirectional && params.cascadeCount > 0
+                ? std::min(params.cascadeCount, 4) : 0;
+            const int punctualKind = params.punctualKind >= 1 && params.punctualKind <= 2
+                ? params.punctualKind : 0;
+            const bool havePoint = punctualKind == 1 && params.punctualShadowCube != nullptr;
+            const bool haveSpot = punctualKind == 2 && params.punctualShadowMap != nullptr;
+
+            D3DCommon::D3DShadowConstants shadow{};
+            std::copy_n(params.lightViewProjColMajor, 16, shadow.LightViewProj);
+            std::copy_n(params.cascadeMatricesColMajor, 64, shadow.CascadeMatrices);
+            std::copy_n(params.punctualViewProjColMajor, 16, shadow.PunctualViewProj);
+            shadow.Directional[0] = haveDirectional ? 1.0f : 0.0f;
+            shadow.Directional[1] = params.shadowDepthBias;
+            shadow.Directional[2] = static_cast<float>(std::clamp(params.shadowPcfRadius, 0, 2));
+            shadow.Directional[3] = static_cast<float>(cascadeCount);
+            const int shadowWidth = haveDirectional ? params.shadowMap->GetWidth() : 1;
+            const int shadowHeight = haveDirectional ? params.shadowMap->GetHeight() : 1;
+            shadow.ShadowTexelBlendDebug[0] = shadowWidth > 0 ? 1.0f / static_cast<float>(shadowWidth) : 0.0f;
+            shadow.ShadowTexelBlendDebug[1] = shadowHeight > 0 ? 1.0f / static_cast<float>(shadowHeight) : 0.0f;
+            shadow.ShadowTexelBlendDebug[2] = params.cascadeBlendBand;
+            shadow.ShadowTexelBlendDebug[3] = params.cascadeDebugTint ? 1.0f : 0.0f;
+            std::copy_n(params.cascadeSplits, 4, shadow.CascadeSplits);
+            std::copy_n(params.cascadeViewZRow, 4, shadow.CascadeViewZ);
+            std::copy_n(params.punctualPosition, 3, shadow.PunctualPositionRange);
+            shadow.PunctualPositionRange[3] = params.punctualRange > 0.0f ? params.punctualRange : 1.0f;
+            std::copy_n(params.punctualDirection, 3, shadow.PunctualDirectionKind);
+            shadow.PunctualDirectionKind[3] = static_cast<float>(punctualKind);
+            std::copy_n(params.punctualDiffuse, 3, shadow.PunctualDiffuseHasShadow);
+            shadow.PunctualDiffuseHasShadow[3] = (havePoint || haveSpot) ? 1.0f : 0.0f;
+            shadow.PunctualConeBiasTexelX[0] = params.punctualCosInner;
+            shadow.PunctualConeBiasTexelX[1] = params.punctualCosOuter;
+            shadow.PunctualConeBiasTexelX[2] = params.punctualShadowBias;
+            const int spotWidth = haveSpot ? params.punctualShadowMap->GetWidth() : 1;
+            const int spotHeight = haveSpot ? params.punctualShadowMap->GetHeight() : 1;
+            shadow.PunctualConeBiasTexelX[3] = spotWidth > 0 ? 1.0f / static_cast<float>(spotWidth) : 0.0f;
+            shadow.PunctualTexelY[0] = spotHeight > 0 ? 1.0f / static_cast<float>(spotHeight) : 0.0f;
+
+            cbs[3] = GetOrCreateShadowConstantBufferEXT();
+            UpdateDynamicConstantBufferEXT(cbs[3], &shadow, sizeof(shadow));
+            RebindSamplerEXT(7);
+            RebindSamplerEXT(8);
+            RebindSamplerEXT(9);
+        }
+
         BindVertexStreams(context_.Get(), d3dVb, params);
         if (ib != nullptr)
         {
@@ -3713,12 +3814,12 @@ namespace CNA::Internal::Renderers::DirectX11
         context_->VSSetShader(vs, nullptr, 0);
         context_->PSSetShader(ps, nullptr, 0);
 
-        // Always rebind the full 3-slot-cbuffer/7-slot-SRV range (unused slots explicitly null,
+        // Always rebind the full 4-slot-cbuffer/10-slot-SRV range (unused slots explicitly null,
         // see cbs'/srvs' own declaration comments above) -- no variant can see a stale binding
         // left by whatever differently-shaped draw call ran immediately before this one.
-        context_->VSSetConstantBuffers(0, 3, cbs);
-        context_->PSSetConstantBuffers(0, 3, cbs);
-        context_->PSSetShaderResources(0, 7, srvs);
+        context_->VSSetConstantBuffers(0, 4, cbs);
+        context_->PSSetConstantBuffers(0, 4, cbs);
+        context_->PSSetShaderResources(0, 10, srvs);
 
         if (ib != nullptr)
         {

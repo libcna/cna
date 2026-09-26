@@ -2,6 +2,7 @@
 #include "CNA/Internal/Renderers/D3DCommon/D3DShaderCache.hpp"
 
 #include "shaders/hlsl_shaders.hpp"
+#include "shaders/hlsl_modern_stock_shaders.hpp"
 
 namespace CNA::Internal::Renderers::D3DCommon
 {
@@ -54,6 +55,18 @@ namespace CNA::Internal::Renderers::D3DCommon
                 case D3DShaderVariant::Skinned3dVertexLitColoredFloatIndices: return {kSkinned3dVertexLitColoredFloatIndicesVertDxbc, kSkinned3dVertexLitColoredFloatIndicesVertDxbc_size};
                 case D3DShaderVariant::Sprite3d:          return {kSprite3dVertDxbc, kSprite3dVertDxbc_size};
                 case D3DShaderVariant::Colored3dPositionOnly: return {kColored3dPositionOnlyVertDxbc, kColored3dPositionOnlyVertDxbc_size};
+                case D3DShaderVariant::LitTextured3dShadow: return {kLitTextured3dVertDxbc, kLitTextured3dVertDxbc_size};
+                case D3DShaderVariant::LitTextured3dColoredShadow: return {kLitTextured3dColoredVertDxbc, kLitTextured3dColoredVertDxbc_size};
+                case D3DShaderVariant::LitUntextured3dShadow: return {kLitUntextured3dVertDxbc, kLitUntextured3dVertDxbc_size};
+                case D3DShaderVariant::Skinned3dShadow: return {kSkinned3dVertDxbc, kSkinned3dVertDxbc_size};
+                case D3DShaderVariant::Skinned3dFloatIndicesShadow: return {kSkinned3dFloatIndicesVertDxbc, kSkinned3dFloatIndicesVertDxbc_size};
+                case D3DShaderVariant::Skinned3dColoredShadow: return {kSkinned3dColoredVertDxbc, kSkinned3dColoredVertDxbc_size};
+                case D3DShaderVariant::Skinned3dColoredFloatIndicesShadow: return {kSkinned3dColoredFloatIndicesVertDxbc, kSkinned3dColoredFloatIndicesVertDxbc_size};
+                case D3DShaderVariant::Pbr3dShadow: return {kPbr3dVertDxbc, kPbr3dVertDxbc_size};
+                case D3DShaderVariant::Pbr3dDualUvShadow: return {kPbr3dDualUvVertDxbc, kPbr3dDualUvVertDxbc_size};
+                case D3DShaderVariant::PbrSkinned3dShadow: return {kPbrSkinned3dVertDxbc, kPbrSkinned3dVertDxbc_size};
+                case D3DShaderVariant::PbrSkinned3dDualUvShadow: return {kPbrSkinned3dDualUvVertDxbc, kPbrSkinned3dDualUvVertDxbc_size};
+                case D3DShaderVariant::PbrSkinned3dDualUvColorShadow: return {kPbrSkinned3dDualUvColorVertDxbc, kPbrSkinned3dDualUvColorVertDxbc_size};
             }
             return {nullptr, 0};
         }
@@ -100,6 +113,22 @@ namespace CNA::Internal::Renderers::D3DCommon
                 case D3DShaderVariant::Skinned3dVertexLitColoredFloatIndices: return {kSkinned3dVertexLitColoredFragDxbc, kSkinned3dVertexLitColoredFragDxbc_size};
                 case D3DShaderVariant::Sprite3d:          return {kSprite3dFragDxbc, kSprite3dFragDxbc_size};
                 case D3DShaderVariant::Colored3dPositionOnly: return {kColored3dFragDxbc, kColored3dFragDxbc_size};
+                case D3DShaderVariant::LitTextured3dShadow:
+                case D3DShaderVariant::LitUntextured3dShadow:
+                    return {kLitTextured3dShadowFragDxbc, kLitTextured3dShadowFragDxbc_size};
+                case D3DShaderVariant::LitTextured3dColoredShadow:
+                    return {kLitTextured3dColoredShadowFragDxbc, kLitTextured3dColoredShadowFragDxbc_size};
+                case D3DShaderVariant::Skinned3dShadow:
+                case D3DShaderVariant::Skinned3dFloatIndicesShadow:
+                    return {kSkinned3dShadowFragDxbc, kSkinned3dShadowFragDxbc_size};
+                case D3DShaderVariant::Skinned3dColoredShadow:
+                case D3DShaderVariant::Skinned3dColoredFloatIndicesShadow:
+                    return {kSkinned3dColoredShadowFragDxbc, kSkinned3dColoredShadowFragDxbc_size};
+                case D3DShaderVariant::Pbr3dShadow: return {kPbr3dShadowFragDxbc, kPbr3dShadowFragDxbc_size};
+                case D3DShaderVariant::Pbr3dDualUvShadow: return {kPbr3dDualUvShadowFragDxbc, kPbr3dDualUvShadowFragDxbc_size};
+                case D3DShaderVariant::PbrSkinned3dShadow: return {kPbrSkinned3dShadowFragDxbc, kPbrSkinned3dShadowFragDxbc_size};
+                case D3DShaderVariant::PbrSkinned3dDualUvShadow: return {kPbrSkinned3dDualUvShadowFragDxbc, kPbrSkinned3dDualUvShadowFragDxbc_size};
+                case D3DShaderVariant::PbrSkinned3dDualUvColorShadow: return {kPbrSkinned3dDualUvColorShadowFragDxbc, kPbrSkinned3dDualUvColorShadowFragDxbc_size};
             }
             return {nullptr, 0};
         }
