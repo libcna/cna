@@ -83,6 +83,17 @@ namespace {
             return CnaTest::EngineLayer::RunsLegacyComputeSource(gd);
         }
 
+        [[nodiscard]] bool supportsHlslComputeSource() const
+        {
+            return gd.SupportsShaderLanguageEXT(
+                CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Compute);
+        }
+
+        [[nodiscard]] bool supportsComputeSource() const
+        {
+            return supportsLegacyComputeSource() || supportsHlslComputeSource();
+        }
+
         [[nodiscard]] std::string legacySource(const std::string& esSource) const
         {
             return CnaTest::EngineLayer::LegacyComputeSource(gd, esSource);
@@ -98,6 +109,19 @@ uniform int uCount;
 void main() {
     uint index = gl_GlobalInvocationID.x;
     if (index < uint(uCount)) values[index] = values[index] * 2.0;
+}
+)";
+
+    const char* const kDoublerHlsl = R"(
+RWByteAddressBuffer Values : register(u0);
+cbuffer DoublerParameters : register(b0) { int uCount; };
+[numthreads(64, 1, 1)]
+void main(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint index = dispatchId.x;
+    if (index >= uint(uCount)) return;
+    uint byteOffset = index * 4;
+    Values.Store(byteOffset, asuint(asfloat(Values.Load(byteOffset)) * 2.0f));
 }
 )";
 
@@ -390,11 +414,13 @@ TEST_F(ComputeTest, ABrokenShaderThrowsWithItsCompilerLog)
 {
     // MOD-1511: the log is the whole value of the failure, so it must reach the caller.
     if (!supported()) GTEST_SKIP() << "this renderer does not support compute shaders";
-    if (!supportsLegacyComputeSource())
-        GTEST_SKIP() << "this test's legacy payload has no form in the renderer's dialect";
+    if (!supportsComputeSource())
+        GTEST_SKIP() << "this test has no payload in the renderer's compute dialect";
     try
     {
-        ComputeShader broken(gd, legacySource("#version 310 es\nthis is not a shader\n"));
+        ComputeShader broken(gd, supportsLegacyComputeSource()
+            ? legacySource("#version 310 es\nthis is not a shader\n")
+            : std::string("this is not an HLSL shader\n"));
         FAIL() << "a shader that cannot compile was accepted";
     }
     catch (const std::runtime_error& error)
@@ -421,15 +447,16 @@ TEST_F(ComputeTest, ADispatchDoublesEveryElementOfABuffer)
 {
     // MOD-1513, the row's own example: 1024 floats, doubled.
     if (!supported()) GTEST_SKIP() << "this renderer does not support compute shaders";
-    if (!supportsLegacyComputeSource())
-        GTEST_SKIP() << "this test's legacy payload has no form in the renderer's dialect";
+    if (!supportsComputeSource())
+        GTEST_SKIP() << "this test has no payload in the renderer's compute dialect";
     constexpr int kCount = 1024;
     StorageBufferT<float> values(gd, kCount);
     std::vector<float> source(kCount);
     for (int i = 0; i < kCount; ++i) source[static_cast<std::size_t>(i)] = static_cast<float>(i);
     values.setData(source);
 
-    ComputeShader doubler(gd, legacySource(kDoubler));
+    ComputeShader doubler(gd, supportsLegacyComputeSource()
+        ? legacySource(kDoubler) : std::string(kDoublerHlsl));
     EXPECT_TRUE(doubler.isValid());
     EXPECT_TRUE(doubler.getCompileError().empty());
     EXPECT_EQ(doubler.getSelectedLanguageEXT(), CNA::ShaderLanguageEXT::Unknown);
@@ -741,12 +768,12 @@ TEST_F(ComputeTest, UniformsReachTheProgram)
     // MOD-1515: an int and a float, checked by their effect on a buffer rather than by asking the
     // program back -- what matters is that the value the shader read is the value that was set.
     if (!supported()) GTEST_SKIP() << "this renderer does not support compute shaders";
-    if (!supportsLegacyComputeSource())
-        GTEST_SKIP() << "this test's legacy payload has no form in the renderer's dialect";
+    if (!supportsComputeSource())
+        GTEST_SKIP() << "this test has no payload in the renderer's compute dialect";
     StorageBufferT<float> values(gd, 64);
     values.setData(std::vector<float>(64, 1.0f));
 
-    ComputeShader scaler(gd, legacySource(R"(#version 310 es
+    const std::string glsl = R"(#version 310 es
 layout(local_size_x = 64) in;
 layout(std430, binding = 0) buffer Values { float values[]; };
 uniform int uOffset;
@@ -755,7 +782,20 @@ void main() {
     uint index = gl_GlobalInvocationID.x;
     values[index] = values[index] * uScale + float(uOffset);
 }
-)"));
+)";
+    constexpr const char* hlsl = R"(
+RWByteAddressBuffer Values : register(u0);
+cbuffer ScaleParameters : register(b0) { int uOffset; float uScale; };
+[numthreads(64, 1, 1)]
+void main(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint byteOffset = dispatchId.x * 4;
+    float value = asfloat(Values.Load(byteOffset));
+    Values.Store(byteOffset, asuint(value * uScale + float(uOffset)));
+}
+)";
+    ComputeShader scaler(gd, supportsLegacyComputeSource()
+        ? legacySource(glsl) : std::string(hlsl));
     scaler.bindStorageBuffer(0, values.getBuffer());
     scaler.setUniform("uOffset", 7);
     scaler.setUniform("uScale", 3.0f);
@@ -769,10 +809,11 @@ TEST_F(ComputeTest, DispatchArgumentsAreValidatedBeforeSubmission)
 {
     // MOD-1523.
     if (!supported()) GTEST_SKIP() << "this renderer does not support compute shaders";
-    if (!supportsLegacyComputeSource())
-        GTEST_SKIP() << "this test's legacy payload has no form in the renderer's dialect";
+    if (!supportsComputeSource())
+        GTEST_SKIP() << "this test has no payload in the renderer's compute dialect";
     StorageBufferT<float> values(gd, 64);
-    ComputeShader doubler(gd, legacySource(kDoubler));
+    ComputeShader doubler(gd, supportsLegacyComputeSource()
+        ? legacySource(kDoubler) : std::string(kDoublerHlsl));
     doubler.bindStorageBuffer(0, values.getBuffer());
 
     EXPECT_THROW(doubler.dispatch(0), std::invalid_argument);

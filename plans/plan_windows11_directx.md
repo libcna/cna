@@ -1155,3 +1155,27 @@ $env:CNA_D3D11_DEBUG_LAYER='1'
 & C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ContactShadowPassTest.TheShaderAgreesWithTheCpuTwinOnEveryCase' *> C:\rv\logs\dx11-contact-shadow-probe-1.log
 & C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ContactShadowPassTest.*' *> C:\rv\logs\dx11-contact-shadow-suite-1.log
 ```
+
+## DX11 core compute source conformance, 2026-09-26
+
+WIN11-0046: four `ComputeTest` cases used only legacy GLSL compute text and
+skipped DX11 despite native HLSL compute support. Added HLSL text for the
+broken-shader diagnostic, 1024-element float doubling, int/float uniform
+delivery, and dispatch-argument validation, keeping the original GLSL route
+for those renderers. All four pass on physical Intel Iris Xe with D3D11 debug
+enabled (`C:\rv\logs\dx11-compute-core-focused-1.log`). The full
+`ComputeTest.*` run passed **13/17** with four skips and no failures, 18
+explicit Intel `8086:46A6` selections, and zero debug warnings/errors
+(`C:\rv\logs\dx11-compute-core-suite-1.log`). Two skips are genuinely
+inapplicable (`WithoutSupportBothWrappersRefuseByName` on a compute-capable
+renderer, and a Vulkan SPIR-V sampler rejection); two remaining legacy GLSL
+image-binding tests are being examined separately. DX11's raw `Texture2D`
+compute-image capability is currently false; typed `StorageTexture2D` compute
+is covered by the separate native DX11 suite.
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsExtTests --parallel 8
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ComputeTest.ABrokenShaderThrowsWithItsCompilerLog:ComputeTest.ADispatchDoublesEveryElementOfABuffer:ComputeTest.UniformsReachTheProgram:ComputeTest.DispatchArgumentsAreValidatedBeforeSubmission' *> C:\rv\logs\dx11-compute-core-focused-1.log
+& C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ComputeTest.*' *> C:\rv\logs\dx11-compute-core-suite-1.log
+```
