@@ -24,6 +24,7 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -684,10 +685,9 @@ TEST(ShaderPackageSelectionEXTTest, RequiredVertexStorageBindingIsCapabilityChec
 {
     CnaTest::EngineLayer::HiDefDevice device;
     CNA::ShaderLanguageEXT language = CNA::ShaderLanguageEXT::Unknown;
-    // WMG-0012: WGSL among the candidates, so a WGSL renderer has a language to build the probe
-    // package in rather than skipping a selection rule that is not about languages at all.
     for (const auto candidate : {CNA::ShaderLanguageEXT::SpirV,
                                  CNA::ShaderLanguageEXT::Wgsl,
+                                 CNA::ShaderLanguageEXT::Hlsl,
                                  CNA::ShaderLanguageEXT::GlslDesktop,
                                  CNA::ShaderLanguageEXT::GlslEs})
     {
@@ -724,10 +724,9 @@ TEST(ShaderPackageSelectionEXTTest, ConstantBuffersHaveOnlyThePublishedComputeRo
 {
     CnaTest::EngineLayer::HiDefDevice device;
     CNA::ShaderLanguageEXT language = CNA::ShaderLanguageEXT::Unknown;
-    // WMG-0012: WGSL among the candidates, so a WGSL renderer has a language to build the probe
-    // package in rather than skipping a selection rule that is not about languages at all.
     for (const auto candidate : {CNA::ShaderLanguageEXT::SpirV,
                                  CNA::ShaderLanguageEXT::Wgsl,
+                                 CNA::ShaderLanguageEXT::Hlsl,
                                  CNA::ShaderLanguageEXT::GlslDesktop,
                                  CNA::ShaderLanguageEXT::GlslEs})
     {
@@ -946,18 +945,33 @@ TEST(ShaderEffectFactoryTest, ClearReleasesEverything)
 TEST(ShaderDiagnosticsTest, AWorkingShaderReportsNothing)
 {
     CnaTest::EngineLayer::HiDefDevice gd;
-    if (!CnaTest::EngineLayer::RunsGlslShaderSource(gd))
-        GTEST_SKIP() << "this renderer compiles no shader source, so there is no success to see";
+    const bool hlsl = gd.SupportsShaderLanguageEXT(
+                          CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Vertex)
+                   && gd.SupportsShaderLanguageEXT(
+                          CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Fragment);
+    if (!hlsl && !CnaTest::EngineLayer::RunsGlslShaderSource(gd))
+        GTEST_SKIP() << "this renderer does not compile a shader source used by this probe";
 
-    ShaderEffect effect(gd, kVertex, kFragment);
-    ASSERT_TRUE(effect.IsEffectValid());
-    EXPECT_TRUE(effect.GetCompileErrorEXT().empty())
+    const ShaderPackageEXT hlslPackage(
+        {
+            ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Vertex,
+                          "main", "working.vert.hlsl",
+                          "float4 main(float4 position : POSITION) : SV_POSITION { return position; }"),
+            ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Fragment,
+                          "main", "working.frag.hlsl",
+                          "float4 main() : SV_Target { return float4(1, 0, 0, 1); }"),
+        },
+        {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment});
+    auto effect = hlsl ? std::make_unique<ShaderEffect>(gd, hlslPackage)
+                       : std::make_unique<ShaderEffect>(gd, kVertex, kFragment);
+    ASSERT_TRUE(effect->IsEffectValid());
+    EXPECT_TRUE(effect->GetCompileErrorEXT().empty())
         << "a shader that compiled reported an error anyway";
-    EXPECT_TRUE(effect.GetShaderDiagnosticsEXT().empty())
+    EXPECT_TRUE(effect->GetShaderDiagnosticsEXT().empty())
         << "a shader that compiled retained structured diagnostics anyway";
 
     bool logged = false;
-    EXPECT_TRUE(CNA::Graphics::detail::reportShaderCompileFailure(gd, "Working", &effect, logged));
+    EXPECT_TRUE(CNA::Graphics::detail::reportShaderCompileFailure(gd, "Working", effect.get(), logged));
     EXPECT_FALSE(logged) << "nothing failed, so nothing should have been reported";
 }
 

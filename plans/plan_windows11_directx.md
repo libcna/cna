@@ -1207,3 +1207,37 @@ $env:CNA_D3D11_DEBUG_LAYER='1'
 & C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ComputeTest.ImageBindingEitherWorksOrRefusesWithItsReason:ComputeTest.Texture2DGetDataDoesNotSeeComputeWrites' *> C:\rv\logs\dx11-image-binding-focused-1.log
 & C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ComputeTest.*' *> C:\rv\logs\dx11-image-binding-compute-suite-1.log
 ```
+
+## DX11 full modern regression and HLSL shader-infrastructure tests, 2026-09-26
+
+WIN11-0048: the complete modern DX11 executable after WIN11-0047 ran **984
+tests from 126 suites: 934 pass, 50 skip, 0 fail** in 1,878,203 ms
+(`C:\rv\logs\dx11-modern-full-after-0047.log`). The log contains 683 explicit
+selections of physical Intel Iris Xe `8086:46A6`, `software=0`, no other
+adapter, and zero D3D11 debug-layer warning/error/corruption messages. The
+50 exact skipped test names are in the final summary. Thirty-one are the
+directional, cascaded and punctual `ShadowVisibilityTest` families whose
+stock shader sampling is still absent. The other skips include opposing
+capability controls, GLSL-specific diagnostic probes, one raw `Texture2D`
+compute-image capability, and three shader-infrastructure tests that omitted
+HLSL from their test sources/candidate list.
+
+The two `ShaderPackageSelectionEXTTest` probes now include HLSL after WGSL
+among their selectable languages. The successful-shader diagnostics probe
+uses a valid native HLSL graphics package when the renderer declares HLSL,
+and keeps the original GLSL source on GLSL renderers. The three formerly
+skipped cases passed on the physical Intel adapter; the complete related
+selection/diagnostics group passed **9/9**, zero skips/failures, nine Intel
+selections, and zero D3D11 debug messages
+(`C:\rv\logs\dx11-shader-infrastructure-hlsl-suite-1.log`). The intentionally
+broken-shader diagnostic tests still emit expected compiler-error text;
+these are not D3D11 debug-layer messages. No DX11 renderer behavior was
+changed by this test-source task. Shadow sampling and IBL remain open.
+
+```powershell
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 7200000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no' *> C:\rv\logs\dx11-modern-full-after-0047.log
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsExtTests --parallel 8
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ShaderPackageSelectionEXTTest.RequiredVertexStorageBindingIsCapabilityChecked:ShaderPackageSelectionEXTTest.ConstantBuffersHaveOnlyThePublishedComputeRoute:ShaderDiagnosticsTest.AWorkingShaderReportsNothing' *> C:\rv\logs\dx11-shader-infrastructure-hlsl-focused-1.log
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ShaderPackageSelectionEXTTest.*:ShaderDiagnosticsTest.*' *> C:\rv\logs\dx11-shader-infrastructure-hlsl-suite-1.log
+```
