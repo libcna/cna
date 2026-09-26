@@ -2961,3 +2961,41 @@ exit $code
 
 The high-cardinality Intel GBV removal in WIN11-0077 remains a separate
 open issue; routine hardware classic parity is green after this correction.
+
+### WIN11-0079: Trace GBV descriptor history and run DX12 CNAEXT examples
+
+The existing `CNA_D3D12_DESCRIPTOR_TRACE=1` allocator trace was combined
+with WIN11-0077's unique Texture2D names in one 90-second, time-boxed
+physical-Intel GBV reproduction of descriptor legs A+B+C+D. It reproduced
+the same DRED fault address and the same two freed resource serials from
+A (`#1608`) and C (`#1919`). Their SRV/UAV allocations were at indices
+`1023/1024` and `822/821`, respectively. D's new textures (`#2125/#2126`)
+received distinct `512/511` and `496/495` slots. The trace showed
+`fenceSubmitted=fenceCompleted=2178` before D's new allocations and
+zero pending frees at that point. Thus simple direct reuse of either
+faulting resource's descriptor slot by D is ruled out. This does not rule
+out an older queued GBV reference or a different stale command-list
+binding. The trace did not change the failure: DRED again reported a
+GBV command-list/queue breadcrumb and an incomplete application frame
+operation; the runner exited 124 at its 90-second limit. This is a
+bounded **Intel GBV-only** investigation item, not a passing fixture or a
+proven driver defect. No allocator delay, global GPU wait, or test skip was
+added. Trace: `C:\rv\logs\dx12-descriptor-abcd-current-gbv-traced-1.log`.
+
+The two CNAEXT examples registered for this Windows modern DX12 build,
+`CNAEXT_Settings_Compile_Run` and `Ascii_Quantizer`, were built with MSVC
+`--parallel 12` and passed **2/2** on the private desktop with explicit
+Intel hardware selection policy, D3D12 debug layer and DRED enabled, GBV
+off. The CTest run exited 0:
+`C:\rv\logs\dx12-modern-applicable-examples-1.log`. These examples are
+compile/settings and CPU-quantizer coverage, not a substitute for a full
+rendering application. The visual CNAEXT examples remain gated on WIN32.
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx12-modern --config Debug --target cna_example_cnaext_settings cna_test_ascii_quantizer --parallel 12
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='0'
+& C:\rv\work\private_desktop_awake.exe 900000 'ctest --test-dir C:\rv\build\cna-win11-dx12-modern -C Debug -R "^(CNAEXT_Settings_Compile_Run|Ascii_Quantizer)$" --output-on-failure --parallel 1' *> C:\rv\logs\dx12-modern-applicable-examples-1.log
+```
