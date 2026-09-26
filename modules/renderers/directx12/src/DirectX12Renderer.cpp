@@ -3408,6 +3408,43 @@ namespace CNA::Internal::Renderers::DirectX12
                frequency != 0;
     }
 
+    std::uint64_t DirectX12Renderer::GetTimestampPeriodPicosecondsEXT() const
+    {
+        UINT64 frequency = 0;
+        if (!commandQueue_ || FAILED(commandQueue_->GetTimestampFrequency(&frequency)) ||
+            frequency == 0)
+            return 0;
+        constexpr std::uint64_t picosecondsPerSecond = UINT64_C(1'000'000'000'000);
+        const std::uint64_t whole = picosecondsPerSecond / frequency;
+        const std::uint64_t remainder = picosecondsPerSecond % frequency;
+        return whole + (remainder >= frequency / 2 + frequency % 2 ? 1 : 0);
+    }
+
+    void DirectX12Renderer::SetStringMarkerEXT(const char* marker)
+    {
+        if (!device_ || marker == nullptr || marker[0] == '\0') return;
+
+        using SetMarkerOnCommandList =
+            void(WINAPI*)(ID3D12GraphicsCommandList*, UINT64, PCSTR);
+        struct PixRuntime
+        {
+            HMODULE library = LoadLibraryExW(
+                L"WinPixEventRuntime.dll", nullptr, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+            SetMarkerOnCommandList setMarker = library
+                ? reinterpret_cast<SetMarkerOnCommandList>(
+                      GetProcAddress(library, "PIXSetMarkerOnCommandList"))
+                : nullptr;
+
+            ~PixRuntime()
+            {
+                if (library) FreeLibrary(library);
+            }
+        };
+        static const PixRuntime pix;
+        if (pix.setMarker)
+            pix.setMarker(GetFrameCommandListEXT(), 0, marker);
+    }
+
     std::unique_ptr<IGpuTimerRenderer> DirectX12Renderer::CreateGpuTimerEXT()
     {
         if (!SupportsGpuTimerEXT()) return nullptr;

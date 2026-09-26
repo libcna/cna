@@ -2640,3 +2640,61 @@ $filter='DirectX12CompiledEffectDrawTest.BaseInstanceSelectsDividedCompiledEffec
 $commandLine='"'+$exe+'" --gtest_color=no --gtest_filter='+$filter
 & C:\rv\work\private_desktop_awake.exe 900000 $commandLine *> C:\rv\logs\dx12-base-instance-compiled-focused-1.log
 ```
+
+### WIN11-0073: DX12 GPU timestamp profile and PIX markers
+
+The complete post-WIN11-0072 modern DX12 binary passed **1,016 tests from 135
+suites: 992 pass, 24 skip, 0 fail** in 2,291,114 ms
+(`C:\rv\logs\dx12-modern-full-final-post-baseinstance-1.log`). All 24 skips
+are backend-specific, unsupported-capability inverse, or GL/Vulkan diagnostic
+probes; no shadow, IBL, compute, indirect, array, or storage-image case skipped.
+The run selected physical Intel Iris Xe `8086:46A6` **725 times**, never WARP,
+with D3D12 debug layer and DRED enabled and zero D3D12 warnings/errors,
+device removals, or DRED faults. The PowerShell runner wrapper reported status
+1 and wrote a native-stderr `NativeCommandError` record, although Google Test
+reached its normal final summary with zero failures; the wrapper status remains
+unclassified. A post-diagnostics run with explicit launcher exit-code capture
+is in progress. Seven process
+samples before the expensive volumetric cases held 393 handles and at most
+92.84 MiB private memory; a later volumetric sample was 450 handles and
+119.67 MiB, so these sparse samples alone are not a lifetime conclusion.
+
+The renderer already exposed a native GPU timer, but its capability-profile
+timestamp period inherited zero. DX12 now reads the live direct queue's
+`GetTimestampFrequency` and returns the nearest integer picoseconds per tick,
+or zero when no frequency exists. A regression compares both the renderer and
+public profile with the native queue before recreation, then compares the
+renderer with the recreated queue.
+
+`SetStringMarkerEXT` had inherited a no-op. Direct D3D12 `SetMarker` calls are
+not the supported PIX format, so DX12 now optionally loads the official
+`WinPixEventRuntime.dll` from the application's default DLL search directories
+on first use and calls `PIXSetMarkerOnCommandList` on the current frame list.
+Missing runtime, null text, and empty text remain inert. No new public API or
+system-wide installation was needed. For local validation, the official NuGet
+package `WinPixEventRuntime` 1.0.240308001 was downloaded under `C:\rv\work`
+(package SHA-256 `726ACC93D6968E2146261A1E415521747D50AD69894C2B42B5D0D4C29FD66EC4`);
+its x64 DLL (SHA-256
+`81ADCFD8253C3489BE720DA7E30F16004DC9A1F02A8B418C6C3AEF4993032E6D`)
+was copied only beside the test EXEs. This runtime requirement follows
+Microsoft's `ID3D12GraphicsCommandList::SetMarker` and PIX runtime guidance.
+
+The native MSVC Debug build passed. The timestamp and marker tests passed
+**4/4** with D3D12 debug layer, DRED, and GPU-based validation enabled,
+explicit Intel hardware selection, no skip and no validation/debug/DRED error
+(`C:\rv\logs\dx12-diagnostics-gbv-focused-1.log`). The marker test records a
+UTF-8 marker, checks that it added no submission or GPU wait, presents,
+recreates the device, and records/presents again. This proves runtime loading
+and debug-clean API use; a PIX timeline capture was not taken. The separate
+MSVC AddressSanitizer test evidence follows under WIN11-0074.
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx12-modern --config Debug --target CnaGraphicsExtTests --parallel 16
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='1'
+$exe='C:\rv\build\cna-win11-dx12-modern\Debug\CnaGraphicsExtTests.exe'
+$commandLine='"'+$exe+'" --gtest_color=no --gtest_filter=D3D12GpuTimerTest.*:D3D12DebugMarkerTest.*'
+& C:\rv\work\private_desktop_awake.exe 900000 $commandLine *> C:\rv\logs\dx12-diagnostics-gbv-focused-1.log
+```

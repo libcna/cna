@@ -418,6 +418,16 @@ namespace CNA::Internal::Renderers::DirectX12
          */
         [[nodiscard]] bool SupportsGpuTimerEXT() const override;
         /**
+         * @brief Returns the direct queue's GPU timestamp period rounded to picoseconds.
+         * @return Picoseconds per tick, or zero when the queue has no timestamp frequency.
+         */
+        [[nodiscard]] std::uint64_t GetTimestampPeriodPicosecondsEXT() const override;
+        /**
+         * @brief Inserts a PIX marker on the current D3D12 frame when its runtime is available.
+         * @param marker Non-empty UTF-8 marker text.
+         */
+        void SetStringMarkerEXT(const char* marker) override;
+        /**
          * @brief Creates a native D3D12 GPU timestamp timer.
          * @return A timestamp query timer, or null when unsupported.
          */

@@ -8,11 +8,71 @@
 #include "EngineTestSupport.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 
+#include <cstdint>
 #include <memory>
 
 using CNA::Graphics::GpuTimer;
 using CNA::Internal::Renderers::DirectX12::DirectX12Renderer;
 using Microsoft::Xna::Framework::Color;
+
+TEST(D3D12GpuTimerTest, CapabilityPeriodMatchesTheLiveDirectQueue)
+{
+    CnaTest::EngineLayer::HiDefDevice device;
+    auto& renderer = dynamic_cast<DirectX12Renderer&>(device.GetRenderer());
+    ASSERT_TRUE(renderer.SupportsGpuTimerEXT());
+
+    auto checkFrequency = [&](bool checkProfile)
+    {
+        UINT64 frequency = 0;
+        ASSERT_TRUE(SUCCEEDED(renderer.GetCommandQueueEXT()->GetTimestampFrequency(&frequency)));
+        ASSERT_GT(frequency, 0u);
+        constexpr std::uint64_t picosecondsPerSecond = UINT64_C(1'000'000'000'000);
+        const std::uint64_t whole = picosecondsPerSecond / frequency;
+        const std::uint64_t remainder = picosecondsPerSecond % frequency;
+        const std::uint64_t expected =
+            whole + (remainder >= frequency / 2 + frequency % 2 ? 1 : 0);
+        EXPECT_EQ(renderer.GetTimestampPeriodPicosecondsEXT(), expected);
+        if (checkProfile)
+        {
+            const auto limit = device.GetRendererLimitEXT(
+                CNA::RendererLimit::TimestampPeriodPicoseconds);
+            ASSERT_TRUE(limit.known);
+            EXPECT_EQ(limit.value, expected);
+        }
+    };
+
+    checkFrequency(true);
+    ASSERT_NO_THROW(renderer.RecreateDeviceEXT());
+    checkFrequency(false);
+}
+
+TEST(D3D12DebugMarkerTest, PixMarkersUseTheCurrentFrameAcrossDeviceRecreation)
+{
+    HMODULE available = LoadLibraryExW(
+        L"WinPixEventRuntime.dll", nullptr, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+    if (!available)
+        GTEST_SKIP() << "WinPixEventRuntime.dll is required for D3D12 GPU markers";
+    FreeLibrary(available);
+
+    CnaTest::EngineLayer::HiDefDevice device;
+    auto& renderer = dynamic_cast<DirectX12Renderer&>(device.GetRenderer());
+    const auto submissions = renderer.GetFrameSubmissionCountEXT();
+    const auto waits = renderer.GetGpuWaitCountEXT();
+
+    device.SetStringMarkerEXT("CNA D3D12 marker \xE2\x9C\x93");
+    HMODULE pix = GetModuleHandleW(L"WinPixEventRuntime.dll");
+    ASSERT_NE(pix, nullptr);
+    ASSERT_NE(GetProcAddress(pix, "PIXSetMarkerOnCommandList"), nullptr);
+    device.SetStringMarkerEXT("");
+    renderer.SetStringMarkerEXT(nullptr);
+    EXPECT_EQ(renderer.GetFrameSubmissionCountEXT(), submissions);
+    EXPECT_EQ(renderer.GetGpuWaitCountEXT(), waits);
+    device.Present();
+
+    ASSERT_NO_THROW(renderer.RecreateDeviceEXT());
+    device.SetStringMarkerEXT("CNA D3D12 recovered marker");
+    EXPECT_NO_THROW(device.Present());
+}
 
 TEST(D3D12GpuTimerTest, RecordingAndDisposalDoNotSubmitOrWaitForTheGpu)
 {
