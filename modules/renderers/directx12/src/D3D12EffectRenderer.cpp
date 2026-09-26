@@ -21,6 +21,44 @@ namespace CNA::Internal::Renderers::DirectX12
             std::snprintf(buf, sizeof(buf), "0x%08lX", static_cast<unsigned long>(hr));
             return buf;
         }
+
+        bool InspectStorageInputs(ID3DBlob* bytecode, std::uint32_t& slots,
+                                  int& resourceCount, std::string& error)
+        {
+            ComPtr<ID3D11ShaderReflection> reflection;
+            if (FAILED(D3DReflect(bytecode->GetBufferPointer(), bytecode->GetBufferSize(),
+                                  IID_PPV_ARGS(reflection.GetAddressOf()))))
+            {
+                error = "D3D12 ShaderEffect could not reflect raw storage inputs";
+                return false;
+            }
+            D3D11_SHADER_DESC description{};
+            if (FAILED(reflection->GetDesc(&description)))
+            {
+                error = "D3D12 ShaderEffect could not inspect stage resources";
+                return false;
+            }
+            for (UINT index = 0; index < description.BoundResources; ++index)
+            {
+                D3D11_SHADER_INPUT_BIND_DESC binding{};
+                if (FAILED(reflection->GetResourceBindingDesc(index, &binding)) ||
+                    binding.Type != D3D_SIT_BYTEADDRESS)
+                    continue;
+                if (binding.BindCount == 0 || binding.BindPoint >= 16 ||
+                    binding.BindCount > 16 - binding.BindPoint)
+                {
+                    error = "D3D12 ShaderEffect raw storage t-register exceeds 16 slots";
+                    return false;
+                }
+                for (UINT slot = binding.BindPoint;
+                     slot < binding.BindPoint + binding.BindCount; ++slot)
+                    slots |= UINT32_C(1) << slot;
+                resourceCount = std::max(
+                    resourceCount,
+                    static_cast<int>(binding.BindPoint + binding.BindCount));
+            }
+            return true;
+        }
     }
 
     D3D12EffectRenderer::D3D12EffectRenderer(DirectX12Renderer* owner)
@@ -40,6 +78,8 @@ namespace CNA::Internal::Renderers::DirectX12
         vsBytecode_.Reset();
         psBytecode_.Reset();
         reflection_.Reset();
+        storageSlots_ = 0;
+        storageResourceCount_ = 0;
         textures_ = {};
         programId_ = 0;
 
@@ -74,10 +114,15 @@ namespace CNA::Internal::Renderers::DirectX12
             !reflection_.AddShader(
                 psBytecode_->GetBufferPointer(), psBytecode_->GetBufferSize(), compileError_))
             return false;
+        if (!InspectStorageInputs(vsBytecode_.Get(), storageSlots_,
+                                  storageResourceCount_, compileError_) ||
+            !InspectStorageInputs(psBytecode_.Get(), storageSlots_,
+                                  storageResourceCount_, compileError_))
+            return false;
 
         rootSignature_ = owner_->GetRootSignatureCacheEXT().GetOrCreate(
             device_, reflection_.GetConstantBufferCount(),
-            reflection_.GetShaderResourceCount(), reflection_.GetSamplerCount());
+            GetShaderResourceCountEXT(), reflection_.GetSamplerCount());
         if (!rootSignature_)
         {
             compileError_ = "D3D12EffectRenderer: failed to create the reflected root signature";

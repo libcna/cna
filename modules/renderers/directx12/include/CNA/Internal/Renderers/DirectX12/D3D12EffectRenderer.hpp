@@ -15,6 +15,7 @@
 #include <d3dcompiler.h>
 #include <wrl/client.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -76,7 +77,15 @@ namespace CNA::Internal::Renderers::DirectX12
         /** @brief Returns one plus the highest reflected t-register. */
         [[nodiscard]] int GetShaderResourceCountEXT() const
         {
-            return reflection_.GetShaderResourceCount();
+            return std::max(reflection_.GetShaderResourceCount(), storageResourceCount_);
+        }
+        /**
+         * @brief Returns the raw storage t-registers reflected from both shader stages.
+         * @return Bit mask of HLSL texture registers occupied by ByteAddressBuffer inputs.
+         */
+        [[nodiscard]] std::uint32_t GetStorageSlotsEXT() const noexcept
+        {
+            return storageSlots_;
         }
         /** @brief Returns one plus the highest reflected s-register. */
         [[nodiscard]] int GetSamplerCountEXT() const { return reflection_.GetSamplerCount(); }
@@ -109,6 +118,8 @@ namespace CNA::Internal::Renderers::DirectX12
         ComPtr<ID3DBlob> vsBytecode_;
         ComPtr<ID3DBlob> psBytecode_;
         D3DCommon::D3DProgramReflection reflection_;
+        std::uint32_t storageSlots_ = 0;
+        int storageResourceCount_ = 0;
         std::array<TextureBinding,
                    D3DCommon::D3DProgramReflection::kMaxShaderResources> textures_{};
         std::uint64_t programId_ = 0;

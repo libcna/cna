@@ -4,6 +4,7 @@
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
 
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 
 namespace CNA::Internal::Renderers::DirectX12
@@ -12,7 +13,12 @@ namespace CNA::Internal::Renderers::DirectX12
     {
         constexpr std::uint32_t kTransferSource = UINT32_C(0x02);
         constexpr std::uint32_t kTransferDestination = UINT32_C(0x04);
-        constexpr std::uint32_t kSupportedUsage = kTransferSource | kTransferDestination;
+        constexpr std::uint32_t kStorage = UINT32_C(0x01);
+        constexpr std::uint32_t kIndirectArguments = UINT32_C(0x08);
+        constexpr std::uint32_t kConstant = UINT32_C(0x40);
+        constexpr std::uint32_t kSupportedUsage =
+            kStorage | kTransferSource | kTransferDestination |
+            kIndirectArguments | kConstant;
         constexpr std::uint32_t kCpuRead = UINT32_C(0x01);
         constexpr std::uint32_t kCpuWrite = UINT32_C(0x02);
 
@@ -21,7 +27,8 @@ namespace CNA::Internal::Renderers::DirectX12
             return offset <= total && length <= total - offset;
         }
 
-        D3D12_RESOURCE_DESC BufferDescription(std::size_t byteSize)
+        D3D12_RESOURCE_DESC BufferDescription(std::size_t byteSize,
+                                              D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE)
         {
             D3D12_RESOURCE_DESC desc{};
             desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
@@ -32,6 +39,7 @@ namespace CNA::Internal::Renderers::DirectX12
             desc.Format = DXGI_FORMAT_UNKNOWN;
             desc.SampleDesc.Count = 1;
             desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+            desc.Flags = flags;
             return desc;
         }
     }
@@ -46,7 +54,7 @@ namespace CNA::Internal::Renderers::DirectX12
     {
         if (!renderer || !device_ || byteSize == 0 || usage == 0 ||
             (usage & ~kSupportedUsage) != 0 || (cpuAccess & ~(kCpuRead | kCpuWrite)) != 0)
-            throw std::invalid_argument("D3D12 storage buffer: invalid transfer descriptor");
+            throw std::invalid_argument("D3D12 storage buffer: invalid descriptor");
         CreateResource();
         renderer_->RegisterRecoverableResourceEXT(this);
     }
@@ -62,15 +70,64 @@ namespace CNA::Internal::Renderers::DirectX12
     {
         D3D12_HEAP_PROPERTIES heap{};
         heap.Type = D3D12_HEAP_TYPE_DEFAULT;
-        const auto desc = BufferDescription(byteSize_);
+        const std::size_t alignment = (usage_ & kConstant) != 0 ? 256 : 4;
+        if (byteSize_ > std::numeric_limits<std::size_t>::max() - (alignment - 1))
+            throw std::invalid_argument("D3D12 storage buffer: size overflows alignment");
+        const std::size_t alignedSize =
+            (byteSize_ + alignment - 1) & ~(alignment - 1);
+        if ((usage_ & kStorage) != 0 &&
+            alignedSize / 4 > std::numeric_limits<UINT>::max())
+            throw std::invalid_argument("D3D12 storage buffer: raw view count exceeds UINT");
+        const auto desc = BufferDescription(
+            alignedSize, (usage_ & kStorage) != 0
+                ? D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS
+                : D3D12_RESOURCE_FLAG_NONE);
         const HRESULT hr = device_->CreateCommittedResource(
             &heap, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_COMMON,
             nullptr, IID_PPV_ARGS(buffer_.ReleaseAndGetAddressOf()));
         if (FAILED(hr))
             throw std::runtime_error("D3D12 storage buffer: DEFAULT heap allocation failed");
-        buffer_->SetName(L"CNA StorageBuffer transfer resource");
+        buffer_->SetName(L"CNA StorageBuffer resource");
         renderer_->GetResourceStateTrackerEXT().TrackResource(
             buffer_.Get(), D3D12_RESOURCE_STATE_COMMON);
+        if ((usage_ & kStorage) == 0) return;
+
+        heaps_ = renderer_->GetDescriptorHeapsEXT();
+        try
+        {
+            D3D12_UNORDERED_ACCESS_VIEW_DESC uav{};
+            uav.Format = DXGI_FORMAT_R32_TYPELESS;
+            uav.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+            uav.Buffer.NumElements = static_cast<UINT>(alignedSize / 4);
+            uav.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_RAW;
+            uavIndex_ = renderer_->CreateCbvSrvUavDescriptorEXT(
+                [&](D3D12_CPU_DESCRIPTOR_HANDLE handle)
+                {
+                    device_->CreateUnorderedAccessView(buffer_.Get(), nullptr, &uav, handle);
+                });
+
+            D3D12_SHADER_RESOURCE_VIEW_DESC srv{};
+            srv.Format = DXGI_FORMAT_R32_TYPELESS;
+            srv.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+            srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+            srv.Buffer.NumElements = static_cast<UINT>(alignedSize / 4);
+            srv.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
+            srvIndex_ = renderer_->CreateCbvSrvUavDescriptorEXT(
+                [&](D3D12_CPU_DESCRIPTOR_HANDLE handle)
+                {
+                    device_->CreateShaderResourceView(buffer_.Get(), &srv, handle);
+                });
+        }
+        catch (...)
+        {
+            if (uavIndex_ != D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex)
+                heaps_->cbvSrvUav.Free(uavIndex_);
+            uavIndex_ = D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex;
+            heaps_.reset();
+            renderer_->GetResourceStateTrackerEXT().UntrackResource(buffer_.Get());
+            buffer_.Reset();
+            throw;
+        }
     }
 
     void D3D12StorageBuffer::UploadRange(
@@ -237,6 +294,16 @@ namespace CNA::Internal::Renderers::DirectX12
     {
         if (renderer_ && buffer_)
             renderer_->GetResourceStateTrackerEXT().UntrackResource(buffer_.Get());
+        if (heaps_)
+        {
+            if (uavIndex_ != D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex)
+                heaps_->cbvSrvUav.Free(uavIndex_);
+            if (srvIndex_ != D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex)
+                heaps_->cbvSrvUav.Free(srvIndex_);
+        }
+        uavIndex_ = D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex;
+        srvIndex_ = D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex;
+        heaps_.reset();
         buffer_.Reset();
         device_.Reset();
     }

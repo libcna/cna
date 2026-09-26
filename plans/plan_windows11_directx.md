@@ -2058,3 +2058,85 @@ This is a foundation for the next native DX12 compute/storage task. The
 compute capability remains false, storage/constant/indirect buffer roles are
 still refused, and the full modern skip count from WIN11-0062 is therefore not
 yet a new conformance count.
+
+### WIN11-0064: DX12 native compute and graphics storage bindings
+
+The DX12 renderer now compiles the existing CNAEXT HLSL compute dialect to
+`cs_5_0`, reflects named uniforms, and records native compute PSOs and dispatches
+on its frame command list. The root signature maps b0..b13, t0..t15, u0..u7
+directly; it uses static samplers for sampled textures. StorageBuffer gained
+same-device raw UAV and SRV descriptors for its declared Storage role, plus
+constant-buffer binding. GPU writes invalidate its CPU recovery shadow.
+Compute and graphics reuse the resource-state tracker and frame-fence retention;
+no dispatch adds a global GPU wait. Dispatch rejects one buffer bound to two
+writable UAV slots or to both UAV and CBV slots. A compiled compute program
+retains bytecode and its existing bindings/uniforms across explicit device
+recreation, while a failed compilation remains invalid and does not obstruct
+device recreation.
+
+The graphics ShaderEffect path reflects raw `ByteAddressBuffer` inputs at their
+HLSL t-registers, binds the corresponding StorageBuffer SRVs, and exposes those
+SRVs to vertex and fragment stages. The original clustered-forward run with
+compute/storage enabled found **26 pass / 15 fail** in 41 tests: the graphics
+root signature covered only the older texture range and lacked its reflected
+raw t6 binding (D3D12 debug message 690). Extending reflected resource counts
+and graphics root SRV visibility resolved that error. The rerun passed
+**41/41**, with no D3D12 debug warning/error:
+`C:\rv\logs\dx12-modern-draw-storage-clustered-2.log`.
+
+On the physical Intel Iris Xe `8086:46A6` with `CNA_D3D12_ADAPTER=hardware`,
+D3D12 debug layer and DRED enabled, the compute suite passed **14/17** with
+three capability/backend skips and no failure
+(`C:\rv\logs\dx12-modern-compute-suite-1.log`). It covers exact 1 MiB storage
+round trips, compiler diagnostics, buffer doubling, sampled Texture2D and
+RenderTarget2D, external constant/uniform buffers, dispatch bounds and GPU
+readback. The renderer-neutral `ModernGpuConformance.*` suite passed **7/8**;
+only the still-unimplemented storage image route skipped
+(`C:\rv\logs\dx12-modern-compute-conformance-1.log`). It covers 3D grids,
+chained dispatches, queued lifetime after public object disposal, 4 MiB copies,
+and classic draw / compute / classic draw state isolation. Targeted GPU-based
+validation passed **5/5** compute cases and **3/3** compute-plus-clustered cases
+on the Intel adapter with zero validation messages
+(`C:\rv\logs\dx12-modern-compute-gbv-1.log`,
+`C:\rv\logs\dx12-modern-draw-storage-gbv-1.log`). WARP was not selected.
+
+The complete normal-validation binary ran **998 tests from 129 suites** in
+**2,359,997 ms**: **910 pass, 88 skip, 0 fail**
+(`C:\rv\logs\dx12-modern-full-post-compute-1.log`). It selected Intel Iris Xe
+hardware **698** times, with zero WARP/software selections, debug-layer
+warnings/errors, device removals, or DRED faults. This binary preceded the
+final two recovery regressions and one binding-alias regression. The 88 skips
+include backend-specific inverse probes plus still-missing indirect drawing,
+GPU timers, storage textures, Texture2DArray, and modern shadow/IBL paths;
+they are not a completion claim.
+
+After those regressions were added, the rebuilt `CnaGraphicsExtTests` binary
+passed **68/72** focused tests with **4 truthful skips**, no failure, **63**
+Intel hardware selections, and no debug/DRED diagnostic
+(`C:\rv\logs\dx12-modern-compute-recovery-targeted-1.log`). Both explicit
+device-recreation tests, the simultaneous writable-alias rejection, every
+clustered-forward/light-buffer case, compute tests, storage-buffer stress and
+renderer-neutral GPU conformance were selected. The four skips were the
+no-compute inverse probe, Vulkan-only sampler probe, unavailable writable
+Texture2D image probe, and unavailable storage-image conformance probe.
+Targeted GPU-based validation passed **4/4** for the two recovery cases, alias
+guard, and 1,024-element buffer dispatch, with **6** Intel adapter selections,
+four GPU-validation device starts, and no warnings/errors
+(`C:\rv\logs\dx12-modern-compute-recovery-gbv-1.log`).
+
+```powershell
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='0'
+& C:\rv\work\private_desktop_awake.exe 4800000 'C:\rv\build\cna-win11-dx12-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no' *> C:\rv\logs\dx12-modern-full-post-compute-1.log
+cmake --build C:\rv\build\cna-win11-dx12-modern --config Debug --target CnaGraphicsExtTests --parallel 6
+$filter='D3D12ComputeRecoveryTest.*:D3D12ComputeBindingTest.*:D3D12StorageBufferTest.*:ComputeTest.*:ModernGpuConformance.*:ClusteredForwardEffectTest.*:ClusteredLightBufferTest.*'
+& C:\rv\work\private_desktop_awake.exe 900000 "C:\rv\build\cna-win11-dx12-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=$filter" *> C:\rv\logs\dx12-modern-compute-recovery-targeted-1.log
+$env:CNA_D3D12_GPU_VALIDATION='1'
+$filter='D3D12ComputeRecoveryTest.*:D3D12ComputeBindingTest.*:ComputeTest.ADispatchDoublesEveryElementOfABuffer'
+& C:\rv\work\private_desktop_awake.exe 900000 "C:\rv\build\cna-win11-dx12-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=$filter" *> C:\rv\logs\dx12-modern-compute-recovery-gbv-1.log
+```
+
+Modern storage textures, Texture2DArray, indirect drawing, GPU timing and
+modern IBL/shadow capability work remain separate implementation tasks.

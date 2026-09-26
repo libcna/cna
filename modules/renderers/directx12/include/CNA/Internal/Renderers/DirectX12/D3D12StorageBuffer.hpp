@@ -3,6 +3,7 @@
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/ID3DDeviceRecoverableEXT.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12DescriptorHeaps.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12RendererReference.hpp"
 
 #include <d3d12.h>
@@ -10,17 +11,18 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace CNA::Internal::Renderers::DirectX12
 {
-    /** @brief Native GPU buffer for the portable transfer roles. */
+    /** @brief Native GPU buffer for portable transfer and shader-storage roles. */
     class D3D12StorageBuffer final : public IStorageBufferRenderer,
                                      public D3DCommon::ID3DDeviceRecoverableEXT
     {
     public:
         /**
-         * @brief Allocates a device-local buffer for declared transfer roles.
+         * @brief Allocates a device-local buffer for declared GPU roles.
          * @param renderer Owning D3D12 renderer.
          * @param byteSize Logical buffer size.
          * @param usage Portable usage bitmask.
@@ -83,6 +85,18 @@ namespace CNA::Internal::Renderers::DirectX12
         [[nodiscard]] ID3D12Resource* GetResourceEXT() const noexcept { return buffer_.Get(); }
         /** @brief Returns the native device this buffer belongs to. */
         [[nodiscard]] ID3D12Device* GetDeviceEXT() const noexcept { return device_.Get(); }
+        /**
+         * @brief Returns the stable raw UAV index when storage use was declared.
+         * @return Descriptor index, or the invalid index when storage use is absent.
+         */
+        [[nodiscard]] std::uint32_t GetUavIndexEXT() const noexcept { return uavIndex_; }
+        /**
+         * @brief Returns the stable raw SRV index when storage use was declared.
+         * @return Descriptor index, or the invalid index when storage use is absent.
+         */
+        [[nodiscard]] std::uint32_t GetSrvIndexEXT() const noexcept { return srvIndex_; }
+        /** @brief Drops the recovery shadow after an unobserved GPU write. */
+        void InvalidateRecoveryShadowEXT() noexcept { recoveryShadow_.clear(); }
 
         /** @brief Drops the old device allocation during device recreation or disposal. */
         void ReleaseDeviceResourcesEXT() noexcept override;
@@ -96,6 +110,9 @@ namespace CNA::Internal::Renderers::DirectX12
         D3D12RendererReference renderer_;
         Microsoft::WRL::ComPtr<ID3D12Device> device_;
         Microsoft::WRL::ComPtr<ID3D12Resource> buffer_;
+        std::shared_ptr<D3D12DescriptorHeaps> heaps_;
+        std::uint32_t uavIndex_ = D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex;
+        std::uint32_t srvIndex_ = D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex;
         std::size_t byteSize_ = 0;
         std::uint32_t usage_ = 0;
         std::uint32_t cpuAccess_ = 0;

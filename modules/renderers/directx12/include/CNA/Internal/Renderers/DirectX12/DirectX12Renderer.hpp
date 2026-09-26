@@ -373,6 +373,88 @@ namespace CNA::Internal::Renderers::DirectX12
         std::unique_ptr<IStorageBufferRenderer> CreateStorageBufferEXT(
             std::size_t byteSize, std::uint32_t usage,
             std::uint32_t cpuAccess) override;
+        /**
+         * @brief Creates a native HLSL compute program and preserves compiler diagnostics.
+         * @param computeSrc HLSL source with a main entry point.
+         * @return Compute program, including a failed program's diagnostic.
+         */
+        std::unique_ptr<IComputeShaderRenderer> CreateComputeShader(
+            const std::string& computeSrc) override;
+        /**
+         * @brief Creates a legacy storage/transfer/indirect buffer for compute wrappers.
+         * @param byteSize Logical byte count.
+         * @return Native buffer, or null when compute is unavailable.
+         */
+        std::unique_ptr<IStorageBufferRenderer> CreateStorageBuffer(
+            std::size_t byteSize) override;
+        /**
+         * @brief Records a native compute dispatch into the active frame command list.
+         * @param shader Same-device compute program.
+         * @param groupsX X work-group count.
+         * @param groupsY Y work-group count.
+         * @param groupsZ Z work-group count.
+         */
+        void DispatchCompute(IComputeShaderRenderer* shader, int groupsX,
+                             int groupsY, int groupsZ) override;
+        /**
+         * @brief Reports native D3D12 compute dispatch availability.
+         * @return True when the device supports compute shaders.
+         */
+        [[nodiscard]] bool SupportsComputeShadersEXT() const override;
+        /**
+         * @brief Returns the native dispatch limit along one axis.
+         * @param axis Zero for X, one for Y, two for Z.
+         * @return The maximum work-group count, or zero for an invalid axis.
+         */
+        [[nodiscard]] int GetMaxComputeWorkGroupCountEXT(int axis) const override;
+        /**
+         * @brief Returns the HLSL thread-group size limit along one axis.
+         * @param axis Zero for X, one for Y, two for Z.
+         * @return The maximum size, or zero for an invalid axis.
+         */
+        [[nodiscard]] int GetMaxComputeWorkGroupSizeEXT(int axis) const override;
+        /**
+         * @brief Returns the maximum product of HLSL local work-group dimensions.
+         * @return Maximum threads in one work group, or zero without compute support.
+         */
+        [[nodiscard]] int GetMaxComputeWorkGroupInvocationsEXT() const override;
+        /**
+         * @brief Reports the implemented raw storage-buffer byte limit.
+         * @return Maximum byte count, or zero without compute support.
+         */
+        [[nodiscard]] std::uint64_t GetMaxStorageBufferBytesEXT() const override;
+        /**
+         * @brief Reports the native constant-buffer byte limit.
+         * @return Maximum constant-buffer byte count, or zero without a device.
+         */
+        [[nodiscard]] std::uint64_t GetMaxUniformBufferBytesEXT() const override;
+        /**
+         * @brief Reports the eight raw UAV registers bound by the compute root signature.
+         * @return Number of storage bindings, or zero without compute support.
+         */
+        [[nodiscard]] int GetMaxComputeStorageBufferBindingsEXT() const override;
+        /**
+         * @brief Reports four-byte alignment for raw storage-buffer views.
+         * @return Required alignment, or zero without compute support.
+         */
+        [[nodiscard]] std::uint64_t GetMinStorageBufferOffsetAlignmentEXT() const override;
+        /**
+         * @brief Reports 256-byte D3D12 constant-buffer alignment.
+         * @return Required alignment, or zero without a device.
+         */
+        [[nodiscard]] std::uint64_t GetMinUniformBufferOffsetAlignmentEXT() const override;
+        /**
+         * @brief Reports the sixteen raw storage t-registers available to vertex shaders.
+         * @return Number of available bindings, or zero without compute support.
+         */
+        [[nodiscard]] int GetMaxVertexShaderStorageBlocksEXT() const override;
+        /**
+         * @brief Retains a native raw storage SRV for a following ShaderEffect draw.
+         * @param binding HLSL t-register.
+         * @param buffer Same-device buffer with Storage usage.
+         */
+        void BindStorageBufferForDrawEXT(
+            int binding, const IStorageBufferRenderer& buffer) override;
 #if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
         /** @brief Creates a compiled XNA effect through CNA's MojoShader HLSL backend. */
         std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(
@@ -1133,6 +1215,7 @@ namespace CNA::Internal::Renderers::DirectX12
         /// REMED-GFX-177: shared with every resource that owns a descriptor, so a resource destroyed
         /// after this renderer still frees its slot into a live allocator.
         std::shared_ptr<D3D12DescriptorHeaps> heaps_;
+        std::array<std::shared_ptr<const IStorageBufferRenderer>, 16> drawStorageBuffers_{};
 
         // DX-119: real sampler cache + per-slot tracked XNA-level SamplerState (updated by
         // ApplySamplerState, matching GraphicsDevice::applySamplerStatesToRenderer()'s own

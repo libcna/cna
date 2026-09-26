@@ -6,6 +6,7 @@
 #include "CNA/Internal/Renderers/DirectX12/D3D12Buffers.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Textures.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12StorageBuffer.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12ComputeShader.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12RenderTargets.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12SpriteBatch.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12OcclusionQuery.hpp"
@@ -2944,7 +2945,9 @@ namespace CNA::Internal::Renderers::DirectX12
         return device_ != nullptr &&
                language == static_cast<int>(CNA::ShaderLanguageEXT::Hlsl) &&
                (stage == static_cast<int>(CNA::ShaderStageEXT::Vertex) ||
-                stage == static_cast<int>(CNA::ShaderStageEXT::Fragment));
+                stage == static_cast<int>(CNA::ShaderStageEXT::Fragment) ||
+                (stage == static_cast<int>(CNA::ShaderStageEXT::Compute) &&
+                 SupportsComputeShadersEXT()));
     }
 
     bool DirectX12Renderer::SupportsTexture3DSamplingEXT() const
@@ -3017,11 +3020,119 @@ namespace CNA::Internal::Renderers::DirectX12
     std::unique_ptr<IStorageBufferRenderer> DirectX12Renderer::CreateStorageBufferEXT(
         std::size_t byteSize, std::uint32_t usage, std::uint32_t cpuAccess)
     {
-        constexpr std::uint32_t supportedUsage = UINT32_C(0x06);
+        constexpr std::uint32_t supportedUsage = UINT32_C(0x4F);
         if (!device_ || byteSize == 0 || usage == 0 ||
-            (usage & ~supportedUsage) != 0 || (cpuAccess & ~UINT32_C(0x03)) != 0)
+            (usage & ~supportedUsage) != 0 || (cpuAccess & ~UINT32_C(0x03)) != 0 ||
+            ((usage & UINT32_C(0x01)) != 0 &&
+             (!SupportsComputeShadersEXT() || byteSize > GetMaxStorageBufferBytesEXT())) ||
+            ((usage & UINT32_C(0x08)) != 0 && !SupportsIndirectDrawEXT()) ||
+            ((usage & UINT32_C(0x40)) != 0 &&
+             byteSize > GetMaxUniformBufferBytesEXT()))
             return nullptr;
         return std::make_unique<D3D12StorageBuffer>(this, byteSize, usage, cpuAccess);
+    }
+
+    bool DirectX12Renderer::SupportsComputeShadersEXT() const
+    {
+        return device_ != nullptr && featureLevel_ >= D3D_FEATURE_LEVEL_11_0;
+    }
+
+    std::unique_ptr<IComputeShaderRenderer> DirectX12Renderer::CreateComputeShader(
+        const std::string& computeSrc)
+    {
+        if (!SupportsComputeShadersEXT()) return nullptr;
+        auto shader = std::make_unique<D3D12ComputeShader>(this);
+        shader->CompileProgram(computeSrc);
+        return shader;
+    }
+
+    std::unique_ptr<IStorageBufferRenderer> DirectX12Renderer::CreateStorageBuffer(
+        std::size_t byteSize)
+    {
+        if (!SupportsComputeShadersEXT() || byteSize == 0 ||
+            byteSize > GetMaxStorageBufferBytesEXT())
+            return nullptr;
+        return std::make_unique<D3D12StorageBuffer>(
+            this, byteSize, UINT32_C(0x0F), UINT32_C(0x03));
+    }
+
+    void DirectX12Renderer::DispatchCompute(
+        IComputeShaderRenderer* shader, int groupsX, int groupsY, int groupsZ)
+    {
+        auto* native = dynamic_cast<D3D12ComputeShader*>(shader);
+        if (!native || native->GetDeviceEXT() != device_.Get() ||
+            groupsX <= 0 || groupsY <= 0 || groupsZ <= 0 ||
+            groupsX > GetMaxComputeWorkGroupCountEXT(0) ||
+            groupsY > GetMaxComputeWorkGroupCountEXT(1) ||
+            groupsZ > GetMaxComputeWorkGroupCountEXT(2))
+            throw std::invalid_argument("D3D12 compute dispatch has an invalid program or size");
+        native->Dispatch(groupsX, groupsY, groupsZ);
+    }
+
+    int DirectX12Renderer::GetMaxComputeWorkGroupCountEXT(int axis) const
+    {
+        return SupportsComputeShadersEXT() && axis >= 0 && axis < 3 ? 65535 : 0;
+    }
+
+    int DirectX12Renderer::GetMaxComputeWorkGroupSizeEXT(int axis) const
+    {
+        if (!SupportsComputeShadersEXT()) return 0;
+        switch (axis)
+        {
+        case 0: return 1024;
+        case 1: return 1024;
+        case 2: return 64;
+        default: return 0;
+        }
+    }
+
+    int DirectX12Renderer::GetMaxComputeWorkGroupInvocationsEXT() const
+    {
+        return SupportsComputeShadersEXT() ? 1024 : 0;
+    }
+
+    std::uint64_t DirectX12Renderer::GetMaxStorageBufferBytesEXT() const
+    {
+        return SupportsComputeShadersEXT() ? UINT64_C(128) * 1024 * 1024 : 0;
+    }
+
+    std::uint64_t DirectX12Renderer::GetMaxUniformBufferBytesEXT() const
+    {
+        return device_ ? UINT64_C(64) * 1024 : 0;
+    }
+
+    int DirectX12Renderer::GetMaxComputeStorageBufferBindingsEXT() const
+    {
+        return SupportsComputeShadersEXT() ? D3D12ComputeShader::kStorageSlots : 0;
+    }
+
+    std::uint64_t DirectX12Renderer::GetMinStorageBufferOffsetAlignmentEXT() const
+    {
+        return SupportsComputeShadersEXT() ? 4 : 0;
+    }
+
+    std::uint64_t DirectX12Renderer::GetMinUniformBufferOffsetAlignmentEXT() const
+    {
+        return device_ ? D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT : 0;
+    }
+
+    int DirectX12Renderer::GetMaxVertexShaderStorageBlocksEXT() const
+    {
+        return SupportsComputeShadersEXT() ? static_cast<int>(drawStorageBuffers_.size()) : 0;
+    }
+
+    void DirectX12Renderer::BindStorageBufferForDrawEXT(
+        int binding, const IStorageBufferRenderer& buffer)
+    {
+        const auto* native = dynamic_cast<const D3D12StorageBuffer*>(&buffer);
+        if (binding < 0 || binding >= GetMaxVertexShaderStorageBlocksEXT() ||
+            !native || native->GetDeviceEXT() != device_.Get() ||
+            (native->GetUsageEXT() & UINT32_C(0x01)) == 0 ||
+            native->GetSrvIndexEXT() == D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex)
+            throw System::NotSupportedException(
+                "D3D12 draw storage binding requires a same-device raw storage buffer "
+                "and a t-register from zero through fifteen.");
+        drawStorageBuffers_[static_cast<std::size_t>(binding)] = buffer.shared_from_this();
     }
 
     std::unique_ptr<ITextureCubeRenderer> DirectX12Renderer::CreateTextureCube(
@@ -3632,6 +3743,7 @@ namespace CNA::Internal::Renderers::DirectX12
 
             const int constantBufferCount = customEffect->GetConstantBufferCountEXT();
             const int shaderResourceCount = customEffect->GetShaderResourceCountEXT();
+            const std::uint32_t storageSlots = customEffect->GetStorageSlotsEXT();
             const int samplerCount = customEffect->GetSamplerCountEXT();
             ID3D12GraphicsCommandList* cmdList = GetFrameCommandListEXT();
             RetainFrameObjectEXT(customPso);
@@ -3649,8 +3761,27 @@ namespace CNA::Internal::Renderers::DirectX12
             std::array<D3D12_GPU_DESCRIPTOR_HANDLE,
                        D3DCommon::D3DProgramReflection::kMaxShaderResources> textureHandles{};
             for (int slot = 0; slot < shaderResourceCount; ++slot)
+            {
+                if ((storageSlots & (UINT32_C(1) << slot)) == 0)
+                {
+                    textureHandles[static_cast<std::size_t>(slot)] =
+                        customEffect->GetTextureGpuHandleEXT(slot);
+                    continue;
+                }
+                const auto& held = drawStorageBuffers_[static_cast<std::size_t>(slot)];
+                const auto* native = dynamic_cast<const D3D12StorageBuffer*>(held.get());
+                if (!native || !native->GetResourceEXT() ||
+                    native->GetSrvIndexEXT() ==
+                        D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex)
+                    throw System::NotSupportedException(
+                        "D3D12 ShaderEffect uses an unbound raw storage t-register " +
+                        std::to_string(slot) + '.');
+                RetainFrameObjectEXT(native->GetResourceEXT());
+                resourceStates_.TransitionTo(
+                    cmdList, native->GetResourceEXT(), D3D12_RESOURCE_STATE_GENERIC_READ);
                 textureHandles[static_cast<std::size_t>(slot)] =
-                    customEffect->GetTextureGpuHandleEXT(slot);
+                    GetCbvSrvUavGpuHandleEXT(native->GetSrvIndexEXT());
+            }
             std::array<D3D12_GPU_DESCRIPTOR_HANDLE,
                        D3DCommon::D3DProgramReflection::kMaxSamplers> samplerHandles{};
             for (int slot = 0; slot < samplerCount; ++slot)

@@ -66,20 +66,24 @@ namespace CNA::Internal::Renderers::DirectX12
     class D3D12RootSignatureCache
     {
     public:
-        /// Returns a cached (or newly created) root signature with @p numCbvs root CBV descriptors
-        /// at b0..b(numCbvs-1) (ALL-visibility), plus -- for each of t0..t(numSrvs-1) -- its OWN
-        /// single-descriptor table root parameter at index numCbvs+i (PIXEL-visibility, matching
-        /// this project's own "textures are always sampled in the pixel shader" convention; see the
-        /// class-level doc comment for why N separate tables, not one shared multi-descriptor table)
-        /// and @p numSamplers static
-        /// samplers at s0..s(numSamplers-1) using a fixed linear-wrap description (a reasonable
-        /// stock-effect default; this is the same scope boundary the class-level doc comment already
-        /// documents). Returns a null ComPtr (does not throw) if D3D12SerializeRootSignature or
-        /// CreateRootSignature fails, matching this project's established D3DShaderCache/
-        /// D3D11*Cache error-handling convention (callers check the returned ComPtr).
+        /**
+         * @brief Returns a cached root signature with root CBVs, one table per SRV and static samplers.
+         *
+         * SRV tables are visible to both graphics stages so ShaderEffect can read raw storage
+         * buffers in vertex or pixel shaders. Serialization or creation failure returns null.
+         *
+         * @param device Device on which to create the signature.
+         * @param numCbvs Number of root CBVs starting at b0.
+         * @param numSrvs Number of single-descriptor SRV tables starting at t0.
+         * @param numSamplers Number of fixed linear-wrap samplers starting at s0.
+         * @return Cached or newly created signature, or null on native failure.
+         */
         ComPtr<ID3D12RootSignature> GetOrCreate(ID3D12Device* device, int numCbvs, int numSrvs, int numSamplers);
 
-        /// Number of distinct root-signature shapes created so far (CNAEXT diagnostics).
+        /**
+         * @brief Reports the number of distinct root-signature shapes created so far.
+         * @return Current cache size.
+         */
         [[nodiscard]] std::size_t GetCacheSizeEXT() const { return cache_.size(); }
 
     private:

@@ -3,14 +3,19 @@
 
 #include <gtest/gtest.h>
 
+#include "CNA/Graphics/ComputeShader.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
 #include "EngineTestSupport.hpp"
 
 #include <array>
 #include <cstdint>
+#include <string>
+#include <vector>
 
+using CNA::Graphics::ComputeShader;
 using CNA::Graphics::StorageBuffer;
+using CNA::Graphics::StorageBufferT;
 using CNA::Graphics::StorageBufferCpuAccess;
 using CNA::Graphics::StorageBufferDescriptor;
 using CNA::Graphics::StorageBufferUsage;
@@ -93,6 +98,68 @@ TEST(D3D12StorageBufferTest, CpuWrittenContentsSurviveDeviceRecreation)
     std::array<std::uint8_t, 13> actual{};
     buffer.getBytes(67, actual.data(), actual.size());
     EXPECT_EQ(actual, expected);
+}
+
+TEST(D3D12ComputeRecoveryTest, ProgramAndStorageBindingSurviveDeviceRecreation)
+{
+    CnaTest::EngineLayer::HiDefDevice device;
+    auto& renderer = dynamic_cast<DirectX12Renderer&>(device.GetRenderer());
+    StorageBufferT<float> values(device, 64);
+    values.setData(std::vector<float>(64, 1.0f));
+    ComputeShader shader(device, R"(
+RWByteAddressBuffer Values : register(u0);
+[numthreads(64, 1, 1)]
+void main(uint3 id : SV_DispatchThreadID)
+{
+    uint at = id.x * 4;
+    Values.Store(at, asuint(asfloat(Values.Load(at)) * 2.0f));
+}
+)");
+    shader.bindStorageBuffer(0, values.getBuffer());
+    shader.dispatch(1);
+    for (float value : values.getData()) EXPECT_FLOAT_EQ(value, 2.0f);
+
+    renderer.RecreateDeviceEXT();
+
+    values.setData(std::vector<float>(64, 3.0f));
+    shader.dispatch(1);
+    for (float value : values.getData()) EXPECT_FLOAT_EQ(value, 6.0f);
+}
+
+TEST(D3D12ComputeRecoveryTest, AnUncompiledProgramDoesNotPreventDeviceRecreation)
+{
+    CnaTest::EngineLayer::HiDefDevice device;
+    auto& renderer = dynamic_cast<DirectX12Renderer&>(device.GetRenderer());
+    auto broken = renderer.CreateComputeShader("this is not an HLSL shader\n");
+    ASSERT_NE(broken, nullptr);
+    EXPECT_FALSE(broken->IsValid());
+    EXPECT_FALSE(broken->GetCompileError().empty());
+
+    EXPECT_NO_THROW(renderer.RecreateDeviceEXT());
+    EXPECT_FALSE(broken->IsValid());
+    EXPECT_FALSE(broken->GetCompileError().empty());
+}
+
+TEST(D3D12ComputeBindingTest, SimultaneousWritableAliasesAreRejectedBeforeDispatch)
+{
+    CnaTest::EngineLayer::HiDefDevice device;
+    StorageBuffer buffer(device, StorageBufferDescriptor(
+        256, StorageBufferUsage::Storage | StorageBufferUsage::Constant,
+        StorageBufferCpuAccess::Read | StorageBufferCpuAccess::Write));
+    const std::string source = R"(
+RWByteAddressBuffer Values : register(u0);
+[numthreads(1, 1, 1)]
+void main(uint3 id : SV_DispatchThreadID) { Values.Store(0, 42); }
+)";
+    ComputeShader shader(device, source);
+    shader.bindStorageBuffer(0, buffer);
+    shader.bindStorageBuffer(1, buffer);
+    EXPECT_THROW(shader.dispatch(1), std::invalid_argument);
+
+    ComputeShader constantAlias(device, source);
+    constantAlias.bindStorageBuffer(0, buffer);
+    constantAlias.bindConstantBuffer(0, buffer);
+    EXPECT_THROW(constantAlias.dispatch(1), std::invalid_argument);
 }
 
 #endif // CNA_RENDERER_DIRECTX12 && CNA_CNAEXT
