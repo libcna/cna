@@ -919,3 +919,44 @@ cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraph
 $env:CNA_D3D11_DEBUG_LAYER='1'
 & C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsTests.exe --gtest_color=no --gtest_filter=ShaderEffectTest.*:EffectApplyTest.*:DrawRouteValidation.*' 2>&1 | Out-File C:\rv\logs\dx11-vertex-storage-classic-focused.log
 ```
+
+## DX11 GPU culler shader packages, 2026-09-26
+
+WIN11-0038: the existing GPU culler compute and draw packages now include
+HLSL stages derived deterministically from their current Vulkan GLSL sources.
+The offline generator uses glslang and SPIRV-Cross, validates all three
+stages with FXC shader model 5.0, and records each source SHA-256 in the
+checked-in HLSL header. The compute program's two read-only storage inputs
+use D3D11 UAV registers `u0` and `u2` because the existing portable compute
+binding path exposes its four storage buffers as UAVs; shader logic does not
+write those inputs. The compacted draw list uses the new vertex byte-buffer
+SRV binding at `t6`. The indirect argument buffer remains a GPU-side copy of
+the writable command storage, so the visible count does not cross the CPU to
+drive the draw. No public shader intake or CNAEXT API changed.
+
+On physical Intel Iris Xe PCI `8086:46A6`, `software=0`, the first run passed
+**8/8** GPU culler cases with zero skips, including CPU/GPU survivor-count
+agreement and a rendered five-band pixel oracle
+(`C:\rv\logs\dx11-culler-hlsl-focused-1.log`). A new regression alternates
+an empty and visible frustum over **1,024 compute-dispatch/indirect-draw
+cycles**, then checks the final GPU count and pixels. It passed
+(`C:\rv\logs\dx11-culler-hlsl-churn-1.log`). The rebuilt final culler suite
+passed **9/9**, zero fail, zero skip, with eight explicit Intel selections
+and **zero D3D11 debug warnings/errors**
+(`C:\rv\logs\dx11-culler-hlsl-focused-2.log`). The generator was rerun with
+FXC and produced identical header hashes, proving deterministic output.
+The compute header SHA-256 is
+`9b16c2e3af535618258dfaa833a95af12e221c23637edc9de121cb0447e0c4c8`;
+the draw header SHA-256 is
+`7edf2eca0a2a4e18e5f2e08cdc41ea786f93b981cf48bf00a050ea816ccd8314`.
+Production library and test build logs are
+`C:\rv\logs\dx11-culler-lib-build-1.log` and
+`C:\rv\logs\dx11-culler-hlsl-build-2.log`.
+
+```powershell
+python tools/shader_package/generate_culler_hlsl.py --glslang C:\rv\build\glslang-win11\StandAlone\Release\glslang.exe --spirv-cross C:\rv\build\spirv-cross-win11\Release\spirv-cross.exe --fxc 'C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\fxc.exe'
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsExtTests --parallel 4
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=GpuInstanceCullerTest.RepeatedCullAndIndirectDrawKeepTheLatestVisibleList' 2>&1 | Out-File C:\rv\logs\dx11-culler-hlsl-churn-1.log
+& C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=GpuInstanceCullerTest.*' *> C:\rv\logs\dx11-culler-hlsl-focused-2.log
+```

@@ -18,6 +18,7 @@
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "System/NotSupportedException.hpp"
 #include "shaders/gpu_instance_culler/GpuInstanceCullerShaderPackage.generated.hpp"
+#include "shaders/gpu_instance_culler/GpuInstanceCullerHlsl.generated.hpp"
 
 #include <array>
 #include <cstddef>
@@ -85,6 +86,12 @@ namespace CNA::Graphics {
                                   CNA::ShaderStageEXT::Compute, "main",
                                   "gpu_instance_culler/cull.vulkan.comp.wgsl",
                                   std::string(kCullVulkanComputeWgsl)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                  CNA::ShaderStageEXT::Compute, "main",
+                                  "gpu_instance_culler/cull.vulkan.comp.spv -> hlsl",
+                                  std::string(
+                                      detail::GpuInstanceCullerHlslGenerated::
+                                          kCullComputeSource)),
                 },
                 {CNA::ShaderStageEXT::Compute},
                 {
