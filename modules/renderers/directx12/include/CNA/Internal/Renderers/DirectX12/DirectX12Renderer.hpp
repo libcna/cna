@@ -374,10 +374,24 @@ namespace CNA::Internal::Renderers::DirectX12
         std::unique_ptr<ITexture2DArrayRenderer> CreateTexture2DArrayEXT(
             int width, int height, int layerCount, int mipLevelCount,
             int surfaceFormat, std::uint32_t usage) override;
+        /**
+         * @brief Creates a typed-UAV texture with declared transfer and sampling roles.
+         * @param width Level-zero width.
+         * @param height Level-zero height.
+         * @param mipLevelCount Allocated mip levels.
+         * @param surfaceFormat XNA SurfaceFormat ordinal.
+         * @param usage StorageTexture2DUsage mask.
+         * @return Renderer-owned texture, or null if the descriptor is unsupported.
+         */
+        std::unique_ptr<IStorageTexture2DRenderer> CreateStorageTexture2DEXT(
+            int width, int height, int mipLevelCount,
+            int surfaceFormat, std::uint32_t usage) override;
         /** @brief Returns the D3D12 texture-array layer limit, or zero without a device. */
         [[nodiscard]] int GetMaxTextureArrayLayersEXT() const override;
         /** @brief Returns the reflected shader-resource register count. */
         [[nodiscard]] int GetMaxSampledTexturesPerShaderStageEXT() const override;
+        /** @brief Returns the number of native typed-UAV compute slots. */
+        [[nodiscard]] int GetMaxStorageImagesPerShaderStageEXT() const override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
         /// DX-120: real D3D12OcclusionQueryRenderer, no longer the inherited default (-> nullptr).
         std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;

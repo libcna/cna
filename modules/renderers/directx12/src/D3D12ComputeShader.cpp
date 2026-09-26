@@ -3,6 +3,7 @@
 
 #include "CNA/Internal/Renderers/DirectX12/D3D12RenderTargets.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12StorageBuffer.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12StorageTexture2D.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Textures.hpp"
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
 
@@ -157,6 +158,8 @@ namespace CNA::Internal::Renderers::DirectX12
         bytecode_.Reset();
         reflection_.Reset();
         storageBuffers_ = {};
+        storageTextures_ = {};
+        storageTextureAccess_ = {};
         constantBuffers_ = {};
         textures_ = {};
         compileError_.clear();
@@ -233,6 +236,31 @@ namespace CNA::Internal::Renderers::DirectX12
             throw std::invalid_argument(
                 "D3D12 compute requires a same-device storage UAV buffer");
         held = buffer->shared_from_this();
+        storageTextures_[static_cast<std::size_t>(binding)].reset();
+    }
+
+    bool D3D12ComputeShader::BindStorageTexture2DEXT(
+        int unit, std::shared_ptr<IStorageTexture2DRenderer> texture, int accessMode)
+    {
+        if (unit < 0 || unit >= kStorageSlots || accessMode < 0 || accessMode > 2)
+            return false;
+        auto& held = storageTextures_[static_cast<std::size_t>(unit)];
+        if (!texture)
+        {
+            held.reset();
+            return true;
+        }
+        auto* native = dynamic_cast<D3D12StorageTexture2D*>(texture.get());
+        const std::uint32_t required = accessMode == 0 ? UINT32_C(0x01) :
+            accessMode == 1 ? UINT32_C(0x02) : UINT32_C(0x03);
+        if (!native || native->GetOwnerEXT() != renderer_.Get() ||
+            (native->GetUsageEXT() & required) != required ||
+            native->GetUavGpuHandleEXT().ptr == 0)
+            return false;
+        held = std::move(texture);
+        storageTextureAccess_[static_cast<std::size_t>(unit)] = accessMode;
+        storageBuffers_[static_cast<std::size_t>(unit)].reset();
+        return true;
     }
 
     bool D3D12ComputeShader::BindConstantBufferEXT(
@@ -282,6 +310,15 @@ namespace CNA::Internal::Renderers::DirectX12
                 if (constant.get() == resource)
                     throw std::invalid_argument(
                         "D3D12 compute cannot bind one buffer as both UAV and CBV");
+        }
+        for (std::size_t slot = 0; slot < storageTextures_.size(); ++slot)
+        {
+            const auto* resource = storageTextures_[slot].get();
+            if (!resource) continue;
+            for (std::size_t other = slot + 1; other < storageTextures_.size(); ++other)
+                if (storageTextures_[other].get() == resource)
+                    throw std::invalid_argument(
+                        "D3D12 compute cannot bind one storage texture to multiple UAV slots");
         }
         auto* owner = renderer_.Get();
         ID3D12GraphicsCommandList* commands = owner->GetFrameCommandListEXT();
@@ -343,13 +380,24 @@ namespace CNA::Internal::Renderers::DirectX12
 
         for (int slot = 0; slot < kStorageSlots; ++slot)
         {
-            const auto& held = storageBuffers_[static_cast<std::size_t>(slot)];
-            if (!held) continue;
-            auto* native = static_cast<D3D12StorageBuffer*>(held.get());
-            ID3D12Resource* resource = native->GetResourceEXT();
+            const std::size_t index = static_cast<std::size_t>(slot);
+            D3D12_GPU_DESCRIPTOR_HANDLE handle{};
+            ID3D12Resource* resource = nullptr;
+            if (const auto& held = storageBuffers_[index])
+            {
+                auto* native = static_cast<D3D12StorageBuffer*>(held.get());
+                resource = native->GetResourceEXT();
+                handle = owner->GetCbvSrvUavGpuHandleEXT(native->GetUavIndexEXT());
+            }
+            else if (const auto& held = storageTextures_[index])
+            {
+                auto* native = static_cast<D3D12StorageTexture2D*>(held.get());
+                resource = native->GetResourceEXT();
+                handle = native->GetUavGpuHandleEXT();
+            }
+            if (!resource) continue;
             owner->RetainFrameObjectEXT(resource);
             states.TransitionTo(commands, resource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-            const auto handle = owner->GetCbvSrvUavGpuHandleEXT(native->GetUavIndexEXT());
             commands->SetComputeRootDescriptorTable(
                 static_cast<UINT>(kConstantSlots + kTextureSlots + slot), handle);
         }
@@ -363,6 +411,15 @@ namespace CNA::Internal::Renderers::DirectX12
             native->InvalidateRecoveryShadowEXT();
             states.TransitionTo(commands, native->GetResourceEXT(),
                                 D3D12_RESOURCE_STATE_GENERIC_READ);
+        }
+        for (std::size_t slot = 0; slot < storageTextures_.size(); ++slot)
+        {
+            const auto& held = storageTextures_[slot];
+            if (!held) continue;
+            auto* native = static_cast<D3D12StorageTexture2D*>(held.get());
+            if (storageTextureAccess_[slot] != 0)
+                native->InvalidateRecoveryShadowEXT();
+            states.TransitionTo(commands, native->GetResourceEXT(), kReadableTexture);
         }
     }
 }

@@ -9,6 +9,9 @@ XNA effects now pass their DX11 and DX12 renderer suites on Intel (WIN11-0066).
 DX12 modern GPU timestamps and pass timing now pass focused hardware tests
 (WIN11-0067). Native DX12 sampled texture arrays now pass exact-transfer,
 shader-binding, recovery, and targeted GPU-validation tests (WIN11-0068).
+Native DX12 storage textures now pass typed-UAV transfer, compute/readback,
+compute-to-graphics, lifetime, recovery, and targeted GPU-validation tests
+(WIN11-0069).
 The large DX12 descriptor fixture under Intel GPU-based validation remains a recorded
 exception (WIN11-0025). Modern parity and application validation remain open.
 
@@ -2412,3 +2415,60 @@ $env:CNA_D3D12_GPU_VALIDATION='1'
 ```
 
 Writable DX12 storage images and modern shadow/IBL visibility remain open.
+
+### WIN11-0069: Native DX12 typed storage textures
+
+The DX12 renderer now creates native typed-UAV `StorageTexture2D` resources
+for device-supported uncompressed formats. `GetSurfaceFormatUsageSupportEXT`
+uses `D3D12_FEATURE_FORMAT_SUPPORT` to publish typed UAV load/store and sampled,
+filterable, mip, and transfer uses independently. The eight compute UAV slots
+accept storage images as well as storage buffers; the binding records enforce
+device ownership and declared read/write access, reject duplicate writable
+image aliases before recording GPU commands, retain resources through queued
+work, and transition UAV output back to shader-readable state. ShaderEffect
+can sample a storage image through an SRV at its HLSL `t` register. Exact
+rectangle uploads/readbacks use placed footprints and GPU copies. CPU-written
+mip data is restored on explicit device recreation; a GPU write invalidates
+the stale level-zero CPU recovery shadow.
+
+The new focused run on physical Intel Iris Xe `8086:46A6`, feature level
+`12_1`, passed **7/7** cases with no skips: all advertised typed-UAV formats
+completed exact full and partial rectangle transfers; odd-size mips remained
+independent; `Single` typed UAV compute read/write survived explicit
+`RecreateDeviceEXT`; a compute-produced Color image was sampled by a graphics
+ShaderEffect in the same frame after the public image was disposed; foreign
+renderer records and duplicate writable aliases were refused; a queued upload
+was released safely after device shutdown; and the renderer-neutral
+`ModernGpuConformance.AStorageImageHoldsExactlyWhatComputeWrote` changed from
+skip to pass. The explicit `RecreateDeviceEXT` message is a test-invoked
+recreation, not an observed hardware device removal. Log:
+`C:\rv\logs\dx12-modern-storage-focused-1.log`.
+
+Targeted GPU-based validation passed **4/4** cases: advertised format
+transfers, typed float compute plus recreation, compute-to-graphics sampling,
+and the renderer-neutral storage-image pixel oracle
+(`C:\rv\logs\dx12-modern-storage-gbv-1.log`). The focused and GBV runs
+selected Intel hardware explicitly on every device creation, used the D3D12
+debug layer and DRED, and produced zero test failures, skips, D3D12 debug or
+GPU-validation warnings/errors, device-removal events, or DRED faults. The
+modern full-suite run initiated before WIN11-0069 uses the pre-storage binary
+and does not establish this task's full-suite status. A post-storage complete
+run is still required. Ordinary classic `Texture2D` compute-image binding and
+modern DX12 shadow/IBL visibility remain separate tasks.
+
+```powershell
+cmake -S C:\rv\src\cna -B C:\rv\build\cna-win11-dx12-modern
+cmake --build C:\rv\build\cna-win11-dx12-modern --target CnaGraphicsExtTests --config Debug --parallel 12
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='0'
+$filter='D3D12StorageTextureTest.*:ModernGpuConformance.AStorageImageHoldsExactlyWhatComputeWrote'
+$exe='C:\rv\build\cna-win11-dx12-modern\Debug\CnaGraphicsExtTests.exe'
+$commandLine='"'+$exe+'" --gtest_color=no --gtest_filter='+$filter
+& C:\rv\work\private_desktop_awake.exe 900000 $commandLine *> C:\rv\logs\dx12-modern-storage-focused-1.log
+$env:CNA_D3D12_GPU_VALIDATION='1'
+$filter='D3D12StorageTextureTest.EveryAdvertisedTypedUavFormatTransfersExactRectangles:D3D12StorageTextureTest.TypedFloatImageFeedsComputeAndSurvivesRecovery:D3D12StorageTextureTest.ComputeOutputIsSampledByGraphicsInTheSameFrame:ModernGpuConformance.AStorageImageHoldsExactlyWhatComputeWrote'
+$commandLine='"'+$exe+'" --gtest_color=no --gtest_filter='+$filter
+& C:\rv\work\private_desktop_awake.exe 900000 $commandLine *> C:\rv\logs\dx12-modern-storage-gbv-1.log
+```

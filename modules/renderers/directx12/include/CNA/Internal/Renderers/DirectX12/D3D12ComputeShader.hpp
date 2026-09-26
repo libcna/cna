@@ -63,6 +63,16 @@ namespace CNA::Internal::Renderers::DirectX12
          */
         void BindStorageBuffer(int binding, IStorageBufferRenderer* buffer) override;
         /**
+         * @brief Retains a same-device typed UAV texture at register u(unit).
+         * @param unit UAV register.
+         * @param texture Storage texture record, or null to clear the slot.
+         * @param accessMode GraphicsImageAccess ordinal.
+         * @return True when the texture and its declared access are valid.
+         */
+        [[nodiscard]] bool BindStorageTexture2DEXT(
+            int unit, std::shared_ptr<IStorageTexture2DRenderer> texture,
+            int accessMode) override;
+        /**
          * @brief Retains a same-device constant buffer at register b(binding).
          * @param binding Constant-buffer register.
          * @param buffer Constant buffer record, or null to clear.
@@ -124,6 +134,8 @@ namespace CNA::Internal::Renderers::DirectX12
         Microsoft::WRL::ComPtr<ID3DBlob> bytecode_;
         D3DCommon::D3DProgramReflection reflection_;
         std::array<std::shared_ptr<IStorageBufferRenderer>, kStorageSlots> storageBuffers_{};
+        std::array<std::shared_ptr<IStorageTexture2DRenderer>, kStorageSlots> storageTextures_{};
+        std::array<int, kStorageSlots> storageTextureAccess_{};
         std::array<std::shared_ptr<IStorageBufferRenderer>, kConstantSlots> constantBuffers_{};
         std::array<std::shared_ptr<ITextureRenderer>, kTextureSlots> textures_{};
         std::string compileError_;
