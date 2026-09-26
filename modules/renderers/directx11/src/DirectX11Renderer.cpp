@@ -1757,8 +1757,8 @@ namespace CNA::Internal::Renderers::DirectX11
     {
         using CNA::RendererFormatUsage;
         if (!device_ || !context_ || !SupportsComputeShadersEXT() ||
-            surfaceFormat != static_cast<int>(
-                Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color) ||
+            !D3DCommon::IsXnaUncompressedSurfaceFormat(surfaceFormat) ||
+            D3DCommon::SurfaceFormatBytesPerTexel(surfaceFormat) <= 0 ||
             width <= 0 || height <= 0 ||
             width > D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION ||
             height > D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION ||
@@ -1784,7 +1784,8 @@ namespace CNA::Internal::Renderers::DirectX11
         if ((support.supportedUsages & required) != required)
             return nullptr;
         return std::make_unique<D3D11StorageTexture2D>(
-            device_.Get(), context_.Get(), width, height, mipLevelCount, usage);
+            device_.Get(), context_.Get(), width, height, mipLevelCount,
+            surfaceFormat, usage);
     }
 
     int DirectX11Renderer::GetMaxTextureArrayLayersEXT() const
@@ -1842,8 +1843,7 @@ namespace CNA::Internal::Renderers::DirectX11
             supported |= static_cast<std::uint32_t>(RendererFormatUsage::Mipmapped);
         if ((native & D3D11_FORMAT_SUPPORT_SHADER_SAMPLE) != 0)
             supported |= static_cast<std::uint32_t>(RendererFormatUsage::Filterable);
-        if (surfaceFormat == static_cast<int>(
-                Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color) &&
+        if (D3DCommon::IsXnaUncompressedSurfaceFormat(surfaceFormat) &&
             SupportsComputeShadersEXT() &&
             (native & D3D11_FORMAT_SUPPORT_TYPED_UNORDERED_ACCESS_VIEW) != 0)
         {

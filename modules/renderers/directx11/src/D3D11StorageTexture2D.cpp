@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/DirectX11/D3D11StorageTexture2D.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -9,11 +10,15 @@ namespace CNA::Internal::Renderers::DirectX11
 {
     D3D11StorageTexture2D::D3D11StorageTexture2D(
         ID3D11Device* device, ID3D11DeviceContext* context, int width, int height,
-        int mipLevels, std::uint32_t usage)
+        int mipLevels, int surfaceFormat, std::uint32_t usage)
         : device_(device), context_(context), width_(width), height_(height),
-          mipLevels_(mipLevels), usage_(usage)
+          mipLevels_(mipLevels),
+          format_(D3DCommon::SurfaceFormatToDxgi(surfaceFormat)),
+          bytesPerTexel_(D3DCommon::SurfaceFormatBytesPerTexel(surfaceFormat)),
+          usage_(usage)
     {
         if (!device || !context || width <= 0 || height <= 0 || mipLevels <= 0 ||
+            format_ == DXGI_FORMAT_UNKNOWN || bytesPerTexel_ <= 0 ||
             (usage & UINT32_C(0x03)) == 0)
             throw std::invalid_argument("D3D11 storage texture: invalid allocation description");
 
@@ -22,7 +27,7 @@ namespace CNA::Internal::Renderers::DirectX11
         description.Height = static_cast<UINT>(height);
         description.MipLevels = static_cast<UINT>(mipLevels);
         description.ArraySize = 1;
-        description.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        description.Format = format_;
         description.SampleDesc.Count = 1;
         description.Usage = D3D11_USAGE_DEFAULT;
         description.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
@@ -56,7 +61,8 @@ namespace CNA::Internal::Renderers::DirectX11
         const int mipHeight = std::max(1, height_ >> mipLevel);
         return x <= mipWidth && width <= mipWidth - x &&
                y <= mipHeight && height <= mipHeight - y &&
-               byteCount == static_cast<std::size_t>(width) * height * 4u;
+               byteCount == static_cast<std::size_t>(width) * height *
+                   static_cast<std::size_t>(bytesPerTexel_);
     }
 
     bool D3D11StorageTexture2D::SetData(
@@ -73,7 +79,8 @@ namespace CNA::Internal::Renderers::DirectX11
         region.bottom = static_cast<UINT>(y + height);
         region.back = 1;
         context_->UpdateSubresource(texture_.Get(), static_cast<UINT>(mipLevel),
-                                    &region, data, static_cast<UINT>(width * 4), 0);
+                                    &region, data,
+                                    static_cast<UINT>(width * bytesPerTexel_), 0);
         return true;
     }
 
@@ -89,7 +96,7 @@ namespace CNA::Internal::Renderers::DirectX11
         description.Height = static_cast<UINT>(std::max(1, height_ >> mipLevel));
         description.MipLevels = 1;
         description.ArraySize = 1;
-        description.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        description.Format = format_;
         description.SampleDesc.Count = 1;
         description.Usage = D3D11_USAGE_STAGING;
         description.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
@@ -104,11 +111,13 @@ namespace CNA::Internal::Renderers::DirectX11
             return false;
         auto* destination = static_cast<std::uint8_t*>(data);
         const auto* source = static_cast<const std::uint8_t*>(mapped.pData);
-        const std::size_t rowBytes = static_cast<std::size_t>(width) * 4u;
+        const std::size_t rowBytes = static_cast<std::size_t>(width) *
+            static_cast<std::size_t>(bytesPerTexel_);
         for (int row = 0; row < height; ++row)
             std::memcpy(destination + static_cast<std::size_t>(row) * rowBytes,
                         source + static_cast<std::size_t>(y + row) * mapped.RowPitch +
-                            static_cast<std::size_t>(x) * 4u,
+                            static_cast<std::size_t>(x) *
+                                static_cast<std::size_t>(bytesPerTexel_),
                         rowBytes);
         context_->Unmap(staging.Get(), 0);
         return true;

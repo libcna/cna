@@ -544,7 +544,7 @@ open engineering work even when a test correctly skips for the absent feature.
 | GPU elapsed-time queries | Native D3D11 timestamp/disjoint query path, with physical Intel workload and in-flight range tests passed (WIN11-0029). |
 | Indirect indexed/nonindexed draws and argument-only/transfer buffers | Native GPU-fetched draw path, with physical Intel count/offset and byte-transfer tests passed. Storage and constant buffer roles now use native mirrors copied in GPU order (WIN11-0030). |
 | Compute shaders, dispatch, shader storage and constant-buffer binding | Native HLSL cs_5_0, dispatch, raw UAV buffers, constant buffers and sampled Texture2D/RenderTarget2D execute on Intel. Full 974-case refreshed run after production HLSL variants: 733 pass, 241 skip, 0 fail. |
-| Storage textures, compute images, compute sampled textures, compute/graphics hazards | Native Color storage-image read/write, exact mip/rectangle transfer, sampled storage-image binding and PS SRV/compute UAV hazard restoration pass focused Intel tests. Mutable classic Texture2D image binding remains unimplemented and is not advertised. Storage-image factory is Color-only. |
+| Storage textures, compute images, compute sampled textures, compute/graphics hazards | Native typed UAV storage-image read/write, exact mip/rectangle transfer, sampled storage-image binding and PS SRV/compute UAV hazard restoration pass on Intel. WIN11-0059 extends the storage-image factory and ordinary `Texture2D` image binding from Color to supported uncompressed formats; six float formats passed exact byte transfer and `Single` passed native compute write/readback. |
 | Sampled Texture2DArray and layer/mip transfers | Native array SRV, all 20 core SurfaceFormat transfers, 2,048-layer limit, ShaderEffect sampling and retained lifetime pass focused Intel tests. Odd block-compressed mip-edge partial transfer regression added. |
 | Shadow reception and image-based lighting in modern effects | Interface correctly reports false; DX11 stock PBR shader does not yet consume shadow/IBL bindings. |
 | GPU debug markers and modern resource-limit reporting | Marker override absent; most modern limits retain interface defaults. Native D3D11 capabilities need measured values when the corresponding paths are implemented. |
@@ -1662,4 +1662,61 @@ $env:CNA_D3D12_GPU_VALIDATION='0'
 & C:\rv\work\private_desktop_awake.exe 7200000 'ctest --test-dir C:\rv\build\cna-win11-dx12-debug -C Debug -L DIRECTX12 --output-on-failure --parallel 1' *> C:\rv\logs\dx12-cube-mrt-classic-label-1.log
 $env:CNA_D3D12_GPU_VALIDATION='1'
 & C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx12-debug\Debug\CnaGraphicsTests.exe --gtest_color=no --gtest_filter=RenderTargetSemantics.DirectXPlural*' *> C:\rv\logs\dx12-cube-mrt-gbv-focused-1.log
+```
+
+## DX11 modern full baseline and typed float UAVs, 2026-09-26
+
+After WIN11-0053 through WIN11-0058, the full DX11 modern
+`CnaGraphicsExtTests` executable ran on the private desktop with the D3D11
+debug layer: **995 tests, 982 pass, 13 skip, 0 fail**, 1,884,598 ms
+(`C:\rv\logs\dx11-modern-full-post-marker-hlsl-classic-1.log`). The run
+recorded 696 explicit physical Intel `8086:46A6` selections with
+`software=0`, feature level `11_1`, and no D3D11 warning, error, or
+corruption. Its 13 skips are opposite-capability probes or GL/Vulkan-specific
+diagnostic fixtures; the log lists every name. The two applicable registered
+Windows CNAEXT examples, `CNAEXT_Settings_Compile_Run` and
+`Ascii_Quantizer`, passed **2/2**
+(`C:\rv\logs\dx11-modern-applicable-examples-1.log`). The other visual
+CNAEXT examples remain CMake-gated on WIN32. In 155 samples from the full
+run, private bytes started near 24.9 MiB, peaked near 358.6 MiB during
+volumetric rendering, and ended near 38 MiB. Process handles rose from
+508 to 992; this requires an isolated repeat before a lifetime-stability
+claim (`C:\rv\logs\dx11-modern-full-resource-samples-1.csv`).
+
+WIN11-0059: the modern DX11 storage-image factory and ordinary `Texture2D`
+image binding were explicitly Color-only despite native typed UAV support.
+The renderer now checks the selected device's format support, uses the
+shared DXGI format and byte-size mapping for uncompressed storage textures,
+preserves exact upload/readback pitches, creates an ordinary-texture UAV for
+each supported uncompressed format, and checks actual read/write access at
+image binding. Unsupported formats retain truthful negative capability
+reporting. No public API was expanded.
+
+The three new focused tests passed **3/3** on Intel Iris Xe with the D3D11
+debug layer: all six float formats (`Single`, `Vector2`, `Vector4`,
+`HalfSingle`, `HalfVector2`, `HalfVector4`) preserved full and partial
+transfer bytes; a `Single` storage image survived compute read/modify/write
+and CPU readback; and a classic `Single` `Texture2D` accepted typed image
+write with native staging readback
+(`C:\rv\logs\dx11-typed-storage-focused-1.log`). Related compute,
+storage-image, and modern GPU conformance tests finished **49 selected,
+47 pass, 2 truthful opposite-capability skips, 0 fail** in 99,280 ms;
+53 explicit Intel hardware selections and no debug diagnostics
+(`C:\rv\logs\dx11-typed-storage-related-modern-1.log`).
+The ordinary `Single` texture test then added a simulated D3D11 context
+loss/recovery before its compute write; its typed UAV, device identity, and
+read/write access bits survived recovery, and the focused **3/3** rerun
+remained debug-clean (`C:\rv\logs\dx11-typed-storage-focused-recovery-1.log`).
+The affected classic `Texture2D` and surface-format test selection passed
+**121 selected, 120 pass, 1 truthful capability skip, 0 fail** in 95,323 ms,
+with 49 Intel hardware selections and no D3D11 debug diagnostics
+(`C:\rv\logs\dx11-typed-storage-classic-textures-1.log`).
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsExtTests CnaGraphicsTests --parallel 4
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=D3D11NativeComputeTest.TypedFloatStorageImagesPreserveExactTransferBytes:D3D11NativeComputeTest.SingleStorageImageComputeWriteAndReadback:D3D11NativeComputeTest.OrdinarySingleTextureIsWritableAsTypedImage' *> C:\rv\logs\dx11-typed-storage-focused-1.log
+& C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ComputeTest.*:D3D11NativeComputeTest.*:StorageTexture2DTest.*:ModernGpuConformance.*' *> C:\rv\logs\dx11-typed-storage-related-modern-1.log
+& C:\rv\work\private_desktop_awake.exe 1200000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsTests.exe --gtest_color=no --gtest_filter=*Texture2D*:*SurfaceFormat*' *> C:\rv\logs\dx11-typed-storage-classic-textures-1.log
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=D3D11NativeComputeTest.TypedFloatStorageImagesPreserveExactTransferBytes:D3D11NativeComputeTest.SingleStorageImageComputeWriteAndReadback:D3D11NativeComputeTest.OrdinarySingleTextureIsWritableAsTypedImage' *> C:\rv\logs\dx11-typed-storage-focused-recovery-1.log
 ```

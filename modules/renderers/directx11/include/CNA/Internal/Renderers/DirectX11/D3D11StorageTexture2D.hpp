@@ -13,18 +13,20 @@ namespace CNA::Internal::Renderers::DirectX11
     {
     public:
         /**
-         * @brief Allocates a Color storage texture and its requested native views.
+         * @brief Allocates a typed storage texture and its requested native views.
          * @param device Owning D3D11 device.
          * @param context Immediate context for transfers.
          * @param width Level-zero width.
          * @param height Level-zero height.
          * @param mipLevels Allocated mip count.
+         * @param surfaceFormat XNA SurfaceFormat ordinal with device-supported typed UAV access.
          * @param usage Portable storage-texture usage bits.
          */
         D3D11StorageTexture2D(ID3D11Device* device, ID3D11DeviceContext* context,
-                              int width, int height, int mipLevels, std::uint32_t usage);
+                              int width, int height, int mipLevels, int surfaceFormat,
+                              std::uint32_t usage);
         /**
-         * @brief Uploads a tightly packed Color rectangle into one mip.
+         * @brief Uploads a tightly packed format-native rectangle into one mip.
          * @param mipLevel Mip level.
          * @param x Left texel.
          * @param y Top texel.
@@ -37,7 +39,7 @@ namespace CNA::Internal::Renderers::DirectX11
         [[nodiscard]] bool SetData(int mipLevel, int x, int y, int width, int height,
                                    const void* data, std::size_t byteCount) override;
         /**
-         * @brief Reads a tightly packed Color rectangle from one mip.
+         * @brief Reads a tightly packed format-native rectangle from one mip.
          * @param mipLevel Mip level.
          * @param x Left texel.
          * @param y Top texel.
@@ -88,6 +90,8 @@ namespace CNA::Internal::Renderers::DirectX11
         int width_ = 0;
         int height_ = 0;
         int mipLevels_ = 0;
+        DXGI_FORMAT format_ = DXGI_FORMAT_UNKNOWN;
+        int bytesPerTexel_ = 0;
         std::uint32_t usage_ = 0;
     };
 }

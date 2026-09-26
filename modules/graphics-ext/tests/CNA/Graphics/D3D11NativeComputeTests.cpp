@@ -26,8 +26,11 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdio>
 #include <cstdint>
+#include <cstring>
 #include <memory>
+#include <vector>
 
 #ifdef CNA_RENDERER_DIRECTX11
 #include "CNA/Internal/Renderers/DirectX11/D3D11ComputeShader.hpp"
@@ -449,6 +452,114 @@ TEST(D3D11NativeComputeTest, StorageImageTransfersPreserveMipsAndRectangles)
     EXPECT_EQ(patch, actualPatch);
 }
 
+TEST(D3D11NativeComputeTest, TypedFloatStorageImagesPreserveExactTransferBytes)
+{
+    using CNA::Graphics::StorageTexture2D;
+    using CNA::Graphics::StorageTexture2DDescriptor;
+    using CNA::Graphics::StorageTexture2DUsage;
+    using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+    CnaTest::EngineLayer::HiDefDevice device;
+    if (device.GetGraphicsRendererName() != "DIRECTX11")
+        GTEST_SKIP() << "this typed storage-image probe targets DirectX 11";
+
+    constexpr auto usage = StorageTexture2DUsage::StorageWrite |
+        StorageTexture2DUsage::TransferSource |
+        StorageTexture2DUsage::TransferDestination;
+    constexpr auto required = static_cast<CNA::RendererFormatUsage>(
+        static_cast<std::uint32_t>(CNA::RendererFormatUsage::TextureStorage) |
+        static_cast<std::uint32_t>(CNA::RendererFormatUsage::StorageWrite) |
+        static_cast<std::uint32_t>(CNA::RendererFormatUsage::TransferSource) |
+        static_cast<std::uint32_t>(CNA::RendererFormatUsage::TransferDestination));
+    struct FormatCase { SurfaceFormat format; int bytesPerTexel; };
+    constexpr std::array formats{
+        FormatCase{SurfaceFormat::Single, 4},
+        FormatCase{SurfaceFormat::Vector2, 8},
+        FormatCase{SurfaceFormat::Vector4, 16},
+        FormatCase{SurfaceFormat::HalfSingle, 2},
+        FormatCase{SurfaceFormat::HalfVector2, 4},
+        FormatCase{SurfaceFormat::HalfVector4, 8},
+    };
+    int supported = 0;
+    for (const auto [format, bytesPerTexel] : formats)
+    {
+        if (!device.GetRendererSurfaceFormatSupportEXT(format).Supports(required))
+            continue;
+        ++supported;
+        SCOPED_TRACE(static_cast<int>(format));
+        StorageTexture2D image(device, StorageTexture2DDescriptor(
+            4, 3, 1, format, usage));
+        std::printf("[INFO] D3D11 typed storage format ordinal %d, bytes/texel %d\n",
+                    static_cast<int>(format), bytesPerTexel);
+        std::vector<std::uint8_t> expected(
+            static_cast<std::size_t>(4 * 3 * bytesPerTexel));
+        for (std::size_t index = 0; index < expected.size(); ++index)
+            expected[index] = static_cast<std::uint8_t>(index * 37u + 11u);
+        image.setData(0, nullptr, expected.data(), expected.size());
+        const Microsoft::Xna::Framework::Rectangle region(1, 1, 2, 1);
+        std::vector<std::uint8_t> patch(
+            static_cast<std::size_t>(2 * bytesPerTexel), UINT8_C(0xA5));
+        image.setData(0, &region, patch.data(), patch.size());
+        std::copy(patch.begin(), patch.end(),
+                  expected.begin() + static_cast<std::size_t>(5 * bytesPerTexel));
+        std::vector<std::uint8_t> actual(expected.size());
+        image.getData(0, nullptr, actual.data(), actual.size());
+        EXPECT_EQ(actual, expected);
+        std::vector<std::uint8_t> actualPatch(patch.size());
+        image.getData(0, &region, actualPatch.data(), actualPatch.size());
+        EXPECT_EQ(actualPatch, patch);
+    }
+    std::printf("[INFO] D3D11 typed float UAV formats with exact transfers: %d/%zu\n",
+                supported, formats.size());
+    EXPECT_GT(supported, 0) << "the physical D3D11 adapter reported no typed float UAV store";
+}
+
+TEST(D3D11NativeComputeTest, SingleStorageImageComputeWriteAndReadback)
+{
+    using CNA::Graphics::StorageTexture2D;
+    using CNA::Graphics::StorageTexture2DDescriptor;
+    using CNA::Graphics::StorageTexture2DUsage;
+    using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+    CnaTest::EngineLayer::HiDefDevice device;
+    if (device.GetGraphicsRendererName() != "DIRECTX11")
+        GTEST_SKIP() << "this typed storage-image probe targets DirectX 11";
+    constexpr auto required = static_cast<CNA::RendererFormatUsage>(
+        static_cast<std::uint32_t>(CNA::RendererFormatUsage::TextureStorage) |
+        static_cast<std::uint32_t>(CNA::RendererFormatUsage::StorageRead) |
+        static_cast<std::uint32_t>(CNA::RendererFormatUsage::StorageWrite) |
+        static_cast<std::uint32_t>(CNA::RendererFormatUsage::TransferSource) |
+        static_cast<std::uint32_t>(CNA::RendererFormatUsage::TransferDestination));
+    if (!device.GetRendererSurfaceFormatSupportEXT(SurfaceFormat::Single).Supports(required))
+        GTEST_SKIP() << "this D3D11 adapter lacks typed R32_FLOAT UAV read/write";
+
+    StorageTexture2D image(device, StorageTexture2DDescriptor(
+        2, 2, 1, SurfaceFormat::Single,
+        StorageTexture2DUsage::StorageRead |
+            StorageTexture2DUsage::StorageWrite |
+            StorageTexture2DUsage::TransferSource |
+            StorageTexture2DUsage::TransferDestination));
+    const std::array<float, 4> initial{0.5f, 1.25f, 2.0f, 3.5f};
+    image.setData(0, nullptr, initial.data(), sizeof(initial));
+    const CNA::Graphics::ShaderCodeEXT source(
+        CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Compute,
+        "main", "D3D11SingleStorageImage.hlsl", R"HLSL(
+RWTexture2D<float> Image : register(u0);
+[numthreads(1, 1, 1)]
+void main(uint3 id : SV_DispatchThreadID)
+{
+    Image[uint2(1, 1)] = Image[uint2(1, 1)] * 2.0f + 0.25f;
+}
+)HLSL");
+    CNA::Graphics::ComputeShader shader(device, source);
+    shader.bindStorageTexture(0, image, CNA::GraphicsImageAccess::ReadWrite);
+    shader.dispatch(1);
+    std::array<float, 4> actual{};
+    image.getData(0, nullptr, actual.data(), sizeof(actual));
+    EXPECT_EQ(actual[0], initial[0]);
+    EXPECT_EQ(actual[1], initial[1]);
+    EXPECT_EQ(actual[2], initial[2]);
+    EXPECT_EQ(actual[3], 7.25f);
+}
+
 TEST(D3D11NativeComputeTest, TypedStorageImageReadReachesAnotherGpuResource)
 {
     using CNA::Graphics::StorageTexture2D;
@@ -533,6 +644,64 @@ void main(uint3 id : SV_DispatchThreadID)
 }
 
 #ifdef CNA_RENDERER_DIRECTX11
+TEST(D3D11NativeComputeTest, OrdinarySingleTextureIsWritableAsTypedImage)
+{
+    using CNA::Internal::Renderers::DirectX11::D3D11TextureRenderer;
+    using CNA::Internal::Renderers::DirectX11::DirectX11Renderer;
+    using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+    using Microsoft::Xna::Framework::Graphics::Texture2D;
+    CnaTest::EngineLayer::HiDefDevice device;
+    auto* renderer = dynamic_cast<DirectX11Renderer*>(&device.GetRenderer());
+    ASSERT_NE(renderer, nullptr);
+    constexpr auto access = static_cast<CNA::RendererFormatUsage>(
+        static_cast<std::uint32_t>(CNA::RendererFormatUsage::StorageRead) |
+        static_cast<std::uint32_t>(CNA::RendererFormatUsage::StorageWrite));
+    if (!device.GetRendererSurfaceFormatSupportEXT(SurfaceFormat::Single).Supports(access))
+        GTEST_SKIP() << "this D3D11 adapter lacks typed R32_FLOAT UAV read/write";
+
+    Texture2D image(device, 1, 1, false, SurfaceFormat::Single);
+    auto* native = dynamic_cast<D3D11TextureRenderer*>(&image.GetRenderer());
+    ASSERT_NE(native, nullptr);
+    ASSERT_NE(native->GetUnorderedAccessViewEXT(), nullptr);
+    renderer->DebugSimulateContextLoss();
+    renderer->DebugRestoreContext();
+    ASSERT_NE(native->GetUnorderedAccessViewEXT(), nullptr);
+    EXPECT_EQ(native->GetDeviceEXT(), renderer->GetDeviceEXT());
+    EXPECT_EQ(native->GetImageAccessEXT() & static_cast<std::uint32_t>(access),
+              static_cast<std::uint32_t>(access));
+    const CNA::Graphics::ShaderCodeEXT source(
+        CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Compute,
+        "main", "D3D11SingleTextureImage.hlsl", R"HLSL(
+RWTexture2D<float> Output : register(u0);
+[numthreads(1, 1, 1)]
+void main(uint3 id : SV_DispatchThreadID)
+{
+    Output[id.xy] = 2.75f;
+}
+)HLSL");
+    CNA::Graphics::ComputeShader shader(device, source);
+    shader.bindImage(0, image, CNA::GraphicsImageAccess::WriteOnly);
+    shader.dispatch(1);
+
+    D3D11_TEXTURE2D_DESC description{};
+    native->GetTextureEXT()->GetDesc(&description);
+    description.Usage = D3D11_USAGE_STAGING;
+    description.BindFlags = 0;
+    description.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    description.MiscFlags = 0;
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> staging;
+    ASSERT_TRUE(SUCCEEDED(renderer->GetDeviceEXT()->CreateTexture2D(
+        &description, nullptr, staging.GetAddressOf())));
+    renderer->GetContextEXT()->CopyResource(staging.Get(), native->GetTextureEXT());
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    ASSERT_TRUE(SUCCEEDED(renderer->GetContextEXT()->Map(
+        staging.Get(), 0, D3D11_MAP_READ, 0, &mapped)));
+    float actual = 0.0f;
+    std::memcpy(&actual, mapped.pData, sizeof(actual));
+    renderer->GetContextEXT()->Unmap(staging.Get(), 0);
+    EXPECT_EQ(actual, 2.75f);
+}
+
 TEST(D3D11NativeComputeTest, ImageBindingRetainsTextureAfterPublicDestruction)
 {
     using CNA::Internal::Renderers::DirectX11::D3D11TextureRenderer;
@@ -639,7 +808,8 @@ TEST(D3D11NativeComputeTest, ComputeImageWriteRestoresAliasingPixelShaderResourc
 
     constexpr std::uint32_t usage = UINT32_C(0x02) | UINT32_C(0x04) | UINT32_C(0x10);
     auto image = std::make_shared<D3D11StorageTexture2D>(
-        renderer->GetDeviceEXT(), renderer->GetContextEXT(), 1, 1, 1, usage);
+        renderer->GetDeviceEXT(), renderer->GetContextEXT(), 1, 1, 1,
+        static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color), usage);
     D3D11ComputeShader compute(renderer->GetDeviceEXT(), renderer->GetContextEXT());
     ASSERT_TRUE(compute.CompileProgram(R"(
 RWTexture2D<unorm float4> Target : register(u0);
@@ -696,7 +866,8 @@ float4 main(float4 position : SV_POSITION) : SV_TARGET
 
     constexpr std::uint32_t usage = UINT32_C(0x02) | UINT32_C(0x04);
     auto image = std::make_shared<D3D11StorageTexture2D>(
-        renderer->GetDeviceEXT(), renderer->GetContextEXT(), 1, 1, 1, usage);
+        renderer->GetDeviceEXT(), renderer->GetContextEXT(), 1, 1, 1,
+        static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color), usage);
     ID3D11ShaderResourceView* expected = image->GetShaderResourceViewEXT();
     ASSERT_TRUE(effect.BindStorageTexture2DEXT(0, image));
     image.reset();

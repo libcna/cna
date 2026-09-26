@@ -173,10 +173,17 @@ namespace CNA::Internal::Renderers::DirectX11
             return;
         }
         auto* native = dynamic_cast<D3D11TextureRenderer*>(texture);
+        constexpr std::uint32_t read = static_cast<std::uint32_t>(
+            CNA::RendererFormatUsage::StorageRead);
+        constexpr std::uint32_t write = static_cast<std::uint32_t>(
+            CNA::RendererFormatUsage::StorageWrite);
+        const std::uint32_t required = accessMode == 0 ? read :
+            accessMode == 1 ? write : read | write;
         if (native == nullptr || native->GetDeviceEXT() != device_.Get() ||
-            native->GetUnorderedAccessViewEXT() == nullptr)
+            native->GetUnorderedAccessViewEXT() == nullptr ||
+            (native->GetImageAccessEXT() & required) != required)
             throw std::invalid_argument(
-                "D3D11 compute image binding requires a same-device Color Texture2D with a typed UAV");
+                "D3D11 compute image binding requires a same-device Texture2D with typed UAV access");
         retained = texture->shared_from_this();
         storageBuffers_[static_cast<std::size_t>(unit)].reset();
         storageTextures_[static_cast<std::size_t>(unit)].reset();

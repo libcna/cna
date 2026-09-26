@@ -147,6 +147,7 @@ namespace CNA::Internal::Renderers::DirectX11
     void D3D11TextureRenderer::CreateDeviceResources()
     {
         uav_.Reset();
+        imageAccess_ = 0;
         D3D11_TEXTURE2D_DESC desc{};
         desc.Width = static_cast<UINT>(width_);
         desc.Height = static_cast<UINT>(height_);
@@ -160,10 +161,9 @@ namespace CNA::Internal::Renderers::DirectX11
         constexpr std::uint32_t imageAccess =
             static_cast<std::uint32_t>(CNA::RendererFormatUsage::StorageRead) |
             static_cast<std::uint32_t>(CNA::RendererFormatUsage::StorageWrite);
-        const bool allowImage = !compressed_ &&
-            surfaceFormat_ == static_cast<int>(
-                Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color) &&
-            (imageSupport.supportedUsages & imageAccess) == imageAccess;
+        const std::uint32_t availableImageAccess =
+            imageSupport.supportedUsages & imageAccess;
+        const bool allowImage = !compressed_ && availableImageAccess != 0;
         if (allowImage)
             desc.BindFlags |= D3D11_BIND_UNORDERED_ACCESS;
 
@@ -185,7 +185,9 @@ namespace CNA::Internal::Renderers::DirectX11
             view.Format = dxgiFormat_;
             view.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
             view.Texture2D.MipSlice = 0;
-            device_->CreateUnorderedAccessView(texture_.Get(), &view, uav_.GetAddressOf());
+            if (SUCCEEDED(device_->CreateUnorderedAccessView(
+                    texture_.Get(), &view, uav_.GetAddressOf())))
+                imageAccess_ = availableImageAccess;
         }
     }
 
@@ -236,6 +238,7 @@ namespace CNA::Internal::Renderers::DirectX11
     void D3D11TextureRenderer::ReleaseDeviceResourcesEXT() noexcept
     {
         uav_.Reset();
+        imageAccess_ = 0;
         srv_.Reset();
         texture_.Reset();
         context_.Reset();

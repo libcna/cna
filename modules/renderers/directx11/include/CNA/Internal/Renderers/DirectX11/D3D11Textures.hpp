@@ -55,6 +55,11 @@ namespace CNA::Internal::Renderers::DirectX11
             return uav_.Get();
         }
         /**
+         * @brief Returns the typed UAV access supported by this texture's device.
+         * @return Read and write usage bits available through the native UAV.
+         */
+        [[nodiscard]] std::uint32_t GetImageAccessEXT() const { return imageAccess_; }
+        /**
          * @brief Returns the device that owns this texture.
          * @return Owning D3D11 device.
          */
@@ -75,6 +80,7 @@ namespace CNA::Internal::Renderers::DirectX11
         ComPtr<ID3D11Texture2D> texture_;
         ComPtr<ID3D11ShaderResourceView> srv_;
         ComPtr<ID3D11UnorderedAccessView> uav_;
+        std::uint32_t imageAccess_ = 0;
         int width_ = 0;
         int height_ = 0;
         int mipLevels_ = 1;
