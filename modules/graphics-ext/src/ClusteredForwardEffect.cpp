@@ -19,6 +19,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "shaders/clustered_forward/ClusteredForwardShaderPackage.generated.hpp"
+#include "shaders/clustered_forward/ClusteredForwardHlsl.generated.hpp"
 
 #include <algorithm>
 #include <array>
@@ -87,6 +88,14 @@ namespace CNA::Graphics {
                                   CNA::ShaderStageEXT::Fragment, "main",
                                   "clustered_forward/forward.vulkan.frag.wgsl",
                                   std::string(kForwardVulkanFragmentWgsl)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                  CNA::ShaderStageEXT::Vertex, "main",
+                                  "clustered_forward/forward.vulkan.vert.spv -> hlsl",
+                                  detail::ClusteredForwardHlslGenerated::VertexSource()),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                  CNA::ShaderStageEXT::Fragment, "main",
+                                  "clustered_forward/forward.vulkan.frag.spv -> hlsl",
+                                  detail::ClusteredForwardHlslGenerated::FragmentSource()),
                 },
                 {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment},
                 {
@@ -163,7 +172,8 @@ namespace CNA::Graphics {
         }
 
         effect_->Apply();
-        if (CNA::UsesDescriptorBindingContractEXT(effect_->GetSelectedShaderLanguageEXT()))
+        if (CNA::UsesDescriptorBindingContractEXT(effect_->GetSelectedShaderLanguageEXT()) ||
+            effect_->GetSelectedShaderLanguageEXT() == CNA::ShaderLanguageEXT::Hlsl)
         {
             const bool transmits = extensions_ != nullptr && extensions_->isTransmissionEnabled();
             if (transmits && opaqueFrame_ == nullptr)

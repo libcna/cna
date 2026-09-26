@@ -1063,3 +1063,37 @@ $env:CNA_D3D11_DEBUG_LAYER='1'
 & C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ComputeCullingTest.*' *> C:\rv\logs\dx11-compute-culling-focused-1.log
 & C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ComputeCullingTest.*:GpuInstanceCullerTest.*:ClusteredLightComputeTest.*' *> C:\rv\logs\dx11-compute-culling-related-1.log
 ```
+
+## DX11 clustered forward lighting, 2026-09-26
+
+WIN11-0042: added checked FXC/SM5 HLSL variants generated from the current
+Vulkan GLSL clustered-forward stages. The fragment is split into short
+generated string parts because its ~27 KiB source exceeds MSVC's single
+literal limit; the generator records source SHA-256 values. The HLSL package
+uses the existing descriptor-style uniform arrays and sampled texture slots.
+Regenerating produced the identical generated-file SHA-256
+`C8B864E6168E5FC035F563D290CE9B639647ED6F33C958EF8FF72F67F290B3B7`.
+`ClusteredLightBuffer` now creates its three raw storage-buffer mirrors when
+the device offers an HLSL fragment stage, and `ClusteredForwardEffect::begin`
+binds them at `t6..t8` through the validated DX11 draw-storage path. The
+existing GLSL variants and binding path remain as before.
+
+The first one-light pixel test passed on physical Intel Iris Xe `8086:46A6`,
+`software=0`. The complete `ClusteredForwardEffectTest.*` suite passed
+**34/34**, with 21 explicit physical-Intel device selections, no skips or
+failures, and zero D3D11 debug warnings/errors. It includes 256-light
+rendering, area lights, clearcoat/sheen, transmission, subsurface, probes,
+and probe volumes (`C:\rv\logs\dx11-clustered-forward-suite-1.log`).
+The adjacent `ClusteredLightBufferTest.*` baseline passed 4/7, with three
+existing GPU probes still skipped because those tests carry only inline GLSL
+(`C:\rv\logs\dx11-clustered-light-buffer-baseline-1.log`); that test-source
+gap is the next task.
+
+```powershell
+python tools\shader_package\generate_clustered_forward_hlsl.py --glslang C:\rv\build\glslang-win11\StandAlone\Release\glslangValidator.exe --spirv-cross C:\rv\build\spirv-cross-win11\Release\spirv-cross.exe --fxc 'C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\fxc.exe'
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsExtTests --parallel 8
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ClusteredForwardEffectTest.OneLightLightsTheWallWhereItIs' *> C:\rv\logs\dx11-clustered-forward-one-light-1.log
+& C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ClusteredForwardEffectTest.*' *> C:\rv\logs\dx11-clustered-forward-suite-1.log
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ClusteredLightBufferTest.*' *> C:\rv\logs\dx11-clustered-light-buffer-baseline-1.log
+```

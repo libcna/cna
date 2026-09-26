@@ -175,6 +175,8 @@ namespace CNA::Graphics {
             device_.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::SpirV,
                                               CNA::ShaderStageEXT::Fragment)
             || device_.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Wgsl,
+                                                 CNA::ShaderStageEXT::Fragment)
+            || device_.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Hlsl,
                                                  CNA::ShaderStageEXT::Fragment);
         if (descriptorContractDevice)
         {
