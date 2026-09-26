@@ -262,7 +262,7 @@ if(EMSCRIPTEN)
             # deadlock a background Content.Load while the game loop is active (notably in
             # Firefox). WasmFS keeps preloaded-file stat/open/read operations inside Wasm and is
             # the Emscripten filesystem designed for multithreaded builds.
-            -sWASMFS=1
+            $<$<BOOL:${CNA_EMSCRIPTEN_USE_WASMFS}>:-sWASMFS=1>
             -Wno-pthreads-mem-growth)
     endif()
 endif()

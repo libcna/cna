@@ -43,6 +43,14 @@ cmake --build cmake-build-webgl2-threads --parallel 8
 
 `CNA_ENABLE_EMSCRIPTEN_THREADS=ON` does all of the application-wide wiring:
 
+Threaded builds use WasmFS by default. Applications that need browser-persistent
+`StorageDevice` or `System.IO.IsolatedStorage` can configure
+`-DCNA_EMSCRIPTEN_USE_WASMFS=OFF`: Emscripten's IDBFS cannot link with WasmFS.
+The legacy filesystem then mounts both `/cna-storage` and `/save` over IndexedDB
+before the application starts. Keep the default WasmFS for games that load content
+from background threads; legacy filesystem calls from a worker can wait on the
+browser main thread while it is drawing.
+
 - compiles and links CNA and final consumers with `-pthread`;
 - enables `SHARP_RUNTIME_ENABLE_EMSCRIPTEN_THREADS` for `System.Threading`;
 - enables Emscripten's `OFFSCREEN_FRAMEBUFFER` GL proxy so resource creation from a loading pthread

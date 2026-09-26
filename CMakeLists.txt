@@ -24,6 +24,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(CNA_ENABLE_EMSCRIPTEN_THREADS
     "Build CNA's Emscripten ABI with shared-memory pthread support" OFF)
+option(CNA_EMSCRIPTEN_USE_WASMFS
+    "Use WasmFS for threaded Emscripten builds (legacy FS is required for IDBFS persistence)" ON)
 if(CNA_ENABLE_EMSCRIPTEN_THREADS AND NOT EMSCRIPTEN)
     message(FATAL_ERROR "CNA_ENABLE_EMSCRIPTEN_THREADS is available only with Emscripten.")
 endif()
