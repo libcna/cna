@@ -2698,3 +2698,55 @@ $exe='C:\rv\build\cna-win11-dx12-modern\Debug\CnaGraphicsExtTests.exe'
 $commandLine='"'+$exe+'" --gtest_color=no --gtest_filter=D3D12GpuTimerTest.*:D3D12DebugMarkerTest.*'
 & C:\rv\work\private_desktop_awake.exe 900000 $commandLine *> C:\rv\logs\dx12-diagnostics-gbv-focused-1.log
 ```
+
+### WIN11-0074: MSVC AddressSanitizer on both physical DirectX paths
+
+MSVC `/fsanitize=address` instrumented the native Debug `CnaGraphicsExtTests`
+and its CNA/sharp-runtime dependencies in two new out-of-tree x64/v143 builds:
+`C:\rv\build\cna-win11-dx12-asan` and `C:\rv\build\cna-win11-dx11-asan`.
+The configuration uses `/EHsc`, `/MDd`, `/Zi`, `/Od`, `/Ob0`, and
+`/INCREMENTAL:NO`, omitting Debug's incompatible `/RTC1`. The repository's
+`CNA_SANITIZE` CMake knob only accepts GNU/Clang-family compilers, so these
+are explicit MSVC CMake flags rather than a changed project-wide option.
+Both builds passed. The required `clang_rt.asan_dynamic-x86_64.dll` and debug
+companion were copied from the installed MSVC v143 bin directory next to the
+two test EXEs; no system-wide software was installed. The DX12 test EXE also
+had the locally obtained official PIX runtime DLL from WIN11-0073.
+
+The DX12 focused ASan run passed **41/42**, with one truthful inverse
+indirect-capability skip, **52 explicit Intel `8086:46A6` hardware selections**,
+zero WARP selections, zero ASan findings, zero D3D12 debug warnings/errors,
+and no DRED fault (`C:\rv\logs\dx12-modern-asan-focused-2.log`). The DX11
+focused ASan run passed **51/52**, with the same inverse-capability skip,
+**55 explicit Intel `8086:46A6`, software=0 selections**, zero WARP selections,
+zero ASan findings, and zero D3D11 debug warning/error/corruption
+(`C:\rv\logs\dx11-modern-asan-focused-1.log`). Each run selected all eight
+renderer-neutral `ModernGpuConformance` cases, including queued draw lifetime,
+uploads/readbacks, compute chaining and classic/compute/classic state isolation.
+The DX12 selection additionally exercised 4,096 queued uploads/copies, typed
+storage images, disposed public textures, indirect command buffers, timer
+recreation, and PIX marker recreation. The DX11 selection included both effect
+texture lifetime cases, native compute and image transfers, indirect draws,
+storage textures, and ShaderEffect factory lifetime. These are memory-safety
+and selected lifetime tests, not a whole-suite ASan or leak-detector claim.
+
+```powershell
+cmake -S C:\rv\src\cna -B C:\rv\build\cna-win11-dx12-asan -G 'Visual Studio 17 2022' -A x64 -T v143 -DCNA_PLATFORM=WIN32 -DCNA_AUDIO_PLATFORM=NULL -DCNA_GRAPHICS_RENDERER=DIRECTX12 -DCNA_CNAEXT=ON -DCNA_ENABLE_SDL=OFF -DCNA_ENABLE_VIDEO=OFF -DCNA_ENABLE_FONT_PIPELINE=OFF -DCNA_ENABLE_NET=ON -DCNA_ENABLE_DRACO=OFF -DCNA_BUILD_TESTS=ON -DCNA_BUILD_EXAMPLES=OFF -DCNA_USE_CCACHE=OFF '-DCMAKE_CXX_FLAGS=/EHsc /fsanitize=address' '-DCMAKE_C_FLAGS=/fsanitize=address' '-DCMAKE_CXX_FLAGS_DEBUG=/MDd /Zi /Od /Ob0 /fsanitize=address' '-DCMAKE_C_FLAGS_DEBUG=/MDd /Zi /Od /Ob0 /fsanitize=address' '-DCMAKE_EXE_LINKER_FLAGS_DEBUG=/DEBUG /INCREMENTAL:NO'
+cmake --build C:\rv\build\cna-win11-dx12-asan --config Debug --target CnaGraphicsExtTests --parallel 12
+cmake -S C:\rv\src\cna -B C:\rv\build\cna-win11-dx11-asan -G 'Visual Studio 17 2022' -A x64 -T v143 -DCNA_PLATFORM=WIN32 -DCNA_AUDIO_PLATFORM=NULL -DCNA_GRAPHICS_RENDERER=DIRECTX11 -DCNA_CNAEXT=ON -DCNA_ENABLE_SDL=OFF -DCNA_ENABLE_VIDEO=OFF -DCNA_ENABLE_FONT_PIPELINE=OFF -DCNA_ENABLE_NET=ON -DCNA_ENABLE_DRACO=OFF -DCNA_BUILD_TESTS=ON -DCNA_BUILD_EXAMPLES=OFF -DCNA_USE_CCACHE=OFF '-DCMAKE_CXX_FLAGS=/EHsc /fsanitize=address' '-DCMAKE_C_FLAGS=/fsanitize=address' '-DCMAKE_CXX_FLAGS_DEBUG=/MDd /Zi /Od /Ob0 /fsanitize=address' '-DCMAKE_C_FLAGS_DEBUG=/MDd /Zi /Od /Ob0 /fsanitize=address' '-DCMAKE_EXE_LINKER_FLAGS_DEBUG=/DEBUG /INCREMENTAL:NO'
+cmake --build C:\rv\build\cna-win11-dx11-asan --config Debug --target CnaGraphicsExtTests --parallel 12
+$env:ASAN_OPTIONS='halt_on_error=1'
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='0'
+$filter='D3D12StorageBufferTest.*:D3D12ComputeRecoveryTest.*:D3D12ComputeBindingTest.*:D3D12StorageTextureTest.*:D3D12OrdinaryImageTest.*:ModernGpuConformance.*:IndirectDrawTest.*:D3D12GpuTimerTest.*:D3D12DebugMarkerTest.*'
+$exe='C:\rv\build\cna-win11-dx12-asan\Debug\CnaGraphicsExtTests.exe'
+$commandLine='"'+$exe+'" --gtest_color=no --gtest_filter='+$filter
+& C:\rv\work\private_desktop_awake.exe 1800000 $commandLine *> C:\rv\logs\dx12-modern-asan-focused-2.log
+$env:CNA_D3D11_DEBUG_LAYER='1'
+$filter='D3D11EffectTextureLifetimeTest.*:D3D11NativeComputeTest.*:ModernGpuConformance.*:IndirectDrawTest.*:ShaderEffectFactoryTest.*:StorageTexture2DTest.*'
+$exe='C:\rv\build\cna-win11-dx11-asan\Debug\CnaGraphicsExtTests.exe'
+$commandLine='"'+$exe+'" --gtest_color=no --gtest_filter='+$filter
+& C:\rv\work\private_desktop_awake.exe 1800000 $commandLine *> C:\rv\logs\dx11-modern-asan-focused-1.log
+```
