@@ -1040,3 +1040,26 @@ $env:CNA_D3D11_DEBUG_LAYER='1'
 & C:\rv\work\private_desktop_awake.exe 900000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=D3D11EffectTextureLifetimeTest.*:ParticleSystemTest.*:GpuInstanceCullerTest.*:D3D11NativeComputeTest.*:ShaderPackageOverloadTest.*' *> C:\rv\logs\dx11-effect-texture-lifetime-related-1.log
 & C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsTests.exe --gtest_color=no --gtest_filter=ShaderEffectTest.*:EffectApplyTest.*:DrawRouteValidation.*' *> C:\rv\logs\dx11-effect-texture-classic-focused.log
 ```
+
+## DX11 compute frustum culling, 2026-09-26
+
+WIN11-0041: the renderer-neutral `ComputeCullingTest` previously skipped DX11
+because its legacy payload existed only in GLSL ES. Added an HLSL compute
+variant that reads the same 625 box centres/extents and six outward-facing XNA
+frustum planes from raw storage buffers, writes one visibility word per box,
+and uses the existing `uCount` uniform contract. The test still compares every
+GPU answer to `FrustumCullerEXT` and requires a nontrivial visible/culled split.
+The physical Intel `8086:46A6` run passed **1/1**, no skip/fail and zero D3D11
+debug warnings/errors (`C:\rv\logs\dx11-compute-culling-focused-1.log`). A
+combined culling/clustered-compute run passed **20/20** from three suites on
+the same physical adapter with the debug layer enabled and no reported
+warnings/errors (`C:\rv\logs\dx11-compute-culling-related-1.log`). The HLSL
+branch is selected by the current shader-language capability; existing GLSL
+execution remains the path on its own renderers.
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsExtTests --parallel 8
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ComputeCullingTest.*' *> C:\rv\logs\dx11-compute-culling-focused-1.log
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=ComputeCullingTest.*:GpuInstanceCullerTest.*:ClusteredLightComputeTest.*' *> C:\rv\logs\dx11-compute-culling-related-1.log
+```

@@ -13,6 +13,7 @@
 
 #include "CNA/Graphics/ComputeShader.hpp"
 #include "CNA/Graphics/FrustumCullerEXT.hpp"
+#include "CNA/Graphics/ShaderCodeEXT.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/BoundingBox.hpp"
@@ -25,6 +26,7 @@
 #include "EngineTestSupport.hpp"
 
 #include <array>
+#include <memory>
 #include <vector>
 
 using Microsoft::Xna::Framework::BoundingBox;
@@ -72,6 +74,31 @@ void main() {
 }
 )";
 
+    const char* const kCullerHlsl = R"(
+RWByteAddressBuffer Boxes : register(u0);
+RWByteAddressBuffer Visible : register(u1);
+RWByteAddressBuffer Planes : register(u2);
+cbuffer CullerParameters : register(b0) { int uCount; };
+
+[numthreads(64, 1, 1)]
+void main(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint index = dispatchId.x;
+    if (index >= uint(uCount)) return;
+    float3 centre = asfloat(Boxes.Load3(index * 32));
+    float3 extent = asfloat(Boxes.Load3(index * 32 + 16));
+    uint inside = 1;
+    for (uint i = 0; i < 6; ++i)
+    {
+        float4 plane = asfloat(Planes.Load4(i * 16));
+        float radius = dot(extent, abs(plane.xyz));
+        if (dot(plane.xyz, centre) + plane.w - radius > 0.0f)
+            inside = 0;
+    }
+    Visible.Store(index * 4, inside);
+}
+)";
+
 } // namespace
 
 TEST(ComputeCullingTest, TheGpuCullerAgreesWithTheCpuOneBoxForBox)
@@ -79,8 +106,10 @@ TEST(ComputeCullingTest, TheGpuCullerAgreesWithTheCpuOneBoxForBox)
     CnaTest::EngineLayer::HiDefDevice gd;
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ComputeShaders))
         GTEST_SKIP() << "this renderer does not support compute shaders";
-    if (!CnaTest::EngineLayer::RunsLegacyComputeSource(gd))
-        GTEST_SKIP() << "this legacy culler payload has no form in the renderer's dialect";
+    const bool hlsl = gd.SupportsShaderLanguageEXT(
+        CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Compute);
+    if (!hlsl && !CnaTest::EngineLayer::RunsLegacyComputeSource(gd))
+        GTEST_SKIP() << "this culler has no payload in the renderer's shader dialect";
 
     const Matrix view = Matrix::CreateLookAt(Vector3(0.0f, 10.0f, 30.0f), Vector3::Zero,
                                              Vector3(0.0f, 1.0f, 0.0f));
@@ -120,12 +149,20 @@ TEST(ComputeCullingTest, TheGpuCullerAgreesWithTheCpuOneBoxForBox)
     StorageBufferT<Vector4> planeBuffer(gd, 6);
     planeBuffer.setData(gpuPlanes);
 
-    ComputeShader shader(gd, CnaTest::EngineLayer::LegacyComputeSource(gd, kCuller));
-    shader.bindStorageBuffer(0, boxBuffer.getBuffer());
-    shader.bindStorageBuffer(1, visibleBuffer.getBuffer());
-    shader.bindStorageBuffer(2, planeBuffer.getBuffer());
-    shader.setUniform("uCount", count);
-    shader.dispatch((count + 63) / 64);
+    std::unique_ptr<ComputeShader> shader;
+    if (hlsl)
+        shader = std::make_unique<ComputeShader>(
+            gd, CNA::Graphics::ShaderCodeEXT(
+                CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Compute,
+                "main", "compute_culling.directx.comp.hlsl", kCullerHlsl));
+    else
+        shader = std::make_unique<ComputeShader>(
+            gd, CnaTest::EngineLayer::LegacyComputeSource(gd, kCuller));
+    shader->bindStorageBuffer(0, boxBuffer.getBuffer());
+    shader->bindStorageBuffer(1, visibleBuffer.getBuffer());
+    shader->bindStorageBuffer(2, planeBuffer.getBuffer());
+    shader->setUniform("uCount", count);
+    shader->dispatch((count + 63) / 64);
 
     const std::vector<std::int32_t> gpuVisible = visibleBuffer.getData();
     ASSERT_EQ(gpuVisible.size(), static_cast<std::size_t>(count));
