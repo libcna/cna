@@ -1449,3 +1449,41 @@ $env:CNA_D3D11_DEBUG_LAYER='1'
 & C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsTests.exe --gtest_color=no --gtest_filter=Texture2D*' *> C:\rv\logs\dx11-image-binding-classic-texture-suite-1.log
 & C:\rv\work\private_desktop_awake.exe 600000 'ctest --test-dir C:\rv\build\cna-win11-dx11-modern -C Debug -V -R ^DirectX11_ContextRecoveryContract$' *> C:\rv\logs\dx11-image-binding-recovery-verbose-1.log
 ```
+
+The complete post-image-binding DX11 modern binary then ran **994 tests from
+127 suites: 979 pass, 15 skip, 0 fail** in 1,982,923 ms on the private
+desktop (`C:\rv\logs\dx11-modern-full-after-image-binding-1.log`). The log
+contains 694 explicit physical Intel Iris Xe `8086:46A6, software=0` device
+selections, feature level `11_1`, debug layer enabled, no other selected
+adapter, and zero D3D11 debug-layer warning/error/corruption messages. The
+15 skip names are in the final summary; the former raw `Texture2D` image
+binding skip is absent. This run predates the marker and HLSL probe changes
+below.
+
+```powershell
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 7200000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no' *> C:\rv\logs\dx11-modern-full-after-image-binding-1.log
+```
+
+## DX11 native debug markers, 2026-09-26
+
+WIN11-0053: `GraphicsDevice::SetStringMarkerEXT` now reaches D3D11's
+`ID3DUserDefinedAnnotation::SetMarker` on the immediate context. The DX11
+renderer converts its existing UTF-8 public label to UTF-16, ignores empty
+labels, caches the optional context annotation interface, releases it before
+context teardown, and reacquires it on device recovery. A native test checks
+the real annotation interface and calls the public marker before and after
+simulated context loss/recovery. It passed **1/1** on Intel `8086:46A6`,
+`software=0`, D3D11 debug enabled; no debug-layer messages. The test proves
+the callable D3D11 annotation path and recovery lifetime, not the appearance
+of labels in an external graphics capture.
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx11-modern --config Debug --target CnaGraphicsExtTests --parallel 8
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 600000 'C:\rv\build\cna-win11-dx11-modern\Debug\CnaGraphicsExtTests.exe --gtest_color=no --gtest_filter=AerialPerspectiveTest.TheShaderAgreesWithTheCpuTwinOnAirMass:ThinFilmIridescenceTest.TheShaderMatchesTheCpuReference:D3D11NativeComputeTest.DebugMarkersFollowTheImmediateContextAcrossRecovery' *> C:\rv\logs\dx11-marker-hlsl-focused-1.log
+```
+
+Build log: `C:\rv\logs\dx11-marker-hlsl-relink-1.log`. The combined three-case
+physical run passed **3/3**, zero skips/failures, four explicit Intel adapter
+selections (the marker case recreates its device), and zero D3D11 diagnostics.

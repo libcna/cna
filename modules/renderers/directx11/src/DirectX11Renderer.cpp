@@ -536,6 +536,7 @@ namespace CNA::Internal::Renderers::DirectX11
             throw std::runtime_error("D3D11CreateDevice failed, hr=" + FormatHr(hr));
         }
 
+        context_.As(&annotation_);
         debugLayerEnabled_ = (flags & D3D11_CREATE_DEVICE_DEBUG) != 0;
         if (debugLayerEnabled_ && SUCCEEDED(device_.As(&infoQueue_)))
         {
@@ -905,6 +906,7 @@ namespace CNA::Internal::Renderers::DirectX11
         DrainDebugMessagesEXT();
         D3DCommon::D3DDebugLayerLog::UnregisterLiveQueue(this);
         infoQueue_.Reset();
+        annotation_.Reset();
         context_.Reset();
         device_.Reset();
         factory_.Reset();
@@ -1522,6 +1524,18 @@ namespace CNA::Internal::Renderers::DirectX11
     {
         if (!SupportsGpuTimerEXT()) return nullptr;
         return std::make_unique<D3D11GpuTimerRenderer>(device_.Get(), context_.Get());
+    }
+
+    void DirectX11Renderer::SetStringMarkerEXT(const char* marker)
+    {
+        if (marker == nullptr || marker[0] == '\0' || !annotation_)
+            return;
+        const int length = MultiByteToWideChar(CP_UTF8, 0, marker, -1, nullptr, 0);
+        if (length <= 1) return;
+        std::wstring wide(static_cast<std::size_t>(length), L'\0');
+        if (MultiByteToWideChar(CP_UTF8, 0, marker, -1, wide.data(), length) != length)
+            return;
+        annotation_->SetMarker(wide.c_str());
     }
 
     bool DirectX11Renderer::SupportsIndirectDrawEXT() const

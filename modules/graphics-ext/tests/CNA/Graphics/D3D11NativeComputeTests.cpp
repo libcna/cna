@@ -58,6 +58,31 @@ TEST(D3D11NativeComputeTest, VertexAndColorLimitsMatchTheNativeDrawPaths)
     EXPECT_EQ(colors.value, 4u);
 }
 
+#ifdef CNA_RENDERER_DIRECTX11
+TEST(D3D11NativeComputeTest, DebugMarkersFollowTheImmediateContextAcrossRecovery)
+{
+    using CNA::Internal::Renderers::DirectX11::DirectX11Renderer;
+    CnaTest::EngineLayer::HiDefDevice device;
+    auto* renderer = dynamic_cast<DirectX11Renderer*>(&device.GetRenderer());
+    ASSERT_NE(renderer, nullptr);
+
+    Microsoft::WRL::ComPtr<ID3DUserDefinedAnnotation> original;
+    ASSERT_TRUE(SUCCEEDED(renderer->GetContextEXT()->QueryInterface(
+        IID_PPV_ARGS(original.GetAddressOf()))));
+    device.SetStringMarkerEXT("CNA D3D11 marker \xE2\x9C\x93");
+    device.SetStringMarkerEXT("");
+    renderer->SetStringMarkerEXT(nullptr);
+    original.Reset();
+
+    renderer->DebugSimulateContextLoss();
+    renderer->DebugRestoreContext();
+    Microsoft::WRL::ComPtr<ID3DUserDefinedAnnotation> restored;
+    ASSERT_TRUE(SUCCEEDED(renderer->GetContextEXT()->QueryInterface(
+        IID_PPV_ARGS(restored.GetAddressOf()))));
+    device.SetStringMarkerEXT("CNA D3D11 recovered marker");
+}
+#endif
+
 TEST(D3D11NativeComputeTest, AComputeWriteRoundTripsThroughGpuStorage)
 {
     CnaTest::EngineLayer::HiDefDevice device;

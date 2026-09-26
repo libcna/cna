@@ -11,6 +11,7 @@
 #include "D3D11StateObjectCache.hpp"
 
 #include <d3d11.h>
+#include <d3d11_1.h>
 #include <dxgi1_5.h>
 #include <wrl/client.h>
 
@@ -18,6 +19,7 @@
 #include <array>
 #include <functional>
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -240,6 +242,11 @@ namespace CNA::Internal::Renderers::DirectX11
          * @return A timestamp query, or null when unsupported.
          */
         std::unique_ptr<IGpuTimerRenderer> CreateGpuTimerEXT() override;
+        /**
+         * @brief Inserts a UTF-8 label into the D3D11 immediate context's annotation stream.
+         * @param marker Label to emit; null and empty labels are ignored.
+         */
+        void SetStringMarkerEXT(const char* marker) override;
 
         /**
          * @brief Reports native GPU-fetched indirect draw support.
@@ -804,6 +811,7 @@ namespace CNA::Internal::Renderers::DirectX11
         // Device lifetime (plans/plan_dx.md design decision 11).
         ComPtr<ID3D11Device> device_;
         ComPtr<ID3D11DeviceContext> context_;
+        ComPtr<ID3DUserDefinedAnnotation> annotation_;
         ComPtr<IDXGIFactory2> factory_;
         /// WINCLOSE-0024: stock shader objects, keyed by D3DShaderVariant, for this device only.
         std::unordered_map<int, ComPtr<ID3D11VertexShader>> stockVertexShaders_;
