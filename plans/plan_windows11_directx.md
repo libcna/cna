@@ -26,6 +26,10 @@ off passes (WIN11-0080/0087/0093). `cna-street`, `cna-car-simulator`, and
 renderers. WIN11-0091 also closed a DX12 first-frame swap-chain size defect.
 The high-cardinality combined-diagnostics exception remains open.
 
+After the WIN11-0091 first-frame fix was committed, both earlier DX12
+applications were rebuilt and rerun against CNA `a5854b9464d78859259f0551bc8a42fbf9ee2800`
+(WIN11-0094). Their short Intel hardware runs passed with debug layer and DRED.
+
 ## Stable source and machine baseline
 
 | Item | Measured value |
@@ -3590,4 +3594,43 @@ $env:CNA_D3D12_DEBUG_LAYER='1'
 $env:CNA_D3D12_GPU_VALIDATION='1'
 $env:CNA_D3D12_DRED='0' # or '1' for the failing combined-diagnostics control
 & C:\rv\work\private_desktop_awake.exe 90000 '"C:\rv\build\cna-win11-dx12-debug\Debug\cna_test_directx12_descriptor_capacity.exe" --legs ABCD'
+```
+
+### WIN11-0094: Revalidate DX12 applications after the first-frame fix
+
+The existing `cna-street-dx12` and `cna-car-simulator-dx12` out-of-tree
+Debug trees were rebuilt with Visual Studio 2022 x64, MSVC v143, and
+`--parallel 12` against CNA `a5854b9464d78859259f0551bc8a42fbf9ee2800`.
+The application branches remained at `962188720db8db9b37f22b4cd2194fd15feb7cb4`
+and `81380b56961b6a23bcb68934f880e8f5c1a0303b`, respectively. These
+incremental builds passed. DX11 application binaries needed no rebuild because
+WIN11-0091 changed only the DX12 renderer and its native stress test.
+
+On the private desktop, the updated cna-street rendered 12 low-preset frames
+at 800x480 and saved `cna-street-dx12-post-first-frame-12.png`; the updated
+cna-car-simulator loaded the Lipova map, built 1,920 terrain chunks and 143
+road batches, warmed 20 traffic cars, rendered 30 lockstep frames at 640x360,
+and saved `cna-car-simulator-dx12-post-first-frame-30.png`. Both processes
+exited 0. The screenshots were opened and showed the expected street and
+exterior car scenes. Both selected the physical Intel Iris Xe `8086:46A6`,
+FL 12_1, with the D3D12 debug layer and DRED enabled, routine GBV off.
+Neither log contains a renderer warning/error or device removal. The
+simulator's observed process working set during map load was about 4.5 GiB;
+system free memory returned to over 6 GiB after it exited.
+
+Logs: `C:\rv\logs\cna-street-dx12-post-first-frame-build.log`,
+`C:\rv\logs\cna-street-dx12-post-first-frame-12.log`,
+`C:\rv\logs\cna-car-simulator-dx12-post-first-frame-build.log`, and
+`C:\rv\logs\cna-car-simulator-dx12-post-first-frame-30.log`. The PNGs are
+under `C:\rv\artifacts` with the same basename as their run logs.
+
+```powershell
+cmake --build C:\rv\build\cna-street-dx12 --config Debug --target cna-street --parallel 12
+cmake --build C:\rv\build\cna-car-simulator-dx12 --config Debug --target cna-car-simulator --parallel 12
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='0'
+& C:\rv\work\private_desktop_awake.exe 900000 '"C:\rv\build\cna-street-dx12\bin\Debug\cna-street.exe" --frames 12 --width 800 --height 480 --preset low --no-audio --no-overlay --screenshot C:\rv\artifacts\cna-street-dx12-post-first-frame-12.png'
+& C:\rv\work\private_desktop_awake.exe 900000 '"C:\rv\build\cna-car-simulator-dx12\bin\Debug\cna-car-simulator.exe" --no-save --no-audio --lockstep --frames 30 --width 640 --height 360 --quality low --spawn square --route town --route-stay --traffic-warmup 20 --time 17:30 --time-scale 0 --weather cloudy --screenshot C:\rv\artifacts\cna-car-simulator-dx12-post-first-frame-30.png'
 ```
