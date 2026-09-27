@@ -167,11 +167,11 @@ namespace CNA::Internal::Renderers::Software
             // D3D9/11 and OpenGL define MIN/MAX on the unmodified source and destination; both
             // factors are ignored for these operations. FNA3D maps the XNA functions directly to
             // those native operations, so factoring first would diverge whenever either factor is
-            // not One (zero-factor cases are pinned by the shared blend matrix).
-            if (function == 3)
-                return std::max(source[channel], destination[channel]);
-            if (function == 4)
-                return std::min(source[channel], destination[channel]);
+            // not One (zero-factor cases are pinned by the shared blend matrix). SOFTWARE-485: the
+            // ordinal mapping stays in ApplyBlendFunction alone; a second copy here kept FNA's
+            // Max=3/Min=4 after XNA-MEMBER-002 moved to XNA's Min=3/Max=4.
+            if (function == 3 || function == 4)
+                return ApplyBlendFunction(function, source[channel], destination[channel]);
             const float sourceTerm = source[channel] *
                 BlendFactorComponent(sourceFactor, channel, source, destination, constant);
             const float destinationTerm = destination[channel] *
