@@ -21,7 +21,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/D3D9EffectRenderer.cpp")
     list(REMOVE_ITEM _cna_d3d9_sources ${D3D9_EFFECT_BACKEND_SOURCES})
     add_library(cna_renderer_d3d9_effect STATIC ${D3D9_EFFECT_BACKEND_SOURCES})
     target_link_libraries(cna_renderer_d3d9_effect PUBLIC cna_renderer_common)
-    cna_link_sharp_runtime(cna_renderer_d3d9_effect PUBLIC)
+    cna_link_sharp_runtime(cna_renderer_d3d9_effect PUBLIC ${CNA_SHARP_RUNTIME_RENDERER_COMPONENTS})
     target_include_directories(cna_renderer_d3d9_effect PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/include")
     target_link_libraries(cna_renderer_d3d9_effect PRIVATE d3d9 d3dcompiler)

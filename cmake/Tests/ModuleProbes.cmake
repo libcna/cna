@@ -149,6 +149,24 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
                 --forbid "${_cna_native_sdk_forbid}")
     endif()
 
+    # No runtime module brings sharp-runtime's System::Xml stack or its vendored tinyxml2. Every
+    # renderer family used to link the whole CNA closure PUBLIC, Xml included, so anything that
+    # linked a renderer -- which graphics-core, and therefore every module above it, does -- carried
+    # a second tinyxml2 into programs that have their own (cmake/SharpRuntimeConsumption.cmake).
+    # Only the `CNA` umbrella and the build-time content pipeline add it, on purpose.
+    if(Python3_Interpreter_FOUND)
+        foreach(_cna_xmlfree_probe IN ITEMS probe_math probe_core probe_graphics probe_content
+                probe_runtime probe_input probe_audio probe_media probe_storage probe_devices
+                probe_devices_ext probe_graphics_ext)
+            add_test(NAME ModuleLinkClosure_XmlFree_${_cna_xmlfree_probe}
+                COMMAND Python3::Interpreter
+                    "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_module_link_closure.py"
+                    --build-dir "${CMAKE_BINARY_DIR}"
+                    --target ${_cna_xmlfree_probe}
+                    --forbid "libsharp_runtime_(xml|tinyxml2)")
+        endforeach()
+    endif()
+
     # VULKAN closure: the selected renderer's native SDK and nothing from any other family.
     # Same reasoning as the HEADLESS closure above: "the selected renderer's SDK and nothing from
     # any other family" is only a meaningful claim when exactly one renderer is compiled in.

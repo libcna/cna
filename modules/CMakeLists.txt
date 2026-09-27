@@ -416,6 +416,12 @@ else()
     include(${PROJECT_SOURCE_DIR}/cmake/SharedRuntimeLibrary.cmake)
     cmake_language(DEFER DIRECTORY ${PROJECT_SOURCE_DIR} CALL cna_define_shared_runtime_deferred)
 endif()
+# System::Xml for games. The renderer no longer carries it (cmake/SharpRuntimeConsumption.cmake),
+# and none of the parts above uses it, but XNA Game Studio 4.0's game templates reference
+# System.Xml, so an XNA game may use XmlSerializer and XmlDocument without asking -- RolePlayingGame
+# saves its games that way and links only this umbrella. Named on the umbrella rather than on any
+# part, so a program that links CNA modules individually gets no XML stack it did not request.
+cna_link_sharp_runtime(CNA INTERFACE ${CNA_SHARP_RUNTIME_XML_COMPONENTS})
 
 # The C API is a separate shared-library adapter over the canonical C++ aggregate. It remains
 # opt-in until its experimental ABI is proven by the C-only test matrix.

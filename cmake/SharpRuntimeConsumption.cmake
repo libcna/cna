@@ -60,6 +60,21 @@ else()
     list(APPEND CNA_SHARP_RUNTIME_DEFAULT_COMPONENTS Xml.Serialization)
 endif()
 
+# The System::Xml stack is in the closure above so that it is instantiated: the build-time content
+# pipeline needs it (XNAPP-071, IntermediateSerializer) and a game may use XmlSerializer. No runtime
+# module and no renderer includes a System/Xml header, though. A renderer family links the closure
+# PUBLIC, and it used to link all of it, so Xml -- and sharp-runtime's vendored tinyxml2 with it --
+# reached every program that links a renderer, including one that picks CNA modules one by one and
+# brings an XML parser of its own (MeshCraft, whose Mc3 links its own tinyxml2). Renderers link
+# CNA_SHARP_RUNTIME_RENDERER_COMPONENTS instead; the `CNA` umbrella adds the XML components back for
+# games (modules/CMakeLists.txt), and cna_content_pipeline names Xml itself.
+set(CNA_SHARP_RUNTIME_XML_COMPONENTS Xml)
+if(CNA_SHARP_RUNTIME_HAS_XML_SERIALIZATION)
+    list(APPEND CNA_SHARP_RUNTIME_XML_COMPONENTS Xml.Serialization)
+endif()
+set(CNA_SHARP_RUNTIME_RENDERER_COMPONENTS ${CNA_SHARP_RUNTIME_DEFAULT_COMPONENTS})
+list(REMOVE_ITEM CNA_SHARP_RUNTIME_RENDERER_COMPONENTS ${CNA_SHARP_RUNTIME_XML_COMPONENTS})
+
 function(cna_detect_sharp_runtime_shape)
     if(TARGET SharpRuntime::Core.Base)
         set(CNA_SHARP_RUNTIME_IS_MODULAR ON PARENT_SCOPE)

@@ -52,7 +52,9 @@ function(cna_renderer_common_setup target)
         string(REPLACE "," ";" _cna_target_defines "${CNA_RENDERER_TARGET_DEFINE}")
         target_compile_definitions(${RENDERER_TARGET} PRIVATE ${_cna_target_defines})
     endif()
-    cna_link_sharp_runtime(${RENDERER_TARGET} PUBLIC)
+    # Not the whole CNA closure: the System::Xml components stay out of every renderer's PUBLIC
+    # interface (cmake/SharpRuntimeConsumption.cmake).
+    cna_link_sharp_runtime(${RENDERER_TARGET} PUBLIC ${CNA_SHARP_RUNTIME_RENDERER_COMPONENTS})
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include")
         target_include_directories(${RENDERER_TARGET} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
     endif()
