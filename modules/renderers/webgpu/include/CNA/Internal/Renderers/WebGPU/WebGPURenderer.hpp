@@ -4551,9 +4551,10 @@ namespace CNA::Internal::Renderers::WebGPU
          * @return False when @p bytes exceeds a whole chunk; the caller then uses its own buffer.
          */
         bool ReserveArenaEXT(StreamArenaEXT& arena, std::uint64_t bytes);
-        /// Copies @p bytes into the current chunk at the next aligned offset. The caller reserved.
+        /// Copies @p bytes into the current chunk at the next aligned offset, zero-filling up to
+        /// @p paddedBytes when that is larger. The caller reserved.
         [[nodiscard]] ArenaSliceEXT AppendArenaEXT(StreamArenaEXT& arena, const void* data,
-                                                   std::size_t bytes);
+                                                   std::size_t bytes, std::size_t paddedBytes = 0);
         /**
          * @brief Appends @p blocks to the uniform arena in one chunk and returns the chunk's
          *        dynamic-offset group for @p layout, whose bindings 0..n-1 are those blocks.
@@ -4591,7 +4592,7 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             WGPUBindGroupLayout layout = nullptr;
             std::uint32_t arenaChunk = ~0u;
-            std::array<const void*, 8> handles{};
+            std::array<const void*, 16> handles{};
             bool operator==(const BindingCacheKeyEXT&) const = default;
         };
         struct BindingCacheKeyHashEXT
@@ -4603,7 +4604,7 @@ namespace CNA::Internal::Renderers::WebGPU
         struct BindingCacheEntryEXT
         {
             WGPUBindGroup group = nullptr;
-            std::array<std::shared_ptr<const WebGPUSampledResourceEXT>, 7> keepAlive{};
+            std::array<std::shared_ptr<const WebGPUSampledResourceEXT>, 8> keepAlive{};
             std::uint64_t lastUsedFrame = 0;
         };
         /**
@@ -4617,6 +4618,15 @@ namespace CNA::Internal::Renderers::WebGPU
             const BindingCacheKeyEXT& key,
             std::initializer_list<const WebGPUSampledTextureEXT*> textures,
             const WGPUBindGroupDescriptor& descriptor);
+        /// The same, for a texture list built at run time (a compiled effect's sampler slots).
+        [[nodiscard]] WGPUBindGroup AcquireCachedBindGroupEXT(
+            const BindingCacheKeyEXT& key,
+            const std::vector<const WebGPUSampledTextureEXT*>& textures,
+            const WGPUBindGroupDescriptor& descriptor);
+        /// The one implementation both overloads forward to.
+        [[nodiscard]] WGPUBindGroup AcquireCachedBindGroupEXT(
+            const BindingCacheKeyEXT& key, const WebGPUSampledTextureEXT* const* textures,
+            std::size_t textureCount, const WGPUBindGroupDescriptor& descriptor);
         /**
          * @brief WEBGPUPERF-0007: a sampler-and-texture group from the binding cache, keyed from
          *        @p descriptor itself.
@@ -5834,6 +5844,15 @@ namespace CNA::Internal::Renderers::WebGPU
                 std::vector<std::uint8_t> data;
                 std::uint64_t arrayStride = 0;
                 bool perInstance = false;
+                /// plans/plan_webgpu_perf.md WEBGPUPERF-0008: the vertex buffer's own storage, bound
+                /// in place where `data` used to carry a copy of the whole buffer -- the stock
+                /// families' STREETPERF-0004 rule. Holding it is what makes a later `SetData` move
+                /// the buffer to fresh storage rather than rewrite what this draw reads.
+                std::shared_ptr<WebGPUBufferStorageEXT> storage;
+                std::uint64_t storageOffset = 0;  ///< Byte offset of the draw's first record.
+                std::uint64_t storageSize = 0;    ///< Bytes bound from there.
+                /// Whether the draw has bytes to bind for this stream, copied or resident.
+                [[nodiscard]] bool HasSource() const { return !data.empty() || storage != nullptr; }
             };
             /// One resolved sampler slot: the view, its keep-alive, and the native sampler.
             struct SamplerBinding
