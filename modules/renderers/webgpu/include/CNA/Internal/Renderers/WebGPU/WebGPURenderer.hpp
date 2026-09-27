@@ -671,7 +671,9 @@ namespace CNA::Internal::Renderers::WebGPU
      * A queued draw binds the storage its buffer had when the draw was issued and keeps it alive
      * until the frame is submitted. A `SetData` while a queued draw still holds the storage moves
      * the buffer to fresh storage -- `wgpuQueueWriteBuffer` is ordered before the frame's own
-     * later submission, so writing in place would change what the queued draw reads.
+     * later submission, so writing in place would change what the queued draw reads. A draw that
+     * is already recorded but not yet submitted is covered the other way: `SetData` submits the
+     * frame encoder first (WEBGPUPERF-0006).
      */
     struct WebGPUBufferStorageEXT
     {
@@ -1880,6 +1882,23 @@ namespace CNA::Internal::Renderers::WebGPU
 
         [[nodiscard]] WGPUDevice Device() const { return device_; }
         [[nodiscard]] WGPUQueue Queue() const { return queue_; }
+        /**
+         * @brief plans/plan_webgpu_perf.md WEBGPUPERF-0006: submits the frame's encoded passes
+         *        before queue work that must come after them.
+         *
+         * Every flush of a bind cycle records into one command encoder per frame, which is
+         * submitted when the back buffer is flushed or presented -- a render-target switch used to
+         * cost a submission of its own, most of it the kernel call. Anything that touches the queue
+         * outside a replay calls this first: a queue write executes before the next submission, not
+         * in encoder order, so a `SetData` landing ahead of already-encoded passes would change
+         * what those passes read; and a readback or another submission has to see them done. A
+         * no-op while a replay is recording: the only queue writes there are to per-draw or newly
+         * made resources, which the passes being recorded read.
+         */
+        void OrderExternalQueueWorkEXT()
+        {
+            if (frameEncoderEXT_ != nullptr && replayingEXT_ == 0) SubmitFrameEncoderEXT();
+        }
         [[nodiscard]] WGPUInstance Instance() const { return instance_; }
 
         // WEBGPU-53/54: RenderTarget2D support (single-target only; MRT is WEBGPU-85/86/87).
@@ -2931,6 +2950,21 @@ namespace CNA::Internal::Renderers::WebGPU
          * @param destination Attachments, extents and usage policy of the bound destination.
          */
         void ReplayOrderedSegments(WGPUCommandEncoder encoder, const PassDestination& destination);
+        /**
+         * @brief WEBGPUPERF-0006: what a flush does before it records: consumes any occlusion
+         *        results and uploads the sprites -- either of which may have to submit what the frame
+         *        encoder already holds -- and then returns that encoder.
+         */
+        [[nodiscard]] WGPUCommandEncoder BeginReplayEXT();
+        /// WEBGPUPERF-0006: the frame's encoder, created by the first flush that needs it.
+        [[nodiscard]] WGPUCommandEncoder AcquireFrameEncoderEXT();
+        /// WEBGPUPERF-0006: writes the stream arenas, submits the frame's encoder and releases what
+        /// its passes held. Does nothing when no flush recorded since the last submission.
+        void SubmitFrameEncoderEXT();
+        /// WEBGPUPERF-0006: the encoder the frame's flushes record into, or null.
+        WGPUCommandEncoder frameEncoderEXT_ = nullptr;
+        /// WEBGPUPERF-0006: non-zero while a replay records into the frame encoder.
+        int replayingEXT_ = 0;
         /// REMED-GFX-167: drops the ordered stream and every family vector together, releasing the
         /// native references their commands hold. Called at the tail of a replay and, crucially,
         /// FIRST in the destructor -- these vectors are members, so left populated they would
@@ -2949,8 +2983,14 @@ namespace CNA::Internal::Renderers::WebGPU
         /** @brief Drops queued sprites, and their ordered-stream entries, without replaying them. */
         void DiscardQueuedSprites();
 
-        /** @brief Uploads every queued sprite's vertices into the shared sprite vertex buffer. */
+        /**
+         * @brief Uploads every queued sprite's vertices: into the vertex arena
+         *        (WEBGPUPERF-0006), or, when they do not fit a chunk, into the shared sprite vertex
+         *        ring after submitting what the frame encoder holds.
+         */
         void UploadSpriteVertices();
+        /// WEBGPUPERF-0006: byte offset of this flush's sprite vertices in @ref spriteVertexBuffer_.
+        std::uint64_t spriteVertexOffsetEXT_ = 0;
 
         /**
          * @brief Restores the pass state a preceding sprite may have changed, before a 3D draw.
@@ -3930,7 +3970,9 @@ namespace CNA::Internal::Renderers::WebGPU
         std::array<WGPUBuffer, kSpriteVertexRing> spriteVertexRing_{};
         std::array<std::uint64_t, kSpriteVertexRing> spriteVertexRingCapacity_{};
         std::size_t spriteVertexRingIndex_ = 0;
-        WGPUBuffer spriteVertexBuffer_ = nullptr;        ///< Non-owning alias of the active ring slot.
+        /// Non-owning alias of the active ring slot, or (WEBGPUPERF-0006) of the vertex-arena chunk
+        /// holding this cycle's sprites, at @ref spriteVertexOffsetEXT_.
+        WGPUBuffer spriteVertexBuffer_ = nullptr;
         /// WEBGPU-154: the shared 12-index line list every wireframe sprite draws through.
         WGPUBuffer spriteWireIndexBuffer_ = nullptr;
         /// WEBGPU-155: the shared 16-byte (0,0,0,1) neutral vertex record, bound at array stride 0
@@ -4489,6 +4531,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // still references them (before wgpuQueueSubmit) would race the recorded-but-not-yet-
         // executed commands.
         std::vector<WGPUBuffer> pendingBufferReleases_;
+        /// WEBGPUPERF-0006: back-buffer views a recorded pass writes, released at its submission.
+        std::vector<WGPUTextureView> pendingTextureViewReleasesEXT_;
         std::vector<WGPUBindGroup> pendingBindGroupReleases_;
 
         // ---- plans/plan_webgpu_perf.md WEBGPUPERF-0001..0004: the per-draw binding cost ----------
@@ -4505,6 +4549,7 @@ namespace CNA::Internal::Renderers::WebGPU
         void QueueWriteBufferEXT(WGPUBuffer buffer, std::uint64_t offset, const void* data,
                                  std::size_t size)
         {
+            OrderExternalQueueWorkEXT();   // WEBGPUPERF-0006.
             ++queueWritesEXT_;
             queueWriteBytesEXT_ += size;
             wgpuQueueWriteBuffer(queue_, buffer, offset, data, size);

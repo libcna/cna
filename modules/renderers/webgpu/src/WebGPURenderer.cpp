@@ -1615,6 +1615,9 @@ namespace CNA::Internal::Renderers::WebGPU
 
     void WebGPUTextureRenderer::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
     {
+        // WEBGPUPERF-0006: a queue write lands before the next submission, ahead of passes already
+        // encoded that still read the old contents.
+        if (owner_ != nullptr) owner_->OrderExternalQueueWorkEXT();
         if (level < 0 || level >= mipLevels_ || rgba == nullptr || levelW <= 0 || levelH <= 0)
             throw std::invalid_argument("CNA WebGPU: invalid mip upload");
 
@@ -1728,6 +1731,7 @@ namespace CNA::Internal::Renderers::WebGPU
         if (readbackBuffer == nullptr)
             throw std::runtime_error("CNA WebGPU: Texture2D.GetData: failed to create readback buffer");
 
+        owner_->OrderExternalQueueWorkEXT();   // WEBGPUPERF-0006: passes that wrote it may be unsubmitted.
         WGPUCommandEncoderDescriptor encoderDescriptor{};
         encoderDescriptor.label = StringView("CNA WebGPU Texture2D Readback Encoder");
         WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(owner_->Device(), &encoderDescriptor);
@@ -1901,6 +1905,9 @@ namespace CNA::Internal::Renderers::WebGPU
     bool WebGPUTextureCubeRenderer::SetData(int face, int level, int x, int y, int w, int h,
                                             const void* data, int dataLength)
     {
+        // WEBGPUPERF-0006: a queue write lands before the next submission, ahead of passes already
+        // encoded that still read the old contents.
+        if (owner_ != nullptr) owner_->OrderExternalQueueWorkEXT();
         // REMED-GFX-135: these were `throw std::out_of_range`/`std::invalid_argument` from inside a
         // renderer, so a request this renderer cannot store escaped the public API as a raw std
         // exception rather than the shared layer's own deterministic System::NotSupportedException.
@@ -1954,6 +1961,9 @@ namespace CNA::Internal::Renderers::WebGPU
                                                          int w, int h,
                                                          const void* data, int dataLength)
     {
+        // WEBGPUPERF-0006: a queue write lands before the next submission, ahead of passes already
+        // encoded that still read the old contents.
+        if (owner_ != nullptr) owner_->OrderExternalQueueWorkEXT();
         // WEBGPU-206: the block route. TextureCube::SetData's compressed overload has already
         // checked block alignment and computed the exact payload size, so what is left here is the
         // native copy and keeping the blocks as the authoritative store.
@@ -2131,6 +2141,7 @@ namespace CNA::Internal::Renderers::WebGPU
         if (readbackBuffer == nullptr)
             throw std::runtime_error("CNA WebGPU: TextureCube.GetData: failed to create readback buffer");
 
+        owner_->OrderExternalQueueWorkEXT();   // WEBGPUPERF-0006: passes that wrote it may be unsubmitted.
         WGPUCommandEncoderDescriptor encoderDescriptor{};
         encoderDescriptor.label = StringView("CNA WebGPU TextureCube Readback Encoder");
         WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(owner_->Device(), &encoderDescriptor);
@@ -2507,6 +2518,7 @@ namespace CNA::Internal::Renderers::WebGPU
         if (readbackBuffer == nullptr)
             throw std::runtime_error("CNA WebGPU: RenderTargetCube.GetData: failed to create readback buffer");
 
+        owner_->OrderExternalQueueWorkEXT();   // WEBGPUPERF-0006: passes that wrote it may be unsubmitted.
         WGPUCommandEncoderDescriptor encoderDescriptor{};
         encoderDescriptor.label = StringView("CNA WebGPU RenderTargetCube Readback Encoder");
         WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(owner_->Device(), &encoderDescriptor);
@@ -2634,6 +2646,9 @@ namespace CNA::Internal::Renderers::WebGPU
                                           int w, int h, int depth,
                                           const void* data, int dataLength)
     {
+        // WEBGPUPERF-0006: a queue write lands before the next submission, ahead of passes already
+        // encoded that still read the old contents.
+        if (owner_ != nullptr) owner_->OrderExternalQueueWorkEXT();
         // REMED-GFX-135: see WebGPUTextureCubeRenderer::SetData for why these are results, not
         // throws.
         if (level < 0 || level >= mipLevels_) return false;
@@ -2692,6 +2707,7 @@ namespace CNA::Internal::Renderers::WebGPU
         if (readbackBuffer == nullptr)
             throw std::runtime_error("CNA WebGPU: Texture3D.GetData: failed to create readback buffer");
 
+        owner_->OrderExternalQueueWorkEXT();   // WEBGPUPERF-0006: passes that wrote it may be unsubmitted.
         WGPUCommandEncoderDescriptor encoderDescriptor{};
         encoderDescriptor.label = StringView("CNA WebGPU Texture3D Readback Encoder");
         WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(owner_->Device(), &encoderDescriptor);
@@ -3103,6 +3119,7 @@ namespace CNA::Internal::Renderers::WebGPU
         if (readbackBuffer == nullptr)
             throw std::runtime_error("CNA WebGPU: RenderTarget2D.GetData: failed to create readback buffer");
 
+        owner_->OrderExternalQueueWorkEXT();   // WEBGPUPERF-0006: passes that wrote it may be unsubmitted.
         WGPUCommandEncoderDescriptor encoderDescriptor{};
         encoderDescriptor.label = StringView("CNA WebGPU RenderTarget2D Readback Encoder");
         WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(owner_->Device(), &encoderDescriptor);
@@ -3263,6 +3280,9 @@ namespace CNA::Internal::Renderers::WebGPU
                                                         std::size_t strideInBytes,
                                                         SetDataOptions)
     {
+        // WEBGPUPERF-0006: a queue write lands before the next submission, ahead of passes already
+        // encoded that still read the old contents.
+        if (owner_ != nullptr) owner_->OrderExternalQueueWorkEXT();
         if (vertexCount < 0 || strideInBytes == 0)
             throw std::invalid_argument("CNA WebGPU: invalid vertex buffer upload");
         if (vertexCount == 0)
@@ -3336,6 +3356,9 @@ namespace CNA::Internal::Renderers::WebGPU
 
     void WebGPUIndexBufferRenderer::Upload(const void* data, int indexCount, bool dataIsThirtyTwoBit)
     {
+        // WEBGPUPERF-0006: a queue write lands before the next submission, ahead of passes already
+        // encoded that still read the old contents.
+        if (owner_ != nullptr) owner_->OrderExternalQueueWorkEXT();
         if (indexCount < 0 || dataIsThirtyTwoBit != thirtyTwoBit_)
             throw std::invalid_argument("CNA WebGPU: invalid index buffer upload");
         if (indexCount == 0)
@@ -4056,6 +4079,12 @@ namespace CNA::Internal::Renderers::WebGPU
 
     void WebGPURenderer::ReleaseDeviceOwnedObjectsEXT()
     {
+        // WEBGPUPERF-0006: recorded work that will never be submitted.
+        if (frameEncoderEXT_ != nullptr)
+        {
+            wgpuCommandEncoderRelease(frameEncoderEXT_);
+            frameEncoderEXT_ = nullptr;
+        }
         // WEBGPU-182. Everything below was created FROM device_, and every pointer released here is
         // also nulled so the ordinary lazy re-creation paths rebuild it on next use -- which is what
         // lets the destructor and a device recreate share this one function.
@@ -4105,6 +4134,8 @@ namespace CNA::Internal::Renderers::WebGPU
         pendingBindGroupReleases_.clear();
         for (WGPUBuffer buf : pendingBufferReleases_) wgpuBufferRelease(buf);
         pendingBufferReleases_.clear();
+        for (WGPUTextureView view : pendingTextureViewReleasesEXT_) wgpuTextureViewRelease(view);
+        pendingTextureViewReleasesEXT_.clear();
         DestroyTransientBufferPool();
         ReleaseSamplerCache();
         for (const auto& [format, pipe] : mipBlitPipelines_)
@@ -4464,6 +4495,8 @@ namespace CNA::Internal::Renderers::WebGPU
 
     void WebGPURenderer::ConfigureSurface(bool force)
     {
+        // WEBGPUPERF-0006: passes already recorded against the old surface go before it changes.
+        OrderExternalQueueWorkEXT();
         const auto drawableSize = surfaceState_.GetDrawableSize();
         const int width = drawableSize.width;
         const int height = drawableSize.height;
@@ -7593,6 +7626,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     {
         if (texture == nullptr || mipLevels <= 1 || width <= 0 || height <= 0)
             return;
+        OrderExternalQueueWorkEXT();   // WEBGPUPERF-0006: level 0 may still be in the frame encoder.
         const WGPURenderPipeline blitPipeline = EnsureMipBlitPipeline(format);
 
         WGPUCommandEncoderDescriptor encoderDescriptor{};
@@ -8001,9 +8035,34 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     void WebGPURenderer::UploadSpriteVertices()
     {
         spriteVertexBytes_ = 0;
+        spriteVertexOffsetEXT_ = 0;
         if (spriteCommands_.empty())
             return;
-        const std::uint64_t required = Align4(spriteCommands_.size() * 6u * sizeof(SpriteVertex));
+        // REMED-GFX-159: every sprite of the cycle still goes into ONE buffer in ONE write, exactly
+        // as before -- interleaving changes when each sprite is DRAWN, not how its vertices are
+        // staged, so a sprite's vertices stay at offset i*6 and there is still no per-sprite
+        // allocation.
+        std::vector<SpriteVertex> vertices;
+        vertices.reserve(spriteCommands_.size() * 6u);
+        for (const SpriteCommand& command : spriteCommands_)
+            vertices.insert(vertices.end(), command.vertices.begin(), command.vertices.end());
+        spriteVertexBytes_ = vertices.size() * sizeof(SpriteVertex);
+
+        // plans/plan_webgpu_perf.md WEBGPUPERF-0006: the frame encoder holds several bind cycles,
+        // so one cycle's vertices must not overwrite a buffer an earlier, still unsubmitted cycle
+        // draws from. The vertex arena gives each its own range and is written at the submission.
+        if (ReserveArenaEXT(vertexArenaEXT_, spriteVertexBytes_))
+        {
+            const ArenaSliceEXT slice =
+                AppendArenaEXT(vertexArenaEXT_, vertices.data(), spriteVertexBytes_);
+            spriteVertexBuffer_ = slice.buffer;
+            spriteVertexOffsetEXT_ = slice.offset;
+            return;
+        }
+        // Larger than a chunk: the ring, whose queue write lands before the next submission -- so
+        // what the frame encoder already holds is submitted first.
+        OrderExternalQueueWorkEXT();
+        const std::uint64_t required = Align4(spriteVertexBytes_);
         // WEBGPU-59: rotate to the next ring slot BEFORE writing, so this cycle never writes the
         // buffer the previous two submissions are still reading. Grow the chosen slot in place when
         // it is too small. spriteVertexBuffer_/spriteVertexCapacityBytes_ alias the active slot.
@@ -8023,17 +8082,6 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         }
         spriteVertexBuffer_ = slot;
         spriteVertexCapacityBytes_ = slotCapacity;
-
-        // REMED-GFX-159: every sprite of the cycle still goes into ONE buffer in ONE write, exactly
-        // as before -- interleaving changes when each sprite is DRAWN, not how its vertices are
-        // staged, so a sprite's vertices stay at offset i*6 and there is still no per-sprite
-        // allocation. This is a queue-timeline write, so it is ordered against the submit below
-        // rather than against the draws being recorded, and may still happen up front.
-        std::vector<SpriteVertex> vertices;
-        vertices.reserve(spriteCommands_.size() * 6u);
-        for (const SpriteCommand& command : spriteCommands_)
-            vertices.insert(vertices.end(), command.vertices.begin(), command.vertices.end());
-        spriteVertexBytes_ = vertices.size() * sizeof(SpriteVertex);
         QueueWriteBufferEXT(spriteVertexBuffer_, 0, vertices.data(), spriteVertexBytes_);
     }
 
@@ -8241,7 +8289,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // per sprite RUN, not once per sprite.
         if (!state.spriteVerticesBound)
         {
-            wgpuRenderPassEncoderSetVertexBuffer(pass, 0, spriteVertexBuffer_, 0, spriteVertexBytes_);
+            wgpuRenderPassEncoderSetVertexBuffer(pass, 0, spriteVertexBuffer_, spriteVertexOffsetEXT_,
+                                                 spriteVertexBytes_);
             state.spriteVerticesBound = true;
         }
 
@@ -8548,15 +8597,19 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     void WebGPURenderer::ReplayOrderedSegments(WGPUCommandEncoder encoder,
                                                        const PassDestination& destination)
     {
-        // WEBGPU-84: consume any occlusion results a prior flush resolved but nothing has read yet,
-        // before this flush's own resolve overwrites the shared readback buffer. A no-op unless a
-        // previous flush left a pending result (and the prior encoder is already submitted, so the
-        // map completes at once). Polling IsComplete()/PixelCount() drains it the same way.
-        ReadbackOcclusionResults();
-
-        // One upload for the whole bind cycle, before any pass opens: wgpuQueueWriteBuffer is not
-        // legal inside a render pass, and every segment reads the same shared sprite buffer.
-        UploadSpriteVertices();
+        // The occlusion readback and the sprite upload this used to begin with are in
+        // BeginReplayEXT(), which the caller ran to obtain `encoder`: either may submit what the
+        // frame encoder holds, and that has to happen before, not while, this records into it.
+        // WEBGPUPERF-0006: while recording, a queue write must not submit the encoder it records
+        // into -- see OrderExternalQueueWorkEXT().
+        struct ReplayScope
+        {
+            int& depth;
+            explicit ReplayScope(int& d) : depth(d) { ++depth; }
+            ~ReplayScope() { --depth; }
+            ReplayScope(const ReplayScope&) = delete;
+            ReplayScope& operator=(const ReplayScope&) = delete;
+        } replayScope{replayingEXT_};
 
         const std::vector<PassSegmentPlan> segments = BuildPassSegments();
         const bool trace = TraceDrawOrder();
@@ -8713,12 +8766,71 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             occlusionReadbackPending_ = true;
         }
 
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0002: every uniform block and instance stream the
-        // passes above bound, in one queue write per chunk. Every caller submits this encoder next,
-        // and a queue write lands before the submission that follows it.
-        FlushStreamArenasEXT();
+        // plans/plan_webgpu_perf.md WEBGPUPERF-0002: the uniform blocks and instance streams the
+        // passes above bound are written by SubmitFrameEncoderEXT(), one queue write per chunk for
+        // every flush the encoder holds (WEBGPUPERF-0006), just before it submits them.
 
         DiscardQueuedCommands();
+    }
+
+    WGPUCommandEncoder WebGPURenderer::BeginReplayEXT()
+    {
+        // WEBGPU-84: consume any occlusion results a prior flush resolved but nothing has read yet,
+        // before this flush's own resolve overwrites the shared readback buffer. A no-op unless a
+        // previous flush left a pending result. Polling IsComplete()/PixelCount() drains it the
+        // same way.
+        ReadbackOcclusionResults();
+
+        // One upload for the whole bind cycle, before any pass opens: wgpuQueueWriteBuffer is not
+        // legal inside a render pass, and every segment reads the same sprite vertices.
+        UploadSpriteVertices();
+
+        return AcquireFrameEncoderEXT();
+    }
+
+    WGPUCommandEncoder WebGPURenderer::AcquireFrameEncoderEXT()
+    {
+        if (frameEncoderEXT_ == nullptr)
+        {
+            WGPUCommandEncoderDescriptor encoderDescriptor{};
+            encoderDescriptor.label = StringView("CNA WebGPU Frame Encoder");
+            frameEncoderEXT_ = wgpuDeviceCreateCommandEncoder(device_, &encoderDescriptor);
+            if (frameEncoderEXT_ == nullptr)
+                throw std::runtime_error("CNA WebGPU: failed to create the frame command encoder");
+        }
+        return frameEncoderEXT_;
+    }
+
+    void WebGPURenderer::SubmitFrameEncoderEXT()
+    {
+        if (frameEncoderEXT_ == nullptr)
+            return;
+        // Detached first: the arena writes below go through QueueWriteBufferEXT(), which would
+        // otherwise try to submit this same encoder.
+        WGPUCommandEncoder encoder = frameEncoderEXT_;
+        frameEncoderEXT_ = nullptr;
+
+        // WEBGPUPERF-0002: every uniform block and instance stream the recorded passes bound, one
+        // queue write per chunk. A queue write lands before the submission that follows it.
+        FlushStreamArenasEXT();
+
+        WGPUCommandBufferDescriptor commandBufferDescriptor{};
+        commandBufferDescriptor.label = StringView("CNA WebGPU Frame Commands");
+        WGPUCommandBuffer commandBuffer = wgpuCommandEncoderFinish(encoder, &commandBufferDescriptor);
+        wgpuCommandEncoderRelease(encoder);
+        wgpuQueueSubmit(queue_, 1, &commandBuffer);
+        ++queueSubmitCount_;
+        wgpuCommandBufferRelease(commandBuffer);
+
+        // Transient per-draw resources are only safe to release once the command buffer
+        // referencing them has actually been submitted -- see pendingBufferReleases_'s own doc
+        // comment in the header.
+        for (WGPUBindGroup bg : pendingBindGroupReleases_) wgpuBindGroupRelease(bg);
+        for (WGPUBuffer buf : pendingBufferReleases_) RecycleTransientBuffer(buf);  // WEBGPU-12/59: pool, don't release
+        for (WGPUTextureView view : pendingTextureViewReleasesEXT_) wgpuTextureViewRelease(view);
+        pendingBindGroupReleases_.clear();
+        pendingBufferReleases_.clear();
+        pendingTextureViewReleasesEXT_.clear();
     }
 
     // REMED-GFX-159 keeps the ordered stream and all eleven family vectors alive for the whole
@@ -8816,6 +8928,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     {
         if (!occlusionReadbackPending_) return;
         occlusionReadbackPending_ = false;
+        // WEBGPUPERF-0006: the resolve that filled the buffer may still be in the frame encoder.
+        OrderExternalQueueWorkEXT();
 
         const std::size_t bytes =
             static_cast<std::size_t>(kMaxOcclusionSlots) * sizeof(std::uint64_t);
@@ -12095,9 +12209,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         backBufferViewDescriptor.aspect = WGPUTextureAspect_All;
         WGPUTextureView backBuffer = wgpuTextureCreateView(acquiredTexture_, &backBufferViewDescriptor);
         const bool useMsaa = sampleCount_ > 1 && msaaColorView_ != nullptr;
-        WGPUCommandEncoderDescriptor encoderDescriptor{};
-        encoderDescriptor.label = StringView("CNA WebGPU Frame Encoder");
-        WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(device_, &encoderDescriptor);
+        WGPUCommandEncoder encoder = BeginReplayEXT();
 
         // WEBGPU-29/30: the blend constant and the reference stencil are genuinely dynamic
         // wgpu-native render-pass state (unlike blend/cull/wireframe/depthBias, which are baked
@@ -12136,22 +12248,10 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
         CaptureReadback(encoder, acquiredTexture_);
 
-        WGPUCommandBufferDescriptor commandBufferDescriptor{};
-        commandBufferDescriptor.label = StringView("CNA WebGPU Frame Commands");
-        WGPUCommandBuffer commandBuffer = wgpuCommandEncoderFinish(encoder, &commandBufferDescriptor);
-        wgpuCommandEncoderRelease(encoder);
-        wgpuQueueSubmit(queue_, 1, &commandBuffer);
-        ++queueSubmitCount_;
-        wgpuCommandBufferRelease(commandBuffer);
-        wgpuTextureViewRelease(backBuffer);
-
-        // Transient per-draw colored3D resources are only safe to release once the command
-        // buffer referencing them has actually been submitted -- see pendingBufferReleases_'s
-        // own doc comment in the header.
-        for (WGPUBindGroup bg : pendingBindGroupReleases_) wgpuBindGroupRelease(bg);
-        for (WGPUBuffer buf : pendingBufferReleases_) RecycleTransientBuffer(buf);  // WEBGPU-12/59: pool, don't release
-        pendingBindGroupReleases_.clear();
-        pendingBufferReleases_.clear();
+        // plans/plan_webgpu_perf.md WEBGPUPERF-0006: recorded, not submitted -- Present() and
+        // ReadBackbuffer() submit, and a mid-frame switch away from the back buffer need not. The
+        // view goes when the passes that write it have been submitted, with the per-draw resources.
+        pendingTextureViewReleasesEXT_.push_back(backBuffer);
 
         clearColorPending_ = false;
         clearDepthPending_ = false;
@@ -12162,9 +12262,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
     void WebGPURenderer::RenderPendingDrawsToRenderTarget(WebGPURenderTargetRenderer* target)
     {
-        WGPUCommandEncoderDescriptor encoderDescriptor{};
-        encoderDescriptor.label = StringView("CNA WebGPU RenderTarget Encoder");
-        WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(device_, &encoderDescriptor);
+        // plans/plan_webgpu_perf.md WEBGPUPERF-0006: into the frame's encoder, submitted with the
+        // back buffer rather than per bind cycle.
+        WGPUCommandEncoder encoder = BeginReplayEXT();
 
         // WEBGPU-58: ColorAttachmentView() is the multisampled texture's view while this target
         // is multisampled (mirroring the owner's global sampleCount_ -- see
@@ -12225,26 +12325,11 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         }
         ReplayOrderedSegments(encoder, destination);
 
-        WGPUCommandBufferDescriptor commandBufferDescriptor{};
-        commandBufferDescriptor.label = StringView("CNA WebGPU RenderTarget Commands");
-        WGPUCommandBuffer commandBuffer = wgpuCommandEncoderFinish(encoder, &commandBufferDescriptor);
-        wgpuCommandEncoderRelease(encoder);
-        wgpuQueueSubmit(queue_, 1, &commandBuffer);
-        ++queueSubmitCount_;
-        wgpuCommandBufferRelease(commandBuffer);
-
-        // Same "only release after the referencing command buffer is submitted" rule as
-        // EnsureFrameRendered() -- see pendingBufferReleases_'s own doc comment in the header.
-        for (WGPUBindGroup bg : pendingBindGroupReleases_) wgpuBindGroupRelease(bg);
-        for (WGPUBuffer buf : pendingBufferReleases_) RecycleTransientBuffer(buf);  // WEBGPU-12/59: pool, don't release
-        pendingBindGroupReleases_.clear();
-        pendingBufferReleases_.clear();
-
         // WEBGPU-164: regenerate each attached target's mip chain from its just-rendered (and,
         // under MSAA, just-resolved) level 0 -- FNA3D's ResolveTarget does exactly this on unbind,
-        // and the cube sibling below already does it per face. Ordered after the submit above, so
-        // the downsample cascade samples a finished level 0. In each target's own colorFormat_, not
-        // RGBA8Unorm. EVERY slot of an MRT set, not only slot 0: a mipped target in slot 1 is as
+        // and the cube sibling below already does it per face. GenerateMipsForLayer() submits the
+        // frame encoder before its own, so the downsample cascade samples a finished level 0. In
+        // each target's own colorFormat_, not RGBA8Unorm. EVERY slot of an MRT set, not only slot 0: a mipped target in slot 1 is as
         // much a written attachment as slot 0 is, and leaving its chain stale would make what a
         // later sample reads depend on which slot the game happened to bind it in.
         const auto regenerate = [this](WebGPURenderTargetRenderer* rt) {
@@ -12284,9 +12369,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     // `clearPending || !preserveContents` expression the 2D sibling above already used.
     void WebGPURenderer::RenderPendingDrawsToRenderTargetCubeFace(WebGPURenderTargetCubeRenderer* target, int face)
     {
-        WGPUCommandEncoderDescriptor encoderDescriptor{};
-        encoderDescriptor.label = StringView("CNA WebGPU RenderTargetCube Encoder");
-        WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(device_, &encoderDescriptor);
+        // WEBGPUPERF-0006: into the frame's encoder, like the 2D sibling above.
+        WGPUCommandEncoder encoder = BeginReplayEXT();
 
         // REMED-GFX-136: `discard` is read from the target THIS pass is being created for, at the
         // moment the pass descriptor is built, and preserveContents_ is immutable after
@@ -12329,23 +12413,10 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         destination.traceName = "rendertargetcube-face";
         ReplayOrderedSegments(encoder, destination);
 
-        WGPUCommandBufferDescriptor commandBufferDescriptor{};
-        commandBufferDescriptor.label = StringView("CNA WebGPU RenderTargetCube Commands");
-        WGPUCommandBuffer commandBuffer = wgpuCommandEncoderFinish(encoder, &commandBufferDescriptor);
-        wgpuCommandEncoderRelease(encoder);
-        wgpuQueueSubmit(queue_, 1, &commandBuffer);
-        ++queueSubmitCount_;
-        wgpuCommandBufferRelease(commandBuffer);
-
-        for (WGPUBindGroup bg : pendingBindGroupReleases_) wgpuBindGroupRelease(bg);
-        for (WGPUBuffer buf : pendingBufferReleases_) RecycleTransientBuffer(buf);  // WEBGPU-12/59: pool, don't release
-        pendingBindGroupReleases_.clear();
-        pendingBufferReleases_.clear();
-
         // WEBGPU-114: regenerate this face's mip chain from its just-rendered (and, under MSAA,
         // just-resolved) level 0 -- FNA3D's own ResolveTarget does exactly this on unbind
-        // (glGenerateMipmap when levelCount > 1). Ordered after the submit above, so the downsample
-        // cascade samples the finished level 0. In colorFormat_ (surfaceFormat_), not RGBA8Unorm.
+        // (glGenerateMipmap when levelCount > 1). GenerateMipsForLayer() submits the frame encoder
+        // before its own, so the downsample cascade samples the finished level 0. In colorFormat_ (surfaceFormat_), not RGBA8Unorm.
         if (target->LevelCount() > 1)
             GenerateMipsForLayer(target->Texture(), face, target->GetSize(), target->GetSize(),
                                  target->LevelCount(), target->ColorFormat());
@@ -12393,14 +12464,18 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
     void WebGPURenderer::Present()
     {
-        if (!EnsureFrameRendered())
+        // WEBGPUPERF-0006: the frame's one submission. Render-target passes recorded before a
+        // failed back-buffer acquisition are still the game's, so they go even then.
+        const bool rendered = EnsureFrameRendered();
+        SubmitFrameEncoderEXT();
+        if (!rendered)
             return;
         SweepBindingCacheEXT();
 #if !defined(__EMSCRIPTEN__)
         // In the browser there is no explicit present: emdawnwebgpu aborts on wgpuSurfacePresent
         // ("use requestAnimationFrame instead"). The canvas's current texture is shown automatically
         // once control returns to the event loop, which Game::RunLoop() does every frame by awaiting
-        // requestAnimationFrame. The queue submit in EnsureFrameRendered() above is the whole frame.
+        // requestAnimationFrame. The queue submit above is the whole frame.
         wgpuSurfacePresent(surface_);
 #endif
         wgpuTextureRelease(acquiredTexture_);
@@ -12467,6 +12542,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // reading it back, so a Clear()+GetBackBufferData() pair observes its own frame's result
         // without needing a real Present() in between (matches Vulkan/Bgfx's on-demand submit).
         EnsureFrameRendered();
+        SubmitFrameEncoderEXT();   // WEBGPUPERF-0006: the copy into readbackBuffer_ is in it.
 
         if (const char* trace = std::getenv("CNA_BACKBUFFER_READ_TRACE"); trace != nullptr && *trace != '\0')
         {

@@ -10,7 +10,10 @@
 // cycle's draws are recorded into render passes only when the cycle is flushed. Every modern
 // operation here therefore first flushes the draws already queued (keeping the cycle's contents --
 // a continuation loads, it never re-applies the cycle's discard or clear), then encodes its own work
-// and SUBMITS it. Submission order is queue order, and `wgpuQueueWriteBuffer`/`WriteTexture` are
+// and SUBMITS it. A flush records into the frame's one command encoder (plans/plan_webgpu_perf.md
+// WEBGPUPERF-0006), and `OrderExternalQueueWorkEXT` submits that encoder ahead of any queue write or
+// submission made outside a replay, so the passes still precede the operation that follows them.
+// Submission order is queue order, and `wgpuQueueWriteBuffer`/`WriteTexture` are
 // queue operations ordered with submissions, so a CPU upload is seen by exactly the dispatches and
 // draws issued after it. Nothing waits except a CPU readback, which waits for its own submission.
 //

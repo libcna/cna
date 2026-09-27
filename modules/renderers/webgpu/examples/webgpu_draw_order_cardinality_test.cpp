@@ -15,7 +15,11 @@
 // a flush on this renderer -- is never counted as part of the sequence under test:
 //
 //   * render passes begun          -- must be exactly 1 for one bind cycle, whatever the mix
-//   * queue submits                -- must be exactly 1, so no family transition submits or waits
+//   * queue submits                -- must be exactly 1, so no family transition submits or waits.
+//                                     Since plans/plan_webgpu_perf.md WEBGPUPERF-0006 a flush only
+//                                     records and the frame carries it, so each window starts with
+//                                     nothing recorded (Settle) and ends by submitting its cycle
+//                                     (Settle again): the 1 is the cycle's own submission
 //   * Colored3D pipeline variants  -- must not grow with alternation count, so a draw's position
 //                                     in the order is not part of any pipeline or cache key
 //   * native setViewport calls     -- must stay at the one pass-opening call when every draw
@@ -168,6 +172,9 @@ class WebGpuDrawOrderCardinalityTest : public Game
                          b.GetSetScissorCallCountEXT() };
     }
 
+    /// WEBGPUPERF-0006: submits whatever the renderer has recorded and not yet submitted.
+    static void Settle(WebGPURenderer& b) { b.OrderExternalQueueWorkEXT(); }
+
     static Counters Delta(const Counters& a, const Counters& b)
     {
         return Counters{ b.passes - a.passes, b.submits - a.submits, b.pipelines - a.pipelines,
@@ -202,10 +209,12 @@ class WebGpuDrawOrderCardinalityTest : public Game
         {
             auto rt = MakeTarget(dev);
             dev.SetRenderTarget(rt.get());
+            Settle(renderer);
             const Counters before = Sample(renderer);
             dev.Clear(kBlack);
             for (int i = 0; i < 4; ++i) { DrawSprite(kRed); Draw3D(dev, kRed); }
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Settle(renderer);
             d1 = Delta(before, Sample(renderer));
 
             checkCount(d1.passes, 1, "D1 eight alternating draws in one cycle: render passes");
@@ -225,11 +234,13 @@ class WebGpuDrawOrderCardinalityTest : public Game
         {
             auto rt = MakeTarget(dev);
             dev.SetRenderTarget(rt.get());
+            Settle(renderer);
             const Counters before = Sample(renderer);
             dev.Clear(kBlack);
             for (int i = 0; i < 4; ++i) DrawSprite(kRed);
             for (int i = 0; i < 4; ++i) Draw3D(dev, kRed);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Settle(renderer);
             d2 = Delta(before, Sample(renderer));
 
             checkCount(d2.passes, 1, "D2 eight grouped draws in one cycle: render passes");
@@ -256,10 +267,12 @@ class WebGpuDrawOrderCardinalityTest : public Game
         {
             auto rt = MakeTarget(dev);
             dev.SetRenderTarget(rt.get());
+            Settle(renderer);
             const Counters before = Sample(renderer);
             dev.Clear(kBlack);
             for (int i = 0; i < 8; ++i) { DrawSprite(kRed); Draw3D(dev, kRed); }
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Settle(renderer);
             const Counters d = Delta(before, Sample(renderer));
 
             checkCount(d.passes, 1, "D4 sixteen alternating draws in one cycle: render passes");
@@ -274,6 +287,7 @@ class WebGpuDrawOrderCardinalityTest : public Game
         // three now share the ordered walk; if only the render-target path had been corrected, this
         // is where the backbuffer's cost would diverge.
         {
+            Settle(renderer);   // the back-buffer readback below submits this cycle itself
             const Counters before = Sample(renderer);
             dev.Clear(kBlack);
             for (int i = 0; i < 4; ++i) { DrawSprite(kRed); Draw3D(dev, kRed); }
@@ -307,11 +321,13 @@ class WebGpuDrawOrderCardinalityTest : public Game
             for (const Leg& leg : legs)
             {
                 dev.SetRenderTarget(&cube, CubeMapFace::PositiveX);
+                Settle(renderer);
                 const Counters before = Sample(renderer);
                 dev.Clear(kBlack);
                 if (leg.spriteFirst) { DrawSprite(kRed);   Draw3D(dev, kBlue); }
                 else                 { Draw3D(dev, kBlue); DrawSprite(kRed);   }
                 dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+                Settle(renderer);
                 const Counters d = Delta(before, Sample(renderer));
 
                 checkCount(d.passes, 1, std::string(leg.name) + ": render passes");

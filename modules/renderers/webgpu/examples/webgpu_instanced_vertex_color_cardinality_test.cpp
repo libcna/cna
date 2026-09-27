@@ -230,9 +230,14 @@ namespace
                                                 kPrimitiveCount, 1);
                 }
                 dev.SetRenderTarget(nullptr);
+                renderer.OrderExternalQueueWorkEXT();
             };
 
+            // plans/plan_webgpu_perf.md WEBGPUPERF-0006: a flush records into the frame's encoder
+            // and the frame submits it, so a window starts with nothing recorded and every cycle
+            // below ends by submitting itself -- a cycle's submit count is its own submission.
             const auto measure = [&](const char* label, auto&& body) {
+                renderer.OrderExternalQueueWorkEXT();
                 const Cost before = Snapshot(renderer);
                 body();
                 const Cost d = Delta(before, Snapshot(renderer));

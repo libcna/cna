@@ -26,6 +26,13 @@
 //   colour in the effect's uniform block, put their own colour in their own cell.
 // Check K -- a steady frame of those draws creates no bind group.
 // Check L -- ... and four times as many cost the same number of queue writes.
+// Check M -- WEBGPUPERF-0006: a frame that renders into four render targets before the back buffer
+//   is one queue submission, not one per bind cycle.
+// Check N -- ... and each target still shows its own sprite and its own BasicEffect colour: every
+//   cycle recorded into the one encoder keeps its own vertices and uniform blocks.
+// Check O -- a Texture2D.SetData between two of those cycles lands after the cycle that drew the old
+//   contents and before the one that draws the new: the first target shows red, the back buffer
+//   green.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -44,6 +51,8 @@
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
@@ -71,6 +80,10 @@ namespace
     constexpr int kChurnFrames = 24;
     constexpr int kChurnStart = 17;
     constexpr int kShaderEffectStart = kChurnStart + kChurnFrames;
+    constexpr int kRenderTargetStart = kShaderEffectStart + 9;
+    constexpr int kRenderTargets = 4;
+    constexpr int kTargetSize = 8;
+    constexpr int kTargetCell = 16;
 
     // A custom WGSL ShaderEffect on the 3D route, sampling a texture so its group carries the
     // sampler and the view beside the uniform block.
@@ -146,6 +159,7 @@ struct Uniforms {
     {
         std::size_t bindGroups = 0;
         std::size_t queueWrites = 0;
+        std::size_t submits = 0;
     };
 }
 
@@ -158,14 +172,19 @@ class WebGpuBindingCostTest : public Game
     std::unique_ptr<BasicEffect> basic_;
     std::unique_ptr<SpriteBatch> sprites_;
     std::unique_ptr<ShaderEffect> shaderEffect_;
+    std::unique_ptr<BasicEffect> unlit_;
+    std::vector<std::unique_ptr<RenderTarget2D>> targets_;
     Texture2D whiteA_;
     Texture2D whiteB_;
+    Texture2D mutable_;
     int frame_ = 0;
     int passCount_ = 0;
     int result_ = 1;
     Counters at16Start_, at16End_, at64Start_, at64End_;
     Counters basicStart_, basicEnd_, basic4Start_, basic4End_;
     Counters shaderStart_, shaderEnd_, shader4Start_, shader4End_;
+    Counters targetsStart_, targetsEnd_;
+    int wrongShader_ = 0;
     std::size_t cacheAfterChurn_ = 0;
     std::size_t cacheAfterFirstChurn_ = 0;
     int churnMismatches_ = 0;
@@ -183,7 +202,8 @@ class WebGpuBindingCostTest : public Game
 
     Counters Snapshot()
     {
-        return Counters{Renderer().GetBindGroupCreateCountEXT(), Renderer().GetQueueWriteCountEXT()};
+        return Counters{Renderer().GetBindGroupCreateCountEXT(), Renderer().GetQueueWriteCountEXT(),
+                        Renderer().GetQueueSubmitCountEXT()};
     }
 
     void PrepareEffect(Texture2D* texture)
@@ -268,6 +288,90 @@ class WebGpuBindingCostTest : public Game
         dev.SetVertexBuffer(nullptr);
     }
 
+    // Sprite colours per target -- the first draws mutable_ untinted -- and BasicEffect colours.
+    static Color TargetSpriteTint(int target)
+    {
+        static const std::array<Color, kRenderTargets> tints{Color::White, Color(0, 255, 0, 255),
+                                                             Color(0, 0, 255, 255),
+                                                             Color(0, 255, 255, 255)};
+        return tints[static_cast<std::size_t>(target)];
+    }
+    static Vector3 TargetSpriteColour(int target)
+    {
+        static const std::array<Vector3, kRenderTargets> colours{
+            Vector3(1, 0, 0), Vector3(0, 1, 0), Vector3(0, 0, 1), Vector3(0, 1, 1)};
+        return colours[static_cast<std::size_t>(target)];
+    }
+    static Vector3 TargetBasicColour(int target)
+    {
+        static const std::array<Vector3, kRenderTargets> colours{
+            Vector3(1, 0, 1), Vector3(1, 1, 0), Vector3(1, 1, 1), Vector3(0, 1, 0)};
+        return colours[static_cast<std::size_t>(target)];
+    }
+
+    // Each target: a sprite over its left half and an unlit BasicEffect quad over its right, then
+    // all of them, and mutable_, side by side on the back buffer. When `rewrite` is set, mutable_
+    // turns green once the first target -- which draws it red -- has been flushed. The rectangle
+    // overload writes the existing native texture in place; the whole-texture one would give the
+    // wrapper a new texture and leave the queue order untested.
+    void DrawRenderTargets(GraphicsDevice& dev, bool rewrite)
+    {
+        const Color red(255, 0, 0, 255);
+        const Color green(0, 255, 0, 255);
+        const Rectangle whole(0, 0, 1, 1);
+        mutable_.SetData(0, &whole, &red, 0, 1);
+        for (int i = 0; i < kRenderTargets; ++i)
+        {
+            dev.SetRenderTarget(targets_[static_cast<std::size_t>(i)].get());
+            if (rewrite && i == 1)
+                mutable_.SetData(0, &whole, &green, 0, 1);
+            dev.Clear(Color::Black);
+            sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque);
+            sprites_->Draw(i == 0 ? mutable_ : whiteA_, Rectangle(0, 0, kTargetSize / 2, kTargetSize),
+                           TargetSpriteTint(i));
+            sprites_->End();
+            dev.setBlendStateProperty(BlendState::Opaque);
+            dev.setDepthStencilStateProperty(DepthStencilState::None);
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
+            unlit_->setWorldProperty(Matrix::CreateScale(0.5f, 1.0f, 1.0f) *
+                                     Matrix::CreateTranslation(0.5f, 0.0f, 0.0f));
+            unlit_->setDiffuseColorProperty(TargetBasicColour(i));
+            unlit_->Apply();
+            dev.SetVertexBuffer(basicQuad_.get());
+            dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            dev.SetVertexBuffer(nullptr);
+        }
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        dev.Clear(Color(64, 64, 64, 255));
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &SamplerState::PointClamp, nullptr,
+                        nullptr);
+        for (int i = 0; i < kRenderTargets; ++i)
+            sprites_->Draw(*targets_[static_cast<std::size_t>(i)],
+                           Rectangle(i * kTargetCell, 0, kTargetCell, kTargetCell), Color::White);
+        sprites_->Draw(mutable_, Rectangle(0, 2 * kTargetCell, kTargetCell, kTargetCell),
+                       Color::White);
+        sprites_->End();
+    }
+
+    int CountWrongTargets(GraphicsDevice& dev)
+    {
+        int wrong = 0;
+        for (int i = 0; i < kRenderTargets; ++i)
+        {
+            const int y = kTargetCell / 2;
+            const Color left = Read(dev, i * kTargetCell + kTargetCell / 4, y);
+            const Color right = Read(dev, i * kTargetCell + 3 * kTargetCell / 4, y);
+            if (!Matches(left, TargetSpriteColour(i)) || !Matches(right, TargetBasicColour(i)))
+            {
+                ++wrong;
+                std::printf("    target %d is (%d,%d,%d) | (%d,%d,%d)\n", i, left.getRProperty(),
+                            left.getGProperty(), left.getBProperty(), right.getRProperty(),
+                            right.getGProperty(), right.getBProperty());
+            }
+        }
+        return wrong;
+    }
+
     int CountWrongCells(GraphicsDevice& dev)
     {
         int wrong = 0;
@@ -329,6 +433,10 @@ protected:
         basic_->DirectionalLight0.setDirectionProperty(Vector3(0.0f, 0.0f, 1.0f));
         basic_->DirectionalLight0.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
         sprites_ = std::make_unique<SpriteBatch>(dev);
+        unlit_ = std::make_unique<BasicEffect>(dev);
+        mutable_ = Texture2D::CreateFromPixels(dev, 1, 1, std::vector<std::uint8_t>{255, 0, 0, 255});
+        for (int i = 0; i < kRenderTargets; ++i)
+            targets_.push_back(std::make_unique<RenderTarget2D>(dev, kTargetSize, kTargetSize));
         shaderEffect_ = std::make_unique<ShaderEffect>(dev, kVertexWgsl, kFragmentWgsl);
         if (shaderEffect_->IsEffectValid())
             shaderEffect_->DeclareUniformBlockEXT(kUniformBlockSize, kUniformNames, kUniformOffsets, 4);
@@ -359,6 +467,8 @@ protected:
         if (frame_ == kShaderEffectStart + 4) shaderEnd_ = Snapshot();
         if (frame_ == kShaderEffectStart + 7) shader4Start_ = Snapshot();
         if (frame_ == kShaderEffectStart + 8) shader4End_ = Snapshot();
+        if (frame_ == kRenderTargetStart + 3) targetsStart_ = Snapshot();
+        if (frame_ == kRenderTargetStart + 4) targetsEnd_ = Snapshot();
 
         if (frame_ < 4)
         {
@@ -416,10 +526,22 @@ protected:
         {
             DrawShaderEffectGrid(dev, 4);
         }
-        else
+        else if (frame_ == kShaderEffectStart + 8)
         {
             DrawShaderEffectGrid(dev, 1);
-            const int wrongShader = CountWrongCells(dev);
+            wrongShader_ = CountWrongCells(dev);
+        }
+        else if (frame_ < kRenderTargetStart + 4)
+        {
+            DrawRenderTargets(dev, false);
+        }
+        else
+        {
+            DrawRenderTargets(dev, true);
+            const int wrongTargets = CountWrongTargets(dev);
+            const Color first = Read(dev, kTargetCell / 4, kTargetCell / 2);
+            const Color rewritten = Read(dev, kTargetCell / 2, 2 * kTargetCell + kTargetCell / 2);
+            const int wrongShader = wrongShader_;
             {
                 const std::size_t groups16 = at16End_.bindGroups - at16Start_.bindGroups;
                 const std::size_t groups64 = at64End_.bindGroups - at64Start_.bindGroups;
@@ -474,8 +596,20 @@ protected:
                       "L: four times the ShaderEffect draws cost the queue writes one does (" +
                           std::to_string(writesShader4) + " vs " + std::to_string(writesShader) +
                           ")");
-                std::printf("=== %d/12 PASS ===\n", passCount_);
-                result_ = passCount_ == 12 ? 0 : 1;
+                const std::size_t submits = targetsEnd_.submits - targetsStart_.submits;
+                check(submits == 1,
+                      "M: a frame with four render-target cycles is one submission (" +
+                          std::to_string(submits) + ")");
+                check(wrongTargets == 0, "N: each render target shows its own sprite and colour (" +
+                                             std::to_string(wrongTargets) + " wrong)");
+                check(Matches(first, Vector3(1, 0, 0)) && Matches(rewritten, Vector3(0, 1, 0)),
+                      "O: SetData between two cycles lands between them (first target " +
+                          std::to_string(first.getRProperty()) + "," +
+                          std::to_string(first.getGProperty()) + ", back buffer " +
+                          std::to_string(rewritten.getRProperty()) + "," +
+                          std::to_string(rewritten.getGProperty()) + ")");
+                std::printf("=== %d/15 PASS ===\n", passCount_);
+                result_ = passCount_ == 15 ? 0 : 1;
                 Exit();
             }
         }

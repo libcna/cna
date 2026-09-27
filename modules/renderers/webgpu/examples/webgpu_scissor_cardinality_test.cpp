@@ -176,7 +176,10 @@ class WebGpuScissorCardinalityTest : public Game
             auto rt = MakeTarget(dev);
             dev.SetRenderTarget(rt.get());
             // Baseline INSIDE the cycle: binding a target flushes whatever the backbuffer had
-            // pending, which is not what this check is measuring.
+            // pending, which is not what this check is measuring. plans/plan_webgpu_perf.md
+            // WEBGPUPERF-0006: that flush is recorded into the frame's encoder rather than
+            // submitted, so it is submitted here, and the cycle's own submission forced at its end.
+            renderer.OrderExternalQueueWorkEXT();
             const std::size_t pass0 = renderer.GetRenderPassCountEXT();
             const std::size_t submit0 = renderer.GetQueueSubmitCountEXT();
             const std::size_t ss0 = renderer.GetSetScissorCallCountEXT();
@@ -191,6 +194,7 @@ class WebGpuScissorCardinalityTest : public Game
             }
             SetScissor(dev, 0, 0, kRT, kRT);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            renderer.OrderExternalQueueWorkEXT();
 
             checkCount(renderer.GetRenderPassCountEXT() - pass0, 1,
                        "S1 four rectangles in one cycle: render passes");
@@ -264,6 +268,7 @@ class WebGpuScissorCardinalityTest : public Game
         {
             auto rt = MakeTarget(dev);
             dev.SetRenderTarget(rt.get());
+            renderer.OrderExternalQueueWorkEXT();   // WEBGPUPERF-0006, as in S1.
             const std::size_t pipe0 = renderer.GetColoredPipelineCacheSizeEXT();
             const std::size_t pass0 = renderer.GetRenderPassCountEXT();
             const std::size_t submit0 = renderer.GetQueueSubmitCountEXT();
@@ -298,6 +303,7 @@ class WebGpuScissorCardinalityTest : public Game
             Draw3D(dev, kRed);
             SetScissor(dev, 0, 0, kRT, kRT);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            renderer.OrderExternalQueueWorkEXT();
 
             checkCount(renderer.GetColoredPipelineCacheSizeEXT() - pipe0, 0,
                        "S4 boundary rectangles: new pipeline variants");
@@ -395,6 +401,8 @@ class WebGpuScissorCardinalityTest : public Game
 
         // ---- S8: the BACKBUFFER pass follows the same rules ----
         {
+            // WEBGPUPERF-0006: nothing recorded before the window; the readback submits the cycle.
+            renderer.OrderExternalQueueWorkEXT();
             const std::size_t ss0 = renderer.GetSetScissorCallCountEXT();
             const std::size_t pass0 = renderer.GetRenderPassCountEXT();
             const std::size_t submit0 = renderer.GetQueueSubmitCountEXT();
