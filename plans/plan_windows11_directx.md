@@ -3802,3 +3802,39 @@ its Debug executable SHA-256 is
 The full-GBV-plus-auto-breadcrumbs fault remains unclassified between a CNA
 resource lifetime error, Windows diagnostic instrumentation, and the Intel
 driver. No production setting or test expectation was changed.
+
+### WIN11-0099: Check synchronized validation and live SRV bindings
+
+The D3D12 debug interface's
+`SetEnableSynchronizedCommandQueueValidation(TRUE)` was enabled temporarily
+before creating the device, alongside full GBV and DRED. The classic A+B+C+D
+fixture still ended **14/15** in D with `DXGI_ERROR_DEVICE_HUNG`, the same
+page-fault VA and freed A/C Texture2D names. Microsoft documents this
+dependent-queue setting as enabled by default
+(<https://learn.microsoft.com/en-us/windows/win32/api/d3d12sdklayers/nf-d3d12sdklayers-id3d12debug3-setenablesynchronizedcommandqueuevalidation>);
+the explicit call was a
+negative control, not a production change. It was reverted and the original
+target rebuilt. The ordinary Intel debug+DRED, GBV-off control passed
+**15/15**. Evidence:
+`C:\rv\logs\dx12-descriptor-sync-gbv-intel-dred.log` and
+`C:\rv\logs\dx12-descriptor-post-sync-gbv-diag-normal.log`.
+
+A second temporary trace printed the native Texture2D COM resource pointer
+and GPU SRV handle selected for each classic draw. With full GBV and DRED on
+the physical Intel adapter, A+B+C passed, then D reproduced the same
+**14/15** removal. DRED again named freed Texture2D resources `#1608` and
+`#1916`. The creation trace identified their COM pointers as
+`000002023F8F6080` and `000002023BD99F50`. The D leg created texture
+`#2126` at `000002023B39A330`; all **61 recorded D SRV bindings** before
+removal used this current resource and the same GPU SRV handle
+`2208699974528`. Neither DRED-named A/C resource appeared in a D binding.
+This rules out a stale old Texture2D pointer being passed through the
+current classic draw's SRV binding helper in the recorded D draws. It does
+not rule out a stale descriptor inside the GPU heap, instrumentation state,
+or a command recorded earlier but executed later.
+
+The trace was removed and the original target rebuilt. Ordinary Intel
+debug+DRED, GBV-off A+B+C+D passed **15/15**. No production renderer or
+fixture code changed. Evidence:
+`C:\rv\logs\dx12-descriptor-bind-trace-intel-gbv-dred.log` and
+`C:\rv\logs\dx12-descriptor-post-bind-trace-diag-normal.log`.
