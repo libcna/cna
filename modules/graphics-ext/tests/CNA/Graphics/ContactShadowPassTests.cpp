@@ -267,7 +267,12 @@ TEST(ContactShadowPassTest, TheShaderAgreesWithTheCpuTwinOnEveryCase)
     CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_GLSL_SHADER_SOURCE(gd);
+    const bool hlsl = gd.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                                    CNA::ShaderStageEXT::Vertex)
+                   && gd.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                                    CNA::ShaderStageEXT::Fragment);
+    if (!hlsl && !CnaTest::EngineLayer::RunsGlslShaderSource(gd))
+        GTEST_SKIP() << "this renderer has no contact-shadow probe shader dialect";
 
     constexpr const char* kVertexSource = R"(#version 300 es
 precision highp float;
@@ -298,7 +303,33 @@ void main() {
 }
 )";
 
-    ShaderEffect probe(gd, kVertexSource, source);
+    constexpr const char* kHlslVertexSource = R"(
+cbuffer SpriteParameters : register(b0) { float2 viewportSize; };
+struct Input { float2 position : POSITION; float2 texcoord : TEXCOORD; float4 color : COLOR; };
+float4 main(Input input) : SV_Position
+{
+    float2 ndc = input.position / viewportSize * 2.0f - 1.0f;
+    return float4(ndc.x, -ndc.y, 0.0f, 1.0f);
+}
+)";
+    constexpr const char* kHlslFragmentSource = R"(
+cbuffer ProbeParameters : register(b4)
+{
+    float uRay;
+    float uScene;
+    float uBias;
+    float uThickness;
+};
+float4 main(float4 position : SV_Position) : SV_Target0
+{
+    float difference = uRay - uScene;
+    bool hit = difference > uBias && difference < uThickness;
+    return float4(hit ? 1.0f : 0.0f, 0.0f, 0.0f, 1.0f);
+}
+)";
+
+    ShaderEffect probe(gd, hlsl ? kHlslVertexSource : kVertexSource,
+                       hlsl ? kHlslFragmentSource : source);
     ASSERT_TRUE(probe.IsEffectValid());
 
     Texture2D dummy(gd, 1, 1);
@@ -390,6 +421,8 @@ TEST(ContactShadowPassTest, WithoutDepthTheFrameIsCopiedThroughAndTheReasonIsNam
     auto scene = MakeFlatScene(gd, 200);
     RenderTarget2D destination(gd, kSize, kSize);
     ContactShadowPass pass(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the contact-shadow shader package";
     AimTheRay(pass, 12.0f);
 
     PostProcessContext context = MakeContext(scene.get(), nullptr, &destination);
@@ -410,6 +443,8 @@ TEST(ContactShadowPassTest, WithoutAFarPlaneTheStoredDepthHasNoScaleAndThePassRe
     auto depth = MakeContactDepth(gd);
     RenderTarget2D destination(gd, kSize, kSize);
     ContactShadowPass pass(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the contact-shadow shader package";
     AimTheRay(pass, 12.0f);
 
     PostProcessContext context = MakeContext(scene.get(), depth.get(), &destination);
@@ -429,6 +464,8 @@ TEST(ContactShadowPassTest, WithoutAViewMatrixTheLightDirectionCannotBePlacedAnd
     auto depth = MakeContactDepth(gd);
     RenderTarget2D destination(gd, kSize, kSize);
     ContactShadowPass pass(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the contact-shadow shader package";
     AimTheRay(pass, 12.0f);
 
     PostProcessContext context = MakeContext(scene.get(), depth.get(), &destination);

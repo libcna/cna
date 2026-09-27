@@ -16,6 +16,7 @@
 #include "CNA/Graphics/ShaderCodeEXT.hpp"
 #include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "GpuInstanceCullerTestShaderPackage.generated.hpp"
+#include "shaders/GpuInstanceCullerDrawHlsl.generated.hpp"
 #include "Microsoft/Xna/Framework/BoundingBox.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -126,6 +127,16 @@ std::vector<std::uint8_t> ToBytes(const std::uint32_t (&words)[N])
                           CNA::ShaderStageEXT::Fragment, "main",
                           "gpu_instance_culler/draw.vulkan.frag.wgsl",
                           std::string(kDrawVulkanFragmentWgsl)),
+            ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl,
+                          CNA::ShaderStageEXT::Vertex, "main",
+                          "gpu_instance_culler/draw.vulkan.vert.spv -> hlsl",
+                          std::string(CNA::Tests::GpuInstanceCullerDrawHlslGenerated::
+                                          kDrawVertexSource)),
+            ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl,
+                          CNA::ShaderStageEXT::Fragment, "main",
+                          "gpu_instance_culler/draw.vulkan.frag.spv -> hlsl",
+                          std::string(CNA::Tests::GpuInstanceCullerDrawHlslGenerated::
+                                          kDrawFragmentSource)),
         },
         {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment},
         {ShaderBindingRequirementEXT(
@@ -251,6 +262,46 @@ TEST(GpuInstanceCullerTest, EachSurvivorIsDrawnOnceAndTheRestAreNot)
     // expectation cannot pass this.
     const int expected = CpuVisibleCount(instances);
     ASSERT_GT(expected, 1);
+    EXPECT_EQ(CountBands(target), expected);
+}
+
+TEST(GpuInstanceCullerTest, RepeatedCullAndIndirectDrawKeepTheLatestVisibleList)
+{
+    CnaTest::EngineLayer::HiDefDevice device;
+    GpuInstanceCuller culler(device);
+    if (!culler.isSupported()) GTEST_SKIP() << culler.getUnsupportedReason();
+
+    ShaderEffect effect(device, DrawPackage());
+    ASSERT_TRUE(effect.IsEffectValid()) << effect.GetCompileErrorEXT();
+    const auto instances = Scene();
+    culler.setInstances(instances);
+    const Matrix away = Matrix::CreateLookAt(Vector3(0.0f, 0.0f, 10.0f),
+                                             Vector3(0.0f, 0.0f, 200.0f),
+                                             Vector3(0.0f, 1.0f, 0.0f));
+
+    Quad quad(device);
+    RenderTarget2D target(device, kSize, kSize);
+    device.SetVertexBuffer(&quad.vertices);
+    device.SetIndexBuffer(&quad.indices);
+    device.SetRenderTarget(&target);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    effect.Apply();
+
+    constexpr int iterations = 1024;
+    for (int frame = 0; frame < iterations; ++frame)
+    {
+        culler.cull((frame & 1) != 0 ? SceneView() : away, SceneProjection(), 6);
+        device.Clear(Color::Black);
+        culler.draw(PrimitiveType::TriangleList);
+    }
+    device.SetRenderTarget(nullptr);
+    device.SetIndexBuffer(nullptr);
+    device.SetVertexBuffer(nullptr);
+
+    const int expected = CpuVisibleCount(instances);
+    ASSERT_GT(expected, 1);
+    EXPECT_EQ(culler.readVisibleCountEXT(), expected);
     EXPECT_EQ(CountBands(target), expected);
 }
 

@@ -1337,13 +1337,14 @@ if(CNA_BUILD_TESTS)
     # One alternation rather than a list: a semicolon inside PROPERTIES would split the pair.
     string(JOIN "|" _cna_unit_tests_output_gate ${_cna_unit_tests_output_gate})
     if(_cna_unit_tests_output_gate)
-        gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST
+        gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ${_cna_unit_tests_discovery_filter}
             PROPERTIES FAIL_REGULAR_EXPRESSION "${_cna_unit_tests_output_gate}"
                        ${_cna_unit_tests_audio_environment})
     else()
-        gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ${_cna_unit_tests_discovery_filter}
             ${_cna_unit_tests_audio_properties})
     endif()

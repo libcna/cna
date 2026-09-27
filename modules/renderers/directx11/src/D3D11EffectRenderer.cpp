@@ -2,10 +2,13 @@
 #include "CNA/Internal/Renderers/DirectX11/D3D11EffectRenderer.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11RenderTargets.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11Textures.hpp"
+#include "CNA/Internal/Renderers/DirectX11/D3D11Texture2DArray.hpp"
+#include "CNA/Internal/Renderers/DirectX11/D3D11StorageTexture2D.hpp"
 
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <regex>
 #include <stdexcept>
 
 namespace CNA::Internal::Renderers::DirectX11
@@ -17,6 +20,46 @@ namespace CNA::Internal::Renderers::DirectX11
             char buf[32];
             std::snprintf(buf, sizeof(buf), "0x%08lX", static_cast<unsigned long>(hr));
             return buf;
+        }
+
+        bool ReflectStageResources(ID3DBlob* bytecode, std::uint32_t& textures,
+                                   std::uint32_t& storage, std::string& error)
+        {
+            ComPtr<ID3D11ShaderReflection> shader;
+            if (FAILED(D3DReflect(bytecode->GetBufferPointer(), bytecode->GetBufferSize(),
+                                  __uuidof(ID3D11ShaderReflection),
+                                  reinterpret_cast<void**>(shader.GetAddressOf()))) ||
+                !shader)
+            {
+                error = "DirectX11 could not reflect ShaderEffect stage resources.";
+                return false;
+            }
+            D3D11_SHADER_DESC description{};
+            if (FAILED(shader->GetDesc(&description)))
+            {
+                error = "DirectX11 could not inspect ShaderEffect stage resources.";
+                return false;
+            }
+            for (UINT index = 0; index < description.BoundResources; ++index)
+            {
+                D3D11_SHADER_INPUT_BIND_DESC binding{};
+                if (FAILED(shader->GetResourceBindingDesc(index, &binding)))
+                    continue;
+                if (binding.Type != D3D_SIT_TEXTURE &&
+                    binding.Type != D3D_SIT_BYTEADDRESS)
+                    continue;
+                if (binding.BindCount == 0 || binding.BindPoint >= 16 ||
+                    binding.BindCount > 16 - binding.BindPoint)
+                {
+                    error = "DirectX11 ShaderEffect resource register exceeds 16 slots.";
+                    return false;
+                }
+                auto& mask = binding.Type == D3D_SIT_TEXTURE ? textures : storage;
+                for (UINT slot = binding.BindPoint;
+                     slot < binding.BindPoint + binding.BindCount; ++slot)
+                    mask |= UINT32_C(1) << slot;
+            }
+            return true;
         }
     }
 
@@ -30,11 +73,21 @@ namespace CNA::Internal::Renderers::DirectX11
         compileError_.clear();
         valid_ = false;
         vs_.Reset();
+        baseInstanceVs_.Reset();
         ps_.Reset();
         vsBytecode_.Reset();
+        baseInstanceVsBytecode_.Reset();
         psBytecode_.Reset();
         inputLayouts_.clear();
+        baseInstanceInputLayouts_.clear();
+        vertexSource_ = vertSrc;
+        static const std::regex instanceIdSemantic(
+            R"(:\s*SV_InstanceID\b)", std::regex_constants::icase);
+        hasInstanceIdInput_ = std::regex_search(vertSrc, instanceIdSemantic);
         reflection_.Reset();
+        vertexTextureSlots_ = 0;
+        vertexStorageSlots_ = 0;
+        pixelStorageSlots_ = 0;
         constantBuffers_ = {};
         textures_ = {};
 
@@ -68,6 +121,12 @@ namespace CNA::Internal::Renderers::DirectX11
                 vsBytecode_->GetBufferPointer(), vsBytecode_->GetBufferSize(), compileError_) ||
             !reflection_.AddShader(
                 psBytecode_->GetBufferPointer(), psBytecode_->GetBufferSize(), compileError_))
+            return false;
+        std::uint32_t unusedPixelTextures = 0;
+        if (!ReflectStageResources(vsBytecode_.Get(), vertexTextureSlots_,
+                                   vertexStorageSlots_, compileError_) ||
+            !ReflectStageResources(psBytecode_.Get(), unusedPixelTextures,
+                                   pixelStorageSlots_, compileError_))
             return false;
 
         hr = device_->CreateVertexShader(vsBytecode_->GetBufferPointer(), vsBytecode_->GetBufferSize(),
@@ -108,7 +167,13 @@ namespace CNA::Internal::Renderers::DirectX11
             return;
 
         BindProgramEXT(true);
+    }
 
+    bool D3D11EffectRenderer::BindSpriteEXT()
+    {
+        if (!valid_)
+            return false;
+        BindProgramEXT(true);
         using Microsoft::Xna::Framework::Graphics::VertexElement;
         using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
         using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
@@ -118,8 +183,10 @@ namespace CNA::Internal::Renderers::DirectX11
             {VertexElement(16, VertexElementFormat::Vector4, VertexElementUsage::Color, 0), 0, 0, false},
         };
         const auto layout = GetOrCreateInputLayoutEXT({}, spriteElements);
-        if (layout)
-            context_->IASetInputLayout(layout.Get());
+        if (!layout)
+            return false;
+        context_->IASetInputLayout(layout.Get());
+        return true;
     }
 
     void D3D11EffectRenderer::BindProgramEXT(const bool preserveImplicitTexture0)
@@ -157,6 +224,13 @@ namespace CNA::Internal::Renderers::DirectX11
         for (int slot = 0; slot < reflection_.GetShaderResourceCount(); ++slot)
             srvs[static_cast<std::size_t>(slot)] = ResolveTextureSrvEXT(slot);
         const UINT resourceCount = static_cast<UINT>(reflection_.GetShaderResourceCount());
+        std::array<ID3D11ShaderResourceView*,
+                   D3DCommon::D3DProgramReflection::kMaxShaderResources> vertexSrvs{};
+        for (int slot = 0; slot < static_cast<int>(vertexSrvs.size()); ++slot)
+            if ((vertexTextureSlots_ & (UINT32_C(1) << slot)) != 0)
+                vertexSrvs[static_cast<std::size_t>(slot)] = ResolveTextureSrvEXT(slot);
+        context_->VSSetShaderResources(
+            0, static_cast<UINT>(vertexSrvs.size()), vertexSrvs.data());
         if (resourceCount > 0)
         {
             if (!preserveImplicitTexture0 || textures_[0].explicitlySet)
@@ -230,55 +304,141 @@ namespace CNA::Internal::Renderers::DirectX11
     {
         if (unit < 0 || unit >= static_cast<int>(textures_.size()))
             return;
+        std::shared_ptr<void> retained = texture ? texture->shared_from_this() : nullptr;
         textures_[static_cast<std::size_t>(unit)] =
-            {TextureKind::Texture2D, texture, true};
+            {texture ? TextureKind::Texture2D : TextureKind::None,
+             texture, true, std::move(retained)};
     }
 
     void D3D11EffectRenderer::BindTextureCube(const int unit, ITextureCubeRenderer* texture)
     {
         if (unit < 0 || unit >= static_cast<int>(textures_.size()))
             return;
+        std::shared_ptr<void> retained = texture ? texture->shared_from_this() : nullptr;
         textures_[static_cast<std::size_t>(unit)] =
-            {TextureKind::TextureCube, texture, true};
+            {texture ? TextureKind::TextureCube : TextureKind::None,
+             texture, true, std::move(retained)};
     }
 
     void D3D11EffectRenderer::BindTexture3D(int unit, ITexture3DRenderer* texture)
     {
         if (unit < 0 || unit >= static_cast<int>(textures_.size()))
             return;
+        std::shared_ptr<void> retained = texture ? texture->shared_from_this() : nullptr;
         textures_[static_cast<std::size_t>(unit)] =
-            {TextureKind::Texture3D, texture, true};
+            {texture ? TextureKind::Texture3D : TextureKind::None,
+             texture, true, std::move(retained)};
+    }
+
+    bool D3D11EffectRenderer::BindTexture2DArrayEXT(
+        int unit, std::shared_ptr<ITexture2DArrayRenderer> texture)
+    {
+        if (unit < 0 || unit >= static_cast<int>(textures_.size()))
+            return false;
+        auto* native = texture ? dynamic_cast<D3D11Texture2DArray*>(texture.get()) : nullptr;
+        if (texture && (!native || native->GetDeviceEXT() != device_.Get()))
+            return false;
+        auto& binding = textures_[static_cast<std::size_t>(unit)];
+        binding.kind = texture ? TextureKind::Texture2DArray : TextureKind::None;
+        binding.texture = native;
+        binding.explicitlySet = true;
+        binding.retainedClassic.reset();
+        binding.retainedStorage.reset();
+        binding.retainedArray = std::move(texture);
+        return true;
+    }
+
+    bool D3D11EffectRenderer::BindStorageTexture2DEXT(
+        int unit, std::shared_ptr<IStorageTexture2DRenderer> texture)
+    {
+        if (unit < 0 || unit >= static_cast<int>(textures_.size()))
+            return false;
+        auto* native = texture ? dynamic_cast<D3D11StorageTexture2D*>(texture.get()) : nullptr;
+        if (texture && (!native || native->GetDeviceEXT() != device_.Get() ||
+                        !native->GetShaderResourceViewEXT()))
+            return false;
+        auto& binding = textures_[static_cast<std::size_t>(unit)];
+        binding.kind = texture ? TextureKind::StorageTexture2D : TextureKind::None;
+        binding.texture = native;
+        binding.explicitlySet = true;
+        binding.retainedClassic.reset();
+        binding.retainedArray.reset();
+        binding.retainedStorage = std::move(texture);
+        return true;
     }
 
     void D3D11EffectRenderer::SetViewportSizeEXT(float width, float height)
     {
         reflection_.SetVec2("vpSize", width, height);
+        reflection_.SetVec2("viewportSize", width, height);
     }
 
     ComPtr<ID3D11InputLayout> D3D11EffectRenderer::GetOrCreateInputLayoutEXT(
         const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaration,
-        const std::vector<D3DCommon::D3DVertexInputElement>& inputElements)
+        const std::vector<D3DCommon::D3DVertexInputElement>& inputElements,
+        const bool logicalInstanceId)
     {
         const InputLayoutKey key{
             D3DCommon::VertexDeclarationCacheKey(declaration),
             D3DCommon::VertexInputLayoutCacheKey(inputElements)};
-        if (const auto found = inputLayouts_.find(key); found != inputLayouts_.end())
+        auto& layouts = logicalInstanceId ? baseInstanceInputLayouts_ : inputLayouts_;
+        if (const auto found = layouts.find(key); found != layouts.end())
             return found->second;
 
         std::vector<D3D11_INPUT_ELEMENT_DESC> translated;
         const bool translatedOk = !inputElements.empty()
             ? D3DCommon::InputElementsForLayout(inputElements, translated)
             : D3DCommon::InputElementsForDeclaration(declaration, translated);
+        if (logicalInstanceId)
+            translated.push_back({"CNA_LOGICAL_INSTANCE_ID", 0, DXGI_FORMAT_R32_UINT,
+                                  static_cast<UINT>(kMaxVertexStreams), 0,
+                                  D3D11_INPUT_PER_INSTANCE_DATA, 1});
         ComPtr<ID3D11InputLayout> layout;
-        if (translatedOk && vsBytecode_)
+        ID3DBlob* bytecode = logicalInstanceId
+            ? baseInstanceVsBytecode_.Get() : vsBytecode_.Get();
+        if (translatedOk && bytecode)
         {
             device_->CreateInputLayout(
                 translated.data(), static_cast<UINT>(translated.size()),
-                vsBytecode_->GetBufferPointer(), vsBytecode_->GetBufferSize(),
+                bytecode->GetBufferPointer(), bytecode->GetBufferSize(),
                 layout.ReleaseAndGetAddressOf());
         }
-        inputLayouts_.emplace(key, layout);
+        layouts.emplace(key, layout);
         return layout;
+    }
+
+    bool D3D11EffectRenderer::EnsureBaseInstanceVertexShaderEXT()
+    {
+        if (baseInstanceVs_)
+            return true;
+        static const std::regex instanceIdSemantic(
+            R"(:\s*SV_InstanceID\b)", std::regex_constants::icase);
+        const std::string source = std::regex_replace(
+            vertexSource_, instanceIdSemantic, ": CNA_LOGICAL_INSTANCE_ID");
+        ComPtr<ID3DBlob> errors;
+        const HRESULT compileResult = D3DCompile(
+            source.data(), source.size(), "ShaderEffect_base_instance_vs", nullptr, nullptr,
+            "main", "vs_5_0", D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3,
+            0, baseInstanceVsBytecode_.ReleaseAndGetAddressOf(), errors.GetAddressOf());
+        if (FAILED(compileResult))
+        {
+            compileError_ = errors
+                ? std::string(static_cast<const char*>(errors->GetBufferPointer()),
+                              errors->GetBufferSize())
+                : ("D3DCompile (base-instance vertex) failed, hr=" + FormatHr(compileResult));
+            return false;
+        }
+        const HRESULT createResult = device_->CreateVertexShader(
+            baseInstanceVsBytecode_->GetBufferPointer(),
+            baseInstanceVsBytecode_->GetBufferSize(), nullptr,
+            baseInstanceVs_.ReleaseAndGetAddressOf());
+        if (FAILED(createResult))
+        {
+            compileError_ = "CreateVertexShader (base-instance) failed, hr=" +
+                FormatHr(createResult);
+            return false;
+        }
+        return true;
     }
 
     bool D3D11EffectRenderer::BindForDrawEXT(
@@ -291,6 +451,29 @@ namespace CNA::Internal::Renderers::DirectX11
         if (!layout)
             return false;
         BindProgramEXT(false);
+        context_->IASetInputLayout(layout.Get());
+        return true;
+    }
+
+    bool D3D11EffectRenderer::BindForBaseInstanceDrawEXT(
+        const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaration,
+        const std::vector<D3DCommon::D3DVertexInputElement>& inputElements,
+        bool& usesLogicalIdStream)
+    {
+        usesLogicalIdStream = hasInstanceIdInput_;
+        if (!hasInstanceIdInput_)
+            return BindForDrawEXT(declaration, inputElements);
+        if (!valid_ || !EnsureBaseInstanceVertexShaderEXT())
+            return false;
+        const auto layout = GetOrCreateInputLayoutEXT(
+            declaration, inputElements, true);
+        if (!layout)
+        {
+            compileError_ = "DirectX11 could not create the base-instance input layout.";
+            return false;
+        }
+        BindProgramEXT(false);
+        context_->VSSetShader(baseInstanceVs_.Get(), nullptr, 0);
         context_->IASetInputLayout(layout.Get());
         return true;
     }
@@ -322,6 +505,16 @@ namespace CNA::Internal::Renderers::DirectX11
             case TextureKind::Texture3D:
                 if (const auto* texture = dynamic_cast<const D3D11Texture3DRenderer*>(
                         static_cast<ITexture3DRenderer*>(binding.texture)))
+                    return texture->GetShaderResourceViewEXT();
+                break;
+            case TextureKind::Texture2DArray:
+                if (const auto* texture = dynamic_cast<const D3D11Texture2DArray*>(
+                        static_cast<ITexture2DArrayRenderer*>(binding.texture)))
+                    return texture->GetShaderResourceViewEXT();
+                break;
+            case TextureKind::StorageTexture2D:
+                if (const auto* texture = dynamic_cast<const D3D11StorageTexture2D*>(
+                        static_cast<IStorageTexture2DRenderer*>(binding.texture)))
                     return texture->GetShaderResourceViewEXT();
                 break;
             case TextureKind::None:

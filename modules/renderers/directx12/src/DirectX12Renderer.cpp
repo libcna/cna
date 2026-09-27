@@ -1,17 +1,24 @@
 // plans/plan_dx.md Phase DX17: frame-scoped D3D12 command recording with persistently mapped
 // per-frame upload rings and explicit immediate-list boundaries for CPU readbacks.
 #include "CNA/Logger.hpp"
+#include "CNA/IndirectDrawArguments.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Buffers.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Textures.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12StorageBuffer.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12ComputeShader.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12RenderTargets.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12SpriteBatch.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12OcclusionQuery.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12GpuTimer.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12EffectRenderer.hpp"
 #if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
 #include "CNA/Internal/Renderers/DirectX12/D3D12CompiledEffect.hpp"
 #endif
 #include "CNA/Internal/Renderers/DirectX12/D3D12Texture3D.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12Texture2DArray.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12StorageTexture2D.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DDebugLayerLog.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"
@@ -23,6 +30,7 @@
 #include "System/NotSupportedException.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -62,12 +70,62 @@ namespace CNA::Internal::Renderers::DirectX12
     namespace
     {
         constexpr std::size_t kDefaultFrameUploadChunkSize = 1u * 1024u * 1024u;
+        static_assert(sizeof(CNA::IndirectDrawArguments) == sizeof(D3D12_DRAW_ARGUMENTS));
+        static_assert(sizeof(CNA::IndirectDrawIndexedArguments) ==
+                      sizeof(D3D12_DRAW_INDEXED_ARGUMENTS));
 
         std::string FormatHr(HRESULT hr)
         {
             char buf[32];
             std::snprintf(buf, sizeof(buf), "0x%08lX", static_cast<unsigned long>(hr));
             return buf;
+        }
+
+#if defined(_MSC_VER)
+        constexpr UINT DredHistoryIndex(UINT completed) noexcept
+        {
+            return completed % 65536u;
+        }
+
+        static_assert(DredHistoryIndex(65536u) == 0u);
+        static_assert(DredHistoryIndex(65537u) == 1u);
+
+        const char* DredOperationName(D3D12_AUTO_BREADCRUMB_OP op) noexcept
+        {
+            switch (op)
+            {
+                case D3D12_AUTO_BREADCRUMB_OP_DRAWINSTANCED: return "DrawInstanced";
+                case D3D12_AUTO_BREADCRUMB_OP_DRAWINDEXEDINSTANCED: return "DrawIndexedInstanced";
+                case D3D12_AUTO_BREADCRUMB_OP_EXECUTEINDIRECT: return "ExecuteIndirect";
+                case D3D12_AUTO_BREADCRUMB_OP_DISPATCH: return "Dispatch";
+                case D3D12_AUTO_BREADCRUMB_OP_COPYBUFFERREGION: return "CopyBufferRegion";
+                case D3D12_AUTO_BREADCRUMB_OP_COPYTEXTUREREGION: return "CopyTextureRegion";
+                case D3D12_AUTO_BREADCRUMB_OP_RESOLVESUBRESOURCE: return "ResolveSubresource";
+                case D3D12_AUTO_BREADCRUMB_OP_CLEARRENDERTARGETVIEW: return "ClearRenderTargetView";
+                case D3D12_AUTO_BREADCRUMB_OP_CLEARDEPTHSTENCILVIEW: return "ClearDepthStencilView";
+                case D3D12_AUTO_BREADCRUMB_OP_RESOURCEBARRIER: return "ResourceBarrier";
+                case D3D12_AUTO_BREADCRUMB_OP_WRITEBUFFERIMMEDIATE: return "WriteBufferImmediate";
+                default: return "Other";
+            }
+        }
+#endif
+
+        const D3D12StorageBuffer& RequireIndirectBuffer(
+            const IStorageBufferRenderer& buffer, DirectX12Renderer* owner,
+            int byteOffset, std::size_t commandBytes)
+        {
+            const auto* native = dynamic_cast<const D3D12StorageBuffer*>(&buffer);
+            if (!native || native->GetOwnerEXT() != owner ||
+                !native->GetResourceEXT() ||
+                (native->GetUsageEXT() & UINT32_C(0x08)) == 0)
+                throw System::NotSupportedException(
+                    "D3D12 indirect drawing requires a same-device argument buffer");
+            if (byteOffset < 0 || (byteOffset & 3) != 0 ||
+                static_cast<std::size_t>(byteOffset) > native->GetByteSize() ||
+                commandBytes > native->GetByteSize() -
+                               static_cast<std::size_t>(byteOffset))
+                throw std::out_of_range("D3D12 indirect argument range is invalid");
+            return *native;
         }
 
         // Every live renderer's info queue, so a diagnostic handler can read the message that made
@@ -103,8 +161,9 @@ namespace CNA::Internal::Renderers::DirectX12
         {
             const int bytes = WideCharToMultiByte(CP_UTF8, 0, text, -1, nullptr, 0, nullptr, nullptr);
             if (bytes <= 1) return {};
-            std::string out(static_cast<std::size_t>(bytes - 1), '\0');
+            std::string out(static_cast<std::size_t>(bytes), '\0');
             WideCharToMultiByte(CP_UTF8, 0, text, -1, out.data(), bytes, nullptr, nullptr);
+            out.resize(static_cast<std::size_t>(bytes - 1));
             return out;
         }
 
@@ -241,7 +300,8 @@ namespace CNA::Internal::Renderers::DirectX12
 
         void BindVertexStreams(
             ID3D12GraphicsCommandList* commandList,
-            const D3D12VertexBufferRenderer& fallback, const GpuDrawParams& params)
+            const D3D12VertexBufferRenderer& fallback, const GpuDrawParams& params,
+            int logicalInstance = -1)
         {
             D3D12_VERTEX_BUFFER_VIEW views[kMaxVertexStreams]{};
             if (params.vertexStreamCount == 0)
@@ -259,12 +319,62 @@ namespace CNA::Internal::Renderers::DirectX12
                     const auto& buffer =
                         *static_cast<const D3D12VertexBufferRenderer*>(stream.buffer);
                     views[stream.slot] = buffer.GetViewEXT();
-                    AdvanceVertexBufferView(views[stream.slot], stream.vertexOffset);
+                    std::int64_t elementOffset = stream.vertexOffset;
+                    if (logicalInstance >= 0 && stream.instanceFrequency > 0)
+                        elementOffset += logicalInstance / stream.instanceFrequency;
+                    if (elementOffset > (std::numeric_limits<int>::max)())
+                        throw System::NotSupportedException(
+                            "DirectX12 instance stream offset exceeds the native view range.");
+                    AdvanceVertexBufferView(views[stream.slot],
+                                            static_cast<int>(elementOffset));
                 }
             }
 
             commandList->IASetVertexBuffers(
                 0, static_cast<UINT>(kMaxVertexStreams), views);
+        }
+
+        void DrawIndexedInstances(
+            ID3D12GraphicsCommandList* commandList,
+            const D3D12VertexBufferRenderer& fallback, const GpuDrawParams& params,
+            UINT indexCount, int instanceCount,
+            const D3D12_VERTEX_BUFFER_VIEW* logicalIds = nullptr)
+        {
+            for (int instance = 0; instance < instanceCount; ++instance)
+            {
+                const std::int64_t logical =
+                    static_cast<std::int64_t>(params.firstInstance) + instance;
+                if (logical < 0 || logical > (std::numeric_limits<int>::max)())
+                    throw System::NotSupportedException(
+                        "DirectX12 first instance exceeds the supported logical range.");
+                bool aligned = true;
+                for (int stream = 0; stream < params.vertexStreamCount; ++stream)
+                {
+                    const int frequency = params.vertexStreams[
+                        static_cast<std::size_t>(stream)].instanceFrequency;
+                    if (frequency > 0 && logical % frequency != 0)
+                    {
+                        aligned = false;
+                        break;
+                    }
+                }
+                BindVertexStreams(commandList, fallback, params,
+                                  static_cast<int>(logical));
+                if (logicalIds != nullptr)
+                {
+                    D3D12_VERTEX_BUFFER_VIEW view = *logicalIds;
+                    const UINT byteOffset = static_cast<UINT>(instance) * sizeof(UINT);
+                    view.BufferLocation += byteOffset;
+                    view.SizeInBytes -= byteOffset;
+                    commandList->IASetVertexBuffers(16, 1, &view);
+                }
+                commandList->DrawIndexedInstanced(
+                    indexCount, aligned ? static_cast<UINT>(instanceCount - instance) : 1u,
+                    static_cast<UINT>(params.startIndex),
+                    static_cast<INT>(params.baseVertex), 0);
+                if (aligned)
+                    break;
+            }
         }
 
         /// D3D12_PRIMITIVE_TOPOLOGY is D3D_PRIMITIVE_TOPOLOGY under the hood -- same underlying enum
@@ -820,10 +930,22 @@ namespace CNA::Internal::Renderers::DirectX12
                 std::string line = "D3D12 DRED breadcrumb node " + std::to_string(nodeIndex) +
                                    ": " + std::to_string(completed) + " of " +
                                    std::to_string(node->BreadcrumbCount) + " operations completed";
-                // The first operation that did not complete is the one the removal interrupted.
+                if (node->pCommandListDebugNameA)
+                    line += ", command list " + std::string(node->pCommandListDebugNameA);
+                else if (node->pCommandListDebugNameW)
+                    line += ", command list " + NarrowAdapterDescription(node->pCommandListDebugNameW);
+                if (node->pCommandQueueDebugNameA)
+                    line += ", queue " + std::string(node->pCommandQueueDebugNameA);
+                else if (node->pCommandQueueDebugNameW)
+                    line += ", queue " + NarrowAdapterDescription(node->pCommandQueueDebugNameW);
                 if (node->pCommandHistory != nullptr && completed < node->BreadcrumbCount)
-                    line += ", first incomplete op " +
-                            std::to_string(static_cast<int>(node->pCommandHistory[completed]));
+                {
+                    // DRED retains only the most recent 64K command history entries.
+                    const D3D12_AUTO_BREADCRUMB_OP op =
+                        node->pCommandHistory[DredHistoryIndex(completed)];
+                    line += ", next recorded op " + std::to_string(completed) + ": " +
+                            DredOperationName(op) + " (" + std::to_string(static_cast<int>(op)) + ")";
+                }
                 CNA::Logger::Error(line, CNA::LogCategory::RENDER);
             }
         }
@@ -839,11 +961,17 @@ namespace CNA::Internal::Renderers::DirectX12
             for (const D3D12_DRED_ALLOCATION_NODE* node = pageFault.pHeadExistingAllocationNode;
                  node != nullptr && allocations < 16; node = node->pNext, ++allocations)
                 line += "; existing allocation type " +
-                        std::to_string(static_cast<int>(node->AllocationType));
+                        std::to_string(static_cast<int>(node->AllocationType)) +
+                        (node->ObjectNameA ? ", name " + std::string(node->ObjectNameA)
+                                           : (node->ObjectNameW ? ", name " + NarrowAdapterDescription(node->ObjectNameW)
+                                                                : ""));
             for (const D3D12_DRED_ALLOCATION_NODE* node = pageFault.pHeadRecentFreedAllocationNode;
                  node != nullptr && allocations < 32; node = node->pNext, ++allocations)
                 line += "; recently freed allocation type " +
-                        std::to_string(static_cast<int>(node->AllocationType));
+                        std::to_string(static_cast<int>(node->AllocationType)) +
+                        (node->ObjectNameA ? ", name " + std::string(node->ObjectNameA)
+                                           : (node->ObjectNameW ? ", name " + NarrowAdapterDescription(node->ObjectNameW)
+                                                                : ""));
             CNA::Logger::Error(line, CNA::LogCategory::RENDER);
         }
 #endif
@@ -859,6 +987,7 @@ namespace CNA::Internal::Renderers::DirectX12
         HRESULT hr = device_->CreateCommandQueue(&desc, IID_PPV_ARGS(commandQueue_.ReleaseAndGetAddressOf()));
         if (FAILED(hr))
             throw std::runtime_error("ID3D12Device::CreateCommandQueue failed, hr=" + FormatHr(hr));
+        commandQueue_->SetName(L"CNA DirectX12 graphics queue");
     }
 
     void DirectX12Renderer::CreateDescriptorHeapResources()
@@ -898,6 +1027,8 @@ namespace CNA::Internal::Renderers::DirectX12
                 IID_PPV_ARGS(frameCommandLists_[i].ReleaseAndGetAddressOf()));
             if (FAILED(hr))
                 throw std::runtime_error("ID3D12Device::CreateCommandList (frame) failed, hr=" + FormatHr(hr));
+            const std::wstring listName = L"CNA DirectX12 frame command list " + std::to_wstring(i);
+            frameCommandLists_[i]->SetName(listName.c_str());
             hr = frameCommandLists_[i]->Close();
             if (FAILED(hr))
                 throw std::runtime_error("ID3D12GraphicsCommandList::Close (frame initial) failed, hr=" + FormatHr(hr));
@@ -915,6 +1046,7 @@ namespace CNA::Internal::Renderers::DirectX12
             IID_PPV_ARGS(commandList_.ReleaseAndGetAddressOf()));
         if (FAILED(hr))
             throw std::runtime_error("ID3D12Device::CreateCommandList failed, hr=" + FormatHr(hr));
+        commandList_->SetName(L"CNA DirectX12 immediate command list");
 
         hr = commandList_->Close();
         if (FAILED(hr))
@@ -1524,6 +1656,7 @@ namespace CNA::Internal::Renderers::DirectX12
                 nullptr, IID_PPV_ARGS(chunk.resource.ReleaseAndGetAddressOf()));
             if (FAILED(hr))
                 throw std::runtime_error("D3D12 frame constant arena creation failed, hr=" + FormatHr(hr));
+            chunk.resource->SetName(L"CNA frame constant upload arena");
             const D3D12_RANGE noRead{0, 0};
             hr = chunk.resource->Map(0, &noRead, reinterpret_cast<void**>(&chunk.mapped));
             if (FAILED(hr))
@@ -1560,6 +1693,7 @@ namespace CNA::Internal::Renderers::DirectX12
             nullptr, IID_PPV_ARGS(chunk.resource.ReleaseAndGetAddressOf()));
         if (FAILED(hr))
             throw std::runtime_error("D3D12 frame upload ring creation failed, hr=" + FormatHr(hr));
+        chunk.resource->SetName(L"CNA frame texture/buffer upload arena");
 
         const D3D12_RANGE noRead{0, 0};
         hr = chunk.resource->Map(0, &noRead, reinterpret_cast<void**>(&chunk.mapped));
@@ -1770,6 +1904,8 @@ namespace CNA::Internal::Renderers::DirectX12
         UnregisterLiveDebugQueue(infoQueue_);
         D3DCommon::D3DDebugLayerLog::UnregisterLiveQueue(this);
         infoQueue_.Reset();
+        indirectDrawSignature_.Reset();
+        indirectIndexedSignature_.Reset();
         device_.Reset();
         factory_.Reset();
 
@@ -2048,9 +2184,17 @@ namespace CNA::Internal::Renderers::DirectX12
     void DirectX12Renderer::NotifyRenderTargetCubeDestroyedEXT(
         IRenderTargetCubeRenderer* target) noexcept
     {
-        if (currentCubeRT_ != target) return;
-        currentCubeRT_ = nullptr;
-        UnbindOffscreenColorTargetEXT();
+        bool wasBound = currentCubeRT_ == target;
+        if (wasBound) currentCubeRT_ = nullptr;
+        for (int i = 0; i < currentMrtCount_; ++i)
+        {
+            if (currentMrtCubes_[i] == target)
+            {
+                currentMrtCubes_[i] = nullptr;
+                wasBound = true;
+            }
+        }
+        if (wasBound) UnbindOffscreenColorTargetEXT();
     }
 
     D3D12_GPU_DESCRIPTOR_HANDLE DirectX12Renderer::GetSrvGpuHandleForTextureEXT(const ITextureRenderer* tex)
@@ -2269,25 +2413,44 @@ namespace CNA::Internal::Renderers::DirectX12
                 renderTargets[0].GetCubeFace());
             return;
         }
-        for (int i = 0; i < count; ++i)
-            if (renderTargets[i].IsRenderTargetCubeFace())
-                throw std::runtime_error(
-                    "DirectX12Renderer::SetRenderTargets: cube faces in a multi-target "
-                    "set are not implemented by this CNA renderer.");
-
         ID3D12Resource* resources[8];
         D3D12_CPU_DESCRIPTOR_HANDLE rtvs[8];
         const int n = std::min(count, 8);
-        D3D12RenderTargetRenderer* first = nullptr;
+        D3D12_CPU_DESCRIPTOR_HANDLE firstDsv{};
+        DXGI_FORMAT firstDsvFormat = DXGI_FORMAT_UNKNOWN;
+        ID3D12Resource* firstDepthResource = nullptr;
         for (int i = 0; i < n; ++i)
         {
-            auto* rt = dynamic_cast<D3D12RenderTargetRenderer*>(
-                renderTargets[i].GetRenderTarget2D());
-            if (!rt)
-                throw std::runtime_error("DirectX12Renderer::SetRenderTargets: target is not a real D3D12RenderTargetRenderer");
-            resources[i] = rt->GetColorResourceEXT();
-            rtvs[i] = rt->GetRtvEXT();
-            if (i == 0) first = rt;
+            if (renderTargets[i].IsRenderTargetCubeFace())
+            {
+                auto* cube = dynamic_cast<D3D12RenderTargetCubeRenderer*>(
+                    renderTargets[i].GetRenderTargetCube());
+                if (!cube)
+                    throw std::runtime_error("DirectX12Renderer::SetRenderTargets: invalid cube attachment");
+                resources[i] = cube->GetColorResourceEXT();
+                rtvs[i] = cube->PrepareMrtFaceEXT(renderTargets[i].GetCubeFace());
+                if (i == 0)
+                {
+                    firstDsv = cube->GetDsvEXT();
+                    firstDsvFormat = cube->GetDsvFormatEXT();
+                    firstDepthResource = cube->GetDepthResourceEXT();
+                }
+            }
+            else
+            {
+                auto* target = dynamic_cast<D3D12RenderTargetRenderer*>(
+                    renderTargets[i].GetRenderTarget2D());
+                if (!target)
+                    throw std::runtime_error("DirectX12Renderer::SetRenderTargets: invalid 2D attachment");
+                resources[i] = target->GetColorResourceEXT();
+                rtvs[i] = target->GetRtvEXT();
+                if (i == 0)
+                {
+                    firstDsv = target->GetDsvEXT();
+                    firstDsvFormat = target->GetDsvFormatEXT();
+                    firstDepthResource = target->GetDepthResourceEXT();
+                }
+            }
         }
         // plans/plan_dx.md DX-255: XNA takes the depth-stencil buffer from render target 0, exactly as
         // DirectX11Renderer::SetRenderTargets() already does. Omitting it here is what made every
@@ -2300,9 +2463,7 @@ namespace CNA::Internal::Renderers::DirectX12
         BindOffscreenColorTargetsEXT(resources, rtvs, n, resources[0]->GetDesc().Format,
                                      renderTargets[0].GetWidth(),
                                      renderTargets[0].GetHeight(),
-                                     first ? first->GetDsvEXT() : D3D12_CPU_DESCRIPTOR_HANDLE{},
-                                     first ? first->GetDsvFormatEXT() : DXGI_FORMAT_UNKNOWN,
-                                     first ? first->GetDepthResourceEXT() : nullptr);
+                                     firstDsv, firstDsvFormat, firstDepthResource);
 
         // DX-255: and remember the set, so each target's own UnbindAsRenderTarget() (MSAA resolve,
         // mip regeneration) runs when it is replaced. currentCustomRT_ cannot hold N targets; this
@@ -2310,7 +2471,12 @@ namespace CNA::Internal::Renderers::DirectX12
         // never had -- so an MRT set's targets were never finalized here at all.
         currentMrtCount_ = std::min(n, kMaxMrtTargets);
         for (int i = 0; i < currentMrtCount_; ++i)
-            currentMrtTargets_[i] = renderTargets[i].GetRenderTarget2D();
+        {
+            currentMrtTargets_[i] = renderTargets[i].IsRenderTargetCubeFace()
+                ? nullptr : renderTargets[i].GetRenderTarget2D();
+            currentMrtCubes_[i] = renderTargets[i].IsRenderTargetCubeFace()
+                ? renderTargets[i].GetRenderTargetCube() : nullptr;
+        }
     }
 
     void DirectX12Renderer::FlushPendingMrtResolveEXT()
@@ -2319,11 +2485,21 @@ namespace CNA::Internal::Renderers::DirectX12
         // Copy and clear first: UnbindAsRenderTarget() calls back into this renderer
         // (RestoreBackBufferRenderTargetEXT), and re-entering this function must find nothing to do.
         IRenderTargetRenderer* targets[kMaxMrtTargets] = {};
+        IRenderTargetCubeRenderer* cubes[kMaxMrtTargets] = {};
         const int n = currentMrtCount_;
-        for (int i = 0; i < n; ++i) targets[i] = currentMrtTargets_[i];
+        for (int i = 0; i < n; ++i)
+        {
+            targets[i] = currentMrtTargets_[i];
+            cubes[i] = currentMrtCubes_[i];
+            currentMrtTargets_[i] = nullptr;
+            currentMrtCubes_[i] = nullptr;
+        }
         currentMrtCount_ = 0;
         for (int i = 0; i < n; ++i)
+        {
             if (targets[i]) targets[i]->UnbindAsRenderTarget();
+            if (cubes[i]) cubes[i]->UnbindAsRenderTarget();
+        }
     }
 
     void DirectX12Renderer::Clear(float r, float g, float b, float a)
@@ -2470,6 +2646,7 @@ namespace CNA::Internal::Renderers::DirectX12
                                                     D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
                                                     IID_PPV_ARGS(rb.GetAddressOf()))))
             return {};
+        rb->SetName(L"CNA D3D12 immediate texture readback");
 
         D3D12_TEXTURE_COPY_LOCATION dst{};
         dst.pResource = rb.Get();
@@ -2679,6 +2856,9 @@ namespace CNA::Internal::Renderers::DirectX12
     int DirectX12Renderer::ApplyMultiSampleCount(int requestedMultiSampleCount)
     {
         requestedMultiSampleCount_ = requestedMultiSampleCount;
+        // GraphicsDevice::Reset has already applied the requested window size. Synchronise the
+        // swap chain before the first draw/readback, which can happen before the first Present.
+        EnsureSwapChainSize();
         const int clamped = ClampBackBufferMultiSampleCount(
             device_.Get(), DXGI_FORMAT_R8G8B8A8_UNORM, requestedMultiSampleCount_);
         // DX12-0019: the applied depth format stands in for the old `!depthStencilResource_` test, which
@@ -2787,6 +2967,50 @@ namespace CNA::Internal::Renderers::DirectX12
         return RendererFormatVerdict::Defer;
     }
 
+    CNA::RendererFormatSupport DirectX12Renderer::GetSurfaceFormatUsageSupportEXT(
+        int surfaceFormat) const
+    {
+        using CNA::RendererFormatUsage;
+        constexpr std::uint32_t known =
+            static_cast<std::uint32_t>(RendererFormatUsage::Sampled) |
+            static_cast<std::uint32_t>(RendererFormatUsage::Filterable) |
+            static_cast<std::uint32_t>(RendererFormatUsage::TransferSource) |
+            static_cast<std::uint32_t>(RendererFormatUsage::TransferDestination) |
+            static_cast<std::uint32_t>(RendererFormatUsage::Mipmapped) |
+            static_cast<std::uint32_t>(RendererFormatUsage::StorageRead) |
+            static_cast<std::uint32_t>(RendererFormatUsage::StorageWrite);
+        if (!device_ || ClassifySurfaceFormatEXT(surfaceFormat) != RendererFormatVerdict::Supported)
+            return {known, 0};
+        D3D12_FEATURE_DATA_FORMAT_SUPPORT native{};
+        native.Format = D3DCommon::SurfaceFormatToDxgi(surfaceFormat);
+        if (native.Format == DXGI_FORMAT_UNKNOWN ||
+            FAILED(device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &native,
+                                                sizeof(native))) ||
+            (native.Support1 & D3D12_FORMAT_SUPPORT1_TEXTURE2D) == 0)
+            return {known, 0};
+        std::uint32_t supported =
+            static_cast<std::uint32_t>(RendererFormatUsage::TransferSource) |
+            static_cast<std::uint32_t>(RendererFormatUsage::TransferDestination);
+        if ((native.Support1 & D3D12_FORMAT_SUPPORT1_SHADER_LOAD) != 0)
+            supported |= static_cast<std::uint32_t>(RendererFormatUsage::Sampled);
+        if ((native.Support1 & (D3D12_FORMAT_SUPPORT1_SHADER_LOAD |
+                                D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE)) ==
+            (D3D12_FORMAT_SUPPORT1_SHADER_LOAD | D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE))
+            supported |= static_cast<std::uint32_t>(RendererFormatUsage::Filterable);
+        if ((native.Support1 & D3D12_FORMAT_SUPPORT1_MIP) != 0)
+            supported |= static_cast<std::uint32_t>(RendererFormatUsage::Mipmapped);
+        if (D3DCommon::IsXnaUncompressedSurfaceFormat(surfaceFormat) &&
+            D3DCommon::SurfaceFormatBytesPerTexel(surfaceFormat) > 0 &&
+            (native.Support1 & D3D12_FORMAT_SUPPORT1_TYPED_UNORDERED_ACCESS_VIEW) != 0)
+        {
+            if ((native.Support2 & D3D12_FORMAT_SUPPORT2_UAV_TYPED_LOAD) != 0)
+                supported |= static_cast<std::uint32_t>(RendererFormatUsage::StorageRead);
+            if ((native.Support2 & D3D12_FORMAT_SUPPORT2_UAV_TYPED_STORE) != 0)
+                supported |= static_cast<std::uint32_t>(RendererFormatUsage::StorageWrite);
+        }
+        return {known, supported};
+    }
+
     RendererFormatVerdict DirectX12Renderer::ClassifyTexture3DFormatEXT(int surfaceFormat) const
     {
         // DX12-0016 (WINCLOSE-0013): the interface default defers to the framework's Color-only volume
@@ -2874,6 +3098,28 @@ namespace CNA::Internal::Renderers::DirectX12
         return D3DCommon::IsXnaBlockCompressedSurfaceFormat(surfaceFormat);
     }
 
+    bool DirectX12Renderer::SupportsShaderLanguageEXT(int language, int stage) const
+    {
+        return device_ != nullptr &&
+               language == static_cast<int>(CNA::ShaderLanguageEXT::Hlsl) &&
+               (stage == static_cast<int>(CNA::ShaderStageEXT::Vertex) ||
+                stage == static_cast<int>(CNA::ShaderStageEXT::Fragment) ||
+                (stage == static_cast<int>(CNA::ShaderStageEXT::Compute) &&
+                 SupportsComputeShadersEXT()));
+    }
+
+    bool DirectX12Renderer::SupportsTexture3DSamplingEXT() const
+    {
+        if (!device_) return false;
+        D3D12_FEATURE_DATA_FORMAT_SUPPORT support{};
+        support.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        constexpr auto required = static_cast<D3D12_FORMAT_SUPPORT1>(
+            D3D12_FORMAT_SUPPORT1_TEXTURE3D | D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE);
+        return SUCCEEDED(device_->CheckFeatureSupport(
+                   D3D12_FEATURE_FORMAT_SUPPORT, &support, sizeof(support))) &&
+               (support.Support1 & required) == required;
+    }
+
     bool DirectX12Renderer::SupportsCapability(CNA::GraphicsCapability capability) const
     {
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
@@ -2929,6 +3175,173 @@ namespace CNA::Internal::Renderers::DirectX12
         return std::make_unique<D3D12TextureRenderer>(this, data);
     }
 
+    std::unique_ptr<IStorageBufferRenderer> DirectX12Renderer::CreateStorageBufferEXT(
+        std::size_t byteSize, std::uint32_t usage, std::uint32_t cpuAccess)
+    {
+        constexpr std::uint32_t supportedUsage = UINT32_C(0x4F);
+        if (!device_ || byteSize == 0 || usage == 0 ||
+            (usage & ~supportedUsage) != 0 || (cpuAccess & ~UINT32_C(0x03)) != 0 ||
+            ((usage & UINT32_C(0x01)) != 0 &&
+             (!SupportsComputeShadersEXT() || byteSize > GetMaxStorageBufferBytesEXT())) ||
+            ((usage & UINT32_C(0x08)) != 0 && !SupportsIndirectDrawEXT()) ||
+            ((usage & UINT32_C(0x40)) != 0 &&
+             byteSize > GetMaxUniformBufferBytesEXT()))
+            return nullptr;
+        return std::make_unique<D3D12StorageBuffer>(this, byteSize, usage, cpuAccess);
+    }
+
+    bool DirectX12Renderer::SupportsComputeShadersEXT() const
+    {
+        return device_ != nullptr && featureLevel_ >= D3D_FEATURE_LEVEL_11_0;
+    }
+
+    bool DirectX12Renderer::SupportsComputeImageBindingEXT() const
+    {
+        if (!SupportsComputeShadersEXT()) return false;
+        const auto support = GetSurfaceFormatUsageSupportEXT(static_cast<int>(
+            Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color));
+        constexpr std::uint32_t required =
+            static_cast<std::uint32_t>(CNA::RendererFormatUsage::StorageRead) |
+            static_cast<std::uint32_t>(CNA::RendererFormatUsage::StorageWrite);
+        return (support.supportedUsages & required) == required;
+    }
+
+    std::unique_ptr<IComputeShaderRenderer> DirectX12Renderer::CreateComputeShader(
+        const std::string& computeSrc)
+    {
+        if (!SupportsComputeShadersEXT()) return nullptr;
+        auto shader = std::make_unique<D3D12ComputeShader>(this);
+        shader->CompileProgram(computeSrc);
+        return shader;
+    }
+
+    std::unique_ptr<IStorageBufferRenderer> DirectX12Renderer::CreateStorageBuffer(
+        std::size_t byteSize)
+    {
+        if (!SupportsComputeShadersEXT() || byteSize == 0 ||
+            byteSize > GetMaxStorageBufferBytesEXT())
+            return nullptr;
+        return std::make_unique<D3D12StorageBuffer>(
+            this, byteSize, UINT32_C(0x0F), UINT32_C(0x03));
+    }
+
+    void DirectX12Renderer::DispatchCompute(
+        IComputeShaderRenderer* shader, int groupsX, int groupsY, int groupsZ)
+    {
+        auto* native = dynamic_cast<D3D12ComputeShader*>(shader);
+        if (!native || native->GetOwnerEXT() != this ||
+            groupsX <= 0 || groupsY <= 0 || groupsZ <= 0 ||
+            groupsX > GetMaxComputeWorkGroupCountEXT(0) ||
+            groupsY > GetMaxComputeWorkGroupCountEXT(1) ||
+            groupsZ > GetMaxComputeWorkGroupCountEXT(2))
+            throw std::invalid_argument("D3D12 compute dispatch has an invalid program or size");
+        native->Dispatch(groupsX, groupsY, groupsZ);
+    }
+
+    int DirectX12Renderer::GetMaxComputeWorkGroupCountEXT(int axis) const
+    {
+        return SupportsComputeShadersEXT() && axis >= 0 && axis < 3 ? 65535 : 0;
+    }
+
+    int DirectX12Renderer::GetMaxComputeWorkGroupSizeEXT(int axis) const
+    {
+        if (!SupportsComputeShadersEXT()) return 0;
+        switch (axis)
+        {
+        case 0: return 1024;
+        case 1: return 1024;
+        case 2: return 64;
+        default: return 0;
+        }
+    }
+
+    int DirectX12Renderer::GetMaxComputeWorkGroupInvocationsEXT() const
+    {
+        return SupportsComputeShadersEXT() ? 1024 : 0;
+    }
+
+    std::uint64_t DirectX12Renderer::GetMaxStorageBufferBytesEXT() const
+    {
+        return SupportsComputeShadersEXT() ? UINT64_C(128) * 1024 * 1024 : 0;
+    }
+
+    std::uint64_t DirectX12Renderer::GetMaxUniformBufferBytesEXT() const
+    {
+        return device_ ? UINT64_C(64) * 1024 : 0;
+    }
+
+    int DirectX12Renderer::GetMaxComputeStorageBufferBindingsEXT() const
+    {
+        return SupportsComputeShadersEXT() ? D3D12ComputeShader::kStorageSlots : 0;
+    }
+
+    std::uint64_t DirectX12Renderer::GetMinStorageBufferOffsetAlignmentEXT() const
+    {
+        return SupportsComputeShadersEXT() ? 4 : 0;
+    }
+
+    std::uint64_t DirectX12Renderer::GetMinUniformBufferOffsetAlignmentEXT() const
+    {
+        return device_ ? D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT : 0;
+    }
+
+    int DirectX12Renderer::GetMaxVertexShaderStorageBlocksEXT() const
+    {
+        return SupportsComputeShadersEXT() ? static_cast<int>(drawStorageBuffers_.size()) : 0;
+    }
+
+    void DirectX12Renderer::BindStorageBufferForDrawEXT(
+        int binding, const IStorageBufferRenderer& buffer)
+    {
+        const auto* native = dynamic_cast<const D3D12StorageBuffer*>(&buffer);
+        if (binding < 0 || binding >= GetMaxVertexShaderStorageBlocksEXT() ||
+            !native || native->GetOwnerEXT() != this ||
+            (native->GetUsageEXT() & UINT32_C(0x01)) == 0 ||
+            native->GetSrvIndexEXT() == D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex)
+            throw System::NotSupportedException(
+                "D3D12 draw storage binding requires a same-device raw storage buffer "
+                "and a t-register from zero through fifteen.");
+        drawStorageBuffers_[static_cast<std::size_t>(binding)] = buffer.shared_from_this();
+    }
+
+    bool DirectX12Renderer::SupportsIndirectDrawEXT() const
+    {
+        return device_ != nullptr && featureLevel_ >= D3D_FEATURE_LEVEL_11_0;
+    }
+
+    ID3D12CommandSignature* DirectX12Renderer::GetOrCreateIndirectSignatureEXT(bool indexed)
+    {
+        auto& signature = indexed ? indirectIndexedSignature_ : indirectDrawSignature_;
+        if (signature) return signature.Get();
+
+        D3D12_INDIRECT_ARGUMENT_DESC argument{};
+        argument.Type = indexed ? D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED
+                                : D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
+        D3D12_COMMAND_SIGNATURE_DESC description{};
+        description.ByteStride = indexed ? sizeof(D3D12_DRAW_INDEXED_ARGUMENTS)
+                                         : sizeof(D3D12_DRAW_ARGUMENTS);
+        description.NumArgumentDescs = 1;
+        description.pArgumentDescs = &argument;
+        const HRESULT hr = device_->CreateCommandSignature(
+            &description, nullptr, IID_PPV_ARGS(signature.ReleaseAndGetAddressOf()));
+        if (FAILED(hr))
+            throw std::runtime_error(
+                "D3D12 indirect command signature creation failed: " + FormatHr(hr));
+        return signature.Get();
+    }
+
+    void DirectX12Renderer::ExecuteIndirectDrawEXT(
+        ID3D12GraphicsCommandList* commands, ID3D12Resource* arguments,
+        UINT64 byteOffset, bool indexed)
+    {
+        ID3D12CommandSignature* signature = GetOrCreateIndirectSignatureEXT(indexed);
+        RetainFrameObjectEXT(arguments);
+        RetainFrameObjectEXT(signature);
+        resourceStates_.TransitionTo(
+            commands, arguments, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+        commands->ExecuteIndirect(signature, 1, arguments, byteOffset, nullptr, 0);
+    }
+
     std::unique_ptr<ITextureCubeRenderer> DirectX12Renderer::CreateTextureCube(
         int size, bool mipMap, int surfaceFormat)
     {
@@ -2941,6 +3354,79 @@ namespace CNA::Internal::Renderers::DirectX12
         return std::make_unique<D3D12Texture3DRenderer>(this, w, h, depth, mipMap, surfaceFormat);
     }
 
+    std::unique_ptr<ITexture2DArrayRenderer> DirectX12Renderer::CreateTexture2DArrayEXT(
+        int width, int height, int layerCount, int mipLevelCount,
+        int surfaceFormat, std::uint32_t usage)
+    {
+        if (!device_ || width <= 0 || height <= 0 ||
+            width > GetMaxTextureDimension() || height > GetMaxTextureDimension() ||
+            layerCount <= 0 || layerCount > GetMaxTextureArrayLayersEXT() ||
+            mipLevelCount <= 0 || mipLevelCount > D3D12_REQ_MIP_LEVELS ||
+            (usage & 1u) == 0 || (usage & ~0x0Fu) != 0)
+            return nullptr;
+        const auto support = GetSurfaceFormatUsageSupportEXT(surfaceFormat);
+        constexpr std::uint32_t sampled =
+            static_cast<std::uint32_t>(CNA::RendererFormatUsage::Sampled);
+        constexpr std::uint32_t filterable =
+            static_cast<std::uint32_t>(CNA::RendererFormatUsage::Filterable);
+        if ((support.supportedUsages & sampled) == 0 ||
+            ((usage & 2u) != 0 && (support.supportedUsages & filterable) == 0))
+            return nullptr;
+        return std::make_unique<D3D12Texture2DArray>(
+            this, width, height, layerCount, mipLevelCount, surfaceFormat, usage);
+    }
+
+    std::unique_ptr<IStorageTexture2DRenderer> DirectX12Renderer::CreateStorageTexture2DEXT(
+        int width, int height, int mipLevelCount, int surfaceFormat, std::uint32_t usage)
+    {
+        using CNA::RendererFormatUsage;
+        if (!SupportsComputeShadersEXT() || width <= 0 || height <= 0 ||
+            width > GetMaxTextureDimension() || height > GetMaxTextureDimension() ||
+            mipLevelCount <= 0 || mipLevelCount > D3D12_REQ_MIP_LEVELS ||
+            (usage & UINT32_C(0x03)) == 0 || (usage & ~UINT32_C(0x3F)) != 0)
+            return nullptr;
+        const auto support = GetSurfaceFormatUsageSupportEXT(surfaceFormat);
+        std::uint32_t required = 0;
+        if ((usage & UINT32_C(0x01)) != 0)
+            required |= static_cast<std::uint32_t>(RendererFormatUsage::StorageRead);
+        if ((usage & UINT32_C(0x02)) != 0)
+            required |= static_cast<std::uint32_t>(RendererFormatUsage::StorageWrite);
+        if ((usage & UINT32_C(0x04)) != 0)
+            required |= static_cast<std::uint32_t>(RendererFormatUsage::Sampled);
+        if ((usage & UINT32_C(0x08)) != 0)
+            required |= static_cast<std::uint32_t>(RendererFormatUsage::Filterable);
+        if ((usage & UINT32_C(0x10)) != 0)
+            required |= static_cast<std::uint32_t>(RendererFormatUsage::TransferSource);
+        if ((usage & UINT32_C(0x20)) != 0)
+            required |= static_cast<std::uint32_t>(RendererFormatUsage::TransferDestination);
+        if (mipLevelCount > 1)
+            required |= static_cast<std::uint32_t>(RendererFormatUsage::Mipmapped);
+        if ((support.supportedUsages & required) != required)
+            return nullptr;
+        return std::make_unique<D3D12StorageTexture2D>(
+            this, width, height, mipLevelCount, surfaceFormat, usage);
+    }
+
+    int DirectX12Renderer::GetMaxTextureArrayLayersEXT() const
+    {
+        return device_ ? D3D12_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION : 0;
+    }
+
+    int DirectX12Renderer::GetMaxSampledTexturesPerShaderStageEXT() const
+    {
+        return device_ ? D3DCommon::D3DProgramReflection::kMaxShaderResources : 0;
+    }
+
+    int DirectX12Renderer::GetMaxStorageImagesPerShaderStageEXT() const
+    {
+        if (!SupportsComputeShadersEXT()) return 0;
+        const auto support = GetSurfaceFormatUsageSupportEXT(static_cast<int>(
+            Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color));
+        return (support.supportedUsages & static_cast<std::uint32_t>(
+            CNA::RendererFormatUsage::StorageWrite)) != 0
+            ? D3D12ComputeShader::kStorageSlots : 0;
+    }
+
     std::unique_ptr<ISpriteBatchRenderer> DirectX12Renderer::CreateSpriteBatch()
     {
         return std::make_unique<D3D12SpriteBatchRenderer>(this);
@@ -2949,6 +3435,56 @@ namespace CNA::Internal::Renderers::DirectX12
     std::unique_ptr<IOcclusionQueryRenderer> DirectX12Renderer::CreateOcclusionQuery()
     {
         return std::make_unique<D3D12OcclusionQueryRenderer>(this);
+    }
+
+    bool DirectX12Renderer::SupportsGpuTimerEXT() const
+    {
+        UINT64 frequency = 0;
+        return commandQueue_ && SUCCEEDED(commandQueue_->GetTimestampFrequency(&frequency)) &&
+               frequency != 0;
+    }
+
+    std::uint64_t DirectX12Renderer::GetTimestampPeriodPicosecondsEXT() const
+    {
+        UINT64 frequency = 0;
+        if (!commandQueue_ || FAILED(commandQueue_->GetTimestampFrequency(&frequency)) ||
+            frequency == 0)
+            return 0;
+        constexpr std::uint64_t picosecondsPerSecond = UINT64_C(1'000'000'000'000);
+        const std::uint64_t whole = picosecondsPerSecond / frequency;
+        const std::uint64_t remainder = picosecondsPerSecond % frequency;
+        return whole + (remainder >= frequency / 2 + frequency % 2 ? 1 : 0);
+    }
+
+    void DirectX12Renderer::SetStringMarkerEXT(const char* marker)
+    {
+        if (!device_ || marker == nullptr || marker[0] == '\0') return;
+
+        using SetMarkerOnCommandList =
+            void(WINAPI*)(ID3D12GraphicsCommandList*, UINT64, PCSTR);
+        struct PixRuntime
+        {
+            HMODULE library = LoadLibraryExW(
+                L"WinPixEventRuntime.dll", nullptr, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+            SetMarkerOnCommandList setMarker = library
+                ? reinterpret_cast<SetMarkerOnCommandList>(
+                      GetProcAddress(library, "PIXSetMarkerOnCommandList"))
+                : nullptr;
+
+            ~PixRuntime()
+            {
+                if (library) FreeLibrary(library);
+            }
+        };
+        static const PixRuntime pix;
+        if (pix.setMarker)
+            pix.setMarker(GetFrameCommandListEXT(), 0, marker);
+    }
+
+    std::unique_ptr<IGpuTimerRenderer> DirectX12Renderer::CreateGpuTimerEXT()
+    {
+        if (!SupportsGpuTimerEXT()) return nullptr;
+        return std::make_unique<D3D12GpuTimer>(this);
     }
 
     std::unique_ptr<IEffectRenderer> DirectX12Renderer::CreateEffectRenderer(
@@ -3471,7 +4007,9 @@ namespace CNA::Internal::Renderers::DirectX12
     void DirectX12Renderer::DrawPrimitivesExImpl(
         const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
         const Matrix& world, const Matrix& view, const Matrix& projection,
-        PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
+        PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+        ID3D12Resource* indirectArguments, UINT64 indirectByteOffset,
+        int instanceCount)
     {
         // GLTF-394: reject line/point topology before declaration/target/PSO work can mask the reason.
         const D3D12_PRIMITIVE_TOPOLOGY nativeTopology = ToD3D12Topology(primitive);
@@ -3485,12 +4023,15 @@ namespace CNA::Internal::Renderers::DirectX12
         const std::size_t fallbackStride =
             d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
         const bool multiStream = HasMultipleVertexStreams(params);
+        const bool customInstanceStream = params.customEffectRequested &&
+            FirstInstanceStream(params) != nullptr;
         std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> combinedElements;
         std::vector<D3DVertexInputElement> inputElements;
-        if (multiStream)
-            BuildVertexInputLayout(params, false, combinedElements, inputElements);
+        if (multiStream || customInstanceStream)
+            BuildVertexInputLayout(params, customInstanceStream,
+                                   combinedElements, inputElements);
         const std::size_t stride = CombinedVertexStrideOr(params, fallbackStride);
-        const auto& vertexElements = multiStream
+        const auto& vertexElements = multiStream || customInstanceStream
             ? combinedElements : d3dVb.GetDeclarationEXT().GetElements();
 
 #if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
@@ -3498,7 +4039,8 @@ namespace CNA::Internal::Renderers::DirectX12
         {
             RecordCompiledEffectDrawEXT(
                 d3dVb, ib, primitive, primitiveCount, 1, params,
-                *params.compiledEffectRuntime);
+                *params.compiledEffectRuntime, nullptr, nullptr,
+                indirectArguments, indirectByteOffset);
             return;
         }
 #endif
@@ -3527,18 +4069,39 @@ namespace CNA::Internal::Renderers::DirectX12
             customState.vertexInputElements = inputElements;
             customState.topologyType = static_cast<int>(ToD3D12TopologyType(primitive));
             FillPsoStateFromCurrentEXT(customState);
+            const bool logicalIdStream = params.firstInstance > 0 &&
+                customEffect->HasInstanceIdInputEXT();
             ID3D12PipelineState* customPso = customEffect->GetOrCreatePipelineStateEXT(
-                std::move(customState));
+                std::move(customState), logicalIdStream);
             ID3D12RootSignature* customRootSignature = customEffect->GetRootSignatureEXT();
             if (customPso == nullptr || customRootSignature == nullptr)
                 throw System::NotSupportedException(
                     "DirectX12 could not match the ShaderEffect vertex signature and current "
-                    "pipeline state to the bound VertexDeclaration.");
+                    "pipeline state to the bound VertexDeclaration: " +
+                    customEffect->GetCompileError());
 
             const int constantBufferCount = customEffect->GetConstantBufferCountEXT();
             const int shaderResourceCount = customEffect->GetShaderResourceCountEXT();
+            const std::uint32_t storageSlots = customEffect->GetStorageSlotsEXT();
             const int samplerCount = customEffect->GetSamplerCountEXT();
             ID3D12GraphicsCommandList* cmdList = GetFrameCommandListEXT();
+            D3D12_VERTEX_BUFFER_VIEW logicalIdView{};
+            if (logicalIdStream)
+            {
+                if (static_cast<std::uint64_t>(instanceCount) >
+                    (std::numeric_limits<UINT>::max)() / sizeof(UINT))
+                    throw System::NotSupportedException(
+                        "DirectX12 logical instance ID stream exceeds the native buffer size.");
+                const std::size_t byteCount = static_cast<std::size_t>(instanceCount) * sizeof(UINT);
+                const auto allocation = AllocateFrameUploadEXT(byteCount, alignof(UINT));
+                auto* ids = reinterpret_cast<UINT*>(allocation.mapped);
+                for (int instance = 0; instance < instanceCount; ++instance)
+                    ids[instance] = static_cast<UINT>(params.firstInstance + instance);
+                logicalIdView.BufferLocation =
+                    allocation.resource->GetGPUVirtualAddress() + allocation.offset;
+                logicalIdView.SizeInBytes = static_cast<UINT>(byteCount);
+                logicalIdView.StrideInBytes = sizeof(UINT);
+            }
             RetainFrameObjectEXT(customPso);
             RetainFrameObjectEXT(customRootSignature);
             RetainFrameObjectEXT(d3dVb.GetResourceEXT());
@@ -3554,8 +4117,27 @@ namespace CNA::Internal::Renderers::DirectX12
             std::array<D3D12_GPU_DESCRIPTOR_HANDLE,
                        D3DCommon::D3DProgramReflection::kMaxShaderResources> textureHandles{};
             for (int slot = 0; slot < shaderResourceCount; ++slot)
+            {
+                if ((storageSlots & (UINT32_C(1) << slot)) == 0)
+                {
+                    textureHandles[static_cast<std::size_t>(slot)] =
+                        customEffect->GetTextureGpuHandleEXT(slot);
+                    continue;
+                }
+                const auto& held = drawStorageBuffers_[static_cast<std::size_t>(slot)];
+                const auto* native = dynamic_cast<const D3D12StorageBuffer*>(held.get());
+                if (!native || !native->GetResourceEXT() ||
+                    native->GetSrvIndexEXT() ==
+                        D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex)
+                    throw System::NotSupportedException(
+                        "D3D12 ShaderEffect uses an unbound raw storage t-register " +
+                        std::to_string(slot) + '.');
+                RetainFrameObjectEXT(native->GetResourceEXT());
+                resourceStates_.TransitionTo(
+                    cmdList, native->GetResourceEXT(), D3D12_RESOURCE_STATE_GENERIC_READ);
                 textureHandles[static_cast<std::size_t>(slot)] =
-                    customEffect->GetTextureGpuHandleEXT(slot);
+                    GetCbvSrvUavGpuHandleEXT(native->GetSrvIndexEXT());
+            }
             std::array<D3D12_GPU_DESCRIPTOR_HANDLE,
                        D3DCommon::D3DProgramReflection::kMaxSamplers> samplerHandles{};
             for (int slot = 0; slot < samplerCount; ++slot)
@@ -3615,15 +4197,28 @@ namespace CNA::Internal::Renderers::DirectX12
                         handle);
             }
 
-            const UINT elementCount = static_cast<UINT>(
-                VertexCountForPrimitives(primitive, primitiveCount));
-            if (ib != nullptr)
-                cmdList->DrawIndexedInstanced(
-                    elementCount, 1, static_cast<UINT>(params.startIndex),
-                    static_cast<INT>(params.baseVertex), 0);
+            if (indirectArguments != nullptr)
+                ExecuteIndirectDrawEXT(cmdList, indirectArguments, indirectByteOffset,
+                                       ib != nullptr);
             else
-                cmdList->DrawInstanced(
-                    elementCount, 1, static_cast<UINT>(params.vertexStart), 0);
+            {
+                const UINT elementCount = static_cast<UINT>(
+                    VertexCountForPrimitives(primitive, primitiveCount));
+                if (ib != nullptr)
+                {
+                    if (instanceCount > 1 || params.firstInstance > 0)
+                        DrawIndexedInstances(cmdList, d3dVb, params, elementCount,
+                                             instanceCount,
+                                             logicalIdStream ? &logicalIdView : nullptr);
+                    else
+                        cmdList->DrawIndexedInstanced(
+                            elementCount, 1, static_cast<UINT>(params.startIndex),
+                            static_cast<INT>(params.baseVertex), 0);
+                }
+                else
+                    cmdList->DrawInstanced(
+                        elementCount, 1, static_cast<UINT>(params.vertexStart), 0);
+            }
 
             return;
         }
@@ -3662,6 +4257,13 @@ namespace CNA::Internal::Renderers::DirectX12
         // The stride-only rule remains solely for internal buffers that carry no declaration.
         const bool needsLitTextured = hasNormal && !needsAlphaTest && !needsDualTex
                                      && !needsEnvMap && !needsPbr && !needsSkinned;
+        const bool haveIbl = needsPbr && params.iblEnabled &&
+            params.iblIrradiance != nullptr &&
+            params.iblPrefilteredSpecular != nullptr && params.iblBrdfLut != nullptr;
+        const bool useModernLightingShader =
+            (needsLitTextured || needsSkinned || needsPbr) &&
+            ((params.shadowsEnabled && params.shadowMap != nullptr) ||
+             params.punctualKind != 0 || haveIbl);
 
         // env_map3d.vert.hlsl's VSInput is Position+Normal+UV (32 bytes), same as lit_textured3d.
         if (needsEnvMap && stride != 32)
@@ -3781,7 +4383,8 @@ namespace CNA::Internal::Renderers::DirectX12
             // A COLOR0 declaration routes to the *Colored sibling independently of record stride.
             // Declaration-less legacy buffers retain the canonical stride-56 fallback.
             const bool colored = hasDeclaration ? hasColor : stride == 56;
-            const bool vertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
+            const bool vertexLit = params.lightingEnabled && !params.preferPerPixelLighting
+                                   && !useModernLightingShader;
             if (usesFloatBoneIndices)
                 variant = colored
                     ? (vertexLit ? D3DShaderVariant::Skinned3dVertexLitColoredFloatIndices
@@ -3803,13 +4406,13 @@ namespace CNA::Internal::Renderers::DirectX12
             // Same real-default fix for BasicEffect's lit-textured bucket.
             variant = hasTexCoord
                 ? (hasColor
-                    ? ((params.lightingEnabled && !params.preferPerPixelLighting)
+                    ? ((params.lightingEnabled && !params.preferPerPixelLighting && !useModernLightingShader)
                         ? D3DShaderVariant::LitTextured3dVertexLitColored
                         : D3DShaderVariant::LitTextured3dColored)
-                    : ((params.lightingEnabled && !params.preferPerPixelLighting)
+                    : ((params.lightingEnabled && !params.preferPerPixelLighting && !useModernLightingShader)
                         ? D3DShaderVariant::LitTextured3dVertexLit
                         : D3DShaderVariant::LitTextured3d))
-                : ((params.lightingEnabled && !params.preferPerPixelLighting)
+                : ((params.lightingEnabled && !params.preferPerPixelLighting && !useModernLightingShader)
                     ? D3DShaderVariant::LitUntextured3dVertexLit
                     : D3DShaderVariant::LitUntextured3d);
             hasTexture = true;
@@ -3841,6 +4444,29 @@ namespace CNA::Internal::Renderers::DirectX12
                     std::to_string(stride) + " for the colored/textured bundle (plans/plan_dx.md DX-111)");
         }
 
+        if (useModernLightingShader)
+        {
+            switch (variant)
+            {
+                case D3DShaderVariant::LitTextured3d: variant = D3DShaderVariant::LitTextured3dShadow; break;
+                case D3DShaderVariant::LitTextured3dColored: variant = D3DShaderVariant::LitTextured3dColoredShadow; break;
+                case D3DShaderVariant::LitUntextured3d: variant = D3DShaderVariant::LitUntextured3dShadow; break;
+                case D3DShaderVariant::Skinned3d: variant = D3DShaderVariant::Skinned3dShadow; break;
+                case D3DShaderVariant::Skinned3dFloatIndices: variant = D3DShaderVariant::Skinned3dFloatIndicesShadow; break;
+                case D3DShaderVariant::Skinned3dColored: variant = D3DShaderVariant::Skinned3dColoredShadow; break;
+                case D3DShaderVariant::Skinned3dColoredFloatIndices: variant = D3DShaderVariant::Skinned3dColoredFloatIndicesShadow; break;
+                case D3DShaderVariant::Pbr3d: variant = D3DShaderVariant::Pbr3dShadow; break;
+                case D3DShaderVariant::Pbr3dDualUv: variant = D3DShaderVariant::Pbr3dDualUvShadow; break;
+                case D3DShaderVariant::PbrSkinned3d: variant = D3DShaderVariant::PbrSkinned3dShadow; break;
+                case D3DShaderVariant::PbrSkinned3dDualUv: variant = D3DShaderVariant::PbrSkinned3dDualUvShadow; break;
+                case D3DShaderVariant::PbrSkinned3dDualUvColor: variant = D3DShaderVariant::PbrSkinned3dDualUvColorShadow; break;
+                default: throw std::logic_error("D3D12 stock lighting shader has no modern variant");
+            }
+            hasTexture = true;
+            numCbvs = 5;
+            numSrvs = 13;
+        }
+
         const int numSamplers = numSrvs; // DX-119: one real, runtime-settable sampler descriptor
                                           // table per texture slot, s0.. matching t0..
 
@@ -3866,14 +4492,11 @@ namespace CNA::Internal::Renderers::DirectX12
         // cbAddresses[i] is bound to root CBV parameter i (b0, b1, ...) -- see each branch below for
         // which struct/register each variant actually needs, field-for-field matching the real HLSL
         // cbuffer declarations (D3DConstantBuffers.hpp).
-        D3D12_GPU_VIRTUAL_ADDRESS cbAddresses[3] = {0, 0, 0};
-        // params.texture0/texture1 for the (up to 2) SRVs most variants bind -- dual_texture3d uses
-        // the 2nd slot for a 2nd Texture2D; env_map3d uses it for a TextureCube instead
-        // (srvCubeTexture below), which is why it isn't part of this Texture2D-only array. Sized 7
-        // for PBR's five core maps plus KHR_materials_specular strength/colour at t5/t6.
-        const ITextureRenderer* srvTextures[7] = {
-            params.texture0, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
-        const ITextureCubeRenderer* srvCubeTexture = nullptr; // only set by the needsEnvMap branch
+        D3D12_GPU_VIRTUAL_ADDRESS cbAddresses[5] = {0, 0, 0, 0, 0};
+        // Stock effects use up to thirteen texture slots: seven PBR material maps, three shadow
+        // maps, and three IBL maps. Cube slots have their own typed array.
+        const ITextureRenderer* srvTextures[13] = {params.texture0};
+        const ITextureCubeRenderer* srvCubes[13] = {};
 
         if (needsAlphaTest)
         {
@@ -4032,7 +4655,7 @@ namespace CNA::Internal::Renderers::DirectX12
             cbAddresses[2] = envAddress;
 
             srvTextures[0] = params.texture0;
-            srvCubeTexture = params.envMap;
+            srvCubes[1] = params.envMap;
         }
         else if (needsPbr)
         {
@@ -4359,6 +4982,73 @@ namespace CNA::Internal::Renderers::DirectX12
             cbAddresses[1] = AllocateFrameConstantDataEXT(&fog, sizeof(fog));
         }
 
+        if (useModernLightingShader)
+        {
+            const bool haveDirectional = params.shadowsEnabled && params.shadowMap != nullptr;
+            const int cascadeCount = haveDirectional && params.cascadeCount > 0
+                ? std::min(params.cascadeCount, 4) : 0;
+            const int punctualKind = params.punctualKind >= 1 && params.punctualKind <= 2
+                ? params.punctualKind : 0;
+            const bool havePoint = punctualKind == 1 && params.punctualShadowCube != nullptr;
+            const bool haveSpot = punctualKind == 2 && params.punctualShadowMap != nullptr;
+
+            D3DCommon::D3DShadowConstants shadow{};
+            std::copy_n(params.lightViewProjColMajor, 16, shadow.LightViewProj);
+            std::copy_n(params.cascadeMatricesColMajor, 64, shadow.CascadeMatrices);
+            std::copy_n(params.punctualViewProjColMajor, 16, shadow.PunctualViewProj);
+            shadow.Directional[0] = haveDirectional ? 1.0f : 0.0f;
+            shadow.Directional[1] = params.shadowDepthBias;
+            shadow.Directional[2] = static_cast<float>(std::clamp(params.shadowPcfRadius, 0, 2));
+            shadow.Directional[3] = static_cast<float>(cascadeCount);
+            const int shadowWidth = haveDirectional ? params.shadowMap->GetWidth() : 1;
+            const int shadowHeight = haveDirectional ? params.shadowMap->GetHeight() : 1;
+            shadow.ShadowTexelBlendDebug[0] = shadowWidth > 0 ? 1.0f / static_cast<float>(shadowWidth) : 0.0f;
+            shadow.ShadowTexelBlendDebug[1] = shadowHeight > 0 ? 1.0f / static_cast<float>(shadowHeight) : 0.0f;
+            shadow.ShadowTexelBlendDebug[2] = params.cascadeBlendBand;
+            shadow.ShadowTexelBlendDebug[3] = params.cascadeDebugTint ? 1.0f : 0.0f;
+            std::copy_n(params.cascadeSplits, 4, shadow.CascadeSplits);
+            std::copy_n(params.cascadeViewZRow, 4, shadow.CascadeViewZ);
+            std::copy_n(params.punctualPosition, 3, shadow.PunctualPositionRange);
+            shadow.PunctualPositionRange[3] = params.punctualRange > 0.0f ? params.punctualRange : 1.0f;
+            std::copy_n(params.punctualDirection, 3, shadow.PunctualDirectionKind);
+            shadow.PunctualDirectionKind[3] = static_cast<float>(punctualKind);
+            std::copy_n(params.punctualDiffuse, 3, shadow.PunctualDiffuseHasShadow);
+            shadow.PunctualDiffuseHasShadow[3] = (havePoint || haveSpot) ? 1.0f : 0.0f;
+            shadow.PunctualConeBiasTexelX[0] = params.punctualCosInner;
+            shadow.PunctualConeBiasTexelX[1] = params.punctualCosOuter;
+            shadow.PunctualConeBiasTexelX[2] = params.punctualShadowBias;
+            const int spotWidth = haveSpot ? params.punctualShadowMap->GetWidth() : 1;
+            const int spotHeight = haveSpot ? params.punctualShadowMap->GetHeight() : 1;
+            shadow.PunctualConeBiasTexelX[3] = spotWidth > 0 ? 1.0f / static_cast<float>(spotWidth) : 0.0f;
+            shadow.PunctualTexelY[0] = spotHeight > 0 ? 1.0f / static_cast<float>(spotHeight) : 0.0f;
+            cbAddresses[3] = AllocateFrameConstantDataEXT(&shadow, sizeof(shadow));
+        }
+        if (needsPbr && useModernLightingShader)
+        {
+            D3DCommon::D3DIblConstants ibl{};
+            ibl.Enabled = haveIbl ? 1.0f : 0.0f;
+            ibl.PrefilteredMipCount = static_cast<float>(
+                params.iblPrefilteredMipCount > 0 ? params.iblPrefilteredMipCount : 1);
+            ibl.Intensity = params.iblIntensity;
+            cbAddresses[4] = AllocateFrameConstantDataEXT(&ibl, sizeof(ibl));
+        }
+        for (int i = 1; i < numCbvs; ++i)
+            if (cbAddresses[i] == 0)
+                cbAddresses[i] = cbAddresses[0];
+
+        if (useModernLightingShader)
+        {
+            srvTextures[7] = params.shadowsEnabled ? params.shadowMap : nullptr;
+            srvCubes[8] = params.punctualKind == 1 ? params.punctualShadowCube : nullptr;
+            srvTextures[9] = params.punctualKind == 2 ? params.punctualShadowMap : nullptr;
+            if (haveIbl)
+            {
+                srvCubes[10] = params.iblIrradiance;
+                srvCubes[11] = params.iblPrefilteredSpecular;
+                srvTextures[12] = params.iblBrdfLut;
+            }
+        }
+
         // DX-111 (dual_texture3d): each texture register (t0, t1, ...) is its own single-descriptor
         // root table parameter now (D3D12RootSignatureCache's own updated layout -- see that file's
         // doc comment for the real empirical finding that a single multi-descriptor table, populated
@@ -4378,26 +5068,28 @@ namespace CNA::Internal::Renderers::DirectX12
         // fallback records an upload.
         for (int i = 0; i < numSrvs; ++i)
         {
-            if (i == 1 && needsEnvMap)
+            const bool cubeSlot = (i == 1 && needsEnvMap) ||
+                (useModernLightingShader && (i == 8 || i == 10 || i == 11));
+            if (cubeSlot)
             {
-                if (srvCubeTexture == nullptr)
-                    srvCubeTexture = GetOrCreateDefaultOpaqueBlackCubeEXT();
+                if (srvCubes[i] == nullptr)
+                    srvCubes[i] = GetOrCreateDefaultOpaqueBlackCubeEXT();
             }
             else if (srvTextures[i] == nullptr)
             {
-                srvTextures[i] = needsPbr ? GetOrCreateDefaultWhiteTextureEXT()
-                                          : GetOrCreateDefaultOpaqueBlackTextureEXT();
+                srvTextures[i] = needsPbr && i <= 6
+                    ? GetOrCreateDefaultWhiteTextureEXT()
+                    : GetOrCreateDefaultOpaqueBlackTextureEXT();
             }
         }
 
-        D3D12_GPU_DESCRIPTOR_HANDLE srvHandles[7]{};
+        D3D12_GPU_DESCRIPTOR_HANDLE srvHandles[13]{};
         for (int i = 0; i < numSrvs; ++i)
         {
-            // env_map3d's 2nd slot (t1) is a TextureCube, not a Texture2D -- srvCubeTexture is only
-            // ever set by the needsEnvMap branch above, every other variant's 2nd slot (if any) is a
-            // plain Texture2D via srvTextures[1] (dual_texture3d).
-            srvHandles[i] = (i == 1 && needsEnvMap)
-                ? GetSrvGpuHandleForTextureCubeEXT(srvCubeTexture)
+            const bool cubeSlot = (i == 1 && needsEnvMap) ||
+                (useModernLightingShader && (i == 8 || i == 10 || i == 11));
+            srvHandles[i] = cubeSlot
+                ? GetSrvGpuHandleForTextureCubeEXT(srvCubes[i])
                 : GetSrvGpuHandleForTextureEXT(srvTextures[i]);
         }
 
@@ -4452,7 +5144,7 @@ namespace CNA::Internal::Renderers::DirectX12
             // Resolve once to create every missing descriptor before reading the heap object. A
             // later slot can grow and replace the heap, invalidating both its old object and every
             // GPU handle obtained from it, so resolve all handles again after allocation settles.
-            D3D12_GPU_DESCRIPTOR_HANDLE samplerHandles[7]{};
+            D3D12_GPU_DESCRIPTOR_HANDLE samplerHandles[13]{};
             for (int i = 0; i < numSrvs; ++i)
                 (void)GetSamplerGpuHandleEXT(i);
             for (int i = 0; i < numSrvs; ++i)
@@ -4466,7 +5158,10 @@ namespace CNA::Internal::Renderers::DirectX12
                 cmdList->SetGraphicsRootDescriptorTable(numCbvs + numSrvs + i, samplerHandles[i]);
         }
 
-        if (ib != nullptr)
+        if (indirectArguments != nullptr)
+            ExecuteIndirectDrawEXT(cmdList, indirectArguments, indirectByteOffset,
+                                   ib != nullptr);
+        else if (ib != nullptr)
         {
             // REMED-GFX-020 (renderer parity with D3D11): honor the XNA DrawIndexedPrimitives
             // startIndex/baseVertex offsets (StartIndexLocation / BaseVertexLocation) instead of
@@ -4503,11 +5198,44 @@ namespace CNA::Internal::Renderers::DirectX12
         DrawPrimitivesExImpl(vb, &ib, world, view, projection, primitive, primitiveCount, params);
     }
 
+    void DirectX12Renderer::DrawPrimitivesIndirectEXT(
+        const IVertexBufferRenderer& vb, const Matrix& world, const Matrix& view,
+        const Matrix& projection, PrimitiveType primitive,
+        const IStorageBufferRenderer& argumentBuffer, int argumentByteOffset,
+        const GpuDrawParams& params)
+    {
+        const auto& native = RequireIndirectBuffer(
+            argumentBuffer, this, argumentByteOffset,
+            sizeof(D3D12_DRAW_ARGUMENTS));
+        DrawPrimitivesExImpl(
+            vb, nullptr, world, view, projection, primitive, 0, params,
+            native.GetResourceEXT(), static_cast<UINT64>(argumentByteOffset));
+    }
+
+    void DirectX12Renderer::DrawIndexedPrimitivesIndirectEXT(
+        const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
+        const Matrix& world, const Matrix& view, const Matrix& projection,
+        PrimitiveType primitive, const IStorageBufferRenderer& argumentBuffer,
+        int argumentByteOffset, const GpuDrawParams& params)
+    {
+        const auto& native = RequireIndirectBuffer(
+            argumentBuffer, this, argumentByteOffset,
+            sizeof(D3D12_DRAW_INDEXED_ARGUMENTS));
+        DrawPrimitivesExImpl(
+            vb, &ib, world, view, projection, primitive, 0, params,
+            native.GetResourceEXT(), static_cast<UINT64>(argumentByteOffset));
+    }
+
     void DirectX12Renderer::DrawInstancedPrimitivesEx(
         const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, int instanceCount, const GpuDrawParams& params)
     {
+        if (instanceCount <= 0 || params.firstInstance < 0 ||
+            static_cast<std::int64_t>(params.firstInstance) + instanceCount - 1 >
+                (std::numeric_limits<int>::max)())
+            throw System::NotSupportedException(
+                "DirectX12 instancing requires a positive count and a valid first instance.");
         // GLTF-394: reject line/point topology before fallback/stream/target work can mask the reason.
         const D3D12_PRIMITIVE_TOPOLOGY nativeTopology = ToD3D12Topology(primitive);
         // Matches DirectX11Renderer::DrawInstancedPrimitivesEx's own fallback -- no per-instance
@@ -4515,9 +5243,18 @@ namespace CNA::Internal::Renderers::DirectX12
         // REMED-GFX-202: the per-instance stream is the lowest-slot entry of the shared
         // GpuVertexStreamBinding array whose InstanceFrequency is greater than zero.
         const auto* instanceStream = FirstInstanceStream(params);
+        if (params.customEffectRequested)
+        {
+            DrawPrimitivesExImpl(vb, &ib, world, view, projection,
+                                 primitive, primitiveCount, params,
+                                 nullptr, 0, instanceCount);
+            return;
+        }
         if (instanceStream == nullptr)
         {
-            DrawIndexedPrimitivesEx(vb, ib, world, view, projection, primitive, primitiveCount, params);
+            for (int instance = 0; instance < instanceCount; ++instance)
+                DrawIndexedPrimitivesEx(
+                    vb, ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
         if (!boundColorResource_)
@@ -4537,6 +5274,93 @@ namespace CNA::Internal::Renderers::DirectX12
             return;
         }
 #endif
+        const bool stockEffectNeedsFullShader = params.textureEnabled || params.texture0 != nullptr ||
+            params.lightingEnabled || params.fogEnabled || params.dualTexture ||
+            params.envMapping || params.skinned || params.pbr ||
+            params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f;
+        if (stockEffectNeedsFullShader)
+        {
+            struct InstanceColumn
+            {
+                const GpuVertexStreamBinding* stream;
+                const D3D12VertexBufferRenderer* buffer;
+                int byteOffset;
+            };
+            std::array<InstanceColumn, 4> columns{};
+            int columnCount = 0;
+            GpuDrawParams ordinary = params;
+            ordinary.instanceCount = 1;
+            ordinary.vertexStreamCount = 0;
+            for (int streamIndex = 0; streamIndex < params.vertexStreamCount; ++streamIndex)
+            {
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(streamIndex)];
+                if (stream.instanceFrequency == 0)
+                {
+                    ordinary.vertexStreams[static_cast<std::size_t>(ordinary.vertexStreamCount++)] = stream;
+                    continue;
+                }
+                const auto* buffer = static_cast<const D3D12VertexBufferRenderer*>(stream.buffer);
+                if (buffer == nullptr)
+                    throw System::NotSupportedException("DirectX12 instancing requires a per-instance buffer.");
+                const auto& elements = buffer->GetDeclarationEXT().GetElements();
+                if (elements.empty())
+                {
+                    if (stream.strideInBytes != 64)
+                        throw System::NotSupportedException(
+                            "DirectX12 cannot infer four instance-matrix columns from this stride.");
+                    for (int index = 0; index < 4 && columnCount < 4; ++index)
+                        columns[static_cast<std::size_t>(columnCount++)] = {&stream, buffer, index * 16};
+                }
+                else
+                {
+                    for (const auto& element : elements)
+                    {
+                        if (columnCount == 4)
+                            break;
+                        if (element.getVertexElementFormatProperty() !=
+                            Microsoft::Xna::Framework::Graphics::VertexElementFormat::Vector4)
+                            throw System::NotSupportedException(
+                                "DirectX12 instance-matrix columns must be Vector4 elements.");
+                        columns[static_cast<std::size_t>(columnCount++)] = {
+                            &stream, buffer, element.getOffsetProperty()};
+                    }
+                }
+            }
+            if (columnCount != 4 || ordinary.vertexStreamCount == 0)
+                throw System::NotSupportedException(
+                    "DirectX12 stock instancing requires four instance-matrix columns and a vertex stream.");
+            for (int instance = 0; instance < instanceCount; ++instance)
+            {
+                std::array<float, 16> values{};
+                for (int column = 0; column < 4; ++column)
+                {
+                    const auto& entry = columns[static_cast<std::size_t>(column)];
+                    const int record = entry.stream->vertexOffset +
+                        (params.firstInstance + instance) /
+                            entry.stream->instanceFrequency;
+                    const int stride = entry.stream->strideInBytes;
+                    if (record < 0 || record >= entry.buffer->GetVertexCount() || stride <= 0)
+                        throw System::NotSupportedException(
+                            "DirectX12 instance-matrix read exceeds the bound vertex buffer.");
+                    const std::size_t offset = static_cast<std::size_t>(record) * stride +
+                        static_cast<std::size_t>(entry.byteOffset);
+                    const auto& bytes = entry.buffer->GetCpuDataEXT();
+                    if (offset + sizeof(float) * 4 > bytes.size())
+                        throw System::NotSupportedException(
+                            "DirectX12 instance-matrix column exceeds the upload shadow.");
+                    std::memcpy(values.data() + column * 4, bytes.data() + offset,
+                                sizeof(float) * 4);
+                }
+                const Matrix instanceWorld(
+                    values[0], values[1], values[2], values[3],
+                    values[4], values[5], values[6], values[7],
+                    values[8], values[9], values[10], values[11],
+                    values[12], values[13], values[14], values[15]);
+                DrawPrimitivesExImpl(vb, &ib, instanceWorld * world, view, projection,
+                                     primitive, primitiveCount, ordinary);
+            }
+            return;
+        }
         std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> combinedElements;
         std::vector<D3DVertexInputElement> inputElements;
         BuildVertexInputLayout(params, true, combinedElements, inputElements);
@@ -4633,14 +5457,8 @@ namespace CNA::Internal::Renderers::DirectX12
         cmdList->SetGraphicsRootConstantBufferView(0, perDrawAddress);
 
         const UINT indexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
-        const UINT instCount = static_cast<UINT>(std::max(1, instanceCount));
-        // REMED-GFX-123: honor the public startIndex/baseVertex on the instanced path too (both
-        // were hardcoded to zero), exactly as this renderer's ordinary indexed draw already does
-        // since REMED-GFX-020. StartInstanceLocation stays 0 -- the per-instance stream's own start
-        // is already in its view above, so adding it here would apply the same offset twice.
-        cmdList->DrawIndexedInstanced(indexCount, instCount,
-                                      static_cast<UINT>(params.startIndex),
-                                      static_cast<INT>(params.baseVertex), 0);
+        DrawIndexedInstances(cmdList, d3dVb, params, indexCount,
+                             std::max(1, instanceCount));
 
     }
 }

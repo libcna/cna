@@ -26,6 +26,10 @@ namespace CNA::Internal::Renderers::D3DCommon
     /// corresponding D3D11_BLEND. Returns D3D11_BLEND_ONE for an unrecognized ordinal.
     D3D11_BLEND BlendToD3D11(int blend);
 
+    /// Maps an XNA alpha blend factor to a D3D11 scalar alpha factor. Color factors use their
+    /// alpha component, and SourceAlphaSaturation has an alpha component of one.
+    D3D11_BLEND AlphaBlendToD3D11(int blend);
+
     /// Maps an XNA BlendFunction ordinal to the corresponding D3D11_BLEND_OP. Returns
     /// D3D11_BLEND_OP_ADD for an unrecognized ordinal.
     D3D11_BLEND_OP BlendFunctionToD3D11(int blendFunction);

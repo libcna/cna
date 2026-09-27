@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/D3DCommon/D3DProgramReflection.hpp"
 
+#include <d3d11.h>
 #include <d3dcompiler.h>
 #include <wrl/client.h>
 
@@ -41,7 +42,8 @@ namespace CNA::Internal::Renderers::D3DCommon
     }
 
     bool D3DProgramReflection::AddShader(
-        const void* bytecode, const std::size_t bytecodeSize, std::string& error)
+        const void* bytecode, const std::size_t bytecodeSize, std::string& error,
+        const bool allowComputeUavs)
     {
         if (bytecode == nullptr || bytecodeSize == 0)
         {
@@ -110,6 +112,18 @@ namespace CNA::Internal::Renderers::D3DCommon
                 continue;
             }
 
+            if (binding.Type == D3D_SIT_BYTEADDRESS)
+            {
+                if (binding.BindCount == 0 ||
+                    binding.BindCount > kMaxShaderResources ||
+                    binding.BindPoint > kMaxShaderResources - binding.BindCount)
+                {
+                    error = "Runtime HLSL byte-buffer register range exceeds 16 slots";
+                    return false;
+                }
+                continue;
+            }
+
             if (binding.Type == D3D_SIT_SAMPLER)
             {
                 if (binding.BindCount == 0 || binding.BindCount > kMaxSamplers ||
@@ -123,6 +137,24 @@ namespace CNA::Internal::Renderers::D3DCommon
                     samplers_[slot] = true;
                 samplerCount_ = std::max(
                     samplerCount_, static_cast<int>(binding.BindPoint + binding.BindCount));
+                continue;
+            }
+
+            if (allowComputeUavs &&
+                (binding.Type == D3D_SIT_UAV_RWTYPED ||
+                 binding.Type == D3D_SIT_UAV_RWSTRUCTURED ||
+                 binding.Type == D3D_SIT_UAV_RWBYTEADDRESS ||
+                 binding.Type == D3D_SIT_UAV_APPEND_STRUCTURED ||
+                 binding.Type == D3D_SIT_UAV_CONSUME_STRUCTURED ||
+                 binding.Type == D3D_SIT_UAV_RWSTRUCTURED_WITH_COUNTER))
+            {
+                if (binding.BindCount == 0 ||
+                    binding.BindCount > D3D11_PS_CS_UAV_REGISTER_COUNT ||
+                    binding.BindPoint > D3D11_PS_CS_UAV_REGISTER_COUNT - binding.BindCount)
+                {
+                    error = "Runtime HLSL compute UAV register range exceeds 8 slots";
+                    return false;
+                }
                 continue;
             }
 
@@ -201,6 +233,24 @@ namespace CNA::Internal::Renderers::D3DCommon
                     });
                 if (!duplicate)
                     locations.push_back(location);
+
+                // SPIRV-Cross flattens ShadowMatrices.uWorld and
+                // ShadowMatrices.uLightViewProjection into matrices_* HLSL names. ShaderEffect
+                // callers still set the package's original public uniform names.
+                if (std::strcmp(bufferDesc.Name, "ShadowMatrices") == 0 &&
+                    std::strncmp(variableDesc.Name, "matrices_", 9) == 0)
+                {
+                    auto& aliases = uniforms_[CanonicalName(variableDesc.Name + 9)];
+                    const bool aliasPresent = std::any_of(
+                        aliases.begin(), aliases.end(), [&](const UniformLocation& existing)
+                        {
+                            return existing.bufferSlot == location.bufferSlot &&
+                                   existing.offset == location.offset &&
+                                   existing.size == location.size;
+                        });
+                    if (!aliasPresent)
+                        aliases.push_back(location);
+                }
             }
         }
 
@@ -227,12 +277,21 @@ namespace CNA::Internal::Renderers::D3DCommon
         const auto found = uniforms_.find(CanonicalName(name));
         if (found == uniforms_.end())
             return;
-        const std::int32_t nativeValue = value;
         for (const auto& location : found->second)
         {
             auto& buffer = constantBuffers_[location.bufferSlot].data;
-            if (location.offset + sizeof(nativeValue) <= buffer.size())
+            if (location.offset + sizeof(std::int32_t) > buffer.size())
+                continue;
+            if (location.variableType == D3D_SVT_FLOAT)
+            {
+                const float nativeValue = static_cast<float>(value);
                 std::memcpy(buffer.data() + location.offset, &nativeValue, sizeof(nativeValue));
+            }
+            else
+            {
+                const std::int32_t nativeValue = value;
+                std::memcpy(buffer.data() + location.offset, &nativeValue, sizeof(nativeValue));
+            }
         }
     }
 
@@ -346,7 +405,7 @@ namespace CNA::Internal::Renderers::D3DCommon
             {
                 for (int column = 0; column < columns; ++column)
                 {
-                    const int sourceIndex = column * 4 + row;
+                    const int sourceIndex = row * 4 + column;
                     const int destinationIndex = location.variableClass == D3D_SVC_MATRIX_ROWS
                         ? row * 4 + column : column * 4 + row;
                     if (static_cast<std::size_t>(destinationIndex + 1) * sizeof(float) <= stride)

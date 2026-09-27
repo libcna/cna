@@ -495,7 +495,24 @@ def raw_string(text: str) -> str:
     delimiter = "CNA_SHADER"
     if f"){delimiter}\"" in text:
         raise ValueError("shader source collides with the generated raw-string delimiter")
-    return f'R"{delimiter}({text}){delimiter}"'
+    source = text.encode("utf-8")
+    if len(source) <= 12000:
+        return f'R"{delimiter}({text}){delimiter}"'
+    # MSVC 19.43 limits each source literal to 16,380 bytes before adjacent
+    # literals concatenate. Keep boundaries on complete lines for readable diffs.
+    chunks = []
+    start = 0
+    while start < len(source):
+        end = min(start + 12000, len(source))
+        if end < len(source):
+            line_end = source.rfind(b"\n", start, end)
+            if line_end > start:
+                end = line_end + 1
+        while end < len(source) and source[end] & 0xC0 == 0x80:
+            end -= 1
+        chunks.append(f'R"{delimiter}({source[start:end].decode("utf-8")}){delimiter}"')
+        start = end
+    return "\n    ".join(chunks)
 
 
 def spirv_array(symbol: str, output: bytes) -> list[str]:

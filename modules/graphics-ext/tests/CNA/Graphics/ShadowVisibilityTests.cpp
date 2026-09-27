@@ -34,7 +34,9 @@
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ImageBasedLightEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
@@ -44,6 +46,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
@@ -86,12 +89,15 @@ using Microsoft::Xna::Framework::Graphics::BlendState;
 using Microsoft::Xna::Framework::Graphics::BufferUsage;
 using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::DepthStencilState;
+using Microsoft::Xna::Framework::Graphics::CubeMapFace;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::ImageBasedLightEXT;
 using Microsoft::Xna::Framework::Graphics::PrimitiveType;
 using Microsoft::Xna::Framework::Graphics::RasterizerState;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
+using Microsoft::Xna::Framework::Graphics::TextureCube;
 using Microsoft::Xna::Framework::Graphics::VertexPositionNormalTexture;
 using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
 using Microsoft::Xna::Framework::Graphics::VertexElement;
@@ -486,6 +492,251 @@ void DrawGroundFromBuffer(GraphicsDevice& device, RenderTarget2D& target, Effect
     device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
     device.SetRenderTarget(nullptr);
     device.SetVertexBuffer(nullptr);
+}
+
+void FillConstantEnvironment(TextureCube& irradiance, TextureCube& specular, Texture2D& lut)
+{
+    std::array<Color, 16> red;
+    std::array<Color, 16> blue;
+    red.fill(Color(128, 0, 0, 255));
+    blue.fill(Color(0, 0, 255, 255));
+    for (int face = 0; face < 6; ++face)
+    {
+        irradiance.SetData(static_cast<CubeMapFace>(face), red.data(), 16);
+        specular.SetData(static_cast<CubeMapFace>(face), blue.data(), 16);
+    }
+    const Color brdf(255, 0, 0, 255);
+    lut.SetData(&brdf, 1);
+}
+
+template <typename EffectT>
+void ConfigureIblPbr(EffectT& effect)
+{
+    effect.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+    effect.setMetallicFactorProperty(0.0f);
+    effect.setRoughnessFactorProperty(0.5f);
+    effect.setAmbientLightColorProperty(Vector3::Zero);
+    effect.getDirectionalLight0Property().setEnabledProperty(false);
+    effect.getDirectionalLight1Property().setEnabledProperty(false);
+    effect.getDirectionalLight2Property().setEnabledProperty(false);
+    effect.setWorldProperty(Matrix::getIdentityProperty());
+    effect.setViewProperty(TopDownView());
+    effect.setProjectionProperty(FitToGround());
+}
+
+class IblVisibilityTest : public ::testing::Test
+{
+protected:
+    CnaTest::EngineLayer::HiDefDevice device;
+
+    void SetUp() override
+    {
+        if (!device.SupportsImageBasedLightingEXT())
+            GTEST_SKIP() << "this renderer's PBR shaders do not sample image-based lighting";
+    }
+};
+
+TEST_F(IblVisibilityTest, PbrEffectSamplesAllThreeProductsAndHonorsIntensity)
+{
+    RenderTarget2D target(device, kFrame, kFrame, false, SurfaceFormat::Color,
+                          DepthFormat::Depth24);
+    TextureCube irradiance(device, 4, false, SurfaceFormat::Color);
+    TextureCube specular(device, 4, false, SurfaceFormat::Color);
+    Texture2D lut(device, 1, 1);
+    FillConstantEnvironment(irradiance, specular, lut);
+
+    PbrEffect effect(device);
+    ConfigureIblPbr(effect);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setDepthStencilStateProperty(DepthStencilState::Default);
+    device.setBlendStateProperty(BlendState::Opaque);
+
+    DrawGroundFromBuffer<GpuPbrVertex>(device, target, effect);
+    const Color baseline = Capture(target).At(kFrame / 2, kFrame / 2);
+
+    ImageBasedLightEXT light;
+    light.Irradiance = &irradiance;
+    light.PrefilteredSpecular = &specular;
+    light.BrdfLut = &lut;
+    effect.setImageBasedLightEXT(light);
+    DrawGroundFromBuffer<GpuPbrVertex>(device, target, effect);
+    const Color lit = Capture(target).At(kFrame / 2, kFrame / 2);
+
+    EXPECT_GT(lit.getRProperty(), baseline.getRProperty() + 32)
+        << "the irradiance cube did not light the red diffuse term";
+    EXPECT_GT(lit.getBProperty(), baseline.getBProperty() + 8)
+        << "the prefiltered cube and BRDF table did not light the blue specular term";
+
+    light.Intensity = 0.0f;
+    effect.setImageBasedLightEXT(light);
+    DrawGroundFromBuffer<GpuPbrVertex>(device, target, effect);
+    const Color zeroIntensity = Capture(target).At(kFrame / 2, kFrame / 2);
+    EXPECT_NEAR(zeroIntensity.getRProperty(), baseline.getRProperty(), 2);
+    EXPECT_NEAR(zeroIntensity.getBProperty(), baseline.getBProperty(), 2);
+
+    effect.setImageBasedLightEXT(ImageBasedLightEXT{});
+    DrawGroundFromBuffer<GpuPbrVertex>(device, target, effect);
+    const Color detached = Capture(target).At(kFrame / 2, kFrame / 2);
+    EXPECT_NEAR(detached.getRProperty(), baseline.getRProperty(), 2);
+    EXPECT_NEAR(detached.getBProperty(), baseline.getBProperty(), 2);
+}
+
+TEST_F(IblVisibilityTest, IrradianceUsesTheWorldNormalsCubeFace)
+{
+    RenderTarget2D target(device, kFrame, kFrame, false, SurfaceFormat::Color,
+                          DepthFormat::Depth24);
+    TextureCube irradiance(device, 4, false, SurfaceFormat::Color);
+    TextureCube specular(device, 4, false, SurfaceFormat::Color);
+    Texture2D lut(device, 1, 1);
+    std::array<Color, 16> black;
+    std::array<Color, 16> red;
+    black.fill(Color::Black);
+    red.fill(Color(128, 0, 0, 255));
+    for (int face = 0; face < 6; ++face)
+    {
+        const auto cubeFace = static_cast<CubeMapFace>(face);
+        irradiance.SetData(cubeFace, black.data(), 16);
+        specular.SetData(cubeFace, black.data(), 16);
+    }
+    const Color brdf(255, 0, 0, 255);
+    lut.SetData(&brdf, 1);
+
+    PbrEffect effect(device);
+    ConfigureIblPbr(effect);
+    ImageBasedLightEXT light;
+    light.Irradiance = &irradiance;
+    light.PrefilteredSpecular = &specular;
+    light.BrdfLut = &lut;
+    effect.setImageBasedLightEXT(light);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setDepthStencilStateProperty(DepthStencilState::Default);
+    device.setBlendStateProperty(BlendState::Opaque);
+
+    irradiance.SetData(CubeMapFace::PositiveY, red.data(), 16);
+    DrawGroundFromBuffer<GpuPbrVertex>(device, target, effect);
+    const int positiveY = Capture(target).BrightnessAt(kFrame / 2, kFrame / 2);
+
+    irradiance.SetData(CubeMapFace::PositiveY, black.data(), 16);
+    irradiance.SetData(CubeMapFace::NegativeY, red.data(), 16);
+    DrawGroundFromBuffer<GpuPbrVertex>(device, target, effect);
+    const int negativeY = Capture(target).BrightnessAt(kFrame / 2, kFrame / 2);
+    EXPECT_GT(positiveY, negativeY + 32)
+        << "the upward world normal selected the wrong irradiance cube face";
+}
+
+TEST_F(IblVisibilityTest, SkinnedPbrEffectSamplesTheEnvironment)
+{
+    RenderTarget2D target(device, kFrame, kFrame, false, SurfaceFormat::Color,
+                          DepthFormat::Depth24);
+    TextureCube irradiance(device, 4, false, SurfaceFormat::Color);
+    TextureCube specular(device, 4, false, SurfaceFormat::Color);
+    Texture2D lut(device, 1, 1);
+    FillConstantEnvironment(irradiance, specular, lut);
+
+    SkinnedPbrEffect effect(device);
+    ConfigureIblPbr(effect);
+    effect.SetBoneTransforms(std::vector<Matrix>(1, Matrix::getIdentityProperty()));
+    effect.setWeightsPerVertexProperty(1);
+    ImageBasedLightEXT light;
+    light.Irradiance = &irradiance;
+    light.PrefilteredSpecular = &specular;
+    light.BrdfLut = &lut;
+    effect.setImageBasedLightEXT(light);
+
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setDepthStencilStateProperty(DepthStencilState::Default);
+    device.setBlendStateProperty(BlendState::Opaque);
+    DrawGroundFromBuffer<GpuSkinnedPbrVertex>(device, target, effect);
+    const Color lit = Capture(target).At(kFrame / 2, kFrame / 2);
+    EXPECT_GT(lit.getRProperty(), 32);
+    EXPECT_GT(lit.getBProperty(), 8);
+}
+
+TEST_F(IblVisibilityTest, PrefilteredSpecularUsesTheRoughnessMip)
+{
+    RenderTarget2D target(device, kFrame, kFrame, false, SurfaceFormat::Color,
+                          DepthFormat::Depth24);
+    TextureCube irradiance(device, 4, false, SurfaceFormat::Color);
+    TextureCube specular(device, 4, true, SurfaceFormat::Color);
+    Texture2D lut(device, 1, 1);
+    std::array<Color, 16> black;
+    black.fill(Color::Black);
+    const std::array<Color, 4> blackMip{Color::Black, Color::Black,
+                                         Color::Black, Color::Black};
+    const Color blue(0, 0, 255, 255);
+    for (int face = 0; face < 6; ++face)
+    {
+        const auto cubeFace = static_cast<CubeMapFace>(face);
+        irradiance.SetData(cubeFace, black.data(), 16);
+        specular.SetData(cubeFace, 0, nullptr, black.data(), 0, 16);
+        specular.SetData(cubeFace, 1, nullptr, blackMip.data(), 0, 4);
+        specular.SetData(cubeFace, 2, nullptr, &blue, 0, 1);
+    }
+    const Color brdf(255, 0, 0, 255);
+    lut.SetData(&brdf, 1);
+
+    PbrEffect effect(device);
+    ConfigureIblPbr(effect);
+    ImageBasedLightEXT light;
+    light.Irradiance = &irradiance;
+    light.PrefilteredSpecular = &specular;
+    light.BrdfLut = &lut;
+    light.PrefilteredMipCount = 3;
+    effect.setImageBasedLightEXT(light);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setDepthStencilStateProperty(DepthStencilState::Default);
+    device.setBlendStateProperty(BlendState::Opaque);
+
+    effect.setRoughnessFactorProperty(0.05f);
+    DrawGroundFromBuffer<GpuPbrVertex>(device, target, effect);
+    const int glossy = Capture(target).At(kFrame / 2, kFrame / 2).getBProperty();
+    effect.setRoughnessFactorProperty(1.0f);
+    DrawGroundFromBuffer<GpuPbrVertex>(device, target, effect);
+    const int rough = Capture(target).At(kFrame / 2, kFrame / 2).getBProperty();
+    EXPECT_GT(rough, glossy + 16)
+        << "roughness did not choose the blue prefiltered mip: " << glossy
+        << " vs " << rough;
+}
+
+TEST_F(IblVisibilityTest, AShadowBlocksDirectLightButPreservesTheEnvironment)
+{
+    if (!device.SupportsShadowSamplingEXT())
+        GTEST_SKIP() << "this renderer does not sample a directional shadow map";
+
+    ShadowMap shadowMap(device, ShadowQuality::Medium);
+    RenderTarget2D target(device, kFrame, kFrame, false, SurfaceFormat::Color,
+                          DepthFormat::Depth24);
+    TextureCube irradiance(device, 4, false, SurfaceFormat::Color);
+    TextureCube specular(device, 4, false, SurfaceFormat::Color);
+    Texture2D lut(device, 1, 1);
+    FillConstantEnvironment(irradiance, specular, lut);
+
+    PbrEffect effect(device);
+    ConfigureIblPbr(effect);
+    auto& sun = effect.getDirectionalLight0Property();
+    sun.setEnabledProperty(true);
+    sun.setDirectionProperty(Vector3(0.0f, -1.0f, 0.0f));
+    sun.setDiffuseColorProperty(Vector3(3.0f, 3.0f, 3.0f));
+    ImageBasedLightEXT light;
+    light.Irradiance = &irradiance;
+    light.PrefilteredSpecular = &specular;
+    light.BrdfLut = &lut;
+    effect.setImageBasedLightEXT(light);
+
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setDepthStencilStateProperty(DepthStencilState::Default);
+    device.setBlendStateProperty(BlendState::Opaque);
+    FillShadowMap(device, shadowMap);
+    effect.setShadowMapEXT(shadowMap.getShadowTexture());
+    effect.setLightViewProjectionEXT(shadowMap.getLightViewProjection());
+    effect.setShadowsEnabledEXT(true);
+    DrawGroundFromBuffer<GpuPbrVertex>(device, target, effect);
+
+    const Frame frame = Capture(target);
+    const int shadowed = frame.BrightnessAt(kFrame / 2, kFrame / 2);
+    const int lit = frame.BrightnessAt(3, 3);
+    EXPECT_GT(shadowed, 32) << "the shadow incorrectly removed environment light";
+    EXPECT_LT(shadowed, lit) << "the direct term did not receive the shadow";
 }
 
 TEST_F(ShadowVisibilityTest, SkinnedEffectReceivesTheShadow)

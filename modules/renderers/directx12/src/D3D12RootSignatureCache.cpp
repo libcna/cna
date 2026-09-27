@@ -70,7 +70,7 @@ namespace CNA::Internal::Renderers::DirectX12
             p.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
             p.DescriptorTable.NumDescriptorRanges = 1;
             p.DescriptorTable.pDescriptorRanges = &srvRanges[static_cast<std::size_t>(t)];
-            p.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+            p.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
             rootParams.push_back(p);
         }
 

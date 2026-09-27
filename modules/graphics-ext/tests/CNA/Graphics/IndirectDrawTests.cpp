@@ -15,6 +15,8 @@
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/GraphicsMemoryBarrier.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
+#include "CNA/Graphics/ComputeShader.hpp"
+#include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "CNA/IndirectDrawArguments.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -28,12 +30,17 @@
 #include "System/NotSupportedException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "EngineTestSupport.hpp"
+#if defined(CNA_RENDERER_DIRECTX12)
+#include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
+#endif
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -122,6 +129,36 @@ TEST(IndirectDrawTest, TheCommandBarrierIsItsOwnBitAndIsPartOfAll)
                                 GraphicsMemoryBarrier::IndirectCommand));
 }
 
+TEST(IndirectDrawTest, NativeArgumentBufferTransfersKeepExactByteRanges)
+{
+    CnaTest::EngineLayer::HiDefDevice device;
+    if (!CanRunIndirect(device)) GTEST_SKIP() << "this renderer has no indirect draw route";
+
+    const StorageBufferDescriptor descriptor(
+        48,
+        StorageBufferUsage::IndirectArguments | StorageBufferUsage::TransferSource |
+            StorageBufferUsage::TransferDestination,
+        StorageBufferCpuAccess::Read | StorageBufferCpuAccess::Write);
+    StorageBuffer source(device, descriptor);
+    StorageBuffer destination(device, descriptor);
+    std::array<std::uint8_t, 48> expected{};
+    for (std::size_t index = 0; index < expected.size(); ++index)
+        expected[index] = static_cast<std::uint8_t>(index * 5u + 3u);
+    source.setBytes(expected.data(), expected.size());
+
+    const std::array<std::uint8_t, 7> patch{91, 82, 73, 64, 55, 46, 37};
+    source.setBytes(5, patch.data(), patch.size());
+    std::copy(patch.begin(), patch.end(), expected.begin() + 5);
+    std::array<std::uint8_t, 48> actual{};
+    source.getBytes(actual.data(), actual.size());
+    EXPECT_EQ(actual, expected);
+
+    source.copyTo(destination, 3, 17, 13);
+    std::array<std::uint8_t, 13> copied{};
+    destination.getBytes(17, copied.data(), copied.size());
+    EXPECT_TRUE(std::equal(copied.begin(), copied.end(), expected.begin() + 3));
+}
+
 TEST(IndirectDrawTest, ARendererWithoutTheCapabilityRefusesByName)
 {
     CnaTest::EngineLayer::HiDefDevice device;
@@ -174,6 +211,78 @@ TEST(IndirectDrawTest, ADrawWithNothingBoundStillRefusesBeforeTheGpuSeesIt)
     EXPECT_THROW(device.DrawPrimitivesIndirectEXT(PrimitiveType::TriangleList,
                                                   *arguments.getRendererEXT(), 0),
                  std::runtime_error);
+}
+
+TEST(IndirectDrawTest, AForeignDirectXDeviceArgumentBufferIsRefusedBeforeSubmission)
+{
+    CnaTest::EngineLayer::HiDefDevice drawDevice;
+    CnaTest::EngineLayer::HiDefDevice bufferDevice;
+    const std::string_view renderer = drawDevice.GetGraphicsRendererName();
+    if (renderer != "DIRECTX11" && renderer != "DIRECTX12")
+        GTEST_SKIP() << "this native device-isolation probe targets DirectX";
+    if (!CanRunIndirect(drawDevice) || !CanRunIndirect(bufferDevice))
+        GTEST_SKIP() << "this renderer has no indirect draw route";
+
+    StorageBuffer arguments(
+        bufferDevice, CpuIndirectDescriptor(sizeof(IndirectDrawArguments)));
+    const auto triangle = CoveringTriangle();
+    VertexBuffer vertices(drawDevice, 3);
+    vertices.SetData(triangle.data(), 3);
+    BasicEffect effect(drawDevice);
+    effect.VertexColorEnabled = true;
+    drawDevice.SetVertexBuffer(&vertices);
+    effect.Apply();
+    EXPECT_THROW(
+        drawDevice.DrawPrimitivesIndirectEXT(
+            PrimitiveType::TriangleList, *arguments.getRendererEXT(), 0),
+        System::NotSupportedException);
+    drawDevice.SetVertexBuffer(nullptr);
+}
+
+TEST(IndirectDrawTest, DirectXComputeWritesArgumentsConsumedByTheGpuDraw)
+{
+    CnaTest::EngineLayer::HiDefDevice device;
+    const std::string_view renderer = device.GetGraphicsRendererName();
+    if (renderer != "DIRECTX11" && renderer != "DIRECTX12")
+        GTEST_SKIP() << "this raw HLSL producer targets DirectX";
+    ASSERT_TRUE(device.SupportsCapability(GraphicsCapability::ComputeShaders));
+    ASSERT_TRUE(CanRunIndirect(device));
+    ASSERT_TRUE(device.SupportsShaderLanguageEXT(
+        CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Compute));
+
+    StorageBuffer arguments(device, sizeof(IndirectDrawArguments));
+    const CNA::Graphics::ShaderCodeEXT source(
+        CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Compute,
+        "main", "D3D11IndirectProducer.hlsl", R"(
+RWByteAddressBuffer Args : register(u0);
+[numthreads(1, 1, 1)]
+void main(uint3 id : SV_DispatchThreadID)
+{
+    Args.Store(0, 3);
+    Args.Store(4, 1);
+    Args.Store(8, 0);
+    Args.Store(12, 0);
+}
+)");
+    CNA::Graphics::ComputeShader producer(device, source);
+    producer.bindStorageBuffer(0, arguments);
+    producer.dispatch(1);
+
+    const auto triangle = CoveringTriangle();
+    VertexBuffer vertices(device, 3);
+    vertices.SetData(triangle.data(), 3);
+    BasicEffect effect(device);
+    effect.VertexColorEnabled = true;
+    RenderTarget2D target(device, kSize, kSize);
+    device.SetVertexBuffer(&vertices);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    effect.Apply();
+    device.DrawPrimitivesIndirectEXT(
+        PrimitiveType::TriangleList, *arguments.getRendererEXT(), 0);
+    device.SetRenderTarget(nullptr);
+    EXPECT_GT(CountLitPixels(target), 0);
+    device.SetVertexBuffer(nullptr);
 }
 
 TEST(IndirectDrawTest, TheCountsReallyComeFromTheBuffer)
@@ -335,6 +444,58 @@ TEST(IndirectDrawTest, TheIndexedRouteRefusesWithoutAnIndexBuffer)
                  std::runtime_error);
     device.SetVertexBuffer(nullptr);
 }
+
+#if defined(CNA_RENDERER_DIRECTX12)
+TEST(IndirectDrawTest, D3D12CommandSignaturesAreRecreatedWithTheDevice)
+{
+    CnaTest::EngineLayer::HiDefDevice device;
+    auto& renderer = dynamic_cast<CNA::Internal::Renderers::DirectX12::DirectX12Renderer&>(
+        device.GetRenderer());
+    const auto triangle = CoveringTriangle();
+    VertexBuffer vertices(device, 3);
+    vertices.SetData(triangle.data(), 3);
+    const std::array<std::uint16_t, 3> order{0, 1, 2};
+    IndexBuffer indices(device, 3);
+    indices.SetData(order.data(), 3);
+    BasicEffect effect(device);
+    effect.VertexColorEnabled = true;
+    RenderTarget2D target(device, kSize, kSize);
+    IndirectDrawArguments draw{};
+    draw.VertexCount = 3;
+    draw.InstanceCount = 1;
+    IndirectDrawIndexedArguments indexed{};
+    indexed.IndexCount = 3;
+    indexed.InstanceCount = 1;
+    StorageBuffer drawArguments(device, CpuIndirectDescriptor(sizeof(draw)));
+    StorageBuffer indexedArguments(device, CpuIndirectDescriptor(sizeof(indexed)));
+    drawArguments.setBytes(&draw, sizeof(draw));
+    indexedArguments.setBytes(&indexed, sizeof(indexed));
+
+    const auto render = [&](bool useIndices) {
+        device.SetVertexBuffer(&vertices);
+        if (useIndices) device.SetIndexBuffer(&indices);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+        effect.Apply();
+        if (useIndices)
+            device.DrawIndexedPrimitivesIndirectEXT(
+                PrimitiveType::TriangleList, *indexedArguments.getRendererEXT(), 0);
+        else
+            device.DrawPrimitivesIndirectEXT(
+                PrimitiveType::TriangleList, *drawArguments.getRendererEXT(), 0);
+        device.SetRenderTarget(nullptr);
+        device.SetIndexBuffer(nullptr);
+        device.SetVertexBuffer(nullptr);
+        return CountLitPixels(target);
+    };
+
+    EXPECT_EQ(render(false), kSize * kSize);
+    EXPECT_EQ(render(true), kSize * kSize);
+    renderer.RecreateDeviceEXT();
+    EXPECT_EQ(render(false), kSize * kSize);
+    EXPECT_EQ(render(true), kSize * kSize);
+}
+#endif
 
 } // namespace
 

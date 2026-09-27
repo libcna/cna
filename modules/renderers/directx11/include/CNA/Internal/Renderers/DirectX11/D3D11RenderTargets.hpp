@@ -199,6 +199,17 @@ namespace CNA::Internal::Renderers::DirectX11
         void UnbindAsRenderTarget() override;
         [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
 
+        /**
+         * @brief Selects a cube face for a plural MRT bind without replacing the other attachments.
+         * @param face Cube face index from zero through five.
+         * @return That face's render-target view, or null for an invalid face.
+         */
+        [[nodiscard]] ID3D11RenderTargetView* PrepareMRTFaceEXT(int face);
+        /** @brief Returns this cube's shared depth-stencil view for a slot-zero MRT binding. */
+        [[nodiscard]] ID3D11DepthStencilView* GetDSVEXT() const { return dsv_.Get(); }
+        /** @brief Resolves the selected face and regenerates its mips without changing OM bindings. */
+        void ResolveAndGenerateMipsEXT();
+
         [[nodiscard]] ID3D11ShaderResourceView* GetShaderResourceViewEXT() const { return srv_.Get(); }
         /// The underlying 6-slice texture-array resource actually bound for rendering (CNAEXT --
         /// test/diagnostics) -- the MSAA array itself when `GetMultiSampleCount() > 0` (matches

@@ -17,6 +17,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "shaders/volumetric_fog/VolumetricFogShaderPackage.generated.hpp"
+#include "shaders/SceneHlsl.generated.hpp"
 
 #include <algorithm>
 #include <array>
@@ -105,6 +106,16 @@ namespace CNA::Graphics {
                     ShaderCodeEXT(CNA::ShaderLanguageEXT::Wgsl,
                                   CNA::ShaderStageEXT::Fragment, "main",
                                   wgslFragment.label, std::string(wgslFragment.source)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                  CNA::ShaderStageEXT::Vertex, "main",
+                                  "volumetric_fog/fullscreen.vulkan.vert.spv -> hlsl",
+                                  std::string(CNA::Graphics::detail::SceneHlslGenerated::FindStage(
+                                      "volumetric_fog/fullscreen.vulkan.vert.spv"))),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                  CNA::ShaderStageEXT::Fragment, "main",
+                                  std::string(vulkanFragment.label) + " -> hlsl",
+                                  std::string(CNA::Graphics::detail::SceneHlslGenerated::FindStage(
+                                      vulkanFragment.label))),
                 },
                 {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment},
                 std::move(requirements));
@@ -192,7 +203,6 @@ namespace CNA::Graphics {
         RenderTarget2D* volume = pool_.acquire(kSliceCount * kSliceResolution, kSliceResolution,
                                                SurfaceFormat::Color, DepthFormat::None, 0);
 
-        buildEffect_->Apply();
         const bool haveShadow = shadowMap_ != nullptr && shadowMap_->getShadowTexture() != nullptr;
         Matrix lightViewProjection = Matrix::getIdentityProperty();
         if (haveShadow)
@@ -224,11 +234,11 @@ namespace CNA::Graphics {
         buildEffect_->SetUniformFloatArray("uVolumetricBuildScalars",
                                            buildScalars.data(),
                                            static_cast<int>(buildScalars.size()));
+        buildEffect_->Apply();
 
         fullscreen_->draw(context.source, volume, buildEffect_.get(),
                           kSliceCount * kSliceResolution, kSliceResolution);
 
-        resolveEffect_->Apply();
         resolveEffect_->SetUniformInt("uDepthSampler", 1);
         resolveEffect_->SetTexture(1, *context.sourceDepth);
         resolveEffect_->SetUniformInt("uVolumeSampler", 2);
@@ -243,6 +253,7 @@ namespace CNA::Graphics {
         resolveEffect_->SetUniformFloatArray("uVolumetricResolveScalars",
                                              resolveScalars.data(),
                                              static_cast<int>(resolveScalars.size()));
+        resolveEffect_->Apply();
 
         fullscreen_->draw(context.source, context.destination, resolveEffect_.get(),
                           context.width, context.height);

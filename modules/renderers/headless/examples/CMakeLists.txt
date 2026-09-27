@@ -33,6 +33,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS"
         if(TARGET SDL3::SDL3)
             target_link_libraries(${target} PRIVATE SDL3::SDL3)
             target_compile_definitions(${target} PRIVATE CNA_HEADLESS_TEST_HAS_SDL=1)
+        else()
+            target_compile_definitions(${target} PRIVATE CNA_EXAMPLES_NO_SDL)
         endif()
         if(TARGET SDL3::SDL3main)
             target_link_libraries(${target} PRIVATE SDL3::SDL3main)

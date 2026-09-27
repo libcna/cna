@@ -94,6 +94,117 @@ void main() {
 }
 )";
 
+constexpr const char* kHlslVertexSource = R"(
+cbuffer SpriteParameters : register(b0) { float2 viewportSize; };
+struct Input { float2 position : POSITION; float2 texcoord : TEXCOORD; float4 color : COLOR; };
+struct Output { float4 position : SV_Position; };
+Output main(Input input)
+{
+    Output output;
+    float2 ndc = input.position / viewportSize * 2.0f - 1.0f;
+    output.position = float4(ndc.x, -ndc.y, 0.0f, 1.0f);
+    return output;
+}
+)";
+
+constexpr const char* kHlslLookupSource = R"(
+Texture2D<float4> uCnaLightData : register(t1);
+Texture2D<float4> uCnaClusterTable : register(t2);
+Texture2D<float4> uCnaLightIndices : register(t3);
+
+uint cnaUnpackUint(float4 texel)
+{
+    uint4 bytes = uint4(texel * 255.0f + 0.5f);
+    return bytes.x | (bytes.y << 8) | (bytes.z << 16) | (bytes.w << 24);
+}
+float cnaLightFloat(int field, int light)
+{
+    return asfloat(cnaUnpackUint(uCnaLightData.Load(int3(field, light, 0))));
+}
+uint cnaTableUint(int texel)
+{
+    return cnaUnpackUint(uCnaClusterTable.Load(int3(texel % 256, texel / 256, 0)));
+}
+int cnaClusterLightCount(int cluster) { return int(cnaTableUint(cluster * 2 + 1)); }
+int cnaClusterLightIndex(int cluster, int item)
+{
+    int texel = int(cnaTableUint(cluster * 2)) + item;
+    return int(cnaUnpackUint(uCnaLightIndices.Load(int3(texel % 256, texel / 256, 0))));
+}
+)";
+
+bool RunsHlslProbe(GraphicsDevice& device)
+{
+    return device.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                             CNA::ShaderStageEXT::Vertex)
+        && device.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                             CNA::ShaderStageEXT::Fragment);
+}
+
+std::string ProbeVertexSource(GraphicsDevice& device)
+{
+    return RunsHlslProbe(device) ? kHlslVertexSource : kVertexSource;
+}
+
+std::string MakeHlslProbeSource()
+{
+    return std::string(kHlslLookupSource) + R"(
+cbuffer ProbeParameters : register(b4)
+{
+    int uProbeIndex;
+    float3 uProbePosition;
+    float uProbeRange;
+    float3 uProbeColour;
+    float uProbeIsSpot;
+    float3 uProbeDirection;
+    float uProbeCosOuter;
+};
+bool cnaClose(float a, float b) { return abs(a - b) < 1e-5f; }
+bool cnaClose3(float3 a, float3 b)
+{
+    return cnaClose(a.x, b.x) && cnaClose(a.y, b.y) && cnaClose(a.z, b.z);
+}
+float4 main(float4 position : SV_Position) : SV_Target0
+{
+    bool ok = cnaClose3(float3(cnaLightFloat(0, uProbeIndex),
+                               cnaLightFloat(1, uProbeIndex),
+                               cnaLightFloat(2, uProbeIndex)), uProbePosition)
+           && cnaClose(cnaLightFloat(3, uProbeIndex), uProbeRange)
+           && cnaClose3(float3(cnaLightFloat(4, uProbeIndex),
+                               cnaLightFloat(5, uProbeIndex),
+                               cnaLightFloat(6, uProbeIndex)), uProbeColour)
+           && cnaClose(cnaLightFloat(7, uProbeIndex), uProbeIsSpot)
+           && cnaClose3(float3(cnaLightFloat(8, uProbeIndex),
+                               cnaLightFloat(9, uProbeIndex),
+                               cnaLightFloat(10, uProbeIndex)), uProbeDirection)
+           && cnaClose(cnaLightFloat(11, uProbeIndex), uProbeCosOuter);
+    return ok ? float4(1.0f, 1.0f, 1.0f, 1.0f) : float4(0.0f, 0.0f, 0.0f, 1.0f);
+}
+)";
+}
+
+std::string MakeHlslListSource()
+{
+    return std::string(kHlslLookupSource) + R"(
+cbuffer ProbeParameters : register(b4)
+{
+    int uProbeCluster;
+    int uProbeCount;
+    int uProbeFirst;
+    int uProbeLast;
+};
+float4 main(float4 position : SV_Position) : SV_Target0
+{
+    int count = cnaClusterLightCount(uProbeCluster);
+    bool ok = count == uProbeCount;
+    if (ok && count > 0)
+        ok = cnaClusterLightIndex(uProbeCluster, 0) == uProbeFirst
+          && cnaClusterLightIndex(uProbeCluster, count - 1) == uProbeLast;
+    return ok ? float4(1.0f, 1.0f, 1.0f, 1.0f) : float4(0.0f, 0.0f, 0.0f, 1.0f);
+}
+)";
+}
+
 /// A shader that decodes one light and paints white when every field matches the uniforms holding
 /// the same values, black otherwise. Whole-frame, so a single pixel read answers the question.
 std::string MakeProbeSource()
@@ -264,11 +375,13 @@ TEST(ClusteredLightBufferTest, AnEmptySetUploadsWithoutAZeroSizedTexture)
 TEST(ClusteredLightBufferTest, TheShaderReadsBackEveryFieldOfEveryLight)
 {
     CnaTest::EngineLayer::HiDefDevice gd;
-    CNA_SKIP_WITHOUT_GLSL_SHADER_SOURCE(gd);
+    if (!RunsHlslProbe(gd) && !CnaTest::EngineLayer::RunsGlslShaderSource(gd))
+        GTEST_SKIP() << "this renderer has no clustered-light probe shader dialect";
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
-    ShaderEffect effect(gd, kVertexSource, MakeProbeSource());
+    ShaderEffect effect(gd, ProbeVertexSource(gd),
+                        RunsHlslProbe(gd) ? MakeHlslProbeSource() : MakeProbeSource());
     ASSERT_TRUE(effect.IsEffectValid()) << effect.GetCompileErrorEXT();
 
     const ClusteredLightGrid grid = MakeGrid();
@@ -319,11 +432,13 @@ TEST(ClusteredLightBufferTest, TheShaderDisagreesWhenItShould)
     // cannot tell "it matched" from "the shader always paints white". This asks for the wrong
     // answer on purpose.
     CnaTest::EngineLayer::HiDefDevice gd;
-    CNA_SKIP_WITHOUT_GLSL_SHADER_SOURCE(gd);
+    if (!RunsHlslProbe(gd) && !CnaTest::EngineLayer::RunsGlslShaderSource(gd))
+        GTEST_SKIP() << "this renderer has no clustered-light probe shader dialect";
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
-    ShaderEffect effect(gd, kVertexSource, MakeProbeSource());
+    ShaderEffect effect(gd, ProbeVertexSource(gd),
+                        RunsHlslProbe(gd) ? MakeHlslProbeSource() : MakeProbeSource());
     ASSERT_TRUE(effect.IsEffectValid()) << effect.GetCompileErrorEXT();
 
     const ClusteredLightGrid grid = MakeGrid();
@@ -352,11 +467,13 @@ TEST(ClusteredLightBufferTest, TheShaderDisagreesWhenItShould)
 TEST(ClusteredLightBufferTest, TheShaderWalksTheSameClusterListTheCpuBuilt)
 {
     CnaTest::EngineLayer::HiDefDevice gd;
-    CNA_SKIP_WITHOUT_GLSL_SHADER_SOURCE(gd);
+    if (!RunsHlslProbe(gd) && !CnaTest::EngineLayer::RunsGlslShaderSource(gd))
+        GTEST_SKIP() << "this renderer has no clustered-light probe shader dialect";
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
-    ShaderEffect effect(gd, kVertexSource, MakeListSource());
+    ShaderEffect effect(gd, ProbeVertexSource(gd),
+                        RunsHlslProbe(gd) ? MakeHlslListSource() : MakeListSource());
     ASSERT_TRUE(effect.IsEffectValid()) << effect.GetCompileErrorEXT();
 
     const ClusteredLightGrid grid = MakeGrid();

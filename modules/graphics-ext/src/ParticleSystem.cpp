@@ -26,6 +26,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "shaders/particle_system/ParticleSystemShaderPackage.generated.hpp"
+#include "shaders/particle_system/ParticleSystemHlsl.generated.hpp"
 
 #include <algorithm>
 #include <array>
@@ -94,6 +95,11 @@ namespace CNA::Graphics {
                                   CNA::ShaderStageEXT::Compute, "main",
                                   "particle_system/simulate.vulkan.comp.wgsl",
                                   std::string(kSimulateVulkanComputeWgsl)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                  CNA::ShaderStageEXT::Compute, "main",
+                                  "particle_system/simulate.vulkan.comp.spv -> hlsl",
+                                  std::string(detail::ParticleSystemHlslGenerated::
+                                                  kSimulateComputeSource)),
                 },
                 {CNA::ShaderStageEXT::Compute},
                 {
@@ -144,6 +150,16 @@ namespace CNA::Graphics {
                                   CNA::ShaderStageEXT::Fragment, "main",
                                   "particle_system/draw.vulkan.frag.wgsl",
                                   std::string(kDrawVulkanFragmentWgsl)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                  CNA::ShaderStageEXT::Vertex, "main",
+                                  "particle_system/draw.vulkan.vert.spv -> hlsl",
+                                  std::string(detail::ParticleSystemHlslGenerated::
+                                                  kDrawVertexSource)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                  CNA::ShaderStageEXT::Fragment, "main",
+                                  "particle_system/draw.vulkan.frag.spv -> hlsl",
+                                  std::string(detail::ParticleSystemHlslGenerated::
+                                                  kDrawFragmentSource)),
                 },
                 {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment},
                 {
@@ -481,7 +497,6 @@ layout(std430, binding = 7) readonly buffer CnaParticleBuffer { vec4 cnaParticle
         {
             effect_->setViewProperty(view);
             effect_->setProjectionProperty(projection);
-            effect_->Apply();
             std::array<float, 32> matrices{};
             view.ToColumnMajor(matrices.data());
             projection.ToColumnMajor(matrices.data() + 16);
@@ -516,6 +531,7 @@ layout(std430, binding = 7) readonly buffer CnaParticleBuffer { vec4 cnaParticle
                 effect_->SetTexture(1, *sceneDepth_);
             }
 
+            effect_->Apply();
             device_.GetRenderer().BindStorageBufferForDrawEXT(kParticleBinding,
                                                               *buffer_->getRendererEXT());
             device_.SetVertexBuffer(quad_.get());

@@ -4,7 +4,9 @@
 #include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <stdexcept>
 
@@ -12,6 +14,8 @@ namespace CNA::Internal::Renderers::DirectX12
 {
     namespace
     {
+        std::atomic<std::uint64_t> nextTextureResourceSerial{1};
+
         std::string FormatHr(HRESULT hr)
         {
             char buf[32];
@@ -64,8 +68,6 @@ namespace CNA::Internal::Renderers::DirectX12
         ResolveSurfaceFormat(surfaceFormat_, dxgiFormat_, bytesPerTexel_, compressed_,
                              bytesPerBlock_);
         cpuLevels_.resize(static_cast<std::size_t>(mipLevels_));
-        CreateDeviceResources();
-
         if (!data.pixels.empty())
         {
             const int rowUnits = compressed_ ? (width_ + 3) / 4 : width_;
@@ -77,18 +79,34 @@ namespace CNA::Internal::Renderers::DirectX12
                 throw std::invalid_argument(
                     "D3D12TextureRenderer: level-zero pixel buffer is too small for SurfaceFormat::" +
                     std::string(D3DCommon::SurfaceFormatName(surfaceFormat_)) + ".");
-            StoreLevel(0, data.pixels.data(), width_, height_, static_cast<int>(rowBytes));
-            UploadRegion(0, cpuLevels_[0].data(), width_, height_, static_cast<int>(rowBytes));
         }
-        else
+        CreateDeviceResources();
+        try
         {
-            TransitionToShaderReadableEXT();
+            if (!data.pixels.empty())
+            {
+                const int rowUnits = compressed_ ? (width_ + 3) / 4 : width_;
+                const int unitBytes = compressed_ ? bytesPerBlock_ : bytesPerTexel_;
+                const std::size_t rowBytes = static_cast<std::size_t>(rowUnits) * unitBytes;
+                StoreLevel(0, data.pixels.data(), width_, height_, static_cast<int>(rowBytes));
+                UploadRegion(0, cpuLevels_[0].data(), width_, height_, static_cast<int>(rowBytes));
+            }
+            else
+            {
+                TransitionToShaderReadableEXT();
+            }
+        }
+        catch (...)
+        {
+            ReleaseDeviceResourcesEXT();
+            throw;
         }
         renderer_->RegisterRecoverableResourceEXT(this);
     }
 
     void D3D12TextureRenderer::CreateDeviceResources()
     {
+        imageAccess_ = 0;
         D3D12_HEAP_PROPERTIES heapProps{};
         heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
 
@@ -102,6 +120,15 @@ namespace CNA::Internal::Renderers::DirectX12
         desc.SampleDesc.Count = 1;
         desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN; // driver-chosen tiled layout, standard for TEXTURE2D
 
+        constexpr std::uint32_t imageAccess =
+            static_cast<std::uint32_t>(CNA::RendererFormatUsage::StorageRead) |
+            static_cast<std::uint32_t>(CNA::RendererFormatUsage::StorageWrite);
+        const std::uint32_t availableImageAccess = !compressed_
+            ? renderer_->GetSurfaceFormatUsageSupportEXT(surfaceFormat_).supportedUsages & imageAccess
+            : 0;
+        if (availableImageAccess != 0)
+            desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
         // COPY_DEST is a legal initial state for a DEFAULT-heap texture that (per this renderer's own
         // constructor flow) is about to receive its level-0 upload -- and, when there IS no initial
         // pixel data, gets deliberately transitioned to kTextureShaderReadableState below rather
@@ -109,8 +136,23 @@ namespace CNA::Internal::Renderers::DirectX12
         HRESULT hr = renderer_->GetDeviceEXT()->CreateCommittedResource(
             &heapProps, D3D12_HEAP_FLAG_NONE, &desc,
             D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(texture_.GetAddressOf()));
+        if (FAILED(hr) && availableImageAccess != 0)
+        {
+            desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+            hr = renderer_->GetDeviceEXT()->CreateCommittedResource(
+                &heapProps, D3D12_HEAP_FLAG_NONE, &desc,
+                D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(texture_.GetAddressOf()));
+        }
         if (FAILED(hr))
             throw std::runtime_error("D3D12TextureRenderer: CreateCommittedResource failed, hr=" + FormatHr(hr));
+        // DRED can report multiple freed textures at one fault address; a serial identifies
+        // which creation each name belongs to after its COM object has been released.
+        const std::uint64_t serial = nextTextureResourceSerial.fetch_add(1, std::memory_order_relaxed);
+        const std::wstring resourceName = L"CNA Texture2D resource #" + std::to_wstring(serial);
+        texture_->SetName(resourceName.c_str());
+        if (std::getenv("CNA_D3D12_TEXTURE_TRACE") != nullptr)
+            std::fprintf(stderr, "[D3D12-TEX] create serial=%llu resource=%p\n",
+                         static_cast<unsigned long long>(serial), texture_.Get());
 
         renderer_->GetResourceStateTrackerEXT().TrackResource(texture_.Get(), D3D12_RESOURCE_STATE_COPY_DEST);
 
@@ -120,12 +162,34 @@ namespace CNA::Internal::Renderers::DirectX12
         srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         srvDesc.Texture2D.MipLevels = static_cast<UINT>(mipLevels_);
 
-        heaps_ = renderer_->GetDescriptorHeapsEXT();
-        srvIndex_ = renderer_->CreateCbvSrvUavDescriptorEXT(
-            [&](D3D12_CPU_DESCRIPTOR_HANDLE cpu)
+        try
+        {
+            heaps_ = renderer_->GetDescriptorHeapsEXT();
+            srvIndex_ = renderer_->CreateCbvSrvUavDescriptorEXT(
+                [&](D3D12_CPU_DESCRIPTOR_HANDLE cpu)
+                {
+                    renderer_->GetDeviceEXT()->CreateShaderResourceView(texture_.Get(), &srvDesc, cpu);
+                });
+            if ((desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS) != 0)
             {
-                renderer_->GetDeviceEXT()->CreateShaderResourceView(texture_.Get(), &srvDesc, cpu);
-            });
+                D3D12_UNORDERED_ACCESS_VIEW_DESC uav{};
+                uav.Format = dxgiFormat_;
+                uav.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+                uav.Texture2D.MipSlice = 0;
+                uavIndex_ = renderer_->CreateCbvSrvUavDescriptorEXT(
+                    [&](D3D12_CPU_DESCRIPTOR_HANDLE cpu)
+                    {
+                        renderer_->GetDeviceEXT()->CreateUnorderedAccessView(
+                            texture_.Get(), nullptr, &uav, cpu);
+                    });
+                imageAccess_ = availableImageAccess;
+            }
+        }
+        catch (...)
+        {
+            ReleaseDeviceResourcesEXT();
+            throw;
+        }
 
     }
 
@@ -237,7 +301,11 @@ namespace CNA::Internal::Renderers::DirectX12
             renderer_->GetResourceStateTrackerEXT().UntrackResource(texture_.Get());
         if (heaps_ && srvIndex_ != D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex)
             heaps_->cbvSrvUav.Free(srvIndex_);
+        if (heaps_ && uavIndex_ != D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex)
+            heaps_->cbvSrvUav.Free(uavIndex_);
         srvIndex_ = D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex;
+        uavIndex_ = D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex;
+        imageAccess_ = 0;
         heaps_.reset();
         texture_.Reset();
     }
@@ -280,9 +348,22 @@ namespace CNA::Internal::Renderers::DirectX12
         const std::size_t required = rowBytes * static_cast<std::size_t>(rowCount);
         if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required) return false;
 
-        const UINT rowPitch = AlignUp(static_cast<UINT>(rowBytes),
-                                      D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
-        const UINT64 readbackBufferSize = static_cast<UINT64>(rowPitch) * rowCount;
+        UINT rowPitch = AlignUp(static_cast<UINT>(rowBytes),
+                                D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+        UINT64 readbackBufferSize = static_cast<UINT64>(rowPitch) * rowCount;
+        D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint{};
+        if (compressed_)
+        {
+            // Read the whole BC subresource using the driver's copyable footprint. A
+            // hand-built footprint for a sub-4x4 tail can be rejected at Close().
+            UINT footprintRows = 0;
+            UINT64 rowSize = 0;
+            const D3D12_RESOURCE_DESC textureDesc = texture_->GetDesc();
+            renderer_->GetDeviceEXT()->GetCopyableFootprints(
+                &textureDesc, static_cast<UINT>(level), 1, 0,
+                &footprint, &footprintRows, &rowSize, &readbackBufferSize);
+            rowPitch = footprint.Footprint.RowPitch;
+        }
 
         D3D12_HEAP_PROPERTIES heapProps{};
         heapProps.Type = D3D12_HEAP_TYPE_READBACK;
@@ -305,11 +386,15 @@ namespace CNA::Internal::Renderers::DirectX12
         D3D12_TEXTURE_COPY_LOCATION dst{};
         dst.pResource = readback.Get();
         dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-        dst.PlacedFootprint.Footprint.Format = dxgiFormat_;
-        dst.PlacedFootprint.Footprint.Width = static_cast<UINT>(w);
-        dst.PlacedFootprint.Footprint.Height = static_cast<UINT>(h);
-        dst.PlacedFootprint.Footprint.Depth = 1;
-        dst.PlacedFootprint.Footprint.RowPitch = rowPitch;
+        dst.PlacedFootprint = footprint;
+        if (!compressed_)
+        {
+            dst.PlacedFootprint.Footprint.Format = dxgiFormat_;
+            dst.PlacedFootprint.Footprint.Width = static_cast<UINT>(w);
+            dst.PlacedFootprint.Footprint.Height = static_cast<UINT>(h);
+            dst.PlacedFootprint.Footprint.Depth = 1;
+            dst.PlacedFootprint.Footprint.RowPitch = rowPitch;
+        }
 
         D3D12_TEXTURE_COPY_LOCATION src{};
         src.pResource = texture_.Get();
@@ -322,7 +407,7 @@ namespace CNA::Internal::Renderers::DirectX12
         auto& tracker = renderer_->GetResourceStateTrackerEXT();
         const D3D12_RESOURCE_STATES priorState = tracker.GetTrackedStateEXT(texture_.Get());
         tracker.TransitionTo(cmdList, texture_.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE);
-        cmdList->CopyTextureRegion(&dst, 0, 0, 0, &src, &srcBox);
+        cmdList->CopyTextureRegion(&dst, 0, 0, 0, &src, compressed_ ? nullptr : &srcBox);
         tracker.TransitionTo(cmdList, texture_.Get(), priorState);
         hr = cmdList->Close();
         if (FAILED(hr)) return false;
@@ -332,9 +417,11 @@ namespace CNA::Internal::Renderers::DirectX12
         const D3D12_RANGE readRange{0, static_cast<SIZE_T>(readbackBufferSize)};
         if (FAILED(readback->Map(0, &readRange, reinterpret_cast<void**>(&mapped)))) return false;
         auto* out = static_cast<uint8_t*>(data);
+        const std::size_t sourceX = compressed_ ? static_cast<std::size_t>(x / 4) * bytesPerBlock_ : 0;
+        const std::size_t sourceY = compressed_ ? static_cast<std::size_t>(y / 4) : 0;
         for (int row = 0; row < rowCount; ++row)
             std::memcpy(out + static_cast<std::size_t>(row) * rowBytes,
-                        mapped + static_cast<std::size_t>(row) * rowPitch, rowBytes);
+                        mapped + (sourceY + row) * rowPitch + sourceX, rowBytes);
         const D3D12_RANGE writtenRange{0, 0};
         readback->Unmap(0, &writtenRange);
         return true;

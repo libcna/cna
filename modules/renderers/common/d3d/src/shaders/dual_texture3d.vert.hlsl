@@ -58,7 +58,7 @@ VSOutput main(VSInput input)
 #ifdef CNA_DUAL_TEXTURE_DUAL_UV_INPUT
     output.UV1 = input.UV1;
 #else
-    output.UV1 = input.UV0;
+    output.UV1 = float2(0.0, 0.0);
 #endif
     // WINCLOSE-0022: XNA writes this to D3D9 COLOR0, which saturates before interpolation.
 #ifdef CNA_DUAL_TEXTURE_COLOR_INPUT

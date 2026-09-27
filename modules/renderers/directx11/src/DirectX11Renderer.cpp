@@ -1,8 +1,13 @@
 // plans/plan_dx.md Phase DIRECTX2/DIRECTX4: D3D11 renderer skeleton + device/swap-chain/back-buffer.
 #include "CNA/Logger.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
 #include "CNA/Internal/Renderers/DirectX11/DirectX11Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11Buffers.hpp"
+#include "CNA/Internal/Renderers/DirectX11/D3D11IndirectBuffer.hpp"
+#include "CNA/Internal/Renderers/DirectX11/D3D11ComputeShader.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11Textures.hpp"
+#include "CNA/Internal/Renderers/DirectX11/D3D11Texture2DArray.hpp"
+#include "CNA/Internal/Renderers/DirectX11/D3D11StorageTexture2D.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11RenderTargets.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11OcclusionQuery.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11EffectRenderer.hpp"
@@ -17,17 +22,20 @@
 #include "CNA/Internal/Renderers/D3DCommon/D3DPresentation.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DRasterizationConvention.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <iterator>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -36,6 +44,73 @@ namespace CNA::Internal::Renderers::DirectX11
 {
     namespace
     {
+        class D3D11GpuTimerRenderer final : public IGpuTimerRenderer
+        {
+        public:
+            D3D11GpuTimerRenderer(ID3D11Device* device, ID3D11DeviceContext* context)
+                : context_(context)
+            {
+                D3D11_QUERY_DESC description{};
+                description.Query = D3D11_QUERY_TIMESTAMP_DISJOINT;
+                if (FAILED(device->CreateQuery(&description, disjoint_.GetAddressOf())))
+                    throw std::runtime_error("D3D11 GPU timer: disjoint query creation failed");
+                description.Query = D3D11_QUERY_TIMESTAMP;
+                if (FAILED(device->CreateQuery(&description, start_.GetAddressOf())) ||
+                    FAILED(device->CreateQuery(&description, end_.GetAddressOf())))
+                    throw std::runtime_error("D3D11 GPU timer: timestamp query creation failed");
+            }
+
+            void Begin() override
+            {
+                ready_ = false;
+                ended_ = false;
+                context_->Begin(disjoint_.Get());
+                context_->End(start_.Get());
+            }
+
+            void End() override
+            {
+                context_->End(end_.Get());
+                context_->End(disjoint_.Get());
+                ended_ = true;
+            }
+
+            [[nodiscard]] bool IsResultAvailable() const override
+            {
+                if (!ended_) return false;
+                if (ready_) return true;
+                D3D11_QUERY_DATA_TIMESTAMP_DISJOINT disjoint{};
+                UINT64 start = 0;
+                UINT64 end = 0;
+                constexpr UINT flags = D3D11_ASYNC_GETDATA_DONOTFLUSH;
+                if (context_->GetData(disjoint_.Get(), &disjoint, sizeof(disjoint), flags) != S_OK ||
+                    context_->GetData(start_.Get(), &start, sizeof(start), flags) != S_OK ||
+                    context_->GetData(end_.Get(), &end, sizeof(end), flags) != S_OK)
+                    return false;
+                nanoseconds_ = disjoint.Disjoint || disjoint.Frequency == 0 || end < start
+                    ? 0
+                    : static_cast<std::uint64_t>(
+                          static_cast<long double>(end - start) * 1.0e9L /
+                          static_cast<long double>(disjoint.Frequency));
+                ready_ = true;
+                return true;
+            }
+
+            [[nodiscard]] std::uint64_t ElapsedNanoseconds() const override
+            {
+                return IsResultAvailable() ? nanoseconds_ : 0;
+            }
+
+        private:
+            ComPtr<ID3D11DeviceContext> context_;
+            ComPtr<ID3D11Query> disjoint_;
+            ComPtr<ID3D11Query> start_;
+            ComPtr<ID3D11Query> end_;
+            bool ended_ = false;
+            mutable bool ready_ = false;
+            mutable std::uint64_t nanoseconds_ = 0;
+        };
+
         std::string FormatHr(HRESULT hr)
         {
             char buf[32];
@@ -145,6 +220,26 @@ namespace CNA::Internal::Renderers::DirectX11
         {
             combinedElements.clear();
             inputElements.clear();
+            const auto streamElements = [](const D3D11VertexBufferRenderer& buffer,
+                                           int strideInBytes)
+            {
+                auto elements = buffer.GetDeclarationEXT().GetElements();
+                if (!elements.empty())
+                    return elements;
+                const auto inferred = CNA::Internal::Graphics::InferredLayoutForStride(
+                    strideInBytes,
+                    CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
+                if (!inferred.known)
+                    throw System::NotSupportedException(
+                        "DirectX11 cannot infer a vertex declaration for this buffer stride.");
+                for (std::size_t index = 0; index < inferred.count; ++index)
+                {
+                    const auto& input = inferred.elements[index];
+                    elements.emplace_back(input.offset, input.format, input.usage,
+                                          input.usageIndex);
+                }
+                return elements;
+            };
             for (int i = 0; i < params.vertexStreamCount; ++i)
             {
                 const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
@@ -152,11 +247,12 @@ namespace CNA::Internal::Renderers::DirectX11
                     continue;
                 const auto* buffer =
                     static_cast<const D3D11VertexBufferRenderer*>(stream.buffer);
-                if (buffer == nullptr || buffer->GetDeclarationEXT().GetElements().empty())
+                if (buffer == nullptr)
                     throw System::NotSupportedException(
-                        "DirectX11 multi-stream input requires every per-vertex buffer to carry "
-                        "a VertexDeclaration.");
-                const auto& elements = buffer->GetDeclarationEXT().GetElements();
+                        "DirectX11 multi-stream input requires a per-vertex buffer.");
+                const auto elements = streamElements(
+                    *buffer, stream.strideInBytes > 0 ? stream.strideInBytes
+                                                      : static_cast<int>(buffer->GetStrideEXT()));
                 for (std::size_t elementIndex = 0; elementIndex < elements.size(); ++elementIndex)
                 {
                     auto combined = elements[elementIndex];
@@ -187,6 +283,7 @@ namespace CNA::Internal::Renderers::DirectX11
 
             if (!includeInstanceStreams)
                 return;
+            int instanceColumn = 0;
             for (int i = 0; i < params.vertexStreamCount; ++i)
             {
                 const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
@@ -194,21 +291,30 @@ namespace CNA::Internal::Renderers::DirectX11
                     continue;
                 const auto* buffer =
                     static_cast<const D3D11VertexBufferRenderer*>(stream.buffer);
-                if (buffer == nullptr || buffer->GetDeclarationEXT().GetElements().empty())
+                if (buffer == nullptr)
                     throw System::NotSupportedException(
-                        "DirectX11 instancing requires every per-instance buffer to carry a "
-                        "VertexDeclaration.");
-                for (const auto& element : buffer->GetDeclarationEXT().GetElements())
+                        "DirectX11 instancing requires a per-instance buffer.");
+                for (const auto& element : streamElements(
+                         *buffer, stream.strideInBytes > 0 ? stream.strideInBytes
+                                                           : static_cast<int>(buffer->GetStrideEXT())))
                 {
+                    auto nativeElement = element;
+                    const bool worldColumn = instanceColumn < 4;
+                    if (worldColumn)
+                    {
+                        nativeElement.setVertexElementUsageProperty(
+                            Microsoft::Xna::Framework::Graphics::VertexElementUsage::TextureCoordinate);
+                        nativeElement.setUsageIndexProperty(++instanceColumn);
+                    }
                     inputElements.push_back(
-                        {element, stream.slot, stream.instanceFrequency, true});
+                        {nativeElement, stream.slot, stream.instanceFrequency, worldColumn});
                 }
             }
         }
 
         void BindVertexStreams(
             ID3D11DeviceContext* context, const D3D11VertexBufferRenderer& fallback,
-            const GpuDrawParams& params)
+            const GpuDrawParams& params, int logicalInstance = -1)
         {
             ID3D11Buffer* buffers[kMaxVertexStreams]{};
             UINT strides[kMaxVertexStreams]{};
@@ -232,8 +338,12 @@ namespace CNA::Internal::Renderers::DirectX11
                         ? stream.strideInBytes : buffer.GetStrideEXT());
                     buffers[stream.slot] = buffer.GetBufferEXT();
                     strides[stream.slot] = stride;
-                    offsets[stream.slot] = static_cast<UINT>(
-                        static_cast<std::size_t>(std::max(stream.vertexOffset, 0)) * stride);
+                    std::size_t elementOffset = static_cast<std::size_t>(
+                        std::max(stream.vertexOffset, 0));
+                    if (logicalInstance >= 0 && stream.instanceFrequency > 0)
+                        elementOffset += static_cast<std::size_t>(
+                            logicalInstance / stream.instanceFrequency);
+                    offsets[stream.slot] = static_cast<UINT>(elementOffset * stride);
                 }
             }
 
@@ -426,6 +536,7 @@ namespace CNA::Internal::Renderers::DirectX11
             throw std::runtime_error("D3D11CreateDevice failed, hr=" + FormatHr(hr));
         }
 
+        context_.As(&annotation_);
         debugLayerEnabled_ = (flags & D3D11_CREATE_DEVICE_DEBUG) != 0;
         if (debugLayerEnabled_ && SUCCEEDED(device_.As(&infoQueue_)))
         {
@@ -467,6 +578,17 @@ namespace CNA::Internal::Renderers::DirectX11
         hr = dxgiDevice->GetParent(IID_PPV_ARGS(adapter.ReleaseAndGetAddressOf()));
         if (FAILED(hr))
             throw std::runtime_error("IDXGIDevice::GetParent(IDXGIAdapter) failed, hr=" + FormatHr(hr));
+
+        ComPtr<IDXGIAdapter1> adapter1;
+        DXGI_ADAPTER_DESC1 adapterDescription{};
+        if (FAILED(adapter.As(&adapter1)) || FAILED(adapter1->GetDesc1(&adapterDescription)))
+            throw std::runtime_error("D3D11 could not identify its selected DXGI adapter");
+        char adapterIdentity[96];
+        std::snprintf(adapterIdentity, sizeof(adapterIdentity),
+                      "D3D11 selected DXGI adapter PCI %04X:%04X, software=%u",
+                      adapterDescription.VendorId, adapterDescription.DeviceId,
+                      (adapterDescription.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0 ? 1u : 0u);
+        CNA::Logger::Info(adapterIdentity, CNA::LogCategory::RENDER);
 
         hr = adapter->GetParent(IID_PPV_ARGS(factory_.ReleaseAndGetAddressOf()));
         if (FAILED(hr))
@@ -600,11 +722,16 @@ namespace CNA::Internal::Renderers::DirectX11
         ID3D11RenderTargetView* rtv = GetBackBufferDrawRtv();
         context_->OMSetRenderTargets(1, &rtv, depthStencilView_.Get());
 
+        // ResizeBuffers recreates the back buffer after GraphicsDevice's window-size
+        // notification. Restore the presentation rectangle here as well: the logical
+        // viewport can remain 320x240 while a resized window needs new letterbox bars.
+        const auto geometry = D3DCommon::ComputeD3DPresentationGeometry(
+            width_, height_, virtualWidth_, virtualHeight_, presentationMode_);
         D3D11_VIEWPORT vp{};
-        vp.TopLeftX = 0.0f;
-        vp.TopLeftY = 0.0f;
-        vp.Width = static_cast<float>(width_);
-        vp.Height = static_cast<float>(height_);
+        vp.TopLeftX = static_cast<float>(std::lround(geometry.x));
+        vp.TopLeftY = static_cast<float>(std::lround(geometry.y));
+        vp.Width = static_cast<float>(std::lround(geometry.width));
+        vp.Height = static_cast<float>(std::lround(geometry.height));
         vp.MinDepth = 0.0f;
         vp.MaxDepth = 1.0f;
         context_->RSSetViewports(1, &vp);
@@ -743,6 +870,9 @@ namespace CNA::Internal::Renderers::DirectX11
         currentBlendState_.Reset();
         currentDepthStencilState_.Reset();
         perDrawConstantBuffer_.Reset();
+        logicalInstanceIdBuffer_.Reset();
+        logicalInstanceIdCapacity_ = 0;
+        drawStorageBuffers_.fill(nullptr);
         fogConstantBuffer_.Reset();
         lightingConstantBuffer_.Reset();
         alphaTestConstantBuffer_.Reset();
@@ -753,6 +883,8 @@ namespace CNA::Internal::Renderers::DirectX11
         skinnedExtraConstantBuffer_.Reset();
         pbrPerDrawConstantBuffer_.Reset();
         pbrLightsConstantBuffer_.Reset();
+        shadowConstantBuffer_.Reset();
+        iblConstantBuffer_.Reset();
         defaultWhiteSrv_.Reset();
         defaultWhiteTexture_.Reset();
         defaultFlatNormalSrv_.Reset();
@@ -766,6 +898,8 @@ namespace CNA::Internal::Renderers::DirectX11
         currentMRTCount_ = 0;
         for (auto& target : currentMRTTargets_)
             target = nullptr;
+        for (auto& target : currentMRTCubes_)
+            target = nullptr;
         currentRTVCount_ = 0;
         for (auto& rtv : currentColorRTVs_)
             rtv = nullptr;
@@ -774,6 +908,7 @@ namespace CNA::Internal::Renderers::DirectX11
         DrainDebugMessagesEXT();
         D3DCommon::D3DDebugLayerLog::UnregisterLiveQueue(this);
         infoQueue_.Reset();
+        annotation_.Reset();
         context_.Reset();
         device_.Reset();
         factory_.Reset();
@@ -1363,6 +1498,225 @@ namespace CNA::Internal::Renderers::DirectX11
                (support & D3D11_FORMAT_SUPPORT_SHADER_SAMPLE) != 0;
     }
 
+    bool DirectX11Renderer::SupportsTexture3DSamplingEXT() const
+    {
+        if (!device_) return false;
+        UINT support = 0;
+        return SUCCEEDED(device_->CheckFormatSupport(DXGI_FORMAT_R8G8B8A8_UNORM, &support)) &&
+            (support & (D3D11_FORMAT_SUPPORT_TEXTURE3D | D3D11_FORMAT_SUPPORT_SHADER_SAMPLE)) ==
+                (D3D11_FORMAT_SUPPORT_TEXTURE3D | D3D11_FORMAT_SUPPORT_SHADER_SAMPLE);
+    }
+
+    bool DirectX11Renderer::SupportsShaderLanguageEXT(int language, int stage) const
+    {
+        return device_ != nullptr &&
+               language == static_cast<int>(CNA::ShaderLanguageEXT::Hlsl) &&
+               (stage == static_cast<int>(CNA::ShaderStageEXT::Vertex) ||
+                stage == static_cast<int>(CNA::ShaderStageEXT::Fragment) ||
+                (stage == static_cast<int>(CNA::ShaderStageEXT::Compute) &&
+                 SupportsComputeShadersEXT()));
+    }
+
+    bool DirectX11Renderer::SupportsGpuTimerEXT() const
+    {
+        return device_ != nullptr && featureLevel_ >= D3D_FEATURE_LEVEL_10_0;
+    }
+
+    std::unique_ptr<IGpuTimerRenderer> DirectX11Renderer::CreateGpuTimerEXT()
+    {
+        if (!SupportsGpuTimerEXT()) return nullptr;
+        return std::make_unique<D3D11GpuTimerRenderer>(device_.Get(), context_.Get());
+    }
+
+    void DirectX11Renderer::SetStringMarkerEXT(const char* marker)
+    {
+        if (marker == nullptr || marker[0] == '\0' || !annotation_)
+            return;
+        const int length = MultiByteToWideChar(CP_UTF8, 0, marker, -1, nullptr, 0);
+        if (length <= 1) return;
+        std::wstring wide(static_cast<std::size_t>(length), L'\0');
+        if (MultiByteToWideChar(CP_UTF8, 0, marker, -1, wide.data(), length) != length)
+            return;
+        annotation_->SetMarker(wide.c_str());
+    }
+
+    bool DirectX11Renderer::SupportsIndirectDrawEXT() const
+    {
+        return device_ != nullptr && featureLevel_ >= D3D_FEATURE_LEVEL_11_0;
+    }
+
+    bool DirectX11Renderer::SupportsBaseInstanceDrawingEXT() const
+    {
+        return device_ != nullptr && context_ != nullptr &&
+               featureLevel_ >= D3D_FEATURE_LEVEL_11_0;
+    }
+
+    int DirectX11Renderer::GetMaxVertexShaderStorageBlocksEXT() const
+    {
+        return device_ != nullptr && featureLevel_ >= D3D_FEATURE_LEVEL_11_0
+            ? static_cast<int>(drawStorageBuffers_.size()) : 0;
+    }
+
+    void DirectX11Renderer::BindStorageBufferForDrawEXT(
+        int binding, const IStorageBufferRenderer& buffer)
+    {
+        const auto* native = dynamic_cast<const D3D11IndirectBuffer*>(&buffer);
+        if (binding < 0 || binding >= GetMaxVertexShaderStorageBlocksEXT() ||
+            native == nullptr || native->GetDeviceEXT() != device_.Get() ||
+            native->GetShaderResourceViewEXT() == nullptr)
+            throw System::NotSupportedException(
+                "DirectX11 draw storage binding needs a same-device raw storage buffer "
+                "and a t-register from zero through fifteen.");
+        drawStorageBuffers_[static_cast<std::size_t>(binding)] =
+            buffer.shared_from_this();
+    }
+
+    void DirectX11Renderer::BindStorageInputsForEffectEXT(
+        const D3D11EffectRenderer& effect)
+    {
+        const std::uint32_t vertex = effect.GetVertexStorageSlotsEXT();
+        const std::uint32_t pixel = effect.GetPixelStorageSlotsEXT();
+        for (std::size_t slot = 0; slot < drawStorageBuffers_.size(); ++slot)
+        {
+            const std::uint32_t bit = UINT32_C(1) << slot;
+            if (((vertex | pixel) & bit) == 0)
+                continue;
+            const auto* native = dynamic_cast<const D3D11IndirectBuffer*>(
+                drawStorageBuffers_[slot].get());
+            if (native == nullptr || native->GetShaderResourceViewEXT() == nullptr)
+                throw System::NotSupportedException(
+                    "DirectX11 ShaderEffect uses an unbound raw storage t-register " +
+                    std::to_string(slot) + '.');
+            ID3D11ShaderResourceView* srv = native->GetShaderResourceViewEXT();
+            if ((vertex & bit) != 0)
+                context_->VSSetShaderResources(static_cast<UINT>(slot), 1, &srv);
+            if ((pixel & bit) != 0)
+                context_->PSSetShaderResources(static_cast<UINT>(slot), 1, &srv);
+        }
+    }
+
+    void DirectX11Renderer::ClearStorageInputsAfterEffectEXT(
+        const D3D11EffectRenderer& effect)
+    {
+        ID3D11ShaderResourceView* empty[16]{};
+        context_->VSSetShaderResources(0, 16, empty);
+        const std::uint32_t pixel = effect.GetPixelStorageSlotsEXT();
+        for (UINT slot = 0; slot < 16; ++slot)
+            if ((pixel & (UINT32_C(1) << slot)) != 0)
+                context_->PSSetShaderResources(slot, 1, empty);
+    }
+
+    std::unique_ptr<IStorageBufferRenderer> DirectX11Renderer::CreateStorageBufferEXT(
+        std::size_t byteSize, std::uint32_t usage, std::uint32_t cpuAccess)
+    {
+        constexpr std::uint32_t supportedUsage = UINT32_C(0x4F);
+        if (usage == 0 || (usage & ~supportedUsage) != 0 ||
+            (cpuAccess & ~UINT32_C(0x03)) != 0 || byteSize == 0 ||
+            byteSize > static_cast<std::size_t>(std::numeric_limits<UINT>::max() - 15) ||
+            ((usage & UINT32_C(0x01)) != 0 &&
+             (!SupportsComputeShadersEXT() || byteSize > GetMaxStorageBufferBytesEXT())) ||
+            ((usage & UINT32_C(0x08)) != 0 && !SupportsIndirectDrawEXT()) ||
+            ((usage & UINT32_C(0x40)) != 0 &&
+             byteSize > GetMaxUniformBufferBytesEXT()))
+            return nullptr;
+        return std::make_unique<D3D11IndirectBuffer>(
+            device_.Get(), context_.Get(), byteSize, usage, cpuAccess);
+    }
+
+    bool DirectX11Renderer::SupportsComputeShadersEXT() const
+    {
+        return device_ != nullptr && featureLevel_ >= D3D_FEATURE_LEVEL_11_0;
+    }
+
+    bool DirectX11Renderer::SupportsComputeImageBindingEXT() const
+    {
+        if (!SupportsComputeShadersEXT()) return false;
+        const auto support = GetSurfaceFormatUsageSupportEXT(static_cast<int>(
+            Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color));
+        constexpr std::uint32_t required =
+            static_cast<std::uint32_t>(CNA::RendererFormatUsage::StorageRead) |
+            static_cast<std::uint32_t>(CNA::RendererFormatUsage::StorageWrite);
+        return (support.supportedUsages & required) == required;
+    }
+
+    std::unique_ptr<IComputeShaderRenderer> DirectX11Renderer::CreateComputeShader(
+        const std::string& computeSrc)
+    {
+        if (!SupportsComputeShadersEXT()) return nullptr;
+        auto shader = std::make_unique<D3D11ComputeShader>(device_.Get(), context_.Get());
+        shader->CompileProgram(computeSrc);
+        return shader;
+    }
+
+    std::unique_ptr<IStorageBufferRenderer> DirectX11Renderer::CreateStorageBuffer(
+        std::size_t byteSize)
+    {
+        if (!SupportsComputeShadersEXT()) return nullptr;
+        return CreateStorageBufferEXT(byteSize, UINT32_C(0x0F), UINT32_C(0x03));
+    }
+
+    void DirectX11Renderer::DispatchCompute(
+        IComputeShaderRenderer* shader, int groupsX, int groupsY, int groupsZ)
+    {
+        auto* native = dynamic_cast<D3D11ComputeShader*>(shader);
+        if (!native || groupsX <= 0 || groupsY <= 0 || groupsZ <= 0 ||
+            groupsX > GetMaxComputeWorkGroupCountEXT(0) ||
+            groupsY > GetMaxComputeWorkGroupCountEXT(1) ||
+            groupsZ > GetMaxComputeWorkGroupCountEXT(2))
+            throw std::invalid_argument("D3D11 compute dispatch has an invalid program or size");
+        native->Dispatch(groupsX, groupsY, groupsZ);
+    }
+
+    int DirectX11Renderer::GetMaxComputeWorkGroupCountEXT(int axis) const
+    {
+        return SupportsComputeShadersEXT() && axis >= 0 && axis < 3
+            ? D3D11_CS_DISPATCH_MAX_THREAD_GROUPS_PER_DIMENSION : 0;
+    }
+
+    int DirectX11Renderer::GetMaxComputeWorkGroupSizeEXT(int axis) const
+    {
+        if (!SupportsComputeShadersEXT()) return 0;
+        switch (axis)
+        {
+        case 0: return D3D11_CS_THREAD_GROUP_MAX_X;
+        case 1: return D3D11_CS_THREAD_GROUP_MAX_Y;
+        case 2: return D3D11_CS_THREAD_GROUP_MAX_Z;
+        default: return 0;
+        }
+    }
+
+    int DirectX11Renderer::GetMaxComputeWorkGroupInvocationsEXT() const
+    {
+        return SupportsComputeShadersEXT()
+            ? D3D11_CS_THREAD_GROUP_MAX_THREADS_PER_GROUP : 0;
+    }
+
+    std::uint64_t DirectX11Renderer::GetMaxStorageBufferBytesEXT() const
+    {
+        return SupportsComputeShadersEXT() ? UINT64_C(128) * 1024 * 1024 : 0;
+    }
+
+    std::uint64_t DirectX11Renderer::GetMaxUniformBufferBytesEXT() const
+    {
+        return device_ != nullptr
+            ? static_cast<std::uint64_t>(D3D11_REQ_CONSTANT_BUFFER_ELEMENT_COUNT) * 16 : 0;
+    }
+
+    int DirectX11Renderer::GetMaxComputeStorageBufferBindingsEXT() const
+    {
+        return SupportsComputeShadersEXT() ? D3D11_PS_CS_UAV_REGISTER_COUNT : 0;
+    }
+
+    std::uint64_t DirectX11Renderer::GetMinStorageBufferOffsetAlignmentEXT() const
+    {
+        return SupportsComputeShadersEXT() ? 4 : 0;
+    }
+
+    std::uint64_t DirectX11Renderer::GetMinUniformBufferOffsetAlignmentEXT() const
+    {
+        return device_ != nullptr ? 16 : 0;
+    }
+
     bool DirectX11Renderer::LoadsCompressedContentNativelyEXT() const
     {
         return true;
@@ -1371,6 +1725,140 @@ namespace CNA::Internal::Renderers::DirectX11
     std::unique_ptr<ITextureRenderer> DirectX11Renderer::CreateTexture(const ImageData& data)
     {
         return std::make_unique<D3D11TextureRenderer>(this, data);
+    }
+
+    std::unique_ptr<ITexture2DArrayRenderer> DirectX11Renderer::CreateTexture2DArrayEXT(
+        int width, int height, int layerCount, int mipLevelCount,
+        int surfaceFormat, std::uint32_t usage)
+    {
+        if (!device_ || !context_ || width <= 0 || height <= 0 ||
+            width > D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION ||
+            height > D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION ||
+            layerCount <= 0 || layerCount > GetMaxTextureArrayLayersEXT() ||
+            mipLevelCount <= 0 || mipLevelCount > D3D11_REQ_MIP_LEVELS ||
+            ClassifySurfaceFormatEXT(surfaceFormat) != RendererFormatVerdict::Supported)
+            return nullptr;
+        const auto support = GetSurfaceFormatUsageSupportEXT(surfaceFormat);
+        constexpr std::uint32_t sampled = static_cast<std::uint32_t>(
+            CNA::RendererFormatUsage::Sampled);
+        constexpr std::uint32_t filterable = static_cast<std::uint32_t>(
+            CNA::RendererFormatUsage::Filterable);
+        if ((support.supportedUsages & sampled) == 0 ||
+            ((usage & UINT32_C(0x02)) != 0 &&
+             (support.supportedUsages & filterable) == 0))
+            return nullptr;
+        return std::make_unique<D3D11Texture2DArray>(
+            device_.Get(), context_.Get(), width, height, layerCount,
+            mipLevelCount, surfaceFormat, usage);
+    }
+
+    std::unique_ptr<IStorageTexture2DRenderer> DirectX11Renderer::CreateStorageTexture2DEXT(
+        int width, int height, int mipLevelCount, int surfaceFormat, std::uint32_t usage)
+    {
+        using CNA::RendererFormatUsage;
+        if (!device_ || !context_ || !SupportsComputeShadersEXT() ||
+            !D3DCommon::IsXnaUncompressedSurfaceFormat(surfaceFormat) ||
+            D3DCommon::SurfaceFormatBytesPerTexel(surfaceFormat) <= 0 ||
+            width <= 0 || height <= 0 ||
+            width > D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION ||
+            height > D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION ||
+            mipLevelCount <= 0 || mipLevelCount > D3D11_REQ_MIP_LEVELS ||
+            (usage & UINT32_C(0x03)) == 0 || (usage & ~UINT32_C(0x3F)) != 0)
+            return nullptr;
+        const auto support = GetSurfaceFormatUsageSupportEXT(surfaceFormat);
+        std::uint32_t required = 0;
+        if (usage & UINT32_C(0x01))
+            required |= static_cast<std::uint32_t>(RendererFormatUsage::StorageRead);
+        if (usage & UINT32_C(0x02))
+            required |= static_cast<std::uint32_t>(RendererFormatUsage::StorageWrite);
+        if (usage & UINT32_C(0x04))
+            required |= static_cast<std::uint32_t>(RendererFormatUsage::Sampled);
+        if (usage & UINT32_C(0x08))
+            required |= static_cast<std::uint32_t>(RendererFormatUsage::Filterable);
+        if (usage & UINT32_C(0x10))
+            required |= static_cast<std::uint32_t>(RendererFormatUsage::TransferSource);
+        if (usage & UINT32_C(0x20))
+            required |= static_cast<std::uint32_t>(RendererFormatUsage::TransferDestination);
+        if (mipLevelCount > 1)
+            required |= static_cast<std::uint32_t>(RendererFormatUsage::Mipmapped);
+        if ((support.supportedUsages & required) != required)
+            return nullptr;
+        return std::make_unique<D3D11StorageTexture2D>(
+            device_.Get(), context_.Get(), width, height, mipLevelCount,
+            surfaceFormat, usage);
+    }
+
+    int DirectX11Renderer::GetMaxTextureArrayLayersEXT() const
+    {
+        if (!device_) return 0;
+        if (featureLevel_ >= D3D_FEATURE_LEVEL_11_0)
+            return D3D11_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION;
+        return featureLevel_ >= D3D_FEATURE_LEVEL_10_0 ? 512 : 0;
+    }
+
+    int DirectX11Renderer::GetMaxSampledTexturesPerShaderStageEXT() const
+    {
+        return device_ ? D3DCommon::D3DProgramReflection::kMaxShaderResources : 0;
+    }
+
+    int DirectX11Renderer::GetMaxStorageImagesPerShaderStageEXT() const
+    {
+        if (!SupportsComputeShadersEXT()) return 0;
+        const auto support = GetSurfaceFormatUsageSupportEXT(static_cast<int>(
+            Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color));
+        return (support.supportedUsages & static_cast<std::uint32_t>(
+            CNA::RendererFormatUsage::StorageWrite)) != 0
+            ? D3D11_PS_CS_UAV_REGISTER_COUNT : 0;
+    }
+
+    CNA::RendererFormatSupport DirectX11Renderer::GetSurfaceFormatUsageSupportEXT(
+        int surfaceFormat) const
+    {
+        using CNA::RendererFormatUsage;
+        constexpr std::uint32_t classified =
+            static_cast<std::uint32_t>(RendererFormatUsage::Sampled) |
+            static_cast<std::uint32_t>(RendererFormatUsage::Filterable) |
+            static_cast<std::uint32_t>(RendererFormatUsage::StorageRead) |
+            static_cast<std::uint32_t>(RendererFormatUsage::StorageWrite) |
+            static_cast<std::uint32_t>(RendererFormatUsage::TransferSource) |
+            static_cast<std::uint32_t>(RendererFormatUsage::TransferDestination) |
+            static_cast<std::uint32_t>(RendererFormatUsage::Mipmapped);
+        if (!device_ ||
+            ClassifySurfaceFormatEXT(surfaceFormat) != RendererFormatVerdict::Supported)
+            return {classified, 0};
+        const DXGI_FORMAT format = D3DCommon::SurfaceFormatToDxgi(surfaceFormat);
+        UINT native = 0;
+        // A format without SHADER_SAMPLE still permits point-only sampling;
+        // that bit decides Filterable below rather than basic Sampled support.
+        constexpr UINT required = D3D11_FORMAT_SUPPORT_TEXTURE2D;
+        if (format == DXGI_FORMAT_UNKNOWN ||
+            FAILED(device_->CheckFormatSupport(format, &native)) ||
+            (native & required) != required || !DeviceKeepsFormatBytesEXT(format))
+            return {classified, 0};
+        std::uint32_t supported =
+            static_cast<std::uint32_t>(RendererFormatUsage::Sampled) |
+            static_cast<std::uint32_t>(RendererFormatUsage::TransferSource) |
+            static_cast<std::uint32_t>(RendererFormatUsage::TransferDestination);
+        if ((native & D3D11_FORMAT_SUPPORT_MIP) != 0)
+            supported |= static_cast<std::uint32_t>(RendererFormatUsage::Mipmapped);
+        if ((native & D3D11_FORMAT_SUPPORT_SHADER_SAMPLE) != 0)
+            supported |= static_cast<std::uint32_t>(RendererFormatUsage::Filterable);
+        if (D3DCommon::IsXnaUncompressedSurfaceFormat(surfaceFormat) &&
+            SupportsComputeShadersEXT() &&
+            (native & D3D11_FORMAT_SUPPORT_TYPED_UNORDERED_ACCESS_VIEW) != 0)
+        {
+            D3D11_FEATURE_DATA_FORMAT_SUPPORT2 typed{};
+            typed.InFormat = format;
+            if (SUCCEEDED(device_->CheckFeatureSupport(
+                    D3D11_FEATURE_FORMAT_SUPPORT2, &typed, sizeof(typed))))
+            {
+                if ((typed.OutFormatSupport2 & D3D11_FORMAT_SUPPORT2_UAV_TYPED_LOAD) != 0)
+                    supported |= static_cast<std::uint32_t>(RendererFormatUsage::StorageRead);
+                if ((typed.OutFormatSupport2 & D3D11_FORMAT_SUPPORT2_UAV_TYPED_STORE) != 0)
+                    supported |= static_cast<std::uint32_t>(RendererFormatUsage::StorageWrite);
+            }
+        }
+        return {classified, supported};
     }
 
     std::unique_ptr<ITexture3DRenderer> DirectX11Renderer::CreateTexture3D(
@@ -1410,10 +1898,13 @@ namespace CNA::Internal::Renderers::DirectX11
     void DirectX11Renderer::FlushPendingMRTResolveEXT()
     {
         if (currentMRTCount_ <= 0) return;
+        RestoreBackBufferRenderTargetEXT();
         for (int i = 0; i < currentMRTCount_; ++i)
         {
             if (currentMRTTargets_[i]) currentMRTTargets_[i]->ResolveAndGenerateMipsEXT();
+            if (currentMRTCubes_[i]) currentMRTCubes_[i]->ResolveAndGenerateMipsEXT();
             currentMRTTargets_[i] = nullptr;
+            currentMRTCubes_[i] = nullptr;
         }
         currentMRTCount_ = 0;
     }
@@ -1434,6 +1925,7 @@ namespace CNA::Internal::Renderers::DirectX11
 
     void DirectX11Renderer::SetRenderTargetCubeFace(IRenderTargetCubeRenderer* rt, int face)
     {
+        FlushPendingMRTResolveEXT();
         FlushPendingCubeResolveEXT();
         if (!rt)
         {
@@ -1526,27 +2018,33 @@ namespace CNA::Internal::Renderers::DirectX11
                 renderTargets[0].GetCubeFace());
             return;
         }
-        for (int i = 0; i < count; ++i)
-            if (renderTargets[i].IsRenderTargetCubeFace())
-                throw std::runtime_error(
-                    "DirectX11Renderer::SetRenderTargets: cube faces in a multi-target "
-                    "set are not implemented by this CNA renderer.");
-
         const int n = std::min(count, static_cast<int>(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT));
         ID3D11RenderTargetView* rtvs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};
+        ID3D11DepthStencilView* dsv = nullptr;
         for (int i = 0; i < n; ++i)
         {
-            auto* d3drt = static_cast<D3D11RenderTargetRenderer*>(
-                renderTargets[i].GetRenderTarget2D());
-            rtvs[i] = d3drt ? d3drt->GetRTVEXT() : nullptr;
+            if (renderTargets[i].IsRenderTargetCubeFace())
+            {
+                auto* cube = static_cast<D3D11RenderTargetCubeRenderer*>(
+                    renderTargets[i].GetRenderTargetCube());
+                rtvs[i] = cube ? cube->PrepareMRTFaceEXT(renderTargets[i].GetCubeFace()) : nullptr;
+                if (i == 0) dsv = cube ? cube->GetDSVEXT() : nullptr;
+            }
+            else
+            {
+                auto* target = static_cast<D3D11RenderTargetRenderer*>(
+                    renderTargets[i].GetRenderTarget2D());
+                rtvs[i] = target ? target->GetRTVEXT() : nullptr;
+                if (i == 0) dsv = target ? target->GetDSVEXT() : nullptr;
+            }
+            if (!rtvs[i])
+                throw std::runtime_error("DirectX11Renderer::SetRenderTargets: missing color attachment view.");
         }
 
-        auto* first = static_cast<D3D11RenderTargetRenderer*>(
-            renderTargets[0].GetRenderTarget2D());
-        ID3D11DepthStencilView* dsv = first ? first->GetDSVEXT() : nullptr;
-        const int w = first ? first->GetWidth() : width_;
-        const int h = first ? first->GetHeight() : height_;
+        const int w = renderTargets[0].GetWidth();
+        const int h = renderTargets[0].GetHeight();
 
+        UnbindOutputAliasesEXT(rtvs, n, dsv);
         context_->OMSetRenderTargets(static_cast<UINT>(n), rtvs, dsv);
 
         D3D11_VIEWPORT vp{};
@@ -1566,8 +2064,13 @@ namespace CNA::Internal::Renderers::DirectX11
         // genuinely runs when this MRT set is replaced/unbound, not silently skipped).
         currentMRTCount_ = n;
         for (int i = 0; i < n; ++i)
-            currentMRTTargets_[i] = static_cast<D3D11RenderTargetRenderer*>(
-                renderTargets[i].GetRenderTarget2D());
+        {
+            currentMRTTargets_[i] = renderTargets[i].IsRenderTargetCubeFace()
+                ? nullptr : static_cast<D3D11RenderTargetRenderer*>(renderTargets[i].GetRenderTarget2D());
+            currentMRTCubes_[i] = renderTargets[i].IsRenderTargetCubeFace()
+                ? static_cast<D3D11RenderTargetCubeRenderer*>(renderTargets[i].GetRenderTargetCube())
+                : nullptr;
+        }
     }
 
     void DirectX11Renderer::ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy)
@@ -1618,6 +2121,7 @@ namespace CNA::Internal::Renderers::DirectX11
             samplerLodBias_[slot]);
         ID3D11SamplerState* raw = sampler.Get();
         context_->PSSetSamplers(static_cast<UINT>(slot), 1, &raw);
+        context_->VSSetSamplers(static_cast<UINT>(slot), 1, &raw);
     }
 
     std::unique_ptr<IOcclusionQueryRenderer> DirectX11Renderer::CreateOcclusionQuery()
@@ -1819,6 +2323,60 @@ namespace CNA::Internal::Renderers::DirectX11
         }
     }
 
+    void DirectX11Renderer::UnbindOutputAliasesEXT(
+        ID3D11RenderTargetView* const* rtvs, int count, ID3D11DepthStencilView* dsv)
+    {
+        std::vector<ID3D11Resource*> outputs;
+        outputs.reserve(static_cast<std::size_t>(std::max(0, count)) + (dsv ? 1u : 0u));
+        for (int i = 0; i < count; ++i)
+        {
+            if (!rtvs[i]) continue;
+            ID3D11Resource* resource = nullptr;
+            rtvs[i]->GetResource(&resource);
+            outputs.push_back(resource);
+        }
+        if (dsv)
+        {
+            ID3D11Resource* resource = nullptr;
+            dsv->GetResource(&resource);
+            outputs.push_back(resource);
+        }
+        if (outputs.empty()) return;
+
+        const auto clearStage = [&](auto getViews, auto setViews)
+        {
+            ID3D11ShaderResourceView* views[D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT]{};
+            (context_.Get()->*getViews)(0, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT, views);
+            for (UINT slot = 0; slot < D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT; ++slot)
+            {
+                if (!views[slot]) continue;
+                ID3D11Resource* sampled = nullptr;
+                views[slot]->GetResource(&sampled);
+                const bool alias = std::find(outputs.begin(), outputs.end(), sampled) != outputs.end();
+                sampled->Release();
+                views[slot]->Release();
+                if (alias)
+                {
+                    ID3D11ShaderResourceView* empty = nullptr;
+                    (context_.Get()->*setViews)(slot, 1, &empty);
+                }
+            }
+        };
+        clearStage(&ID3D11DeviceContext::VSGetShaderResources,
+                   &ID3D11DeviceContext::VSSetShaderResources);
+        clearStage(&ID3D11DeviceContext::PSGetShaderResources,
+                   &ID3D11DeviceContext::PSSetShaderResources);
+        clearStage(&ID3D11DeviceContext::GSGetShaderResources,
+                   &ID3D11DeviceContext::GSSetShaderResources);
+        clearStage(&ID3D11DeviceContext::HSGetShaderResources,
+                   &ID3D11DeviceContext::HSSetShaderResources);
+        clearStage(&ID3D11DeviceContext::DSGetShaderResources,
+                   &ID3D11DeviceContext::DSSetShaderResources);
+        clearStage(&ID3D11DeviceContext::CSGetShaderResources,
+                   &ID3D11DeviceContext::CSSetShaderResources);
+        for (ID3D11Resource* resource : outputs) resource->Release();
+    }
+
     void DirectX11Renderer::TrackCurrentRenderTargetEXT(
         ID3D11RenderTargetView* const* rtvs, int count, ID3D11DepthStencilView* dsv)
     {
@@ -1890,8 +2448,17 @@ namespace CNA::Internal::Renderers::DirectX11
     void DirectX11Renderer::NotifyRenderTargetCubeDestroyedEXT(
         D3D11RenderTargetCubeRenderer* target) noexcept
     {
-        if (currentCubeRT_ != target) return;
-        currentCubeRT_ = nullptr;
+        bool wasBound = currentCubeRT_ == target;
+        if (wasBound) currentCubeRT_ = nullptr;
+        for (int i = 0; i < currentMRTCount_; ++i)
+        {
+            if (currentMRTCubes_[i] == target)
+            {
+                currentMRTCubes_[i] = nullptr;
+                wasBound = true;
+            }
+        }
+        if (!wasBound) return;
         try { RestoreBackBufferRenderTargetEXT(); }
         catch (...)
         {
@@ -2256,6 +2823,44 @@ namespace CNA::Internal::Renderers::DirectX11
         return pbrLightsConstantBuffer_.Get();
     }
 
+    ID3D11Buffer* DirectX11Renderer::GetOrCreateShadowConstantBufferEXT()
+    {
+        if (!shadowConstantBuffer_)
+        {
+            D3D11_BUFFER_DESC desc{};
+            desc.ByteWidth = sizeof(D3DCommon::D3DShadowConstants);
+            desc.Usage = D3D11_USAGE_DYNAMIC;
+            desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+            desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+            const HRESULT hr = device_->CreateBuffer(
+                &desc, nullptr, shadowConstantBuffer_.ReleaseAndGetAddressOf());
+            if (FAILED(hr))
+                throw std::runtime_error(
+                    "DirectX11Renderer: shadow constant buffer creation failed, hr=" +
+                    FormatHr(hr));
+        }
+        return shadowConstantBuffer_.Get();
+    }
+
+    ID3D11Buffer* DirectX11Renderer::GetOrCreateIblConstantBufferEXT()
+    {
+        if (!iblConstantBuffer_)
+        {
+            D3D11_BUFFER_DESC desc{};
+            desc.ByteWidth = sizeof(D3DCommon::D3DIblConstants);
+            desc.Usage = D3D11_USAGE_DYNAMIC;
+            desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+            desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+            const HRESULT hr = device_->CreateBuffer(
+                &desc, nullptr, iblConstantBuffer_.ReleaseAndGetAddressOf());
+            if (FAILED(hr))
+                throw std::runtime_error(
+                    "DirectX11Renderer: IBL constant buffer creation failed, hr=" +
+                    FormatHr(hr));
+        }
+        return iblConstantBuffer_.Get();
+    }
+
     ID3D11ShaderResourceView* DirectX11Renderer::GetOrCreateDefaultWhiteSrvEXT()
     {
         if (!defaultWhiteSrv_)
@@ -2383,7 +2988,8 @@ namespace CNA::Internal::Renderers::DirectX11
     void DirectX11Renderer::DrawPrimitivesExImpl(
         const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
         const Matrix& world, const Matrix& view, const Matrix& projection,
-        PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
+        PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+        ID3D11Buffer* indirectArguments, UINT indirectByteOffset)
     {
         // DX-62/DX-63/DX-64/DX-65/DX-66/DX-67: real effect-aware variant dispatch.
         const auto& d3dVb = static_cast<const D3D11VertexBufferRenderer&>(vb);
@@ -2412,7 +3018,14 @@ namespace CNA::Internal::Renderers::DirectX11
             context_->IASetPrimitiveTopology(ToD3D11Topology(primitive));
             const UINT elementCount = static_cast<UINT>(
                 VertexCountForPrimitives(primitive, primitiveCount));
-            if (ib != nullptr)
+            if (indirectArguments != nullptr)
+            {
+                if (ib != nullptr)
+                    context_->DrawIndexedInstancedIndirect(indirectArguments, indirectByteOffset);
+                else
+                    context_->DrawInstancedIndirect(indirectArguments, indirectByteOffset);
+            }
+            else if (ib != nullptr)
                 context_->DrawIndexed(elementCount, static_cast<UINT>(params.startIndex),
                                       static_cast<INT>(params.baseVertex));
             else
@@ -2441,6 +3054,7 @@ namespace CNA::Internal::Renderers::DirectX11
                 throw System::NotSupportedException(
                     "DirectX11 could not match the ShaderEffect vertex signature to the bound "
                     "VertexDeclaration.");
+            BindStorageInputsForEffectEXT(*customEffect);
 
             BindVertexStreams(context_.Get(), d3dVb, params);
             if (ib != nullptr)
@@ -2451,11 +3065,19 @@ namespace CNA::Internal::Renderers::DirectX11
             context_->IASetPrimitiveTopology(ToD3D11Topology(primitive));
             const UINT elementCount = static_cast<UINT>(
                 VertexCountForPrimitives(primitive, primitiveCount));
-            if (ib != nullptr)
+            if (indirectArguments != nullptr)
+            {
+                if (ib != nullptr)
+                    context_->DrawIndexedInstancedIndirect(indirectArguments, indirectByteOffset);
+                else
+                    context_->DrawInstancedIndirect(indirectArguments, indirectByteOffset);
+            }
+            else if (ib != nullptr)
                 context_->DrawIndexed(elementCount, static_cast<UINT>(params.startIndex),
                                       static_cast<INT>(params.baseVertex));
             else
                 context_->Draw(elementCount, static_cast<UINT>(params.vertexStart));
+            ClearStorageInputsAfterEffectEXT(*customEffect);
             return;
         }
 
@@ -2492,6 +3114,13 @@ namespace CNA::Internal::Renderers::DirectX11
         // The stride-only rule remains solely for internal buffers that carry no declaration.
         const bool needsLitTextured = hasNormal && !needsAlphaTest && !needsDualTex
                                      && !needsEnvMap && !needsPbr && !needsSkinned;
+        const bool haveIbl = needsPbr && params.iblEnabled &&
+            params.iblIrradiance != nullptr &&
+            params.iblPrefilteredSpecular != nullptr && params.iblBrdfLut != nullptr;
+        const bool useModernLightingShader =
+            (needsLitTextured || needsSkinned || needsPbr) &&
+            ((params.shadowsEnabled && params.shadowMap != nullptr) ||
+             params.punctualKind != 0 || haveIbl);
 
         if (needsAlphaTest && params.texture0 != nullptr && !hasTexCoord)
             throw std::runtime_error(
@@ -2575,7 +3204,8 @@ namespace CNA::Internal::Renderers::DirectX11
             // A COLOR0 declaration routes to the *Colored sibling independently of record stride.
             // Declaration-less legacy buffers retain the canonical stride-56 fallback.
             const bool colored = hasDeclaration ? hasColor : stride == 56;
-            const bool vertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
+            const bool vertexLit = params.lightingEnabled && !params.preferPerPixelLighting
+                                   && !useModernLightingShader;
             if (usesFloatBoneIndices)
                 variant = colored
                     ? (vertexLit ? D3DCommon::D3DShaderVariant::Skinned3dVertexLitColoredFloatIndices
@@ -2593,13 +3223,13 @@ namespace CNA::Internal::Renderers::DirectX11
             // Same real-default fix for BasicEffect's lit-textured bucket.
             variant = hasTexCoord
                 ? (hasColor
-                    ? ((params.lightingEnabled && !params.preferPerPixelLighting)
+                    ? ((params.lightingEnabled && !params.preferPerPixelLighting && !useModernLightingShader)
                         ? D3DCommon::D3DShaderVariant::LitTextured3dVertexLitColored
                         : D3DCommon::D3DShaderVariant::LitTextured3dColored)
-                    : ((params.lightingEnabled && !params.preferPerPixelLighting)
+                    : ((params.lightingEnabled && !params.preferPerPixelLighting && !useModernLightingShader)
                         ? D3DCommon::D3DShaderVariant::LitTextured3dVertexLit
                         : D3DCommon::D3DShaderVariant::LitTextured3d))
-                : ((params.lightingEnabled && !params.preferPerPixelLighting)
+                : ((params.lightingEnabled && !params.preferPerPixelLighting && !useModernLightingShader)
                     ? D3DCommon::D3DShaderVariant::LitUntextured3dVertexLit
                     : D3DCommon::D3DShaderVariant::LitUntextured3d);
         else
@@ -2624,6 +3254,27 @@ namespace CNA::Internal::Renderers::DirectX11
                     std::to_string(stride) + " for the colored/textured bundle (plans/plan_dx.md DX-62)");
         }
 
+        if (useModernLightingShader)
+        {
+            using D3DCommon::D3DShaderVariant;
+            switch (variant)
+            {
+                case D3DShaderVariant::LitTextured3d: variant = D3DShaderVariant::LitTextured3dShadow; break;
+                case D3DShaderVariant::LitTextured3dColored: variant = D3DShaderVariant::LitTextured3dColoredShadow; break;
+                case D3DShaderVariant::LitUntextured3d: variant = D3DShaderVariant::LitUntextured3dShadow; break;
+                case D3DShaderVariant::Skinned3d: variant = D3DShaderVariant::Skinned3dShadow; break;
+                case D3DShaderVariant::Skinned3dFloatIndices: variant = D3DShaderVariant::Skinned3dFloatIndicesShadow; break;
+                case D3DShaderVariant::Skinned3dColored: variant = D3DShaderVariant::Skinned3dColoredShadow; break;
+                case D3DShaderVariant::Skinned3dColoredFloatIndices: variant = D3DShaderVariant::Skinned3dColoredFloatIndicesShadow; break;
+                case D3DShaderVariant::Pbr3d: variant = D3DShaderVariant::Pbr3dShadow; break;
+                case D3DShaderVariant::Pbr3dDualUv: variant = D3DShaderVariant::Pbr3dDualUvShadow; break;
+                case D3DShaderVariant::PbrSkinned3d: variant = D3DShaderVariant::PbrSkinned3dShadow; break;
+                case D3DShaderVariant::PbrSkinned3dDualUv: variant = D3DShaderVariant::PbrSkinned3dDualUvShadow; break;
+                case D3DShaderVariant::PbrSkinned3dDualUvColor: variant = D3DShaderVariant::PbrSkinned3dDualUvColorShadow; break;
+                default: throw std::logic_error("DirectX11 shadow shader has no stock variant");
+            }
+        }
+
         ID3D11VertexShader* vs = GetStockVertexShaderEXT(variant);
         ID3D11PixelShader* ps = GetStockPixelShaderEXT(variant);
         if (!vs || !ps)
@@ -2640,10 +3291,9 @@ namespace CNA::Internal::Renderers::DirectX11
         // + t1 (TextureCube). PBR needs seven slots: the five core maps plus KHR_materials_specular
         // strength/colour at t5/t6. Every other variant only ever binds t0 -- higher entries stay
         // null, which is harmless for a shader that does not declare them. Always bind the full
-        // seven-wide range (unused slots explicitly null) so no variant can see a stale SRV left
-        // by a previous, differently-shaped draw call (same discipline as cbs[3] below).
-        ID3D11ShaderResourceView* srvs[7] = {
-            nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+        // thirteen-wide range (unused slots explicitly null) so no variant can see a stale SRV
+        // left by a previous, differently-shaped draw call (same discipline as cbs[5] below).
+        ID3D11ShaderResourceView* srvs[13] = {};
         if (needsDualTex)
         {
             // WINCLOSE-0018: XNA samples an unbound slot as opaque black, not white.
@@ -2703,9 +3353,24 @@ namespace CNA::Internal::Renderers::DirectX11
                                       : GetOrCreateDefaultOpaqueBlackSrvEXT();
         }
 
-        // 3 contiguous slots (b0/b1/b2) always fully rebound below (unused slots explicitly null)
+        if (useModernLightingShader)
+        {
+            srvs[7] = params.shadowsEnabled ? GetSrvForTextureEXT(params.shadowMap) : nullptr;
+            srvs[8] = params.punctualKind == 1
+                ? GetSrvForTextureCubeEXT(params.punctualShadowCube) : nullptr;
+            srvs[9] = params.punctualKind == 2
+                ? GetSrvForTextureEXT(params.punctualShadowMap) : nullptr;
+        }
+        if (haveIbl)
+        {
+            srvs[10] = GetSrvForTextureCubeEXT(params.iblIrradiance);
+            srvs[11] = GetSrvForTextureCubeEXT(params.iblPrefilteredSpecular);
+            srvs[12] = GetSrvForTextureEXT(params.iblBrdfLut);
+        }
+
+        // 5 contiguous slots (b0 through b4) always fully rebound below (unused slots explicitly null)
         // so no variant can see a stale buffer left bound by a previous, different-shaped draw.
-        ID3D11Buffer* cbs[3] = { nullptr, nullptr, nullptr };
+        ID3D11Buffer* cbs[5] = {};
 
         if (needsAlphaTest)
         {
@@ -3170,6 +3835,69 @@ namespace CNA::Internal::Renderers::DirectX11
             cbs[1] = fogCB;
         }
 
+        if (useModernLightingShader)
+        {
+            const bool haveDirectional = params.shadowsEnabled && params.shadowMap != nullptr;
+            const int cascadeCount = haveDirectional && params.cascadeCount > 0
+                ? std::min(params.cascadeCount, 4) : 0;
+            const int punctualKind = params.punctualKind >= 1 && params.punctualKind <= 2
+                ? params.punctualKind : 0;
+            const bool havePoint = punctualKind == 1 && params.punctualShadowCube != nullptr;
+            const bool haveSpot = punctualKind == 2 && params.punctualShadowMap != nullptr;
+
+            D3DCommon::D3DShadowConstants shadow{};
+            std::copy_n(params.lightViewProjColMajor, 16, shadow.LightViewProj);
+            std::copy_n(params.cascadeMatricesColMajor, 64, shadow.CascadeMatrices);
+            std::copy_n(params.punctualViewProjColMajor, 16, shadow.PunctualViewProj);
+            shadow.Directional[0] = haveDirectional ? 1.0f : 0.0f;
+            shadow.Directional[1] = params.shadowDepthBias;
+            shadow.Directional[2] = static_cast<float>(std::clamp(params.shadowPcfRadius, 0, 2));
+            shadow.Directional[3] = static_cast<float>(cascadeCount);
+            const int shadowWidth = haveDirectional ? params.shadowMap->GetWidth() : 1;
+            const int shadowHeight = haveDirectional ? params.shadowMap->GetHeight() : 1;
+            shadow.ShadowTexelBlendDebug[0] = shadowWidth > 0 ? 1.0f / static_cast<float>(shadowWidth) : 0.0f;
+            shadow.ShadowTexelBlendDebug[1] = shadowHeight > 0 ? 1.0f / static_cast<float>(shadowHeight) : 0.0f;
+            shadow.ShadowTexelBlendDebug[2] = params.cascadeBlendBand;
+            shadow.ShadowTexelBlendDebug[3] = params.cascadeDebugTint ? 1.0f : 0.0f;
+            std::copy_n(params.cascadeSplits, 4, shadow.CascadeSplits);
+            std::copy_n(params.cascadeViewZRow, 4, shadow.CascadeViewZ);
+            std::copy_n(params.punctualPosition, 3, shadow.PunctualPositionRange);
+            shadow.PunctualPositionRange[3] = params.punctualRange > 0.0f ? params.punctualRange : 1.0f;
+            std::copy_n(params.punctualDirection, 3, shadow.PunctualDirectionKind);
+            shadow.PunctualDirectionKind[3] = static_cast<float>(punctualKind);
+            std::copy_n(params.punctualDiffuse, 3, shadow.PunctualDiffuseHasShadow);
+            shadow.PunctualDiffuseHasShadow[3] = (havePoint || haveSpot) ? 1.0f : 0.0f;
+            shadow.PunctualConeBiasTexelX[0] = params.punctualCosInner;
+            shadow.PunctualConeBiasTexelX[1] = params.punctualCosOuter;
+            shadow.PunctualConeBiasTexelX[2] = params.punctualShadowBias;
+            const int spotWidth = haveSpot ? params.punctualShadowMap->GetWidth() : 1;
+            const int spotHeight = haveSpot ? params.punctualShadowMap->GetHeight() : 1;
+            shadow.PunctualConeBiasTexelX[3] = spotWidth > 0 ? 1.0f / static_cast<float>(spotWidth) : 0.0f;
+            shadow.PunctualTexelY[0] = spotHeight > 0 ? 1.0f / static_cast<float>(spotHeight) : 0.0f;
+
+            cbs[3] = GetOrCreateShadowConstantBufferEXT();
+            UpdateDynamicConstantBufferEXT(cbs[3], &shadow, sizeof(shadow));
+            RebindSamplerEXT(7);
+            RebindSamplerEXT(8);
+            RebindSamplerEXT(9);
+        }
+        if (needsPbr && useModernLightingShader)
+        {
+            D3DCommon::D3DIblConstants ibl{};
+            ibl.Enabled = haveIbl ? 1.0f : 0.0f;
+            ibl.PrefilteredMipCount = static_cast<float>(
+                params.iblPrefilteredMipCount > 0 ? params.iblPrefilteredMipCount : 1);
+            ibl.Intensity = params.iblIntensity;
+            cbs[4] = GetOrCreateIblConstantBufferEXT();
+            UpdateDynamicConstantBufferEXT(cbs[4], &ibl, sizeof(ibl));
+            if (haveIbl)
+            {
+                RebindSamplerEXT(10);
+                RebindSamplerEXT(11);
+                RebindSamplerEXT(12);
+            }
+        }
+
         BindVertexStreams(context_.Get(), d3dVb, params);
         if (ib != nullptr)
         {
@@ -3181,12 +3909,12 @@ namespace CNA::Internal::Renderers::DirectX11
         context_->VSSetShader(vs, nullptr, 0);
         context_->PSSetShader(ps, nullptr, 0);
 
-        // Always rebind the full 3-slot-cbuffer/7-slot-SRV range (unused slots explicitly null,
+        // Always rebind the full 5-slot-cbuffer/13-slot-SRV range (unused slots explicitly null,
         // see cbs'/srvs' own declaration comments above) -- no variant can see a stale binding
         // left by whatever differently-shaped draw call ran immediately before this one.
-        context_->VSSetConstantBuffers(0, 3, cbs);
-        context_->PSSetConstantBuffers(0, 3, cbs);
-        context_->PSSetShaderResources(0, 7, srvs);
+        context_->VSSetConstantBuffers(0, 5, cbs);
+        context_->PSSetConstantBuffers(0, 5, cbs);
+        context_->PSSetShaderResources(0, 13, srvs);
 
         if (ib != nullptr)
         {
@@ -3195,8 +3923,11 @@ namespace CNA::Internal::Renderers::DirectX11
             // each fetched index). Previously both were hardcoded 0, so any indexed draw at a
             // non-zero offset silently read from the start of the buffers.
             const UINT indexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
-            context_->DrawIndexed(indexCount, static_cast<UINT>(params.startIndex),
-                                  static_cast<INT>(params.baseVertex));
+            if (indirectArguments != nullptr)
+                context_->DrawIndexedInstancedIndirect(indirectArguments, indirectByteOffset);
+            else
+                context_->DrawIndexed(indexCount, static_cast<UINT>(params.startIndex),
+                                      static_cast<INT>(params.baseVertex));
         }
         else
         {
@@ -3205,7 +3936,10 @@ namespace CNA::Internal::Renderers::DirectX11
             // non-zero startVertex silently re-rendered vertices from index 0 (the root cause of the
             // DirectX11_Pbr_VertexColor quad-D no-draw: DrawPrimitives(..., 6, 2) drew vertices 0..5).
             const UINT vertexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
-            context_->Draw(vertexCount, static_cast<UINT>(params.vertexStart));
+            if (indirectArguments != nullptr)
+                context_->DrawInstancedIndirect(indirectArguments, indirectByteOffset);
+            else
+                context_->Draw(vertexCount, static_cast<UINT>(params.vertexStart));
         }
     }
 
@@ -3224,23 +3958,99 @@ namespace CNA::Internal::Renderers::DirectX11
         DrawPrimitivesExImpl(vb, &ib, world, view, projection, primitive, primitiveCount, params);
     }
 
+    void DirectX11Renderer::DrawPrimitivesIndirectEXT(
+        const IVertexBufferRenderer& vb, const Matrix& world, const Matrix& view,
+        const Matrix& projection, PrimitiveType primitive,
+        const IStorageBufferRenderer& argumentBuffer, int argumentByteOffset,
+        const GpuDrawParams& params)
+    {
+        const auto* d3dBuffer = dynamic_cast<const D3D11IndirectBuffer*>(&argumentBuffer);
+        if (d3dBuffer == nullptr || d3dBuffer->GetDeviceEXT() != device_.Get() ||
+            argumentByteOffset < 0)
+            throw System::NotSupportedException("DirectX11 indirect draw needs a native argument buffer.");
+        DrawPrimitivesExImpl(vb, nullptr, world, view, projection, primitive, 0, params,
+                             d3dBuffer->GetBufferEXT(), static_cast<UINT>(argumentByteOffset));
+    }
+
+    void DirectX11Renderer::DrawIndexedPrimitivesIndirectEXT(
+        const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
+        const Matrix& world, const Matrix& view, const Matrix& projection,
+        PrimitiveType primitive, const IStorageBufferRenderer& argumentBuffer,
+        int argumentByteOffset, const GpuDrawParams& params)
+    {
+        const auto* d3dBuffer = dynamic_cast<const D3D11IndirectBuffer*>(&argumentBuffer);
+        if (d3dBuffer == nullptr || d3dBuffer->GetDeviceEXT() != device_.Get() ||
+            argumentByteOffset < 0)
+            throw System::NotSupportedException("DirectX11 indexed indirect draw needs a native argument buffer.");
+        DrawPrimitivesExImpl(vb, &ib, world, view, projection, primitive, 0, params,
+                             d3dBuffer->GetBufferEXT(), static_cast<UINT>(argumentByteOffset));
+    }
+
     void DirectX11Renderer::DrawInstancedPrimitivesEx(
         const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, int instanceCount, const GpuDrawParams& params)
     {
-        // DX-68: matches VulkanRenderer::DrawInstancedPrimitivesEx's own fallback -- no
-        // per-instance VB means this isn't really an instanced draw at all.
         // REMED-GFX-202: the per-instance stream is now the lowest-slot entry of the shared
         // GpuVertexStreamBinding array whose InstanceFrequency is greater than zero.
         const auto* instanceStream = FirstInstanceStream(params);
-        if (instanceStream == nullptr)
-        {
-            DrawIndexedPrimitivesEx(vb, ib, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
+        if (params.firstInstance < 0)
+            throw System::NotSupportedException(
+                "DirectX11 instancing requires a non-negative first instance.");
         const auto& d3dVb = static_cast<const D3D11VertexBufferRenderer&>(vb);
         const auto& d3dIb = static_cast<const D3D11IndexBufferRenderer&>(ib);
+        bool logicalIdStreamActive = false;
+        const auto drawWithFirstInstance = [&](const UINT indexCount)
+        {
+            const UINT startIndex = static_cast<UINT>(params.startIndex);
+            const INT baseVertex = static_cast<INT>(params.baseVertex);
+            if (instanceStream == nullptr || params.firstInstance == 0)
+            {
+                context_->DrawIndexedInstanced(
+                    indexCount, static_cast<UINT>(std::max(1, instanceCount)),
+                    startIndex, baseVertex,
+                    logicalIdStreamActive ? 0u : static_cast<UINT>(params.firstInstance));
+                return;
+            }
+
+            // D3D11 applies StartInstanceLocation after InstanceDataStepRate. Rebase every
+            // stream at a logical index that aligns to all its frequencies, then submit the
+            // entire remaining range in one draw. Only the leading unaligned instances need
+            // individual draws; this also keeps frequency-one streams on the fast path.
+            for (int instance = 0; instance < instanceCount; ++instance)
+            {
+                const int logicalInstance = params.firstInstance + instance;
+                bool allStreamsAligned = true;
+                for (int i = 0; i < params.vertexStreamCount; ++i)
+                {
+                    const int frequency = params.vertexStreams[
+                        static_cast<std::size_t>(i)].instanceFrequency;
+                    if (frequency > 0 && logicalInstance % frequency != 0)
+                    {
+                        allStreamsAligned = false;
+                        break;
+                    }
+                }
+                BindVertexStreams(
+                    context_.Get(), d3dVb, params, logicalInstance);
+                if (logicalIdStreamActive)
+                {
+                    ID3D11Buffer* idBuffer = logicalInstanceIdBuffer_.Get();
+                    const UINT stride = sizeof(UINT);
+                    const UINT offset = static_cast<UINT>(instance) * stride;
+                    context_->IASetVertexBuffers(
+                        static_cast<UINT>(kMaxVertexStreams), 1,
+                        &idBuffer, &stride, &offset);
+                }
+                context_->DrawIndexedInstanced(
+                    indexCount,
+                    allStreamsAligned
+                        ? static_cast<UINT>(instanceCount - instance) : 1u,
+                    startIndex, baseVertex, 0);
+                if (allStreamsAligned)
+                    break;
+            }
+        };
 #if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
         if (params.compiledEffectRuntime != nullptr)
         {
@@ -3249,21 +4059,196 @@ namespace CNA::Internal::Renderers::DirectX11
             BindVertexStreams(context_.Get(), d3dVb, params);
             context_->IASetIndexBuffer(d3dIb.GetBufferEXT(), d3dIb.GetFormatEXT(), 0);
             context_->IASetPrimitiveTopology(ToD3D11Topology(primitive));
-            context_->DrawIndexedInstanced(
-                static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount)),
-                static_cast<UINT>(std::max(1, instanceCount)),
-                static_cast<UINT>(params.startIndex),
-                static_cast<INT>(params.baseVertex), 0);
+            drawWithFirstInstance(static_cast<UINT>(
+                VertexCountForPrimitives(primitive, primitiveCount)));
             return;
         }
 #endif
+        if (params.customEffectRequested)
+        {
+            auto* customEffect = dynamic_cast<D3D11EffectRenderer*>(params.customEffectRenderer);
+            if (customEffect == nullptr || !customEffect->IsValid())
+                throw System::NotSupportedException(
+                    "DirectX11 custom instancing requires a valid D3D11 ShaderEffect.");
+
+            std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> combinedElements;
+            std::vector<D3DCommon::D3DVertexInputElement> inputElements;
+            BuildVertexInputLayout(
+                params, instanceStream != nullptr, combinedElements, inputElements);
+            const auto& declaration = combinedElements.empty()
+                ? d3dVb.GetDeclarationEXT().GetElements() : combinedElements;
+            float worldValues[16];
+            float viewValues[16];
+            float projectionValues[16];
+            world.ToColumnMajor(worldValues);
+            view.ToColumnMajor(viewValues);
+            projection.ToColumnMajor(projectionValues);
+            customEffect->SetUniformMat4("World", worldValues);
+            customEffect->SetUniformMat4("View", viewValues);
+            customEffect->SetUniformMat4("Projection", projectionValues);
+            if (params.firstInstance > 0
+                    ? !customEffect->BindForBaseInstanceDrawEXT(
+                          declaration, inputElements, logicalIdStreamActive)
+                    : !customEffect->BindForDrawEXT(declaration, inputElements))
+                throw System::NotSupportedException(
+                    "DirectX11 could not match the instanced ShaderEffect vertex signature "
+                    "to the bound vertex streams: " + customEffect->GetCompileError());
+            BindStorageInputsForEffectEXT(*customEffect);
+
+            if (logicalIdStreamActive)
+            {
+                const UINT requested = static_cast<UINT>(instanceCount);
+                constexpr UINT maxCapacity =
+                    (std::numeric_limits<UINT>::max)() / sizeof(UINT);
+                if (requested > maxCapacity)
+                    throw System::NotSupportedException(
+                        "DirectX11 base-instance ID stream exceeds the D3D11 buffer size.");
+                if (logicalInstanceIdCapacity_ < requested)
+                {
+                    const UINT doubled = logicalInstanceIdCapacity_ <= maxCapacity / 2
+                        ? logicalInstanceIdCapacity_ * 2u : maxCapacity;
+                    const UINT capacity = (std::max)(requested, doubled);
+                    D3D11_BUFFER_DESC desc{};
+                    desc.ByteWidth = capacity * sizeof(UINT);
+                    desc.Usage = D3D11_USAGE_DYNAMIC;
+                    desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+                    desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+                    ComPtr<ID3D11Buffer> buffer;
+                    if (FAILED(device_->CreateBuffer(&desc, nullptr, buffer.GetAddressOf())))
+                        throw std::runtime_error(
+                            "DirectX11 could not allocate the logical instance ID stream.");
+                    logicalInstanceIdBuffer_ = std::move(buffer);
+                    logicalInstanceIdCapacity_ = capacity;
+                }
+                D3D11_MAPPED_SUBRESOURCE mapped{};
+                if (FAILED(context_->Map(logicalInstanceIdBuffer_.Get(), 0,
+                                         D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+                    throw std::runtime_error(
+                        "DirectX11 could not update the logical instance ID stream.");
+                auto* ids = static_cast<UINT*>(mapped.pData);
+                for (UINT instance = 0; instance < requested; ++instance)
+                    ids[instance] = static_cast<UINT>(params.firstInstance) + instance;
+                context_->Unmap(logicalInstanceIdBuffer_.Get(), 0);
+            }
+
+            BindVertexStreams(context_.Get(), d3dVb, params);
+            if (logicalIdStreamActive)
+            {
+                ID3D11Buffer* idBuffer = logicalInstanceIdBuffer_.Get();
+                const UINT stride = sizeof(UINT);
+                const UINT offset = 0;
+                context_->IASetVertexBuffers(
+                    static_cast<UINT>(kMaxVertexStreams), 1,
+                    &idBuffer, &stride, &offset);
+            }
+            context_->IASetIndexBuffer(d3dIb.GetBufferEXT(), d3dIb.GetFormatEXT(), 0);
+            context_->IASetPrimitiveTopology(ToD3D11Topology(primitive));
+            drawWithFirstInstance(static_cast<UINT>(
+                VertexCountForPrimitives(primitive, primitiveCount)));
+            ClearStorageInputsAfterEffectEXT(*customEffect);
+            return;
+        }
+        if (instanceStream == nullptr)
+        {
+            // With no per-instance data the stock shader still needs one submission per
+            // requested instance for blend/stencil side effects.
+            for (int instance = 0; instance < instanceCount; ++instance)
+                DrawIndexedPrimitivesEx(
+                    vb, ib, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+        const bool stockEffectNeedsFullShader = params.textureEnabled || params.texture0 != nullptr ||
+            params.lightingEnabled || params.fogEnabled || params.dualTexture ||
+            params.envMapping || params.skinned || params.pbr ||
+            params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f;
+        if (stockEffectNeedsFullShader)
+        {
+            struct InstanceColumn
+            {
+                const GpuVertexStreamBinding* stream;
+                const D3D11VertexBufferRenderer* buffer;
+                int byteOffset;
+            };
+            std::array<InstanceColumn, 4> columns{};
+            int columnCount = 0;
+            GpuDrawParams ordinary = params;
+            ordinary.instanceCount = 1;
+            ordinary.vertexStreamCount = 0;
+            for (int streamIndex = 0; streamIndex < params.vertexStreamCount; ++streamIndex)
+            {
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(streamIndex)];
+                if (stream.instanceFrequency == 0)
+                {
+                    ordinary.vertexStreams[static_cast<std::size_t>(ordinary.vertexStreamCount++)] = stream;
+                    continue;
+                }
+                const auto* buffer = static_cast<const D3D11VertexBufferRenderer*>(stream.buffer);
+                if (buffer == nullptr)
+                    throw System::NotSupportedException("DirectX11 instancing requires a per-instance buffer.");
+                const auto& elements = buffer->GetDeclarationEXT().GetElements();
+                if (elements.empty())
+                {
+                    if (stream.strideInBytes != 64)
+                        throw System::NotSupportedException(
+                            "DirectX11 cannot infer four instance-matrix columns from this stride.");
+                    for (int index = 0; index < 4 && columnCount < 4; ++index)
+                        columns[static_cast<std::size_t>(columnCount++)] = {&stream, buffer, index * 16};
+                }
+                else
+                {
+                    for (const auto& element : elements)
+                    {
+                        if (columnCount == 4)
+                            break;
+                        if (element.getVertexElementFormatProperty() !=
+                            Microsoft::Xna::Framework::Graphics::VertexElementFormat::Vector4)
+                            throw System::NotSupportedException(
+                                "DirectX11 instance-matrix columns must be Vector4 elements.");
+                        columns[static_cast<std::size_t>(columnCount++)] = {
+                            &stream, buffer, element.getOffsetProperty()};
+                    }
+                }
+            }
+            if (columnCount != 4 || ordinary.vertexStreamCount == 0)
+                throw System::NotSupportedException(
+                    "DirectX11 stock instancing requires four instance-matrix columns and a vertex stream.");
+            for (int instance = 0; instance < instanceCount; ++instance)
+            {
+                std::array<float, 16> matrixValues{};
+                for (int column = 0; column < 4; ++column)
+                {
+                    const auto& entry = columns[static_cast<std::size_t>(column)];
+                    const int divisor = entry.stream->instanceFrequency;
+                    const int record = entry.stream->vertexOffset +
+                        (params.firstInstance + instance) / divisor;
+                    const int stride = entry.stream->strideInBytes;
+                    if (record < 0 || record >= entry.buffer->GetVertexCount() || stride <= 0)
+                        throw System::NotSupportedException(
+                            "DirectX11 instance-matrix read exceeds the bound vertex buffer.");
+                    const std::size_t byteOffset = static_cast<std::size_t>(record) * stride +
+                        static_cast<std::size_t>(entry.byteOffset);
+                    const auto& bytes = entry.buffer->GetCpuDataEXT();
+                    if (byteOffset + sizeof(float) * 4 > bytes.size())
+                        throw System::NotSupportedException(
+                            "DirectX11 instance-matrix column exceeds the upload shadow.");
+                    std::memcpy(matrixValues.data() + column * 4, bytes.data() + byteOffset,
+                                sizeof(float) * 4);
+                }
+                const Matrix instanceWorld(
+                    matrixValues[0], matrixValues[1], matrixValues[2], matrixValues[3],
+                    matrixValues[4], matrixValues[5], matrixValues[6], matrixValues[7],
+                    matrixValues[8], matrixValues[9], matrixValues[10], matrixValues[11],
+                    matrixValues[12], matrixValues[13], matrixValues[14], matrixValues[15]);
+                DrawPrimitivesExImpl(vb, &ib, instanceWorld * world, view, projection,
+                                     primitive, primitiveCount, ordinary);
+            }
+            return;
+        }
         std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> combinedElements;
         std::vector<D3DCommon::D3DVertexInputElement> inputElements;
         BuildVertexInputLayout(params, true, combinedElements, inputElements);
-        // plans/plan_directx12_parity.md DX12-0028 (shared with DirectX12): the stock instanced effect reads each instance's World
-        // matrix from TextureCoordinate1..4 of the per-instance stream (INSTANCEWORLD0..3, DX-222). A
-        // declaration without all four was only refused when input-layout creation failed -- a generic
-        // runtime_error, and a debug-layer error (ID 65) for a draw the game can be told about plainly.
+        // The stock shader reads four INSTANCEWORLD columns. CNA's instance-matrix convention
+        // assigns them by declaration order, so the public semantics may vary between callers.
         {
             bool instanceColumns[4] = {false, false, false, false};
             for (const auto& input : inputElements)
@@ -3272,14 +4257,16 @@ namespace CNA::Internal::Renderers::DirectX11
                 if (input.instanceWorldSemantic &&
                     input.element.getVertexElementUsageProperty() ==
                         Microsoft::Xna::Framework::Graphics::VertexElementUsage::TextureCoordinate &&
+                    input.element.getVertexElementFormatProperty() ==
+                        Microsoft::Xna::Framework::Graphics::VertexElementFormat::Vector4 &&
                     usageIndex >= 1 && usageIndex <= 4)
                     instanceColumns[usageIndex - 1] = true;
             }
             if (!(instanceColumns[0] && instanceColumns[1] && instanceColumns[2] && instanceColumns[3]))
                 throw System::NotSupportedException(
                     "DirectX11Renderer::DrawInstancedPrimitivesEx: the stock instanced effect reads each "
-                    "instance's World matrix from TextureCoordinate1..4 of the per-instance stream, "
-                    "and the bound declaration does not provide all four");
+                    "instance's World matrix from four Vector4 columns in the per-instance "
+                    "streams, and the bound declarations do not provide all four");
         }
         const bool hasColor = D3DCommon::DeclarationHasElement(
             combinedElements,
@@ -3328,16 +4315,10 @@ namespace CNA::Internal::Renderers::DirectX11
         context_->PSSetConstantBuffers(0, 1, &perDrawCB);
 
         const UINT indexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
-        const UINT instCount = static_cast<UINT>(std::max(1, instanceCount));
         // REMED-GFX-123: honor the public startIndex/baseVertex on the instanced path too (both
-        // were hardcoded to zero). Exactly what REMED-GFX-020 did for this renderer's ordinary
-        // indexed draw: StartIndexLocation is an index-ELEMENT offset, BaseVertexLocation is added
-        // to every decoded index once. StartInstanceLocation stays 0 -- the per-instance stream's
-        // own start is the byte offset applied at IASetVertexBuffers above, so adding it here too
-        // would apply the same public offset twice.
-        context_->DrawIndexedInstanced(indexCount, instCount,
-                                       static_cast<UINT>(params.startIndex),
-                                       static_cast<INT>(params.baseVertex), 0);
+        // were hardcoded to zero). The per-instance stream's VertexOffset is applied at
+        // IASetVertexBuffers; StartInstanceLocation is a separate logical instance index.
+        drawWithFirstInstance(indexCount);
     }
 }
 

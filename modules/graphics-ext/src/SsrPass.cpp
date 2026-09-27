@@ -63,7 +63,6 @@ namespace CNA::Graphics {
         const float intensity   = settings != nullptr ? settings->getSSRIntensity()   : intensity_;
         const int   stepCount   = settings != nullptr ? settings->getSSRStepCount()   : stepCount_;
 
-        effect_->Apply();
         effect_->SetUniformInt("uDepthSampler", 1);
         effect_->SetTexture(1, *context.sourceDepth);
         effect_->SetUniformInt("uNormalSampler", 2);
@@ -92,6 +91,7 @@ namespace CNA::Graphics {
         effect_->SetUniformVec2Array("uSsrVectors", depthSize.data(), 1);
         effect_->SetUniformFloatArray("uSsrScalars", scalars.data(),
                                       static_cast<int>(scalars.size()));
+        effect_->Apply();
 
         fullscreen_->draw(context.source, context.destination, effect_.get(),
                           context.width, context.height);

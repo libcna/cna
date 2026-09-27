@@ -285,6 +285,7 @@ class DescriptorCapacityContractTest : public Game
     int passCount_ = 0;
     int totalCount_ = 0;
     int result_ = 1;
+    std::string selectedLegs_;
 
     /// Set once by a real construct-and-write probe: CNA::GraphicsCapability has no TextureCube
     /// entry, so "does this renderer have cube textures" is answered by trying, not by asking.
@@ -309,6 +310,8 @@ class DescriptorCapacityContractTest : public Game
     /// swallowed -- and the remaining legs must still be measured instead of being lost with it.
     void runLeg(const char* name, const std::function<void()>& leg)
     {
+        if (!selectedLegs_.empty() && selectedLegs_.find(name) == std::string::npos)
+            return;
         try
         {
             leg();
@@ -1133,7 +1136,8 @@ class DescriptorCapacityContractTest : public Game
     }
 
 public:
-    DescriptorCapacityContractTest()
+    explicit DescriptorCapacityContractTest(std::string selectedLegs = {})
+        : selectedLegs_(std::move(selectedLegs))
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kBBW);
@@ -1194,9 +1198,15 @@ public:
     }
 };
 
-int main()
+int main(int argc, char** argv)
 {
-    DescriptorCapacityContractTest game;
+    if (argc != 1 && (argc != 3 || std::string(argv[1]) != "--legs" ||
+                      std::string(argv[2]).find_first_not_of("ABCDEFGHIJKLM") != std::string::npos))
+    {
+        std::fprintf(stderr, "usage: descriptor_capacity_contract_test [--legs ABCDEFGHIJKLM]\n");
+        return 2;
+    }
+    DescriptorCapacityContractTest game(argc == 3 ? argv[2] : "");
     game.Run();
     return game.Result();
 }

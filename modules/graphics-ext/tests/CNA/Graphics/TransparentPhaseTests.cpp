@@ -76,8 +76,9 @@ std::array<VertexPositionColor, 6> LeftHalf(const float z)
 
 std::unique_ptr<ShaderEffect> MakeFlat(GraphicsDevice& device)
 {
-    return std::make_unique<ShaderEffect>(
-        device, CNA::Tests::Transparency::CreateFlatPackage());
+    auto package = CNA::Tests::Transparency::CreateFlatPackage();
+    if (!package.selectFor(device).isUsable()) return nullptr;
+    return std::make_unique<ShaderEffect>(device, package);
 }
 
 Frame BackBuffer(GraphicsDevice& device)
@@ -123,7 +124,8 @@ TEST(TransparentPhaseTest, ARegisteredDrawIsIgnoredWhileTheModeIsNone)
     RenderPipeline pipeline(device);
     pipeline.resize(device.getViewportProperty().getWidthProperty(), device.getViewportProperty().getHeightProperty());
     const auto flat = MakeFlat(device);
-    if (!flat->IsEffectValid()) GTEST_SKIP() << "this renderer cannot run custom effects";
+    if (!flat) GTEST_SKIP() << "this renderer has no flat transparency shader variant";
+    ASSERT_TRUE(flat->IsEffectValid()) << flat->GetCompileErrorEXT();
 
     const auto render = [&](const bool registerTransparent) {
         if (registerTransparent)
@@ -157,7 +159,8 @@ TEST(TransparentPhaseTest, TheSortedPhaseReachesTheFrame)
     RenderPipeline pipeline(device);
     pipeline.resize(device.getViewportProperty().getWidthProperty(), device.getViewportProperty().getHeightProperty());
     const auto flat = MakeFlat(device);
-    if (!flat->IsEffectValid()) GTEST_SKIP() << "this renderer cannot run custom effects";
+    if (!flat) GTEST_SKIP() << "this renderer has no flat transparency shader variant";
+    ASSERT_TRUE(flat->IsEffectValid()) << flat->GetCompileErrorEXT();
 
     pipeline.getSettings().setTransparencyMode(TransparencyMode::Sorted);
     pipeline.setTransparentScene([&] {
@@ -190,7 +193,8 @@ TEST(TransparentPhaseTest, DepthIsTestedAndNotWritten)
     RenderPipeline pipeline(device);
     pipeline.resize(device.getViewportProperty().getWidthProperty(), device.getViewportProperty().getHeightProperty());
     const auto flat = MakeFlat(device);
-    if (!flat->IsEffectValid()) GTEST_SKIP() << "this renderer cannot run custom effects";
+    if (!flat) GTEST_SKIP() << "this renderer has no flat transparency shader variant";
+    ASSERT_TRUE(flat->IsEffectValid()) << flat->GetCompileErrorEXT();
 
     pipeline.getSettings().setTransparencyMode(TransparencyMode::Sorted);
     pipeline.setTransparentScene([&] {

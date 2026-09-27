@@ -5,10 +5,14 @@
 #include "CNA/Internal/Renderers/DirectX12/D3D12TextureCube.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Textures.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Texture3D.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12Texture2DArray.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12StorageTexture2D.hpp"
 
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <regex>
+#include <utility>
 
 namespace CNA::Internal::Renderers::DirectX12
 {
@@ -19,6 +23,44 @@ namespace CNA::Internal::Renderers::DirectX12
             char buf[32];
             std::snprintf(buf, sizeof(buf), "0x%08lX", static_cast<unsigned long>(hr));
             return buf;
+        }
+
+        bool InspectStorageInputs(ID3DBlob* bytecode, std::uint32_t& slots,
+                                  int& resourceCount, std::string& error)
+        {
+            ComPtr<ID3D11ShaderReflection> reflection;
+            if (FAILED(D3DReflect(bytecode->GetBufferPointer(), bytecode->GetBufferSize(),
+                                  IID_PPV_ARGS(reflection.GetAddressOf()))))
+            {
+                error = "D3D12 ShaderEffect could not reflect raw storage inputs";
+                return false;
+            }
+            D3D11_SHADER_DESC description{};
+            if (FAILED(reflection->GetDesc(&description)))
+            {
+                error = "D3D12 ShaderEffect could not inspect stage resources";
+                return false;
+            }
+            for (UINT index = 0; index < description.BoundResources; ++index)
+            {
+                D3D11_SHADER_INPUT_BIND_DESC binding{};
+                if (FAILED(reflection->GetResourceBindingDesc(index, &binding)) ||
+                    binding.Type != D3D_SIT_BYTEADDRESS)
+                    continue;
+                if (binding.BindCount == 0 || binding.BindPoint >= 16 ||
+                    binding.BindCount > 16 - binding.BindPoint)
+                {
+                    error = "D3D12 ShaderEffect raw storage t-register exceeds 16 slots";
+                    return false;
+                }
+                for (UINT slot = binding.BindPoint;
+                     slot < binding.BindPoint + binding.BindCount; ++slot)
+                    slots |= UINT32_C(1) << slot;
+                resourceCount = std::max(
+                    resourceCount,
+                    static_cast<int>(binding.BindPoint + binding.BindCount));
+            }
+            return true;
         }
     }
 
@@ -37,10 +79,18 @@ namespace CNA::Internal::Renderers::DirectX12
         pso_.Reset();
         rootSignature_.Reset();
         vsBytecode_.Reset();
+        baseInstanceVsBytecode_.Reset();
         psBytecode_.Reset();
         reflection_.Reset();
+        storageSlots_ = 0;
+        storageResourceCount_ = 0;
         textures_ = {};
         programId_ = 0;
+        baseInstanceProgramId_ = 0;
+        vertexSource_ = vertSrc;
+        static const std::regex instanceIdSemantic(
+            R"(:\s*SV_InstanceID\b)", std::regex_constants::icase);
+        hasInstanceIdInput_ = std::regex_search(vertSrc, instanceIdSemantic);
 
         const UINT flags = D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3;
 
@@ -73,10 +123,15 @@ namespace CNA::Internal::Renderers::DirectX12
             !reflection_.AddShader(
                 psBytecode_->GetBufferPointer(), psBytecode_->GetBufferSize(), compileError_))
             return false;
+        if (!InspectStorageInputs(vsBytecode_.Get(), storageSlots_,
+                                  storageResourceCount_, compileError_) ||
+            !InspectStorageInputs(psBytecode_.Get(), storageSlots_,
+                                  storageResourceCount_, compileError_))
+            return false;
 
         rootSignature_ = owner_->GetRootSignatureCacheEXT().GetOrCreate(
             device_, reflection_.GetConstantBufferCount(),
-            reflection_.GetShaderResourceCount(), reflection_.GetSamplerCount());
+            GetShaderResourceCountEXT(), reflection_.GetSamplerCount());
         if (!rootSignature_)
         {
             compileError_ = "D3D12EffectRenderer: failed to create the reflected root signature";
@@ -158,35 +213,96 @@ namespace CNA::Internal::Renderers::DirectX12
     {
         if (unit < 0 || unit >= static_cast<int>(textures_.size()))
             return;
+        std::shared_ptr<void> retained = texture ? texture->shared_from_this() : nullptr;
         textures_[static_cast<std::size_t>(unit)] =
-            {TextureKind::Texture2D, texture, true};
+            {texture ? TextureKind::Texture2D : TextureKind::None,
+             texture, true, std::move(retained)};
     }
 
     void D3D12EffectRenderer::BindTextureCube(const int unit, ITextureCubeRenderer* texture)
     {
         if (unit < 0 || unit >= static_cast<int>(textures_.size()))
             return;
+        std::shared_ptr<void> retained = texture ? texture->shared_from_this() : nullptr;
         textures_[static_cast<std::size_t>(unit)] =
-            {TextureKind::TextureCube, texture, true};
+            {texture ? TextureKind::TextureCube : TextureKind::None,
+             texture, true, std::move(retained)};
     }
 
     void D3D12EffectRenderer::BindTexture3D(int unit, ITexture3DRenderer* texture)
     {
         if (unit < 0 || unit >= static_cast<int>(textures_.size()))
             return;
+        std::shared_ptr<void> retained = texture ? texture->shared_from_this() : nullptr;
         textures_[static_cast<std::size_t>(unit)] =
-            {TextureKind::Texture3D, texture, true};
+            {texture ? TextureKind::Texture3D : TextureKind::None,
+             texture, true, std::move(retained)};
+    }
+
+    bool D3D12EffectRenderer::BindTexture2DArrayEXT(
+        int unit, std::shared_ptr<ITexture2DArrayRenderer> texture)
+    {
+        if (unit < 0 || unit >= static_cast<int>(textures_.size())) return false;
+        auto* native = texture ? dynamic_cast<D3D12Texture2DArray*>(texture.get()) : nullptr;
+        if (texture && (!native || native->GetOwnerEXT() != owner_.Get())) return false;
+        textures_[static_cast<std::size_t>(unit)] =
+            {texture ? TextureKind::Texture2DArray : TextureKind::None,
+             native, true, std::move(texture)};
+        return true;
+    }
+
+    bool D3D12EffectRenderer::BindStorageTexture2DEXT(
+        int unit, std::shared_ptr<IStorageTexture2DRenderer> texture)
+    {
+        if (unit < 0 || unit >= static_cast<int>(textures_.size())) return false;
+        auto* native = texture ? dynamic_cast<D3D12StorageTexture2D*>(texture.get()) : nullptr;
+        if (texture && (!native || native->GetOwnerEXT() != owner_.Get() ||
+                        (native->GetUsageEXT() & UINT32_C(0x04)) == 0))
+            return false;
+        textures_[static_cast<std::size_t>(unit)] =
+            {texture ? TextureKind::StorageTexture2D : TextureKind::None,
+             native, true, std::move(texture)};
+        return true;
     }
 
     ID3D12PipelineState* D3D12EffectRenderer::GetOrCreatePipelineStateEXT(
-        D3D12PipelineStateDesc desc)
+        D3D12PipelineStateDesc desc, bool logicalInstanceId)
     {
         (void) owner_.Get();
         if (!valid_ || !rootSignature_ || !vsBytecode_ || !psBytecode_)
             return nullptr;
-        desc.customProgramId = programId_;
-        desc.customVertexShaderBytecode = vsBytecode_->GetBufferPointer();
-        desc.customVertexShaderBytecodeSize = vsBytecode_->GetBufferSize();
+        ID3DBlob* vertexBytecode = vsBytecode_.Get();
+        if (logicalInstanceId && hasInstanceIdInput_)
+        {
+            if (!baseInstanceVsBytecode_)
+            {
+                static const std::regex instanceIdSemantic(
+                    R"(:\s*SV_InstanceID\b)", std::regex_constants::icase);
+                const std::string source = std::regex_replace(
+                    vertexSource_, instanceIdSemantic, ": CNA_LOGICAL_INSTANCE_ID");
+                ComPtr<ID3DBlob> errors;
+                const HRESULT result = D3DCompile(
+                    source.data(), source.size(), "ShaderEffect_base_instance_vs",
+                    nullptr, nullptr, "main", "vs_5_0",
+                    D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3,
+                    0, baseInstanceVsBytecode_.GetAddressOf(), errors.GetAddressOf());
+                if (FAILED(result))
+                {
+                    compileError_ = errors
+                        ? std::string(static_cast<const char*>(errors->GetBufferPointer()),
+                                      errors->GetBufferSize())
+                        : ("D3DCompile (base-instance vertex) failed, hr=" + FormatHr(result));
+                    return nullptr;
+                }
+                baseInstanceProgramId_ = NextD3D12CustomProgramIdEXT();
+            }
+            vertexBytecode = baseInstanceVsBytecode_.Get();
+            desc.logicalInstanceIdStream = true;
+        }
+        desc.customProgramId = desc.logicalInstanceIdStream
+            ? baseInstanceProgramId_ : programId_;
+        desc.customVertexShaderBytecode = vertexBytecode->GetBufferPointer();
+        desc.customVertexShaderBytecodeSize = vertexBytecode->GetBufferSize();
         desc.customPixelShaderBytecode = psBytecode_->GetBufferPointer();
         desc.customPixelShaderBytecodeSize = psBytecode_->GetBufferSize();
         pso_ = owner_->psoCache_.GetOrCreate(device_, rootSignature_.Get(), desc);
@@ -253,6 +369,22 @@ namespace CNA::Internal::Renderers::DirectX12
                     return texture->GetShaderResourceViewGpuHandleEXT();
                 }
                 break;
+            case TextureKind::Texture2DArray:
+                if (const auto* texture = dynamic_cast<const D3D12Texture2DArray*>(
+                        static_cast<ITexture2DArrayRenderer*>(binding.texture)))
+                {
+                    owner_->RetainFrameObjectEXT(texture->GetResourceEXT());
+                    return texture->GetShaderResourceViewGpuHandleEXT();
+                }
+                break;
+            case TextureKind::StorageTexture2D:
+                if (const auto* texture = dynamic_cast<const D3D12StorageTexture2D*>(
+                        static_cast<IStorageTexture2DRenderer*>(binding.texture)))
+                {
+                    owner_->RetainFrameObjectEXT(texture->GetResourceEXT());
+                    return texture->GetSrvGpuHandleEXT();
+                }
+                break;
             case TextureKind::None:
                 break;
         }
@@ -262,5 +394,6 @@ namespace CNA::Internal::Renderers::DirectX12
     void D3D12EffectRenderer::SetViewportSizeEXT(float width, float height)
     {
         reflection_.SetVec2("vpSize", width, height);
+        reflection_.SetVec2("viewportSize", width, height);
     }
 }

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 // Task 238: Stress test — DynamicVertexBuffer and DynamicIndexBuffer update every frame.
 //
-// Runs two warm-up frames plus 60 measured frames cycling through
+// Runs two warm-up frames plus 60 measured frames by default, or a bounded
+// CNA_STRESS_FRAMES override, cycling through
 // SetDataOptions::None, Discard, NoOverwrite.
 // The first frame uploads two different DVB objects with Discard and NoOverwrite before either
 // draw reaches a readback boundary, then verifies their left/right colors independently. Remaining
@@ -40,6 +41,7 @@
 #include <array>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <vector>
 
@@ -47,8 +49,7 @@ using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 
 static constexpr int kWarmupFrames = 2;
-static constexpr int kMeasuredFrames = 60;
-static constexpr int kFrames = kWarmupFrames + kMeasuredFrames;
+static constexpr int kDefaultMeasuredFrames = 60;
 
 static const Vector3 kTL(-1.f,  1.f, 0.f);
 static const Vector3 kBL(-1.f, -1.f, 0.f);
@@ -91,6 +92,7 @@ class DynamicBufferStressTest : public Game
     int pass_ = 0;
     int fail_ = 0;
     int frameCount_ = 0;
+    int measuredFrames_ = kDefaultMeasuredFrames;
 #if defined(CNA_RENDERER_DIRECTX12)
     std::uint64_t uploadResourceBaseline_ = 0;
 #endif
@@ -154,7 +156,7 @@ protected:
 
     void Draw(const GameTime&) override
     {
-        if (frameCount_ >= kFrames) return;
+        if (frameCount_ >= kWarmupFrames + measuredFrames_) return;
 
         auto& dev = getGraphicsDeviceProperty();
         dev.SetDepthTestEnabled(false);
@@ -238,19 +240,20 @@ protected:
         dev.SetVertexBuffer(nullptr);
 
         ++frameCount_;
-        if (frameCount_ >= kFrames) {
+        if (frameCount_ >= kWarmupFrames + measuredFrames_) {
 #if defined(CNA_RENDERER_DIRECTX12)
             auto& renderer = dynamic_cast<CNA::Internal::Renderers::DirectX12::DirectX12Renderer&>(
                 dev.GetRenderer());
             check(renderer.GetUploadResourceCreationCountEXT() == uploadResourceBaseline_,
                   "D3D12 upload ring creates no resources after warm-up");
-            check(renderer.GetGpuWaitCountEXT() <= static_cast<std::uint64_t>(kMeasuredFrames),
+            check(renderer.GetGpuWaitCountEXT() <= static_cast<std::uint64_t>(measuredFrames_),
                   "D3D12 performs at most one actual GPU wait per measured frame");
             check(renderer.GetUploadAllocationCountEXT() >=
-                      static_cast<std::uint64_t>(2 * kMeasuredFrames),
+                      static_cast<std::uint64_t>(2 * measuredFrames_),
                   "D3D12 vertex/index updates allocate distinct frame-ring ranges");
 #endif
-            std::printf("=== %d/%d PASS (%d frames) ===\n", pass_, pass_ + fail_, kFrames);
+            std::printf("=== %d/%d PASS (%d frames) ===\n", pass_, pass_ + fail_,
+                        kWarmupFrames + measuredFrames_);
             Exit();
         }
     }
@@ -258,6 +261,11 @@ protected:
 public:
     DynamicBufferStressTest()
     {
+        if (const char* requested = std::getenv("CNA_STRESS_FRAMES"))
+        {
+            const long parsed = std::strtol(requested, nullptr, 10);
+            if (parsed >= 1 && parsed <= 10000) measuredFrames_ = static_cast<int>(parsed);
+        }
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
     }

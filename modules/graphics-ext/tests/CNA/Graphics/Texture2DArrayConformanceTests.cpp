@@ -43,6 +43,9 @@
 #include "System/NotSupportedException.hpp"
 #include "EngineTestSupport.hpp"
 #include "TextureArrayShaderPackage.generated.hpp"
+#if defined(CNA_RENDERER_DIRECTX12)
+#include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
+#endif
 
 #include <array>
 #include <cstdint>
@@ -194,6 +197,28 @@ namespace {
                 ShaderCodeEXT(ShaderLanguageEXT::Wgsl, ShaderStageEXT::Fragment, "main",
                               "array.vulkan.frag.glsl -> wgsl",
                               std::string(Package::kVulkanFragmentWgsl)),
+                ShaderCodeEXT(ShaderLanguageEXT::Hlsl, ShaderStageEXT::Vertex, "main",
+                              "array.dx11.vert.hlsl", R"(
+                    struct Input { float3 position : POSITION; };
+                    struct Output { float4 position : SV_POSITION; float layer : TEXCOORD0; };
+                    Output main(Input input)
+                    {
+                        Output output;
+                        output.position = float4(input.position.xy, 0.0, 1.0);
+                        output.layer = input.position.z;
+                        return output;
+                    }
+                )"),
+                ShaderCodeEXT(ShaderLanguageEXT::Hlsl, ShaderStageEXT::Fragment, "main",
+                              "array.dx11.frag.hlsl", R"(
+                    Texture2DArray<float4> uArray : register(t0);
+                    SamplerState arraySampler : register(s0);
+                    float4 main(float4 position : SV_POSITION, float layer : TEXCOORD0)
+                        : SV_TARGET
+                    {
+                        return uArray.SampleLevel(arraySampler, float3(0.5, 0.5, layer), 0);
+                    }
+                )"),
             },
             {ShaderStageEXT::Vertex, ShaderStageEXT::Fragment},
             {ShaderBindingRequirementEXT("uArray", 0, ShaderBindingTypeEXT::SampledTexture2DArray,
@@ -306,7 +331,7 @@ TEST(Texture2DArrayConformance, EveryAdvertisedFormatKeepsItsLayersMipsAndRectan
         }
 
         // A sub-rectangle of layer 1, level 0: the right half, which is whole 4x4 blocks too.
-        const Rectangle rightHalf(kWidth / 2, 0, kWidth / 2, kHeight);
+        const Microsoft::Xna::Framework::Rectangle rightHalf(kWidth / 2, 0, kWidth / 2, kHeight);
         const std::size_t halfBytes = RectangleBytes(format, kWidth / 2, kHeight);
         const std::vector<std::uint8_t> half = Pattern(format, halfBytes, 97);
         array.setData(1, 0, &rightHalf, half.data(), halfBytes);
@@ -370,6 +395,43 @@ TEST(Texture2DArrayConformance, ThePublishedLayerLimitIsReal)
                                                              SurfaceFormat::Color,
                                                              kTransferUsage)),
                  System::NotSupportedException);
+}
+
+TEST(Texture2DArrayConformance, APartialBlockAtAnOddMipEdgePreservesOtherBlocks)
+{
+    CnaTest::EngineLayer::HiDefDevice gd;
+    if (ArrayLayerLimit(gd) < 2)
+        GTEST_SKIP() << "this renderer publishes no texture arrays";
+    if (!AdvertisesTransfers(gd, SurfaceFormat::Dxt1))
+        GTEST_SKIP() << "this renderer does not publish DXT1 array transfers";
+
+    Texture2DArray array(gd, Texture2DArrayDescriptor(
+        12, 8, 2, 2, SurfaceFormat::Dxt1, kTransferUsage));
+    std::array<std::uint8_t, 16> first{};
+    std::array<std::uint8_t, 16> other{};
+    std::array<std::uint8_t, 8> replacement{};
+    for (std::size_t i = 0; i < first.size(); ++i)
+    {
+        first[i] = static_cast<std::uint8_t>(i + 1);
+        other[i] = static_cast<std::uint8_t>(i + 71);
+        if (i < replacement.size())
+            replacement[i] = static_cast<std::uint8_t>(i + 151);
+    }
+    array.setData(0, 1, nullptr, first.data(), first.size());
+    array.setData(1, 1, nullptr, other.data(), other.size());
+    const Microsoft::Xna::Framework::Rectangle edge(4, 0, 2, 4);
+    array.setData(0, 1, &edge, replacement.data(), replacement.size());
+
+    std::array<std::uint8_t, 16> actualFirst{};
+    std::array<std::uint8_t, 16> actualOther{};
+    std::array<std::uint8_t, 8> actualEdge{};
+    array.getData(0, 1, nullptr, actualFirst.data(), actualFirst.size());
+    array.getData(1, 1, nullptr, actualOther.data(), actualOther.size());
+    array.getData(0, 1, &edge, actualEdge.data(), actualEdge.size());
+    std::copy(replacement.begin(), replacement.end(), first.begin() + 8);
+    EXPECT_EQ(first, actualFirst);
+    EXPECT_EQ(other, actualOther);
+    EXPECT_EQ(replacement, actualEdge);
 }
 
 TEST(Texture2DArrayConformance, EachLayerReachesAShaderEffectThroughUnitZero)
@@ -447,5 +509,31 @@ TEST(Texture2DArrayConformance, AnArrayOutlivingItsDeviceIsReleasedSafely)
     gd.reset();                          // the device -- and its context or queue -- first
     EXPECT_NO_THROW(array.reset());      // then the array: nothing may reach a dead device
 }
+
+#if defined(CNA_RENDERER_DIRECTX12)
+TEST(D3D12Texture2DArrayTest, LayersAndCompressedMipsSurviveDeviceRecreation)
+{
+    CnaTest::EngineLayer::HiDefDevice device;
+    auto& renderer = dynamic_cast<CNA::Internal::Renderers::DirectX12::DirectX12Renderer&>(
+        device.GetRenderer());
+    Texture2DArray color(device, Texture2DArrayDescriptor(
+        4, 4, 2, 2, SurfaceFormat::Color, kTransferUsage));
+    Texture2DArray blocks(device, Texture2DArrayDescriptor(
+        12, 8, 2, 2, SurfaceFormat::Dxt1, kTransferUsage));
+    const std::vector<std::uint8_t> colorBytes = Solid(Color::Blue, 4);
+    const std::vector<std::uint8_t> blockBytes = Pattern(SurfaceFormat::Dxt1, 16, 41);
+    color.setData(1, 1, nullptr, colorBytes.data(), colorBytes.size());
+    blocks.setData(0, 1, nullptr, blockBytes.data(), blockBytes.size());
+
+    renderer.RecreateDeviceEXT();
+
+    std::vector<std::uint8_t> actualColor(colorBytes.size());
+    std::vector<std::uint8_t> actualBlocks(blockBytes.size());
+    color.getData(1, 1, nullptr, actualColor.data(), actualColor.size());
+    blocks.getData(0, 1, nullptr, actualBlocks.data(), actualBlocks.size());
+    EXPECT_EQ(actualColor, colorBytes);
+    EXPECT_EQ(actualBlocks, blockBytes);
+}
+#endif
 
 #endif // CNA_CNAEXT

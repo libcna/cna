@@ -93,6 +93,7 @@
 #include "common/PixelTestGame.hpp"
 
 #include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -1248,6 +1249,16 @@ int main(int argc, char** argv)
         const std::string a = argv[i];
         if (a.rfind("--leg=", 0) == 0) onlyLeg = a.substr(6);
     }
+
+#if defined(_WIN32) && defined(_MSC_VER)
+    if (onlyLeg == "C2")
+    {
+        // C2 deliberately ends in abort; a Windows crash/report dialog would block
+        // its supervisor until timeout instead of returning the termination code.
+        SetErrorMode(GetErrorMode() | SEM_NOGPFAULTERRORBOX);
+        _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+    }
+#endif
 
 #if CNA_GFX180_CAN_ISOLATE
     if (onlyLeg.empty())

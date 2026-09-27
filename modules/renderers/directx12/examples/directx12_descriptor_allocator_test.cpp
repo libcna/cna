@@ -4,8 +4,8 @@
 // public XNA API that a high-cardinality workload renders correctly on every renderer; this fixture
 // proves the D3D12-specific CARDINALITY and LIFETIME claims that a rendered pixel cannot show:
 //
-//   * a freed slot is REISSUED rather than consumed forever -- the exact defect, measured as a
-//     recycle count and a repeated index, not inferred from "it did not throw";
+//   * every freed SRV/UAV slot is REISSUED rather than consumed forever -- the exact defect,
+//     measured as a recycle count and an unchanged bump cursor, not inferred from "it did not throw";
 //   * capacity GROWS on genuine simultaneous demand and stops at the D3D12 specification's own
 //     ceiling, rather than at an arbitrary constant;
 //   * a stable INDEX survives growth, and the GPU handle it resolves to moves with the heap;
@@ -18,10 +18,8 @@
 //     resource. The fixture explicitly waits only between completed lifetime generations, where
 //     reuse is legal and deterministic.
 //
-// This is deliberately an off-screen renderer fixture (args.surface.windowId == 0), for the reason
-// examples/directx12_smoke_test.cpp's own header records: GraphicsDevice's constructor creates a real
-// window for any non-Headless renderer, and this dev loop's Wine dxgi.dll crashes in
-// d3d12_swapchain_init. Everything measured here is device-level, so no swap chain is involved.
+// This is deliberately an off-screen renderer fixture (args.surface.windowId == 0): everything
+// measured here is device-level descriptor bookkeeping, so presentation is not involved.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -98,6 +96,7 @@ int main()
     DirectX12Renderer renderer(args);
     ID3D12Device* device = renderer.GetDeviceEXT();
     const std::shared_ptr<D3D12DescriptorHeaps>& heaps = renderer.GetDescriptorHeapsEXT();
+    std::uint32_t descriptorsPerTexture = 1;
 
     Check(device != nullptr && heaps != nullptr, "A1: device and descriptor allocator set exist");
     std::printf("=== REMED-GFX-177 D3D12 descriptor allocator ===\n");
@@ -115,7 +114,7 @@ int main()
               "A5: exactly two heap objects for the shader-visible pool (staging + shader-visible)");
     }
 
-    // ---- B: one descriptor per sampleable resource, returned on destruction ----------------------
+    // ---- B: every descriptor a texture owns is returned on destruction ---------------------------
     {
         const std::uint64_t before = heaps->cbvSrvUav.GetStatsEXT().allocations;
         const std::uint32_t liveBefore = heaps->cbvSrvUav.GetStatsEXT().live;
@@ -123,24 +122,33 @@ int main()
         {
             D3D12TextureRenderer tex(&renderer, TinyImage());
             indexOfDoomed = tex.GetShaderResourceViewIndexEXT();
+            descriptorsPerTexture = tex.GetImageAccessEXT() != 0 ? 2u : 1u;
             const D3D12DescriptorHeapStats s = heaps->cbvSrvUav.GetStatsEXT();
-            Check(s.allocations == before + 1 && s.live == liveBefore + 1,
-                  "B1: a Texture2D takes exactly one CBV/SRV/UAV descriptor");
-            Check(renderer.GetCbvSrvUavGpuHandleEXT(indexOfDoomed).ptr != 0,
-                  "B2: its index resolves to a real shader-visible GPU handle");
+            Check(s.allocations == before + descriptorsPerTexture &&
+                      s.live == liveBefore + descriptorsPerTexture,
+                  "B1: a Texture2D owns one SRV plus a UAV when its format supports compute images");
+            const auto srv = renderer.GetCbvSrvUavGpuHandleEXT(indexOfDoomed);
+            const auto uav = tex.GetUnorderedAccessViewGpuHandleEXT();
+            Check(srv.ptr != 0 && (descriptorsPerTexture == 2
+                      ? uav.ptr != 0 && uav.ptr != srv.ptr : uav.ptr == 0),
+                  "B2: each owned descriptor resolves to a distinct shader-visible GPU handle");
         }
         const D3D12DescriptorHeapStats after = heaps->cbvSrvUav.GetStatsEXT();
-        Check(after.live == liveBefore && after.frees >= 1,
-              "B3: destroying it RETURNS the descriptor -- the exact behaviour DX-103 lacked (" +
+        Check(after.live == liveBefore && after.frees >= descriptorsPerTexture,
+              "B3: destroying it RETURNS every descriptor -- the exact behaviour DX-103 lacked (" +
                   Describe("srv", after) + ")");
 
         // SetData is frame-deferred since DX-238. Complete that lifetime generation before asking
         // for deterministic reuse; recycling an in-flight descriptor would be the actual bug.
         renderer.WaitForGpuIdleEXT();
+        const D3D12DescriptorHeapStats reclaimable = heaps->cbvSrvUav.GetStatsEXT();
         D3D12TextureRenderer replacement(&renderer, TinyImage());
-        Check(replacement.GetShaderResourceViewIndexEXT() == indexOfDoomed,
-              "B4: the very next texture is given the freed slot back (index " +
-                  std::to_string(indexOfDoomed) + ")");
+        const D3D12DescriptorHeapStats reused = heaps->cbvSrvUav.GetStatsEXT();
+        Check(replacement.GetShaderResourceViewIndexEXT() !=
+                      D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex &&
+                      reused.recycles - reclaimable.recycles == descriptorsPerTexture &&
+                      reused.neverUsed == reclaimable.neverUsed,
+              "B4: the very next texture reuses every freed slot without advancing the cursor");
     }
     renderer.WaitForGpuIdleEXT();
 
@@ -171,12 +179,15 @@ int main()
         const D3D12DescriptorHeapStats after = heaps->cbvSrvUav.GetStatsEXT();
         Check(!threw, "C1: 200 sequential create/destroy cycles do not exhaust the heap");
         Check(after.capacity == before.capacity,
-              "C2: capacity did NOT grow -- one live resource never needs more than one slot (cap=" +
+              "C2: capacity did NOT grow -- bounded live demand reuses its SRV/UAV slots (cap=" +
                   std::to_string(after.capacity) + ")");
-        Check(after.recycles - before.recycles >= 200 - kGenerationSize,
+        Check(after.recycles - before.recycles >=
+                  (200 - kGenerationSize) * descriptorsPerTexture,
               "C3: after the first in-flight generation, later allocations came from the FREE "
-              "LIST (recycled=" + std::to_string(after.recycles - before.recycles) + "/200)");
-        Check(before.neverUsed - after.neverUsed <= kGenerationSize,
+              "LIST (recycled=" + std::to_string(after.recycles - before.recycles) + "/" +
+                  std::to_string(200 * descriptorsPerTexture) + ")");
+        Check(before.neverUsed - after.neverUsed <=
+                  kGenerationSize * descriptorsPerTexture,
               "C4: the bump cursor advanced by at most one in-flight generation");
     }
 
@@ -188,28 +199,35 @@ int main()
         std::vector<std::unique_ptr<D3D12TextureRenderer>> live;
         std::vector<std::uint32_t> indices;
         std::vector<D3D12_GPU_DESCRIPTOR_HANDLE> handlesAtBirth;
+        std::vector<D3D12_GPU_DESCRIPTOR_HANDLE> uavHandlesAtBirth;
         for (int i = 0; i < 300; ++i)
         {
             live.push_back(std::make_unique<D3D12TextureRenderer>(&renderer, TinyImage()));
             indices.push_back(live.back()->GetShaderResourceViewIndexEXT());
             handlesAtBirth.push_back(live.back()->GetShaderResourceViewGpuHandleEXT());
+            uavHandlesAtBirth.push_back(live.back()->GetUnorderedAccessViewGpuHandleEXT());
         }
 
         const D3D12DescriptorHeapStats after = heaps->cbvSrvUav.GetStatsEXT();
         ID3D12DescriptorHeap* heapAfter = renderer.GetCbvSrvUavHeapEXT();
 
-        Check(after.capacity >= 300 && after.growths >= 2,
+        Check(after.capacity >= 300 * descriptorsPerTexture && after.growths >= 2,
               "D1: 300 simultaneously live textures grew the heap past its starting 64 (" +
                   Describe("srv", after) + ")");
-        Check(after.capacity == 512,
-              "D2: growth DOUBLES (64 -> 128 -> 256 -> 512), so capacity tracks demand rather than "
-              "any hand-picked number (cap=" + std::to_string(after.capacity) + ")");
+        std::uint32_t expectedCapacity = 64;
+        while (expectedCapacity < 300 * descriptorsPerTexture)
+            expectedCapacity *= 2;
+        Check(after.capacity == expectedCapacity,
+              "D2: growth doubles to the smallest capacity covering every live SRV/UAV (cap=" +
+                  std::to_string(after.capacity) + ", expected=" +
+                  std::to_string(expectedCapacity) + ")");
         Check(heapAfter != heapBefore && after.generation > before.generation,
               "D3: the shader-visible heap OBJECT was replaced and the generation counter says so");
 
         // Indices are the contract: they must be unchanged by growth, and every one must still
         // resolve -- into the NEW heap, not the retired one.
         std::uint32_t movedHandles = 0;
+        std::uint32_t movedUavHandles = 0;
         std::uint32_t badIndices = 0;
         std::uint32_t duplicates = 0;
         std::vector<char> seen(after.capacity, 0);
@@ -217,6 +235,9 @@ int main()
         {
             if (live[i]->GetShaderResourceViewIndexEXT() != indices[i]) ++badIndices;
             if (live[i]->GetShaderResourceViewGpuHandleEXT().ptr != handlesAtBirth[i].ptr) ++movedHandles;
+            if (descriptorsPerTexture == 2 &&
+                live[i]->GetUnorderedAccessViewGpuHandleEXT().ptr != uavHandlesAtBirth[i].ptr)
+                ++movedUavHandles;
             if (indices[i] < seen.size())
             {
                 if (seen[indices[i]]) ++duplicates;
@@ -228,10 +249,11 @@ int main()
         Check(duplicates == 0,
               "D5: no two live resources were given the same slot (duplicates=" +
                   std::to_string(duplicates) + ")");
-        Check(movedHandles > 0,
-              "D6: GPU handles allocated before the growth now resolve into the NEW heap -- which is "
-              "exactly why a raw handle could not be stored (moved=" + std::to_string(movedHandles) +
-                  "/" + std::to_string(indices.size()) + ")");
+        Check(movedHandles > 0 &&
+                  (descriptorsPerTexture == 1 || movedUavHandles > 0),
+              "D6: SRV and UAV GPU handles allocated before growth resolve in the NEW heap "
+              "(SRV moved=" + std::to_string(movedHandles) +
+                  ", UAV moved=" + std::to_string(movedUavHandles) + ")");
         Check(after.bulkCopies > 0,
               "D7: growth re-mirrored the live range from the staging heap rather than copying out "
               "of the shader-visible one, which D3D12 forbids (descriptors copied=" +
@@ -260,9 +282,10 @@ int main()
         Check(reused.growths == reclaimable.growths && reused.capacity == reclaimable.capacity,
               "D10: a second wave of 300 needs NO further growth (grow=" +
                   std::to_string(reused.growths) + ", cap=" + std::to_string(reused.capacity) + ")");
-        Check(reused.recycles - reclaimable.recycles == 300,
-              "D11: all 300 came from the free list (recycled=" +
-                  std::to_string(reused.recycles - reclaimable.recycles) + "/300)");
+        Check(reused.recycles - reclaimable.recycles == 300 * descriptorsPerTexture,
+              "D11: every SRV/UAV in the second wave came from the free list (recycled=" +
+                  std::to_string(reused.recycles - reclaimable.recycles) + "/" +
+                  std::to_string(300 * descriptorsPerTexture) + ")");
         again.clear();
         renderer.WaitForGpuIdleEXT();
     }
@@ -527,9 +550,9 @@ int main()
             Check(newHeaps != oldHeaps,
                   "K1: device recreation builds a brand-new allocator set");
             Check(oldHeaps->cbvSrvUav.GetStatsEXT().live == 0,
-                  "K2: recreation releases the survivor's descriptor from the old set");
+                  "K2: recreation releases the survivor's descriptors from the old set");
             Check(newHeaps->cbvSrvUav.GetStatsEXT().capacity == 64 &&
-                      newHeaps->cbvSrvUav.GetStatsEXT().live == 1,
+                      newHeaps->cbvSrvUav.GetStatsEXT().live == descriptorsPerTexture,
                   "K3: the survivor is recreated in the new set at its starting capacity (" +
                       Describe("srv", newHeaps->cbvSrvUav.GetStatsEXT()) + ")");
             Check(survivor->GetShaderResourceViewGpuHandleEXT().ptr != 0,
@@ -537,8 +560,9 @@ int main()
 
             const std::uint32_t newLiveBefore = newHeaps->cbvSrvUav.GetStatsEXT().live;
             survivor.reset();
-            Check(newHeaps->cbvSrvUav.GetStatsEXT().live == newLiveBefore - 1,
-                  "K5: destroying the recovered resource frees its replacement descriptor");
+            Check(newHeaps->cbvSrvUav.GetStatsEXT().live ==
+                      newLiveBefore - descriptorsPerTexture,
+                  "K5: destroying the recovered resource frees all replacement descriptors");
             Check(oldHeaps->cbvSrvUav.GetStatsEXT().live == 0,
                   "K6: recovered-resource destruction leaves the retired set untouched");
 

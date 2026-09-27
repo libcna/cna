@@ -47,6 +47,7 @@
 #include "ModernConformanceShaderPackage.generated.hpp"
 
 #include <cstdint>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -126,9 +127,57 @@ namespace {
         return std::vector<std::uint8_t>(begin, begin + sizeof(words));
     }
 
-    /// One compute program as a four-variant package: the generated GLSL ES and desktop GLSL
-    /// text, the SPIR-V words and the WGSL the generator derives from the same Vulkan GLSL
-    /// (plans/plan_webgpu_modern_graphics.md WMG-0005), so every renderer runs the same program.
+    std::string_view HlslComputeSource(std::string_view label)
+    {
+        if (label == "grid") return R"(
+RWByteAddressBuffer Output : register(u0);
+cbuffer Parameters : register(b0) { int uWidth; int uHeight; };
+[numthreads(4, 2, 2)]
+void main(uint3 id : SV_DispatchThreadID)
+{
+    uint index = id.x + id.y * uint(uWidth) + id.z * uint(uWidth) * uint(uHeight);
+    Output.Store(index * 4, (id.x << 20) | (id.y << 10) | id.z);
+}
+)";
+        if (label == "accumulate") return R"(
+RWByteAddressBuffer Input : register(u0);
+RWByteAddressBuffer Accumulator : register(u1);
+cbuffer Parameters : register(b0) { int uCount; float uScale; };
+[numthreads(64, 1, 1)]
+void main(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= uint(uCount)) return;
+    uint address = id.x * 4;
+    float value = asfloat(Accumulator.Load(address)) +
+                  asfloat(Input.Load(address)) * uScale;
+    Accumulator.Store(address, asuint(value));
+}
+)";
+        if (label == "chain") return R"(
+RWByteAddressBuffer Source : register(u0);
+RWByteAddressBuffer Destination : register(u1);
+cbuffer Parameters : register(b0) { int uCount; };
+[numthreads(64, 1, 1)]
+void main(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x < uint(uCount))
+        Destination.Store(id.x * 4, Source.Load(id.x * 4) * 2 + 1);
+}
+)";
+        if (label == "image") return R"(
+RWTexture2D<unorm float4> uImage : register(u0);
+[numthreads(8, 8, 1)]
+void main(uint3 id : SV_DispatchThreadID)
+{
+    uImage[id.xy] = float4(float(id.x) / 255.0, float(id.y) / 255.0,
+                            float(id.x ^ id.y) / 255.0, 1.0);
+}
+)";
+        return {};
+    }
+
+    /// The generated GLSL ES and desktop GLSL text, SPIR-V words and derived WGSL keep the
+    /// established packages; native HLSL carries equivalent buffer work on Direct3D 11.
     /// The desktop variant is what a desktop core context compiles
     /// (plans/plan_opengl4_modern_graphics.md GL4-0025).
     template <std::size_t N>
@@ -137,8 +186,7 @@ namespace {
                                     const std::uint32_t (&spirv)[N], std::string_view wgsl,
                                     std::vector<ShaderBindingRequirementEXT> bindings)
     {
-        return ShaderPackageEXT(
-            {
+        std::vector<ShaderCodeEXT> variants{
                 ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Compute, "main",
                               std::string(label) + ".es.comp.glsl", std::string(esSource)),
                 ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslDesktop, CNA::ShaderStageEXT::Compute,
@@ -148,8 +196,13 @@ namespace {
                               std::string(label) + ".vulkan.comp.glsl", Bytes(spirv)),
                 ShaderCodeEXT(CNA::ShaderLanguageEXT::Wgsl, CNA::ShaderStageEXT::Compute, "main",
                               std::string(label) + ".vulkan.comp.glsl -> wgsl", std::string(wgsl)),
-            },
-            {CNA::ShaderStageEXT::Compute}, std::move(bindings));
+        };
+        if (const std::string_view hlsl = HlslComputeSource(label); !hlsl.empty())
+            variants.emplace_back(
+                CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Compute, "main",
+                std::string(label) + ".directx.comp.hlsl", std::string(hlsl));
+        return ShaderPackageEXT(
+            std::move(variants), {CNA::ShaderStageEXT::Compute}, std::move(bindings));
     }
 
     ShaderBindingRequirementEXT StorageAt(const char* name, int slot)
@@ -556,6 +609,17 @@ TEST_F(ModernGpuConformance, ClassicDrawingIsUnchangedByInterleavedCompute)
     if (Lacks(gd.SupportsCapability(GraphicsCapability::ThreeD), "3D"))
         GTEST_SKIP() << "this renderer has no 3D pipeline";
 
+    const int cycles = [] {
+        const char* value = std::getenv("CNA_MODERN_INTEROP_STRESS_CYCLES");
+        if (value == nullptr || value[0] == '\0') return 1;
+        char* end = nullptr;
+        const long parsed = std::strtol(value, &end, 10);
+        if (end == value || *end != '\0' || parsed < 1 || parsed > 1000)
+            throw std::invalid_argument(
+                "CNA_MODERN_INTEROP_STRESS_CYCLES must be between 1 and 1000");
+        return static_cast<int>(parsed);
+    }();
+
     constexpr int kSize = 32;
     constexpr std::size_t kCount = 256;
     BasicEffect effect(gd);
@@ -605,29 +669,34 @@ TEST_F(ModernGpuConformance, ClassicDrawingIsUnchangedByInterleavedCompute)
             return pixels;
         };
 
-        const auto plain = frame(false);
-        const auto mixed = frame(true);
-        int differing = 0;
-        for (std::size_t i = 0; i < plain.size(); ++i)
-            differing += plain[i] != mixed[i] ? 1 : 0;
-        Check(differing == 0, shape + ": " + std::to_string(differing) +
-                                  " pixels differ once compute is interleaved with the classic "
-                                  "draws");
-        // The frame must have drawn both triangles and depth-rejected the far one where they
-        // overlap, or the comparison proves nothing about either attachment.
-        int red = 0, blue = 0, both = 0;
-        for (const Color& c : plain)
+        for (int cycle = 0; cycle < cycles; ++cycle)
         {
-            const bool r = c.getRProperty() > 150;
-            const bool bl = c.getBProperty() > 150;
-            red += r ? 1 : 0;
-            blue += bl ? 1 : 0;
-            both += (r && bl) ? 1 : 0;
+            const auto plain = frame(false);
+            const auto mixed = frame(true);
+            int differing = 0;
+            for (std::size_t i = 0; i < plain.size(); ++i)
+                differing += plain[i] != mixed[i] ? 1 : 0;
+            Check(differing == 0, shape + " cycle " + std::to_string(cycle) + ": " +
+                                      std::to_string(differing) +
+                                      " pixels differ once compute is interleaved with the classic "
+                                      "draws");
+            // The frame must have drawn both triangles and depth-rejected the far one where they
+            // overlap, or the comparison proves nothing about either attachment.
+            int red = 0, blue = 0, both = 0;
+            for (const Color& c : plain)
+            {
+                const bool r = c.getRProperty() > 150;
+                const bool bl = c.getBProperty() > 150;
+                red += r ? 1 : 0;
+                blue += bl ? 1 : 0;
+                both += (r && bl) ? 1 : 0;
+            }
+            Check(red > 0 && blue > 0 && both == 0,
+                  shape + " cycle " + std::to_string(cycle) +
+                      ": the classic frame drew both triangles with the far one depth-tested "
+                      "away (red " + std::to_string(red) + ", blue " +
+                      std::to_string(blue) + ", both " + std::to_string(both) + " pixels)");
         }
-        Check(red > 0 && blue > 0 && both == 0,
-              shape + ": the classic frame drew both triangles with the far one depth-tested away "
-                      "(red " + std::to_string(red) + ", blue " + std::to_string(blue) +
-                  ", both " + std::to_string(both) + " pixels)");
     };
 
     {

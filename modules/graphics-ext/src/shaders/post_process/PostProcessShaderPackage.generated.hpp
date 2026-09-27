@@ -6216,7 +6216,8 @@ fn main_1() {
     let _e27 = source;
     colour_2 = clamp(_e27.xyz, vec3(0f), vec3(1f));
     let _e34 = pc.uColorGradeParams[2u];
-    if (_e34 >= 0.5f) {
+)CNA_SHADER"
+    R"CNA_SHADER(    if (_e34 >= 0.5f) {
         let _e36 = colour_2;
         param_22 = _e36;
         let _e37 = cnaLutTetrahedral_u0028_vf3_u003b((&param_22));
@@ -7010,7 +7011,8 @@ fn main_1() {
     } else {
         let _e38 = colour_2;
         param_23 = _e38;
-        let _e39 = cnaLutTrilinear_u0028_vf3_u003b((&param_23));
+)CNA_SHADER"
+    R"CNA_SHADER(        let _e39 = cnaLutTrilinear_u0028_vf3_u003b((&param_23));
         local = _e39;
     }
     let _e40 = local;
@@ -11141,7 +11143,8 @@ fn main_1() {
                     }
                 }
                 let _e293 = unnamed_1.uSsrMatrices[0i];
-                let _e294 = farPoint;
+)CNA_SHADER"
+    R"CNA_SHADER(                let _e294 = farPoint;
                 let _e297 = unnamed.uSsrScalars[0i];
                 let _e298 = (_e294 * _e297);
                 hitClip = (_e293 * vec4<f32>(_e298.x, _e298.y, _e298.z, 1f));

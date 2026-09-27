@@ -227,12 +227,18 @@ namespace CNA::Graphics {
                 "GraphicsImageAccess");
         }
         if (!isImageBindingSupported())
+        {
+            const bool glEs = device_.GetShaderDialectEXT() ==
+                CNA::Internal::Renderers::ShaderDialectEXT::GlslEs;
             throw System::NotSupportedException(
                 "CNA::Graphics::ComputeShader::bindImage: the '"
                 + std::string(device_.GetGraphicsRendererName())
-                + "' renderer cannot bind a Texture2D as a compute image -- GL ES requires an "
-                  "immutable texture and CNA allocates textures mutably. Write to a StorageBuffer "
-                  "instead");
+                + "' renderer cannot bind a Texture2D as a compute image -- "
+                + (glEs ? "GL ES requires an immutable texture and CNA allocates textures "
+                          "mutably. "
+                        : "this renderer does not expose writable Texture2D images. ")
+                + "Use a StorageTexture2D or StorageBuffer instead");
+        }
         renderer_->Bind();
         renderer_->BindImageTexture(unit, &texture.GetRenderer(), static_cast<int>(access));
     }

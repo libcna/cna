@@ -44,6 +44,8 @@ namespace CNA::Internal::Renderers::DirectX12
                 D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(resource.GetAddressOf()));
             if (FAILED(hr))
                 throw std::runtime_error(std::string(what) + ": CreateCommittedResource (DEFAULT heap) failed, hr=" + FormatHr(hr));
+            const std::string label(what);
+            resource->SetName(std::wstring(label.begin(), label.end()).c_str());
             return resource;
         }
 

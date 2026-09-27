@@ -210,6 +210,8 @@ TEST(SsaoFromRealPrepassTest, TheSameStepOccludesFromATextureAndFromARenderTarge
     { FullscreenPass blit(gd); blit.draw(normalTexture.get(), normalTarget.get(), nullptr, kSize, kSize); }
 
     SsaoPass pass(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the SSAO shader package";
     RenderTarget2D source(gd, kSize, kSize);
     RenderTarget2D destination(gd, kSize, kSize);
     gd.SetRenderTarget(&source);

@@ -152,6 +152,9 @@ TEST(EffectPassTest, TheAdaptedEffectReallyReachesTheDraw)
                         "and ignored";
 
     DepthEffect effect(gd);
+    if (effect.GetSelectedShaderLanguageEXT() == CNA::ShaderLanguageEXT::Unknown)
+        GTEST_SKIP() << "this renderer has no DepthEffect shader package variant";
+    ASSERT_TRUE(effect.IsEffectValid()) << effect.GetCompileErrorEXT();
     effect.setMode(CNA::Graphics::DepthEffectMode::Grayscale1Bit);
     EffectPass pass(gd, &effect, "Depth");
 
@@ -198,6 +201,10 @@ TEST(EffectPassTest, AnAdaptedEffectRunsInsideAChain)
         || (gd.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Wgsl,
                                          CNA::ShaderStageEXT::Vertex)
             && gd.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Wgsl,
+                                            CNA::ShaderStageEXT::Fragment))
+        || (gd.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                         CNA::ShaderStageEXT::Vertex)
+            && gd.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Hlsl,
                                             CNA::ShaderStageEXT::Fragment));
     if (!hasPortableCrtVariant)
         GTEST_SKIP() << "this renderer has no CRTEffect package variant";

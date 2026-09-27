@@ -1514,6 +1514,14 @@ public:
 int main()
 {
     InstancedTexturedDrawTest game;
-    game.Run();
+    try
+    {
+        game.Run();
+    }
+    catch (const std::exception& exception)
+    {
+        std::fprintf(stderr, "[FAIL] uncaught fixture exception: %s\n", exception.what());
+        return 1;
+    }
     return game.getResult();
 }

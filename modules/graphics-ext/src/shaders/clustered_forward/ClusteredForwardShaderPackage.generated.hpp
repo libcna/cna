@@ -326,7 +326,8 @@ float cnaAreaCoverage(vec3 quad[4], vec3 surface, vec3 lobeAxis, float lobeScale
     vec3 axis = normalize(lobeAxis);
     vec3 tangent = cnaFrameTangent(axis);
     vec3 bitangent = cross(axis, tangent);
-    float inverseScale = 1.0 / max(lobeScale, 1e-4);
+)CNA_SHADER"
+    R"CNA_SHADER(    float inverseScale = 1.0 / max(lobeScale, 1e-4);
 
     vec3 p[5];
     for (int i = 0; i < 4; ++i) {
@@ -591,7 +592,8 @@ void main() {
         // Refraction, not transparency: the ray bends entering the surface, travels the volume's
         // thickness, and leaves somewhere else -- so what shows through is *displaced*, which is
         // the whole visual difference from alpha blending. The exit point is projected back to
-        // screen space to find it in the copy of the opaque frame.
+)CNA_SHADER"
+    R"CNA_SHADER(        // screen space to find it in the copy of the opaque frame.
         vec3 refracted = refract(-viewDirection, normal, 1.0 / max(uIor, 1.0));
         vec3 exitPoint = vWorldPosition + refracted * uThickness;
         vec4 exitClip = uViewProjection * vec4(exitPoint, 1.0);
@@ -1906,7 +1908,8 @@ fn cnaThinFilmIridescence_u0028_f1_u003b_f1_u003b_f1_u003b_f1_u003b_vf3_u003b(ou
             let _e301 = cm;
             cm = (_e301 * sqrt(_e299));
             let _e303 = cm;
-            let _e305 = order;
+)CNA_SHADER"
+    R"CNA_SHADER(            let _e305 = order;
             let _e307 = opd_1;
             let _e309 = order;
             let _e311 = phi;
@@ -2259,7 +2262,8 @@ fn cnaFrameTangent_u0028_vf3_u003b(axis: ptr<function, vec3<f32>>) -> vec3<f32> 
     var guess: vec3<f32>;
 
     let _e163 = (*axis)[2u];
-    guess = select(vec3<f32>(1f, 0f, 0f), vec3<f32>(0f, 0f, 1f), vec3((abs(_e163) < 0.9f)));
+)CNA_SHADER"
+    R"CNA_SHADER(    guess = select(vec3<f32>(1f, 0f, 0f), vec3<f32>(0f, 0f, 1f), vec3((abs(_e163) < 0.9f)));
     let _e168 = guess;
     let _e169 = (*axis);
     return normalize(cross(_e168, _e169));
@@ -2641,7 +2645,8 @@ fn cnaAreaContribution_u0028_vf3_u003b_vf3_u003b_vf3_u003b_vf3_u003b_f1_u003b_f1
     let _e242 = tangentBase;
     let _e243 = tangentBase;
     if (dot(_e242, _e243) > 0.000000000001f) {
-        let _e246 = tangentBase;
+)CNA_SHADER"
+    R"CNA_SHADER(        let _e246 = tangentBase;
         local_4 = normalize(_e246);
     } else {
         let _e248 = (*normal_1);
@@ -2974,7 +2979,8 @@ fn main_1() {
             let _e432 = lightDiffuse;
             let _e433 = diffuseSum;
             diffuseSum = (_e433 + _e432);
-            continue;
+)CNA_SHADER"
+    R"CNA_SHADER(            continue;
         } else {
             break;
         }
@@ -3334,7 +3340,8 @@ float cnaAreaCoverage(vec3 quad[4], vec3 surface, vec3 lobeAxis, float lobeScale
     vec3 bitangent = cross(axis, tangent);
     float inverseScale = 1.0 / max(lobeScale, 1e-4);
 
-    vec3 p[5];
+)CNA_SHADER"
+    R"CNA_SHADER(    vec3 p[5];
     for (int i = 0; i < 4; ++i) {
         vec3 relative = quad[i] - surface;
         p[i] = vec3(dot(relative, tangent) * inverseScale,
@@ -3598,7 +3605,8 @@ void main() {
         // thickness, and leaves somewhere else -- so what shows through is *displaced*, which is
         // the whole visual difference from alpha blending. The exit point is projected back to
         // screen space to find it in the copy of the opaque frame.
-        vec3 refracted = refract(-viewDirection, normal, 1.0 / max(uIor, 1.0));
+)CNA_SHADER"
+    R"CNA_SHADER(        vec3 refracted = refract(-viewDirection, normal, 1.0 / max(uIor, 1.0));
         vec3 exitPoint = vWorldPosition + refracted * uThickness;
         vec4 exitClip = uViewProjection * vec4(exitPoint, 1.0);
         vec2 uv = exitClip.xy / max(abs(exitClip.w), 1e-4) * sign(exitClip.w) * 0.5 + 0.5;

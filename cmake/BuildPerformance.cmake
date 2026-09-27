@@ -289,7 +289,7 @@ function(cna_is_owned_target target output_variable)
     endif()
 
     file(RELATIVE_PATH _cna_target_relative_source_dir
-        "${CMAKE_SOURCE_DIR}" "${_cna_target_source_dir}")
+        "${CNA_SOURCE_DIR}" "${_cna_target_source_dir}")
     if(_cna_target_relative_source_dir MATCHES "^\\.\\." OR
        IS_ABSOLUTE "${_cna_target_relative_source_dir}" OR
        _cna_target_relative_source_dir MATCHES "^(third_party|vendor)(/|$)")
@@ -304,7 +304,7 @@ function(cna_apply_build_support_to_cna_targets)
         message(FATAL_ERROR "CNA project build options must exist before applying target support.")
     endif()
 
-    cna_collect_buildsystem_targets("${CMAKE_SOURCE_DIR}" _cna_all_targets)
+    cna_collect_buildsystem_targets("${CNA_SOURCE_DIR}" _cna_all_targets)
     set(_cna_supported_target_count 0)
     foreach(_cna_target IN LISTS _cna_all_targets)
         cna_is_owned_target("${_cna_target}" _cna_target_is_owned)
@@ -461,7 +461,7 @@ function(cna_apply_ipo_to_cna_targets)
         message(FATAL_ERROR "CNA_ENABLE_IPO was requested but is unsupported:\n${_cna_ipo_failure}")
     endif()
 
-    cna_collect_buildsystem_targets("${CMAKE_SOURCE_DIR}" _cna_all_targets)
+    cna_collect_buildsystem_targets("${CNA_SOURCE_DIR}" _cna_all_targets)
     set(_cna_ipo_target_count 0)
     foreach(_cna_target IN LISTS _cna_all_targets)
         cna_is_owned_target("${_cna_target}" _cna_target_is_owned)

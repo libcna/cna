@@ -327,6 +327,11 @@ namespace CNA::Internal::Renderers::DirectX11
             // author never calls SetViewportSizeEXT() itself.
             customRenderer->SetViewportSizeEXT(vpW, vpH);
             customEffect_->Apply();
+            // Derived effects set their parameters after ShaderEffect::OnApply binds.
+            // Upload the completed parameter block before submitting this batch.
+            if (!customRenderer->BindSpriteEXT())
+                throw std::runtime_error(
+                    "D3D11SpriteBatchRenderer: custom vertex shader does not accept sprites");
 
             const auto& vertices = TransformedSprite2DVertices();
             vb_.SetData(vertices.data(), static_cast<int>(vertices.size()), sizeof(Sprite2DVertex));
@@ -466,7 +471,7 @@ namespace CNA::Internal::Renderers::DirectX11
         GpuDrawParams params;
         for (int pass = 0; pass < passCount; ++pass)
         {
-            technique->getPassesProperty()[pass].Apply();
+            technique->getPassesProperty()[pass]->Apply();
             owner_->BindCompiledEffectForDrawEXT(
                 vb_, params, *runtime, currentTexture_, &deviceTextures);
             context_->DrawIndexed(static_cast<UINT>(pendingIndices_.size()), 0, 0);

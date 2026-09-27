@@ -124,6 +124,69 @@ void main() {
 }
 )";
 
+constexpr const char* kHlslVertexSource = R"(
+cbuffer SpriteParameters : register(b0) { float2 viewportSize; };
+struct Input { float2 position : POSITION; float2 texcoord : TEXCOORD; float4 color : COLOR; };
+struct Output { float4 position : SV_Position; float2 texcoord : TEXCOORD0; };
+Output main(Input input)
+{
+    Output output;
+    float2 ndc = input.position / viewportSize * 2.0f - 1.0f;
+    output.position = float4(ndc.x, -ndc.y, 0.0f, 1.0f);
+    output.texcoord = input.texcoord;
+    return output;
+}
+)";
+
+bool RunsHlslProbe(GraphicsDevice& device)
+{
+    return device.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                             CNA::ShaderStageEXT::Vertex)
+        && device.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                             CNA::ShaderStageEXT::Fragment);
+}
+
+std::string MakeHlslVerdictSource(const bool packed, const bool sky)
+{
+    return std::string("#define CNA_PACKED_DEPTH ") + (packed ? "1\n" : "0\n")
+         + std::string("#define CNA_SKY_VERDICT ") + (sky ? "1\n" : "0\n") + R"(
+Texture2D<float4> texture1 : register(t0);
+SamplerState textureSampler : register(s0);
+cbuffer VerdictParameters : register(b4)
+{
+    row_major float4x4 uInverseProjection;
+    float uQuadDepth;
+};
+float cnaDecodeLinearDepth(float4 texel)
+{
+#if CNA_PACKED_DEPTH
+    return dot(texel, float4(1.0f / 16581375.0f, 1.0f / 65025.0f,
+                              1.0f / 255.0f, 1.0f));
+#else
+    return texel.r;
+#endif
+}
+float4 main(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_Target0
+{
+    float depth = cnaDecodeLinearDepth(texture1.SampleLevel(textureSampler, texcoord, 0.0f));
+#if CNA_SKY_VERDICT
+    return float4(depth >= 0.99f ? 1.0f : 0.0f,
+                  depth <= 0.01f ? 1.0f : 0.0f, 0.0f, 1.0f);
+#else
+    if (abs(depth - uQuadDepth) > 0.02f)
+        return float4(0.0f, 0.0f, 1.0f, 1.0f);
+    float2 cameraUv = float2(texcoord.x, 1.0f - texcoord.y);
+    float4 clip = float4(cameraUv * 2.0f - 1.0f, 1.0f, 1.0f);
+    float4 ray = mul(clip, uInverseProjection);
+    float3 direction = ray.xyz / ray.w;
+    float3 viewPosition = direction * (depth / max(-direction.z, 1e-6f));
+    bool agrees = viewPosition.x > 0.0f && viewPosition.y > 0.0f;
+    return float4(agrees ? 1.0f : 0.0f, agrees ? 0.0f : 1.0f, 0.0f, 1.0f);
+#endif
+}
+)";
+}
+
 /// Classifies every pixel the prepass says the quad occupies.
 ///
 /// R: the reconstruction put it in the +X +Y quadrant, where the quad was drawn.
@@ -159,14 +222,19 @@ TEST(PrepassReconstructionTest, TheReconstructedPositionIsWhereTheGeometryWasDra
     CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_GLSL_SHADER_SOURCE(gd);
+    if (!RunsHlslProbe(gd) && !CnaTest::EngineLayer::RunsGlslShaderSource(gd))
+        GTEST_SKIP() << "this renderer has no prepass verdict shader dialect";
 
     DepthNormalPrepass prepass(gd, kSize, kSize);
     if (!prepass.isSupported(gd))
         GTEST_SKIP() << "this renderer cannot run the depth/normal prepass";
     RunPrepassOverTheQuad(gd, prepass);
 
-    ShaderEffect verdict(gd, kVertexSource, MakeVerdictSource(prepass.isDepthPacked()));
+    ShaderEffect verdict(gd,
+                         RunsHlslProbe(gd) ? kHlslVertexSource : kVertexSource,
+                         RunsHlslProbe(gd)
+                             ? MakeHlslVerdictSource(prepass.isDepthPacked(), false)
+                             : MakeVerdictSource(prepass.isDepthPacked()));
     ASSERT_TRUE(verdict.IsEffectValid());
 
     RenderTarget2D destination(gd, kSize, kSize);
@@ -206,7 +274,8 @@ TEST(PrepassReconstructionTest, TheUnwrittenSkyReadsAsTheFarPlaneAndNotAsTheEye)
     CnaTest::EngineLayer::HiDefDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_GLSL_SHADER_SOURCE(gd);
+    if (!RunsHlslProbe(gd) && !CnaTest::EngineLayer::RunsGlslShaderSource(gd))
+        GTEST_SKIP() << "this renderer has no prepass verdict shader dialect";
 
     DepthNormalPrepass prepass(gd, kSize, kSize);
     if (!prepass.isSupported(gd))
@@ -225,7 +294,11 @@ void main() {
     FragColor = vec4(d >= 0.99 ? 1.0 : 0.0, d <= 0.01 ? 1.0 : 0.0, 0.0, 1.0);
 }
 )";
-    ShaderEffect verdict(gd, kVertexSource, source);
+    ShaderEffect verdict(gd,
+                         RunsHlslProbe(gd) ? kHlslVertexSource : kVertexSource,
+                         RunsHlslProbe(gd)
+                             ? MakeHlslVerdictSource(prepass.isDepthPacked(), true)
+                             : source);
     ASSERT_TRUE(verdict.IsEffectValid());
 
     RenderTarget2D destination(gd, kSize, kSize);

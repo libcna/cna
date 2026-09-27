@@ -140,6 +140,24 @@ namespace
         void DrawFrame()
         {
             auto& device = getGraphicsDeviceProperty();
+            if (frame_ == 0 && renderer_ != nullptr && renderer_->IsSwapChainAvailableEXT())
+            {
+                RECT client{};
+                GetClientRect(Window(), &client);
+                const D3D12_RESOURCE_DESC desc = renderer_->GetCurrentBackBufferResourceEXT()->GetDesc();
+                int logicalWidth = 0;
+                int logicalHeight = 0;
+                renderer_->GetViewportSize(logicalWidth, logicalHeight);
+                std::printf("initial client=%ldx%ld backbuffer=%llux%u logical=%dx%d\n",
+                            client.right, client.bottom,
+                            static_cast<unsigned long long>(desc.Width), desc.Height,
+                            logicalWidth, logicalHeight);
+                if (desc.Width != static_cast<UINT64>(client.right) ||
+                    desc.Height != static_cast<UINT>(client.bottom))
+                    Fail("the first frame uses a stale swap-chain size before Present");
+                if (logicalWidth != client.right || logicalHeight != client.bottom)
+                    Fail("the first frame uses stale logical viewport dimensions before Present");
+            }
             if (frame_ == 50)
                 warm_ = SampleProcess();
 
@@ -191,6 +209,10 @@ namespace
                 pixel[2] != clear.getBProperty())
                 Fail("frame " + std::to_string(frame_) + ": back-buffer corner read " + std::to_string(pixel[0]) +
                      "," + std::to_string(pixel[1]) + "," + std::to_string(pixel[2]) + ", expected the clear colour");
+
+            renderer_->ReadBackbuffer(16, 16, 1, 1, pixel);
+            if (pixel[0] != 255 || pixel[1] != 0 || pixel[2] != 0)
+                Fail("frame " + std::to_string(frame_) + ": the drawn sprite moved or disappeared after resize");
         }
 
         void ChurnResources()

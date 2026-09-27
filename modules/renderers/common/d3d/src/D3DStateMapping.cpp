@@ -38,6 +38,19 @@ namespace CNA::Internal::Renderers::D3DCommon
         }
     }
 
+    D3D11_BLEND AlphaBlendToD3D11(int blend)
+    {
+        switch (static_cast<Blend>(blend))
+        {
+            case Blend::SourceColor:             return D3D11_BLEND_SRC_ALPHA;
+            case Blend::InverseSourceColor:      return D3D11_BLEND_INV_SRC_ALPHA;
+            case Blend::DestinationColor:        return D3D11_BLEND_DEST_ALPHA;
+            case Blend::InverseDestinationColor: return D3D11_BLEND_INV_DEST_ALPHA;
+            case Blend::SourceAlphaSaturation:   return D3D11_BLEND_ONE;
+            default:                             return BlendToD3D11(blend);
+        }
+    }
+
     D3D11_BLEND_OP BlendFunctionToD3D11(int blendFunction)
     {
         switch (static_cast<BlendFunction>(blendFunction))

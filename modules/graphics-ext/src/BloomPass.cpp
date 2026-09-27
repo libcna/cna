@@ -249,7 +249,6 @@ namespace CNA::Graphics {
                 RenderTarget2D* summed =
                     pool_.acquire(larger.width, larger.height, format, DepthFormat::None,
                                   kUpsampleSlotBase + static_cast<int>(index));
-                upsampleEffect_->Apply();
                 upsampleEffect_->SetUniformInt("uSmallerSampler", 1);
                 upsampleEffect_->SetTexture(1, *accumulated);
                 upsampleEffect_->SetUniformVec4(
@@ -258,6 +257,7 @@ namespace CNA::Graphics {
                     0.0f);
                 SetGlDualSamplerOrientation(
                     *upsampleEffect_, larger.target, accumulated);
+                upsampleEffect_->Apply();
                 fullscreen_->draw(larger.target, summed, upsampleEffect_.get(), larger.width,
                                   larger.height, linearClamp);
                 accumulated = summed;
@@ -265,11 +265,11 @@ namespace CNA::Graphics {
         }
 
         // ---- Composite the finished glow back onto the untouched scene ------------------------
-        combineEffect_->Apply();
         combineEffect_->SetUniformInt("uBloomSampler", 1);
         combineEffect_->SetTexture(1, *accumulated);
         combineEffect_->SetUniformVec4("uBloomParams", intensity, 0.0f, 0.0f, 0.0f);
         SetGlDualSamplerOrientation(*combineEffect_, context.source, accumulated);
+        combineEffect_->Apply();
         fullscreen_->draw(context.source, context.destination, combineEffect_.get(),
                           context.width, context.height, linearClamp);
     }

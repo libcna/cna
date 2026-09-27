@@ -5,7 +5,10 @@
 #include "CNA/Internal/Renderers/DirectX11/DirectX11Renderer.hpp"
 #include "CNA/TestSupport/CompiledEffectConformance.hpp"
 #include "CNA/TestSupport/TestPaths.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 
 #include <gtest/gtest.h>
 
@@ -19,7 +22,17 @@
 namespace
 {
     using CNA::Internal::Renderers::DirectX11::DirectX11Renderer;
+    using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
+    using Microsoft::Xna::Framework::Graphics::PresentationParameters;
+
+    struct HiDefGraphicsDevice final : GraphicsDevice
+    {
+        HiDefGraphicsDevice()
+            : GraphicsDevice(GraphicsAdapter::getDefaultAdapterProperty(),
+                             GraphicsProfile::HiDef, PresentationParameters()) {}
+    };
 
     std::vector<std::uint8_t> LoadEffect(const char* name)
     {
@@ -41,7 +54,7 @@ namespace
 
 TEST(DirectX11CompiledEffectTest, CapabilityAndPublicRuntimeContract)
 {
-    GraphicsDevice device;
+    HiDefGraphicsDevice device;
     (void) RendererOf(device);
     ASSERT_TRUE(CNA::TestSupport::SupportsCompiledEffects(device));
     CNA::TestSupport::RunCompiledEffectContract(device);
@@ -49,7 +62,7 @@ TEST(DirectX11CompiledEffectTest, CapabilityAndPublicRuntimeContract)
 
 TEST(DirectX11CompiledEffectTest, CompilerProducedStockEffectsParse)
 {
-    GraphicsDevice device;
+    HiDefGraphicsDevice device;
     DirectX11Renderer& renderer = RendererOf(device);
     for (const char* name : {"SpriteEffect.fxb", "BasicEffect.fxb", "AlphaTestEffect.fxb",
                              "DualTextureEffect.fxb", "EnvironmentMapEffect.fxb",
@@ -66,97 +79,97 @@ TEST(DirectX11CompiledEffectTest, CompilerProducedStockEffectsParse)
 
 TEST(DirectX11CompiledEffectDrawTest, SharedDrawMatrixContract)
 {
-    GraphicsDevice device;
+    HiDefGraphicsDevice device;
     CNA::TestSupport::RunCompiledEffectDrawContract(device);
 }
 
 TEST(DirectX11CompiledEffectDrawTest, SharedMultiStreamDrawContract)
 {
-    GraphicsDevice device;
+    HiDefGraphicsDevice device;
     CNA::TestSupport::RunCompiledEffectMultiStreamDrawContract(device);
 }
 
 TEST(DirectX11CompiledEffectDrawTest, SharedInstancingDrawContract)
 {
-    GraphicsDevice device;
+    HiDefGraphicsDevice device;
     CNA::TestSupport::RunCompiledEffectInstancingDrawContract(device);
 }
 
 TEST(DirectX11CompiledEffectDrawTest, SharedSpriteBatchContract)
 {
-    GraphicsDevice device;
+    HiDefGraphicsDevice device;
     CNA::TestSupport::RunCompiledEffectSpriteBatchContract(device);
 }
 
 TEST(DirectX11CompiledEffectDrawTest, SharedSpriteBatchMultiPassContract)
 {
-    GraphicsDevice device;
+    HiDefGraphicsDevice device;
     CNA::TestSupport::RunCompiledEffectSpriteBatchMultiPassContract(device);
 }
 
 TEST(DirectX11CompiledEffectDrawTest, SharedSpriteBatchTextureSlotContract)
 {
-    GraphicsDevice device;
+    HiDefGraphicsDevice device;
     CNA::TestSupport::RunCompiledEffectSpriteBatchTextureSlotContract(device);
 }
 
 TEST(DirectX11CompiledEffectDrawTest, SharedSamplerPixelContract)
 {
-    GraphicsDevice device;
+    HiDefGraphicsDevice device;
     CNA::TestSupport::RunCompiledEffectSamplerPixelContract(device);
 }
 
 TEST(DirectX11CompiledEffectDrawTest, SharedPassSelectionContract)
 {
-    GraphicsDevice device;
+    HiDefGraphicsDevice device;
     CNA::TestSupport::RunCompiledEffectPassSelectionContract(device);
 }
 
 TEST(DirectX11CompiledEffectDrawTest, SharedRenderTargetSourceContract)
 {
-    GraphicsDevice device;
+    HiDefGraphicsDevice device;
     CNA::TestSupport::RunCompiledEffectRenderTargetSourceContract(device);
 }
 
 TEST(DirectX11CompiledEffectDrawTest, SharedSpriteBatchRenderTargetSourceContract)
 {
-    GraphicsDevice device;
+    HiDefGraphicsDevice device;
     CNA::TestSupport::RunCompiledEffectSpriteBatchRenderTargetSourceContract(device);
 }
 
 TEST(DirectX11CompiledEffectDrawTest, SharedStockDrawIsolationContract)
 {
-    GraphicsDevice device;
+    HiDefGraphicsDevice device;
     CNA::TestSupport::RunCompiledEffectStockDrawIsolationContract(device);
 }
 
 TEST(DirectX11CompiledEffectDrawTest, SharedOrientationContract)
 {
-    GraphicsDevice device;
+    HiDefGraphicsDevice device;
     CNA::TestSupport::RunCompiledEffectOrientationContract(device);
 }
 
 TEST(DirectX11CompiledEffectDrawTest, SharedEffectSwitchingContract)
 {
-    GraphicsDevice device;
+    HiDefGraphicsDevice device;
     CNA::TestSupport::RunCompiledEffectSwitchingContract(device);
 }
 
 TEST(DirectX11CompiledEffectDrawTest, SharedCubeAndVolumeSamplerContract)
 {
-    GraphicsDevice device;
+    HiDefGraphicsDevice device;
     CNA::TestSupport::RunCompiledEffectCubeAndVolumeSamplerContract(device);
 }
 
 TEST(DirectX11CompiledEffectDrawTest, SharedManyDrawsContract)
 {
-    GraphicsDevice device;
+    HiDefGraphicsDevice device;
     CNA::TestSupport::RunCompiledEffectManyDrawsContract(device);
 }
 
 TEST(DirectX11CompiledEffectDrawTest, SharedTruncationContract)
 {
-    GraphicsDevice device;
+    HiDefGraphicsDevice device;
     CNA::TestSupport::RunCompiledEffectTruncationContract(device);
 }
 
