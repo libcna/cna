@@ -24,7 +24,12 @@ full GBV with only DRED page-fault reporting passes twice and DRED with GBV
 off passes (WIN11-0080/0087/0093). `cna-street`, `cna-car-simulator`, and
 `cna-gltf-viewer` have passed physical Intel application runs on both DirectX
 renderers. WIN11-0091 also closed a DX12 first-frame swap-chain size defect.
-The high-cardinality combined-diagnostics exception remains open.
+The high-cardinality combined-diagnostics exception remains open. On
+2026-09-27 the owner removed graphics CNAEXT from this Windows workstream's
+scope, while asking that the extension itself not be removed here. Existing
+modern results below remain historical evidence; subsequent work targets only
+classic DX11/DX12 and real application validation. The descriptor-capacity
+exception is a classic fixture and therefore remains in scope.
 
 After the WIN11-0091 first-frame fix was committed, both earlier DX12
 applications were rebuilt and rerun against CNA `a5854b9464d78859259f0551bc8a42fbf9ee2800`
@@ -3751,3 +3756,49 @@ cmake -S C:\rv\work\dx12_gbv_dred_repro -B C:\rv\build\dx12_gbv_dred_repro -G 'V
 cmake --build C:\rv\build\dx12_gbv_dred_repro --config Debug --parallel 12
 & C:\rv\work\private_desktop_awake.exe 600000 '"C:\rv\build\dx12_gbv_dred_repro\Debug\dx12_gbv_dred_repro.exe"'
 ```
+
+### WIN11-0098: Narrow the classic high-cardinality diagnostic boundary
+
+The owner excluded graphics CNAEXT from further work on 2026-09-27 without
+authorizing its removal here. `DescriptorCapacityContract` is registered by
+`cmake/DirectXParityTests.cmake` from
+`modules/graphics/examples/descriptor_capacity_contract_test.cpp` and uses
+classic `Texture2D`, `SamplerState`, `BasicEffect`, and `RenderTarget2D` API.
+It remains a classic DX12 validation exception. The modern CNAEXT feature
+matrix and tests are no longer acceptance gates for this Windows workstream.
+
+The external raw D3D12 differential was extended to give each render target
+the same shader-readable resting state as CNA: a frame-list transition to
+`RENDER_TARGET` before the draw, a transition to
+`PIXEL_SHADER_RESOURCE | NON_PIXEL_SHADER_RESOURCE` after the draw, and an
+immediate readback that returns to that readable state. On physical Intel
+`8086:46A6`, FL 12_1, with full GBV, DRED auto-breadcrumbs/page faults, and
+the debug layer, it again completed **1,338 nonzero readbacks**, including
+all 256 D draws, with **zero D3D12 warnings/errors**. Giving each sampled
+texture the `ALLOW_UNORDERED_ACCESS` flag used by CNA's ordinary Color texture
+resource also passed with the same count and diagnostics. These experiments
+exclude the missing render-target resting-state transitions and ordinary
+Color texture resource flag as sufficient explanations for the raw/CNA
+difference; the raw program remains an incomplete model of CNA.
+
+A temporary CNA diagnostic forced ordinary `Texture2D` Color resources to be
+created without UAV access. The original A+B+C+D classic fixture still
+removed the Intel device in D: **14/15**, `DXGI_ERROR_DEVICE_HUNG`, the same
+DRED page-fault VA `0x0000B80205DC0000`, and recently freed A/C Texture2D
+resources. Thus the classic failure does not require the optional modern UAV
+flag or descriptor. That temporary source change was reverted, the original
+fixture rebuilt, and the ordinary Intel debug+DRED, GBV-off control passed
+**15/15**. `git diff` shows no renderer or fixture change from this experiment.
+
+Evidence:
+`C:\rv\logs\dx12-raw-intel-gbv-dred-rt-readable-barriers.log`,
+`C:\rv\logs\dx12-raw-intel-gbv-dred-texture-uav-flag.log`,
+`C:\rv\logs\dx12-descriptor-no-uav-textures-intel-gbv-dred.log`, and
+`C:\rv\logs\dx12-descriptor-post-no-uav-diag-normal.log`.
+The external raw source SHA-256 after both additions is
+`367767D3A543CC9D2833366330A249C1616CB22271D6EAE14FB3FA3CFDD573F0`;
+its Debug executable SHA-256 is
+`D85F8EC6FFAFB20FB4D2A4152A644981BCFC767C4119E6984FF144D3B0108B61`.
+The full-GBV-plus-auto-breadcrumbs fault remains unclassified between a CNA
+resource lifetime error, Windows diagnostic instrumentation, and the Intel
+driver. No production setting or test expectation was changed.
