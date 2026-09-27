@@ -5,6 +5,7 @@
 #include "CNA/GraphicsRendererType.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/Gdi/GdiRenderer.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <SDL3/SDL.h>
@@ -37,7 +38,7 @@ int main()
     try
     {
         GraphicsRendererCreateArgs args;
-        args.surface.windowId = SDL_GetWindowID(window);
+        args.surface = CNA::Examples::SdlTestSurface(window);
         args.virtualWidth = 32;
         args.virtualHeight = 32;
         args.presentationMode = CnaPresentationMode::Stretch;

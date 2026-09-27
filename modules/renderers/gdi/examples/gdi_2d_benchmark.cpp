@@ -5,6 +5,7 @@
 #include "CNA/GraphicsRendererType.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/Gdi/GdiRenderer.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -81,7 +82,7 @@ namespace
             Measurements measurements;
             {
                 GraphicsRendererCreateArgs args;
-                args.surface.windowId = SDL_GetWindowID(window);
+                args.surface = CNA::Examples::SdlTestSurface(window);
                 args.virtualWidth = benchmarkCase.width;
                 args.virtualHeight = benchmarkCase.height;
                 args.presentationMode = CnaPresentationMode::Stretch;
