@@ -72,7 +72,7 @@ for identity in $identities; do
         # A missing external toolchain or SDK is this container's limitation, not CNA's.
         # The wordings below are this repository's own "you do not have the dependency" messages,
         # collected by running the sweep rather than guessed: a pinned external source tree
-        # (CNA_SKIA_ROOT, CNA_WICKED_ROOT), a sibling checkout (free-direct), a system dev package
+        # (CNA_SKIA_ROOT, CNA_WICKED_ROOT), a sibling checkout (easy-gl), a system dev package
         # (GLU, libshaderc), or a platform/toolchain this container is not.
         if grep -qiE 'could not find|not found|no such file or directory|requires -D|requires emscripten|requires (the )?windows|unsupported platform|only builds when|only.*(windows|emscripten|apple|macos)|missing sibling repository|needs glu|install lib|auto_fetch' "$log"; then
             reason="$(grep -iEm1 'could not find|not found|requires |unsupported platform|only builds when|missing sibling repository|needs glu|install lib' "$log" | sed 's/^ *//' | cut -c1-88)"

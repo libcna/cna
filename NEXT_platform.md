@@ -403,10 +403,12 @@ each, zero difference). The round trip is now checked before it is trusted.
 - **`sharp-runtime`, `easy-gl` and `meta-gl` are available as sibling repositories.** The three
   native EasyGL identities configure here; OPENGLES2/OPENGLES3 were fully built and tested and
   OPENGL33's production target was built. WEBGL1/WEBGL2 require an Emscripten toolchain, which is
-  unavailable. `free-direct` is absent, so `FREEDIRECT` cannot configure.
+  unavailable. (`FREEDIRECT`, which needed the `free-direct` sibling, was retired on 2026-09-27;
+  see `docs/removed-renderers.md`.)
 - **Vendored third-party is only** SDL, SDL_image, SDL_mixer, cgltf, enet, stb. Vulkan, DirectX,
-  Magnum, Skia, bgfx, WickedEngine, Diligent, LLGL, FNA3D, wgpu-native, Blend2D, ShivaVG and
-  PortableGL are all unavailable, so most of Phase 4's renderer families cannot be compiled here.
+  Magnum, Skia, bgfx, WickedEngine, Diligent, LLGL, FNA3D, wgpu-native, Blend2D and ShivaVG are all
+  unavailable, so most of Phase 4's renderer families cannot be compiled here. (`PORTABLEGL`, whose
+  header was fetched at configure time, was retired on 2026-09-27.)
 - No GPU and no display server; `SDL_VIDEODRIVER=dummy` is the only usable video driver.
 
 ---

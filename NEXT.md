@@ -5,6 +5,25 @@
 > shader support remain. Older task reports below describe the tree at their own dates.
 > See [the current API](docs/cnaext-engine-layer.md).
 
+## Renderer set reduced to 22 identities (`plans/plan_renderer_cleanup.md` `RRC-012`/`RRC-013`, 2026-09-27)
+
+`DIRECT2D`, `FREEDIRECT` and `PORTABLEGL` were removed as an intentional, permanent scope
+reduction: their implementation families, the PortableGL download pin, the `../free-direct` sibling
+checkout, the Direct2D Wine/Proton tooling and CI leg, their tests and their documents. CNA now has
+**22 public renderer identities over 18 implementation families**. The three are refused by name at
+configure time on every selection route; their C ABI values 16, 21 and 46 are permanently reserved,
+`CNA_GRAPHICS_RENDERER_MAXIMUM` is 44 (`SVG_DOM`), and the C ABI is `0.31.0`. The SDL3 renderer
+allowlist is now `sdl-renderer`, `sdl-gpu` and `fna3d`. The record is `docs/removed-renderers.md`.
+
+- `GDI` and `SOFTWARE` were not modified, and no shared presentation or CPU-raster code was removed.
+- **`GDI` does not currently link**, independently of this change: `SoftwareRenderer2D.cpp`, which
+  `GDI` compiles with `CNA_SOFTWARE_2D_ONLY`, calls helpers that are defined only outside that mode
+  (since `8465377b1`/`0f213ebaf`, 2026-09-08). Every GDI renderer unit compiles; its executables and
+  tests cannot be built until that is fixed.
+- `RRC-013` repaired `scripts/check_runtime_renderer_discipline.py`, whose identity parser had
+  matched nothing since `RRC-006` (2026-09-17) added the C ABI column to the identity table: its
+  registry-map and define-scope checks passed over zero identities. They now check all 22.
+
 ## SAMPLE-070 browser StorageDevice persistence (2026-09-26)
 
 The Role Playing Game port exposed a general browser StorageDevice defect: saves
@@ -1049,8 +1068,9 @@ task.
 > selections have a real playback transport and no decoder above it.
 >
 > **New production code must not include SDL or call `SDL_*`/`MIX_*` outside the platform SDL3/SDL2
-> implementations, the isolated audio mixer implementation, and the four audited renderer
-> exceptions (`sdl-renderer`, `sdl-gpu`, `fna3d`, `freedirect`).** Use `IPlatform` services,
+> implementations, the isolated audio mixer implementation, and the three audited renderer
+> exceptions (`sdl-renderer`, `sdl-gpu`, `fna3d`).** (`freedirect` was a fourth until it was
+> retired on 2026-09-27.) Use `IPlatform` services,
 > explicit capabilities/refusals, batched events and cached input snapshots. Run all **seven**
 > gates from `tools/platform/` — inventory, classification, renderer audit, `sdl_ratchet.py
 > --check --strict`, hot-path lint, non-production manifest and `check_contract.py`. The ratchet's

@@ -27,7 +27,8 @@ renderer count is not a goal.
 | RRC-009 | Final pass: remove `DrawMeshEXT`, the dead API the curation left with no implementer | ✅ |
 | RRC-010 | Final pass: audit `needsSurfacePresenter` and `TERMINAL` — decide, do not assume | ✅ |
 | RRC-011 | Remove retired renderer spikes and the rejected Three.js probe; repair current-tree references and retention policy | ✅ |
-| RRC-012 | Retire `DIRECT2D`, `FREEDIRECT` and `PORTABLEGL`: remove their families and every integration that existed only for them | ✅ |
+| RRC-012 | Retire `DIRECT2D`, `FREEDIRECT` and `PORTABLEGL`: remove their families and every integration that existed only for them | ✅ `0f96ea703` |
+| RRC-013 | Repair the runtime-discipline gate's identity parser; remove stale current-state references left by RRC-012 | ✅ |
 
 **2026-09-19 owner decision (`RRC-011`).** Retired renderer probes and the rejected Three.js
 candidate probe no longer belong in the current `spikes/` tree. The earlier archive-retention
@@ -842,7 +843,7 @@ before this change (from `MOD-RETIRE-1`) and are left for their own refresh.
 | Check | Result |
 |---|---|
 | `scripts/check_renderer_identities.py` | 22 identities / 18 families; 29 retired, values reserved, next free 52 |
-| `check_renderer_combinations.py`, `check_runtime_renderer_discipline.py` | pass (2 rules; 18 families) |
+| `check_renderer_combinations.py`, `check_runtime_renderer_discipline.py` | pass (2 rules; 18 families) -- but see `RRC-013`: the discipline gate's identity-dependent checks were checking zero identities |
 | `renderer_sdl_audit.py`, `sdl_inventory.py`, `sdl_ratchet.py`, `hot_path_lint.py`, `nonproduction_sdl_audit.py` | pass; `sdl_classify.py` fails on the pre-existing unclassified `SDL_TOUCH_MOUSEID` |
 | `cmake -P cmake/RendererIdentities.cmake` | refuses `DIRECT2D`, `freedirect`, `PortableGL`, `-DCNA_RENDERER_PORTABLEGL=ON` and `CNA_GRAPHICS_RENDERERS=HEADLESS;DIRECT2D` by name; accepts `GDI` |
 | `cmake-build-multi`, clean configure, `SDL_RENDERER;OPENGLES3;VULKAN;SOFTWARE;HEADLESS;STUB` | configures; `CnaTests` builds; 331 renderer-related cases on the private display: 317 pass, 14 skipped, 0 fail; 44 configuration/registry/ABI ctests pass |
@@ -857,3 +858,37 @@ Failures present both before and after, none caused here: `EasyGLRedundantStateT
 tests whose executables that tree does not build. Not validated: any Windows, macOS or browser
 run, and the `DIRECTX9/11/12`, `METAL`, `WEBGPU`, `SDL_GPU`, `OPENGL4`, `FNA3D` and Emscripten
 builds, none of whose sources changed.
+
+## RRC-013 — Repair the runtime-discipline gate; stale references
+
+**Found by review of `RRC-012`.** `scripts/check_runtime_renderer_discipline.py` reads the public
+identities from `check_renderer_identities.py`'s `IDENTITIES` table with a pattern that required
+each row to close right after the enum name. `RRC-006` (`d1a579e00`, 2026-09-17) added the C ABI
+value as a third field, and from then on the pattern matched nothing. `check_registry_map()` and
+`check_identity_define_scope()` iterated over an empty list and passed, and the gate printed
+"all 0 public identities reach the generated registry" -- in `RRC-006`..`RRC-011` and again in
+`RRC-012`'s own verification, which reported the gate as passing without noticing the zero.
+
+The parser now reads the first two fields of a row whatever follows them, the same way
+`check_renderer_combinations.py` reads that table, and an empty result is a hard error rather than
+a vacuous pass. Its `registry_map()` had a second, smaller defect: it read on past the map's closing
+parenthesis to the next `list(FIND`, so a comment after the map ("a CNA_GRAPHICS_RENDERER identity")
+became a 23rd entry. It now stops at the map's own `)` and strips comments, like the identity gate's
+copy of the same parser.
+
+**Verification.** The gate reports 22 public identities and the map has exactly 22 entries, none
+missing and none extra. Three defects injected in memory -- `VULKAN` removed from the map, `GDI`
+mapped to an accessor its descriptor unit does not define, and an `add_compile_definitions(CNA_RENDERER_SOFTWARE)`
+appended to `RendererSelection.cmake` -- are each reported; the pre-repair script reports nothing for
+the first and parses zero identities. The real tree passes.
+
+**Stale references.** `NEXT.md`'s platform rule named `freedirect` among the SDL renderer exceptions,
+and `NEXT_platform.md` described `FREEDIRECT` and PortableGL as unavailable in the environment rather
+than retired; both now say so. `scripts/check_renderer_configure_sweep.sh` used `free-direct` as its
+example of a missing sibling checkout, which is now `easy-gl` (whose check prints the same message).
+`NEXT.md` gained the ledger entry `RRC-012` should have added. Historical and tombstone mentions
+are unchanged.
+
+**Out of scope, recorded.** `GDI` does not link on this tree: `SoftwareRenderer2D.cpp`, compiled into
+`GDI` with `CNA_SOFTWARE_2D_ONLY`, calls helpers defined only outside that mode (since
+`8465377b1`/`0f213ebaf`). It predates `RRC-012` and is a separate task.

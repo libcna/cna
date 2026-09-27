@@ -116,7 +116,15 @@ def public_identities():
         block = re.search(r"IDENTITIES = \[(.*?)\n\]", handle.read(), re.S)
     if block is None:
         raise SystemExit("check_renderer_identities.py: IDENTITIES table not found")
-    return [name for name, _enum in re.findall(r'\("([A-Z0-9_]+)", "(\w+)"\)', block.group(1))]
+    # Rows are (cmake name, enum name, C ABI value). Only the first two fields are read, so a row
+    # that grows again still matches. RRC-006 added the third field while this pattern still
+    # required the row to close after the enum name, and from then until RRC-012 it matched
+    # nothing: the registry-map and define-scope checks below ran over zero identities and passed.
+    names = [name for name, _enum in re.findall(r'\("([A-Z0-9_]+)",\s*"(\w+)"', block.group(1))]
+    if not names:
+        raise SystemExit("check_renderer_identities.py: IDENTITIES table parsed to zero identities; "
+                         "this gate would check nothing")
+    return names
 
 
 def family_sources(suffixes=(".cpp", ".mm")):
@@ -231,11 +239,15 @@ def registry_map():
     """cmake/RendererRegistry.cmake's identity -> (namespace, accessor) table."""
     with open(REGISTRY_CMAKE, encoding="utf-8") as handle:
         text = handle.read()
-    block = re.search(r"set\(_map\n(.*?)\n\s*list\(FIND", text, re.S)
+    # Ends at the set()'s own closing parenthesis. Reading on to the next list(FIND) swallowed the
+    # comments and code after the map, and "CNA_GRAPHICS_RENDERER identity" in one of those comments
+    # became a 23rd identity.
+    block = re.search(r"set\(_map\n(.*?)\)\n", text, re.S)
     if block is None:
         raise SystemExit("cmake/RendererRegistry.cmake: the identity -> namespace _map was not found")
     mapping = {}
-    for identity, entry in re.findall(r"([A-Z][A-Z0-9_]*)\s+([A-Za-z][\w|]*)", block.group(1)):
+    body = re.sub(r"#[^\n]*", "", block.group(1))
+    for identity, entry in re.findall(r"([A-Z][A-Z0-9_]*)\s+([A-Za-z][\w|]*)", body):
         namespace, _, accessor = entry.partition("|")
         mapping[identity] = (namespace, accessor or "GetDescriptor")
     return mapping

@@ -118,7 +118,8 @@ Weston/Xwayland display (`tools/platform/run_gpu_tests_private.sh`) the renderer
 fallback, registry, descriptor, capability, cube-storage, glTF policy and cross-renderer contract
 suites ran 331 cases: 317 passed, 14 skipped by configuration, none failed. In the same tree the 29
 retired-selector refusals, the route and live-accept cases, the identity/combination/discipline
-gates and the C ABI header baseline all pass. The default `cmake-build-debug` (`OPENGLES3`, SDL3)
+gates and the C ABI header baseline all pass. (The discipline gate's identity parser was matching
+nothing at the time; `RRC-013` repaired it, and it passes over all 22 identities.) The default `cmake-build-debug` (`OPENGLES3`, SDL3)
 was rebuilt incrementally and its full CTest suite run before and after the change on the same
 display: 134 of 10,140 failed before, 120 of 10,144 after, and no test fails only after the change
 except `CnaInputTests`, an X11 `BadWindow` under parallel load that passes on its own. The C ABI
