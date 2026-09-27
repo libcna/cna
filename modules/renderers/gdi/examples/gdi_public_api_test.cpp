@@ -291,12 +291,15 @@ namespace
                          SameRectangle(device.getScissorRectangleProperty(), resizedBounds),
                      "GraphicsDevice.Reset restores full resized viewport and scissor state");
 
+        // The 45-degree sprite is a diamond centred on (6,2); its upper-left edge is x+y=5.172.
+        // Of pixel (3,1)'s standard D3D 4x samples (SOFTWARE-319), only (7/8,3/8) and (5/8,7/8)
+        // lie inside it, so two of four red samples resolve to 127.
         device.Clear(Color::Black);
         Draw(sprites, atlas, Rectangle(6, 2, 4, 4), Rectangle(0, 0, 1, 1), nullptr,
              0.78539816339f, Vector2(0.5f, 0.5f));
         std::vector<Color> pixels = ReadBackbuffer(device, kResizedWidth, kResizedHeight);
         ok &= Expect(SameColor(PixelAt(pixels, kResizedWidth, 3, 1),
-                                     Color(63, 0, 0, 255), 1),
+                                     Color(127, 0, 0, 255), 1),
                      "public 4x MSAA reset resolves fractional SpriteBatch edge coverage");
 
         PresentationParameters unsupported = applied.Clone();
@@ -343,8 +346,9 @@ int main()
         parameters.setDeviceWindowHandleProperty(
             reinterpret_cast<PresentationParameters::IntPtr>(window));
 
+        // HiDef: GetBackBufferData, which observes every backbuffer result, is refused under Reach.
         GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(),
-                              GraphicsProfile::Reach, parameters);
+                              GraphicsProfile::HiDef, parameters);
         SpriteBatch sprites(device);
         Texture2D atlas(device, 2, 2, false, SurfaceFormat::Color);
 

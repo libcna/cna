@@ -238,8 +238,9 @@ int main()
         parameters.setBackBufferHeightProperty(kHeight);
         parameters.setDeviceWindowHandleProperty(
             reinterpret_cast<PresentationParameters::IntPtr>(window));
+        // HiDef: GetBackBufferData, which observes the backbuffer mask, is refused under Reach.
         GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(),
-                              GraphicsProfile::Reach, parameters);
+                              GraphicsProfile::HiDef, parameters);
 
         bool ok = true;
         ok &= Expect(CNA::getCurrentGraphicsRendererType() == CNA::GraphicsRendererType::Gdi,

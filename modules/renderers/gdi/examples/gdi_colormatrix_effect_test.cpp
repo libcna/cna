@@ -95,7 +95,8 @@ int main()
         parameters.setBackBufferHeightProperty(4);
         parameters.setDeviceWindowHandleProperty(
             reinterpret_cast<PresentationParameters::IntPtr>(window));
-        GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
+        // HiDef: GetBackBufferData, which observes the effect's output, is refused under Reach.
+        GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
         if (CNA::getCurrentGraphicsRendererType() != CNA::GraphicsRendererType::Gdi)
         {
             std::fprintf(stderr, "ColorMatrixEffect integration test was not built for GDI.\n");

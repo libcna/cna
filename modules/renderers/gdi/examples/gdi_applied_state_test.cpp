@@ -17,7 +17,6 @@
 
 #include <cstdio>
 #include <exception>
-#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -131,20 +130,19 @@ namespace
         ok &= Expect(SameColor(lastMip, mipColor),
                      "reported three-level target is backed by a readable generated 1x1 mip");
 
-        bool rejectedUnsupportedFormat = false;
-        try
-        {
-            RenderTarget2D unsupported(device, 2, 2, false, SurfaceFormat::Bgr565,
-                                       DepthFormat::None, 0,
-                                       RenderTargetUsage::DiscardContents);
-            (void)unsupported;
-        }
-        catch (const std::runtime_error&)
-        {
-            rejectedUnsupportedFormat = true;
-        }
-        ok &= Expect(rejectedUnsupportedFormat,
-                     "RenderTarget2D rejects a non-RGBA8 format instead of reporting false storage");
+        // SOFTWARE-216: like XNA, an unavailable preferred format falls back to Color rather than
+        // throwing. The target must then report Color, and a value 5:6:5 storage cannot hold
+        // must read back exactly, so the reported format is the real storage.
+        RenderTarget2D substituted(device, 2, 2, false, SurfaceFormat::Bgr565,
+                                   DepthFormat::None, 0,
+                                   RenderTargetUsage::PreserveContents);
+        const Color precise(17, 33, 65, 128);
+        device.SetRenderTarget(&substituted);
+        device.Clear(precise);
+        device.SetRenderTarget(nullptr);
+        ok &= Expect(substituted.getFormatProperty() == SurfaceFormat::Color &&
+                         SameColor(ReadTargetPixel(substituted), precise),
+                     "RenderTarget2D substitutes RGBA8 for a Bgr565 request and reports it");
         return ok;
     }
 
@@ -206,8 +204,9 @@ int main()
         requested.setDeviceWindowHandleProperty(
             reinterpret_cast<PresentationParameters::IntPtr>(window));
 
+        // HiDef: GetBackBufferData, which checks the applied storage, is refused under Reach.
         GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(),
-                              GraphicsProfile::Reach, requested);
+                              GraphicsProfile::HiDef, requested);
         bool ok = true;
         ok &= ExerciseBackbufferState(device);
         ok &= ExerciseAppliedRenderTargetState(device);

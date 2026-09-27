@@ -146,9 +146,12 @@ namespace
                 ShaderEffect effect(device, "void main() {}", "void main() {}");
                 (void)effect;
             });
+        // The public constructor refuses on the device's capability answer (OcclusionQuery=false)
+        // before it asks the renderer for a query, so GDI's own refusal is never reached here;
+        // ExerciseDirectRendererBoundary checks that refusal directly.
         ok &= ExpectNotSupported(
             "OcclusionQuery construction fails immediately with NotSupportedException",
-            "occlusion queries", [&]
+            "OcclusionQuery is not supported by the active graphics profile and renderer", [&]
             {
                 OcclusionQuery query(device);
                 (void)query;
@@ -412,8 +415,10 @@ int main()
 
         bool ok = true;
         {
+            // HiDef: Reach refuses a 32-bit IndexBuffer itself, so only under HiDef does that
+            // public path reach GDI's own unsupported-feature refusal.
             GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(),
-                                  GraphicsProfile::Reach, parameters);
+                                  GraphicsProfile::HiDef, parameters);
             ok &= Expect(!device.SupportsCapability(CNA::GraphicsCapability::ThreeD),
                          "GDI continues to report ThreeD=false");
             ok &= Expect(!device.SupportsCapability(CNA::GraphicsCapability::Texture3D) &&

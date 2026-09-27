@@ -564,9 +564,11 @@ namespace
         renderer.Clear(1.0f, 0.0f, 0.0f, 1.0f);
         ok &= ExpectPixel("resized backbuffer", ReadPixel(renderer, 15, 7), red);
 
-        // Letterbox transforms use the same presentation geometry as Present().
+        // Letterbox transforms use the same presentation geometry as Present(). The renderer's
+        // surface is a snapshot (PLAT-74), so the resize reaches it only through OnSurfaceChanged.
         ok &= Expect(SDL_SetWindowSize(window, 64, 64), "SDL_SetWindowSize failed.");
         ok &= Expect(SDL_SyncWindow(window), "SDL_SyncWindow failed.");
+        renderer.OnSurfaceChanged(CNA::Examples::SdlTestSurface(window));
         renderer.SetPresentationMode(static_cast<int>(CnaPresentationMode::Letterbox));
         float windowX = 0.0f;
         float windowY = 0.0f;
@@ -633,6 +635,7 @@ namespace
         // use the conservative full-frame path.
         ok &= Expect(SDL_SetWindowSize(window, 16, 8), "SDL_SetWindowSize for dirty present failed.");
         ok &= Expect(SDL_SyncWindow(window), "SDL_SyncWindow for dirty present failed.");
+        renderer.OnSurfaceChanged(CNA::Examples::SdlTestSurface(window));
         renderer.SetPresentationMode(static_cast<int>(CnaPresentationMode::Stretch));
         renderer.Clear(0.0f, 0.0f, 0.0f, 1.0f);
         renderer.Present();
@@ -655,8 +658,10 @@ namespace
                           linearFilteredPixel);
 
         // GDI-025: only an explicit request for four samples opts into CPU MSAA.  A rotated
-        // opaque sprite leaves a predictable fractional edge coverage after the sample resolve;
-        // the 2x2 grid has one covered sample at this chosen edge pixel, so red resolves to 63.
+        // opaque sprite leaves a predictable fractional edge coverage after the sample resolve.
+        // The sprite is a diamond centred on (6,2) whose upper-left edge is x+y=5.172; of this
+        // edge pixel's standard D3D 4x samples (SOFTWARE-319), only (7/8,3/8) and (5/8,7/8) lie
+        // inside it, so two of four red samples resolve to 127.
         ok &= Expect(renderer.ApplyMultiSampleCount(2) == 0 && renderer.GetMultiSampleCount() == 0,
                      "GDI must honestly reject unsupported CPU MSAA sample counts.");
         ok &= Expect(renderer.ApplyMultiSampleCount(4) == 4 && renderer.GetMultiSampleCount() == 4,
@@ -671,7 +676,7 @@ namespace
         Draw(renderer, *atlas, Rectangle(6, 2, 4, 4), Rectangle(0, 0, 1, 1), Color::White,
              0.78539816339f, Vector2(0.5f, 0.5f));
         ok &= ExpectPixel("GDI 4x MSAA resolves fractional rotated edge", ReadPixel(renderer, 3, 1),
-                          Pixel{ 63, 0, 0, 255 }, 1);
+                          Pixel{ 127, 0, 0, 255 }, 1);
         ok &= Expect(renderer.ApplyMultiSampleCount(0) == 0 && renderer.GetMultiSampleCount() == 0,
                      "GDI must release optional CPU MSAA when zero samples are requested.");
         return ok;

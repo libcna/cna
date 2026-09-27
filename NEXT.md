@@ -19,9 +19,12 @@ allowlist is now `sdl-renderer`, `sdl-gpu` and `fna3d`. The record is `docs/remo
 - `GDI` did not link, independently of this change: the 2D-only build called lighting helpers
   defined only in the full build, and one of its shared units never received `CNA_SOFTWARE_2D_ONLY`
   at all. `plans/plan_gdi.md` `GDI-079` restored the compile and link, and `GDI-080` fixed four
-  test programs that still passed an incomplete surface: under Wine 12 of the 19 GDI cases pass,
-  and the other seven fail on assertions recorded as `GDI-081` (graphics-profile enforcement) and
-  `GDI-082` (letterbox and MSAA coverage).
+  test programs that still passed an incomplete surface: under Wine 12 of the 19 GDI cases passed,
+  and the other seven failed on assertions recorded as `GDI-081` (graphics-profile enforcement) and
+  `GDI-082` (letterbox and MSAA coverage). Both turned out to be tests older than the contracts
+  they check (`SOFTWARE-213`/`208`/`199`/`216` profile rules, `PLAT-74` surface snapshots,
+  `SOFTWARE-319` sample positions). With the tests corrected and no production change, all 19
+  pass under Wine; GDI has still not been run on native Windows.
 - `RRC-013` repaired `scripts/check_runtime_renderer_discipline.py`, whose identity parser had
   matched nothing since `RRC-006` (2026-09-17) added the C ABI column to the identity table: its
   registry-map and define-scope checks passed over zero identities. They now check all 22.

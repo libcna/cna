@@ -155,32 +155,46 @@ namespace
                               Pixel{maskCase.expectedRed, 0, 0, 255}, maskCase.message, 1);
         }
 
-        // The same rotated edge used by the public API oracle covers exactly one of the four
-        // 2x2-grid locations. Running it once per single-bit mask proves that geometric coverage
-        // and MultiSampleMask are intersected rather than either one replacing the other.
-        int nonzeroMasks = 0;
-        int resolvedRedSum = 0;
+        // The same rotated edge used by the public API oracle: a diamond centred on (6,2) whose
+        // upper-left edge is x+y=5.172. Pixel (3,1)'s standard D3D 4x samples (SOFTWARE-319) have
+        // x+y = 4.50, 5.25, 4.75 and 5.50, so exactly samples 1 and 3 are covered. Running it
+        // once per single-bit mask proves that geometric coverage and MultiSampleMask are
+        // intersected rather than either one replacing the other.
+        constexpr unsigned int expectedCoverage = 0xAu;
+        unsigned int observedCoverage = 0u;
+        bool coveredSamplesResolveToOneQuarter = true;
         for (int sample = 0; sample < 4; ++sample)
         {
             renderer.Clear(0.0f, 0.0f, 0.0f, 1.0f);
             SetOpaqueMask(renderer, 1u << sample);
             Draw(renderer, *atlas, Rectangle(6, 2, 4, 4), redSource,
                  0.78539816339f, Vector2(0.5f, 0.5f));
-            const int resolvedRed = ReadPixel(renderer, 3, 1)[0];
-            resolvedRedSum += resolvedRed;
-            nonzeroMasks += resolvedRed != 0 ? 1 : 0;
+            const Pixel resolved = ReadPixel(renderer, 3, 1);
+            if (resolved[0] != 0)
+            {
+                observedCoverage |= 1u << sample;
+                coveredSamplesResolveToOneQuarter &=
+                    std::abs(static_cast<int>(resolved[0]) - 63) <= 1 &&
+                    resolved[1] == 0 && resolved[2] == 0 && resolved[3] == 255;
+            }
         }
-        ok &= Expect(nonzeroMasks == 1 && std::abs(resolvedRedSum - 63) <= 1,
+        if (observedCoverage != expectedCoverage)
+        {
+            std::fprintf(stderr, "rotated-edge sample coverage: expected 0x%X, got 0x%X\n",
+                         expectedCoverage, observedCoverage);
+        }
+        ok &= Expect(observedCoverage == expectedCoverage && coveredSamplesResolveToOneQuarter,
                      "triangle coverage intersects the four individual sample-mask bits exactly");
 
-        // Wireframe deliberately remains the established one-pixel DDA line rasterizer. It emits
-        // every mask-enabled sample for each visited pixel; it does not claim subpixel line AA.
+        // With MultiSampleAntiAlias on, wireframe edges are one-pixel-wide footprints evaluated at
+        // the same four sample positions (SOFTWARE-315). Corner pixel (1,1) lies on the top and
+        // left edges and the TL-BR split diagonal, which together cover all four samples.
         renderer.ApplyRasterizerState(/*CullNone*/ 0, /*WireFrame*/ 1, false);
         renderer.Clear(0.0f, 0.0f, 0.0f, 1.0f);
         SetOpaqueMask(renderer, 0xFu);
         Draw(renderer, *atlas, Rectangle(1, 1, 5, 5), redSource);
         ok &= ExpectPixel(ReadPixel(renderer, 1, 1), red,
-                          "wireframe edge writes every enabled sample without claiming line AA");
+                          "wireframe corner covers every enabled sample");
         ok &= ExpectPixel(ReadPixel(renderer, 2, 4), black,
                           "wireframe still leaves the quad interior untouched");
 
