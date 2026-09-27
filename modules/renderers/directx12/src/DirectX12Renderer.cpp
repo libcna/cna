@@ -81,6 +81,35 @@ namespace CNA::Internal::Renderers::DirectX12
             return buf;
         }
 
+#if defined(_MSC_VER)
+        constexpr UINT DredHistoryIndex(UINT completed) noexcept
+        {
+            return completed % 65536u;
+        }
+
+        static_assert(DredHistoryIndex(65536u) == 0u);
+        static_assert(DredHistoryIndex(65537u) == 1u);
+
+        const char* DredOperationName(D3D12_AUTO_BREADCRUMB_OP op) noexcept
+        {
+            switch (op)
+            {
+                case D3D12_AUTO_BREADCRUMB_OP_DRAWINSTANCED: return "DrawInstanced";
+                case D3D12_AUTO_BREADCRUMB_OP_DRAWINDEXEDINSTANCED: return "DrawIndexedInstanced";
+                case D3D12_AUTO_BREADCRUMB_OP_EXECUTEINDIRECT: return "ExecuteIndirect";
+                case D3D12_AUTO_BREADCRUMB_OP_DISPATCH: return "Dispatch";
+                case D3D12_AUTO_BREADCRUMB_OP_COPYBUFFERREGION: return "CopyBufferRegion";
+                case D3D12_AUTO_BREADCRUMB_OP_COPYTEXTUREREGION: return "CopyTextureRegion";
+                case D3D12_AUTO_BREADCRUMB_OP_RESOLVESUBRESOURCE: return "ResolveSubresource";
+                case D3D12_AUTO_BREADCRUMB_OP_CLEARRENDERTARGETVIEW: return "ClearRenderTargetView";
+                case D3D12_AUTO_BREADCRUMB_OP_CLEARDEPTHSTENCILVIEW: return "ClearDepthStencilView";
+                case D3D12_AUTO_BREADCRUMB_OP_RESOURCEBARRIER: return "ResourceBarrier";
+                case D3D12_AUTO_BREADCRUMB_OP_WRITEBUFFERIMMEDIATE: return "WriteBufferImmediate";
+                default: return "Other";
+            }
+        }
+#endif
+
         const D3D12StorageBuffer& RequireIndirectBuffer(
             const IStorageBufferRenderer& buffer, DirectX12Renderer* owner,
             int byteOffset, std::size_t commandBytes)
@@ -909,10 +938,14 @@ namespace CNA::Internal::Renderers::DirectX12
                     line += ", queue " + std::string(node->pCommandQueueDebugNameA);
                 else if (node->pCommandQueueDebugNameW)
                     line += ", queue " + NarrowAdapterDescription(node->pCommandQueueDebugNameW);
-                // The first operation that did not complete is the one the removal interrupted.
                 if (node->pCommandHistory != nullptr && completed < node->BreadcrumbCount)
-                    line += ", first incomplete op " +
-                            std::to_string(static_cast<int>(node->pCommandHistory[completed]));
+                {
+                    // DRED retains only the most recent 64K command history entries.
+                    const D3D12_AUTO_BREADCRUMB_OP op =
+                        node->pCommandHistory[DredHistoryIndex(completed)];
+                    line += ", next recorded op " + std::to_string(completed) + ": " +
+                            DredOperationName(op) + " (" + std::to_string(static_cast<int>(op)) + ")";
+                }
                 CNA::Logger::Error(line, CNA::LogCategory::RENDER);
             }
         }

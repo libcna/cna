@@ -31,6 +31,8 @@ applications were rebuilt and rerun against CNA `a5854b9464d78859259f0551bc8a42f
 (WIN11-0094). Their short Intel hardware runs passed with debug layer and DRED.
 WIN11-0095 confirmed that reducing readback frequency in the high-cardinality
 diagnostic case does not remove its full-GBV-plus-auto-breadcrumbs fault.
+WIN11-0096 made DRED breadcrumb output decode operation names and safely wrap
+the SDK's 64K command-history ring.
 
 ## Stable source and machine baseline
 
@@ -3660,3 +3662,30 @@ ABCD passed **15/15**, exit 0. No diagnostic source change remains. Logs:
 `C:\rv\logs\dx12-descriptor-abcd-intel-gbv-sparse-readback-progress.log`,
 `C:\rv\logs\dx12-descriptor-sparse-readback-diag-revert-build.log`, and
 `C:\rv\logs\dx12-descriptor-abcd-post-sparse-diag-normal.log`.
+
+### WIN11-0096: Decode and bound DRED breadcrumb history
+
+The DRED reporter previously printed only the numeric enum for the next
+recorded command and indexed `pCommandHistory[completed]` directly. Microsoft
+specifies that this command history retains only the most recent 65,536
+operations in a ring; when the completed counter exceeds that length, direct
+indexing can read beyond the history array during crash reporting. The
+reporter now indexes modulo 65,536, with compile-time checks at the wrap
+boundary, and prints names for common draw, copy, clear, dispatch, and barrier
+operations alongside their numeric enum values. It calls the value the
+"next recorded op" because DRED's counter may lag actual GPU progress. The
+SDK's `d3d12.h` defines enum 6 as `Dispatch` and 15 as `ResourceBarrier`.
+The documented ring behavior and breadcrumb caveats are at
+<https://learn.microsoft.com/en-us/windows/win32/direct3d12/use-dred>.
+
+The native VS2022 x64 target rebuilt successfully. A physical Intel
+full-GBV+DRED A+B+C+D reproduction still ended **14/15** with the same
+`DXGI_ERROR_DEVICE_HUNG` and page-fault VA, but now identified the next
+recorded operation on the debug layer's GBV queue as `Dispatch (6)` and on
+CNA's frame command list as `ResourceBarrier (15)`. This narrows the
+instrumented location, not the fault owner. An ordinary Intel debug+DRED
+control with GBV off passed **15/15**, including all 256 D draws. No
+rendering path or validation policy changed. Logs:
+`C:\rv\logs\dx12-dred-opnames-build.log`,
+`C:\rv\logs\dx12-dred-opnames-intel-gbv-repro.log`, and
+`C:\rv\logs\dx12-dred-opnames-normal-control.log`.
