@@ -20,9 +20,10 @@ DX12 base-instance drawing now passes native, custom ShaderEffect, and opt-in
 compiled-effect pixel tests, including divided instance streams (WIN11-0072).
 The large DX12 descriptor fixture under Intel GPU-based validation remains a recorded
 exception: disabling only GBV's resource-state checks makes its A+B+C+D history pass,
-while default full GBV still removes the device (WIN11-0080). `cna-street` has now
-passed day/night physical Intel runs on both DirectX renderers; the car simulator
-application ladder and that GBV exception remain open (WIN11-0085).
+while default full GBV still removes the device (WIN11-0080/0087). `cna-street`
+and `cna-car-simulator` have passed day/night physical Intel application runs
+on both DirectX renderers; the high-cardinality full-GBV exception remains
+open (WIN11-0085/0086/0088).
 
 ## Stable source and machine baseline
 
@@ -3277,6 +3278,89 @@ $env:CNA_D3D12_GPU_VALIDATION='0'
 & C:\rv\work\private_desktop_awake.exe 900000 '"C:\rv\build\cna-street-dx12\bin\Debug\cna-street.exe" --capture C:\rv\artifacts\cna-street-dx12-viewpoints --width 800 --height 480 --preset low --no-audio --no-overlay'
 & C:\rv\work\private_desktop_awake.exe 1800000 '"C:\rv\build\cna-street-dx11\bin\Debug\cna-street.exe" --benchmark baseline --frames 240 --night --width 1024 --height 640 --preset low --no-audio --no-overlay --screenshot C:\rv\artifacts\cna-street-dx11-night-240.png --benchmark-output C:\rv\artifacts\cna-street-dx11-night-240.jsonl'
 & C:\rv\work\private_desktop_awake.exe 1800000 '"C:\rv\build\cna-street-dx12\bin\Debug\cna-street.exe" --benchmark baseline --frames 240 --night --width 1024 --height 640 --preset low --no-audio --no-overlay --screenshot C:\rv\artifacts\cna-street-dx12-night-240.png --benchmark-output C:\rv\artifacts\cna-street-dx12-night-240.jsonl'
+```
+
+### WIN11-0086 and WIN11-0088: Validate cna-car-simulator on native DirectX hardware
+
+The public `libcna/cna-car-simulator` repository was cloned under
+`C:\rv\src\cna-car-simulator`, initially at `main`
+`5773baa5c7a32f0c85e96ab6f4a4bb91bf2feff5`. A separate local
+`win11-directx-validation` branch now has two Robert Vokac commits:
+`cc186fb5f63a7f157a48b56cacf2656f1656394f` corrects Windows MSVC
+Debug test time budgets, and `81380b56961b6a23bcb68934f880e8f5c1a0303b`
+makes the registered Windows smoke independent of user save/audio state and
+gives it the measured startup allowance. It was not pushed. The app uses
+classic XNA CNA only (`CNA_CNAEXT=OFF`) and nested `add_subdirectory` against
+the local CNA feature branch, with CNA code at `7b5b4209f` when built; later
+CNA commits through WIN11-0087 only changed this ledger. Both out-of-tree
+Visual Studio 2022 x64/v143 Debug builds passed, under
+`C:\rv\build\cna-car-simulator-dx11` and `-dx12`. Both used `WIN32`, NULL
+audio, SDL off, font source pipeline off, video off, and 12 bounded MSBuild
+parallel jobs. Disk had about 258 GiB free after the builds.
+
+The first DX11 CTest unit run hit its original 300 s watchdog and the first
+sample-map load check expected under 6 s while MSVC Debug measured 25.7 s
+during a concurrent build. Run alone, the same map load took 11.2 s. These
+were Windows Debug test time-budget defects, not graphics failures. The
+optimized-build 6 s assertion remains intact; MSVC Debug now uses a 60 s
+stall guard and the full Windows CTest unit suite a 3600 s watchdog. The
+registered Windows smoke now runs 3 frames at 640x360, low quality, with
+`--no-save --no-audio` and a 600 s timeout; other platforms retain their
+existing command and 120 s timeout. The emitted CTest JSON confirmed the
+actual command and both new limits.
+
+| Check | DX11 | DX12 |
+| --- | --- | --- |
+| Native Debug app and test targets | PASS | PASS |
+| XNA API/static, map generation, asset manifest, map validation | 4/4 PASS | 4/4 PASS |
+| Google Test unit cases | 302/302 outside `SampleMap` + 19/19 `SampleMap` = **321/321** | **321/321**, one full CTest run, 1624.05 s |
+| Registered private-desktop CTest `simulator_smoke` | PASS, 189.50 s | PASS, 299.21 s |
+| Fixed clear-day exterior, 3 frames at 640x360 | PASS, 178.41 s | PASS, 286.94 s |
+| Fixed rainy-night cockpit, 3 frames at 960x540 | PASS, 186.62 s | PASS, 294.98 s |
+| Town-route drive, 300 frames at 640x360 | PASS, 259.71 s | PASS, 343.31 s |
+
+Every GPU run was isolated on the private desktop. DX11 selected the physical
+DXGI hardware adapter `8086:46A6`, `software=0`, FL 11_1, with the D3D11
+debug layer enabled; it emitted 0 D3D warnings/errors. DX12 explicitly used
+`CNA_D3D12_ADAPTER=hardware`, selected Iris Xe `8086:46A6`, FL 12_1, with
+the D3D12 debug layer and DRED enabled, routine GBV off; it emitted 0
+warnings/errors and no DRED removal. No WARP fallback occurred. Both apps
+loaded the `lipova` map (17 roads, 70 lanes), built 1,920 terrain chunks and
+143 road batches, rendered cars, pedestrians, shadows and cockpit mirrors.
+The route benchmark reached about 37 km/h and reported exactly matching
+270-frame measured averages of 813.085 scene draw calls, 1,240,250 scene
+triangles, 20 traffic cars and 36 people alive. Its screenshots at frame 300
+match except for 3 pixels differing by one channel level. The clear-day
+pair differed at 5 such pixels; the rainy-night pair was pixel identical.
+These are measured comparisons, not newly imposed image tolerances. Captures
+and route benchmark JSON are under `C:\rv\artifacts\cna-car-simulator-*`.
+
+Five-second process samples during the route runs show bounded late values:
+DX11 final 12 active samples had working set 3.376–3.759 GiB and 533–535
+handles; DX12 final 12 had 5.697–5.852 GiB and 461–466 handles. DX12's
+observed peak working set was 5.944 GiB on this 16 GiB shared-memory GPU
+machine; substantial free RAM returned after exit. These Debug timings are
+diagnostic, not a release performance ranking. The app was tested with
+`--no-audio`; it does not opt into user-driven runtime resizing, so the
+application evidence covers two startup sizes while CNA's separate native
+Win32 tests cover dynamic resizing. Its registered smoke uses the private
+runner; running it on the live desktop is outside this evidence.
+
+Logs:
+`C:\rv\logs\cna-car-simulator-dx11-unit-nonmap-1.log`,
+`C:\rv\logs\cna-car-simulator-dx11-unit-samplemap-1.log`,
+`C:\rv\logs\cna-car-simulator-dx12-unit-ctest-1.log`, both
+`-registered-smoke-1.log`, both `-route300-1.log` and `-route300-memory.csv`,
+both `-day-smoke-1.log` and `-night-rain-cockpit-1.log`.
+
+```powershell
+cmake -S C:\rv\src\cna-car-simulator -B C:\rv\build\cna-car-simulator-dx11 -G 'Visual Studio 17 2022' -A x64 -DCARSIM_CNA_ROOT=C:\rv\src\cna -DCARSIM_SHARP_RUNTIME_ROOT=C:\rv\src\sharp-runtime -DCNA_PLATFORM=WIN32 -DCNA_AUDIO_PLATFORM=NULL -DCNA_ENABLE_SDL=OFF -DCNA_GRAPHICS_RENDERER=DIRECTX11 -DCNA_USE_CCACHE=OFF -DCNA_ENABLE_FONT_PIPELINE=OFF -DCARSIM_BUILD_TESTS=ON -DCARSIM_BUILD_TOOLS=ON
+# Repeat with a distinct -B ...-dx12 tree and -DCNA_GRAPHICS_RENDERER=DIRECTX12.
+cmake --build C:\rv\build\cna-car-simulator-dx11 --config Debug --target cna-car-simulator carsim_tests carsim-mapvalidate --parallel 12
+ctest --test-dir C:\rv\build\cna-car-simulator-dx12 -C Debug -R '^carsim_unit_tests$' --output-on-failure --parallel 1
+$env:CNA_D3D12_ADAPTER='hardware'; $env:CNA_D3D12_DEBUG_LAYER='1'; $env:CNA_D3D12_DRED='1'; $env:CNA_D3D12_GPU_VALIDATION='0'
+& C:\rv\work\private_desktop_awake.exe 900000 'ctest --test-dir C:\rv\build\cna-car-simulator-dx12 -C Debug -R "^simulator_smoke$" --output-on-failure'
+& C:\rv\work\private_desktop_awake.exe 1800000 '"C:\rv\build\cna-car-simulator-dx12\bin\Debug\cna-car-simulator.exe" --no-save --no-audio --lockstep --frames 300 --width 640 --height 360 --quality low --spawn square --route town --route-stay --traffic-warmup 20 --time 17:30 --time-scale 0 --weather cloudy --benchmark --benchmark-json C:\rv\artifacts\cna-car-simulator-dx12-route300.json --screenshot C:\rv\artifacts\cna-car-simulator-dx12-route300.png'
 ```
 
 ### WIN11-0087: Rule out stale freed shader-visible descriptors in the Intel GBV removal
