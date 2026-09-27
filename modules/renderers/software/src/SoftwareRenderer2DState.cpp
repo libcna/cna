@@ -566,6 +566,10 @@ namespace CNA::Internal::Renderers::Software
         {
             if (renderTargets[slot].IsRenderTargetCubeFace())
             {
+#ifdef CNA_SOFTWARE_2D_ONLY
+                throw std::runtime_error(
+                    "Software's GDI 2D compilation unit does not support RenderTargetCube.");
+#else
                 nextCube[static_cast<std::size_t>(slot)] =
                     dynamic_cast<SoftwareRenderTargetCubeRenderer*>(
                         renderTargets[slot].GetRenderTargetCube());
@@ -573,6 +577,7 @@ namespace CNA::Internal::Renderers::Software
                 if (nextCube[static_cast<std::size_t>(slot)] == nullptr)
                     throw std::runtime_error(
                         "SoftwareRenderer::SetRenderTargets: incompatible cube target.");
+#endif
             }
             else
             {
@@ -599,11 +604,13 @@ namespace CNA::Internal::Renderers::Software
                     next2D[index]->BindAsRenderTarget();
                     currentMrtFramebuffers_[index] = &next2D[index]->Framebuffer();
                 }
+#ifndef CNA_SOFTWARE_2D_ONLY
                 else
                 {
                     currentMrtFramebuffers_[index] =
                         &nextCube[index]->BindForMrt(nextFaces[index], slot == 0);
                 }
+#endif
                 ++currentMrtCount_;
             }
         }

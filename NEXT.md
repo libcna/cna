@@ -16,10 +16,10 @@ configure time on every selection route; their C ABI values 16, 21 and 46 are pe
 allowlist is now `sdl-renderer`, `sdl-gpu` and `fna3d`. The record is `docs/removed-renderers.md`.
 
 - `GDI` and `SOFTWARE` were not modified, and no shared presentation or CPU-raster code was removed.
-- **`GDI` does not currently link**, independently of this change: `SoftwareRenderer2D.cpp`, which
-  `GDI` compiles with `CNA_SOFTWARE_2D_ONLY`, calls helpers that are defined only outside that mode
-  (since `8465377b1`/`0f213ebaf`, 2026-09-08). Every GDI renderer unit compiles; its executables and
-  tests cannot be built until that is fixed.
+- `GDI` did not link, independently of this change: the 2D-only build called lighting helpers
+  defined only in the full build, and one of its shared units never received `CNA_SOFTWARE_2D_ONLY`
+  at all. `plans/plan_gdi.md` `GDI-079` restored the compile and link; running the executables
+  under Wine still fails at device creation and is open as `GDI-080`.
 - `RRC-013` repaired `scripts/check_runtime_renderer_discipline.py`, whose identity parser had
   matched nothing since `RRC-006` (2026-09-17) added the C ABI column to the identity table: its
   registry-map and define-scope checks passed over zero identities. They now check all 22.

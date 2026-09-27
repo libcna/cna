@@ -1517,21 +1517,10 @@ namespace CNA::Internal::Renderers::Software
             return (lambda > 0.0f) ? lambda : 0.0f;
         }
 
-#ifndef CNA_SOFTWARE_2D_ONLY
-        /// SOFTWARE-82: applies a column-major 4x4 matrix (GpuDrawParams::worldColMajor's own
-        /// layout, and SkinnedEffect's boneTransforms per-bone entries) to a vector using the
-        /// standard column-vector convention `v' = M*v` -- deliberately NOT going through CNA's
-        /// own Matrix type (which is row-major/row-vector), to avoid a transpose round-trip for
-        /// data that already arrives in exactly this flat, column-major layout. `w=1` applies
-        /// translation (for a position); `w=0` ignores it (for a direction/normal).
-        Vector3 ApplyAffineColumnMajor(const float* m, const Vector3& v, float w)
-        {
-            return Vector3(
-                m[0] * v.X + m[4] * v.Y + m[8]  * v.Z + m[12] * w,
-                m[1] * v.X + m[5] * v.Y + m[9]  * v.Z + m[13] * w,
-                m[2] * v.X + m[6] * v.Y + m[10] * v.Z + m[14] * w);
-        }
-
+        // WriteShadedFragment below is compiled into the 2D-only build GDI uses as well
+        // (SoftwareRenderer2D.cpp, CNA_SOFTWARE_2D_ONLY), and it reads these helpers, so they
+        // stay outside the 3D-only region. The vertex-stage preparation that also uses them does
+        // not, and remains inside it.
         [[nodiscard]] Vector3 NormalizeOrZero(const Vector3& value)
         {
             const float lengthSquared = value.X * value.X + value.Y * value.Y +
@@ -1541,36 +1530,6 @@ namespace CNA::Internal::Renderers::Software
             const float inverseLength = 1.0f / std::sqrt(lengthSquared);
             return Vector3(value.X * inverseLength, value.Y * inverseLength,
                            value.Z * inverseLength);
-        }
-
-        /// SOFTWARE-113: transforms a normal with transpose(inverse(World3x3)). The cofactor
-        /// layout is the same column-major representation EasyGL uploads to its stock shaders.
-        [[nodiscard]] Vector3 TransformWorldNormal(const float* world, const Vector3& normal)
-        {
-            const float a = world[0], d = world[1], g = world[2];
-            const float b = world[4], e = world[5], h = world[6];
-            const float c = world[8], f = world[9], i = world[10];
-            const float determinant =
-                a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
-            const float inverseDeterminant = determinant != 0.0f ? 1.0f / determinant : 0.0f;
-            const float normalMatrix[9] = {
-                (e * i - f * h) * inverseDeterminant,
-                -(b * i - c * h) * inverseDeterminant,
-                (b * f - c * e) * inverseDeterminant,
-                -(d * i - f * g) * inverseDeterminant,
-                (a * i - c * g) * inverseDeterminant,
-                -(a * f - c * d) * inverseDeterminant,
-                (d * h - e * g) * inverseDeterminant,
-                -(a * h - b * g) * inverseDeterminant,
-                (a * e - b * d) * inverseDeterminant,
-            };
-            return NormalizeOrZero(Vector3(
-                normalMatrix[0] * normal.X + normalMatrix[3] * normal.Y +
-                    normalMatrix[6] * normal.Z,
-                normalMatrix[1] * normal.X + normalMatrix[4] * normal.Y +
-                    normalMatrix[7] * normal.Z,
-                normalMatrix[2] * normal.X + normalMatrix[5] * normal.Y +
-                    normalMatrix[8] * normal.Z));
         }
 
         [[nodiscard]] bool UsesClassicEffectLighting(const GpuDrawParams& params)
@@ -1587,16 +1546,6 @@ namespace CNA::Internal::Renderers::Software
             return !params.lightingEnabled && !params.envMapping && !params.skinned && !params.pbr &&
                    !params.customEffectRequested && params.customEffectRenderer == nullptr &&
                    params.compiledEffectRuntime == nullptr;
-        }
-
-        void PrepareUnlitCommonDiffuseVertex(ClipVertex& vertex, const GpuDrawParams& params)
-        {
-            if (!UsesUnlitCommonDiffuseOutput(params))
-                return;
-            vertex.r = std::clamp(vertex.r * params.diffuseColor[0], 0.0f, 1.0f);
-            vertex.g = std::clamp(vertex.g * params.diffuseColor[1], 0.0f, 1.0f);
-            vertex.b = std::clamp(vertex.b * params.diffuseColor[2], 0.0f, 1.0f);
-            vertex.a = std::clamp(vertex.a * params.diffuseColor[3], 0.0f, 1.0f);
         }
 
         struct ClassicLightingResult
@@ -1660,6 +1609,61 @@ namespace CNA::Internal::Renderers::Software
                     specularSum[channel] * params.specularColor[channel];
             }
             return result;
+        }
+
+#ifndef CNA_SOFTWARE_2D_ONLY
+        /// SOFTWARE-82: applies a column-major 4x4 matrix (GpuDrawParams::worldColMajor's own
+        /// layout, and SkinnedEffect's boneTransforms per-bone entries) to a vector using the
+        /// standard column-vector convention `v' = M*v` -- deliberately NOT going through CNA's
+        /// own Matrix type (which is row-major/row-vector), to avoid a transpose round-trip for
+        /// data that already arrives in exactly this flat, column-major layout. `w=1` applies
+        /// translation (for a position); `w=0` ignores it (for a direction/normal).
+        Vector3 ApplyAffineColumnMajor(const float* m, const Vector3& v, float w)
+        {
+            return Vector3(
+                m[0] * v.X + m[4] * v.Y + m[8]  * v.Z + m[12] * w,
+                m[1] * v.X + m[5] * v.Y + m[9]  * v.Z + m[13] * w,
+                m[2] * v.X + m[6] * v.Y + m[10] * v.Z + m[14] * w);
+        }
+
+        /// SOFTWARE-113: transforms a normal with transpose(inverse(World3x3)). The cofactor
+        /// layout is the same column-major representation EasyGL uploads to its stock shaders.
+        [[nodiscard]] Vector3 TransformWorldNormal(const float* world, const Vector3& normal)
+        {
+            const float a = world[0], d = world[1], g = world[2];
+            const float b = world[4], e = world[5], h = world[6];
+            const float c = world[8], f = world[9], i = world[10];
+            const float determinant =
+                a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+            const float inverseDeterminant = determinant != 0.0f ? 1.0f / determinant : 0.0f;
+            const float normalMatrix[9] = {
+                (e * i - f * h) * inverseDeterminant,
+                -(b * i - c * h) * inverseDeterminant,
+                (b * f - c * e) * inverseDeterminant,
+                -(d * i - f * g) * inverseDeterminant,
+                (a * i - c * g) * inverseDeterminant,
+                -(a * f - c * d) * inverseDeterminant,
+                (d * h - e * g) * inverseDeterminant,
+                -(a * h - b * g) * inverseDeterminant,
+                (a * e - b * d) * inverseDeterminant,
+            };
+            return NormalizeOrZero(Vector3(
+                normalMatrix[0] * normal.X + normalMatrix[3] * normal.Y +
+                    normalMatrix[6] * normal.Z,
+                normalMatrix[1] * normal.X + normalMatrix[4] * normal.Y +
+                    normalMatrix[7] * normal.Z,
+                normalMatrix[2] * normal.X + normalMatrix[5] * normal.Y +
+                    normalMatrix[8] * normal.Z));
+        }
+
+        void PrepareUnlitCommonDiffuseVertex(ClipVertex& vertex, const GpuDrawParams& params)
+        {
+            if (!UsesUnlitCommonDiffuseOutput(params))
+                return;
+            vertex.r = std::clamp(vertex.r * params.diffuseColor[0], 0.0f, 1.0f);
+            vertex.g = std::clamp(vertex.g * params.diffuseColor[1], 0.0f, 1.0f);
+            vertex.b = std::clamp(vertex.b * params.diffuseColor[2], 0.0f, 1.0f);
+            vertex.a = std::clamp(vertex.a * params.diffuseColor[3], 0.0f, 1.0f);
         }
 
         void PrepareClassicLightingVertex(ClipVertex& vertex, const Vector3& position,
