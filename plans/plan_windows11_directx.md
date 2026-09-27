@@ -3885,3 +3885,17 @@ and ordinary Intel debug+DRED with GBV off passed **15/15**. No unbounded
 allocator or validation workaround was shipped. Logs:
 `C:\rv\logs\dx12-descriptor-no-reuse-no-growth-intel-gbv-dred.log` and
 `C:\rv\logs\dx12-descriptor-post-no-reuse-diag-normal.log`.
+
+### WIN11-0102: Exclude RTV/DSV descriptor reuse as a sufficient trigger
+
+The CPU RTV/DSV descriptor allocator was temporarily changed to assign only
+fresh indices. Its trace showed **zero CPU descriptor recycles**, nine RTV
+allocations, and zero extra CPU descriptor blocks in A+B+C+D. With full GBV,
+DRED and debug layer on physical Intel `8086:46A6`, A+B+C passed but D
+still ended **14/15**, `DXGI_ERROR_DEVICE_HUNG`, at the same DRED fault VA
+`0x0000B80205DC0000` with recently freed A/C Texture2D resources. Thus
+RTV/DSV descriptor-index reuse alone is not the trigger. The change was
+reverted, the original target rebuilt, and the ordinary Intel debug+DRED,
+GBV-off control passed **15/15**. Logs:
+`C:\rv\logs\dx12-cpu-descriptor-no-reuse-intel-gbv-dred.log` and
+`C:\rv\logs\dx12-descriptor-post-cpu-no-reuse-diag-normal.log`.
