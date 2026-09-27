@@ -3278,3 +3278,38 @@ $env:CNA_D3D12_GPU_VALIDATION='0'
 & C:\rv\work\private_desktop_awake.exe 1800000 '"C:\rv\build\cna-street-dx11\bin\Debug\cna-street.exe" --benchmark baseline --frames 240 --night --width 1024 --height 640 --preset low --no-audio --no-overlay --screenshot C:\rv\artifacts\cna-street-dx11-night-240.png --benchmark-output C:\rv\artifacts\cna-street-dx11-night-240.jsonl'
 & C:\rv\work\private_desktop_awake.exe 1800000 '"C:\rv\build\cna-street-dx12\bin\Debug\cna-street.exe" --benchmark baseline --frames 240 --night --width 1024 --height 640 --preset low --no-audio --no-overlay --screenshot C:\rv\artifacts\cna-street-dx12-night-240.png --benchmark-output C:\rv\artifacts\cna-street-dx12-night-240.jsonl'
 ```
+
+### WIN11-0087: Rule out stale freed shader-visible descriptors in the Intel GBV removal
+
+Microsoft documents that `CreateShaderResourceView(nullptr, &validDesc, slot)`
+creates a valid null descriptor, and that GBV can detect a shader descriptor
+referencing a deleted resource. To test the stale-descriptor hypothesis, a
+temporary change to `D3D12ShaderVisibleDescriptorAllocator::ReclaimCompleted`
+overwrote completed CBV/SRV/UAV slots with a valid null `Texture2D` SRV in both
+the staging and shader-visible heaps before returning them to the free list.
+No GPU wait, changed fixture expectation, or relaxed GBV mode was involved.
+The official API and GBV descriptions are
+<https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12device-createshaderresourceview>
+and <https://learn.microsoft.com/en-us/windows/win32/direct3d12/using-d3d12-debug-layer-gpu-based-validation>.
+
+The physical Intel `8086:46A6` run with D3D12 debug, DRED, and **full GBV**
+still passed A+B+C and removed the device in D. DRED again reported GPU VA
+`0x0000B802062F0000`, freed Texture2D resources `#1919` and `#1608`, and
+first incomplete application frame operation 15. The private runner exited
+124 after its 90-second limit. Thus clearing reusable descriptors does not
+resolve the GBV state-tracking/lifetime exception; the hypothesis was not
+accepted as a renderer fix. The temporary patch was removed, `git diff --check`
+and `git status --short` showed no renderer changes, and the original
+`cna_test_directx12_descriptor_capacity` binary was rebuilt. Logs:
+`C:\rv\logs\dx12-descriptor-null-reclaim-build-1.log`,
+`C:\rv\logs\dx12-descriptor-null-reclaim-intel-gbv-1.log`, and
+`C:\rv\logs\dx12-descriptor-null-reclaim-revert-build-1.log`.
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx12-debug --config Debug --target cna_test_directx12_descriptor_capacity --parallel 12
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='1'
+& C:\rv\work\private_desktop_awake.exe 90000 '"C:\rv\build\cna-win11-dx12-debug\Debug\cna_test_directx12_descriptor_capacity.exe" --legs ABCD'
+```
