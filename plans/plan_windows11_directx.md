@@ -3107,3 +3107,35 @@ $exe='C:\rv\build\cna-win11-dx12-debug\Debug\cna_test_directx12_descriptor_capac
 $commandLine='"'+$exe+'" --legs ABCD'
 & C:\rv\work\private_desktop_awake.exe 20000 $commandLine *> C:\rv\logs\dx12-descriptor-abcd-intel-gbv-retain-two-textures-diagnostic-1.log
 ```
+
+### WIN11-0082: Apply CNA-owned MSVC build policy when CNA is a subproject
+
+The first `cna-street` DX11 build, consuming this CNA checkout through
+`add_subdirectory(CNA_ROOT_DIR)`, failed in numerous CNA DirectX11 source
+files with MSVC `C2589`/`C2059` at `std::min`/`std::max`. Its configure log
+said `CNA: applied private compiler/linker support to 0 owned targets`,
+and the generated `cna_renderer_directx11.vcxproj` lacked `NOMINMAX`.
+The standalone DX11 tree had `NOMINMAX` and compiled. Root cause:
+`cmake/BuildPerformance.cmake` traversed and classified targets relative
+to top-level `CMAKE_SOURCE_DIR`, which is the *application* when CNA is
+added as a subproject. It now uses CMake's `CNA_SOURCE_DIR` for the CNA
+owned-target traversal and ownership test, including the same traversal
+used by opt-in IPO. This preserves top-level behavior and excludes the
+application and vendored targets from private CNA flags.
+
+Reconfiguring both native Visual Studio 2022 x64 MSVC Debug application
+trees reported **28 CNA-owned targets** rather than 0. The generated
+DX11 renderer project now contains `NOMINMAX`, and its prior failures
+disappeared. The complete `cna-street` DX11 target then built and linked
+on this CNA branch (the application separately needed WIN11-0083's stale
+generated WGSL literal split). The CMake correction is framework-owned;
+the WGSL output correction belongs to the application's own branch.
+Logs: `C:\rv\logs\cna-street-dx11-build-1.log`,
+`C:\rv\logs\cna-street-dx11-configure-after-root-fix.log`,
+`C:\rv\logs\cna-street-dx12-configure-1.log`, and
+`C:\rv\logs\cna-street-dx11-build-shader-rechunk.log`.
+
+```powershell
+cmake -S C:\rv\src\cna-street-win11 -B C:\rv\build\cna-street-dx11 -G 'Visual Studio 17 2022' -A x64 -T v143 -DCNA_STREET_RENDERER=DIRECTX11 -DCNA_ROOT_DIR=C:\rv\src\cna -DCNA_PLATFORM=WIN32 -DCNA_AUDIO_PLATFORM=NULL -DCNA_ENABLE_SDL=OFF -DCNA_ENABLE_VIDEO=OFF -DCNA_ENABLE_FONT_PIPELINE=OFF -DCNA_ENABLE_NET=OFF -DCNA_ENABLE_DRACO=OFF -DCNA_USE_CCACHE=OFF
+cmake --build C:\rv\build\cna-street-dx11 --config Debug --target cna-street --parallel 12
+```
