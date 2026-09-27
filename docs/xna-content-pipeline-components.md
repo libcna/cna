@@ -110,7 +110,7 @@ No properties.
 
 `Microsoft::Xna::Framework::Content::Pipeline::Processors::FontTextureProcessor`, declared in `modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/FontProcessors.hpp`.
 
-Defaults and the character mapping are measured (processor/FontTextureProcessor, fontprocessor/texture_character_for_index, /texture_first_character_set). What Process produces cannot be compared beyond its boundary, because SpriteFontContent publishes nothing: the two measured outcomes -- a delimited strip is accepted, a texture with no glyphs is refused with XNA's message -- are reproduced, and the glyph packing is CNA's own.
+Defaults and character mapping are measured (processor/FontTextureProcessor, fontprocessor/texture_character_for_index, /texture_first_character_set). The XNA-shaped processor façade still exposes no SpriteFontContent fields for direct comparison, but the registered `.contentproj` route (`XNAPP-139`) writes an XNB that can be compared: three ordinary sheets match genuine XNA byte-for-byte, while no-glyph and non-magenta-border sheets reproduce XNA's refusals. A valid 32-bit BMP of the same pixel sheet also produced the same reference XNB in the SAMPLE-090 current-head analysis.
 
 | Property | Type | XNA default | Configurable | Declared by | CNA |
 |---|---|---|---|---|---|

@@ -6,7 +6,7 @@ wrong, it is absent — or present as a deliberate divergence — and closing it
 than a repair.
 
 A row leaves this file when the capability lands, or when the owner records that CNA will not have
-it.
+it. Entry numbers are stable evidence references, so removing a closed entry leaves a number gap.
 
 Most of these surface through the `cna-samples` campaign, because porting a sample is what puts
 weight on a corner of the API nothing else reaches. The sample that found a gap is named, but a gap
@@ -48,30 +48,6 @@ can preserve XNA's alpha output and alpha sampling semantics, with native and br
 A GL red-only attachment by itself writes/samples red, not alpha, so GL_R8 alone is insufficient.
 The existing XNA-style preferred-format fallback remains the behavior when exact Alpha8 storage
 is unavailable; no sample-side substitution is needed.
-
----
-
-## 2. No `FontTextureProcessor`: a marker bitmap cannot become a `SpriteFont`
-
-**Found:** 2026-09-09, through SAMPLE-090 (BitmapFontMaker), whose row was cancelled the same day as a
-design-time WinForms tool. The gap is not cancelled with it: it is about the format, not the tool.
-
-XNA has two routes from authored content into a `SpriteFont`:
-
-| route | XNA processor | CNA |
-|---|---|---|
-| `.spritefont` XML → rasterise an installed TrueType face | `FontDescriptionProcessor` | **present** — `CNA::Content::Pipeline::FontDescription`, `modules/content-pipeline` |
-| a pre-rendered bitmap whose glyphs are separated by a marker colour | `FontTextureProcessor` | **absent** |
-
-The second route is how a project ships a hand-drawn or pixel-art font, or one rendered by a tool
-rather than by the pipeline. SAMPLE-090 is such a tool: it clears an atlas to `Color.Magenta` and
-blits each glyph over it with `CompositingMode.SourceCopy`, saving 32-bit ARGB BMP
-(`MainForm.cs:219`). But the gap is not about that tool — **any** bitmap produced by any means is
-equally unusable, because CNA has no importer for the format.
-
-**Closing it** means a processor that takes an image, splits glyphs on the marker colour, and emits
-the same `SpriteFont` the description route already emits. The runtime side needs nothing: the
-`SpriteFont` it would produce is the one CNA already loads.
 
 ---
 

@@ -1,4 +1,18 @@
 # NEXT.md
+
+## SAMPLE-090 FontTextureProcessor gap record corrected (2026-09-27)
+
+The cna-samples current-head re-analysis found that `misc/known_gaps.md` still claimed CNA
+could not import marker-separated BMP fonts. That was true when SAMPLE-090 was cancelled, but
+`XNAPP-139` (`a51a7650c`) subsequently implemented the complete `.contentproj`
+`FontTextureProcessor` route. Existing tests compare three ordinary sheets byte-for-byte with
+genuine XNA XNBs. A fresh valid 32-bit BMP probe in
+`../cna-samples` also builds through current `cna-content` to a byte-identical XNB. The
+old SAMPLE-090 Mono/libgdiplus export itself has no magenta separators and is not a valid
+Windows font output. The obsolete gap entry was removed; remaining entry IDs stay stable.
+No CNA implementation changed. SAMPLE-090's WinForms tool remains owner-cancelled.
+See `../cna-samples/samples/BitmapFontMaker/missing.md` and its retained evidence.
+
 > **Current graphics-extension scope (MOD-RETIRE-1, 2026-09-27):** The former modern
 > `CNA::Graphics` engine layer and optional `PbrMaterial` abstraction have been removed.
 > `AsciiPostProcessEffect`, `CRTEffect`, `DepthEffect`, `DebugDraw` and their small portable
