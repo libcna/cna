@@ -33,6 +33,9 @@ WIN11-0095 confirmed that reducing readback frequency in the high-cardinality
 diagnostic case does not remove its full-GBV-plus-auto-breadcrumbs fault.
 WIN11-0096 made DRED breadcrumb output decode operation names and safely wrap
 the SDK's 64K command-history ring.
+WIN11-0097 added an independent raw D3D12 differential that passes on the
+same Intel hardware with full GBV and DRED; the remaining CNA-specific
+high-cardinality fault is not classified as a general driver failure.
 
 ## Stable source and machine baseline
 
@@ -3689,3 +3692,62 @@ rendering path or validation policy changed. Logs:
 `C:\rv\logs\dx12-dred-opnames-build.log`,
 `C:\rv\logs\dx12-dred-opnames-intel-gbv-repro.log`, and
 `C:\rv\logs\dx12-dred-opnames-normal-control.log`.
+
+### WIN11-0097: Independent native D3D12 differential and further CNA isolation
+
+An out-of-repository C++23/MSVC v143 raw D3D12 program was created under
+`C:\rv\work\dx12_gbv_dred_repro`, built out of tree under
+`C:\rv\build\dx12_gbv_dred_repro` with the Visual Studio 17 2022 x64
+generator. It explicitly enumerates physical Intel `8086:46A6` and refuses
+software adapters, creates a feature-level 12_1 device, enables the D3D12
+debug layer, full GPU-based validation, DRED auto-breadcrumbs and page-fault
+reporting before device creation, and uses a fence before releasing resources.
+Its A/B/C/D-like workload creates hundreds of sampled 2x2 textures, uses
+multiple sampler descriptors, draws into a 2x2 render target, and reads that
+target back. The latest variant uses separate frame and immediate command
+lists, recycles SRV slots after each batch, recreates the render target
+between B/C/D, and binds a new constant-buffer upload for each draw. It
+completed **1,338 nonzero readbacks**, including all 256 D draws, exit 0,
+with **0 D3D12 debug warnings/errors** under full GBV+DRED. The final source
+SHA-256 is `61462D6E9592340B1D762FAADB705AE47D1D91FF81DED5B02D66359FF4A02321`;
+the final binary SHA-256 is
+`BE7F72E581BAFA99BD72D002F6F1EF883386CF6F21B36D1FB4D59A7D54826DA5`.
+The final run is `C:\rv\logs\dx12-raw-intel-gbv-dred-per-draw-constants.log`;
+earlier controls are `-abcd.log`, `-abcd-split-lists.log`,
+`-abcd-reuse-srv.log`, `-abcd-clean.log`, and `-target-churn.log` under the
+same `dx12-raw-intel-gbv-dred` prefix. One intermediate version had 1,024
+classified optimized-clear mismatch warnings (ID 820); the clear value was
+corrected before the final zero-warning control. This raw program is a
+**differential, not a full reproduction** of CNA's shader packages, effect
+lifetime, root signature, upload-ring layout, or descriptor-heap growth.
+Its pass rules out a general claim that full GBV plus DRED breadcrumbs always
+hangs this driver under an A+B+C+D-shaped workload; it does not prove CNA
+owns the remaining fault.
+
+Three temporary CNA experiments sharpened the boundary. Making all A/B/C/D
+draws use `DrawUserPrimitives` instead of a separate vertex buffer still
+passed C and removed the device in D with the same page-fault VA. Reusing
+one `BasicEffect` across all A/B/C/D instead of constructing one per draw
+still passed A/B/C and removed the device in D. Starting the CBV/SRV/UAV
+heap at 4,096 and the sampler heap at 64 eliminated heap growth during this
+fixture (`CNA_D3D12_DESCRIPTOR_TRACE=1` logged no growth), yet D again
+removed the device. These are negative controls, not proof that vertex,
+effect, or descriptor code is correct in every scenario. Logs:
+`C:\rv\logs\dx12-descriptor-userraw-intel-gbv-dred.log`,
+`C:\rv\logs\dx12-descriptor-cached-all-effects-intel-gbv-dred.log`, and
+`C:\rv\logs\dx12-descriptor-no-heap-growth-intel-gbv-dred.log`.
+Each temporary CNA source change was restored to `HEAD`, the original target
+rebuilt, and the ordinary Intel debug+DRED/GBV-off ABCD control passed
+**15/15**. The final control is
+`C:\rv\logs\dx12-descriptor-post-cached-all-effects-normal.log`; the other
+post-diagnostic controls are preserved beside it. No test expectation,
+renderer default, descriptor capacity, or validation setting was shipped as
+a workaround. The full-GBV-plus-auto-breadcrumbs CNA high-cardinality
+exception remains open with a narrower, framework-specific investigation
+boundary.
+
+```powershell
+cmake -S C:\rv\work\dx12_gbv_dred_repro -B C:\rv\build\dx12_gbv_dred_repro -G 'Visual Studio 17 2022' -A x64 -T v143
+cmake --build C:\rv\build\dx12_gbv_dred_repro --config Debug --parallel 12
+& C:\rv\work\private_desktop_awake.exe 600000 '"C:\rv\build\dx12_gbv_dred_repro\Debug\dx12_gbv_dred_repro.exe"'
+```
