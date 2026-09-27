@@ -35,7 +35,7 @@ if(CNA_PLATFORM STREQUAL "SDL3" AND CNA_AUDIO_PLATFORM STREQUAL "SDL2")
 endif()
 
 if(CNA_PLATFORM STREQUAL "SDL2" AND CNA_AUDIO_PLATFORM STREQUAL "SDL2")
-    set(_cna_renderers_with_direct_sdl3 SDL_RENDERER SDL_GPU FNA3D FREEDIRECT)
+    set(_cna_renderers_with_direct_sdl3 SDL_RENDERER SDL_GPU FNA3D)
     if(CNA_GRAPHICS_RENDERER IN_LIST _cna_renderers_with_direct_sdl3)
         message(FATAL_ERROR
             "CNA: CNA_PLATFORM=SDL2 and CNA_AUDIO_PLATFORM=SDL2 require a renderer without "

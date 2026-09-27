@@ -139,7 +139,7 @@ TEST(GraphicsRendererRegistryTest, LookupOfSomethingThisBuildDoesNotContainRetur
     EXPECT_EQ(nullptr, Registry::Find(std::string_view("NOT_A_RENDERER")));
     EXPECT_EQ(nullptr, Registry::Find(std::string_view("")));
 
-    for (int ordinal = 0; ordinal <= static_cast<int>(GraphicsRendererType::PortableGL); ++ordinal)
+    for (int ordinal = 0; ordinal <= static_cast<int>(GraphicsRendererType::SvgDom); ++ordinal)
     {
         const auto candidate = static_cast<GraphicsRendererType>(ordinal);
         if (Registry::Find(candidate) == nullptr)

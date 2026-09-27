@@ -42,12 +42,6 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
 #ifdef CNA_RENDERER_DIRECTX12
     ++enabled;
 #endif
-#ifdef CNA_RENDERER_DIRECT2D
-    ++enabled;
-#endif
-#ifdef CNA_RENDERER_FREEDIRECT
-    ++enabled;
-#endif
     // A genuine, previously-uncaught gap in the D3D9 branch (feature/dx9): no commit in this
     // file's own history ever added a D3D9 entry here (found 2026-07-16 while merging
     // feature/sdlgpu). The full unfiltered CnaTests suite was never run under
@@ -93,13 +87,6 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
     ++enabled;
 #endif
 #ifdef CNA_RENDERER_FNA3D
-    ++enabled;
-#endif
-
-    // The PORTABLEGL identity, registered here at the same time it was registered everywhere
-    // else -- the omission this whole comment block records is exactly what a new renderer keeps
-    // reproducing when only the non-test registries are updated.
-#ifdef CNA_RENDERER_PORTABLEGL
     ++enabled;
 #endif
 

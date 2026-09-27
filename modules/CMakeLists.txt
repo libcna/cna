@@ -439,8 +439,8 @@ set(_cna_framework_modules
     content-pipeline storage
     devices devices-ext graphics-ext gamer-services net phone)
 set(_cna_renderer_modules
-    canvas direct2d directx9 directx11 directx12 easygl fna3d freedirect gdi headless html-dom
-    metal opengl4 portablegl sdl-gpu sdl-renderer software stub svg-dom vulkan webgpu
+    canvas directx9 directx11 directx12 easygl fna3d gdi headless html-dom
+    metal opengl4 sdl-gpu sdl-renderer software stub svg-dom vulkan webgpu
     common/d3d common/mojoshader)
 string(JOIN "|" _cna_framework_module_pattern ${_cna_framework_modules})
 string(JOIN "|" _cna_renderer_module_pattern ${_cna_renderer_modules})

@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_direct2d.md D2D-129: the 2D half of the cross-renderer diagnostic. Issues one fixed corpus
-// of PUBLIC 2D commands and dumps the resulting 64x64 RGBA8 backbuffer, in exactly the format
+// The 2D half of the cross-renderer diagnostic. Issues one fixed corpus of PUBLIC 2D commands and
+// dumps the resulting 64x64 RGBA8 backbuffer, in exactly the format
 // cross_renderer_diagnostic_compare.cpp already reads -- so the existing comparator judges this
 // too and no second comparator exists to drift.
 //
 // The existing cross_renderer_diagnostic_scene.cpp cannot serve here: it draws a BasicEffect
-// triangle through a VertexBuffer, and Direct2D is a permanently 2D-only renderer that rejects
-// every one of those calls. This file is deliberately renderer-agnostic in the same way -- no
-// #ifdef, no renderer-specific include -- and is built once per renderer so the SAME source
-// produces one dump per renderer.
+// triangle through a VertexBuffer, which a 2D-only renderer rejects. This file is deliberately
+// renderer-agnostic in the same way -- no #ifdef, no renderer-specific include -- and is built
+// once per renderer so the SAME source produces one dump per renderer.
 //
 // What the corpus deliberately does NOT contain, and why, is the whitelist of known differences.
 // It is kept narrow on purpose: every construct below is one where two conforming 2D renderers may
@@ -17,16 +16,17 @@
 //
 //   * Linear filtering of a magnified sprite -- the exact filter kernel and its edge behavior are
 //     unspecified; every sprite here is point-sampled at an integer scale.
-//   * Mip selection and mip-linear blending -- Direct2D has authored levels and no implicit chain,
-//     EasyGL has a GL sampler chain; the selection rule is not a shared contract.
-//   * Anisotropic filtering, MSAA, Additive blending -- capability-dependent and reported false by
-//     Direct2D.
+//   * Mip selection and mip-linear blending -- the selection rule is not a shared contract between
+//     a renderer with only authored levels and one with a GL sampler chain.
+//   * Anisotropic filtering, MSAA, Additive blending -- capability-dependent; a 2D-only renderer
+//     may report them unsupported.
 //   * Rotation by a non-right angle -- the rasterized coverage of a rotated quad edge is
 //     implementation defined.
 //   * Non-opaque destinations -- the backbuffer's alpha handling at presentation differs; the
 //     corpus composites onto an opaque cleared background only.
 //
-// See docs/direct2d-easygl-differential.md for how to run it and for the tolerance rationale.
+// scripts/compare-easygl-vulkan-diagnostic.sh runs it for EasyGL and Vulkan; docs/vulkan-renderer.md
+// records the measured result.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"

@@ -54,17 +54,11 @@ namespace CNA
         /** @brief Direct3D 12. */
         DirectX12,
 
-        /** @brief Direct2D 1.1 (Windows, 2D-only). */
-        Direct2D,
-
         /** @brief HTML Canvas 2D (Emscripten). */
         Canvas,
 
         /** @brief HTML DOM elements composited by CSS (Emscripten). */
         HtmlDom,
-
-        /** @brief FreeDirect (DirectDraw via the ../free-direct sibling reimplementation). */
-        FreeDirect,
 
         /** @brief Direct3D 9. */
         DirectX9,
@@ -86,10 +80,7 @@ namespace CNA
         Fna3d,
 
         /** @brief SVG DOM (Emscripten only, 2D-only): SpriteBatch output as real SVG elements. */
-        SvgDom,
-
-        /** @brief PortableGL (rswinkle/PortableGL, CPU software OpenGL 3.x). */
-        PortableGL
+        SvgDom
     };
 
     /**
@@ -135,14 +126,10 @@ namespace CNA
         return GraphicsRendererType::DirectX11;
 #elif defined(CNA_RENDERER_DIRECTX12)
         return GraphicsRendererType::DirectX12;
-#elif defined(CNA_RENDERER_DIRECT2D)
-        return GraphicsRendererType::Direct2D;
 #elif defined(CNA_RENDERER_CANVAS)
         return GraphicsRendererType::Canvas;
 #elif defined(CNA_RENDERER_HTML_DOM)
         return GraphicsRendererType::HtmlDom;
-#elif defined(CNA_RENDERER_FREEDIRECT)
-        return GraphicsRendererType::FreeDirect;
 #elif defined(CNA_RENDERER_DIRECTX9)
         return GraphicsRendererType::DirectX9;
 #elif defined(CNA_RENDERER_SDL_GPU)
@@ -157,8 +144,6 @@ namespace CNA
         return GraphicsRendererType::Fna3d;
 #elif defined(CNA_RENDERER_SVG_DOM)
         return GraphicsRendererType::SvgDom;
-#elif defined(CNA_RENDERER_PORTABLEGL)
-        return GraphicsRendererType::PortableGL;
 #else
 #error "CNA: no CNA_RENDERER_* compile definition set -- graphics renderer selection (cmake/RendererSelection.cmake) is broken"
 #endif
@@ -196,10 +181,8 @@ namespace CNA
             case GraphicsRendererType::Stub:          return "STUB";
             case GraphicsRendererType::DirectX11:        return "DIRECTX11";
             case GraphicsRendererType::DirectX12:        return "DIRECTX12";
-            case GraphicsRendererType::Direct2D:     return "DIRECT2D";
             case GraphicsRendererType::Canvas:       return "CANVAS";
             case GraphicsRendererType::HtmlDom:      return "HTML_DOM";
-            case GraphicsRendererType::FreeDirect:           return "FREEDIRECT";
             case GraphicsRendererType::DirectX9:          return "DIRECTX9";
             case GraphicsRendererType::SdlGpu:        return "SDL_GPU";
             case GraphicsRendererType::OpenGL4:       return "OPENGL4";
@@ -207,7 +190,6 @@ namespace CNA
             case GraphicsRendererType::Metal:          return "METAL";
             case GraphicsRendererType::Fna3d:         return "FNA3D";
             case GraphicsRendererType::SvgDom:         return "SVG_DOM";
-            case GraphicsRendererType::PortableGL:    return "PORTABLEGL";
         }
         return "UNKNOWN";
     }
@@ -241,7 +223,7 @@ namespace CNA
             return true;
         };
 
-        for (int ordinal = 0; ordinal <= static_cast<int>(GraphicsRendererType::PortableGL); ++ordinal)
+        for (int ordinal = 0; ordinal <= static_cast<int>(GraphicsRendererType::SvgDom); ++ordinal)
         {
             const auto candidate = static_cast<GraphicsRendererType>(ordinal);
             if (equalsIgnoreCase(getGraphicsRendererName(candidate), name))

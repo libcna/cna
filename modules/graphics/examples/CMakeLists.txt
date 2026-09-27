@@ -198,7 +198,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         if(NOT _cna_house3d_renderers)
             set(_cna_house3d_renderers ${CNA_GRAPHICS_RENDERER})
         endif()
-        set(_cna_house3d_windowless HEADLESS SOFTWARE STUB PORTABLEGL)
+        set(_cna_house3d_windowless HEADLESS SOFTWARE STUB)
         # plans/plan_x11.md X11-0172: the smoke run also looks at what it drew -- two planes, the
         # nearer drawn first, must still show the nearer. It passed for months with a GL window
         # that had no depth buffer at all. Not for the renderers that keep no pixels to read back.

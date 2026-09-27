@@ -116,7 +116,7 @@ Consequences worth stating plainly:
   renderer refuses at selection time, deterministically, rather than crashing on a null handle.
 - **The "window" is the terminal viewport.** `IPlatformWindow::GetClientBounds()` returns
   `columns × cellWidth` by `rows × cellHeight` in virtual pixels. Resize arrives via `SIGWINCH`.
-- **Only CPU renderers are selectable.** `SOFTWARE`, `PORTABLEGL`, `HEADLESS`,
+- **Only CPU renderers are selectable.** `SOFTWARE`, `HEADLESS`,
   `STUB`. That is a capability answer, not a limitation to hide.
 
 ---

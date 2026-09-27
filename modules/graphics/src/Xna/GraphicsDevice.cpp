@@ -3883,7 +3883,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const auto& descriptor =
             activeDescriptor_ != nullptr ? *activeDescriptor_ : selectedDescriptor();
 
-        // No real window -- HEADLESS/SOFTWARE/STUB/PORTABLEGL, matching the constructor's own
+        // No real window -- HEADLESS/SOFTWARE/STUB, matching the constructor's own
         // needsVideoSubsystem check. GraphicsRendererCreateArgs::window stays nullptr;
         // UpdateViewportFromWindow() already falls back to the renderer's own GetViewportSize()
         // first and only touches the window if that yields nothing, and
@@ -5299,7 +5299,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // directly instead of routing through SetRenderTargets(). That skipped the null-renderer
         // check SetRenderTargets() already performs (RenderTarget2D::GetRenderTargetRenderer() is
         // null on a renderer that keeps IGraphicsRenderer's nullptr CreateRenderTarget2D() default,
-        // e.g. Stub/PortableGL/OpenGLES1/OpenGL1): `renderTarget ? renderTarget->GetRenderTargetRenderer()
+        // e.g. Stub): `renderTarget ? renderTarget->GetRenderTargetRenderer()
         // : nullptr` collapsed to the SAME nullptr the "unbind" call passes, so the renderer accepted
         // it as an ordinary restore-backbuffer request instead of refusing an unsupported binding --
         // while this method still recorded the target as bound and reset the viewport/scissor to its

@@ -191,7 +191,7 @@ using ConditionalLoggerRoute = void (*)(std::string_view, bool);
 
 // Every public renderer identity, paired explicitly so neither side depends on the other's
 // declaration order.
-constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererType>, 25>
+constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererType>, 22>
     RendererIdentities{{
         {CNA_GRAPHICS_RENDERER_SDL_RENDERER, CNA::GraphicsRendererType::SdlRenderer},
         {CNA_GRAPHICS_RENDERER_OPENGLES2, CNA::GraphicsRendererType::OpenGLES2},
@@ -206,10 +206,8 @@ constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererTy
         {CNA_GRAPHICS_RENDERER_STUB, CNA::GraphicsRendererType::Stub},
         {CNA_GRAPHICS_RENDERER_DIRECTX11, CNA::GraphicsRendererType::DirectX11},
         {CNA_GRAPHICS_RENDERER_DIRECTX12, CNA::GraphicsRendererType::DirectX12},
-        {CNA_GRAPHICS_RENDERER_DIRECT2D, CNA::GraphicsRendererType::Direct2D},
         {CNA_GRAPHICS_RENDERER_CANVAS, CNA::GraphicsRendererType::Canvas},
         {CNA_GRAPHICS_RENDERER_HTML_DOM, CNA::GraphicsRendererType::HtmlDom},
-        {CNA_GRAPHICS_RENDERER_FREEDIRECT, CNA::GraphicsRendererType::FreeDirect},
         {CNA_GRAPHICS_RENDERER_DIRECTX9, CNA::GraphicsRendererType::DirectX9},
         {CNA_GRAPHICS_RENDERER_SDL_GPU, CNA::GraphicsRendererType::SdlGpu},
         {CNA_GRAPHICS_RENDERER_OPENGL4, CNA::GraphicsRendererType::OpenGL4},
@@ -217,7 +215,6 @@ constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererTy
         {CNA_GRAPHICS_RENDERER_METAL, CNA::GraphicsRendererType::Metal},
         {CNA_GRAPHICS_RENDERER_FNA3D, CNA::GraphicsRendererType::Fna3d},
         {CNA_GRAPHICS_RENDERER_SVG_DOM, CNA::GraphicsRendererType::SvgDom},
-        {CNA_GRAPHICS_RENDERER_PORTABLEGL, CNA::GraphicsRendererType::PortableGL},
     }};
 
 // A retired identity's numeric value is never reused (see docs/c-api/ABI_VERSIONING.md), so

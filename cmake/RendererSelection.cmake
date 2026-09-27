@@ -29,22 +29,14 @@ option(CNA_RENDERER_SOFTWARE "Enable Software (CPU rasterizer) graphics renderer
 # validation modes/counters or SOFTWARE's real CPU rasterizer). Named "Stub" rather than "Null" to
 # avoid colliding with the <cstddef>/<cstdlib> NULL macro (see plans/plan_stub.md's naming section).
 option(CNA_RENDERER_STUB "Enable Stub (no-op) graphics renderer" OFF)
-# rswinkle/PortableGL: a single-header, C99, CPU software implementation of an OpenGL 3.x-ish
-# pipeline (real buffers, vertex attribs, programmable vertex/fragment shaders as C function
-# pointers, glDrawArrays/glDrawElements, textures) -- no GPU/window required, same "genuine
-# CPU-only renderer" category as HEADLESS/SOFTWARE/STUB above, but the rasterization/shading
-# pipeline is delegated to real PortableGL API calls rather than a hand-rolled rasterizer.
-option(CNA_RENDERER_PORTABLEGL "Enable PortableGL (rswinkle/PortableGL, CPU software OpenGL 3.x) graphics renderer" OFF)
 option(CNA_RENDERER_DIRECTX11 "Enable Direct3D 11 graphics renderer (Windows only)" OFF)
 option(CNA_RENDERER_DIRECTX12 "Enable Direct3D 12 graphics renderer (Windows only)" OFF)
-option(CNA_RENDERER_DIRECT2D "Enable Direct2D 1.1 graphics renderer (Windows only, 2D-only)" OFF)
 # plans/plan_canvas.md: HTML Canvas 2D renderer -- Emscripten-only (design decision 1), a browser-native,
 # GPU-free 2D-only renderer using canvas.getContext('2d') instead of WEBGL2's WebGL context.
 option(CNA_RENDERER_CANVAS "Enable HTML Canvas 2D graphics renderer (Emscripten only)" OFF)
 # plans/plan_html_dom.md: HTML DOM renderer -- Emscripten-only (design decision 1), 2D-only, rendering
 # SpriteBatch output as pooled CSS-transformed <div> elements instead of rasterizing into a canvas.
 option(CNA_RENDERER_HTML_DOM "Enable HTML DOM (CSS-composited) graphics renderer (Emscripten only)" OFF)
-option(CNA_RENDERER_FREEDIRECT "Enable FreeDirect (DirectDraw via the ../free-direct sibling reimplementation) graphics renderer" OFF)
 option(CNA_RENDERER_DIRECTX9 "Enable Direct3D 9 graphics renderer (Windows only)" OFF)
 option(CNA_RENDERER_SDL_GPU "Enable SDL_gpu graphics renderer" OFF)
 
@@ -137,7 +129,7 @@ macro(cna_configure_renderer_identity)
 # graphical native window that a GPU API could bind. This check deliberately precedes every
 # renderer dependency probe below, so an incompatible pair always fails with this explanation
 # instead of, for example, first asking a TERMINAL+VULKAN build to install a Vulkan SDK.
-set(_cna_terminal_renderers SOFTWARE PORTABLEGL HEADLESS STUB)
+set(_cna_terminal_renderers SOFTWARE HEADLESS STUB)
 if(CNA_PLATFORM STREQUAL "TERMINAL" AND NOT CNA_GRAPHICS_RENDERER IN_LIST _cna_terminal_renderers)
     list(JOIN _cna_terminal_renderers ", " _cna_terminal_renderers_text)
     message(FATAL_ERROR
@@ -149,9 +141,8 @@ endif()
 # plans/plan_dx.md design decision 2: DIRECTX11/DIRECTX12 genuinely cannot build anywhere but Windows (native or
 # MinGW/MSVC cross-compile) -- d3d11.h/d3d12.h/dxgi.h do not exist elsewhere, so this is a hard
 # FATAL_ERROR. plans/plan_dx9.md design decision 1 extends this same gate to DIRECTX9 (d3d9.h is
-# equally Windows-only), and DIRECT2D and GDI need the Windows SDK in the same way. FreeDirect is not
-# listed: it renders through the SDL3-backed ../free-direct and builds natively on Linux.
-if((CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECT2D" OR CNA_GRAPHICS_RENDERER STREQUAL "GDI")
+# equally Windows-only), and GDI needs the Windows SDK in the same way.
+if((CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9" OR CNA_GRAPHICS_RENDERER STREQUAL "GDI")
         AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
     message(FATAL_ERROR
         "CNA: ${CNA_GRAPHICS_RENDERER} renderer only builds when targeting Windows. Either build "
@@ -257,26 +248,6 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQUAL 
         add_subdirectory(../easy-gl easy-gl)
         set(_cna_easygl_subdir_added TRUE)
     endif()
-endif()
-
-# plans/plan_freedirect.md design decision 10 / Task DX3-2: free-direct is a SIBLING repository checkout, not a
-# git submodule of this repo -- same rationale as sharp-runtime/easy-gl's identical checks above.
-# free-direct's own CMakeLists.txt (add_subdirectory(../free-api ...)) resolves SDL3::SDL3/
-# SDL3_image::SDL3_image/SDL3_mixer::SDL3_mixer from CNA's own already-vendored targets (set up by
-# cna_configure_vendored_sdl() above, before renderer selection runs), so no
-# -DFREE_API_USE_SYSTEM_SDL3 flag is needed here, mirroring how ../free-eggbert/../planetblupi
-# already consume free-direct today (design decision 10).
-if(CNA_GRAPHICS_RENDERER STREQUAL "FREEDIRECT")
-    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../free-direct/CMakeLists.txt")
-        message(FATAL_ERROR
-            "CNA: Missing sibling repository 'free-direct' at "
-            "${CMAKE_CURRENT_SOURCE_DIR}/../free-direct -- this is a separate git "
-            "checkout expected next to this repo's own directory, not a git "
-            "submodule (git submodule update --init will not fetch it). Fix: "
-            "cd ${CMAKE_CURRENT_SOURCE_DIR}/.. && "
-            "git clone https://github.com/openeggbert/free-direct.git")
-    endif()
-    add_subdirectory(../free-direct free-direct)
 endif()
 
 if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
@@ -420,12 +391,6 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
         cna_configure_mojoshader()
         add_compile_definitions(CNA_DIRECTX12_COMPILED_EFFECTS)
     endif()
-elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECT2D")
-    message(STATUS "CNA: Using DIRECT2D graphics renderer (Windows-only, 2D-only)")
-    set(RENDERER_DIR "modules/renderers/direct2d")
-    set(RENDERER_TARGET "cna_renderer_direct2d")
-    list(APPEND _cna_identity_defines CNA_RENDERER_DIRECT2D)
-    set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECT2D")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "CANVAS")
     message(STATUS "CNA: Using CANVAS (HTML Canvas 2D) graphics renderer")
     set(RENDERER_DIR "modules/renderers/canvas")
@@ -438,12 +403,6 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "HTML_DOM")
     set(RENDERER_TARGET "cna_renderer_html_dom")
     list(APPEND _cna_identity_defines CNA_RENDERER_HTML_DOM)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_HTML_DOM")
-elseif(CNA_GRAPHICS_RENDERER STREQUAL "FREEDIRECT")
-    message(STATUS "CNA: Using FreeDirect (DirectDraw via free-direct) graphics renderer")
-    set(RENDERER_DIR "modules/renderers/freedirect")
-    set(RENDERER_TARGET "cna_renderer_freedirect")
-    list(APPEND _cna_identity_defines CNA_RENDERER_FREEDIRECT)
-    set(CNA_RENDERER_DEFINE "CNA_RENDERER_FREEDIRECT")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     message(STATUS "CNA: Using DIRECTX9 graphics renderer")
     set(RENDERER_DIR "modules/renderers/directx9")
@@ -543,14 +502,6 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "SVG_DOM")
     set(RENDERER_TARGET "cna_renderer_svg_dom")
     list(APPEND _cna_identity_defines CNA_RENDERER_SVG_DOM)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_SVG_DOM")
-elseif(CNA_GRAPHICS_RENDERER STREQUAL "PORTABLEGL")
-    message(STATUS "CNA: Using PORTABLEGL (rswinkle/PortableGL, CPU software OpenGL 3.x) graphics renderer")
-    set(RENDERER_DIR "modules/renderers/portablegl")
-    set(RENDERER_TARGET "cna_renderer_portablegl")
-    list(APPEND _cna_identity_defines CNA_RENDERER_PORTABLEGL)
-    set(CNA_RENDERER_DEFINE "CNA_RENDERER_PORTABLEGL")
-    include(cmake/ThirdPartyPortableGL.cmake)
-    cna_configure_portablegl()
 else()
     message(FATAL_ERROR "CNA: Unknown graphics renderer: ${CNA_GRAPHICS_RENDERER}")
 endif()

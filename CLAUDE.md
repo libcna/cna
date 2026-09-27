@@ -525,7 +525,7 @@ SDL or call an `SDL_*`/`MIX_*` function outside these intentional native edges:
 - `modules/platform/src/Sdl3/` and `modules/platform/src/Sdl2/`;
 - `modules/audio/src/Platform/Sdl3/`, `modules/audio/src/Platform/Sdl2/`, and the mixer
   implementation isolated inside audio;
-- renderer families `sdl-renderer`, `sdl-gpu`, `fna3d`, and `freedirect`.
+- renderer families `sdl-renderer`, `sdl-gpu`, and `fna3d`.
 
 `modules/platform/src/X11/` and `modules/platform/src/Wayland/` are inside the platform module and
 are deliberately **not** among those edges: they are the backends that exist to prove CNA does not
@@ -558,20 +558,20 @@ task/evidence log is `plans/plan_platform.md`.
 
 Renderer selection is compile-time via `CNA_GRAPHICS_RENDERER` CMake option
 (`SDL_RENDERER` | `OPENGLES2` | `OPENGLES3` | `OPENGL33` | `WEBGL1` | `WEBGL2` | `VULKAN` | `WEBGPU` |
-`HEADLESS` | `SOFTWARE` | `STUB` | `DIRECTX11` | `DIRECTX12` | `DIRECT2D` | `CANVAS` | `HTML_DOM` |
-`FREEDIRECT` | `DIRECTX9` | `SDL_GPU` | `OPENGL4` | `GDI` | `METAL` | `FNA3D` | `SVG_DOM` |
-`PORTABLEGL`). These are exactly **25 public identities** over 21 implementation families; EasyGL
-remains an internal implementation shared by five GL profiles. The canonical list lives in
+`HEADLESS` | `SOFTWARE` | `STUB` | `DIRECTX11` | `DIRECTX12` | `CANVAS` | `HTML_DOM` |
+`DIRECTX9` | `SDL_GPU` | `OPENGL4` | `GDI` | `METAL` | `FNA3D` | `SVG_DOM`). These are exactly
+**22 public identities** over 18 implementation families; EasyGL remains an internal implementation
+shared by five GL profiles. The canonical list lives in
 `cmake/RendererIdentities.cmake` and is pinned by `scripts/check_renderer_identities.py`.
 
 CNA intentionally maintains a curated renderer set. A new renderer is added only when it provides
 meaningful platform coverage, compatibility value, architectural value, or a capability not
-reasonably covered by the existing set -- never because the count would grow. Twenty-six identities
+reasonably covered by the existing set -- never because the count would grow. Twenty-nine identities
 are retired (`BGFX`, `MAGNUM`, `SKIA`, `BLEND2D`, `DIRECTX1`/`2`/`3`/`5`/`6`/`7`/`8`/`10`,
 `OPENGLES1`, `OPENGL1`, `OPENGL2`, `WICKED`, `SOKOL`, `DILIGENT`, `GLIDE`, `LLGL`, `OPENVG`,
-`TINYGL`, `IGL`, `PIXIJS`, `NANOVG`, `RLGL`), and the former `ASCII` identity was replaced by the
-renderer-neutral `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`, see
-`docs/ascii-post-process-effect.md`). A retired selector is refused at configure time, by name and
+`TINYGL`, `IGL`, `PIXIJS`, `NANOVG`, `RLGL`, `DIRECT2D`, `FREEDIRECT`, `PORTABLEGL`), and the
+former `ASCII` identity was replaced by the renderer-neutral `CNA::Graphics::AsciiPostProcessEffect`
+(`modules/graphics-ext/`, see `docs/ascii-post-process-effect.md`). A retired selector is refused at configure time, by name and
 with its permanently reserved C ABI value; its number is never reassigned. Do not resurrect one
 without a fresh owner instruction -- see `plans/plan_renderer_cleanup.md` and
 `docs/removed-renderers.md`.

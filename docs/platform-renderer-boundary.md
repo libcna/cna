@@ -44,7 +44,7 @@ not `IPlatform*`, and a missing required service is a deterministic construction
 capability. Native-handle renderers (DirectX, GDI, the native WebGPU path) need no service
 pointer at all.
 
-The four deliberate SDL exceptions (`SDL_RENDERER`, `SDL_GPU`, `FNA3D`, `FREEDIRECT`) may keep
+The three deliberate SDL exceptions (`SDL_RENDERER`, `SDL_GPU`, `FNA3D`) may keep
 their SDL-specific construction internally. They still do not make SDL types part of the common
 renderer interface.
 
@@ -148,4 +148,4 @@ primitive, vertex, pixel or input event.
 
 Verification for the code tasks must include a non-SDL fake window with a non-1.0 scale, a resize
 notification whose logical and pixel sizes differ, lifetime-order assertions, and compilation of
-the STUB/HEADLESS/SOFTWARE/PORTABLEGL families without SDL declarations in the common interface.
+the STUB/HEADLESS/SOFTWARE families without SDL declarations in the common interface.

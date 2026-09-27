@@ -16,9 +16,9 @@ using CNA::toStringView;
 static_assert(getCurrentGraphicsBackendCategory() == getCurrentGraphicsBackendCategory());
 static_assert(!toStringView(getCurrentGraphicsBackendCategory()).empty());
 constexpr GraphicsBackendCategory kCompileTimeCategory = getCurrentGraphicsBackendCategory();
-constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::PortableGL) + 1;
-static_assert(kPublicRendererCount == 25,
-              "GraphicsRendererType must expose all 25 public renderer identities");
+constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::SvgDom) + 1;
+static_assert(kPublicRendererCount == 22,
+              "GraphicsRendererType must expose all 22 public renderer identities");
 
 TEST(GraphicsBackendCategoryTest, GetCurrentGraphicsBackendCategoryDoesNotThrow)
 {
@@ -50,7 +50,6 @@ namespace
             case GraphicsRendererType::Vulkan:
             case GraphicsRendererType::DirectX11:
             case GraphicsRendererType::DirectX12:
-            case GraphicsRendererType::Direct2D:
             case GraphicsRendererType::DirectX9:
             case GraphicsRendererType::OpenGL4:
             case GraphicsRendererType::Gdi:
@@ -59,13 +58,11 @@ namespace
 
             case GraphicsRendererType::SdlRenderer:
             case GraphicsRendererType::WebGPU:
-            case GraphicsRendererType::FreeDirect:
             case GraphicsRendererType::SdlGpu:
             case GraphicsRendererType::Fna3d:
                 return GraphicsBackendCategory::TranslationLayer;
 
             case GraphicsRendererType::Software:
-            case GraphicsRendererType::PortableGL:
                 return GraphicsBackendCategory::Software;
 
             case GraphicsRendererType::WebGL1:

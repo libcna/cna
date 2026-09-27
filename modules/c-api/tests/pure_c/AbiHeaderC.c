@@ -197,13 +197,11 @@ _Static_assert(sizeof(CNA_RendererInfo) == 32U,
                "CNA_RendererInfo layout must remain stable");
 _Static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1) &&
                    CNA_GRAPHICS_RENDERER_VULKAN == UINT32_C(8) &&
-                   CNA_GRAPHICS_RENDERER_FREEDIRECT == UINT32_C(21) &&
                    CNA_GRAPHICS_RENDERER_SDL_GPU == UINT32_C(31) &&
                    CNA_GRAPHICS_RENDERER_OPENGL4 == UINT32_C(33) &&
                    CNA_GRAPHICS_RENDERER_GDI == UINT32_C(40) &&
                    CNA_GRAPHICS_RENDERER_SVG_DOM == UINT32_C(44) &&
-                   CNA_GRAPHICS_RENDERER_PORTABLEGL == UINT32_C(46) &&
-                   CNA_GRAPHICS_RENDERER_MAXIMUM == CNA_GRAPHICS_RENDERER_PORTABLEGL,
+                   CNA_GRAPHICS_RENDERER_MAXIMUM == CNA_GRAPHICS_RENDERER_SVG_DOM,
                "CNA renderer identities must remain stable");
 _Static_assert(CNA_GRAPHICS_CAPABILITY_THREE_D == UINT32_C(0) &&
                    CNA_GRAPHICS_CAPABILITY_ADDITIVE_BLENDING == UINT32_C(12) &&

@@ -29,7 +29,7 @@ Established by PLAT-3 (docs/platform-renderer-sdl-audit.md) and design decision 
 
   * modules/platform/          -- the platform module itself; SDL3 lives here by definition
   * modules/renderers/sdl-renderer, sdl-gpu   -- SDL by identity
-  * modules/renderers/fna3d, freedirect       -- SDL by upstream dependency
+  * modules/renderers/fna3d                   -- SDL by upstream dependency
   * the SDL3 audio implementation             -- separate contract, PLAT-91..99
 
 Anything else counted here is coupling still to remove.
@@ -62,7 +62,6 @@ ALLOWLIST_PREFIXES: tuple[str, ...] = (
     "modules/renderers/sdl-renderer/",
     "modules/renderers/sdl-gpu/",
     "modules/renderers/fna3d/",
-    "modules/renderers/freedirect/",
     "modules/audio/src/Platform/Sdl3/",  # SDL3 playback and recording implementations
     "modules/audio/src/Platform/Sdl2/",  # SDL2 playback implementation
     "modules/audio/src/Backend/Sdl3Mixer/",  # memory mixer implementation

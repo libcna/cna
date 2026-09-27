@@ -202,12 +202,6 @@ endif()
 set(CNA_ENABLE_VIDEO "${_cna_enable_video_normalized}" CACHE STRING
     "Enable FFmpeg video playback (OFF, AUTO, or ON)" FORCE)
 unset(_cna_enable_video_normalized)
-# On a Linux cross-build, Direct2D tests normally use the project's dedicated system-Wine prefix.
-# PROTON is an opt-in DXVK-backed alternative for a local Steam Proton installation; native
-# Windows configurations still execute the .exe directly.
-set(CNA_DIRECT2D_TEST_RUNTIME "WINE" CACHE STRING "Cross-compiled Direct2D test runtime (WINE or PROTON)")
-set_property(CACHE CNA_DIRECT2D_TEST_RUNTIME PROPERTY STRINGS WINE PROTON)
-
 # DISPLAY used by every GPU/window-creating ctest. Empty by default -- tests inherit the caller's --
 # and the live desktop is opt-in; see cmake/TestDisplayPolicy.cmake (GTI-0001).
 include(cmake/TestDisplayPolicy.cmake)

@@ -229,14 +229,6 @@
       "category": "renderer-integration-executable",
       "max_references": 9
     },
-    "modules/renderers/direct2d/examples/direct2d_2d_parity_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 8
-    },
-    "modules/renderers/direct2d/examples/direct2d_smoke_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 2
-    },
     "modules/renderers/directx12/examples/directx12_swapchain_diag.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 19
@@ -321,22 +313,6 @@
       "category": "renderer-integration-executable",
       "max_references": 16
     },
-    "modules/renderers/freedirect/examples/freedirect_logical_transform_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 6
-    },
-    "modules/renderers/freedirect/examples/freedirect_resize_transaction_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 25
-    },
-    "modules/renderers/freedirect/examples/freedirect_smoke_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/freedirect/examples/freedirect_spritefont_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 2
-    },
     "modules/renderers/gdi/examples/gdi_2d_benchmark.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 14
@@ -420,10 +396,6 @@
     "modules/renderers/opengl4/examples/opengl4_smoke_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 11
-    },
-    "modules/renderers/portablegl/examples/portablegl_smoke_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 5
     },
     "modules/renderers/sdl-gpu/examples/sdlgpu_constructor_exception_safety_test.cpp": {
       "category": "renderer-integration-executable",

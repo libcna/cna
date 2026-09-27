@@ -4,7 +4,7 @@
 
 #include "CNA/RendererTestGate.hpp"
 
-// Lets CNA_RENDERER_IS name identities bare (Stub, PortableGL, ...), matching how the compile-time
+// Lets CNA_RENDERER_IS name identities bare (Stub, Gdi, ...), matching how the compile-time
 // guards these replaced read.
 using namespace CNA::Testing::Renderers;
 #include <array>
@@ -491,9 +491,9 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
         targets.push_back(std::make_unique<RenderTarget2D>(gd, 4, 4));
         bindings.emplace_back(targets.back().get());
     }
-    if (CNA_RENDERER_IS(SdlRenderer, FreeDirect, Gdi))
+    if (CNA_RENDERER_IS(SdlRenderer, Gdi))
     {
-    // Task 709 (the SDL_RENDERER family) / DX3-27 (DirectDraw, plans/plan_freedirect.md) / GDI: each
+    // Task 709 (the SDL_RENDERER family) / GDI: each
     // supports exactly one active render target at a time -- unlike the other, real-MRT-capable renderers,
     // binding more than one target here must throw clearly rather than silently rendering to only
     // the first. 4 is still within the MAX_RENDERTARGET_BINDINGS cap
@@ -511,14 +511,6 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // reaching the renderer, because RenderTarget2D::GetRenderTargetRenderer() is null. Rejecting is
     // the correct behaviour and the reason it is asserted here: a no-op renderer must not report
     // false success for a target it cannot honour.
-    EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
-    }
-    else if (CNA_RENDERER_IS(PortableGL))
-    {
-    // PortableGL owns exactly one framebuffer per context and creates no render targets at all --
-    // the same shape as Stub above: GraphicsDevice rejects the bind before reaching the renderer
-    // because RenderTarget2D::GetRenderTargetRenderer() is null, and PortableGLRenderer::
-    // SetRenderTargets() refuses a non-empty set as well, so neither layer can accept one silently.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
     }
     else if (CNA_RENDERER_IS(OpenGLES2))
@@ -559,7 +551,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTarget_SingleOverload_MatchesArrayOv
 {
     // REMED-GFX-PGL-AUDIT: SetRenderTarget(RenderTarget2D*) used to call renderer_->SetRenderTarget2D()
     // directly with `renderTarget ? renderTarget->GetRenderTargetRenderer() : nullptr`. On a renderer
-    // that keeps IGraphicsRenderer's nullptr CreateRenderTarget2D() default (Stub, PortableGL),
+    // that keeps IGraphicsRenderer's nullptr CreateRenderTarget2D() default (Stub),
     // GetRenderTargetRenderer() is itself null, so that ternary collapsed to the exact nullptr the
     // "unbind" call passes -- the renderer accepted it as an ordinary restore-backbuffer request
     // instead of refusing an unsupported binding, while this method still recorded the target as
@@ -569,7 +561,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTarget_SingleOverload_MatchesArrayOv
     // this pins for both public entry points.
     GraphicsDevice gd;
     RenderTarget2D target(gd, 4, 4);
-    if (CNA_RENDERER_IS(Stub, PortableGL))
+    if (CNA_RENDERER_IS(Stub))
     {
     EXPECT_THROW(gd.SetRenderTarget(&target), System::NotSupportedException);
     // No partial state: GraphicsDevice must not report the rejected target as bound...

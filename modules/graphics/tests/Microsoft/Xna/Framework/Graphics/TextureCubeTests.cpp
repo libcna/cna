@@ -101,28 +101,10 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
 // plans/plan_runtimerenderer.md RTR-P9-4: evaluated at runtime, so these describe the ACTIVE renderer
 // rather than the build default.
 //
-// A follow-up to the conversion fixed this: PORTABLEGL was silently NOT in
-// the list below. The preceding OPENVG explanation was a `//` comment whose last line ended in a
-// backslash, so the preprocessor continued the COMMENT onto the following
-// `defined(CNA_RENDERER_PORTABLEGL)` line and swallowed it -- verified with a minimal preprocessor
-// case. That made CubeStorageSupported() true under PORTABLEGL, claiming cube storage this CPU
-// software renderer may well not have.
-//
-// PortableGL is now IN the list, restoring what the code plainly intended: modules/content/tests'
-// own cube-storage guards -- whose comment says they use "the same reviewed renderer set" as this
-// file -- have always listed PORTABLEGL and state that "PortableGL keeps the same nullptr
-// CreateTextureCube default -- no cube resource exists there either". The two lists were meant to
-// be identical; only this one lost an entry to the comment.
-//
-// Measured consequence: none. A single-renderer PORTABLEGL build passes this suite 85/85 both with
-// and without PortableGL in the list, because the assertions these constants drive
-// (ExpectUploadStoredOrRefused) accept either "stored" or "refused with NotSupportedException" --
-// they exist to forbid the third outcome, silently discarding data. So the swallowed condition was
-// real but benign HERE. It is corrected because the list is also read by humans as the statement of
-// which renderers own cube pixels, and because a future assertion that does distinguish the two
-// would have inherited the wrong answer.
-//
-// The runtime form has no line continuations, so the trap cannot recur.
+// The runtime form has no line continuations. The compile-time `defined(...)` chain it replaced lost
+// a renderer to a `//` comment whose last line ended in a backslash: the preprocessor continued the
+// comment onto the next condition and swallowed it. modules/content/tests' cube-storage guards use
+// the same reviewed renderer set as this file, and the lists must stay identical.
 //
 // PIXIJS (plans/plan_pixijs.md PIXIJS-71) is in this "no cube resource exists" set too: no cube override
 // written, so it keeps the shared nullptr CreateTextureCube default, v1 scope being 2D-only.
@@ -136,7 +118,7 @@ namespace
 {
 [[nodiscard]] inline bool CubeStorageSupported()
 {
-    return !CNA_RENDERER_IS(SdlRenderer, Canvas, HtmlDom, FreeDirect, Headless, Gdi, PortableGL);
+    return !CNA_RENDERER_IS(SdlRenderer, Canvas, HtmlDom, Headless, Gdi);
 }
 
 /// Level-0 readback and storage are the same set again.

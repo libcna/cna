@@ -13,9 +13,9 @@ static_assert(getCurrentGraphicsRendererType() == getCurrentGraphicsRendererType
 static_assert(!getCurrentGraphicsRendererName().empty());
 constexpr GraphicsRendererType kCompileTimeType = getCurrentGraphicsRendererType();
 constexpr std::string_view kCompileTimeName = getCurrentGraphicsRendererName();
-constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::PortableGL) + 1;
-static_assert(kPublicRendererCount == 25,
-              "GraphicsRendererType must expose all 25 public renderer identities");
+constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::SvgDom) + 1;
+static_assert(kPublicRendererCount == 22,
+              "GraphicsRendererType must expose all 22 public renderer identities");
 
 TEST(GraphicsRendererTypeTest, GetCurrentGraphicsRendererTypeDoesNotThrow)
 {
@@ -62,10 +62,8 @@ namespace
             case GraphicsRendererType::Software:    return "SOFTWARE";
             case GraphicsRendererType::DirectX11:       return "DIRECTX11";
             case GraphicsRendererType::DirectX12:       return "DIRECTX12";
-            case GraphicsRendererType::Direct2D:    return "DIRECT2D";
             case GraphicsRendererType::Canvas:      return "CANVAS";
             case GraphicsRendererType::HtmlDom:     return "HTML_DOM";
-            case GraphicsRendererType::FreeDirect:  return "FREEDIRECT";
             case GraphicsRendererType::Stub:        return "STUB";
             case GraphicsRendererType::DirectX9:        return "DIRECTX9";
             case GraphicsRendererType::SdlGpu:      return "SDL_GPU";
@@ -74,7 +72,6 @@ namespace
             case GraphicsRendererType::Metal:       return "METAL";
             case GraphicsRendererType::Fna3d:       return "FNA3D";
             case GraphicsRendererType::SvgDom:      return "SVG_DOM";
-            case GraphicsRendererType::PortableGL:  return "PORTABLEGL";
         }
         return {};
     }

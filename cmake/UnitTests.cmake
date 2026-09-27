@@ -1229,7 +1229,7 @@ if(CNA_BUILD_TESTS)
     endif()
 
     # plans/plan_dx.md DX-15 follow-up + plans/plan_dx9.md D9-123 follow-up (merge-reconciled 2026-07-16):
-    # now that CnaTests.exe genuinely builds under the D3D9/D3D11/D3D12/Direct2D MinGW cross-targets,
+    # now that CnaTests.exe genuinely builds under the D3D9/D3D11/D3D12 MinGW cross-targets,
     # gtest_discover_tests(DISCOVERY_MODE PRE_TEST) below executes it directly to enumerate tests
     # -- and any add_test(COMMAND CnaTests ...) test (e.g. CnaInputTests, further below) does the
     # same at run time. All three need the same Wine wrapper DirectX9_Smoke/DirectX11_Smoke/DirectX12_Smoke
@@ -1255,12 +1255,6 @@ if(CNA_BUILD_TESTS)
         elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D12_SKIP_VKD3D_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-vkd3d.sh")
-        elseif("DIRECT2D" IN_LIST CNA_RENDERER_IDENTITIES)
-            # Direct2D needs the normal/dedicated prefix selected by run-wine-direct2d.sh, not the
-            # D3D11-only DXVK prefix (which may not contain Wine's d2d1 runtime). Pure unit tests
-            # do not create a device, so skip the unrelated DXVK renderer-log gate.
-            set_target_properties(CnaTests PROPERTIES
-                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D11_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-direct2d.sh")
         endif()
     endif()
 
@@ -1345,14 +1339,6 @@ if(CNA_BUILD_TESTS)
             ${_cna_unit_tests_audio_properties})
     endif()
     unset(_cna_unit_tests_discovery_filter)
-
-    # D2D-118/D2D-119: a stable label and one explicit runner make the renderer's device-free
-    # capability, blend, mip-policy, HRESULT and pixel-conversion contract independently runnable.
-    if(CNA_GRAPHICS_RENDERER STREQUAL "DIRECT2D")
-        cna_register_renderer_test(NAME Direct2D_Unit
-            COMMAND CnaTests --gtest_filter=Direct2D*
-            TIMEOUT 60 LABELS "Direct2D;Unit" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
-    endif()
 
     # INPUT-BUILD-003: canonical Input-test selector — SINGLE SOURCE OF TRUTH.
     # The input subset used to be selected by a long --gtest_filter string copy-pasted across the docs

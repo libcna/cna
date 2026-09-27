@@ -1,5 +1,7 @@
 # Direct2D backend — plán 2D parity s EasyGL
 
+> **Retired renderer — historical record.** The `DIRECT2D` renderer identity was retired on 2026-09-27; its implementation was removed from the tree and its C ABI value 16 is permanently reserved. This plan is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/`, `scripts/` and `docs/` for this renderer no longer exist. See `plans/plan_renderer_cleanup.md` (RRC-012) and `docs/removed-renderers.md`.
+
 > **Rozhodnutý rozsah:** `DIRECT2D` je trvale **2D-only** backend. Nepřidává se do něj 3D
 > pipeline jen proto, že Direct2D interně používá D3D11 device pro GPU akceleraci a prezentaci.
 > Pro 3D slouží existující `D3D11` backend.

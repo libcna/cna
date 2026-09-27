@@ -125,19 +125,16 @@ runtime contract is independently exercised by
 | Renderer | Status | 32-bit route / refusal boundary |
 |---|---:|---|
 | Canvas | ❌ | HTML Canvas 2D; inherits the shared refusal. |
-| Direct2D | ❌ | 2D-only; inherits the shared refusal. |
 | DirectX 11 | ✅ | Explicit factory; `DXGI_FORMAT_R32_UINT`. |
 | DirectX 12 | ✅ | Explicit factory; `DXGI_FORMAT_R32_UINT`. |
 | DirectX 9 | ✅ | Explicit factory; `D3DFMT_INDEX32`. |
 | EasyGL | ✅ | Explicit factory; draw selects `GL_UNSIGNED_INT`. |
 | FNA3D | ✅ | Explicit factory; FNA3D 32-bit index element size. |
-| FreeDirect | ❌ | DirectDraw-only; inherits the shared refusal. |
 | GDI | ❌ | Local, explicit `32-bit index buffers` unsupported error. |
 | Headless | ◇ | Width-locked uint32 shadow and validated indexed-draw trace; no pixels. |
 | HTML DOM | ❌ | 2D DOM renderer; inherits the shared refusal. |
 | Metal | ✅ | Explicit factory; `MTLIndexTypeUInt32`. |
 | OpenGL 4 | ✅ | Explicit factory; draw selects `GL_UNSIGNED_INT`. |
-| PortableGL | ✅ | Explicit width-locked factory; real PortableGL `GL_UNSIGNED_INT` draw. |
 | SDL_GPU | ✅ | Explicit width-locked factory; `SDL_GPU_INDEXELEMENTSIZE_32BIT`. |
 | SDL_Renderer | ❌ | 2D-only; inherits the shared refusal. |
 | Software | ✅ | Width-locked uint32 CPU buffer and raster path (2D-only GDI build rejects locally). |
@@ -146,9 +143,9 @@ runtime contract is independently exercised by
 | Vulkan | ✅ | Explicit factory; `VK_INDEX_TYPE_UINT32`. |
 | WebGPU | ✅ | Explicit factory; `WGPUIndexFormat_Uint32`. |
 
-PortableGL, SDL_GPU and Stub were the three exact-width implementations that previously relied on
-the unsafe shared delegation. They now own explicit factories; PortableGL and Stub also reject a
-direct renderer-level upload whose width disagrees with the factory declaration.
+SDL_GPU and Stub were exact-width implementations that previously relied on the unsafe shared
+delegation. They now own explicit factories; Stub also rejects a direct renderer-level upload whose
+width disagrees with the factory declaration.
 
 ### Explicit unsupported paths (`GLTF-394`)
 

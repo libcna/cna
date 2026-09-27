@@ -195,9 +195,6 @@ namespace
 #elif defined(CNA_RENDERER_CANVAS)
     constexpr Contract kContract{"CANVAS", false, Support::Unsupported, false, false,
                                  false, Support::Unsupported, false, true, false};
-#elif defined(CNA_RENDERER_FREEDIRECT)
-    constexpr Contract kContract{"FREEDIRECT", false, Support::Unsupported, false, false,
-                                 false, Support::Unsupported, false, true, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
     // `mipMapCubeTargets` true only in the sense that construction and level-0 rendering work:
     // D3D9RenderTargetCubeRenderer::Recreate() allocates ONE level whatever mipMap asked for

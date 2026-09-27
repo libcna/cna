@@ -10,13 +10,6 @@
 # Kept in lockstep with docs/runtime-renderer-selection.md by
 # scripts/check_renderer_combinations.py.
 
-# Real-OpenGL families. PORTABLEGL cannot join them: it is a single-header C library that DEFINES
-# the global gl* symbols (glClear, glDrawArrays, ...) as ordinary functions, so linking it beside a
-# real GL renderer is a duplicate-symbol error by construction.
-set(CNA_RENDERER_REAL_GL_FAMILIES
-    OPENGLES2 OPENGLES3 OPENGL33 WEBGL1 WEBGL2   # EasyGL
-    OPENGL4)                                      # native GL
-
 # Identities served by one implementation family. Two of them in one binary would mean compiling
 # that family twice with different profile defines -- an ODR violation, not merely a name clash.
 # Lifting this is plans/plan_runtimerenderer.md phase P11 (EasyGL's profile becomes a runtime choice).
@@ -24,7 +17,7 @@ set(CNA_RENDERER_SHARED_EASYGL OPENGLES2 OPENGLES3 OPENGL33 WEBGL1 WEBGL2)
 
 # Platform partitions. A combination spanning two of these can never build: the toolchain targets
 # one of them at a time.
-set(CNA_RENDERER_WINDOWS_ONLY DIRECTX9 DIRECTX11 DIRECTX12 DIRECT2D GDI)
+set(CNA_RENDERER_WINDOWS_ONLY DIRECTX9 DIRECTX11 DIRECTX12 GDI)
 # Listing the browser renderers here is what makes the PAIRWISE rule state the reason -- a
 # CANVAS + DIRECTX11 request should be refused as "two platforms, one toolchain", not left to
 # whichever per-identity gate in RendererSelection.cmake happens to fire first.
@@ -74,14 +67,6 @@ function(cna_validate_renderer_combination)
         foreach(_second IN LISTS _identities)
             if(_first STREQUAL _second)
                 continue()
-            endif()
-
-            # PORTABLEGL's global gl* symbols vs any real GL renderer.
-            if(_first STREQUAL "PORTABLEGL" AND _second IN_LIST CNA_RENDERER_REAL_GL_FAMILIES)
-                _cna_reject_combination("${_first}" "${_second}"
-                    "PORTABLEGL is a single-header C library that DEFINES the global gl* symbols "
-                    "(glClear, glDrawArrays, ...). Linking it beside a renderer that calls the real "
-                    "OpenGL of the same names is a duplicate-symbol error.")
             endif()
 
             # GDI re-compiles the SOFTWARE translation units with CNA_SOFTWARE_2D_ONLY.

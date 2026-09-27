@@ -198,14 +198,12 @@ TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsATexture2DFixtu
 // reviewed renderer set as tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp.
 // plans/plan_sokol.md SOKOL-27: SokolTextureCubeRenderer stores real cube pixels (see
 // tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp for the full contract).
-// PortableGL keeps the same nullptr CreateTextureCube default -- no cube resource exists there
-// either (docs/portablegl-renderer.md).
 // plans/plan_runtimerenderer.md RTR-P9-11: evaluated at runtime, so this describes the ACTIVE
 // renderer rather than the build default. PIXIJS (plans/plan_pixijs.md PIXIJS-71) is in the "no cube
 // resource exists" set: no cube override written, v1 scope being 2D-only.
 [[nodiscard]] inline bool CubeStorageSupported()
 {
-    return !CNA_RENDERER_IS(SdlRenderer, Canvas, HtmlDom, FreeDirect, Headless, Gdi, PortableGL);
+    return !CNA_RENDERER_IS(SdlRenderer, Canvas, HtmlDom, Headless, Gdi);
 }
 
 TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsATextureCubeFixtureWithNoOtherSetup)

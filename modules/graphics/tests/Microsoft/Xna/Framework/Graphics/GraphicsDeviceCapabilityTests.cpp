@@ -83,16 +83,6 @@ struct CapabilityExpectation
         case GraphicsRendererType::WebGL1:
             return {false, false, true};
 
-        // PortableGL owns exactly one framebuffer per context and creates no render targets at all
-        // (SetRenderTargets refuses every non-empty binding), has no occlusion-query mechanism, and
-        // its shader stage is a pair of C function pointers with nothing for a CNA Effect to be
-        // compiled into (PortableGLSpriteBatchRenderer::SetCustomEffect refuses a non-null Effect
-        // rather than drawing with the built-in sprite shader). All three answers are structural,
-        // and each is backed by a refusal in
-        // modules/renderers/portablegl/examples/portablegl_rejection_test.cpp.
-        case GraphicsRendererType::PortableGL:
-            return {false, false, false};
-
         // plans/plan_fna3d.md: FNA3D's only shader entry point is FNA3D_CreateEffect, which takes a
         // *compiled* Direct3D 9 Effect Framework binary and runs it through MojoShader; nothing in
         // the library compiles a GLSL/HLSL source string, which is what

@@ -22,20 +22,19 @@ include_guard(GLOBAL)
 # `cmake -P` does not inherit the project's cmake_minimum_required() policy set.
 cmake_policy(SET CMP0057 NEW)
 
-# The 25 public renderer identities, in C ABI value order.
+# The 22 public renderer identities, in C ABI value order.
 set(CNA_RENDERER_PUBLIC_IDENTITIES
     SDL_RENDERER OPENGLES2 OPENGLES3 OPENGL33 WEBGL1 WEBGL2 VULKAN WEBGPU HEADLESS SOFTWARE STUB
-    DIRECTX11 DIRECTX12 DIRECT2D CANVAS HTML_DOM FREEDIRECT DIRECTX9 SDL_GPU OPENGL4 GDI METAL FNA3D
-    SVG_DOM PORTABLEGL)
+    DIRECTX11 DIRECTX12 CANVAS HTML_DOM DIRECTX9 SDL_GPU OPENGL4 GDI METAL FNA3D SVG_DOM)
 
 # Retired identities as <NAME>=<C ABI value>. A retired value stays reserved forever: it is never
 # assigned to another renderer, and the next new identity takes value 52. See
 # docs/removed-renderers.md for what each one was and why it was retired.
 set(CNA_RENDERER_RETIRED_IDENTITIES
-    BGFX=7 MAGNUM=10 SKIA=19 BLEND2D=20
+    BGFX=7 MAGNUM=10 DIRECT2D=16 SKIA=19 BLEND2D=20 FREEDIRECT=21
     DIRECTX1=23 DIRECTX2=24 DIRECTX3=25 DIRECTX5=26 DIRECTX6=27 DIRECTX7=28 DIRECTX8=29 DIRECTX10=30
     OPENGLES1=32 OPENGL1=34 OPENGL2=35 WICKED=36 SOKOL=37 DILIGENT=38 GLIDE=39 LLGL=41 OPENVG=45
-    TINYGL=47 IGL=48 PIXIJS=49 NANOVG=50 RLGL=51)
+    PORTABLEGL=46 TINYGL=47 IGL=48 PIXIJS=49 NANOVG=50 RLGL=51)
 
 # Returns the retired C ABI value of an identity (compared case-insensitively), or an empty string
 # when the identity is not retired.

@@ -38,14 +38,11 @@ function(_cna_renderer_identity_map out_var)
         HEADLESS     Headless
         SOFTWARE     Software
         STUB         Stub
-        PORTABLEGL   PortableGL
         DIRECTX11    DirectX11
         DIRECTX12    DirectX12
-        DIRECT2D     Direct2D
         CANVAS       Canvas
         HTML_DOM     HtmlDom
         SVG_DOM      SvgDom
-        FREEDIRECT   FreeDirect
         DIRECTX9     DirectX9
         SDL_GPU      SdlGpu
         OPENGL4      OpenGL4

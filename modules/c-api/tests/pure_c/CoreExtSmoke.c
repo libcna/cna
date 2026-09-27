@@ -181,29 +181,26 @@ static const CNA_GraphicsRendererType live_renderer_identities[] = {
         CNA_GRAPHICS_RENDERER_STUB,
         CNA_GRAPHICS_RENDERER_DIRECTX11,
         CNA_GRAPHICS_RENDERER_DIRECTX12,
-        CNA_GRAPHICS_RENDERER_DIRECT2D,
         CNA_GRAPHICS_RENDERER_CANVAS,
         CNA_GRAPHICS_RENDERER_HTML_DOM,
-        CNA_GRAPHICS_RENDERER_FREEDIRECT,
         CNA_GRAPHICS_RENDERER_DIRECTX9,
         CNA_GRAPHICS_RENDERER_SDL_GPU,
         CNA_GRAPHICS_RENDERER_OPENGL4,
         CNA_GRAPHICS_RENDERER_GDI,
         CNA_GRAPHICS_RENDERER_METAL,
         CNA_GRAPHICS_RENDERER_FNA3D,
-        CNA_GRAPHICS_RENDERER_SVG_DOM,
-        CNA_GRAPHICS_RENDERER_PORTABLEGL
+        CNA_GRAPHICS_RENDERER_SVG_DOM
 };
 
 /* Values of retired renderer identities (docs/removed-renderers.md). They stay reserved forever:
  * no route may accept one, and no surviving constant may take one over. Several sit above
  * CNA_GRAPHICS_RENDERER_MAXIMUM, so the gap sweep below does not reach them on its own. */
 static const CNA_GraphicsRendererType retired_renderer_identities[] = {
-        UINT32_C(7), UINT32_C(10), UINT32_C(19), UINT32_C(20), UINT32_C(23), UINT32_C(24),
-        UINT32_C(25), UINT32_C(26), UINT32_C(27), UINT32_C(28), UINT32_C(29), UINT32_C(30),
-        UINT32_C(32), UINT32_C(34), UINT32_C(35), UINT32_C(36), UINT32_C(37), UINT32_C(38),
-        UINT32_C(39), UINT32_C(41), UINT32_C(45), UINT32_C(47), UINT32_C(48), UINT32_C(49),
-        UINT32_C(50), UINT32_C(51)
+        UINT32_C(7), UINT32_C(10), UINT32_C(16), UINT32_C(19), UINT32_C(20), UINT32_C(21),
+        UINT32_C(23), UINT32_C(24), UINT32_C(25), UINT32_C(26), UINT32_C(27), UINT32_C(28),
+        UINT32_C(29), UINT32_C(30), UINT32_C(32), UINT32_C(34), UINT32_C(35), UINT32_C(36),
+        UINT32_C(37), UINT32_C(38), UINT32_C(39), UINT32_C(41), UINT32_C(45), UINT32_C(46),
+        UINT32_C(47), UINT32_C(48), UINT32_C(49), UINT32_C(50), UINT32_C(51)
 };
 
 static int is_live_renderer_identity(const CNA_GraphicsRendererType identity)

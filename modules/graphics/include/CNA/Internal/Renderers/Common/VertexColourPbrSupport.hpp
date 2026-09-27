@@ -90,11 +90,11 @@ namespace CNA::Internal::Renderers
      * metallic-roughness path whatsoever, whose stock-effect selector would otherwise fall through
      * and shade an authored glTF material as something else entirely.
      *
-     * The partition is the same and so is the reasoning. `PORTABLEGL` already refuses such a draw
-     * in their own words; this is that decision made once, so a renderer cannot join them by
-     * accident or drift out of them silently. (Four more renderers refused it in their own words
-     * until 2026-09-17 -- `SOKOL`, `TINYGL`, `GLIDE` and `OPENGLES1` -- which is why the shared
-     * guard was worth extracting even though one caller remains.)
+     * The partition is the same and so is the reasoning: this is that decision made once, so a
+     * renderer cannot join the refusing set by accident or drift out of it silently. (Five retired
+     * renderers refused it in their own words -- `SOKOL`, `TINYGL`, `GLIDE` and `OPENGLES1` until
+     * 2026-09-17, `PORTABLEGL` until 2026-09-27 -- which is why the shared guard was worth
+     * extracting even though one caller, `FNA3D`, remains.)
      *
      * Call it at the entry of the params-carrying draw paths, before any GPU state is touched: a
      * refusal that happens after the data has been submitted through the wrong shading model is not

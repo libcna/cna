@@ -56,13 +56,11 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 
 ## Graphics backends and renderers
 
-- [`plan_renderer_cleanup.md`](plan_renderer_cleanup.md) — retirement of 25 renderer identities and the
+- [`plan_renderer_cleanup.md`](plan_renderer_cleanup.md) — retirement of 28 renderer identities and the
   curated renderer set that remains.
 - [`plan_canvas.md`](plan_canvas.md) — HTML Canvas 2D.
-- [`plan_direct2d.md`](plan_direct2d.md) — Direct2D.
 - [`plan_dx.md`](plan_dx.md) — Direct3D 11 and Direct3D 12.
 - [`plan_dx9.md`](plan_dx9.md) — Direct3D 9.
-- [`plan_freedirect.md`](plan_freedirect.md) — FreeDirect.
 - [`plan_gdi.md`](plan_gdi.md) — Win32 GDI.
 - [`plan_headless.md`](plan_headless.md) — headless rendering.
 - [`plan_html_dom.md`](plan_html_dom.md) — HTML DOM rendering.
@@ -92,10 +90,12 @@ Skia's own plan was deleted with that renderer in 2026-08; the tombstone is the 
 - [`plan_blend2d.md`](plan_blend2d.md) — Blend2D.
 - [`plan_d3d10.md`](plan_d3d10.md) — Direct3D 10.
 - [`plan_diligent.md`](plan_diligent.md) — Diligent Engine.
+- [`plan_direct2d.md`](plan_direct2d.md) — Direct2D (retired 2026-09-27).
 - [`plan_dxold.md`](plan_dxold.md) — legacy DirectX roadmap, with
   [`plan_dx1.md`](plan_dx1.md), [`plan_dx2.md`](plan_dx2.md), [`plan_dx3.md`](plan_dx3.md),
   [`plan_dx5.md`](plan_dx5.md), [`plan_dx6.md`](plan_dx6.md), [`plan_dx7.md`](plan_dx7.md) and
   [`plan_dx8.md`](plan_dx8.md).
+- [`plan_freedirect.md`](plan_freedirect.md) — FreeDirect (retired 2026-09-27).
 - [`plan_glide.md`](plan_glide.md) — Glide 3.x.
 - [`plan_igl.md`](plan_igl.md) — IGL.
 - [`plan_llgl.md`](plan_llgl.md) — LLGL.

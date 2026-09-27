@@ -194,11 +194,6 @@ namespace
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
     constexpr const char* kRendererName = "CANVAS";
-#elif defined(CNA_RENDERER_FREEDIRECT)
-    constexpr bool kRasterizes = true;
-    constexpr bool kReadsBackbuffer = true;
-    constexpr bool kDraws3D = false;
-    constexpr const char* kRendererName = "FREEDIRECT";
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;

@@ -317,10 +317,6 @@ namespace
     constexpr Contract kContract{"CANVAS", Support::Exact, false, Support::Unsupported,
                                  false, false, false, false, true,
                                  true, true, false, false, true, false, false, false};
-#elif defined(CNA_RENDERER_FREEDIRECT)
-    constexpr Contract kContract{"FREEDIRECT", Support::Exact, false, Support::Unsupported,
-                                 false, false, false, false, true,
-                                 true, true, false, false, true, false, false, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr Contract kContract{"DIRECTX9", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,

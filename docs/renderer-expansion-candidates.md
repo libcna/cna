@@ -28,11 +28,12 @@ Authoritative companions:
 
 ## 1. What CNA supports today
 
-**25 public renderer identities**, mechanically verified by `scripts/check_renderer_identities.py`
+**22 public renderer identities**, mechanically verified by `scripts/check_renderer_identities.py`
 against `modules/core/include/CNA/GraphicsRendererType.hpp`, `cmake/RendererIdentities.cmake`, the
 runtime registry and the C ABI. Selected at configure time via `-DCNA_GRAPHICS_RENDERER=<selector>`;
 implementations live in `modules/renderers/<family>/`. Twenty-five former identities were retired on
-2026-09-17 (`plans/plan_renderer_cleanup.md`, `docs/removed-renderers.md`).
+2026-09-17 and three more (`DIRECT2D`, `FREEDIRECT`, `PORTABLEGL`) on 2026-09-27
+(`plans/plan_renderer_cleanup.md`, `docs/removed-renderers.md`).
 
 The five GL profiles (`OPENGLES2`, `OPENGLES3`, `OPENGL33`, `WEBGL1`, `WEBGL2`) share the internal
 EasyGL implementation while keeping distinct public contracts (context, shader profile, platform).
@@ -40,11 +41,11 @@ EasyGL implementation while keeping distinct public contracts (context, shader p
 | Class | Identities | Count |
 |---|---|---:|
 | No pixels (validation/no-op) | `HEADLESS`, `STUB` | 2 |
-| 2D-oriented | `SDL_RENDERER`, `CANVAS`, `HTML_DOM`, `SVG_DOM`, `FREEDIRECT`, `DIRECT2D`, `GDI` | 7 |
-| CPU 3D | `SOFTWARE`, `PORTABLEGL` | 2 |
+| 2D-oriented | `SDL_RENDERER`, `CANVAS`, `HTML_DOM`, `SVG_DOM`, `GDI` | 5 |
+| CPU 3D | `SOFTWARE` | 1 |
 | Programmable / modern | `OPENGLES2`, `OPENGLES3`, `OPENGL33`, `WEBGL1`, `WEBGL2`, `OPENGL4`, `VULKAN`, `WEBGPU`, `METAL`, `DIRECTX9`, `DIRECTX11`, `DIRECTX12`, `SDL_GPU` | 13 |
 | Abstraction layer | `FNA3D` | 1 |
-| **Total** | | **25** |
+| **Total** | | **22** |
 
 Notes that must not be misstated anywhere: `WEBGPU` is experimental with a bounded verified
 surface; the `ASCII` identity was **removed** in favour of the renderer-neutral
@@ -95,8 +96,8 @@ copyleft or version-dependent and could be disqualifying.
 
 | # | Identity | Upstream / API | Class | Proves what nothing else proves | Gate | Effort | Risk | License |
 |---:|---|---|---|---|---|---|---|---|
-| A1 | `OSMESA` | Mesa `libOSMesa` | CPU GL 4.x | Real, spec-complete desktop GL executed with **zero GPU and zero display server** — the only way to run the full EasyGL/`OPENGL4` feature matrix in CI. `PORTABLEGL` is a partial GL 3.x reimplementation, not Mesa. | none (CPU) | S | low | MIT |
-| A2 | `TINYGL` | C-Chads/tinygl (Bellard lineage) | CPU fixed-function | **DELIVERED 2026-08-13, RETIRED 2026-09-17.** Fixed-function GL 1.x on CPU. Its argument rested on contrasts with `OPENGL1` (also retired) and `PORTABLEGL`; in practice its 1-bit colour-key transparency, absent stencil/scissor/render-targets and absent shaders left it unable to serve as a general CPU renderer, which `SOFTWARE` and `PORTABLEGL` already do. See `../plans/plan_tinygl.md`. | none | S | low | zlib-style, acknowledgment required |
+| A1 | `OSMESA` | Mesa `libOSMesa` | CPU GL 4.x | Real, spec-complete desktop GL executed with **zero GPU and zero display server** — the only way to run the full EasyGL/`OPENGL4` feature matrix in CI. The retired `PORTABLEGL` was a partial GL 3.x reimplementation, not Mesa. | none (CPU) | S | low | MIT |
+| A2 | `TINYGL` | C-Chads/tinygl (Bellard lineage) | CPU fixed-function | **DELIVERED 2026-08-13, RETIRED 2026-09-17.** Fixed-function GL 1.x on CPU. Its argument rested on contrasts with `OPENGL1` (also retired) and `PORTABLEGL`; in practice its 1-bit colour-key transparency, absent stencil/scissor/render-targets and absent shaders left it unable to serve as a general CPU renderer, which `SOFTWARE` already does (`PORTABLEGL`, also retired, did too). See `../plans/plan_tinygl.md`. | none | S | low | zlib-style, acknowledgment required |
 | A3 | `SWIFTSHADER` | google/swiftshader | CPU Vulkan | A conformant **Vulkan** API surface with no GPU — lets the `VULKAN` renderer's contract be regression-tested on GPU-less machines without claiming it as `VULKAN`. (Weigh against §4's llvmpipe/lavapipe ruling: a software **driver** behind `VULKAN` is not an identity.) | none | M | med | Apache-2.0 |
 | A4 | `CAIRO` | cairo | 2D vector | ⚠ Premise expired: the `SKIA` and `BLEND2D` identities it was meant to sit beside are both retired, so CNA has no CPU 2D vector identity for it to be a *third* of. What survives is the device-agnostic backend set (image, X11, PDF, SVG) behind one API. | system pkg | M | med | LGPL-2.1 / MPL-1.1 — **verify** |
 | A5 | `XLIB` | X11 `XImage`/MIT-SHM | 2D presentation | The Linux peer of `GDI`: CPU pixels pushed straight to a bare X server, no SDL, no GL, no toolkit. | Linux + X11 | S | low | MIT |
@@ -139,7 +140,7 @@ also strengthen CI.
 
 | # | Identity | Upstream | Class | Proves what nothing else proves | Gate | Effort | Risk |
 |---:|---|---|---|---|---|---|---|
-| C1 | `QUARTZ2D` | CoreGraphics | 2D | macOS's `GDI`/`DIRECT2D` peer — today macOS has exactly one native identity (`METAL`). | macOS | M | med |
+| C1 | `QUARTZ2D` | CoreGraphics | 2D | macOS's `GDI` peer — today macOS has exactly one native identity (`METAL`). | macOS | M | med |
 | C2 | `ANDROID_CANVAS` | `android.graphics.Canvas` via JNI | 2D | Android's own 2D stack; CNA currently reaches Android only through GL. | Android | M | high |
 | C3 | `ANATIVEWINDOW` | NDK `ANativeWindow` | 2D presentation | Direct CPU buffer lock/post with no Java and no GL — the Android peer of `FBDEV`. | Android NDK | M | med |
 | C4 | `WEBGPU_WEB` | Browser WebGPU (Emscripten) | Programmable | **WITHDRAWN 2026-09-04 — this row's premise is false.** It argued browser WebGPU was identity-worthy because `WEBGPU` was native-only. `WEBGPU` shipped its browser backend on 2026-08-26 (`WEBGPU-119`–`123`), through Emscripten's emdawnwebgpu port: 2D, the 3D `BasicEffect` path and every stock effect render in a real browser, byte-identical to native Vulkan. `docs/webgpu-renderer.md` states it is *"one renderer identity with two backends, not two renderers"*, which is §4's own Dawn ruling applied to the same question. Nothing to add. | — | — | — |
@@ -226,11 +227,12 @@ authorization.
 The earlier edition of this section added the live identities, the Phase 2 list and this catalog
 into a "97 theoretical ceiling". **That arithmetic is deleted, not updated.** Summing a support
 matrix with a research list produces a number that looks like an ambition, and CNA has since
-established the opposite policy: the set is curated, and on 2026-09-17 it went *down* by 25.
+established the opposite policy: the set is curated, and on 2026-09-17 it went *down* by 25, and on
+2026-09-27 by three more.
 
 The only renderer count that may be published anywhere is the one
-`scripts/check_renderer_identities.py` prints for the actual tree — today, **25 public identities
-over 21 implementation families**. Twenty-six identities are retired, their ABI values permanently
+`scripts/check_renderer_identities.py` prints for the actual tree — today, **22 public identities
+over 18 implementation families**. Twenty-nine identities are retired, their ABI values permanently
 reserved (`docs/removed-renderers.md`).
 
 For the record of what this catalog has actually produced since 2026-08-13: three candidates built

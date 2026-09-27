@@ -33,8 +33,10 @@ and in `scripts/check_renderer_identities.py` (which fails if a value or a name 
 |---:|---|---|
 | 7 | `BGFX` | 2026-09-17 |
 | 10 | `MAGNUM` | 2026-09-17 |
+| 16 | `DIRECT2D` | 2026-09-27 |
 | 19 | `SKIA` | 2026-08-30 |
 | 20 | `BLEND2D` | 2026-09-17 |
+| 21 | `FREEDIRECT` | 2026-09-27 |
 | 23 | `DIRECTX1` | 2026-09-17 |
 | 24 | `DIRECTX2` | 2026-09-17 |
 | 25 | `DIRECTX3` | 2026-09-17 |
@@ -52,13 +54,133 @@ and in `scripts/check_renderer_identities.py` (which fails if a value or a name 
 | 39 | `GLIDE` | 2026-09-17 |
 | 41 | `LLGL` | 2026-09-17 |
 | 45 | `OPENVG` | 2026-09-17 |
+| 46 | `PORTABLEGL` | 2026-09-27 |
 | 47 | `TINYGL` | 2026-09-17 |
 | 48 | `IGL` | 2026-09-17 |
 | 49 | `PIXIJS` | 2026-09-17 |
 | 50 | `NANOVG` | 2026-09-17 |
 | 51 | `RLGL` | 2026-09-17 |
 
-The C ABI went to `0.28.0` for the 2026-09-17 retirement (`docs/c-api/ABI_VERSIONING.md`).
+The C ABI went to `0.28.0` for the 2026-09-17 retirement and to `0.31.0` for the 2026-09-27 one
+(`docs/c-api/ABI_VERSIONING.md`).
+
+## The 2026-09-27 retirement
+
+An intentional, permanent scope reduction (`plans/plan_renderer_cleanup.md` `RRC-012`): `DIRECT2D`,
+`FREEDIRECT` and `PORTABLEGL` were removed in one commit, found with `git log --grep=RRC-012`, leaving
+22 public renderer identities over 18 implementation families. None of the three was replaced, and
+each was already covered by a renderer that stays:
+
+- `DIRECT2D`, a Windows 2D-only renderer, by `GDI` (Windows 2D), `DIRECTX9`/`DIRECTX11`/`DIRECTX12`
+  (Windows GPU) and `SDL_RENDERER`.
+- `FREEDIRECT`, a DirectDraw-shaped 2D renderer over the unpinned `../free-direct` sibling, by
+  `SDL_RENDERER` and `GDI`. It was the last renderer of the legacy DirectX lineage.
+- `PORTABLEGL`, a bounded CPU OpenGL 3.x pipeline, by `SOFTWARE`, which is CNA's CPU renderer for
+  the classic XNA surface.
+
+**What was removed** besides the three `modules/renderers/<family>` directories: the three
+`option(CNA_RENDERER_*)` switches and dispatch arms in `cmake/RendererSelection.cmake` (with the
+`../free-direct` sibling `add_subdirectory` and the `PORTABLEGL` member of the `TERMINAL` renderer
+list); `cmake/ThirdPartyPortableGL.cmake`; the registry map rows; the `PORTABLEGL`-versus-real-GL
+combination rule and `DIRECT2D` in the Windows-only partition (`cmake/RendererCombinations.cmake`);
+`FREEDIRECT` from the SDL3-dependent renderer lists (`cmake/SdlAvailability.cmake`,
+`cmake/Sdl2OnlyConfiguration.cmake`, `tools/platform/renderer_sdl_audit.py`,
+`tools/platform/sdl_ratchet.py`), so the SDL allowlist is now `sdl-renderer`, `sdl-gpu` and
+`fna3d`; the `CNA_DIRECT2D_TEST_RUNTIME` cache option, the Direct2D Wine emulator arm and the
+`Direct2D_Unit` test in `cmake/UnitTests.cmake`; the `GraphicsRendererType` enumerators and their
+name, category and maturity arms; the three C ABI constants and their C/C++ mappings; the
+`DIRECT2D` leg of `.github/workflows/d3d-windows-ci.yml`; nine Direct2D-only scripts under
+`scripts/` and the `tests/fixtures/direct2d` log fixtures; seven renderer documents under `docs/`;
+and the per-renderer arms in shared tests and examples.
+
+**Compatibility residue, kept on purpose.** The three names stay in
+`CNA_RENDERER_RETIRED_IDENTITIES` so that every selection route -- `CNA_GRAPHICS_RENDERER`, a member
+of `CNA_GRAPHICS_RENDERERS`, and `CNA_RENDERER_<X>=ON` -- is refused by name instead of silently
+configuring the host default. Their C ABI values 16, 21 and 46 stay reserved: `graphics.h` names them
+in the `CNA_GRAPHICS_RENDERER_MAXIMUM` comment, and every C route refuses them with
+`CNA_RESULT_INVALID_ARGUMENT`. No constant, enumerator, class or stub renderer remains. The C++
+enumerators after the removed ones moved down, as the dense `GraphicsRendererType` has always
+allowed; no surviving C ABI value changed.
+
+**Deliberately preserved.** `GDI` and `SOFTWARE` were not modified. None of the removed families
+shared source with them: `DIRECT2D` used only the common `PlatformRendererSurfaceState.hpp` (still
+included by `GDI`, `DIRECTX9`/`11`/`12`, `METAL` and `WEBGPU`), `FREEDIRECT` the common
+`NoOp3DResources.hpp` and `Sdl3RendererInterop.hpp` (still used by `SDL_RENDERER`, `CANVAS`,
+`SDL_GPU` and `FNA3D`), and `PORTABLEGL` `VertexDeclarationFidelity.hpp` (used throughout).
+`RequirePbrShadingSupportEXT` stays because `FNA3D` still calls it. The Win32 platform, the
+`IPlatformSurfacePresenter` CPU-frame path and the `TERMINAL` platform are unchanged; `TERMINAL`
+keeps `SOFTWARE`, `HEADLESS` and `STUB`.
+
+**Validation performed** (2026-09-27, Linux x86-64). `cmake-build-multi` was configured from an
+empty directory with `SDL_RENDERER;OPENGLES3;VULKAN;SOFTWARE;HEADLESS;STUB` in one binary and
+`CnaTests` built: all six retained families compile against the changed headers. On the private
+Weston/Xwayland display (`tools/platform/run_gpu_tests_private.sh`) the renderer identity, selection,
+fallback, registry, descriptor, capability, cube-storage, glTF policy and cross-renderer contract
+suites ran 331 cases: 317 passed, 14 skipped by configuration, none failed. In the same tree the 29
+retired-selector refusals, the route and live-accept cases, the identity/combination/discipline
+gates and the C ABI header baseline all pass. The default `cmake-build-debug` (`OPENGLES3`, SDL3)
+was rebuilt incrementally and its full CTest suite run before and after the change on the same
+display: 134 of 10,140 failed before, 120 of 10,144 after, and no test fails only after the change
+except `CnaInputTests`, an X11 `BadWindow` under parallel load that passes on its own. The C ABI
+baseline was regenerated against the rebuilt `libcna_c_api.so`: only the three constants, the
+maximum and the version changed, and the 3,213 exports did not. `cmake-build-gdi` was configured
+from an empty directory with the MinGW-w64 toolchain and `CNA_GRAPHICS_RENDERER=GDI`, and every GDI
+renderer translation unit compiles.
+
+**Not validated.** No Windows, macOS or browser run was possible here. The GDI executables do not
+link on this tree for a reason that predates this change: `SoftwareRenderer2D.cpp`, compiled into
+`GDI` with `CNA_SOFTWARE_2D_ONLY`, calls helpers that are only defined outside that mode (since
+`8465377b1`/`0f213ebaf`, 2026-09-08), so the GDI tests were neither linked nor run. `DIRECTX9`,
+`DIRECTX11`, `DIRECTX12`, `METAL`, `WEBGPU`, `SDL_GPU`, `OPENGL4`, `FNA3D` and the Emscripten
+renderers were not built; none of their sources changed.
+
+### DIRECT2D
+
+| | |
+|---|---|
+| Identity | `DIRECT2D` (enum `Direct2D`, C ABI 16) |
+| Family | `modules/renderers/direct2d` — 11 files, 8,467 lines |
+| Dependency | the Windows SDK `d2d1`, `d3d11` and `dxgi` import libraries, no fetched source; Linux cross-builds ran through Wine's `d2d1` in a dedicated prefix, or Proton `9.0 (Beta)`/`8.0` through DXVK for the presentation device |
+| Build was | `-DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake -DCNA_GRAPHICS_RENDERER=DIRECT2D` (tests through `scripts/run-wine-direct2d.sh`, `CNA_DIRECT2D_TEST_RUNTIME=WINE|PROTON`), or native MSVC |
+
+**What it proved.** A SpriteBatch-oriented 2D renderer on `ID2D1DeviceContext`, with a D3D11 device
+and flip-model swap chain only as its host (`plans/plan_direct2d.md`): byte-exact
+`SurfaceFormat::Color` ↔ BGRA conversion, authored `Texture2D` mips, exact Porter-Duff tuples mapped
+to Direct2D composites with every inexact blend refused, device-loss recovery that raised
+`ContentLost`, and a native debug-layer/live-object gate in CI. The renderer-agnostic 2D corpus it
+motivated, `modules/graphics/examples/cross_renderer_2d_corpus.cpp`, stays and is still built by
+EasyGL and Vulkan.
+
+### FREEDIRECT
+
+| | |
+|---|---|
+| Identity | `FREEDIRECT` (enum `FreeDirect`, C ABI 21) |
+| Family | `modules/renderers/freedirect` — 15 files, 4,203 lines |
+| Dependency | the sibling checkout `../free-direct` (`https://github.com/openeggbert/free-direct.git`, which itself adds `../free-api`), added with `add_subdirectory` and **never pinned** -- the build used whatever that checkout held; its own SDL3 came from CNA's vendored targets |
+| Build was | `-DCNA_GRAPHICS_RENDERER=FREEDIRECT` with `../free-direct` present (native Linux, no Wine) |
+
+**What it proved.** A 2D-only renderer over a COM-shaped DirectDraw subset: a CPU shadow backbuffer
+that worked around `free-direct`'s unwritable primary surface, a `BltFast` fast path plus an
+edge-function compositor, four distinct `BlendState` formulas, bilinear filtering and
+`Wrap`/`Mirror` addressing (`plans/plan_freedirect.md`). It was named `DIRECTX3` until 2026-08-04.
+**Note for anyone restoring it:** like Skia, the dependency was never pinned, so the removal commit
+does not identify the `free-direct` revision it was built against.
+
+### PORTABLEGL
+
+| | |
+|---|---|
+| Identity | `PORTABLEGL` (enum `PortableGL`, C ABI 46) |
+| Family | `modules/renderers/portablegl` — 19 files, 5,853 lines |
+| Dependency | `https://github.com/rswinkle/PortableGL.git` @ tag `0.100.0`, commit `63a55db75ab07619797a93ff9bf3909355d27950` (MIT, single header, FetchContent; `cmake/ThirdPartyPortableGL.cmake`, removed with it) |
+| Build was | `-DCNA_GRAPHICS_RENDERER=PORTABLEGL` (no GPU, no window) |
+
+**What it proved.** A bounded CPU 3D path in which every pipeline stage is a real PortableGL call --
+buffers, vertex attributes, C-function-pointer shaders, `glDrawArrays`/`glDrawElements`, blend,
+stencil, cull and polygon mode -- with everything outside that boundary refused by name. It could
+not share a binary with a real OpenGL renderer, because the header defines the global `gl*`
+symbols; that combination rule left with it.
 
 ## The 2026-09-17 retirement
 
@@ -80,7 +202,8 @@ stays:
 - **2D vector rasterizers** — `BLEND2D`, `OPENVG`, `NANOVG`. 2D-only by construction, so they could
   never satisfy the 3D half of `IGraphicsRenderer`; CNA's 2D already renders on the GPU through EasyGL
   and SDL_GPU, and on the CPU through `SOFTWARE`.
-- **Duplicate CPU and browser routes** — `TINYGL` (covered by `SOFTWARE` and `PORTABLEGL`) and
+- **Duplicate CPU and browser routes** — `TINYGL` (covered by `SOFTWARE` and `PORTABLEGL`, the
+  latter itself retired on 2026-09-27) and
   `PIXIJS` (covered by `WEBGL2`, `CANVAS`, `HTML_DOM` and `SVG_DOM`).
 
 The sizes below count the family directory only; each renderer also had documentation, CI and
@@ -145,7 +268,8 @@ requests a surface presenter, so the `TERMINAL` platform's CI leg now builds `SO
 `plans/plan_dx2.md`); DirectDraw v2 and v4; FVF submission; real stencil in DirectX 6; the
 flattened DirectX 7 device; and Direct3D 8's merged device with a DXVK delivery route. `DIRECTX3`
 here is the *real* DirectX 3 renderer;
-the `../free-direct`-backed renderer that once held that name is `FREEDIRECT` and stays.
+the `../free-direct`-backed renderer that once held that name is `FREEDIRECT`, which survived this
+retirement and was retired on 2026-09-27.
 
 ### DIRECTX10
 

@@ -27,6 +27,7 @@ renderer count is not a goal.
 | RRC-009 | Final pass: remove `DrawMeshEXT`, the dead API the curation left with no implementer | ✅ |
 | RRC-010 | Final pass: audit `needsSurfacePresenter` and `TERMINAL` — decide, do not assume | ✅ |
 | RRC-011 | Remove retired renderer spikes and the rejected Three.js probe; repair current-tree references and retention policy | ✅ |
+| RRC-012 | Retire `DIRECT2D`, `FREEDIRECT` and `PORTABLEGL`: remove their families and every integration that existed only for them | ✅ |
 
 **2026-09-19 owner decision (`RRC-011`).** Retired renderer probes and the rejected Three.js
 candidate probe no longer belong in the current `spikes/` tree. The earlier archive-retention
@@ -799,3 +800,60 @@ retired identities; all 34 `CnaRendererRetired` CTests pass. Incremental builds 
 `EasyGLRedundantStateTests.cpp` missing `metagl/metagl.hpp`; its first attempt also encountered a
 read-only `/rv/cnaccache` and was rerun with ccache disabled. No CMake or runtime source was
 changed in RRC-011.
+
+## RRC-012 — Retire `DIRECT2D`, `FREEDIRECT` and `PORTABLEGL`
+
+**Owner instruction, 2026-09-27.** An intentional, permanent scope reduction: remove the three
+renderers completely -- implementation, selection, build, tests, CI, scripts and live documentation
+-- without disturbing `GDI`, `SOFTWARE`, shared Windows/CPU presentation code or any other retained
+renderer. Not a deprecation: no dormant implementation, stub or compatibility wrapper remains.
+
+It follows `RRC-002`/`RRC-003` exactly. The three names move from `CNA_RENDERER_PUBLIC_IDENTITIES`
+to `CNA_RENDERER_RETIRED_IDENTITIES` (`DIRECT2D=16`, `FREEDIRECT=21`, `PORTABLEGL=46`), so all three
+selection routes refuse them by name; the enumerators, registry rows, C ABI constants and their
+mappings are removed; `CNA_GRAPHICS_RENDERER_MAXIMUM` moves from 46 to 44 (`SVG_DOM`) and the C ABI
+goes to `0.31.0`. 22 public identities remain over 18 implementation families.
+
+**Audit, before deleting.** Every match of `FreeDirect`, `Direct2D`, `D2D`, `PortableGL` and their
+spellings was classified. Shared code was checked by its includers, not its name, and none of it
+was renderer-specific: `PlatformRendererSurfaceState.hpp` (Direct2D) is still included by `GDI`,
+`DIRECTX9`/`11`/`12`, `METAL` and `WEBGPU`; `NoOp3DResources.hpp` and `Sdl3RendererInterop.hpp`
+(FreeDirect) by `SDL_RENDERER`, `CANVAS`, `SDL_GPU` and `FNA3D`; `VertexDeclarationFidelity.hpp`
+(PortableGL) throughout. Nothing under `modules/renderers/gdi`, `modules/renderers/software` or
+`modules/platform` referred to any of the three. Two things became dead with the removals and were
+deleted: `CNA_RENDERER_REAL_GL_FAMILIES`, which only the `PORTABLEGL` combination rule read, and the
+PortableGL FetchContent pin. `RequirePbrShadingSupportEXT` stays: `FNA3D` still calls it. No
+`spikes/` probe existed for any of the three.
+
+**What moved rather than went.** `cross_renderer_2d_corpus.cpp`, written for the Direct2D/EasyGL
+differential, is renderer-agnostic and still built by EasyGL and Vulkan; its comments now say so
+instead of pointing at the deleted `docs/direct2d-easygl-differential.md`. The Windows CI workflow
+keeps its `DIRECTX11`/`DIRECTX12` legs and their `--parallel 2` build unchanged.
+
+**Generated artefacts** were regenerated with their own tools: `docs/platform-renderer-sdl-audit.md`
+(18 families, allowlist `fna3d`, `sdl-gpu`, `sdl-renderer`), `plans/plan_platform.md` §2, and
+`docs/c-api/COVERAGE.md`. `tools/platform/nonproduction_sdl_budget.json` lost exactly the seven
+entries of deleted files; `--update` would also have tightened two unrelated entries, so it was not
+used. Two generated C ABI documents, `COMPATIBILITY.md` and `LIMITATIONS.md`, were already stale
+before this change (from `MOD-RETIRE-1`) and are left for their own refresh.
+
+**Verification.**
+
+| Check | Result |
+|---|---|
+| `scripts/check_renderer_identities.py` | 22 identities / 18 families; 29 retired, values reserved, next free 52 |
+| `check_renderer_combinations.py`, `check_runtime_renderer_discipline.py` | pass (2 rules; 18 families) |
+| `renderer_sdl_audit.py`, `sdl_inventory.py`, `sdl_ratchet.py`, `hot_path_lint.py`, `nonproduction_sdl_audit.py` | pass; `sdl_classify.py` fails on the pre-existing unclassified `SDL_TOUCH_MOUSEID` |
+| `cmake -P cmake/RendererIdentities.cmake` | refuses `DIRECT2D`, `freedirect`, `PortableGL`, `-DCNA_RENDERER_PORTABLEGL=ON` and `CNA_GRAPHICS_RENDERERS=HEADLESS;DIRECT2D` by name; accepts `GDI` |
+| `cmake-build-multi`, clean configure, `SDL_RENDERER;OPENGLES3;VULKAN;SOFTWARE;HEADLESS;STUB` | configures; `CnaTests` builds; 331 renderer-related cases on the private display: 317 pass, 14 skipped, 0 fail; 44 configuration/registry/ABI ctests pass |
+| `cmake-build-debug` (`OPENGLES3`, SDL3), full ctest on the private display | before 134/10,140 failed, after 120/10,144; the only after-only failure, `CnaInputTests` (X11 `BadWindow` at `-j8`), passes twice alone |
+| C ABI | `abi_baseline.json` regenerated with the library: three constants, `MAXIMUM` and version only; 3,213 exports unchanged; `CApi_CoreExtSmoke`, `CApi_AbiSmoke`, `CApi_RenderTargetLifetimeSmoke` pass |
+| `cmake-build-gdi`, clean MinGW-w64 configure, `GDI` | configures; every GDI renderer unit compiles; linking blocked by the pre-existing `SoftwareRenderer2D.cpp` 2D-only break (`8465377b1`/`0f213ebaf`) |
+
+Failures present both before and after, none caused here: `EasyGLRedundantStateTest` (3, abort),
+`ENet*` (3), the C ABI generated-document gates stale since `MOD-RETIRE-1`
+(`CApiCompatibilityMatrix`, `CApiLimitations`, `CApiDocExportCounts`, `CApiBoolContractCurrent`,
+`CApiReleaseGate`), `CApi_InstalledConsumer` (static library not built in that tree), and 107
+tests whose executables that tree does not build. Not validated: any Windows, macOS or browser
+run, and the `DIRECTX9/11/12`, `METAL`, `WEBGPU`, `SDL_GPU`, `OPENGL4`, `FNA3D` and Emscripten
+builds, none of whose sources changed.

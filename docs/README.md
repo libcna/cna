@@ -141,8 +141,6 @@ Kept for their investigation methodology and root-cause detail, not as current s
 - `ascii-renderer.md` — **historical**: completeness status for the former `ASCII` (SDL-windowed
   retro glyph-grid) graphics renderer, removed 2026-08 in favor of the post-process effect above;
   see `../plans/plan_ascii.md` for the full historical task-by-task detail.
-- `freedirect-renderer.md` — FreeDirect (DirectDraw via the `../free-direct` sibling; named `DIRECTX3` before 2026-08-04)'s own completeness status,
-  current as of `plans/plan_freedirect.md`'s Phase X1-X7 closure (2026-07-15).
 - `fna-reference-harness.md` — the differential-testing infra (`tools/fna-reference/`) mentioned
   in `../README.md`'s verification-methodology bullet.
 

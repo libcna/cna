@@ -23,8 +23,8 @@
 3. In practice: **Switch / Switch 2 / PS4 / PS5 / Xbox One / Series = yes, an NDA SDK and a
    registered developer account are required.** **PS Vita / PSP / PS2 / 3DS / Wii / GameCube /
    Dreamcast / Xbox Classic = no, a public homebrew SDK is sufficient**—and CNA is realistically
-   closer to that goal than one might expect because it has the `SOFTWARE`, `PORTABLEGL`, and
-   `SDL_RENDERER` renderers.
+   closer to that goal than one might expect because it has the `SOFTWARE` and `SDL_RENDERER`
+   renderers.
 
 ---
 
@@ -195,8 +195,8 @@ This is where an actual new platform implementation is created (`CNA::Platform::
   combiners), and nxdk does not provide `d3d8.dll`—pbkit/XGU must be used.
 - **Wii/GameCube + `opengx`, 3DS + `picaGL`, PSP + `pspgl`, Dreamcast + `GLdc`** → again,
   fixed-function GL1-level targets.
-- For the smallest platforms, `SOFTWARE` and `PORTABLEGL` remain the final fallback (both have only
-  four references to SDL in this tree, so they are closest to being SDL-independent).
+- For the smallest platforms, `SOFTWARE` remains the final fallback (it is SDL-free in this tree, so
+  it is closest to being SDL-independent).
 
 ### Phase 6 — Class A (NDA)
 
@@ -213,9 +213,9 @@ documentation. No SDK function name, header, or build script that refers to devk
 | PS Vita | `SDL_RENDERER` (vitaGL is a GL1/GLES1-level API, which no current renderer targets) | lowest barrier to entry in the entire analysis |
 | PSP | `SOFTWARE` | 480×272, fixed-function |
 | PS2 | custom `gsKit`/`ps2gl` backend, or `SOFTWARE` | 32 MB RAM is a hard limit |
-| 3DS | `SOFTWARE` / `PORTABLEGL` fallback only | two screens fall outside the XNA model; address as CNAEXT |
-| Wii / GameCube | `SOFTWARE` / `PORTABLEGL` fallback only | libogc GX is fixed-function |
-| Dreamcast | `SOFTWARE` / `PORTABLEGL` fallback only | 16 MB RAM, the tightest profile |
+| 3DS | `SOFTWARE` fallback only | two screens fall outside the XNA model; address as CNAEXT |
+| Wii / GameCube | `SOFTWARE` fallback only | libogc GX is fixed-function |
+| Dreamcast | `SOFTWARE` fallback only | 16 MB RAM, the tightest profile |
 | Xbox Classic | new `NXDK` renderer (pbkit/XGU) | NV2A is fixed-function + register combiners |
 | Switch / Switch 2 | NDA (deko3d / Vulkan-like) | outside the public repository |
 | PS4 / PS5 | NDA (GNM/GNMX, AGC) | outside the public repository |

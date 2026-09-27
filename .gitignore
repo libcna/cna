@@ -26,7 +26,6 @@ cmake-build-d3d11/*
 cmake-build-d3d12/*
 cmake-build-canvas/*
 cmake-build-ascii/*
-cmake-build-freedirect/*
 cmake-build-d3d9/*
 cmake-build-sdlgpu/*
 cmake-build-opengl4/*

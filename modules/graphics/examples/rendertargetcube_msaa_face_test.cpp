@@ -179,9 +179,6 @@ namespace
 #elif defined(CNA_RENDERER_CANVAS)
     constexpr Contract kContract{"CANVAS", false, Support::Unsupported, false,
                                  Support::Unsupported, false, false};
-#elif defined(CNA_RENDERER_FREEDIRECT)
-    constexpr Contract kContract{"FREEDIRECT", false, Support::Unsupported, false,
-                                 Support::Unsupported, false, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
     // `msaaEngages` false: D3D9RenderTargetCubeRenderer::Recreate() allocates a plain
     // D3DUSAGE_RENDERTARGET cube texture and GetMultiSampleCount() reports 0 by construction.

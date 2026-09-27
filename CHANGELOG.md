@@ -61,6 +61,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
   while the ABI is still experimental; there is no replacement and no compatibility stub. This
   advances the experimental C ABI to `0.29.0`, with exported symbols 4,056 → 4,055 and recorded
   struct layouts 222 → 221 (`plans/plan_renderer_cleanup.md` `RRC-009`).
+- **Three more renderer identities**, `DIRECT2D`, `FREEDIRECT` and `PORTABLEGL`, leaving 22 public
+  identities over 18 implementation families: their implementation families, the PortableGL
+  FetchContent pin, the `../free-direct` sibling checkout, the Direct2D Wine/Proton runners,
+  debug-log gates and Windows CI leg, their tests and their documentation
+  (`plans/plan_renderer_cleanup.md` `RRC-012`, [`docs/removed-renderers.md`](docs/removed-renderers.md)).
+  They are refused by name at configure time like the earlier retirements. `GDI` and `SOFTWARE` are
+  unchanged. Their C ABI values 16, 21 and 46 are permanently reserved,
+  `CNA_GRAPHICS_RENDERER_MAXIMUM` moves to 44 (`SVG_DOM`), and the experimental C ABI goes to
+  `0.31.0`; no surviving identity is renumbered.
 
 ### Changed
 

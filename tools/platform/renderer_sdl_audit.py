@@ -60,11 +60,9 @@ from sdl_inventory import scan  # noqa: E402
 SDL_NATIVE = frozenset({"sdl-renderer", "sdl-gpu"})
 
 # Renderers allowlisted because the third-party library they wrap links SDL3 itself. CNA's own
-# sources here contain only small integration seams. Free-direct creates and owns an internal
-# SDL_Renderer that CNA never sees (its CMakeLists resolves SDL3::SDL3 from CNA's vendored targets),
-# and FNA3D links SDL3 upstream the same way. Migrating CNA code cannot remove either dependency,
-# which is precisely why they are a separate verdict from sdl-native.
-SDL_UPSTREAM = frozenset({"fna3d", "freedirect"})
+# sources here contain only small integration seams: FNA3D links SDL3 upstream. Migrating CNA code
+# cannot remove that dependency, which is precisely why it is a separate verdict from sdl-native.
+SDL_UPSTREAM = frozenset({"fna3d"})
 
 # SDL_Renderer calls that mean "put my finished CPU pixels on the screen" rather than "render with
 # SDL". A family that calls any of these, and is not sdl-native, is doing CPU presentation.
@@ -123,8 +121,7 @@ def strip_comments_and_strings(text: str) -> str:
     The inventory deliberately counts SDL named in comments -- a doc comment phrased in SDL's
     vocabulary is coupling the plan removes. A *verdict*, though, must not be decided by prose:
     html-dom's only "presentation call" is the words `SDL_SetRenderClipRect` inside a comment
-    explaining what this renderer does NOT do, and freedirect's SDL_Renderer mentions are all
-    commentary about the library's internals. Classifying either as a CPU presenter on that basis
+    explaining what this renderer does NOT do. Classifying it as a CPU presenter on that basis
     would be wrong, so the verdict path reads code only.
     """
     return _COMMENT_OR_STRING.sub(" ", text)
@@ -285,12 +282,11 @@ def render_markdown(rows: list[dict[str, object]], identities: dict[str, str]) -
 
     out.write("\n## Findings\n\n")
     out.write(
-        f"1. **The allowlist is {len(allowlist)}, not three:** "
+        f"1. **The allowlist is {len(allowlist)}:** "
         + ", ".join(f"`{f}`" for f in allowlist)
-        + ". `sdl-renderer` and `sdl-gpu` are SDL3 APIs by identity. `fna3d` and `freedirect` wrap\n"
-        "   third-party libraries that link SDL3 themselves — free-direct creates and owns an\n"
-        "   internal `SDL_Renderer` CNA never sees — so no amount of migrating CNA code removes\n"
-        "   their dependency. That is a different kind of exception and is recorded as one.\n\n"
+        + ". `sdl-renderer` and `sdl-gpu` are SDL3 APIs by identity. `fna3d` wraps a third-party\n"
+        "   library that links SDL3 itself, so no amount of migrating CNA code removes its\n"
+        "   dependency. That is a different kind of exception and is recorded as one.\n\n"
     )
     if presenters:
         out.write(
@@ -320,8 +316,8 @@ def render_markdown(rows: list[dict[str, object]], identities: dict[str, str]) -
         )
     else:
         out.write(
-            "3. **PLAT-59 closed the interface-only renderer coupling.** `HEADLESS`, `PORTABLEGL`,\n"
-            "   `SOFTWARE` and `STUB` are now SDL-free. `IGraphicsRenderer` exposes neither native\n"
+            "3. **PLAT-59 closed the interface-only renderer coupling.** `HEADLESS`, `SOFTWARE` and\n"
+            "   `STUB` are now SDL-free. `IGraphicsRenderer` exposes neither native\n"
             "   window/renderer getter and no longer names `SDL_Renderer`; PLAT-60 had already\n"
             "   removed its `SDL_Texture*` method.\n"
         )

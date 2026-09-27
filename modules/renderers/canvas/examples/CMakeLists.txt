@@ -24,7 +24,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "CANVAS")
 
     # CNA::GraphicsCapability: Canvas is 2D-only -- SupportsCapability() reports which
     # capabilities are genuinely absent (ThreeD and everything that depends on it). Twin of
-    # cna_test_sdl_graphics_capability/cna_test_freedirect_graphics_capability.
+    # cna_test_sdl_graphics_capability.
     add_executable(cna_test_canvas_graphics_capability canvas_graphics_capability_test.cpp)
     target_link_libraries(cna_test_canvas_graphics_capability PRIVATE CNA SDL3::SDL3)
 

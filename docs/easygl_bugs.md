@@ -110,7 +110,6 @@ them verifiable on this host:
 |---|---|---|
 | `directx11` | `D3D11StateObjectCache.cpp` `GetOrCreate` | `lround(-0.0001)` is **0** -- the bias is dropped entirely |
 | `vulkan` | `VulkanRenderer::ApplyRasterizerState` | unscaled into `vkCmdSetDepthBias`'s `depthBiasConstantFactor` |
-| `portablegl` | `PortableGLRenderer.cpp:1348` | unscaled into `glPolygonOffset` |
 
 ## Browser fullscreen reports a drawable the browser does not present (found 2026-09-08)
 

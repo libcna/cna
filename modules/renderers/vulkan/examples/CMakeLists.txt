@@ -63,7 +63,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_vulkan_test(cna_diag_vulkan ${CNA_GRAPHICS_EXAMPLES_DIR}/cross_renderer_diagnostic_scene.cpp)
 
         # plan_vulkan.md VULKAN-431: the 2D half of the same dump, from the same renderer-agnostic
-        # source EasyGL and Direct2D already build. Deliberately a plain executable and NOT a
+        # source EasyGL already builds. Deliberately a plain executable and NOT a
         # CTest, exactly as cna_diag_vulkan above and cna_corpus2d_easygl are: it asserts nothing
         # on its own, it produces one renderer's dump for cna_diag_compare to judge against
         # another's -- and the two dumps come from two different build directories, which is why

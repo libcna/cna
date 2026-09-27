@@ -467,20 +467,21 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
 
     # The other two routes, plus the controls that keep the refusal honest. BGFX and RLGL stand in
     # for the whole retired set on the SET and OPTION routes -- the per-identity sweep above already
-    # proves the table is complete, so repeating 26 identities on three routes would buy nothing but
-    # 78 tests. What these add is route coverage: a member of CNA_GRAPHICS_RENDERERS and a
+    # proves the table is complete, so repeating 29 identities on three routes would buy nothing but
+    # 87 tests. What these add is route coverage: a member of CNA_GRAPHICS_RENDERERS and a
     # CNA_RENDERER_<X>=ON option are read by different code than the cache selector.
     #
     # The ACCEPT and unknown-name controls exist because a refusal that refuses everything is not a
-    # working gate: without them, a bug that rejected all input would pass all 26 cases above.
+    # working gate: without them, a bug that rejected all input would pass all 29 cases above.
     set(_cna_retired_route_cases
         # name|route|identity|outcome|expected text
         "SetMember_BGFX|SET|BGFX|REFUSE|removed-renderers.md"
         "SetMember_OPENGLES1|SET|OPENGLES1|REFUSE|removed-renderers.md"
         "Option_RLGL|OPTION|RLGL|REFUSE|removed-renderers.md"
         "Option_DIRECTX7|OPTION|DIRECTX7|REFUSE|removed-renderers.md"
+        "Option_FREEDIRECT|OPTION|FREEDIRECT|REFUSE|removed-renderers.md"
         "LiveSelectorAccepted_VULKAN|SELECTOR|VULKAN|ACCEPT|"
-        "LiveSelectorAccepted_PORTABLEGL|SELECTOR|PORTABLEGL|ACCEPT|"
+        "LiveSelectorAccepted_SVG_DOM|SELECTOR|SVG_DOM|ACCEPT|"
         "LiveSetMemberAccepted_STUB|SET|STUB|ACCEPT|"
         "UnknownNameStillUnknown|SELECTOR|NOT_A_RENDERER|REFUSE|unknown graphics renderer")
     foreach(_cna_retired_route_case IN LISTS _cna_retired_route_cases)

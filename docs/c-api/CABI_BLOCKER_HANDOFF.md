@@ -95,7 +95,7 @@ Two halves with different answers.
   `_unsubscribe_content_lost` bind the render-target half that buffers already had.
 - **ABI CLASSIFICATION** — **D** for the event becoming real; **C** for the two additive routes.
 - **CNA TEST** — `ContentLostProbe`, `CApi_RenderTargetLifetimeSmoke`, and `ContentLostTests.cpp`.
-- **STATUS** — `RESOLVED where loss is real`. Only `directx9` and `direct2d` report a device
+- **STATUS** — `RESOLVED where loss is real`. Only `directx9` and `direct2d` (retired 2026-09-27) report a device
   reset; every other renderer family never loses content and so never raises it. This is
   deliberate — firing on a caller-initiated `Reset` would make the event noise.
 - **CORRECTION, and it was a real defect.** An earlier revision of this row claimed "a write clears

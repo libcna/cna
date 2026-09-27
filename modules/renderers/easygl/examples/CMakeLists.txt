@@ -132,11 +132,10 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
         cna_easygl_test(cna_diag_easygl ${CNA_GRAPHICS_EXAMPLES_DIR}/cross_renderer_diagnostic_scene.cpp)
 
-        # plans/plan_direct2d.md D2D-129: the 2D counterpart of the dump above. The 3D scene next to it
-        # cannot serve that purpose -- Direct2D is a permanently 2D-only renderer and rejects its
-        # VertexBuffer/BasicEffect calls -- so the 2D corpus is a separate, equally
-        # renderer-agnostic source built once per renderer. Same "comparison tool, no pass/fail
-        # assertion of its own" precedent: not registered as a ctest.
+        # The 2D counterpart of the dump above. The 3D scene next to it cannot serve that purpose
+        # for a 2D-only renderer, which rejects its VertexBuffer/BasicEffect calls, so the 2D
+        # corpus is a separate, equally renderer-agnostic source built once per renderer. Same
+        # "comparison tool, no pass/fail assertion of its own" precedent: not registered as a ctest.
         cna_easygl_test(cna_corpus2d_easygl ${CNA_GRAPHICS_EXAMPLES_DIR}/cross_renderer_2d_corpus.cpp)
 
         # plans/plan_dx9.md D9-A6: builds the SAME ${CMAKE_SOURCE_DIR}/tools/xna-oracle/CnaOracleRender.cpp (D9-A3's own

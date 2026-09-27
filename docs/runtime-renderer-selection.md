@@ -25,8 +25,8 @@ linked in and the concrete one is chosen at runtime, before CNA is started.
 |---|---|
 | Descriptor / registry value types | ✅ present (`GraphicsRendererDescriptor`, `GraphicsRendererRegistry`, `GraphicsRendererFallbackRecord`) |
 | Pre-window contract extracted from `GraphicsDevice` | ✅ window flags, `SDL_INIT_VIDEO`, the no-window branch and per-family GL context attributes are all descriptor-driven |
-| Per-family descriptors | ✅ all 21 implementation families / 25 public renderer identities; guarded by `scripts/check_runtime_renderer_discipline.py` |
-| Namespaced factories / generated registry | ✅ all 21 factories namespaced; `cmake/RendererRegistry.cmake` emits the table, and the discipline gate checks every identity reaches it |
+| Per-family descriptors | ✅ all 18 implementation families / 22 public renderer identities; guarded by `scripts/check_runtime_renderer_discipline.py` |
+| Namespaced factories / generated registry | ✅ all 18 factories namespaced; `cmake/RendererRegistry.cmake` emits the table, and the discipline gate checks every identity reaches it |
 | `GraphicsRendererSelection` API | ✅ selection, latch, env var, availability; 20 tests |
 | Fallback chain | ✅ resolution, recording, logging and exhaustion; cross-window-kind recreation verified with `SDL_RENDERER;OPENGLES3;HEADLESS` and `OPENGLES3;VULKAN;SOFTWARE;HEADLESS;STUB` multi builds |
 | Multi-renderer CMake mode | ✅ `CNA_GRAPHICS_RENDERERS`, configure-time combination rules, CI job |
@@ -49,7 +49,7 @@ can serve them. Each renderer family answers them through its own
 
 | Question | Field |
 |---|---|
-| Does this renderer need a window at all? | `needsWindow` — false for `HEADLESS`, `SOFTWARE`, `STUB`, `PORTABLEGL` |
+| Does this renderer need a window at all? | `needsWindow` — false for `HEADLESS`, `SOFTWARE`, `STUB` |
 | Must the platform's video subsystem be started? | `needsVideoSubsystem` — false for the same families, which is what lets them run with no display server |
 | What kind of window does it need? | `windowKind` (`None`/`Plain`/`OpenGL`/`Vulkan`/`Metal`), plus `wantsHighDpi` |
 | Anything to fix before the window exists? | `glFramebuffer` — depth/stencil/double-buffer/multisample bits, which a desktop GLX visual fixes at window-creation time. Only `OPENGL4` and `FNA3D` have real work here |
@@ -225,9 +225,8 @@ configure time, not merely to exist.
 
 | Combination | Why it is refused |
 |---|---|
-| `PORTABLEGL` + any real-OpenGL renderer | PORTABLEGL is a single-header C library that **defines** the global `gl*` symbols (`glClear`, `glDrawArrays`, …). Linking it beside a renderer that calls the real OpenGL of the same names is a duplicate-symbol error. |
 | `GDI` + `SOFTWARE` | GDI compiles the SOFTWARE module's own translation units a second time with `CNA_SOFTWARE_2D_ONLY`. Both in one binary would define the same functions twice with different bodies — an ODR violation. |
-| Renderers from different **platform** partitions | Windows-only (`DIRECTX9`, `DIRECTX11`, `DIRECTX12`, `DIRECT2D`, `GDI`), Emscripten-only (`WEBGL1`, `WEBGL2`, `CANVAS`, `HTML_DOM`, `SVG_DOM`) and macOS-only (`METAL`) cannot be targeted by one toolchain. |
+| Renderers from different **platform** partitions | Windows-only (`DIRECTX9`, `DIRECTX11`, `DIRECTX12`, `GDI`), Emscripten-only (`WEBGL1`, `WEBGL2`, `CANVAS`, `HTML_DOM`, `SVG_DOM`) and macOS-only (`METAL`) cannot be targeted by one toolchain. |
 
 ### Verified combinations
 
@@ -235,13 +234,12 @@ configure time, not merely to exist.
 |---|---|
 | `HEADLESS;SOFTWARE;STUB` | ✅ builds, full test suite green, all three selectable at runtime, real fallback between them verified |
 | `WEBGL2;WEBGL1;CANVAS;HTML_DOM;SVG_DOM` (Emscripten) | 🟨 **one wasm bundle carries all five**, and the selection API works inside it — `GetAvailable()` reports all five and `GetSelected()` resolves. Creating a device needs a real browser, which is not yet automated here |
-| `SOFTWARE;PORTABLEGL;HEADLESS;STUB` | ✅ 6269 passed, 0 failed. PORTABLEGL *can* join a multi build — its global `gl*` symbols only conflict with a renderer that calls the real OpenGL of the same names |
 | `SDL_RENDERER;OPENGLES3;SOFTWARE;HEADLESS;STUB` | ✅ builds, all five selectable at runtime, window recreation across window kinds verified. Its 16 test failures are identical to a single-renderer `SDL_RENDERER` build's — pre-existing renderer boundaries, none caused by multi-renderer mode |
 | `OPENGLES3;OPENGLES2;OPENGL33;SOFTWARE;HEADLESS` | ✅ **6385 passed, 0 failed.** Three EasyGL GL profiles in one binary — `OPENGL33` really does get a desktop core context (`OpenGL 4.6 (Core Profile)`) while the ES profiles get an ES context |
 | `OPENGLES3;VULKAN;SOFTWARE;HEADLESS;STUB` | ✅ **6385 passed, 0 failed.** Two different GPU APIs in one binary, both selectable at runtime, including the `SDL_WINDOW_OPENGL` ↔ `SDL_WINDOW_VULKAN` crossing |
 
-Combinations whose evidence involved a renderer retired on 2026-09-17 are no longer listed:
-they cannot be configured any more, so the measurement is not reproducible. Those rows are in
+Combinations whose evidence involved a renderer retired on 2026-09-17 or 2026-09-27 are no longer
+listed: they cannot be configured any more, so the measurement is not reproducible. Those rows are in
 git history (`docs/removed-renderers.md` names the renderers).
 
 ### What a multi-renderer build makes newly testable

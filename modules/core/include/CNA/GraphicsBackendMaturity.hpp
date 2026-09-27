@@ -81,7 +81,6 @@ namespace CNA
             case GraphicsRendererType::WebGL2:
             case GraphicsRendererType::Headless:
             case GraphicsRendererType::Stub:
-            case GraphicsRendererType::Direct2D:
             case GraphicsRendererType::Canvas:
             case GraphicsRendererType::HtmlDom:
             case GraphicsRendererType::SdlGpu:
@@ -92,10 +91,8 @@ namespace CNA
 
             case GraphicsRendererType::WebGPU:
             case GraphicsRendererType::Software:
-            case GraphicsRendererType::FreeDirect:
             case GraphicsRendererType::Fna3d:
             case GraphicsRendererType::SvgDom:
-            case GraphicsRendererType::PortableGL:
                 return GraphicsBackendMaturity::Experimental;
         }
         // Unreachable as long as every GraphicsRendererType member has an arm above; kept as a

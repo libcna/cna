@@ -16,7 +16,7 @@ rediscovering the problem.
 
 **Found:** 2026-09-08, through SAMPLE-073 (SoccerPitch).
 **Fixed in:** EasyGL only (`2ce1cf2ff`).
-**Open in:** `directx11`, `vulkan`, `portablegl`.
+**Open in:** `directx11`, `vulkan`.
 
 ### The false premise
 
@@ -75,7 +75,6 @@ Tests: `EasyGLDepthBias.IsScaledByTheDepthBuffersOwnResolution`,
 |---|---|---|
 | `directx11` | `D3D11StateObjectCache.cpp`, `D3D11RasterizerStateCache::GetOrCreate` | **`0`** — `lround(-0.0001)` rounds it away, so the bias is dropped entirely |
 | `vulkan` | `VulkanRenderer::ApplyRasterizerState` | unscaled into `vkCmdSetDepthBias`'s `depthBiasConstantFactor` |
-| `portablegl` | `PortableGLRenderer.cpp:1348` | unscaled into `glPolygonOffset` |
 
 `software` and the 2D-only renderers have no depth bias to get wrong.
 

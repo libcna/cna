@@ -10,16 +10,16 @@ namespace CNA
      * @brief What kind of implementation technology a graphics backend uses.
      *
      * Orthogonal to GraphicsBackendMaturity, which classifies recommendation confidence instead
-     * of implementation technology. For example FREEDIRECT and DIRECTX9 both speak a DirectX-era
-     * API, but FREEDIRECT reimplements the DirectDraw surface itself (TranslationLayer) while
-     * DIRECTX9 talks to the real Direct3D 9 COM interfaces (Native).
+     * of implementation technology. For example FNA3D and DIRECTX11 can both end up on Direct3D 11,
+     * but FNA3D picks its driver at runtime (TranslationLayer) while DIRECTX11 talks to the real
+     * Direct3D 11 COM interfaces (Native).
      */
     enum class GraphicsBackendCategory
     {
         /** @brief Compiled against exactly one fixed real graphics API, with no runtime backend negotiation. */
         Native,
 
-        /** @brief An intermediate library picks/abstracts the real backend at runtime (a "portable RHI" such as FNA3D/SDL_RENDERER/SDL_GPU/WebGPU), or reimplements another API's surface itself (FreeDirect). */
+        /** @brief An intermediate library picks/abstracts the real backend at runtime (a "portable RHI" such as FNA3D/SDL_RENDERER/SDL_GPU/WebGPU). */
         TranslationLayer,
 
         /** @brief Renders entirely on the CPU; no real GPU driver is involved. */
@@ -71,7 +71,6 @@ namespace CNA
             case GraphicsRendererType::Vulkan:
             case GraphicsRendererType::DirectX11:
             case GraphicsRendererType::DirectX12:
-            case GraphicsRendererType::Direct2D:
             case GraphicsRendererType::DirectX9:
             case GraphicsRendererType::OpenGL4:
             case GraphicsRendererType::Gdi:
@@ -80,13 +79,11 @@ namespace CNA
 
             case GraphicsRendererType::SdlRenderer:
             case GraphicsRendererType::WebGPU:
-            case GraphicsRendererType::FreeDirect:
             case GraphicsRendererType::SdlGpu:
             case GraphicsRendererType::Fna3d:
                 return GraphicsBackendCategory::TranslationLayer;
 
             case GraphicsRendererType::Software:
-            case GraphicsRendererType::PortableGL:
                 return GraphicsBackendCategory::Software;
 
             case GraphicsRendererType::WebGL1:

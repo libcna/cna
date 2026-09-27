@@ -56,7 +56,7 @@ function(cna_renderer_common_setup target)
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include")
         target_include_directories(${RENDERER_TARGET} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
     endif()
-    # The four PLAT-76 allowlisted SDL-backed families resolve the snapshot's WindowId at one
+    # The three PLAT-76 allowlisted SDL-backed families resolve the snapshot's WindowId at one
     # SDL3 implementation edge. This remains PRIVATE so the platform implementation tree never
     # becomes part of the renderer or framework include contract; every other family is SDL-free.
     target_include_directories(${RENDERER_TARGET} PRIVATE

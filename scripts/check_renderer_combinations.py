@@ -24,7 +24,6 @@ IDENTITIES_SCRIPT = os.path.join(REPO, "scripts", "check_renderer_identities.py"
 # The rules the CMake file implements, each keyed by a phrase that must appear in the docs so a user
 # hitting the configure error can look it up.
 RULES = {
-    "PORTABLEGL": "PORTABLEGL",
     "GDI + SOFTWARE": "GDI",
     # The "shared EasyGL" rule was REMOVED by plans/plan_runtimerenderer.md phase P11, which made that
     # family's GL profile a runtime value. Its five identities now coexist, so there is no rule to
@@ -62,7 +61,7 @@ def main():
 
     # Every identity named in a rule list must be a real identity.
     identities = known_identities()
-    for list_name in ("CNA_RENDERER_REAL_GL_FAMILIES", "CNA_RENDERER_SHARED_EASYGL",
+    for list_name in ("CNA_RENDERER_SHARED_EASYGL",
                        "CNA_RENDERER_WINDOWS_ONLY", "CNA_RENDERER_EMSCRIPTEN_ONLY",
                        "CNA_RENDERER_MACOS_ONLY"):
         block = re.search(r"set\(" + list_name + r"\s(.*?)\)", cmake_text, re.S)

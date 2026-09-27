@@ -2,7 +2,24 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.30.0** (`MOD-RETIRE-1`). This alpha-stage breaking
+The current experimental ABI is **0.31.0** (`RRC-012`). It **retires three public renderer
+identities** -- `DIRECT2D` (`16`), `FREEDIRECT` (`21`) and `PORTABLEGL` (`46`) -- together with the
+three `CNA_GRAPHICS_RENDERER_*` constants that named them, and moves
+`CNA_GRAPHICS_RENDERER_MAXIMUM` from `46` (`PORTABLEGL`) to `44` (`SVG_DOM`, the highest surviving
+identity). CNA now has 22 public renderer identities (`plans/plan_renderer_cleanup.md`,
+`docs/removed-renderers.md`). No route, structure, field, capability bit or exported symbol changes,
+and no surviving identity is renumbered: a binding that passes `CNA_GRAPHICS_RENDERER_VULKAN` (`8`)
+or `CNA_GRAPHICS_RENDERER_GDI` (`40`) passes the same integer as before. What breaks is a binding
+that names one of the three removed constants (it no longer compiles), passes one of their integers
+(every route now refuses it with `CNA_RESULT_INVALID_ARGUMENT`), or compares against
+`CNA_GRAPHICS_RENDERER_MAXIMUM` (the ceiling moved down). The three values join the permanently
+reserved set, which is now `7`, `10`, `16`, `19`--`21`, `23`--`30`, `32`, `34`--`39`, `41` and
+`45`--`51`; a future identity still takes **`52`**. That is an incompatible change, which under the
+`0.x` rule below takes this minor increment, these release notes and an updated baseline.
+
+### Previous ABI 0.30.0
+
+The ABI was **0.30.0** (`MOD-RETIRE-1`). This alpha-stage breaking
 reduction removes `engine_layer.h`, its pipeline, post-process, clustered-lighting, shadow,
 probe and optional PBR-material routes, along with their handles, enums and value layouts.
 `graphics_ext.h` retains ASCII, CRT, colour-depth and DebugDraw routes. Core Effect, PBR,

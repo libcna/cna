@@ -62,8 +62,6 @@ using Microsoft::Xna::Framework::Graphics::TextureCube;
 // Software gained real per-mip cube storage in that finding, so its mip readback is now exact.
 // plans/plan_sokol.md SOKOL-27: SokolTextureCubeRenderer stores every declared mip level's six faces in a
 // real CPU shadow, so its readback is exact at every level too.
-// PortableGL keeps the same nullptr CreateTextureCube default -- no cube resource exists there
-// either (docs/portablegl-renderer.md).
 // plans/plan_runtimerenderer.md RTR-P9-11: evaluated at runtime, so these describe the ACTIVE renderer
 // rather than the build default. The three-way split is preserved exactly.
 //
@@ -71,8 +69,7 @@ using Microsoft::Xna::Framework::Graphics::TextureCube;
 // written, so it keeps the shared nullptr CreateTextureCube default, v1 scope being 2D-only.
 [[nodiscard]] inline bool CubeStorageSupported()
 {
-    return !CNA_RENDERER_IS(SdlRenderer, Canvas, HtmlDom, FreeDirect, Headless, Gdi,
-                            PortableGL);
+    return !CNA_RENDERER_IS(SdlRenderer, Canvas, HtmlDom, Headless, Gdi);
 }
 
 [[nodiscard]] inline bool CubeLevel0ReadbackSupported() { return CubeStorageSupported(); }

@@ -36,7 +36,7 @@ namespace CNA::Internal::Renderers
      */
     enum class RendererWindowKind
     {
-        /** @brief No window at all (HEADLESS, SOFTWARE, STUB, PORTABLEGL). */
+        /** @brief No window at all (HEADLESS, SOFTWARE, STUB). */
         None,
 
         /** @brief An ordinary window with no graphics-API intent (SDL_RENDERER, the D3D family). */
@@ -209,7 +209,7 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Whether this renderer needs a real window at all.
          *
-         * false for HEADLESS, SOFTWARE, STUB and PORTABLEGL -- GraphicsRendererCreateArgs::window
+         * false for HEADLESS, SOFTWARE and STUB -- GraphicsRendererCreateArgs::window
          * stays nullptr and no SDL window is ever created for them.
          */
         bool needsWindow = false;
@@ -279,8 +279,8 @@ namespace CNA::Internal::Renderers
          * `TerminalSurfacePresenter` turns the RGBA8 frame into ANSI under 36 pseudo-TTY tests,
          * `SoftwarePresentationTests` pins the producer's side of the handover, and
          * `TerminalSoftwareDemoIntegration` drives the whole path through a real pty.
-         * `cmake/RendererSelection.cmake` reserves `TERMINAL` for `SOFTWARE`, `PORTABLEGL`,
-         * `HEADLESS` and `STUB`.
+         * `cmake/RendererSelection.cmake` reserves `TERMINAL` for `SOFTWARE`, `HEADLESS` and
+         * `STUB`.
          */
         bool needsSurfacePresenter = false;
 

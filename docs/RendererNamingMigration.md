@@ -1,11 +1,11 @@
 # CNA renderer naming migration (2026-08)
 
 > **Historical campaign record.** This document describes the 2026-08 normalization as it stood
-> then. Twenty-five renderer identities were retired on 2026-09-17, and `SKIA` in 2026-08; the
-> names below that belong to them are kept as the record of what the campaign renamed, tagged
-> where they first appear in each section, and are refused by name at configure time today with
-> their C ABI values permanently reserved. CNA now carries 25 public renderer identities over 21
-> implementation families — `cmake/RendererIdentities.cmake` is the live registry and
+> then. Twenty-five renderer identities were retired on 2026-09-17, `DIRECT2D`, `FREEDIRECT` and
+> `PORTABLEGL` on 2026-09-27, and `SKIA` in 2026-08; the names below that belong to them are kept as
+> the record of what the campaign renamed, tagged where they first appear in each section, and are
+> refused by name at configure time today with their C ABI values permanently reserved. CNA now
+> carries 22 public renderer identities over 18 implementation families — `cmake/RendererIdentities.cmake` is the live registry and
 > [`removed-renderers.md`](removed-renderers.md) records every retirement.
 
 The owner-directed terminology + renderer-identity normalization performed on
@@ -80,9 +80,9 @@ Public identities (selector / enum / module directory / main class):
 | `D3D12` | `DIRECTX12` | `D3D12` | `DirectX12` | `renderers/d3d12` | `renderers/directx12` | `DirectX12Renderer` |
 
 There is intentionally **no DIRECTX4** (CNA never had that identity).
-`DIRECT2D` and `FREEDIRECT` are unchanged — and the `DIRECTX3` row above is the *real*
-DirectX 3 renderer, not the `free-direct`-backed renderer that had held that name until
-2026-08-04 and is `FREEDIRECT`, which survives. Macro/target/test surfaces follow:
+`DIRECT2D` and `FREEDIRECT` (both retired 2026-09-27) were unchanged — and the `DIRECTX3` row
+above is the *real* DirectX 3 renderer, not the `free-direct`-backed renderer that had held that
+name until 2026-08-04 and became `FREEDIRECT`. Macro/target/test surfaces follow:
 `CNA_RENDERER_DIRECTX<N>`, `cna_renderer_directx<N>`, `cmake/Tests/DirectX<N>Tests.cmake`,
 ctest names `DirectX<N>_*`, wine runners `scripts/run-wine-directx{1..8,10}.sh`,
 discipline checks `scripts/check-directx*`, examples `examples/directx<N>_*.cpp`,

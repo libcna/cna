@@ -1,5 +1,7 @@
 # FreeDirect (DirectDraw via `../free-direct`) Graphics Backend — Implementation Plan
 
+> **Retired renderer — historical record.** The `FREEDIRECT` renderer identity was retired on 2026-09-27; its implementation was removed from the tree and its C ABI value 21 is permanently reserved. This plan is kept unchanged below as the record of that work; nothing in it describes current CNA support, and paths it names under `modules/renderers/`, `scripts/` and `docs/` for this renderer no longer exist. See `plans/plan_renderer_cleanup.md` (RRC-012) and `docs/removed-renderers.md`.
+
 > **Renamed 2026-08-04 (owner instruction, dxold integration):** this backend, originally
 > shipped as `DX3`, is now the `FREEDIRECT` backend (`CNA_GRAPHICS_BACKEND=FREEDIRECT`,
 > `GraphicsBackendType::FreeDirect`, `FreeDirectGraphicsBackend`), freeing the `DX3` name for

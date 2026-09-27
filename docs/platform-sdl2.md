@@ -123,12 +123,12 @@ Two honest limits:
 | Renderer | On SDL2 |
 |---|---|
 | `OPENGLES2`, `OPENGLES3`, `OPENGL33`, `OPENGL4` | supported — `IPlatformGlContext` |
-| `HEADLESS`, `STUB`, `SOFTWARE`, `PORTABLEGL` | supported — need no window |
-| `SDL_RENDERER`, `SDL_GPU`, `FNA3D`, `FREEDIRECT` | **rejected at configure time** when audio is also SDL2 |
+| `HEADLESS`, `STUB`, `SOFTWARE` | supported — need no window |
+| `SDL_RENDERER`, `SDL_GPU`, `FNA3D` | **rejected at configure time** when audio is also SDL2 |
 | `DIRECTX*`, `GDI`, `METAL` | not yet — need a native window handle |
 | `VULKAN` | not yet — needs `IPlatformVulkanSurface` |
 
-`cmake/Sdl2OnlyConfiguration.cmake` rejects the four allowlisted SDL3 renderer families when both
+`cmake/Sdl2OnlyConfiguration.cmake` rejects the three allowlisted SDL3 renderer families when both
 `CNA_PLATFORM` and `CNA_AUDIO_PLATFORM` are SDL2, because those families link SDL3 themselves and
 would defeat an otherwise SDL2-only binary. That same condition publishes
 `CNA_SDL2_ONLY_CONFIGURATION`, which keeps SDL3 off the test and harness link lines too: SDL2 and

@@ -2603,14 +2603,14 @@ TEST(GltfRendererIndexWidthPolicy, InventoryClassifiesEveryRenderer)
     // remaining 2D/no-3D backends deliberately inherit the shared, unconditionally throwing
     // default. Keeping the three sets disjoint makes a new renderer an audit failure, not an
     // accidental 16-bit fallback.
-    constexpr std::array<const char*, 14> providers{{
+    constexpr std::array<const char*, 13> providers{{
         "directx11", "directx12", "directx9",
-        "easygl", "fna3d", "headless", "metal", "opengl4", "portablegl", "sdl-gpu",
+        "easygl", "fna3d", "headless", "metal", "opengl4", "sdl-gpu",
         "software", "stub", "vulkan", "webgpu",
     }};
     constexpr std::array<const char*, 1> explicitRejecters{{"gdi"}};
-    constexpr std::array<const char*, 6> inheritedRejecters{{
-        "canvas", "direct2d", "freedirect", "html-dom", "sdl-renderer", "svg-dom",
+    constexpr std::array<const char*, 4> inheritedRejecters{{
+        "canvas", "html-dom", "sdl-renderer", "svg-dom",
     }};
 
     std::set<std::string> expected;
@@ -2638,13 +2638,13 @@ TEST(GltfRendererIndexWidthPolicy, InventoryClassifiesEveryRenderer)
 
 TEST(GltfRendererIndexWidthPolicy, ProvidersOptInAndUnsupportedRenderersCannotFallBackToSixteenBits)
 {
-    constexpr std::array<const char*, 14> providers{{
+    constexpr std::array<const char*, 13> providers{{
         "directx11", "directx12", "directx9",
-        "easygl", "fna3d", "headless", "metal", "opengl4", "portablegl", "sdl-gpu",
+        "easygl", "fna3d", "headless", "metal", "opengl4", "sdl-gpu",
         "software", "stub", "vulkan", "webgpu",
     }};
-    constexpr std::array<const char*, 6> inheritedRejecters{{
-        "canvas", "direct2d", "freedirect", "html-dom", "sdl-renderer", "svg-dom",
+    constexpr std::array<const char*, 4> inheritedRejecters{{
+        "canvas", "html-dom", "sdl-renderer", "svg-dom",
     }};
 
     const std::filesystem::path root = RepositoryRoot();

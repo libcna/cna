@@ -208,9 +208,6 @@ namespace
 #elif defined(CNA_RENDERER_CANVAS)
     constexpr Contract kContract{"CANVAS", false, Support::Unsupported, Support::Unsupported,
                                  true, false, Support::Unsupported, MipTargets::Real, true, false, false, false, false};
-#elif defined(CNA_RENDERER_FREEDIRECT)
-    constexpr Contract kContract{"FREEDIRECT", false, Support::Unsupported, Support::Unsupported,
-                                 true, false, Support::Unsupported, MipTargets::Real, true, false, false, false, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
     // D3D9RenderTargetCubeRenderer reports GetMultiSampleCount() == 0 unconditionally and its
     // Recreate() allocates exactly ONE level whatever `mipMap` asked for, so this target is

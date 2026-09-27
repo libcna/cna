@@ -146,7 +146,7 @@ static void on_content_lost(const CNA_Handle render_target, void* const context)
 
 /*
  * The ContentLost subscription (CABI-24). The event itself is only reachable on the renderer
- * families that can report a device reset -- DIRECTX9 and DIRECT2D -- so what is asserted
+ * families that can report a device reset -- DIRECTX9, for example -- so what is asserted
  * here is the subscription contract: it registers, it refuses malformed arguments, it releases
  * once, and on a renderer that cannot lose a device it stays silent rather than inventing a
  * notification.
