@@ -15,30 +15,39 @@ unrelated reasons, and the gap is not cancelled with them.
 
 ---
 
-## 1. `SurfaceFormat::Alpha8` render targets are refused
+## 1. Native `SurfaceFormat::Alpha8` render-target storage is unavailable
 
-**Found:** 2026-09-09, through SAMPLE-087 (AvatarShadows), whose row was cancelled for an unrelated
-reason — the sample is Xbox-360-only. The gap is not.
+**Found:** 2026-09-09 through SAMPLE-087 (AvatarShadows), whose Xbox 360-only row was later
+cancelled. **Corrected:** 2026-09-27 against CNA `next 629554a95`. The original audit treated an
+unsupported Alpha8 preference as a constructor failure. `SOFTWARE-216` (`70fe41618`) restored
+XNA's preferred-format fallback on a different development line; it was absent from the old audit's
+CNA HEAD `35268971c` and is present in current `next`. Cancelling the sample did not close the
+remaining exact-format capability gap.
 
-`GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Alpha8)` returns **false**,
-asserted by `GraphicsCapabilityFloatRenderTargetTest.NonColourNonFloatFormatsAreNotRenderTargets`.
-The test's own comment gives the reasoning: "claiming otherwise would put the caller back in the
-position MOD-100 exists to end — asking for one format and silently receiving another."
+`GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Alpha8)` still returns
+**false**: EasyGL has no Alpha8 render-target attachment mapping. A normal `RenderTarget2D`
+constructor requesting Alpha8 now calls `SelectRenderTargetFormatEXT`, selects `Color` and allocates
+that supported target. Its `Format` consequently reports `Color`. The focused capability test
+asserts the false exact-format answer, while
+`GraphicsCapabilityFloatRenderTargetTest.AnUnsupportedPreferredFormatIsSubstituted` pins the
+shared preferred-format fallback with Dxt1. The Alpha8 conclusion here follows the same current
+selection code and EasyGL mapping; it has not been separately tested on a real GL context in this
+re-analysis.
 
-**XNA does the opposite.** Its `RenderTarget2D` silently substitutes when it cannot honour a
-requested format — the behaviour this project records as a defect in `MOD-107`, where a WebGPU
-`RenderTargetCube(HdrBlendable)` reported the float format it was asked for while holding 8-bit
-texels.
+SAMPLE-087 writes Avatar silhouettes into a full-screen target and has `GroundEffect.fx` sample
+its alpha channel to darken the ground by 50%. A `Color` target retains that alpha channel, so
+Alpha8 preference alone no longer blocks construction or the shader's alpha-mask algorithm. It
+does lose the source's intended **one byte per pixel** storage choice: `Color` uses four bytes per
+pixel. The exact Xbox allocation was not captured, so whether that hardware honored the Alpha8
+preference or also fell back remains unverified. A faithful native Alpha8 attachment could retain
+the memory lesson on CNA, but the visible result still cannot be qualified without the genuine
+Avatar body and a console reference capture.
 
-So CNA's refusal is principled and knowing, and it is still a divergence. It costs any technique
-that renders into a single-channel target: SAMPLE-087's planar avatar shadows drew into a
-full-screen `Alpha8` target and sampled it to darken the ground by 50 %, which is an ordinary
-shadow-mask idiom rather than anything exotic.
-
-**Closing it** means either supporting `Alpha8` as a render-target format on the renderers whose
-API can hold it — GL has `GL_R8`, and a swizzle or a shader read gives the alpha semantics — or an
-owner decision to substitute as XNA does and give up the MOD-100 guarantee for this format. The
-first keeps both promises; the second is smaller.
+**Closing the remaining gap** means supporting a true alpha-only render target where the renderer
+can preserve XNA's alpha output and alpha sampling semantics, with native and browser pixel tests.
+A GL red-only attachment by itself writes/samples red, not alpha, so GL_R8 alone is insufficient.
+The existing XNA-style preferred-format fallback remains the behavior when exact Alpha8 storage
+is unavailable; no sample-side substitution is needed.
 
 ---
 
