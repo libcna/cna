@@ -347,11 +347,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_Pbr3D COMMAND cna_test_webgpu_pbr3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plans/plan_webgpu_perf.md WEBGPUPERF-0001..0004/0007: PbrEffect draws still reach the right
-    # uniforms through the arena's dynamic offsets, a steady frame of PBR -- or of BasicEffect draws and
-    # sprites -- creates no bind group, its queue writes do not grow with its draw count, and a texture
-    # recreated every frame never meets a stale cached group. Reads the renderer's counters, so it
-    # also links WebGPU::WebGPU.
+    # plans/plan_webgpu_perf.md WEBGPUPERF-0001..0005/0007: PbrEffect and ShaderEffect draws still
+    # reach the right uniforms through the arena's dynamic offsets, a steady frame of PBR, BasicEffect,
+    # sprite or ShaderEffect draws creates no bind group, its queue writes do not grow with its draw
+    # count, and a texture recreated every frame never meets a stale cached group. Reads the renderer's
+    # counters, so it also links WebGPU::WebGPU.
     cna_webgpu_test(cna_test_webgpu_binding_cost webgpu_binding_cost_test.cpp)
     target_link_libraries(cna_test_webgpu_binding_cost PRIVATE WebGPU::WebGPU)
     cna_register_renderer_test(NAME WebGPU_BindingCost COMMAND cna_test_webgpu_binding_cost

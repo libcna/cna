@@ -22,6 +22,10 @@
 // Check H -- WEBGPUPERF-0007, the classic families: a steady frame of lit, textured BasicEffect draws
 //   and SpriteBatch sprites creates no bind group either.
 // Check I -- ... and four times as many of each cost the same number of queue writes.
+// Check J -- WEBGPUPERF-0005, a custom-WGSL ShaderEffect: sixteen draws, each with its own World and
+//   colour in the effect's uniform block, put their own colour in their own cell.
+// Check K -- a steady frame of those draws creates no bind group.
+// Check L -- ... and four times as many cost the same number of queue writes.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -40,6 +44,7 @@
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -64,6 +69,51 @@ namespace
     constexpr int kSize = 64;
     constexpr int kGrid = 4;
     constexpr int kChurnFrames = 24;
+    constexpr int kChurnStart = 17;
+    constexpr int kShaderEffectStart = kChurnStart + kChurnFrames;
+
+    // A custom WGSL ShaderEffect on the 3D route, sampling a texture so its group carries the
+    // sampler and the view beside the uniform block.
+    const char* const kVertexWgsl = R"WGSL(
+struct Uniforms {
+    World: mat4x4f,
+    View: mat4x4f,
+    Projection: mat4x4f,
+    uColor: vec3f,
+};
+@group(0) @binding(0) var<uniform> u: Uniforms;
+struct VOut {
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f,
+};
+@vertex fn vs_main(
+    @location(0) position: vec3f,
+    @location(1) normal: vec3f,
+    @location(2) uv: vec2f
+) -> VOut {
+    var out: VOut;
+    out.position = u.Projection * u.View * u.World * vec4f(position, 1.0);
+    out.uv = uv + normal.xy * 0.0;
+    return out;
+}
+)WGSL";
+    const char* const kFragmentWgsl = R"WGSL(
+struct Uniforms {
+    World: mat4x4f,
+    View: mat4x4f,
+    Projection: mat4x4f,
+    uColor: vec3f,
+};
+@group(0) @binding(0) var<uniform> u: Uniforms;
+@group(0) @binding(1) var texSampler: sampler;
+@group(0) @binding(2) var tex: texture_2d<f32>;
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(textureSample(tex, texSampler, uv).rgb * u.uColor, 1.0);
+}
+)WGSL";
+    const char* const kUniformNames[] = {"World", "View", "Projection", "uColor"};
+    const int kUniformOffsets[] = {0, 64, 128, 192};
+    constexpr int kUniformBlockSize = 208;
 
     // VertexPositionNormalTangentTexture's 48-byte layout, as webgpu_pbr3d_test.cpp uses it.
     struct PbrGpuVertex
@@ -107,6 +157,7 @@ class WebGpuBindingCostTest : public Game
     std::unique_ptr<PbrEffect> effect_;
     std::unique_ptr<BasicEffect> basic_;
     std::unique_ptr<SpriteBatch> sprites_;
+    std::unique_ptr<ShaderEffect> shaderEffect_;
     Texture2D whiteA_;
     Texture2D whiteB_;
     int frame_ = 0;
@@ -114,6 +165,8 @@ class WebGpuBindingCostTest : public Game
     int result_ = 1;
     Counters at16Start_, at16End_, at64Start_, at64End_;
     Counters basicStart_, basicEnd_, basic4Start_, basic4End_;
+    Counters shaderStart_, shaderEnd_, shader4Start_, shader4End_;
+    std::size_t cacheAfterChurn_ = 0;
     std::size_t cacheAfterFirstChurn_ = 0;
     int churnMismatches_ = 0;
 
@@ -193,6 +246,46 @@ class WebGpuBindingCostTest : public Game
         sprites_->End();
     }
 
+    // `repeats` x 16 draws of the custom WGSL effect, each cell with its own World and colour.
+    void DrawShaderEffectGrid(GraphicsDevice& dev, int repeats)
+    {
+        dev.SetVertexBuffer(basicQuad_.get());
+        for (int r = 0; r < repeats; ++r)
+            for (int cell = 0; cell < kGrid * kGrid; ++cell)
+            {
+                const float x = -0.75f + 0.5f * static_cast<float>(cell % kGrid);
+                const float y = 0.75f - 0.5f * static_cast<float>(cell / kGrid);
+                shaderEffect_->setWorldProperty(Matrix::CreateScale(0.24f) *
+                                                Matrix::CreateTranslation(x, y, 0.0f));
+                shaderEffect_->setViewProperty(Matrix::getIdentityProperty());
+                shaderEffect_->setProjectionProperty(Matrix::getIdentityProperty());
+                shaderEffect_->Apply();
+                shaderEffect_->SetTexture(0, cell % 2 == 0 ? whiteA_ : whiteB_);
+                const Vector3 colour = CellColour(cell);
+                shaderEffect_->SetUniformVec3("uColor", colour.X, colour.Y, colour.Z);
+                dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            }
+        dev.SetVertexBuffer(nullptr);
+    }
+
+    int CountWrongCells(GraphicsDevice& dev)
+    {
+        int wrong = 0;
+        for (int cell = 0; cell < kGrid * kGrid; ++cell)
+        {
+            const int px = kSize / (2 * kGrid) + (kSize / kGrid) * (cell % kGrid);
+            const int py = kSize / (2 * kGrid) + (kSize / kGrid) * (cell / kGrid);
+            const Color pixel = Read(dev, px, py);
+            if (!Matches(pixel, CellColour(cell)))
+            {
+                ++wrong;
+                std::printf("    cell %d at (%d,%d) is (%d,%d,%d)\n", cell, px, py,
+                            pixel.getRProperty(), pixel.getGProperty(), pixel.getBProperty());
+            }
+        }
+        return wrong;
+    }
+
     Color Read(GraphicsDevice& dev, int x, int y)
     {
         const Rectangle region(x, y, 1, 1);
@@ -236,6 +329,12 @@ protected:
         basic_->DirectionalLight0.setDirectionProperty(Vector3(0.0f, 0.0f, 1.0f));
         basic_->DirectionalLight0.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
         sprites_ = std::make_unique<SpriteBatch>(dev);
+        shaderEffect_ = std::make_unique<ShaderEffect>(dev, kVertexWgsl, kFragmentWgsl);
+        if (shaderEffect_->IsEffectValid())
+            shaderEffect_->DeclareUniformBlockEXT(kUniformBlockSize, kUniformNames, kUniformOffsets, 4);
+        else
+            std::printf("    the ShaderEffect did not compile: %s\n",
+                        shaderEffect_->GetCompileErrorEXT().c_str());
     }
 
     void Draw(const GameTime&) override
@@ -256,6 +355,10 @@ protected:
         if (frame_ == 12) basicEnd_ = Snapshot();
         if (frame_ == 15) basic4Start_ = Snapshot();
         if (frame_ == 16) basic4End_ = Snapshot();
+        if (frame_ == kShaderEffectStart + 3) shaderStart_ = Snapshot();
+        if (frame_ == kShaderEffectStart + 4) shaderEnd_ = Snapshot();
+        if (frame_ == kShaderEffectStart + 7) shader4Start_ = Snapshot();
+        if (frame_ == kShaderEffectStart + 8) shader4End_ = Snapshot();
 
         if (frame_ < 4)
         {
@@ -276,27 +379,15 @@ protected:
         else if (frame_ == 16)
         {
             DrawGrid(dev, 1);
-            int wrong = 0;
-            for (int cell = 0; cell < kGrid * kGrid; ++cell)
-            {
-                const int px = kSize / (2 * kGrid) + (kSize / kGrid) * (cell % kGrid);
-                const int py = kSize / (2 * kGrid) + (kSize / kGrid) * (cell / kGrid);
-                const Color pixel = Read(dev, px, py);
-                if (!Matches(pixel, CellColour(cell)))
-                {
-                    ++wrong;
-                    std::printf("    cell %d at (%d,%d) is (%d,%d,%d)\n", cell, px, py,
-                                pixel.getRProperty(), pixel.getGProperty(), pixel.getBProperty());
-                }
-            }
+            const int wrong = CountWrongCells(dev);
             check(wrong == 0, "A: sixteen draws each show their own colour (" +
                                   std::to_string(wrong) + " wrong)");
         }
-        else
+        else if (frame_ < kShaderEffectStart)
         {
             // Check E: a fresh texture every frame, red and green in turn, destroyed at the end of
             // Draw while its queued draw still holds it.
-            const int churn = frame_ - 17;
+            const int churn = frame_ - kChurnStart;
             const bool red = churn % 2 == 0;
             Texture2D texture = Texture2D::CreateFromPixels(
                 dev, 1, 1,
@@ -314,8 +405,21 @@ protected:
                 ++churnMismatches_;
             if (churn == 2)
                 cacheAfterFirstChurn_ = Renderer().GetBindingCacheSizeEXT();
-
             if (churn == kChurnFrames - 1)
+                cacheAfterChurn_ = Renderer().GetBindingCacheSizeEXT();
+        }
+        else if (frame_ < kShaderEffectStart + 4)
+        {
+            DrawShaderEffectGrid(dev, 1);
+        }
+        else if (frame_ < kShaderEffectStart + 8)
+        {
+            DrawShaderEffectGrid(dev, 4);
+        }
+        else
+        {
+            DrawShaderEffectGrid(dev, 1);
+            const int wrongShader = CountWrongCells(dev);
             {
                 const std::size_t groups16 = at16End_.bindGroups - at16Start_.bindGroups;
                 const std::size_t groups64 = at64End_.bindGroups - at64Start_.bindGroups;
@@ -333,7 +437,7 @@ protected:
                 check(churnMismatches_ == 0,
                       "E: every frame draws its own new texture (" +
                           std::to_string(churnMismatches_) + " frames wrong)");
-                const std::size_t cacheEnd = Renderer().GetBindingCacheSizeEXT();
+                const std::size_t cacheEnd = cacheAfterChurn_;
                 check(cacheEnd <= cacheAfterFirstChurn_ + 2,
                       "F: the binding cache does not grow with dead textures (" +
                           std::to_string(cacheAfterFirstChurn_) + " -> " +
@@ -353,8 +457,25 @@ protected:
                 check(writesBasic4 == writesBasic,
                       "I: four times the classic draws cost the queue writes one does (" +
                           std::to_string(writesBasic4) + " vs " + std::to_string(writesBasic) + ")");
-                std::printf("=== %d/9 PASS ===\n", passCount_);
-                result_ = passCount_ == 9 ? 0 : 1;
+                check(wrongShader == 0, "J: sixteen ShaderEffect draws each show their own colour (" +
+                                            std::to_string(wrongShader) + " wrong)");
+                const std::size_t groupsShader = shaderEnd_.bindGroups - shaderStart_.bindGroups;
+                const std::size_t writesShader = shaderEnd_.queueWrites - shaderStart_.queueWrites;
+                const std::size_t groupsShader4 = shader4End_.bindGroups - shader4Start_.bindGroups;
+                const std::size_t writesShader4 =
+                    shader4End_.queueWrites - shader4Start_.queueWrites;
+                std::printf("    per frame: 16 ShaderEffect draws -> %zu groups, %zu writes; x4 -> "
+                            "%zu groups, %zu writes\n", groupsShader, writesShader, groupsShader4,
+                            writesShader4);
+                check(groupsShader == 0 && groupsShader4 == 0,
+                      "K: a steady frame of ShaderEffect draws creates no bind group (" +
+                          std::to_string(groupsShader) + ", " + std::to_string(groupsShader4) + ")");
+                check(writesShader4 == writesShader,
+                      "L: four times the ShaderEffect draws cost the queue writes one does (" +
+                          std::to_string(writesShader4) + " vs " + std::to_string(writesShader) +
+                          ")");
+                std::printf("=== %d/12 PASS ===\n", passCount_);
+                result_ = passCount_ == 12 ? 0 : 1;
                 Exit();
             }
         }

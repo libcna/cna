@@ -2500,14 +2500,32 @@ namespace CNA::Internal::Renderers::WebGPU
          */
         [[nodiscard]] WebGPUSampledTextureEXT NeutralTextureForDimensionEXT(
             WGPUTextureViewDimension dimension);
+        /// WEBGPUPERF-0005: one descriptor-contract draw's groups and the dynamic offsets each
+        /// binds its arena blocks at, in binding order.
+        struct DescriptorEffectBindingsEXT
+        {
+            std::array<WGPUBindGroup, 4> groups{};
+            std::array<std::array<std::uint32_t, 8>, 4> offsets{};
+            std::array<std::uint32_t, 4> offsetCounts{};
+        };
+        /// Binds @p bindings' groups on @p pass, each with its own dynamic offsets.
+        static void SetDescriptorEffectBindGroupsEXT(WGPURenderPassEncoder pass,
+                                                     const DescriptorEffectBindingsEXT& bindings,
+                                                     std::uint32_t groupCount);
         /**
          * @brief WMG-0006: builds one descriptor-contract draw's bind groups.
+         *
+         * WEBGPUPERF-0005: every uniform block the program's layout marks dynamic goes into the
+         * flush's uniform arena, and a group whose every entry is then a sampler, a view or an arena
+         * block comes from the binding cache. The groups are owned by the cache, or (uncacheable)
+         * released after the submit; the caller releases none of them.
+         *
          * @param effect The effect whose layouts they follow.
          * @param snapshot Everything the draw captured.
          * @param transient Receives the per-draw buffers to recycle after submission.
-         * @return One bind group per declared group.
+         * @return One bind group per declared group, with its dynamic offsets.
          */
-        [[nodiscard]] std::array<WGPUBindGroup, 4> BuildDescriptorEffectBindGroupsEXT(
+        [[nodiscard]] DescriptorEffectBindingsEXT BuildDescriptorEffectBindGroupsEXT(
             const WebGPUEffectRenderer& effect, const WebGPUDescriptorEffectSnapshotEXT& snapshot,
             std::vector<WGPUBuffer>& transient);
 
@@ -4561,6 +4579,33 @@ namespace CNA::Internal::Renderers::WebGPU
          */
         [[nodiscard]] ArenaUniformBindingEXT AppendUniformBlocksEXT(
             WGPUBindGroupLayout layout, std::initializer_list<ArenaBlockEXT> blocks);
+        /**
+         * @brief WEBGPUPERF-0005: appends one uniform block, zero-padded to @p paddedBytes, reusing
+         *        the block this flush last appended under @p dedupeKey when its bytes are the same.
+         *
+         * A ShaderEffect's array blocks are several KiB each and rarely change from one draw to
+         * the next; appending them again for every draw would grow the flush's arena by that much
+         * per draw. Null @p dedupeKey always appends.
+         *
+         * @return Where the block is.
+         */
+        [[nodiscard]] ArenaSliceEXT AppendUniformBlockEXT(const void* dedupeKey, const void* data,
+                                                          std::size_t bytes,
+                                                          std::size_t paddedBytes);
+        /// The blocks AppendUniformBlockEXT appended this flush, by key; cleared with the arena.
+        struct DedupedUniformBlockEXT
+        {
+            std::vector<std::uint8_t> bytes;
+            ArenaSliceEXT slice;
+        };
+        std::unordered_map<const void*, DedupedUniformBlockEXT> dedupedUniformBlocksEXT_;
+        /// An arena block's identity inside a cache key: its chunk and its binding size.
+        [[nodiscard]] static const void* ArenaBlockHandleEXT(const ArenaSliceEXT& slice,
+                                                             std::uint64_t size) noexcept
+        {
+            return reinterpret_cast<const void*>(static_cast<std::uintptr_t>(
+                (static_cast<std::uint64_t>(slice.chunk) << 32) | (size & 0xFFFFFFFFull)));
+        }
         /// Writes every used chunk of both arenas and rewinds them. Called once per flush.
         void FlushStreamArenasEXT();
         /// Releases both arenas' buffers (device loss and destruction).
@@ -4605,8 +4650,18 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             WGPUBindGroup group = nullptr;
             std::array<std::shared_ptr<const WebGPUSampledResourceEXT>, 8> keepAlive{};
+            /// WEBGPUPERF-0005: a native reference on the layout, and on every sampler and buffer
+            /// the group names, for the reason `keepAlive` holds the views: while the entry exists
+            /// none of those addresses can be reused by a new object and match its key. A
+            /// ShaderEffect owns its layout and (legacy route) its sampler, so they can be released
+            /// while a group that names them is still cached.
+            WGPUBindGroupLayout layout = nullptr;
+            std::vector<WGPUSampler> samplers;
+            std::vector<WGPUBuffer> buffers;
             std::uint64_t lastUsedFrame = 0;
         };
+        /// Releases the group and every reference @p entry holds.
+        static void ReleaseBindingCacheEntryEXT(BindingCacheEntryEXT& entry);
         /**
          * @brief Returns the cached group for @p key, creating it from @p descriptor on a miss.
          *
