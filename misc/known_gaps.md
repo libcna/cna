@@ -66,8 +66,10 @@ return sessionType == NetworkSessionType::SystemLink;
 `Local` and `LocalWithLeaderboards` are offline session types in XNA too, so a single machine
 genuinely is the whole session and nothing is missing about them. `PlayerMatch` and `Ranked` are
 different: they are Xbox LIVE matchmaking types, where the service finds the peers. There is no such
-service here, and none is planned. The same absence covers invitations — nothing can raise
-`NetworkSession::InviteAccepted`, because nothing delivers an invitation.
+service here. The owner has expressed an intention to build a separate CNA server, but no
+replacement matchmaking/invitation backend has been scoped or implemented in this repository.
+The same absence covers invitations — nothing can raise `NetworkSession::InviteAccepted`,
+because nothing delivers an invitation.
 
 ### What was closed, and what remains
 
