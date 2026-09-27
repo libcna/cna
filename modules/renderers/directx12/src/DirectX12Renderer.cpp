@@ -2823,6 +2823,9 @@ namespace CNA::Internal::Renderers::DirectX12
     int DirectX12Renderer::ApplyMultiSampleCount(int requestedMultiSampleCount)
     {
         requestedMultiSampleCount_ = requestedMultiSampleCount;
+        // GraphicsDevice::Reset has already applied the requested window size. Synchronise the
+        // swap chain before the first draw/readback, which can happen before the first Present.
+        EnsureSwapChainSize();
         const int clamped = ClampBackBufferMultiSampleCount(
             device_.Get(), DXGI_FORMAT_R8G8B8A8_UNORM, requestedMultiSampleCount_);
         // DX12-0019: the applied depth format stands in for the old `!depthStencilResource_` test, which
