@@ -20,8 +20,9 @@ DX12 base-instance drawing now passes native, custom ShaderEffect, and opt-in
 compiled-effect pixel tests, including divided instance streams (WIN11-0072).
 The large DX12 descriptor fixture under Intel GPU-based validation remains a recorded
 exception: disabling only GBV's resource-state checks makes its A+B+C+D history pass,
-while default full GBV still removes the device (WIN11-0080). Application validation
-remains open.
+while default full GBV still removes the device (WIN11-0080). `cna-street` has now
+passed day/night physical Intel runs on both DirectX renderers; the car simulator
+application ladder and that GBV exception remain open (WIN11-0085).
 
 ## Stable source and machine baseline
 
@@ -3216,4 +3217,64 @@ $env:CNA_D3D12_GPU_VALIDATION='0'
 & C:\rv\work\private_desktop_awake.exe 900000 '"C:\rv\build\cna-street-dx12\bin\Debug\cna-street.exe" --frames 12 --width 800 --height 480 --preset low --no-audio --no-overlay --screenshot C:\rv\artifacts\cna-street-dx12-low-sky-hlsl.png'
 ctest --test-dir C:\rv\build\cna-street-dx11 -C Debug -R '^(traffic_signal_tests|traffic_system_tests|pedestrian_tests|geometry_tests|layout_tests|settings_tests|camera_tests|content_pipeline_tests|appearance_tests|realism_tests|character_format_tests|gait_tests|shadow_cull_tests|benchmark_tests|validate_assets|vehicle_orientation)$' --output-on-failure --parallel 4
 ctest --test-dir C:\rv\build\cna-street-dx12 -C Debug -R '^(traffic_signal_tests|traffic_system_tests|pedestrian_tests|geometry_tests|layout_tests|settings_tests|camera_tests|content_pipeline_tests|appearance_tests|realism_tests|character_format_tests|gait_tests|shadow_cull_tests|benchmark_tests|validate_assets|vehicle_orientation)$' --output-on-failure --parallel 4
+```
+
+### WIN11-0085: Exercise cna-street viewpoints and long night runs on Intel
+
+On app commit `962188720db8db9b37f22b4cd2194fd15feb7cb4`, both renderers
+completed the application's `--capture` sequence: **18/18 named viewpoints**
+each at 800x480, exit 0, 0 application/Direct3D warnings or errors. DX12
+had DRED enabled and no device removal. DX11 capture elapsed about 204 s,
+DX12 about 299 s including procedural scene generation. The 36 PNGs are in
+`C:\rv\artifacts\cna-street-dx11-viewpoints` and
+`C:\rv\artifacts\cna-street-dx12-viewpoints`. The DX11 output directory
+was renamed after the run; its log retains the original path ending
+`-resize-capture`. Visual review of aerial, car, storefront, cafe and
+long-street viewpoints found no missing sky, material, shadow, traffic or
+geometry. A coarse cross-renderer probe sampled 24,000 RGB pixels per
+viewpoint; mean absolute channel differences were at most 0.020 across the
+18 views. This is differential evidence, not an invented image tolerance.
+
+Each backend also ran the application's fixed `baseline` benchmark for
+**240 no-audio/no-overlay night frames** at a different startup size,
+1024x640, with 12 warm-up frames and 228 measured. Both exited 0. Screenshots
+`C:\rv\artifacts\cna-street-dx11-night-240.png` and
+`C:\rv\artifacts\cna-street-dx12-night-240.png` show a twilight sky,
+illuminated shop windows and car lights. Both benchmark JSONL reports say
+about 1,230 visible draws, 983 shadow draws, and 121 skinned draws per frame.
+These are Debug runs and the timing numbers are diagnostic, not a release
+performance comparison.
+
+| Backend | Elapsed | 228-frame CPU/GPU mean | Diagnostics | Process observations |
+| --- | ---: | ---: | --- | --- |
+| DX11 | 324.22 s | 651.73 / 532.29 ms | D3D11 debug on; 0 warnings/errors | 61 samples at 5 s intervals; late working set 1.82–2.44 GiB, handles 588–600 with long plateaus and no sustained climb |
+| DX12 | 435.84 s | 675.20 / 167.13 ms | D3D12 debug and DRED on; 0 warnings/errors, no device removal; routine GBV off | 85 samples at 5 s intervals; late working set 1.23–2.73 GiB after trimming, handles 453–455 |
+
+`cna-street` uses XNA's default `GameWindow.AllowUserResizing=false` and does
+not opt into runtime window resizing. A private-desktop window probe verified
+its initial client size; a planned forced `SetWindowPos` controller was
+stopped **before it changed the window**. The application was instead run
+at two startup sizes; CNA's independent Win32/DirectX tests cover repeated
+native resize. The source-assets fallback reported zero imported external
+models, but the procedural scene exercised PBR/IBL, cascaded shadows,
+reflection probes, traffic, skinned characters, post-processing and sky.
+This is the practical asset boundary of the checkout.
+
+Logs and data:
+`C:\rv\logs\cna-street-dx11-resize-capture-1.log`,
+`C:\rv\logs\cna-street-dx12-viewpoints-1.log`,
+`C:\rv\logs\cna-street-dx11-night-240.log`,
+`C:\rv\logs\cna-street-dx12-night-240.log`,
+their `-memory.csv` companions, and benchmark JSONL in `C:\rv\artifacts`.
+
+```powershell
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 900000 '"C:\rv\build\cna-street-dx11\bin\Debug\cna-street.exe" --capture C:\rv\artifacts\cna-street-dx11-resize-capture --width 800 --height 480 --preset low --no-audio --no-overlay'
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='0'
+& C:\rv\work\private_desktop_awake.exe 900000 '"C:\rv\build\cna-street-dx12\bin\Debug\cna-street.exe" --capture C:\rv\artifacts\cna-street-dx12-viewpoints --width 800 --height 480 --preset low --no-audio --no-overlay'
+& C:\rv\work\private_desktop_awake.exe 1800000 '"C:\rv\build\cna-street-dx11\bin\Debug\cna-street.exe" --benchmark baseline --frames 240 --night --width 1024 --height 640 --preset low --no-audio --no-overlay --screenshot C:\rv\artifacts\cna-street-dx11-night-240.png --benchmark-output C:\rv\artifacts\cna-street-dx11-night-240.jsonl'
+& C:\rv\work\private_desktop_awake.exe 1800000 '"C:\rv\build\cna-street-dx12\bin\Debug\cna-street.exe" --benchmark baseline --frames 240 --night --width 1024 --height 640 --preset low --no-audio --no-overlay --screenshot C:\rv\artifacts\cna-street-dx12-night-240.png --benchmark-output C:\rv\artifacts\cna-street-dx12-night-240.jsonl'
 ```
