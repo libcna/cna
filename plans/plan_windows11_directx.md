@@ -3899,3 +3899,36 @@ reverted, the original target rebuilt, and the ordinary Intel debug+DRED,
 GBV-off control passed **15/15**. Logs:
 `C:\rv\logs\dx12-cpu-descriptor-no-reuse-intel-gbv-dred.log` and
 `C:\rv\logs\dx12-descriptor-post-cpu-no-reuse-diag-normal.log`.
+
+### WIN11-0103: Isolate the fresh D texture upload in the combined-diagnostics fault
+
+Temporary variations of the original classic A+B+C+D fixture retained A/B/C
+unchanged while changing only D. These were **diagnostics**, with altered
+D assertions, and are not counted as ordinary conformance passes. All runs
+selected physical Intel `8086:46A6`, FL 12_1, with the D3D12 debug layer,
+full GBV, and DRED auto-breadcrumbs/page faults enabled:
+
+| D variation | Result | Log |
+|---|---|---|
+| Draw 256 times without enabling BasicEffect texturing, then read back | 15/15, no removal | `dx12-descriptor-d-untextured-intel-gbv-dred.log` |
+| Keep the textured BasicEffect shader but bind its default fallback texture, then read back | 15/15, no removal | `dx12-descriptor-d-fallback-texture-intel-gbv-dred.log` |
+| Retain C's last Texture2D, sample it through all 256 D draws, and do not create D's new texture | 15/15, no removal | `dx12-descriptor-d-reuse-c-texture-intel-gbv-dred.log` |
+| Retain and sample C's last Texture2D, but also create and upload a new unused Texture2D at D's start | 14/15, device hung; DRED again names old A/C textures at `0x0000B80205DC0000` | `dx12-descriptor-d-new-unused-texture-intel-gbv-dred.log` |
+| Retain and sample C's last Texture2D; create a new unused D texture without SetData/upload | 15/15, no removal | `dx12-descriptor-d-new-empty-texture-intel-gbv-dred.log` |
+| Retain and sample C's last Texture2D; call SetData again on that retained resource at D's start, without creating a new one | 15/15, no removal | `dx12-descriptor-d-update-c-texture-intel-gbv-dred.log` |
+
+The combined evidence narrows the trigger to **a fresh Texture2D resource
+receiving a SetData upload after A+B+C history**. Sampling the new resource
+is unnecessary, whereas merely creating it without SetData or updating the
+already-live C resource is insufficient in these runs. The result is
+consistent with a resource-VA/lifetime interaction in the combined
+instrumentation, but it does not establish whether CNA, the Windows debug
+runtime, or the Intel driver owns the fault. The DRED recently-freed list
+identifies VA matches, not a proven causative GPU command
+(<https://microsoft.github.io/DirectX-Specs/d3d/DeviceRemovedExtendedData.html>).
+
+The fixture and renderer were restored exactly, the original native target
+rebuilt, and ordinary Intel debug+DRED with GBV off passed the unchanged
+A+B+C+D assertions **15/15**. No diagnostic D assertion, skip, upload
+workaround, or change to graphics CNAEXT was shipped. The final control is
+`C:\rv\logs\dx12-descriptor-post-texture-differentials-normal.log`.
