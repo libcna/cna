@@ -19,11 +19,12 @@ now pass focused physical Intel and targeted GPU-validation tests (WIN11-0071).
 DX12 base-instance drawing now passes native, custom ShaderEffect, and opt-in
 compiled-effect pixel tests, including divided instance streams (WIN11-0072).
 The large DX12 descriptor fixture under Intel GPU-based validation remains a recorded
-exception: disabling only GBV's resource-state checks makes its A+B+C+D history pass,
-while default full GBV still removes the device (WIN11-0080/0087). `cna-street`
-and `cna-car-simulator` have passed day/night physical Intel application runs
-on both DirectX renderers; the high-cardinality full-GBV exception remains
-open (WIN11-0085/0086/0088).
+exception: full GBV plus DRED auto-breadcrumbs removes the device, while
+full GBV with only DRED page-fault reporting passes twice and DRED with GBV
+off passes (WIN11-0080/0087/0093). `cna-street`, `cna-car-simulator`, and
+`cna-gltf-viewer` have passed physical Intel application runs on both DirectX
+renderers. WIN11-0091 also closed a DX12 first-frame swap-chain size defect.
+The high-cardinality combined-diagnostics exception remains open.
 
 ## Stable source and machine baseline
 
@@ -3395,5 +3396,198 @@ $env:CNA_D3D12_ADAPTER='hardware'
 $env:CNA_D3D12_DEBUG_LAYER='1'
 $env:CNA_D3D12_DRED='1'
 $env:CNA_D3D12_GPU_VALIDATION='1'
+& C:\rv\work\private_desktop_awake.exe 90000 '"C:\rv\build\cna-win11-dx12-debug\Debug\cna_test_directx12_descriptor_capacity.exe" --legs ABCD'
+```
+
+### WIN11-0089 and WIN11-0090: Native DirectX validation of cna-gltf-viewer
+
+The public `libcna/cna-gltf-viewer` repository was selected as a third real
+CNA application because it exercises CNAEXT PBR, runtime and offline glTF
+loading, and deterministic backbuffer capture. `mesh-craft` does not currently
+offer a DirectX backend and has a separate Windows GLES-header blocker;
+`cna-lab` is an experimental monorepo, and `cna-extended` is a library rather
+than an application. The viewer was cloned at `develop`
+`12a10a1b837dca1021f9093ef51f583718720dea` into
+`C:\rv\src\cna-gltf-viewer`. Its local `win11-directx-validation` branch
+contains Robert Vokac commit `bee186d1a650f65105d4a98339dd36c0397bddd7`;
+it was not pushed. That app-local fix exposes `DIRECTX12`, permits a native
+Win32/SDL-free build, chooses HiDef only for capture so that path can call
+`GetBackBufferData`, sizes that read from `PresentationParameters`, and invokes
+the offline converter through wide-character Windows process spawning with
+proper argument quoting. No CNA public API was changed for the viewer.
+
+Both out-of-tree Visual Studio 2022 x64/v143 Debug builds passed under
+`C:\rv\build\cna-gltf-viewer-dx11` and `-dx12`, each using the local CNA
+branch, `CNA_PLATFORM=WIN32`, `CNA_AUDIO_PLATFORM=NULL`, SDL/video/font/Draco
+off, and 12 bounded compile jobs for the initial build. The viewer enables
+CNAEXT. Each backend's two registered CTest cases passed (CLI help and the
+actual triangle converter). On the private desktop, ten direct glTF captures
+and one offline CNJ capture per backend passed at 512x512. The cases cover
+material factors, alpha mask, normal/occlusion, skin bind pose, fixed-time
+rigid animation, GLB, base-colour texture, punctual lights, texture transform,
+and sparse indices. On each backend the direct and offline gold material PNGs
+are byte identical. Across DX11 and DX12, eight of eleven 512x512 image pairs
+are pixel identical; the other three differ by one channel level in one pixel
+each. The measured comparison is saved in
+`C:\rv\artifacts\cna-gltf-viewer-dx11-dx12-pixel-diffs.csv`; no new image
+tolerance was imposed. A separate input GLB and all three destinations with
+spaces in their paths produced PNG, `scene.cnj`, and `oracle.json` on both
+backends.
+
+DX11 selected physical DXGI `8086:46A6`, `software=0`, FL 11_1; DX12
+explicitly selected physical Intel Iris Xe `8086:46A6`, FL 12_1. Debug layers
+were enabled, and DX12 DRED was enabled; the successful normal runs emitted
+no Direct3D warning/error or device removal. The gold fixture reports its
+existing optional `KHR_materials_specular` partial-support warning from the
+generic glTF importer, not a DirectX diagnostic. Targeted DX12 GPU-based
+validation was also clean for gold PBR, base-colour texture, and skinning:
+all three captured successfully without validation messages or DRED removal,
+and the GBV gold/skin PNGs match their normal DX12 PNGs byte for byte. The
+skinning process wrote its PNG immediately but needed about 4.7 minutes to
+finish instrumented shutdown. An initial 120-second private-runner watchdog
+therefore exited 124; the repeat with a 600-second limit exited 0.
+
+The application exposed a separate CNA DX12 defect: before the first
+`Present`, the swap chain and logical viewport still reflected the initial
+800x480 window even after the application selected a 512x512 native
+backbuffer. WIN11-0091 records the framework-level reproduction and fix.
+Before that fix, the DX12 capture region was rejected as outside the
+backbuffer, and after sizing from the public presentation parameters it was
+cropped by the stale viewport. This was not hidden with an application delay
+or image tolerance.
+
+Configure form (repeat with distinct `-dx12` tree and `DIRECTX12` selector):
+
+```powershell
+cmake -S C:\rv\src\cna-gltf-viewer -B C:\rv\build\cna-gltf-viewer-dx11 -G 'Visual Studio 17 2022' -A x64 -DCNA_ROOT_DIR=C:\rv\src\cna -DCNA_PLATFORM=WIN32 -DCNA_AUDIO_PLATFORM=NULL -DCNA_ENABLE_SDL=OFF -DCNA_GRAPHICS_RENDERER=DIRECTX11 -DCNA_ENABLE_VIDEO=OFF -DCNA_ENABLE_FONT_PIPELINE=OFF -DCNA_ENABLE_DRACO=OFF -DCNA_USE_CCACHE=OFF
+cmake --build C:\rv\build\cna-gltf-viewer-dx11 --config Debug --target cna_gltf_viewer --parallel 12
+ctest --test-dir C:\rv\build\cna-gltf-viewer-dx11 -C Debug --output-on-failure
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 120000 '"C:\rv\build\cna-gltf-viewer-dx11\Debug\cna_gltf_viewer.exe" "C:\rv\src\cna\tests\assets\gltf\mat-factor-only-gold.gltf" --direct --reference-capture --capture "C:\rv\artifacts\cna-gltf-viewer-dx11-gold-direct.png"'
+```
+
+For DX12 the corresponding environment was
+`CNA_D3D12_ADAPTER=hardware`, `CNA_D3D12_DEBUG_LAYER=1`,
+`CNA_D3D12_DRED=1`, and `CNA_D3D12_GPU_VALIDATION=0` normally or `1` in the
+three focused validation runs. Per-case logs and PNGs are under
+`C:\rv\logs\cna-gltf-viewer-*` and `C:\rv\artifacts\cna-gltf-viewer-*`;
+the quoted-path end-to-end logs end in `-spaced-paths-final.log`. After
+restricting HiDef to capture mode, both backends' reference PNG hashes
+remained unchanged; the logs end in `-gold-conditional-profile.log`.
+
+### WIN11-0091: Synchronise the DX12 swap chain before the first draw
+
+The viewer's first DX12 512x512 reference capture exposed a native Win32
+presentation mismatch: the public `PresentationParameters` requested 512x512,
+but `GetViewportSize` still reported 800x480 before the first `Present` and the
+captured triangle was shifted and cropped. On DX11 the same path reported
+512x512 and captured the complete triangle. `DirectX12Renderer` refreshed its
+physical `width_`/`height_` only in `Present()`, while DX11 also resized in
+`ApplyMultiSampleCount()` after `GraphicsDevice::Reset` changed the window.
+The application now reads its capture region from the public presentation
+parameters; CNA itself must also apply the requested physical swap-chain size
+before any draw or readback.
+
+`DirectX12Renderer::ApplyMultiSampleCount()` now calls the existing
+`EnsureSwapChainSize()` at that reset boundary. It returns immediately when
+the size has not changed and uses the pre-existing resize wait only when
+DXGI `ResizeBuffers` is required; no per-draw GPU idle path was added. A
+physical Win32 first-frame assertion was added to the existing DX12 present
+stress. Before the renderer fix it measured **client 320x240 versus swap chain
+800x480**, with the debug layer clean but the regression failing. With the
+fix it measured **client 320x240, swap chain 320x240, logical viewport
+320x240** before the first `Present`. The viewer then reported 512x512 for
+both backbuffer and viewport in `CNA_BACKBUFFER_READ_TRACE`, and its restored
+DX12 gold capture differed from DX11 by only one channel level in one pixel.
+
+The 221-frame physical Intel Win32 stress passed with 10 resizes, one
+minimize/restore, nine resource-churn rounds, 21 backbuffer readbacks, nine
+render-target readbacks, zero D3D12 debug warnings/errors, no device removal,
+handle growth -4, and private-memory growth 0 MiB. A follow-up run with an
+assertion that the red sprite remains at logical (16,16) after resizes also
+passed, with handle growth -2 and private-memory growth 0 MiB. The entire rebuilt native
+`DIRECTX12` classic CTest label passed **296/296** in 347.57 s, exit 0,
+with debug layer and DRED enabled and GPU-based validation off for the full
+routine run. Targeted viewer GBV captures above exercised the corrected
+first-frame path with PBR, texture, and skinning.
+
+The rebuilt modern `CnaGraphicsExtTests.exe` then completed **994 pass / 0
+fail / 24 truthful skip** out of 1,018 tests in 3,050.415 s, exit 0, with
+729 explicit physical Intel adapter selections and no WARP selection. The
+24 skipped names match the established DX12 capability/test-contract set;
+there were no `[WARN][RENDER]` or `[ERROR][RENDER]` messages, DRED removals,
+or unexplained validation errors. The full run used the D3D12 debug layer
+and DRED, with routine GBV off. Its exact output is
+`C:\rv\logs\dx12-modern-full-initial-size-fix-intel.log`.
+
+Logs:
+`C:\rv\logs\dx12-first-frame-regression-red-run.log`,
+`C:\rv\logs\dx12-first-frame-regression-viewport-221.log`,
+`C:\rv\logs\dx12-first-frame-sprite-viewport-221.log`,
+`C:\rv\logs\dx12-classic-initial-size-fix-full-intel.log`, and
+`C:\rv\logs\cna-gltf-viewer-dx12-gold-direct-3.log`. The direct private
+stress command was:
+
+```powershell
+cmake --build C:\rv\build\cna-win11-dx12-debug --config Debug --target cna_stress_directx12_win32_present --parallel 12
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='0'
+& C:\rv\work\private_desktop_awake.exe 300000 '"C:\rv\build\cna-win11-dx12-debug\Debug\cna_stress_directx12_win32_present.exe" --frames 221'
+& C:\rv\work\private_desktop_awake.exe 7200000 'ctest --test-dir C:\rv\build\cna-win11-dx12-debug -C Debug -L DIRECTX12 --output-on-failure --parallel 1'
+```
+
+### WIN11-0093: Isolate the Intel high-cardinality hang to GBV plus DRED auto-breadcrumbs
+
+The original `DescriptorCapacityContract --legs ABCD` was rerun on physical
+Intel `8086:46A6`, FL 12_1, with the D3D12 debug layer and full GBV enabled.
+Two runs with `CNA_D3D12_DRED=0` passed **15/15**, exit 0; re-enabling DRED
+on the same diagnostic binary reproduced **14/15**, exit 1, with
+`DXGI_ERROR_DEVICE_HUNG` in leg D. A temporary `WaitForGpuIdleEXT()` call
+after C did not prevent the removal: A+B+C passed, D failed, and DRED named
+recently freed Texture2D and immediate-readback allocations. This was a
+diagnostic timing probe, not a shipping global wait.
+
+DRED's two features were then separated temporarily before device creation.
+With **auto-breadcrumbs forced off and page-fault reporting forced on**, full
+GBV passed **15/15**, exit 0. With **auto-breadcrumbs forced on and page-fault
+reporting forced off**, full GBV reproduced **14/15**, exit 1, with the same
+device-hung removal in D. The ordinary debug+DRED run with GBV off passed
+15/15 after all diagnostic code was removed. The original fixture and
+default DRED configuration were rebuilt; `git diff` contained no diagnostic
+renderer or fixture path afterward. No GBV mode, test expectation, skip, or
+production DRED setting was weakened to make a green run.
+
+This differential isolates the trigger to the **combination of full GBV
+resource-state instrumentation and DRED auto-breadcrumb insertion** on the
+physical Intel driver under this high-cardinality A+B+C+D history. It does
+not prove whether the remaining fault belongs to the Intel driver, the
+Windows diagnostics runtime, or an application lifetime race that extra
+instrumentation exposes. Microsoft documents that DRED auto-breadcrumbs
+insert `WriteBufferImmediate` progress writes after render operations and
+that GBV injects extra GPU operations and Dispatch calls; neither document
+claims the two are incompatible. See
+<https://learn.microsoft.com/en-us/windows/win32/direct3d12/use-dred> and
+<https://learn.microsoft.com/en-us/windows/win32/direct3d12/using-d3d12-debug-layer-gpu-based-validation>.
+Targeted full-GBV modern and viewer runs remain clean; the combined
+high-cardinality diagnostic exception is recorded separately rather than
+declared fixed.
+
+The exact logs are
+`C:\rv\logs\dx12-descriptor-abcd-intel-gbv-idle-after-c.log`,
+`C:\rv\logs\dx12-descriptor-abcd-intel-gbv-dred-off.log`,
+`C:\rv\logs\dx12-descriptor-abcd-intel-gbv-dred-off-repeat.log`,
+`C:\rv\logs\dx12-descriptor-abcd-intel-gbv-dred-on-control.log`,
+`C:\rv\logs\dx12-descriptor-gbv-dred-pagefault-only.log`,
+`C:\rv\logs\dx12-descriptor-gbv-dred-breadcrumbs-only.log`, and
+`C:\rv\logs\dx12-descriptor-abcd-post-diag-original-normal.log`. The
+runtime control used:
+
+```powershell
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_GPU_VALIDATION='1'
+$env:CNA_D3D12_DRED='0' # or '1' for the failing combined-diagnostics control
 & C:\rv\work\private_desktop_awake.exe 90000 '"C:\rv\build\cna-win11-dx12-debug\Debug\cna_test_directx12_descriptor_capacity.exe" --legs ABCD'
 ```
