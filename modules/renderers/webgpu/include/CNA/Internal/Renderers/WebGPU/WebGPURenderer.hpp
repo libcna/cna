@@ -25,6 +25,7 @@
 
 #include <array>
 #include <functional>
+#include <initializer_list>
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -1466,6 +1467,47 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] std::size_t GetTransientBufferReuseCountEXT() const noexcept
         {
             return transientBuffersReusedEXT_;
+        }
+        /**
+         * @brief plans/plan_webgpu_perf.md WEBGPUPERF-0001: bind groups this renderer has created.
+         *
+         * Cumulative since device creation, so a test measures one frame as the difference of two
+         * readings. A group served from the binding cache or an arena chunk is not counted again,
+         * which is the point: a steady scene should create none per frame.
+         *
+         * @return The number of native bind groups created.
+         */
+        [[nodiscard]] std::size_t GetBindGroupCreateCountEXT() const noexcept
+        {
+            return bindGroupsCreatedEXT_;
+        }
+        /**
+         * @brief WEBGPUPERF-0001: `wgpuQueueWriteBuffer` calls made by the draw and flush paths.
+         *
+         * Cumulative since device creation. A buffer's own `SetData` is not counted here; these
+         * are the writes the renderer makes on a draw's behalf.
+         *
+         * @return The number of queue writes.
+         */
+        [[nodiscard]] std::size_t GetQueueWriteCountEXT() const noexcept
+        {
+            return queueWritesEXT_;
+        }
+        /**
+         * @brief WEBGPUPERF-0001: bytes written by the calls @ref GetQueueWriteCountEXT counts.
+         * @return The cumulative byte count.
+         */
+        [[nodiscard]] std::uint64_t GetQueueWriteByteCountEXT() const noexcept
+        {
+            return queueWriteBytesEXT_;
+        }
+        /**
+         * @brief WEBGPUPERF-0003: bind groups currently held by the binding cache.
+         * @return The number of cached groups.
+         */
+        [[nodiscard]] std::size_t GetBindingCacheSizeEXT() const noexcept
+        {
+            return bindingCacheEXT_.size();
         }
 
         /**
@@ -3354,7 +3396,8 @@ namespace CNA::Internal::Renderers::WebGPU
          * @param pass The open render pass.
          * @param state The captured per-instance records; a disabled one binds nothing.
          * @param slot Native vertex-buffer slot to bind at -- the one past the draw's own streams.
-         * @return The transient buffer to release after submission, or null when nothing was bound.
+         * @return The transient buffer to release after submission, or null when nothing was bound
+         *         or the records went into the vertex arena (WEBGPUPERF-0002).
          */
         [[nodiscard]] WGPUBuffer BindInstanceStreamEXT(WGPURenderPassEncoder pass,
                                                        const WebGPUInstanceStreamEXT& state,
@@ -3662,6 +3705,10 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPUTextureView neutralVolumeView_ = nullptr;
         WGPUTexture neutralArrayTexture_ = nullptr;
         WGPUTextureView neutralArrayView_ = nullptr;
+        /// WEBGPUPERF-0003: the one reference object each neutral texture hands out.
+        std::shared_ptr<const WebGPUSampledResourceEXT> neutralCubeKeepAliveEXT_;
+        std::shared_ptr<const WebGPUSampledResourceEXT> neutralVolumeKeepAliveEXT_;
+        std::shared_ptr<const WebGPUSampledResourceEXT> neutralArrayKeepAliveEXT_;
         /// WMG: the byte-granular buffer copy kernel (WebGPURendererModern.cpp).
         WGPUShaderModule byteCopyModule_ = nullptr;
         WGPUComputePipeline byteCopyPipeline_ = nullptr;
@@ -4421,6 +4468,170 @@ namespace CNA::Internal::Renderers::WebGPU
         // executed commands.
         std::vector<WGPUBuffer> pendingBufferReleases_;
         std::vector<WGPUBindGroup> pendingBindGroupReleases_;
+
+        // ---- plans/plan_webgpu_perf.md WEBGPUPERF-0001..0004: the per-draw binding cost ----------
+        /// Every bind group the draw paths create goes through here, so the count is the frame's
+        /// real cost to wgpu. Creation and the release at the next submit are what made a street
+        /// frame of 1 212 draws spend most of its time inside wgpu.
+        [[nodiscard]] WGPUBindGroup CreateBindGroupEXT(const WGPUBindGroupDescriptor* descriptor)
+        {
+            ++bindGroupsCreatedEXT_;
+            return wgpuDeviceCreateBindGroup(device_, descriptor);
+        }
+        /// Every queue write the draw and flush paths make goes through here, for the same reason:
+        /// wgpu stages each one separately, so their number matters as much as their size.
+        void QueueWriteBufferEXT(WGPUBuffer buffer, std::uint64_t offset, const void* data,
+                                 std::size_t size)
+        {
+            ++queueWritesEXT_;
+            queueWriteBytesEXT_ += size;
+            wgpuQueueWriteBuffer(queue_, buffer, offset, data, size);
+        }
+        std::size_t bindGroupsCreatedEXT_ = 0;
+        std::size_t queueWritesEXT_ = 0;
+        std::uint64_t queueWriteBytesEXT_ = 0;
+
+        /**
+         * @brief WEBGPUPERF-0002: one flush's small per-draw data, written in one queue write per
+         *        chunk instead of one per block.
+         *
+         * Each chunk is a GPU buffer that lives as long as the device, with a CPU staging copy. A
+         * draw appends its block to the staging copy and binds the chunk at the block's offset;
+         * `ReplayOrderedSegments` writes every used chunk once, after its last pass and before its
+         * caller submits, and the next flush starts at offset 0 again. Reusing a chunk in the next
+         * flush is safe for the reason the transient pool is: the queue orders the next write after
+         * the submission that read the previous one. Chunks are never replaced, so a bind group
+         * built over one stays valid for the device's lifetime; the arena grows to the largest
+         * flush seen and keeps that many.
+         */
+        struct StreamArenaEXT
+        {
+            struct Chunk
+            {
+                WGPUBuffer buffer = nullptr;
+                std::vector<std::uint8_t> staging;
+                std::uint64_t used = 0;
+            };
+            WGPUBufferUsage usage = WGPUBufferUsage_None;
+            std::uint64_t chunkBytes = 0;
+            const char* label = "";
+            std::vector<Chunk> chunks;
+            std::size_t current = 0;
+        };
+        /// Where one appended block landed: the chunk's buffer and index, and the byte offset.
+        struct ArenaSliceEXT
+        {
+            WGPUBuffer buffer = nullptr;
+            std::uint32_t chunk = 0;
+            std::uint32_t offset = 0;
+        };
+        /// A group-0 style binding served from the uniform arena: the chunk's shared group and the
+        /// dynamic offset of each of its blocks, in binding order.
+        struct ArenaUniformBindingEXT
+        {
+            WGPUBindGroup group = nullptr;
+            std::array<std::uint32_t, 4> offsets{};
+            std::uint32_t count = 0;
+        };
+        /// One block of an @ref ArenaUniformBindingEXT: its bytes and its size.
+        struct ArenaBlockEXT
+        {
+            const void* data = nullptr;
+            std::size_t size = 0;
+        };
+        /// The alignment every block of @p arena starts at.
+        [[nodiscard]] std::uint64_t ArenaAlignmentEXT(const StreamArenaEXT& arena) const;
+        /**
+         * @brief Makes the arena's current chunk able to take @p bytes more, moving to (and if
+         *        needed creating) the next chunk when it cannot.
+         * @return False when @p bytes exceeds a whole chunk; the caller then uses its own buffer.
+         */
+        bool ReserveArenaEXT(StreamArenaEXT& arena, std::uint64_t bytes);
+        /// Copies @p bytes into the current chunk at the next aligned offset. The caller reserved.
+        [[nodiscard]] ArenaSliceEXT AppendArenaEXT(StreamArenaEXT& arena, const void* data,
+                                                   std::size_t bytes);
+        /**
+         * @brief Appends @p blocks to the uniform arena in one chunk and returns the chunk's
+         *        dynamic-offset group for @p layout, whose bindings 0..n-1 are those blocks.
+         */
+        [[nodiscard]] ArenaUniformBindingEXT AppendUniformBlocksEXT(
+            WGPUBindGroupLayout layout, std::initializer_list<ArenaBlockEXT> blocks);
+        /// Writes every used chunk of both arenas and rewinds them. Called once per flush.
+        void FlushStreamArenasEXT();
+        /// Releases both arenas' buffers (device loss and destruction).
+        void ReleaseStreamArenasEXT();
+        /// 1 MiB of uniform blocks is about four thousand 256-byte-aligned blocks per chunk.
+        StreamArenaEXT uniformArenaEXT_{.usage = WGPUBufferUsage_Uniform, .chunkBytes = 1u << 20,
+                                        .label = "CNA WebGPU Uniform Arena Chunk"};
+        /// Per-instance streams; a draw with more than a chunk's worth uses its own buffer.
+        StreamArenaEXT vertexArenaEXT_{.usage = WGPUBufferUsage_Vertex, .chunkBytes = 1u << 20,
+                                       .label = "CNA WebGPU Vertex Arena Chunk"};
+
+        /**
+         * @brief WEBGPUPERF-0003: identifies a cached bind group by everything it binds.
+         *
+         * `handles` are the samplers and texture views in binding order. A view is only ever keyed
+         * while the entry also holds the native reference that owns it (see
+         * @ref BindingCacheEntryEXT), so a freed view's address cannot come back as a new texture
+         * and match an old group. `arenaChunk` names the uniform-arena chunk the group's buffer
+         * binding points into, or ~0u when it has none.
+         */
+        struct BindingCacheKeyEXT
+        {
+            WGPUBindGroupLayout layout = nullptr;
+            std::uint32_t arenaChunk = ~0u;
+            std::array<const void*, 8> handles{};
+            bool operator==(const BindingCacheKeyEXT&) const = default;
+        };
+        struct BindingCacheKeyHashEXT
+        {
+            std::size_t operator()(const BindingCacheKeyEXT& key) const noexcept;
+        };
+        /// A cached group, the references that keep its views' addresses unique, and when a frame
+        /// last used it.
+        struct BindingCacheEntryEXT
+        {
+            WGPUBindGroup group = nullptr;
+            std::array<std::shared_ptr<const WebGPUSampledResourceEXT>, 7> keepAlive{};
+            std::uint64_t lastUsedFrame = 0;
+        };
+        /**
+         * @brief Returns the cached group for @p key, creating it from @p descriptor on a miss.
+         *
+         * @p textures are the sampled textures whose views @p key names. When one of them carries
+         * no reference of its own on its view the group is not cached: it is created for this draw
+         * and released after the submit, as every group used to be.
+         */
+        [[nodiscard]] WGPUBindGroup AcquireCachedBindGroupEXT(
+            const BindingCacheKeyEXT& key,
+            std::initializer_list<const WebGPUSampledTextureEXT*> textures,
+            const WGPUBindGroupDescriptor& descriptor);
+        /**
+         * @brief WEBGPUPERF-0003: group 1 of both PBR families -- the slot-0 sampler and the seven
+         *        material maps -- from the binding cache.
+         *
+         * A street's draws are sorted by material, so a frame of a thousand PBR draws needs a few
+         * hundred distinct groups, and a steady scene builds none of them twice.
+         *
+         * @return The group; owned by the cache (or, uncacheable, released after the submit).
+         */
+        [[nodiscard]] WGPUBindGroup AcquirePbrTextureBindingEXT(
+            WGPUSampler sampler, const WebGPUSampledTextureEXT& baseColor,
+            const WebGPUSampledTextureEXT& normal, const WebGPUSampledTextureEXT& metallicRoughness,
+            const WebGPUSampledTextureEXT& emissive, const WebGPUSampledTextureEXT& occlusion,
+            const WebGPUSampledTextureEXT& specular, const WebGPUSampledTextureEXT& specularColor,
+            const char* label);
+        /// Drops groups no frame used for a while, and groups holding the last reference to a
+        /// texture nothing else can bind any more. Called once per presented frame.
+        void SweepBindingCacheEXT();
+        /// Releases every cached group. Called whenever a layout, sampler or arena chunk a cached
+        /// group names is about to go.
+        void ReleaseBindingCacheEXT();
+        std::unordered_map<BindingCacheKeyEXT, BindingCacheEntryEXT, BindingCacheKeyHashEXT>
+            bindingCacheEXT_;
+        std::uint64_t bindingCacheFrameEXT_ = 0;
+        /// Frames a cached group may go unused before the sweep releases it.
+        static constexpr std::uint64_t kBindingCacheMaxIdleFramesEXT = 120;
 
         // WEBGPU-12/59: transient per-draw buffer pool. Every 3D draw used to create a fresh
         // WGPUBuffer for its vertices/uniforms/indices and release it once the frame's command
@@ -5753,13 +5964,17 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] WebGPUShadowStateEXT CaptureShadowStateEXT(
             const CNA::Internal::Renderers::GpuDrawParams& params);
         /**
-         * @brief WMG-0014: builds one draw's group-2 bind group.
+         * @brief WEBGPUPERF-0004: one draw's group-2 binding, served from the binding cache.
+         *
+         * The parameter block goes into the uniform arena and is bound at a dynamic offset, so
+         * draws that receive the same maps with the same samplers share one group.
+         *
          * @param state The captured state.
-         * @param transient Receives the uniform buffer to recycle after submission.
-         * @return The bind group; never null once the device exists.
+         * @param offset Receives the block's dynamic offset.
+         * @return The group; owned by the cache, never released by the caller.
          */
-        [[nodiscard]] WGPUBindGroup CreateShadowBindGroupEXT(
-            const WebGPUShadowStateEXT& state, std::vector<WGPUBuffer>& transient);
+        [[nodiscard]] WGPUBindGroup AcquireShadowBindingEXT(const WebGPUShadowStateEXT& state,
+                                                            std::uint32_t& offset);
         /// WMG-0014: group 2 of every shadow-receiving pipeline: the params block, and the
         /// directional, point and spot maps each with the sampler its slot carried.
         WGPUBindGroupLayout shadowBindGroupLayout_ = nullptr;
@@ -5778,13 +5993,14 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] WebGPUIblStateEXT CaptureIblStateEXT(
             const CNA::Internal::Renderers::GpuDrawParams& params);
         /**
-         * @brief WMG-0022: builds one draw's group-3 bind group.
+         * @brief WEBGPUPERF-0004: one draw's group-3 binding, served from the binding cache; see
+         *        @ref AcquireShadowBindingEXT.
          * @param state The captured state.
-         * @param transient Receives the uniform buffer to recycle after submission.
-         * @return The bind group; never null once the device exists.
+         * @param offset Receives the block's dynamic offset.
+         * @return The group; owned by the cache, never released by the caller.
          */
-        [[nodiscard]] WGPUBindGroup CreateIblBindGroupEXT(
-            const WebGPUIblStateEXT& state, std::vector<WGPUBuffer>& transient);
+        [[nodiscard]] WGPUBindGroup AcquireIblBindingEXT(const WebGPUIblStateEXT& state,
+                                                         std::uint32_t& offset);
         /// WMG-0022: group 3 of both PBR pipelines: the params block, the irradiance and
         /// prefiltered cubes and the BRDF table, each with the sampler its slot carried.
         WGPUBindGroupLayout iblBindGroupLayout_ = nullptr;

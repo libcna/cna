@@ -329,12 +329,21 @@ namespace CNA::Internal::Renderers::WebGPU
     WebGPUSampledTextureEXT WebGPURenderer::NeutralTextureForDimensionEXT(
         WGPUTextureViewDimension dimension)
     {
+        // plans/plan_webgpu_perf.md WEBGPUPERF-0003: one reference object per shape, made with the
+        // texture and handed out on every call. A fresh one per call cost two heap allocations per
+        // draw, and an object only the binding cache held would read to its sweep as a texture
+        // nothing can bind any more.
         const auto makeWhite = [&](WGPUTextureDimension textureDimension,
                                    WGPUTextureViewDimension viewDimension, std::uint32_t layers,
                                    std::uint32_t depth, WGPUTexture& texture, WGPUTextureView& view,
+                                   std::shared_ptr<const WebGPUSampledResourceEXT>& keepAlive,
                                    const char* label) {
-            if (view != nullptr) return WebGPUSampledTextureEXT{
-                view, std::make_shared<const WebGPUSampledResourceEXT>(texture, view)};
+            if (view != nullptr)
+            {
+                if (keepAlive == nullptr)
+                    keepAlive = std::make_shared<const WebGPUSampledResourceEXT>(texture, view);
+                return WebGPUSampledTextureEXT{view, keepAlive};
+            }
             WGPUTextureDescriptor descriptor{};
             descriptor.label = Label(label);
             descriptor.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
@@ -359,8 +368,8 @@ namespace CNA::Internal::Renderers::WebGPU
             viewDescriptor.arrayLayerCount = textureDimension == WGPUTextureDimension_3D ? 1 : faces;
             viewDescriptor.aspect = WGPUTextureAspect_All;
             view = wgpuTextureCreateView(texture, &viewDescriptor);
-            return WebGPUSampledTextureEXT{
-                view, std::make_shared<const WebGPUSampledResourceEXT>(texture, view)};
+            keepAlive = std::make_shared<const WebGPUSampledResourceEXT>(texture, view);
+            return WebGPUSampledTextureEXT{view, keepAlive};
         };
 
         switch (dimension)
@@ -368,13 +377,16 @@ namespace CNA::Internal::Renderers::WebGPU
         case WGPUTextureViewDimension_Cube:
         case WGPUTextureViewDimension_CubeArray:
             return makeWhite(WGPUTextureDimension_2D, WGPUTextureViewDimension_Cube, 6, 1,
-                             neutralCubeTexture_, neutralCubeView_, "CNA WebGPU neutral cube");
+                             neutralCubeTexture_, neutralCubeView_, neutralCubeKeepAliveEXT_,
+                             "CNA WebGPU neutral cube");
         case WGPUTextureViewDimension_3D:
             return makeWhite(WGPUTextureDimension_3D, WGPUTextureViewDimension_3D, 1, 1,
-                             neutralVolumeTexture_, neutralVolumeView_, "CNA WebGPU neutral volume");
+                             neutralVolumeTexture_, neutralVolumeView_, neutralVolumeKeepAliveEXT_,
+                             "CNA WebGPU neutral volume");
         case WGPUTextureViewDimension_2DArray:
             return makeWhite(WGPUTextureDimension_2D, WGPUTextureViewDimension_2DArray, 1, 1,
-                             neutralArrayTexture_, neutralArrayView_, "CNA WebGPU neutral array");
+                             neutralArrayTexture_, neutralArrayView_, neutralArrayKeepAliveEXT_,
+                             "CNA WebGPU neutral array");
         default:
             EnsurePbrDefaultTextures();
             return ResolveSamplable(pbrDefaultWhiteTexture_.get());
@@ -399,7 +411,7 @@ namespace CNA::Internal::Renderers::WebGPU
             std::vector<std::uint8_t> bytes(static_cast<std::size_t>(size), 0);
             if (data != nullptr && byteSize > 0)
                 std::memcpy(bytes.data(), data, static_cast<std::size_t>(byteSize));
-            wgpuQueueWriteBuffer(queue_, buffer, 0, bytes.data(), bytes.size());
+            QueueWriteBufferEXT(buffer, 0, bytes.data(), bytes.size());
             transient.push_back(buffer);
             return std::pair<WGPUBuffer, std::uint64_t>{buffer, size};
         };
@@ -544,7 +556,7 @@ namespace CNA::Internal::Renderers::WebGPU
             descriptor.layout = layout.GroupLayout(g);
             descriptor.entryCount = entries.size();
             descriptor.entries = entries.empty() ? nullptr : entries.data();
-            groups[g] = wgpuDeviceCreateBindGroup(device_, &descriptor);
+            groups[g] = CreateBindGroupEXT(&descriptor);
         }
         return groups;
     }

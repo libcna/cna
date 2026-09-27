@@ -619,7 +619,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
                     WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst, size);
                 std::vector<std::uint8_t> bytes = dispatch.scalarBytes;
                 bytes.resize(static_cast<std::size_t>(size), 0);
-                wgpuQueueWriteBuffer(queue_, block, 0, bytes.data(), bytes.size());
+                QueueWriteBufferEXT(block, 0, bytes.data(), bytes.size());
                 transient.push_back(block);
                 WGPUBindGroupEntry e = WGPU_BIND_GROUP_ENTRY_INIT;
                 e.binding = 0;
@@ -632,7 +632,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
             descriptor.layout = layout.GroupLayout(g);
             descriptor.entryCount = entries.size();
             descriptor.entries = entries.empty() ? nullptr : entries.data();
-            groups.push_back(wgpuDeviceCreateBindGroup(device_, &descriptor));
+            groups.push_back(CreateBindGroupEXT(&descriptor));
         }
 
         WGPUCommandEncoder encoder = BeginModernEncoderEXT("CNA WebGPU compute dispatch");
@@ -678,6 +678,9 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     void WebGPURenderer::ReleaseModernDeviceObjectsEXT()
     {
         drawStorageBuffers_.clear();
+        neutralCubeKeepAliveEXT_.reset();
+        neutralVolumeKeepAliveEXT_.reset();
+        neutralArrayKeepAliveEXT_.reset();
         const auto releaseNeutral = [](WGPUTexture& texture, WGPUTextureView& view) {
             if (view != nullptr) wgpuTextureViewRelease(view);
             if (texture != nullptr) wgpuTextureRelease(texture);
@@ -718,7 +721,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
                 static_cast<std::uint32_t>(count), 0, 0, 0};
             WGPUBuffer block = AcquireTransientBuffer(
                 WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst, sizeof(params));
-            wgpuQueueWriteBuffer(queue_, block, 0, params, sizeof(params));
+            QueueWriteBufferEXT(block, 0, params, sizeof(params));
             transient.push_back(block);
             std::array<WGPUBindGroupEntry, 3> entries{};
             for (auto& e : entries) e = WGPU_BIND_GROUP_ENTRY_INIT;
@@ -736,7 +739,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
             descriptor.layout = byteCopyLayout_->GroupLayout(0);
             descriptor.entryCount = entries.size();
             descriptor.entries = entries.data();
-            WGPUBindGroup group = wgpuDeviceCreateBindGroup(device_, &descriptor);
+            WGPUBindGroup group = CreateBindGroupEXT(&descriptor);
             bindGroups.push_back(group);
             wgpuComputePassEncoderSetBindGroup(pass, 0, group, 0, nullptr);
             wgpuComputePassEncoderDispatchWorkgroups(
@@ -753,7 +756,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         BeforeModernResourceWriteEXT();
         if (offset % 4 == 0 && size % 4 == 0)
         {
-            wgpuQueueWriteBuffer(queue_, buffer, offset, data, static_cast<std::size_t>(size));
+            QueueWriteBufferEXT(buffer, offset, data, static_cast<std::size_t>(size));
             return;
         }
         // An unaligned range: stage the bytes (padded) and merge them in with the byte-copy kernel.
@@ -762,7 +765,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
             WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst | WGPUBufferUsage_CopySrc, stagedSize);
         std::vector<std::uint8_t> padded(static_cast<std::size_t>(stagedSize), 0);
         std::memcpy(padded.data(), data, static_cast<std::size_t>(size));
-        wgpuQueueWriteBuffer(queue_, staging, 0, padded.data(), padded.size());
+        QueueWriteBufferEXT(staging, 0, padded.data(), padded.size());
         std::vector<WGPUBuffer> transient{staging};
         std::vector<WGPUBindGroup> groups;
         WGPUCommandEncoder encoder = BeginModernEncoderEXT("CNA WebGPU unaligned buffer write");
@@ -1222,6 +1225,9 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         entries[0].visibility = WGPUShaderStage_Fragment;
         entries[0].buffer.type = WGPUBufferBindingType_Uniform;
         entries[0].buffer.minBindingSize = sizeof(WebGPUShadowStateEXT::uniforms);
+        // plans/plan_webgpu_perf.md WEBGPUPERF-0004: the block lives in the uniform arena, so draws
+        // receiving the same maps share one group and differ only in this offset.
+        entries[0].buffer.hasDynamicOffset = true;
         const auto sampler = [&entries](const std::uint32_t binding) {
             entries[binding].binding = binding;
             entries[binding].visibility = WGPUShaderStage_Fragment;
@@ -1309,17 +1315,19 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         return state;
     }
 
-    WGPUBindGroup WebGPURenderer::CreateShadowBindGroupEXT(const WebGPUShadowStateEXT& state,
-                                                           std::vector<WGPUBuffer>& transient)
+    WGPUBindGroup WebGPURenderer::AcquireShadowBindingEXT(const WebGPUShadowStateEXT& state,
+                                                          std::uint32_t& offset)
     {
         EnsureShadowResourcesEXT();
-        WGPUBufferDescriptor bufferDescriptor{};
-        bufferDescriptor.label = Label("CNA WebGPU Shadow UBO");
-        bufferDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-        bufferDescriptor.size = sizeof(state.uniforms);
-        WGPUBuffer buffer = AcquireTransientBuffer(bufferDescriptor.usage, bufferDescriptor.size);
-        wgpuQueueWriteBuffer(queue_, buffer, 0, state.uniforms.data(), sizeof(state.uniforms));
-        transient.push_back(buffer);
+        // plans/plan_webgpu_perf.md WEBGPUPERF-0004: the block goes into the uniform arena and is
+        // bound at its own offset; what is left in the group is the maps and their samplers, which
+        // a whole frame of draws usually shares -- so the group comes from the binding cache
+        // instead of being built, written and released for every draw.
+        if (!ReserveArenaEXT(uniformArenaEXT_, sizeof(state.uniforms)))
+            throw std::runtime_error("CNA WebGPU: the shadow block does not fit an arena chunk");
+        const ArenaSliceEXT slice =
+            AppendArenaEXT(uniformArenaEXT_, state.uniforms.data(), sizeof(state.uniforms));
+        offset = slice.offset;
 
         // A pipeline statically uses every binding its layout declares, so an absent map binds a
         // 1x1 white texture rather than nothing. White reads as "nothing occludes", which is what
@@ -1328,35 +1336,47 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
             NeutralTextureForDimensionEXT(WGPUTextureViewDimension_2D);
         const WebGPUSampledTextureEXT whiteCube =
             NeutralTextureForDimensionEXT(WGPUTextureViewDimension_Cube);
+        const WebGPUSampledTextureEXT& map = state.map ? state.map : white2D;
+        const WebGPUSampledTextureEXT& cube = state.cube ? state.cube : whiteCube;
+        const WebGPUSampledTextureEXT& spot = state.spot ? state.spot : white2D;
+
+        const auto sampler = [&](const std::size_t slot, const char* label) {
+            const SlotSamplerState& s = state.samplers[slot];
+            return GetOrCreateSlotSampler(s.filter, s.addressU, s.addressV, s.addressW,
+                                          s.maxMipLevel, s.maxAnisotropy, label);
+        };
+        const WGPUSampler mapSampler = sampler(0, "ShadowMap");
+        const WGPUSampler cubeSampler = sampler(1, "PunctualCube");
+        const WGPUSampler spotSampler = sampler(2, "PunctualMap");
 
         std::array<WGPUBindGroupEntry, 7> entries{};
         entries[0].binding = 0;
-        entries[0].buffer = buffer;
+        entries[0].buffer = slice.buffer;
         entries[0].size = sizeof(state.uniforms);
-        const auto bindSampler = [&](const std::uint32_t binding, const std::size_t slot,
-                                     const char* label) {
-            const SlotSamplerState& s = state.samplers[slot];
-            entries[binding].binding = binding;
-            entries[binding].sampler = GetOrCreateSlotSampler(s.filter, s.addressU, s.addressV,
-                                                              s.addressW, s.maxMipLevel,
-                                                              s.maxAnisotropy, label);
-        };
-        bindSampler(1, 0, "ShadowMap");
+        entries[1].binding = 1;
+        entries[1].sampler = mapSampler;
         entries[2].binding = 2;
-        entries[2].textureView = state.map ? state.map.View() : white2D.View();
-        bindSampler(3, 1, "PunctualCube");
+        entries[2].textureView = map.View();
+        entries[3].binding = 3;
+        entries[3].sampler = cubeSampler;
         entries[4].binding = 4;
-        entries[4].textureView = state.cube ? state.cube.View() : whiteCube.View();
-        bindSampler(5, 2, "PunctualMap");
+        entries[4].textureView = cube.View();
+        entries[5].binding = 5;
+        entries[5].sampler = spotSampler;
         entries[6].binding = 6;
-        entries[6].textureView = state.spot ? state.spot.View() : white2D.View();
+        entries[6].textureView = spot.View();
 
         WGPUBindGroupDescriptor descriptor{};
         descriptor.label = Label("CNA WebGPU Shadow BindGroup");
         descriptor.layout = shadowBindGroupLayout_;
         descriptor.entryCount = entries.size();
         descriptor.entries = entries.data();
-        return wgpuDeviceCreateBindGroup(device_, &descriptor);
+
+        BindingCacheKeyEXT key;
+        key.layout = shadowBindGroupLayout_;
+        key.arenaChunk = slice.chunk;
+        key.handles = {mapSampler, map.View(), cubeSampler, cube.View(), spotSampler, spot.View()};
+        return AcquireCachedBindGroupEXT(key, {&map, &cube, &spot}, descriptor);
     }
 
     // ---- WMG-0022: image-based lighting for the two PBR families -------------------------------
@@ -1369,6 +1389,8 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         entries[0].visibility = WGPUShaderStage_Fragment;
         entries[0].buffer.type = WGPUBufferBindingType_Uniform;
         entries[0].buffer.minBindingSize = sizeof(WebGPUIblStateEXT::uniforms);
+        // WEBGPUPERF-0004: in the uniform arena, as the shadow block is.
+        entries[0].buffer.hasDynamicOffset = true;
         const auto sampler = [&entries](const std::uint32_t binding) {
             entries[binding].binding = binding;
             entries[binding].visibility = WGPUShaderStage_Fragment;
@@ -1429,17 +1451,17 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         return state;
     }
 
-    WGPUBindGroup WebGPURenderer::CreateIblBindGroupEXT(const WebGPUIblStateEXT& state,
-                                                        std::vector<WGPUBuffer>& transient)
+    WGPUBindGroup WebGPURenderer::AcquireIblBindingEXT(const WebGPUIblStateEXT& state,
+                                                       std::uint32_t& offset)
     {
         EnsureIblResourcesEXT();
-        WGPUBufferDescriptor bufferDescriptor{};
-        bufferDescriptor.label = Label("CNA WebGPU Ibl UBO");
-        bufferDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-        bufferDescriptor.size = sizeof(state.uniforms);
-        WGPUBuffer buffer = AcquireTransientBuffer(bufferDescriptor.usage, bufferDescriptor.size);
-        wgpuQueueWriteBuffer(queue_, buffer, 0, state.uniforms.data(), sizeof(state.uniforms));
-        transient.push_back(buffer);
+        // WEBGPUPERF-0004: the same shape as AcquireShadowBindingEXT: the block in the arena, the
+        // cubes and the table -- the sky's or a probe's, shared by every draw near it -- cached.
+        if (!ReserveArenaEXT(uniformArenaEXT_, sizeof(state.uniforms)))
+            throw std::runtime_error("CNA WebGPU: the IBL block does not fit an arena chunk");
+        const ArenaSliceEXT slice =
+            AppendArenaEXT(uniformArenaEXT_, state.uniforms.data(), sizeof(state.uniforms));
+        offset = slice.offset;
 
         // A pipeline statically uses every binding its layout declares, so a draw with no
         // environment binds 1x1 white rather than nothing. What it samples does not matter --
@@ -1449,34 +1471,47 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
             NeutralTextureForDimensionEXT(WGPUTextureViewDimension_2D);
         const WebGPUSampledTextureEXT whiteCube =
             NeutralTextureForDimensionEXT(WGPUTextureViewDimension_Cube);
+        const WebGPUSampledTextureEXT& irradiance = state.irradiance ? state.irradiance : whiteCube;
+        const WebGPUSampledTextureEXT& specular = state.specular ? state.specular : whiteCube;
+        const WebGPUSampledTextureEXT& brdfLut = state.brdfLut ? state.brdfLut : white2D;
+
+        const auto sampler = [&](const std::size_t slot, const char* label) {
+            const SlotSamplerState& s = state.samplers[slot];
+            return GetOrCreateSlotSampler(s.filter, s.addressU, s.addressV, s.addressW,
+                                          s.maxMipLevel, s.maxAnisotropy, label);
+        };
+        const WGPUSampler irradianceSampler = sampler(0, "IblIrradiance");
+        const WGPUSampler specularSampler = sampler(1, "IblPrefilteredSpecular");
+        const WGPUSampler brdfSampler = sampler(2, "IblBrdfLut");
 
         std::array<WGPUBindGroupEntry, 7> entries{};
         entries[0].binding = 0;
-        entries[0].buffer = buffer;
+        entries[0].buffer = slice.buffer;
         entries[0].size = sizeof(state.uniforms);
-        const auto bindSampler = [&](const std::uint32_t binding, const std::size_t slot,
-                                     const char* label) {
-            const SlotSamplerState& s = state.samplers[slot];
-            entries[binding].binding = binding;
-            entries[binding].sampler = GetOrCreateSlotSampler(s.filter, s.addressU, s.addressV,
-                                                              s.addressW, s.maxMipLevel,
-                                                              s.maxAnisotropy, label);
-        };
-        bindSampler(1, 0, "IblIrradiance");
+        entries[1].binding = 1;
+        entries[1].sampler = irradianceSampler;
         entries[2].binding = 2;
-        entries[2].textureView = state.irradiance ? state.irradiance.View() : whiteCube.View();
-        bindSampler(3, 1, "IblPrefilteredSpecular");
+        entries[2].textureView = irradiance.View();
+        entries[3].binding = 3;
+        entries[3].sampler = specularSampler;
         entries[4].binding = 4;
-        entries[4].textureView = state.specular ? state.specular.View() : whiteCube.View();
-        bindSampler(5, 2, "IblBrdfLut");
+        entries[4].textureView = specular.View();
+        entries[5].binding = 5;
+        entries[5].sampler = brdfSampler;
         entries[6].binding = 6;
-        entries[6].textureView = state.brdfLut ? state.brdfLut.View() : white2D.View();
+        entries[6].textureView = brdfLut.View();
 
         WGPUBindGroupDescriptor descriptor{};
         descriptor.label = Label("CNA WebGPU Ibl BindGroup");
         descriptor.layout = iblBindGroupLayout_;
         descriptor.entryCount = entries.size();
         descriptor.entries = entries.data();
-        return wgpuDeviceCreateBindGroup(device_, &descriptor);
+
+        BindingCacheKeyEXT key;
+        key.layout = iblBindGroupLayout_;
+        key.arenaChunk = slice.chunk;
+        key.handles = {irradianceSampler, irradiance.View(), specularSampler, specular.View(),
+                       brdfSampler, brdfLut.View()};
+        return AcquireCachedBindGroupEXT(key, {&irradiance, &specular, &brdfLut}, descriptor);
     }
 }

@@ -1,7 +1,7 @@
 # WebGPU per-draw CPU cost — binding-model redesign
 
-**Status: open, not started.** Recorded 2026-09-25 at the owner's request, for whoever picks it up
-(human or AI agent). Nothing below has been implemented; the task IDs are proposals.
+**Status: 0001-0004 done (2026-09-27), 0005-0007 open.** Recorded 2026-09-25 at the owner's request;
+implementation started 2026-09-27. See *Results* for what changed and what it measured.
 
 Task IDs: `WEBGPUPERF-0001`, … . Predecessor and evidence:
 [`plan_street_perf.md`](plan_street_perf.md) (`STREETPERF-0001`..`0004`, branch `street-perf`),
@@ -21,7 +21,31 @@ timer `begin`/`end` flushes and submits the pending draws, plus one more submit 
 query. wgpu's per-call cost for bind-group creation, queue writes and submits (with its tracking and
 `maintain`) is what the frame is made of.
 
-## Measurements
+## Since this was written: the street lost the engine layer (2026-09-27)
+
+`MOD-RETIRE-1` retired CNA's graphics engine layer the day this work began, and cna-street was
+downgraded to build without it (cna-street branch `current-cna`): no cascaded shadows, no SSAO
+prepass, no HDR target or post chain, no GPU timers. Every object is still drawn; the frame now goes
+straight to the back buffer. So the 924 ShaderEffect shadow casters and the timer flushes described
+below are gone from the street, and the remaining workload is 1 212 draws a frame, almost all
+PbrEffect and SkinnedPbrEffect.
+
+Two things about measuring it changed with that:
+
+* **The street's own `cpuMeanMs` no longer measures a deferred renderer.** It is
+  `SceneRenderer::render`'s clock, and Vulkan, SDL_GPU and WebGPU replay their recorded draws at
+  `Present()`, after that clock stops. The shadow and post passes used to force the replay inside
+  `render()` through their render-target switches; with them gone WebGPU read 12 ms for a frame that
+  took 95. The street now also records the wall clock from one `Draw` to the next
+  (`frameIntervalMeanMs`/`presentedFps` in the benchmark output, cna-street commit `400cdec`), and
+  every number below is that interval.
+* **The problem was still there.** After the downgrade, `--benchmark baseline`: OPENGL33 33 ms,
+  OPENGL4 29, VULKAN 30, SDL_GPU 30, **WEBGPU 95 ms**. A gdb profile (80 stacks) put 62 of 80 in
+  `Present` -> `EnsureFrameRendered`: 29 encoding the draws (`IssuePbrDraw` 22), 26 in
+  `wgpuQueueSubmit` -- nearly all of it wgpu's `maintain`/`drop` releasing the previous frame's
+  per-draw objects -- 19 in `wgpuQueueWriteBuffer` and 17 in `wgpuDeviceCreateBindGroup`.
+
+## Measurements (2026-09-25, before the downgrade)
 
 All on the Radeon 780M (Mesa 25.0.7 RADV under wgpu-native v29.0.1.1), cna-street's Release tree
 `../cna-street/build`, the private compositor, back to back.
@@ -120,12 +144,13 @@ Paths are relative to `modules/renderers/webgpu/src/`; line numbers are as of `s
 
 | ID | Task | Status |
 |---|---|---|
-| WEBGPUPERF-0001 | Test-only counters per frame (bind groups created, queue writes and bytes, submits) and a baseline recorded here | ⬜ |
-| WEBGPUPERF-0002 | Stock families: one uniform arena per flush, bound with dynamic offsets; one UBO bind group per (arena, layout) per flush; one `wgpuQueueWriteBuffer` of the arena before the submit. PBR and skinned PBR first -- they are the street's opaque pass | ⬜ |
-| WEBGPUPERF-0003 | Cache texture/sampler bind groups keyed by (layout, views, samplers); evict when a texture/view dies (hook into the texture renderers' release) and by frame age | ⬜ |
-| WEBGPUPERF-0004 | Shadow and IBL groups: uniforms into the arena, texture parts cached | ⬜ |
-| WEBGPUPERF-0005 | ShaderEffect descriptor route: reflected uniform blocks into the arena with dynamic offsets (the reflected layout marks them dynamic); cache the non-uniform groups. This is the street's 924 shadow casters | ⬜ |
-| WEBGPUPERF-0006 | Fewer submits: resolve timer queries in the flush that is already happening instead of a separate encoder; evaluate one encoder per frame, submitted early only when a queue write, readback or present needs ordering | ⬜ |
+| WEBGPUPERF-0001 | Test-only counters per frame (bind groups created, queue writes and bytes, submits) and a baseline recorded here | ✅ `GetBindGroupCreateCountEXT`, `GetQueueWriteCountEXT`, `GetQueueWriteByteCountEXT`, `GetBindingCacheSizeEXT` (submits were already `GetQueueSubmitCountEXT`); every draw-path `wgpuDeviceCreateBindGroup`/`wgpuQueueWriteBuffer` goes through `CreateBindGroupEXT`/`QueueWriteBufferEXT`. Baseline in *Results* |
+| WEBGPUPERF-0002 | Stock families: one uniform arena per flush, bound with dynamic offsets; one UBO bind group per (arena, layout) per flush; one `wgpuQueueWriteBuffer` of the arena before the submit. PBR and skinned PBR first -- they are the street's opaque pass | ✅ for PBR and skinned PBR, and every family's per-instance stream (a vertex arena). The classic families are WEBGPUPERF-0007 |
+| WEBGPUPERF-0003 | Cache texture/sampler bind groups keyed by (layout, views, samplers); evict when a texture/view dies (hook into the texture renderers' release) and by frame age | ✅ PBR texture groups. No hook was needed: an entry holds each view's own `WebGPUSampledResourceEXT`, so a view's address cannot be reused while it is keyed, and the per-present sweep drops an entry once it holds a texture's last reference, or after 120 idle frames |
+| WEBGPUPERF-0004 | Shadow and IBL groups: uniforms into the arena, texture parts cached | ✅ for every family that binds them (PBR, skinned PBR, LitTextured, Skinned) |
+| WEBGPUPERF-0005 | ShaderEffect descriptor route: reflected uniform blocks into the arena with dynamic offsets (the reflected layout marks them dynamic); cache the non-uniform groups. This is the street's 924 shadow casters | ⬜ The street's casters went with the engine layer; it now draws one ShaderEffect a frame (the sky). Still worth doing for games that draw many |
+| WEBGPUPERF-0006 | Fewer submits: resolve timer queries in the flush that is already happening instead of a separate encoder; evaluate one encoder per frame, submitted early only when a queue write, readback or present needs ordering | ⬜ The timer half no longer reaches a game: `CNA::Graphics::GpuTimer` was retired and `CreateGpuTimerEXT` is only reachable through the internal renderer interface. The encoder-per-frame half stands |
+| WEBGPUPERF-0007 | The classic stock families (Colored, Textured, LitTextured, AlphaTest, DualTexture, EnvMap, Instanced, Skinned, sprites): group 0 into the uniform arena, texture groups cached -- the same treatment 0002/0003 gave PBR | ⬜ |
 
 Each task: the street's 18 captures identical before/after; `-L WebGPU` 148/0 in
 `cmake-build-webgpu`; `CnaRendererTests` and `CnaGraphicsTests` keep exactly the failures that
@@ -134,6 +159,51 @@ exist without the change (2 and 20 on `street-perf`, listed in `plan_street_perf
 
 **Target:** WebGPU's CPU frame on `--benchmark baseline` within about 1.5× of Vulkan's (≈45 ms or
 better) with identical captures.
+
+## Results (2026-09-27)
+
+**What changed** (`modules/renderers/webgpu`):
+
+* A **uniform arena** and a **vertex arena** per flush (`StreamArenaEXT`): persistent 1 MiB chunk
+  buffers with CPU staging. A draw appends its blocks (aligned to `minUniformBufferOffsetAlignment`)
+  and `ReplayOrderedSegments` writes every used chunk with one `wgpuQueueWriteBuffer`, after its last
+  pass and before its caller submits. Chunks are never replaced, so a group over one stays valid.
+* PBR and skinned-PBR group 0, and the uniform entry of the shared shadow and IBL groups, are
+  **dynamic-offset** bindings over the chunk. Five dynamic uniform buffers for PBR, six for skinned
+  PBR -- under core WebGPU's floor of eight.
+* A **binding cache** (`AcquireCachedBindGroupEXT`) for the arena groups, the PBR texture groups and
+  the shadow and IBL groups, keyed by layout, arena chunk, samplers and views. The neutral fallback
+  textures now hand out one reference object each (a fresh one per call cost two allocations per
+  draw and read to the sweep as a dead texture).
+* Per-instance streams go into the vertex arena for every family.
+
+**Counters** (`WebGPU_BindingCost`, PbrEffect draws with 16 distinct uniform sets, per steady frame):
+
+| | bind groups | queue writes |
+|---|---|---|
+| before, 16 draws | 64 | 80 |
+| before, 64 draws | 256 | 320 |
+| after, 16 draws | **0** | **1** |
+| after, 64 draws | **0** | **1** |
+
+**The street** (`--benchmark baseline`, frame interval, back to back and interleaved because the
+machine is shared -- the load average moved between 7 and 13 during these runs):
+
+| | before | after |
+|---|---|---|
+| WEBGPU | 90.7 / 94.6 ms | **40.3 / 28.1 ms** |
+| VULKAN (reference) | 35.9 ms | 38.8 ms |
+
+WebGPU is now on a par with Vulkan on the same GPU, inside the 1.5x target. All 18 viewpoints
+captured on WEBGPU before and after are pixel-identical (worst difference 0); two runs of the
+unchanged build differ in views 01, 07, 11, 13 and 18 by up to 0.08 % of pixels, as they always did.
+
+**Regressions:** `ctest -L WebGPU` in `cmake-build-webgpu` (RelWithDebInfo, `WEBGPU;VULKAN`) 147/147
+with the new `WebGPU_BindingCost`. `CnaRendererTests` 269 pass, 2 fail -- the two
+`SharedBackendConformanceContract` compiled-effect tests, failing before this work. `CnaGraphicsTests`
+20 fail; the same 20 were run on the unmodified source and fail there too. `WebGPU_BindingCost`'s
+checks were proven live by mutation: zeroing the dynamic offsets fails A and E, and keying the
+texture group without its views fails E.
 
 ## How to measure
 
@@ -146,6 +216,7 @@ cmake --build build -j8 --target cna-street compare-images
 
 R=../cna/tools/platform/run_gpu_tests_private.sh          # never the live desktop
 CNA_GRAPHICS_RENDERER=WEBGPU $R --exec ./build/bin/cna-street --no-audio --benchmark baseline
+# read frameIntervalMeanMs, not cpuMeanMs -- see "Since this was written"
 CNA_GRAPHICS_RENDERER=WEBGPU $R --exec ./build/bin/cna-street --no-audio --no-overlay --capture build-probe/webgpu-perf/new
 ```
 

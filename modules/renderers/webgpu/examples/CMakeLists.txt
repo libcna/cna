@@ -345,6 +345,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_Pbr3D COMMAND cna_test_webgpu_pbr3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plans/plan_webgpu_perf.md WEBGPUPERF-0001..0004: PbrEffect draws still reach the right uniforms
+    # through the arena's dynamic offsets, a steady frame creates no bind group, its queue writes do
+    # not grow with its draw count, and a texture recreated every frame never meets a stale cached
+    # group. Reads the renderer's counters, so it also links WebGPU::WebGPU.
+    cna_webgpu_test(cna_test_webgpu_binding_cost webgpu_binding_cost_test.cpp)
+    target_link_libraries(cna_test_webgpu_binding_cost PRIVATE WebGPU::WebGPU)
+    cna_register_renderer_test(NAME WebGPU_BindingCost COMMAND cna_test_webgpu_binding_cost
+        TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # plans/plan_street_webgpu.md STREETW-0001: the same family when the draw is INSTANCED, which
     # until then fell through to instanced3d.wgsl -- position-only, unlit, untextured.
     cna_webgpu_test(cna_test_webgpu_instanced_pbr3d webgpu_instanced_pbr3d_test.cpp)
