@@ -14,10 +14,8 @@ namespace Microsoft::Xna::Framework::Graphics
      * *material*, so it needs somewhere to live that travels with the material rather than with the
      * device.
      *
-     * Declared here, in the graphics module, rather than on any one effect: `CNAEXT.md` §5.5's
-     * engine-layer `CNA::Graphics::PbrMaterial` needs the same three values, and two independently
-     * declared alpha-mode enums would only ever converge into a conversion function nobody could
-     * delete (`docs/gltf-api-change-review.md` §1.3).
+     * Declared in the graphics module so glTF import and the retained PBR effects share the same
+     * three alpha-mode values.
      */
     enum class AlphaModeEXT
     {

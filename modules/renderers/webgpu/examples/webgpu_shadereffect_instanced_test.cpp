@@ -4,7 +4,7 @@
 //
 // The contract is XNA's own and there is only one of it: SetVertexBuffers with a binding whose
 // InstanceFrequency is above zero, then DrawInstancedPrimitives. Nothing about it is specific to a
-// stock effect -- CNA::Graphics::InstancedRendererEXT documents that an effect wanting its tint
+// stock effect -- the instanced drawing helper documents that an effect wanting its tint
 // stream "must be a ShaderEffect whose vertex input declares it", and Vulkan and EasyGL both
 // implement exactly that (vulkan_shader_effect_3d_test's check G, EasyGL's glVertexAttribDivisor
 // path). This renderer did not: DrawInstancedPrimitivesEx never looked at customEffectRenderer, so

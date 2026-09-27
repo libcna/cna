@@ -1,3 +1,8 @@
+> **Historical record:** The modern graphics-engine layer described below was removed in the
+> 2026-09 scope reduction. Current supported APIs are listed in
+> [current graphics-extension API](../docs/cnaext-engine-layer.md). Do not use the old code examples
+> or capability claims as current documentation.
+
 # CNAEXT — CNA Extended Graphics Layer (Final Design)
 
 > **Naming note (2026-08):** this document was `NOXNA.md` until the CNA naming

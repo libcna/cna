@@ -11,15 +11,13 @@
 
 #include <gtest/gtest.h>
 
-#include "CNA/Graphics/BloomPass.hpp"
 #include "CNA/Graphics/ShaderCodeEXT.hpp"
-#include "CNA/Graphics/ShaderDiagnostics.hpp"
-#include "CNA/Graphics/ShaderEffectFactory.hpp"
 #include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/RendererCapabilityProfile.hpp"
 #include "CNA/ShaderDiagnosticEXT.hpp"
-#include "EngineTestSupport.hpp"
+#include "RetroGraphicsTestSupport.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 
@@ -33,7 +31,6 @@
 
 namespace {
 
-using CNA::Graphics::ShaderEffectFactory;
 using CNA::Graphics::ShaderCodeEXT;
 using CNA::Graphics::ShaderBindingRequirementEXT;
 using CNA::Graphics::ShaderBindingTypeEXT;
@@ -41,137 +38,6 @@ using CNA::Graphics::ShaderPackageEXT;
 using CNA::Graphics::ShaderPackageSelectionEXT;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::ShaderEffect;
-
-#ifdef CNA_RENDERER_DIRECTX12
-TEST(DirectX12ModernCapabilityTest, PublishedVertexAndColorLimitsMatchTheNativeDrawPaths)
-{
-    CnaTest::EngineLayer::HiDefDevice device;
-    const auto bindings = device.GetRendererLimitEXT(
-        CNA::RendererLimit::MaxVertexInputBindings);
-    const auto attributes = device.GetRendererLimitEXT(
-        CNA::RendererLimit::MaxVertexInputAttributes);
-    const auto colors = device.GetRendererLimitEXT(
-        CNA::RendererLimit::MaxColorAttachments);
-    ASSERT_TRUE(bindings.known);
-    ASSERT_TRUE(attributes.known);
-    ASSERT_TRUE(colors.known);
-    EXPECT_EQ(bindings.value, 16u);
-    EXPECT_EQ(attributes.value, 32u);
-    EXPECT_EQ(colors.value, 4u);
-}
-#endif
-
-// =====================================================================================
-// MOD-2215: owned structured shader diagnostics
-// =====================================================================================
-
-TEST(ShaderDiagnosticEXTTest, SeverityOrdinalsAreStableAndValuesAreOwned)
-{
-    EXPECT_EQ(static_cast<int>(CNA::ShaderDiagnosticSeverityEXT::Information), 0);
-    EXPECT_EQ(static_cast<int>(CNA::ShaderDiagnosticSeverityEXT::Warning), 1);
-    EXPECT_EQ(static_cast<int>(CNA::ShaderDiagnosticSeverityEXT::Error), 2);
-    EXPECT_EQ(static_cast<int>(CNA::ShaderDiagnosticSeverityEXT::Count), 3);
-
-    std::string label = "effect.frag.glsl";
-    std::string message = "unexpected token";
-    CNA::ShaderDiagnosticEXT diagnostic(
-        CNA::ShaderDiagnosticSeverityEXT::Warning, CNA::ShaderStageEXT::Fragment,
-        label, 7, 11, message);
-    label.clear();
-    message.clear();
-
-    EXPECT_EQ(diagnostic.getSeverity(), CNA::ShaderDiagnosticSeverityEXT::Warning);
-    EXPECT_EQ(diagnostic.getStage(), CNA::ShaderStageEXT::Fragment);
-    EXPECT_EQ(diagnostic.getSourceLabel(), "effect.frag.glsl");
-    EXPECT_EQ(diagnostic.getLine(), 7);
-    EXPECT_EQ(diagnostic.getColumn(), 11);
-    EXPECT_EQ(diagnostic.getMessage(), "unexpected token");
-}
-
-TEST(ShaderDiagnosticEXTTest, InvalidIdentitiesLocationsAndEmptyTextAreRejected)
-{
-    EXPECT_THROW(CNA::ShaderDiagnosticEXT(
-        CNA::ShaderDiagnosticSeverityEXT::Count, CNA::ShaderStageEXT::Vertex,
-        "", 0, 0, "error"), std::invalid_argument);
-    EXPECT_THROW(CNA::ShaderDiagnosticEXT(
-        static_cast<CNA::ShaderDiagnosticSeverityEXT>(999), CNA::ShaderStageEXT::Vertex,
-        "", 0, 0, "error"), std::invalid_argument);
-    EXPECT_THROW(CNA::ShaderDiagnosticEXT(
-        CNA::ShaderDiagnosticSeverityEXT::Error, CNA::ShaderStageEXT::Count,
-        "", 0, 0, "error"), std::invalid_argument);
-    EXPECT_THROW(CNA::ShaderDiagnosticEXT(
-        CNA::ShaderDiagnosticSeverityEXT::Error, static_cast<CNA::ShaderStageEXT>(999),
-        "", 0, 0, "error"), std::invalid_argument);
-    EXPECT_THROW(CNA::ShaderDiagnosticEXT(
-        CNA::ShaderDiagnosticSeverityEXT::Error, CNA::ShaderStageEXT::Vertex,
-        "", -1, 0, "error"), std::invalid_argument);
-    EXPECT_THROW(CNA::ShaderDiagnosticEXT(
-        CNA::ShaderDiagnosticSeverityEXT::Error, CNA::ShaderStageEXT::Vertex,
-        "", 1, -1, "error"), std::invalid_argument);
-    EXPECT_THROW(CNA::ShaderDiagnosticEXT(
-        CNA::ShaderDiagnosticSeverityEXT::Error, CNA::ShaderStageEXT::Vertex,
-        "", 0, 1, "error"), std::invalid_argument);
-    EXPECT_THROW(CNA::ShaderDiagnosticEXT(
-        CNA::ShaderDiagnosticSeverityEXT::Error, CNA::ShaderStageEXT::Vertex,
-        "", 0, 0, ""), std::invalid_argument);
-}
-
-TEST(ShaderDiagnosticEXTTest, CompilerLogParserRecognizesCommonLocationsStagesAndSeverities)
-{
-    const auto diagnostics = CNA::ShaderDiagnosticEXT::parseCompilerLog(
-        " VS: WARNING: shader.glsl:4:7: first warning  \r\n"
-        "FS: ERROR: 0:12(3): fragment failure\n"
-        "CS: info: kernel.comp(9,2): compiler note\n"
-        "ERROR: 0:2: source-id line only\n",
-        CNA::ShaderStageEXT::Unknown, "owned label");
-
-    ASSERT_EQ(diagnostics.size(), 4U);
-    EXPECT_EQ(diagnostics[0].getSeverity(), CNA::ShaderDiagnosticSeverityEXT::Warning);
-    EXPECT_EQ(diagnostics[0].getStage(), CNA::ShaderStageEXT::Vertex);
-    EXPECT_EQ(diagnostics[0].getLine(), 4);
-    EXPECT_EQ(diagnostics[0].getColumn(), 7);
-    EXPECT_EQ(diagnostics[0].getMessage(),
-              "VS: WARNING: shader.glsl:4:7: first warning");
-    EXPECT_EQ(diagnostics[1].getSeverity(), CNA::ShaderDiagnosticSeverityEXT::Error);
-    EXPECT_EQ(diagnostics[1].getStage(), CNA::ShaderStageEXT::Fragment);
-    EXPECT_EQ(diagnostics[1].getLine(), 12);
-    EXPECT_EQ(diagnostics[1].getColumn(), 3);
-    EXPECT_EQ(diagnostics[2].getSeverity(), CNA::ShaderDiagnosticSeverityEXT::Information);
-    EXPECT_EQ(diagnostics[2].getStage(), CNA::ShaderStageEXT::Compute);
-    EXPECT_EQ(diagnostics[2].getLine(), 9);
-    EXPECT_EQ(diagnostics[2].getColumn(), 2);
-    EXPECT_EQ(diagnostics[3].getStage(), CNA::ShaderStageEXT::Compute);
-    EXPECT_EQ(diagnostics[3].getLine(), 2);
-    EXPECT_EQ(diagnostics[3].getColumn(), 0);
-    for (const auto& diagnostic : diagnostics)
-        EXPECT_EQ(diagnostic.getSourceLabel(), "owned label");
-
-    EXPECT_TRUE(CNA::ShaderDiagnosticEXT::parseCompilerLog(
-        " \t\r\n", CNA::ShaderStageEXT::Vertex).empty());
-    EXPECT_THROW((void)CNA::ShaderDiagnosticEXT::parseCompilerLog(
-        "error", CNA::ShaderStageEXT::Count), std::invalid_argument);
-}
-
-TEST(ShaderCompilationExceptionEXTTest, SummaryIsStableAndAllDiagnosticsRemainAccessible)
-{
-    std::vector<CNA::ShaderDiagnosticEXT> diagnostics;
-    diagnostics.emplace_back(
-        CNA::ShaderDiagnosticSeverityEXT::Error, CNA::ShaderStageEXT::Fragment,
-        "effect.frag", 8, 2, "unexpected identifier");
-    diagnostics.emplace_back(
-        CNA::ShaderDiagnosticSeverityEXT::Warning, CNA::ShaderStageEXT::Fragment,
-        "effect.frag", 3, 0, "unused input");
-    CNA::ShaderCompilationExceptionEXT error(std::move(diagnostics));
-
-    EXPECT_EQ(std::string(error.what()),
-              "Shader compilation failed (2 diagnostics): Error Fragment 'effect.frag':8:2: "
-              "unexpected identifier; 1 more");
-    ASSERT_EQ(error.getDiagnostics().size(), 2U);
-    EXPECT_EQ(error.getDiagnostics()[1].getSeverity(),
-              CNA::ShaderDiagnosticSeverityEXT::Warning);
-    EXPECT_EQ(error.getDiagnostics()[1].getMessage(), "unused input");
-    EXPECT_THROW(CNA::ShaderCompilationExceptionEXT({}), std::invalid_argument);
-}
 
 constexpr const char* kVertex = R"(#version 300 es
 precision highp float;
@@ -576,7 +442,7 @@ TEST(ShaderPackageEXTTest, BindingsAreUniquePerStageAndConsistentAcrossStages)
 
 TEST(ShaderPackageSelectionEXTTest, StablePreferenceIgnoresDeclarationOrderAndOwnsSelectedCode)
 {
-    CnaTest::EngineLayer::HiDefDevice device;
+    CnaTest::RetroGraphics::HiDefDevice device;
     std::vector<ShaderCodeEXT> variants;
     const auto add = [&variants](const CNA::ShaderLanguageEXT language,
                                  const CNA::ShaderStageEXT stage,
@@ -652,7 +518,7 @@ TEST(ShaderPackageSelectionEXTTest, StablePreferenceIgnoresDeclarationOrderAndOw
 
 TEST(ShaderPackageSelectionEXTTest, DuplicateLiveStageIsAmbiguousAndNeverChosen)
 {
-    CnaTest::EngineLayer::HiDefDevice device;
+    CnaTest::RetroGraphics::HiDefDevice device;
     constexpr std::array preference = {
         CNA::ShaderLanguageEXT::SpirV,
         CNA::ShaderLanguageEXT::Dxil,
@@ -703,7 +569,7 @@ TEST(ShaderPackageSelectionEXTTest, DuplicateLiveStageIsAmbiguousAndNeverChosen)
 
 TEST(ShaderPackageSelectionEXTTest, FragmentStorageRequiresAnAvailableBufferRoute)
 {
-    CnaTest::EngineLayer::HiDefDevice device;
+    CnaTest::RetroGraphics::HiDefDevice device;
     if (device.SupportsCapability(CNA::GraphicsCapability::ComputeShaders))
         GTEST_SKIP() << "this renderer has a storage-buffer creation route";
 
@@ -740,7 +606,7 @@ TEST(ShaderPackageSelectionEXTTest, FragmentStorageRequiresAnAvailableBufferRout
 
 TEST(ShaderPackageSelectionEXTTest, RequiredVertexStorageBindingIsCapabilityChecked)
 {
-    CnaTest::EngineLayer::HiDefDevice device;
+    CnaTest::RetroGraphics::HiDefDevice device;
     CNA::ShaderLanguageEXT language = CNA::ShaderLanguageEXT::Unknown;
     for (const auto candidate : {CNA::ShaderLanguageEXT::SpirV,
                                  CNA::ShaderLanguageEXT::Wgsl,
@@ -779,7 +645,7 @@ TEST(ShaderPackageSelectionEXTTest, RequiredVertexStorageBindingIsCapabilityChec
 
 TEST(ShaderPackageSelectionEXTTest, ConstantBuffersHaveOnlyThePublishedComputeRoute)
 {
-    CnaTest::EngineLayer::HiDefDevice device;
+    CnaTest::RetroGraphics::HiDefDevice device;
     CNA::ShaderLanguageEXT language = CNA::ShaderLanguageEXT::Unknown;
     for (const auto candidate : {CNA::ShaderLanguageEXT::SpirV,
                                  CNA::ShaderLanguageEXT::Wgsl,
@@ -818,7 +684,7 @@ TEST(ShaderPackageSelectionEXTTest, ConstantBuffersHaveOnlyThePublishedComputeRo
 
 TEST(ShaderPackageOverloadTest, ShaderEffectRejectsMismatchedCodeAndWrongPackageStages)
 {
-    CnaTest::EngineLayer::HiDefDevice device;
+    CnaTest::RetroGraphics::HiDefDevice device;
     const ShaderCodeEXT vertex(
         CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Vertex,
         "main", "effect.vert", "source");
@@ -835,14 +701,14 @@ TEST(ShaderPackageOverloadTest, ShaderEffectRejectsMismatchedCodeAndWrongPackage
 
 TEST(ShaderPackageOverloadTest, LegacyShaderEffectReportsNoExplicitSelectedLanguage)
 {
-    CnaTest::EngineLayer::HiDefDevice device;
+    CnaTest::RetroGraphics::HiDefDevice device;
     ShaderEffect effect(device, kVertex, kFragment);
     EXPECT_EQ(effect.GetSelectedShaderLanguageEXT(), CNA::ShaderLanguageEXT::Unknown);
 }
 
 TEST(ShaderPackageOverloadTest, NativeHlslPackageCompilesOnADeclaredHlslRenderer)
 {
-    CnaTest::EngineLayer::HiDefDevice device;
+    CnaTest::RetroGraphics::HiDefDevice device;
     if (!device.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Hlsl,
                                           CNA::ShaderStageEXT::Vertex) ||
         !device.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Hlsl,
@@ -866,7 +732,7 @@ TEST(ShaderPackageOverloadTest, NativeHlslPackageCompilesOnADeclaredHlslRenderer
 
 TEST(ShaderPackageOverloadTest, AnHlslDialectDeclaresItsExecutableGraphicsStages)
 {
-    CnaTest::EngineLayer::HiDefDevice device;
+    CnaTest::RetroGraphics::HiDefDevice device;
     if (device.GetShaderDialectEXT() !=
         CNA::Internal::Renderers::ShaderDialectEXT::Hlsl)
         GTEST_SKIP() << "this renderer does not compile HLSL shader sources";
@@ -881,7 +747,7 @@ TEST(ShaderPackageOverloadTest, AnHlslDialectDeclaresItsExecutableGraphicsStages
 
 TEST(ShaderPackageOverloadTest, DerivedEffectCanRetainLegacyFallbackWhenNoVariantExists)
 {
-    CnaTest::EngineLayer::HiDefDevice device;
+    CnaTest::RetroGraphics::HiDefDevice device;
     CNA::ShaderLanguageEXT unsupported = CNA::ShaderLanguageEXT::Unknown;
     for (const auto candidate : {CNA::ShaderLanguageEXT::GlslDesktop,
                                  CNA::ShaderLanguageEXT::GlslEs,
@@ -928,196 +794,5 @@ TEST(ShaderPackageOverloadTest, DerivedEffectCanRetainLegacyFallbackWhenNoVarian
 // MOD-210: compiled once per name, per device
 // =====================================================================================
 
-TEST(ShaderEffectFactoryTest, TheSameNameIsCompiledOnceAndHandedBackAfter)
-{
-    CnaTest::EngineLayer::HiDefDevice gd;
-    ShaderEffectFactory factory(gd);
-    EXPECT_EQ(factory.getCompileCount(), 0u);
-    EXPECT_FALSE(factory.contains("Pass.copy"));
-
-    ShaderEffect* first = factory.acquire("Pass.copy", kVertex, kFragment);
-    ASSERT_NE(first, nullptr);
-    EXPECT_EQ(factory.getCompileCount(), 1u);
-    EXPECT_TRUE(factory.contains("Pass.copy"));
-
-    // The row's actual criterion: a second request compiles nothing and is the same program.
-    ShaderEffect* second = factory.acquire("Pass.copy", kVertex, kFragment);
-    EXPECT_EQ(second, first);
-    EXPECT_EQ(factory.getCompileCount(), 1u) << "the second request compiled the shader again";
-}
-
-TEST(ShaderEffectFactoryTest, DistinctNamesAreDistinctPrograms)
-{
-    CnaTest::EngineLayer::HiDefDevice gd;
-    ShaderEffectFactory factory(gd);
-
-    ShaderEffect* copy   = factory.acquire("Pass.copy", kVertex, kFragment);
-    ShaderEffect* invert = factory.acquire("Pass.invert", kVertex, kFragment);
-    EXPECT_NE(copy, invert);
-    EXPECT_EQ(factory.getCompileCount(), 2u);
-}
-
-TEST(ShaderEffectFactoryTest, TheNameIsTheKeyAndTheSourceIsNotConsulted)
-{
-    // A deliberate consequence of keying by name, asserted so it is a documented rule rather than a
-    // surprise: hashing two kilobytes of GLSL to discover it is the same GLSL is work to avoid
-    // work. A name must therefore mean one shader, and reusing it with different source is a bug
-    // in the caller -- one this test pins the behaviour of rather than pretends cannot happen.
-    CnaTest::EngineLayer::HiDefDevice gd;
-    ShaderEffectFactory factory(gd);
-
-    ShaderEffect* first = factory.acquire("Pass.copy", kVertex, kFragment);
-    ShaderEffect* again = factory.acquire("Pass.copy", kVertex, kBroken);
-    EXPECT_EQ(again, first) << "the second source was consulted; it must not be";
-    EXPECT_EQ(factory.getCompileCount(), 1u);
-}
-
-TEST(ShaderEffectFactoryTest, AnEmptyNameIsRejected)
-{
-    CnaTest::EngineLayer::HiDefDevice gd;
-    ShaderEffectFactory factory(gd);
-    EXPECT_THROW((void)factory.acquire("", kVertex, kFragment), std::invalid_argument);
-}
-
-TEST(ShaderEffectFactoryTest, AFailedCompileIsStillReturnedRatherThanNull)
-{
-    // Returning null would give every caller a second failure mode to handle, when ShaderEffect
-    // already reports this one through IsEffectValid(). The cache also keeps it, so a pass asking
-    // repeatedly does not recompile a shader that will not compile.
-    CnaTest::EngineLayer::HiDefDevice gd;
-    ShaderEffectFactory factory(gd);
-
-    ShaderEffect* broken = factory.acquire("Pass.broken", kVertex, kBroken);
-    ASSERT_NE(broken, nullptr);
-    EXPECT_EQ(factory.acquire("Pass.broken", kVertex, kBroken), broken);
-    EXPECT_EQ(factory.getCompileCount(), 1u);
-}
-
-TEST(ShaderEffectFactoryTest, ClearReleasesEverything)
-{
-    CnaTest::EngineLayer::HiDefDevice gd;
-    ShaderEffectFactory factory(gd);
-    factory.acquire("Pass.copy", kVertex, kFragment);
-    factory.acquire("Pass.invert", kVertex, kFragment);
-    ASSERT_EQ(factory.getCompileCount(), 2u);
-
-    factory.clear();
-    EXPECT_FALSE(factory.contains("Pass.copy"));
-    // The compile counter is a lifetime total, not a cache size: it answers "how much compiling did
-    // this run do", which is the question the row is about.
-    EXPECT_EQ(factory.getCompileCount(), 2u);
-    factory.acquire("Pass.copy", kVertex, kFragment);
-    EXPECT_EQ(factory.getCompileCount(), 3u);
-}
-
-// =====================================================================================
-// MOD-219: a shader that did not compile says so
-// =====================================================================================
-
-TEST(ShaderDiagnosticsTest, AWorkingShaderReportsNothing)
-{
-    CnaTest::EngineLayer::HiDefDevice gd;
-    const bool hlsl = gd.SupportsShaderLanguageEXT(
-                          CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Vertex)
-                   && gd.SupportsShaderLanguageEXT(
-                          CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Fragment);
-    if (!hlsl && !CnaTest::EngineLayer::RunsGlslShaderSource(gd))
-        GTEST_SKIP() << "this renderer does not compile a shader source used by this probe";
-
-    const ShaderPackageEXT hlslPackage(
-        {
-            ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Vertex,
-                          "main", "working.vert.hlsl",
-                          "float4 main(float4 position : POSITION) : SV_POSITION { return position; }"),
-            ShaderCodeEXT(CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Fragment,
-                          "main", "working.frag.hlsl",
-                          "float4 main() : SV_Target { return float4(1, 0, 0, 1); }"),
-        },
-        {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment});
-    auto effect = hlsl ? std::make_unique<ShaderEffect>(gd, hlslPackage)
-                       : std::make_unique<ShaderEffect>(gd, kVertex, kFragment);
-    ASSERT_TRUE(effect->IsEffectValid());
-    EXPECT_TRUE(effect->GetCompileErrorEXT().empty())
-        << "a shader that compiled reported an error anyway";
-    EXPECT_TRUE(effect->GetShaderDiagnosticsEXT().empty())
-        << "a shader that compiled retained structured diagnostics anyway";
-
-    bool logged = false;
-    EXPECT_TRUE(CNA::Graphics::detail::reportShaderCompileFailure(gd, "Working", effect.get(), logged));
-    EXPECT_FALSE(logged) << "nothing failed, so nothing should have been reported";
-}
-
-TEST(ShaderDiagnosticsTest, ABrokenShaderCarriesTheCompilerLog)
-{
-    CnaTest::EngineLayer::HiDefDevice gd;
-    if (!CnaTest::EngineLayer::RunsShaderSource(gd))
-        GTEST_SKIP() << "this renderer compiles no shader source, so nothing can fail to compile";
-
-    ShaderEffect effect(gd, kVertex, kBroken);
-    ASSERT_FALSE(effect.IsEffectValid()) << "a sentence compiled as a fragment shader";
-    EXPECT_FALSE(effect.GetCompileErrorEXT().empty())
-        << "the shader failed and the renderer said nothing about why";
-}
-
-TEST(ShaderDiagnosticsTest, TheFailureIsReportedOnceAndNamesThePass)
-{
-    CnaTest::EngineLayer::HiDefDevice gd;
-    if (!CnaTest::EngineLayer::RunsShaderSource(gd))
-        GTEST_SKIP() << "this renderer compiles no shader source";
-
-    ShaderEffect effect(gd, kVertex, kBroken);
-    bool logged = false;
-    EXPECT_FALSE(CNA::Graphics::detail::reportShaderCompileFailure(gd, "MyPass", &effect, logged));
-    EXPECT_TRUE(logged);
-
-    // The flag is what keeps a per-frame caller from filling the log; the second call must be
-    // silent and still answer the question.
-    EXPECT_FALSE(CNA::Graphics::detail::reportShaderCompileFailure(gd, "MyPass", &effect, logged));
-}
-
-TEST(ShaderDiagnosticsTest, ANullEffectIsAFailureAndNotACrash)
-{
-    // The state on a renderer that accepts no custom effect at all: the pass never built one.
-    CnaTest::EngineLayer::HiDefDevice gd;
-    bool logged = false;
-    EXPECT_FALSE(CNA::Graphics::detail::reportShaderCompileFailure(gd, "NoEffect", nullptr, logged));
-    EXPECT_TRUE(logged);
-}
-
-TEST(ShaderDiagnosticsTest, ItDoesNotThrowWhateverTheRenderer)
-{
-    // The deviation from MOD-219's proposed "throws", asserted so it is not reintroduced. Three
-    // renderers report CustomEffects true and never compile GLSL source, so throwing on a failed
-    // compile would turn a documented capability boundary into a crash on all three.
-    CnaTest::EngineLayer::HiDefDevice gd;
-    bool logged = false;
-    EXPECT_NO_THROW({
-        ShaderEffect effect(gd, kVertex, kBroken);
-        (void)CNA::Graphics::detail::reportShaderCompileFailure(gd, "Broken", &effect, logged);
-    });
-}
-
-// =====================================================================================
-// MOD-220: a pass states its own sampling requirement
-// =====================================================================================
-
-TEST(SamplerRequirementTest, BloomStillProducesItsSpreadWithItsOwnSamplerState)
-{
-    // MOD-220 changed how bloom asks for linear-clamp filtering, not what it gets: SpriteBatch
-    // already documents a null sampler as meaning LinearClamp, so the pyramid was being filtered
-    // correctly by inheritance. The point of stating it is that a change to that default can no
-    // longer degrade bloom silently -- so what this test protects is that the explicit request
-    // behaves as the inherited one did.
-    CnaTest::EngineLayer::HiDefDevice gd;
-    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-
-    CNA::Graphics::BloomPass pass(gd);
-    if (!pass.isSupported(gd))
-        GTEST_SKIP() << "this renderer cannot run the bloom shaders";
-
-    EXPECT_EQ(pass.getName(), "Bloom");
-}
-
 } // namespace
-
 #endif // CNA_CNAEXT

@@ -924,44 +924,7 @@ _Static_assert(sizeof(CNA_SpriteTextCommand) == 72U &&
                    offsetof(CNA_SpriteTextCommand, text) == 16U &&
                    offsetof(CNA_SpriteTextCommand, position) == 32U,
                "CNA_SpriteTextCommand layout must remain stable");
-_Static_assert(sizeof(CNA_AsciiPostProcessEffectHandle) == 8U &&
-                   sizeof(CNA_AsciiQuantizeMode) == sizeof(uint32_t) &&
-                   sizeof(CNA_CRTMaskType) == sizeof(uint32_t) &&
-                   sizeof(CNA_DitherMode) == sizeof(uint32_t) &&
-                   sizeof(CNA_RenderQuality) == sizeof(uint32_t) &&
-                   sizeof(CNA_ShadowQuality) == sizeof(uint32_t) &&
-                   sizeof(CNA_TonemappingMode) == sizeof(uint32_t) &&
-                   sizeof(CNA_DepthEffectMode) == sizeof(uint32_t) &&
-                   CNA_CRT_MASK_TYPE_SHADOW_MASK == UINT32_C(2) &&
-                   CNA_DEPTH_EFFECT_MODE_PALETTE_16 == UINT32_C(6) &&
-                   CNA_SHADOW_QUALITY_ULTRA == UINT32_C(4),
-               "CNA graphics-extension identities must remain stable");
-_Static_assert(sizeof(CNA_PbrMaterial) == 72U && _Alignof(CNA_PbrMaterial) == 8U &&
-                   offsetof(CNA_PbrMaterial, albedo_color) == 40U &&
-                   offsetof(CNA_PbrMaterial, emissive_color) == 44U &&
-                   offsetof(CNA_PbrMaterial, metallic_factor) == 48U &&
-                   offsetof(CNA_PbrMaterial, alpha_blend_enabled) == 68U &&
-                   offsetof(CNA_PbrMaterial, reserved) == 69U,
-               "CNA_PbrMaterial layout must remain stable");
-_Static_assert(sizeof(CNA_PbrMaterialEXT) == 360U && _Alignof(CNA_PbrMaterialEXT) == 8U &&
-                   offsetof(CNA_PbrMaterialEXT, albedo_color) == 64U &&
-                   offsetof(CNA_PbrMaterialEXT, emissive_factor) == 68U &&
-                   offsetof(CNA_PbrMaterialEXT, specular_color_factor) == 80U &&
-                   offsetof(CNA_PbrMaterialEXT, metallic_factor) == 92U &&
-                   offsetof(CNA_PbrMaterialEXT, alpha_mode) == 120U &&
-                   offsetof(CNA_PbrMaterialEXT, double_sided) == 124U &&
-                   offsetof(CNA_PbrMaterialEXT, reserved) == 129U &&
-                   offsetof(CNA_PbrMaterialEXT, texture_coordinate_sets) == 132U &&
-                   offsetof(CNA_PbrMaterialEXT, texture_transforms) == 160U &&
-                   CNA_PBR_MATERIAL_EXT_VERSION == UINT32_C(1),
-               "CNA_PbrMaterialEXT layout must remain stable");
-_Static_assert(sizeof(CNA_RenderPipelineSettings) == 28U &&
-                   _Alignof(CNA_RenderPipelineSettings) == 4U &&
-                   offsetof(CNA_RenderPipelineSettings, tonemapping_mode) == 12U &&
-                   offsetof(CNA_RenderPipelineSettings, render_quality) == 16U &&
-                   offsetof(CNA_RenderPipelineSettings, hdr_enabled) == 24U &&
-                   offsetof(CNA_RenderPipelineSettings, shadows_enabled) == 27U,
-               "CNA_RenderPipelineSettings layout must remain stable");
+
 _Static_assert(sizeof(CNA_StorageDeviceHandle) == 8U &&
                    sizeof(CNA_StorageContainerHandle) == 8U &&
                    sizeof(CNA_StorageStreamHandle) == 8U &&

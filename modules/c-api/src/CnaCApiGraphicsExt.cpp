@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
-#include "CNA/C/engine_layer.h"
 #include "CNA/C/graphics_ext.h"
 #include "CNA/IndirectDrawArguments.hpp"
-#include "Microsoft/Xna/Framework/Graphics/AreaLightEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ImageBasedLightEXT.hpp"
 #include "CnaCApiDetail.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
@@ -18,11 +16,6 @@
 #include "CNA/Graphics/CRTMaskType.hpp"
 #include "CNA/Graphics/DepthEffectMode.hpp"
 #include "CNA/Graphics/DitherMode.hpp"
-#include "CNA/Graphics/PbrMaterial.hpp"
-#include "CNA/Graphics/RenderPipelineSettings.hpp"
-#include "CNA/Graphics/RenderQuality.hpp"
-#include "CNA/Graphics/ShadowQuality.hpp"
-#include "CNA/Graphics/TonemappingMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -98,22 +91,6 @@ static_assert(
     NativeOrdinal(Ext::DitherMode::Bayer4x4) == CNA_DITHER_MODE_BAYER_4X4 &&
     NativeOrdinal(Ext::DitherMode::Bayer8x8) == CNA_DITHER_MODE_BAYER_8X8);
 static_assert(
-    NativeOrdinal(Ext::RenderQuality::Low) == CNA_RENDER_QUALITY_LOW &&
-    NativeOrdinal(Ext::RenderQuality::Medium) == CNA_RENDER_QUALITY_MEDIUM &&
-    NativeOrdinal(Ext::RenderQuality::High) == CNA_RENDER_QUALITY_HIGH &&
-    NativeOrdinal(Ext::RenderQuality::Ultra) == CNA_RENDER_QUALITY_ULTRA);
-static_assert(
-    NativeOrdinal(Ext::ShadowQuality::Disabled) == CNA_SHADOW_QUALITY_DISABLED &&
-    NativeOrdinal(Ext::ShadowQuality::Low) == CNA_SHADOW_QUALITY_LOW &&
-    NativeOrdinal(Ext::ShadowQuality::Medium) == CNA_SHADOW_QUALITY_MEDIUM &&
-    NativeOrdinal(Ext::ShadowQuality::High) == CNA_SHADOW_QUALITY_HIGH &&
-    NativeOrdinal(Ext::ShadowQuality::Ultra) == CNA_SHADOW_QUALITY_ULTRA);
-static_assert(
-    NativeOrdinal(Ext::TonemappingMode::None) == CNA_TONEMAPPING_MODE_NONE &&
-    NativeOrdinal(Ext::TonemappingMode::Reinhard) == CNA_TONEMAPPING_MODE_REINHARD &&
-    NativeOrdinal(Ext::TonemappingMode::Filmic) == CNA_TONEMAPPING_MODE_FILMIC &&
-    NativeOrdinal(Ext::TonemappingMode::Aces) == CNA_TONEMAPPING_MODE_ACES);
-static_assert(
     NativeOrdinal(Ext::DepthEffectMode::Color16Bit) == CNA_DEPTH_EFFECT_MODE_COLOR_16_BIT &&
     NativeOrdinal(Ext::DepthEffectMode::Color8Bit) == CNA_DEPTH_EFFECT_MODE_COLOR_8_BIT &&
     NativeOrdinal(Ext::DepthEffectMode::Grayscale4Bit) ==
@@ -153,80 +130,6 @@ CNA_Result cna_graphics_ext_is_available(CNA_Bool* const outAvailable)
 #endif
 }
 
-CNA_Result cna_pbr_material_init(CNA_PbrMaterial* const outMaterial)
-{
-    // The canonical defaults are reproduced here so the value route works in every build; when the
-    // extension layer is present the assertions below prove the two agree.
-    const CNA_PbrMaterial defaults = {
-        CNA_INVALID_HANDLE,
-        CNA_INVALID_HANDLE,
-        CNA_INVALID_HANDLE,
-        CNA_INVALID_HANDLE,
-        CNA_INVALID_HANDLE,
-        {UINT8_C(255), UINT8_C(255), UINT8_C(255), UINT8_C(255)},
-        {UINT8_C(0), UINT8_C(0), UINT8_C(0), UINT8_C(255)},
-        0.0F,
-        0.5F,
-        1.0F,
-        1.0F,
-        0.5F,
-        CNA_FALSE,
-        {UINT8_C(0), UINT8_C(0), UINT8_C(0)}};
-    return StoreValue(outMaterial, defaults);
-}
-
-CNA_Result cna_pbr_material_ext_init(CNA_PbrMaterialEXT* const outMaterial)
-{
-    CNA_PbrMaterialEXT defaults = {};
-    defaults.struct_size                 = static_cast<uint32_t>(sizeof(CNA_PbrMaterialEXT));
-    defaults.struct_version              = CNA_PBR_MATERIAL_EXT_VERSION;
-    defaults.albedo_texture              = CNA_INVALID_HANDLE;
-    defaults.normal_texture              = CNA_INVALID_HANDLE;
-    defaults.metallic_roughness_texture  = CNA_INVALID_HANDLE;
-    defaults.ambient_occlusion_texture   = CNA_INVALID_HANDLE;
-    defaults.emissive_texture            = CNA_INVALID_HANDLE;
-    defaults.specular_texture            = CNA_INVALID_HANDLE;
-    defaults.specular_color_texture      = CNA_INVALID_HANDLE;
-    defaults.albedo_color                = {UINT8_C(255), UINT8_C(255), UINT8_C(255), UINT8_C(255)};
-    defaults.emissive_factor             = {0.0F, 0.0F, 0.0F};
-    defaults.specular_color_factor       = {1.0F, 1.0F, 1.0F};
-    defaults.metallic_factor             = 1.0F;
-    defaults.roughness_factor            = 1.0F;
-    defaults.normal_scale                = 1.0F;
-    defaults.occlusion_strength          = 1.0F;
-    defaults.ior                         = 1.5F;
-    defaults.specular_factor             = 1.0F;
-    defaults.alpha_cutoff                = 0.5F;
-    defaults.alpha_mode                  = CNA_ALPHA_MODE_OPAQUE_EXT;
-    defaults.double_sided                = CNA_FALSE;
-    defaults.base_color_texture_srgb     = CNA_TRUE;
-    defaults.emissive_texture_srgb       = CNA_TRUE;
-    defaults.specular_color_texture_srgb = CNA_TRUE;
-    defaults.output_encoded_to_srgb      = CNA_TRUE;
-    for (int slot = 0; slot < 7; ++slot) {
-        defaults.texture_coordinate_sets[slot] = 0;
-        const CNA_Result transformResult =
-            cna_texture_transform_ext_init(&defaults.texture_transforms[slot]);
-        if (transformResult != CNA_RESULT_SUCCESS) {
-            return transformResult;
-        }
-    }
-    return StoreValue(outMaterial, defaults);
-}
-
-/* CBIND-092C. The two indirect-draw argument structs are the GPU's own command format, not part of
- * the engine layer -- they live in the always-compiled graphics module -- so these initializers
- * work in every build. Their SIZE is the contract, since the GPU reads them verbatim, and the
- * assertions below pin it on both sides of the boundary. */
-static_assert(
-    sizeof(CNA_IndirectDrawArguments) == sizeof(CNA::IndirectDrawArguments) &&
-    sizeof(CNA_IndirectDrawArguments) == 16,
-    "the GPU reads this struct verbatim; it must be exactly four 32-bit words on both sides");
-static_assert(
-    sizeof(CNA_IndirectDrawIndexedArguments) == sizeof(CNA::IndirectDrawIndexedArguments) &&
-    sizeof(CNA_IndirectDrawIndexedArguments) == 20,
-    "the GPU reads this struct verbatim; it must be exactly five 32-bit words on both sides");
-
 CNA_Result cna_indirect_draw_arguments_init(CNA_IndirectDrawArguments* const outArguments)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -261,91 +164,6 @@ CNA_Result cna_indirect_draw_indexed_arguments_init(
     });
 }
 
-/* CBIND-091C. The area light is the second value in this slice whose canonical type lives in the
- * always-compiled XNA header rather than under CNA_CNAEXT, so these two routes work in every build
- * for the same reason the image-based-light pair below does. */
-CNA_Result cna_area_light_ext_init(CNA_AreaLightEXT* const outLight)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outLight == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The light is null.");
-        }
-        const Microsoft::Xna::Framework::Graphics::AreaLightEXT defaults;
-        *outLight = CNA_AreaLightEXT{};
-        outLight->struct_size = static_cast<uint32_t>(sizeof(CNA_AreaLightEXT));
-        outLight->struct_version = UINT32_C(1);
-        outLight->shape = static_cast<CNA_AreaLightShapeEXT>(defaults.Shape);
-        outLight->two_sided = static_cast<CNA_Bool>(defaults.TwoSided ? CNA_TRUE : CNA_FALSE);
-        outLight->position = CNA_Vector3{defaults.Position.X, defaults.Position.Y,
-                                         defaults.Position.Z};
-        outLight->right_axis = CNA_Vector3{defaults.RightAxis.X, defaults.RightAxis.Y,
-                                           defaults.RightAxis.Z};
-        outLight->up_axis = CNA_Vector3{defaults.UpAxis.X, defaults.UpAxis.Y, defaults.UpAxis.Z};
-        outLight->color = CNA_Vector3{defaults.Color.X, defaults.Color.Y, defaults.Color.Z};
-        outLight->intensity = defaults.Intensity;
-        outLight->range = defaults.Range;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-namespace {
-
-/* Rebuilding the canonical value and asking it, rather than restating its seven arms here. The
- * shape-dependent arm -- a tube skips the parallel-axis test -- is exactly the one a reimplementation
- * gets wrong, and this cannot get it wrong. */
-[[nodiscard]] CNA_Result ToNativeAreaLight(
-    const CNA_AreaLightEXT* const light,
-    Microsoft::Xna::Framework::Graphics::AreaLightEXT* const out)
-{
-    if (light == nullptr) {
-        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The light is null.");
-    }
-    if (light->struct_size < static_cast<uint32_t>(sizeof(CNA_AreaLightEXT)) ||
-        light->struct_version == UINT32_C(0)) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The area-light structure is malformed.");
-    }
-    if (light->shape > CNA_AREA_LIGHT_SHAPE_TUBE_EXT) {
-        return Fail(
-            CNA_RESULT_INVALID_ARGUMENT,
-            CNA_ERROR_CATEGORY_ARGUMENT,
-            "The area-light shape is not a defined identity.");
-    }
-    out->Shape =
-        static_cast<Microsoft::Xna::Framework::Graphics::AreaLightShapeEXT>(light->shape);
-    out->Position = {light->position.x, light->position.y, light->position.z};
-    out->RightAxis = {light->right_axis.x, light->right_axis.y, light->right_axis.z};
-    out->UpAxis = {light->up_axis.x, light->up_axis.y, light->up_axis.z};
-    out->Color = {light->color.x, light->color.y, light->color.z};
-    out->Intensity = light->intensity;
-    out->Range = light->range;
-    out->TwoSided = light->two_sided != CNA_FALSE;
-    return CNA_RESULT_SUCCESS;
-}
-
-} // namespace
-
-CNA_Result cna_area_light_ext_is_valid(
-    const CNA_AreaLightEXT* const light, CNA_Bool* const outValid)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        Microsoft::Xna::Framework::Graphics::AreaLightEXT native;
-        if (const CNA_Result result = ToNativeAreaLight(light, &native);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        return StoreValue(
-            outValid, static_cast<CNA_Bool>(native.IsValidEXT() ? CNA_TRUE : CNA_FALSE));
-    });
-}
-
-/* CBIND-091A. The image-based light is a value, and its canonical type lives in the
- * always-compiled XNA header rather than under CNA_CNAEXT (plans/plan_modern.md MOD-1222),
- * so these two routes work in every build and read their defaults from the canonical type
- * instead of repeating them as literals. */
 CNA_Result cna_image_based_light_ext_init(CNA_ImageBasedLightEXT* const outLight)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -400,22 +218,6 @@ CNA_Result cna_image_based_light_ext_is_valid(
         }
         return StoreValue(outValid, static_cast<CNA_Bool>(complete ? CNA_TRUE : CNA_FALSE));
     });
-}
-
-CNA_Result cna_render_pipeline_settings_init(CNA_RenderPipelineSettings* const outSettings)
-{
-    const CNA_RenderPipelineSettings defaults = {
-        1.0F,
-        2.2F,
-        1.0F,
-        CNA_TONEMAPPING_MODE_NONE,
-        CNA_RENDER_QUALITY_MEDIUM,
-        CNA_SHADOW_QUALITY_DISABLED,
-        CNA_FALSE,
-        CNA_FALSE,
-        CNA_FALSE,
-        CNA_FALSE};
-    return StoreValue(outSettings, defaults);
 }
 
 #ifndef CNA_CNAEXT

@@ -718,8 +718,8 @@ namespace CNA::Internal::Renderers::OpenGL4
          * @brief Allocates a buffer for exactly the declared roles.
          *
          * @param byteSize Bytes to allocate.
-         * @param usage `CNA::Graphics::StorageBufferUsage` bits.
-         * @param cpuAccess `CNA::Graphics::StorageBufferCpuAccess` bits.
+         * @param usage `storage-buffer usage` bits.
+         * @param cpuAccess `storage-buffer CPU-access` bits.
          * @return The buffer, or null when a declared role is not available here.
          */
         std::unique_ptr<IStorageBufferRenderer> CreateStorageBufferEXT(
@@ -769,7 +769,7 @@ namespace CNA::Internal::Renderers::OpenGL4
          * @param layerCount Layers; at most GetMaxTextureArrayLayersEXT().
          * @param mipLevelCount Levels to allocate.
          * @param surfaceFormat SurfaceFormat ordinal.
-         * @param usage `CNA::Graphics::Texture2DArrayUsage` bits.
+         * @param usage `texture-array usage` bits.
          * @return The array, or null for a format a `Texture2D` here does not store (or stores
          *         only decoded, for Dxt without native S3TC).
          */
@@ -797,7 +797,7 @@ namespace CNA::Internal::Renderers::OpenGL4
          * @param height Level-0 height.
          * @param mipLevelCount Levels to allocate.
          * @param surfaceFormat SurfaceFormat ordinal.
-         * @param usage `CNA::Graphics::StorageTexture2DUsage` bits.
+         * @param usage `storage-texture usage` bits.
          * @return The texture, or null without compute image binding or for another format.
          */
         std::unique_ptr<IStorageTexture2DRenderer> CreateStorageTexture2DEXT(

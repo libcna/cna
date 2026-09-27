@@ -5,21 +5,21 @@
 
 #include "CNA/C/effects.h"
 #include "CNA/C/graphics.h"
+#include "CNA/C/math_values.h"
+#include "CNA/C/vertex_resources.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /**
- * @brief Reports whether this build contains CNA's extended graphics layer.
+ * @brief Reports whether standalone CNA graphics extensions are enabled.
  *
  * @param out_available Receives `CNA_TRUE` when the extension layer is present.
  * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
  *
- * The extended layer is an opt-in CNA build option. Its C declarations exist in every build so
- * that the exported ABI never changes shape, but the routes that need a native extension object
- * return `CNA_RESULT_NOT_SUPPORTED` when the layer is absent. The pure value operations below —
- * identities, `CNA_PbrMaterial` and `CNA_RenderPipelineSettings` — work in either build.
+ * The standalone retro effects and DebugDraw require the opt-in `CNA_CNAEXT` build option.
+ * Core renderer and PBR value routes below work in either build.
  */
 CNA_C_API CNA_Result cna_graphics_ext_is_available(CNA_Bool* out_available);
 
@@ -51,44 +51,6 @@ typedef uint32_t CNA_DitherMode;
 /** @brief 8x8 ordered Bayer dithering. */
 #define CNA_DITHER_MODE_BAYER_8X8 UINT32_C(2)
 
-/** @brief Fixed-width identity of an overall render-quality preset. */
-typedef uint32_t CNA_RenderQuality;
-
-/** @brief Minimum quality. */
-#define CNA_RENDER_QUALITY_LOW UINT32_C(0)
-/** @brief Balanced quality and performance. */
-#define CNA_RENDER_QUALITY_MEDIUM UINT32_C(1)
-/** @brief High quality with minor performance cost. */
-#define CNA_RENDER_QUALITY_HIGH UINT32_C(2)
-/** @brief Maximum quality regardless of cost. */
-#define CNA_RENDER_QUALITY_ULTRA UINT32_C(3)
-
-/** @brief Fixed-width identity of a shadow-map quality preset. */
-typedef uint32_t CNA_ShadowQuality;
-
-/** @brief Shadows disabled. */
-#define CNA_SHADOW_QUALITY_DISABLED UINT32_C(0)
-/** @brief 512x512 shadow map with no filtering. */
-#define CNA_SHADOW_QUALITY_LOW UINT32_C(1)
-/** @brief 1024x1024 shadow map with 2x2 percentage-closer filtering. */
-#define CNA_SHADOW_QUALITY_MEDIUM UINT32_C(2)
-/** @brief 2048x2048 shadow map with 3x3 percentage-closer filtering. */
-#define CNA_SHADOW_QUALITY_HIGH UINT32_C(3)
-/** @brief 4096x4096 shadow map with 5x5 percentage-closer filtering. */
-#define CNA_SHADOW_QUALITY_ULTRA UINT32_C(4)
-
-/** @brief Fixed-width identity of a tonemapping operator. */
-typedef uint32_t CNA_TonemappingMode;
-
-/** @brief No tonemapping; values are clamped. */
-#define CNA_TONEMAPPING_MODE_NONE UINT32_C(0)
-/** @brief Reinhard tonemapping. */
-#define CNA_TONEMAPPING_MODE_REINHARD UINT32_C(1)
-/** @brief Filmic tonemapping. */
-#define CNA_TONEMAPPING_MODE_FILMIC UINT32_C(2)
-/** @brief ACES filmic tonemapping. */
-#define CNA_TONEMAPPING_MODE_ACES UINT32_C(3)
-
 /** @brief Fixed-width identity of a target color depth for the depth-reduction effect. */
 typedef uint32_t CNA_DepthEffectMode;
 
@@ -107,254 +69,119 @@ typedef uint32_t CNA_DepthEffectMode;
 /** @brief Nearest match against the classic 16-color EGA/CGA palette. */
 #define CNA_DEPTH_EFFECT_MODE_PALETTE_16 UINT32_C(6)
 
-/**
- * @brief Physically based material definition following the glTF 2.0 metallic-roughness model.
- *
- * The canonical type is a settings bag whose accessors assign without clamping, so this fixed
- * layout is the whole of it: a C caller reads and writes the fields directly, exactly as the
- * canonical getters and setters do. Texture slots are non-owning: a handle stored here does not
- * keep its texture alive, matching the canonical non-owning `Texture2D*` slots.
- */
-/**
- * @brief Superseded by @ref CNA_PbrMaterialEXT; frozen at its ABI 1 shape.
- *
- * This mirrors the canonical `CNA::Graphics::PbrMaterial` as it stood before that type grew the
- * `KHR_materials_specular`/`ior` factors, per-slot texture transforms, three-way alpha coverage
- * and a floating-point emissive factor. Its layout and its initializer's values cannot change
- * within an ABI major (`docs/c-api/ABI_VERSIONING.md`), so the current shape arrives under a new
- * name rather than by rearranging this one. Existing consumers keep working unchanged; new code
- * should use @ref CNA_PbrMaterialEXT, whose fields correspond one-to-one with the canonical type.
- */
-typedef struct CNA_PbrMaterial {
-    /** @brief Albedo (base color) texture handle, or `CNA_INVALID_HANDLE`. */
-    CNA_Handle albedo_texture;
-
-    /** @brief Tangent-space normal map handle, or `CNA_INVALID_HANDLE`. */
-    CNA_Handle normal_texture;
-
-    /** @brief Metallic-roughness texture handle (B = metallic, G = roughness). */
-    CNA_Handle metallic_roughness_texture;
-
-    /** @brief Ambient-occlusion texture handle (R channel), or `CNA_INVALID_HANDLE`. */
-    CNA_Handle ambient_occlusion_texture;
-
-    /** @brief Emissive texture handle, or `CNA_INVALID_HANDLE`. */
-    CNA_Handle emissive_texture;
-
-    /** @brief Albedo color factor multiplied with the albedo texture. */
-    CNA_Color albedo_color;
-
-    /** @brief Emissive color factor. */
-    CNA_Color emissive_color;
-
-    /** @brief Metallic factor; the canonical range is 0 through 1. */
-    float metallic_factor;
-
-    /** @brief Roughness factor; the canonical range is 0 through 1. */
-    float roughness_factor;
-
-    /** @brief Normal-map intensity scale, where 1 is full strength. */
-    float normal_scale;
-
-    /** @brief Ambient-occlusion strength; the canonical range is 0 through 1. */
-    float occlusion_strength;
-
-    /** @brief Alpha cutoff threshold used by alpha-test rendering. */
-    float alpha_cutoff;
-
-    /** @brief `CNA_TRUE` to render this material with alpha blending. */
-    CNA_Bool alpha_blend_enabled;
-
-    /** @brief Reserved bytes; always zero. */
-    uint8_t reserved[3];
-} CNA_PbrMaterial;
-
-/**
- * @brief The canonical `CNA::Graphics::PbrMaterial` in full, as an extensible value struct.
- *
- * CNA extension. Every field corresponds to exactly one accessor pair on the canonical type, so a
- * material described here loses nothing on the way to a `PbrEffect`. Textures are handles and stay
- * non-owning, matching the canonical non-owning `Texture2D*` slots.
- *
- * Initialize with @ref cna_pbr_material_ext_init, which fills `struct_size` and `struct_version`
- * along with the canonical defaults; fields added in a later minor version are appended after
- * `texture_transforms`.
- */
-typedef struct CNA_PbrMaterialEXT {
-    /** @brief Size of this caller-provided structure in bytes. */
-    uint32_t struct_size;
-
-    /** @brief Version of this caller-provided structure. */
-    uint32_t struct_version;
-
-    /** @brief Albedo (base color) texture handle, or `CNA_INVALID_HANDLE`. */
-    CNA_Handle albedo_texture;
-
-    /** @brief Tangent-space normal map handle, or `CNA_INVALID_HANDLE`. */
-    CNA_Handle normal_texture;
-
-    /** @brief Metallic-roughness texture handle (B = metallic, G = roughness). */
-    CNA_Handle metallic_roughness_texture;
-
-    /** @brief Ambient-occlusion texture handle (R channel), or `CNA_INVALID_HANDLE`. */
-    CNA_Handle ambient_occlusion_texture;
-
-    /** @brief Emissive texture handle, or `CNA_INVALID_HANDLE`. */
-    CNA_Handle emissive_texture;
-
-    /** @brief `KHR_materials_specular` strength map handle (A channel). */
-    CNA_Handle specular_texture;
-
-    /** @brief `KHR_materials_specular` color map handle (RGB). */
-    CNA_Handle specular_color_texture;
-
-    /** @brief Albedo color factor multiplied with the albedo texture. */
-    CNA_Color albedo_color;
-
-    /**
-     * @brief Linear emissive factor.
-     *
-     * A vector rather than a color: `KHR_materials_emissive_strength` scales it without an upper
-     * bound, so eight bits per channel cannot hold what an HDR pipeline expects.
-     */
-    CNA_Vector3 emissive_factor;
-
-    /** @brief Linear `KHR_materials_specular` color factor; white by default. */
-    CNA_Vector3 specular_color_factor;
-
-    /** @brief Metallic factor; the canonical range is 0 through 1. */
-    float metallic_factor;
-
-    /** @brief Roughness factor; the canonical range is 0 through 1. */
-    float roughness_factor;
-
-    /** @brief Normal-map intensity scale, where 1 is full strength. */
-    float normal_scale;
-
-    /** @brief Ambient-occlusion strength; the canonical range is 0 through 1. */
-    float occlusion_strength;
-
-    /** @brief `KHR_materials_ior` index of refraction; 1.5 by default. */
-    float ior;
-
-    /** @brief `KHR_materials_specular` strength factor; 1 by default. */
-    float specular_factor;
-
-    /** @brief Alpha cutoff threshold, meaningful only in `CNA_ALPHA_MODE_MASK_EXT`. */
-    float alpha_cutoff;
-
-    /** @brief How the material's alpha is interpreted; one `CNA_ALPHA_MODE_*_EXT` identity. */
-    CNA_AlphaModeEXT alpha_mode;
-
-    /** @brief `CNA_TRUE` to draw both faces of the surface (glTF `doubleSided`). */
-    CNA_Bool double_sided;
-
-    /** @brief `CNA_TRUE` when the albedo texture's samples are sRGB-encoded. */
-    CNA_Bool base_color_texture_srgb;
-
-    /** @brief `CNA_TRUE` when the emissive texture's samples are sRGB-encoded. */
-    CNA_Bool emissive_texture_srgb;
-
-    /** @brief `CNA_TRUE` when the specular-color texture's samples are sRGB-encoded. */
-    CNA_Bool specular_color_texture_srgb;
-
-    /** @brief `CNA_TRUE` to encode the lit result back to sRGB before the framebuffer. */
-    CNA_Bool output_encoded_to_srgb;
-
-    /** @brief Reserved bytes; always zero. */
-    uint8_t reserved[3];
-
-    /**
-     * @brief Packed vertex UV channel each texture slot samples.
-     *
-     * Indexed in slot order: base color, normal, metallic-roughness, emissive, occlusion,
-     * specular, specular color.
-     */
-    int32_t texture_coordinate_sets[7];
-
-    /** @brief Each slot's `KHR_texture_transform`, in the same slot order. */
-    CNA_TextureTransformEXT texture_transforms[7];
-} CNA_PbrMaterialEXT;
-
-/** @brief Version this build's @ref CNA_PbrMaterialEXT declares. */
-#define CNA_PBR_MATERIAL_EXT_VERSION UINT32_C(1)
-
-
-/**
- * @brief Configuration for CNA's extended render pipeline.
- *
- * Like @ref CNA_PbrMaterial this mirrors a canonical settings bag whose accessors assign without
- * clamping, so the fields are written directly.
- */
-typedef struct CNA_RenderPipelineSettings {
-    /** @brief Scene exposure multiplier applied when HDR is enabled. */
-    float exposure;
-
-    /** @brief Display gamma; the canonical default is 2.2. */
-    float gamma;
-
-    /** @brief Bloom intensity multiplier. */
-    float bloom_intensity;
-
-    /** @brief Active tonemapping operator. */
-    CNA_TonemappingMode tonemapping_mode;
-
-    /** @brief Overall render-quality preset. */
-    CNA_RenderQuality render_quality;
-
-    /** @brief Shadow-map quality preset. */
-    CNA_ShadowQuality shadow_quality;
-
-    /** @brief `CNA_TRUE` when HDR rendering is enabled. */
-    CNA_Bool hdr_enabled;
-
-    /** @brief `CNA_TRUE` when the bloom post-process pass is enabled. */
-    CNA_Bool bloom_enabled;
-
-    /** @brief `CNA_TRUE` when the SSAO post-process pass is enabled. */
-    CNA_Bool ssao_enabled;
-
-    /** @brief `CNA_TRUE` when shadow rendering is enabled. */
-    CNA_Bool shadows_enabled;
-} CNA_RenderPipelineSettings;
-
 /** @brief Owned handle for an ASCII post-process effect. */
 typedef CNA_Handle CNA_AsciiPostProcessEffectHandle;
 
 /**
- * @brief Initializes an ABI 1 PBR material with the defaults that shape was published with.
+ * @brief One image-based light: the three textures a PBR shader needs, and how bright they are.
  *
- * These are the pre-`CNA_PbrMaterialEXT` defaults, kept exactly as published: an ABI major may not
- * change what an existing name means, and that includes the values this writes. The canonical C++
- * type has since moved its own defaults to glTF's (metallic 1, roughness 1), which
- * @ref cna_pbr_material_ext_init reproduces.
- *
- * @param out_material Receives white albedo, metallic 0, roughness 0.5, opaque black emissive,
- * unit normal scale and occlusion strength, no alpha blending, alpha cutoff 0.5 and no textures.
- * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ * A caller fills this and hands it to an effect. The textures are **borrowed**; the structure
+ * records them and never owns them.
  */
-CNA_C_API CNA_Result cna_pbr_material_init(CNA_PbrMaterial* out_material);
+typedef struct CNA_ImageBasedLightEXT {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+    /** @brief The irradiance cube, or `CNA_INVALID_HANDLE`. */
+    CNA_Handle irradiance;
+    /** @brief The prefiltered specular cube, or `CNA_INVALID_HANDLE`. */
+    CNA_Handle prefiltered_specular;
+    /** @brief The BRDF lookup texture, or `CNA_INVALID_HANDLE`. */
+    CNA_Handle brdf_lut;
+    /** @brief How many mip levels the prefiltered cube has; at least one. */
+    int32_t prefiltered_mip_count;
+    /** @brief Scalar multiplier on the light. */
+    float intensity;
+} CNA_ImageBasedLightEXT;
 
 /**
- * @brief Initializes a full PBR material with the canonical defaults.
+ * @brief Fills an image-based light with its canonical defaults.
  *
- * @param out_material Receives `struct_size`, `struct_version`, white albedo, metallic 1,
- * roughness 1, zero emissive, unit normal scale and occlusion strength, IOR 1.5, unit specular
- * factor and white specular color, opaque coverage with cutoff 0.5, single-sided, every texture
- * slot empty on UV channel 0 with the identity transform, and sRGB decoding and encoding on.
- * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ * @param out_light Receives the defaults along with `struct_size` and `struct_version`.
+ * @return `CNA_RESULT_SUCCESS` in either build, or an argument/native error.
  */
-CNA_C_API CNA_Result cna_pbr_material_ext_init(CNA_PbrMaterialEXT* out_material);
+CNA_C_API CNA_Result cna_image_based_light_ext_init(CNA_ImageBasedLightEXT* out_light);
 
 /**
- * @brief Initializes render-pipeline settings with the canonical defaults.
+ * @brief Reports whether the light is complete enough to shade with.
  *
- * @param out_settings Receives HDR off, exposure 1, gamma 2.2, no tonemapping, bloom off with
- * intensity 1, SSAO off, medium render quality, disabled shadow quality and shadows off.
- * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ * All three textures must be present and the mip count at least one. A light that is *nearly*
+ * complete is the failure this answers: it does not look like a mismatch, it looks like a scene
+ * lit slightly wrong.
+ *
+ * @param light The light.
+ * @param out_valid Receives the answer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null or malformed structure,
+ * or another native error. This core PBR value route works in either build.
  */
-CNA_C_API CNA_Result cna_render_pipeline_settings_init(
-    CNA_RenderPipelineSettings* out_settings);
+CNA_C_API CNA_Result cna_image_based_light_ext_is_valid(
+    const CNA_ImageBasedLightEXT* light, CNA_Bool* out_valid);
+
+
+/**
+ * @brief The arguments of an indirect draw, in the exact layout the GPU reads.
+ *
+ * **Sixteen bytes, four 32-bit words, and the layout is the contract** -- the GPU reads this
+ * verbatim, so it is not a structure the ABI may version or pad. It therefore has no `struct_size`
+ * or `struct_version`, unlike every other POD in this header, and a compile-time assertion pins its
+ * size on both sides of the boundary.
+ */
+typedef struct CNA_IndirectDrawArguments {
+    /** @brief How many vertices to fetch. */
+    uint32_t vertex_count;
+    /** @brief How many instances to draw; one for an ordinary draw, zero to draw nothing. */
+    uint32_t instance_count;
+    /** @brief The first vertex, in elements of the bound stream. */
+    uint32_t first_vertex;
+    /**
+     * @brief The first instance.
+     *
+     * **Must be zero on GL ES.** ES 3.1 has no base-instance parameter and the word is required to
+     * be zero; a non-zero value there is undefined rather than diagnosed, and cannot be checked
+     * anywhere -- by the time the draw runs the value lives in GPU memory.
+     */
+    uint32_t base_instance;
+} CNA_IndirectDrawArguments;
+
+/**
+ * @brief The arguments of an indexed indirect draw, in the exact layout the GPU reads.
+ *
+ * Same contract as @ref CNA_IndirectDrawArguments, one word longer: **twenty bytes, five words.**
+ */
+typedef struct CNA_IndirectDrawIndexedArguments {
+    /** @brief How many indices to fetch. */
+    uint32_t index_count;
+    /** @brief How many instances to draw. */
+    uint32_t instance_count;
+    /** @brief The first index, in index elements. */
+    uint32_t first_index;
+    /** @brief Added to every decoded index, in vertex elements; signed, as the API is. */
+    int32_t base_vertex;
+    /** @brief The first instance; must be zero on GL ES, for the reason above. */
+    uint32_t base_instance;
+} CNA_IndirectDrawIndexedArguments;
+
+/**
+ * @brief Fills indirect draw arguments with the canonical defaults.
+ *
+ * Works in **every** build, because the canonical struct is part of the always-compiled graphics module and uses
+ * the GPU's own command format and lives in the always-compiled graphics module.
+ *
+ * @param out_arguments Receives all-zero arguments, which draw nothing.
+ * @return `CNA_RESULT_SUCCESS` in every build, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_indirect_draw_arguments_init(CNA_IndirectDrawArguments* out_arguments);
+
+/**
+ * @brief Fills indexed indirect draw arguments with the canonical defaults.
+ *
+ * @param out_arguments Receives all-zero arguments, which draw nothing.
+ * @return `CNA_RESULT_SUCCESS` in every build, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_indirect_draw_indexed_arguments_init(
+    CNA_IndirectDrawIndexedArguments* out_arguments);
+
 
 /**
  * @brief Creates an owned CRT display-emulation effect.
@@ -641,6 +468,229 @@ CNA_C_API CNA_Result cna_ascii_post_process_effect_get_last_grid_dimensions(
  */
 CNA_C_API CNA_Result cna_ascii_post_process_effect_destroy(
     CNA_AsciiPostProcessEffectHandle effect);
+
+/** @brief The fewest segments a debug sphere or cone is drawn with. */
+#define CNA_DEBUG_DRAW_MIN_SEGMENTS 4
+
+/** @brief The most segments a debug sphere or cone is drawn with. */
+#define CNA_DEBUG_DRAW_MAX_SEGMENTS 128
+
+/**
+ * @brief Owned handle for the debug line renderer.
+ *
+ * Two line lists, drawn in two passes: the depth-tested one first, then the overlay, **so an
+ * overlay line crossing a depth-tested one wins** -- which is the point of asking for an overlay.
+ * @ref cna_debug_draw_set_depth_tested chooses which list the following lines go into.
+ *
+ * **@ref cna_debug_draw_begin resets that choice to depth-tested and clears both lists.** Setting
+ * it before `begin` is therefore lost; set it after. Nothing here refuses -- there are no throws in
+ * the canonical class at all -- so the contracts worth knowing are about *when* state is reset
+ * rather than about what is rejected.
+ */
+typedef CNA_Handle CNA_DebugDrawHandle;
+
+/**
+ * @brief Creates a debug line renderer.
+ *
+ * @param graphics_device The device to draw with.
+ * @param out_debug Receives the renderer; invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an invalid device or null
+ * output, `CNA_RESULT_NOT_SUPPORTED` without CNA_CNAEXT, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_create(
+    CNA_Handle graphics_device, CNA_DebugDrawHandle* out_debug);
+
+/**
+ * @brief Releases a debug line renderer.
+ *
+ * @param debug The renderer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for an invalid handle,
+ * `CNA_RESULT_NOT_SUPPORTED` without CNA_CNAEXT, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_destroy(CNA_DebugDrawHandle debug);
+
+/**
+ * @brief Opens a frame, clearing both line lists and restoring depth testing.
+ *
+ * @param debug The renderer.
+ * @param view The view matrix.
+ * @param projection The projection matrix.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null matrix,
+ * `CNA_RESULT_NOT_SUPPORTED` without CNA_CNAEXT, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_begin(
+    CNA_DebugDrawHandle debug, const CNA_Matrix* view, const CNA_Matrix* projection);
+
+/**
+ * @brief Draws both line lists and closes the frame.
+ *
+ * **Idempotent**: ending a frame that is not open does nothing and succeeds, so a caller does not
+ * have to track whether it opened one. The device's depth-stencil state is restored afterwards.
+ *
+ * @param debug The renderer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without CNA_CNAEXT, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_end(CNA_DebugDrawHandle debug);
+
+/**
+ * @brief Discards both line lists without drawing them.
+ *
+ * Leaves the frame open and the depth-test choice alone, unlike @ref cna_debug_draw_begin.
+ *
+ * @param debug The renderer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without CNA_CNAEXT, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_clear(CNA_DebugDrawHandle debug);
+
+/**
+ * @brief Adds one line.
+ *
+ * @param debug The renderer.
+ * @param from Where it starts.
+ * @param to Where it ends.
+ * @param colour Its colour.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null argument,
+ * `CNA_RESULT_NOT_SUPPORTED` without CNA_CNAEXT, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_add_line(
+    CNA_DebugDrawHandle debug,
+    const CNA_Vector3* from,
+    const CNA_Vector3* to,
+    CNA_Color colour);
+
+/**
+ * @brief Adds the twelve edges of a box.
+ *
+ * @param debug The renderer.
+ * @param bounds The box.
+ * @param colour Its colour.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null box,
+ * `CNA_RESULT_NOT_SUPPORTED` without CNA_CNAEXT, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_add_box(
+    CNA_DebugDrawHandle debug, const CNA_BoundingBox* bounds, CNA_Color colour);
+
+/**
+ * @brief Adds three rings approximating a sphere at a centre and radius.
+ *
+ * The segment count is **clamped to @ref CNA_DEBUG_DRAW_MIN_SEGMENTS through
+ * @ref CNA_DEBUG_DRAW_MAX_SEGMENTS**, not refused: a debug shape drawn with too few or absurdly
+ * many segments is still a debug shape, and refusing would turn a cosmetic argument into an error.
+ *
+ * @param debug The renderer.
+ * @param centre The centre.
+ * @param radius The radius.
+ * @param colour Its colour.
+ * @param segments Segments per ring; clamped.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null centre,
+ * `CNA_RESULT_NOT_SUPPORTED` without CNA_CNAEXT, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_add_sphere(
+    CNA_DebugDrawHandle debug,
+    const CNA_Vector3* centre,
+    float radius,
+    CNA_Color colour,
+    int32_t segments);
+
+/**
+ * @brief Adds three rings approximating a bounding sphere.
+ *
+ * The same drawing as @ref cna_debug_draw_add_sphere, taking the shape as one value; bound
+ * separately because C has no overloading.
+ *
+ * @param debug The renderer.
+ * @param sphere The sphere.
+ * @param colour Its colour.
+ * @param segments Segments per ring; clamped.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null sphere,
+ * `CNA_RESULT_NOT_SUPPORTED` without CNA_CNAEXT, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_add_bounding_sphere(
+    CNA_DebugDrawHandle debug,
+    const CNA_BoundingSphere* sphere,
+    CNA_Color colour,
+    int32_t segments);
+
+/**
+ * @brief Adds the twelve edges of a frustum.
+ *
+ * @param debug The renderer.
+ * @param frustum The frustum.
+ * @param colour Its colour.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without CNA_CNAEXT, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_add_frustum(
+    CNA_DebugDrawHandle debug, CNA_BoundingFrustum frustum, CNA_Color colour);
+
+/**
+ * @brief Adds three axis-aligned segments crossing at a point.
+ *
+ * @param debug The renderer.
+ * @param position Where they cross.
+ * @param size Half the length of each segment.
+ * @param colour Their colour.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null position,
+ * `CNA_RESULT_NOT_SUPPORTED` without CNA_CNAEXT, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_add_cross(
+    CNA_DebugDrawHandle debug, const CNA_Vector3* position, float size, CNA_Color colour);
+
+/**
+ * @brief Reports which list the following lines go into.
+ *
+ * @param debug The renderer.
+ * @param out_depth_tested Receives `CNA_TRUE` for the depth-tested list.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without CNA_CNAEXT, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_is_depth_tested(
+    CNA_DebugDrawHandle debug, CNA_Bool* out_depth_tested);
+
+/**
+ * @brief Chooses which list the following lines go into.
+ *
+ * **Reset to `CNA_TRUE` by @ref cna_debug_draw_begin**, so setting it before opening a frame is
+ * lost. Lines already added stay in the list they were added to.
+ *
+ * @param debug The renderer.
+ * @param depth_tested `CNA_TRUE` for the depth-tested list; a non-canonical byte is refused.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-canonical boolean,
+ * `CNA_RESULT_NOT_SUPPORTED` without CNA_CNAEXT, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_set_depth_tested(
+    CNA_DebugDrawHandle debug, CNA_Bool depth_tested);
+
+/**
+ * @brief Returns how many lines are queued, across both lists.
+ *
+ * Lines, not vertices: two vertices make one line.
+ *
+ * @param debug The renderer.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without CNA_CNAEXT, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_get_line_count(
+    CNA_DebugDrawHandle debug, int32_t* out_count);
+
+/**
+ * @brief Copies one of the two vertex lists out, in submission order.
+ *
+ * @param debug The renderer.
+ * @param depth_tested Which list to copy; a non-canonical byte is refused.
+ * @param destination The array, or null to ask for the count.
+ * @param capacity How many vertices it holds.
+ * @param out_count Receives the number of vertices, which is twice the number of lines in that
+ * list.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with the needed count in
+ * `out_count`, `CNA_RESULT_INVALID_ARGUMENT` for a null count or a non-canonical boolean,
+ * `CNA_RESULT_NOT_SUPPORTED` without CNA_CNAEXT, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_copy_vertices(
+    CNA_DebugDrawHandle debug,
+    CNA_Bool depth_tested,
+    CNA_VertexPositionColor* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
 
 #ifdef __cplusplus
 }

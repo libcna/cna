@@ -1,5 +1,11 @@
 # OPENGL4 renderer — desktop OpenGL 4.x core profile
 
+> Current scope (MOD-RETIRE-1): the former `CNA::Graphics` engine layer and its
+> modern resource wrappers have been removed. The backend remains available for
+> XNA graphics, PBR, custom shaders, and the retained retro effects. The dated
+> validation record below describes the earlier engine build; see
+> [the scope reduction](graphics-ext-scope-reduction.md) for current extension APIs.
+
 `-DCNA_GRAPHICS_RENDERER=OPENGL4` · enum `CNA::GraphicsRendererType::OpenGL4` · target
 `cna_renderer_opengl4` · sources `modules/renderers/opengl4/`.
 
@@ -63,7 +69,7 @@ work in its own context.
   `GL_ARB_robustness` reset notification is not; `CanBeginDrawEXT` keeps the base answer.
 - The ES 2.0/WebGL 1 fallbacks of the EasyGL family have no counterpart in a desktop 4.x context.
 
-## Modern (CNAEXT) GPU features
+## Renderer GPU capability history
 
 Workstream B of `plans/plan_opengl4_modern_graphics.md` (`GL4-0024` onward) implements the modern
 API over the live context. Every answer below is asked of the driver, never assumed, and
@@ -93,9 +99,8 @@ API over the live context. Every answer below is asked of the driver, never assu
   every format: GLSL image atomics need `r32i`/`r32ui`.
 - **Texture arrays** — `GL_TEXTURE_2D_ARRAY` in every `Texture2D` format (Dxt with native S3TC),
   each layer stored and sampled exactly as a `Texture2D` of its format; exact per-layer, per-mip,
-  sub-rectangle transfers; `ShaderEffect::SetTextureArrayEXT` binds array unit N to GL texture unit
-  N's array target, sampled through XNA sampler slot N (Vulkan's and WebGPU's rule), and the effect
-  keeps the array alive until the unit is cleared. `MaxTextureArrayLayers` is
+  sub-rectangle transfers. The former graphics-extension array wrapper and its
+  `ShaderEffect` binding API have been removed. `MaxTextureArrayLayers` is
   `GL_MAX_ARRAY_TEXTURE_LAYERS`. Core since GL 3.0, so available on the 4.1 floor too
   (`OpenGL4_Gl41Floor`, a real 4.1 context through Mesa's version override).
 - **Not implemented:** scRGB/HDR10 display output (sRGB only, the base answer).
@@ -117,7 +122,7 @@ Measured on an AMD Radeon 780M (Mesa radeonsi, 4.6 core) through
 | `ctest -R '^OpenGL4_'` — OpenGL4's own tests, the 32 shared parity fixtures, 346 EasyGL example sources rebuilt against OpenGL4, the modern stress run and the forced 4.1 floor | 407 / 407 | 406 / 406 (openbox managing the private display) + `OpenGL4_Gl41Floor` |
 | `CnaGraphicsTests` | 2 833 / 0 / 57 | 2 800 / 0 / 71 (OpenGL4-only build) |
 | `CnaRendererTests` | 338 / 0 / 10 | 232 / 0 / 0 (before `GL4-0037`'s two cases) |
-| `CnaGraphicsExtTests` (the modern engine layer) | 960 / 0 / 7 | 956 / 0 / 6 (before `GL4-0037`); `Texture2DArray*` 14 / 14 |
+| Former `CnaGraphicsExtTests` engine suite (removed by MOD-RETIRE-1) | 960 / 0 / 7 | 956 / 0 / 6 (before `GL4-0037`); former `Texture2DArray*` 14 / 14 |
 | CNAEXT example oracles | 32 / 1 / 0 | 34 / 1 / 0 (the failure, on every renderer: `CNAEXT_NoPosixSetenv`, a source scan of the Wayland platform) |
 | AddressSanitizer + UBSan + LeakSanitizer (`build-asan`): OpenGL4's own tests, `CnaGraphicsExtTests`, 3000-cycle stress | 18 / 0 / 0, 956 / 0 / 6, 6 / 6 | — |
 

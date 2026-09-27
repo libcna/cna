@@ -190,7 +190,7 @@ namespace
               srvs[4] = params.pbrOcclusionMap ? GetSrvForTextureEXT(params.pbrOcclusionMap) : GetOrCreateDefaultWhiteSrvEXT();
               srvs[5] = params.pbrSpecularMap ? GetSrvForTextureEXT(params.pbrSpecularMap) : GetOrCreateDefaultWhiteSrvEXT();
               srvs[6] = params.pbrSpecularColorMap ? GetSrvForTextureEXT(params.pbrSpecularColorMap) : GetOrCreateDefaultWhiteSrvEXT();)",
-           R"(context_->PSSetShaderResources(0, 7, srvs))",
+           R"(context_->PSSetShaderResources(0, 13, srvs))",
            R"(Texture2D uTexture : register(t0);
               SamplerState uTextureSampler : register(s0);
               Texture2D uNormalMap : register(t1);
@@ -1538,8 +1538,8 @@ TEST(GltfRendererPbrFallbackPolicy, ModernDirectXRenderersSampleBothKhrMaterials
     }
 
     for (const char* evidence : {
-             "ID3D11ShaderResourceView* srvs[7]",
-             "context_->PSSetShaderResources(0, 7, srvs)",
+             "ID3D11ShaderResourceView* srvs[13]",
+             "context_->PSSetShaderResources(0, 13, srvs)",
              "params.pbrSpecularMap ? GetSrvForTextureEXT(params.pbrSpecularMap) : GetOrCreateDefaultWhiteSrvEXT()",
              "params.pbrSpecularColorMap ? GetSrvForTextureEXT(params.pbrSpecularColorMap) : GetOrCreateDefaultWhiteSrvEXT()"})
     {
@@ -1549,7 +1549,7 @@ TEST(GltfRendererPbrFallbackPolicy, ModernDirectXRenderersSampleBothKhrMaterials
 
     for (const char* evidence : {
              "numSrvs = 7",
-             "const ITextureRenderer* srvTextures[7]",
+             "const ITextureRenderer* srvTextures[13]",
              "params.pbrSpecularMap ? params.pbrSpecularMap : GetOrCreateDefaultWhiteTextureEXT()",
              "params.pbrSpecularColorMap ? params.pbrSpecularColorMap : GetOrCreateDefaultWhiteTextureEXT()",
              "(stride == 60) ? D3DShaderVariant::Pbr3dDualUv",

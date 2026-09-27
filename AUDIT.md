@@ -1,4 +1,9 @@
 # CNA XNA 4.0 API Audit
+> **Current graphics-extension scope (MOD-RETIRE-1, 2026-09-27):** The former modern
+> `CNA::Graphics` engine layer and optional `PbrMaterial` abstraction have been removed.
+> `AsciiPostProcessEffect`, `CRTEffect`, `DepthEffect`, `DebugDraw` and their small portable
+> shader support remain. Older task reports below describe the tree at their own dates.
+> See [the current API](docs/cnaext-engine-layer.md).
 
 > **SAMPLE-014 correction (2026-09-19):** `RenderTarget2D` now accepts Reach-profile NPOT
 > mipmapped dimensions as FNA does; `Texture2D` keeps its separate profile restriction. The

@@ -1,5 +1,9 @@
 # AUDIT_MANIFEST.md — Master Work-Queue Index
 
+> **Current scope (MOD-RETIRE-1, 2026-09-27):** The modern `graphics-ext` engine
+> layer has been removed. Its old shard counts below are historical; see
+> [`docs/cnaext-engine-layer.md`](../docs/cnaext-engine-layer.md) for the current API.
+
 > **Predates the 2026-09-17 renderer curation.** This archive was written when CNA had many more
 > renderer identities than it has now, and it names renderers that **no longer exist**: bgfx,
 > Magnum, Wicked, Sokol, Diligent, Glide, LLGL, IGL, rlgl, TinyGL, NanoVG, PixiJS, OpenVG, Blend2D,

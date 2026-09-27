@@ -35,8 +35,8 @@ add_library(cna_c_api ${CNA_C_API_LIBRARY_KIND}
     src/CnaCApiEffects.cpp
     src/CnaCApiGraphics.cpp
     src/CnaCApiGraphicsDevice.cpp
-    src/CnaCApiEngineLayer.cpp
     src/CnaCApiGraphicsExt.cpp
+    src/CnaCApiDebugDraw.cpp
     src/CnaCApiGraphicsResource.cpp
     src/CnaCApiGraphicsState.cpp
     src/CnaCApiGamerServices.cpp
@@ -1447,34 +1447,6 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
-    add_executable(cna_c_api_engine_layer_smoke
-        tests/pure_c/EngineLayerSmoke.c
-    )
-    set_target_properties(cna_c_api_engine_layer_smoke PROPERTIES
-        C_STANDARD 17
-        C_STANDARD_REQUIRED ON
-        C_EXTENSIONS OFF
-    )
-    target_link_libraries(cna_c_api_engine_layer_smoke PRIVATE cna_c_api)
-    target_link_libraries(cna_c_api_engine_layer_smoke PRIVATE Threads::Threads)
-    cna_c_api_enable_strict_warnings(cna_c_api_engine_layer_smoke)
-    add_test(NAME CApi_EngineLayerSmoke COMMAND cna_c_api_engine_layer_smoke)
-    # plans/plan_binding.md CBIND-084A. The suite creates a game, so it takes the same isolated
-    # environment CBIND-094 gave the other game-creating smokes rather than reading the machine.
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_EngineLayerSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/engine-layer-smoke-home"
-        )
-    elseif(CNA_GRAPHICS_RENDERER MATCHES "^OPEN(GL|GLES)")
-        set_tests_properties(CApi_EngineLayerSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;SDL_AUDIODRIVER=dummy;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/engine-layer-smoke-home"
-        )
-    else()
-        set_tests_properties(CApi_EngineLayerSmoke PROPERTIES
-            ENVIRONMENT "SDL_AUDIODRIVER=dummy;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/engine-layer-smoke-home"
-        )
-    endif()
-
     add_executable(cna_c_api_media_smoke
         tests/pure_c/MediaSmoke.c
     )
@@ -2088,18 +2060,6 @@ if(CNA_BUILD_TESTS)
     cna_c_api_enable_strict_warnings(cna_c_api_utf8_oracle_test)
     add_test(NAME CApi_Utf8Oracle COMMAND cna_c_api_utf8_oracle_test)
 
-    # CBIND-090: the .cube parser against an independent oracle. Unlike the UTF-8 oracle this one
-    # goes through the public routes, because the subject is the parser as a caller reaches it --
-    # a few thousand entries rather than eighteen million decisions, so the route costs nothing.
-    add_executable(cna_c_api_cube_lut_oracle_test tests/cpp/CubeLutOracleTest.cpp)
-    target_include_directories(cna_c_api_cube_lut_oracle_test PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/tests/support
-    )
-    target_link_libraries(cna_c_api_cube_lut_oracle_test PRIVATE cna_c_api)
-    cna_c_api_enable_strict_warnings(cna_c_api_cube_lut_oracle_test)
-    add_test(NAME CApi_CubeLutOracle COMMAND cna_c_api_cube_lut_oracle_test)
-
     # CBIND-041: the only test that leaves the source tree. It installs the CNACApi component into a
     # staging prefix, configures modules/c-api/examples/c as a standalone project that knows nothing
     # but CMAKE_PREFIX_PATH, builds it and runs it. Everything else in this suite proves the ABI
@@ -2138,8 +2098,6 @@ if(CNA_BUILD_TESTS)
     # the Clang command line that turns this source into a running fuzzer.
     add_library(cna_c_api_fuzz_targets OBJECT
         tests/fuzz/StringViewFuzz.cpp
-        # CBIND-090: the engine layer's only byte-facing surface, the .cube LUT parser.
-        tests/fuzz/CubeLutFuzz.cpp
     )
     target_include_directories(cna_c_api_fuzz_targets PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include

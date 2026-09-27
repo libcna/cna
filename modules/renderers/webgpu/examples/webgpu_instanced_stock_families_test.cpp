@@ -77,7 +77,7 @@ namespace
     }
 
     /// The per-instance world matrix, as the four Float32x4 columns every renderer's instanced
-    /// path reads -- the declaration `CNA::Graphics::InstancedRendererEXT` builds.
+    /// path reads -- the declaration consumed by the retained instanced draw path.
     const VertexDeclaration& InstanceDeclaration()
     {
         static const VertexDeclaration declaration{

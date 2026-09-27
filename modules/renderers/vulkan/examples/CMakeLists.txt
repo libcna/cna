@@ -283,11 +283,8 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # plan_vulkan.md VULKAN-253 / plan_modern.md MOD-2248/MOD-2249: a custom effect samples a
         # texture the caller explicitly bound through set 1; storage image upload/compute/readback
         # shares that ordered stream and its tracked layouts.
-        cna_vulkan_test(cna_test_vulkan_effect_bound_texture
-                        vulkan_effect_bound_texture_test.cpp)
-        cna_register_renderer_test(NAME Vulkan_ShaderEffect_BoundTexture
-            COMMAND cna_test_vulkan_effect_bound_texture
-            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+
 
         # plan_vulkan.md VULKAN-164: SamplerState.AddressW decides what a bound Texture3D reads
         # outside [0,1] -- the test VULKAN-094 proposed and could not write.
@@ -1451,11 +1448,8 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # VkFormats; usage masks and numeric limits are the intersection of live physical-device
         # facts with paths this renderer actually implements, and public construction of every
         # base/mip/MSAA combination must agree with those answers.
-        cna_vulkan_test(cna_test_vulkan_format_limit_queries
-                        vulkan_format_limit_queries_test.cpp)
-        cna_register_renderer_test(NAME Vulkan_FormatLimitQueries
-            COMMAND cna_test_vulkan_format_limit_queries
-            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+
 
         # plans/plan_modern.md MOD-2223: allocation identity plus end-to-end float/HDR clear,
         # draw, sampling, mixed-MRT and typed readback coverage.
@@ -1470,57 +1464,39 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             # every draw (a shadow caster, the depth/normal prepass) used to copy its whole uniform
             # block into a fresh VkBuffer per draw. 1500 prepass draws placed by their world
             # matrix alone must each land in their own cell, and retire no buffer per draw.
-            cna_vulkan_test(cna_test_vulkan_engine_matrix_arena
-                            vulkan_engine_matrix_arena_test.cpp)
-            cna_register_renderer_test(NAME Vulkan_EngineMatrixArena
-                COMMAND cna_test_vulkan_engine_matrix_arena
-                TIMEOUT 90 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+
 
             # plans/plan_street.md STREET-0007: the directional shadow casters' winding was mirrored
             # against the pipelines' clockwise front face, so back-face culling kept the faces that
             # face away from the light. A box drawn into cascade 0 with CullCounterClockwise must
             # leave its top face's depth where the receiver reads it.
-            cna_vulkan_test(cna_test_vulkan_shadow_caster_winding
-                            vulkan_shadow_caster_winding_test.cpp)
-            cna_register_renderer_test(NAME Vulkan_ShadowCasterWinding
-                COMMAND cna_test_vulkan_shadow_caster_winding
-                TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+
 
             # plans/plan_modern.md MOD-2243: raw physical-device limits/usage combinations must
             # agree with array factory decisions, and native image/view records must retire and
             # survive device-first teardown without holding dead Vulkan handles.
-            cna_vulkan_test(cna_test_vulkan_texture2d_array_contract
-                            vulkan_texture2d_array_contract_test.cpp)
-            cna_register_renderer_test(NAME Vulkan_Texture2DArrayContract
-                COMMAND cna_test_vulkan_texture2d_array_contract
-                TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+
 
             # plans/plan_modern.md MOD-2229/MOD-2241/MOD-2242/MOD-2248: SPIR-V compute plus
             # descriptor-qualified storage buffers, exact native usage/memory, staging copies,
             # bounded native allocation/lifetime and logical barrier emission/elision.
-            cna_vulkan_test(cna_test_vulkan_compute_storage_buffer
-                            vulkan_compute_storage_buffer_test.cpp)
-            cna_register_renderer_test(NAME Vulkan_ComputeStorageBuffer
-                COMMAND cna_test_vulkan_compute_storage_buffer
-                TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+
 
             # plans/plan_modern.md MOD-2245/2247: canonical indirect layouts, all geometry/base
             # offsets, deferred argument/program lifetime, mixed SpriteBatch/compute/copy/3D order,
             # one frame submit and the validation stream are one end-to-end contract.
-            cna_vulkan_test(cna_test_vulkan_indirect_draw
-                            vulkan_indirect_draw_test.cpp)
-            cna_register_renderer_test(NAME Vulkan_IndirectDraw
-                COMMAND cna_test_vulkan_indirect_draw
-                TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+
 
             # plans/plan_modern.md MOD-2246: selected queue timestamp facts, asynchronous result
             # collection, query-pool reuse, zero device waits, ordered marker labels, balanced pass
             # regions and one-copy structured logger delivery are one native contract.
-            cna_vulkan_test(cna_test_vulkan_gpu_timer_debug
-                            vulkan_gpu_timer_debug_test.cpp)
-            cna_register_renderer_test(NAME Vulkan_GpuTimerDebug
-                COMMAND cna_test_vulkan_gpu_timer_debug
-                TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+
 
             # plans/plan_modern.md MOD-2252: every modern native record survives ordinary submit
             # and swapchain recreation, queued work owns pre-present disposals, and device teardown

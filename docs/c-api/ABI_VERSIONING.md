@@ -2,6 +2,16 @@
 
 ## ABI identity
 
+The current experimental ABI is **0.30.0** (`MOD-RETIRE-1`). This alpha-stage breaking
+reduction removes `engine_layer.h`, its pipeline, post-process, clustered-lighting, shadow,
+probe and optional PBR-material routes, along with their handles, enums and value layouts.
+`graphics_ext.h` retains ASCII, CRT, colour-depth and DebugDraw routes. Core Effect, PBR,
+ShaderEffect, glTF, CNB/CNJ and content routes remain. The ABI baseline records the exact
+removed symbols and layouts; the library now exports 3,213 `cna_*` routes. Bindings must target
+the new header and version.
+
+### Previous ABI 0.29.0
+
 The ABI is `0.29.0`. It **removes the SpriteBatch 2D mesh route**: the function
 `cna_sprite_batch_draw_mesh_ext` and the versioned structure `CNA_SpriteMeshEXT` it took (64 bytes,
 8-byte aligned) are gone, together with the C++ surface behind them --

@@ -1,5 +1,10 @@
 # Vulkan graphics renderer
 
+> Current scope (MOD-RETIRE-1): the former `CNA::Graphics` engine layer has been
+> removed. Dated engine-suite results below are historical. Vulkan remains a
+> supported renderer for XNA graphics, PBR, custom shaders and retained retro
+> effects. See [the scope reduction](graphics-ext-scope-reduction.md).
+
 ## Status of this document
 
 **Complete as of 2026-09-10 (`VULKAN-480`, updated by `REMED-GFX-203`, `MOD-2222`–`MOD-2236`, `MOD-2240`–`MOD-2244`), and written after the re-audits it depends on**

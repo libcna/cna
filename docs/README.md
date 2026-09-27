@@ -31,13 +31,8 @@ on it) rather than assuming either way.
 - **[`renderer-registry.md`](renderer-registry.md)** — the canonical list of the **50** public
   renderer identities (enum, CMake selector, compile definition, factory, platform/dependency
   gate). Start here for "which renderers does CNA have."
-- **[`cnaext-engine-layer.md`](cnaext-engine-layer.md)** — the `CNA::Graphics` engine layer (HDR
-  pipeline, post-process passes, shadows, sky, image-based lighting, materials, instancing/LOD,
-  compute), which lives behind the `CNA_CNAEXT` CMake option and is **OFF by default**. Start here
-  for "what does the engine layer do on renderer X"; the design is `../CNAEXT.md`, the task backlog
-  `../plans/plan_modern.md`, the running ledger `../NEXT_modern.md`, the measurements
-  [`cnaext-perf.md`](cnaext-perf.md), and the fifteen-minute introduction
-  [`cnaext-getting-started.md`](cnaext-getting-started.md).
+- **[`cnaext-engine-layer.md`](cnaext-engine-layer.md)** — current standalone ASCII, CRT,
+  colour-depth and DebugDraw extensions; the previous modern engine layer has been retired.
 - **[`renderer-expansion-candidates.md`](renderer-expansion-candidates.md)** — surveyed catalog of
   **41** possible future renderer identities, screened against the live registry and against the
   "no alias identities" rule, plus the list of things that must *not* become identities. A

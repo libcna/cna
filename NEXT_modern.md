@@ -1,3 +1,8 @@
+> **Historical record:** The modern graphics-engine layer described below was removed in the
+> 2026-09 scope reduction. Current supported APIs are listed in
+> [current graphics-extension API](docs/cnaext-engine-layer.md). Do not use the old code examples
+> or capability claims as current documentation.
+
 # NEXT_modern.md — running ledger for the CNAEXT engine layer
 
 Continuity file for [`plans/plan_modern.md`](plans/plan_modern.md) (the `MOD-*` backlog implementing

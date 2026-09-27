@@ -95,7 +95,7 @@
 // four of them cannot drift into four subtly different shadows.
 //
 // The map holds light-space distance rather than a depth buffer: CNA cannot sample a depth
-// attachment as a texture on every renderer, so CNA::Graphics::ShadowMap writes distance into an
+// attachment as a texture on every renderer, so a shadow-map producer writes distance into an
 // ordinary colour target and this reads it back like any other texture.
 //
 // uShadowTexel carries 1/size rather than the shader calling textureSize(): that function is GLSL

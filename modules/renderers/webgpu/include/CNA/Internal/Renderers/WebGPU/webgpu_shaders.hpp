@@ -1022,8 +1022,7 @@ struct VSOut {
      * `CnaIblAmbient` (`modules/renderers/vulkan/src/shaders/pbr3d.frag.glsl`) and EasyGL's
      * `cnaIblAmbient` (`EasyGLRenderer::CnaGlIblDecl`), so the three renderers answer an IBL query
      * from one equation rather than from three readings of one description. The mip for a given
-     * roughness is `roughness * (mipCount - 1)` -- `CNA::Graphics::EnvironmentProcessor::
-     * mipForRoughness`, which is the formula `GpuDrawParams::iblPrefilteredMipCount` documents.
+     * roughness is `roughness * (mipCount - 1)` -- `the prefiltering rule`, which is the formula `GpuDrawParams::iblPrefilteredMipCount` documents.
      *
      * At **group 3**, which the stock PBR pipeline layouts had free; the shadow block owns group 2
      * and the PBR families own groups 0 and 1. WGSL module-scope declarations may appear in any

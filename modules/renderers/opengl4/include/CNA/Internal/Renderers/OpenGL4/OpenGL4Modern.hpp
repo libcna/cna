@@ -25,7 +25,7 @@ namespace CNA::Internal::Renderers::OpenGL4
     class OpenGL4Renderer;
 
     /**
-     * @brief One GL buffer object behind a `CNA::Graphics::StorageBuffer` (GL4-0025).
+     * @brief One GL buffer object behind a storage buffer (GL4-0025).
      *
      * GL buffer objects are target-agnostic, so the same name serves as a shader-storage block, a
      * uniform block, an indirect-argument source or a copy endpoint. Transfers go through the copy
@@ -39,8 +39,8 @@ namespace CNA::Internal::Renderers::OpenGL4
          * @brief Allocates @p byteSize bytes of uninitialised storage.
          *
          * @param byteSize Allocation size; must be positive.
-         * @param usage Raw `CNA::Graphics::StorageBufferUsage` bits.
-         * @param cpuAccess Raw `CNA::Graphics::StorageBufferCpuAccess` bits.
+         * @param usage Raw `storage-buffer usage` bits.
+         * @param cpuAccess Raw `storage-buffer CPU-access` bits.
          * @throws std::invalid_argument for a zero size or a mask outside the declared bits.
          */
         OpenGL4StorageBufferRenderer(std::size_t byteSize, std::uint32_t usage,
@@ -290,7 +290,7 @@ namespace CNA::Internal::Renderers::OpenGL4
     [[nodiscard]] bool MapStorageImageFormat(int surfaceFormat, OpenGL4StorageImageFormat& out);
 
     /**
-     * @brief One `CNA::Graphics::StorageTexture2D`: a mutable GL 2D texture with every declared
+     * @brief One storage texture: a mutable GL 2D texture with every declared
      *        level allocated, read and written by compute as an image (GL4-0030).
      *
      * Transfers are the declared format's exact bytes, tightly packed. A readback asks GL for the
@@ -363,7 +363,7 @@ namespace CNA::Internal::Renderers::OpenGL4
     };
 
     /**
-     * @brief One `CNA::Graphics::Texture2DArray`: a `GL_TEXTURE_2D_ARRAY` (GL4-0037).
+     * @brief One sampled texture array: a `GL_TEXTURE_2D_ARRAY` (GL4-0037).
      *
      * Core since GL 3.0, so every context this renderer accepts has it. Each layer is stored exactly
      * as a `Texture2D` of the same SurfaceFormat is -- the same internal format, the same Direct3D 9

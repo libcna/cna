@@ -12,7 +12,7 @@ or renamed module stops this gate rather than inheriting a default. Paths whose 
 are `Internal` or `Detail` in any capitalization are excluded as implementation detail.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **556 headers**, **9355 symbols**, **8363 implemented**, **15 partial**, **468 planned**, **509 not applicable**. Explicitly excluded headers: **425**.
+Snapshot: **471 headers**, **8114 symbols**, **7058 implemented**, **15 partial**, **615 planned**, **426 not applicable**. Explicitly excluded headers: **468**.
 
 ## Out of runtime C API scope
 
@@ -23,16 +23,19 @@ not counted above, and their declarations are not missing C bindings.
 |---|---:|---|
 | `modules/c-api` | 0 | the C ABI itself; a binding cannot be a binding target |
 | `modules/content-pipeline` | 107 | CBIND-117, owner decision 2026-09-18: the Content Pipeline is a build-time tool, not part of the runtime a game links. `cna_c_api` does not link `cna_content_pipeline`, so its declarations cannot be missing *runtime* C bindings |
+| `modules/design` | 16 | design-time type converters are not linked by the runtime C ABI |
+| `modules/diagnostics` | 2 | the optional profiler interface has no C ABI routes |
+| `modules/inspector` | 3 | the optional inspector agent and protocol have no C ABI routes |
 | `modules/phone` | 9 | CBIND-117, owner decision 2026-09-18: `Microsoft::Phone::{Shell,Notification}` is the Windows Phone 7 application-lifecycle and push-notification API, not XNA 4.0. Nothing in the repository links `cna_phone`, and no plan row promises it C parity |
 | `modules/platform` | 27 | CBIND-047, owner decision 2026-08-16: the platform abstraction is the substrate the C ABI is built on, not a surface it exposes. Its public headers are its internal contract -- the renderers and the runtime are its consumers, not applications -- and IPlatform deals in C++ interfaces, unique_ptr ownership and virtual dispatch that have no C form |
-| `modules/renderers/**` | 138 | renderer implementations are hidden behind `IGraphicsRenderer` by project policy; a C caller selects a renderer by identity (`CNA_GraphicsRendererType`) and never names an implementation |
+| `modules/renderers/**` | 156 | renderer implementations are hidden behind `IGraphicsRenderer` by project policy; a C caller selects a renderer by identity (`CNA_GraphicsRendererType`) and never names an implementation |
 | `modules/audio` internal/detail paths | 9 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/content` internal/detail paths | 43 | implementation detail: a path segment is `Internal` or `Detail` |
-| `modules/core` internal/detail paths | 6 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/core` internal/detail paths | 7 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/devices` internal/detail paths | 13 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/devices-ext` internal/detail paths | 1 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/gamer-services` internal/detail paths | 1 | implementation detail: a path segment is `Internal` or `Detail` |
-| `modules/graphics` internal/detail paths | 32 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/graphics` internal/detail paths | 35 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/graphics-ext` internal/detail paths | 2 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/input` internal/detail paths | 4 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/media` internal/detail paths | 12 | implementation detail: a path segment is `Internal` or `Detail` |
@@ -40,7 +43,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `25a23672c19e7543ef3d152ebb482a360de7b80c961d95e64290d249427d7027`.
+Full inventory SHA-256: `c343ee70de3fa67bbd55edc48a8cf77fe8ce3f100b1da425969862cd880fa7d6`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:
@@ -59,20 +62,20 @@ owner, hashes the complete matrix, and compares this summary. The CTest
 
 | Module | Headers | Symbols | Implemented | Partial | Planned | N/A |
 |---|---:|---:|---:|---:|---:|---:|
-| `audio` | 22 | 310 | 217 | 0 | 0 | 93 |
-| `content` | 41 | 784 | 561 | 10 | 188 | 25 |
+| `audio` | 22 | 320 | 217 | 0 | 10 | 93 |
+| `content` | 41 | 802 | 561 | 10 | 207 | 24 |
 | `core` | 15 | 143 | 137 | 0 | 0 | 6 |
 | `devices` | 20 | 215 | 187 | 0 | 0 | 28 |
 | `devices-ext` | 17 | 84 | 79 | 0 | 0 | 5 |
-| `gamer-services` | 54 | 676 | 641 | 0 | 0 | 35 |
-| `graphics` | 143 | 2821 | 2639 | 0 | 116 | 66 |
-| `graphics-ext` | 98 | 1549 | 1335 | 0 | 133 | 81 |
-| `input` | 50 | 874 | 836 | 0 | 10 | 28 |
-| `math` | 24 | 938 | 927 | 0 | 10 | 1 |
-| `media` | 24 | 337 | 285 | 0 | 0 | 52 |
-| `net` | 23 | 269 | 252 | 1 | 0 | 16 |
-| `runtime` | 22 | 313 | 225 | 4 | 11 | 73 |
-| `storage` | 3 | 42 | 42 | 0 | 0 | 0 |
+| `gamer-services` | 54 | 683 | 637 | 0 | 11 | 35 |
+| `graphics` | 143 | 2938 | 2606 | 0 | 269 | 63 |
+| `graphics-ext` | 11 | 110 | 68 | 0 | 40 | 2 |
+| `input` | 51 | 894 | 836 | 0 | 30 | 28 |
+| `math` | 24 | 954 | 926 | 0 | 27 | 1 |
+| `media` | 24 | 338 | 285 | 0 | 1 | 52 |
+| `net` | 23 | 270 | 252 | 1 | 1 | 16 |
+| `runtime` | 23 | 319 | 225 | 4 | 17 | 73 |
+| `storage` | 3 | 44 | 42 | 0 | 2 | 0 |
 
 ## Status definitions
 

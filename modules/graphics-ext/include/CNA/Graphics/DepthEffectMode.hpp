@@ -5,7 +5,7 @@
 
 namespace CNA::Graphics {
 
-/** @addtogroup cnaext_engine
+/** @addtogroup cna_graphics_extensions
  *  @{
  */
 
@@ -37,7 +37,7 @@ namespace CNA::Graphics {
         Palette16,
     };
 
-/** @} */ // end of cnaext_engine
+/** @} */ // end of cna_graphics_extensions
 
 } // namespace CNA::Graphics
 

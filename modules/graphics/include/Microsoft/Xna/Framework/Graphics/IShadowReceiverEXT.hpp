@@ -16,11 +16,9 @@ namespace Microsoft::Xna::Framework::Graphics {
      * CNAEXT: not part of the XNA 4.0 API. XNA had no shadow support of any kind, so this is an
      * addition rather than a reinterpretation of something that existed.
      *
-     * It is deliberately always compiled, unlike the `CNA::Graphics` engine layer that generates
-     * the maps. Receiving a shadow is a per-draw property of a material -- exactly the shape of an
-     * `Effect` member -- and gating it behind a compile option would mean an effect's public
-     * surface changed with a build flag. Generating a shadow map is frame-level orchestration and
-     * stays in the engine layer; this is the seam between the two.
+     * This contract is always compiled so the effects' public shadow inputs are available in
+     * both extension configurations. Applications may provide their own shadow-map texture and
+     * matrices; no engine-level shadow-map producer is required.
      *
      * An effect that implements this carries the three values into `GpuDrawParams`. A renderer
      * without a shadow-sampling shader variant accepts them and ignores them, the same convention
@@ -36,8 +34,8 @@ namespace Microsoft::Xna::Framework::Graphics {
         /**
          * @brief Sets the shadow map to sample.
          *
-         * The texture holds light-space distance rather than a depth buffer; see
-         * `CNA::Graphics::ShadowMap` for why.
+         * The texture holds light-space distance rather than a depth buffer so every
+         * renderer can sample the same representation.
          *
          * @param shadowMap The map, or null to detach it.
          */
@@ -72,7 +70,7 @@ namespace Microsoft::Xna::Framework::Graphics {
         /**
          * @brief Sets the depth bias used when comparing against the map.
          *
-         * @param bias The bias; see `CNA::Graphics::ShadowMap::getDepthBias` for what it trades.
+         * @param bias The bias; see `shadow-map depth bias` for what it trades.
          */
         CNAEXT virtual void setShadowDepthBiasEXT(float bias) = 0;
 
@@ -83,10 +81,8 @@ namespace Microsoft::Xna::Framework::Graphics {
          * @brief Sets the percentage-closer-filtering radius, in shadow-map texels.
          *
          * 0 takes a single sample and gives a hard, stair-stepped edge; 1 averages a 3x3
-         * neighbourhood and 2 a 5x5 one. A plain integer rather than a `ShadowQuality`, because
-         * that enumeration belongs to the engine layer, which is compiled out by default -- an
-         * effect's public surface must not change with a build flag. `CNA::Graphics::ShadowMap`
-         * maps its quality onto this.
+         * neighbourhood and 2 a 5x5 one. The integer keeps this core effect contract
+         * independent of any shadow-map producer or extension build flag.
          *
          * @param radius Radius in texels; renderers clamp values outside 0..2.
          */

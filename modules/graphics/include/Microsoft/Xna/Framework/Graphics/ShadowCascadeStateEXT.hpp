@@ -18,7 +18,7 @@ namespace Microsoft::Xna::Framework::Graphics {
      * torn update it is. Passing them as one value makes that pairing impossible.
      *
      * Always compiled, like `IShadowReceiverEXT` itself, so an effect's public surface does not
-     * change with a build flag. The engine layer's `CNA::Graphics::CascadedShadowMap` fills it.
+     * change with a build flag. Applications or renderers may fill it.
      */
     CNAEXT struct ShadowCascadeStateEXT
     {

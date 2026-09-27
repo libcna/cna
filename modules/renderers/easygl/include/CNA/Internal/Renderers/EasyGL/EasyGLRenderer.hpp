@@ -751,8 +751,8 @@ namespace CNA::Internal::Renderers::EasyGL
         /**
          * @brief Allocates a GL buffer with exact portable roles and CPU-access intent.
          * @param byteSize Positive allocation size in bytes.
-         * @param usage Raw `CNA::Graphics::StorageBufferUsage` bits.
-         * @param cpuAccess Raw `CNA::Graphics::StorageBufferCpuAccess` bits.
+         * @param usage Raw `storage-buffer usage` bits.
+         * @param cpuAccess Raw `storage-buffer CPU-access` bits.
          */
         EasyGLStorageBufferRenderer(
             std::size_t byteSize, std::uint32_t usage = UINT32_C(0x0F),
@@ -808,12 +808,12 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] std::size_t GetByteSize() const override { return byteSize_; }
         /**
          * @brief Returns the immutable portable usage mask.
-         * @return Raw `CNA::Graphics::StorageBufferUsage` bits.
+         * @return Raw `storage-buffer usage` bits.
          */
         [[nodiscard]] std::uint32_t GetUsageEXT() const override { return usage_; }
         /**
          * @brief Returns the immutable direct CPU-access mask.
-         * @return Raw `CNA::Graphics::StorageBufferCpuAccess` bits.
+         * @return Raw `storage-buffer CPU-access` bits.
          */
         [[nodiscard]] std::uint32_t GetCpuAccessEXT() const override { return cpuAccess_; }
 
@@ -2192,8 +2192,8 @@ namespace CNA::Internal::Renderers::EasyGL
         /**
          * @brief Creates a GL buffer for the exact declared portable roles.
          * @param byteSize Positive allocation size in bytes.
-         * @param usage Raw `CNA::Graphics::StorageBufferUsage` bits.
-         * @param cpuAccess Raw `CNA::Graphics::StorageBufferCpuAccess` bits.
+         * @param usage Raw `storage-buffer usage` bits.
+         * @param cpuAccess Raw `storage-buffer CPU-access` bits.
          * @return The buffer, or null if a requested role is unsupported by the live context.
          */
         std::unique_ptr<IStorageBufferRenderer> CreateStorageBufferEXT(

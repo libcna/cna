@@ -381,10 +381,8 @@ if(CNA_BUILD_TESTS)
     # exercise the aggregate. This makes a clean CnaMathTests/CnaCoreTests build genuinely focused,
     # rather than merely omitting unrelated test sources while still building every CNA module.
     set(CNA_TEST_GROUP_DEPENDENCY_audio cna_audio cna_input cna_media)
-    # The content group includes GltfMaterialToPbrMaterialTests, whose contract deliberately
-    # crosses into the engine-layer material bridge implemented by cna_graphics_ext. Compile-only
-    # include visibility is insufficient: the focused executable must link that implementation.
-    set(CNA_TEST_GROUP_DEPENDENCY_content cna_content cna_graphics_ext)
+    # Core glTF/CNB imports use core PBR effects without graphics-ext.
+    set(CNA_TEST_GROUP_DEPENDENCY_content cna_content)
     # plans/plan_xnapipeline.md XNAP-90: cna_content_pipeline is the build-time-only module (the
     # FreeType-backed .spritefont route). It is deliberately absent from the CNA runtime umbrella,
     # so this group names it explicitly and CnaTests links it separately below.
@@ -400,10 +398,8 @@ if(CNA_BUILD_TESTS)
     set(CNA_TEST_GROUP_DEPENDENCY_devices_ext cna_devices_ext)
     set(CNA_TEST_GROUP_DEPENDENCY_gamer_services CNA_GamerServices)
     set(CNA_TEST_GROUP_DEPENDENCY_graphics cna_graphics_core)
-    # Engine resources such as Texture2DArray exercise their real GraphicsDevice ownership and
-    # renderer capability gate. Link the aggregate so this focused group receives the selected
-    # renderer registry as well as the graphics-ext implementation; cna_graphics_ext alone cannot
-    # construct a device because renderer families deliberately sit outside its dependency edge.
+    # The retained effects and DebugDraw create real graphics resources. Link the aggregate so
+    # this focused group receives the selected renderer registry and graphics-ext implementation.
     set(CNA_TEST_GROUP_DEPENDENCY_graphics_ext CNA)
     if(CNA_SHARP_RUNTIME_HAS_XML_SERIALIZATION)
         set(CNA_TEST_GROUP_DEPENDENCY_input cna_input SharpRuntime::Xml.Serialization)
@@ -1410,7 +1406,7 @@ if(CNA_BUILD_TESTS)
         "L0|GltfFixtureCorpus.*:GltfOracleEXT.*:GltfConformanceLadder.*:GltfSharedDefectPolicy.*:GltfRendererPbrFallbackPolicy.*:GltfRendererIndexWidthPolicy.*:GltfRendererPointTopologyPolicy.*:GltfDracoEncoderPin.*"
         "L1|GltfConformanceL1.*:GltfContainerRobustness.*:GltfContainerValidation.*:GltfUriContainment.*:GltfExternalBuffer.*:GltfExtensionRegistry.*:GltfLimitationsDoc.*:GltfVendoredCgltf.*"
         "L2|GltfConformanceL2.*:GltfAccessorDecodeLock.*:GltfBufferAndWeightForm.*:GltfIndexDecode.*:GltfIndexForm.*"
-        "L3|GltfConformanceL3.*:GltfAttributeCoverage.*:GltfImportCoreTest.*:GltfPrimitiveTopology.*:GltfMaterialState.*:GltfMaterialVariants.*:GltfMaterialBridgeTest.*:GltfMaterialExtensionsTest.*:GltfMaterialToPbrMaterialTest.*:GltfDrawTopology.*:GltfSamplerMapping.*:GltfImageSource.*:GltfUvChannel.*:GltfOcclusionRemap.*:GltfUnsupportedTexture.*:GltfUnlitMaterial.*:GltfDracoParity.*"
+        "L3|GltfConformanceL3.*:GltfAttributeCoverage.*:GltfImportCoreTest.*:GltfPrimitiveTopology.*:GltfMaterialState.*:GltfMaterialVariants.*:GltfMaterialExtensionsTest.*:GltfDrawTopology.*:GltfSamplerMapping.*:GltfImageSource.*:GltfUvChannel.*:GltfOcclusionRemap.*:GltfUnsupportedTexture.*:GltfUnlitMaterial.*:GltfDracoParity.*"
         "L4|GltfConformanceL4.*:GltfConventions.*:GltfImportReport.*:GltfNodeTransformOrder.*:GltfNodeHierarchy.*:GltfMirroring.*:GltfModelShape.*:GltfSceneGraphBones.*:GltfSkinSpaces.*:GltfSkinComposition.*:GltfSkinLadder.*:GltfRigidAnimation.*:GltfAnimationSampling.*:GltfAnimationRobustness.*:GltfClipAndLight.*:GltfCameras.*:GltfMorphWeights.*:GltfMorphBlending.*:GltfSceneSelection.*:GltfRealWorldAcceptanceL4.*"
         "L5|GltfConformanceL5.*:GltfStrideAndBuffer.*:GltfBufferOracle.*:GltfVertexBufferInvariants.*:GltfVertexLayoutTable.*:GltfNormalTangentCorpus.*"
         "L6|GltfConformanceL6.*:GltfDrawParamsOracleL6.*:GltfLightingPolicy.*:GltfLightBudget.*:GltfPbrBrdf.*"

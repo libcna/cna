@@ -6,15 +6,15 @@
 // composition over the real extension modules rather than a monolith. The extension
 // surfaces themselves are option-gated (CNA_CNAEXT / CNA_DEVICES, default OFF).
 #include "CNA/Devices/PowerState.hpp"
-#include "CNA/Graphics/RenderQuality.hpp"
+#include "CNA/Graphics/AsciiQuantizeMode.hpp"
 
 #include <cstdio>
 
 int main()
 {
 #if defined(CNA_CNAEXT) && defined(CNA_DEVICES)
-    std::printf("cnaext umbrella probe: quality=%d power=%d\n",
-                static_cast<int>(CNA::Graphics::RenderQuality::High),
+    std::printf("cnaext umbrella probe: ascii mode=%d power=%d\n",
+                static_cast<int>(CNA::Graphics::AsciiQuantizeMode::Color),
                 static_cast<int>(CNA::Devices::PowerState::Charging));
 #else
     std::printf("cnaext umbrella probe: extension surfaces gated off; "

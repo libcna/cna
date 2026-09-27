@@ -6020,19 +6020,10 @@ if (ProfileUsesGlslEs100())
         // mojoShaderContext_ is a raw pointer (no destructor of its own) and needs the GL context
         // still current, which platformContext_ (destroyed after this body returns) still owns.
         //
-        // Release the registered compiled effects FIRST, and through the same path context loss
-        // uses. A compiled effect can outlive this renderer: the CNAEXT engine layer holds its
-        // post-process passes by shared_ptr, and CNA::Graphics::SsrPass -> FullscreenPass owns a
-        // SpriteBatch whose EasyGL sprite renderer owns an EasyGLCompiledEffect. When that chain
-        // finally releases, ~EasyGLCompiledEffect calls MOJOSHADER_deleteEffect ->
-        // MOJOSHADER_glDeleteShader, which addresses the context destroyed below -- a segfault, not
-        // a leak. ReleaseForContextLossEXT deletes each native effect while the context is still
-        // current and nulls its pointers, so the later destructor finds nothing to free.
-        //
-        // Neither branch could see this alone: the effects are owned by SpriteBatch's renderer
-        // because of plans/plan_fx.md FX-129/FX-130/FX-131 on `next`, and the passes that outlive
-        // the renderer come from the engine-layer work on `vulkan`. It appeared when they met
-        // (2026-09-11), as CApi_EngineLayerSmoke crashing in teardown.
+        // Release registered compiled effects before the GL context is destroyed. A SpriteBatch
+        // or other effect owner can outlive this renderer; its later destructor would otherwise
+        // call MojoShader's GL deletion against a dead context. ReleaseForContextLossEXT clears
+        // each native effect while the context is still current, so later destruction is safe.
         //
         // The function's log line says "context recovery" because that is its other caller; the
         // work it does -- release every effect, then destroy the MojoShader context -- is exactly
@@ -6829,7 +6820,7 @@ if (!ProfileIsEs2ApiGeneration())
         // Two different answers for two different APIs. Desktop GL has GL_TIME_ELAPSED in core from
         // 3.3 (ARB_timer_query); ES has it only through GL_EXT_disjoint_timer_query, which many
         // drivers -- software rasterisers in particular -- simply do not ship. Where it is absent
-        // the answer is false, and CNA::Graphics::GpuTimer refuses rather than handing back a CPU
+        // the answer is false, and callers must not receive a CPU
         // clock reading: the whole reason to measure on the GPU is that the CPU number is the time
         // the driver took to *accept* the work.
         const auto& capabilities = device.capabilities();
@@ -6855,7 +6846,7 @@ if (!ProfileIsEs2ApiGeneration())
         // Desktop GL only, and not because ES lacks the entry point: ES 3.1 requires the texture
         // bound as an image to be immutable (glTexStorage2D), and every CNA texture is allocated
         // with glTexImage2D. Changing that is a change to the texture path every draw in the engine
-        // goes through, so this reports the truth instead -- and CNA::Graphics::ComputeShader
+        // goes through, so this reports the truth instead -- and a compute dispatch
         // refuses the binding rather than issuing one the driver will reject silently.
         return SupportsComputeShadersEXT() && device.capabilities().is_opengl();
     }

@@ -1,3 +1,8 @@
+> **Historical record:** The modern graphics-engine layer described below was removed in the
+> 2026-09 scope reduction. Current supported APIs are listed in
+> [current graphics-extension API](cnaext-engine-layer.md). Do not use the old code examples
+> or capability claims as current documentation.
+
 # Engine-layer coverage (`modules/graphics-ext/`)
 
 `plans/plan_modern.md` **MOD-1741**. Measured, not estimated — every number here came out of a real

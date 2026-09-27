@@ -17,8 +17,6 @@ namespace CNA::Internal::Renderers { class IEffectRenderer; }
 namespace CNA::Graphics {
     class ShaderCodeEXT;
     class ShaderPackageEXT;
-    class Texture2DArray;
-    class StorageTexture2D;
 }
 #endif
 
@@ -207,49 +205,7 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         CNAEXT void SetTexture(int unit, Texture3D& texture);
 
-#ifdef CNA_CNAEXT
-        /**
-         * @brief Binds a sampled two-dimensional texture array to a custom shader.
-         *
-         * Texture-array bindings occupy their own renderer-defined descriptor range; they never
-         * alias a `Texture2D`, cube or volume binding with an incompatible native view type.
-         *
-         * @param unit Zero-based texture-array sampler unit.
-         * @param texture Live texture-array resource to bind.
-         * @throws System::ObjectDisposedException If @p texture has been disposed.
-         * @throws System::NotSupportedException If the active renderer does not implement array
-         *         sampling or refuses @p unit.
-         */
-        CNAEXT void SetTextureArrayEXT(int unit, CNA::Graphics::Texture2DArray& texture);
 
-        /**
-         * @brief Clears a previously bound texture array from a custom shader.
-         *
-         * @param unit Zero-based texture-array sampler unit.
-         * @throws System::NotSupportedException If the active renderer does not implement array
-         *         sampling or refuses @p unit.
-         */
-        CNAEXT void ClearTextureArrayEXT(int unit);
-
-        /**
-         * @brief Binds a sampled storage texture to an ordinary two-dimensional sampler unit.
-         * @param unit Zero-based 2D sampler unit.
-         * @param texture Live storage texture with `Sampled` usage declared.
-         * @throws System::ObjectDisposedException If @p texture is disposed.
-         * @throws std::invalid_argument If the texture belongs to another graphics device or was
-         *         not created with sampled usage.
-         * @throws System::NotSupportedException If the renderer refuses the sampled binding.
-         */
-        CNAEXT void SetStorageTextureEXT(
-            int unit, CNA::Graphics::StorageTexture2D& texture);
-
-        /**
-         * @brief Clears a sampled storage texture from a two-dimensional sampler unit.
-         * @param unit Zero-based 2D sampler unit.
-         * @throws System::NotSupportedException If the renderer refuses the clear operation.
-         */
-        CNAEXT void ClearStorageTextureEXT(int unit);
-#endif
 
         /**
          * @brief Task 1079: enables a `ShaderEffect` to drive a real 3D `GraphicsDevice::

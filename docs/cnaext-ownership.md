@@ -1,3 +1,8 @@
+> **Historical record:** The modern graphics-engine layer described below was removed in the
+> 2026-09 scope reduction. Current supported APIs are listed in
+> [current graphics-extension API](cnaext-engine-layer.md). Do not use the old code examples
+> or capability claims as current documentation.
+
 # Who deletes what in `CNA::Graphics`
 
 `plans/plan_modern.md` **MOD-1903**. One table, so that no class in the engine layer is ambiguous about

@@ -1,4 +1,9 @@
 # NEXT.md
+> **Current graphics-extension scope (MOD-RETIRE-1, 2026-09-27):** The former modern
+> `CNA::Graphics` engine layer and optional `PbrMaterial` abstraction have been removed.
+> `AsciiPostProcessEffect`, `CRTEffect`, `DepthEffect`, `DebugDraw` and their small portable
+> shader support remain. Older task reports below describe the tree at their own dates.
+> See [the current API](docs/cnaext-engine-layer.md).
 
 ## SAMPLE-070 browser StorageDevice persistence (2026-09-26)
 

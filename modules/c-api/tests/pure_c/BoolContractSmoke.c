@@ -105,13 +105,6 @@ int main(void)
                (unsigned)result);
         ++accepted;
     }
-    result = cna_area_light_shading_coverage(0, 0, 0, 0, UINT8_C(9), 0);
-    if (result != CNA_RESULT_INVALID_ARGUMENT &&
-        result != CNA_RESULT_NOT_SUPPORTED) {
-        printf("accepted a non-canonical CNA_Bool (%u): cna_area_light_shading_coverage\n",
-               (unsigned)result);
-        ++accepted;
-    }
     result = cna_avatar_animation_update(0, 0, UINT8_C(9));
     if (result != CNA_RESULT_INVALID_ARGUMENT &&
         result != CNA_RESULT_NOT_SUPPORTED) {
@@ -154,13 +147,6 @@ int main(void)
                (unsigned)result);
         ++accepted;
     }
-    result = cna_cascaded_shadow_map_set_debug_tint_enabled(0, UINT8_C(9));
-    if (result != CNA_RESULT_INVALID_ARGUMENT &&
-        result != CNA_RESULT_NOT_SUPPORTED) {
-        printf("accepted a non-canonical CNA_Bool (%u): cna_cascaded_shadow_map_set_debug_tint_enabled\n",
-               (unsigned)result);
-        ++accepted;
-    }
     result = cna_cnb_model_set_flags(0, UINT8_C(9), UINT8_C(9));
     if (result != CNA_RESULT_INVALID_ARGUMENT &&
         result != CNA_RESULT_NOT_SUPPORTED) {
@@ -186,20 +172,6 @@ int main(void)
     if (result != CNA_RESULT_INVALID_ARGUMENT &&
         result != CNA_RESULT_NOT_SUPPORTED) {
         printf("accepted a non-canonical CNA_Bool (%u): cna_debug_draw_set_depth_tested\n",
-               (unsigned)result);
-        ++accepted;
-    }
-    result = cna_depth_normal_prepass_copy_depth_decode_glsl(UINT8_C(9), 0, 0, 0);
-    if (result != CNA_RESULT_INVALID_ARGUMENT &&
-        result != CNA_RESULT_NOT_SUPPORTED) {
-        printf("accepted a non-canonical CNA_Bool (%u): cna_depth_normal_prepass_copy_depth_decode_glsl\n",
-               (unsigned)result);
-        ++accepted;
-    }
-    result = cna_depth_normal_prepass_set_velocity_enabled_ext(0, UINT8_C(9));
-    if (result != CNA_RESULT_INVALID_ARGUMENT &&
-        result != CNA_RESULT_NOT_SUPPORTED) {
-        printf("accepted a non-canonical CNA_Bool (%u): cna_depth_normal_prepass_set_velocity_enabled_ext\n",
                (unsigned)result);
         ++accepted;
     }
@@ -235,13 +207,6 @@ int main(void)
     if (result != CNA_RESULT_INVALID_ARGUMENT &&
         result != CNA_RESULT_NOT_SUPPORTED) {
         printf("accepted a non-canonical CNA_Bool (%u): cna_effect_lights_set_enabled\n",
-               (unsigned)result);
-        ++accepted;
-    }
-    result = cna_effect_set_shadows_enabled_ext(0, UINT8_C(9));
-    if (result != CNA_RESULT_INVALID_ARGUMENT &&
-        result != CNA_RESULT_NOT_SUPPORTED) {
-        printf("accepted a non-canonical CNA_Bool (%u): cna_effect_set_shadows_enabled_ext\n",
                (unsigned)result);
         ++accepted;
     }
@@ -476,20 +441,6 @@ int main(void)
                (unsigned)result);
         ++accepted;
     }
-    result = cna_instanced_renderer_ext_set_fallback_enabled(0, UINT8_C(9));
-    if (result != CNA_RESULT_INVALID_ARGUMENT &&
-        result != CNA_RESULT_NOT_SUPPORTED) {
-        printf("accepted a non-canonical CNA_Bool (%u): cna_instanced_renderer_ext_set_fallback_enabled\n",
-               (unsigned)result);
-        ++accepted;
-    }
-    result = cna_instanced_renderer_ext_set_tints_enabled(0, UINT8_C(9));
-    if (result != CNA_RESULT_INVALID_ARGUMENT &&
-        result != CNA_RESULT_NOT_SUPPORTED) {
-        printf("accepted a non-canonical CNA_Bool (%u): cna_instanced_renderer_ext_set_tints_enabled\n",
-               (unsigned)result);
-        ++accepted;
-    }
     result = cna_invite_accepted_event_info_init(0, UINT8_C(9), 0);
     if (result != CNA_RESULT_INVALID_ARGUMENT &&
         result != CNA_RESULT_NOT_SUPPORTED) {
@@ -658,13 +609,6 @@ int main(void)
                (unsigned)result);
         ++accepted;
     }
-    result = cna_particle_system_set_simulation_on_cpu_ext(0, UINT8_C(9));
-    if (result != CNA_RESULT_INVALID_ARGUMENT &&
-        result != CNA_RESULT_NOT_SUPPORTED) {
-        printf("accepted a non-canonical CNA_Bool (%u): cna_particle_system_set_simulation_on_cpu_ext\n",
-               (unsigned)result);
-        ++accepted;
-    }
     result = cna_pbr_effect_set_double_sided_ext(0, UINT8_C(9));
     if (result != CNA_RESULT_INVALID_ARGUMENT &&
         result != CNA_RESULT_NOT_SUPPORTED) {
@@ -690,20 +634,6 @@ int main(void)
     if (result != CNA_RESULT_INVALID_ARGUMENT &&
         result != CNA_RESULT_NOT_SUPPORTED) {
         printf("accepted a non-canonical CNA_Bool (%u): cna_pbr_effect_set_vertex_color_enabled_ext\n",
-               (unsigned)result);
-        ++accepted;
-    }
-    result = cna_post_process_chain_set_gpu_timing_enabled(0, UINT8_C(9));
-    if (result != CNA_RESULT_INVALID_ARGUMENT &&
-        result != CNA_RESULT_NOT_SUPPORTED) {
-        printf("accepted a non-canonical CNA_Bool (%u): cna_post_process_chain_set_gpu_timing_enabled\n",
-               (unsigned)result);
-        ++accepted;
-    }
-    result = cna_render_pipeline_set_gpu_timing_enabled_ext(0, UINT8_C(9));
-    if (result != CNA_RESULT_INVALID_ARGUMENT &&
-        result != CNA_RESULT_NOT_SUPPORTED) {
-        printf("accepted a non-canonical CNA_Bool (%u): cna_render_pipeline_set_gpu_timing_enabled_ext\n",
                (unsigned)result);
         ++accepted;
     }
@@ -749,31 +679,10 @@ int main(void)
                (unsigned)result);
         ++accepted;
     }
-    result = cna_spatial_upscale_pass_set_edge_adaptive(0, UINT8_C(9));
-    if (result != CNA_RESULT_INVALID_ARGUMENT &&
-        result != CNA_RESULT_NOT_SUPPORTED) {
-        printf("accepted a non-canonical CNA_Bool (%u): cna_spatial_upscale_pass_set_edge_adaptive\n",
-               (unsigned)result);
-        ++accepted;
-    }
     result = cna_sprite_font_set_default_character(0, UINT8_C(9), 0);
     if (result != CNA_RESULT_INVALID_ARGUMENT &&
         result != CNA_RESULT_NOT_SUPPORTED) {
         printf("accepted a non-canonical CNA_Bool (%u): cna_sprite_font_set_default_character\n",
-               (unsigned)result);
-        ++accepted;
-    }
-    result = cna_ssao_pass_copy_occlusion_glsl(UINT8_C(9), 0, 0, 0);
-    if (result != CNA_RESULT_INVALID_ARGUMENT &&
-        result != CNA_RESULT_NOT_SUPPORTED) {
-        printf("accepted a non-canonical CNA_Bool (%u): cna_ssao_pass_copy_occlusion_glsl\n",
-               (unsigned)result);
-        ++accepted;
-    }
-    result = cna_ssao_pass_set_half_resolution(0, UINT8_C(9));
-    if (result != CNA_RESULT_INVALID_ARGUMENT &&
-        result != CNA_RESULT_NOT_SUPPORTED) {
-        printf("accepted a non-canonical CNA_Bool (%u): cna_ssao_pass_set_half_resolution\n",
                (unsigned)result);
         ++accepted;
     }
@@ -802,13 +711,6 @@ int main(void)
     if (result != CNA_RESULT_INVALID_ARGUMENT &&
         result != CNA_RESULT_NOT_SUPPORTED) {
         printf("accepted a non-canonical CNA_Bool (%u): cna_text_input_raise_text_editing_candidates_ext\n",
-               (unsigned)result);
-        ++accepted;
-    }
-    result = cna_tonemap_pass_set_deband_enabled(0, UINT8_C(9));
-    if (result != CNA_RESULT_INVALID_ARGUMENT &&
-        result != CNA_RESULT_NOT_SUPPORTED) {
-        printf("accepted a non-canonical CNA_Bool (%u): cna_tonemap_pass_set_deband_enabled\n",
                (unsigned)result);
         ++accepted;
     }

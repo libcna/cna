@@ -124,9 +124,8 @@ namespace CNA
          * stores unclamped float values, instead of the 8-bit `Color` target every renderer creates
          * today regardless of the requested format.
          *
-         * This is the foundation of the CNAEXT engine layer's HDR pipeline (`plans/plan_modern.md`
-         * Phase 1): without it a scene rendered to an off-screen target is clamped to [0,1] before
-         * tonemapping ever runs, which defeats the purpose of tonemapping. It is reported separately
+         * A scene rendered to a float off-screen target can preserve values above 1.0 for custom
+         * shaders and PBR lighting. This is reported separately
          * from `HalfFloatRenderTargets` because 16-bit float targets are far more widely available
          * than 32-bit ones -- notably on GLES 3.0 devices, where `GL_EXT_color_buffer_half_float`
          * is common and full float colour buffers are not.
@@ -149,11 +148,9 @@ namespace CNA
          * @brief 16-bit-per-channel (half) floating-point colour render targets --
          * `SurfaceFormat::HalfSingle`, `HalfVector2`, `HalfVector4` and `HdrBlendable`.
          *
-         * The practical HDR format: half the bandwidth and memory of a 32-bit float target, enough
-         * range and precision for scene-referred colour, and blendable on far more hardware. The
-         * CNAEXT engine layer's HDR scene target prefers `HdrBlendable` (an alias of `HalfVector4`
-         * in CNA) and falls back to `Color` with a one-time log when neither float capability is
-         * present. See `FloatRenderTargets` for why the two are separate entries.
+         * Half the bandwidth and memory of a 32-bit float target, with useful range for
+         * scene-referred colour and blending on more hardware. `HdrBlendable` is an alias of
+         * `HalfVector4` in CNA. See `FloatRenderTargets` for why the two are separate entries.
          */
         HalfFloatRenderTargets,
 
@@ -162,14 +159,11 @@ namespace CNA
          * to merely rendering into one.
          *
          * The two are separate hardware features and separate GL extensions: a context can render
-         * to `RGBA16F` and still only sample it with `NEAREST`. Bloom is where that bites -- its
-         * down/upsample chain is built on hardware-filtered half-resolution reads, and without
-         * linear filtering it must fall back to more taps at more cost for a worse result. The
-         * `CNA::Graphics` passes query this and document which fallback they take.
+         * to `RGBA16F` and still only sample it with `NEAREST`. Custom shaders that sample
+         * half-float textures can query this before selecting a filter.
          *
          * Reported for the half-float formats (`HalfSingle`/`HalfVector2`/`HalfVector4`/
-         * `HdrBlendable`), which are what the engine layer's targets use; 32-bit float filtering is
-         * rarer still and no CNA pass depends on it.
+         * `HdrBlendable`); 32-bit float filtering is a separate capability.
          */
         HalfFloatTextureLinearFiltering,
 

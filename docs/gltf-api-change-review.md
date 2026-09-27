@@ -1,5 +1,9 @@
 # glTF API-change review (`GLTF-025`)
 
+> Historical review: references below to the optional `CNA::Graphics::PbrMaterial` bridge
+> describe a removed alpha-stage extension. Runtime glTF loading still configures the core
+> `PbrEffect` and `SkinnedPbrEffect` directly.
+
 `plans/plan_gltf.md` §25's gate: **every proposed public or CNAEXT member is reviewed here, with its
 problem, shape, compatibility, migration and test recorded, before it is implemented.** A row that
 has not been through this file must not appear in a header.

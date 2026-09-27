@@ -1,5 +1,9 @@
 # Manifest shard: `cna-graphics`
 
+> **Current scope (MOD-RETIRE-1, 2026-09-27):** The large `CNA::Graphics` engine layer
+> has been removed. This manifest is retained as a historical audit record. The current public
+> graphics-extension surface is listed in [`docs/cnaext-engine-layer.md`](../../docs/cnaext-engine-layer.md).
+
 [<- Back to AUDIT_MANIFEST.md](../AUDIT_MANIFEST.md)
 
 Files in this shard: **79**

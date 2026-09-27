@@ -24,33 +24,12 @@ namespace Microsoft::Xna::Framework::Graphics {
 
 namespace CNA::Graphics {
 
-/** @addtogroup cnaext_engine
- *  @{
+/**
+ * @brief Draws simple wireframe debug geometry using core CNA/XNA graphics facilities.
+ *
+ * Use this utility for directions, bounds, camera frusta, collision volumes, triggers,
+ * waypoints, and other gameplay markers. It batches depth-tested and overlay lines.
  */
-
-    /**
-     * @brief Draws wireframe shapes for looking at what the engine layer is doing.
-     *
-     * plans/plan_modern.md `MOD-2160`. Nothing in this layer could draw a debug shape before, and the gap
-     * was felt directly: every frustum, probe grid, cluster slice and light bound built in Phase 20
-     * was verified by arithmetic, because there was no way to look at one.
-     *
-     * Everything submitted between @ref begin and @ref end is **accumulated into one vertex list and
-     * drawn in a single call** — two, when both depth modes are used. That is not an optimisation
-     * detail; a debug helper that costs a draw call per line is one nobody leaves switched on, and a
-     * helper only used when someone remembers to switch it on is not there when it is needed.
-     *
-     * ```cpp
-     * debug.begin(view, projection);
-     * debug.addBox(bounds, Color::Yellow);
-     * debug.setDepthTested(false);          // from here on, drawn through geometry
-     * debug.addFrustum(lightFrustum, Color::Cyan);
-     * debug.end();
-     * ```
-     *
-     * It draws lines and nothing else. A solid shape would need a fill rule, a winding convention
-     * and a lighting decision, and none of those help answer "is this box where I think it is".
-     */
     class DebugDraw final
     {
     public:
@@ -213,7 +192,6 @@ namespace CNA::Graphics {
         bool open_        = false;
     };
 
-/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

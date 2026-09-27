@@ -3002,7 +3002,7 @@ namespace CNA::Internal::GltfImport
             out.material.attenuationColorEXT =
                 Vector3(attenuation[0], attenuation[1], attenuation[2]);
             // glTF spells "absorbs nothing" as +Infinity, which no shader uniform can carry; it
-            // arrives as 0, the same spelling PbrMaterialExtensions uses for the same thing.
+            // arrives as 0.
             // cgltf's own sentinel for the absent value is FLT_MAX rather than an infinity, so the
             // test is a magnitude rather than std::isfinite -- which is exactly the difference the
             // first version of this got wrong, letting 3.4e38 through as a real distance.

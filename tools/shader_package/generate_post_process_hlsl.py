@@ -23,30 +23,6 @@ def run(command: list[str], timeout: int = 90) -> None:
             f"{' '.join(command)} failed:\n{result.stdout}{result.stderr}")
 
 
-def explicit_ssr_lod(source: str) -> str:
-    """Avoid FXC unrolling implicit derivatives in the ray loop; use mip zero."""
-    result: list[str] = []
-    position = 0
-    while (start := source.find(".Sample(", position)) >= 0:
-        result.append(source[position:start])
-        opening = start + len(".Sample")
-        depth = 0
-        for end in range(opening, len(source)):
-            if source[end] == "(":
-                depth += 1
-            elif source[end] == ")":
-                depth -= 1
-                if depth == 0:
-                    break
-        else:
-            raise ValueError("unbalanced HLSL Sample arguments")
-        result.append(
-            ".SampleLevel(" + source[opening + 1:end] + ", 0.0f)")
-        position = end + 1
-    result.append(source[position:])
-    return "".join(result)
-
-
 def translate(
     source: Path, glslang: Path, spirv_cross: Path, fxc: Path | None,
     scratch: Path, vertex_semantics: tuple[str, ...] = ("POSITION", "TEXCOORD", "COLOR"),
@@ -89,18 +65,6 @@ def translate(
     text = re.sub(
         r"(?m)^cbuffer ([A-Za-z0-9_]+)(?: : register\(b[0-9]+\))?",
         assign_slot, text)
-    if source.name == "color_grade_volume.vulkan.frag.glsl":
-        # The pass uses ShaderEffect texture unit 1 for every LUT layout. The
-        # Vulkan descriptor's binding 9 is separate from that runtime unit.
-        if (text.count("uLutVolume : register(t9)") != 1 or
-                text.count("_uLutVolume_sampler : register(s9)") != 1):
-            raise ValueError("volume-LUT shader binding changed; review its HLSL mapping")
-        text = text.replace("uLutVolume : register(t9)",
-                            "uLutVolume : register(t1)")
-        text = text.replace("_uLutVolume_sampler : register(s9)",
-                            "_uLutVolume_sampler : register(s1)")
-    if source.name == "ssr.vulkan.frag.glsl":
-        text = explicit_ssr_lod(text)
     if ")CNA_HLSL" in text:
         raise ValueError(f"{source.name} contains the raw-string delimiter")
     hlsl.write_text(text, encoding="utf-8")

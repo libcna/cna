@@ -12976,7 +12976,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // family below and was rendered with CNA's own shader instead of the game's -- a silent
         // wrong-shader result rather than a refusal, and the one case the two ordinary routes
         // already handled. It sits before the instance-stream search because a ShaderEffect draw
-        // with no per-instance stream is still an instanced draw (CNA::Graphics::ParticleSystem is
+        // with no per-instance stream is still an instanced draw (particle draws is
         // exactly that: a storage buffer, a ShaderEffect and an instance COUNT), and the fallback
         // below would have flattened it to a single instance.
         if (params.customEffectRenderer != nullptr)

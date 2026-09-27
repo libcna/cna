@@ -48,7 +48,7 @@ the current renderer has behavioral evidence across every in-scope family. See
 ## Software CPU-raster XNA/Core companion matrix (`SOFTWARE-128`)
 
 `✅` means the CPU implementation and public behavioral evidence are present. `N/A` is an
-intentional implementation-model difference, and `DEFERRED-CNAEXT` is outside this classic
+intentional implementation-model difference, and `OUTSIDE-SCOPE` is outside this classic
 XNA/Core campaign rather than a Software parity gap.
 
 | Feature family | Status | Evidence / boundary |
@@ -66,7 +66,7 @@ XNA/Core campaign rather than a Software parity gap.
 | SpriteBatch and SpriteFont | ✅ | Every draw/layout family, sort modes, transforms, sub-pixel placement, viewport/scissor/state/target interaction, glyph spacing/newline/fallback/flips/rotation/scale and deterministic disposal have shared public proof. |
 | Model.Draw orchestration | ✅ | Nine shared rigid/skinned hierarchy, effect, texture, content, index-width and sampled-animation scenes plus 122 shared Model unit checks. |
 | Resource lifecycle, validation and presentation reset | ✅ | Shared disposal/ownership/events/range checks and CPU backbuffer/MSAA/depth/stencil resize/reset behavior. Physical fullscreen or swap timing is not fabricated. |
-| Arbitrary ShaderEffect, PBR and modern engine pipeline | DEFERRED-CNAEXT | Custom shader execution, PBR/SkinnedPBR, compute/storage, HDR/post-processing, modern shadows/IBL and other `modules/graphics-ext` facilities are explicitly excluded. |
+| Custom ShaderEffect, PBR and standalone stylization effects | OUTSIDE-SCOPE | These CNA additions are outside this classic XNA/Core Software campaign; capability depends on the selected renderer. The former modern engine pipeline has been removed. |
 | Physical window, GPU context, swap chain and driver state | N/A | Software owns no native window or graphics context; `Present()` completes synchronously while preserving the CPU framebuffer. |
 
 The **Stub** renderer (`CNA_GRAPHICS_RENDERER=STUB`, tracked in `../plans/plan_stub.md`) is, like Headless,

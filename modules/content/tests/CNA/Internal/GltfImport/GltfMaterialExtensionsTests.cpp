@@ -159,7 +159,7 @@ TEST(GltfMaterialExtensionsTest, ClearcoatSheenTransmissionVolumeAndIridescenceA
 TEST(GltfMaterialExtensionsTest, AnInfiniteAttenuationDistanceArrivesAsTheValueMeaningInfinite)
 {
     // glTF spells "the medium absorbs nothing" as +Infinity, which is not a number a shader uniform
-    // can carry. It has to arrive as the zero that PbrMaterialExtensions uses for the same thing,
+    // can carry. It has to arrive as zero,
     // or every volume with the extension's default would absorb everything after one unit.
     const MaterialOut material = MaterialOf(DocumentWith(
         R"({ "KHR_materials_volume": { "thicknessFactor": 1.0 } })",

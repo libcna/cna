@@ -45,7 +45,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     class SdlGpuRenderer;
 
     /**
-     * @brief `SDL_gpu`-backed `CNA::Graphics::StorageBuffer`. CNAEXT.
+     * @brief `SDL_gpu`-backed storage buffer. CNAEXT.
      *
      * One `SDL_GPUBuffer` plus a CPU shadow copy. The shadow is not a cache: it is what a
      * `Constant`-usage buffer is pushed from (SDL has no uniform-buffer resource), and what a
@@ -59,8 +59,8 @@ namespace CNA::Internal::Renderers::SdlGpu
          *
          * @param owner Owning renderer; supplies the device.
          * @param byteSize Size in bytes; must be positive.
-         * @param usage `CNA::Graphics::StorageBufferUsage` mask.
-         * @param cpuAccess `CNA::Graphics::StorageBufferCpuAccess` mask.
+         * @param usage `storage-buffer usage` mask.
+         * @param cpuAccess `storage-buffer CPU-access` mask.
          * @throws std::runtime_error If `SDL_CreateGPUBuffer` fails.
          */
         SdlGpuStorageBufferRenderer(SdlGpuRenderer& owner, std::size_t byteSize,
@@ -129,7 +129,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     };
 
     /**
-     * @brief `SDL_gpu`-backed `CNA::Graphics::StorageTexture2D`. CNAEXT.
+     * @brief `SDL_gpu`-backed storage texture. CNAEXT.
      *
      * One `SDL_GPUTexture` carrying whichever of the compute storage-read, storage-write and
      * sampler usages the descriptor asked for. `SDL_gpu` has no separate storage-image object: a
@@ -146,7 +146,7 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @param height Height in texels; positive.
          * @param mipLevelCount Levels to allocate; at least one.
          * @param surfaceFormat `SurfaceFormat` ordinal.
-         * @param usage `CNA::Graphics::StorageTexture2DUsage` mask.
+         * @param usage `storage-texture usage` mask.
          * @throws std::runtime_error If the format is unsupported or creation fails.
          */
         SdlGpuStorageTexture2DRenderer(SdlGpuRenderer& owner, int width, int height,
@@ -219,7 +219,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     };
 
     /**
-     * @brief `SDL_gpu`-backed `CNA::Graphics::ComputeShader`. CNAEXT.
+     * @brief `SDL_gpu`-backed compute shader. CNAEXT.
      *
      * Takes SPIR-V only, through the same descriptor translation the graphics path uses. The
      * pipeline is created on first successful compile, because `SDL_CreateGPUComputePipeline`

@@ -26,8 +26,5 @@ authoring tools only; CNA runtime targets never load or link them.
 
 SPIR-V is compiled at shaderc's `performance` level unless the manifest says otherwise, and every
 package that predates the field keeps that default byte for byte. `performance` drops `OpName` and
-`OpMemberName`. Vulkan's `ComputeShader::setUniform` binds a scalar by its push-constant **member
-name**, so a package whose compute program uses named scalar uniforms declares
-`"optimization": "zero"`, which keeps the names; the chosen level is recorded in the header as
-`kCompilerOptimization` (`plans/plan_vulkan_modern_graphics.md` VMG-0012). The engine layer's own
-packages avoid named scalars instead (constant buffers, packed vectors), which is equally portable.
+`OpMemberName`; use `"optimization": "zero"` when a package needs those names for reflection.
+The chosen level is recorded in the header as `kCompilerOptimization`.

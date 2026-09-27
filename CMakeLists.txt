@@ -175,7 +175,7 @@ message(STATUS "CNA: diagnostics ${CNA_DIAGNOSTICS}")
 # (modules/<name>/examples/CMakeLists.txt, modules/renderers/<family>/examples/CMakeLists.txt);
 # this option keeps its historical configure-wide meaning.
 option(CNA_BUILD_EXAMPLES "Build CNA example applications (house3d demo, demo_2d, ...)" ON)
-option(CNA_CNAEXT "Enable CNA CNAEXT extended graphics layer (beyond XNA 4.0)" OFF)
+option(CNA_CNAEXT "Enable standalone ASCII, CRT, colour-depth and DebugDraw graphics extensions" OFF)
 option(CNA_DEVICES "Enable CNA-specific device/sensor extensions beyond XNA 4.0 (battery, camera, clipboard, ...)" OFF)
 option(CNA_ENABLE_NET "Build CNA networking (GamerServices + Net, requires ENet)" ON)
 # The C API adapts the whole canonical aggregate, GamerServices included: it links CNA_GamerServices

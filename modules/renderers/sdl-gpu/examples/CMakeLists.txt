@@ -117,17 +117,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # resources, looking for the lifetime failures that only appear after thousands of cycles. Not
     # registered with ctest: it takes minutes rather than seconds and is run deliberately, the way
     # the other renderers' stress programs are.
-    cna_sdlgpu_test(cna_test_sdlgpu_modern_stress sdlgpu_modern_stress_test.cpp)
+
 
     # SMG-0040: no storage buffer's native SDL_GPUBuffer survives SDL_DestroyGPUDevice, in any
     # destruction order -- counted through the renderer's resource hook, and in a Debug build also
     # through the validation layer, whose live-object report fails the entry.
-    cna_sdlgpu_test(cna_test_sdlgpu_storage_buffer_lifetime sdlgpu_storage_buffer_lifetime_test.cpp)
-    cna_register_renderer_test(NAME SdlGpu_StorageBufferLifetime
-        COMMAND cna_test_sdlgpu_storage_buffer_lifetime
-        TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
-    set_tests_properties(SdlGpu_StorageBufferLifetime PROPERTIES
-        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-;\\[FAIL\\]")
+
+
+
 
     # SMG-0038: forces SDL_gpu's Vulkan defragmenter over a texture allocation, three times, and
     # reads the surviving textures back. The vendored SDL crashed here before its upstream fix.
@@ -599,10 +596,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # plans/plan_street_sdlgpu.md STREETS-0003: an engine-layer pass reads a half-float render
     # target through the linear filter it asked for. FullscreenPass exists only with CNAEXT.
     if(CNA_CNAEXT)
-        cna_sdlgpu_test(cna_test_sdlgpu_halffloat_filtering sdlgpu_halffloat_filtering_test.cpp)
-        cna_register_renderer_test(NAME SdlGpu_HalfFloatFiltering
-            COMMAND cna_test_sdlgpu_halffloat_filtering
-            TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+
+
     endif()
 
     # GLTF-213: exact PBR sRGB transfer witnesses on rigid and identity-skinned pipelines.

@@ -116,31 +116,18 @@ own version from `CNA::getVersionString()` in `CNA/Version.hpp`.
   supplies the final deterministic L7 image/disposition gate.
 - **Read `docs/gltf-limitations.md` before choosing CNA for a glTF pipeline.** It lists every
   approximation and every unsupported feature next to the report field that names the loss at run
-  time. `CNAEXT.md` §3.2 carries the same information as a per-capability status table.
+  time. The older `misc/CNAEXT.md` design is historical; use the current glTF limitations document.
 
-### The CNAEXT Engine Layer (opt-in, experimental, `CNA::Graphics`)
+### Standalone CNA graphics extensions (`CNA_CNAEXT`)
 
-- **Maturity: the API is still moving.** Every subsystem below is implemented and tested, and the
-  HDR spine runs end to end — but the layer is at engine revision 10, and earlier revisions already
-  carried renames. Build against a pinned CNA revision, read `CNA_CNAEXT_ENGINE_VERSION` and
-  [`docs/cnaext-engine-changelog.md`](docs/cnaext-engine-changelog.md) when you move, and expect
-  more of the same. [`CNAEXT.md`](misc/CNAEXT.md) §9.1 says exactly which parts are settled (the layer's
-  shape, the ownership rules, the naming conventions) and which are not (per-renderer behaviour
-  outside EasyGL, the set of device queries, compute).
-- Everything above the XNA API — HDR render targets and tonemapping, a post-process chain
-  (bloom, SSAO, FXAA), directional/cascaded/point/spot shadows, skybox and image-based lighting,
-  a PBR material bound straight to the effect, instancing with LOD and frustum culling, and
-  compute shaders with storage buffers — lives in `modules/graphics-ext/` behind the `CNA_CNAEXT`
-  CMake option, which is **OFF by default**. With it off the layer does not exist and a game
-  renders exactly what it rendered before; a ctest enforces that every file in the module is
-  guarded.
-- Read [`CNAEXT.md`](misc/CNAEXT.md) for the design, [`docs/cnaext-engine-layer.md`](docs/cnaext-engine-layer.md)
-  for the capability boundary per subsystem and per renderer,
-  [`docs/cnaext-getting-started.md`](docs/cnaext-getting-started.md) to try it, and `plans/plan_modern.md`
-  / `NEXT_modern.md` for the task backlog and the running ledger.
-- EasyGL (`OPENGLES3`/`OPENGL33`) is the reference renderer. Every other renderer is measured, not
-  assumed: the per-identity matrix in `docs/cnaext-engine-layer.md` names all 49 with a status, and
-  a ctest fails if one is missing from it.
+`CNA_CNAEXT=ON` enables the small `modules/graphics-ext` surface: `AsciiPostProcessEffect`,
+`CRTEffect`, `DepthEffect` (colour-depth and palette reduction), and `DebugDraw`. CRT and Depth
+are ordinary `ShaderEffect` descendants usable with render targets and SpriteBatch; ASCII has a
+direct draw API. `DebugDraw` batches wireframe lines, bounds, spheres and frusta using `BasicEffect`.
+The option is off by default. See [graphics extension guide](docs/cnaext-engine-layer.md).
+
+The XNA-compatible graphics core, renderer backends, custom shaders, `PbrEffect` and
+`SkinnedPbrEffect`, glTF loading, and CNB/CNJ content pipeline do not depend on this option.
 
 ### Cross-Platform Direction
 

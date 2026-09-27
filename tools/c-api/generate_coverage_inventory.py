@@ -87,6 +87,9 @@ MODULE_SCOPE: dict[str, tuple[str, str]] = {
     "net": (Scope.RUNTIME, ""),
     "runtime": (Scope.RUNTIME, ""),
     "storage": (Scope.RUNTIME, ""),
+    "design": (Scope.OUT_OF_SCOPE, "design-time type converters are not linked by the runtime C ABI"),
+    "diagnostics": (Scope.OUT_OF_SCOPE, "the optional profiler interface has no C ABI routes"),
+    "inspector": (Scope.OUT_OF_SCOPE, "the optional inspector agent and protocol have no C ABI routes"),
     "c-api": (
         Scope.OUT_OF_SCOPE,
         "the C ABI itself; a binding cannot be a binding target",
@@ -791,105 +794,22 @@ CNAEXT_SLICE_OWNERS: dict[str, str] = {
     "input/TouchPanel": "CBIND-083",
     "runtime/DrawableGameComponent": "CBIND-083",
     # CBIND-084 -- 121 rows
-    "graphics-ext/BlitPass": "CBIND-084",
-    "graphics-ext/ComputeShader": "CBIND-084",
-    "graphics-ext/DepthEncoding": "CBIND-084",
-    "graphics-ext/EffectPass": "CBIND-084",
-    "graphics-ext/EngineException": "CBIND-084",
-    "graphics-ext/EngineLayerVersion": "CBIND-084",
-    "graphics-ext/FullscreenPass": "CBIND-084",
-    "graphics-ext/GpuTimer": "CBIND-084",
-    "graphics-ext/MaterialBinding": "CBIND-084",
-    "graphics-ext/PostProcessContext": "CBIND-084",
-    "graphics-ext/PostProcessPass": "CBIND-084",
-    "graphics-ext/RenderTargetPool": "CBIND-084",
-    "graphics-ext/RequireCapability": "CBIND-084",
-    "graphics-ext/ScopedRenderTarget": "CBIND-084",
-    "graphics-ext/ShaderDiagnostics": "CBIND-084",
-    "graphics-ext/ShaderEffectFactory": "CBIND-084",
-    "graphics-ext/StorageBuffer": "CBIND-084",
     # CBIND-085 -- 209 rows
-    "graphics-ext/CascadedShadowMap": "CBIND-085",
-    "graphics-ext/ClusteredShadowPolicyEXT": "CBIND-085",
-    "graphics-ext/ContactShadowPass": "CBIND-085",
-    "graphics-ext/CubeShadowMap": "CBIND-085",
-    "graphics-ext/DepthNormalPrepass": "CBIND-085",
-    "graphics-ext/DirectionalLightEXT": "CBIND-085",
-    "graphics-ext/PointLightEXT": "CBIND-085",
-    "graphics-ext/ShadowMap": "CBIND-085",
-    "graphics-ext/SpotLightEXT": "CBIND-085",
-    "graphics-ext/SpotShadowMap": "CBIND-085",
     "graphics/IShadowReceiverEXT": "CBIND-085",
     "graphics/PunctualLightEXT": "CBIND-085",
     "graphics/ShadowCascadeStateEXT": "CBIND-085",
     # CBIND-086 -- 116 rows
-    "graphics-ext/ClusteredForwardEffect": "CBIND-086",
-    "graphics-ext/ClusteredLightAssignment": "CBIND-086",
-    "graphics-ext/ClusteredLightBuffer": "CBIND-086",
-    "graphics-ext/ClusteredLightCompute": "CBIND-086",
-    "graphics-ext/ClusteredLightEXT": "CBIND-086",
-    "graphics-ext/ClusteredLightGrid": "CBIND-086",
-    "graphics-ext/ClusteredLightSetEXT": "CBIND-086",
-    "graphics-ext/ClusteredLightType": "CBIND-086",
     # CBIND-087 -- 177 rows
-    "graphics-ext/GltfMaterialBridge": "CBIND-087",
-    "graphics-ext/PbrMaterial": "CBIND-087",
-    "graphics-ext/PbrMaterialExtensions": "CBIND-087",
-    "graphics-ext/ThinFilmIridescence": "CBIND-087",
-    "graphics-ext/TransparencyMode": "CBIND-087",
-    "graphics-ext/TransparentDrawList": "CBIND-087",
-    "graphics-ext/WeightedBlendedTransparency": "CBIND-087",
     "graphics/PbrEffect": "CBIND-087",
     "graphics/SkinnedPbrEffect": "CBIND-087",
     # CBIND-088 -- 117 rows
-    "graphics-ext/RenderPipeline": "CBIND-088",
-    "graphics-ext/RenderPipelineSettings": "CBIND-088",
     # CBIND-089 -- 232 rows
-    "graphics-ext/AerialPerspectivePass": "CBIND-089",
-    "graphics-ext/AsciiPass": "CBIND-089",
-    "graphics-ext/BloomPass": "CBIND-089",
-    "graphics-ext/ChromaticAberrationPass": "CBIND-089",
-    "graphics-ext/DecalPass": "CBIND-089",
-    "graphics-ext/DepthOfFieldPass": "CBIND-089",
-    "graphics-ext/FilmGrainPass": "CBIND-089",
-    "graphics-ext/FxaaPass": "CBIND-089",
-    "graphics-ext/HeightFogPass": "CBIND-089",
-    "graphics-ext/LensFlarePass": "CBIND-089",
-    "graphics-ext/LightShaftPass": "CBIND-089",
-    "graphics-ext/MotionBlurPass": "CBIND-089",
-    "graphics-ext/PostProcessChain": "CBIND-089",
-    "graphics-ext/SpatialUpscalePass": "CBIND-089",
-    "graphics-ext/SsaoPass": "CBIND-089",
-    "graphics-ext/SsrPass": "CBIND-089",
-    "graphics-ext/VolumetricFogPass": "CBIND-089",
     # CBIND-090 -- 87 rows
-    "graphics-ext/AutoExposureEXT": "CBIND-090",
-    "graphics-ext/ColorGradePass": "CBIND-090",
-    "graphics-ext/CubeLut": "CBIND-090",
-    "graphics-ext/HdrDisplayOutput": "CBIND-090",
-    "graphics-ext/LutInterpolation": "CBIND-090",
-    "graphics-ext/TonemapPass": "CBIND-090",
-    "graphics-ext/TonemappingMode": "CBIND-090",
     "graphics/DisplayColorSpace": "CBIND-090",
     # CBIND-091 -- 137 rows
-    "graphics-ext/AreaLightBrdfTable": "CBIND-091",
-    "graphics-ext/AreaLightShading": "CBIND-091",
-    "graphics-ext/AtmosphericSky": "CBIND-091",
-    "graphics-ext/EnvironmentProcessor": "CBIND-091",
-    "graphics-ext/LightProbeBaker": "CBIND-091",
-    "graphics-ext/LightProbeEXT": "CBIND-091",
-    "graphics-ext/LightProbeVolumeEXT": "CBIND-091",
-    "graphics-ext/Skybox": "CBIND-091",
-    "graphics/AreaLightEXT": "CBIND-091",
     "graphics/ImageBasedLightEXT": "CBIND-091",
     # CBIND-092 -- 157 rows
     "graphics-ext/DebugDraw": "CBIND-092",
-    "graphics-ext/DebugGizmos": "CBIND-092",
-    "graphics-ext/FrustumCullerEXT": "CBIND-092",
-    "graphics-ext/GpuInstanceCuller": "CBIND-092",
-    "graphics-ext/InstancedRendererEXT": "CBIND-092",
-    "graphics-ext/LodGroupEXT": "CBIND-092",
-    "graphics-ext/ParticleSystem": "CBIND-092",
     "graphics/GraphicsImageAccess": "CBIND-092",
     "graphics/GraphicsMemoryBarrier": "CBIND-092",
     "graphics/IndirectDrawArguments": "CBIND-092",
@@ -902,21 +822,8 @@ CNAEXT_SLICE_OWNERS: dict[str, str] = {
 }
 
 
-# CBIND-084C, 2026-08-26. One symbol whose owner is not its header's slice. PostProcessContext's
-# `settings` field points at a RenderPipelineSettings, and the C form of that type is still a
-# subset of the canonical one; binding the field now would silently apply engine defaults for
-# every field the subset omits. The field therefore waits for CBIND-088, which owns the settings
-# type, while the rest of the struct is bound by CBIND-084C.
+# Active symbol-level deferrals are tracked below.
 SYMBOL_OWNER_OVERRIDES: dict[str, str] = {
-    # Every entry that stood here has expired. The two material-extension ones went when CBIND-087A
-    # bound PbrMaterialExtensions, the four image-based-light ones and the two light-probe ones when
-    # CBIND-091A bound the types that carry them, the two skybox ones when CBIND-091B bound Skybox,
-    # and setAreaLight when CBIND-091C bound AreaLightEXT and the BRDF table. The table is kept
-    # rather than deleted because the discipline it enforces -- a deferral names its owner and is
-    # removed in the commit that binds it -- outlives the entries.
-    # The two CBIND-088B skybox entries that stood here expired when CBIND-091B bound Skybox and
-    # the pipeline pair that carries it, and the four CBIND-087C image-based-light entries expired
-    # when CBIND-091A bound ImageBasedLightEXT.
     # CBIND-120, 2026-08-30. The current `next` merges added these public CNAEXT queries after the
     # graphics binding slice had closed. Recording them as new binding work does not authorize
     # growing the C ABI during Content Pipeline integration.
@@ -1077,12 +984,20 @@ UNMAPPED_RUNTIME_SURFACE_TASK = "CBIND-127"
 # planned row left is dead weight and `validate_reopened_slices` says so, so the set shrinks as the
 # backlog is bound rather than accumulating.
 REOPENED_SLICES: frozenset[str] = frozenset({
+    "graphics/BasicEffect",
+    "graphics/DynamicIndexBuffer",
+    "graphics/DynamicVertexBuffer",
+    "graphics/SkinnedEffect",
+    "math/Color",
+    "math/Matrix",
+    "math/Quaternion",
+    "math/Vector2",
+    "math/Vector3",
+    "media/Song",
     "content/CnbSoundEffectCodec",   # was CBIND-110
     "content/CnbTextureCodec",       # was CBIND-108
     "content/ContentManager",        # was CBIND-105
     "content/ReflectiveTypeReader",  # was CBIND-114
-    "graphics-ext/ComputeShader",    # was CBIND-084
-    "graphics-ext/StorageBuffer",    # was CBIND-084
     "graphics/GraphicsDevice",       # was CBIND-093
     "graphics/ShaderEffect",         # was CBIND-093
     "graphics/TextureCube",          # was CBIND-080

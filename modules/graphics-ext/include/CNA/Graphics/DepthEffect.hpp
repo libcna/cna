@@ -10,7 +10,7 @@
 
 namespace CNA::Graphics {
 
-/** @addtogroup cnaext_engine
+/** @addtogroup cna_graphics_extensions
  *  @{
  */
 
@@ -88,7 +88,7 @@ namespace CNA::Graphics {
         bool paletteTexturesBuilt_ = false;
     };
 
-/** @} */ // end of cnaext_engine
+/** @} */ // end of cna_graphics_extensions
 
 } // namespace CNA::Graphics
 

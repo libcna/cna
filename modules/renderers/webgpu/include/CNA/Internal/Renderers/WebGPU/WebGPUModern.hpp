@@ -158,7 +158,7 @@ namespace CNA::Internal::Renderers::WebGPU
     };
 
     /**
-     * @brief A WebGPU buffer implementing `CNA::Graphics::StorageBuffer`.
+     * @brief A WebGPU buffer implementing the storage-buffer renderer contract.
      *
      * The native usage is the declared portable usage plus Storage, CopySrc and CopyDst: every
      * record can be read back, written and byte-copied (see `CopyBytesEXT`), whatever roles the
@@ -225,7 +225,7 @@ namespace CNA::Internal::Renderers::WebGPU
     };
 
     /**
-     * @brief A WebGPU sampled two-dimensional texture array (`CNA::Graphics::Texture2DArray`).
+     * @brief A WebGPU sampled two-dimensional texture array .
      */
     class WebGPUTexture2DArrayRenderer final : public ITexture2DArrayRenderer,
                                                public IWebGPUModernResourceEXT
@@ -283,7 +283,7 @@ namespace CNA::Internal::Renderers::WebGPU
     };
 
     /**
-     * @brief A WebGPU storage texture (`CNA::Graphics::StorageTexture2D`).
+     * @brief A WebGPU storage texture .
      */
     class WebGPUStorageTexture2DRenderer final : public IStorageTexture2DRenderer,
                                                  public IWebGPUModernResourceEXT
@@ -411,7 +411,7 @@ namespace CNA::Internal::Renderers::WebGPU
     };
 
     /**
-     * @brief A WGSL compute program (`CNA::Graphics::ComputeShader`).
+     * @brief A WGSL compute program .
      *
      * The binding contract (docs/webgpu-renderer.md, "Modern shader payloads"): every resource in
      * `@group(0)`, addressed by its binding number -- storage and uniform buffers, sampled textures
@@ -500,7 +500,7 @@ namespace CNA::Internal::Renderers::WebGPU
     };
 
     /**
-     * @brief A GPU timer over timestamp queries (`CNA::Graphics::GpuTimer`).
+     * @brief A GPU timer over timestamp queries .
      *
      * `Begin()` and `End()` each become a one-entry timestamp write, submitted in public order (the
      * pending draws before each are flushed first), and resolved into a mappable buffer. The result

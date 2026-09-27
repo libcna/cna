@@ -246,8 +246,7 @@ namespace CNA::Internal::Renderers
      * @brief A GPU buffer a compute shader reads and writes (an SSBO, in GL terms).
      *
      * plans/plan_modern.md `MOD-1501`. Deliberately byte-oriented and free of every XNA type: a storage
-     * buffer holds whatever a shader says it holds, and the public `CNA::Graphics::StorageBuffer`
-     * wrapper is where a typed view over it belongs.
+     * buffer holds whatever a shader says it holds, and a higher-level caller may place a typed view over it.
      */
     class IStorageBufferRenderer
         : public std::enable_shared_from_this<IStorageBufferRenderer>
@@ -322,7 +321,7 @@ namespace CNA::Internal::Renderers
 
         /**
          * @brief Returns the immutable portable usage mask.
-         * @return Raw `CNA::Graphics::StorageBufferUsage` bits.
+         * @return Raw `storage-buffer usage` bits.
          */
         [[nodiscard]] virtual std::uint32_t GetUsageEXT() const
         {
@@ -332,7 +331,7 @@ namespace CNA::Internal::Renderers
 
         /**
          * @brief Returns the immutable portable direct CPU-access mask.
-         * @return Raw `CNA::Graphics::StorageBufferCpuAccess` bits.
+         * @return Raw `storage-buffer CPU-access` bits.
          */
         [[nodiscard]] virtual std::uint32_t GetCpuAccessEXT() const
         {
@@ -794,7 +793,7 @@ namespace CNA::Internal::Renderers
     /**
      * @brief Renderer-owned record for one sampled two-dimensional texture array.
      *
-     * `CNA::Graphics::Texture2DArray` owns this record through shared lifetime identity so future
+     * A sampled texture array can own this record through shared lifetime identity so future
      * sampled bindings can retain internal work safely without retaining or dereferencing the
      * public `GraphicsResource`. The interface intentionally exposes no native image/view handle.
      * Layer and mip transfers are part of plans/plan_modern.md `MOD-2226`; defaults refuse them
@@ -835,7 +834,7 @@ namespace CNA::Internal::Renderers
     /**
      * @brief Renderer-owned record for one two-dimensional storage texture.
      *
-     * `CNA::Graphics::StorageTexture2D` owns this record through shared lifetime identity so a
+     * A storage texture can own this record through shared lifetime identity so a
      * deferred compute binding can retain native work without retaining or dereferencing the
      * public `GraphicsResource`. The interface deliberately exposes no native image/view handle.
      * Defaults refuse transfers so an unimplemented renderer cannot silently discard bytes.
@@ -1698,7 +1697,7 @@ namespace CNA::Internal::Renderers
         /// BasicEffect (lit path only): camera world-space position for specular half-vector.
         float eyePositionWorld[3] = {0,0,0};
         /// plans/plan_modern.md MOD-821: shadow reception. `shadowMap` holds light-space distance (not a
-        /// depth buffer -- CNA cannot sample a depth attachment; see CNA::Graphics::ShadowMap), and
+        /// depth buffer -- CNA cannot sample a depth attachment), and
         /// `lightViewProjColMajor` takes a world position into that map's space. Defaults mean "no
         /// shadows", and a renderer with no shadow-sampling variant accepts and ignores them, the
         /// same convention the PBR fields use.
@@ -1733,7 +1732,7 @@ namespace CNA::Internal::Renderers
         /// draw that has never heard of punctual lights leaves it there, which is what keeps this
         /// free. 1 is a point light (shadowed by `punctualShadowCube`), 2 a spot light (shadowed
         /// by `punctualShadowMap` through `punctualViewProjColMajor`). Both maps store *distance
-        /// from the light over its range*, not projected depth; see CNA::Graphics::CubeShadowMap.
+        /// from the light over its range*, not projected depth; see a cube shadow-map producer.
         int   punctualKind = 0;
         float punctualPosition[3]  = {0, 0, 0};
         float punctualDirection[3] = {0, -1, 0};
@@ -2022,8 +2021,7 @@ namespace CNA::Internal::Renderers
         /// The (N.V across, roughness down) scale/bias table. Row 0 is roughness 0.
         const ITextureRenderer* iblBrdfLut = nullptr;
         /// How many mips the prefiltered cube was generated with. The shader's mip for a given
-        /// roughness is `roughness * (count - 1)`, which is CNA::Graphics::EnvironmentProcessor::
-        /// mipForRoughness -- the same formula on both sides, by construction rather than by
+        /// roughness is `roughness * (count - 1)`, which is the prefiltering rule -- the same formula on both sides, by construction rather than by
         /// agreement.
         int   iblPrefilteredMipCount = 1;
         /// Multiplies the whole environment contribution. The products are 8-bit, so an
@@ -2917,7 +2915,7 @@ namespace CNA::Internal::Renderers
          * @param layerCount Number of array layers.
          * @param mipLevelCount Number of allocated mip levels.
          * @param surfaceFormat `SurfaceFormat` ordinal.
-         * @param usage `CNA::Graphics::Texture2DArrayUsage` bit mask.
+         * @param usage `texture-array usage` bit mask.
          * @return Renderer-owned record, or null when this path is unavailable.
          */
         virtual std::unique_ptr<ITexture2DArrayRenderer> CreateTexture2DArrayEXT(
@@ -2938,7 +2936,7 @@ namespace CNA::Internal::Renderers
          * @param height Level-zero height in texels.
          * @param mipLevelCount Number of allocated mip levels.
          * @param surfaceFormat `SurfaceFormat` ordinal.
-         * @param usage `CNA::Graphics::StorageTexture2DUsage` bit mask.
+         * @param usage `storage-texture usage` bit mask.
          * @return Renderer-owned record, or null when this path is unavailable.
          */
         virtual std::unique_ptr<IStorageTexture2DRenderer> CreateStorageTexture2DEXT(
@@ -3024,8 +3022,7 @@ namespace CNA::Internal::Renderers
         /// Microsoft::Xna::Framework::Graphics::SurfaceFormat ordinal, exactly as
         /// CreateRenderTarget2DEXT is to CreateRenderTarget2D. The default forwards and ignores the
         /// format, so every renderer keeps its Color-only cube behaviour until it implements more;
-        /// the CNAEXT engine layer needs this for image-based lighting, whose irradiance and
-        /// prefiltered-specular products are float cube maps rendered face by face.
+        /// core image-based lighting may use float cube maps rendered face by face.
         virtual std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCubeEXT(
             int size, int depthFormat, bool preserveContents, bool mipMap,
             int multiSampleCount, int /*surfaceFormat*/)
@@ -3080,8 +3077,8 @@ namespace CNA::Internal::Renderers
          * constructor continues through the factory above.
          *
          * @param byteSize Positive allocation size.
-         * @param usage Raw `CNA::Graphics::StorageBufferUsage` bits.
-         * @param cpuAccess Raw `CNA::Graphics::StorageBufferCpuAccess` bits.
+         * @param usage Raw `storage-buffer usage` bits.
+         * @param cpuAccess Raw `storage-buffer CPU-access` bits.
          * @return Renderer-side buffer record, or null when unsupported.
          */
         virtual std::unique_ptr<IStorageBufferRenderer> CreateStorageBufferEXT(
@@ -3102,10 +3099,9 @@ namespace CNA::Internal::Renderers
         /// actually determines the pixels. Three renderers answer this differently from
         /// `GraphicsCapability::CustomEffects`, and each way is legitimate: SOFTWARE and HEADLESS
         /// *accept* any shader source and render with their own fixed path instead (a documented
-        /// decision, not a bug), and Vulkan compiles SPIR-V bytecode rather than the GLSL text the
-        /// engine layer writes. A post-process pass that believes its shader ran on those
-        /// renderers produces a copy of its input and reports success, which is the one outcome
-        /// worse than refusing. False by default, for the same reason every other promise here is.
+        /// decision, not a bug), and Vulkan compiles SPIR-V bytecode rather than GLSL text.
+        /// Custom-shader callers need this distinction. False by default, like the other
+        /// capability promises here.
         [[nodiscard]] virtual bool ExecutesShaderEffectSourceEXT() const { return false; }
 
         /// plans/plan_modern.md MOD-1699: whether this renderer's lit shaders actually SAMPLE the

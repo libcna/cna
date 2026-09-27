@@ -80,7 +80,7 @@ namespace CNA::Internal::Renderers::WebGPU
         }
 
         // The byte-granular copy. WebGPU's copies and queue writes need 4-byte-aligned offsets and
-        // sizes, and CNA::Graphics::StorageBuffer promises arbitrary byte ranges (setBytes at an odd
+        // sizes, and the storage-buffer renderer contract promises arbitrary byte ranges (setBytes at an odd
         // offset, copyTo between odd offsets). Each invocation owns one destination word, merges
         // exactly the bytes of the range into it and leaves the others, so neighbouring bytes are
         // never touched. The source is always a separate staging buffer, so no binding aliases.
@@ -1081,7 +1081,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
 
     namespace
     {
-        /// `CNA::Graphics::StorageBufferUsage::IndirectArguments`, as the portable bit the public
+        /// `storage-buffer usage::IndirectArguments`, as the portable bit the public
         /// descriptor carries. Named here rather than included because the enum lives in the
         /// engine layer, which this renderer does not depend on.
         constexpr std::uint32_t kStorageUsageIndirectArgumentsEXT = UINT32_C(1) << 3;

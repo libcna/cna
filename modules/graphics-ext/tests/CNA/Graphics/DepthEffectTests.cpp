@@ -14,21 +14,22 @@
 
 #include "CNA/Graphics/DepthEffect.hpp"
 #include "CNA/Graphics/DitherMode.hpp"
-#include "CNA/Graphics/EffectPass.hpp"
-#include "CNA/Graphics/PostProcessContext.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/ShaderLanguageEXT.hpp"
-#include "EngineTestSupport.hpp"
+#include "RetroGraphicsTestSupport.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
 
 using CNA::Graphics::DepthEffect;
 using CNA::Graphics::DepthEffectMode;
 using CNA::Graphics::DitherMode;
-using CNA::Graphics::EffectPass;
-using CNA::Graphics::PostProcessContext;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Graphics::Effect;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
@@ -46,13 +47,15 @@ namespace {
     gd.Clear(sourceColor);
     gd.SetRenderTarget(nullptr);
 
-    EffectPass pass(gd, &effect, "Depth");
-    PostProcessContext context;
-    context.source = &source;
-    context.destination = &destination;
-    context.width = width;
-    context.height = height;
-    pass.apply(context);
+    using namespace Microsoft::Xna::Framework::Graphics;
+    gd.SetRenderTarget(&destination);
+    SpriteBatch batch(gd);
+    SamplerState pointClamp = SamplerState::PointClamp;
+    batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque,
+                &pointClamp, nullptr, nullptr, &effect);
+    batch.Draw(source, Microsoft::Xna::Framework::Rectangle(0, 0, width, height), Color::White);
+    batch.End();
+    gd.SetRenderTarget(nullptr);
 
     std::vector<Color> pixels(static_cast<std::size_t>(width * height), Color::Black);
     destination.GetData(pixels.data(), static_cast<int>(pixels.size()));
@@ -97,7 +100,7 @@ void ExpectNearColor(const Color& actual, const Color& expected, const int toler
 
 TEST(DepthEffectTest, DefaultModeIsColor16Bit)
 {
-    CnaTest::EngineLayer::HiDefDevice gd;
+    CnaTest::RetroGraphics::HiDefDevice gd;
     DepthEffect fx(gd);
 
     EXPECT_EQ(fx.getMode(), DepthEffectMode::Color16Bit);
@@ -105,7 +108,7 @@ TEST(DepthEffectTest, DefaultModeIsColor16Bit)
 
 TEST(DepthEffectTest, SelectsTheBestShaderPackageVariant)
 {
-    CnaTest::EngineLayer::HiDefDevice gd;
+    CnaTest::RetroGraphics::HiDefDevice gd;
     DepthEffect fx(gd);
 
     if (gd.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::SpirV,
@@ -127,7 +130,7 @@ TEST(DepthEffectTest, SelectsTheBestShaderPackageVariant)
 
 TEST(DepthEffectTest, DefaultDitherModeIsNone)
 {
-    CnaTest::EngineLayer::HiDefDevice gd;
+    CnaTest::RetroGraphics::HiDefDevice gd;
     DepthEffect fx(gd);
 
     EXPECT_EQ(fx.getDitherMode(), DitherMode::None);
@@ -135,7 +138,7 @@ TEST(DepthEffectTest, DefaultDitherModeIsNone)
 
 TEST(DepthEffectTest, SetDitherModeRoundTripsForEveryMode)
 {
-    CnaTest::EngineLayer::HiDefDevice gd;
+    CnaTest::RetroGraphics::HiDefDevice gd;
     DepthEffect fx(gd);
 
     const DitherMode ditherModes[] = {
@@ -153,7 +156,7 @@ TEST(DepthEffectTest, SetDitherModeRoundTripsForEveryMode)
 
 TEST(DepthEffectTest, SetModeRoundTripsForEveryMode)
 {
-    CnaTest::EngineLayer::HiDefDevice gd;
+    CnaTest::RetroGraphics::HiDefDevice gd;
     DepthEffect fx(gd);
 
     const DepthEffectMode modes[] = {
@@ -175,7 +178,7 @@ TEST(DepthEffectTest, SetModeRoundTripsForEveryMode)
 
 TEST(DepthEffectTest, ApplyDoesNotCrashWithoutARenderer)
 {
-    CnaTest::EngineLayer::HiDefDevice gd;
+    CnaTest::RetroGraphics::HiDefDevice gd;
     DepthEffect fx(gd);
 
     fx.setMode(DepthEffectMode::Grayscale1Bit);
@@ -188,7 +191,7 @@ TEST(DepthEffectTest, ApplyDoesNotCrashWithoutARenderer)
 // mode, rather than crashing on GraphicsDevice::GetRenderer()'s "no renderer" exception.
 TEST(DepthEffectTest, ApplyDoesNotCrashForPaletteModesWithoutARenderer)
 {
-    CnaTest::EngineLayer::HiDefDevice gd;
+    CnaTest::RetroGraphics::HiDefDevice gd;
     DepthEffect fx(gd);
 
     fx.setMode(DepthEffectMode::Palette256);
@@ -200,7 +203,7 @@ TEST(DepthEffectTest, ApplyDoesNotCrashForPaletteModesWithoutARenderer)
 
 TEST(DepthEffectTest, GetTypeNameReturnsCnaGraphicsDepthEffect)
 {
-    CnaTest::EngineLayer::HiDefDevice gd;
+    CnaTest::RetroGraphics::HiDefDevice gd;
     DepthEffect fx(gd);
 
     EXPECT_EQ(fx.GetTypeName(), "CNA.Graphics.DepthEffect");
@@ -208,7 +211,7 @@ TEST(DepthEffectTest, GetTypeNameReturnsCnaGraphicsDepthEffect)
 
 TEST(DepthEffectTest, CloneReturnsIndependentDepthEffectWithSameModeAndDitherMode)
 {
-    CnaTest::EngineLayer::HiDefDevice gd;
+    CnaTest::RetroGraphics::HiDefDevice gd;
     DepthEffect fx(gd);
     fx.setMode(DepthEffectMode::Grayscale2Bit);
     fx.setDitherMode(DitherMode::Bayer4x4);
@@ -230,7 +233,7 @@ TEST(DepthEffectTest, CloneReturnsIndependentDepthEffectWithSameModeAndDitherMod
 
 TEST(DepthEffectTest, CloneReturnsIndependentDepthEffectWithSamePaletteMode)
 {
-    CnaTest::EngineLayer::HiDefDevice gd;
+    CnaTest::RetroGraphics::HiDefDevice gd;
     DepthEffect fx(gd);
     fx.setMode(DepthEffectMode::Palette16);
 
@@ -243,7 +246,7 @@ TEST(DepthEffectTest, CloneReturnsIndependentDepthEffectWithSamePaletteMode)
 
 TEST(DepthEffectTest, RgbBitDepthModesUseTheirExactChannelLayoutsAndPreserveAlpha)
 {
-    CnaTest::EngineLayer::HiDefDevice gd;
+    CnaTest::RetroGraphics::HiDefDevice gd;
     DepthEffect fx(gd);
     CNA_REQUIRE_PORTABLE_DEPTH(gd, fx);
     fx.setDitherMode(DitherMode::None);
@@ -264,7 +267,7 @@ TEST(DepthEffectTest, RgbBitDepthModesUseTheirExactChannelLayoutsAndPreserveAlph
 
 TEST(DepthEffectTest, GrayscaleModesUseBt601LumaAndTheirExactLevelCounts)
 {
-    CnaTest::EngineLayer::HiDefDevice gd;
+    CnaTest::RetroGraphics::HiDefDevice gd;
     DepthEffect fx(gd);
     CNA_REQUIRE_PORTABLE_DEPTH(gd, fx);
     fx.setDitherMode(DitherMode::None);
@@ -294,7 +297,7 @@ TEST(DepthEffectTest, GrayscaleModesUseBt601LumaAndTheirExactLevelCounts)
 
 TEST(DepthEffectTest, PaletteModesSelectTheActualNearestWebSafeAndEgaEntries)
 {
-    CnaTest::EngineLayer::HiDefDevice gd;
+    CnaTest::RetroGraphics::HiDefDevice gd;
     DepthEffect fx(gd);
     CNA_REQUIRE_PORTABLE_DEPTH(gd, fx);
     fx.setDitherMode(DitherMode::None);
@@ -314,7 +317,7 @@ TEST(DepthEffectTest, PaletteModesSelectTheActualNearestWebSafeAndEgaEntries)
 
 TEST(DepthEffectTest, Bayer4x4UsesTheEasyGlPhysicalRowOrientation)
 {
-    CnaTest::EngineLayer::HiDefDevice gd;
+    CnaTest::RetroGraphics::HiDefDevice gd;
     DepthEffect fx(gd);
     CNA_REQUIRE_PORTABLE_DEPTH(gd, fx);
     fx.setMode(DepthEffectMode::Grayscale1Bit);
@@ -342,7 +345,7 @@ TEST(DepthEffectTest, Bayer4x4UsesTheEasyGlPhysicalRowOrientation)
 
 TEST(DepthEffectTest, Bayer8x8UsesAllSixtyFourOrderedThresholds)
 {
-    CnaTest::EngineLayer::HiDefDevice gd;
+    CnaTest::RetroGraphics::HiDefDevice gd;
     DepthEffect fx(gd);
     CNA_REQUIRE_PORTABLE_DEPTH(gd, fx);
     fx.setMode(DepthEffectMode::Grayscale1Bit);

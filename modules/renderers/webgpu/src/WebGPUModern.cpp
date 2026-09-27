@@ -29,14 +29,14 @@ namespace CNA::Internal::Renderers::WebGPU
             return (value + alignment - 1) / alignment * alignment;
         }
 
-        // The portable usage bits of CNA::Graphics::StorageBufferUsage, kept numeric here because
+        // The portable usage bits of storage-buffer usage, kept numeric here because
         // this renderer does not include the engine-layer headers.
         constexpr std::uint32_t kUsageIndirectArguments = UINT32_C(1) << 3;
         constexpr std::uint32_t kUsageVertex = UINT32_C(1) << 4;
         constexpr std::uint32_t kUsageIndex = UINT32_C(1) << 5;
         constexpr std::uint32_t kUsageConstant = UINT32_C(1) << 6;
 
-        // CNA::Graphics::Texture2DArrayUsage / StorageTexture2DUsage bits.
+        // texture-array usage / StorageTexture2DUsage bits.
         constexpr std::uint32_t kArrayUsageTransferSource = UINT32_C(1) << 2;
         constexpr std::uint32_t kStorageUsageRead = UINT32_C(1) << 0;
         constexpr std::uint32_t kStorageUsageWrite = UINT32_C(1) << 1;

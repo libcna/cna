@@ -15,7 +15,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
 namespace CNA::Graphics
 {
-    /** @addtogroup cnaext_engine
+    /** @addtogroup cna_graphics_extensions
      *  @{
      */
 
@@ -216,7 +216,7 @@ namespace CNA::Graphics
         std::vector<ShaderBindingRequirementEXT> bindingRequirements_;
     };
 
-    /** @} */ // end of cnaext_engine
+    /** @} */ // end of cna_graphics_extensions
 }
 
 #endif // CNA_CNAEXT

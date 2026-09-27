@@ -414,7 +414,7 @@ namespace CNA::Internal::Renderers::Vulkan
         VulkanRenderer* owner_      = nullptr;
     };
 
-    /** @brief Vulkan-owned image record behind `CNA::Graphics::Texture2DArray`. */
+    /** @brief Vulkan-owned image record behind a sampled texture array. */
     class VulkanTexture2DArrayRenderer final
         : public ITexture2DArrayRenderer
         , public IVulkanArraySamplable
@@ -509,7 +509,7 @@ namespace CNA::Internal::Renderers::Vulkan
         VkImageView imageView_ = VK_NULL_HANDLE;
     };
 
-    /** @brief Vulkan image record behind `CNA::Graphics::StorageTexture2D`. */
+    /** @brief Vulkan image record behind a storage texture. */
     class VulkanStorageTexture2DRenderer final : public IStorageTexture2DRenderer
     {
         friend class VulkanRenderer;
@@ -1586,8 +1586,8 @@ namespace CNA::Internal::Renderers::Vulkan
          *
          * @param owner The Vulkan renderer that owns the device.
          * @param byteSize The positive buffer size.
-         * @param usage Raw `CNA::Graphics::StorageBufferUsage` bits.
-         * @param cpuAccess Raw `CNA::Graphics::StorageBufferCpuAccess` bits.
+         * @param usage Raw `storage-buffer usage` bits.
+         * @param cpuAccess Raw `storage-buffer CPU-access` bits.
          */
         VulkanStorageBufferRenderer(
             VulkanRenderer* owner, std::size_t byteSize,

@@ -12,7 +12,7 @@ namespace Microsoft::Xna::Framework::Graphics { class GraphicsDevice; }
 
 namespace CNA::Graphics {
 
-/** @addtogroup cnaext_engine
+/** @addtogroup cna_graphics_extensions
  *  @{
  */
 
@@ -133,7 +133,7 @@ namespace CNA::Graphics {
         int lastGridRows_ = 0;
     };
 
-/** @} */ // end of cnaext_engine
+/** @} */ // end of cna_graphics_extensions
 
 } // namespace CNA::Graphics
 

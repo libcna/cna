@@ -176,25 +176,6 @@ namespace
         excluded.push_back("GltfDracoEncoderPin");
         excluded.push_back("GltfDracoParity");
 #endif
-        // The focused CnaContentTests binary owns this ladder but deliberately contains only the
-        // content test-object group. GltfMaterialBridgeTest lives in graphics-ext; PbrMaterialTest
-        // is a same-group sentinel that distinguishes the aggregate CnaTests binary (where the
-        // bridge MUST be registered) from the focused binary (where source presence is the honest
-        // boundary). Do not key this on CNA_CNAEXT: CnaContentTests links cna_graphics_ext for the
-        // content-owned material conversion tests even though it does not consume graphics-ext's
-        // test objects.
-        if (!IsTestSuiteRegistered("PbrMaterialTest"))
-        {
-            excluded.push_back("GltfMaterialBridgeTest");
-        }
-#ifndef CNA_CNAEXT
-        // plans/plan_modern.md MOD-1309/MOD-1310: the glTF-to-PbrMaterial bridge belongs to the engine
-        // layer, which is compiled out by default, so this content-owned conversion suite does not
-        // exist in that build. Same treatment as the Draco pair: excluded from the "must be
-        // registered" side, and its source presence checked instead, so a rung cannot come to name
-        // a suite nobody wrote.
-        excluded.push_back("GltfMaterialToPbrMaterialTest");
-#endif
         return excluded;
     }
 
@@ -210,16 +191,6 @@ namespace
         {
             source = RepositoryRoot() / "modules" / "content" / "tests" / "CNA" /
                 "Internal" / "GltfImport" / "GltfDracoCorpusTests.cpp";
-        }
-        else if (suite == "GltfMaterialToPbrMaterialTest")
-        {
-            source = RepositoryRoot() / "modules" / "content" / "tests" / "CNA" / "Internal" /
-                "GltfImport" / "GltfMaterialToPbrMaterialTests.cpp";
-        }
-        else if (suite == "GltfMaterialBridgeTest")
-        {
-            source = RepositoryRoot() / "modules" / "graphics-ext" / "tests" / "CNA" /
-                "Graphics" / "GltfMaterialBridgeTests.cpp";
         }
         else { return false; }
         std::ifstream file(source);

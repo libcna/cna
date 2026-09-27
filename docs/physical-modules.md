@@ -110,7 +110,7 @@ implemented on `feature/module-examples` and promoted to `develop` on 2026-08-10
   public profile (the easygl family's suite serves OPENGLES3/OPENGL33/WEBGL1/WEBGL2; the
   profile stays visible in target/ctest names).
 - **Extension examples** live with their extension module:
-  `modules/graphics-ext/examples/` (cnaext_settings_example, depth/crt effect demos — all
+  `modules/graphics-ext/examples/` (ASCII oracles and depth/CRT effect demos — all
   CNAEXT).
 - **Registration is module-local**: each owning module's `CMakeLists.txt` enters
   `examples/CMakeLists.txt` via `add_subdirectory(examples)`; the historical configure

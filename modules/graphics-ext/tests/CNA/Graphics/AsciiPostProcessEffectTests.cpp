@@ -15,7 +15,7 @@
 
 #include "CNA/Graphics/AsciiPostProcessEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
-#include "EngineTestSupport.hpp"
+#include "RetroGraphicsTestSupport.hpp"
 
 using CNA::Graphics::AsciiPostProcessEffect;
 using CNA::Graphics::AsciiQuantizeMode;
@@ -23,7 +23,7 @@ using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 
 TEST(AsciiPostProcessEffectTest, DefaultCellSizeIsEightByEight)
 {
-    CnaTest::EngineLayer::HiDefDevice gd;
+    CnaTest::RetroGraphics::HiDefDevice gd;
     AsciiPostProcessEffect fx(gd);
 
     int width = 0, height = 0;
@@ -34,7 +34,7 @@ TEST(AsciiPostProcessEffectTest, DefaultCellSizeIsEightByEight)
 
 TEST(AsciiPostProcessEffectTest, SetCellSizeRoundTrips)
 {
-    CnaTest::EngineLayer::HiDefDevice gd;
+    CnaTest::RetroGraphics::HiDefDevice gd;
     AsciiPostProcessEffect fx(gd);
 
     fx.setCellSize(16, 4);
@@ -46,7 +46,7 @@ TEST(AsciiPostProcessEffectTest, SetCellSizeRoundTrips)
 
 TEST(AsciiPostProcessEffectTest, SetCellSizeRejectsNonPositiveValues)
 {
-    CnaTest::EngineLayer::HiDefDevice gd;
+    CnaTest::RetroGraphics::HiDefDevice gd;
     AsciiPostProcessEffect fx(gd);
 
     EXPECT_THROW(fx.setCellSize(0, 8), std::invalid_argument);
@@ -63,7 +63,7 @@ TEST(AsciiPostProcessEffectTest, SetCellSizeRejectsNonPositiveValues)
 
 TEST(AsciiPostProcessEffectTest, SetQuantizeModeRoundTripsForBothModes)
 {
-    CnaTest::EngineLayer::HiDefDevice gd;
+    CnaTest::RetroGraphics::HiDefDevice gd;
     AsciiPostProcessEffect fx(gd);
 
     fx.setQuantizeMode(AsciiQuantizeMode::BlackWhite);
@@ -75,7 +75,7 @@ TEST(AsciiPostProcessEffectTest, SetQuantizeModeRoundTripsForBothModes)
 
 TEST(AsciiPostProcessEffectTest, GetLastGridDimensionsStartsAtZero)
 {
-    CnaTest::EngineLayer::HiDefDevice gd;
+    CnaTest::RetroGraphics::HiDefDevice gd;
     AsciiPostProcessEffect fx(gd);
 
     int columns = -1, rows = -1;
@@ -86,7 +86,7 @@ TEST(AsciiPostProcessEffectTest, GetLastGridDimensionsStartsAtZero)
 
 TEST(AsciiPostProcessEffectTest, ConstructingMultipleIndependentEffectsDoesNotThrow)
 {
-    CnaTest::EngineLayer::HiDefDevice gd;
+    CnaTest::RetroGraphics::HiDefDevice gd;
     auto exercise = [&gd]()
     {
         AsciiPostProcessEffect a(gd);

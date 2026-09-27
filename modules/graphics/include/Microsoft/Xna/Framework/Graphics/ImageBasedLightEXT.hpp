@@ -16,7 +16,7 @@ namespace Microsoft::Xna::Framework::Graphics {
      *
      * The split-sum approximation needs three things at once, and they must have been generated
      * together: the diffuse irradiance cube, the specular cube whose mips are a roughness ramp,
-     * and the BRDF table indexed by (N·V, roughness). `CNA::Graphics::EnvironmentProcessor`
+     * and the BRDF table indexed by (N·V, roughness). Environment prefiltering
      * produces all three. Pairing a prefiltered cube with a mip count from a different one is the
      * failure this struct exists to prevent -- it does not look like a mismatch, it looks like the
      * material's roughness is wrong.

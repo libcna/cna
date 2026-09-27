@@ -15,7 +15,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 {
     namespace
     {
-        // CNA::Graphics::StorageBufferUsage, which this layer receives as a plain mask.
+        // storage-buffer usage, which this layer receives as a plain mask.
         constexpr std::uint32_t kUsageStorage = 1u << 0;
         constexpr std::uint32_t kUsageTransferSource = 1u << 1;
         constexpr std::uint32_t kUsageTransferDestination = 1u << 2;
@@ -299,7 +299,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     namespace
     {
-        // CNA::Graphics::StorageTexture2DUsage.
+        // storage-texture usage.
         constexpr std::uint32_t kTextureStorageRead = 1u << 0;
         constexpr std::uint32_t kTextureStorageWrite = 1u << 1;
         constexpr std::uint32_t kTextureSampled = 1u << 2;

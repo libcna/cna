@@ -390,7 +390,7 @@ namespace CNA::Internal::GltfImport
          * @brief `KHR_materials_volume.attenuationDistance`, or 0 for the extension's infinity.
          *
          * glTF spells "absorbs nothing" as `+Infinity`, which is not a value a shader uniform can
-         * carry, so it arrives here as 0 -- the same spelling `PbrMaterialExtensions` uses.
+         * carry, so it arrives here as 0.
          */
         float attenuationDistanceEXT = 0.0f;
         /** @brief `KHR_materials_volume.attenuationColor` (extension default white). */
