@@ -474,6 +474,8 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     void WebGPURenderer::BeforeModernResourceWriteEXT()
     {
         if (pendingDrawsUseModernResourcesEXT_) FlushPendingDrawsForModernEXT();
+        // WEBGPUPERF-0006: a flush only records; the write must still land after those passes.
+        OrderExternalQueueWorkEXT();
     }
 
     WGPUShaderModule WebGPURenderer::CreateShaderModuleCheckedEXT(
@@ -556,6 +558,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
                                                 std::vector<WGPUBuffer> transient,
                                                 std::vector<WGPUBindGroup> bindGroups)
     {
+        OrderExternalQueueWorkEXT();   // WEBGPUPERF-0006: the frame's recorded passes go first.
         WGPUCommandBufferDescriptor descriptor{};
         descriptor.label = Label("CNA WebGPU modern commands");
         WGPUCommandBuffer commands = wgpuCommandEncoderFinish(encoder, &descriptor);

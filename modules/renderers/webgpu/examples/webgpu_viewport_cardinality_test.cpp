@@ -165,7 +165,10 @@ class WebGpuViewportCardinalityTest : public Game
             auto rt = MakeTarget(dev);
             dev.SetRenderTarget(rt.get());
             // Baseline INSIDE the cycle: binding a target flushes whatever the backbuffer had
-            // pending, which is not what this check is measuring.
+            // pending, which is not what this check is measuring. plans/plan_webgpu_perf.md
+            // WEBGPUPERF-0006: that flush is recorded into the frame's encoder rather than
+            // submitted, so it is submitted here, and the cycle's own submission forced at its end.
+            renderer.OrderExternalQueueWorkEXT();
             const std::size_t pass0 = renderer.GetRenderPassCountEXT();
             const std::size_t submit0 = renderer.GetQueueSubmitCountEXT();
             const std::size_t sv0 = renderer.GetSetViewportCallCountEXT();
@@ -179,6 +182,7 @@ class WebGpuViewportCardinalityTest : public Game
             }
             SetVp(dev, 0, 0, kRT, kRT);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            renderer.OrderExternalQueueWorkEXT();
 
             checkCount(renderer.GetRenderPassCountEXT() - pass0, 1,
                        "P1 four viewports in one cycle: render passes");

@@ -49,7 +49,7 @@ namespace CNA::Internal::Renderers::WebGPU
     std::shared_ptr<WebGPUProgramLayoutEXT> WebGPUProgramLayoutEXT::Create(
         WGPUDevice device,
         const std::vector<std::pair<const WgslModuleReflection*, WGPUShaderStage>>& stages,
-        std::string& error)
+        std::string& error, const std::uint32_t maxDynamicUniformBlocks)
     {
         std::shared_ptr<WebGPUProgramLayoutEXT> layout(new WebGPUProgramLayoutEXT());
         for (const auto& [reflection, stage] : stages)
@@ -109,6 +109,18 @@ namespace CNA::Internal::Renderers::WebGPU
         }
         layout->groupCount_ = used;
 
+        // plans/plan_webgpu_perf.md WEBGPUPERF-0005: all of a program's uniform blocks become
+        // dynamic-offset bindings, or none do -- a pipeline layout may hold only so many, and a
+        // program past that keeps the per-draw buffers it always had.
+        std::uint32_t uniformBlocks = 0;
+        for (std::uint32_t g = 0; g < layout->groupCount_; ++g)
+            for (const WebGPUBindingSlotEXT& s : layout->groups_[g])
+                if (s.kind == WgslResourceKind::UniformBuffer) ++uniformBlocks;
+        if (uniformBlocks > 0 && uniformBlocks <= maxDynamicUniformBlocks)
+            for (std::uint32_t g = 0; g < layout->groupCount_; ++g)
+                for (WebGPUBindingSlotEXT& s : layout->groups_[g])
+                    if (s.kind == WgslResourceKind::UniformBuffer) s.dynamicOffset = true;
+
         for (std::uint32_t g = 0; g < layout->groupCount_; ++g)
         {
             std::vector<WGPUBindGroupLayoutEntry> entries;
@@ -123,6 +135,7 @@ namespace CNA::Internal::Renderers::WebGPU
                 case WgslResourceKind::UniformBuffer:
                     e.buffer.type = WGPUBufferBindingType_Uniform;
                     e.buffer.minBindingSize = s.minBindingSize;
+                    e.buffer.hasDynamicOffset = s.dynamicOffset;
                     break;
                 case WgslResourceKind::StorageBuffer:
                     e.buffer.type = WGPUBufferBindingType_Storage;

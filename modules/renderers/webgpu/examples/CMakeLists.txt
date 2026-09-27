@@ -173,9 +173,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # WEBGPU-12/59: transient per-draw buffer pool + 3-slot sprite vertex ring. Renders a fixed
-    # scene for many frames and asserts the pool's create count plateaus while its reuse count keeps
-    # climbing (bounded + reused), with zero uncaptured GPU errors. Reads pool stats off the
-    # concrete WebGPURenderer, so it also links WebGPU::WebGPU.
+    # scene for many frames and asserts the pool's create count plateaus and -- since
+    # plans/plan_webgpu_perf.md WEBGPUPERF-0007 moved the scene's per-draw blocks from the pool into
+    # the uniform arena -- that steady frames create no bind group and make a fixed few queue
+    # writes, with zero uncaptured GPU errors. Reads the renderer's counters off the concrete
+    # WebGPURenderer, so it also links WebGPU::WebGPU.
     cna_webgpu_test(cna_test_webgpu_buffer_pool_stress webgpu_buffer_pool_stress_test.cpp)
     target_link_libraries(cna_test_webgpu_buffer_pool_stress PRIVATE WebGPU::WebGPU)
     cna_register_renderer_test(NAME WebGPU_BufferPoolStress COMMAND cna_test_webgpu_buffer_pool_stress
@@ -345,10 +347,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_Pbr3D COMMAND cna_test_webgpu_pbr3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plans/plan_webgpu_perf.md WEBGPUPERF-0001..0004: PbrEffect draws still reach the right uniforms
-    # through the arena's dynamic offsets, a steady frame creates no bind group, its queue writes do
-    # not grow with its draw count, and a texture recreated every frame never meets a stale cached
-    # group. Reads the renderer's counters, so it also links WebGPU::WebGPU.
+    # plans/plan_webgpu_perf.md WEBGPUPERF-0001..0005/0007: PbrEffect and ShaderEffect draws still
+    # reach the right uniforms through the arena's dynamic offsets, a steady frame of PBR, BasicEffect,
+    # sprite or ShaderEffect draws creates no bind group, its queue writes do not grow with its draw
+    # count, and a texture recreated every frame never meets a stale cached group. Reads the renderer's
+    # counters, so it also links WebGPU::WebGPU.
     cna_webgpu_test(cna_test_webgpu_binding_cost webgpu_binding_cost_test.cpp)
     target_link_libraries(cna_test_webgpu_binding_cost PRIVATE WebGPU::WebGPU)
     cna_register_renderer_test(NAME WebGPU_BindingCost COMMAND cna_test_webgpu_binding_cost

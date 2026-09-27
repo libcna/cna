@@ -108,11 +108,18 @@ namespace CNA::Internal::Renderers::WebGPU
         }
 
         std::string error;
+        // plans/plan_webgpu_perf.md WEBGPUPERF-0005: the uniform blocks as dynamic-offset bindings,
+        // so a draw binds them inside the flush's uniform arena and its groups can be cached.
+        const std::uint32_t deviceDynamicLimit =
+            owner_->DeviceLimitsEXT().maxDynamicUniformBuffersPerPipelineLayout;
         programLayout_ = WebGPUProgramLayoutEXT::Create(
             owner_->DeviceEXT(),
             {{&vertexReflection, WGPUShaderStage_Vertex},
              {&fragmentReflection, WGPUShaderStage_Fragment}},
-            error);
+            error,
+            // Eight is core WebGPU's floor, and what DescriptorEffectBindingsEXT holds per group.
+            deviceDynamicLimit != WGPU_LIMIT_U32_UNDEFINED && deviceDynamicLimit > 0
+                ? std::min(deviceDynamicLimit, 8u) : 8u);
         if (programLayout_ == nullptr)
         {
             compileError_ = "WebGPU ShaderEffect: " + error;
@@ -393,16 +400,41 @@ namespace CNA::Internal::Renderers::WebGPU
         }
     }
 
-    std::array<WGPUBindGroup, 4> WebGPURenderer::BuildDescriptorEffectBindGroupsEXT(
+    void WebGPURenderer::SetDescriptorEffectBindGroupsEXT(WGPURenderPassEncoder pass,
+                                                          const DescriptorEffectBindingsEXT& bindings,
+                                                          const std::uint32_t groupCount)
+    {
+        for (std::uint32_t g = 0; g < groupCount; ++g)
+            wgpuRenderPassEncoderSetBindGroup(pass, g, bindings.groups[g], bindings.offsetCounts[g],
+                                              bindings.offsetCounts[g] > 0
+                                                  ? bindings.offsets[g].data() : nullptr);
+    }
+
+    WebGPURenderer::DescriptorEffectBindingsEXT WebGPURenderer::BuildDescriptorEffectBindGroupsEXT(
         const WebGPUEffectRenderer& effect, const WebGPUDescriptorEffectSnapshotEXT& snapshot,
         std::vector<WGPUBuffer>& transient)
     {
         const WebGPUProgramLayoutEXT& layout = *effect.ProgramLayoutEXT();
-        std::array<WGPUBindGroup, 4> groups{};
+        DescriptorEffectBindingsEXT result;
 
-        // One transient uniform (or storage) buffer per declared block, written from the snapshot.
-        const auto makeBuffer = [&](const void* data, std::uint64_t byteSize, bool storage) {
+        // A block the layout declares dynamic goes into the flush's uniform arena
+        // (plans/plan_webgpu_perf.md WEBGPUPERF-0005), keyed by its slot so an unchanged block is
+        // appended once per flush rather than once per draw. Any other block keeps its own transient
+        // buffer, and the group that binds it is then built for this draw alone.
+        const auto bindBlock = [&](const WebGPUBindingSlotEXT& slot, const void* data,
+                                   std::uint64_t byteSize, bool storage, WGPUBindGroupEntry& entry,
+                                   std::uint32_t group, bool& cacheable) -> const void* {
             const std::uint64_t size = std::max<std::uint64_t>((byteSize + 15u) & ~std::uint64_t{15u}, 16u);
+            if (slot.dynamicOffset && !storage)
+            {
+                const ArenaSliceEXT slice = AppendUniformBlockEXT(
+                    &slot, data, static_cast<std::size_t>(data != nullptr ? byteSize : 0),
+                    static_cast<std::size_t>(size));
+                entry.buffer = slice.buffer;
+                entry.size = size;
+                result.offsets[group][result.offsetCounts[group]++] = slice.offset;
+                return ArenaBlockHandleEXT(slice, size);
+            }
             WGPUBuffer buffer = AcquireTransientBuffer(
                 static_cast<WGPUBufferUsage>((storage ? WGPUBufferUsage_Storage
                                                       : WGPUBufferUsage_Uniform) |
@@ -413,7 +445,10 @@ namespace CNA::Internal::Renderers::WebGPU
                 std::memcpy(bytes.data(), data, static_cast<std::size_t>(byteSize));
             QueueWriteBufferEXT(buffer, 0, bytes.data(), bytes.size());
             transient.push_back(buffer);
-            return std::pair<WGPUBuffer, std::uint64_t>{buffer, size};
+            entry.buffer = buffer;
+            entry.size = size;
+            cacheable = false;
+            return nullptr;
         };
 
         // The uniform arrays. A block the WGSL declares as storage is tightly packed (std430); one
@@ -452,11 +487,21 @@ namespace CNA::Internal::Renderers::WebGPU
 
         for (std::uint32_t g = 0; g < layout.GroupCount(); ++g)
         {
+            const std::vector<WebGPUBindingSlotEXT>& slots = layout.Group(g);
             std::vector<WGPUBindGroupEntry> entries;
-            for (const WebGPUBindingSlotEXT& slot : layout.Group(g))
+            entries.reserve(slots.size());
+            BindingCacheKeyEXT key;
+            key.layout = layout.GroupLayout(g);
+            bool cacheable = slots.size() <= key.handles.size();
+            // Reserved up front: the cache is handed pointers into this vector.
+            std::vector<WebGPUSampledTextureEXT> textureStorage;
+            textureStorage.reserve(slots.size());
+            std::vector<const WebGPUSampledTextureEXT*> textures;
+            for (const WebGPUBindingSlotEXT& slot : slots)
             {
                 WGPUBindGroupEntry entry = WGPU_BIND_GROUP_ENTRY_INIT;
                 entry.binding = slot.binding;
+                const void* handle = nullptr;
                 switch (slot.kind)
                 {
                 case WgslResourceKind::Sampler:
@@ -468,6 +513,7 @@ namespace CNA::Internal::Renderers::WebGPU
                                                 static_cast<std::uint32_t>(WebGPUEffectRenderer::kDescriptorSamplerOffset));
                     entry.sampler = SamplerForStateEXT(
                         snapshot.samplers[static_cast<std::size_t>(std::clamp(unit, 0, 15))]);
+                    handle = entry.sampler;
                     break;
                 }
                 case WgslResourceKind::SampledTexture:
@@ -491,6 +537,9 @@ namespace CNA::Internal::Renderers::WebGPU
                         texture = NeutralTextureForDimensionEXT(slot.viewDimension);
                     }
                     entry.textureView = texture.View();
+                    handle = entry.textureView;
+                    textureStorage.push_back(std::move(texture));
+                    textures.push_back(&textureStorage.back());
                     break;
                 }
                 case WgslResourceKind::UniformBuffer:
@@ -500,11 +549,9 @@ namespace CNA::Internal::Renderers::WebGPU
                     const bool storage = slot.kind != WgslResourceKind::UniformBuffer;
                     if (g == static_cast<std::uint32_t>(WebGPUEffectRenderer::kDescriptorScalarGroup) && slot.binding == 0)
                     {
-                        const auto [buffer, size] =
-                            makeBuffer(snapshot.scalars.data(), snapshot.scalars.size() * sizeof(float),
-                                       storage);
-                        entry.buffer = buffer;
-                        entry.size = size;
+                        handle = bindBlock(slot, snapshot.scalars.data(),
+                                           snapshot.scalars.size() * sizeof(float), storage, entry,
+                                           g, cacheable);
                     }
                     else if (g == 2)
                     {
@@ -518,15 +565,16 @@ namespace CNA::Internal::Renderers::WebGPU
                                 ") and none was bound for the draw");
                         entry.buffer = bound->Buffer();
                         entry.size = bound->NativeSize();
+                        // The application's own buffer: its lifetime is not the cache's to extend.
+                        cacheable = false;
                     }
                     else if (slot.binding == static_cast<std::uint32_t>(WebGPUEffectRenderer::kDescriptorEngineMatrixBinding))
                     {
                         const float* matrices = snapshot.arrays != nullptr
                             ? snapshot.arrays->engineMatrices.data() : nullptr;
                         static constexpr std::uint64_t kEngineMatrixBytes = 6 * 64;
-                        const auto [buffer, size] = makeBuffer(matrices, kEngineMatrixBytes, storage);
-                        entry.buffer = buffer;
-                        entry.size = size;
+                        handle = bindBlock(slot, matrices, kEngineMatrixBytes, storage, entry, g,
+                                           cacheable);
                     }
                     else
                     {
@@ -536,10 +584,8 @@ namespace CNA::Internal::Renderers::WebGPU
                             : slot.binding == static_cast<std::uint32_t>(WebGPUEffectRenderer::kDescriptorFloatArrayBinding) + 2 ? 3
                             : 16;
                         const std::vector<float>* packed = arrayBytes(elementFloats, storage);
-                        const auto [buffer, size] =
-                            makeBuffer(packed->data(), packed->size() * sizeof(float), storage);
-                        entry.buffer = buffer;
-                        entry.size = size;
+                        handle = bindBlock(slot, packed->data(), packed->size() * sizeof(float),
+                                           storage, entry, g, cacheable);
                     }
                     break;
                 }
@@ -549,6 +595,7 @@ namespace CNA::Internal::Renderers::WebGPU
                         std::to_string(g) + ") @binding(" + std::to_string(slot.binding) +
                         "); a graphics stage on this renderer samples storage textures instead");
                 }
+                if (cacheable) key.handles[entries.size()] = handle;
                 entries.push_back(entry);
             }
             WGPUBindGroupDescriptor descriptor{};
@@ -556,8 +603,16 @@ namespace CNA::Internal::Renderers::WebGPU
             descriptor.layout = layout.GroupLayout(g);
             descriptor.entryCount = entries.size();
             descriptor.entries = entries.empty() ? nullptr : entries.data();
-            groups[g] = CreateBindGroupEXT(&descriptor);
+            if (cacheable)
+            {
+                result.groups[g] = AcquireCachedBindGroupEXT(key, textures, descriptor);
+            }
+            else
+            {
+                result.groups[g] = CreateBindGroupEXT(&descriptor);
+                pendingBindGroupReleases_.push_back(result.groups[g]);
+            }
         }
-        return groups;
+        return result;
     }
 }

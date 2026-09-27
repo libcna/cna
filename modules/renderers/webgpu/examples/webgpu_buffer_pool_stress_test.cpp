@@ -8,8 +8,13 @@
 //
 // Check A -- after a warm-up, the transient-buffer CREATE count stops climbing entirely across the
 //   remaining frames: a repeating scene allocates nothing new (the whole point of the pool).
-// Check B -- the transient-buffer REUSE count keeps climbing over those same frames: draws are
-//   genuinely served from the pool, not bypassing it.
+// Check B -- plans/plan_webgpu_perf.md WEBGPUPERF-0007: over those same frames the scene creates no
+//   bind group and makes a small, fixed number of queue writes per frame. This check used to assert
+//   that the pool's REUSE count kept climbing; the pool served this scene's per-draw uniform blocks
+//   and nothing else (its vertices and indices are resident since STREETPERF-0004), and those blocks
+//   now go into the flush's uniform arena -- so this scene no longer touches the pool at all, which is
+//   the point. What would bring the churn back is a group or a write per draw, and that is what is
+//   measured. The pool remains the fallback for custom-effect blocks and oversize data.
 // Check C -- zero uncaptured WebGPU validation/device errors across the whole run: recycling a
 //   buffer and rewriting it in a later frame never races the GPU (queue-FIFO ordering makes it safe).
 // Check D -- the scene still renders (a sampled pixel is not the clear colour), so pooling did not
@@ -52,7 +57,8 @@ class WebGpuBufferPoolStressTest : public Game
     BasicEffect* fx_ = nullptr;
     int frame_ = 0;
     std::size_t createAtWarmup_ = 0;
-    std::size_t reuseAtWarmup_ = 0;
+    std::size_t groupsAtWarmup_ = 0;
+    std::size_t writesAtWarmup_ = 0;
     int passCount_ = 0;
     int result_ = 1;
 
@@ -120,7 +126,8 @@ protected:
         if (frame_ == kWarmupFrame)
         {
             createAtWarmup_ = renderer.GetTransientBufferCreateCountEXT();
-            reuseAtWarmup_ = renderer.GetTransientBufferReuseCountEXT();
+            groupsAtWarmup_ = renderer.GetBindGroupCreateCountEXT();
+            writesAtWarmup_ = renderer.GetQueueWriteCountEXT();
         }
 
         ++frame_;
@@ -128,14 +135,21 @@ protected:
         {
             const std::size_t createEnd = renderer.GetTransientBufferCreateCountEXT();
             const std::size_t reuseEnd = renderer.GetTransientBufferReuseCountEXT();
+            const std::size_t groups = renderer.GetBindGroupCreateCountEXT() - groupsAtWarmup_;
+            const std::size_t writes = renderer.GetQueueWriteCountEXT() - writesAtWarmup_;
+            // The uniform arena's one write and the sprite ring's one, with room for one more; a
+            // write per quad would be 320 a frame.
+            const std::size_t frames = static_cast<std::size_t>(kTotalFrames - kWarmupFrame);
+            const std::size_t writeBudget = 3 * frames;
             const std::size_t uncaptured = renderer.GetUncapturedErrorCountEXT();
 
             check(createEnd == createAtWarmup_,
                   "Check A: transient-buffer create count plateaus after warm-up (warmup="
                   + std::to_string(createAtWarmup_) + " end=" + std::to_string(createEnd) + ")");
-            check(reuseEnd > reuseAtWarmup_ + static_cast<std::size_t>(kTotalFrames - kWarmupFrame),
-                  "Check B: transient-buffer reuse count keeps climbing (warmup="
-                  + std::to_string(reuseAtWarmup_) + " end=" + std::to_string(reuseEnd) + ")");
+            check(groups == 0 && writes <= writeBudget,
+                  "Check B: steady frames create no bind group and make a fixed few queue writes ("
+                  + std::to_string(groups) + " groups, " + std::to_string(writes) + " writes over "
+                  + std::to_string(frames) + " frames, budget " + std::to_string(writeBudget) + ")");
             check(uncaptured == 0,
                   "Check C: zero uncaptured WebGPU errors across the run ("
                   + std::to_string(uncaptured) + ")");

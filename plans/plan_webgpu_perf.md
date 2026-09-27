@@ -1,6 +1,6 @@
 # WebGPU per-draw CPU cost — binding-model redesign
 
-**Status: 0001-0004 done (2026-09-27), 0005-0007 open.** Recorded 2026-09-25 at the owner's request;
+**Status: 0001-0008 done (2026-09-27); 0006's timer half left alone on purpose -- see its row.** Recorded 2026-09-25 at the owner's request;
 implementation started 2026-09-27. See *Results* for what changed and what it measured.
 
 Task IDs: `WEBGPUPERF-0001`, … . Predecessor and evidence:
@@ -102,8 +102,9 @@ Paths are relative to `modules/renderers/webgpu/src/`; line numbers are as of `s
    `IssueDescriptorEffectDrawEXT` → `BuildDescriptorEffectBindGroupsEXT`
    (`WebGPUModernEffect.cpp` ≈384) writes one transient buffer per declared block from the draw's
    snapshot and builds up to four bind groups per draw from the reflected layout.
-4. **A submit per flush.** `FlushCurrentRenderTarget` (≈11 899) → `RenderPendingDrawsToRenderTarget`
-   (≈11 695) encodes the pending draws, finishes the encoder and submits it. It runs on every
+4. **A submit per flush** (fixed by `WEBGPUPERF-0006`). `FlushCurrentRenderTarget` (≈11 899) →
+   `RenderPendingDrawsToRenderTarget` (≈11 695) encodes the pending draws, finishes the encoder and
+   submits it. It runs on every
    render-target switch (shadow cascades, prepass, scene, every post pass) and from
    `FlushPendingDrawsForModernEXT` (`WebGPURendererModern.cpp` ≈465).
 5. **Timers flush.** `WriteTimestampEXT` (`WebGPURendererModern.cpp` ≈986, `WMG-0017`) calls
@@ -148,9 +149,10 @@ Paths are relative to `modules/renderers/webgpu/src/`; line numbers are as of `s
 | WEBGPUPERF-0002 | Stock families: one uniform arena per flush, bound with dynamic offsets; one UBO bind group per (arena, layout) per flush; one `wgpuQueueWriteBuffer` of the arena before the submit. PBR and skinned PBR first -- they are the street's opaque pass | ✅ for PBR and skinned PBR, and every family's per-instance stream (a vertex arena). The classic families are WEBGPUPERF-0007 |
 | WEBGPUPERF-0003 | Cache texture/sampler bind groups keyed by (layout, views, samplers); evict when a texture/view dies (hook into the texture renderers' release) and by frame age | ✅ PBR texture groups. No hook was needed: an entry holds each view's own `WebGPUSampledResourceEXT`, so a view's address cannot be reused while it is keyed, and the per-present sweep drops an entry once it holds a texture's last reference, or after 120 idle frames |
 | WEBGPUPERF-0004 | Shadow and IBL groups: uniforms into the arena, texture parts cached | ✅ for every family that binds them (PBR, skinned PBR, LitTextured, Skinned) |
-| WEBGPUPERF-0005 | ShaderEffect descriptor route: reflected uniform blocks into the arena with dynamic offsets (the reflected layout marks them dynamic); cache the non-uniform groups. This is the street's 924 shadow casters | ⬜ The street's casters went with the engine layer; it now draws one ShaderEffect a frame (the sky). Still worth doing for games that draw many |
-| WEBGPUPERF-0006 | Fewer submits: resolve timer queries in the flush that is already happening instead of a separate encoder; evaluate one encoder per frame, submitted early only when a queue write, readback or present needs ordering | ⬜ The timer half no longer reaches a game: `CNA::Graphics::GpuTimer` was retired and `CreateGpuTimerEXT` is only reachable through the internal renderer interface. The encoder-per-frame half stands |
-| WEBGPUPERF-0007 | The classic stock families (Colored, Textured, LitTextured, AlphaTest, DualTexture, EnvMap, Instanced, Skinned, sprites): group 0 into the uniform arena, texture groups cached -- the same treatment 0002/0003 gave PBR | ⬜ |
+| WEBGPUPERF-0005 | ShaderEffect descriptor route: reflected uniform blocks into the arena with dynamic offsets (the reflected layout marks them dynamic); cache the non-uniform groups. This is the street's 924 shadow casters | ✅ All four ShaderEffect routes. Descriptor contract: `WebGPUProgramLayoutEXT::Create` takes an opt-in cap and declares every uniform block dynamic when the program has no more than that (the effect asks for up to 8, core WebGPU's floor; compute and the byte-copy kernel keep their layouts); `BuildDescriptorEffectBindGroupsEXT` puts those blocks in the arena through `AppendUniformBlockEXT`, which reuses a slot's block when its bytes did not change within the flush -- the array blocks are several KiB each -- and caches every group whose entries are all samplers, views and arena blocks. Storage blocks and application storage buffers keep their per-draw handling and make their group uncacheable. The descriptor sprite's six vertices go into the vertex arena. Legacy contract (one named block, one texture): the block in the arena at a dynamic offset, the group cached. A cache entry now also holds a reference on its layout and on every sampler and buffer it names, as it did on views -- a ShaderEffect owns its layout and (legacy) its sampler, so either can go while a group naming it is cached, and the address must not come back and match |
+| WEBGPUPERF-0006 | Fewer submits: resolve timer queries in the flush that is already happening instead of a separate encoder; evaluate one encoder per frame, submitted early only when a queue write, readback or present needs ordering | ✅ One encoder per frame. Every bind-cycle flush -- render target, cube face, back buffer -- records into `frameEncoderEXT_` (`BeginReplayEXT`), and `SubmitFrameEncoderEXT` writes the stream arenas and submits it at `Present`, before a back-buffer readback, and wherever `OrderExternalQueueWorkEXT` finds queue work that must come after the recorded passes: every texture/buffer upload and readback entry point, `QueueWriteBufferEXT` itself outside a replay, `GenerateMipsForLayer`, the modern encoder and resource writes, the occlusion readback and a surface reconfigure. The arenas now live for the whole encoder rather than one flush, and SpriteBatch's vertices moved into the vertex arena (one cycle's must not overwrite a buffer an earlier, unsubmitted cycle draws from); a batch larger than a chunk still takes the ring, after submitting first. **Timer half: not done, deliberately.** It no longer reaches a game -- `CNA::Graphics::GpuTimer` was retired and `CreateGpuTimerEXT` is only reachable through the internal renderer interface -- and nothing exercises it any more, so a change there could be neither measured nor tested. It keeps its own resolve submission |
+| WEBGPUPERF-0008 | The compiled-effect route (XNA `.fx` effects through MojoShader, `IssueCompiledEffectDraw`): per draw it builds four groups (group 0 empty), writes the VS and PS register files and the LOD-bias block, **and copies every vertex stream into a transient buffer of its own** -- the per-draw geometry copy `STREETPERF-0004` removed from the stock families is still live here. Give it resident geometry first, then the arena and the cache | ✅ An ordinary compiled draw binds each vertex buffer's own storage (`CompiledEffectDrawCommand::Stream::storage`, the stock families' copy-on-write rule); the SpriteBatch route keeps copying its run -- it refills one internal buffer per run, and holding that storage would allocate a new one per refill -- but into the vertex arena. Both register files and the LOD-bias block are dynamic-offset bindings over the uniform arena; all four groups come from the binding cache. `WebGPUCompiledEffectDrawTest.SteadyDrawsBuildNoGroupsAndCopyNoGeometry` pins it: four draws of a 48 KiB buffer land their own Tint, a steady flush builds no group, four times the draws cost the same writes, and a flush of sixteen draws writes less than the buffer holds (the old route wrote it sixteen times). **Also found:** the shared `RunCompiledEffectContract` had never run on WebGPU -- both WebGPU copies of `SharedBackendConformanceContract` built a default Reach device and stopped at the contract's own HiDef assertion; they were the two "pre-existing failures" of `CnaRendererTests`. They now ask for HiDef as Vulkan's and SDL_GPU's copies do, and the whole contract passes on the SPIR-V and the WGSL route |
+| WEBGPUPERF-0007 | The classic stock families (Colored, Textured, LitTextured, AlphaTest, DualTexture, EnvMap, Instanced, Skinned, sprites): group 0 into the uniform arena, texture groups cached -- the same treatment 0002/0003 gave PBR | ✅ The shared `coloredBindGroupLayout_` (six families), the lit, skinned and environment-map group 0s and the stock sprite group's sampler block are dynamic-offset bindings over the uniform arena; their texture groups come from `AcquireSampledBindingEXT`, which keys a sampler-and-view group straight from its descriptor. A sprite used to write its own 16-byte block and build and release its own group; the block is now appended once per distinct LOD bias per flush, and a run of sprites sharing a group binds it once. The custom-effect sprite and draw routes are unchanged (0005) |
 
 Each task: the street's 18 captures identical before/after; `-L WebGPU` 148/0 in
 `cmake-build-webgpu`; `CnaRendererTests` and `CnaGraphicsTests` keep exactly the failures that
@@ -198,8 +200,73 @@ WebGPU is now on a par with Vulkan on the same GPU, inside the 1.5x target. All 
 captured on WEBGPU before and after are pixel-identical (worst difference 0); two runs of the
 unchanged build differ in views 01, 07, 11, 13 and 18 by up to 0.08 % of pixels, as they always did.
 
+**The classic families (WEBGPUPERF-0007)**, same test, 16 lit textured BasicEffect draws and 64
+SpriteBatch sprites per steady frame: 0 bind groups and 2 queue writes (the arena and SpriteBatch's
+own vertex upload), and the same 0 and 2 at four times as many of each. Before, every one of those
+draws and sprites created at least one group and wrote at least one block.
+
+**0005:** `WebGPU_BindingCost` checks J-L: sixteen custom-WGSL ShaderEffect draws with their own
+World and colour land in their own cells, a steady frame builds no group and makes one queue write,
+and so does four times as many. `CnaGraphicsExtTests` (the retained CRT, Depth and ASCII effects,
+packaged descriptor-contract ShaderEffects) 73 pass, 3 skipped (HLSL-only). The street's sky is a
+descriptor sprite: with the reflection probes off, all 18 views identical to the unmodified renderer.
+With them on, a few views differ by 1-5 levels because **probe 07 has two possible renderings in any
+build** -- two adjacent pixels of one face, measured flipping between runs of the unmodified renderer
+too (4 of 5 runs against a reference) -- and every reflective surface samples the probes.
+
+**0008:** `CnaRendererTests` 273/273 on WebGPU (it was 269 + 2 failing before the HiDef fix;
+the other two are the new test and its WGSL twin's contract now running), `ctest -L WebGPU` 147/147.
+
+**0006:** one command encoder per frame. Measured with 21 SpriteBatch bind cycles a frame -- K
+render targets of one sprite each, then the back buffer (a throwaway probe, not committed):
+
+| | 0 switches | 20 switches | per switch |
+|---|---|---|---|
+| before | 0.155 ms | 1.285 ms | ~57 µs, 47 of 80 stack samples in `wgpuQueueSubmit` (40 of them the ioctl) |
+| after | 0.150 ms | 0.47-0.48 ms | **~16 µs** |
+| VULKAN (reference) | | | 8-11 µs |
+
+`WebGPU_BindingCost` checks M-O: a frame of four render-target cycles and the back buffer is one
+submission (five before); each target still shows its own sprite vertices and its own BasicEffect
+block, so no cycle overwrote another's arena range or sprite buffer inside the one encoder; and a
+`Texture2D.SetData` issued between two cycles lands between them -- the first target shows the old
+red, the back buffer the new green. Proven live by mutation: without the upload hook the first
+target shows green (O and N fail). Note that `Texture2D.SetData(Color*, int)` on an ordinary texture
+gives the wrapper a *new* native texture and so never exercises the hazard; the check uses the
+rectangle overload, which writes in place.
+
+Four cardinality tests (`WebGPU_DrawOrder_`, `_Scissor_`, `_Viewport_` and
+`_InstancedVertexColor_Cardinality`) asserted "one bind cycle = exactly one submit" by sampling the
+counter around the flush. With the flush only recording, three of them read 0 or 2, and the rest
+passed by accident -- the one submit they saw was the *previous* cycle's work, pushed out by a
+vertex-buffer upload inside the window. Each window now starts with nothing recorded and ends by
+submitting its own cycle (`OrderExternalQueueWorkEXT`), so "exactly one" again means what it was
+written to mean: the cycle is carried by one submission and adds none of its own.
+
+The street after 0006: its steady frame now goes straight to the back buffer, one bind cycle, so
+this task changes little there -- which the numbers agree with. Measured while another agent's
+Blender held the GPU, so only the ratio means anything: WEBGPU 41.6 / 47.0 / 49.2 ms against VULKAN
+59.1 / 60.9 / 54.9 ms, interleaved. The reflection probes are where it does reach: their 29 cubes are
+six face cycles each with a mip chain, all recorded into the one encoder now. All 29 baked probes
+are pixel-identical to the unmodified renderer's (`--dump-probes`, two runs of each build; a third
+run of the new one flips probe 07's known two pixels). With probes off, all 18 captures are identical
+but view 11 (one pixel, the shop window's timing-dependent dressing); with them on, the views differ
+from a reference in the same few scattered pixels -- up to 32 levels, never more than 0.003 % of a
+view -- by which two runs of the *same* build differ from each other: every reflective surface
+samples probe 07.
+
+Regressions after 0006: `ctest -L WebGPU` 147/147 (after restating the four cardinality tests),
+`CnaRendererTests` 273 pass and the same 1 skip, `CnaGraphicsTests` the same 20 failures and 202
+skips, `CnaGraphicsExtTests` 73 pass and 3 skipped.
+
 **Regressions:** `ctest -L WebGPU` in `cmake-build-webgpu` (RelWithDebInfo, `WEBGPU;VULKAN`) 147/147
-with the new `WebGPU_BindingCost`. `CnaRendererTests` 269 pass, 2 fail -- the two
+with the new `WebGPU_BindingCost`, after both steps. 0007 changed one test's premise:
+`WebGPU_BufferPoolStress` asserted the transient pool's reuse count kept climbing, and the pool had
+served that scene's per-draw uniform blocks and nothing else -- its geometry is resident since
+`STREETPERF-0004` -- so once the blocks moved to the arena the scene stopped touching the pool at all.
+Its Check B now asserts what keeps that scene churn-free instead: no bind group and a fixed few queue
+writes per steady frame (18 over 10 frames, against 320+ before). The street after 0007: 18 captures
+identical to the unmodified renderer's, 25.8 / 28.7 ms a frame. `CnaRendererTests` 269 pass, 2 fail -- the two
 `SharedBackendConformanceContract` compiled-effect tests, failing before this work. `CnaGraphicsTests`
 20 fail; the same 20 were run on the unmodified source and fail there too. `WebGPU_BindingCost`'s
 checks were proven live by mutation: zeroing the dynamic offsets fails A and E, and keying the

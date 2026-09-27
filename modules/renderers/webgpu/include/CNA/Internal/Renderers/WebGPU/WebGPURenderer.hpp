@@ -671,7 +671,9 @@ namespace CNA::Internal::Renderers::WebGPU
      * A queued draw binds the storage its buffer had when the draw was issued and keeps it alive
      * until the frame is submitted. A `SetData` while a queued draw still holds the storage moves
      * the buffer to fresh storage -- `wgpuQueueWriteBuffer` is ordered before the frame's own
-     * later submission, so writing in place would change what the queued draw reads.
+     * later submission, so writing in place would change what the queued draw reads. A draw that
+     * is already recorded but not yet submitted is covered the other way: `SetData` submits the
+     * frame encoder first (WEBGPUPERF-0006).
      */
     struct WebGPUBufferStorageEXT
     {
@@ -1880,6 +1882,23 @@ namespace CNA::Internal::Renderers::WebGPU
 
         [[nodiscard]] WGPUDevice Device() const { return device_; }
         [[nodiscard]] WGPUQueue Queue() const { return queue_; }
+        /**
+         * @brief plans/plan_webgpu_perf.md WEBGPUPERF-0006: submits the frame's encoded passes
+         *        before queue work that must come after them.
+         *
+         * Every flush of a bind cycle records into one command encoder per frame, which is
+         * submitted when the back buffer is flushed or presented -- a render-target switch used to
+         * cost a submission of its own, most of it the kernel call. Anything that touches the queue
+         * outside a replay calls this first: a queue write executes before the next submission, not
+         * in encoder order, so a `SetData` landing ahead of already-encoded passes would change
+         * what those passes read; and a readback or another submission has to see them done. A
+         * no-op while a replay is recording: the only queue writes there are to per-draw or newly
+         * made resources, which the passes being recorded read.
+         */
+        void OrderExternalQueueWorkEXT()
+        {
+            if (frameEncoderEXT_ != nullptr && replayingEXT_ == 0) SubmitFrameEncoderEXT();
+        }
         [[nodiscard]] WGPUInstance Instance() const { return instance_; }
 
         // WEBGPU-53/54: RenderTarget2D support (single-target only; MRT is WEBGPU-85/86/87).
@@ -2500,14 +2519,32 @@ namespace CNA::Internal::Renderers::WebGPU
          */
         [[nodiscard]] WebGPUSampledTextureEXT NeutralTextureForDimensionEXT(
             WGPUTextureViewDimension dimension);
+        /// WEBGPUPERF-0005: one descriptor-contract draw's groups and the dynamic offsets each
+        /// binds its arena blocks at, in binding order.
+        struct DescriptorEffectBindingsEXT
+        {
+            std::array<WGPUBindGroup, 4> groups{};
+            std::array<std::array<std::uint32_t, 8>, 4> offsets{};
+            std::array<std::uint32_t, 4> offsetCounts{};
+        };
+        /// Binds @p bindings' groups on @p pass, each with its own dynamic offsets.
+        static void SetDescriptorEffectBindGroupsEXT(WGPURenderPassEncoder pass,
+                                                     const DescriptorEffectBindingsEXT& bindings,
+                                                     std::uint32_t groupCount);
         /**
          * @brief WMG-0006: builds one descriptor-contract draw's bind groups.
+         *
+         * WEBGPUPERF-0005: every uniform block the program's layout marks dynamic goes into the
+         * flush's uniform arena, and a group whose every entry is then a sampler, a view or an arena
+         * block comes from the binding cache. The groups are owned by the cache, or (uncacheable)
+         * released after the submit; the caller releases none of them.
+         *
          * @param effect The effect whose layouts they follow.
          * @param snapshot Everything the draw captured.
          * @param transient Receives the per-draw buffers to recycle after submission.
-         * @return One bind group per declared group.
+         * @return One bind group per declared group, with its dynamic offsets.
          */
-        [[nodiscard]] std::array<WGPUBindGroup, 4> BuildDescriptorEffectBindGroupsEXT(
+        [[nodiscard]] DescriptorEffectBindingsEXT BuildDescriptorEffectBindGroupsEXT(
             const WebGPUEffectRenderer& effect, const WebGPUDescriptorEffectSnapshotEXT& snapshot,
             std::vector<WGPUBuffer>& transient);
 
@@ -2812,6 +2849,10 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t publicOrder = 0;
             /// REMED-GFX-172, trace only: that draw's position within the replayed segment.
             std::size_t replayPosition = 0;
+            /// WEBGPUPERF-0007: the stock sprite group, and its offset, bound at group 0 by the last
+            /// sprite; null once anything else has bound group 0.
+            WGPUBindGroup spriteBindGroup = nullptr;
+            std::uint32_t spriteBindOffset = 0;
         };
 
         /**
@@ -2909,6 +2950,21 @@ namespace CNA::Internal::Renderers::WebGPU
          * @param destination Attachments, extents and usage policy of the bound destination.
          */
         void ReplayOrderedSegments(WGPUCommandEncoder encoder, const PassDestination& destination);
+        /**
+         * @brief WEBGPUPERF-0006: what a flush does before it records: consumes any occlusion
+         *        results and uploads the sprites -- either of which may have to submit what the frame
+         *        encoder already holds -- and then returns that encoder.
+         */
+        [[nodiscard]] WGPUCommandEncoder BeginReplayEXT();
+        /// WEBGPUPERF-0006: the frame's encoder, created by the first flush that needs it.
+        [[nodiscard]] WGPUCommandEncoder AcquireFrameEncoderEXT();
+        /// WEBGPUPERF-0006: writes the stream arenas, submits the frame's encoder and releases what
+        /// its passes held. Does nothing when no flush recorded since the last submission.
+        void SubmitFrameEncoderEXT();
+        /// WEBGPUPERF-0006: the encoder the frame's flushes record into, or null.
+        WGPUCommandEncoder frameEncoderEXT_ = nullptr;
+        /// WEBGPUPERF-0006: non-zero while a replay records into the frame encoder.
+        int replayingEXT_ = 0;
         /// REMED-GFX-167: drops the ordered stream and every family vector together, releasing the
         /// native references their commands hold. Called at the tail of a replay and, crucially,
         /// FIRST in the destructor -- these vectors are members, so left populated they would
@@ -2927,8 +2983,14 @@ namespace CNA::Internal::Renderers::WebGPU
         /** @brief Drops queued sprites, and their ordered-stream entries, without replaying them. */
         void DiscardQueuedSprites();
 
-        /** @brief Uploads every queued sprite's vertices into the shared sprite vertex buffer. */
+        /**
+         * @brief Uploads every queued sprite's vertices: into the vertex arena
+         *        (WEBGPUPERF-0006), or, when they do not fit a chunk, into the shared sprite vertex
+         *        ring after submitting what the frame encoder holds.
+         */
         void UploadSpriteVertices();
+        /// WEBGPUPERF-0006: byte offset of this flush's sprite vertices in @ref spriteVertexBuffer_.
+        std::uint64_t spriteVertexOffsetEXT_ = 0;
 
         /**
          * @brief Restores the pass state a preceding sprite may have changed, before a 3D draw.
@@ -3908,7 +3970,9 @@ namespace CNA::Internal::Renderers::WebGPU
         std::array<WGPUBuffer, kSpriteVertexRing> spriteVertexRing_{};
         std::array<std::uint64_t, kSpriteVertexRing> spriteVertexRingCapacity_{};
         std::size_t spriteVertexRingIndex_ = 0;
-        WGPUBuffer spriteVertexBuffer_ = nullptr;        ///< Non-owning alias of the active ring slot.
+        /// Non-owning alias of the active ring slot, or (WEBGPUPERF-0006) of the vertex-arena chunk
+        /// holding this cycle's sprites, at @ref spriteVertexOffsetEXT_.
+        WGPUBuffer spriteVertexBuffer_ = nullptr;
         /// WEBGPU-154: the shared 12-index line list every wireframe sprite draws through.
         WGPUBuffer spriteWireIndexBuffer_ = nullptr;
         /// WEBGPU-155: the shared 16-byte (0,0,0,1) neutral vertex record, bound at array stride 0
@@ -4467,6 +4531,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // still references them (before wgpuQueueSubmit) would race the recorded-but-not-yet-
         // executed commands.
         std::vector<WGPUBuffer> pendingBufferReleases_;
+        /// WEBGPUPERF-0006: back-buffer views a recorded pass writes, released at its submission.
+        std::vector<WGPUTextureView> pendingTextureViewReleasesEXT_;
         std::vector<WGPUBindGroup> pendingBindGroupReleases_;
 
         // ---- plans/plan_webgpu_perf.md WEBGPUPERF-0001..0004: the per-draw binding cost ----------
@@ -4483,6 +4549,7 @@ namespace CNA::Internal::Renderers::WebGPU
         void QueueWriteBufferEXT(WGPUBuffer buffer, std::uint64_t offset, const void* data,
                                  std::size_t size)
         {
+            OrderExternalQueueWorkEXT();   // WEBGPUPERF-0006.
             ++queueWritesEXT_;
             queueWriteBytesEXT_ += size;
             wgpuQueueWriteBuffer(queue_, buffer, offset, data, size);
@@ -4547,20 +4614,55 @@ namespace CNA::Internal::Renderers::WebGPU
          * @return False when @p bytes exceeds a whole chunk; the caller then uses its own buffer.
          */
         bool ReserveArenaEXT(StreamArenaEXT& arena, std::uint64_t bytes);
-        /// Copies @p bytes into the current chunk at the next aligned offset. The caller reserved.
+        /// Copies @p bytes into the current chunk at the next aligned offset, zero-filling up to
+        /// @p paddedBytes when that is larger. The caller reserved.
         [[nodiscard]] ArenaSliceEXT AppendArenaEXT(StreamArenaEXT& arena, const void* data,
-                                                   std::size_t bytes);
+                                                   std::size_t bytes, std::size_t paddedBytes = 0);
         /**
          * @brief Appends @p blocks to the uniform arena in one chunk and returns the chunk's
          *        dynamic-offset group for @p layout, whose bindings 0..n-1 are those blocks.
          */
         [[nodiscard]] ArenaUniformBindingEXT AppendUniformBlocksEXT(
             WGPUBindGroupLayout layout, std::initializer_list<ArenaBlockEXT> blocks);
+        /**
+         * @brief WEBGPUPERF-0005: appends one uniform block, zero-padded to @p paddedBytes, reusing
+         *        the block this flush last appended under @p dedupeKey when its bytes are the same.
+         *
+         * A ShaderEffect's array blocks are several KiB each and rarely change from one draw to
+         * the next; appending them again for every draw would grow the flush's arena by that much
+         * per draw. Null @p dedupeKey always appends.
+         *
+         * @return Where the block is.
+         */
+        [[nodiscard]] ArenaSliceEXT AppendUniformBlockEXT(const void* dedupeKey, const void* data,
+                                                          std::size_t bytes,
+                                                          std::size_t paddedBytes);
+        /// The blocks AppendUniformBlockEXT appended this flush, by key; cleared with the arena.
+        struct DedupedUniformBlockEXT
+        {
+            std::vector<std::uint8_t> bytes;
+            ArenaSliceEXT slice;
+        };
+        std::unordered_map<const void*, DedupedUniformBlockEXT> dedupedUniformBlocksEXT_;
+        /// An arena block's identity inside a cache key: its chunk and its binding size.
+        [[nodiscard]] static const void* ArenaBlockHandleEXT(const ArenaSliceEXT& slice,
+                                                             std::uint64_t size) noexcept
+        {
+            return reinterpret_cast<const void*>(static_cast<std::uintptr_t>(
+                (static_cast<std::uint64_t>(slice.chunk) << 32) | (size & 0xFFFFFFFFull)));
+        }
         /// Writes every used chunk of both arenas and rewinds them. Called once per flush.
         void FlushStreamArenasEXT();
         /// Releases both arenas' buffers (device loss and destruction).
         void ReleaseStreamArenasEXT();
         /// 1 MiB of uniform blocks is about four thousand 256-byte-aligned blocks per chunk.
+        /// WEBGPUPERF-0007: the stock sprite shader's sampler block -- the LOD bias, padded to a vec4.
+        static constexpr std::size_t kSpriteSamplerBlockBytesEXT = 16;
+        /// WEBGPUPERF-0007: this flush's sprite sampler block for @p lodBias, appended to the uniform
+        /// arena the first time the flush meets that bias.
+        [[nodiscard]] ArenaSliceEXT SpriteSamplerBlockEXT(float lodBias);
+        /// The blocks SpriteSamplerBlockEXT appended this flush, by bias; cleared with the arena.
+        std::vector<std::pair<float, ArenaSliceEXT>> spriteSamplerBlocksEXT_;
         StreamArenaEXT uniformArenaEXT_{.usage = WGPUBufferUsage_Uniform, .chunkBytes = 1u << 20,
                                         .label = "CNA WebGPU Uniform Arena Chunk"};
         /// Per-instance streams; a draw with more than a chunk's worth uses its own buffer.
@@ -4580,7 +4682,7 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             WGPUBindGroupLayout layout = nullptr;
             std::uint32_t arenaChunk = ~0u;
-            std::array<const void*, 8> handles{};
+            std::array<const void*, 16> handles{};
             bool operator==(const BindingCacheKeyEXT&) const = default;
         };
         struct BindingCacheKeyHashEXT
@@ -4592,9 +4694,19 @@ namespace CNA::Internal::Renderers::WebGPU
         struct BindingCacheEntryEXT
         {
             WGPUBindGroup group = nullptr;
-            std::array<std::shared_ptr<const WebGPUSampledResourceEXT>, 7> keepAlive{};
+            std::array<std::shared_ptr<const WebGPUSampledResourceEXT>, 8> keepAlive{};
+            /// WEBGPUPERF-0005: a native reference on the layout, and on every sampler and buffer
+            /// the group names, for the reason `keepAlive` holds the views: while the entry exists
+            /// none of those addresses can be reused by a new object and match its key. A
+            /// ShaderEffect owns its layout and (legacy route) its sampler, so they can be released
+            /// while a group that names them is still cached.
+            WGPUBindGroupLayout layout = nullptr;
+            std::vector<WGPUSampler> samplers;
+            std::vector<WGPUBuffer> buffers;
             std::uint64_t lastUsedFrame = 0;
         };
+        /// Releases the group and every reference @p entry holds.
+        static void ReleaseBindingCacheEntryEXT(BindingCacheEntryEXT& entry);
         /**
          * @brief Returns the cached group for @p key, creating it from @p descriptor on a miss.
          *
@@ -4606,6 +4718,28 @@ namespace CNA::Internal::Renderers::WebGPU
             const BindingCacheKeyEXT& key,
             std::initializer_list<const WebGPUSampledTextureEXT*> textures,
             const WGPUBindGroupDescriptor& descriptor);
+        /// The same, for a texture list built at run time (a compiled effect's sampler slots).
+        [[nodiscard]] WGPUBindGroup AcquireCachedBindGroupEXT(
+            const BindingCacheKeyEXT& key,
+            const std::vector<const WebGPUSampledTextureEXT*>& textures,
+            const WGPUBindGroupDescriptor& descriptor);
+        /// The one implementation both overloads forward to.
+        [[nodiscard]] WGPUBindGroup AcquireCachedBindGroupEXT(
+            const BindingCacheKeyEXT& key, const WebGPUSampledTextureEXT* const* textures,
+            std::size_t textureCount, const WGPUBindGroupDescriptor& descriptor);
+        /**
+         * @brief WEBGPUPERF-0007: a sampler-and-texture group from the binding cache, keyed from
+         *        @p descriptor itself.
+         *
+         * Every entry must be a sampler or a view, and every view one of @p textures, whose
+         * reference the cached entry keeps; otherwise the group is built for this draw and
+         * released after the submit.
+         *
+         * @return The group; owned by the cache (or, uncacheable, released after the submit).
+         */
+        [[nodiscard]] WGPUBindGroup AcquireSampledBindingEXT(
+            const WGPUBindGroupDescriptor& descriptor,
+            std::initializer_list<const WebGPUSampledTextureEXT*> textures);
         /**
          * @brief WEBGPUPERF-0003: group 1 of both PBR families -- the slot-0 sampler and the seven
          *        material maps -- from the binding cache.
@@ -5468,7 +5602,7 @@ namespace CNA::Internal::Renderers::WebGPU
         /// @brief XNA's opaque-black 2D, for an unbound classic stock-effect texture slot.
         [[nodiscard]] WebGPUSampledTextureEXT ClassicNullTextureEXT();
         /// @brief XNA's opaque-black cube, for an unbound EnvironmentMapEffect::EnvironmentMap.
-        [[nodiscard]] WGPUTextureView ClassicNullCubeViewEXT();
+        [[nodiscard]] WebGPUSampledTextureEXT ClassicNullCubeEXT();
         std::unique_ptr<WebGPUTextureRenderer> classicNullTexture_;
         std::unique_ptr<WebGPUTextureCubeRenderer> classicNullCube_;
 
@@ -5810,6 +5944,15 @@ namespace CNA::Internal::Renderers::WebGPU
                 std::vector<std::uint8_t> data;
                 std::uint64_t arrayStride = 0;
                 bool perInstance = false;
+                /// plans/plan_webgpu_perf.md WEBGPUPERF-0008: the vertex buffer's own storage, bound
+                /// in place where `data` used to carry a copy of the whole buffer -- the stock
+                /// families' STREETPERF-0004 rule. Holding it is what makes a later `SetData` move
+                /// the buffer to fresh storage rather than rewrite what this draw reads.
+                std::shared_ptr<WebGPUBufferStorageEXT> storage;
+                std::uint64_t storageOffset = 0;  ///< Byte offset of the draw's first record.
+                std::uint64_t storageSize = 0;    ///< Bytes bound from there.
+                /// Whether the draw has bytes to bind for this stream, copied or resident.
+                [[nodiscard]] bool HasSource() const { return !data.empty() || storage != nullptr; }
             };
             /// One resolved sampler slot: the view, its keep-alive, and the native sampler.
             struct SamplerBinding

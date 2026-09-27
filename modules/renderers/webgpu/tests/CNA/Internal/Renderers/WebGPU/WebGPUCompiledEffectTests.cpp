@@ -35,6 +35,8 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -266,7 +268,11 @@ TEST(WebGPUCompiledEffectTest, TheSpirvSplitRefusesSomethingThatIsNotSpirv)
 
 TEST(WebGPUCompiledEffectTest, SharedBackendConformanceContract)
 {
-    GraphicsDevice device;
+    // HiDef, as Vulkan's and SDL_GPU's copies of this test ask for: the contract's first line
+    // asserts it (its render-state section uses separate alpha blending), and under the default
+    // Reach device that assertion was the only thing this test ever ran.
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectContract(device);
@@ -996,7 +1002,9 @@ TEST(WebGPUCompiledEffectWgslTest, TranslationIsDeterministicAndNamesItsEntryPoi
 #define CNA_WEBGPU_WGSL_ROUTE_TEST(name, call)                                                   \
     TEST(WebGPUCompiledEffectWgslDrawTest, name)                                                 \
     {                                                                                            \
-        GraphicsDevice device;                                                                   \
+        /* HiDef: the shared backend contract asserts it; see SharedBackendConformanceContract. */ \
+        GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(),                      \
+                              GraphicsProfile::HiDef, PresentationParameters());                \
         if (!CNA::TestSupport::SupportsCompiledEffects(device))                                  \
             GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";  \
         WgslRouteScope wgsl(device);                                                             \
@@ -1054,5 +1062,109 @@ CNA_WEBGPU_WGSL_ROUTE_TEST(SharedTruncationContract,
                            CNA::TestSupport::RunCompiledEffectTruncationContract(device))
 
 #undef CNA_WEBGPU_WGSL_ROUTE_TEST
+
+// -----------------------------------------------------------------------------------------------
+// plans/plan_webgpu_perf.md WEBGPUPERF-0008 -- what a compiled-effect draw costs wgpu.
+//
+// A compiled draw used to copy every vertex stream it bound, whole, into the queued command and
+// upload that copy at replay, and to write its two register files and build four bind groups per
+// draw. It now binds the buffer's own storage, and the blocks and groups come from the flush's
+// uniform arena and the binding cache. Four draws with their own Tint and Transform must still land
+// their own colour in their own quarter; a steady flush must build no group; four times the draws
+// must cost the same number of queue writes; and a flush must write less than the vertex buffer
+// holds -- the old route wrote the whole buffer once per draw.
+// -----------------------------------------------------------------------------------------------
+TEST(WebGPUCompiledEffectDrawTest, SteadyDrawsBuildNoGroupsAndCopyNoGeometry)
+{
+    using Microsoft::Xna::Framework::Vector4;
+    GraphicsDevice device;
+    WebGPURenderer* renderer = RendererOf(device);
+    if (renderer == nullptr || !CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "this build did not select the WebGPU renderer";
+
+    Effect effect(device, CNA::TestSupport::BuildSyntheticDrawableEffect());
+    auto& parameters = effect.getParametersProperty();
+    EffectPass& pass = *effect.getTechniquesProperty()[0]->getPassesProperty()[1];
+
+    // A clip-space quad at the front of a buffer much larger than what any draw reads.
+    struct ClipVertex { float x, y, z; };
+    const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+    });
+    constexpr int kVertices = 4096;
+    std::vector<ClipVertex> vertices(kVertices, ClipVertex{0.0f, 0.0f, 0.0f});
+    const ClipVertex quad[6] = {
+        {-1.0f,  1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f},
+        {-1.0f,  1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f}, { 1.0f,  1.0f, 0.0f},
+    };
+    std::copy(std::begin(quad), std::end(quad), vertices.begin());
+    VertexBuffer buffer(device, declaration, kVertices, BufferUsage::None);
+    buffer.SetDataRaw(vertices.data(), kVertices, static_cast<int>(sizeof(ClipVertex)));
+    const std::uint64_t bufferBytes = static_cast<std::uint64_t>(kVertices) * sizeof(ClipVertex);
+
+    const std::array<Vector4, 4> tints{Vector4(1, 0, 0, 1), Vector4(0, 1, 0, 1),
+                                       Vector4(0, 0, 1, 1), Vector4(1, 1, 0, 1)};
+    constexpr int kSize = 16;
+    RenderTarget2D target(device, kSize, kSize);
+    const auto flush = [&](int repeats) {
+        device.SetRenderTarget(&target);
+        device.Clear(Color(9, 19, 29, 255));
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        device.SetVertexBuffer(&buffer);
+        for (int r = 0; r < repeats; ++r)
+            for (int cell = 0; cell < 4; ++cell)
+            {
+                const float x = cell % 2 == 0 ? -0.5f : 0.5f;
+                const float y = cell / 2 == 0 ? 0.5f : -0.5f;
+                parameters["Transform"]->SetValue(Matrix::CreateScale(0.5f) *
+                                                  Matrix::CreateTranslation(x, y, 0.0f));
+                parameters["Tint"]->SetValue(tints[static_cast<std::size_t>(cell)]);
+                pass.Apply();
+                device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            }
+        device.SetVertexBuffer(nullptr);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+    };
+    struct Cost { std::size_t groups = 0, writes = 0; std::uint64_t bytes = 0; };
+    const auto snapshot = [&] {
+        return Cost{renderer->GetBindGroupCreateCountEXT(), renderer->GetQueueWriteCountEXT(),
+                    renderer->GetQueueWriteByteCountEXT()};
+    };
+    const auto steadyCost = [&](int repeats) {
+        for (int warm = 0; warm < 3; ++warm) flush(repeats);
+        const Cost before = snapshot();
+        flush(repeats);
+        const Cost after = snapshot();
+        return Cost{after.groups - before.groups, after.writes - before.writes,
+                    after.bytes - before.bytes};
+    };
+
+    const Cost once = steadyCost(1);
+    const Cost fourTimes = steadyCost(4);
+    EXPECT_EQ(once.groups, 0u) << "a steady flush of compiled draws must build no bind group";
+    EXPECT_EQ(fourTimes.groups, 0u);
+    EXPECT_EQ(fourTimes.writes, once.writes)
+        << "four times the compiled draws must cost the queue writes one does";
+    EXPECT_LT(fourTimes.bytes, bufferBytes)
+        << "sixteen draws must not write the " << bufferBytes << "-byte vertex buffer even once";
+
+    flush(1);
+    for (int cell = 0; cell < 4; ++cell)
+    {
+        const int x = cell % 2 == 0 ? kSize / 4 : 3 * kSize / 4;
+        const int y = cell / 2 == 0 ? kSize / 4 : 3 * kSize / 4;
+        Color pixel(0, 0, 0, 0);
+        const Rectangle probe(x, y, 1, 1);
+        target.GetData(0, &probe, &pixel, 0, 1);
+        const Vector4& tint = tints[static_cast<std::size_t>(cell)];
+        SCOPED_TRACE("cell " + std::to_string(cell));
+        EXPECT_NEAR(pixel.getRProperty(), static_cast<int>(tint.X * 255.0f), 2);
+        EXPECT_NEAR(pixel.getGProperty(), static_cast<int>(tint.Y * 255.0f), 2);
+        EXPECT_NEAR(pixel.getBProperty(), static_cast<int>(tint.Z * 255.0f), 2);
+    }
+    EXPECT_EQ(renderer->GetUncapturedErrorCountEXT(), 0u);
+}
 
 #endif  // CNA_WEBGPU_COMPILED_EFFECTS

@@ -10,7 +10,10 @@
 // cycle's draws are recorded into render passes only when the cycle is flushed. Every modern
 // operation here therefore first flushes the draws already queued (keeping the cycle's contents --
 // a continuation loads, it never re-applies the cycle's discard or clear), then encodes its own work
-// and SUBMITS it. Submission order is queue order, and `wgpuQueueWriteBuffer`/`WriteTexture` are
+// and SUBMITS it. A flush records into the frame's one command encoder (plans/plan_webgpu_perf.md
+// WEBGPUPERF-0006), and `OrderExternalQueueWorkEXT` submits that encoder ahead of any queue write or
+// submission made outside a replay, so the passes still precede the operation that follows them.
+// Submission order is queue order, and `wgpuQueueWriteBuffer`/`WriteTexture` are
 // queue operations ordered with submissions, so a CPU upload is seen by exactly the dispatches and
 // draws issued after it. Nothing waits except a CPU readback, which waits for its own submission.
 //
@@ -76,6 +79,11 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPUStorageTextureAccess storageAccess = WGPUStorageTextureAccess_Undefined;
         /** @brief Buffer minimum binding size. */
         std::uint64_t minBindingSize = 0;
+        /**
+         * @brief plans/plan_webgpu_perf.md WEBGPUPERF-0005: a uniform block the layout declares with
+         *        a dynamic offset, so a draw binds it inside the flush's uniform arena.
+         */
+        bool dynamicOffset = false;
         /** @brief Variable name, for diagnostics. */
         std::string name;
         /** @brief Declared type, whitespace-normalised. */
@@ -104,12 +112,15 @@ namespace CNA::Internal::Renderers::WebGPU
          * @param device The device to create the layouts on.
          * @param stages Each stage's reflection and its stage flag.
          * @param error Receives the reason on failure.
+         * @param maxDynamicUniformBlocks WEBGPUPERF-0005: when the program declares no more uniform
+         *        blocks than this, every one of them is declared with a dynamic offset (and its slot
+         *        says so); 0, the default, declares none. Storage buffers are never dynamic.
          * @return The layout, or null with @p error set.
          */
         [[nodiscard]] static std::shared_ptr<WebGPUProgramLayoutEXT> Create(
             WGPUDevice device,
             const std::vector<std::pair<const WgslModuleReflection*, WGPUShaderStage>>& stages,
-            std::string& error);
+            std::string& error, std::uint32_t maxDynamicUniformBlocks = 0);
 
         /** @brief Releases the native layouts. */
         ~WebGPUProgramLayoutEXT();
