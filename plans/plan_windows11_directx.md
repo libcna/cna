@@ -3838,3 +3838,29 @@ debug+DRED, GBV-off A+B+C+D passed **15/15**. No production renderer or
 fixture code changed. Evidence:
 `C:\rv\logs\dx12-descriptor-bind-trace-intel-gbv-dred.log` and
 `C:\rv\logs\dx12-descriptor-post-bind-trace-diag-normal.log`.
+
+### WIN11-0100: Exclude paired UAV slots and swap-chain attachment as sufficient triggers
+
+The external raw D3D12 differential now creates a UAV descriptor beside each
+sampled Texture2D SRV, matching CNA's paired descriptor allocation for an
+ordinary uncompressed Color texture. It still passed all **1,338 nonzero
+readbacks** on physical Intel `8086:46A6`, including 256 D draws, with full
+GBV and DRED and **zero D3D12 warnings/errors**. Its current source SHA-256
+is `795F8A94845DE6EB5839ADF358321821685CBDD8C8A5A6620B48E05DC0245010`;
+the Debug binary is
+`0B8D3EC05C71E25C913B970AD0FE782D499CA932799069057DB584F298DD138E`.
+Log: `C:\rv\logs\dx12-raw-intel-gbv-dred-paired-uav-descriptors.log`.
+
+The original CNA classic fixture was then run with
+`CNA_FORCE_HEADLESS_DEVICE_EXT=DIRECTX12`, alongside explicit physical Intel
+selection, full GBV, DRED, and the debug layer. The renderer reported
+`swap chain unavailable`, confirming that it used a headless graphics device.
+A+B+C passed, but D still removed the device with
+`DXGI_ERROR_DEVICE_HUNG`: **14/15**, exit 1. The failure surfaced through
+render-target `GetData`; this path did not print a fresh DRED page-fault
+record, so the earlier DRED fault addresses are not attributed to this
+particular run. A Win32 swap chain is therefore not required for the
+combined-diagnostics fault. The raw model still lacks CNA's BasicEffect
+shader, root signature, fallback bindings, upload arenas, and descriptor
+retirement behavior, so it cannot classify the fault owner. Log:
+`C:\rv\logs\dx12-descriptor-headless-device-intel-gbv-dred.log`.
