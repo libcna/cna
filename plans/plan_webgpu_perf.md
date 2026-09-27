@@ -1,6 +1,6 @@
 # WebGPU per-draw CPU cost — binding-model redesign
 
-**Status: 0001-0004 done (2026-09-27), 0005-0007 open.** Recorded 2026-09-25 at the owner's request;
+**Status: 0001-0004 and 0007 done (2026-09-27), 0005-0006 open.** Recorded 2026-09-25 at the owner's request;
 implementation started 2026-09-27. See *Results* for what changed and what it measured.
 
 Task IDs: `WEBGPUPERF-0001`, … . Predecessor and evidence:
@@ -150,7 +150,7 @@ Paths are relative to `modules/renderers/webgpu/src/`; line numbers are as of `s
 | WEBGPUPERF-0004 | Shadow and IBL groups: uniforms into the arena, texture parts cached | ✅ for every family that binds them (PBR, skinned PBR, LitTextured, Skinned) |
 | WEBGPUPERF-0005 | ShaderEffect descriptor route: reflected uniform blocks into the arena with dynamic offsets (the reflected layout marks them dynamic); cache the non-uniform groups. This is the street's 924 shadow casters | ⬜ The street's casters went with the engine layer; it now draws one ShaderEffect a frame (the sky). Still worth doing for games that draw many |
 | WEBGPUPERF-0006 | Fewer submits: resolve timer queries in the flush that is already happening instead of a separate encoder; evaluate one encoder per frame, submitted early only when a queue write, readback or present needs ordering | ⬜ The timer half no longer reaches a game: `CNA::Graphics::GpuTimer` was retired and `CreateGpuTimerEXT` is only reachable through the internal renderer interface. The encoder-per-frame half stands |
-| WEBGPUPERF-0007 | The classic stock families (Colored, Textured, LitTextured, AlphaTest, DualTexture, EnvMap, Instanced, Skinned, sprites): group 0 into the uniform arena, texture groups cached -- the same treatment 0002/0003 gave PBR | ⬜ |
+| WEBGPUPERF-0007 | The classic stock families (Colored, Textured, LitTextured, AlphaTest, DualTexture, EnvMap, Instanced, Skinned, sprites): group 0 into the uniform arena, texture groups cached -- the same treatment 0002/0003 gave PBR | ✅ The shared `coloredBindGroupLayout_` (six families), the lit, skinned and environment-map group 0s and the stock sprite group's sampler block are dynamic-offset bindings over the uniform arena; their texture groups come from `AcquireSampledBindingEXT`, which keys a sampler-and-view group straight from its descriptor. A sprite used to write its own 16-byte block and build and release its own group; the block is now appended once per distinct LOD bias per flush, and a run of sprites sharing a group binds it once. The custom-effect sprite and draw routes are unchanged (0005) |
 
 Each task: the street's 18 captures identical before/after; `-L WebGPU` 148/0 in
 `cmake-build-webgpu`; `CnaRendererTests` and `CnaGraphicsTests` keep exactly the failures that
@@ -198,8 +198,19 @@ WebGPU is now on a par with Vulkan on the same GPU, inside the 1.5x target. All 
 captured on WEBGPU before and after are pixel-identical (worst difference 0); two runs of the
 unchanged build differ in views 01, 07, 11, 13 and 18 by up to 0.08 % of pixels, as they always did.
 
+**The classic families (WEBGPUPERF-0007)**, same test, 16 lit textured BasicEffect draws and 64
+SpriteBatch sprites per steady frame: 0 bind groups and 2 queue writes (the arena and SpriteBatch's
+own vertex upload), and the same 0 and 2 at four times as many of each. Before, every one of those
+draws and sprites created at least one group and wrote at least one block.
+
 **Regressions:** `ctest -L WebGPU` in `cmake-build-webgpu` (RelWithDebInfo, `WEBGPU;VULKAN`) 147/147
-with the new `WebGPU_BindingCost`. `CnaRendererTests` 269 pass, 2 fail -- the two
+with the new `WebGPU_BindingCost`, after both steps. 0007 changed one test's premise:
+`WebGPU_BufferPoolStress` asserted the transient pool's reuse count kept climbing, and the pool had
+served that scene's per-draw uniform blocks and nothing else -- its geometry is resident since
+`STREETPERF-0004` -- so once the blocks moved to the arena the scene stopped touching the pool at all.
+Its Check B now asserts what keeps that scene churn-free instead: no bind group and a fixed few queue
+writes per steady frame (18 over 10 frames, against 320+ before). The street after 0007: 18 captures
+identical to the unmodified renderer's, 25.8 / 28.7 ms a frame. `CnaRendererTests` 269 pass, 2 fail -- the two
 `SharedBackendConformanceContract` compiled-effect tests, failing before this work. `CnaGraphicsTests`
 20 fail; the same 20 were run on the unmodified source and fail there too. `WebGPU_BindingCost`'s
 checks were proven live by mutation: zeroing the dynamic offsets fails A and E, and keying the

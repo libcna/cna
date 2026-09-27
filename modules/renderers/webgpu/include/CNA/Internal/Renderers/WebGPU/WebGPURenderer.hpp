@@ -2812,6 +2812,10 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t publicOrder = 0;
             /// REMED-GFX-172, trace only: that draw's position within the replayed segment.
             std::size_t replayPosition = 0;
+            /// WEBGPUPERF-0007: the stock sprite group, and its offset, bound at group 0 by the last
+            /// sprite; null once anything else has bound group 0.
+            WGPUBindGroup spriteBindGroup = nullptr;
+            std::uint32_t spriteBindOffset = 0;
         };
 
         /**
@@ -4561,6 +4565,13 @@ namespace CNA::Internal::Renderers::WebGPU
         /// Releases both arenas' buffers (device loss and destruction).
         void ReleaseStreamArenasEXT();
         /// 1 MiB of uniform blocks is about four thousand 256-byte-aligned blocks per chunk.
+        /// WEBGPUPERF-0007: the stock sprite shader's sampler block -- the LOD bias, padded to a vec4.
+        static constexpr std::size_t kSpriteSamplerBlockBytesEXT = 16;
+        /// WEBGPUPERF-0007: this flush's sprite sampler block for @p lodBias, appended to the uniform
+        /// arena the first time the flush meets that bias.
+        [[nodiscard]] ArenaSliceEXT SpriteSamplerBlockEXT(float lodBias);
+        /// The blocks SpriteSamplerBlockEXT appended this flush, by bias; cleared with the arena.
+        std::vector<std::pair<float, ArenaSliceEXT>> spriteSamplerBlocksEXT_;
         StreamArenaEXT uniformArenaEXT_{.usage = WGPUBufferUsage_Uniform, .chunkBytes = 1u << 20,
                                         .label = "CNA WebGPU Uniform Arena Chunk"};
         /// Per-instance streams; a draw with more than a chunk's worth uses its own buffer.
@@ -4606,6 +4617,19 @@ namespace CNA::Internal::Renderers::WebGPU
             const BindingCacheKeyEXT& key,
             std::initializer_list<const WebGPUSampledTextureEXT*> textures,
             const WGPUBindGroupDescriptor& descriptor);
+        /**
+         * @brief WEBGPUPERF-0007: a sampler-and-texture group from the binding cache, keyed from
+         *        @p descriptor itself.
+         *
+         * Every entry must be a sampler or a view, and every view one of @p textures, whose
+         * reference the cached entry keeps; otherwise the group is built for this draw and
+         * released after the submit.
+         *
+         * @return The group; owned by the cache (or, uncacheable, released after the submit).
+         */
+        [[nodiscard]] WGPUBindGroup AcquireSampledBindingEXT(
+            const WGPUBindGroupDescriptor& descriptor,
+            std::initializer_list<const WebGPUSampledTextureEXT*> textures);
         /**
          * @brief WEBGPUPERF-0003: group 1 of both PBR families -- the slot-0 sampler and the seven
          *        material maps -- from the binding cache.
@@ -5468,7 +5492,7 @@ namespace CNA::Internal::Renderers::WebGPU
         /// @brief XNA's opaque-black 2D, for an unbound classic stock-effect texture slot.
         [[nodiscard]] WebGPUSampledTextureEXT ClassicNullTextureEXT();
         /// @brief XNA's opaque-black cube, for an unbound EnvironmentMapEffect::EnvironmentMap.
-        [[nodiscard]] WGPUTextureView ClassicNullCubeViewEXT();
+        [[nodiscard]] WebGPUSampledTextureEXT ClassicNullCubeEXT();
         std::unique_ptr<WebGPUTextureRenderer> classicNullTexture_;
         std::unique_ptr<WebGPUTextureCubeRenderer> classicNullCube_;
 

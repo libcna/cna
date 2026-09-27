@@ -19,6 +19,9 @@
 //   must never survive into a later frame whose new texture happens to reuse the old one's address.
 // Check F -- ... and the cache does not grow with the number of frames that did that.
 // Check G -- zero uncaptured WebGPU errors across the run.
+// Check H -- WEBGPUPERF-0007, the classic families: a steady frame of lit, textured BasicEffect draws
+//   and SpriteBatch sprites creates no bind group either.
+// Check I -- ... and four times as many of each cost the same number of queue writes.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -28,14 +31,21 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 
 #include <array>
@@ -93,13 +103,17 @@ class WebGpuBindingCostTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     std::unique_ptr<VertexBuffer> quad_;
+    std::unique_ptr<VertexBuffer> basicQuad_;
     std::unique_ptr<PbrEffect> effect_;
+    std::unique_ptr<BasicEffect> basic_;
+    std::unique_ptr<SpriteBatch> sprites_;
     Texture2D whiteA_;
     Texture2D whiteB_;
     int frame_ = 0;
     int passCount_ = 0;
     int result_ = 1;
     Counters at16Start_, at16End_, at64Start_, at64End_;
+    Counters basicStart_, basicEnd_, basic4Start_, basic4End_;
     std::size_t cacheAfterFirstChurn_ = 0;
     int churnMismatches_ = 0;
 
@@ -152,6 +166,33 @@ class WebGpuBindingCostTest : public Game
         dev.SetVertexBuffer(nullptr);
     }
 
+    // The classic families: `repeats` x 16 lit, textured BasicEffect draws, then `repeats` x 64
+    // sprites alternating between two textures, drawn one by one (Deferred).
+    void DrawClassic(GraphicsDevice& dev, int repeats)
+    {
+        dev.SetVertexBuffer(basicQuad_.get());
+        for (int r = 0; r < repeats; ++r)
+            for (int cell = 0; cell < kGrid * kGrid; ++cell)
+            {
+                const float x = -0.75f + 0.5f * static_cast<float>(cell % kGrid);
+                const float y = 0.75f - 0.5f * static_cast<float>(cell / kGrid);
+                basic_->setWorldProperty(Matrix::CreateScale(0.24f) *
+                                         Matrix::CreateTranslation(x, y, 0.0f));
+                basic_->setTextureProperty(cell % 2 == 0 ? &whiteA_ : &whiteB_);
+                basic_->setDiffuseColorProperty(CellColour(cell));
+                basic_->Apply();
+                dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            }
+        dev.SetVertexBuffer(nullptr);
+
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend);
+        for (int i = 0; i < 64 * repeats; ++i)
+            sprites_->Draw(i % 2 == 0 ? whiteA_ : whiteB_,
+                           Vector2(static_cast<float>(i % 60), static_cast<float>((i / 60) % 60)),
+                           CellColour(i % 16) == Vector3(0, 0, 0) ? Color::Gray : Color::White);
+        sprites_->End();
+    }
+
     Color Read(GraphicsDevice& dev, int x, int y)
     {
         const Rectangle region(x, y, 1, 1);
@@ -175,6 +216,26 @@ protected:
         quad_->SetDataRaw(verts.data(), static_cast<int>(verts.size()),
                           static_cast<int>(sizeof(PbrGpuVertex)));
         effect_ = std::make_unique<PbrEffect>(dev);
+
+        basicQuad_ = std::make_unique<VertexBuffer>(
+            dev, VertexPositionNormalTexture::getVertexDeclarationStatic(), 6, BufferUsage::None);
+        const Vector3 n(0.0f, 0.0f, -1.0f);
+        const VertexPositionNormalTexture basicVerts[6] = {
+            {Vector3(-1.0f, 1.0f, 0.5f), n, Vector2(0.0f, 0.0f)},
+            {Vector3(-1.0f, -1.0f, 0.5f), n, Vector2(0.0f, 1.0f)},
+            {Vector3(1.0f, -1.0f, 0.5f), n, Vector2(1.0f, 1.0f)},
+            {Vector3(-1.0f, 1.0f, 0.5f), n, Vector2(0.0f, 0.0f)},
+            {Vector3(1.0f, -1.0f, 0.5f), n, Vector2(1.0f, 1.0f)},
+            {Vector3(1.0f, 1.0f, 0.5f), n, Vector2(1.0f, 0.0f)},
+        };
+        basicQuad_->SetData(basicVerts, 0, 6);
+        basic_ = std::make_unique<BasicEffect>(dev);
+        basic_->setTextureEnabledProperty(true);
+        basic_->setLightingEnabledProperty(true);
+        basic_->DirectionalLight0.setEnabledProperty(true);
+        basic_->DirectionalLight0.setDirectionProperty(Vector3(0.0f, 0.0f, 1.0f));
+        basic_->DirectionalLight0.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+        sprites_ = std::make_unique<SpriteBatch>(dev);
     }
 
     void Draw(const GameTime&) override
@@ -184,13 +245,17 @@ protected:
         dev.setDepthStencilStateProperty(DepthStencilState::None);
         dev.Clear(Color(64, 64, 64, 255));
 
-        // Frames 0-3 draw sixteen, 4-7 sixty-four. A counter read at the start of a frame includes
-        // the previous frame's flush, so frame 3 -> 4 measures a steady frame of sixteen and
-        // frame 7 -> 8 a steady frame of sixty-four.
+        // Frames 0-3 draw sixteen PBR draws, 4-7 sixty-four, 8-11 the classic families once and
+        // 12-15 four times over. A counter read at the start of a frame includes the previous
+        // frame's flush, so the last frame of each phase is measured from its start to the next.
         if (frame_ == 3) at16Start_ = Snapshot();
         if (frame_ == 4) at16End_ = Snapshot();
         if (frame_ == 7) at64Start_ = Snapshot();
         if (frame_ == 8) at64End_ = Snapshot();
+        if (frame_ == 11) basicStart_ = Snapshot();
+        if (frame_ == 12) basicEnd_ = Snapshot();
+        if (frame_ == 15) basic4Start_ = Snapshot();
+        if (frame_ == 16) basic4End_ = Snapshot();
 
         if (frame_ < 4)
         {
@@ -200,7 +265,15 @@ protected:
         {
             DrawGrid(dev, 4);
         }
-        else if (frame_ == 8)
+        else if (frame_ < 12)
+        {
+            DrawClassic(dev, 1);
+        }
+        else if (frame_ < 16)
+        {
+            DrawClassic(dev, 4);
+        }
+        else if (frame_ == 16)
         {
             DrawGrid(dev, 1);
             int wrong = 0;
@@ -223,7 +296,7 @@ protected:
         {
             // Check E: a fresh texture every frame, red and green in turn, destroyed at the end of
             // Draw while its queued draw still holds it.
-            const int churn = frame_ - 9;
+            const int churn = frame_ - 17;
             const bool red = churn % 2 == 0;
             Texture2D texture = Texture2D::CreateFromPixels(
                 dev, 1, 1,
@@ -267,8 +340,21 @@ protected:
                           std::to_string(cacheEnd) + ")");
                 const std::size_t errors = Renderer().GetUncapturedErrorCountEXT();
                 check(errors == 0, "G: zero uncaptured WebGPU errors (" + std::to_string(errors) + ")");
-                std::printf("=== %d/7 PASS ===\n", passCount_);
-                result_ = passCount_ == 7 ? 0 : 1;
+                const std::size_t groupsBasic = basicEnd_.bindGroups - basicStart_.bindGroups;
+                const std::size_t writesBasic = basicEnd_.queueWrites - basicStart_.queueWrites;
+                const std::size_t groupsBasic4 = basic4End_.bindGroups - basic4Start_.bindGroups;
+                const std::size_t writesBasic4 = basic4End_.queueWrites - basic4Start_.queueWrites;
+                std::printf("    per frame: 16 BasicEffect + 64 sprites -> %zu groups, %zu writes; "
+                            "x4 -> %zu groups, %zu writes\n", groupsBasic, writesBasic, groupsBasic4,
+                            writesBasic4);
+                check(groupsBasic == 0 && groupsBasic4 == 0,
+                      "H: a steady frame of BasicEffect draws and sprites creates no bind group (" +
+                          std::to_string(groupsBasic) + ", " + std::to_string(groupsBasic4) + ")");
+                check(writesBasic4 == writesBasic,
+                      "I: four times the classic draws cost the queue writes one does (" +
+                          std::to_string(writesBasic4) + " vs " + std::to_string(writesBasic) + ")");
+                std::printf("=== %d/9 PASS ===\n", passCount_);
+                result_ = passCount_ == 9 ? 0 : 1;
                 Exit();
             }
         }

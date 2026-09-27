@@ -3797,6 +3797,8 @@ namespace CNA::Internal::Renderers::WebGPU
             }
             arena->current = 0;
         }
+        // Their offsets pointed into the flush just written.
+        spriteSamplerBlocksEXT_.clear();
     }
 
     void WebGPURenderer::ReleaseStreamArenasEXT()
@@ -3863,6 +3865,47 @@ namespace CNA::Internal::Renderers::WebGPU
         return group;
     }
 
+    WGPUBindGroup WebGPURenderer::AcquireSampledBindingEXT(
+        const WGPUBindGroupDescriptor& descriptor,
+        std::initializer_list<const WebGPUSampledTextureEXT*> textures)
+    {
+        // The key comes straight from the descriptor: every entry is a sampler or a view, keyed at
+        // its binding, and every view has to be one of @p textures, whose reference the cached
+        // entry keeps. Anything else -- a buffer entry, a view nobody vouched for -- is built for
+        // this draw alone, as every group used to be.
+        BindingCacheKeyEXT key;
+        key.layout = descriptor.layout;
+        bool keyable = descriptor.entryCount <= key.handles.size();
+        for (std::size_t i = 0; keyable && i < descriptor.entryCount; ++i)
+        {
+            const WGPUBindGroupEntry& entry = descriptor.entries[i];
+            if (entry.buffer != nullptr || entry.binding >= key.handles.size())
+            {
+                keyable = false;
+                break;
+            }
+            if (entry.textureView != nullptr)
+            {
+                bool vouched = false;
+                for (const WebGPUSampledTextureEXT* texture : textures)
+                    vouched = vouched || (texture != nullptr && texture->view == entry.textureView);
+                keyable = vouched;
+                key.handles[entry.binding] = entry.textureView;
+            }
+            else
+            {
+                key.handles[entry.binding] = entry.sampler;
+            }
+        }
+        if (!keyable)
+        {
+            WGPUBindGroup group = CreateBindGroupEXT(&descriptor);
+            pendingBindGroupReleases_.push_back(group);
+            return group;
+        }
+        return AcquireCachedBindGroupEXT(key, textures, descriptor);
+    }
+
     WGPUBindGroup WebGPURenderer::AcquirePbrTextureBindingEXT(
         WGPUSampler sampler, const WebGPUSampledTextureEXT& baseColor,
         const WebGPUSampledTextureEXT& normal, const WebGPUSampledTextureEXT& metallicRoughness,
@@ -3878,24 +3921,19 @@ namespace CNA::Internal::Renderers::WebGPU
         const std::array<const WebGPUSampledTextureEXT*, 7> maps{
             &baseColor, &normal, &metallicRoughness, &emissive, &occlusion, &specular,
             &specularColor};
-        BindingCacheKeyEXT key;
-        key.layout = pbrBindGroupLayout1_;
-        key.handles[0] = sampler;
         for (std::size_t i = 0; i < maps.size(); ++i)
         {
             entries[i + 1].binding = static_cast<std::uint32_t>(i + 1);
             entries[i + 1].textureView = maps[i]->View();
-            key.handles[i + 1] = maps[i]->View();
         }
         WGPUBindGroupDescriptor descriptor{};
         descriptor.label = StringView(label);
         descriptor.layout = pbrBindGroupLayout1_;
         descriptor.entryCount = entries.size();
         descriptor.entries = entries.data();
-        return AcquireCachedBindGroupEXT(
-            key, {&baseColor, &normal, &metallicRoughness, &emissive, &occlusion, &specular,
-                  &specularColor},
-            descriptor);
+        return AcquireSampledBindingEXT(
+            descriptor, {&baseColor, &normal, &metallicRoughness, &emissive, &occlusion, &specular,
+                         &specularColor});
     }
 
     void WebGPURenderer::SweepBindingCacheEXT()
@@ -4562,6 +4600,8 @@ namespace CNA::Internal::Renderers::WebGPU
 
     void WebGPURenderer::DestroySpriteResources()
     {
+        // WEBGPUPERF-0007: cached groups may name this family's layouts.
+        ReleaseBindingCacheEXT();
         // WEBGPU-155: the neutral vertex record is shared by every stock family, so it is released
         // with the sprite resources rather than owned by any one of them.
         if (neutralVertexBuffer_ != nullptr) wgpuBufferRelease(neutralVertexBuffer_);
@@ -4626,6 +4666,9 @@ namespace CNA::Internal::Renderers::WebGPU
         layoutEntries[2].visibility = WGPUShaderStage_Fragment;
         layoutEntries[2].buffer.type = WGPUBufferBindingType_Uniform;
         layoutEntries[2].buffer.minBindingSize = 16;
+        // plans/plan_webgpu_perf.md WEBGPUPERF-0007: the block lives in the uniform arena, so every
+        // sprite of one texture and sampler binds the same cached group.
+        layoutEntries[2].buffer.hasDynamicOffset = true;
         WGPUBindGroupLayoutDescriptor bindLayoutDescriptor{};
         bindLayoutDescriptor.label = StringView("CNA WebGPU SpriteBatch BindGroupLayout");
         bindLayoutDescriptor.entryCount = layoutEntries.size();
@@ -4825,6 +4868,8 @@ namespace CNA::Internal::Renderers::WebGPU
 
     void WebGPURenderer::DestroyColoredResources()
     {
+        // WEBGPUPERF-0007: cached groups may name this family's layouts.
+        ReleaseBindingCacheEXT();
         for (auto& [key, pipe] : coloredPipelines_)
         {
             if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
@@ -4869,6 +4914,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // colored/textured/colored_textured/alpha_test/dual/instanced -- ALL of which bind a 160-byte
         // buffer (every *DrawCommand::uniforms is std::array<float,40>), so declare the exact size.
         uniformEntry.buffer.minBindingSize = kPrimaryUniformByteSize;
+        // plans/plan_webgpu_perf.md WEBGPUPERF-0007: the block lives in the uniform arena, so every
+        // family sharing this layout binds the chunk's one group at its own offset.
+        uniformEntry.buffer.hasDynamicOffset = true;
         WGPUBindGroupLayoutDescriptor bindLayoutDescriptor{};
         bindLayoutDescriptor.label = StringView("CNA WebGPU Colored3D BindGroupLayout");
         bindLayoutDescriptor.entryCount = 1;
@@ -5788,6 +5836,8 @@ namespace CNA::Internal::Renderers::WebGPU
 
     void WebGPURenderer::DestroyTexturedResources()
     {
+        // WEBGPUPERF-0007: cached groups may name this family's layouts.
+        ReleaseBindingCacheEXT();
         for (auto& [key, pipe] : texturedPipelines_)
         {
             if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
@@ -6298,6 +6348,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         layoutEntries[1].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
         layoutEntries[1].buffer.type = WGPUBufferBindingType_Uniform;
         layoutEntries[1].buffer.minBindingSize = 272;
+        // WEBGPUPERF-0007: both blocks in the uniform arena.
+        for (WGPUBindGroupLayoutEntry& entry : layoutEntries)
+            entry.buffer.hasDynamicOffset = true;
         WGPUBindGroupLayoutDescriptor bindLayoutDescriptor{};
         bindLayoutDescriptor.label = StringView("CNA WebGPU LitTextured3D BindGroupLayout");
         bindLayoutDescriptor.entryCount = layoutEntries.size();
@@ -6425,6 +6478,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
     void WebGPURenderer::DestroyAlphaTestResources()
     {
+        // WEBGPUPERF-0007: cached groups may name this family's layouts.
+        ReleaseBindingCacheEXT();
         for (auto& [key, pipe] : alphaTestPipelines_)
         {
             if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
@@ -6566,6 +6621,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
     void WebGPURenderer::DestroyDualTextureResources()
     {
+        // WEBGPUPERF-0007: cached groups may name this family's layouts.
+        ReleaseBindingCacheEXT();
         for (auto& [key, pipe] : dualTexturePipelines_)
         {
             if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
@@ -6747,6 +6804,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
     void WebGPURenderer::DestroyEnvMapResources()
     {
+        // WEBGPUPERF-0007: cached groups may name this family's layouts.
+        ReleaseBindingCacheEXT();
         for (auto& [key, pipe] : envMapPipelines_)
         {
             if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
@@ -6815,6 +6874,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // bias. A minBindingSize smaller than the WGSL struct is a pipeline-creation error, which
         // is exactly how this was caught rather than by a wrong picture.
         uboLayoutEntries[1].buffer.minBindingSize = 256;
+        // WEBGPUPERF-0007: both blocks in the uniform arena.
+        for (WGPUBindGroupLayoutEntry& entry : uboLayoutEntries)
+            entry.buffer.hasDynamicOffset = true;
         WGPUBindGroupLayoutDescriptor uboLayoutDescriptor{};
         uboLayoutDescriptor.label = StringView("CNA WebGPU EnvMap3D UBO BindGroupLayout");
         uboLayoutDescriptor.entryCount = uboLayoutEntries.size();
@@ -7031,35 +7093,12 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             command.vertexData, command.resident, vbDescriptor.usage, vbDescriptor.size);
         WGPUBuffer vertexBuffer = vertexSource.transient;
 
-        WGPUBufferDescriptor transformDescriptor{};
-        transformDescriptor.label = StringView("CNA WebGPU EnvMap3D Transform UBO");
-        transformDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-        transformDescriptor.size = sizeof(command.transformUniforms);
-        WGPUBuffer transformBuffer = AcquireTransientBuffer(transformDescriptor.usage, transformDescriptor.size);
-        QueueWriteBufferEXT(transformBuffer, 0, command.transformUniforms.data(),
-                            sizeof(command.transformUniforms));
-
-        WGPUBufferDescriptor paramsDescriptor{};
-        paramsDescriptor.label = StringView("CNA WebGPU EnvMap3D Params UBO");
-        paramsDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-        paramsDescriptor.size = sizeof(command.envMapUniforms);
-        WGPUBuffer paramsBuffer = AcquireTransientBuffer(paramsDescriptor.usage, paramsDescriptor.size);
-        QueueWriteBufferEXT(paramsBuffer, 0, command.envMapUniforms.data(),
-                            sizeof(command.envMapUniforms));
-
-        std::array<WGPUBindGroupEntry, 2> uboEntries{};
-        uboEntries[0].binding = 0;
-        uboEntries[0].buffer = transformBuffer;
-        uboEntries[0].size = sizeof(command.transformUniforms);
-        uboEntries[1].binding = 1;
-        uboEntries[1].buffer = paramsBuffer;
-        uboEntries[1].size = sizeof(command.envMapUniforms);
-        WGPUBindGroupDescriptor uboBindDescriptor{};
-        uboBindDescriptor.label = StringView("CNA WebGPU EnvMap3D UBO BindGroup");
-        uboBindDescriptor.layout = envMapBindGroupLayout_;
-        uboBindDescriptor.entryCount = uboEntries.size();
-        uboBindDescriptor.entries = uboEntries.data();
-        WGPUBindGroup uboBindGroup = CreateBindGroupEXT(&uboBindDescriptor);
+        // plans/plan_webgpu_perf.md WEBGPUPERF-0007: the two blocks into this flush's arena, bound
+        // through the chunk's one group at their own offsets, as WEBGPUPERF-0002 did for PBR.
+        const ArenaUniformBindingEXT ubo = AppendUniformBlocksEXT(
+            envMapBindGroupLayout_,
+            {{command.transformUniforms.data(), sizeof(command.transformUniforms)},
+             {command.envMapUniforms.data(), sizeof(command.envMapUniforms)}});
 
         WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
                                                      command.addressV, command.addressW, command.maxMipLevel, command.maxAnisotropy,
@@ -7067,12 +7106,11 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // GSC-0004: EnvironmentMapEffect samples both slots unconditionally, and XNA reads
         // either unbound one as opaque black -- what the envmap_texture_null / envmap_cube_null
         // oracle references measure.
-        WGPUTextureView texView = command.texture
-            ? command.texture.View()
-            : ClassicNullTextureEXT().View();
-        WGPUTextureView cubeView = command.envMap
-            ? command.envMap.View()
-            : ClassicNullCubeViewEXT();
+        const WebGPUSampledTextureEXT texture = command.texture ? command.texture
+                                                                : ClassicNullTextureEXT();
+        const WebGPUSampledTextureEXT cube = command.envMap ? command.envMap : ClassicNullCubeEXT();
+        const WGPUTextureView texView = texture.View();
+        const WGPUTextureView cubeView = cube.View();
         // REMED-GFX-172: the reflection cube's own SamplerStates[1], from the description captured
         // at this draw's public call. The fallback 1x1 white cube is filtered by the same slot --
         // a missing resource does not change WHICH sampler slot owns that binding.
@@ -7094,7 +7132,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         texBindDescriptor.layout = envMapTextureBindGroupLayout_;
         texBindDescriptor.entryCount = texEntries.size();
         texBindDescriptor.entries = texEntries.data();
-        WGPUBindGroup texBindGroup = CreateBindGroupEXT(&texBindDescriptor);
+        // WEBGPUPERF-0007: from the binding cache, keyed by the samplers and the views.
+        const WGPUBindGroup texBindGroup = AcquireSampledBindingEXT(texBindDescriptor, {&texture, &cube});
 
         if (MultiTextureSamplerTraceEnabled())
         {
@@ -7128,7 +7167,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (command.stencil.enable)
             wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(command.stencilRef));
         wgpuRenderPassEncoderSetPipeline(pass, pipe);
-        wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetBindGroup(pass, 0, ubo.group, ubo.count, ubo.offsets.data());
         wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexSource.buffer, vertexSource.offset,
                                              vertexSource.size);
@@ -7160,16 +7199,14 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                 wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
         }
 
-        pendingBindGroupReleases_.push_back(uboBindGroup);
-        pendingBindGroupReleases_.push_back(texBindGroup);
-        pendingBufferReleases_.push_back(transformBuffer);
-        pendingBufferReleases_.push_back(paramsBuffer);
         if (vertexBuffer != nullptr) pendingBufferReleases_.push_back(vertexBuffer);
         if (instanceBuffer != nullptr) pendingBufferReleases_.push_back(instanceBuffer);
     }
 
     void WebGPURenderer::DestroyInstancedResources()
     {
+        // WEBGPUPERF-0007: cached groups may name this family's layouts.
+        ReleaseBindingCacheEXT();
         for (auto& [key, pipe] : instancedPipelines_)
         {
             if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
@@ -7307,23 +7344,11 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             command.vertexData, command.resident, vbDescriptor.usage, vbDescriptor.size);
         WGPUBuffer vertexBuffer = vertexSource.transient;
 
-        WGPUBufferDescriptor uboDescriptor{};
-        uboDescriptor.label = StringView("CNA WebGPU Instanced3D UBO");
-        uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-        uboDescriptor.size = sizeof(command.uniforms);
-        WGPUBuffer uniformBuffer = AcquireTransientBuffer(uboDescriptor.usage, uboDescriptor.size);
-        QueueWriteBufferEXT(uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
-
-        WGPUBindGroupEntry bindEntry{};
-        bindEntry.binding = 0;
-        bindEntry.buffer = uniformBuffer;
-        bindEntry.size = sizeof(command.uniforms);
-        WGPUBindGroupDescriptor bindDescriptor{};
-        bindDescriptor.label = StringView("CNA WebGPU Instanced3D BindGroup");
-        bindDescriptor.layout = coloredBindGroupLayout_;
-        bindDescriptor.entryCount = 1;
-        bindDescriptor.entries = &bindEntry;
-        WGPUBindGroup bindGroup = CreateBindGroupEXT(&bindDescriptor);
+        // plans/plan_webgpu_perf.md WEBGPUPERF-0007: the uniform block into this flush's arena, bound
+        // through the chunk's one group at its own offset, as WEBGPUPERF-0002 did for PBR.
+        const ArenaUniformBindingEXT ubo = AppendUniformBlocksEXT(
+            coloredBindGroupLayout_,
+            {{command.uniforms.data(), sizeof(command.uniforms)}});
 
         WGPURenderPipeline pipe = GetOrCreatePipelineInstanced3D(command.vertexLayout,
                                                                  command.instancedHasColor,
@@ -7343,7 +7368,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (command.stencil.enable)
             wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(command.stencilRef));
         wgpuRenderPassEncoderSetPipeline(pass, pipe);
-        wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetBindGroup(pass, 0, ubo.group, ubo.count, ubo.offsets.data());
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexSource.buffer, vertexSource.offset,
                                              vertexSource.size);
         // WEBGPU-172: slots 1..n, which for a classic instanced draw is exactly the world-matrix
@@ -7366,8 +7391,6 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                 wgpuRenderPassEncoderDraw(pass, command.vertexCount, command.instanceCount, 0, 0);
         }
 
-        pendingBindGroupReleases_.push_back(bindGroup);
-        pendingBufferReleases_.push_back(uniformBuffer);
         if (vertexBuffer != nullptr) pendingBufferReleases_.push_back(vertexBuffer);
     }
 
@@ -8150,6 +8173,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // instead of the stock sprite pipeline (its own modules, layout and uniform block).
         if (command.customEffect != nullptr)
         {
+            // The effect binds groups of its own, so the next stock sprite must bind again.
+            state.spriteBindGroup = nullptr;
             IssueSpriteWithCustomEffect(pass, command, spriteIndex, targetFormat, targetSampleCount, state);
             return;
         }
@@ -8182,15 +8207,11 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         ApplyDrawViewport(pass, command.viewport);
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
         ApplyDrawScissor(pass, command.scissor);
-        const std::array<float, 4> samplerUniforms{{command.lodBias, 0.0f, 0.0f, 0.0f}};
-        WGPUBufferDescriptor samplerUboDescriptor{};
-        samplerUboDescriptor.label = StringView("CNA WebGPU SpriteBatch Sampler UBO");
-        samplerUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-        samplerUboDescriptor.size = sizeof(samplerUniforms);
-        WGPUBuffer samplerUniformBuffer =
-            AcquireTransientBuffer(samplerUboDescriptor.usage, samplerUboDescriptor.size);
-        QueueWriteBufferEXT(samplerUniformBuffer, 0, samplerUniforms.data(),
-                             sizeof(samplerUniforms));
+        // plans/plan_webgpu_perf.md WEBGPUPERF-0007: the 16-byte sampler block, in the uniform arena
+        // once per distinct LOD bias per flush -- every sprite used to write its own, and build and
+        // release a group of its own, which a frame of a few thousand sprites paid thousands of
+        // times over.
+        const ArenaSliceEXT samplerBlock = SpriteSamplerBlockEXT(command.lodBias);
 
         std::array<WGPUBindGroupEntry, 3> entries{};
         entries[0].binding = 0;
@@ -8207,15 +8228,26 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         entries[1].binding = 1;
         entries[1].textureView = command.texture.View();
         entries[2].binding = 2;
-        entries[2].buffer = samplerUniformBuffer;
-        entries[2].size = sizeof(samplerUniforms);
+        entries[2].buffer = samplerBlock.buffer;
+        entries[2].size = kSpriteSamplerBlockBytesEXT;
         WGPUBindGroupDescriptor descriptor{};
         descriptor.label = StringView("CNA WebGPU SpriteBatch BindGroup");
         descriptor.layout = spriteBindGroupLayout_;
         descriptor.entryCount = entries.size();
         descriptor.entries = entries.data();
-        WGPUBindGroup bindGroup = CreateBindGroupEXT(&descriptor);
-        wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
+        BindingCacheKeyEXT key;
+        key.layout = spriteBindGroupLayout_;
+        key.arenaChunk = samplerBlock.chunk;
+        key.handles[0] = entries[0].sampler;
+        key.handles[1] = entries[1].textureView;
+        const WGPUBindGroup bindGroup = AcquireCachedBindGroupEXT(key, {&command.texture}, descriptor);
+        // A run of sprites sharing a texture, a sampler and a bias binds once.
+        if (bindGroup != state.spriteBindGroup || samplerBlock.offset != state.spriteBindOffset)
+        {
+            wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 1, &samplerBlock.offset);
+            state.spriteBindGroup = bindGroup;
+            state.spriteBindOffset = samplerBlock.offset;
+        }
         // WEBGPU-154: a wireframe sprite draws its own six vertices as a twelve-index line list,
         // reaching them through baseVertex so the index buffer is shared by every sprite.
         if (command.wireframe)
@@ -8232,8 +8264,20 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         {
             wgpuRenderPassEncoderDraw(pass, 6, 1, spriteIndex * 6u, 0);
         }
-        wgpuBindGroupRelease(bindGroup);
-        pendingBufferReleases_.push_back(samplerUniformBuffer);
+    }
+
+    WebGPURenderer::ArenaSliceEXT WebGPURenderer::SpriteSamplerBlockEXT(const float lodBias)
+    {
+        for (const auto& [bias, slice] : spriteSamplerBlocksEXT_)
+            if (bias == lodBias)
+                return slice;
+        const std::array<float, 4> block{{lodBias, 0.0f, 0.0f, 0.0f}};
+        static_assert(sizeof(block) == kSpriteSamplerBlockBytesEXT);
+        if (!ReserveArenaEXT(uniformArenaEXT_, sizeof(block)))
+            throw std::runtime_error("CNA WebGPU: the sprite sampler block does not fit an arena chunk");
+        const ArenaSliceEXT slice = AppendArenaEXT(uniformArenaEXT_, block.data(), sizeof(block));
+        spriteSamplerBlocksEXT_.emplace_back(lodBias, slice);
+        return slice;
     }
 
     void WebGPURenderer::Begin3DDrawState(WGPURenderPassEncoder pass, ReplayState& state)
@@ -8250,9 +8294,11 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             state.blendConstantIsPassDefault = true;
         }
         // Every 3D issue function binds its own pipeline and its own vertex buffer into slot 0
-        // unconditionally, so a following sprite must assume neither is still its own.
+        // unconditionally, so a following sprite must assume neither is still its own -- nor its
+        // group 0, which every 3D family rebinds with a layout of its own.
         state.boundPipeline = nullptr;
         state.spriteVerticesBound = false;
+        state.spriteBindGroup = nullptr;
     }
 
     /**
@@ -13463,23 +13509,11 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             command.vertexData, command.resident, vbDescriptor.usage, vbDescriptor.size);
         WGPUBuffer vertexBuffer = vertexSource.transient;
 
-        WGPUBufferDescriptor uboDescriptor{};
-        uboDescriptor.label = StringView("CNA WebGPU Colored3D UBO");
-        uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-        uboDescriptor.size = sizeof(command.uniforms);
-        WGPUBuffer uniformBuffer = AcquireTransientBuffer(uboDescriptor.usage, uboDescriptor.size);
-        QueueWriteBufferEXT(uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
-
-        WGPUBindGroupEntry bindEntry{};
-        bindEntry.binding = 0;
-        bindEntry.buffer = uniformBuffer;
-        bindEntry.size = sizeof(command.uniforms);
-        WGPUBindGroupDescriptor bindDescriptor{};
-        bindDescriptor.label = StringView("CNA WebGPU Colored3D BindGroup");
-        bindDescriptor.layout = coloredBindGroupLayout_;
-        bindDescriptor.entryCount = 1;
-        bindDescriptor.entries = &bindEntry;
-        WGPUBindGroup bindGroup = CreateBindGroupEXT(&bindDescriptor);
+        // plans/plan_webgpu_perf.md WEBGPUPERF-0007: the uniform block into this flush's arena, bound
+        // through the chunk's one group at its own offset, as WEBGPUPERF-0002 did for PBR.
+        const ArenaUniformBindingEXT ubo = AppendUniformBlocksEXT(
+            coloredBindGroupLayout_,
+            {{command.uniforms.data(), sizeof(command.uniforms)}});
 
         WGPURenderPipeline pipe = GetOrCreatePipelineColored3D(
                                                                command.topology,
@@ -13500,7 +13534,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (command.stencil.enable)
             wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(command.stencilRef));
         wgpuRenderPassEncoderSetPipeline(pass, pipe);
-        wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetBindGroup(pass, 0, ubo.group, ubo.count, ubo.offsets.data());
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexSource.buffer, vertexSource.offset,
                                              vertexSource.size);
         // WEBGPU-155: slot 1 supplies (0, 0, 0, 1) for any stock input this draw's
@@ -13525,8 +13559,6 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                 wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
         }
 
-        pendingBindGroupReleases_.push_back(bindGroup);
-        pendingBufferReleases_.push_back(uniformBuffer);
         if (vertexBuffer != nullptr) pendingBufferReleases_.push_back(vertexBuffer);
     }
 
@@ -13548,23 +13580,11 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             command.vertexData, command.resident, vbDescriptor.usage, vbDescriptor.size);
         WGPUBuffer vertexBuffer = vertexSource.transient;
 
-        WGPUBufferDescriptor uboDescriptor{};
-        uboDescriptor.label = StringView("CNA WebGPU Textured3D UBO");
-        uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-        uboDescriptor.size = sizeof(command.uniforms);
-        WGPUBuffer uniformBuffer = AcquireTransientBuffer(uboDescriptor.usage, uboDescriptor.size);
-        QueueWriteBufferEXT(uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
-
-        WGPUBindGroupEntry uboEntry{};
-        uboEntry.binding = 0;
-        uboEntry.buffer = uniformBuffer;
-        uboEntry.size = sizeof(command.uniforms);
-        WGPUBindGroupDescriptor uboBindDescriptor{};
-        uboBindDescriptor.label = StringView("CNA WebGPU Textured3D UBO BindGroup");
-        uboBindDescriptor.layout = coloredBindGroupLayout_;
-        uboBindDescriptor.entryCount = 1;
-        uboBindDescriptor.entries = &uboEntry;
-        WGPUBindGroup uboBindGroup = CreateBindGroupEXT(&uboBindDescriptor);
+        // plans/plan_webgpu_perf.md WEBGPUPERF-0007: the uniform block into this flush's arena, bound
+        // through the chunk's one group at its own offset, as WEBGPUPERF-0002 did for PBR.
+        const ArenaUniformBindingEXT ubo = AppendUniformBlocksEXT(
+            coloredBindGroupLayout_,
+            {{command.uniforms.data(), sizeof(command.uniforms)}});
 
         WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
                                                      command.addressV, command.addressW, command.maxMipLevel, command.maxAnisotropy,
@@ -13579,7 +13599,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         texBindDescriptor.layout = texturedBindGroupLayout_;
         texBindDescriptor.entryCount = texEntries.size();
         texBindDescriptor.entries = texEntries.data();
-        WGPUBindGroup texBindGroup = CreateBindGroupEXT(&texBindDescriptor);
+        // WEBGPUPERF-0007: from the binding cache, keyed by the sampler and the view.
+        const WGPUBindGroup texBindGroup = AcquireSampledBindingEXT(texBindDescriptor, {&command.texture});
 
         WGPURenderPipeline pipe = command.hasVertexColor
             ? GetOrCreatePipelineColoredTextured3D(
@@ -13611,7 +13632,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (command.stencil.enable)
             wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(command.stencilRef));
         wgpuRenderPassEncoderSetPipeline(pass, pipe);
-        wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetBindGroup(pass, 0, ubo.group, ubo.count, ubo.offsets.data());
         wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexSource.buffer, vertexSource.offset,
                                              vertexSource.size);
@@ -13643,9 +13664,6 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                 wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
         }
 
-        pendingBindGroupReleases_.push_back(uboBindGroup);
-        pendingBindGroupReleases_.push_back(texBindGroup);
-        pendingBufferReleases_.push_back(uniformBuffer);
         if (vertexBuffer != nullptr) pendingBufferReleases_.push_back(vertexBuffer);
         if (instanceBuffer != nullptr) pendingBufferReleases_.push_back(instanceBuffer);
     }
@@ -13668,33 +13686,12 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             command.vertexData, command.resident, vbDescriptor.usage, vbDescriptor.size);
         WGPUBuffer vertexBuffer = vertexSource.transient;
 
-        WGPUBufferDescriptor uboDescriptor{};
-        uboDescriptor.label = StringView("CNA WebGPU LitTextured3D UBO");
-        uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-        uboDescriptor.size = sizeof(command.uniforms);
-        WGPUBuffer uniformBuffer = AcquireTransientBuffer(uboDescriptor.usage, uboDescriptor.size);
-        QueueWriteBufferEXT(uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
-
-        WGPUBufferDescriptor lightUboDescriptor{};
-        lightUboDescriptor.label = StringView("CNA WebGPU LitTextured3D LightUBO");
-        lightUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-        lightUboDescriptor.size = sizeof(command.lightUniforms);
-        WGPUBuffer lightUniformBuffer = AcquireTransientBuffer(lightUboDescriptor.usage, lightUboDescriptor.size);
-        QueueWriteBufferEXT(lightUniformBuffer, 0, command.lightUniforms.data(), sizeof(command.lightUniforms));
-
-        std::array<WGPUBindGroupEntry, 2> uboEntries{};
-        uboEntries[0].binding = 0;
-        uboEntries[0].buffer = uniformBuffer;
-        uboEntries[0].size = sizeof(command.uniforms);
-        uboEntries[1].binding = 1;
-        uboEntries[1].buffer = lightUniformBuffer;
-        uboEntries[1].size = sizeof(command.lightUniforms);
-        WGPUBindGroupDescriptor uboBindDescriptor{};
-        uboBindDescriptor.label = StringView("CNA WebGPU LitTextured3D UBO BindGroup");
-        uboBindDescriptor.layout = litBindGroupLayout_;
-        uboBindDescriptor.entryCount = uboEntries.size();
-        uboBindDescriptor.entries = uboEntries.data();
-        WGPUBindGroup uboBindGroup = CreateBindGroupEXT(&uboBindDescriptor);
+        // plans/plan_webgpu_perf.md WEBGPUPERF-0007: the uniform blocks into this flush's arena, bound
+        // through the chunk's one group at their own offsets, as WEBGPUPERF-0002 did for PBR.
+        const ArenaUniformBindingEXT ubo = AppendUniformBlocksEXT(
+            litBindGroupLayout_,
+            {{command.uniforms.data(), sizeof(command.uniforms)},
+             {command.lightUniforms.data(), sizeof(command.lightUniforms)}});
 
         WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
                                                      command.addressV, command.addressW, command.maxMipLevel, command.maxAnisotropy,
@@ -13709,7 +13706,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         texBindDescriptor.layout = texturedBindGroupLayout_;
         texBindDescriptor.entryCount = texEntries.size();
         texBindDescriptor.entries = texEntries.data();
-        WGPUBindGroup texBindGroup = CreateBindGroupEXT(&texBindDescriptor);
+        // WEBGPUPERF-0007: from the binding cache, keyed by the sampler and the view.
+        const WGPUBindGroup texBindGroup = AcquireSampledBindingEXT(texBindDescriptor, {&command.texture});
 
         // WMG-0014: group 2, this draw's own shadow reception. WEBGPUPERF-0004: a cached group
         // and the block's offset in the uniform arena.
@@ -13746,7 +13744,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (command.stencil.enable)
             wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(command.stencilRef));
         wgpuRenderPassEncoderSetPipeline(pass, pipe);
-        wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetBindGroup(pass, 0, ubo.group, ubo.count, ubo.offsets.data());
         wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetBindGroup(pass, 2, shadowBindGroup, 1, &shadowOffset);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexSource.buffer, vertexSource.offset,
@@ -13779,10 +13777,6 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                 wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
         }
 
-        pendingBindGroupReleases_.push_back(uboBindGroup);
-        pendingBindGroupReleases_.push_back(texBindGroup);
-        pendingBufferReleases_.push_back(uniformBuffer);
-        pendingBufferReleases_.push_back(lightUniformBuffer);
         if (vertexBuffer != nullptr) pendingBufferReleases_.push_back(vertexBuffer);
         if (instanceBuffer != nullptr) pendingBufferReleases_.push_back(instanceBuffer);
     }
@@ -13922,23 +13916,11 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             command.vertexData, command.resident, vbDescriptor.usage, vbDescriptor.size);
         WGPUBuffer vertexBuffer = vertexSource.transient;
 
-        WGPUBufferDescriptor uboDescriptor{};
-        uboDescriptor.label = StringView("CNA WebGPU AlphaTest3D UBO");
-        uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-        uboDescriptor.size = sizeof(command.uniforms);
-        WGPUBuffer uniformBuffer = AcquireTransientBuffer(uboDescriptor.usage, uboDescriptor.size);
-        QueueWriteBufferEXT(uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
-
-        WGPUBindGroupEntry uboEntry{};
-        uboEntry.binding = 0;
-        uboEntry.buffer = uniformBuffer;
-        uboEntry.size = sizeof(command.uniforms);
-        WGPUBindGroupDescriptor uboBindDescriptor{};
-        uboBindDescriptor.label = StringView("CNA WebGPU AlphaTest3D UBO BindGroup");
-        uboBindDescriptor.layout = coloredBindGroupLayout_;
-        uboBindDescriptor.entryCount = 1;
-        uboBindDescriptor.entries = &uboEntry;
-        WGPUBindGroup uboBindGroup = CreateBindGroupEXT(&uboBindDescriptor);
+        // plans/plan_webgpu_perf.md WEBGPUPERF-0007: the uniform block into this flush's arena, bound
+        // through the chunk's one group at its own offset, as WEBGPUPERF-0002 did for PBR.
+        const ArenaUniformBindingEXT ubo = AppendUniformBlocksEXT(
+            coloredBindGroupLayout_,
+            {{command.uniforms.data(), sizeof(command.uniforms)}});
 
         WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
                                                      command.addressV, command.addressW, command.maxMipLevel, command.maxAnisotropy,
@@ -13953,7 +13935,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         texBindDescriptor.layout = texturedBindGroupLayout_;
         texBindDescriptor.entryCount = texEntries.size();
         texBindDescriptor.entries = texEntries.data();
-        WGPUBindGroup texBindGroup = CreateBindGroupEXT(&texBindDescriptor);
+        // WEBGPUPERF-0007: from the binding cache, keyed by the sampler and the view.
+        const WGPUBindGroup texBindGroup = AcquireSampledBindingEXT(texBindDescriptor, {&command.texture});
 
         WGPURenderPipeline pipe = GetOrCreatePipelineAlphaTest3D(
                                                                  command.hasVertexColor,
@@ -13975,7 +13958,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (command.stencil.enable)
             wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(command.stencilRef));
         wgpuRenderPassEncoderSetPipeline(pass, pipe);
-        wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetBindGroup(pass, 0, ubo.group, ubo.count, ubo.offsets.data());
         wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexSource.buffer, vertexSource.offset,
                                              vertexSource.size);
@@ -14007,9 +13990,6 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                 wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
         }
 
-        pendingBindGroupReleases_.push_back(uboBindGroup);
-        pendingBindGroupReleases_.push_back(texBindGroup);
-        pendingBufferReleases_.push_back(uniformBuffer);
         if (vertexBuffer != nullptr) pendingBufferReleases_.push_back(vertexBuffer);
         if (instanceBuffer != nullptr) pendingBufferReleases_.push_back(instanceBuffer);
     }
@@ -14140,23 +14120,11 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             command.vertexData, command.resident, vbDescriptor.usage, vbDescriptor.size);
         WGPUBuffer vertexBuffer = vertexSource.transient;
 
-        WGPUBufferDescriptor uboDescriptor{};
-        uboDescriptor.label = StringView("CNA WebGPU DualTexture3D UBO");
-        uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-        uboDescriptor.size = sizeof(command.uniforms);
-        WGPUBuffer uniformBuffer = AcquireTransientBuffer(uboDescriptor.usage, uboDescriptor.size);
-        QueueWriteBufferEXT(uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
-
-        WGPUBindGroupEntry uboEntry{};
-        uboEntry.binding = 0;
-        uboEntry.buffer = uniformBuffer;
-        uboEntry.size = sizeof(command.uniforms);
-        WGPUBindGroupDescriptor uboBindDescriptor{};
-        uboBindDescriptor.label = StringView("CNA WebGPU DualTexture3D UBO BindGroup");
-        uboBindDescriptor.layout = coloredBindGroupLayout_;
-        uboBindDescriptor.entryCount = 1;
-        uboBindDescriptor.entries = &uboEntry;
-        WGPUBindGroup uboBindGroup = CreateBindGroupEXT(&uboBindDescriptor);
+        // plans/plan_webgpu_perf.md WEBGPUPERF-0007: the uniform block into this flush's arena, bound
+        // through the chunk's one group at its own offset, as WEBGPUPERF-0002 did for PBR.
+        const ArenaUniformBindingEXT ubo = AppendUniformBlocksEXT(
+            coloredBindGroupLayout_,
+            {{command.uniforms.data(), sizeof(command.uniforms)}});
 
         WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
                                                      command.addressV, command.addressW, command.maxMipLevel, command.maxAnisotropy,
@@ -14182,7 +14150,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         texBindDescriptor.layout = dualTextureBindGroupLayout_;
         texBindDescriptor.entryCount = texEntries.size();
         texBindDescriptor.entries = texEntries.data();
-        WGPUBindGroup texBindGroup = CreateBindGroupEXT(&texBindDescriptor);
+        // WEBGPUPERF-0007: from the binding cache, keyed by the sampler and the view.
+        const WGPUBindGroup texBindGroup = AcquireSampledBindingEXT(texBindDescriptor, {&command.texture0, &command.texture1});
 
         if (MultiTextureSamplerTraceEnabled())
         {
@@ -14215,7 +14184,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (command.stencil.enable)
             wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(command.stencilRef));
         wgpuRenderPassEncoderSetPipeline(pass, pipe);
-        wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetBindGroup(pass, 0, ubo.group, ubo.count, ubo.offsets.data());
         wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexSource.buffer, vertexSource.offset,
                                              vertexSource.size);
@@ -14247,9 +14216,6 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                 wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
         }
 
-        pendingBindGroupReleases_.push_back(uboBindGroup);
-        pendingBindGroupReleases_.push_back(texBindGroup);
-        pendingBufferReleases_.push_back(uniformBuffer);
         if (vertexBuffer != nullptr) pendingBufferReleases_.push_back(vertexBuffer);
         if (instanceBuffer != nullptr) pendingBufferReleases_.push_back(instanceBuffer);
     }
@@ -14957,10 +14923,10 @@ namespace
         return classicNullTexture_->Sampled();
     }
 
-    WGPUTextureView WebGPURenderer::ClassicNullCubeViewEXT()
+    WebGPUSampledTextureEXT WebGPURenderer::ClassicNullCubeEXT()
     {
         EnsureClassicNullTextures();
-        return classicNullCube_->CubeView();
+        return classicNullCube_->SampledCube();
     }
 
     void WebGPURenderer::QueuePbrDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
@@ -15366,6 +15332,9 @@ namespace
         layoutEntries[2].visibility = WGPUShaderStage_Vertex;
         layoutEntries[2].buffer.type = WGPUBufferBindingType_Uniform;
         layoutEntries[2].buffer.minBindingSize = (4 + 72 * 16) * sizeof(float);
+        // WEBGPUPERF-0007: all three blocks, the bone palette among them, in the uniform arena.
+        for (WGPUBindGroupLayoutEntry& entry : layoutEntries)
+            entry.buffer.hasDynamicOffset = true;
         WGPUBindGroupLayoutDescriptor bindLayoutDescriptor{};
         bindLayoutDescriptor.label = StringView("CNA WebGPU Skinned3D BindGroupLayout");
         bindLayoutDescriptor.entryCount = layoutEntries.size();
@@ -15759,43 +15728,13 @@ namespace
             command.vertexData, command.resident, vbDescriptor.usage, vbDescriptor.size);
         WGPUBuffer vertexBuffer = vertexSource.transient;
 
-        WGPUBufferDescriptor uboDescriptor{};
-        uboDescriptor.label = StringView("CNA WebGPU Skinned3D UBO");
-        uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-        uboDescriptor.size = sizeof(command.uniforms);
-        WGPUBuffer uniformBuffer = AcquireTransientBuffer(uboDescriptor.usage, uboDescriptor.size);
-        QueueWriteBufferEXT(uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
-
-        WGPUBufferDescriptor lightUboDescriptor{};
-        lightUboDescriptor.label = StringView("CNA WebGPU Skinned3D LightUBO");
-        lightUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-        lightUboDescriptor.size = sizeof(command.lightUniforms);
-        WGPUBuffer lightUniformBuffer = AcquireTransientBuffer(lightUboDescriptor.usage, lightUboDescriptor.size);
-        QueueWriteBufferEXT(lightUniformBuffer, 0, command.lightUniforms.data(), sizeof(command.lightUniforms));
-
-        WGPUBufferDescriptor skinningUboDescriptor{};
-        skinningUboDescriptor.label = StringView("CNA WebGPU Skinned3D SkinningUBO");
-        skinningUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-        skinningUboDescriptor.size = sizeof(command.skinningParams);
-        WGPUBuffer skinningUniformBuffer = AcquireTransientBuffer(skinningUboDescriptor.usage, skinningUboDescriptor.size);
-        QueueWriteBufferEXT(skinningUniformBuffer, 0, command.skinningParams.data(), sizeof(command.skinningParams));
-
-        std::array<WGPUBindGroupEntry, 3> uboEntries{};
-        uboEntries[0].binding = 0;
-        uboEntries[0].buffer = uniformBuffer;
-        uboEntries[0].size = sizeof(command.uniforms);
-        uboEntries[1].binding = 1;
-        uboEntries[1].buffer = lightUniformBuffer;
-        uboEntries[1].size = sizeof(command.lightUniforms);
-        uboEntries[2].binding = 2;
-        uboEntries[2].buffer = skinningUniformBuffer;
-        uboEntries[2].size = sizeof(command.skinningParams);
-        WGPUBindGroupDescriptor uboBindDescriptor{};
-        uboBindDescriptor.label = StringView("CNA WebGPU Skinned3D UBO BindGroup");
-        uboBindDescriptor.layout = skinnedBindGroupLayout_;
-        uboBindDescriptor.entryCount = uboEntries.size();
-        uboBindDescriptor.entries = uboEntries.data();
-        WGPUBindGroup uboBindGroup = CreateBindGroupEXT(&uboBindDescriptor);
+        // plans/plan_webgpu_perf.md WEBGPUPERF-0007: the uniform blocks into this flush's arena, bound
+        // through the chunk's one group at their own offsets, as WEBGPUPERF-0002 did for PBR.
+        const ArenaUniformBindingEXT ubo = AppendUniformBlocksEXT(
+            skinnedBindGroupLayout_,
+            {{command.uniforms.data(), sizeof(command.uniforms)},
+             {command.lightUniforms.data(), sizeof(command.lightUniforms)},
+             {command.skinningParams.data(), sizeof(command.skinningParams)}});
 
         WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
                                                      command.addressV, command.addressW, command.maxMipLevel, command.maxAnisotropy,
@@ -15810,7 +15749,8 @@ namespace
         texBindDescriptor.layout = texturedBindGroupLayout_;
         texBindDescriptor.entryCount = texEntries.size();
         texBindDescriptor.entries = texEntries.data();
-        WGPUBindGroup texBindGroup = CreateBindGroupEXT(&texBindDescriptor);
+        // WEBGPUPERF-0007: from the binding cache, keyed by the sampler and the view.
+        const WGPUBindGroup texBindGroup = AcquireSampledBindingEXT(texBindDescriptor, {&command.texture});
 
         WGPURenderPipeline pipe = GetOrCreatePipelineSkinned3D(command.stride, command.preferVertexLit,
                                                                 command.topology,
@@ -15830,7 +15770,7 @@ namespace
         if (command.stencil.enable)
             wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(command.stencilRef));
         wgpuRenderPassEncoderSetPipeline(pass, pipe);
-        wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetBindGroup(pass, 0, ubo.group, ubo.count, ubo.offsets.data());
         // WMG-0014: group 2, this draw's own shadow reception. WEBGPUPERF-0004: a cached group
         // and the block's offset in the uniform arena.
         std::uint32_t shadowOffset = 0;
@@ -15860,11 +15800,6 @@ namespace
                 wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
         }
 
-        pendingBindGroupReleases_.push_back(uboBindGroup);
-        pendingBindGroupReleases_.push_back(texBindGroup);
-        pendingBufferReleases_.push_back(uniformBuffer);
-        pendingBufferReleases_.push_back(lightUniformBuffer);
-        pendingBufferReleases_.push_back(skinningUniformBuffer);
         if (vertexBuffer != nullptr) pendingBufferReleases_.push_back(vertexBuffer);
         if (instanceBuffer != nullptr) pendingBufferReleases_.push_back(instanceBuffer);
     }
