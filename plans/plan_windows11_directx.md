@@ -29,6 +29,8 @@ The high-cardinality combined-diagnostics exception remains open.
 After the WIN11-0091 first-frame fix was committed, both earlier DX12
 applications were rebuilt and rerun against CNA `a5854b9464d78859259f0551bc8a42fbf9ee2800`
 (WIN11-0094). Their short Intel hardware runs passed with debug layer and DRED.
+WIN11-0095 confirmed that reducing readback frequency in the high-cardinality
+diagnostic case does not remove its full-GBV-plus-auto-breadcrumbs fault.
 
 ## Stable source and machine baseline
 
@@ -3634,3 +3636,27 @@ $env:CNA_D3D12_GPU_VALIDATION='0'
 & C:\rv\work\private_desktop_awake.exe 900000 '"C:\rv\build\cna-street-dx12\bin\Debug\cna-street.exe" --frames 12 --width 800 --height 480 --preset low --no-audio --no-overlay --screenshot C:\rv\artifacts\cna-street-dx12-post-first-frame-12.png'
 & C:\rv\work\private_desktop_awake.exe 900000 '"C:\rv\build\cna-car-simulator-dx12\bin\Debug\cna-car-simulator.exe" --no-save --no-audio --lockstep --frames 30 --width 640 --height 360 --quality low --spawn square --route town --route-stay --traffic-warmup 20 --time 17:30 --time-scale 0 --weather cloudy --screenshot C:\rv\artifacts\cna-car-simulator-dx12-post-first-frame-30.png'
 ```
+
+### WIN11-0095: Rule out readback count as the high-cardinality trigger
+
+A temporary diagnostic variant of `DescriptorCapacityContract --legs ABCD`
+kept all 256 D draws, including target binding, clear, and BasicEffect draw,
+but checked pixels only after every sixteenth draw. On physical Intel
+`8086:46A6`, with full GBV, DRED auto-breadcrumbs, page-fault reporting, and
+the D3D12 debug layer enabled, A+B+C passed and D completed readbacks after
+draws 16, 32, 48, and 64. The fifth readback failed with
+`DXGI_ERROR_DEVICE_HUNG`; DRED again reported GPU VA
+`0x0000B80205DC0000` and recently freed Texture2D resources `#1916` and
+`#1608`. The run exited 1 in 14.77 s. The prior full-readback variant had
+completed about 60 D draws before removal. Reducing D readback frequency by
+roughly an order of magnitude therefore did not remove the fault; the
+cumulative draw/validation history remains relevant. This is a differential,
+not proof that the renderer or driver alone owns the failure.
+
+The diagnostic fixture was restored to `HEAD`, rebuilt, and verified with
+ordinary Intel debug+DRED and GBV off: D1 passed all 256 checked draws and
+ABCD passed **15/15**, exit 0. No diagnostic source change remains. Logs:
+`C:\rv\logs\dx12-descriptor-abcd-intel-gbv-sparse-readback-diag.log`,
+`C:\rv\logs\dx12-descriptor-abcd-intel-gbv-sparse-readback-progress.log`,
+`C:\rv\logs\dx12-descriptor-sparse-readback-diag-revert-build.log`, and
+`C:\rv\logs\dx12-descriptor-abcd-post-sparse-diag-normal.log`.
