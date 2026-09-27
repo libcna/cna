@@ -3864,3 +3864,24 @@ combined-diagnostics fault. The raw model still lacks CNA's BasicEffect
 shader, root signature, fallback bindings, upload arenas, and descriptor
 retirement behavior, so it cannot classify the fault owner. Log:
 `C:\rv\logs\dx12-descriptor-headless-device-intel-gbv-dred.log`.
+
+### WIN11-0101: Rule out shader-visible descriptor reuse and heap growth
+
+A temporary diagnostic build initialized the CBV/SRV/UAV heap with 8,192
+slots and the sampler heap with 64 slots, then allocated shader-visible
+descriptor slots monotonically instead of recycling freed slots. Its
+`CNA_D3D12_DESCRIPTOR_TRACE=1` log confirmed **zero shader-visible heap
+growths and zero recycled slots** throughout A+B+C+D. On the physical Intel
+adapter with the D3D12 debug layer, full GBV, and DRED, A+B+C still passed
+and D still ended **14/15** with `DXGI_ERROR_DEVICE_HUNG`. DRED reported
+page-fault VA `0x0000B80205EA0000` and recently freed Texture2D resources
+`#1608` and `#1917`. Eliminating descriptor-index reuse and heap growth is
+therefore insufficient to prevent the fault. The preceding 8,192-slot
+experiment without sampler pre-sizing had two sampler-heap growths and also
+failed; it is not used for this conclusion.
+
+All temporary allocation changes were reverted, the original target rebuilt,
+and ordinary Intel debug+DRED with GBV off passed **15/15**. No unbounded
+allocator or validation workaround was shipped. Logs:
+`C:\rv\logs\dx12-descriptor-no-reuse-no-growth-intel-gbv-dred.log` and
+`C:\rv\logs\dx12-descriptor-post-no-reuse-diag-normal.log`.
