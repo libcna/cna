@@ -3139,3 +3139,81 @@ Logs: `C:\rv\logs\cna-street-dx11-build-1.log`,
 cmake -S C:\rv\src\cna-street-win11 -B C:\rv\build\cna-street-dx11 -G 'Visual Studio 17 2022' -A x64 -T v143 -DCNA_STREET_RENDERER=DIRECTX11 -DCNA_ROOT_DIR=C:\rv\src\cna -DCNA_PLATFORM=WIN32 -DCNA_AUDIO_PLATFORM=NULL -DCNA_ENABLE_SDL=OFF -DCNA_ENABLE_VIDEO=OFF -DCNA_ENABLE_FONT_PIPELINE=OFF -DCNA_ENABLE_NET=OFF -DCNA_ENABLE_DRACO=OFF -DCNA_USE_CCACHE=OFF
 cmake --build C:\rv\build\cna-street-dx11 --config Debug --target cna-street --parallel 12
 ```
+
+### WIN11-0083: Native cna-street baseline on physical Intel DirectX
+
+GitHub's public repository listing confirmed `libcna/cna-street` exists. A
+shallow, blob-filtered sparse checkout of its `develop` branch at
+`506cef1f06d94ce86e001ce9ffdcd2efbe01ef6e` lives at
+`C:\rv\src\cna-street-win11` on `win11-directx-validation`. Its large
+documentation image history was excluded; code and procedural source assets
+are present. The application consumes this CNA checkout through CMake
+`add_subdirectory`. Both Visual Studio 2022 x64 MSVC v143 Debug trees use
+`CNA_PLATFORM=WIN32`, `CNA_ENABLE_SDL=OFF`, `CNA_CNAEXT=ON`, renderer
+`DIRECTX11` or `DIRECTX12`, and out-of-tree directories
+`C:\rv\build\cna-street-dx11` and `C:\rv\build\cna-street-dx12`.
+
+The app's old generated WGSL header held a single 19,065-byte C++ raw
+string, exceeding MSVC's literal limit (`C2026`). App commit
+`04c8e1f920b587f4e787d4a7a3e41df1369fa4d5` split that literal into
+adjacent pieces using current CNA generator behavior, preserving shader
+bytes. After CNA's WIN11-0082 subproject CMake fix, both native application
+targets built. The initial DX11 Intel run, with the D3D11 debug layer on,
+rendered 12 frames and produced
+`C:\rv\artifacts\cna-street-dx11-low-v0.png`. It had no D3D11 debug
+errors, but logged that the renderer had no usable packaged sky variant;
+the sky pixel at (450, 5) was `(0, 0, 0)`. This is an application shader
+packaging defect, not a missing CNA DirectX shader capability.
+
+The application's own 14 C++ tests plus two Python checks were built in
+both DirectX configurations. The first DX11 CTest run was **15/16** solely
+because the machine's Python lacked NumPy. A project-local virtual
+environment under `C:\rv\work\cna-street-venv` received NumPy 2.5.3;
+no system-wide Python component was changed. Both trees were reconfigured
+with `CNA_STREET_TEST_PYTHON` pointing to that interpreter and each then
+passed **16/16**. Logs:
+`C:\rv\logs\cna-street-dx11-own-ctest-1.log`,
+`C:\rv\logs\cna-street-dx11-own-ctest-venv-1.log`,
+`C:\rv\logs\cna-street-dx12-own-ctest-venv-1.log`.
+
+### WIN11-0084: Package cna-street's sky for Direct3D 11 and 12
+
+App commit `962188720db8db9b37f22b4cd2194fd15feb7cb4` added an
+app-local HLSL generator and two generated shader stages. They translate
+the existing Vulkan GLSL sky stages with CNA's established SPIR-V to HLSL
+rules, retaining the three typed uniform arrays and texture binding. The
+generated header records both GLSL source SHA-256 values and regenerated
+byte-for-byte identically. Both stages compiled offline with the Windows
+SDK `fxc` (`vs_5_0`, `ps_5_0`) and `dxc` (`vs_6_0`, `ps_6_0`). No public
+CNA graphics API was added.
+
+Physical Intel Iris Xe `8086:46A6` application runs after the fix:
+
+| Backend | Native Debug result | Diagnostics | Scene and capture |
+| --- | --- | --- | --- |
+| DX11 | 12 frames, exit 0, feature level 11_1, hardware `software=0` | D3D11 debug layer on; 0 warnings/errors | 1,361 batches; 753,252 triangles; scene build 128.7 s; capture `C:\rv\artifacts\cna-street-dx11-low-sky-hlsl.png` |
+| DX12 | 12 frames, exit 0, feature level 12_1, `CNA_D3D12_ADAPTER=hardware` | D3D12 debug layer and DRED on, 0 warnings/errors, no device removal; routine GBV off | Same scene; build 215.7 s; capture `C:\rv\artifacts\cna-street-dx12-low-sky-hlsl.png` |
+
+Both captures show the street, PBR materials, vehicles, trees, shadows and
+blue atmospheric sky. At the same sky pixel (450, 5), each backend produced
+`(115, 158, 190)`, versus black before the fix. Both reported nonzero GPU
+sky timing; both passed their own **16/16** CTest suite. These are visual
+smoke and scene checks, not pixel-equivalence acceptance for the whole
+image. Logs:
+`C:\rv\logs\cna-street-dx11-low-hlsl-sky-1.log` and
+`C:\rv\logs\cna-street-dx12-low-hlsl-sky-1.log`. Log creation to final
+write spanned approximately 176 s and 272 s respectively, including
+procedural scene generation and capture.
+
+```powershell
+py -3 C:\rv\src\cna-street-win11\scripts\generate-sky-hlsl.py --cna-root C:\rv\src\cna --glslang C:\rv\build\glslang-win11\StandAlone\Release\glslangValidator.exe --spirv-cross C:\rv\build\spirv-cross-win11\Release\spirv-cross.exe
+$env:CNA_D3D11_DEBUG_LAYER='1'
+& C:\rv\work\private_desktop_awake.exe 900000 '"C:\rv\build\cna-street-dx11\bin\Debug\cna-street.exe" --frames 12 --width 800 --height 480 --preset low --no-audio --no-overlay --screenshot C:\rv\artifacts\cna-street-dx11-low-sky-hlsl.png'
+$env:CNA_D3D12_ADAPTER='hardware'
+$env:CNA_D3D12_DEBUG_LAYER='1'
+$env:CNA_D3D12_DRED='1'
+$env:CNA_D3D12_GPU_VALIDATION='0'
+& C:\rv\work\private_desktop_awake.exe 900000 '"C:\rv\build\cna-street-dx12\bin\Debug\cna-street.exe" --frames 12 --width 800 --height 480 --preset low --no-audio --no-overlay --screenshot C:\rv\artifacts\cna-street-dx12-low-sky-hlsl.png'
+ctest --test-dir C:\rv\build\cna-street-dx11 -C Debug -R '^(traffic_signal_tests|traffic_system_tests|pedestrian_tests|geometry_tests|layout_tests|settings_tests|camera_tests|content_pipeline_tests|appearance_tests|realism_tests|character_format_tests|gait_tests|shadow_cull_tests|benchmark_tests|validate_assets|vehicle_orientation)$' --output-on-failure --parallel 4
+ctest --test-dir C:\rv\build\cna-street-dx12 -C Debug -R '^(traffic_signal_tests|traffic_system_tests|pedestrian_tests|geometry_tests|layout_tests|settings_tests|camera_tests|content_pipeline_tests|appearance_tests|realism_tests|character_format_tests|gait_tests|shadow_cull_tests|benchmark_tests|validate_assets|vehicle_orientation)$' --output-on-failure --parallel 4
+```
