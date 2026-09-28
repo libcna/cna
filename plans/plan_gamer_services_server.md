@@ -761,6 +761,8 @@ CNA-specific transport routing; generic proxy change remains the only runtime mo
 - [ ] GS-008d2: client reconnect/server-restart and remaining authenticated fault corpus.
 - [ ] GS-008d: genuine ENet exchange under relay-only isolated routing/firewall conditions,
   forged source/destination/malformed/rate/disconnect/revoke/server failure/reconnect corpus.
+- [x] GS-007e1: private authenticated roster/control gate and genuine spoof/refusal relay probes.
+- [ ] GS-007e2: public async operation ownership/preparation and online lifecycle wiring.
 - [ ] GS-007e: publish standard PlayerMatch/Ranked lifecycle and Guide/invited joins once directory
   plus realtime transport succeeds; do not report membership-only success as multiplayer.
 
@@ -1080,3 +1082,46 @@ checks declared length against a seekable stream before allocation; no generic r
 Bound service handshake count/string/UTF-8/boolean/exact length before decode; no custom crypto or
 XNA objects on service control. Full public Create/Find/Join and invites remain gated until this
 roster and controlled async/lifecycle integration are genuinely tested.
+
+### GS-007e1 authenticated private control checkpoint
+
+New private ServiceRoster validates full bounded directory authority (not advertisements), unique
+accounts/tags/ordinals, exact capacity/private counts, nonzero machines, host binding, local group
+existence and <=4 participants per machine. UTF-8 is checked through the existing strict JSON
+encoder only after field byte limits. IDs are ordinal+1 (1..31), independent of arrival order;
+only hostId receives IsHost. Exact machine claims preserve the caller's local order. Host welcomes
+include complete connected groups from authority; client validates assignments, all represented
+remote groups, host account, exact properties and no own/duplicate/spoofed entries before mutation.
+Unknown/new roster identities require fresh authority in future Update wiring, never blind trust.
+
+Private control preflight checks <=4KiB before field copies: known control tags, 1..4 hello/assigned
+counts, <=31 roster/leave counts, IDs1..31, canonical <=32-byte UTF-8 BinaryWriter names, strict
+booleans, all eight properties, known state and exact end-of-packet. AppData is explicitly a separate
+path, retaining ENet application semantics; the native test alone bounds its synthetic payload64KiB.
+Direct SystemLink decoder/transport remains untouched. No proprietary protocol, new public XNA/C
+method, C API mapping or runtime primitive. Runtime seekable ReadString already checks remaining
+length; there was no generic allocation defect to fix.
+
+Six new cases include all 31 slots/four locals, UTF-8, malformed authority, spoofed/missing/partial
+welcome, every control truncation/trailing byte and 10,000 deterministic decode/encode mutations.
+Clean two-job build; focused6/6 (59ms), complete Net346/346 (4.515s), private ABI/C API/protocol/
+fake gates13/13 (12.20s). Native relay probes now run actual bounded Net ClientHello/ServerWelcome
+and AppData messages, compare service-authorized sender/target IDs and inject one cross-machine
+Alice claim before a valid Bob/Dana hello; host refuses it before identity mutation. Normal+separate
+NAT CTest2/2 pass, no skip, 15.79s (7.68/8.10s), still 16 exact application deliveries including
+32KiB fragmentation/unreliable channel, four accounts/two titles and revoke/server loss. Server
+unchanged5a850401da339ec44b67ed93fde8f019f44c6e9d; runtime unchanged6c4a857. Prior full server11/11
+is the unchanged server baseline; two affected CNA integration tests were rerun against this new
+code. Logs CNA `cmake-build-debug/service-roster-{build,unit,net,private-gates}.log`, server
+`build/service-roster-native-tests.log`. No unresolved failure. Next now967305dd7 already includes
+our committed GS-008c2 and is an ancestor; samples worktree clean/untouched, no new merge needed.
+
+Next GS-007e2: ownership-safe public online APM/preparation plus Net lifecycle/roster/lease wiring.
+Immediate audit defect: existing EndCreate/EndFind/EndJoin accept null when activeAction is null and
+can dereference null; they also accept the wrong Begin family if its pointer is current. Add exact
+operation-family/null validation without consuming a mismatched action, then build genuine pending
+online preparation through the existing bounded executor. Do not merely flip RealNetworkingEnabled;
+online peers must use the authenticated roster gate before GamerJoined and preserve SystemLink.
+Existing End-owned legacy results vs caller-owned GamerServices results and callback reentry need
+an explicit lifetime solution. Ranked leaderboard arbitration, Guide invites, reconnect, all
+standard Avatar migration and original acceptance samples remain unfinished.

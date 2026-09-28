@@ -1,5 +1,13 @@
 # NEXT.md
 
+> **GS-007e1 private online identity gate (2026-09-28):** Authoritative service rosters now
+> constrain exact machine/local-account claims, deterministic 31-slot IDs, owner-only host flags,
+> welcome properties and represented groups. Bounded control preflight precedes decoding.
+> Six tests/10,000 mutations, Net 346/346, native plus NAT relay 2/2 and private gates 13/13 pass.
+> The private probe refuses a forged other-machine account before valid exchange; public online
+> NetworkSession lifecycle/async integration remains unfinished and SystemLink stays direct.
+
+
 > **GS-008d1 NAT-isolated private relay (2026-09-28):** Two genuine CNA ENet peers now
 > exchange fragmented/reliable/unreliable data in separate rootless NAT namespaces with identical
 > private addresses and no inbound mappings. Full configured server gate 11/11, no skip, 137.21s.

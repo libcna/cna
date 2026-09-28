@@ -133,3 +133,12 @@ NetworkSession acceptance. See sibling server README's optional `service_cna_rel
 Test helpers are external optional prerequisites; production CNA/server neither link nor require
 GPL slirp4netns. No host network/package/desktop changes. Public online async/roster/lifecycle,
 reconnect, invitations and standard avatars remain unfinished.
+
+GS-007e1 adds a private authenticated roster gate: service ordinals map to 1..31 wire IDs,
+only the actual host account receives the host flag, machine hello claims must exactly match
+its 1..4 local accounts, and welcome identities/properties/represented groups are checked before
+gamer mutation. The real native probe now exchanges the existing Net ClientHello/ServerWelcome
+and AppData codec through ENet, rejects a cross-machine account spoof and verifies application
+sender/target IDs. Controls are preflighted for bounded counts/strings/UTF-8/canonical booleans/
+IDs/eight properties/exact length before decode/allocation. These helpers are still private;
+public PlayerMatch/Ranked, Net Update roster/lease handling and APM ownership are not yet enabled.
