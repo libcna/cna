@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
 #include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GuideAlreadyVisibleException.hpp"
@@ -23,6 +24,7 @@
 #include "CNA/Platform/IPlatform.hpp"
 #include "CNA/Platform/IPlatformSystemServices.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
@@ -888,15 +890,10 @@ namespace Microsoft::Xna::Framework::GamerServices
         return pendingMessageBox_->FocusButton;
     }
 
-    void Guide::DelayNotifications(System::TimeSpan /*delay*/)
+    void Guide::DelayNotifications(System::TimeSpan delay)
     {
-    }
-
-    void Guide::ShowComposeMessage(
-        Microsoft::Xna::Framework::PlayerIndex /*player*/,
-        const std::string& /*text*/,
-        const std::vector<Gamer*>& /*recipients*/
-    ) {
+        // Defers the Guide's own notifications (game invitations); at most 120 s, an active delay stays.
+        CNA::Internal::GamerServices::delayNotifications(static_cast<long long>(delay.getTotalMillisecondsProperty()));
     }
 
     namespace {
@@ -913,6 +910,65 @@ namespace Microsoft::Xna::Framework::GamerServices
             (void)Guide::BeginShowMessageBox(player,title,text,{"OK"},0,MessageBoxIcon::None,[](System::IAsyncResult& result){
                 std::unique_ptr<System::IAsyncResult> owned(&result);(void)Guide::EndShowMessageBox(&result);
             },{});
+        }
+        void ValidateRecipients(const std::vector<Gamer*>& recipients) {
+            // Reference Gamer.ValidateGamerList: at most 100 gamers, none null or disposed.
+            if(recipients.size()>100)throw System::ArgumentException("Too many gamers.","recipients");
+            for(auto* gamer:recipients) {
+                if(!gamer)throw System::ArgumentException("Gamer is null.","recipients");
+                if(gamer->getIsDisposedProperty())throw System::ObjectDisposedException("recipients");
+            }
+        }
+        void ValidateGamer(Gamer* gamer) {
+            if(!gamer)throw System::ArgumentNullException("gamer");
+            if(gamer->getIsDisposedProperty())throw System::ObjectDisposedException("gamer");
+        }
+        // Runs one service call on the backend executor; the outcome is reported at Update.
+        void SocialCall(PlayerIndex player,std::function<void(Service::IGamerServicesBackend&)> work,std::string failure) {
+            auto service=Service::backend();auto* executor=service.get();auto failed=std::make_shared<bool>(false);
+            service->submit([executor,work=std::move(work),failed]{try{work(*executor);}catch(...){*failed=true;}},
+                [player,failed,failure=std::move(failure)]{if(*failed)SocialMessage(player,"CNA Gamer Services",failure);});
+        }
+        void SendMessage(PlayerIndex player,const std::string& user,const std::vector<std::string>& tags,const std::string& text) {
+            SocialCall(player,[user,tags,text](auto& executor){executor.sendMessage(user,tags,text);},"The message could not be sent.");
+        }
+        void Compose(PlayerIndex player,const std::string& user,const std::vector<std::string>& tags,const std::string& text) {
+            std::string names;for(const auto& tag:tags)names+=(names.empty()?"":", ")+tag;
+            (void)Guide::BeginShowKeyboardInput(player,"Compose message",names.empty()?"Message":"To: "+names,text,
+                [player,user,tags](System::IAsyncResult& input) {
+                    std::unique_ptr<System::IAsyncResult> owned(&input);
+                    if(Guide::WasKeyboardInputCanceledEXT(&input))return;
+                    const auto body=Guide::EndShowKeyboardInput(&input);
+                    if(!tags.empty()){SendMessage(player,user,tags,body);return;}
+                    (void)Guide::BeginShowKeyboardInput(player,"Compose message","Recipient gamertag","",[player,user,body](System::IAsyncResult& recipient) {
+                        std::unique_ptr<System::IAsyncResult> ownedRecipient(&recipient);
+                        if(Guide::WasKeyboardInputCanceledEXT(&recipient))return;
+                        const auto tag=Guide::EndShowKeyboardInput(&recipient);
+                        if(!tag.empty())SendMessage(player,user,{tag},body);
+                    },{});
+                },{});
+        }
+        void Inbox(PlayerIndex player,const std::string& user,int index) {
+            const auto page=Service::backend()->messages(user,index,1);
+            if(page.messages.empty()) {
+                SocialMessage(player,"Messages",index==0?"You have no messages.":"No more messages.");return;
+            }
+            const auto message=page.messages.front();
+            if(!message.read)try{Service::backend()->updateMessage(user,message.id,false);}catch(...){}
+            (void)Guide::BeginShowMessageBox(player,"Messages ("+std::to_string(index+1)+"/"+std::to_string(page.total)+")",
+                "From "+message.sender+":\n"+message.text,{"Next","Reply","Delete","Close"},0,MessageBoxIcon::None,
+                [player,user,index,message](System::IAsyncResult& result) {
+                    std::unique_ptr<System::IAsyncResult> owned(&result);const auto answer=Guide::EndShowMessageBox(&result);
+                    if(!answer||*answer==3)return;
+                    try {
+                        if(*answer==0)Inbox(player,user,index+1);
+                        else if(*answer==1)Compose(player,user,{message.sender},"");
+                        else {Service::backend()->updateMessage(user,message.id,true);Inbox(player,user,index);}
+                    }catch(...){SocialMessage(player,"Messages","The messages could not be read.");}
+                },{});
+        }
+        void Information(PlayerIndex player,const std::string& title,const std::string& text) {
+            (void)SocialActor(player);SocialMessage(player,title,text);
         }
         void ChangeFriend(PlayerIndex player,const std::string& target,const std::string& action) {
             if(socialPending)throw System::InvalidOperationException("A social operation is already pending.");
@@ -999,9 +1055,19 @@ namespace Microsoft::Xna::Framework::GamerServices
                 },{});
         }
     }
-    void Guide::ShowFriendRequest(PlayerIndex player,Gamer* gamer) {
+    void Guide::ShowComposeMessage(PlayerIndex player,const std::string& text,const std::vector<Gamer*>& recipients) {
+        // Reference: text shorter than 256 characters, then the recipient list, then the Guide.
+        if(text.size()>=256)throw System::ArgumentException("Text is too long.","text");
+        ValidateRecipients(recipients);
         if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
-        (void)SocialActor(player);if(!gamer)throw System::ArgumentException("Gamer is null.","gamer");
+        auto* actor=SocialActor(player);std::vector<std::string> tags;
+        for(auto* gamer:recipients)tags.push_back(gamer->getGamertagProperty());
+        Compose(player,Service::GamerAccess::userId(*actor),tags,text);
+    }
+    void Guide::ShowFriendRequest(PlayerIndex player,Gamer* gamer) {
+        ValidateGamer(gamer);
+        if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
+        (void)SocialActor(player);
         const auto tag=gamer->getGamertagProperty();
         (void)BeginShowMessageBox(player,"Friend request","Send a friendship request to "+tag+"?",{"Send request","Cancel"},0,MessageBoxIcon::None,
             [player,tag](System::IAsyncResult& result){std::unique_ptr<System::IAsyncResult> owned(&result);const auto answer=EndShowMessageBox(&result);if(answer&&*answer==0)ChangeFriend(player,tag,"add");},{});
@@ -1041,33 +1107,77 @@ namespace Microsoft::Xna::Framework::GamerServices
     }
 
     void Guide::ShowGamerCard(PlayerIndex player,Gamer* gamer) {
+        ValidateGamer(gamer);
         if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
-        (void)SocialActor(player);if(!gamer)throw System::ArgumentException("Gamer is null.","gamer");
+        (void)SocialActor(player);
         ProfileCard(player,gamer->getGamertagProperty());
     }
 
-    void Guide::ShowMarketplace(Microsoft::Xna::Framework::PlayerIndex /*player*/)
+    void Guide::ShowMarketplace(PlayerIndex player)
     {
+        // Reference: a signed-in LIVE profile with the purchase privilege, else GamerPrivilegeException.
+        SignedInGamer* gamer=nullptr;
+        for(auto* candidate:*Gamer::getSignedInGamersProperty())if(candidate->getPlayerIndexProperty()==player)gamer=candidate;
+        if(!gamer||!gamer->getIsSignedInToLiveProperty())throw GamerPrivilegeException("The profile is not signed in.");
+        if(!gamer->getPrivilegesProperty().getAllowPurchaseContentProperty())throw GamerPrivilegeException("The profile may not purchase content.");
+        if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
+        // CNA runs no store or payment service; titles are fully licensed (IsTrialMode stays false).
+        Information(player,"Marketplace","CNA Gamer Services has no marketplace. This title is fully licensed; there is nothing to purchase.");
     }
 
-    void Guide::ShowMessages(Microsoft::Xna::Framework::PlayerIndex /*player*/)
+    void Guide::ShowMessages(PlayerIndex player)
     {
+        if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
+        auto* actor=SocialActor(player);
+        try{Inbox(player,Service::GamerAccess::userId(*actor),0);}
+        catch(const GuideAlreadyVisibleException&){throw;}
+        catch(...){SocialMessage(player,"Messages","The messages could not be read.");}
     }
 
-    void Guide::ShowParty(Microsoft::Xna::Framework::PlayerIndex /*player*/)
+    void Guide::ShowParty(PlayerIndex player)
     {
+        if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
+        // There is no cross-title voice/party service in CNA; the Guide says so instead of doing nothing.
+        Information(player,"Party","CNA Gamer Services has no party service. Use game invitations to play with friends.");
     }
 
-    void Guide::ShowPartySessions(Microsoft::Xna::Framework::PlayerIndex /*player*/)
+    void Guide::ShowPartySessions(PlayerIndex player)
     {
+        if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
+        Information(player,"Party sessions","CNA Gamer Services has no party service, so there are no party sessions to join.");
     }
 
-    void Guide::ShowPlayerReview(Microsoft::Xna::Framework::PlayerIndex /*player*/, Gamer* /*gamer*/)
+    void Guide::ShowPlayerReview(PlayerIndex player, Gamer* gamer)
     {
+        ValidateGamer(gamer);
+        if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
+        auto* actor=SocialActor(player);const auto user=Service::GamerAccess::userId(*actor);const auto tag=gamer->getGamertagProperty();
+        (void)BeginShowMessageBox(player,"Player review","How was playing with "+tag+"?\nAvoided players' games are not offered to you.",
+            {"Prefer","Avoid","Clear review","Cancel"},0,MessageBoxIcon::None,[player,user,tag](System::IAsyncResult& result) {
+                std::unique_ptr<System::IAsyncResult> owned(&result);const auto answer=EndShowMessageBox(&result);
+                if(!answer||*answer==3)return;
+                const std::string rating=*answer==0?"prefer":*answer==1?"avoid":"clear";
+                SocialCall(player,[user,tag,rating](auto& executor){executor.reviewPlayer(user,tag,rating);},"The review could not be recorded.");
+            },{});
     }
 
-    void Guide::ShowPlayers(Microsoft::Xna::Framework::PlayerIndex /*player*/)
+    void Guide::ShowPlayers(PlayerIndex player)
     {
+        if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
+        (void)SocialActor(player);
+        std::string text;int shown=0;
+        for(const auto& tag:Service::recentPlayers()){if(shown++==8)break;text+=tag+"\n";}
+        if(text.empty())text="You have not played with anyone yet.";
+        (void)BeginShowMessageBox(player,"Recent players",text,{"Gamer card","Close"},0,MessageBoxIcon::None,[player](System::IAsyncResult& result) {
+            std::unique_ptr<System::IAsyncResult> owned(&result);const auto answer=EndShowMessageBox(&result);
+            if(!answer||*answer!=0)return;
+            (void)BeginShowKeyboardInput(player,"Recent players","Gamertag","",[player](System::IAsyncResult& input) {
+                std::unique_ptr<System::IAsyncResult> ownedInput(&input);
+                if(WasKeyboardInputCanceledEXT(&input))return;
+                const auto tag=EndShowKeyboardInput(&input);
+                try{ProfileCard(player,tag);}catch(...){SocialMessage(player,"Recent players","The gamer could not be found.");}
+            },{});
+        },{});
     }
 
     void Guide::ShowSignIn(int paneCount, bool /*onlineOnly*/) {
@@ -1092,8 +1202,17 @@ namespace Microsoft::Xna::Framework::GamerServices
         SyncTouchInputSuppression();
     }
 
-    void Guide::ShowAchievementsEXT(Microsoft::Xna::Framework::PlayerIndex /*player*/)
+    void Guide::ShowAchievementsEXT(PlayerIndex player)
     {
+        if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
+        auto* actor=SocialActor(player);std::string text;int earned=0,shown=0;
+        const auto achievements=Service::backend()->achievements(Service::GamerAccess::userId(*actor));
+        for(const auto& achievement:achievements) {
+            if(achievement.earnedTicks)++earned;
+            if(shown++<10)text+=(achievement.earnedTicks?"[x] ":"[ ] ")+achievement.name+"\n";
+        }
+        if(achievements.empty())text="This title has no achievements.";
+        SocialMessage(player,"Achievements ("+std::to_string(earned)+"/"+std::to_string(achievements.size())+")",text);
     }
 }
 

@@ -227,6 +227,31 @@ public:
     void setPresence(const std::string& user,int mode,const std::string& text) override {
         (void)request("presence.set",{{"mode",mode},{"text",text}},tokenFor(user));
     }
+    void sendMessage(const std::string& user,const std::vector<std::string>& tags,const std::string& text) override {
+        (void)request("messages.send",{{"gamertags",tags},{"text",text}},tokenFor(user));
+    }
+    ServiceMessagePage messages(const std::string& user,int start,int limit) override {
+        const auto result=request("messages.list",{{"start",start},{"limit",limit}},tokenFor(user));
+        ServiceMessagePage page;
+        for(const auto* key:{"start","total","unread"})if(!result.at(key).is_number_integer()||result[key]<0||result[key]>100000)throw Unavailable("Invalid message response.");
+        page.start=result["start"].get<int>();page.total=result["total"].get<int>();page.unread=result["unread"].get<int>();
+        const auto& rows=result.at("messages");
+        if(page.start!=start||!rows.is_array()||rows.size()>static_cast<std::size_t>(limit)||page.unread>page.total)throw Unavailable("Invalid message response.");
+        for(const auto& row:rows) {
+            ServiceMessage message;message.id=CnaService::stringField(row,"message",32);message.sender=CnaService::stringField(row,"sender",32);
+            message.text=CnaService::stringField(row,"text",256);
+            if(message.id.size()!=32||!row.at("created").is_number_integer()||!row.at("read").is_boolean())throw Unavailable("Invalid message response.");
+            message.created=row["created"].get<long long>();message.read=row["read"].get<bool>();page.messages.push_back(std::move(message));
+        }
+        return page;
+    }
+    void updateMessage(const std::string& user,const std::string& message,bool remove) override {
+        (void)request(remove?"messages.delete":"messages.read",{{"message",message}},tokenFor(user));
+    }
+    void reviewPlayer(const std::string& user,const std::string& tag,const std::string& rating) override {
+        if(rating!="prefer"&&rating!="avoid"&&rating!="clear")throw Unavailable("Invalid player review.");
+        (void)request("reviews.submit",{{"gamertag",tag},{"rating",rating}},tokenFor(user));
+    }
     ServiceLeaderboardPage readLeaderboard(const std::string& key,int mode,int start,int size,const std::string& pivot,const std::optional<std::vector<std::string>>& gamers) override {
         Json args{{"key",key},{"mode",mode},{"start",start},{"size",size}};
         if(!pivot.empty())args["pivot"]=pivot;
@@ -410,6 +435,8 @@ private:
             negotiateLocked();
             if(op=="auth.refresh"&&!capabilities_.contains("session-refresh"))throw Unavailable("CNA service refresh capability missing.");
             if(op.starts_with("friends.")&&!capabilities_.contains("friend-requests"))throw Unavailable("CNA service friend-request capability missing.");
+            if(op.starts_with("messages.")&&!capabilities_.contains("messages"))throw Unavailable("CNA service messages capability missing.");
+            if(op=="reviews.submit"&&!capabilities_.contains("player-reviews"))throw Unavailable("CNA service player-review capability missing.");
             if(op=="leaderboards.game.abort"&&!capabilities_.contains("leaderboard-epoch-abort"))throw Unavailable("CNA service leaderboard abort capability missing.");
             if(op.starts_with("leaderboards.game.")&&!capabilities_.contains("local-leaderboard-commit"))throw Unavailable("CNA service local leaderboard commit capability missing.");
             if(op.starts_with("leaderboards.")&&!capabilities_.contains("leaderboard-reads"))throw Unavailable("CNA service leaderboard-read capability missing.");
@@ -595,6 +622,32 @@ public:
         else throw Unavailable("Invalid friendship operation.");
     }
     void setPresence(const std::string& user,int,const std::string& text) override {require(user);presence_[user]=text;}
+    void sendMessage(const std::string& user,const std::vector<std::string>& tags,const std::string& text) override {
+        require(user);if(tags.empty()||tags.size()>100||text.size()>256)throw ServiceOperationError("INVALID_ARGUMENT");
+        for(const auto& tag:tags){const auto target=profile(tag).userId;if(target==user)throw ServiceOperationError("INVALID_ARGUMENT");
+            ServiceMessage message;message.id=std::string(28,'0')+std::to_string(1000+(++messageSequence_%9000));message.sender=profileById(user).gamertag;
+            message.text=text;message.created=messageSequence_;inbox_[target].insert(inbox_[target].begin(),std::move(message));}
+    }
+    ServiceMessagePage messages(const std::string& user,int start,int limit) override {
+        require(user);ServiceMessagePage page;page.start=start;const auto& box=inbox_[user];page.total=static_cast<int>(box.size());
+        for(const auto& message:box)if(!message.read)++page.unread;
+        for(int index=start;index<static_cast<int>(box.size())&&index<start+limit;++index)page.messages.push_back(box[static_cast<std::size_t>(index)]);
+        return page;
+    }
+    void updateMessage(const std::string& user,const std::string& message,bool remove) override {
+        require(user);auto& box=inbox_[user];
+        const auto found=std::find_if(box.begin(),box.end(),[&](const auto& value){return value.id==message;});
+        if(found==box.end())throw ServiceOperationError("NOT_FOUND");
+        if(remove)box.erase(found);else found->read=true;
+    }
+    void reviewPlayer(const std::string& user,const std::string& tag,const std::string& rating) override {
+        require(user);const auto target=profile(tag).userId;if(target==user)throw ServiceOperationError("INVALID_ARGUMENT");
+        if(rating=="clear")reviews_.erase({user,target});
+        else if(rating=="prefer"||rating=="avoid")reviews_[{user,target}]=rating;
+        else throw ServiceOperationError("INVALID_ARGUMENT");
+    }
+    /** @brief Deterministic view of recorded reviews for tests. */
+    const std::map<std::pair<std::string,std::string>,std::string>& reviews()const{return reviews_;}
     ServiceLeaderboardPage readLeaderboard(const std::string& key,int mode,int start,int size,const std::string& pivot,const std::optional<std::vector<std::string>>& gamers) override {
         if(std::all_of(slots_.begin(),slots_.end(),[](const auto& id){return id.empty();}))throw Unavailable("No authenticated fixture gamer.");
         const auto board=std::find_if(boards_.begin(),boards_.end(),[&](const auto& value){return value.key==key&&value.mode==mode;});
@@ -671,6 +724,9 @@ private:
         else if(board.ascending?row.rating>=entry->rating:row.rating<=entry->rating)return;
         entry->rating=row.rating;entry->columns=row.columns;
     }
+    std::map<std::string,std::vector<ServiceMessage>> inbox_;
+    std::map<std::pair<std::string,std::string>,std::string> reviews_;
+    int messageSequence_=0;
     std::map<std::string,std::map<std::string,std::vector<ServiceLeaderboardWrite>>> arbitration_;
     std::map<std::string,ServiceSessionSnapshot> rounds_;
     std::map<std::string,std::vector<std::string>> games_;

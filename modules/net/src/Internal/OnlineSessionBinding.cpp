@@ -119,6 +119,7 @@ NetworkGamer* OnlineSessionBinding::addRemote(const RosterEntry& entry) {
     gamer->SetId(entry.WireId);gamer->SetIsHost(entry.IsHost);gamer->SetIsPrivateSlot(row->privateSlot);
     // Service identity makes its leaderboard writer a service writer instead of the offline store.
     GamerAccess::setUserId(*gamer,row->userId);
+    rememberRecentPlayer(entry.Gamertag);
     auto shared=machine(row->machine);gamer->SetSharedMachine(shared);shared->AddGamerInternal(gamer);
     gamers_[entry.WireId]=gamer;return gamer;
 }

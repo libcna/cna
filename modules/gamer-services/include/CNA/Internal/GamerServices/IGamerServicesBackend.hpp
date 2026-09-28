@@ -107,6 +107,24 @@ struct ServiceLeaderboardWrite {
     /** @brief Compares final rows. @param other Other row. @return Equality. */
     bool operator==(const ServiceLeaderboardWrite& other) const = default;
 };
+/** @brief One account message in a recipient's inbox. */
+struct ServiceMessage {
+    /** @brief Opaque message identifier and the sender's gamertag. */
+    std::string id, sender;
+    /** @brief Message text, at most 256 UTF-8 bytes. */
+    std::string text;
+    /** @brief Unix-second creation time. */
+    long long created=0;
+    /** @brief Whether the recipient has read it. */
+    bool read=false;
+};
+/** @brief Bounded inbox page, newest first. */
+struct ServiceMessagePage {
+    /** @brief Page start, total stored and unread counts. */
+    int start=0, total=0, unread=0;
+    /** @brief Messages on this page. */
+    std::vector<ServiceMessage> messages;
+};
 /** @brief Ranked round a machine's arbitrated rows belong to. */
 struct ServiceArbitration {
     /** @brief Directory session. */
@@ -160,6 +178,18 @@ public:
     /** @brief Changes an account friendship. @param userId Actor. @param gamertag Target.
      * @param action Request, accept, or remove. */
     virtual void changeFriend(const std::string& userId,const std::string& gamertag,const std::string& action) = 0;
+    /** @brief Sends an account message. @param userId Sender. @param gamertags 1..100 recipients.
+     * @param text Message text. */
+    virtual void sendMessage(const std::string& userId,const std::vector<std::string>& gamertags,const std::string& text) = 0;
+    /** @brief Reads an inbox page. @param userId Recipient. @param start Offset. @param limit Page size.
+     * @return Newest-first page. */
+    virtual ServiceMessagePage messages(const std::string& userId,int start,int limit) = 0;
+    /** @brief Marks read or deletes one of the recipient's messages. @param userId Recipient.
+     * @param message Message ID. @param remove Delete instead of marking read. */
+    virtual void updateMessage(const std::string& userId,const std::string& message,bool remove) = 0;
+    /** @brief Records prefer/avoid feedback, or clears it. @param userId Reviewer.
+     * @param gamertag Subject. @param rating "prefer", "avoid" or "clear". */
+    virtual void reviewPlayer(const std::string& userId,const std::string& gamertag,const std::string& rating) = 0;
     /** @brief Publishes rich presence. @param userId Actor. @param mode Stable mode. @param text Display text. */
     virtual void setPresence(const std::string& userId,int mode,const std::string& text) = 0;
     /** @brief Retrieves immutable asset bytes, with verified local cache where configured.

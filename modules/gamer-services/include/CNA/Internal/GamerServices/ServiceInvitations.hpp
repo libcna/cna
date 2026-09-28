@@ -57,6 +57,14 @@ void pumpInvitations();
  * @param user Sending local service identity. @param gamertags Recipients.
  * @param done Owner-thread completion with the number of failed recipients. */
 void sendInvitations(const std::string& user,const std::vector<std::string>& gamertags,std::function<void(int)> done);
+/** @brief Defers Guide notifications (invitation prompts); a delay already in force is kept.
+ * @param milliseconds Requested delay, capped at 120 seconds like the reference. */
+void delayNotifications(long long milliseconds);
+/** @brief Records a gamer met in an online session for the Guide Players pane.
+ * @param gamertag Remote gamer; the newest 30 distinct names are kept. */
+void rememberRecentPlayer(const std::string& gamertag);
+/** @brief Gets recently met players, newest first. @return Gamertags. */
+std::vector<std::string> recentPlayers();
 /** @brief Makes the next pumpInvitations poll immediately; deterministic tests only. */
 void pollInvitationsNowForTesting();
 /** @brief Forgets seen/queued invitations and any accepted invitation; deterministic tests only. */

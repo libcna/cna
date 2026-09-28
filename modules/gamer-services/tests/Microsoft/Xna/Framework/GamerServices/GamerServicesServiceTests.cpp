@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include "Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.hpp"
+#include "System/ArgumentNullException.hpp"
 #include <any>
 
 #include "CNA/Platform/CurrentPlatform.hpp"
@@ -928,21 +930,26 @@ TEST(GuideTest, DelayNotificationsDoesNotThrow) {
     EXPECT_NO_THROW(Guide::DelayNotifications(System::TimeSpan::FromSeconds(1)));
 }
 
-TEST(GuideTest, ShowMethodsDoNotThrow) {
-    EXPECT_NO_THROW(Guide::ShowComposeMessage(PlayerIndex::One, "hi", {}));
-    EXPECT_THROW(Guide::ShowFriendRequest(PlayerIndex::One, nullptr), GamerServicesNotAvailableException);
+// Without a configured service, argument validation still runs first (reference order) and every
+// service-backed pane refuses rather than silently doing nothing.
+TEST(GuideTest, ShowMethodsValidateThenRequireTheService) {
+    EXPECT_THROW(Guide::ShowComposeMessage(PlayerIndex::One, std::string(256, 'a'), {}), System::ArgumentException);
+    EXPECT_THROW(Guide::ShowComposeMessage(PlayerIndex::One, "hi", {nullptr}), System::ArgumentException);
+    EXPECT_THROW(Guide::ShowComposeMessage(PlayerIndex::One, "hi", {}), GamerServicesNotAvailableException);
+    EXPECT_THROW(Guide::ShowFriendRequest(PlayerIndex::One, nullptr), System::ArgumentNullException);
     EXPECT_THROW(Guide::ShowFriends(PlayerIndex::One), GamerServicesNotAvailableException);
     // Invitations need the configured service; the session-ID overload is Windows Phone only.
     EXPECT_THROW(Guide::ShowGameInvite(PlayerIndex::One, std::vector<Gamer*>{}), GamerServicesNotAvailableException);
     EXPECT_THROW(Guide::ShowGameInvite(PlayerIndex::One, std::vector<Gamer*>{nullptr}), System::ArgumentException);
     EXPECT_THROW(Guide::ShowGameInvite(std::string("session-id")), System::NotSupportedException);
-    EXPECT_THROW(Guide::ShowGamerCard(PlayerIndex::One, nullptr), GamerServicesNotAvailableException);
-    EXPECT_NO_THROW(Guide::ShowMarketplace(PlayerIndex::One));
-    EXPECT_NO_THROW(Guide::ShowMessages(PlayerIndex::One));
-    EXPECT_NO_THROW(Guide::ShowParty(PlayerIndex::One));
-    EXPECT_NO_THROW(Guide::ShowPartySessions(PlayerIndex::One));
-    EXPECT_NO_THROW(Guide::ShowPlayerReview(PlayerIndex::One, nullptr));
-    EXPECT_NO_THROW(Guide::ShowPlayers(PlayerIndex::One));
+    EXPECT_THROW(Guide::ShowGamerCard(PlayerIndex::One, nullptr), System::ArgumentNullException);
+    EXPECT_THROW(Guide::ShowMarketplace(PlayerIndex::One), GamerPrivilegeException);
+    EXPECT_THROW(Guide::ShowMessages(PlayerIndex::One), GamerServicesNotAvailableException);
+    EXPECT_THROW(Guide::ShowParty(PlayerIndex::One), GamerServicesNotAvailableException);
+    EXPECT_THROW(Guide::ShowPartySessions(PlayerIndex::One), GamerServicesNotAvailableException);
+    EXPECT_THROW(Guide::ShowPlayerReview(PlayerIndex::One, nullptr), System::ArgumentNullException);
+    EXPECT_THROW(Guide::ShowPlayers(PlayerIndex::One), GamerServicesNotAvailableException);
     EXPECT_THROW(Guide::ShowSignIn(1, false), GamerServicesNotAvailableException);
-    EXPECT_NO_THROW(Guide::ShowAchievementsEXT(PlayerIndex::One));
+    EXPECT_THROW(Guide::ShowAchievementsEXT(PlayerIndex::One), GamerServicesNotAvailableException);
+    EXPECT_FALSE(Guide::getIsVisibleProperty());
 }

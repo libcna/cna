@@ -31,6 +31,8 @@ struct State {
     std::optional<ActiveOnlineSession> active;
     std::optional<AcceptedInvitation> accepted;
     std::function<void(const AcceptedInvitation&)> sink;
+    Clock::time_point quietUntil{};
+    std::deque<std::string> recent;
 };
 State& state(){static State value;return value;}
 SignedInGamer* published(const std::string& user) {
@@ -135,8 +137,19 @@ void pumpInvitations() {
     }
     if(!service||!service->serviceEnabled())return;
     if(!current.polling&&Clock::now()>=current.nextPoll)poll();
-    if(!current.prompting&&!current.accepting&&!Guide::getIsVisibleProperty())prompt();
+    if(!current.prompting&&!current.accepting&&!Guide::getIsVisibleProperty()&&Clock::now()>=current.quietUntil)prompt();
 }
+void delayNotifications(long long milliseconds) {
+    auto& current=state();const auto now=Clock::now();
+    if(now<current.quietUntil||milliseconds<=0)return;
+    current.quietUntil=now+std::chrono::milliseconds(std::min<long long>(milliseconds,120000));
+}
+void rememberRecentPlayer(const std::string& gamertag) {
+    auto& current=state();
+    std::erase(current.recent,gamertag);current.recent.push_front(gamertag);
+    while(current.recent.size()>30)current.recent.pop_back();
+}
+std::vector<std::string> recentPlayers(){const auto& recent=state().recent;return {recent.begin(),recent.end()};}
 void sendInvitations(const std::string& user,const std::vector<std::string>& gamertags,std::function<void(int)> done) {
     auto& current=state();
     if(!current.active)throw ServiceOperationError("INVALID_STATE");
@@ -152,5 +165,6 @@ void pollInvitationsNowForTesting(){state().nextPoll={};}
 void resetInvitationsForTesting() {
     auto& current=state();current.origin=nullptr;current.nextPoll={};current.polling=current.prompting=current.accepting=false;
     current.seen.clear();current.seenOrder.clear();current.queue.clear();current.accepted.reset();
+    current.quietUntil={};current.recent.clear();
 }
 }

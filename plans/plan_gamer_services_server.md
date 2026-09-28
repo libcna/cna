@@ -2114,3 +2114,24 @@ Validation: Net **466/466**; server **20/20, zero skips, 340.73s** (`build/recov
 Known-good set: CNA (this commit), server (restart acceptance commit), runtime 007280bd.
 Open: reconnect across a *client* network change is the same path but only server restart is
 measured; host migration is still absent online (GS-007h).
+
+### GS-005c complete: remaining Guide panes (reference validation, service-backed where possible)
+
+Reference (managed Guide.cs): ShowComposeMessage text <256 chars then Gamer.ValidateGamerList
+(<=100, no null/disposed); ExecuteKernelCall panes throw ArgumentNullException/ObjectDisposed for
+the gamer before service work; ShowMarketplace requires a signed-in LIVE profile with the purchase
+privilege (GamerPrivilegeException); ShowGameInvite(sessionId) is Windows-Phone-only; the Windows
+`player != One` check is a Windows restriction (Xbox 1..4), so CNA keeps 0..3.
+- [x] Server schema 11: account messages (bounded inbox, sender rate) and prefer/avoid reviews;
+  avoided hosts are not offered by sessions.find (31 assertions).
+- [x] ShowComposeMessage (keyboard compose, gamertag prompt when no recipients), ShowMessages
+  (inbox: next/reply/delete, marks read), ShowPlayerReview (prefer/avoid/clear), ShowPlayers
+  (recently met online players -> gamer card), ShowAchievementsEXT (earned list),
+  DelayNotifications (defers invitation prompts, <=120 s, active delay kept).
+- [x] ShowMarketplace/ShowParty/ShowPartySessions open an explanatory Guide pane: CNA has no
+  store/payment or party service (titles are fully licensed; IsTrialMode stays false).
+  LocalNetworkGamer.SendPartyInvites remains a documented no-op for the same reason.
+- [x] Null gamer for ShowFriendRequest/ShowGamerCard/ShowPlayerReview -> ArgumentNullException.
+Validation: GamerServices 465 pass / 1 known skip (7 new pane cases); Net 466/466; fake 113;
+private gates 13/13; server 21/21 (354.87s). Messages/reviews are verified by server unit tests
+and the deterministic Guide panes; not yet exercised by a two-process E2E.
