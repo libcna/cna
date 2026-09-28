@@ -2365,3 +2365,34 @@ controller players could not answer the invitation prompt at all.
 Validation: GamerServices **483 pass / 1 known skip** (SystemGuideTests 5; keyboard message-box
 navigation through a canned platform keyboard); Net 466/466; C API gates pass (three environment
 smokes as before). SAMPLE-096 acceptance below exercises the real Home key and message boxes.
+
+### Priority 9: formerly blocked XNA samples (in progress)
+
+Ports live on cna-samples branch `feature/gamer-services-samples` (worktree
+`/rv/data/development/github.com/libcna/cna-samples-gamer-services`, from committed `develop`
+053ab42; not merged), built in its persistent `cmake-build-release` (OPENGLES3, Release, pointed at
+this CNA worktree through `CNA_SAMPLES_CNA_ROOT`). Acceptance scripts/evidence go in new files under
+the retained audit roots; nothing existing there is modified.
+
+- [x] SAMPLE-096 Invites (cna-samples 3fb4799): the PeerToPeer port plus the upstream differences
+  (PlayerMatch, `InviteAccepted` -> `JoinInvited`). `scripts/capture-cna-invites-gs.py`: own
+  verified-TLS service, two accounts, two Release processes on private Xvfb displays; Guide sign-in
+  via the unchanged `ShowSignIn(4, false)`, PlayerMatch create, Home -> "Invite to game" -> gamertag
+  -> send, guest Guide invitation -> Accept -> sample handler `JoinInvited`, both tanks and labels on
+  both screens, guest driving reaches the host, both exit 0 (`evidence/gs-invites-20260928/`). The
+  port found GS-005d (no system Guide; mouse-only message boxes).
+- [x] SAMPLE-087 AvatarShadows (cna-samples 03d9bfe): four source units line by line; content built
+  for Windows/HiDef from the unchanged sources with the official pipeline
+  (`scripts/build-windows-hidef-content.sh`; upstream is Xbox 360-only). 16 random standard-API
+  avatars with `CreateShadow` shadows via the compiled `GroundEffect.fx` and a `DepthFormat.None`
+  target (`evidence/gs-avatarshadows-20260928/`).
+- [ ] SAMPLE-075 NetworkStateManagement identity flow.
+- [ ] Minimal XNA-shaped achievements/leaderboards compatibility sample (no original sample exists).
+
+Open Net fidelity item found by SAMPLE-096: on a joining machine CNA's `AllGamers` holds the local
+gamer before the existing ones arrive, so `GamerJoined` (replayed at subscription) gives the joiner
+index 0; XNA inserts gamers by the session's internal index (host first) as the kernel reports them,
+so the sample's tanks start apart there. Cosmetic for these samples (positions are then synced).
+
+Known-good cross-repo set: CNA 45c23451b (+ this plan commit), cna-samples feature/gamer-services-samples
+03d9bfe, server bbfe2d5, sharp-runtime 007280bd.
