@@ -122,3 +122,14 @@ Build `cna_service_relay_client_harness` and set `CNA_SERVICE_RELAY_CLIENT_HARNE
 binary path when running the sibling server's `service_cna_relay` CTest. The test explicitly skips
 without its harness; an unconfigured skip is not accepted as cross-repository validation.
 This private transport probe is not a standard-API acceptance sample or public online lifecycle proof.
+
+GS-008d1 now verifies these real CNA/ENet peers in separate Linux user/network namespaces, each
+with its own external slirp4netns outbound NAT, identical private 10.0.2.100 address and no inbound
+port mappings. The test checks namespace inodes, interface addresses and default routes; HTTPS/
+WSS uses the gateway's matching certificate IP SAN. Reliable fragmentation, unreliable data,
+UDP source/size guards, multi-local revocation and server loss pass for both title/category pairs.
+This is shared-host NAT-isolation evidence, not public Internet deployment or standard online
+NetworkSession acceptance. See sibling server README's optional `service_cna_relay_nat` setup.
+Test helpers are external optional prerequisites; production CNA/server neither link nor require
+GPL slirp4netns. No host network/package/desktop changes. Public online async/roster/lifecycle,
+reconnect, invitations and standard avatars remain unfinished.

@@ -1,5 +1,12 @@
 # CNA XNA 4.0 API Audit
 
+> **GS-008d1 NAT-isolated private relay (2026-09-28):** Two genuine CNA ENet peers now
+> exchange fragmented/reliable/unreliable data in separate rootless NAT namespaces with identical
+> private addresses and no inbound mappings. Full configured server gate 11/11, no skip, 137.21s.
+> This is shared-host NAT-isolation evidence; public online session/invite/async/roster integration,
+> reconnect and public Internet deployment acceptance remain unfinished.
+
+
 > **GS-008c2 private CNA relay (2026-09-28):** Verified libcurl WSS now bridges unchanged
 > ENet datagrams through authorized stable loopback routes, bounded queues and an owned worker.
 > Two real CNA processes/four accounts pass bidirectional fragmented/unreliable data, UDP guards,

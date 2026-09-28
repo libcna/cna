@@ -757,6 +757,8 @@ CNA-specific transport routing; generic proxy change remains the only runtime mo
 - [ ] GS-008c3: connect transport status/roster/lease handling to public Net Update/lifecycle.
 - [ ] GS-008c: CNA libcurl WSS connection and loopback UDP routes preserving ENet datagrams,
   protocol/certificate validation and controlled Net updates. SystemLink keeps its direct path.
+- [x] GS-008d1: two actual ENet clients in separate rootless outbound NAT namespaces.
+- [ ] GS-008d2: client reconnect/server-restart and remaining authenticated fault corpus.
 - [ ] GS-008d: genuine ENet exchange under relay-only isolated routing/firewall conditions,
   forged source/destination/malformed/rate/disconnect/revoke/server failure/reconnect corpus.
 - [ ] GS-007e: publish standard PlayerMatch/Ranked lifecycle and Guide/invited joins once directory
@@ -1036,3 +1038,45 @@ Server committed 620415aa39c91b6510a05dccb5ed7b2f66f72ce2; runtime unchanged
 6c4a857de129cf29b5d43430bedf24157d594f12. Resulting CNA relay commit is pinned in the next
 checkpoint. Next unfinished: GS-008d1 run these real peers in separate unprivileged NAT namespaces
 without incoming ports; then reconnect/remaining fault corpus and GS-008c3/GS-007e public lifecycle.
+
+### GS-008d1 separate NAT namespace checkpoint
+
+Independent MIT server test mode `--isolated` executes the same native ENet/CNA relay probe in
+separate rootless user/network namespaces with external packaged slirp4netns helpers. Namespace
+inodes differ from host and each other; child checks only loopback/10.0.2.100 IPv4 interfaces and
+10.0.2.2/tap0 default route before exec. No helper API socket/inbound mapping is created; both
+identical private addresses cannot identify the other ENet listener. HTTPS/WSS gateway access
+uses a verified matching IP SAN. Four accounts/two local users per peer, both categories/titles,
+all 16 application deliveries including 32KiB fragmentation/unreliable channel, UDP guards,
+secondary revocation/owner isolation and server loss pass. No credentials are buffered by the
+namespace setup helper or logged. Child processes, helper exit-FDs and namespaces are reclaimed.
+No host routes/firewall/sysctl/packages/desktop modification. Helper in /tmp only, original MIT
+orchestration does not incorporate/link GPL helper code. Production transport stays libcurl TLS.
+
+Final matching server clean incremental -Werror build and 11/11 CTest pass, no skip, 137.21s;
+normal native relay 7.76s, separate NAT native relay 8.14s, independent WSS 47.18s. Earlier isolated
+standalone run also passed; no new failing diagnostic. Prerequisite absence is an explicit skip77,
+not evidence, and never silently changes kernel/host policy. Reproduce full earlier four-probe
+server command with `CNA_SERVICE_SLIRP4NETNS=/tmp/cna-gamer-services-nat-tools/root/usr/bin/slirp4netns`
+and `CNA_SERVICE_SLIRP_LIBRARY_PATH=/tmp/cna-gamer-services-nat-tools/root/usr/lib/x86_64-linux-gnu`.
+A system helper can omit library override. Log server build/relay-nat-{build,initial,full-tests}.log.
+CNA production code unchanged, Net/GamerServices/private gates remain the GS-008c2 measured set.
+Known-good tested code set: CNA 967305dd7b93f992f7c177a7055bd5892ba8523e;
+server 5a850401da339ec44b67ed93fde8f019f44c6e9d; runtime
+6c4a857de129cf29b5d43430bedf24157d594f12. All on recorded feature branches, clean before this
+CNA documentation-only checkpoint. This is shared-host NAT isolation, not public Internet
+production/latency/failover proof; parent GS-008d remains open for reconnect and remaining faults.
+
+Next active GS-007e1: private authenticated roster/handshake validation before public online
+integration. Existing ENet ClientHello trusts peer gamertags; online mode must bind peer loopback
+route to the authenticated service machine and accept only its exact 1..4 accounts. Use service
+ordinals for deterministic 1..31 wire IDs, owner-only host flags, validate welcome/roster and
+properties before object mutation. Preserve direct SystemLink behavior. Audit also confirms
+NetworkSession's nested action is currently completed immediately and End owns/deletes it;
+public async refactoring must handle callback reentry, wait signaling, operation ownership and
+C API pending-action consumption together. GamerServices ServiceAsyncResult is caller-owned and
+cannot simply be substituted without that ownership audit. Runtime BinaryReader.ReadString already
+checks declared length against a seekable stream before allocation; no generic runtime fix needed.
+Bound service handshake count/string/UTF-8/boolean/exact length before decode; no custom crypto or
+XNA objects on service control. Full public Create/Find/Join and invites remain gated until this
+roster and controlled async/lifecycle integration are genuinely tested.
