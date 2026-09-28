@@ -1384,3 +1384,73 @@ TEST(NetworkSessionTest, DisposeClearsHostProperty) {
     session->Dispose();
     EXPECT_EQ(session->getHostProperty(), nullptr);
 }
+
+
+TEST(NetworkSessionTest, EndFamiliesRejectNullAndForeignResultsWithoutAnAction) {
+    auto* foreign = reinterpret_cast<System::IAsyncResult*>(0x1);
+    EXPECT_THROW(NetworkSession::EndCreate(nullptr), System::ArgumentNullException);
+    EXPECT_THROW(NetworkSession::EndFind(nullptr), System::ArgumentNullException);
+    EXPECT_THROW(NetworkSession::EndJoin(nullptr), System::ArgumentNullException);
+    EXPECT_THROW(NetworkSession::EndCreate(foreign), System::ArgumentException);
+    EXPECT_THROW(NetworkSession::EndFind(foreign), System::ArgumentException);
+    EXPECT_THROW(NetworkSession::EndJoin(foreign), System::ArgumentException);
+}
+
+TEST(NetworkSessionTest, WrongEndFamilyPreservesPendingCreate) {
+    auto gamer = MakeSignedInGamer();
+    const int before = NetworkSession::GetActiveActionInstanceCountForTesting();
+    auto* result = NetworkSession::BeginCreate(NetworkSessionType::Local,
+        std::vector<SignedInGamer*>{&gamer}, 8, 0, {}, {}, {});
+    EXPECT_THROW(NetworkSession::EndFind(result), System::ArgumentException);
+    EXPECT_THROW(NetworkSession::EndJoin(result), System::ArgumentException);
+    EXPECT_THROW(NetworkSession::EndCreate(nullptr), System::ArgumentNullException);
+    EXPECT_EQ(NetworkSession::GetActiveActionInstanceCountForTesting(), before + 1);
+    EXPECT_THROW(NetworkSession::BeginFind(NetworkSessionType::SystemLink, 1, {}, {}, {}),
+        System::InvalidOperationException);
+    auto* session = NetworkSession::EndCreate(result);
+    EXPECT_EQ(session->getMaxGamersProperty(), 8);
+    EXPECT_EQ(NetworkSession::GetActiveActionInstanceCountForTesting(), before);
+    session->Dispose();
+    delete session;
+}
+
+TEST(NetworkSessionTest, WrongEndFamilyPreservesPendingFind) {
+    const int before = NetworkSession::GetActiveActionInstanceCountForTesting();
+    auto* result = NetworkSession::BeginFind(NetworkSessionType::SystemLink, 1, {}, {}, {});
+    EXPECT_THROW(NetworkSession::EndCreate(result), System::ArgumentException);
+    EXPECT_THROW(NetworkSession::EndJoin(result), System::ArgumentException);
+    EXPECT_THROW(NetworkSession::EndFind(nullptr), System::ArgumentNullException);
+    EXPECT_EQ(NetworkSession::GetActiveActionInstanceCountForTesting(), before + 1);
+    EXPECT_THROW(NetworkSession::BeginFind(NetworkSessionType::SystemLink, 1, {}, {}, {}),
+        System::InvalidOperationException);
+    EXPECT_EQ(NetworkSession::EndFind(result).getCountProperty(), 0);
+    EXPECT_EQ(NetworkSession::GetActiveActionInstanceCountForTesting(), before);
+}
+
+TEST(NetworkSessionTest, WrongEndFamilyPreservesPendingJoin) {
+    auto gamer = MakeSignedInGamer();
+    Gamer::setSignedInGamersProperty(new SignedInGamerCollection(
+        SignedInGamerCollection::CreateInternal({&gamer})));
+    struct RestoreGlobalGuard {
+        ~RestoreGlobalGuard() {
+            Gamer::setSignedInGamersProperty(new SignedInGamerCollection(
+                SignedInGamerCollection::CreateInternal({})));
+        }
+    } restoreGuard;
+    auto available = AvailableNetworkSession::CreateInternal(1, "Host", 0, 8, {},
+        QualityOfService::CreateInternal(), "", 0, NetworkSessionType::Local);
+    const int before = NetworkSession::GetActiveActionInstanceCountForTesting();
+    auto* result = NetworkSession::BeginJoin(&available, {}, {});
+    EXPECT_THROW(NetworkSession::EndCreate(result), System::ArgumentException);
+    EXPECT_THROW(NetworkSession::EndFind(result), System::ArgumentException);
+    EXPECT_THROW(NetworkSession::EndJoin(nullptr), System::ArgumentNullException);
+    EXPECT_THROW(NetworkSession::EndJoin(reinterpret_cast<System::IAsyncResult*>(0x1)),
+        System::ArgumentException);
+    EXPECT_EQ(NetworkSession::GetActiveActionInstanceCountForTesting(), before + 1);
+    EXPECT_THROW(NetworkSession::BeginJoin(&available, {}, {}), System::InvalidOperationException);
+    auto* session = NetworkSession::EndJoin(result);
+    EXPECT_FALSE(session->getIsHostProperty());
+    EXPECT_EQ(NetworkSession::GetActiveActionInstanceCountForTesting(), before);
+    session->Dispose();
+    delete session;
+}

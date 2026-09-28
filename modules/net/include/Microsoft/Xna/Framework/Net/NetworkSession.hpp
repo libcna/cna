@@ -824,6 +824,8 @@ namespace Microsoft::Xna::Framework::Net
          */
         CNAEXT void SetSessionPropertiesFromTransport(NetworkSessionProperties properties);
 
+        enum class NetworkSessionOperation { Create, Find, Join };
+
         /**
          * @brief Internal IAsyncResult implementation backing NetworkSession's Begin/End pairs.
          */
@@ -833,6 +835,7 @@ namespace Microsoft::Xna::Framework::Net
             /**
              * @brief Constructs a NetworkSessionAction already positioned to complete.
              *
+             * @param operation The Begin/End operation family.
              * @param state The user-defined async state.
              * @param callback The callback to invoke on completion.
              * @param maxLocal The maximum number of local gamers for this action.
@@ -843,6 +846,7 @@ namespace Microsoft::Xna::Framework::Net
              * @param maxGamers The maximum gamer count retained for a create action.
              */
             NetworkSessionAction(
+                NetworkSessionOperation operation,
                 std::any state,
                 System::AsyncCallback callback,
                 int maxLocal,
@@ -884,6 +888,7 @@ namespace Microsoft::Xna::Framework::Net
             /** @brief Gets the wait handle signalled when the operation completes. */
             [[nodiscard]] System::Threading::WaitHandle& getAsyncWaitHandleProperty() const override;
 
+            const NetworkSessionOperation Operation;
             const System::AsyncCallback Callback;
             const int MaxLocalGamers;
             const int MaxGamers;

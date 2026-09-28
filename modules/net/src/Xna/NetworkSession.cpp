@@ -56,6 +56,7 @@ namespace Microsoft::Xna::Framework::Net
     // --- NetworkSessionAction ---
 
     NetworkSession::NetworkSessionAction::NetworkSessionAction(
+        NetworkSessionOperation operation,
         std::any state,
         System::AsyncCallback callback,
         int maxLocal,
@@ -65,7 +66,8 @@ namespace Microsoft::Xna::Framework::Net
         NetworkSessionType type,
         int maxGamers
     )
-        : Callback(std::move(callback))
+        : Operation(operation)
+        , Callback(std::move(callback))
         , MaxLocalGamers(maxLocal)
         , MaxGamers(maxGamers)
         , LocalGamers(std::move(localGamers))
@@ -796,7 +798,7 @@ namespace Microsoft::Xna::Framework::Net
         }
 
         activeAction_ = new NetworkSessionAction(
-            std::move(asyncState), std::move(callback), maxLocalGamers, std::nullopt, 0,
+            NetworkSessionOperation::Create, std::move(asyncState), std::move(callback), maxLocalGamers, std::nullopt, 0,
             NetworkSessionProperties{}, sessionType, maxGamers
         );
         return InvokeActiveActionCallback();
@@ -833,7 +835,7 @@ namespace Microsoft::Xna::Framework::Net
         }
 
         activeAction_ = new NetworkSessionAction(
-            std::move(asyncState), std::move(callback), maxLocalGamers, std::nullopt, privateGamerSlots,
+            NetworkSessionOperation::Create, std::move(asyncState), std::move(callback), maxLocalGamers, std::nullopt, privateGamerSlots,
             std::move(sessionProperties), sessionType, maxGamers
         );
         return InvokeActiveActionCallback();
@@ -866,7 +868,7 @@ namespace Microsoft::Xna::Framework::Net
         }
 
         activeAction_ = new NetworkSessionAction(
-            std::move(asyncState), std::move(callback), 0, localGamers, privateGamerSlots,
+            NetworkSessionOperation::Create, std::move(asyncState), std::move(callback), 0, localGamers, privateGamerSlots,
             std::move(sessionProperties), sessionType, maxGamers
         );
         return InvokeActiveActionCallback();
@@ -875,7 +877,9 @@ namespace Microsoft::Xna::Framework::Net
     NetworkSession* NetworkSession::EndCreate(System::IAsyncResult* result)
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
-        if (result != activeAction_)
+        if (!result) throw System::ArgumentNullException("result");
+        if (result != activeAction_
+            || activeAction_->Operation != NetworkSessionOperation::Create)
         {
             throw System::ArgumentException("result");
         }
@@ -983,7 +987,7 @@ namespace Microsoft::Xna::Framework::Net
         }
 
         activeAction_ = new NetworkSessionAction(
-            std::move(asyncState), std::move(callback), maxLocalGamers, std::nullopt, 0,
+            NetworkSessionOperation::Find, std::move(asyncState), std::move(callback), maxLocalGamers, std::nullopt, 0,
             std::move(searchProperties), sessionType
         );
         return InvokeActiveActionCallback();
@@ -1012,7 +1016,7 @@ namespace Microsoft::Xna::Framework::Net
         int locals = static_cast<int>(localGamers.size());
 
         activeAction_ = new NetworkSessionAction(
-            std::move(asyncState), std::move(callback), locals, localGamers, 0,
+            NetworkSessionOperation::Find, std::move(asyncState), std::move(callback), locals, localGamers, 0,
             std::move(searchProperties), sessionType
         );
         return InvokeActiveActionCallback();
@@ -1021,7 +1025,9 @@ namespace Microsoft::Xna::Framework::Net
     AvailableNetworkSessionCollection NetworkSession::EndFind(System::IAsyncResult* result)
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
-        if (result != activeAction_)
+        if (!result) throw System::ArgumentNullException("result");
+        if (result != activeAction_
+            || activeAction_->Operation != NetworkSessionOperation::Find)
         {
             throw System::ArgumentException("result");
         }
@@ -1082,7 +1088,7 @@ namespace Microsoft::Xna::Framework::Net
         pendingJoinAddress_ = availableSession->GetConnectAddress();
         pendingJoinPort_ = availableSession->GetConnectPort();
         activeAction_ = new NetworkSessionAction(
-            std::move(asyncState), std::move(callback), 4, std::nullopt, 0,
+            NetworkSessionOperation::Join, std::move(asyncState), std::move(callback), 4, std::nullopt, 0,
             // FNA passes null for SessionProperties here (marked FIXME upstream); substituted
             // with a default instance since this port's SessionProperties isn't nullable.
             NetworkSessionProperties{},
@@ -1094,7 +1100,9 @@ namespace Microsoft::Xna::Framework::Net
     NetworkSession* NetworkSession::EndJoin(System::IAsyncResult* result)
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
-        if (result != activeAction_)
+        if (!result) throw System::ArgumentNullException("result");
+        if (result != activeAction_
+            || activeAction_->Operation != NetworkSessionOperation::Join)
         {
             throw System::ArgumentException("result");
         }

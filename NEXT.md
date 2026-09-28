@@ -1,5 +1,11 @@
 # NEXT.md
 
+> **GS-007e2a Net End guards (2026-09-28):** Null results now throw the reference
+> ArgumentNullException; foreign and wrong-family results are refused without consuming the action.
+> All six cross-family pairs recover through the correct End. Net 350/350, private gates 13/13.
+> Next: async result lifetime/End-once and genuinely pending online operations.
+
+
 > **GS-007e1 private online identity gate (2026-09-28):** Authoritative service rosters now
 > constrain exact machine/local-account claims, deterministic 31-slot IDs, owner-only host flags,
 > welcome properties and represented groups. Bounded control preflight precedes decoding.

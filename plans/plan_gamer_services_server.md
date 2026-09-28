@@ -1125,3 +1125,24 @@ online peers must use the authenticated roster gate before GamerJoined and prese
 Existing End-owned legacy results vs caller-owned GamerServices results and callback reentry need
 an explicit lifetime solution. Ranked leaderboard arbitration, Guide invites, reconnect, all
 standard Avatar migration and original acceptance samples remain unfinished.
+
+
+### GS-007e2a active: exact public Net End ownership guards
+
+Existing EndCreate/EndFind/EndJoin compared only pointer identity, admitting null when no action
+exists and accepting a different Begin family. Add a private operation discriminator and validate
+non-null/current/family before any dereference or mutation. Wrong Ends retain the original action
+and busy state. Four regression cases cover null/foreign pointers and all six cross-family pairs,
+then the correct End succeeds. The local XNA managed shared XOverlappedAsyncResult.cs
+PrepareForEndFunction (lines 68..84) explicitly throws ArgumentNullException for null,
+ArgumentException for a foreign result type, InvalidOperationException on a second End, and waits
+for completion. Null now follows that evidence; family rejection is a CNA ownership guard and
+console-native family/error order is not yet measured. The next async slice must preserve result
+metadata after End, implement End-once and genuine wait/pump behavior.
+No transport gating or SystemLink behavior changes. Validation: incremental native/C API builds
+pass; Net 350/350 (4.601s), including all four new cases; private C API/ABI/protocol/fake gates
+13/13 (10.49s). Logs: cmake-build-debug/service-end-guards-{build,net,private}.log.
+Server 5a850401da339ec44b67ed93fde8f019f44c6e9d and runtime
+6c4a857de129cf29b5d43430bedf24157d594f12 unchanged. GS-007e2a complete; parent public
+online APM/lifecycle remains unfinished. Next: caller-owned result lifetime and real pending
+service searches, then authenticated online transport/session preparation.
