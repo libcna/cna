@@ -57,6 +57,12 @@ namespace CNA::Internal::Renderers::Canvas
         /// called unconditionally per `Begin()` (Identity included), unlike the native renderer's own fix
         /// which needed a separate non-Identity-only code path.
         void SetTransformMatrix(const Matrix& m) override;
+        /**
+         * @brief Records logical projection dimensions for this batch.
+         * @param width Logical viewport width.
+         * @param height Logical viewport height.
+         */
+        void SetViewportSizeEXT(int width, int height) override;
         /// CANVAS-38: throws for a non-null custom Effect (Design decision 10) -- no programmable
         /// shader stage exists on this renderer, same conclusion the native renderer reached (Task 676).
         void SetCustomEffect(Effect* effect) override;
@@ -118,6 +124,8 @@ namespace CNA::Internal::Renderers::Canvas
         std::shared_ptr<CanvasRendererState> state_;
         CanvasCompositeOp activeCompositeOp_ = CanvasCompositeOp::AlphaBlendSourceOver;
         Matrix transform_ = Matrix::getIdentityProperty();
+        int viewportWidth_ = 0, viewportHeight_ = 0;
+        Matrix GetDrawTransform() const;
         std::vector<DrawCommand> commands_;
         bool begun_ = false;
         bool immediateMode_ = false;

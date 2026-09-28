@@ -2384,6 +2384,12 @@ namespace CNA::Internal::Renderers::Vulkan
         batchFirstIndex_ = static_cast<uint32_t>(indices_.size());
     }
 
+    void VulkanSpriteBatchRenderer::SetViewportSizeEXT(int width, int height)
+    {
+        projectionWidth_ = width;
+        projectionHeight_ = height;
+    }
+
     void VulkanSpriteBatchRenderer::End()
     {
         if (!active_) return;
@@ -2465,6 +2471,8 @@ namespace CNA::Internal::Renderers::Vulkan
             snapshot->scissorX = renderer_->scissorX_; snapshot->scissorY = renderer_->scissorY_;
             snapshot->scissorW = renderer_->scissorW_; snapshot->scissorH = renderer_->scissorH_;
             // REMED-GFX-062: capture the viewport active for this batch (see BatchSnapshot).
+            snapshot->projectionWidth = projectionWidth_;
+            snapshot->projectionHeight = projectionHeight_;
             snapshot->viewportSet = renderer_->viewportSet_;
             snapshot->viewportX = renderer_->viewportX_; snapshot->viewportY = renderer_->viewportY_;
             snapshot->viewportW = renderer_->viewportW_; snapshot->viewportH = renderer_->viewportH_;
@@ -14700,33 +14708,13 @@ namespace CNA::Internal::Renderers::Vulkan
                 vkCmdBindVertexBuffers(cb, 0, 1, &spriteVB_[currentFrame_], &vbBindOff);
                 vkCmdBindIndexBuffer(cb, spriteIB_[currentFrame_], ibOff, VK_INDEX_TYPE_UINT16);
 
-                // REMED-GFX-072: the sprite2d vertex shader divides pixel-space positions by this
-                // vpSize to reach NDC. XNA/FNA build the SpriteBatch ortho from GraphicsDevice.
-                // Viewport.Width/Height (CreateOrthographicOffCenter(0, Viewport.Width,
-                // Viewport.Height, 0), FNA SpriteBatch.cs PrepRenderState), so a custom sub-Viewport
-                // makes sprite coordinates VIEWPORT-LOCAL: the divide must use the active Viewport's
-                // W/H, not the full target/virtual size (vpW/vpH). The rasterizer viewport
-                // (computeViewport below, GFX-062) already positions the [-1,1] result at Viewport.
-                // X/Y, so this is the missing projection half. Only override for a genuine custom
-                // sub-region (differs from the physical target extent) -- the default full-target
-                // viewport keeps the pre-existing vpW/vpH (byte-identical, and preserves the
-                // backbuffer's virtual-resolution divisor). The sprite vertices are already the raw
-                // viewport-local pixel coordinates the game passed (Draw() bakes dest.X/Y directly),
-                // so only the divisor changes; the transform matrix (GFX-012) is applied CPU-side
-                // before this and is unaffected.
-                float projW = vpW, projH = vpH;
-                {
-                    const uint32_t physW = targetRT ? static_cast<uint32_t>(targetRT->GetWidth())
-                                                    : swapchainExtent_.width;
-                    const uint32_t physH = targetRT ? static_cast<uint32_t>(targetRT->GetHeight())
-                                                    : swapchainExtent_.height;
-                    if (snapshot->viewportSet && snapshot->viewportW > 0 && snapshot->viewportH > 0 &&
-                        (snapshot->viewportX != 0 || snapshot->viewportY != 0 ||
-                         snapshot->viewportW != physW || snapshot->viewportH != physH)) {
-                        projW = static_cast<float>(snapshot->viewportW);
-                        projH = static_cast<float>(snapshot->viewportH);
-                    }
-                }
+                // The public viewport supplies the projection divisor; the captured physical
+                // rectangle only positions/scales the result. Letterbox bars cannot identify a
+                // custom logical viewport, and deferred replay must retain each batch's size.
+                const float projW = snapshot->projectionWidth > 0
+                    ? static_cast<float>(snapshot->projectionWidth) : vpW;
+                const float projH = snapshot->projectionHeight > 0
+                    ? static_cast<float>(snapshot->projectionHeight) : vpH;
                 float vpSize[2] = { projW, projH };
                 if (customPC) {
                     // Push 128-byte block: vpSize at [0..7], std140 padding at [8..15],

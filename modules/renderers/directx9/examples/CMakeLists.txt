@@ -39,6 +39,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
         endif()
     endmacro()
 
+    cna_directx9_test(cna_test_directx9_frame_recovery directx9_frame_recovery_test.cpp)
+    cna_directx9_ctest_command(_directx9_frame_recovery_cmd cna_test_directx9_frame_recovery)
+    cna_register_renderer_test(NAME DirectX9_FrameRecovery COMMAND ${_directx9_frame_recovery_cmd}
+        TIMEOUT 30 LABELS "DIRECTX9")
+
     # D9-20/D9-21/D9-22: pure-function checks for D3D9's own format/state/vertex-layout mapping
     # tables -- no device/window/GPU needed.
     cna_directx9_test(cna_test_directx9_common directx9_common_test.cpp)

@@ -1,5 +1,15 @@
 # NEXT.md
 
+> **FULLSCREEN-001 consumer fullscreen repair (2026-09-28):** Vulkan captures logical
+> SpriteBatch projection independently of its physical viewport; Canvas scales, letterboxes,
+> clips and maps input consistently. DirectX9 polls recovery before Draw, retries failed resets
+> at current drawable dimensions, and reapplies cached blend/depth states after native reset.
+> Three Mobile Eggbert builds, 11 pixel assertions per Vulkan/Canvas backend, 19 Canvas host
+> tests, two existing Vulkan probes and a deliberately failed Wine fullscreen-reset recovery
+> probe pass on private displays. Actual game fullscreen/resize checks pass; Wine's native
+> backbuffer warning remains with its reference owner unconfirmed. No game/SharpRuntime change.
+> See [task details and limits](plans/plan_fullscreen_regressions.md).
+
 > **GS-007e2c3a online readiness coordinator (2026-09-28):** A weak dispatcher progress
 > owner completes once after prepared hosting or verified welcome, retains initial roster/data,
 > and safely cancels/consumes/calls back. Thirteen new cases; Net 443/443, private gates 5/5,

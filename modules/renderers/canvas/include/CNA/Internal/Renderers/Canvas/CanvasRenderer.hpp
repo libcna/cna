@@ -18,11 +18,13 @@ namespace CNA::Internal::Renderers::Canvas
     /// variant), since Canvas2D's own 'source-over' always treats its input as straight alpha.
     enum class CanvasCompositeOp { Copy = 0, NonPremultipliedSourceOver = 1, AlphaBlendSourceOver = 2, Lighter = 3 };
 
-    /** @brief Blend state shared by one Canvas renderer and the SpriteBatch instances it creates. */
+    /** @brief Presentation and blend state shared by a Canvas renderer and its SpriteBatch instances. */
     struct CanvasRendererState
     {
         /** @brief Composite operation captured by a SpriteBatch when it begins. */
         CanvasCompositeOp compositeOp = CanvasCompositeOp::AlphaBlendSourceOver;
+        /** @brief Physical rectangle for mapping viewport-local sprite coordinates. */
+        Rectangle viewport;
     };
 
     /// Pure mapping from raw BlendState factors/BlendFunction (see IGraphicsRenderer::ApplyBlendState's
@@ -54,6 +56,25 @@ namespace CNA::Internal::Renderers::Canvas
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
+        /**
+         * @brief Returns the physical presentation rectangle for the main canvas.
+         * @param x Receives its left edge.
+         * @param y Receives its top edge.
+         * @param width Receives its width.
+         * @param height Receives its height.
+         */
+        void GetDefaultViewportRect(int& x, int& y, int& width, int& height) override;
+        /**
+         * @brief Retains the physical viewport used by subsequent sprite batches.
+         * @param x Left edge.
+         * @param y Top edge.
+         * @param width Physical width.
+         * @param height Physical height.
+         * @param minDepth Minimum depth; unused by Canvas2D.
+         * @param maxDepth Maximum depth; unused by Canvas2D.
+         */
+        void SetViewport(int x, int y, int width, int height,
+                         float minDepth, float maxDepth) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
@@ -131,6 +152,7 @@ namespace CNA::Internal::Renderers::Canvas
         // renderer-agnostic; the platform snapshot supplies the drawable size and density.
         void getLogicalSize(int& width, int& height) const;
         void getWindowSize(int& width, int& height) const;
+        void getPresentedRect(int& x, int& y, int& width, int& height) const;
 
         RendererSurfaceInfo surface_;
         int virtualWidth_ = 0;

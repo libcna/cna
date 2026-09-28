@@ -1265,6 +1265,12 @@ namespace CNA::Internal::Renderers::Vulkan
         // D3D11SpriteBatchRenderer's design -- same raw-pixel-space Sprite2DVertex/viewportSize
         // shader contract, so there is no projection-matrix uniform to fold it into GPU-side.
         void SetTransformMatrix(const Matrix& m) override { transform_ = m; }
+        /**
+         * @brief Retains logical projection dimensions separately from the physical viewport.
+         * @param width Logical viewport width.
+         * @param height Logical viewport height.
+         */
+        void SetViewportSizeEXT(int width, int height) override;
 
         // Task 665 fix: previously unoverridden (silent no-op via the base class's default
         // empty bodies). Stores pending values applied via VulkanRenderer::
@@ -1347,6 +1353,7 @@ namespace CNA::Internal::Renderers::Vulkan
             // target honors the Viewport active for this batch, not the frame-global viewport left
             // over at Present() (which SetRenderTarget resets to the target's full size). set==false
             // or a zero-sized rect means "full target", matching the backbuffer pass's own guard.
+            int                         projectionWidth = 0, projectionHeight = 0;
             bool                        viewportSet = false;
             int32_t                     viewportX = 0, viewportY = 0;
             uint32_t                    viewportW = 0, viewportH = 0;
@@ -1417,6 +1424,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // (re-)set by SpriteBatch::Begin() before this renderer's Begin(), so it is never stale;
         // defaults to Identity for the no-transform overload.
         Matrix                           transform_           = Matrix::getIdentityProperty();
+        int                              projectionWidth_ = 0, projectionHeight_ = 0;
         std::vector<Sprite2DVertex>      vertices_;
         std::vector<uint16_t>            indices_;
         std::vector<DrawCall>            draws_;

@@ -587,13 +587,24 @@ namespace CNA::Internal::Renderers::DirectX9
         // must be released before Reset() too, not just the registered D3DPOOL_DEFAULT resources.
         defaultDepthStencilSurface_.Reset();
 
+        // A failed resize retains the previous usable dimensions, but a later recovery must
+        // target the current surface rather than repeatedly resetting the obsolete backbuffer.
+        const int previousWidth = width_, previousHeight = height_;
+        const auto drawableSize = surface_.GetDrawableSize();
+        if (drawableSize.width > 0 && drawableSize.height > 0)
+        {
+            width_ = drawableSize.width;
+            height_ = drawableSize.height;
+        }
         D3DPRESENT_PARAMETERS pp = BuildPresentParameters();
         HRESULT hr = device_->Reset(&pp);
         if (FAILED(hr))
         {
             // Reset() can itself fail (genuinely still lost, or a real error) -- stay in the lost
-            // state and let the next Present() try again, matching XNA's own resilience (a real
+            // state and let the next draw gate or Present() retry, matching XNA's resilience (a real
             // game keeps running frames while the device is lost, rather than crashing).
+            width_ = previousWidth;
+            height_ = previousHeight;
             return;
         }
 
@@ -601,6 +612,8 @@ namespace CNA::Internal::Renderers::DirectX9
         // checked viewport/default-surface restoration calls; the public Reset event still fires
         // only after those calls complete below.
         deviceLost_ = false;
+        simulatedDeviceLoss_ = false;
+        presentationDirty_ = false;
         SetViewport(0, 0, width_, height_, 0.0f, 1.0f);
         CacheDefaultDepthStencilSurfaceEXT();
         // Same reasoning as EnsureDeviceSize()'s identical line: Reset() always reverts to the back
@@ -614,13 +627,33 @@ namespace CNA::Internal::Renderers::DirectX9
 
     void DirectX9Renderer::PollDeviceLost()
     {
+        if (simulatedDeviceLoss_) return;
         HRESULT hr = device_->TestCooperativeLevel();
-        if (hr == D3DERR_DEVICENOTRESET)
+        if (hr == D3DERR_DEVICENOTRESET || hr == D3D_OK)
         {
             PerformResetRecovery();
         }
         // D3DERR_DEVICELOST (still lost) or any other result: nothing more to do this frame:
-        // deviceLost_ stays true, and the next Present() will poll again.
+        // deviceLost_ stays true; the next draw gate or Present() polls again.
+    }
+
+    bool DirectX9Renderer::TryBeginDrawEXT()
+    {
+        if (deviceLost_)
+            PollDeviceLost();
+        if (deviceLost_)
+            return false;
+
+        const HRESULT status = device_->TestCooperativeLevel();
+        if (status == D3DERR_DEVICELOST || status == D3DERR_DEVICENOTRESET)
+        {
+            MarkDeviceLostFromScopedFailureEXT();
+            if (status == D3DERR_DEVICENOTRESET)
+                PollDeviceLost();
+            return false;
+        }
+        EnsureDeviceSize();
+        return !deviceLost_ && !presentationDirty_;
     }
 
     void DirectX9Renderer::ThrowIfDeviceLost() const
@@ -1571,6 +1604,7 @@ namespace CNA::Internal::Renderers::DirectX9
         // own documented cost).
         if (deviceLost_) return;
         deviceLost_ = true;
+        simulatedDeviceLoss_ = true;
         if (deviceEventCallback_) deviceEventCallback_(RendererDeviceEvent::Lost);
     }
 

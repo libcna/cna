@@ -1379,6 +1379,15 @@ namespace CNA::Internal::Renderers
         /// Sets the transform matrix applied on top of the 2D ortho projection.
         /// Must be called before the first Draw of each Begin/End block.
         virtual void SetTransformMatrix(const Matrix& m) {}
+        /**
+         * @brief Supplies the logical viewport dimensions used by SpriteBatch's projection.
+         *
+         * Physical presentation scaling is independent of these dimensions. Deferred batches
+         * receive them at End; Immediate batches receive them at Begin.
+         * @param width Logical viewport width.
+         * @param height Logical viewport height.
+         */
+        virtual void SetViewportSizeEXT(int /*width*/, int /*height*/) {}
         /// Sets a custom Effect to use for sprite rendering instead of the built-in sprite shader.
         /// Pass nullptr to restore the built-in shader. Must be called before Begin().
         virtual void SetCustomEffect(Effect* effect) {}
@@ -3852,6 +3861,13 @@ namespace CNA::Internal::Renderers
          * @return True when a Draw/Present pair may begin.
          */
         [[nodiscard]] virtual bool CanBeginDrawEXT() const { return true; }
+
+        /**
+         * @brief Attempts pending native device recovery before accepting the next Draw.
+         *
+         * @return True when drawing can begin; false while recovery remains pending.
+         */
+        [[nodiscard]] virtual bool TryBeginDrawEXT() { return CanBeginDrawEXT(); }
 
         /// Inserts a named GPU debug label into the command stream.
         /// Default implementation is a no-op; Vulkan renderer overrides with

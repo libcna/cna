@@ -19,6 +19,10 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
 
 if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "CANVAS")
+
+    add_executable(cna_test_canvas_spritebatch_presentation
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_presentation_test.cpp)
+    target_link_libraries(cna_test_canvas_spritebatch_presentation PRIVATE CNA SDL3::SDL3)
     add_executable(cna_test_canvas_smoke canvas_smoke_test.cpp)
     target_link_libraries(cna_test_canvas_smoke PRIVATE CNA ${RENDERER_TARGET} SDL3::SDL3)
 

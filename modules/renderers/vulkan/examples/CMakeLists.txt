@@ -56,6 +56,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
         enable_testing()
 
+        cna_vulkan_test(cna_test_vulkan_spritebatch_presentation
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_presentation_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SpriteBatchPresentation
+            COMMAND cna_test_vulkan_spritebatch_presentation TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}" LABELS "VULKAN")
+
         # plans/plan_webgpu.md WEBGPU-123: the shared cross-renderer diagnostic scene built for
         # VULKAN, exactly as EASYGL's cna_diag_easygl / SOFTWARE's cna_diag_software / WEBGPU's
         # cna_diag_webgpu. Deliberately NOT a CTest (a two-build pixel comparison, not a single-run

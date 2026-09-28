@@ -1081,6 +1081,9 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         UpdateViewportFromWindow();
+        // A native reset restores device defaults while XNA retains the assigned state objects.
+        blendStateDirty_ = true;
+        depthStencilStateDirty_ = true;
         DeviceReset.Raise(this, System::EventArgs::Empty);
     }
 
@@ -4416,6 +4419,8 @@ namespace Microsoft::Xna::Framework::Graphics
                     break;
                 case CNA::Internal::Renderers::RendererDeviceEvent::Reset:
                     deviceStatus_ = GraphicsDeviceStatus::Normal;
+                    blendStateDirty_ = true;
+                    depthStencilStateDirty_ = true;
                     // CABI-15: a renderer really did lose and recreate its resources, so the
                     // default-pool ones lost their contents. This is the only place ContentLost is
                     // raised: a caller-initiated Reset on a renderer that never loses anything must

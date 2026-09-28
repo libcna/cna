@@ -181,6 +181,12 @@ namespace Microsoft::Xna::Framework::Graphics
         // SpriteBatch sampler channel from the retained payload immediately before drawing.
         if (renderer_ != nullptr)
         {
+            if (graphicsDevice_ != nullptr)
+            {
+                const auto& viewport = graphicsDevice_->getViewportProperty();
+                renderer_->SetViewportSizeEXT(viewport.getWidthProperty(),
+                                               viewport.getHeightProperty());
+            }
             renderer_->SetSamplerState(
                 CNA::Internal::Renderers::NormalizeXnaTextureFilterOrdinal(
                     static_cast<int>(samplerState_.getFilterProperty())),
