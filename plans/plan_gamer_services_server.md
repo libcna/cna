@@ -2366,7 +2366,7 @@ Validation: GamerServices **483 pass / 1 known skip** (SystemGuideTests 5; keybo
 navigation through a canned platform keyboard); Net 466/466; C API gates pass (three environment
 smokes as before). SAMPLE-096 acceptance below exercises the real Home key and message boxes.
 
-### Priority 9: formerly blocked XNA samples (in progress)
+### Priority 9: formerly blocked XNA samples (complete)
 
 Ports live on cna-samples branch `feature/gamer-services-samples` (worktree
 `/rv/data/development/github.com/libcna/cna-samples-gamer-services`, from committed `develop`
@@ -2394,14 +2394,24 @@ the retained audit roots; nothing existing there is modified.
   LIVE adds the system-Guide invitation accepted through the sample's `InviteAccepted` ->
   `BeginJoinInvited`; both processes exit 0 in every mode. The port found GS-007i (readiness) and
   GS-007l (gamer order); Invites was rerun after GS-007l (`evidence/gs-invites-20260929-order/`).
-- [ ] Minimal XNA-shaped achievements/leaderboards compatibility sample (no original sample exists).
+- [x] Minimal XNA-shaped achievements/leaderboards compatibility sample (cna-samples 378483b,
+  `samples/AchievementsLeaderboards/`): no original exists, so a C# reference in the collection's
+  style (`reference/`) compiled with warnings as errors against the shipped XNA 4.0 Windows
+  assemblies (`/rv/tmp/samples/GS-AchievementsLeaderboards/scripts/build-reference.sh`), and its
+  line-by-line C++ port. `scripts/capture-cna-achievements-leaderboards.py` (evidence
+  `evidence/gs-achievements-leaderboards-20260929/`): own TLS service, three achievements with
+  original PNG pictures (one secret), a BestScoreLifeTime board with an int32 column and nine seeded
+  rows, two accounts; three sequential processes: Guide sign-in, PlayerMatch rounds written in
+  `WriteUnarbitratedLeaderboard`, awards, pictures, best-row aggregation, page two via
+  `BeginPageDown`/`BeginPageUp`, persistence into a new process; all exit 0. Found GS-004m and GS-005e.
 
 Net fidelity item found by SAMPLE-096, fixed as GS-007l (below): on a joining machine CNA's
 `AllGamers` held the local gamer before the existing ones, so `GamerJoined` (replayed at subscription)
 gave the joiner index 0 and SAMPLE-075's lobby listed the joiner above the host.
 
-Known-good cross-repo set: CNA 0a078200d (+ this plan commit), cna-samples feature/gamer-services-samples
-844b717, server bbfe2d5, sharp-runtime 007280bd. (Previous: CNA 45c23451b / cna-samples 03d9bfe.)
+Known-good cross-repo set: CNA 45c17d1d8 (+ this plan commit), cna-samples feature/gamer-services-samples
+378483b, server bbfe2d5, sharp-runtime 007280bd. (Previous: CNA 0a078200d / cna-samples 844b717;
+CNA 45c23451b / cna-samples 03d9bfe.)
 
 ### GS-007i complete: lobby readiness on every transport
 
