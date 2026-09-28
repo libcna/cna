@@ -1,10 +1,21 @@
 # NEXT.md
 
+> **SAMPLE-104 partial browser release (2026-09-28):** The owner requested a playable local
+> WEBGL2 utility explicitly marked 🟡 partial. Common Emscripten account/relay boundaries now
+> refuse unsupported I/O, without fake identities/sessions or removal of NET/sample remote.
+> Native libcurl/TLS/WSS stay intact. Header-only JSON no longer adds host libc headers to the
+> cross compiler; embedded net tests resolve their own protocol/vector paths.
+> Five browser regressions pass in real Chrome; private native account/authority 9/9 and relay
+> 15/15 pass. Native seven/static browser five XNA comparisons are AE=0. The complete current
+> gallery copy passes local Chrome, 600 RAF frames and clean exit on ordinary HTTP.
+> Browser network completion remains open in the shared service track; this is not full network
+> qualification. See [readiness and completion locations](docs/browser-network-readiness.md).
+
 > **SAMPLE-104 XNA host diagnostics (2026-09-28):** Game selects shared Framework 4
 > ArgumentException formatting only when the caller has not explicitly chosen a profile.
 > Two new regressions and the full private OPENGLES3 Runtime gate pass: 191 passed, zero failed,
 > two intentional incompatible-platform skips. Native help/error frames now match XNA exactly;
-> browser transport/remote peer qualification remain owner-deferred. No public XNA/C ABI change.
+> browser remote peer qualification remains open (later partial release described above). No public XNA/C ABI change.
 > See [compatibility record](docs/xna4-runtime-compatibility.md).
 
 > **GS-007e2c2a backend authority (2026-09-28):** Relay endpoint/title/trust is copied

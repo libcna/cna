@@ -14,7 +14,10 @@ cna_link_sharp_runtime(CNA_GamerServices PUBLIC Core.Base IO Collections.Core Gl
 add_subdirectory(examples)
 
 # GS-003: control traffic uses mature TLS rather than sharp-runtime's HTTP-only transport.
-find_package(CURL 7.85 REQUIRED)
-find_package(nlohmann_json 3.11 REQUIRED)
-target_link_libraries(CNA_GamerServices PRIVATE CURL::libcurl nlohmann_json::nlohmann_json)
+if(NOT EMSCRIPTEN)
+    find_package(CURL 7.85 REQUIRED)
+    target_link_libraries(CNA_GamerServices PRIVATE CURL::libcurl)
+endif()
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/HeaderOnlyJson.cmake")
+cna_link_json_headers(CNA_GamerServices)
 target_include_directories(CNA_GamerServices PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/Internal/Protocol)

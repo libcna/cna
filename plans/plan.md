@@ -96,3 +96,18 @@ platform skips) and seven static XNA/native sample frame comparisons pass. No sa
 case, public XNA/C ABI, class layout or server implementation change. General embedded test-source
 path corrected; no other renderer qualified. See `docs/xna4-runtime-compatibility.md` and sibling
 SAMPLE-104 task receipts. Browser account/SystemLink/relay work stays in its separate living plan.
+
+## SAMPLE-104 — partial browser transport boundary — 2026-09-28
+
+**Status: ✅ bounded platform/build task; sample remains 🟡 partially implemented by owner scope.**
+The owner replaced whole-browser deferral with a playable local WEBGL2 release, explicitly noting
+that network features are unavailable. Emscripten builds retain real Net/Gamer Services modules,
+with configured account/relay I/O explicitly refused and queued failures pumped without native
+workers. Native libcurl/TLS/WSS is unchanged. Header-only JSON uses an isolated include bridge,
+and embedded net tests use CNA's protocol/vector paths. Five new browser regressions pass in
+system Chrome; 9 native configuration/authority and 15 relay cases pass privately. Current native
+seven/static browser five XNA frames are AE=0; actual gallery-copy Chrome gate passes on plain HTTP.
+No public XNA/C ABI/layout change, Sharp Runtime edit, sample-local transport, fake peer or shared
+server implementation change. Common browser authentication/public session/relay completion and
+real authenticated client/host qualification remain in the separate living service plan.
+See `docs/browser-network-readiness.md` and the sibling sample diff/missing completion checklist.

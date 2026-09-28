@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: MS-PL
 #include "RelayWebSocket.hpp"
 #include "CnaService/Protocol.hpp"
+#ifndef __EMSCRIPTEN__
 #include <curl/curl.h>
+#endif
 #include <array>
 #include <chrono>
 #include <mutex>
 #include <thread>
 
+#ifndef __EMSCRIPTEN__
 namespace CNA::Internal::Net {
 namespace {
 using Clock=std::chrono::steady_clock;
@@ -156,3 +159,26 @@ bool RelayWebSocket::send(std::span<const unsigned char> frame,std::size_t& offs
     return impl_->send(frame,offset,CURLWS_BINARY);
 }
 }
+
+#else
+// Preserve the private transport contract while refusing unsupported browser I/O.
+// No peer, welcome, packet or connection is fabricated.
+namespace CNA::Internal::Net {
+struct RelayWebSocket::Impl {};
+std::string relayEndpoint(const CNA::GamerServices::Configuration&) {
+    throw CnaService::RelayError("BROWSER_RELAY_TRANSPORT_UNAVAILABLE");
+}
+RelayWebSocket::RelayWebSocket(const CNA::GamerServices::Configuration&,
+    GamerServices::ServiceRelayTicket, std::stop_token) {
+    throw CnaService::RelayError("BROWSER_RELAY_TRANSPORT_UNAVAILABLE");
+}
+RelayWebSocket::~RelayWebSocket() = default;
+std::optional<std::vector<unsigned char>> RelayWebSocket::receive(bool& progressed) {
+    progressed = false;
+    throw CnaService::RelayError("BROWSER_RELAY_TRANSPORT_UNAVAILABLE");
+}
+bool RelayWebSocket::send(std::span<const unsigned char>, std::size_t&) {
+    throw CnaService::RelayError("BROWSER_RELAY_TRANSPORT_UNAVAILABLE");
+}
+}
+#endif

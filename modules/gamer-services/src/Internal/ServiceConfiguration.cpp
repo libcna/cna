@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/GamerServices/Configuration.hpp"
 #include "CnaService/Protocol.hpp"
+#ifndef __EMSCRIPTEN__
 #include <curl/curl.h>
+#endif
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -29,11 +31,13 @@ void read(Configuration& config,const std::filesystem::path& path,bool required)
         config.insecureLoopback=j["insecureLoopback"].get<bool>();
     }
 }
+#ifndef __EMSCRIPTEN__
 std::string part(CURLU* url,CURLUPart field) {
     char* value=nullptr;
     if(curl_url_get(url,field,&value,0)!=CURLUE_OK)return {};
     std::string result=value;curl_free(value);return result;
 }
+#endif
 }
 void setConfigurationOverride(std::optional<Configuration> config) {
     if(config)validateConfiguration(*config);
@@ -41,6 +45,11 @@ void setConfigurationOverride(std::optional<Configuration> config) {
 }
 void validateConfiguration(const Configuration& config) {
     if(config.endpoint.empty())return;
+#ifdef __EMSCRIPTEN__
+    // Browser deployment/authentication is not implemented yet. Do not accept a
+    // configuration that this target cannot use or weaken native URL validation.
+    throw CnaService::Error("BROWSER_SERVICE_TRANSPORT_UNAVAILABLE");
+#else
     if(!CnaService::identifier(config.gameId)||config.endpoint.size()>2048)throw CnaService::Error("INVALID_CONFIGURATION");
     std::unique_ptr<CURLU,decltype(&curl_url_cleanup)> url(curl_url(),curl_url_cleanup);
     if(!url||curl_url_set(url.get(),CURLUPART_URL,config.endpoint.c_str(),0)!=CURLUE_OK)throw CnaService::Error("INVALID_CONFIGURATION");
@@ -50,6 +59,7 @@ void validateConfiguration(const Configuration& config) {
         throw CnaService::Error("INVALID_CONFIGURATION");
     if(scheme!="https" && !(scheme=="http"&&config.insecureLoopback&&(host=="127.0.0.1"||host=="[::1]")))
         throw CnaService::Error("SECURE_TRANSPORT_REQUIRED");
+#endif
 }
 Configuration resolveConfiguration() {
     {std::lock_guard lock(mutex);if(override)return *override;}
