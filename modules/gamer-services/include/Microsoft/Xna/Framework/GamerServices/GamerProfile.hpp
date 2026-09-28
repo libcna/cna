@@ -87,6 +87,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         CNAEXT static GamerProfile CreateInternal();
 
     private:
+        friend class Gamer;
         GamerProfile();
 
         int gamerScore_;

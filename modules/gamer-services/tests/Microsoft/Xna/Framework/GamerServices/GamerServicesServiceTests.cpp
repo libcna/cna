@@ -13,6 +13,7 @@
 
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
@@ -940,6 +941,6 @@ TEST(GuideTest, ShowMethodsDoNotThrow) {
     EXPECT_NO_THROW(Guide::ShowPartySessions(PlayerIndex::One));
     EXPECT_NO_THROW(Guide::ShowPlayerReview(PlayerIndex::One, nullptr));
     EXPECT_NO_THROW(Guide::ShowPlayers(PlayerIndex::One));
-    EXPECT_NO_THROW(Guide::ShowSignIn(1, false));
+    EXPECT_THROW(Guide::ShowSignIn(1, false), GamerServicesNotAvailableException);
     EXPECT_NO_THROW(Guide::ShowAchievementsEXT(PlayerIndex::One));
 }

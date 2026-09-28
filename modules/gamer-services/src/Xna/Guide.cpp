@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GuideAlreadyVisibleException.hpp"
+#include <memory>
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
@@ -21,6 +25,11 @@
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
+#include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
+#include "../Internal/GuideOverlay.hpp"
 #include "System/Threading/EventWaitHandle.hpp"
 #include <algorithm>
 
@@ -135,7 +144,7 @@ namespace Microsoft::Xna::Framework::GamerServices
             SyncTouchInputSuppression();
             if (action->Callback)
             {
-                action->Callback(*action);
+                auto callback = action->Callback; callback(*action);
             }
         }
 
@@ -288,7 +297,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         void SyncTouchInputSuppression()
         {
             Input::Touch::TouchPanel::setInputSuppressedEXT(
-                pendingMessageBox_ != nullptr || pendingKeyboardInput_ != nullptr ||
+                Guide::getIsVisibleProperty() ||
                 suppressTouchUntilMouseRelease_);
         }
 
@@ -349,8 +358,41 @@ namespace Microsoft::Xna::Framework::GamerServices
             action->setIsCompletedProperty(true);
             if (action->Callback)
             {
-                action->Callback(*action);
+                auto callback = action->Callback; callback(*action);
             }
+        }
+    }
+
+    namespace {
+        bool signInActive = false;
+        int signInPaneCount = 0;
+        int signInSlot = 0;
+        std::string signInUsername;
+        void StartSignInPane() {
+            auto occupied=[](int slot) {
+                for(auto* gamer:*Gamer::getSignedInGamersProperty())
+                    if(gamer->getPlayerIndexProperty()==static_cast<PlayerIndex>(slot))return true;
+                return false;
+            };
+            while (signInSlot < signInPaneCount && occupied(signInSlot)) ++signInSlot;
+            if (signInSlot >= signInPaneCount) { signInActive = false; SyncTouchInputSuppression(); return; }
+            (void)Guide::BeginShowKeyboardInput(static_cast<PlayerIndex>(signInSlot), "CNA Gamer Services sign-in",
+                "Username for player " + std::to_string(signInSlot + 1), "", [](System::IAsyncResult& usernameResult) {
+                    std::unique_ptr<System::IAsyncResult> owned(&usernameResult);
+                    if (Guide::WasKeyboardInputCanceledEXT(&usernameResult)) { signInActive = false; SyncTouchInputSuppression(); return; }
+                    signInUsername = Guide::EndShowKeyboardInput(&usernameResult);
+                    if(signInUsername.empty()||signInUsername.size()>64){signInActive=false;signInUsername.clear();SyncTouchInputSuppression();return;}
+                    (void)Guide::BeginShowKeyboardInput(static_cast<PlayerIndex>(signInSlot), "CNA Gamer Services sign-in", "Password", "",
+                        [](System::IAsyncResult& passwordResult) {
+                            std::unique_ptr<System::IAsyncResult> passwordOwned(&passwordResult);
+                            if (Guide::WasKeyboardInputCanceledEXT(&passwordResult)) { signInActive = false; SyncTouchInputSuppression(); return; }
+                            auto password = Guide::EndShowKeyboardInput(&passwordResult);
+                            if(password.size()>256){std::fill(password.begin(),password.end(),'\0');signInActive=false;signInUsername.clear();SyncTouchInputSuppression();return;}
+                            try {CNA::Internal::GamerServices::backend()->signIn(signInSlot, signInUsername, std::move(password));}
+                            catch(...) {signInActive=false;signInUsername.clear();SyncTouchInputSuppression();throw;}
+                            signInUsername.clear(); SyncTouchInputSuppression();
+                        }, {}, true);
+                }, {});
         }
     }
 
@@ -380,7 +422,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     bool Guide::getIsVisibleProperty()
     {
-        return pendingMessageBox_ != nullptr || pendingKeyboardInput_ != nullptr;
+        return pendingMessageBox_ != nullptr || pendingKeyboardInput_ != nullptr || signInActive;
     }
     void Guide::setIsVisibleProperty(bool /*value*/) { }
 
@@ -460,7 +502,8 @@ namespace Microsoft::Xna::Framework::GamerServices
                 {
                     return;
                 }
-                pendingKeyboardInput_->Buffer.push_back(c);
+                if (!signInActive || pendingKeyboardInput_->Buffer.size() < 256)
+                    pendingKeyboardInput_->Buffer.push_back(c);
             }
         );
         return action;
@@ -897,11 +940,35 @@ namespace Microsoft::Xna::Framework::GamerServices
     {
     }
 
-    void Guide::ShowSignIn(int /*paneCount*/, bool /*onlineOnly*/)
-    {
+    void Guide::ShowSignIn(int paneCount, bool /*onlineOnly*/) {
+        // Xbox 360 documentation accepts 1, 2, 4; Windows stub IL is not the target.
+        if (paneCount != 1 && paneCount != 2 && paneCount != 4) throw System::ArgumentException("paneCount must be 1, 2 or 4.", "paneCount");
+        if (getIsVisibleProperty()) throw GuideAlreadyVisibleException();
+        if (!GamerServicesDispatcher::getIsInitializedProperty() || !CNA::Internal::GamerServices::backend()->serviceEnabled())
+            throw GamerServicesNotAvailableException("No CNA account service is configured.");
+        signInPaneCount = paneCount; signInSlot = 0; signInActive = true;
+        try { StartSignInPane(); } catch (...) { signInActive = false; SyncTouchInputSuppression(); throw; }
+    }
+    void Guide::OnSignInResult(int slot, bool success) {
+        if (!signInActive || slot != signInSlot) return;
+        if (success) { ++signInSlot; StartSignInPane(); }
+        else {
+            signInActive = false;
+            (void)BeginShowMessageBox(static_cast<PlayerIndex>(slot), "CNA Gamer Services", "Sign-in failed. Check the account and service connection.",
+                {"OK"}, 0, MessageBoxIcon::Error, [](System::IAsyncResult& result) {
+                    std::unique_ptr<System::IAsyncResult> owned(&result); (void)Guide::EndShowMessageBox(&result);
+                }, {});
+        }
+        SyncTouchInputSuppression();
     }
 
     void Guide::ShowAchievementsEXT(Microsoft::Xna::Framework::PlayerIndex /*player*/)
     {
     }
+}
+
+namespace CNA::Internal::GamerServices {
+std::string guideSignInStatus() {
+    return Microsoft::Xna::Framework::GamerServices::Guide::getIsVisibleProperty() ? "CNA Gamer Services: signing in..." : "";
+}
 }

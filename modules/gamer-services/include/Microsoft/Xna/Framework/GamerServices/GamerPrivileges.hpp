@@ -64,6 +64,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         CNAEXT static GamerPrivileges CreateInternal();
 
     private:
+        friend class GamerServicesDispatcher;
         GamerPrivileges();
 
         GamerPrivilegeSetting allowCommunication_;

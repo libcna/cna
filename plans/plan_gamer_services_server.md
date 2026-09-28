@@ -95,3 +95,50 @@ No credentials belong in title JSON. Configuration is separate from XNA public A
 Server real-CNA E2E extension committed as `eb51d1f`; sharp-runtime unchanged. Backend/Guide
 integration is being committed separately after full validation, so this checkpoint alone does
 not claim service behavior. GS-003 parent remains open until that checkpoint.
+
+### GS-003b/004a authenticated XNA service checkpoint
+
+Implemented bounded single-worker TLS backend, explicit deterministic fake, four authenticated
+slots, zero fabricated accounts at Initialize, duplicate initialization validation, stable signed-in
+collection, sign-in/out publication before events, profile/lookup, online-session privilege, friend
+read ownership and persistent service achievement metadata/idempotent awards. Begin/End validates
+operation and owner, publishes completion/callback once at Update, begins with unsignaled wait
+handle and CompletedSynchronously=false, defers exceptions and rejects repeated End. Nested End
+inside an event progresses only completion events; identity events are deferred to outer Update.
+Retired signed-in objects are retained until shutdown (unbounded repeated sign-in retention needs
+future lifetime review). Revoked-token response queues sign-out; no heartbeat/refresh yet.
+
+Standard Guide.ShowSignIn reuses CNA keyboard/password masking and failure message overlays,
+sequentially handles up to four occupied/unoccupied player slots, rejects overlapping Guide,
+and supports username/password cancellation. Game has a generic internal system-overlay service
+called after application Draw and before EndDraw, verified by a runtime order test. Original CNA
+bitmap system font moved from example helper to private graphics infrastructure; old helper delegates.
+No gameplay server/transport fields added to Microsoft::Xna APIs. Guest/offline sign-in, persistent
+refresh credentials and full Guide social/commerce flows remain unfinished.
+
+Validation (HEADLESS graphics/platform, NULL audio, DISPLAY unset and WAYLAND_DISPLAY empty):
+* CnaGamerServicesTests: 387 run, 386 pass, 1 existing screensaver skip.
+* CnaNetTests: 316/316 pass in confirmation run. First full run had host-migration roster timeout;
+  isolated retry passed, full confirmation passed. No ENet/SystemLink implementation changed.
+* CnaRuntimeTests: 187 run, 185 pass, 2 existing headless capability skips, including overlay order pass.
+* cna_service_client_harness fake: 47 checks pass (four slots, Guide masking/cancel, reentrant profile,
+  ownership/repeated-End/deferred failure, metadata/award, event ordering/lifetime).
+* Server unit: 101 assertions; real TLS E2E plus actual CNA processes: 2/2 ctest pass, 5.72 seconds.
+  CNA scenarios: bad password/CA/hostname, two users/titles/client processes, idempotent achievement,
+  client/server restart, lookup/profile, callbacks, signout. This does NOT prove Internet game transport.
+* Earlier sandbox runs failed local-store writes/ENet sockets; permitted HEADLESS runs resolve those.
+
+Reproduce CNA configure/build with in-repo cmake-build-debug (HEADLESS, NULL audio, no SDL/video/
+Draco/C API/examples, tests ON; sharp-runtime root sibling). Build targets CnaGamerServicesTests,
+CnaNetTests, CnaRuntimeTests, cna_service_client_harness and cna_net_* harnesses; shared cache, -j2.
+Run binaries with desktop display unset. Server: `CNA_SERVICE_CLIENT_HARNESS=<absolute CNA binary>
+ctest --test-dir build --output-on-failure` adds CNA coverage to TLS test (otherwise Python clients).
+Server test auto-provisions temporary SQLite titles/users/catalog and ephemeral trusted test certificate,
+then removes them. No password/token in argv or logs. All live server/socket tests need network-enabled
+execution; GPU runs, when added, must use private runner.
+
+Next unfinished GS-004 items: refresh/user credential persistence, authentication-loss/reconnect and
+remaining profile/privilege metadata. Independent GS-005 work proceeds on presence/social/assets.
+Full service push, friends mutual/privacy model, pictures/cache, leaderboard/online sessions/relay,
+standard avatars, standard samples, C API and final audit remain incomplete. No new stubs or sharp-runtime
+changes. Latest next remains b2fd47a45; test server commit eb51d1f, runtime fc033a0e.

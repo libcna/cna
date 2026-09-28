@@ -3,6 +3,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/GamerProfile.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "System/NotSupportedException.hpp"
+#include "../Internal/ServiceAsyncResult.hpp"
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
@@ -55,14 +56,20 @@ namespace Microsoft::Xna::Framework::GamerServices
         System::IAsyncResult* result = BeginGetProfile(System::AsyncCallback{}, std::any{});
         // Downcast: sharp-runtime's IAsyncResult lacks AsyncWaitHandle (unlike real .NET);
         // Gamer always constructs the concrete GamerAction below, which does expose it.
-        static_cast<GamerAction*>(result)->getAsyncWaitHandleProperty().WaitOne();
-        GamerProfile* profile = EndGetProfile(result);
-        delete result; // caller-owned; FNA relies on GC, so there is no explicit dispose call
-        return profile;
+        if (dynamic_cast<CNA::Internal::GamerServices::ServiceAsyncResult*>(result) == nullptr)
+            static_cast<GamerAction*>(result)->getAsyncWaitHandleProperty().WaitOne();
+        std::unique_ptr<System::IAsyncResult> owned(result);
+        return EndGetProfile(result);
     }
 
     System::IAsyncResult* Gamer::BeginGetProfile(System::AsyncCallback callback, std::any asyncState)
     {
+        if (CNA::Internal::GamerServices::backend()->serviceEnabled()) {
+            auto service = CNA::Internal::GamerServices::backend();
+            const auto tag = gamertag_;
+            return CNA::Internal::GamerServices::ServiceAsyncResult::begin("profile", this,
+                [service, tag]() -> std::any { return service->profile(tag); }, std::move(callback), std::move(asyncState));
+        }
         auto* action = new GamerAction(std::move(asyncState), std::move(callback));
         action->setIsCompletedProperty(true);
         // audit_net.md High finding: the callback used to only be stored, never invoked, despite
@@ -74,27 +81,38 @@ namespace Microsoft::Xna::Framework::GamerServices
         return action;
     }
 
-    GamerProfile* Gamer::EndGetProfile(System::IAsyncResult* /*result*/)
+    GamerProfile* Gamer::EndGetProfile(System::IAsyncResult* result)
     {
+        if (dynamic_cast<CNA::Internal::GamerServices::ServiceAsyncResult*>(result)) {
+            const auto person = std::any_cast<CNA::Internal::GamerServices::ServiceIdentity>(
+                CNA::Internal::GamerServices::ServiceAsyncResult::end(result, "profile", this));
+            auto profile = std::make_unique<GamerProfile>(GamerProfile::CreateInternal());
+            profile->motto_ = person.motto; profile->gamerScore_ = person.gamerScore;
+            profile->totalAchievements_ = person.totalAchievements;
+            profile->region_ = System::Globalization::RegionInfo(person.region);
+            return profile.release();
+        }
         return new GamerProfile(GamerProfile::CreateInternal());
     }
 
-    Gamer* Gamer::GetFromGamertag(const std::string& /*gamertag*/)
-    {
-        throw System::NotSupportedException();
+    Gamer* Gamer::GetFromGamertag(const std::string& gamertag) {
+        std::unique_ptr<System::IAsyncResult> result(BeginGetFromGamertag(gamertag, {}, {}));
+        return EndGetFromGamertag(result.get());
     }
-
-    System::IAsyncResult* Gamer::BeginGetFromGamertag(
-        const std::string& /*gamertag*/,
-        System::AsyncCallback /*callback*/,
-        std::any /*asyncState*/
-    ) {
-        throw System::NotSupportedException();
+    System::IAsyncResult* Gamer::BeginGetFromGamertag(const std::string& gamertag,System::AsyncCallback callback,std::any asyncState) {
+        if (!CNA::Internal::GamerServices::backend()->serviceEnabled()) throw System::NotSupportedException();
+        if (gamertag.empty() || gamertag.size() > 32) throw System::ArgumentException("Invalid gamertag.", "gamertag");
+        auto service = CNA::Internal::GamerServices::backend();
+        return CNA::Internal::GamerServices::ServiceAsyncResult::begin("lookup", nullptr,
+            [service, gamertag]() -> std::any { return service->profile(gamertag); }, std::move(callback), std::move(asyncState));
     }
-
-    Gamer* Gamer::EndGetFromGamertag(System::IAsyncResult* /*result*/)
-    {
-        throw System::NotSupportedException();
+    Gamer* Gamer::EndGetFromGamertag(System::IAsyncResult* result) {
+        if (!CNA::Internal::GamerServices::backend()->serviceEnabled()) throw System::NotSupportedException();
+        const auto person = std::any_cast<CNA::Internal::GamerServices::ServiceIdentity>(
+            CNA::Internal::GamerServices::ServiceAsyncResult::end(result, "lookup", nullptr));
+        auto gamer = std::unique_ptr<Gamer>(new Gamer(person.gamertag, person.displayName));
+        gamer->serviceUserId_ = person.userId;
+        return gamer.release();
     }
 
     std::string Gamer::GetPartnerToken(const std::string& /*audienceUri*/)

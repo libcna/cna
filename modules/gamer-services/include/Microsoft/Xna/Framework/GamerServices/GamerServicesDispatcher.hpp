@@ -60,12 +60,10 @@ namespace Microsoft::Xna::Framework::GamerServices
         static bool UpdateAsync();
 
         /**
-         * @brief Task 7.5: the number of previously-signed-in `SignedInGamer` objects freed by
-         * `Initialize()` calls so far (0 for the very first call; 4 for every call after that,
-         * since `Initialize()` always frees the previous 4 before creating a fresh set). Exists
-         * purely to make Task 7.5's leak fix testable; not part of real XNA.
+         * @brief Gets the number of previously released dispatcher identities for tests.
          *
-         * @return The cumulative number of previous-generation gamers freed.
+         * Retired identities are retained until shutdown, so this value remains zero.
+         * @return Number of released identities.
          */
         CNAEXT [[nodiscard]] static std::size_t GetFreedGamerCountForTesting();
 

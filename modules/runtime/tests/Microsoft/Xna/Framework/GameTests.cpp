@@ -17,6 +17,7 @@
 #include "CNA/Platform/PlatformFactory.hpp"
 #include "CNA/Platform/PlatformTestDecorator.hpp"
 #include "RuntimePlatformTestSupport.hpp"
+#include "CNA/Internal/Runtime/IGameOverlay.hpp"
 
 #include <atomic>
 #include <memory>
@@ -457,4 +458,30 @@ TEST(GameTest, DeferredLoadContentFiresOnDeviceCreatedWhenServiceHasNoDeviceAtIn
     fakeService.DeviceCreatedEvt.Raise(nullptr, System::EventArgs::Empty);
 
     EXPECT_EQ(game.loadContentCalls, 1);
+}
+
+TEST(GameTest, SystemOverlayRunsAfterGameDrawBeforePresentation)
+{
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
+        GTEST_SKIP() << "The selected platform cannot create a test window.";
+    std::vector<std::string> order;
+    class Overlay final : public CNA::Internal::Runtime::IGameOverlay {
+    public:
+        explicit Overlay(std::vector<std::string>& sequence) : sequence_(sequence) {}
+        void draw() override { sequence_.push_back("overlay"); }
+    private:
+        std::vector<std::string>& sequence_;
+    } overlay(order);
+    class OverlayGame final : public Game {
+    public:
+        explicit OverlayGame(std::vector<std::string>& sequence) : sequence_(sequence) {}
+    protected:
+        void Draw(const GameTime&) override { sequence_.push_back("game"); }
+        void EndDraw() override { sequence_.push_back("present"); Game::EndDraw(); }
+    private:
+        std::vector<std::string>& sequence_;
+    } game(order);
+    game.getServicesProperty().AddService<CNA::Internal::Runtime::IGameOverlay>(&overlay);
+    game.RunOneFrame();
+    EXPECT_EQ(order, (std::vector<std::string>{"game", "overlay", "present"}));
 }

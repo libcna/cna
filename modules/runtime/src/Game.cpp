@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "Microsoft/Xna/Framework/Game.hpp"
+#include "CNA/Internal/Runtime/IGameOverlay.hpp"
 
 #include "CNA/Internal/Input/PlatformInputBridge.hpp"
 #include "CNA/Internal/Xnb/XnbBuiltInReaders.hpp"
@@ -731,6 +732,7 @@ namespace Microsoft::Xna::Framework
             {
                 CNA_PROFILE_SCOPE_CATEGORY("Game/Draw", CNA::Diagnostics::Category::Draw);
                 Draw(gameTime_);
+                if (auto* overlay = getServicesProperty().GetService<CNA::Internal::Runtime::IGameOverlay>()) overlay->draw();
                 EndDraw();
             }
             CNA_DIAGNOSTICS_FRAME_COUNTER_ADD("Runtime/DrawCount", 1);
@@ -1125,6 +1127,7 @@ namespace Microsoft::Xna::Framework
                 {
                     CNA_PROFILE_SCOPE_CATEGORY("Game/Draw", CNA::Diagnostics::Category::Draw);
                     state.game->Draw(state.gameTime);
+                    if (auto* overlay = state.game->getServicesProperty().GetService<CNA::Internal::Runtime::IGameOverlay>()) overlay->draw();
                     state.game->EndDraw();
                 }
                 CNA_DIAGNOSTICS_FRAME_COUNTER_ADD("Runtime/DrawCount", 1);

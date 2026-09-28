@@ -536,7 +536,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         static void ShowPlayers(Microsoft::Xna::Framework::PlayerIndex player);
 
         /**
-         * @brief Shows the sign-in UI. No-op in this platform's implementation.
+         * @brief Shows the CNA account sign-in overlay for one, two or four local players.
          *
          * @param paneCount  The number of sign-in panes to show.
          * @param onlineOnly Whether to restrict sign-in to online profiles.
@@ -554,6 +554,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         CNAEXT static void ShowAchievementsEXT(Microsoft::Xna::Framework::PlayerIndex player);
 
     private:
+        friend class GamerServicesDispatcher;
+        static void OnSignInResult(int slot, bool success);
         static bool isTrialMode_;
         static bool simulateTrialMode_;
         static NotificationPosition position_;

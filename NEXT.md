@@ -1,5 +1,15 @@
 # NEXT.md
 
+> **GS-003/004 service foundation (2026-09-28):** Dedicated `feature/gamer-services-server`
+> worktree now has verified-TLS server accounts, four local slots, real Dispatcher Update,
+> standard Guide sign-in, profile/lookup and persistent achievement metadata/awards. Fake harness
+> passes 47 checks; real CNA clients exercise two users/titles and server restart. GamerServices
+> 386 pass/1 skip, Net 316 pass, runtime 185 pass/2 skips. This is partial implementation, not Xbox
+> service completeness. Refresh, social/assets, leaderboard lifecycle, PlayerMatch/Ranked/invites/
+> relay, standard avatar migration and acceptance samples remain active; see
+> [living plan](plans/plan_gamer_services_server.md) for paths, commits, commands and evidence.
+
+
 ## SAMPLE-090 FontTextureProcessor gap record corrected (2026-09-27)
 
 The cna-samples current-head re-analysis found that `misc/known_gaps.md` still claimed CNA

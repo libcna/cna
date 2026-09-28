@@ -609,3 +609,17 @@ if(CNA_BUILD_TESTS)
         tools/content/argv_echo.cpp
     )
 endif()
+
+# GS-003/004: isolated deterministic backend and real-service client probe.
+if(CNA_ENABLE_NET AND CNA_BUILD_TESTS)
+    add_executable(cna_service_client_harness tools/net/service_client_harness.cpp)
+    target_link_libraries(cna_service_client_harness PRIVATE CNA_GamerServices)
+    add_test(NAME GamerServices_FakeBackend COMMAND cna_service_client_harness)
+    set_tests_properties(GamerServices_FakeBackend PROPERTIES TIMEOUT 45)
+endif()
+
+set(CNA_GAMER_SERVICES_SERVER_ROOT "${CMAKE_SOURCE_DIR}/../../cna-gamer-services-server" CACHE PATH "Canonical service checkout for optional protocol and E2E validation")
+if(CNA_ENABLE_NET AND CNA_BUILD_TESTS AND EXISTS "${CNA_GAMER_SERVICES_SERVER_ROOT}/protocol/v1.md")
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    add_test(NAME GamerServices_ProtocolDrift COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/net/check_service_protocol.py ${CNA_GAMER_SERVICES_SERVER_ROOT})
+endif()

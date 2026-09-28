@@ -122,6 +122,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         );
 
     private:
+        friend class SignedInGamer;
         Achievement(
             const std::string& key,
             const std::string& name,

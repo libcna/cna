@@ -253,6 +253,8 @@ namespace Microsoft::Xna::Framework::GamerServices
             mutable System::Threading::EventWaitHandle asyncWaitHandle_;
         };
 
+        friend class GamerServicesDispatcher;
+        std::string serviceUserId_;
         std::string displayName_;
         std::string gamertag_;
         bool isDisposed_{false};
