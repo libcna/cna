@@ -5,6 +5,7 @@
 #include "Microsoft/Xna/Framework/Audio/Microphone.hpp"
 #include "System/DateTime.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/TimeZone.hpp"
 #include "../Internal/ServiceAsyncResult.hpp"
 
 namespace Microsoft::Xna::Framework::GamerServices
@@ -189,8 +190,13 @@ namespace Microsoft::Xna::Framework::GamerServices
                 CNA::Internal::GamerServices::ServiceAsyncResult::end(result, "achievements", this));
             std::vector<Achievement> values;
             for (const auto& record : records) {
+                // The service records UTC. EarnedDateTime is local time, as .NET's FromFileTime makes
+                // the Xbox achievement time and as the offline store records it (DateTime.Now).
+                const auto earned = record.earnedTicks != 0
+                    ? System::DateTime(record.earnedTicks, System::DateTimeKind::Utc).ToLocalTime(System::TimeZone::CurrentTimeZone())
+                    : System::DateTime(0);
                 auto value = Achievement::CreateInternal(record.key, record.name, record.description,
-                    record.displayBeforeEarned, record.earnedTicks != 0, System::DateTime(record.earnedTicks));
+                    record.displayBeforeEarned, record.earnedTicks != 0, earned);
                 value.gamerScore_ = record.score; value.howToEarn_ = record.howToEarn;value.pictureHash_=record.picture;value.serviceBacked_=true;
                 values.push_back(std::move(value));
             }

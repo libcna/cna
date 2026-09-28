@@ -7,6 +7,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "System/IServiceProvider.hpp"
+#include "System/TimeZone.hpp"
 #include <memory>
 #include <array>
 #include <utility>
@@ -189,4 +190,16 @@ TEST_F(ServiceReadLifetimeTest, ActiveBackendIsNotDrainedBySupersededPump) {
     int completions=0;service->submit([]{},[&]{++completions;});
     Service::pumpRetainedCompletions(service);Service::pumpRetainedCompletions({});EXPECT_EQ(0,completions);
     GamerServicesDispatcher::Update();EXPECT_EQ(1,completions);
+}
+
+TEST_F(ServiceReadLifetimeTest, EarnedDateTimeIsTheServiceTimeInLocalTime) {
+    auto* gamer=actor();
+    gamer->AwardAchievement("first");
+    auto achievements=gamer->GetAchievements();
+    ASSERT_EQ(1,achievements.getCountProperty());
+    const auto earned=std::as_const(achievements)[0].getEarnedDateTimeProperty();
+    // The fixture service records this UTC instant for every award.
+    const System::DateTime utc(638000000000000000LL,System::DateTimeKind::Utc);
+    EXPECT_EQ(System::DateTimeKind::Local,earned.getKindProperty());
+    EXPECT_EQ(utc.ToLocalTime(System::TimeZone::CurrentTimeZone()).getTicksProperty(),earned.getTicksProperty());
 }

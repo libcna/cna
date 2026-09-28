@@ -6,7 +6,7 @@ target_include_directories(CNA_GamerServices PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/
 # The public dependency is the runtime layer (Guide/SignedInGamer use Game, graphics,
 # input, audio through it) plus Storage (device selector flows).
 target_link_libraries(CNA_GamerServices PUBLIC cna_runtime cna_storage)
-cna_link_sharp_runtime(CNA_GamerServices PUBLIC Core.Base IO Collections.Core Globalization Runtime Threading Security.Cryptography)
+cna_link_sharp_runtime(CNA_GamerServices PUBLIC Core.Base IO Collections.Core Globalization Runtime Threading Security.Cryptography TimeZone)
 
 # Module-owned examples (module-examples campaign): demo/example registration is
 # module-local; the conditions historically applied by cmake/Examples.cmake live

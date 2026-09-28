@@ -2474,7 +2474,7 @@ typedef struct CNA_AchievementInfo {
     /** @brief Reserved; must be zero. */
     uint8_t reserved;
 
-    /** @brief When the achievement was earned, in 100-nanosecond ticks. */
+    /** @brief When the achievement was earned, in 100-nanosecond ticks of local time. */
     int64_t earned_date_time_ticks;
 } CNA_AchievementInfo;
 

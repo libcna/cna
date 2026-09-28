@@ -2463,3 +2463,14 @@ positional lookup as canonical was corrected, and the divergence has its row in
 `SignedInGamerCollectionTest.PlayerIndexOperatorFindsThePlayerNotThePosition`, `GamersSmoke` step 10-12
 rewritten. CnaGamerServicesTests 484 + 1 skip; C API gates unchanged apart from the three environment
 smokes.
+
+### GS-005e complete: `Achievement.EarnedDateTime` is local time
+
+Seen in the achievements/leaderboards sample: an achievement earned at 00:40 local time showed the
+previous day. The service records UTC ticks and CNA wrapped them as an unspecified-kind `DateTime`;
+the offline store records `DateTime.Now`. Windows XNA throws for this pro-feature property, so the IL
+does not settle the zone; the Xbox achievement time is a UTC `FILETIME` that .NET's `FromFileTime`
+presents as local, which is what a player reads. The service path now converts with
+`ToLocalTime(TimeZone::CurrentTimeZone())` (kind `Local`); gamer-services links the sharp-runtime
+`TimeZone` component. Test: `ServiceReadLifetimeTest.EarnedDateTimeIsTheServiceTimeInLocalTime`;
+the C struct field documents local ticks. CnaGamerServicesTests 485 + 1 skip.
