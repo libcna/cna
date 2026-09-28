@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
 #include "../../modules/net/src/Internal/OnlineSessionPreparation.hpp"
+#include "../../modules/net/src/Internal/ServiceSessionPump.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
@@ -116,11 +117,27 @@ int main(int argc,char** argv) {
                 check(invitation.invite!=previous&&invitation.state==Service::ServiceInvitationState::Pending,"new lobby invitation");
             }
             std::cout<<"directory-host "<<session.session<<' '<<invitation.invite<<'\n'<<std::flush;advance();
-            phase="host-touch";session=directory.touch(users[0],session.session);check(session.currentGamers==2,"remote group left after restart");
+            Transport::ServiceSessionPump snapshots(backend,users[0],hostLease->snapshot());
+            const auto observe=[&] {
+                const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(15);
+                const auto ownerThread=std::this_thread::get_id();
+                for(;;) {
+                    GamerServicesDispatcher::Update();auto observation=snapshots.update();
+                    if(observation) {
+                        if(!observation->failure.empty())throw Service::ServiceOperationError(observation->failure);
+                        check(std::this_thread::get_id()==ownerThread&&observation->snapshot.has_value(),"snapshot owner publication");
+                        check(observation->renewed,"explicit pump renewal");return *observation->snapshot;
+                    }
+                    check(std::chrono::steady_clock::now()<deadline,"snapshot pump deadline");
+                    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                }
+            };
+            phase="host-touch";snapshots.retry();session=observe();check(session.currentGamers==2,"remote group left after restart");
             check(directory.get(users[1],session.session).machine==session.machine,"secondary local roster authority");
             // Parent expires both access credentials again: the existing leaderboard path shares
             // the same participant refresh repair as directory creation/join.
             std::cout<<"directory-after-join\n"<<std::flush;advance();
+            phase="expired-pump-renewal";snapshots.retry();session=observe();
             phase="leaderboard-begin";const auto gameplay=backend->beginLeaderboardGame(users);backend->abortLeaderboardGame(gameplay,users[0]);
             check(hostLease->release(),"prepared host close");
         }else {

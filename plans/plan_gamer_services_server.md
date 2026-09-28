@@ -1514,3 +1514,55 @@ that recreates the queued executor cycle. The action must own preparation separa
 queued Storage, and attach consumed resources on the owner thread. Join must not publish a
 successful public APM completion until ENet welcome, exact service IDs and the authorized host
 have also been established. Next main item is GS-007e2c3 plus GS-008c3 lifecycle/roster/lease wiring.
+
+### GS-007e2c2 known-good committed integration set
+
+- CNA 7dbfcf63e0db0524b2f431e6b2af5138f30fcaa8.
+- sharp-runtime 6c4a857de129cf29b5d43430bedf24157d594f12.
+- cna-gamer-services-server db5434b788da98be488b8b75697d2f1ab12ac256.
+
+### GS-008c3a completed: owner-bound directory snapshot/lease pump
+
+Implement a private bounded service-control pump before wiring public session objects. It retains
+origin but queued work retains only synchronized logical state; no queued executor ownership cycle
+or XNA object/event on the worker. Poll authoritative snapshots at one-second intervals and renew
+membership at thirty-second intervals, independent of relay traffic and authentication heartbeat.
+Allow only one pending read; validate session/category/requesting machine/exact local group and
+monotonic revision. Return owned logical observations only from the caller's update boundary.
+Publish a safe failure once, stop scheduling until explicit retry, and suppress abandoned results.
+Destructor/cancel marks state inert; the separate prepared lease owns membership/socket release.
+GamerServicesDispatcher.Update must continue draining backend completion capacity. Deterministic
+fake-clock cases and a native server-restart/renewal probe validate this boundary; realtime status,
+public Create/Join/ENet welcome and XNA lifecycle event conversion remain GS-008c3/GS-007e2c3.
+
+- [x] GS-008c3a: private bounded owner-update directory snapshots, lease renewal and safe retry.
+
+GS-008c3a implementation: ServiceSessionPump retains its origin outside queued State. Only one
+logical snapshot/failure can be pending; a busy request prevents more work. Worker validates full
+roster, same session/category/requesting machine/exact local user group and monotonic revision;
+malformed authority becomes INVALID_RESPONSE, unknown exception/error text becomes a safe fixed
+failure. update consumes only owned data; no public XNA gamer/session objects or events are
+created on the worker. Failure publishes once and scheduling stops until explicit retry with
+immediate renewal. cancel/destruction suppresses queued/ready/active output and does not own
+membership release (PreparedOnlineSession does). Backend destruction joins in-flight native work;
+queued closures borrow, never strongly retain, their own executor.
+
+Nine new deterministic cases: initial authority/owner guards, one pending request/update boundary,
+roster/property/gameplay changes, fake-clock 1s reads/30s renewal, authentication failure/retry,
+host closure/stopped scheduling, queued/ready cancellation, last-owner/no-cycle and queue saturation.
+Final affected builds pass, full Net **398/398, 14.684s**, private C API/header/export/protocol
+**5/5, 0.59s**, native TLS/WSS directory acceptance **1/1, 10.85s**. The native host forces actual
+pump lease renewal after a real server restart and again after admin-expiring Alice/Charlie access
+credentials; remote group has left, two local identities and secondary membership remain correct.
+Fake clocks test the interval policy; the native probe does not wait thirty physical seconds.
+GamerServicesDispatcher.Update drains backend completion capacity throughout. Logs:
+cmake-build-debug/service-snapshot-pump-{final-build,final-net,private}.log and server
+build/service-snapshot-pump-final-directory.log. No protocol/schema/public XNA/C ABI/runtime
+changes. Realtime status and XNA lifecycle conversion are still the unchecked parent GS-008c3.
+
+Committed next advanced to **92d23c84d12725c97872e3eaf249f789ff7579b6** (SAMPLE-104 browser
+partial-service portability) during this slice. Reviewed committed changes: native CURL/TLS path
+unchanged; Emscripten explicitly refuses account/relay transport, creates no fake connection,
+uses owner-pumped unavailable work and copies host JSON headers without leaking host libc include
+roots into the cross build. Browser service functionality is not newly implemented. Integrate only
+this committed history after the current pump checkpoint; never copy samples-agent local changes.

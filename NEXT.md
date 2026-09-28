@@ -1,5 +1,12 @@
 # NEXT.md
 
+> **GS-008c3a service snapshot/lease pump (2026-09-28):** One pending authenticated
+> read, one-second polling and independent thirty-second renewal produce owned observations at
+> the owner update boundary. Cancellation, failure-once/retry, no executor cycle and saturation
+> have nine new cases. Net 398/398, private gates 5/5 and native restart/expired-credential lease
+> renewal E2E 1/1 pass. Realtime/XNA lifecycle event conversion remains unfinished; next integrate
+> committed SAMPLE-104 browser portability and continue public Create/Join (GS-007e2c3/GS-008c3).
+
 > **GS-007e2c2 owned online preparation (2026-09-28):** Origin-retained results and
 > consumed leases acquire authenticated membership plus bounded native ENet/verified WSS without
 > queued ownership cycles. Eighteen new deterministic cases; Net 389/389, private gates 5/5 and
