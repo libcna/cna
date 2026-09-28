@@ -754,8 +754,8 @@ CNA-specific transport routing; generic proxy change remains the only runtime mo
   per-connection strand/one writer/bounded queue, frame/rate/timeout limits and grant revocation.
 - [x] GS-008c1: private bounded receive assembler and correlated welcome validation; Net 336/336.
 - [x] GS-008c2: private libcurl WSS/loopback UDP I/O and genuine two-process ENet probe.
-- [ ] GS-008c3: connect transport status/roster/lease handling to public Net Update/lifecycle.
-- [ ] GS-008c: CNA libcurl WSS connection and loopback UDP routes preserving ENet datagrams,
+- [x] GS-008c3: connect transport status/roster/lease handling to public Net Update/lifecycle (GS-007e2c3b).
+- [x] GS-008c: CNA libcurl WSS connection and loopback UDP routes preserving ENet datagrams,
   protocol/certificate validation and controlled Net updates. SystemLink keeps its direct path.
 - [x] GS-008d1: two actual ENet clients in separate rootless outbound NAT namespaces.
 - [ ] GS-008d2: client reconnect/server-restart and remaining authenticated fault corpus.
@@ -767,9 +767,9 @@ CNA-specific transport routing; generic proxy change remains the only runtime mo
 - [x] GS-007e2c1: private loopback ENet host and relay-only preallocation packet/fragment limits.
 - [x] GS-007e2c2a: immutable originating backend authority; fake/unconfigured relay refusal.
 - [x] GS-007e2c2: immutable backend deployment authority and owned online preparation/rollback.
-- [ ] GS-007e2c3: consume prepared transport in standard public create/join and E2E.
-- [ ] GS-007e2c: owned online create/join preparation, including cleanup on abandonment/failure.
-- [ ] GS-007e2: public async operation ownership/preparation and online lifecycle wiring.
+- [x] GS-007e2c3: consume prepared transport in standard public create/join and E2E.
+- [x] GS-007e2c: owned online create/join preparation, including cleanup on abandonment/failure.
+- [x] GS-007e2: public async operation ownership/preparation and online lifecycle wiring.
 - [ ] GS-007e: publish standard PlayerMatch/Ranked lifecycle and Guide/invited joins once directory
   plus realtime transport succeeds; do not report membership-only success as multiplayer.
 
@@ -1844,7 +1844,7 @@ service-online-operation-{build,final-build,bounded-build,focused,net,private}.l
 build/service-online-operation-e2e.log. No original XNA sample or avatar migration newly unblocked.
 
 - [x] GS-007e2c3a: owned pending preparation/ENet coordinator and exact readiness/consume lifetime.
-- [ ] GS-007e2c3b: standard public online Create/Join result/session adapter, owned initial gamer
+- [x] GS-007e2c3b: standard public online Create/Join result/session adapter, owned initial gamer
   projection, Update join/leave/data/failure conversion, proper primary host/machine grouping and
   standard-API real-server acceptance. Then invited joins/Guide and lifecycle/Ranked epochs.
 
@@ -1977,3 +1977,56 @@ Adapter design:
 Out of this slice (recorded, not claimed): IsReady propagation (SystemLink also lacks it),
 NetworkMachine.RemoveFromSession (needs a server host-kick operation), online host migration,
 Ranked/PlayerMatch leaderboard epochs, invited joins/Guide.
+
+### GS-007e2c3b complete: public PlayerMatch/Ranked NetworkSession
+
+Implemented exactly the design recorded above. CNA `114a57ff7` (adapter/tests) plus the harness
+commit that follows; server `bf4afe8` (acceptance registration/docs only, no server code change).
+- [x] Public BeginCreate/EndCreate, Find, BeginJoin/EndJoin (and sync wrappers) for PlayerMatch and
+  Ranked over directory + verified relay + service-bound ENet; pending results, one owner-thread
+  callback, CompletedSynchronously=false, End-once, abandonment rollback, callback-driven End.
+- [x] Initial roster without duplicate joins, reference-style Update inside End, host/IDs/private
+  slots/shared machines, Update-time GamerJoined/GamerLeft/data/state/properties/capacity/JIP,
+  SessionEnded reasons, host settings publication (CAS retry) and client hint-expedited reads.
+- [x] Engine fix: early connects from a newly joined machine are kept unidentified until authority
+  names their route (was: rejected, failing the join whenever it beat the host's next read).
+- [x] XNA IL corrections: private slots < maxGamers for every type; MaxGamers/PrivateGamerSlots
+  validation; Ranked AllowJoinInProgress NotSupported; online host-only Allow*; synthetic online
+  listing ObjectDisposedException. plan_bindings_upstream row added.
+- [x] Real acceptance with the public API only: two CNA processes, four Guide-signed-in accounts,
+  both categories/titles, localhost and separate rootless NAT namespaces.
+
+Validation: Net **454/454** (18.2s; 7 public online-session + 4 pump publication cases new);
+GamerServices **459 pass / 1 known HEADLESS screensaver skip**; fake harness **113 checks**; private
+C API/ABI/protocol gates **13/13** (C smoke expectation for synthetic listings: INVALID_STATE, the
+C mapping of the reference ObjectDisposedException); C inventory regenerated 472 headers / 8,140
+symbols, no new exports. Server full corpus **15/15, zero skips, 176.78s** with all five CNA probes
+and the NAT helper; new `service_cna_session` 8.12s, `service_cna_session_nat` 8.53s. Logs:
+CNA `cmake-build-debug/public-online-{net,private}.log`; server `build/public-session-full.log`.
+
+Harness lesson recorded: a test process must keep calling Update while it waits at a parent
+barrier (games update every frame); the first E2E run blocked in getline, stopping directory
+publication and ENet keepalives, and the peer correctly observed HostEndedSession.
+
+Reproduce (CNA, max 4 jobs):
+```
+CCACHE_DIR=/rv/cnaccache CCACHE_BASEDIR=/rv cmake --build cmake-build-debug --parallel 4 --target CnaNetTests CnaGamerServicesTests cna_service_client_harness cna_c_api_service_client cna_service_directory_client_harness cna_service_relay_client_harness cna_service_session_client_harness cna_c_api_net_smoke cna_c_api_leaderboards_smoke
+env -u DISPLAY WAYLAND_DISPLAY= cmake-build-debug/CnaNetTests
+# server repository, after cmake --build build --parallel 4:
+B=<CNA>/cmake-build-debug; CNA_SERVICE_CLIENT_HARNESS=$B/cna_service_client_harness CNA_SERVICE_C_API_HARNESS=$B/cna_c_api_service_client CNA_SERVICE_DIRECTORY_CLIENT_HARNESS=$B/cna_service_directory_client_harness CNA_SERVICE_RELAY_CLIENT_HARNESS=$B/cna_service_relay_client_harness CNA_SERVICE_SESSION_CLIENT_HARNESS=$B/cna_service_session_client_harness CNA_SERVICE_SLIRP4NETNS=/tmp/cna-gamer-services-nat-tools/root/usr/bin/slirp4netns CNA_SERVICE_SLIRP_LIBRARY_PATH=/tmp/cna-gamer-services-nat-tools/root/usr/lib/x86_64-linux-gnu env -u DISPLAY WAYLAND_DISPLAY= ctest --test-dir build --output-on-failure
+```
+(The slirp4netns helper was unpacked to /tmp by an earlier session and is not a repository file; if
+it is gone, re-unpack Debian slirp4netns 1.2.1-1.1 / libslirp 4.8.0-1+deb13u1 there, or install one.)
+
+Open follow-ups created or confirmed by this slice (not claimed):
+- GS-007h: online host migration (server ends the directory on host leave; AllowHostMigration
+  is stored but inert online).
+- GS-007i: IsReady / per-gamer state propagation (SystemLink lacks it too) and reference
+  IsEveryoneReady (all gamers, non-empty).
+- GS-007j: NetworkMachine.RemoveFromSession (reference validation order known; needs a server
+  host-kick operation) and reference AddLocalGamer validation; online AddLocalGamer currently
+  refuses NotSupportedException (directory admits one complete group per machine).
+- GS-007k: AvailableNetworkSessionCollection.Dispose should make its listings unjoinable
+  (reference ObjectDisposedException); QualityOfService for service listings is not measured.
+Next: GS-007e3 invited joins/Guide invitation flow/InviteAccepted, then Ranked/PlayerMatch
+leaderboard lifecycle (GS-006d), reconnect/failure (GS-008d2), remaining Guide, avatars.
