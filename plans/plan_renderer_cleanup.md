@@ -29,6 +29,10 @@ renderer count is not a goal.
 | RRC-011 | Remove retired renderer spikes and the rejected Three.js probe; repair current-tree references and retention policy | ✅ |
 | RRC-012 | Retire `DIRECT2D`, `FREEDIRECT` and `PORTABLEGL`: remove their families and every integration that existed only for them | ✅ `0f96ea703` |
 | RRC-013 | Repair the runtime-discipline gate's identity parser; remove stale current-state references left by RRC-012 | ✅ |
+| RRC-014 | Move the Software contracts only the GDI suite held into the Software suite | ✅ |
+| RRC-015 | Retire `GDI`, `HTML_DOM`, `SVG_DOM` and `OPENGL4`: remove their families and every integration that existed only for them | ⬜ |
+| RRC-016 | Remove `CNA_SOFTWARE_2D_ONLY`, the reduced Software build that existed only for `GDI` | ⬜ |
+| RRC-017 | Remove the four renderers' documents, plans and handoffs; one retirement record | ⬜ |
 
 **2026-09-19 owner decision (`RRC-011`).** Retired renderer probes and the rejected Three.js
 candidate probe no longer belong in the current `spikes/` tree. The earlier archive-retention
@@ -892,3 +896,27 @@ are unchanged.
 **Out of scope, recorded.** `GDI` does not link on this tree: `SoftwareRenderer2D.cpp`, compiled into
 `GDI` with `CNA_SOFTWARE_2D_ONLY`, calls helpers defined only outside that mode (since
 `8465377b1`/`0f213ebaf`). It predates `RRC-012` and is a separate task.
+
+## RRC-014 — Software contracts held only by the GDI suite
+
+**Owner decision, 2026-09-28:** `GDI`, `HTML_DOM`, `SVG_DOM` and `OPENGL4` are retired (`RRC-015`).
+`GDI` compiled eight of the Software module's CPU-2D translation units, so its suite partly tested
+Software. Each of its 18 executables was classified before deletion:
+
+- **Win32 presentation, DC, DPI, DWM, damage and GDI-only contracts -- removed with `GDI`:** smoke,
+  dirty damage, repaint invalidation, presentation oracle/configuration/mode transaction, DC
+  release transaction, window metrics, applied state, unsupported features, the 2D benchmark.
+- **Already covered for Software:** 2D regression and public API (the Software example suite and
+  the shared graphics tests run against `SOFTWARE`), public stencil (`Software_DepthStencilState_*`),
+  and the MSAA contract (`Software_MsaaFragmentContract`, `Software_MsaaStorage`).
+- **Held only by the GDI suite, migrated:** the host-width framebuffer and texture allocation
+  layouts, the live Software allocation refusals (render target, resize, texture upload pitch,
+  source-buffer size, budget) and `ColorMatrixEffect` end to end, now
+  `SoftwareAllocationTests.cpp` and `SoftwareColorMatrixEffectTests.cpp`. One expectation changed
+  with the owner: a Software render target without a depth format is colour only, so the
+  byte-budget refusal is asserted at 11586², not GDI's 11000² (which only exceeded the budget with
+  GDI's mandatory stencil plane). The GDI-only "ShaderEffect is refused" check was not migrated;
+  Software accepts `ShaderEffect`.
+
+Verified in `cmake-build-software`: `CnaRendererTests --gtest_filter='Software*'` 36/36 pass.
+
