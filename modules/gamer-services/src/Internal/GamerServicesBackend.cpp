@@ -4,6 +4,7 @@
 #include "CnaService/Protocol.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include <curl/curl.h>
 #include <condition_variable>
 #include <deque>
@@ -200,6 +201,23 @@ public:
         }
         return page;
     }
+    std::string beginLeaderboardGame(const std::vector<std::string>& users) override {
+        if(users.empty()||users.size()>4)throw Unavailable("Invalid local leaderboard membership.");
+        Json participants=Json::array();for(const auto& user:users)participants.push_back(tokenFor(user));
+        const auto result=request("leaderboards.game.begin",{{"kind","local"},{"participants",participants}},tokenFor(users.front()));
+        auto id=CnaService::stringField(result,"gameplay",32);
+        if(id.size()!=32||id.find_first_not_of("0123456789abcdef")!=std::string::npos)throw Unavailable("Invalid leaderboard gameplay identifier.");return id;
+    }
+    void commitLeaderboardGame(const std::string& gameplay,const std::string& owner,const std::vector<ServiceLeaderboardWrite>& rows) override {
+        Json entries=Json::array();
+        for(const auto& row:rows) {
+            Json columns=Json::object();for(const auto& [name,column]:row.columns) {
+                Json value;std::visit([&](const auto& scalar){value=scalar;},column.value);columns[name]={{"type",column.type},{"value",value}};
+            }
+            entries.push_back(Json{{"userId",row.userId},{"key",row.key},{"mode",row.mode},{"rating",row.rating},{"columns",columns}});
+        }
+        (void)request("leaderboards.game.commit",{{"gameplay",gameplay},{"entries",entries}},tokenFor(owner));
+    }
     std::vector<unsigned char> asset(const std::string& hash) override {
         if(hash.size()!=64||hash.find_first_not_of("0123456789abcdef")!=std::string::npos)throw Unavailable("Invalid service asset identifier.");
         const auto token=tokenFor({});
@@ -328,6 +346,7 @@ private:
                 negotiated_=true;
             }
             if(op.starts_with("friends.")&&!capabilities_.contains("friend-requests"))throw Unavailable("CNA service friend-request capability missing.");
+            if(op.starts_with("leaderboards.game.")&&!capabilities_.contains("local-leaderboard-commit"))throw Unavailable("CNA service local leaderboard commit capability missing.");
             if(op.starts_with("leaderboards.")&&!capabilities_.contains("leaderboard-reads"))throw Unavailable("CNA service leaderboard-read capability missing.");
             if(op=="assets.read"&&!capabilities_.contains("assets"))throw Unavailable("CNA service asset capability missing.");
             if(op=="presence.set"&&!capabilities_.contains("presence"))throw Unavailable("CNA service presence capability missing.");
@@ -412,8 +431,31 @@ public:
         for(int i=start;i<page.total&&static_cast<long long>(i)<static_cast<long long>(start)+size;++i)page.entries.push_back(entries[static_cast<std::size_t>(i)]);
         return page;
     }
+    std::string beginLeaderboardGame(const std::vector<std::string>& users) override {
+        if(users.empty()||users.size()>4)throw Unavailable("Invalid fixture game membership.");
+        for(const auto& user:users)require(user);const auto id="fixture-game-"+std::to_string(++gameSequence_);games_[id]=users;return id;
+    }
+    void commitLeaderboardGame(const std::string& gameplay,const std::string& owner,const std::vector<ServiceLeaderboardWrite>& rows) override {
+        require(owner);if(!games_.contains(gameplay)||games_[gameplay].front()!=owner)throw Unavailable("Invalid fixture game scope.");
+        for(const auto& row:rows) {
+            if(std::find(games_[gameplay].begin(),games_[gameplay].end(),row.userId)==games_[gameplay].end())throw Unavailable("Nonmember fixture write.");
+            const auto board=std::find_if(boards_.begin(),boards_.end(),[&](const auto& value){return value.key==row.key&&value.mode==row.mode;});
+            if(board==boards_.end())throw Unavailable("Fixture board not found.");
+        }
+        for(const auto& row:rows) {
+            auto& board=*std::find_if(boards_.begin(),boards_.end(),[&](const auto& value){return value.key==row.key&&value.mode==row.mode;});
+            auto entry=std::find_if(board.entries.begin(),board.entries.end(),[&](const auto& value){return value.userId==row.userId;});
+            if(entry==board.entries.end()){ServiceLeaderboardEntry value;value.userId=row.userId;value.gamertag=profileById(row.userId).gamertag;board.entries.push_back(value);entry=std::prev(board.entries.end());}
+            else if(board.ascending?row.rating>=entry->rating:row.rating<=entry->rating)continue;
+            entry->rating=row.rating;entry->columns=row.columns;
+        }
+        games_.erase(gameplay);
+    }
     std::vector<unsigned char> asset(const std::string&) override {throw Unavailable("Fake fixture has no assets.");}
 private:
+    ServiceIdentity profileById(const std::string& id) {for(const auto& person:identities_)if(person.userId==id)return person;throw Unavailable("Unknown fixture gamer.");}
+    std::map<std::string,std::vector<std::string>> games_;
+    int gameSequence_=0;
     void require(const std::string& user) {if(user.empty()||std::find(slots_.begin(),slots_.end(),user)==slots_.end())throw Unavailable("Gamer signed out.");}
     std::vector<ServiceIdentity> identities_;
     std::vector<ServiceAchievement> catalog_;
@@ -423,10 +465,16 @@ private:
     std::set<std::pair<std::string,std::string>> edges_;
     std::map<std::string,std::string> presence_;
 };
+thread_local int serviceRestrictionDepth=0;
 std::mutex registryMutex;
 std::shared_ptr<IGamerServicesBackend> current;
 }
+bool serviceCallsRestricted(){return serviceRestrictionDepth>0;}
+void withRestrictedServiceCalls(const std::function<void()>& callback) {
+    ++serviceRestrictionDepth;try{callback();}catch(...){--serviceRestrictionDepth;throw;}--serviceRestrictionDepth;
+}
 std::shared_ptr<IGamerServicesBackend> backend() {
+    if(serviceCallsRestricted())throw System::InvalidOperationException("Other GamerServices calls are forbidden inside a final leaderboard write handler.");
     std::lock_guard lock(registryMutex);if(!current)current=std::make_shared<OnlineBackend>(CNA::GamerServices::resolveConfiguration());return current;
 }
 void setBackendForTesting(std::shared_ptr<IGamerServicesBackend> value) {std::lock_guard lock(registryMutex);current=std::move(value);}

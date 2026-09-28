@@ -613,7 +613,7 @@ endif()
 # GS-003/004: isolated deterministic backend and real-service client probe.
 if(CNA_ENABLE_NET AND CNA_BUILD_TESTS)
     add_executable(cna_service_client_harness tools/net/service_client_harness.cpp)
-    target_link_libraries(cna_service_client_harness PRIVATE CNA_GamerServices)
+    target_link_libraries(cna_service_client_harness PRIVATE CNA_Net)
     add_test(NAME GamerServices_FakeBackend COMMAND cna_service_client_harness)
     set_tests_properties(GamerServices_FakeBackend PROPERTIES TIMEOUT 45)
 endif()

@@ -7,6 +7,8 @@
 #include "Microsoft/Xna/Framework/GamerServices/GamerProfile.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/LeaderboardReader.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
+#include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -36,6 +38,39 @@ void waitFor(int count) {
 void enterText(const std::string& text) {
     for(unsigned char c:text)Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextInput(c);
     Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextInput(u'\r');
+}
+void exerciseLocalLeaderboard(SignedInGamer* gamer,const std::vector<SignedInGamer*>& players) {
+    namespace Net=Microsoft::Xna::Framework::Net;
+    const auto id=LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
+    bool outside=false;try{(void)gamer->getLeaderboardWriterProperty().GetLeaderboard(id);}catch(const System::InvalidOperationException&){outside=true;}check(outside,"writer allowed outside network gameplay");
+    const auto before=LeaderboardReader::Read(id,std::vector<Gamer*>{gamer},gamer,1);
+    const auto oldRating=firstEntry(before).getRatingProperty();
+    std::unique_ptr<Net::NetworkSession> session(Net::NetworkSession::Create(Net::NetworkSessionType::LocalWithLeaderboards,players,4,0,{}));
+    auto* local=session->getLocalGamersProperty()[0];check(local->getGamertagProperty()==gamer->getGamertagProperty(),"local service gamer identity");
+    session->StartGame();
+    outside=false;try{(void)local->getLeaderboardWriterProperty().GetLeaderboard(id);}catch(const System::InvalidOperationException&){outside=true;}check(outside,"write scope published before session Update");
+    session->Update();check(session->getSessionStateProperty()==Net::NetworkSessionState::Playing,"service playing state");
+    auto* entry=local->getLeaderboardWriterProperty().GetLeaderboard(id);entry->setRatingProperty(600);entry->getColumnsProperty().SetValue("Rounds",5);
+    auto* signedEntry=gamer->getLeaderboardWriterProperty().GetLeaderboard(id);
+    check(firstEntry(LeaderboardReader::Read(id,std::vector<Gamer*>{gamer},gamer,1)).getRatingProperty()==oldRating,"gameplay setter flushed before EndGame");
+    int writes=0,ended=0;std::string order;
+    auto writing=session->WriteUnarbitratedLeaderboard.Add([&](auto*,const Net::WriteLeaderboardsEventArgs& args){
+        ++writes;order+='W';bool restricted=false;try{(void)gamer->GetProfile();}catch(const System::InvalidOperationException&){restricted=true;}check(restricted,"service call inside final write handler");
+        restricted=false;try{session->ResetReady();}catch(const System::InvalidOperationException&){restricted=true;}check(restricted,"network call inside final write handler");
+        restricted=false;try{local->SendData(std::vector<SharpRuntime::bytecs>{1},Net::SendDataOptions::Reliable);}catch(const System::InvalidOperationException&){restricted=true;}check(restricted,"packet send inside final write handler");
+        check(!args.getIsLeavingProperty()&&session->getSessionStateProperty()==Net::NetworkSessionState::Playing,"final write event state");
+        if(args.getGamerProperty()==local)args.getGamerProperty()->getLeaderboardWriterProperty().GetLeaderboard(id)->setRatingProperty(650);
+    });
+    auto ending=session->GameEnded.Add([&](auto*,const auto&){++ended;order+='E';});
+    session->EndGame();check(writes==0&&ended==0,"EndGame events before Update");
+    session->Update();check(writes==static_cast<int>(players.size())&&ended==1&&order==std::string(players.size(),'W')+"E","final write before GameEnded ordering");
+    check(session->getSessionStateProperty()==Net::NetworkSessionState::Lobby,"post commit lobby");
+    auto after=LeaderboardReader::Read(id,std::vector<Gamer*>{gamer},gamer,1);
+    check(firstEntry(after).getRatingProperty()==650&&firstEntry(after).getColumnsProperty().GetValueInt32("Rounds")==5,"final callback score/columns persisted");
+    outside=false;try{entry->setRatingProperty(700);}catch(const System::InvalidOperationException&){outside=true;}check(outside,"retained rating writable in Lobby");
+    outside=false;try{entry->getColumnsProperty().SetValue("Rounds",7);}catch(const System::InvalidOperationException&){outside=true;}check(outside,"retained columns writable in Lobby");
+    session->WriteUnarbitratedLeaderboard.Remove(writing);session->GameEnded.Remove(ending);
+    session->Dispose();outside=false;try{signedEntry->setRatingProperty(700);}catch(const System::InvalidOperationException&){outside=true;}check(outside,"signed writer scope survives disposed session");
 }
 int main(int argc,char** argv) {
     try {
@@ -130,7 +165,7 @@ int main(int argc,char** argv) {
             reader.Dispose();bool disposed=false;try{reader.PageDown();}catch(const System::ObjectDisposedException&){disposed=true;}check(disposed,"fake disposed remote reader");
             bool badSize=false;try{std::unique_ptr<System::IAsyncResult> bad(LeaderboardReader::BeginRead(id,0,0,{},{}));}catch(const System::ArgumentOutOfRangeException&){badSize=true;}check(badSize,"fake remote size validation");
         }
-        if(real) {
+        if(real&&std::string(argv[4])!="leaderboard-after") {
             const auto id=LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
             bool callback=false;int callbackCount=0;
             std::unique_ptr<System::IAsyncResult> pending(LeaderboardReader::BeginRead(id,0,1,[&](auto& value){callback=true;++callbackCount;check(!value.getCompletedSynchronouslyProperty(),"remote leaderboard synchronous flag");},77));
@@ -156,11 +191,16 @@ int main(int argc,char** argv) {
                 auto centered=LeaderboardReader::Read(id,alice.get(),1);check(centered.getPageStartProperty()==1&&firstEntry(centered).getGamerProperty()->getGamertagProperty()=="Alice","remote centered read");
                 auto restricted=LeaderboardReader::Read(id,std::vector<Gamer*>{alice.get()},alice.get(),1);check(restricted.getTotalLeaderboardSizeProperty()==1&&firstEntry(restricted).getRankingEXTProperty()==2,"remote restricted/global rank");
                 auto empty=LeaderboardReader::Read(id,std::vector<Gamer*>{},alice.get(),1);check(empty.getTotalLeaderboardSizeProperty()==0,"remote empty gamer set");
-                auto* write=gamer->getLeaderboardWriterProperty().GetLeaderboard(id);write->setRatingProperty(999);
-                auto after=LeaderboardReader::Read(id,0,2);check(firstEntry(after).getRatingProperty()==200,"setter persisted without session commit");
+                bool outside=false;try{(void)gamer->getLeaderboardWriterProperty().GetLeaderboard(id);}catch(const System::InvalidOperationException&){outside=true;}check(outside,"online writer outside session");
             }
             reader.Dispose();bool disposed=false;try{(void)reader.getEntriesProperty();}catch(const System::ObjectDisposedException&){disposed=true;}check(disposed,"remote reader disposal");
             bool sizeInvalid=false;try{std::unique_ptr<System::IAsyncResult> bad(LeaderboardReader::BeginRead(id,0,0,{},{}));}catch(const System::ArgumentOutOfRangeException&){sizeInvalid=true;}check(sizeInvalid,"remote page size validation");
+        }
+        if(!real) {std::vector<SignedInGamer*> locals;for(int i=0;i<4;++i)locals.push_back((*collection)[i]);exerciseLocalLeaderboard(gamer,locals);}
+        if(real&&std::string(argv[4])=="leaderboard-write")exerciseLocalLeaderboard(gamer,{gamer});
+        if(real&&std::string(argv[4])=="leaderboard-after") {
+            auto after=LeaderboardReader::Read(LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime),0,2);
+            check(firstEntry(after).getGamerProperty()->getGamertagProperty()=="Alice"&&firstEntry(after).getRatingProperty()==650,"EndGame persistence across clients/server restart");
         }
         profile->Dispose();
         if(!real) {

@@ -24,6 +24,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void LeaderboardEntry::setRatingProperty(long long value)
     {
+        if(validateWrite_)validateWrite_();
         rating_ = value;
         if (onRatingChangedEXT_)
         {

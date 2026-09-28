@@ -219,7 +219,7 @@ CNA 32c0002ffdc191a118689a3058c64390a8f882ce; server
 a2f849356c5eed23f55256a3c87caf2de45bf5ec; sharp-runtime
 fc033a0e8541a81498c4a496f56a0f59475c6e34. Both task repositories clean at this checkpoint.
 
-### GS-006a leaderboard catalog and remote reads (in progress)
+### GS-006a leaderboard catalog and remote reads (validated subtask)
 
 Schema 3 defines title/key/game-mode sort, aggregation, arbitration and typed-column metadata.
 Only trusted administration can seed development entries. Runtime capability `leaderboard-reads`
@@ -250,3 +250,59 @@ Server 5,136 assertions; final genuine TLS C++/pure C clients and persistence su
 Server committed a13e20d. Next committed next still b2fd47a45; shared samples worktree untouched.
 Next GS-006b: authenticated LocalWithLeaderboards game epochs, transient writer scope, final write
 callback before Lobby and atomic/idempotent server commit. Ranked arbitration follows GS-007.
+
+
+### GS-006b LocalWithLeaderboards EndGame checkpoint
+
+- [x] Authenticated local gameplay epochs (schema 4), 1..4 independent title-bound accounts;
+  owner/member/catalog/arbitration authorization, bounded lifetime/quota, atomic scalar commits.
+- [x] Writer scope opens at Playing Update; rating/column setters retain transient drafts and reject
+  writes before Playing/after Lobby. Final WriteUnarbitratedLeaderboard callbacks run before
+  commit/GameEnded. Networking and backend calls in those callbacks reject. Both signed-in and
+  local-network gamer writers participate; conflicting drafts for the same identity reject.
+- [x] Persistence/ascending-best/latest policy, malformed columns, nonmembers, wrong host/title,
+  invalid-row atomicity, duplicate rows and identical commit retry across server restart tested.
+- [x] LocalNetworkGamer publishes the real signed-in gamertag/display name; the previous test
+  asserting Stub Gamer was corrected. SystemLink wire identity remains its real account identity.
+- [ ] GS-006c: leaving/disposal write events/submission, explicit epoch abort, transport-loss retry
+  policy; Stream columns, catalog validation timing and full event restriction audit.
+- [ ] Ranked/all-machine arbitration and TrueSkill require GS-007 session directory integration.
+
+CNA fake harness **99 checks pass**, including four local signed-in gamers; Net **316/316 pass**
+(including real ENet two-process data/host migration); GamerServices **388 run, 387 pass, 1 existing
+HEADLESS screensaver skip**. Server **5,158 assertions pass**; genuine TLS C++ and pure C clients,
+Alice/Bob and two titles, EndGame final score/columns and independent clients after server restart:
+`ctest --test-dir build --output-on-failure` **2/2 pass, 17.17s**. Native C API Net/leaderboard,
+header/export/ABI/protocol gates pass; coverage-scope rule initially failed because GS task labels
+missed its CBIND prefix, then corrected without broadening approved symbols. ABI stays 0.32.0,
+3,215 exports. Tests/build logs in each persistent build directory (`gameplay-final-*`).
+
+Reproduce with max two build jobs:
+```
+CCACHE_DIR=/rv/cnaccache CCACHE_BASEDIR=/rv cmake --build cmake-build-debug --parallel 2 --target CnaNetTests CnaGamerServicesTests cna_service_client_harness cna_c_api_service_client
+env -u DISPLAY WAYLAND_DISPLAY= cmake-build-debug/cna_service_client_harness
+env -u DISPLAY WAYLAND_DISPLAY= cmake-build-debug/CnaNetTests
+env -u DISPLAY WAYLAND_DISPLAY= cmake-build-debug/CnaGamerServicesTests
+tools/platform/run_gpu_tests_private.sh cmake-build-debug -R '^(CApi_NetSmoke|CApi_LeaderboardsSmoke|CApi_HeaderAudit|CApi_Exports|CApiAbiBaseline|CApiAbiHeaderBaseline|CApiDeclaredExports|GamerServices_ProtocolDrift|CApiCoverageMatrix|CApiCoverageScopeModel|CApiLimitations)$' --output-on-failure
+# In the sibling server repository, after cmake --build build --parallel 2:
+CNA_SERVICE_CLIENT_HARNESS=/rv/data/development/github.com/libcna/cnawork/cna-gamer-services/cmake-build-debug/cna_service_client_harness CNA_SERVICE_C_API_HARNESS=/rv/data/development/github.com/libcna/cnawork/cna-gamer-services/cmake-build-debug/cna_c_api_service_client env -u DISPLAY WAYLAND_DISPLAY= ctest --test-dir build --output-on-failure
+```
+
+Controlled next inspection: canonical samples worktree/next is now committed **9473f5c89**, identical
+to this feature branch's GS-006a parent; no divergent history to merge. No shared working files
+copied or edited. sharp-runtime unchanged. GS-006a tested source set: CNA
+9473f5c8972027d0a5f3e484dc5e4374bd095669 / server a13e20d4c2fd34111b52aa3f57b9eaf3e7b93a7a /
+sharp-runtime fc033a0e8541a81498c4a496f56a0f59475c6e34. GS-006b hashes recorded at the next
+checkpoint after these source commits exist.
+
+Known limits: public dictionary mutable any references/CNAEXT iterators can bypass a later setter
+scope check if retained; catalog validation is currently deferred to server commit, not measured
+Xbox GetLeaderboard timing. Failed EndGame leaves Playing/drafts intact; callbacks run again on
+retry (freezing a previously transmitted transaction is still needed). Disposal currently abandons
+a 24-hour epoch without abort, so interrupted games count against the 16 epoch quota. No online
+Ranked/PlayerMatch, Internet relay, standard-avatar functionality or unblocked original samples
+is claimed at this milestone. Next independent implementation: GS-006c leave/abort lifecycle.
+
+User explicitly selected MIT for independently written server code. Server 317b3aae01a6af7373784e11b2f8ddced2363baf
+adds LICENCE, ignore rules and dependency notices. No FNA or proprietary implementation is imported.
+SPDX synchronization is a separate clean checkpoint after GS-006b, preserving XNA port MS-PL files.

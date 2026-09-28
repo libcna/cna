@@ -60,6 +60,8 @@ struct ServiceLeaderboardColumn {
     std::string type;
     /** @brief Scalar data preserving integer precision. */
     std::variant<long long,double,std::string> value;
+    /** @brief Compares typed values. @param other Other value. @return Equality. */
+    bool operator==(const ServiceLeaderboardColumn& other) const = default;
 };
 /** @brief One ranked entry returned by a bounded service read. */
 struct ServiceLeaderboardEntry {
@@ -88,6 +90,19 @@ struct ServiceLeaderboardFixture {
     bool ascending=false;
     /** @brief Supplied test data. */
     std::vector<ServiceLeaderboardEntry> entries;
+};
+/** @brief Transient gameplay row submitted through an authenticated game scope. */
+struct ServiceLeaderboardWrite {
+    /** @brief Member identity and board key. */
+    std::string userId, key;
+    /** @brief Board game mode. */
+    int mode=0;
+    /** @brief Final rating. */
+    long long rating=0;
+    /** @brief Final typed columns. */
+    std::map<std::string,ServiceLeaderboardColumn> columns;
+    /** @brief Compares final rows. @param other Other row. @return Equality. */
+    bool operator==(const ServiceLeaderboardWrite& other) const = default;
 };
 /** @brief Work completion applied at the dispatcher's controlled update boundary. */
 struct BackendEvent {
@@ -142,9 +157,21 @@ public:
      * @param gamers Optional restricted names. @return Ranked page. */
     virtual ServiceLeaderboardPage readLeaderboard(const std::string& key,int mode,int start,int size,
         const std::string& pivot,const std::optional<std::vector<std::string>>& gamers) = 0;
+    /** @brief Begins a local gameplay write scope. @param users Authenticated local identities.
+     * @return Opaque server-owned scope identifier. */
+    virtual std::string beginLeaderboardGame(const std::vector<std::string>& users) = 0;
+    /** @brief Commits final rows atomically. @param gameplay Scope. @param owner Host identity.
+     * @param rows Final writes. */
+    virtual void commitLeaderboardGame(const std::string& gameplay,const std::string& owner,
+        const std::vector<ServiceLeaderboardWrite>& rows) = 0;
 };
 /** @brief Gets lazily configured backend. @return Shared backend lifetime. */
 std::shared_ptr<IGamerServicesBackend> backend();
+/** @brief Reports a final-write handler's restricted service context. @return Restricted flag. */
+bool serviceCallsRestricted();
+/** @brief Runs a final-write event without permitting other service calls.
+ * @param callback Event delivery. */
+void withRestrictedServiceCalls(const std::function<void()>& callback);
 /** @brief Injects an explicit test backend. @param value Backend or null to reset configuration. */
 void setBackendForTesting(std::shared_ptr<IGamerServicesBackend> value);
 /** @brief Creates deterministic fake with explicitly supplied identities and catalog.

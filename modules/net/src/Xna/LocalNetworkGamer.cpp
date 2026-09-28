@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "System/IO/MemoryStream.hpp"
 #include <algorithm>
 
@@ -24,9 +27,10 @@ namespace Microsoft::Xna::Framework::Net
     }
 
     LocalNetworkGamer::LocalNetworkGamer(GamerServices::SignedInGamer* gamer, NetworkSession* session)
-        : NetworkGamer(session)
+        : NetworkGamer(session,gamer?gamer->getGamertagProperty():std::string{})
         , signedInGamer_(gamer)
     {
+        if(gamer){serviceUserId_=gamer->serviceUserId_;displayName_=gamer->getDisplayNameProperty();}
     }
 
     LocalNetworkGamer LocalNetworkGamer::CreateInternal(GamerServices::SignedInGamer* gamer, NetworkSession* session)
@@ -40,19 +44,23 @@ namespace Microsoft::Xna::Framework::Net
 
     void LocalNetworkGamer::EnableSendVoice(NetworkGamer* /*remoteGamer*/, bool /*enable*/)
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
     }
 
     void LocalNetworkGamer::SendPartyInvites()
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
     }
 
     int LocalNetworkGamer::ReceiveData(std::vector<SharpRuntime::bytecs>& data, NetworkGamer*& sender)
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         return ReceiveData(data, 0, sender);
     }
 
     int LocalNetworkGamer::ReceiveData(std::vector<SharpRuntime::bytecs>& data, int offset, NetworkGamer*& sender)
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         sender = nullptr;
         if (!getIsDataAvailableProperty())
         {
@@ -99,6 +107,7 @@ namespace Microsoft::Xna::Framework::Net
 
     int LocalNetworkGamer::ReceiveData(PacketReader& data, NetworkGamer*& sender)
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         sender = nullptr;
         if (!getIsDataAvailableProperty())
         {
@@ -130,11 +139,13 @@ namespace Microsoft::Xna::Framework::Net
 
     void LocalNetworkGamer::SendData(const std::vector<SharpRuntime::bytecs>& data, SendDataOptions options)
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         SendData(data, 0, static_cast<int>(data.size()), options);
     }
 
     void LocalNetworkGamer::SendData(const std::vector<SharpRuntime::bytecs>& data, int offset, int count, SendDataOptions options)
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         // Task 2.9: FNA's own Array.Copy(data, offset, mem, 0, mem.Length) validates
         // offset/count against data.Length and throws on overflow - preserved here instead of
         // constructing a vector from an out-of-bounds iterator range (undefined behavior).
@@ -157,11 +168,13 @@ namespace Microsoft::Xna::Framework::Net
 
     void LocalNetworkGamer::SendData(const std::vector<SharpRuntime::bytecs>& data, SendDataOptions options, NetworkGamer* recipient)
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         SendData(data, 0, static_cast<int>(data.size()), options, recipient);
     }
 
     void LocalNetworkGamer::SendData(const std::vector<SharpRuntime::bytecs>& data, int offset, int count, SendDataOptions options, NetworkGamer* recipient)
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         // Task 2.9: see the non-recipient overload above for why this check exists.
         if (offset < 0 || count < 0 || offset + count > static_cast<int>(data.size()))
         {
@@ -179,6 +192,7 @@ namespace Microsoft::Xna::Framework::Net
 
     void LocalNetworkGamer::SendData(PacketWriter& data, SendDataOptions options)
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         std::vector<SharpRuntime::bytecs> packet = TakePacket(data);
 
         for (NetworkGamer* gamer : getSessionProperty()->getAllGamersProperty())
@@ -195,6 +209,7 @@ namespace Microsoft::Xna::Framework::Net
 
     void LocalNetworkGamer::SendData(PacketWriter& data, SendDataOptions options, NetworkGamer* recipient)
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         std::vector<SharpRuntime::bytecs> packet = TakePacket(data);
 
         NetworkSession::NetworkEvent evt;

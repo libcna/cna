@@ -379,7 +379,7 @@ namespace Microsoft::Xna::Framework::Net
         System::EventHandler<NetworkSessionEndedEventArgs> SessionEnded;
         /** @brief Declared for API parity; never raised (leaderboards/TrueSkill unimplemented upstream). */
         System::EventHandler<WriteLeaderboardsEventArgs> WriteArbitratedLeaderboard;
-        /** @brief Declared for API parity; never raised (leaderboards/TrueSkill unimplemented upstream). */
+        /** @brief Requests final local statistics before service gameplay returns to the lobby. */
         System::EventHandler<WriteLeaderboardsEventArgs> WriteUnarbitratedLeaderboard;
         /** @brief Declared for API parity; never raised (leaderboards/TrueSkill unimplemented upstream). */
         System::EventHandler<WriteLeaderboardsEventArgs> WriteTrueSkill;
@@ -950,6 +950,10 @@ namespace Microsoft::Xna::Framework::Net
         // canonical ownership contract this follows). Freed in bulk on Dispose() - see Dispose()'s
         // own doc comment for why not incrementally.
         CNAEXT std::vector<std::unique_ptr<NetworkGamer>> ownedGamers_;
+
+        void FinalizeServiceLeaderboards();
+        std::string leaderboardGameplay_,leaderboardOwner_;
+        bool leaderboardTransitionPending_=false;
 
         static NetworkSessionAction* activeAction_;
         static NetworkSession* activeSession_;

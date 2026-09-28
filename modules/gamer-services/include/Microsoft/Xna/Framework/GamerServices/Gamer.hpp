@@ -9,6 +9,8 @@
 #include <optional>
 #include <string>
 
+namespace Microsoft::Xna::Framework::Net { class NetworkSession; class LocalNetworkGamer; }
+
 namespace Microsoft::Xna::Framework::GamerServices
 {
     class SignedInGamerCollection;
@@ -256,6 +258,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         friend class GamerServicesDispatcher;
         friend class LeaderboardReader;
         friend class LeaderboardWriter;
+        friend class Microsoft::Xna::Framework::Net::NetworkSession;
+        friend class Microsoft::Xna::Framework::Net::LocalNetworkGamer;
         std::string serviceUserId_;
         std::string displayName_;
         std::string gamertag_;

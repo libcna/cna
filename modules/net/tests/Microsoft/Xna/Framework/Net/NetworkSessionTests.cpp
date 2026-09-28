@@ -1148,7 +1148,8 @@ TEST(NetworkSessionTest, AddRemoteGamerJoinsRostersAndRaisesGamerJoined) {
         joinedGamertags.push_back(e.getGamerProperty()->getGamertagProperty());
     };
     ASSERT_EQ(joinedGamertags.size(), 1u);
-    EXPECT_EQ(joinedGamertags[0], "Stub Gamer"); // LocalNetworkGamer always reports this gamertag
+    EXPECT_EQ(joinedGamertags[0], gamer.getGamertagProperty());
+    EXPECT_EQ(session->getLocalGamersProperty()[0]->getDisplayNameProperty(), gamer.getDisplayNameProperty());
 
     NetworkGamer remote = NetworkGamer::CreateInternal(session, "RemotePlayer");
     session->AddRemoteGamer(&remote);

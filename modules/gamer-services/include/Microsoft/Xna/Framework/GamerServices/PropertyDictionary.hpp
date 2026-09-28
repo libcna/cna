@@ -11,6 +11,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <functional>
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
@@ -347,6 +348,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         CNAEXT static PropertyDictionary CreateInternal(std::map<std::string, std::any> dict);
 
     private:
+        friend class LeaderboardWriter;
+        std::function<void()> writeGuard_;
         explicit PropertyDictionary(std::map<std::string, std::any> dict);
 
         std::map<std::string, std::any> dictionary_;

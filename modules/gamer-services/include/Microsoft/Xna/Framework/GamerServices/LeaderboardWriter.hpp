@@ -5,6 +5,11 @@
 #include "Microsoft/Xna/Framework/GamerServices/LeaderboardIdentity.hpp"
 #include <map>
 #include <string>
+#include <set>
+#include <memory>
+
+namespace Microsoft::Xna::Framework::Net { class NetworkSession; }
+namespace CNA::Internal::GamerServices { struct ServiceLeaderboardWrite; }
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
@@ -30,9 +35,17 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     private:
         friend class Gamer;
+        friend class Microsoft::Xna::Framework::Net::NetworkSession;
         explicit LeaderboardWriter(Gamer* owner);
+        struct WriteScope {bool active=false;std::set<std::string> dirty;};
+        void BeginServiceGameplay();
+        void EndServiceGameplay();
+        void BindServiceEntry(const std::string& fileKey,LeaderboardEntry& entry);
+        std::vector<CNA::Internal::GamerServices::ServiceLeaderboardWrite> CollectServiceWrites() const;
 
         Gamer* owner_ = nullptr;
         std::map<std::string, LeaderboardEntry> entriesByLeaderboardKeyEXT_;
+        std::map<std::string,LeaderboardIdentity> identities_;
+        std::shared_ptr<WriteScope> writeScope_;
     };
 }

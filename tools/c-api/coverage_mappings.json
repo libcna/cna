@@ -16761,10 +16761,26 @@
       "mapping": "No C form: friendship declarations granting the private service reader/writer access to gamer identity. They declare no callable public behavior.",
       "tests": "Doxygen declaration inventory and native C real-service lifetime tests; no operation exists to bind.",
       "status": "not-applicable",
-      "task": "GS-006a",
+      "task": "CBIND-GS-006a",
       "approved_symbols": [
         "CPP-B1B37194AECF",
         "CPP-6E7785DFBD8B"
+      ]
+    },
+    {
+      "id": "service-gameplay-friendship",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::(?:Gamer::(?:NetworkSession|LocalNetworkGamer)|LeaderboardWriter::NetworkSession)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C form: private friendship declarations granting session infrastructure access to logical service identity and transient writer scopes. They declare no callable operation.",
+      "tests": "Doxygen inventory and real C++/native C service regression gates; no operation exists to bind.",
+      "status": "not-applicable",
+      "task": "CBIND-GS-006b",
+      "approved_symbols": [
+        "CPP-2C91ED51F698",
+        "CPP-0287A3DB7C2C",
+        "CPP-B2E36AF6DA8B"
       ]
     }
   ]

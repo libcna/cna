@@ -25,6 +25,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     std::any& PropertyDictionary::operator[](const std::string& key)
     {
+        if(writeGuard_)writeGuard_();
         // Task 7.4: FNA's real indexer getter is `return dictionary[key];`, which throws
         // KeyNotFoundException for a missing key via Dictionary<TKey,TValue> - dictionary_[key]
         // (std::map::operator[]) instead silently default-constructed and inserted an empty
@@ -100,41 +101,49 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void PropertyDictionary::SetValue(const std::string& key, System::DateTime value)
     {
+        if(writeGuard_)writeGuard_();
         dictionary_[key] = value;
     }
 
     void PropertyDictionary::SetValue(const std::string& key, double value)
     {
+        if(writeGuard_)writeGuard_();
         dictionary_[key] = value;
     }
 
     void PropertyDictionary::SetValue(const std::string& key, int value)
     {
+        if(writeGuard_)writeGuard_();
         dictionary_[key] = value;
     }
 
     void PropertyDictionary::SetValue(const std::string& key, long long value)
     {
+        if(writeGuard_)writeGuard_();
         dictionary_[key] = value;
     }
 
     void PropertyDictionary::SetValue(const std::string& key, LeaderboardOutcome value)
     {
+        if(writeGuard_)writeGuard_();
         dictionary_[key] = value;
     }
 
     void PropertyDictionary::SetValue(const std::string& key, float value)
     {
+        if(writeGuard_)writeGuard_();
         dictionary_[key] = value;
     }
 
     void PropertyDictionary::SetValue(const std::string& key, const std::string& value)
     {
+        if(writeGuard_)writeGuard_();
         dictionary_[key] = value;
     }
 
     void PropertyDictionary::SetValue(const std::string& key, System::TimeSpan value)
     {
+        if(writeGuard_)writeGuard_();
         dictionary_[key] = value;
     }
 
@@ -195,6 +204,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void PropertyDictionary::Add(const std::string& key, std::any value)
     {
+        if(writeGuard_)writeGuard_();
         // Task 8.1: matches Dictionary<TKey,TValue>.Add's real throw-on-duplicate-key behavior
         // (real .NET's own message format: "An item with the same key has already been added.
         // Key: <key>").
@@ -218,11 +228,13 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     bool PropertyDictionary::Remove(const std::string& key)
     {
+        if(writeGuard_)writeGuard_();
         return dictionary_.erase(key) > 0;
     }
 
     bool PropertyDictionary::Remove(const System::Collections::Generic::KeyValuePair<std::string, std::any>& item)
     {
+        if(writeGuard_)writeGuard_();
         const auto found = dictionary_.find(item.Key);
         if (found == dictionary_.end() || !BoxedValuesEqual(found->second, item.Value))
         {
@@ -234,6 +246,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void PropertyDictionary::Clear()
     {
+        if(writeGuard_)writeGuard_();
         dictionary_.clear();
     }
 

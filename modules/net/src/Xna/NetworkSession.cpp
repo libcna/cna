@@ -17,6 +17,9 @@
 #include "System/ObjectDisposedException.hpp"
 #include <chrono>
 #include <thread>
+#include <map>
+#include <tuple>
+#include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
 
 namespace Microsoft::Xna::Framework::Net
 {
@@ -24,12 +27,7 @@ namespace Microsoft::Xna::Framework::Net
 
     namespace
     {
-        /// PlayerMatch and Ranked are Xbox LIVE matchmaking session types: the service
-        /// finds the peers, not the local machine. CNA has no such service, so these two
-        /// are refused rather than accepted into a session no peer can ever reach.
-        /// Real XNA refuses them too when the signed-in profile is not LIVE-eligible;
-        /// here the reason is that no eligible profile can exist at all, so the message
-        /// says that instead of imitating XNA's profile wording.
+        // The service directory is still pending GS-007; SystemLink uses ENet discovery.
         void ThrowIfSessionTypeNeedsMatchmakingService(NetworkSessionType sessionType)
         {
             if (sessionType == NetworkSessionType::PlayerMatch
@@ -40,8 +38,8 @@ namespace Microsoft::Xna::Framework::Net
                     + std::string(sessionType == NetworkSessionType::PlayerMatch
                                       ? "PlayerMatch"
                                       : "Ranked")
-                    + " requires an online matchmaking service, which this platform does "
-                      "not have. Use NetworkSessionType::SystemLink for a local network "
+                    + " requires the CNA session directory, which is not yet implemented. "
+                      "Use NetworkSessionType::SystemLink for a local network "
                       "session, or NetworkSessionType::Local for a single-machine one."
                 );
             }
@@ -329,6 +327,7 @@ namespace Microsoft::Xna::Framework::Net
 
     void NetworkSession::Dispose()
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         // Task 12.1: Dispose() itself was not idempotent - a second call (a real, reachable
         // pattern: e.g. an explicit Dispose() followed by an RAII wrapper/fixture destructor that
         // also unconditionally calls Dispose()) re-entered the body below and hit a use-after-free
@@ -341,6 +340,8 @@ namespace Microsoft::Xna::Framework::Net
             return;
         }
 
+        for(auto* gamer:localGamers_){gamer->leaderboardWriter_.EndServiceGameplay();if(gamer->getSignedInGamerProperty())gamer->getSignedInGamerProperty()->leaderboardWriter_.EndServiceGameplay();}
+        leaderboardGameplay_.clear();
         for (LocalNetworkGamer* gamer : localGamers_)
         {
             gamer->ClearPacketQueue();
@@ -387,6 +388,7 @@ namespace Microsoft::Xna::Framework::Net
 
     void NetworkSession::Update()
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         if (isDisposed_)
         {
             throw System::ObjectDisposedException("this");
@@ -448,10 +450,18 @@ namespace Microsoft::Xna::Framework::Net
             {
                 if (evt.State == NetworkSessionState::Playing)
                 {
+                    if(!leaderboardGameplay_.empty()) {
+                        for(auto* gamer:localGamers_){gamer->leaderboardWriter_.BeginServiceGameplay();gamer->getSignedInGamerProperty()->leaderboardWriter_.BeginServiceGameplay();}
+                        leaderboardTransitionPending_=false;
+                    }
                     GameStarted.Raise(this, GameStartedEventArgs());
                 }
                 else if (evt.State == NetworkSessionState::Lobby)
                 {
+                    if(!leaderboardGameplay_.empty()) {
+                        try{FinalizeServiceLeaderboards();}catch(...){leaderboardTransitionPending_=false;throw;}
+                        leaderboardTransitionPending_=false;
+                    }
                     GameEnded.Raise(this, GameEndedEventArgs());
                 }
                 else
@@ -465,6 +475,7 @@ namespace Microsoft::Xna::Framework::Net
 
     void NetworkSession::AddLocalGamer(SignedInGamer* gamer)
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         if (localGamers_.getCountProperty() == maxLocalGamers_)
         {
             throw System::InvalidOperationException("LocalGamer max limit!");
@@ -502,6 +513,7 @@ namespace Microsoft::Xna::Framework::Net
 
     void NetworkSession::ResetReady()
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         if (isDisposed_) throw System::ObjectDisposedException("this");
         if (!getIsHostProperty()) throw System::InvalidOperationException("This NetworkSession is not the host");
 
@@ -513,9 +525,17 @@ namespace Microsoft::Xna::Framework::Net
 
     void NetworkSession::StartGame()
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         if (isDisposed_) throw System::ObjectDisposedException("this");
         if (!getIsHostProperty()) throw System::InvalidOperationException("This NetworkSession is not the host");
         if (sessionState_ != NetworkSessionState::Lobby) throw System::InvalidOperationException("NetworkSession is not Lobby");
+        if(leaderboardTransitionPending_)throw System::InvalidOperationException("A gameplay transition is already pending.");
+        if(sessionType_==NetworkSessionType::LocalWithLeaderboards&&CNA::Internal::GamerServices::backend()->serviceEnabled()) {
+            std::vector<std::string> users;for(auto* gamer:localGamers_)users.push_back(gamer->serviceUserId_);
+            leaderboardGameplay_=CNA::Internal::GamerServices::backend()->beginLeaderboardGame(users);
+            leaderboardOwner_=users.front();leaderboardTransitionPending_=true;
+        }
+
 
         NetworkEvent evt;
         evt.Type = NetworkEventType::StateChange;
@@ -530,9 +550,13 @@ namespace Microsoft::Xna::Framework::Net
 
     void NetworkSession::EndGame()
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         if (isDisposed_) throw System::ObjectDisposedException("this");
         if (!getIsHostProperty()) throw System::InvalidOperationException("This NetworkSession is not the host");
         if (sessionState_ != NetworkSessionState::Playing) throw System::InvalidOperationException("NetworkSession is not Playing");
+        if(leaderboardTransitionPending_)throw System::InvalidOperationException("A gameplay transition is already pending.");
+        if(!leaderboardGameplay_.empty())leaderboardTransitionPending_=true;
+
 
         NetworkEvent evt;
         evt.Type = NetworkEventType::StateChange;
@@ -543,6 +567,25 @@ namespace Microsoft::Xna::Framework::Net
         {
             CNA::Internal::Net::ENetBackend::BroadcastStateChange(this, NetworkSessionState::Lobby);
         }
+    }
+
+    void NetworkSession::FinalizeServiceLeaderboards() {
+        using CNA::Internal::GamerServices::ServiceLeaderboardWrite;
+        std::map<std::tuple<std::string,std::string,int>,ServiceLeaderboardWrite> writes;
+        for(auto* gamer:localGamers_) {
+            CNA::Internal::GamerServices::withRestrictedServiceCalls([&]{WriteUnarbitratedLeaderboard.Raise(this,WriteLeaderboardsEventArgs::CreateInternal(gamer,false));});
+            for(auto* writer:{&gamer->leaderboardWriter_,&gamer->getSignedInGamerProperty()->leaderboardWriter_}) {
+                for(auto& row:writer->CollectServiceWrites()) {
+                    auto key=std::make_tuple(row.userId,row.key,row.mode);const auto existing=writes.find(key);
+                    if(existing!=writes.end()&&existing->second!=row)throw System::InvalidOperationException("Conflicting leaderboard writes for the same gamer.");
+                    writes[key]=std::move(row);
+                }
+            }
+        }
+        std::vector<ServiceLeaderboardWrite> rows;for(auto& [key,row]:writes){(void)key;rows.push_back(std::move(row));}
+        CNA::Internal::GamerServices::backend()->commitLeaderboardGame(leaderboardGameplay_,leaderboardOwner_,rows);
+        for(auto* gamer:localGamers_){gamer->leaderboardWriter_.EndServiceGameplay();gamer->getSignedInGamerProperty()->leaderboardWriter_.EndServiceGameplay();}
+        leaderboardGameplay_.clear();
     }
 
     void NetworkSession::SendNetworkEvent(NetworkEvent evt)
@@ -595,6 +638,7 @@ namespace Microsoft::Xna::Framework::Net
 
     void NetworkSession::RemoveGamer(NetworkGamer* gamer, NetworkSessionEndReason reason)
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         bool isLocal = false;
         for (LocalNetworkGamer* local : localGamers_)
         {
@@ -709,6 +753,7 @@ namespace Microsoft::Xna::Framework::Net
         std::any asyncState
     )
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         if (maxLocalGamers < 1 || maxLocalGamers > 4)
         {
             throw System::ArgumentOutOfRangeException("maxLocalGamers");
@@ -741,6 +786,7 @@ namespace Microsoft::Xna::Framework::Net
         std::any asyncState
     )
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         if (maxLocalGamers < 1 || maxLocalGamers > 4)
         {
             throw System::ArgumentOutOfRangeException("maxLocalGamers");
@@ -777,6 +823,7 @@ namespace Microsoft::Xna::Framework::Net
         std::any asyncState
     )
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         if (maxGamers < 2 || maxGamers > MaxSupportedGamers)
         {
             throw System::ArgumentOutOfRangeException("maxGamers");
@@ -801,6 +848,7 @@ namespace Microsoft::Xna::Framework::Net
 
     NetworkSession* NetworkSession::EndCreate(System::IAsyncResult* result)
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         if (result != activeAction_)
         {
             throw System::ArgumentException("result");
@@ -892,6 +940,7 @@ namespace Microsoft::Xna::Framework::Net
         std::any asyncState
     )
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         if (sessionType == NetworkSessionType::Local)
         {
             throw System::ArgumentException("sessionType");
@@ -922,6 +971,7 @@ namespace Microsoft::Xna::Framework::Net
         std::any asyncState
     )
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         if (sessionType == NetworkSessionType::Local)
         {
             throw System::ArgumentException("sessionType");
@@ -944,6 +994,7 @@ namespace Microsoft::Xna::Framework::Net
 
     AvailableNetworkSessionCollection NetworkSession::EndFind(System::IAsyncResult* result)
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         if (result != activeAction_)
         {
             throw System::ArgumentException("result");
@@ -986,6 +1037,7 @@ namespace Microsoft::Xna::Framework::Net
         std::any asyncState
     )
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         if (availableSession == nullptr)
         {
             throw System::ArgumentNullException("availableSession");
@@ -1015,6 +1067,7 @@ namespace Microsoft::Xna::Framework::Net
 
     NetworkSession* NetworkSession::EndJoin(System::IAsyncResult* result)
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         if (result != activeAction_)
         {
             throw System::ArgumentException("result");
@@ -1150,6 +1203,7 @@ namespace Microsoft::Xna::Framework::Net
         std::any
     )
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         if (maxLocalGamers < 1 || maxLocalGamers > 4)
         {
             throw System::ArgumentOutOfRangeException("maxLocalGamers");
@@ -1177,6 +1231,7 @@ namespace Microsoft::Xna::Framework::Net
         std::any
     )
     {
+        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         if (activeAction_ != nullptr || activeSession_ != nullptr)
         {
             throw System::InvalidOperationException();

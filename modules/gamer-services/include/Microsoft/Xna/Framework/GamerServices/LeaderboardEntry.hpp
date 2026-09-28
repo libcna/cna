@@ -98,6 +98,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         CNAEXT static LeaderboardEntry CreateInternal(Gamer* gamer, long long rating, int ranking);
 
     private:
+        friend class LeaderboardWriter;
+        std::function<void()> validateWrite_;
         LeaderboardEntry(Gamer* gamer, long long rating, int ranking);
 
         Gamer* gamer_;

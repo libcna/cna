@@ -4,6 +4,8 @@
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/NotSupportedException.hpp"
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
@@ -14,6 +16,10 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     LeaderboardEntry* LeaderboardWriter::GetLeaderboard(const LeaderboardIdentity& leaderboardId)
     {
+        if(!owner_->serviceUserId_.empty()) {
+            if(owner_->getIsDisposedProperty())throw System::ObjectDisposedException("Gamer");
+            if(!writeScope_||!writeScope_->active)throw System::InvalidOperationException("Leaderboards can only be written during network gameplay.");
+        }
         const std::string fileKey = CNA::Internal::GamerServices::MakeLeaderboardFileKeyEXT(
             leaderboardId.getKeyProperty(), leaderboardId.getGameModeProperty()
         );
@@ -26,10 +32,9 @@ namespace Microsoft::Xna::Framework::GamerServices
 
         if(!owner_->serviceUserId_.empty()) {
             if(owner_->getIsDisposedProperty())throw System::ObjectDisposedException("Gamer");
-            const auto page=CNA::Internal::GamerServices::backend()->readLeaderboard(leaderboardId.getKeyProperty(),leaderboardId.getGameModeProperty(),0,1,owner_->getGamertagProperty(),std::vector<std::string>{owner_->getGamertagProperty()});
-            auto entry=LeaderboardEntry::CreateInternal(owner_,page.entries.empty()?0:page.entries[0].rating,0);
+            auto entry=LeaderboardEntry::CreateInternal(owner_,0,0);
             auto [inserted,created]=entriesByLeaderboardKeyEXT_.emplace(fileKey,std::move(entry));(void)created;
-            // Service writers are transient; the session boundary will own submission (GS-006b).
+            identities_[fileKey]=leaderboardId;BindServiceEntry(fileKey,inserted->second);
             return &inserted->second;
         }
 
@@ -58,9 +63,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         (void) didInsert; // always true here - the find() above already ruled out an existing entry
         LeaderboardEntry* result = &inserted->second;
 
-        // See LeaderboardEntry::setRatingProperty()'s own doc comment for why Rating-set is the
-        // real XNA-faithful trigger for "persist this now" (no explicit commit/submit method
-        // exists anywhere in the real LeaderboardWriter API surface).
+        // Explicit offline fixtures retain their legacy persistence hook; service writers
+        // instead collect drafts for the session EndGame transaction.
         Gamer* owner = owner_;
         result->SetOnRatingChangedHookEXT([result, fileKey, owner]() {
             CNA::Internal::GamerServices::PersistedLeaderboardEntry record;
@@ -71,4 +75,45 @@ namespace Microsoft::Xna::Framework::GamerServices
 
         return result;
     }
+    void LeaderboardWriter::BindServiceEntry(const std::string& key,LeaderboardEntry& entry) {
+        const std::weak_ptr<WriteScope> weak=writeScope_;
+        auto guard=[weak,key] {const auto scope=weak.lock();if(!scope||!scope->active)throw System::InvalidOperationException("Leaderboards can only be written during network gameplay.");scope->dirty.insert(key);};
+        entry.validateWrite_=guard;entry.columns_.writeGuard_=guard;
+        entry.SetOnRatingChangedHookEXT({});
+    }
+    void LeaderboardWriter::BeginServiceGameplay() {
+        if(owner_->serviceUserId_.empty())return;
+        if(writeScope_)writeScope_->active=false;
+        writeScope_=std::make_shared<WriteScope>();writeScope_->active=true;
+        for(auto& [key,entry]:entriesByLeaderboardKeyEXT_) {
+            entry.rating_=0;entry.columns_.dictionary_.clear();BindServiceEntry(key,entry);
+        }
+    }
+    void LeaderboardWriter::EndServiceGameplay() {if(writeScope_)writeScope_->active=false;}
+    std::vector<CNA::Internal::GamerServices::ServiceLeaderboardWrite> LeaderboardWriter::CollectServiceWrites() const {
+        using CNA::Internal::GamerServices::ServiceLeaderboardWrite;
+        using CNA::Internal::GamerServices::ServiceLeaderboardColumn;
+        std::vector<ServiceLeaderboardWrite> result;
+        if(!writeScope_||!writeScope_->active)return result;
+        for(const auto& key:writeScope_->dirty) {
+            const auto& entry=entriesByLeaderboardKeyEXT_.at(key);const auto& identity=identities_.at(key);
+            ServiceLeaderboardWrite row;row.userId=owner_->serviceUserId_;row.key=identity.getKeyProperty();row.mode=identity.getGameModeProperty();row.rating=entry.getRatingProperty();
+            for(const auto& [name,value]:entry.getColumnsProperty()) {
+                ServiceLeaderboardColumn column;
+                if(auto* v=std::any_cast<int>(&value)){column.type="int32";column.value=static_cast<long long>(*v);}
+                else if(auto* v=std::any_cast<long long>(&value)){column.type="int64";column.value=*v;}
+                else if(auto* v=std::any_cast<float>(&value)){column.type="single";column.value=static_cast<double>(*v);}
+                else if(auto* v=std::any_cast<double>(&value)){column.type="double";column.value=*v;}
+                else if(auto* v=std::any_cast<std::string>(&value)){column.type="string";column.value=*v;}
+                else if(auto* v=std::any_cast<System::DateTime>(&value)){column.type="datetime";column.value=v->getTicksProperty();}
+                else if(auto* v=std::any_cast<System::TimeSpan>(&value)){column.type="timespan";column.value=v->getTicksProperty();}
+                else if(auto* v=std::any_cast<LeaderboardOutcome>(&value)){column.type="outcome";column.value=static_cast<long long>(*v);}
+                else throw System::NotSupportedException("The service leaderboard column type has no supported transport representation.");
+                row.columns.emplace(name,std::move(column));
+            }
+            result.push_back(std::move(row));
+        }
+        return result;
+    }
+
 }

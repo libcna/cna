@@ -229,12 +229,7 @@ namespace CNA::Internal::Net
             }
         }
 
-        // The gamertag to put on the wire for gamer. LocalNetworkGamer::getGamertagProperty()
-        // always reports "Stub Gamer" (an unchanged, preserved FNA stub behavior — see
-        // NetworkGamer.cpp), so its real identity for other machines comes from the underlying
-        // SignedInGamer instead. Already-remote NetworkGamer instances were constructed with
-        // their real gamertag (see HandleClientHello/HandleServerWelcome/
-        // HandleGamerJoinBroadcast), so getGamertagProperty() is correct for them as-is.
+        // Roster identity comes from the local signed-in account or the received remote identity.
         std::string WireGamertagFor(NetworkGamer* gamer)
         {
             if (auto* local = dynamic_cast<LocalNetworkGamer*>(gamer))
