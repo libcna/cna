@@ -264,6 +264,40 @@ namespace CNA::Internal::Net
         return message;
     }
 
+    // --- GamerReadyBroadcast ---
+
+    std::vector<bytecs> NetPacketCodec::Encode(const GamerReadyMessage& message)
+    {
+        PacketWriter writer;
+        writer.Write(static_cast<bytecs>(MessageTag::GamerReadyBroadcast));
+        writer.Write(EncodeCount(message.Entries.size(), "GamerReadyMessage.Entries"));
+        for (const auto& entry : message.Entries)
+        {
+            writer.Write(static_cast<bytecs>(entry.WireId));
+            writer.Write(entry.IsReady);
+        }
+        return ExtractBytes(writer);
+    }
+
+    GamerReadyMessage NetPacketCodec::DecodeGamerReady(const std::vector<bytecs>& data)
+    {
+        PacketReader reader;
+        FillReader(reader, data);
+        (void) reader.ReadByte(); // skip the tag byte (already inspected by the caller via PeekTag)
+
+        GamerReadyMessage message;
+        const bytecs count = reader.ReadByte();
+        message.Entries.reserve(count);
+        for (bytecs i = 0; i < count; ++i)
+        {
+            GamerReadyEntry entry;
+            entry.WireId = reader.ReadByte();
+            entry.IsReady = reader.ReadBoolean();
+            message.Entries.push_back(entry);
+        }
+        return message;
+    }
+
     // --- SessionPropertiesBroadcast ---
 
     std::vector<bytecs> NetPacketCodec::Encode(const SessionPropertiesBroadcastMessage& message)

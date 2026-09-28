@@ -341,6 +341,31 @@ TEST(NetworkSessionTest, IsEveryoneReadyReflectsLocalGamers) {
     session->Dispose();
 }
 
+TEST(NetworkSessionTest, IsReadyIsSetOnlyInTheLobbyAndClearsWhenTheGameEnds) {
+    auto gamer = MakeSignedInGamer();
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
+    );
+    auto* local = session->getLocalGamersProperty()[0];
+
+    local->setIsReadyProperty(true);
+    session->StartGame();
+    session->Update();
+    ASSERT_EQ(session->getSessionStateProperty(), NetworkSessionState::Playing);
+    EXPECT_TRUE(local->getIsReadyProperty());
+    EXPECT_THROW(local->setIsReadyProperty(false), System::InvalidOperationException);
+    EXPECT_THROW(session->ResetReady(), System::InvalidOperationException);
+
+    // Every machine starts the next lobby with nobody ready.
+    session->EndGame();
+    session->Update();
+    ASSERT_EQ(session->getSessionStateProperty(), NetworkSessionState::Lobby);
+    EXPECT_FALSE(local->getIsReadyProperty());
+    EXPECT_FALSE(session->getIsEveryoneReadyProperty());
+
+    session->Dispose();
+}
+
 TEST(NetworkSessionTest, ResetReadySetsAllGamersNotReady) {
     auto gamer = MakeSignedInGamer();
     NetworkSession* session = NetworkSession::Create(

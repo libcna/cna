@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) Robert Vokac and contributors
 #include <gtest/gtest.h>
+#include <optional>
 
 #include "CNA/Internal/Net/ENetBackend.hpp"
 #include "CNA/Internal/Net/ENetDiscoveryService.hpp"
@@ -1770,6 +1771,124 @@ TEST(ENetBackendTest, HostBroadcastsStateChangeOnStartAndEndGame) {
     EXPECT_EQ(NetPacketCodec::DecodeStateChangeBroadcast(data).NewState, NetworkSessionState::Lobby);
     enet_packet_destroy(received);
     EXPECT_EQ(host.session->getSessionStateProperty(), NetworkSessionState::Lobby);
+}
+
+namespace {
+    // Waits for the next GamerReadyBroadcast the fake machine receives, draining anything else.
+    std::optional<GamerReadyMessage> NextGamerReady(ENetHostHandle& fake, NetworkSession* session) {
+        for (int i = 0; i < 200; ++i, PollYield()) {
+            session->Update();
+            ENetEvent evt{};
+            if (fake.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
+                std::vector<SharpRuntime::bytecs> data(evt.packet->data, evt.packet->data + evt.packet->dataLength);
+                enet_packet_destroy(evt.packet);
+                if (NetPacketCodec::PeekTag(data) == MessageTag::GamerReadyBroadcast) return NetPacketCodec::DecodeGamerReady(data);
+            }
+        }
+        return std::nullopt;
+    }
+}
+
+TEST(ENetBackendTest, LobbyReadinessTravelsBetweenHostAndClient) {
+    SystemLinkSessionFixture host("HostPlayer");
+    ENetHostHandle fakeClient = ENetHostHandle::CreateClient(2);
+    ENetPeer* peerFromClientSide = nullptr;
+    const uint8_t clientWireId = ConnectFakeClientAndCompleteHandshake(fakeClient, host.session, &peerFromClientSide);
+    for (int i = 0; i < 200 && host.session->getAllGamersProperty().getCountProperty() < 2; ++i, PollYield()) host.session->Update();
+    ASSERT_EQ(host.session->getAllGamersProperty().getCountProperty(), 2);
+    auto* local = host.session->getLocalGamersProperty()[0];
+    NetworkGamer* remote = host.session->getRemoteGamersProperty()[0];
+
+    // The host's own gamer: every client hears it.
+    local->setIsReadyProperty(true);
+    auto heard = NextGamerReady(fakeClient, host.session);
+    ASSERT_TRUE(heard.has_value());
+    ASSERT_EQ(heard->Entries.size(), 1u);
+    EXPECT_TRUE(heard->Entries[0].IsReady);
+    EXPECT_NE(heard->Entries[0].WireId, clientWireId);
+    EXPECT_FALSE(host.session->getIsEveryoneReadyProperty());
+
+    // A client may not speak for the host's gamer, only for its own.
+    auto forged = NetPacketCodec::Encode(GamerReadyMessage{{GamerReadyEntry{heard->Entries[0].WireId, false}}});
+    fakeClient.Send(peerFromClientSide, 0, forged.data(), forged.size(), ENET_PACKET_FLAG_RELIABLE);
+    auto own = NetPacketCodec::Encode(GamerReadyMessage{{GamerReadyEntry{clientWireId, true}}});
+    fakeClient.Send(peerFromClientSide, 0, own.data(), own.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeClient.Flush();
+    for (int i = 0; i < 200 && !remote->getIsReadyProperty(); ++i, PollYield()) host.session->Update();
+    EXPECT_TRUE(remote->getIsReadyProperty());
+    EXPECT_TRUE(local->getIsReadyProperty());
+    EXPECT_TRUE(host.session->getIsEveryoneReadyProperty());
+
+    // ResetReady speaks for everyone, the client's gamer included.
+    host.session->ResetReady();
+    EXPECT_FALSE(host.session->getIsEveryoneReadyProperty());
+    heard = NextGamerReady(fakeClient, host.session);
+    ASSERT_TRUE(heard.has_value());
+    EXPECT_EQ(heard->Entries.size(), 2u);
+    for (const auto& entry : heard->Entries) EXPECT_FALSE(entry.IsReady);
+}
+
+TEST(ENetBackendTest, AJoiningMachineLearnsWhoIsAlreadyReady) {
+    SystemLinkSessionFixture host("HostPlayer");
+    host.session->getLocalGamersProperty()[0]->setIsReadyProperty(true);
+    ENetHostHandle fakeClient = ENetHostHandle::CreateClient(2);
+    ENetPeer* peerFromClientSide = nullptr;
+    const uint8_t clientWireId = ConnectFakeClientAndCompleteHandshake(fakeClient, host.session, &peerFromClientSide);
+    auto heard = NextGamerReady(fakeClient, host.session);
+    ASSERT_TRUE(heard.has_value());
+    ASSERT_EQ(heard->Entries.size(), 1u);
+    EXPECT_NE(heard->Entries[0].WireId, clientWireId);
+    EXPECT_TRUE(heard->Entries[0].IsReady);
+}
+
+TEST(ENetBackendTest, ClientAppliesTheHostsReadinessReportsOnly) {
+    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(kFakeHostTestPort, 4, 2);
+    SystemLinkSessionFixture client("ClientPlayer");
+    ENetBackend::ConnectToHost(client.session, "127.0.0.1", fakeHost.getBoundPortProperty());
+    ENetPeer* clientPeerFromHostSide = nullptr;
+    for (int i = 0; i < 200 && !clientPeerFromHostSide; ++i, PollYield()) {
+        client.session->Update();
+        ENetEvent evt{};
+        if (fakeHost.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) clientPeerFromHostSide = evt.peer;
+    }
+    ASSERT_NE(clientPeerFromHostSide, nullptr);
+
+    // Welcome the client (wire id 2) with the host's gamer (wire id 1) in the roster.
+    ServerWelcomeMessage welcome;
+    welcome.AssignedWireIds = {2};
+    welcome.ExistingRoster = {RosterEntry{1, "FakeHost", true}};
+    auto welcomeBytes = NetPacketCodec::Encode(welcome);
+    fakeHost.Send(clientPeerFromHostSide, 0, welcomeBytes.data(), welcomeBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeHost.Flush();
+    for (int i = 0; i < 200 && client.session->getAllGamersProperty().getCountProperty() < 2; ++i, PollYield()) client.session->Update();
+    ASSERT_EQ(client.session->getAllGamersProperty().getCountProperty(), 2);
+
+    // The client's own change goes to the host.
+    auto* local = client.session->getLocalGamersProperty()[0];
+    local->setIsReadyProperty(true);
+    std::optional<GamerReadyMessage> reported;
+    for (int i = 0; i < 200 && !reported; ++i, PollYield()) {
+        client.session->Update();
+        ENetEvent evt{};
+        if (fakeHost.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
+            std::vector<SharpRuntime::bytecs> data(evt.packet->data, evt.packet->data + evt.packet->dataLength);
+            enet_packet_destroy(evt.packet);
+            if (NetPacketCodec::PeekTag(data) == MessageTag::GamerReadyBroadcast) reported = NetPacketCodec::DecodeGamerReady(data);
+        }
+    }
+    ASSERT_TRUE(reported.has_value());
+    ASSERT_EQ(reported->Entries.size(), 1u);
+    EXPECT_EQ(reported->Entries[0].WireId, 2);
+    EXPECT_TRUE(reported->Entries[0].IsReady);
+
+    // The host's reports apply to anyone: its own gamer, and the client's (ResetReady).
+    auto hostReport = NetPacketCodec::Encode(GamerReadyMessage{{GamerReadyEntry{1, true}, GamerReadyEntry{2, false}}});
+    fakeHost.Send(clientPeerFromHostSide, 0, hostReport.data(), hostReport.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeHost.Flush();
+    NetworkGamer* remote = client.session->getRemoteGamersProperty()[0];
+    for (int i = 0; i < 200 && !remote->getIsReadyProperty(); ++i, PollYield()) client.session->Update();
+    EXPECT_TRUE(remote->getIsReadyProperty());
+    EXPECT_FALSE(local->getIsReadyProperty());
 }
 
 TEST(ENetBackendTest, ClientProcessesStateChangeBroadcast) {

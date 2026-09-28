@@ -814,6 +814,28 @@ namespace Microsoft::Xna::Framework::Net
     private:
         friend class CNA::Internal::Net::ENetBackend;
         friend class CNA::Internal::Net::OnlineSessionBinding;
+        friend class NetworkGamer;
+
+        /**
+         * @brief Sends the ready state of gamers to the other machines of the session: a client
+         * reports its own gamers to the host, the host reports to every client.
+         *
+         * @param gamers Gamers whose ready state changed.
+         */
+        CNAEXT void PublishGamerReady(const std::vector<NetworkGamer*>& gamers);
+
+        /**
+         * @brief Clears every gamer's ready state; each machine does this when a game ends.
+         */
+        CNAEXT void ClearReadyInternal();
+
+        /**
+         * @brief Applies a ready state the session transport reported for one gamer.
+         *
+         * @param gamer The gamer the report names.
+         * @param value The reported ready state.
+         */
+        CNAEXT static void ApplyGamerReadyInternal(NetworkGamer& gamer, bool value);
 
         /**
          * @brief Replaces the session host with the identity established by the transport.

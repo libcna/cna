@@ -131,9 +131,11 @@ namespace Microsoft::Xna::Framework::Net
         [[nodiscard]] bool getIsReadyProperty() const;
 
         /**
-         * @brief Sets whether this gamer is ready.
+         * @brief Sets whether this gamer is ready; every machine in the session sees the change.
          *
          * @param value The new ready state.
+         * @throws System::InvalidOperationException if the gamer has left the session, is not
+         *         local, or the session is not in the Lobby state.
          */
         void setIsReadyProperty(bool value);
 
@@ -226,6 +228,18 @@ namespace Microsoft::Xna::Framework::Net
         explicit NetworkGamer(NetworkSession* session, const std::string& gamertag = "Stub Gamer");
 
     private:
+        friend class NetworkSession;
+        CNAEXT friend struct NetworkGamerReadyTestAccess;
+
+        /**
+         * @brief Applies a ready state reported by the session transport (through
+         * NetworkSession::ApplyGamerReadyInternal), or a session-wide reset, without the local-gamer
+         * checks and without publishing it again.
+         *
+         * @param value The ready state.
+         */
+        CNAEXT void SetIsReadyInternal(bool value);
+
         bool hasLeftSession_{false};
         bool hasVoice_{false};
         SharpRuntime::bytecs id_{0};

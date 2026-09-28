@@ -6,6 +6,7 @@
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
+#include <optional>
 
 namespace {
 using namespace OnlineSessionTesting;
@@ -96,6 +97,42 @@ TEST_F(OnlineNetworkSessionTest, HostProjectsRemoteGroupsDataStateAndDepartureAt
     EXPECT_EQ(0,session->getRemoteGamersProperty().getCountProperty());
     const auto id=sessionId("b");session->Dispose();
     EXPECT_THROW((void)service->sessionDirectory().get("a",id),Service::ServiceOperationError);
+}
+
+TEST_F(OnlineNetworkSessionTest, LobbyReadinessCrossesTheServiceSessionAndClearsWhenTheGameEnds) {
+    session=NetworkSession::Create(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(0),gamer(2)},6,0,properties());
+    int started=0,ended=0;
+    session->GameStarted+=[&](auto*,const GameStartedEventArgs&){++started;};
+    session->GameEnded+=[&](auto*,const GameEndedEventArgs&){++ended;};
+    privatePeer(true,sessionId("b"));
+    until([&]{return peer->ready()&&session->getAllGamersProperty().getCountProperty()==4;});
+    const auto reported=[&](unsigned char id){
+        std::optional<bool> value;
+        for(const auto& event:observed)if(event.type==ServiceENetObservation::Type::Readiness)
+            for(const auto& entry:event.readiness)if(entry.WireId==id)value=entry.IsReady;
+        return value;
+    };
+    auto* alice=session->getLocalGamersProperty()[0];auto* charlie=session->getLocalGamersProperty()[1];
+    auto* bob=session->getRemoteGamersProperty()[0];auto* dana=session->getRemoteGamersProperty()[1];
+    EXPECT_THROW(bob->setIsReadyProperty(true),System::InvalidOperationException);
+    alice->setIsReadyProperty(true);charlie->setIsReadyProperty(true);
+    until([&]{return reported(1)==true&&reported(2)==true;});
+    peer->publishReady({{3,true}});
+    until([&]{return bob->getIsReadyProperty();});
+    EXPECT_FALSE(dana->getIsReadyProperty());EXPECT_FALSE(session->getIsEveryoneReadyProperty());
+    peer->publishReady({{4,true}});
+    until([&]{return session->getIsEveryoneReadyProperty();});
+
+    session->StartGame();until([&]{return started==1;});
+    EXPECT_THROW(alice->setIsReadyProperty(false),System::InvalidOperationException);
+    session->EndGame();until([&]{return ended==1;});
+    for(auto* gamer:std::array<NetworkGamer*,4>{alice,charlie,bob,dana})EXPECT_FALSE(gamer->getIsReadyProperty());
+    EXPECT_FALSE(session->getIsEveryoneReadyProperty());
+    // The host may clear anyone's readiness; the report reaches the other machine.
+    until([&]{return peer->snapshot().state==Service::ServiceSessionState::Lobby;});
+    peer->publishReady({{3,true}});until([&]{return bob->getIsReadyProperty();});
+    session->ResetReady();EXPECT_FALSE(bob->getIsReadyProperty());
+    until([&]{return reported(3)==false;});
 }
 
 TEST_F(OnlineNetworkSessionTest, PublicJoinUsesTheFindGroupAndFollowsDirectoryAuthority) {

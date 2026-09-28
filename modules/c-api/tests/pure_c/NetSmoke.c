@@ -430,8 +430,9 @@ static int validate_gamer_mutation(const CNA_NetworkGamerHandle gamer)
         cna_network_gamer_get_is_host(gamer, &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE) {
         return 0;
     }
-    if (cna_network_gamer_set_is_ready(gamer, CNA_TRUE) != CNA_RESULT_SUCCESS ||
-        cna_network_gamer_get_is_ready(gamer, &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE) {
+    /* Readiness belongs to a local gamer in a lobby; a detached gamer is refused and keeps it. */
+    if (cna_network_gamer_set_is_ready(gamer, CNA_TRUE) != CNA_RESULT_INVALID_STATE ||
+        cna_network_gamer_get_is_ready(gamer, &flag) != CNA_RESULT_SUCCESS || flag != CNA_FALSE) {
         return 0;
     }
     return cna_network_gamer_set_roundtrip_ticks_ext(gamer, INT64_C(5000)) ==

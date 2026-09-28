@@ -45,6 +45,9 @@ public:
      * @param options Delivery semantics. */
     void send(Microsoft::Xna::Framework::Net::NetworkGamer* sender,Microsoft::Xna::Framework::Net::NetworkGamer* target,
         const std::vector<SharpRuntime::bytecs>& payload,SendDataOptions options);
+    /** @brief Sends gamers' lobby ready state to the other machines.
+     * @param gamers Gamers whose ready state changed. */
+    void publishReady(const std::vector<Microsoft::Xna::Framework::Net::NetworkGamer*>& gamers);
     /** @brief Records the host's requested gameplay state for directory publication.
      * @param state Lobby or Playing. */
     void requestState(NetworkSessionState state);

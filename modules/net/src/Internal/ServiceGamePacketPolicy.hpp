@@ -6,7 +6,7 @@
 namespace CNA::Internal::Net {
 /** @brief Owned control data admitted by an authenticated service machine, never an XNA object. */
 using ServiceGameControl=std::variant<ClientHelloMessage,ServerWelcomeMessage,GamerJoinBroadcastMessage,GamerLeaveBroadcastMessage,
-    StateChangeBroadcastMessage,SessionPropertiesBroadcastMessage>;
+    StateChangeBroadcastMessage,SessionPropertiesBroadcastMessage,GamerReadyMessage>;
 /** @brief Immutable directory authority applied before any online peer packet mutates game state. */
 class ServiceGamePacketPolicy {
 public:

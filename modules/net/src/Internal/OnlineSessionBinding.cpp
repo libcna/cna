@@ -170,6 +170,13 @@ void OnlineSessionBinding::convert(ServiceENetObservation observation) {
         case Type::Snapshot:
             if(observation.snapshot)apply(*observation.snapshot,false);
             break;
+        case Type::Readiness:
+            if(session_.sessionState_!=NetworkSessionState::Lobby)break;
+            for(const auto& entry:observation.readiness) {
+                auto found=gamers_.find(entry.WireId);
+                if(found!=gamers_.end())NetworkSession::ApplyGamerReadyInternal(*found->second,entry.IsReady);
+            }
+            break;
         case Type::Failed:
             end(observation.failure);
             break;
@@ -215,6 +222,16 @@ void OnlineSessionBinding::send(NetworkGamer* sender,NetworkGamer* target,const 
         if(error.code=="INVALID_ARGUMENT")throw System::ArgumentException("data");
         // Any other refusal races a transport failure that the next observation reports as SessionEnded.
     }
+}
+void OnlineSessionBinding::publishReady(const std::vector<NetworkGamer*>& gamers) {
+    if(ended_||!engine_)return;
+    std::vector<GamerReadyEntry> entries;
+    for(auto* gamer:gamers) {
+        auto found=gamers_.find(gamer->getIdProperty());
+        if(found!=gamers_.end()&&found->second==gamer)entries.push_back(GamerReadyEntry{gamer->getIdProperty(),gamer->getIsReadyProperty()});
+    }
+    // A transport failure is reported as SessionEnded by the next observation.
+    try{engine_->publishReady(entries);}catch(const ServiceOperationError&){}
 }
 void OnlineSessionBinding::requestState(NetworkSessionState state) {
     desiredState_=state==NetworkSessionState::Playing?ServiceSessionState::Playing:ServiceSessionState::Lobby;

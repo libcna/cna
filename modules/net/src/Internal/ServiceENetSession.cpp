@@ -46,6 +46,8 @@ struct ServiceENetSession::Impl {
     ENetPeer* upstream=nullptr;
     std::map<ENetPeer*,Peer> peers;
     std::map<unsigned char,RosterEntry> remoteGamers;
+    // Lobby readiness by gamer ID, as last published or reported; cleared when a game starts or ends.
+    std::map<unsigned char,bool> readiness;
     std::vector<ServiceENetObservation> observations;
     std::shared_ptr<OutgoingBudget> outgoing=std::make_shared<OutgoingBudget>();
     std::size_t queuedBytes=0,queuedData=0;
@@ -127,6 +129,15 @@ struct ServiceENetSession::Impl {
     std::string machineFor(unsigned char id)const {
         for(const auto& row:current.members)if(row.ordinal+1==id)return row.machine;return {};
     }
+    // The recipient's own gamers are left out: it is their authority, and an echo could undo a change still in flight.
+    void sendReadiness(ENetPeer* peer,const std::string& machine) {
+        GamerReadyMessage message;
+        for(const auto& [id,isReady]:readiness) {
+            const auto owner=machineFor(id);
+            if(!owner.empty()&&owner!=machine)message.Entries.push_back(GamerReadyEntry{id,isReady});
+        }
+        if(!message.Entries.empty())transmit(peer,NetPacketCodec::Encode(message));
+    }
     std::vector<std::string> admitted()const {
         std::set<std::string> machines;
         if(host){for(const auto& [peer,value]:peers)if(value.admitted)machines.insert(value.machine);}
@@ -173,7 +184,7 @@ struct ServiceENetSession::Impl {
     }
     void remove(const std::vector<unsigned char>& ids,bool broadcast) {
         GamerLeaveBroadcastMessage leave;
-        for(auto id:ids)if(remoteGamers.erase(id))leave.WireIds.push_back(id);
+        for(auto id:ids){readiness.erase(id);if(remoteGamers.erase(id))leave.WireIds.push_back(id);}
         if(leave.WireIds.empty())return;
         ServiceENetObservation event;event.type=ServiceENetObservation::Type::Left;event.ids=leave.WireIds;emit(std::move(event));
         if(broadcast){const auto bytes=NetPacketCodec::Encode(leave);for(const auto& [peer,value]:peers)if(value.admitted)transmit(peer,bytes);}
@@ -196,6 +207,7 @@ struct ServiceENetSession::Impl {
         remove(departed,host);
         const bool revised=value.revision!=current.revision;
         const bool stateChanged=value.state!=current.state;
+        if(stateChanged)readiness.clear();
         const bool settingsChanged=value.properties!=current.properties||value.maxGamers!=current.maxGamers
             ||value.privateSlots!=current.privateSlots||value.allowJoinInProgress!=current.allowJoinInProgress;
         current=std::move(value);roster=std::move(next);
@@ -269,6 +281,9 @@ struct ServiceENetSession::Impl {
                 auto connected=admitted();std::erase(connected,found->second.machine);
                 const auto welcome=roster->welcomeFor(found->second.machine,helloMessage->LocalGamertags,connected);
                 if(!transmit(peer,NetPacketCodec::Encode(welcome)))return;
+                // Readiness follows every welcome, including a client's re-hello after a directory revision, so a
+                // report dropped while that client's directory view lagged behind a new gamer still converges.
+                sendReadiness(peer,found->second.machine);
                 if(found->second.admitted)return;
                 found->second.admitted=true;GamerJoinBroadcastMessage joined;
                 for(const auto& row:current.members)if(row.machine==found->second.machine)
@@ -282,6 +297,17 @@ struct ServiceENetSession::Impl {
                     event.gamers=welcome->ExistingRoster;event.snapshot=current;emit(std::move(event));}
             }else if(auto* join=std::get_if<GamerJoinBroadcastMessage>(&message))add(join->NewGamers);
             else if(auto* leave=std::get_if<GamerLeaveBroadcastMessage>(&message))remove(leave->WireIds,false);
+            else if(auto* ready=std::get_if<GamerReadyMessage>(&message)) {
+                // The XNA session applies a report only in its own Lobby state, which a host reaches at EndGame
+                // before the directory records it; gating here on the directory's state would drop that report.
+                for(const auto& entry:ready->Entries)readiness[entry.WireId]=entry.IsReady;
+                ServiceENetObservation event;event.type=ServiceENetObservation::Type::Readiness;event.readiness=ready->Entries;emit(std::move(event));
+                if(host) {
+                    // The host passes a client's report on to the other clients.
+                    const auto encoded=NetPacketCodec::Encode(*ready);
+                    for(const auto& [other,value]:peers)if(other!=peer&&value.admitted)transmit(other,encoded);
+                }
+            }
             // State/properties are published through the directory observation, already validated above.
         }catch(const ServiceOperationError&){fail("GAME_TRANSPORT_UNAVAILABLE");}
         catch(const CnaService::Error&) {
@@ -357,6 +383,21 @@ struct ServiceENetSession::Impl {
         transport().Flush();
     }
 };
+void ServiceENetSession::publishReady(const std::vector<GamerReadyEntry>& entries) {
+    impl_->checkOwner();
+    auto& impl=*impl_;
+    if(entries.empty()||impl.stopped||!impl.ready)return;
+    for(const auto& entry:entries) {
+        // A client reports only its own gamers; the host may report anyone (ResetReady).
+        if(!impl.host&&std::find(impl.localIds.begin(),impl.localIds.end(),entry.WireId)==impl.localIds.end())
+            throw ServiceOperationError("NOT_AUTHORIZED");
+        impl.readiness[entry.WireId]=entry.IsReady;
+    }
+    const auto bytes=NetPacketCodec::Encode(GamerReadyMessage{entries});
+    if(impl.host){for(const auto& [peer,value]:impl.peers)if(value.admitted)impl.transmit(peer,bytes);}
+    else if(impl.upstream)impl.transmit(impl.upstream,bytes);
+    impl.transport().Flush();
+}
 void ServiceENetSession::publish(const ServiceSessionSettings& settings) {
     impl_->checkOwner();if(!impl_->host)throw ServiceOperationError("NOT_AUTHORIZED");
     if(!impl_->stopped)impl_->control->publish(settings);

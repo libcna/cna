@@ -2021,8 +2021,8 @@ it is gone, re-unpack Debian slirp4netns 1.2.1-1.1 / libslirp 4.8.0-1+deb13u1 th
 Open follow-ups created or confirmed by this slice (not claimed):
 - GS-007h: online host migration (server ends the directory on host leave; AllowHostMigration
   is stored but inert online).
-- GS-007i: IsReady / per-gamer state propagation (SystemLink lacks it too) and reference
-  IsEveryoneReady (all gamers, non-empty).
+- GS-007i (done, see "GS-007i complete" below): IsReady / per-gamer state propagation (SystemLink
+  lacks it too) and reference IsEveryoneReady (all gamers, non-empty).
 - GS-007j: NetworkMachine.RemoveFromSession (reference validation order known; needs a server
   host-kick operation) and reference AddLocalGamer validation; online AddLocalGamer currently
   refuses NotSupportedException (directory admits one complete group per machine).
@@ -2396,3 +2396,36 @@ so the sample's tanks start apart there. Cosmetic for these samples (positions a
 
 Known-good cross-repo set: CNA 45c23451b (+ this plan commit), cna-samples feature/gamer-services-samples
 03d9bfe, server bbfe2d5, sharp-runtime 007280bd.
+
+### GS-007i complete: lobby readiness on every transport
+
+Found by the SAMPLE-075 port: its lobby starts the game when `IsEveryoneReady`, and "Return to Lobby"
+went straight back into gameplay because readiness never crossed machines and never cleared.
+Reference (IL): the `IsReady` setter refuses a gamer that has left, a remote gamer, and a session
+outside `Lobby` (InvalidOperationException), and an unchanged value sends nothing; `IsEveryoneReady`
+is false for an empty session and otherwise asks every gamer; `ResetReady` is host-only in `Lobby`;
+every gamer's readiness is cleared when the game ends.
+
+- Wire: `GamerReadyBroadcast` (0x08) carries 1..31 (id, ready) pairs; bounded by
+  `validateServiceControlPacket`.
+- SystemLink: a client reports its own gamers to the host; the host accepts only the reporting peer's
+  own ids, applies and relays; clients accept reports only from the host; a joining machine receives
+  the ready gamers after its welcome.
+- Online: the same rules through `ServiceGamePacketPolicy` (a host accepts only the source machine's
+  gamers, a client only the host); the engine replays readiness after every welcome, including a
+  client's re-hello after a directory revision, so a report dropped while that client's directory view
+  lagged behind a new gamer still converges. The recipient's own gamers are never echoed back, so a
+  change in flight is not undone. The XNA binding applies reports only in its own `Lobby` state; the
+  engine does not gate on the directory's state (a host reaches `Lobby` at `EndGame` before the
+  directory records it).
+- The transport's setter is private (`NetworkSession::ApplyGamerReadyInternal`, reached through
+  `ENetBackend`/`OnlineSessionBinding`); no public C++ symbol was added. C API:
+  `cna_network_gamer_set_is_ready` documents `CNA_RESULT_INVALID_STATE`; `NetSmoke` asserts it for a
+  detached gamer.
+
+Tests: session/gamer reference checks, three ENet tests (host<->client, late joiner, client authority),
+`ServiceENetSessionTest.LobbyReadinessIsRelayedOwnedAndReplayedToALateJoiner` (three machines, NOT_AUTHORIZED,
+replay, no echo) and `OnlineNetworkSessionTest.LobbyReadinessCrossesTheServiceSessionAndClearsWhenTheGameEnds`
+(XNA API over the service session, EndGame clear, host ResetReady). CnaNetTests 472/472,
+CnaGamerServicesTests 483 + 1 skip, C API gates pass (the three environment smokes
+ContentSmoke/AudioSmoke/AudioUnavailableSmoke fail as before).

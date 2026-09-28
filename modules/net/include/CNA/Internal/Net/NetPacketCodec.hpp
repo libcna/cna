@@ -33,6 +33,7 @@ namespace CNA::Internal::Net
         // 0x05 is reserved for a future HostChangeBroadcast (host migration); not implemented.
         StateChangeBroadcast = 0x06,
         SessionPropertiesBroadcast = 0x07,
+        GamerReadyBroadcast = 0x08,
         AppData = 0x10,
     };
 
@@ -92,6 +93,20 @@ namespace CNA::Internal::Net
         NetworkSessionProperties SessionProperties;
     };
 
+    /** @brief One gamer's lobby readiness. */
+    struct GamerReadyEntry
+    {
+        uint8_t WireId{0};
+        bool IsReady{false};
+    };
+    /**
+     * @brief Lobby readiness of gamers: a client reports its own gamers to the host, and the host
+     * reports every gamer's changes (and a snapshot to a machine that just joined) to the others.
+     */
+    struct GamerReadyMessage
+    {
+        std::vector<GamerReadyEntry> Entries;
+    };
     /** @brief Carries application SendData/ReceiveData payloads between peers, relayed by the host. */
     struct AppDataMessage
     {
@@ -125,6 +140,13 @@ namespace CNA::Internal::Net
          * @return Connected-channel packet bytes.
          */
         static std::vector<SharpRuntime::bytecs> Encode(const SessionPropertiesBroadcastMessage& message);
+        /**
+         * @brief Encodes gamer readiness entries.
+         *
+         * @param message The entries to encode (at most 255).
+         * @return Connected-channel packet bytes.
+         */
+        static std::vector<SharpRuntime::bytecs> Encode(const GamerReadyMessage& message);
         static std::vector<SharpRuntime::bytecs> Encode(const AppDataMessage& message);
 
         /** @brief Reads the leading MessageTag byte without needing a full decode. */
@@ -144,6 +166,13 @@ namespace CNA::Internal::Net
         static SessionPropertiesBroadcastMessage DecodeSessionPropertiesBroadcast(
             const std::vector<SharpRuntime::bytecs>& data
         );
+        /**
+         * @brief Decodes gamer readiness entries.
+         *
+         * @param data Connected-channel packet bytes.
+         * @return The decoded entries.
+         */
+        static GamerReadyMessage DecodeGamerReady(const std::vector<SharpRuntime::bytecs>& data);
         static AppDataMessage DecodeAppData(const std::vector<SharpRuntime::bytecs>& data);
 
         /**

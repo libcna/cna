@@ -23,6 +23,17 @@ ServiceGameControl ServiceGamePacketPolicy::control(const std::string& source,st
     unsigned char channel,bool established,const std::vector<std::string>& localNames,const std::vector<std::string>& admitted) const {
     if(channel!=0)packet();const auto tag=validateServiceControlPacket(bytes);sourceGuard(source);
     const bool host=snapshot_.machine==snapshot_.hostMachine;
+    if(tag==MessageTag::GamerReadyBroadcast) {
+        // A client reports only its own gamers to the host; the host may report any gamer.
+        if(!established || (!host && source!=snapshot_.hostMachine))authority();
+        auto ready=NetPacketCodec::DecodeGamerReady(std::vector<unsigned char>(bytes.begin(),bytes.end()));
+        std::set<unsigned char> ids;
+        for(const auto& entry:ready.Entries) {
+            const auto member=machinesById_.find(entry.WireId);
+            if(member==machinesById_.end() || !ids.insert(entry.WireId).second || (host && member->second!=source))authority();
+        }
+        return ready;
+    }
     if(host ? tag!=MessageTag::ClientHello : (source!=snapshot_.hostMachine || tag==MessageTag::ClientHello))authority();
     if(!host && tag!=MessageTag::ServerWelcome && !established)authority();
     const std::vector<unsigned char> value(bytes.begin(),bytes.end());

@@ -15,6 +15,7 @@ struct ServiceENetObservation {
         /** @brief An admitted remote group disconnected or lost authority. */ Left,
         /** @brief An admitted game packet targets this local group. */ Data,
         /** @brief Authenticated directory metadata changed. */ Snapshot,
+        /** @brief Gamers' lobby ready state changed. */ Readiness,
         /** @brief Authority or transport became unavailable. */ Failed
     };
     /** @brief Observation category. */
@@ -27,6 +28,8 @@ struct ServiceENetObservation {
     std::optional<AppDataMessage> data;
     /** @brief Owned directory metadata. */
     std::optional<GamerServices::ServiceSessionSnapshot> snapshot;
+    /** @brief Lobby ready states for a Readiness observation. */
+    std::vector<GamerReadyEntry> readiness;
     /** @brief Fixed safe failure code, never raw network text. */
     std::string failure;
 };
@@ -60,6 +63,10 @@ public:
      * @param sender Local source. @param target Known connected target. @param payload Game bytes.
      * @param options Delivery semantics. */
     void send(unsigned char sender,unsigned char target,const std::vector<unsigned char>& payload,SendDataOptions options);
+    /** @brief Sends local gamers' lobby ready state (a client to the host, the host to every
+     * client); the host also reports any gamer, as ResetReady does.
+     * @param entries Changed ready states. */
+    void publishReady(const std::vector<GamerReadyEntry>& entries);
     /** @brief Publishes host-owned directory settings; clients observe them through authority.
      * @param settings Complete desired state, capacity, join-in-progress and properties. */
     void publish(const GamerServices::ServiceSessionSettings& settings);

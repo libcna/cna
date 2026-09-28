@@ -279,5 +279,21 @@ namespace CNA::Internal::Net
          * @param newState The new session state.
          */
         static void BroadcastStateChange(NetworkSession* session, NetworkSessionState newState);
+
+        /**
+         * @brief Sends gamers' lobby ready state: a client to the host, the host to every client.
+         *
+         * @param session The session.
+         * @param gamers Gamers whose ready state changed (gamers without a wire id are skipped).
+         */
+        static void PublishGamerReady(NetworkSession* session, const std::vector<NetworkGamer*>& gamers);
+
+        /**
+         * @brief Applies a ready state the transport received for one gamer.
+         *
+         * @param gamer The gamer the report names.
+         * @param value The reported ready state.
+         */
+        static void ApplyTransportGamerReady(NetworkGamer& gamer, bool value);
     };
 }

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include "System/InvalidOperationException.hpp"
 
 #include "Microsoft/Xna/Framework/Net/NetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkMachine.hpp"
@@ -62,9 +63,18 @@ TEST(NetworkGamerTest, SetIsHostUpdatesProperty) {
     EXPECT_FALSE(g.getIsHostProperty());
 }
 
-TEST(NetworkGamerTest, SetIsReadyProperty) {
+namespace Microsoft::Xna::Framework::Net {
+struct NetworkGamerReadyTestAccess {
+    static void Apply(NetworkGamer& gamer, bool value) { gamer.SetIsReadyInternal(value); }
+};
+}
+
+TEST(NetworkGamerTest, SetIsReadyPropertyRefusesAGamerThatIsNotLocal) {
+    // Reference NetworkGamer.IsReady setter: only local gamers of a session in the Lobby state.
     NetworkGamer g = NetworkGamer::CreateInternal(nullptr);
-    g.setIsReadyProperty(true);
+    EXPECT_THROW(g.setIsReadyProperty(true), System::InvalidOperationException);
+    EXPECT_FALSE(g.getIsReadyProperty());
+    NetworkGamerReadyTestAccess::Apply(g, true);
     EXPECT_TRUE(g.getIsReadyProperty());
 }
 

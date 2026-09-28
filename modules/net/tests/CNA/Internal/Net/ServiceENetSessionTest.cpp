@@ -207,6 +207,35 @@ TEST(ServiceENetSessionTest, ThreeMachinesRelayBetweenClientsAndPublishEachFullG
     third.reset();fixture.until([&]{return Fixture::count(fixture.clientEvents,ServiceENetObservation::Type::Left)==1;});
     EXPECT_EQ(1,Fixture::count(fixture.hostEvents,ServiceENetObservation::Type::Left));
 }
+TEST(ServiceENetSessionTest, LobbyReadinessIsRelayedOwnedAndReplayedToALateJoiner) {
+    Fixture fixture;fixture.host=std::make_unique<ServiceENetSession>(fixture.prepare(false,{"a"}),std::vector<std::string>{"Alice"},fixture.routes());
+    fixture.client=std::make_unique<ServiceENetSession>(fixture.prepare(true,{"b"}),std::vector<std::string>{"Bob"},fixture.routes());
+    fixture.until([&]{return fixture.client->ready();});
+    const auto readiness=[](const std::vector<ServiceENetObservation>& events) {
+        std::map<unsigned char,bool> states;
+        for(const auto& event:events)if(event.type==ServiceENetObservation::Type::Readiness)for(const auto& entry:event.readiness)states[entry.WireId]=entry.IsReady;
+        return states;
+    };
+    fixture.client->publishReady({{2,true}});
+    fixture.until([&]{return readiness(fixture.hostEvents).contains(2);});EXPECT_TRUE(readiness(fixture.hostEvents).at(2));
+    // A client may report only its own gamers; the host's is not its to change.
+    EXPECT_THROW(fixture.client->publishReady({{1,true}}),Service::ServiceOperationError);
+    fixture.host->publishReady({{1,true}});
+    fixture.until([&]{return readiness(fixture.clientEvents).contains(1);});EXPECT_FALSE(readiness(fixture.clientEvents).contains(2));
+
+    auto third=std::make_unique<ServiceENetSession>(fixture.prepare(true,{"c"}),std::vector<std::string>{"Charlie"},fixture.routes());
+    std::vector<ServiceENetObservation> thirdEvents;
+    const auto collect=[&]{auto events=third->update();thirdEvents.insert(thirdEvents.end(),std::make_move_iterator(events.begin()),std::make_move_iterator(events.end()));};
+    fixture.until([&]{collect();return third->ready()&&readiness(thirdEvents).size()==2;});
+    EXPECT_EQ((std::map<unsigned char,bool>{{1,true},{2,true}}),readiness(thirdEvents));
+    // A client's change travels through the host to every other client.
+    third->publishReady({{3,true}});
+    fixture.until([&]{collect();return readiness(fixture.clientEvents).contains(3)&&readiness(fixture.hostEvents).contains(3);});
+    fixture.client->publishReady({{2,false}});
+    fixture.until([&]{collect();return !readiness(thirdEvents).at(2);});
+    // Nobody echoes a machine's own gamers back to it, so a change in flight is never undone.
+    EXPECT_FALSE(readiness(fixture.clientEvents).contains(2));EXPECT_FALSE(readiness(thirdEvents).contains(3));
+}
 TEST(OnlineSessionOperationTest, HostReadinessAndConsumptionArePublishedOnceOnOwnerSubscription) {
     Fixture fixture;int callbacks=0;const auto owner=std::this_thread::get_id();
     OnlineSessionOperation operation(fixture.backend,fixture.operationRequest(),{"Alice","Charlie"},[&]{EXPECT_EQ(owner,std::this_thread::get_id());++callbacks;},fixture.preparationDependencies(),fixture.routes());

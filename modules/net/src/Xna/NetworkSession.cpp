@@ -369,7 +369,9 @@ namespace Microsoft::Xna::Framework::Net
 
     bool NetworkSession::getIsEveryoneReadyProperty() const
     {
-        for (LocalNetworkGamer* gamer : localGamers_)
+        // Reference IsEveryoneReady: every gamer of the session, and false for an empty session.
+        if (allGamers_.getCountProperty() == 0) return false;
+        for (NetworkGamer* gamer : allGamers_)
         {
             if (!gamer->getIsReadyProperty()) return false;
         }
@@ -590,6 +592,8 @@ namespace Microsoft::Xna::Framework::Net
                         }
                         leaderboardTransitionPending_=false;
                     }
+                    // Every machine clears readiness when a game ends, so the lobby starts over.
+                    if (sessionState_ == NetworkSessionState::Playing) ClearReadyInternal();
                     sessionState_ = evt.State;
                     if(online_ && online_->host()) online_->requestState(evt.State);
                     GameEnded.Raise(this, GameEndedEventArgs());
@@ -658,10 +662,36 @@ namespace Microsoft::Xna::Framework::Net
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         if (isDisposed_) throw System::ObjectDisposedException("this");
         if (!getIsHostProperty()) throw System::InvalidOperationException("This NetworkSession is not the host");
+        if (sessionState_ != NetworkSessionState::Lobby) throw System::InvalidOperationException("NetworkSession is not Lobby");
 
+        ClearReadyInternal();
+        std::vector<NetworkGamer*> everyone(allGamers_.begin(), allGamers_.end());
+        PublishGamerReady(everyone);
+    }
+
+    void NetworkSession::ApplyGamerReadyInternal(NetworkGamer& gamer, bool value)
+    {
+        gamer.SetIsReadyInternal(value);
+    }
+
+    void NetworkSession::ClearReadyInternal()
+    {
         for (NetworkGamer* gamer : allGamers_)
         {
-            gamer->setIsReadyProperty(false);
+            gamer->SetIsReadyInternal(false);
+        }
+    }
+
+    void NetworkSession::PublishGamerReady(const std::vector<NetworkGamer*>& gamers)
+    {
+        if (gamers.empty()) return;
+        if (online_)
+        {
+            online_->publishReady(gamers);
+        }
+        else if (CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(sessionType_))
+        {
+            CNA::Internal::Net::ENetBackend::PublishGamerReady(this, gamers);
         }
     }
 

@@ -502,6 +502,14 @@ namespace CNA::Internal::Net
 
             SendTo(state, peer, NetPacketCodec::Encode(welcome), SendDataOptions::Reliable);
 
+            // Gamers already marked ready keep that state for the machine that just joined.
+            GamerReadyMessage readiness;
+            for (const auto& [gamer, wireId] : state.GamerToWireId)
+            {
+                if (gamer->getIsReadyProperty()) readiness.Entries.push_back(GamerReadyEntry{wireId, true});
+            }
+            if (!readiness.Entries.empty()) SendTo(state, peer, NetPacketCodec::Encode(readiness), SendDataOptions::Reliable);
+
             // AddRemoteGamer() raises GamerJoined for our own session, so it happens after the
             // ServerWelcome send (the new peer learns its ids from the welcome, not this event).
             for (NetworkGamer* gamer : newGamers)
@@ -620,6 +628,49 @@ namespace CNA::Internal::Net
             evt.Type = NetworkSession::NetworkEventType::StateChange;
             evt.State = msg.NewState;
             session->SendNetworkEvent(std::move(evt));
+        }
+
+        // The host accepts a client's report only for that client's own gamers and passes it on to
+        // the other clients; a client accepts the host's reports for any gamer, its own included
+        // (ResetReady).
+        void HandleGamerReady(NetworkSession* session, SessionState& state, ENetPeer* fromPeer, const GamerReadyMessage& msg)
+        {
+            const bool host = state.HostPeer == nullptr;
+            if (!host && !IsFromAuthoritativeHost(state, fromPeer))
+            {
+                RejectUnauthorizedHostOnlyMessage(state, fromPeer, "GamerReadyBroadcast");
+                return;
+            }
+            if (session->getSessionStateProperty() != NetworkSessionState::Lobby)
+            {
+                return;
+            }
+            GamerReadyMessage accepted;
+            for (const GamerReadyEntry& entry : msg.Entries)
+            {
+                if (host)
+                {
+                    const auto owned = state.PeerWireIds.find(fromPeer);
+                    if (owned == state.PeerWireIds.end() ||
+                        std::find(owned->second.begin(), owned->second.end(), entry.WireId) == owned->second.end())
+                    {
+                        continue;
+                    }
+                }
+                const auto gamer = state.WireIdToGamer.find(entry.WireId);
+                if (gamer == state.WireIdToGamer.end()) continue;
+                ENetBackend::ApplyTransportGamerReady(*gamer->second, entry.IsReady);
+                accepted.Entries.push_back(entry);
+            }
+            if (host && !accepted.Entries.empty())
+            {
+                const auto bytes = NetPacketCodec::Encode(accepted);
+                for (auto& [otherPeer, wireIds] : state.PeerWireIds)
+                {
+                    if (otherPeer != fromPeer) QueueSend(state, otherPeer, bytes, SendDataOptions::Reliable);
+                }
+                state.Host.Flush();
+            }
         }
 
         void HandleSessionPropertiesBroadcast(
@@ -1092,6 +1143,9 @@ namespace CNA::Internal::Net
                             NetPacketCodec::DecodeSessionPropertiesBroadcast(data)
                         );
                         break;
+                    case MessageTag::GamerReadyBroadcast:
+                        HandleGamerReady(session, state, peer, NetPacketCodec::DecodeGamerReady(data));
+                        break;
                     case MessageTag::AppData:
                         HandleAppData(session, state, peer, NetPacketCodec::DecodeAppData(data));
                         break;
@@ -1137,6 +1191,11 @@ namespace CNA::Internal::Net
     )
     {
         session->SetSessionPropertiesFromTransport(std::move(properties));
+    }
+
+    void ENetBackend::ApplyTransportGamerReady(NetworkGamer& gamer, bool value)
+    {
+        NetworkSession::ApplyGamerReadyInternal(gamer, value);
     }
 
     bool ENetBackend::RealNetworkingEnabled(NetworkSessionType sessionType)
@@ -1386,6 +1445,43 @@ namespace CNA::Internal::Net
         }
 
         DeliverAppData(state, senderIt->second, targetIt->second, payload, options);
+    }
+
+    void ENetBackend::PublishGamerReady(NetworkSession* session, const std::vector<NetworkGamer*>& gamers)
+    {
+        if (!RealNetworkingEnabled(session->getSessionTypeProperty()))
+        {
+            return;
+        }
+        auto it = Sessions().find(session);
+        if (it == Sessions().end())
+        {
+            return;
+        }
+        SessionState& state = *it->second;
+
+        GamerReadyMessage msg;
+        for (NetworkGamer* gamer : gamers)
+        {
+            const auto wireId = state.GamerToWireId.find(gamer);
+            if (wireId != state.GamerToWireId.end()) msg.Entries.push_back(GamerReadyEntry{wireId->second, gamer->getIsReadyProperty()});
+        }
+        if (msg.Entries.empty())
+        {
+            return;
+        }
+        const auto bytes = NetPacketCodec::Encode(msg);
+        if (state.HostPeer != nullptr)
+        {
+            // A client reports to the host, which passes it on.
+            SendTo(state, state.HostPeer, bytes, SendDataOptions::Reliable);
+            return;
+        }
+        for (auto& [peer, wireIds] : state.PeerWireIds)
+        {
+            QueueSend(state, peer, bytes, SendDataOptions::Reliable);
+        }
+        state.Host.Flush();
     }
 
     void ENetBackend::BroadcastStateChange(NetworkSession* session, NetworkSessionState newState)

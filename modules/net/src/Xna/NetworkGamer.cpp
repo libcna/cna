@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Net/NetworkGamer.hpp"
+#include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
+#include "Microsoft/Xna/Framework/Net/NetworkSessionState.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include <utility>
 
@@ -29,7 +32,19 @@ namespace Microsoft::Xna::Framework::Net
     bool NetworkGamer::getIsMutedByLocalUserProperty() const  { return isMutedByLocalUser_; }
     bool NetworkGamer::getIsPrivateSlotProperty() const       { return isPrivateSlot_; }
     bool NetworkGamer::getIsReadyProperty() const             { return isReady_; }
-    void NetworkGamer::setIsReadyProperty(bool value)         { isReady_ = value; }
+    void NetworkGamer::setIsReadyProperty(bool value)
+    {
+        // Reference NetworkGamer.IsReady setter: a gamer that left, a remote gamer, or any state
+        // but Lobby is refused; an unchanged value sends nothing.
+        if (hasLeftSession_) throw System::InvalidOperationException("This NetworkGamer is no longer valid. The gamer may have left the session.");
+        if (!getIsLocalProperty()) throw System::InvalidOperationException("This operation is only valid on local gamers.");
+        if (session_ == nullptr || session_->getSessionStateProperty() != NetworkSessionState::Lobby)
+            throw System::InvalidOperationException("This operation is only valid when the session state is Lobby.");
+        if (value == isReady_) return;
+        isReady_ = value;
+        session_->PublishGamerReady({this});
+    }
+    void NetworkGamer::SetIsReadyInternal(bool value)         { isReady_ = value; }
     bool NetworkGamer::getIsTalkingProperty() const           { return isTalking_; }
 
     const NetworkMachine& NetworkGamer::getMachineProperty() const { return *machine_; }

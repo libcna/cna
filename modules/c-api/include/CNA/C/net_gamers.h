@@ -173,11 +173,12 @@ CNA_C_API CNA_Result cna_network_gamer_get_is_ready(
     CNA_Bool* out_value);
 
 /**
- * @brief Sets whether a gamer is ready.
+ * @brief Sets whether a local gamer is ready, publishing the change to the other machines.
  *
  * @param gamer Owned gamer handle.
  * @param value The new ready state.
- * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the gamer has left its session, is
+ * not local, or its session is not in the lobby, or a documented handle/thread failure.
  */
 CNA_C_API CNA_Result cna_network_gamer_set_is_ready(
     CNA_NetworkGamerHandle gamer,
