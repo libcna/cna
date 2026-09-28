@@ -752,6 +752,8 @@ CNA-specific transport routing; generic proxy change remains the only runtime mo
   persistence migration and revocable connection grant validation. No data capability before usable.
 - [x] GS-008b: Beast/OpenSSL secure WebSocket relay endpoint, single connection per machine,
   per-connection strand/one writer/bounded queue, frame/rate/timeout limits and grant revocation.
+- [x] GS-008c1: private bounded receive assembler and correlated welcome validation; Net 336/336.
+- [ ] GS-008c2: actual libcurl WSS/loopback UDP I/O and genuine ENet probe.
 - [ ] GS-008c: CNA libcurl WSS connection and loopback UDP routes preserving ENet datagrams,
   protocol/certificate validation and controlled Net updates. SystemLink keeps its direct path.
 - [ ] GS-008d: genuine ENet exchange under relay-only isolated routing/firewall conditions,
@@ -945,3 +947,25 @@ GS-008b exact tested code integration set:
 All three clean at this checkpoint. This subsequent handoff commit changes documentation only.
 GS-008c1 now active: bounded private client message assembler and strict relay welcome validation,
 with deterministic fragmentation/chunk/control/boundary/error tests before native WSS/UDP I/O.
+
+### GS-008c1 private client receive checkpoint
+
+Private Net `RelayMessageAssembler` owns completed messages and validates chunk offsets/remaining
+lengths, aggregate 4,120-byte ceiling, at most 64 fragments, control-frame limits and ordering before
+allocation. Control messages interleave between data frames without replacing the partial message;
+empty final fragments are valid. Any refusal clears assembly state and exposes only constant codes.
+The 64-fragment limit is a client receive policy, not a claim about server fragment enforcement.
+Strict <=1,024-byte welcome parsing reuses the bounded UTF-8/duplicate-key parser, validates exact
+root/result schema, request correlation, ticket session/machine, datagram/queue limits and unique
+bounded capabilities. Unknown optional capabilities remain permitted. JSON linking is explicit in Net.
+
+Eight new tests cover all boundaries, metadata overflow/order errors, control interleaving, malformed
+welcome and 1,000 deterministic random fragment/chunk layouts. Clean two-job build and complete Net
+336/336 pass (4.410s), including SystemLink and subprocess regressions; canonical protocol drift
+passes. Initial 335/336 run exposed an incorrect test expecting a specific `what()` rather than the
+safe `code()` plus generic text; assertion corrected, no parser defect or unresolved failure.
+Logs: `cmake-build-debug/relay-client-parser-{build,net-tests}.log`. Server cba4235 and runtime
+6c4a857 unchanged/clean. No public XNA/native ABI addition. Parent GS-008c remains incomplete.
+Next is GS-008c2 verified libcurl WSS worker and bounded per-machine loopback UDP routes, tested with
+actual ENet in separate CNA processes before online NetworkSession is enabled. Concurrent next has
+advanced to 31a560af9 (INPUT-EMU-001); inspect/integrate committed history at this milestone.

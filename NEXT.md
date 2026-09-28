@@ -1,5 +1,12 @@
 # NEXT.md
 
+> **GS-008c1 client receive validation (2026-09-28):** Private relay assembly now bounds
+> partial frames, fragments and interleaved controls before copying; welcome responses must match
+> request/session/machine authority and negotiated limits. Eight new tests include 1,000 deterministic
+> layouts. Net 336/336 pass; canonical protocol drift check passes. WSS/UDP I/O and public online
+> sessions remain unfinished; no XNA/C ABI surface change.
+
+
 > **GS-008b server relay (2026-09-28):** Canonical WSS handshake/resource constants and vectors
 > are synchronized. The sibling server implements authenticated source/title/session routing,
 > bounded cross-strand queues and periodic grant revalidation; matching-build server gate passes
