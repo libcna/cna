@@ -1,5 +1,12 @@
 # CNA XNA 4.0 API Audit
 
+> **SAMPLE-104 XNA host diagnostics (2026-09-28):** Game selects shared Framework 4
+> ArgumentException formatting only when the caller has not explicitly chosen a profile.
+> Two new regressions and the full private OPENGLES3 Runtime gate pass: 191 passed, zero failed,
+> two intentional incompatible-platform skips. Native help/error frames now match XNA exactly;
+> browser transport/remote peer qualification remain owner-deferred. No public XNA/C ABI change.
+> See [compatibility record](docs/xna4-runtime-compatibility.md).
+
 > **GS-007e2c2a backend authority (2026-09-28):** Relay endpoint/title/trust is copied
 > from the originating backend; later overrides/replacement cannot redirect its authority.
 > Four new cases, GamerServices 430 pass / 1 known HEADLESS skip, native/NAT relay 2/2,

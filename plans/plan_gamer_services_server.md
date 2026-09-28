@@ -1346,3 +1346,34 @@ Logs: CNA service-backend-authority-{build,gamer,private,coverage}.log and serve
 build/service-backend-authority-relay.log. Owned preparation/cancellation/rollback remains GS-007e2c2.
 Latest committed next advanced to 092fc7f919475857fe04df247c9e13b177f0598f at this milestone; inspect
 and integrate after this verified clean commit, then rerun relevant regression gates.
+
+### GS-007e2c2a known-good integration set
+
+- CNA 4a4c3acfcd5cf91019bd929b7f1cb07dfaf1fb31.
+- sharp-runtime 6c4a857de129cf29b5d43430bedf24157d594f12.
+- cna-gamer-services-server 0cd1d08984210a120e7b0b7cb238f6f438f4d8af.
+
+### GS-001f completed: committed next integration
+
+- [x] GS-001f: committed SAMPLE-104 integration; clean merge resolution and affected corpus.
+
+Integrate committed next 092fc7f919475857fe04df247c9e13b177f0598f, SAMPLE-104. Changes:
+Game defaults argument exception formatting to Framework 4 unless explicitly configured;
+two Runtime regressions, compatibility docs and a source-relative Metal test glob. No
+uncommitted samples-agent file was inspected/copied or modified. Merge conflicts only in
+AUDIT/NEXT introductory notes; retain both samples and GamerServices records. Validate
+affected Runtime plus service/Net regressions before committing this merge. Server/runtime
+repositories remain unchanged. Then proceed with owned online preparation and GS-007f1
+Ranked join-in-progress contract correction (documented, not yet implemented).
+
+GS-001f validation: sequential -j2 build of Runtime/GamerServices/Net/native relay/control/C API
+targets succeeded. All three full unit binaries ran via tools/platform/run_gpu_tests_private.sh
+--exec (no live desktop): Runtime **192 run / 190 pass / 2 known HEADLESS capability skips,
+2.452s**, including both SAMPLE-104 cases; GamerServices **431 run / 430 pass / 1 known
+screensaver skip, 2.227s**; Net **370/370, 4.723s**. Focused C API/protocol gates: **5/5, 0.41s**.
+Logs: cmake-build-debug/service-next104-{build,runtime,gamer,net,private}.log. Reproduce:
+`tools/platform/run_gpu_tests_private.sh --exec <absolute build>/CnaRuntimeTests` (and the
+other two unit executables). Do not compare this HEADLESS Runtime count directly to the samples
+agent's OPENGLES3 registration; these are separate configured corpora. No new server/runtime
+repository changes. Argument-profile selection is credited to the samples agent's committed work,
+not a newly unblocked online GamerServices/Net sample in this project.

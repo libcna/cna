@@ -86,3 +86,13 @@ interface, so it cannot be done cleanly inside the input branch.
   (`Mouse.cs:107-116`); CNA removed those fields in task 747 in favor of the general
   `IGraphicsBackend` transform, which is why an inverse on that interface is the right fix.
 - `plan_input.md` Phase I9 tasks 800/801; `plan_graphics.md` (graphics track).
+
+## SAMPLE-104 — XNA host exception compatibility maintenance — 2026-09-28
+
+**Status: ✅ bounded runtime correction complete; sample browser completion remains owner-deferred.**
+Game selects shared Framework 4 ArgumentException diagnostics only when no explicit AppContext
+value exists. Two regressions, complete private OPENGLES3 Runtime gate (191 passed/2 intentional
+platform skips) and seven static XNA/native sample frame comparisons pass. No sample special
+case, public XNA/C ABI, class layout or server implementation change. General embedded test-source
+path corrected; no other renderer qualified. See `docs/xna4-runtime-compatibility.md` and sibling
+SAMPLE-104 task receipts. Browser account/SystemLink/relay work stays in its separate living plan.
