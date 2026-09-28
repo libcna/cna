@@ -753,7 +753,8 @@ CNA-specific transport routing; generic proxy change remains the only runtime mo
 - [x] GS-008b: Beast/OpenSSL secure WebSocket relay endpoint, single connection per machine,
   per-connection strand/one writer/bounded queue, frame/rate/timeout limits and grant revocation.
 - [x] GS-008c1: private bounded receive assembler and correlated welcome validation; Net 336/336.
-- [ ] GS-008c2: actual libcurl WSS/loopback UDP I/O and genuine ENet probe.
+- [x] GS-008c2: private libcurl WSS/loopback UDP I/O and genuine two-process ENet probe.
+- [ ] GS-008c3: connect transport status/roster/lease handling to public Net Update/lifecycle.
 - [ ] GS-008c: CNA libcurl WSS connection and loopback UDP routes preserving ENet datagrams,
   protocol/certificate validation and controlled Net updates. SystemLink keeps its direct path.
 - [ ] GS-008d: genuine ENet exchange under relay-only isolated routing/firewall conditions,
@@ -1002,3 +1003,36 @@ were stale after next INPUT-EMU-001's four new device/window CNAEXT declarations
 header. Regenerated summaries (8,134 symbols, Net/GamerServices counts unchanged, no C exports),
 with no new input bindings. Final private gate passes 13/13; this is committed separately from
 relay implementation. Existing ABI remains 0.32/3,215 exports. No unexplained failure retained.
+
+### GS-008c2 verified native relay checkpoint
+
+Completed private transport implementation with four unit cases; no public XNA/C protocol API.
+Final build is clean, two jobs. Net 340/340 (4.480s), GamerServices 409 run/408 pass/one known
+HEADLESS Guide screensaver skip (2.184s), private ABI/C API/protocol/fake gates 13/13 (13.29s).
+C API inventory correction for committed next is separate commit 856efb4c4. No changed ABI or
+export count. Existing SystemLink/subprocess corpus stays passing. Final server 10/10, no skip,
+133.34s: service 3.83s (5,217 assertions), general TLS/native C++/C/restart 58.62s, directory
+99/2.22s, invitations 153/3.16s, two-CNA control 6.94s, relay codec 10,027/.02s, authority
+60/2.17s, flow 725/.01s, WSS 259/48.10s, actual two-CNA ENet/WSS 8.26s.
+The final native probe runs four accounts/two local gamers per machine for both categories and
+two isolated title IDs. Four application messages each direction/category (16 delivered total),
+reliable fragmentation of 32KiB data plus discriminator, reliable small/MTU-size and unreliable
+second channel compare exact bytes. Wrong local UDP source and 4,097-byte datagrams are refused;
+stable route replacement is checked. Wrong trust/hostname abort before secret hello. Secondary
+Dana revoke closes only her machine grant; host remains ready until independent server loss.
+Server failure is observed as safe Failed snapshot, and stop joins/reclaims worker/socket lifetime.
+The harness uses private directory/ENet infrastructure, not public online NetworkSession;
+public acceptance, Internet/NAT isolation and reconnect remain incomplete. No avatar claim.
+
+Native command: build `cna_service_relay_client_harness`, then set
+`CNA_SERVICE_RELAY_CLIENT_HARNESS=<absolute binary>` for sibling `service_cna_relay` CTest.
+Full server gate also sets existing CLIENT/C_API/DIRECTORY harness variables as earlier documented.
+Logs CNA `cmake-build-debug/relay-client-io-{build,net-final,gamers,private-gates-final,native-final}.log`;
+server `build/relay-client-io-{build,full-tests}.log`. Initial compilation exposed platform-dependent
+ENetBuffer field order; switched to named field assignments (Unix/Windows declarations audited),
+then clean compile. Initial private gate 11/13 was stale next-derived inventory, fixed as recorded;
+no unresolved failure remains at this checkpoint. Last formatting-only edit changes no behavior.
+Server committed 620415aa39c91b6510a05dccb5ed7b2f66f72ce2; runtime unchanged
+6c4a857de129cf29b5d43430bedf24157d594f12. Resulting CNA relay commit is pinned in the next
+checkpoint. Next unfinished: GS-008d1 run these real peers in separate unprivileged NAT namespaces
+without incoming ports; then reconnect/remaining fault corpus and GS-008c3/GS-007e public lifecycle.

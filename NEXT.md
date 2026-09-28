@@ -1,5 +1,12 @@
 # NEXT.md
 
+> **GS-008c2 private CNA relay (2026-09-28):** Verified libcurl WSS now bridges unchanged
+> ENet datagrams through authorized stable loopback routes, bounded queues and an owned worker.
+> Two real CNA processes/four accounts pass bidirectional fragmented/unreliable data, UDP guards,
+> TLS refusal, secondary revoke and server loss. Server 10/10, Net 340/340, private gates 13/13;
+> public online NetworkSession/invites, reconnect and NAT-isolated acceptance remain unfinished.
+
+
 > **GS-008c1 client receive validation (2026-09-28):** Private relay assembly now bounds
 > partial frames, fragments and interleaved controls before copying; welcome responses must match
 > request/session/machine authority and negotiated limits. Eight new tests include 1,000 deterministic

@@ -92,14 +92,33 @@ The private backend can now request one-use, short-lived relay authority for its
 and exact authenticated local group. Server grants bind all members' revocable login families;
 ordinary access refresh preserves authority, while revocation/leave/host expiry invalidates it.
 Tickets are ephemeral and never part of gameplay source, URLs, logs or persistent client files.
-The secure WSS forwarding endpoint and ENet bridge are the next tasks; ticket issuance alone
-does not establish an Internet data path or enable public PlayerMatch/Ranked sessions.
+The secure WSS endpoint and private CNA ENet bridge are implemented; ticket issuance alone
+does not enable public PlayerMatch/Ranked sessions.
 
 The sibling server now provides a separate authenticated WSS datagram relay at `/cna/relay/v1`.
 Its canonical header/handshake golden vectors are synchronized with CNA. One-use authority binds
 all local users, title, session and machine; outgoing frames carry server-injected source identity.
 Application queues reserve bounded space before executor posting and revalidate revocable grants.
-Standalone verified-WSS forwarding tests are server transport evidence. CNA WSS/loopback ENet
-integration, public online NetworkSession/invites and isolated Internet acceptance remain unfinished.
+Standalone verified-WSS forwarding tests are server transport evidence. The private CNA libcurl
+bridge now carries genuine ENet datagrams through stable per-machine loopback UDP routes; two CNA
+processes/four local accounts exchange reliable, unreliable and 32KiB fragmented application data
+for both categories/titles. CA/hostname refusals, local UDP source/length guards, secondary revocation
+and server failure are tested. Public online NetworkSession/invites, reconnect and isolated Internet
+acceptance remain unfinished.
 Control HTTPS, directory membership and realtime datagrams are separate responsibilities; service
 membership alone does not make direct ENet reachable across NAT. No new XNA or C transport API.
+
+Private client relay requires libcurl >=7.86 built with TLS and ws/wss protocols; actual runtime
+capabilities are checked before authentication. It derives the WSS authority/path from existing
+validated deployment configuration, verifies certificate/hostname/TLS >=1.2 and disables redirects
+and proxies. Explicit insecure numeric-loopback settings alone permit ws. One owned worker handles
+nonblocking partial frames/sends, rolling outgoing limits, bounded 64-frame queues and fair UDP
+drain; wrong local source ports/oversize/queue saturation drop datagrams. Authoritative remote
+machine routes alone accept incoming packets. Ready/failure snapshots are consumed by the owner;
+no XNA events or object mutations occur on the worker. No native C ABI addition. Windows/macOS/
+browser provider behavior is not yet verified; SystemLink continues using its direct ENet path.
+
+Build `cna_service_relay_client_harness` and set `CNA_SERVICE_RELAY_CLIENT_HARNESS` to that absolute
+binary path when running the sibling server's `service_cna_relay` CTest. The test explicitly skips
+without its harness; an unconfigured skip is not accepted as cross-repository validation.
+This private transport probe is not a standard-API acceptance sample or public online lifecycle proof.
