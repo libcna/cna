@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "Microsoft/Xna/Framework/Game.hpp"
+#include "CNA/Platform/Input/KeyboardAccelerometer.hpp"
 #include "CNA/Internal/Runtime/IGameOverlay.hpp"
 
 #include "CNA/Internal/Input/PlatformInputBridge.hpp"
@@ -1397,6 +1398,14 @@ namespace Microsoft::Xna::Framework
         if (CNA::Platform::IPlatformKeyboard* keyboard = platform_->GetKeyboard())
         {
             keyboard->Update();
+            const auto& snapshot = keyboard->GetSnapshot();
+            CNA::Platform::KeyboardAccelerometer::Update(snapshot, getIsActiveProperty());
+            Window_.updateKeyboardOrientation(snapshot, getIsActiveProperty());
+        }
+        else
+        {
+            CNA::Platform::KeyboardAccelerometer::Update({}, false);
+            Window_.updateKeyboardOrientation({}, false);
         }
         if (CNA::Platform::IPlatformMouse* mouse = platform_->GetMouse())
         {

@@ -361,6 +361,8 @@ namespace Microsoft::Xna::Framework
         void INTERNAL_OnClientSizeChanged(System::Object* sender, const System::EventArgs& args);
         void INTERNAL_CreateGraphicsDeviceInformation(GraphicsDeviceInformation& gdi);
         void markPreferencesChanged();
+        [[nodiscard]] bool supportsOrientations() const;
+        void onKeyboardOrientationChanged();
         void registerServices();
         void unregisterServices();
         void unsubscribeDeviceEvents();

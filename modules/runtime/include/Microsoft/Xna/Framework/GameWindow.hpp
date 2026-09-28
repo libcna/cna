@@ -22,6 +22,7 @@ namespace CNA::Platform
 {
     class IPlatformWindow;
     struct DropEvent;
+    struct KeyboardSnapshot;
 }
 
 namespace CNA::Devices
@@ -116,6 +117,17 @@ namespace Microsoft::Xna::Framework
          * @return The current DisplayOrientation value.
          */
         [[nodiscard]] DisplayOrientation getCurrentOrientationProperty() const;
+
+        /** @brief Gets the per-window, off-by-default keyboard orientation mode.
+         * @return True when arrow keys request device orientation. */
+        CNAEXT [[nodiscard]] bool getKeyboardOrientationEmulationEnabledEXT() const;
+        /**
+         * @brief Enables device-orientation requests from Up/Left/Right (portrait/landscape).
+         * @param enabled True to emulate orientation, independently of accelerometer emulation.
+         * Requests obey GraphicsDeviceManager.SupportedOrientations. A blocked request is retained
+         * until the game unlocks that orientation. Call on the game-loop thread.
+         */
+        CNAEXT void setKeyboardOrientationEmulationEnabledEXT(bool enabled);
 
         /**
          * @brief Gets the native window handle as an integer pointer value.
@@ -267,6 +279,14 @@ namespace Microsoft::Xna::Framework
         bool isBorderless_;
         bool pendingFullScreen_;
         bool hasPendingScreenDeviceChange_;
+        bool keyboardOrientationEnabled_ = false;
+        bool keyboardOrientationResetPending_ = false;
+        DisplayOrientation requestedKeyboardOrientation_ = DisplayOrientation::Default;
+        unsigned previousOrientationKeys_ = 0;
+        std::function<void()> keyboardOrientationChanged_;
+        void updateKeyboardOrientation(const CNA::Platform::KeyboardSnapshot& keyboard, bool focused);
+        [[nodiscard]] DisplayOrientation selectKeyboardOrientation(
+            DisplayOrientation supported, int preferredWidth, int preferredHeight) const;
         std::vector<String> droppedFiles_;
         std::vector<String> droppedTexts_;
 

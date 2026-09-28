@@ -15,6 +15,8 @@
 
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/TargetPlatform.hpp"
+#include "CNA/Platform/Input/KeyboardAccelerometer.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "Microsoft/Devices/Sensors/Detail/AndroidSensorOrientation.hpp"
 #include "Microsoft/Devices/Sensors/Detail/PlatformSensorSubsystem.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -34,8 +36,22 @@ namespace Microsoft::Devices::Sensors
         return CNA::Platform::SensorKind::Accelerometer;
     }
 
+    bool Accelerometer::getKeyboardEmulationEnabledEXT()
+    { return CNA::Platform::KeyboardAccelerometer::IsEnabled(); }
+
+    void Accelerometer::setKeyboardEmulationEnabledEXT(bool enabled)
+    {
+        auto& subsystem = GetSubsystem();
+        std::lock_guard<std::mutex> lock(subsystem.mutex_);
+        if (enabled == getKeyboardEmulationEnabledEXT()) return;
+        if (!subsystem.startedInstances_.empty())
+            throw System::InvalidOperationException("Stop all accelerometers before changing keyboard emulation.");
+        CNA::Platform::KeyboardAccelerometer::SetEnabled(enabled);
+    }
+
     bool Accelerometer::getIsSupportedProperty()
     {
+        if (getKeyboardEmulationEnabledEXT()) return true;
         // Desktop is deliberately treated like Android/iOS: if the selected platform reports a
         // real accelerometer (for example in a 2-in-1 laptop), CNA uses it. Browser support remains
         // excluded by the established target policy and requires a separate compatibility choice.
@@ -137,7 +153,7 @@ namespace Microsoft::Devices::Sensors
                 "Failed to start accelerometer data acquisition: selected platform changed "
                 "while this sensor still owns its previous subsystem reference.");
         }
-        if (!subsystemHeld_)
+        if (!subsystemHeld_ && !getKeyboardEmulationEnabledEXT())
         {
             try
             {
@@ -168,6 +184,8 @@ namespace Microsoft::Devices::Sensors
             throw AccelerometerFailedException(message.c_str());
         }
 
+        // An instance may have been constructed before the application enabled emulation.
+        setIsSupportedProperty(true);
         started_ = true;
         state_ = SensorState::Ready;
 
@@ -455,7 +473,7 @@ namespace Microsoft::Devices::Sensors
             // unremapped, device-fixed axes instead (see
             // Detail::SetAndroidLandscapeRemapEnabled()'s own doc comment).
             const Microsoft::Xna::Framework::Vector3 acceleration =
-                Detail::IsAndroidLandscapeRemapEnabled()
+                !getKeyboardEmulationEnabledEXT() && Detail::IsAndroidLandscapeRemapEnabled()
                     ? ConvertAndroidAccelerometerToXnaLandscape(
                           x / StandardGravity,
                           y / StandardGravity,
