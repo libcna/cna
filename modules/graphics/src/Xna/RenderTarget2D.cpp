@@ -149,9 +149,9 @@ namespace Microsoft::Xna::Framework::Graphics
         , usage_(usage)
     {
         rtRenderer_ = static_cast<IRenderTargetRenderer*>(GetRendererRaw());
-        // GDI-058: the public property describes the attachment that was actually created, not a
-        // request the renderer normalized away. The interface default is identity for renderers that
-        // honor the requested format; GDI's shared CPU target reports DepthFormat::None.
+        // The public property describes the attachment that was actually created, not a request
+        // the renderer normalized away. The interface default is identity for renderers that honor
+        // the requested format.
         if (rtRenderer_)
         {
             depthFormat_ = static_cast<DepthFormat>(

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// GDI-067: genuine 32-bit size_t coverage for CPU framebuffer layout arithmetic.
+// Genuine 32-bit size_t coverage for the Software renderer's CPU framebuffer layout arithmetic.
 
 #include "CNA/Internal/Renderers/Software/SoftwareFramebufferAllocation.hpp"
 
@@ -30,7 +30,7 @@ int main()
                      normal.stencilBytes == 8294400u &&
                      normal.multiSampleBytes == 132710400u &&
                      normal.totalBytes == 174182400u,
-                 "32-bit planner accepts a budgeted 4K GDI 4x framebuffer exactly");
+                 "32-bit planner accepts a budgeted 4K 4x framebuffer without depth exactly");
 
     const SoftwareFramebufferAllocationLayout overflow =
         PlanSoftwareFramebufferAllocation(

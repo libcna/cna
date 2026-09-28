@@ -200,7 +200,8 @@ TEST_F(CrossRendererContractTest, SelectingEveryRendererInTurnLeavesNoFallbackRe
 // The input below is the cheapest instance of that conflation: a plain XNA
 // VertexPositionNormalTangentTexture buffer (stride 48, the same layout glTF emits for a tangented
 // primitive) drawn with a BasicEffect whose DiffuseColor is RED, lighting off, no texture. Every
-// renderer that draws it must produce red. Two did not when this test was written:
+// renderer that draws it must produce red. Two renderers, both since retired, did not when this
+// test was written:
 //
 //   * OPENGL4 produced rgba(0,0,255) -- the colour fallback dropped GpuDrawParams and its program
 //     painted attribute location 1, which on this record is the NORMAL (0,0,1), as the surface;

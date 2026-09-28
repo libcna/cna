@@ -42,22 +42,14 @@ typedef uint32_t CNA_GraphicsRendererType;
 #define CNA_GRAPHICS_RENDERER_DIRECTX12 UINT32_C(15)
 /** @brief Identifies the HTML Canvas backend. */
 #define CNA_GRAPHICS_RENDERER_CANVAS UINT32_C(17)
-/** @brief Identifies the HTML DOM backend. */
-#define CNA_GRAPHICS_RENDERER_HTML_DOM UINT32_C(18)
 /** @brief Identifies the Direct3D 9 backend. */
 #define CNA_GRAPHICS_RENDERER_DIRECTX9 UINT32_C(22)
 /** @brief Identifies the SDL_GPU backend. */
 #define CNA_GRAPHICS_RENDERER_SDL_GPU UINT32_C(31)
-/** @brief Identifies the desktop OpenGL 4 backend. */
-#define CNA_GRAPHICS_RENDERER_OPENGL4 UINT32_C(33)
-/** @brief Identifies the Win32 GDI backend. */
-#define CNA_GRAPHICS_RENDERER_GDI UINT32_C(40)
 /** @brief Identifies the Apple Metal backend. */
 #define CNA_GRAPHICS_RENDERER_METAL UINT32_C(42)
 /** @brief Identifies the FNA3D backend. */
 #define CNA_GRAPHICS_RENDERER_FNA3D UINT32_C(43)
-/** @brief Identifies the SVG DOM backend. */
-#define CNA_GRAPHICS_RENDERER_SVG_DOM UINT32_C(44)
 
 /**
  * @brief Largest defined renderer identity.
@@ -69,15 +61,15 @@ typedef uint32_t CNA_GraphicsRendererType;
  * @ref CNA_GraphicsRendererType, as is any retired value within the range.
  *
  * Retired values, permanently reserved and never assigned to another renderer: 7 (BGFX),
- * 10 (MAGNUM), 16 (DIRECT2D), 19 (SKIA), 20 (BLEND2D), 21 (FREEDIRECT), 23 (DIRECTX1),
- * 24 (DIRECTX2), 25 (DIRECTX3), 26 (DIRECTX5), 27 (DIRECTX6), 28 (DIRECTX7), 29 (DIRECTX8),
- * 30 (DIRECTX10), 32 (OPENGLES1), 34 (OPENGL1), 35 (OPENGL2), 36 (WICKED), 37 (SOKOL),
- * 38 (DILIGENT), 39 (GLIDE), 41 (LLGL), 45 (OPENVG), 46 (PORTABLEGL), 47 (TINYGL), 48 (IGL),
- * 49 (PIXIJS), 50 (NANOVG) and 51 (RLGL). Because values above this maximum include retired
- * ones, a future identity takes the next never-assigned value, 52, not the value after this
- * maximum.
+ * 10 (MAGNUM), 16 (DIRECT2D), 18 (HTML_DOM), 19 (SKIA), 20 (BLEND2D), 21 (FREEDIRECT),
+ * 23 (DIRECTX1), 24 (DIRECTX2), 25 (DIRECTX3), 26 (DIRECTX5), 27 (DIRECTX6), 28 (DIRECTX7),
+ * 29 (DIRECTX8), 30 (DIRECTX10), 32 (OPENGLES1), 33 (OPENGL4), 34 (OPENGL1), 35 (OPENGL2),
+ * 36 (WICKED), 37 (SOKOL), 38 (DILIGENT), 39 (GLIDE), 40 (GDI), 41 (LLGL), 44 (SVG_DOM),
+ * 45 (OPENVG), 46 (PORTABLEGL), 47 (TINYGL), 48 (IGL), 49 (PIXIJS), 50 (NANOVG) and 51 (RLGL).
+ * Because values above this maximum include retired ones, a future identity takes the next
+ * never-assigned value, 52, not the value after this maximum.
  */
-#define CNA_GRAPHICS_RENDERER_MAXIMUM CNA_GRAPHICS_RENDERER_SVG_DOM
+#define CNA_GRAPHICS_RENDERER_MAXIMUM CNA_GRAPHICS_RENDERER_FNA3D
 
 /** @brief Fixed-width identifier for a renderer-dependent graphics capability. */
 typedef uint32_t CNA_GraphicsCapability;

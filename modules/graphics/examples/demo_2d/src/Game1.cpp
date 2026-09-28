@@ -5,7 +5,6 @@
 #include <cstdlib>
 #include <iostream>
 
-#include "CNA/GraphicsRendererType.hpp"
 #include "System/TimeSpan.hpp"
 
 Game1::Game1()
@@ -20,25 +19,11 @@ Game1::Game1()
     backgroundTargetG = randFloat01();
     backgroundTargetB = randFloat01();
 
-    // This demo is deliberately a demanding GPU scene by default (50–100 large, rotating,
-    // alpha-blended sprites).  GDI is a CPU rasterizer with GDI presentation, so using that same
-    // load at 60 FPS consumes a whole core without providing a more useful visual demonstration.
-    // Keep a lively, representative scene for the GDI visual gate while respecting the renderer's
-    // intended modest-workload scope.  Other renderers retain the existing 60 FPS stress profile.
-    const bool gdiCompatibilityProfile =
-        CNA::getCurrentGraphicsRendererType() == CNA::GraphicsRendererType::Gdi;
-    if (gdiCompatibilityProfile)
-    {
-        minFlyers = 12;
-        maxFlyers = 20;
-    }
-
-    const double targetFramesPerSecond = gdiCompatibilityProfile ? 30.0 : 60.0;
+    const double targetFramesPerSecond = 60.0;
     System::TimeSpan targetElapsedTime = System::TimeSpan(
         System::TimeSpan::FromMilliseconds(1000.0 / targetFramesPerSecond).getTicksProperty());
     Game::setTargetElapsedTimeProperty(targetElapsedTime);
-    Game::getWindowProperty().setTitleProperty(
-        gdiCompatibilityProfile ? "CNA 2D Demo - GDI compatibility profile" : "CNA 2D Demo");
+    Game::getWindowProperty().setTitleProperty("CNA 2D Demo");
 }
 
 Game1::~Game1()

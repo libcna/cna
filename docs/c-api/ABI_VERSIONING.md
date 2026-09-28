@@ -2,7 +2,21 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.32.0** (`GS-005b`). It adds caller-buffer picture copy
+The current experimental ABI is **0.33.0** (`RRC-015`). It **retires four public renderer
+identities** -- `HTML_DOM` (`18`), `OPENGL4` (`33`), `GDI` (`40`) and `SVG_DOM` (`44`) -- together
+with the four `CNA_GRAPHICS_RENDERER_*` constants that named them, and moves
+`CNA_GRAPHICS_RENDERER_MAXIMUM` from `44` (`SVG_DOM`) to `43` (`FNA3D`, the highest surviving
+identity). CNA now has 18 public renderer identities (`docs/removed-renderers.md`). No route,
+structure, field, capability bit or exported symbol changes, and no surviving identity is
+renumbered. What breaks is a binding that names one of the four removed constants (it no longer
+compiles), passes one of their integers (every route now refuses it with
+`CNA_RESULT_INVALID_ARGUMENT`), or compares against `CNA_GRAPHICS_RENDERER_MAXIMUM`. The four values
+join the permanently reserved set, which is now `7`, `10`, `16`, `18`--`21`, `23`--`30`, `32`--`41`
+and `44`--`51`; a future identity still takes **`52`**.
+
+### Previous ABI 0.32.0
+
+The ABI was **0.32.0** (`GS-005b`). It added caller-buffer picture copy
 routes for achievements and gamer profiles, releases temporary stream ownership in both size
 routes, and makes the existing Guide/Dispatcher routes reflect configured service availability
 and real authentication. Unconfigured social/sign-in calls now refuse, duplicate initialization

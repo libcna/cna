@@ -1012,7 +1012,7 @@ namespace CNA::Internal::Renderers
         /// Returns whether this target has a real stencil plane. The caller passes true only for
         /// Depth24Stencil8. Most renderers allocate depth and stencil together, so the compatibility
         /// default delegates to HasRealDepthBuffer(); a renderer with standalone stencil storage
-        /// (GDI's CPU 2D extension) overrides this independently.
+        /// overrides this independently.
         [[nodiscard]] virtual bool HasRealStencilBuffer(bool stencilFormatWasRequested) const
         {
             return HasRealDepthBuffer(stencilFormatWasRequested);
@@ -1104,7 +1104,7 @@ namespace CNA::Internal::Renderers
         // is the one `RenderTarget2D::GetData` already established: top row first.
         //
         // Headless keeps the inherited refusal because it rasterizes nothing, and the renderers
-        // that create no cube render target at all (native 2D, Canvas, GDI)
+        // that create no cube render target at all (native 2D, Canvas)
         // never reach this class -- `GraphicsDevice::SetRenderTargets` refuses to bind one and
         // `TextureCube::GetData` refuses a null renderer one step earlier. Every remaining boundary
         // (a multisampled or mipped cube target on bgfx, a mip level D3D9 never allocated, WebGPU's
@@ -1778,7 +1778,7 @@ namespace CNA::Internal::Renderers
         /// Divergence 1 / D9-81 item 1). When true, XNA selects a per-pixel-lit shader
         /// (`VSBasicPixelLighting*`/`PSBasicPixelLighting*`); when false (XNA's own default),
         /// it selects a per-vertex-lit shader instead. Renderers that generate both lighting
-        /// families honour this (D3D9, D3D11, D3D12, WebGPU, Vulkan, EasyGL, OpenGL4);
+        /// families honour this (D3D9, D3D11, D3D12, WebGPU, Vulkan, EasyGL);
         /// fixed-function renderers evaluate lighting per vertex by construction; a
         /// renderer with neither renders per-pixel regardless of its value -- a known, tracked
         /// divergence from XNA's default, not fixed by adding this field alone. Only meaningful
@@ -2579,11 +2579,10 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Maps a requested MSAA sample count to the count this renderer actually applied.
          *
-         * plans/plan_runtimerenderer.md design decision 9. The identity default is deliberate and is
-         * exactly what every renderer except GDI did when this was an #ifdef CNA_RENDERER_GDI block
-         * in the XNA layer: PresentationParameters keeps echoing back what the game asked for.
-         * Only a renderer that clamps the request at construction time (GDI, which supports one
-         * real optional mode) needs to correct that, and it must not be generalized to "always
+         * plans/plan_runtimerenderer.md design decision 9. The identity default is deliberate:
+         * PresentationParameters keeps echoing back what the game asked for. Only a renderer that
+         * clamps the request (SOFTWARE, which supports one real optional mode, or a GPU renderer
+         * limited by its device) needs to correct that, and it must not be generalized to "always
          * report GetMultiSampleCount()" -- most renderers leave that at its 0 default, so doing so
          * would report "no MSAA" for every renderer that in fact honoured the request.
          *
@@ -3448,9 +3447,8 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Returns whether the active default back buffer has a usable stencil plane.
          *
-         * The standalone-plane rule mirrors HasRealBackBufferDepthBuffer() and preserves
-         * renderers such as GDI whose real CPU stencil storage is independent of an XNA combined
-         * depth/stencil presentation format.
+         * The standalone-plane rule mirrors HasRealBackBufferDepthBuffer(), for a renderer whose
+         * real stencil storage is independent of an XNA combined depth/stencil presentation format.
          *
          * @param stencilFormatWasRequested Whether the applied format is Depth24Stencil8.
          * @return True when a public stencil clear can reach real active storage.

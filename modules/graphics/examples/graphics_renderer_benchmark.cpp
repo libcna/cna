@@ -3,16 +3,15 @@
 // CNAEXT. A renderer-agnostic workload written against the public XNA API so the identical source
 // produces a genuine like-for-like comparison. The D3D12 build additionally reads internal
 // synchronization counters after the workload; that diagnostic does not alter what is drawn.
-// In browsers it retains the original
-// CANVAS/EasyGL/HTML_DOM reporting contract. On native hosts it is also the PLAT-7/PLAT-120 fixed
-// scene: build the target once per selected renderer and compare its raw per-frame JSON samples.
+// In browsers it reports for CANVAS and the EasyGL WebGL profiles. On native hosts it is also the
+// PLAT-7/PLAT-120 fixed scene: build the target once per selected renderer and compare its raw
+// per-frame JSON samples.
 //
-// plans/plan_html_dom.md HTMLDOM-111 (reopens HTMLDOM-89/92/99's own conclusions): an earlier version of
-// this file (and htmldom_stress_test.cpp's own HTMLDOM-89 benchmark) stopped its timer immediately
-// after SpriteBatch::End(), before Present() and before Chromium's own deferred style/layout/
-// paint/compositor work -- structurally favouring DOM style submission (cheap, deferred) over
-// Canvas2D/WebGL work (whose real cost is closer to synchronous), and unable to support an
-// "fps-equivalent" or cross-renderer "X is faster" claim at all. Two independent corrections:
+// An earlier version of this file stopped its timer immediately after SpriteBatch::End(), before
+// Present() and before the browser's own deferred style/layout/paint/compositor work --
+// structurally favouring deferred submission over work whose real cost is closer to synchronous,
+// and unable to support an "fps-equivalent" or cross-renderer "X is faster" claim at all. Two
+// independent corrections:
 //
 // 1. TWO metrics, not one, both reported: "CPU submission" (the original performance.now() bracket
 //    around Begin()/Draw()/End() -- real, but explicitly NOT a frame-rate number) and "real
@@ -21,20 +20,18 @@
 //    retaining its Wasm caller, so this interval includes the previous frame's browser-visible
 //    scheduling delay and is the one thing the old submission-only bracket could never see.
 // 2. TWO workloads, not one: "stable tint" (position animates every frame, tint per sprite is FIXED
-//    -- this renderer's own documented sweet spot, "rewards static sprite sheets and moving
-//    sprites") and "heavy churn" (position AND tint both animate every frame -- this renderer's own
-//    documented weak point, "a new cached variant per distinct colour"). The ORIGINAL single-
-//    workload version of this benchmark measured ONLY the heavy-churn case while calling it
-//    "steady state" -- a real, if unintentional, apples-to-oranges mislabelling: the published
-//    2.338 ms/frame number was this renderer's OWN worst documented case, not its best one.
+//    -- the cheap case for a renderer that caches per-colour work) and "heavy churn" (position AND
+//    tint both animate every frame -- the expensive case for the same renderer). The ORIGINAL
+//    single-workload version of this benchmark measured ONLY the heavy-churn case while calling it
+//    "steady state".
 //
 // Also captures navigator.userAgent (browser/build identification) and a real
 // WEBGL_debug_renderer_info UNMASKED_RENDERER_WEBGL query -- via a throwaway canvas unrelated to
 // whichever renderer actually built this binary, since any WebGL context in the same browser
 // session reports the same renderer string -- so a hardware GPU result is never silently compared
 // against a software (SwiftShader) one without saying so. Harmless, informational-only for
-// CANVAS/HTML_DOM (neither creates a WebGL context of its own at all); genuinely load-bearing for
-// EASYGL, whose own canvas IS exactly what this ends up querying.
+// CANVAS (which creates no WebGL context of its own at all); genuinely load-bearing for EASYGL,
+// whose own canvas IS exactly what this ends up querying.
 //
 // Publishes raw per-frame samples (window.__cnaBenchSamples, a JSON array) alongside the averaged
 // numbers, so a result is independently reproducible/re-analysable rather than only the single
@@ -128,7 +125,7 @@ namespace
 #if defined(__EMSCRIPTEN__)
     EM_JS(double, JsNow, (), { return performance.now(); });
 
-    // plans/plan_html_dom.md HTMLDOM-111: raw per-frame end-to-end samples for the phase currently
+    // Raw per-frame end-to-end samples for the phase currently
     // measuring, so the published average is independently re-derivable, not just asserted.
     EM_JS(void, JsPushSample, (const char* phase, double ms), {
         if (!window.__cnaBenchSamples) window.__cnaBenchSamples = [];
@@ -148,12 +145,12 @@ namespace
         // analogue of what the old single "avgMs" used to mean.
         window.__cnaBenchAvgMs = churnEndToEndMs;
         window.__cnaBenchUserAgent = (typeof navigator !== 'undefined') ? navigator.userAgent : "";
-        // plans/plan_html_dom.md HTMLDOM-111: never let a hardware-GPU WebGL result and a software
+        // Never let a hardware-GPU WebGL result and a software
         // (SwiftShader) one be compared without saying so. A real query, via a throwaway canvas
         // unrelated to whichever CNA renderer actually built this binary -- any WebGL context in
         // the same browser session reports the same renderer string, so this works identically
         // for EASYGL (whose OWN canvas is exactly this) and is simply extra, harmless information
-        // for CANVAS/HTML_DOM (which never create a WebGL context of their own at all).
+        // for CANVAS (which never creates a WebGL context of its own at all).
         window.__cnaBenchWebglRenderer = (function () {
             try {
                 const c = document.createElement('canvas');
@@ -249,12 +246,10 @@ class GraphicsRendererBenchmark : public Game
 #endif
 
 
-    // plans/plan_html_dom.md HTMLDOM-111: draws kSpriteCount sprites, all moving every frame (this
-    // renderer's own documented sweet spot on the position side regardless of workload). `churnTint`
-    // selects which of the two workloads this call belongs to: false = "stable tint" (per-sprite
-    // colour is a pure function of `i` alone -- fixed across every frame, the OTHER half of the
-    // documented sweet spot); true = "heavy churn" (colour is ALSO a function of `frame_`, a fresh
-    // value every single frame, this renderer's own documented weak point).
+    // Draws kSpriteCount sprites, all moving every frame. `churnTint` selects which of the two
+    // workloads this call belongs to: false = "stable tint" (per-sprite colour is a pure function of
+    // `i` alone -- fixed across every frame); true = "heavy churn" (colour is ALSO a function of
+    // `frame_`, a fresh value every single frame).
     void DrawSprites(bool churnTint)
     {
         spriteBatch_->Begin();

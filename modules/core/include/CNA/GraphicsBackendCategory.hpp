@@ -72,8 +72,6 @@ namespace CNA
             case GraphicsRendererType::DirectX11:
             case GraphicsRendererType::DirectX12:
             case GraphicsRendererType::DirectX9:
-            case GraphicsRendererType::OpenGL4:
-            case GraphicsRendererType::Gdi:
             case GraphicsRendererType::Metal:
                 return GraphicsBackendCategory::Native;
 
@@ -89,8 +87,6 @@ namespace CNA
             case GraphicsRendererType::WebGL1:
             case GraphicsRendererType::WebGL2:
             case GraphicsRendererType::Canvas:
-            case GraphicsRendererType::HtmlDom:
-            case GraphicsRendererType::SvgDom:
                 return GraphicsBackendCategory::Web;
 
             case GraphicsRendererType::Headless:

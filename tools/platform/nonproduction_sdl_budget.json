@@ -313,89 +313,13 @@
       "category": "renderer-integration-executable",
       "max_references": 16
     },
-    "modules/renderers/gdi/examples/gdi_2d_benchmark.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 14
-    },
-    "modules/renderers/gdi/examples/gdi_2d_regression_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 23
-    },
-    "modules/renderers/gdi/examples/gdi_applied_state_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 13
-    },
-    "modules/renderers/gdi/examples/gdi_colormatrix_effect_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 13
-    },
-    "modules/renderers/gdi/examples/gdi_dc_release_transaction_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 24
-    },
-    "modules/renderers/gdi/examples/gdi_dirty_damage_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 13
-    },
-    "modules/renderers/gdi/examples/gdi_framebuffer_allocation_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 14
-    },
-    "modules/renderers/gdi/examples/gdi_msaa_contract_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 14
-    },
-    "modules/renderers/gdi/examples/gdi_presentation_configuration_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 13
-    },
-    "modules/renderers/gdi/examples/gdi_presentation_mode_transaction_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 19
-    },
-    "modules/renderers/gdi/examples/gdi_public_api_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 14
-    },
-    "modules/renderers/gdi/examples/gdi_public_stencil_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 13
-    },
-    "modules/renderers/gdi/examples/gdi_repaint_invalidation_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 55
-    },
-    "modules/renderers/gdi/examples/gdi_smoke_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 14
-    },
-    "modules/renderers/gdi/examples/gdi_texture_allocation_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 13
-    },
-    "modules/renderers/gdi/examples/gdi_unsupported_features_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 13
-    },
-    "modules/renderers/gdi/examples/gdi_window_metrics_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 53
-    },
     "modules/renderers/headless/examples/headless_smoke_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 6
     },
-    "modules/renderers/html-dom/examples/htmldom_smoke_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 10
-    },
     "modules/renderers/metal/examples/metal_smoke_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 6
-    },
-    "modules/renderers/opengl4/examples/opengl4_smoke_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 11
     },
     "modules/renderers/sdl-gpu/examples/sdlgpu_constructor_exception_safety_test.cpp": {
       "category": "renderer-integration-executable",
@@ -758,10 +682,6 @@
       "max_references": 2
     },
     "modules/renderers/stub/examples/stub_smoke_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 7
-    },
-    "modules/renderers/svg-dom/examples/svgdom_smoke_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 7
     }

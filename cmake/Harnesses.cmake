@@ -435,7 +435,7 @@ endif()
 # plans/plan_fx.md FX-062 existence gate: proves the pinned MojoShader's OpenGL adapter (mojoshader_
 # opengl.c) links and renders a committed effect's shader pair against a real GLES3 context this
 # machine can create, linking only MojoShader and SDL3 -- no CNA, no EasyGL. EasyGL is the shared
-# implementation behind OPENGLES2/OPENGLES3/OPENGL33/OPENGL4/WEBGL1/WEBGL2, and its own stock
+# implementation behind OPENGLES2/OPENGLES3/OPENGL33/WEBGL1/WEBGL2, and its own stock
 # shaders are authored once in GLSL ES 3.00, but that string-rewriting pipeline is irrelevant to
 # MojoShader-compiled shaders: MojoShader emits already-correct-dialect GLSL for whichever profile
 # its own MOJOSHADER_glCreateContext is asked for, entirely in parallel to EasyGL's own shaders.

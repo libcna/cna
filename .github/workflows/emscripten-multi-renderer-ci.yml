@@ -5,15 +5,18 @@
 # before start through Module.cnaPreferredRenderer (RTR-P10-23) -- is where runtime selection stops
 # being a convenience and becomes the only way to serve a mixed audience from one download.
 #
-# The set is WEBGL2 + CANVAS + HTML_DOM + SVG_DOM: one GPU renderer and three that need no GPU at
-# all, which is exactly the fallback shape a real page wants.
+# The set is WEBGL2 + WEBGL1 + CANVAS: a GPU renderer and one that needs no GPU at all, which is the
+# fallback shape a real page wants. WEBGL2 and WEBGL1 are two identities of the one EasyGL family,
+# so the bundle also proves a multi-identity family registers each identity it serves. (A bundle
+# that holds WEBGL2 links with MIN_WEBGL_VERSION=2, so its WEBGL1 profile runs on a WebGL 2
+# context; a page that must reach WebGL-1-only browsers needs a WEBGL1-only bundle.)
 #
 # What this job proves and what it does not:
-#   * it PROVES the four renderers link into one bundle and that the JS selection surface is present
-#     in it -- the failure this guards against is a combination that only breaks when built together
-#   * it does NOT run the bundle in a browser. htmldom-ci.yml already drives a real Chromium for the
-#     HTML_DOM renderer; duplicating that here would test the browser harness, not the multi-renderer
-#     link. Runtime behaviour in a page is covered by that job and by RTR-P10-22's own runs.
+#   * it PROVES the three identities link into one bundle and that the JS selection surface is
+#     present in it -- the failure this guards against is a combination that only breaks when built
+#     together
+#   * it does NOT run the bundle in a browser; runtime behaviour in a page is covered by
+#     RTR-P10-22's own runs.
 
 name: Emscripten multi-renderer CI
 
@@ -36,12 +39,12 @@ concurrency:
 
 jobs:
   emscripten-multi:
-    name: One wasm bundle, four renderers (WEBGL2 + CANVAS + HTML_DOM + SVG_DOM)
+    name: One wasm bundle, three renderers (WEBGL2 + WEBGL1 + CANVAS)
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
-      # Pinned rather than "latest", for the same reason htmldom-ci.yml pins it: a silent emsdk bump
-      # can break a wasm build in ways that look like a source regression.
+      # Pinned rather than "latest": a silent emsdk bump can break a wasm build in ways that look
+      # like a source regression.
       EMSDK_VERSION: "6.0.3"
     steps:
       - name: Checkout cna (with submodules)
@@ -106,14 +109,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ccache python3
 
-      - name: Configure one bundle with all four renderers
+      - name: Configure one bundle with all three renderers
         run: |
           set -euo pipefail
           source ~/emsdk/emsdk_env.sh
           emcmake cmake -S . -B cmake-build-wasm-multi -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCNA_GRAPHICS_RENDERER=WEBGL2 \
-            -DCNA_GRAPHICS_RENDERERS="WEBGL2;CANVAS;HTML_DOM;SVG_DOM" \
+            -DCNA_GRAPHICS_RENDERERS="WEBGL2;WEBGL1;CANVAS" \
             -DCNA_SHARP_RUNTIME_ROOT="${GITHUB_WORKSPACE}/.ci-deps/sharp-runtime" \
             -DCNA_ENABLE_DRACO=OFF \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
@@ -125,9 +128,9 @@ jobs:
           source ~/emsdk/emsdk_env.sh
           cmake --build cmake-build-wasm-multi -j"$(nproc)"
 
-      # The point of the set is that all four are actually IN the artifact. A configure that quietly
-      # dropped one, or a renderer whose sources never reached the link, would otherwise pass this
-      # job by building three renderers and calling it four.
+      # The point of the set is that all three are actually IN the artifact. A configure that
+      # quietly dropped one, or a renderer whose sources never reached the link, would otherwise
+      # pass this job by building two renderers and calling it three.
       - name: Assert every renderer and the JS selection surface are in the bundle
         run: |
           set -euo pipefail
@@ -151,9 +154,7 @@ jobs:
           # was written.
           missing=0
           for archive in libcna_renderer_easygl.a \
-                         libcna_renderer_canvas.a \
-                         libcna_renderer_html_dom.a \
-                         libcna_renderer_svg_dom.a; do
+                         libcna_renderer_canvas.a; do
             if ! find cmake-build-wasm-multi -name "${archive}" | grep -q .; then
               echo "missing renderer archive: ${archive}" >&2
               missing=1
@@ -168,15 +169,15 @@ jobs:
           # Match on "::GetDescriptor...()" rather than on renderer names: a family with a single
           # public identity generates a bare GetDescriptor(), while a family serving several
           # generates GetDescriptor<Identity>() (EasyGL -> GetDescriptorWebGL2). A pattern requiring
-          # the suffix silently counts only the multi-identity families -- it reported 1 of 4 here
-          # while the bundle was in fact correct.
+          # the suffix silently counts only the multi-identity families -- it once reported 1 of 4
+          # here while the bundle was in fact correct.
           registry=$(find cmake-build-wasm-multi -name "CnaRendererRegistry.generated.cpp" | head -1)
           test -n "$registry" || { echo "generated registry not found" >&2; exit 1; }
           registered=$(grep -cE "::GetDescriptor[A-Za-z0-9]*\(\)," "$registry" || true)
           echo "registered renderers: ${registered}"
           grep -oE "[A-Za-z]+::GetDescriptor[A-Za-z0-9]*\(\)" "$registry" | sort -u | sed "s/^/  /"
-          if [ "${registered}" -ne 4 ]; then
-            echo "expected 4 registered renderers, found ${registered}" >&2
+          if [ "${registered}" -ne 3 ]; then
+            echo "expected 3 registered renderers, found ${registered}" >&2
             exit 1
           fi
 

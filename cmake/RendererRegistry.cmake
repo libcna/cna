@@ -41,12 +41,8 @@ function(_cna_renderer_identity_map out_var)
         DIRECTX11    DirectX11
         DIRECTX12    DirectX12
         CANVAS       Canvas
-        HTML_DOM     HtmlDom
-        SVG_DOM      SvgDom
         DIRECTX9     DirectX9
         SDL_GPU      SdlGpu
-        OPENGL4      OpenGL4
-        GDI          Gdi
         METAL        Metal
         FNA3D        Fna3d)
 

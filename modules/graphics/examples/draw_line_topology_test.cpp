@@ -103,8 +103,7 @@ class DrawLineTopologyTest final : public CNA::Examples::PixelTestGame
     /// buffer constructors (SOFTWARE-204, recovered from the shipped assemblies), so a zero-sized
     /// buffer is refused with ArgumentOutOfRangeException before any native resource exists. This
     /// check first asserted FNA's opposite rule -- zero-capacity buffers accepting empty uploads --
-    /// and failed on every renderer once the constructors followed XNA
-    /// (plans/plan_opengl4_modern_graphics.md GL4-0018).
+    /// and failed on every renderer once the constructors followed XNA.
     template <typename Create>
     static bool RefusedAsOutOfRange(Create&& create)
     {

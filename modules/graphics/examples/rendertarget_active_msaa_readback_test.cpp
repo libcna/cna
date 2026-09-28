@@ -28,7 +28,7 @@
 
 namespace
 {
-/// plans/plan_opengl4_modern_graphics.md GL4-0004: HiDef as the PROGRAM's profile --
+/// HiDef as the PROGRAM's profile --
 /// it binds two render targets, and Reach allows one, so under the
 /// default Reach device this test died on a profile refusal before its first check. It is set
 /// here rather than on the GraphicsDeviceManager because `Game`'s own GraphicsDevice exists before
@@ -128,7 +128,6 @@ namespace
                 // can be transferred" (SOFTWARE-246, recovered from the shipped assemblies), raised
                 // by the shared transfer guard before any renderer is asked. Accepting only
                 // NotSupportedException predated that guard and failed every renderer.
-                // plans/plan_opengl4_modern_graphics.md GL4-0018.
                 rejected = true;
             }
             catch (const System::NotSupportedException&)

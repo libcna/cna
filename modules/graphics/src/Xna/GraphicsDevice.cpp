@@ -4446,8 +4446,8 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             renderer_->SetVirtualResolution(virtualWidth_, virtualHeight_);
             NormalizeAppliedPresentationFormats(*renderer_, presentationParameters_);
-            // A renderer that clamps to its own real modes during construction (GDI supports one
-            // optional mode, 4x) surfaces that result immediately. Reset() already performs the
+            // A renderer that clamps to its own real modes during construction (SOFTWARE supports
+            // one optional mode, 4x) surfaces that result immediately. Reset() already performs the
             // same write-back via ApplyMultiSampleCount(); direct construction previously retained
             // the unapplied request.
             presentationParameters_.setMultiSampleCountProperty(

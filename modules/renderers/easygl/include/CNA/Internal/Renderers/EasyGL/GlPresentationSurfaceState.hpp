@@ -9,16 +9,12 @@
 namespace CNA::Internal::Renderers
 {
     /**
-     * @brief Platform-neutral presentation metrics shared by CNA's OpenGL renderer families.
+     * @brief Platform-neutral presentation metrics of the EasyGL (OpenGL) renderer family.
      *
      * The platform publishes physical drawable pixels plus a logical-to-physical display scale.
      * This value object derives the client-coordinate dimensions and owns the virtual
      * resolution transform (NativeBackBuffer, FixedHeightDynamicWidth, Stretch, Letterbox,
      * Overscan), so resize/DPI behaviour can be tested without a native window or GL.
-     *
-     * plans/plan_opengl4_modern_graphics.md GL4-0010: moved verbatim out of the EasyGL family,
-     * where it was EasyGLSurfaceState, so OpenGL4 presents with the same transform instead of the
-     * fill-the-window-only mapping it had before.
      */
     class GlPresentationSurfaceState
     {

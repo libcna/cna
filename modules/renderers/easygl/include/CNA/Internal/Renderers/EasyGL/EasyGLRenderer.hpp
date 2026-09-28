@@ -3,7 +3,7 @@
 
 #include "CNA/Internal/Renderers/EasyGL/GlProfile.hpp"
 
-#include "CNA/Internal/Renderers/Common/GlPresentationSurfaceState.hpp"
+#include "CNA/Internal/Renderers/EasyGL/GlPresentationSurfaceState.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
@@ -37,13 +37,7 @@ namespace CNA::Internal::Renderers::EasyGL
     class EasyGLCompiledEffect;
 #endif
 
-    /**
-     * @brief Platform-neutral presentation metrics consumed by the EasyGL family.
-     *
-     * plans/plan_opengl4_modern_graphics.md GL4-0010: the implementation moved to
-     * CNA/Internal/Renderers/Common/GlPresentationSurfaceState.hpp so OpenGL4 applies the same
-     * virtual-resolution and presentation-mode transform rather than a second copy of it.
-     */
+    /** @brief Platform-neutral presentation metrics consumed by the EasyGL family. */
     using EasyGLSurfaceState = GlPresentationSurfaceState;
 
     /**
@@ -2368,9 +2362,9 @@ namespace CNA::Internal::Renderers::EasyGL
      * @brief Creates an EasyGL renderer for the build's default GL profile.
      *
      * plans/plan_runtimerenderer.md design decision 4: declared in the FAMILY's namespace so several
-     * renderer archives can link into one binary. Declared here, alongside the class, for the same
-     * reason the GDI family declares its own (GdiRenderer.hpp): this family's device-free suites
-     * and contract programs construct a renderer directly, without going through GraphicsDevice,
+     * renderer archives can link into one binary. Declared here, alongside the class, because this
+     * family's device-free suites and contract programs construct a renderer directly, without
+     * going through GraphicsDevice,
      * and since RTR-P9-9 they compile whenever the family is PRESENT rather than only when it is
      * the default.
      *

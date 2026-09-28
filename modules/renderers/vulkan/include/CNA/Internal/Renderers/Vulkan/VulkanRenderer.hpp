@@ -3413,7 +3413,7 @@ namespace CNA::Internal::Renderers::Vulkan
          * `PresentationParameters` after construction, so the identity default let a request the
          * device never applied be echoed to the game -- ask for 3 on any device and
          * `PickSampleCount` gives 2 while the identity reported 3. The argument is deliberately
-         * unused, matching GDI's override: both call sites pass the current request and use the
+         * unused, matching Software's override: both call sites pass the current request and use the
          * answer as a write-back, so the question is *what is in effect*, not *what would this
          * request become*.
          *

@@ -30,7 +30,7 @@ renderer count is not a goal.
 | RRC-012 | Retire `DIRECT2D`, `FREEDIRECT` and `PORTABLEGL`: remove their families and every integration that existed only for them | ✅ `0f96ea703` |
 | RRC-013 | Repair the runtime-discipline gate's identity parser; remove stale current-state references left by RRC-012 | ✅ |
 | RRC-014 | Move the Software contracts only the GDI suite held into the Software suite | ✅ |
-| RRC-015 | Retire `GDI`, `HTML_DOM`, `SVG_DOM` and `OPENGL4`: remove their families and every integration that existed only for them | ⬜ |
+| RRC-015 | Retire `GDI`, `HTML_DOM`, `SVG_DOM` and `OPENGL4`: remove their families and every integration that existed only for them | ✅ |
 | RRC-016 | Remove `CNA_SOFTWARE_2D_ONLY`, the reduced Software build that existed only for `GDI` | ⬜ |
 | RRC-017 | Remove the four renderers' documents, plans and handoffs; one retirement record | ⬜ |
 
@@ -920,3 +920,57 @@ Software. Each of its 18 executables was classified before deletion:
 
 Verified in `cmake-build-software`: `CnaRendererTests --gtest_filter='Software*'` 36/36 pass.
 
+
+## RRC-015 — Retire `GDI`, `HTML_DOM`, `SVG_DOM` and `OPENGL4`
+
+An owner decision to move CNA from breadth to long-term human maintenance. None of the four is
+replaced: `OPENGL33` stays CNA's desktop OpenGL identity with its 3.3 contract (no EasyGL OpenGL 4
+profile), `CANVAS`, `WEBGL1`/`WEBGL2` and `WEBGPU` cover the browser, and `SOFTWARE` stays the full
+CPU renderer. Result: **18 public renderer identities over 14 implementation families**.
+
+- **Removed:** `modules/renderers/{gdi,html-dom,svg-dom,opengl4}` (118 files, 46,933 lines); the
+  GDI Windows and HTML DOM browser workflows; six DOM browser scripts; `tools/htmldom`,
+  `tools/opengl4`; the DOM host-test options; the OpenGL4 GL-error ctest output gate; the GDI branch
+  of the Software CMake (`CNA_GDI_SOFTWARE_SOURCES`, `cna_renderer_software_headers`); the
+  `GDI`+`SOFTWARE` combination rule; every per-renderer arm in the shared tests and examples.
+- **Identity:** the four names move to `CNA_RENDERER_RETIRED_IDENTITIES` (`HTML_DOM=18`,
+  `OPENGL4=33`, `GDI=40`, `SVG_DOM=44`) and are refused by name on every route; their C ABI
+  constants are gone and the values permanently reserved; `CNA_GRAPHICS_RENDERER_MAXIMUM` is `43`
+  (`FNA3D`); the next new value stays `52`. The dense C++ enum loses four enumerators. C ABI `0.33.0`.
+- **Ownership moved, not deleted:** `GlStockShaderSources.hpp` and `GlPresentationSurfaceState.hpp`
+  had been lifted into `Common/` only so `OPENGL4` could share them; they are EasyGL's again.
+- **Kept on purpose:** the Win32 platform's GDI surface presenter (`StretchDIBits`), which is the
+  Win32 CPU-frame path `SOFTWARE` presents through; GDI+/`gdi32`/GDI-object mentions that are
+  Windows API facts; the Mesa EGL leak suppression, which is not OpenGL4-specific.
+- **Emscripten multi-renderer CI** now builds `WEBGL2`+`WEBGL1`+`CANVAS`: a GPU and a GPU-free
+  renderer, and still a multi-identity family in one bundle.
+
+**Verified** (Linux x86-64, 2026-09-28). All five identity/registry gates pass: 18 identities over
+14 families, 33 retired values reserved, next free value 52. A real top-level configure refuses each
+of the four names by name and value in about 0.5 s, before any SDL sub-build, on every route
+(`CNA_GRAPHICS_RENDERER`, a `CNA_GRAPHICS_RENDERERS` member, `CNA_RENDERER_<X>=ON`, any letter
+case). The C ABI baseline changes only by the four constants, the maximum and the version; its
+3,215 exports are unchanged. In `cmake-build-software` (`SOFTWARE`, C API on) the full ctest corpus
+ran on the private display: 10,604 of 10,625 passed, including all 159 Software-labelled tests. Every
+failure was classified; none is a defect this change introduced:
+
+- Measured failing identically at the pre-retirement commit: `CApi_TextureVolumeSmoke`, the three
+  `CApi_Audio*Smoke` tests and `GuideTest.TheClickThatAnswersAMessageBoxDoesNotAlsoReachTheGame`.
+- Older stale checks: the WebGPU PBR binding evidence (the code changed in `85c3baa09`, also
+  counted by `CnaGltfConformanceL0`), the XNA pipeline parity/component reports (hand-edited in
+  `5cc244f23`), and two C API artefacts left by `MOD-RETIRE-1` (regenerated in `b6309c0a8`).
+- Configuration-dependent: `CnaXnbModelCorpusSweep` (vendored Draco builds fixtures the manifest
+  records as refused).
+- Load-sensitive: four ENet cases and two `DynamicSoundEffectInstance` cases pass when rerun alone,
+  and the audio pair passes 20/20 repeats both before and after the change.
+- Generated reports the ABI change had to refresh, regenerated here with their own tools and
+  passing afterwards: `CApiCoverageMatrix`, `CApiLimitations` and `CApiReleaseGate` (whose record
+  also still carried the unregenerated `0.32.0` and planned-symbol count).
+
+
+The Emscripten bundle the CI job now builds (`WEBGL2;WEBGL1;CANVAS`, emsdk 6.0.9) configures, links
+all 82 browser executables except six unrelated to renderers (`posix_spawnp` in the content-pipeline
+host process, host headers in two net harnesses, a missing `<algorithm>` in `PathUtf8Tests`), and
+passes the job's own assertions: both JS selection exports, the `easygl` and `canvas` archives, three
+registered renderers. In headless Chrome the renderer benchmark ran to completion under each of the
+three, each selected at runtime.
