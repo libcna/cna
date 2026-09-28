@@ -937,3 +937,11 @@ sandbox; `unshare`, `ip` and `bwrap` are available, slirp4netns is absent. GS-00
 rootless NAT namespaces with a mature external NAT helper, subject to provisioning; no isolation
 claim has yet been measured. First unfinished task is GS-008c private libcurl WSS/loopback UDP
 transport and parser/real-ENet tests, followed by isolation/standard online sessions/invites/avatars.
+
+GS-008b exact tested code integration set:
+- CNA: 08260011b5b9a25bb8ce4726aa9ad7fff7b046ec (`feature/gamer-services-server`).
+- sharp-runtime: 6c4a857de129cf29b5d43430bedf24157d594f12 (`feature/gamer-services-collections`).
+- cna-gamer-services-server: cba4235cd539e6ed514ccfcf4b3abe48aa6f2efd (`feature/gamer-services-server`).
+All three clean at this checkpoint. This subsequent handoff commit changes documentation only.
+GS-008c1 now active: bounded private client message assembler and strict relay welcome validation,
+with deterministic fragmentation/chunk/control/boundary/error tests before native WSS/UDP I/O.
