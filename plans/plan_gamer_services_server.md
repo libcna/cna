@@ -766,7 +766,7 @@ CNA-specific transport routing; generic proxy change remains the only runtime mo
 - [x] GS-007e2b: caller-owned metadata/End-once and standard pending service Find.
 - [x] GS-007e2c1: private loopback ENet host and relay-only preallocation packet/fragment limits.
 - [x] GS-007e2c2a: immutable originating backend authority; fake/unconfigured relay refusal.
-- [ ] GS-007e2c2: immutable backend deployment authority and owned online preparation/rollback.
+- [x] GS-007e2c2: immutable backend deployment authority and owned online preparation/rollback.
 - [ ] GS-007e2c3: consume prepared transport in standard public create/join and E2E.
 - [ ] GS-007e2c: owned online create/join preparation, including cleanup on abandonment/failure.
 - [ ] GS-007e2: public async operation ownership/preparation and online lifecycle wiring.
@@ -1409,7 +1409,7 @@ instantiate an otherwise unreachable Ranked session. Existing public setter/migr
 gaps and SystemLink flag propagation remain unfinished; no claims of full Ranked API parity.
 Owned online preparation/cancellation/rollback remains the next main GS-007e2c2 task.
 
-### GS-007e2c2 active design: owned preparation and cancellation
+### GS-007e2c2 implemented design: owned preparation and cancellation
 
 The result owns its originating backend, while queued work/completions own only a separate
 mutex-protected state. Work borrows the executor; no state queued by a backend may strongly
@@ -1471,3 +1471,46 @@ of this test-coordination change. Logs: service-migration-ready-build.log and
 service-owned-preparation-final-net.log under cmake-build-debug.
 
 - [x] GS-007g1: coordinate full-roster readiness before the process harness disconnects its host.
+
+### GS-007e2c2 completed: private owned native preparation
+
+OnlineSessionPreparation owns the originating backend; queued synchronized state never owns that
+backend or public gamer/session objects. Acquire typed membership, validate exact local account
+set, kind and joined session correlation; issue a bound one-use ticket and wait up to ten seconds
+for bounded native ENet/WSS readiness. Owner completion publishes once even if replayed, and
+consumption is one-shot including errors. Cancellation wins publication under the same lock.
+Active canceled work and failed preparation close resources and best-effort leave; ready abandoned
+results leave while origin is still retained. A consumed PreparedOnlineSession independently owns
+origin, sockets and membership release, including joined-machine rather than host ownership.
+No detached threads and no sharp-runtime business logic/primitives added. Native fake authority is
+refused; test configuration/transport providers are explicit private dependency injection only.
+
+Eighteen deterministic cases cover immediate argument/authority guards, owner completion and replay,
+End-once, dropped queued/ready/completed results, backend last-owner retention/no cycles, throwing
+callbacks, factory/relay failure, ten-second timeout, active worker cancellation race, joined-group
+release and authentication loss. The first full run had one test fixture expecting the host to find
+its own session; corrected to search as the released remote account, preserving host/group assertions.
+Final Net **389/389, 14.675s**; affected targets/C API build pass with no new compiler warning.
+Private C API/header/export/protocol gates **5/5, 0.84s**. Public XNA/C ABI shape is unchanged;
+no inventory regeneration is necessary for a src-only private header (472/8134 remains the last
+measured native API inventory). Native directory E2E **1/1, 10.85s** after final hardening:
+two primary CNA processes/four users plus another title's search peer, verified HTTPS/WSS,
+failed create and join rollback, real abandoned ready-host cleanup, successful create/ordinary/
+invited preparation, recipient consent, expired multi-local credentials, server restart and
+public BeginFind/EndFind. No ENet welcome/public Create/Join completeness claim. Independent
+actual ENet and isolated-NAT relay cases were included in the preceding server **11/11** set.
+Logs: cmake-build-debug/service-owned-preparation-{hardened-build,hardened-net,private}.log;
+server build/service-owned-preparation-final-directory.log. Server docs/test acceptance commit
+**db5434b788da98be488b8b75697d2f1ab12ac256**; runtime stays **6c4a857de129cf29b5d43430bedf24157d594f12**.
+
+Failure limits: bounded leave can fail when offline/unauthenticated, so interrupted membership
+expires via its 90-second lease. A lost create response provides no returned membership ID to
+roll back; lease fallback still applies. Destruction can wait for bounded in-flight network work
+and cleanup. Accepted invitation consumption is not automatically restored after a later
+transport failure; reconnect/invite retry semantics need evidence and GS-007e2c3 integration.
+Owner construction/cancellation/take/completion dispatch share one thread; only worker state is
+synchronized. Do not wrap this helper in NetworkSessionAction::Queue capturing a strong preparation:
+that recreates the queued executor cycle. The action must own preparation separately from its
+queued Storage, and attach consumed resources on the owner thread. Join must not publish a
+successful public APM completion until ENet welcome, exact service IDs and the authorized host
+have also been established. Next main item is GS-007e2c3 plus GS-008c3 lifecycle/roster/lease wiring.

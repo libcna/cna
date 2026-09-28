@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
+#include "../../modules/net/src/Internal/OnlineSessionPreparation.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
@@ -62,8 +63,37 @@ int main(int argc,char** argv) {
             check(found.getCountProperty()==0,"other title advertisements escaped service scope");
             std::cout<<"directory-done "<<checks<<" checks\n"<<std::flush;return 0;
         }
+        namespace Transport=CNA::Internal::Net;
+        std::string lastPreparedSession;
+        const auto prepare=[&](Transport::OnlineSessionRequest request,bool fail=false) {
+            Transport::OnlinePreparationDependencies dependencies;
+            dependencies.transport=[&,fail](const auto& configuration,auto ticket,const auto& machines) -> std::unique_ptr<Transport::IPreparedOnlineTransport> {
+                lastPreparedSession=ticket.session;
+                if(fail)throw Service::ServiceOperationError("TEST_TRANSPORT_FAILURE");
+                return Transport::makeNativePreparedTransport(configuration,std::move(ticket),machines);
+            };
+            int completions=0;const auto ownerThread=std::this_thread::get_id();
+            auto pending=std::make_unique<Transport::OnlineSessionPreparation>(backend,std::move(request),[&] {
+                check(std::this_thread::get_id()==ownerThread,"preparation callback owner thread");++completions;
+            },std::move(dependencies));
+            check(!pending->complete(),"preparation begins pending");
+            const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(20);
+            while(!pending->complete()) {
+                GamerServicesDispatcher::Update();check(std::chrono::steady_clock::now()<deadline,"preparation deadline");
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            }
+            check(completions==1,"preparation completion once");return pending;
+        };
+        Transport::OnlineSessionRequest request;request.owner=users[0];request.users=users;request.kind=category;request.settings=settings;
         if(host) {
-            phase="create";auto session=directory.create(users[0],users,category,settings);check(session.currentGamers==2,"host local group");
+            phase="failed-host-preparation";
+            {auto pending=prepare(request,true);rejected([&]{(void)pending->take();},"TEST_TRANSPORT_FAILURE");}
+            rejected([&]{(void)directory.get(users[0],lastPreparedSession);},"NOT_FOUND");
+            phase="abandoned-host-preparation";
+            {auto pending=prepare(request);}
+            rejected([&]{(void)directory.get(users[0],lastPreparedSession);},"NOT_FOUND");
+            phase="create";auto hostPreparation=prepare(request);auto hostLease=hostPreparation->take();
+            auto session=hostLease->snapshot();check(session.currentGamers==2,"host local group");
             const auto authority=directory.issueRelayTicket(users[0],users,session.session);
             check(authority.machine==session.machine&&authority.session==session.session&&authority.ticket.size()==64,"host relay authority");
             phase="send-invite";auto invitation=directory.sendInvite(users[0],session.session,"Bob");
@@ -92,7 +122,7 @@ int main(int argc,char** argv) {
             // the same participant refresh repair as directory creation/join.
             std::cout<<"directory-after-join\n"<<std::flush;advance();
             phase="leaderboard-begin";const auto gameplay=backend->beginLeaderboardGame(users);backend->abortLeaderboardGame(gameplay,users[0]);
-            check(directory.leave(users[0],session.session),"host close");
+            check(hostLease->release(),"prepared host close");
         }else {
             std::string session,invite;check(static_cast<bool>(std::getline(std::cin,session))&&static_cast<bool>(std::getline(std::cin,invite)),"control identifiers");
             phase="public-find";
@@ -128,21 +158,27 @@ int main(int argc,char** argv) {
             phase="find";const auto page=directory.find(users[0],category,2,settings.properties,0,32);
             check(page.sessions.size()==1&&page.sessions[0].session==session,"service filtering/correlation");
             auto mismatch=settings.properties;mismatch[0]=38;check(directory.find(users[0],category,2,mismatch,0,32).sessions.empty(),"filter mismatch");
-            phase="ordinary-join";auto joined=directory.join(users[0],users,session);check(joined.currentGamers==4,"ordinary two-local join");
+            request.operation=Transport::OnlineSessionRequest::Operation::Join;request.session=session;
+            phase="failed-join-preparation";
+            {auto pending=prepare(request,true);rejected([&]{(void)pending->take();},"TEST_TRANSPORT_FAILURE");}
+            check(directory.find(users[0],category,2,settings.properties,0,32).sessions.size()==1,"failed join retained membership");
+            phase="ordinary-join";auto joinPreparation=prepare(request);auto joinLease=joinPreparation->take();
+            auto joined=joinLease->snapshot();check(joined.currentGamers==4,"ordinary two-local join");
             const auto authority=directory.issueRelayTicket(users[0],users,session);
             check(authority.machine==joined.machine&&authority.session==session&&authority.ticket.size()==64,"remote relay authority");
             check(directory.get(users[1],session).machine==joined.machine,"secondary local membership read");
             rejected([&]{(void)directory.touch(users[1],session);},"NOT_AUTHORIZED");
-            check(!directory.leave(users[0],session),"ordinary group leave");
+            check(joinLease->release(),"prepared ordinary group leave");
             const auto inbox=directory.listInvites(users[0],0,32);check(inbox.invites.size()==1&&inbox.invites[0].invite==invite,"persisted recipient inbox");
             rejected([&]{(void)directory.getInvite(users[1],invite);},"NOT_AUTHORIZED");
             rejected([&]{(void)directory.join(users[0],users,session,invite);},"INVALID_STATE");
             const auto accepted=directory.acceptInvite(users[0],invite);check(accepted.state==Service::ServiceInvitationState::Accepted,"explicit consent");
             check(directory.acceptInvite(users[0],invite).acceptedAt==accepted.acceptedAt,"accept idempotence");
-            phase="invited-join";joined=directory.join(users[0],users,session,invite);check(joined.currentGamers==4&&joined.openPrivateSlots==0,"private invited local group");
+            phase="invited-join";request.invite=invite;auto invitedPreparation=prepare(request);auto invitedLease=invitedPreparation->take();
+            joined=invitedLease->snapshot();check(joined.currentGamers==4&&joined.openPrivateSlots==0,"private invited local group");
             check(directory.join(users[0],users,session,invite).machine==joined.machine,"same live group retry");
             rejected([&]{(void)directory.join(users[0],{users[0]},session,invite);},"INVALID_STATE");
-            check(!directory.leave(users[0],session),"invited group leave");
+            check(invitedLease->release(),"prepared invited group leave");
             rejected([&]{(void)directory.join(users[0],users,session,invite);},"INVALID_STATE");
             check(directory.listInvites(users[0],0,32).invites.empty(),"consumed inbox");
             std::cout<<"directory-before-revoke\n"<<std::flush;advance();

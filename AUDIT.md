@@ -1,5 +1,12 @@
 # CNA XNA 4.0 API Audit
 
+> **GS-007e2c2 owned online preparation (2026-09-28):** Origin-retained results and
+> consumed leases acquire authenticated membership plus bounded native ENet/verified WSS without
+> queued ownership cycles. Eighteen new deterministic cases; Net 389/389, private gates 5/5 and
+> genuine two-process TLS/WSS preparation/rollback E2E 1/1 pass. No public API/C ABI change.
+> Unreachable rollback relies on the 90-second server lease. Next: public create/join ENet welcome,
+> authorized roster, lease/status pumping and standard lifecycle events (GS-007e2c3/GS-008c3).
+
 > **GS-007g1 SystemLink regression harness (2026-09-28):** Both survivors acknowledge
 > their complete roster and installed handlers over real ENet before the host disconnects.
 > Thirty consecutive three-process migrations pass; full working-tree Net 385/385 also passes
