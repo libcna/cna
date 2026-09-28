@@ -3,8 +3,12 @@
 
 #include "Microsoft/Xna/Framework/Net/AvailableNetworkSession.hpp"
 #include "Microsoft/Xna/Framework/Net/AvailableNetworkSessionCollection.hpp"
+#include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionProperties.hpp"
 #include "Microsoft/Xna/Framework/Net/QualityOfService.hpp"
+#include "System/ObjectDisposedException.hpp"
+
+#include <any>
 
 using namespace Microsoft::Xna::Framework::Net;
 
@@ -192,4 +196,18 @@ TEST(AvailableNetworkSessionCollectionTest, RangeFor) {
     int count = 0;
     for (const auto& s : col) { (void)s; ++count; }
     EXPECT_EQ(2, count);
+}
+
+// Reference NetworkSession.BeginJoin: a listing whose collection was disposed throws
+// ObjectDisposedException, and so does a copy of it; a listing of a live collection does not.
+TEST(AvailableNetworkSessionCollectionTest, DisposingTheCollectionMakesItsListingsUnjoinable) {
+    std::vector<AvailableNetworkSession> sessions;
+    sessions.push_back(MakeSession(1, "hostA"));
+    auto col = AvailableNetworkSessionCollection::CreateInternal(sessions);
+    const AvailableNetworkSessionCollection& constCol = col;
+    const AvailableNetworkSession copy = constCol[0];
+    col.Dispose();
+    EXPECT_THROW((void)NetworkSession::BeginJoin(&constCol[0], System::AsyncCallback{}, std::any{}), System::ObjectDisposedException);
+    EXPECT_THROW((void)NetworkSession::BeginJoin(&copy, System::AsyncCallback{}, std::any{}), System::ObjectDisposedException);
+    EXPECT_THROW((void)NetworkSession::Join(&copy), System::ObjectDisposedException);
 }

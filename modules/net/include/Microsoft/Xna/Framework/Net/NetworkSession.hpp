@@ -730,6 +730,7 @@ namespace Microsoft::Xna::Framework::Net
          *
          * @param availableSession The session to join.
          * @return The joined NetworkSession.
+         * @throws System::ObjectDisposedException if the collection the listing came from was disposed.
          */
         [[nodiscard]] static NetworkSession* Join(const AvailableNetworkSession* availableSession);
 
@@ -740,6 +741,7 @@ namespace Microsoft::Xna::Framework::Net
          * @param callback The callback to invoke on completion.
          * @param asyncState A user-defined state object.
          * @return A caller-owned IAsyncResult; retain it through End, then release it.
+         * @throws System::ObjectDisposedException if the collection the listing came from was disposed.
          */
         [[nodiscard]] static System::IAsyncResult* BeginJoin(
             const AvailableNetworkSession* availableSession,

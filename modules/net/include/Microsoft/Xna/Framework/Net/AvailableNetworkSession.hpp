@@ -132,6 +132,9 @@ namespace Microsoft::Xna::Framework::Net
 
     private:
         friend class NetworkSession;
+        friend class AvailableNetworkSessionCollection;
+        // Set when the collection this listing came from is disposed (shared by every copy).
+        std::shared_ptr<const bool> collectionDisposed_;
         std::shared_ptr<const CNA::Internal::GamerServices::ServiceSessionSnapshot> serviceSnapshot_;
         // The local gamers whose search produced this listing; a join uses exactly this group.
         std::shared_ptr<const std::vector<GamerServices::SignedInGamer*>> serviceLocals_;

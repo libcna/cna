@@ -2026,8 +2026,9 @@ Open follow-ups created or confirmed by this slice (not claimed):
 - GS-007j: NetworkMachine.RemoveFromSession (reference validation order known; needs a server
   host-kick operation) and reference AddLocalGamer validation; online AddLocalGamer currently
   refuses NotSupportedException (directory admits one complete group per machine).
-- GS-007k: AvailableNetworkSessionCollection.Dispose should make its listings unjoinable
-  (reference ObjectDisposedException); QualityOfService for service listings is not measured.
+- GS-007k (done, see Priority 10): AvailableNetworkSessionCollection.Dispose should make its
+  listings unjoinable (reference ObjectDisposedException); QualityOfService for service listings is
+  not measured.
 Next: GS-007e3 invited joins/Guide invitation flow/InviteAccepted, then Ranked/PlayerMatch
 leaderboard lifecycle (GS-006d), reconnect/failure (GS-008d2), remaining Guide, avatars.
 
@@ -2497,3 +2498,10 @@ the C struct field documents local ticks. CnaGamerServicesTests 485 + 1 skip.
   `CNA::Internal::GamerServices::showGuideMessageBox`, which the public rules do not bind. C header
   documents the same results. Test `GuideTest.BeginShowMessageBoxValidatesArgumentsLikeTheReference`;
   CnaGamerServicesTests 486 + 1 skip, C API gates unchanged.
+- [x] GS-007k disposed search results cannot be joined. Reference `BeginJoin` throws
+  `ObjectDisposedException` when the listing's parent collection is disposed; CNA's `Dispose` only
+  set a flag. Each listing now shares its collection's disposal token (copies included), and
+  `Join`/`BeginJoin` check it right after the null check. Listings a binding constructs directly have
+  no collection and stay joinable (a CNA extension the C API and SystemLink tests use; XNA has no
+  public constructor). Test `AvailableNetworkSessionCollectionTest.DisposingTheCollectionMakesItsListingsUnjoinable`;
+  CnaNetTests 473/473.

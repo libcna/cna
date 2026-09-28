@@ -4,6 +4,7 @@
 #include "Microsoft/Xna/Framework/Net/AvailableNetworkSession.hpp"
 #include "System/Collections/ObjectModel/ReadOnlyCollection.hpp"
 #include "System/IDisposable.hpp"
+#include <memory>
 #include <vector>
 
 namespace Microsoft::Xna::Framework::Net
@@ -31,7 +32,8 @@ namespace Microsoft::Xna::Framework::Net
         [[nodiscard]] bool getIsDisposedProperty() const;
 
         /**
-         * @brief Marks this collection as disposed.
+         * @brief Disposes the search results; its listings, and copies of them, can no longer be
+         * joined (NetworkSession::Join/BeginJoin throw System::ObjectDisposedException).
          */
         void Dispose() override;
 
@@ -39,8 +41,8 @@ namespace Microsoft::Xna::Framework::Net
         CNAEXT static AvailableNetworkSessionCollection CreateInternal(std::vector<AvailableNetworkSession> sessions);
 
     private:
-        explicit AvailableNetworkSessionCollection(std::vector<AvailableNetworkSession> sessions);
+        AvailableNetworkSessionCollection(std::vector<AvailableNetworkSession> sessions, std::shared_ptr<bool> disposed);
 
-        bool isDisposed_{false};
+        std::shared_ptr<bool> disposed_;
     };
 }

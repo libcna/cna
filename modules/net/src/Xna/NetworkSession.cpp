@@ -1424,6 +1424,11 @@ namespace Microsoft::Xna::Framework::Net
         {
             throw System::ArgumentNullException("availableSession");
         }
+        // Reference BeginJoin: a listing whose search collection was disposed cannot be joined.
+        if (availableSession->collectionDisposed_ && *availableSession->collectionDisposed_)
+        {
+            throw System::ObjectDisposedException("availableSession");
+        }
         if (activeAction_ != nullptr || activeSession_ != nullptr)
         {
             throw System::InvalidOperationException();
