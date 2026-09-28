@@ -1885,3 +1885,51 @@ complete initial GamerJoined replay, one primary host, multiple local accounts, 
 views, retained authority, received packet queues and group leave/failure, before claiming any
 public online sample acceptance. Follow with standard invited joins/Guide/InviteAccepted, service
 StartGame/EndGame/Ranked leaderboard epochs, migration/reconnect and standard Avatar migration.
+
+### GS-001h1 checkpoint / next-agent handoff
+
+Last known-good source integration (native checks after controlled DX merge):
+- CNA **255bd10be49eace0217a548f37a60e2b084de4e6**, feature/gamer-services-server,
+  /rv/data/development/github.com/libcna/cnawork/cna-gamer-services.
+- sharp-runtime **007280bd1cc789f851f7f454a5041c8ce2479e13**,
+  feature/gamer-services-collections, /rv/data/development/github.com/libcna/sharp-runtime.
+- server **d764f4d0f378429f037d74619388518a457897d5**, feature/gamer-services-server,
+  /rv/data/development/github.com/libcna/cna-gamer-services-server.
+
+All three were clean at inspection. Shared samples worktree /rv/data/development/github.com/libcna/cna
+is on next d5cf852212fb2d3a6930dfb05d95ee96be5aaa24 and was never changed here. Server LICENCE
+is tracked MIT and .gitignore is tracked; no FNA code copied into server. No pushes performed.
+The following checkpoint commit changes this plan only; its native/service sources equal the
+known-good source set above. Net 443/443 and private five gates pass after DX integration; secure
+raw/owned native/NAT 4/4 passed at 90f8300c5 before the renderer-only merge. Earlier full server
+13/13 passed at the engine checkpoint 6a2f6fcf0 / 8d50c8079 / runtime007280bd. Do not collapse
+those separate runs into a claim that every later source revision reran the entire server corpus.
+
+Continue from **GS-007e2c3b**, not from a fresh service redesign. Existing reusable prerequisites:
+OnlineSessionPreparation (membership/verified WSS ownership), ServiceSessionPump (authority/lease),
+ServiceGamePacketPolicy (source/full-group admission), ServiceENetSession (owned realtime and
+observations), OnlineSessionOperation (dispatcher-driven readiness/lifetime). Public online
+Create/Join still refuse lifecycle; they are not complete. Remaining public adapter design:
+1. Freeze/validate one through four actual published local identities at Begin without sending
+   public gamer pointers to workers; retain origin outside queued storage and verify lifetime at End.
+2. Action owns OnlineSessionOperation, publishes asynchronous metadata/wait/callback once;
+   callback must safely call End, recurse, throw or release the result.
+3. End takes established engine + initial observations, constructs the standard NetworkSession,
+   assigns service ordinals, one primary host and shared per-machine views. Populate initial
+   remote collections before handler subscription replay, without duplicate queued joins.
+4. Update converts owned connected-group/data/failure observations to existing XNA objects/events;
+   Dispose closes the service owner before destroying gamers. Bound unread local packet queues.
+   Keep production SystemLink backend and its tests unchanged.
+5. Real standard-API two-process acceptance for both categories/titles/four users and NAT,
+   then service StartGame/EndGame/Ranked epochs, invited joins/Guide/InviteAccepted, reconnect/
+   migration and standard AvatarDescription/Animation/Renderer/assets/C API/sample migration.
+
+No original XNA sample was newly unblocked by the private engine/coordinator. No avatar-specific
+EXT API was migrated, removed or deprecated yet; existing working EXT rendering is retained.
+Internet evidence is separate rootless outbound NATs on this host, not public Internet deployment,
+load/failover or browser/platform qualification. Secure transport remains reviewed OpenSSL/libcurl;
+sharp-runtime plaintext HTTP/WebSocket is not used for Internet credentials. No new failing tests,
+missing dependencies or public API stubs introduced in these two milestones. Known existing runtime
+boundary failures and HEADLESS skips remain documented in earlier checkpoints, not rerun/claimed
+fixed here. No genuine blocker prevents GS-007e2c3b; the private-slot XML ambiguity is a narrow
+edge requiring further behavioral evidence, not grounds to block ordinary public create/join.
