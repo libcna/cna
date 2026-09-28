@@ -1798,3 +1798,58 @@ owned-enet-private}.log; server build/service-owned-enet-{configure,e2e,full-e2e
 No newly ported original XNA sample or avatar EXT migration is claimed. Endpoint credentials
 remain verified TLS/WSS, never sharp-runtime plaintext HTTP. Browser service support, reconnect,
 public online lifecycle, Ranked epochs, social Guide/InviteAccepted and standard avatars remain open.
+
+GS-008c3c2 known-good exact integration set:
+- CNA 6a2f6fcf04639e3a796e3b1cd8050718248f7086.
+- sharp-runtime 007280bd1cc789f851f7f454a5041c8ce2479e13 (committed samples change; untouched here).
+- server 8d50c8079c806485cc433251c356299d0a7fe356.
+
+### GS-007e2c3a complete: owned online Begin/End readiness coordinator
+
+Add a private owner-thread coordinator consuming OnlineSessionPreparation into ServiceENetSession.
+A weak dispatcher progress subscription keeps work independent of End polling; worker queues must
+not own the coordinator/backend. Capture logical local names/IDs, never public gamer objects in
+workers. Complete once only after host resources or exact client welcome; preserve owned initial
+roster observations for the subsequent public session adapter. Callback errors must not replace the
+operation result; callback take/destruction/reentrancy must be safe. Unconsumed resources renew
+while retained, bounded pending data/control observations prevent growth, abandonment cancels and
+rolls back. Support retained-origin progress after global backend replacement, deferred logical
+errors, at-most-once consume and failure before/after readiness. Verify deterministic tests and the
+actual secure owned/native/NAT harness; do not mark public Create/Join complete before the adapter.
+
+GS-007e2c3a implemented: weak owned dispatcher subscription retains logical preparation, origin
+and realtime engine independently of worker work. Completion is once on the owner after host
+resources/client exact welcome; initial roster and incoming data transfer on one consume. Pending
+results continue service/lease progress; staged observations retain at most 128-data/4MiB and 256
+total entries. Callback exceptions do not overwrite success or operation failure. Take/destruction
+inside callbacks and nested updates are safe; cancellation/abandonment release only owned groups,
+suppress notification, and never create an executor ownership cycle. Transport/authority loss
+between readiness and End is deferred instead of handing out a dead engine. No public XNA/C ABI
+or runtime/wire/schema changes; public Create/Join are still refused until their adapter lands.
+
+Thirteen new coordinator cases cover pending/exact welcome, owner callbacks, early/repeated take,
+cancellation before work/after transport readiness/during join, callback take/self-destruction,
+nested and throwing callbacks, origin replacement, failure after completion, foreign thread and
+160 actual incoming packets while an unconsumed result retains only 128 plus initial roster.
+Final native Net **443/443, 17.595s**; private C API/header/export/protocol **5/5, 1.20s**.
+Affected incremental builds pass without warnings/errors at two jobs. Initial focused engine+
+coordinator 24/24 in 2.166s, followed by two further ownership/bounded-retention cases in the final
+full Net run. Actual raw-native/raw-NAT/owned-native/owned-NAT **4/4, zero skips, 41.94s**
+(9.82s/10.58s/10.43s/11.09s). The owned launch boundary now explicitly says pending and lets
+both processes advance the coordinator before established-session consumption. Other nine server
+cases were unchanged and passed in GS-008c3c2's full 13/13; do not describe this later focused
+run as a fresh full 13/13. Server acceptance commit d764f4d0f378429f037d74619388518a457897d5;
+runtime remains 007280bd1cc789f851f7f454a5041c8ce2479e13. Logs: CNA cmake-build-debug/
+service-online-operation-{build,final-build,bounded-build,focused,net,private}.log and server
+build/service-online-operation-e2e.log. No original XNA sample or avatar migration newly unblocked.
+
+- [x] GS-007e2c3a: owned pending preparation/ENet coordinator and exact readiness/consume lifetime.
+- [ ] GS-007e2c3b: standard public online Create/Join result/session adapter, owned initial gamer
+  projection, Update join/leave/data/failure conversion, proper primary host/machine grouping and
+  standard-API real-server acceptance. Then invited joins/Guide and lifecycle/Ranked epochs.
+
+Milestone next inspection found committed CNA DX-271 d5cf852212fb2d3a6930dfb05d95ee96be5aaa24
+on next, branched from b1ea16a. It touches Windows D3D compile/IID handling, not service/Net.
+After committing this coordinator, merge only that committed history into this dedicated branch,
+retain both AUDIT/NEXT notes, regenerate relevant inventory and rerun native Net/private gates.
+Do not modify the shared samples-agent worktree or copy uncommitted changes.

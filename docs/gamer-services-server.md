@@ -221,3 +221,13 @@ helper environment as the raw relay tests. They explicitly skip if the required 
 are absent; a skip is not multiplayer evidence. The raw relay cases separately retain malicious
 fragments, source/size and forged incoming ID tests. These remain private-engine acceptance,
 not public NetworkSession Create/Join completion, reconnect or a public Internet deployment.
+
+A private `OnlineSessionOperation` now joins these stages under a weak dispatcher progress
+subscription. Begin-style construction stays pending; completion is published once on the owner
+only after prepared host resources or the exact client welcome. End-style consumption transfers
+the engine and bounded initial roster/data observations. Retained superseded origins progress
+without publishing their identity events. Unconsumed resources continue pumping/renewing; loss
+before consumption becomes a deferred error. Callback exceptions preserve the result, while
+nested progress, take/destruction inside a callback and abandoned joins are covered. Thirteen
+new coordinator cases pass; the real owned probes now use this coordinator through Dispatcher.Update.
+This is the private asynchronous lifetime boundary; the public NetworkSession adapter is next.

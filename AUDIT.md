@@ -1,5 +1,11 @@
 # CNA XNA 4.0 API Audit
 
+> **GS-007e2c3a online readiness coordinator (2026-09-28):** A weak dispatcher progress
+> owner completes once after prepared hosting or verified welcome, retains initial roster/data,
+> and safely cancels/consumes/calls back. Thirteen new cases; Net 443/443, private gates 5/5,
+> matching real raw/owned native/NAT probes 4/4 pass. Public Create/Join/session projection is
+> the first unfinished integration item; avatars and remaining service features are still open.
+
 > **GS-008c3c2 owned online ENet engine (2026-09-28):** Prepared service membership,
 > verified relay, exact multi-local welcome, roster/lease pumping and bounded source-checked
 > delivery now share one private owner. Thirteen engine cases; Net 430/430, private gates 5/5,

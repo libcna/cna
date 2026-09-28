@@ -3,6 +3,7 @@
 #include "../../modules/net/src/Internal/ServiceRoster.hpp"
 #include "../../modules/net/src/Internal/ServiceGamePacketPolicy.hpp"
 #include "../../modules/net/src/Internal/ServiceENetSession.hpp"
+#include "../../modules/net/src/Internal/OnlineSessionOperation.hpp"
 #include "../../modules/net/src/Internal/RelayEnetPolicy.hpp"
 #include "CnaService/Protocol.hpp"
 #include "CNA/Internal/Net/ENetLibrary.hpp"
@@ -155,13 +156,15 @@ void exchange(NativeHost& native,Transport::RelayTransport& bridge,const std::st
     const auto status=bridge.status();check(status.sent>0&&status.received>0&&status.queued<=64,"bounded bidirectional relay traffic");
 }
 void ownedExchange(Transport::ServiceENetSession& engine,bool host,const std::string& remote,
-    const std::vector<std::string>& locals,const std::vector<std::string>& remotes) {
+    const std::vector<std::string>& locals,const std::vector<std::string>& remotes,std::vector<Transport::ServiceENetObservation> initial) {
     const auto owner=std::this_thread::get_id();
     const Transport::ServiceRoster authority(engine.snapshot());
     const auto localIds=authority.idsFor(engine.snapshot().machine,locals),remoteIds=authority.idsFor(remote,remotes);
     bool readySeen=false,remoteSeen=false,sent=false;std::set<int> received;
     until([&] {
-        for(auto& event:engine.update()) {
+        auto events=std::move(initial);initial.clear();auto updates=engine.update();
+        events.insert(events.end(),std::make_move_iterator(updates.begin()),std::make_move_iterator(updates.end()));
+        for(auto& event:events) {
             check(std::this_thread::get_id()==owner,"owned observations stay on owner");
             check(event.type!=Transport::ServiceENetObservation::Type::Failed,"owned exchange remained available");
             if(event.type==Transport::ServiceENetObservation::Type::Ready) {
@@ -240,12 +243,16 @@ int main(int argc,char** argv) {
         if(owned) {
             phase="owned-preparation";Transport::OnlineSessionRequest request;request.operation=Transport::OnlineSessionRequest::Operation::Join;
             request.owner=users[0];request.users=users;request.kind=category;request.session=session.session;
-            Transport::OnlineSessionPreparation pending(backend,std::move(request));
-            check(!pending.complete(),"owned preparation begins pending");until([&]{return pending.complete();},20);
-            Transport::ServiceENetSession engine(pending.take(),locals);
+            int callbacks=0;const auto owner=std::this_thread::get_id();
+            Transport::OnlineSessionOperation pending(backend,std::move(request),locals,[&]{
+                check(std::this_thread::get_id()==owner,"owned operation completion owner");++callbacks;});
+            check(!pending.complete(),"owned online operation begins pending");
+            std::cout<<"relay-pending\n"<<std::flush;command();phase="owned-establishment";
+            until([&]{return pending.complete();},20);check(callbacks==1,"owned online operation completion once");
+            auto established=pending.take();auto& engine=*established.engine;
             check(engine.snapshot().session==session.session&&engine.snapshot().machine==session.machine,"owned membership replay authority");
-            check(engine.ready()==host,"client completion waits for verified welcome");
-            std::cout<<"relay-ready\n"<<std::flush;command();phase="owned-exchange";ownedExchange(engine,host,remote,locals,remotes);
+            check(engine.ready(),"online operation completion requires verified readiness");
+            phase="owned-exchange";ownedExchange(engine,host,remote,locals,remotes,std::move(established.observations));
             std::cout<<"relay-exchanged\n"<<std::flush;command();phase="owned-failure";
             if(host&&kind=="player") {
                 bool left=false;until([&] {
