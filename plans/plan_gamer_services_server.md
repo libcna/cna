@@ -1595,3 +1595,37 @@ server remains 0b6f2fc17fe184da65dd54f0568ef6fbdd50b8d9. Current next integrated
 92d23c84d12725c97872e3eaf249f789ff7579b6. Public online lifecycle is still unfinished.
 
 Private C API/header/export/protocol gates for GS-001g: **5/5, 5.19s**.
+
+### GS-004k2 completed: retained completion authority and presence queue ownership
+
+Follow-up audit found that queued presence captured its owning backend strongly, creating a
+self-retention cycle when abandoned before execution. Borrow that executor while its joined
+worker/active dispatcher retains lifetime. Both service and Net End waits also need to drain
+the retained scheduling authority after global backend replacement; otherwise valid pending
+operations stall until timeout. Only logical completions from superseded authority are published,
+never its identity events. Dispatch the full batch before rethrowing its first callback error.
+Service End claims consumption before callback pumping, matching the already-tested Net guard.
+Add real pending-origin, callback, stale-identity, abandonment and presence retry tests; then
+validate native service/net/C API and the actual TLS directory acceptance. No wire/schema change.
+
+GS-001g known-good committed set: CNA 0c136c9d5 (merge of committed next
+92d23c84d12725c97872e3eaf249f789ff7579b6), runtime
+6c4a857de129cf29b5d43430bedf24157d594f12, server
+0b6f2fc17fe184da65dd54f0568ef6fbdd50b8d9. Full server 11/11 as above.
+
+GS-004k2: fourteen new GamerServices cases cover five APM families after pending origin replacement,
+reentrant End consumption, abandoned queued presence/no executor cycle, stale presence completion,
+full callback-batch delivery after an exception and exclusion of active/stale identity pumping.
+Two new Net cases cover retained pending search, metadata/callback thread, stale sign-out isolation,
+error consumption and busy-state recovery. Real TLS directory clients now also begin public Find,
+replace the global backend while pending, and successfully End using the retained origin.
+Affected builds pass. Final native GamerServices **448 run / 447 pass / one known HEADLESS skip,
+1.980s**, Net **400/400, 14.680s**, private C API/header/export/protocol gates **5/5, 2.69s**;
+actual multiple-process TLS directory/restart/expired-credential test **1/1, 10.48s**.
+C API inventory regenerated: unchanged **472 headers / 8134 symbols**; private helper excluded.
+Logs: cmake-build-debug/service-retained-pump-{build,gamer,net,private}.log and server
+build/service-retained-pump-directory.log. No wire/schema/runtime/server code changed. Superseded
+backend identity events are intentionally discarded: they no longer have authority over the
+active global sign-in list. Pending completions alone remain valid, bound to their original title.
+Service End now claims consumption before waiting, including callback exceptions/timeouts;
+callers own result metadata until destruction. Public online lifecycle remains GS-007e2c3/GS-008c3.

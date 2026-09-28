@@ -56,7 +56,8 @@ void GamerServicesDispatcher::Update() {
         if(const auto parameter=text.find("{0}");parameter!=std::string::npos)text.replace(parameter,3,std::to_string(presence.presenceValue_));
         const auto user=gamer->serviceUserId_;const auto mode=static_cast<int>(presence.presenceMode_);
         auto succeeded=std::make_shared<bool>(false);
-        service->submit([service,user,mode,text,succeeded]{try{service->setPresence(user,mode,text);*succeeded=true;}catch(...){}},
+        auto* executor=service.get();
+        service->submit([executor,user,mode,text,succeeded]{try{executor->setPresence(user,mode,text);*succeeded=true;}catch(...){}},
             [gamer,revision,succeeded]{auto& state=gamer->presence_;state.pending_=false;if(*succeeded&&revision==state.revision_)state.changed_=false;});
         presence.pending_=true;
     }

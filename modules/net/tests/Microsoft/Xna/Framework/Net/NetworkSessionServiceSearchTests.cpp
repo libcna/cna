@@ -165,3 +165,31 @@ TEST_F(ServiceSearchTest, ResultOwnsExecutorWithoutAQueuedSelfRetentionCycle) {
     result.reset();EXPECT_TRUE(oldBackend.expired());
     service=std::move(replacement);
 }
+
+TEST_F(ServiceSearchTest, PendingEndRetainsSearchAuthorityAfterReplacementAndDiscardsOldSignOut) {
+    int callbacks=0;const auto thread=std::this_thread::get_id();
+    std::unique_ptr<System::IAsyncResult> result(NetworkSession::BeginFind(NetworkSessionType::Ranked,1,
+        properties(),[&](auto& value) {
+            ++callbacks;EXPECT_EQ(thread,std::this_thread::get_id());
+            EXPECT_THROW((void)NetworkSession::EndFind(&value),System::InvalidOperationException);
+        },73));
+    service->signOut(1);std::weak_ptr<Service::IGamerServicesBackend> origin=service;
+    auto replacement=Service::makeFakeBackend({});Service::setBackendForTesting(replacement);service=std::move(replacement);
+    auto found=NetworkSession::EndFind(result.get());ASSERT_EQ(1,found.getCountProperty());
+    EXPECT_EQ("Bob",std::as_const(found)[0].getHostGamertagProperty());EXPECT_EQ(1,callbacks);
+    EXPECT_EQ(4,Gamer::getSignedInGamersProperty()->getCountProperty());
+    EXPECT_EQ(73,std::any_cast<int>(result->getAsyncStateProperty()));EXPECT_TRUE(result->getAsyncWaitHandleProperty().WaitOne(0));
+    EXPECT_FALSE(result->getCompletedSynchronouslyProperty());EXPECT_FALSE(origin.expired());
+    EXPECT_THROW((void)NetworkSession::EndFind(result.get()),System::InvalidOperationException);
+    result.reset();EXPECT_TRUE(origin.expired());
+}
+TEST_F(ServiceSearchTest, RetainedOriginFailureIsConsumedOnceAndReleasesBusyState) {
+    service->signOut(0);int callbacks=0;
+    std::unique_ptr<System::IAsyncResult> result(NetworkSession::BeginFind(NetworkSessionType::Ranked,1,
+        properties(),[&](auto&) {++callbacks;},{}));
+    auto original=service;auto replacement=Service::makeFakeBackend({});Service::setBackendForTesting(replacement);service=std::move(replacement);
+    EXPECT_THROW((void)NetworkSession::EndFind(result.get()),GamerServicesNotAvailableException);
+    EXPECT_EQ(1,callbacks);EXPECT_THROW((void)NetworkSession::EndFind(result.get()),System::InvalidOperationException);
+    Service::setBackendForTesting(original);service=std::move(original);service->signIn(0,"Alice","fixture");GamerServicesDispatcher::Update();
+    EXPECT_EQ(1,NetworkSession::Find(NetworkSessionType::Ranked,1,properties()).getCountProperty());
+}

@@ -170,6 +170,18 @@ int main(int argc,char** argv) {
             check(listing.GetConnectAddress().empty()&&listing.GetConnectPort()==0,"relay listing has no direct peer endpoint");
             try {(void)NetworkSession::EndFind(pending.get());throw std::runtime_error("duplicate End accepted");}
             catch(const System::InvalidOperationException&) {++checks;}
+            int retainedCallbacks=0;
+            std::unique_ptr<System::IAsyncResult> retained(NetworkSession::BeginFind(sessionType,2,search,
+                [&](System::IAsyncResult& result) {
+                    ++retainedCallbacks;check(std::this_thread::get_id()==updateThread,"retained search callback thread");
+                    check(result.getIsCompletedProperty(),"retained search completed before callback");
+                },83));
+            Service::setBackendForTesting(Service::makeFakeBackend({}));
+            auto retainedFound=NetworkSession::EndFind(retained.get());
+            Service::setBackendForTesting(backend);
+            check(retainedFound.getCountProperty()==1&&retainedCallbacks==1,"pending search retains real TLS origin");
+            check(std::any_cast<int>(retained->getAsyncStateProperty())==83,"retained search metadata");
+            check(Gamer::getSignedInGamersProperty()->getCountProperty()==2,"replacement leaves identity events controlled");
             auto wrongFilter=search;wrongFilter[0]=38;
             check(NetworkSession::Find(sessionType,2,wrongFilter).getCountProperty()==0,"public filter mismatch");
             phase="find";const auto page=directory.find(users[0],category,2,settings.properties,0,32);

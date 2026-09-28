@@ -1,5 +1,11 @@
 # NEXT.md
 
+> **GS-004k2 retained completion/presence lifetime (2026-09-28):** End drains its
+> originating scheduler after backend replacement without publishing superseded identities.
+> Presence no longer strongly captures its own queued executor. Sixteen new behavioral cases;
+> GamerServices 447 pass / one known HEADLESS skip, Net 400/400, private gates 5/5 and actual
+> TLS pending-origin/restart E2E 1/1 pass. Public online Create/Join remains the next integration.
+
 > **GS-001g committed-next integration (2026-09-28):** Integrated only committed
 > SAMPLE-104 browser portability; native TLS/WSS behavior remains intact. Private native
 > GamerServices 433 pass / one known HEADLESS skip, Net 398/398, Runtime 190 pass / two known

@@ -173,6 +173,14 @@ public:
 };
 /** @brief Gets lazily configured backend. @return Shared backend lifetime. */
 std::shared_ptr<IGamerServicesBackend> backend();
+/**
+ * @brief Publishes retained-operation completions from a superseded backend on the caller thread.
+ *
+ * Identity events from the superseded authority are discarded. Every completion in the batch is
+ * dispatched before the first callback exception is rethrown.
+ * @param executor Origin retained by the pending result; must differ from the active backend.
+ */
+void pumpRetainedCompletions(const std::shared_ptr<IGamerServicesBackend>& executor);
 /** @brief Reports a final-write handler's restricted service context. @return Restricted flag. */
 bool serviceCallsRestricted();
 /** @brief Runs a final-write event without permitting other service calls.

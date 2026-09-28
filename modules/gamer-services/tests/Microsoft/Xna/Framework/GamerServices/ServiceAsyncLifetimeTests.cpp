@@ -49,6 +49,22 @@ protected:
         }
         return {};
     }
+    void consume(System::IAsyncResult* result,SignedInGamer* owner) {
+        switch(GetParam()) {
+            case Operation::Profile: {
+                std::unique_ptr<GamerProfile> profile(owner->EndGetProfile(result));EXPECT_NE(nullptr,profile);break;
+            }
+            case Operation::Lookup: {
+                std::unique_ptr<Gamer> found(Gamer::EndGetFromGamertag(result));EXPECT_EQ("Alice",found->getGamertagProperty());break;
+            }
+            case Operation::Award:owner->EndAwardAchievement(result);break;
+            case Operation::Achievements:EXPECT_EQ(1,owner->EndGetAchievements(result).getCountProperty());break;
+            case Operation::Read: {
+                auto reader=LeaderboardReader::EndRead(result);EXPECT_EQ(2,reader.getTotalLeaderboardSizeProperty());
+                auto entries=reader.getEntriesProperty();EXPECT_EQ("Alice",std::as_const(entries)[0].getGamerProperty()->getGamertagProperty());reader.Dispose();break;
+            }
+        }
+    }
     Provider provider;
     LeaderboardIdentity identity;
     std::shared_ptr<Service::IGamerServicesBackend> previous,service;
@@ -75,25 +91,30 @@ TEST_P(ServiceAsyncLifetimeTest, CompletedMetadataAndLogicalValueReleaseBackendW
 TEST_P(ServiceAsyncLifetimeTest, PublicEndConsumesOnceOnUpdateOwnerAndKeepsMetadataAlive) {
     const auto thread=std::this_thread::get_id();int callbacks=0;
     auto result=begin([&](auto&) {++callbacks;EXPECT_EQ(thread,std::this_thread::get_id());});
-    switch(GetParam()) {
-        case Operation::Profile: {
-            std::unique_ptr<GamerProfile> profile(actor()->EndGetProfile(result.get()));EXPECT_NE(nullptr,profile);break;
-        }
-        case Operation::Lookup: {
-            std::unique_ptr<Gamer> found(Gamer::EndGetFromGamertag(result.get()));EXPECT_EQ("Alice",found->getGamertagProperty());break;
-        }
-        case Operation::Award:actor()->EndAwardAchievement(result.get());break;
-        case Operation::Achievements:EXPECT_EQ(1,actor()->EndGetAchievements(result.get()).getCountProperty());break;
-        case Operation::Read: {
-            auto reader=LeaderboardReader::EndRead(result.get());EXPECT_EQ(2,reader.getTotalLeaderboardSizeProperty());
-            auto entries=reader.getEntriesProperty();EXPECT_EQ("Alice",std::as_const(entries)[0].getGamerProperty()->getGamertagProperty());reader.Dispose();break;
-        }
-    }
+    consume(result.get(),actor());
     EXPECT_EQ(1,callbacks);EXPECT_TRUE(result->getAsyncWaitHandleProperty().WaitOne(0));
     EXPECT_FALSE(result->getCompletedSynchronouslyProperty());EXPECT_EQ(42,std::any_cast<int>(result->getAsyncStateProperty()));
     const std::array operations{"profile","lookup","award","achievements","leaderboard-read"};
     const void* owner=(GetParam()==Operation::Lookup || GetParam()==Operation::Read)?nullptr:actor();
     EXPECT_THROW((void)Service::ServiceAsyncResult::end(result.get(),operations[static_cast<int>(GetParam())],owner),System::InvalidOperationException);
+}
+TEST_P(ServiceAsyncLifetimeTest, PendingEndPumpsRetainedOriginWithoutPublishingItsIdentityEvents) {
+    const auto thread=std::this_thread::get_id();int callbacks=0;auto* original=actor();
+    auto result=begin([&](auto&) {++callbacks;EXPECT_EQ(thread,std::this_thread::get_id());});
+    service->signOut(1);
+    std::weak_ptr<Service::IGamerServicesBackend> origin=service;
+    auto replacement=Service::makeFakeBackend({});Service::setBackendForTesting(replacement);service=std::move(replacement);
+    EXPECT_FALSE(origin.expired());consume(result.get(),original);
+    EXPECT_EQ(1,callbacks);EXPECT_EQ(2,Gamer::getSignedInGamersProperty()->getCountProperty());
+    EXPECT_TRUE(result->getIsCompletedProperty());EXPECT_EQ(42,std::any_cast<int>(result->getAsyncStateProperty()));
+    EXPECT_FALSE(result->getCompletedSynchronouslyProperty());EXPECT_FALSE(origin.expired());
+    result.reset();EXPECT_TRUE(origin.expired());
+}
+TEST_P(ServiceAsyncLifetimeTest, EndClaimsConsumptionBeforePumpingReentrantCompletion) {
+    int callbacks=0;auto* original=actor();
+    auto result=begin([&](auto& value) {++callbacks;EXPECT_THROW(consume(&value,original),System::InvalidOperationException);});
+    consume(result.get(),original);EXPECT_EQ(1,callbacks);
+    EXPECT_THROW(consume(result.get(),original),System::InvalidOperationException);
 }
 INSTANTIATE_TEST_SUITE_P(ServiceFamilies,ServiceAsyncLifetimeTest,::testing::Values(
     Operation::Profile,Operation::Lookup,Operation::Award,Operation::Achievements,Operation::Read));
@@ -133,4 +154,39 @@ TEST_F(ServiceReadLifetimeTest, DisposedEmptyServiceReaderKeepsItsDisposalContra
     EXPECT_THROW(reader.EndPageDown(nullptr),System::ObjectDisposedException);
     EXPECT_THROW(reader.EndPageUp(nullptr),System::ObjectDisposedException);
     reader.Dispose();
+}
+
+TEST_F(ServiceReadLifetimeTest, AbandonedQueuedPresenceDoesNotRetainItsExecutor) {
+    for(int index=0;index<32;++index)service->submit([]{},[]{});
+    actor()->getPresenceProperty().setPresenceModeProperty(GamerPresenceMode::Level);
+    GamerServicesDispatcher::Update();
+    std::weak_ptr<Service::IGamerServicesBackend> origin=service;
+    auto replacement=Service::makeFakeBackend({});Service::setBackendForTesting(replacement);service=std::move(replacement);
+    EXPECT_TRUE(origin.expired());
+}
+TEST_F(ServiceReadLifetimeTest, PresenceChangedWhilePendingPublishesTheNewRevisionOnFollowingUpdate) {
+    service->changeFriend("a","Bob","add");service->changeFriend("b","Alice","accept");
+    for(int index=0;index<32;++index)service->submit([]{},[]{});
+    actor()->getPresenceProperty().setPresenceModeProperty(GamerPresenceMode::Level);
+    actor()->getPresenceProperty().setPresenceValueProperty(1);GamerServicesDispatcher::Update();
+    actor()->getPresenceProperty().setPresenceValueProperty(2);GamerServicesDispatcher::Update();
+    ASSERT_EQ(1,service->friends("b").size());EXPECT_EQ("Level 1",service->friends("b")[0].presence);
+    GamerServicesDispatcher::Update();EXPECT_EQ("Level 2",service->friends("b")[0].presence);
+    service->setPresence("a",0,"unchanged");GamerServicesDispatcher::Update();
+    EXPECT_EQ("unchanged",service->friends("b")[0].presence);
+}
+TEST_F(ServiceReadLifetimeTest, SupersededPumpDrainsEveryCompletionBeforeRethrowingAndDiscardsIdentity) {
+    int completions=0;const auto thread=std::this_thread::get_id();
+    service->signOut(1);
+    service->submit([]{},[&]{++completions;throw std::runtime_error("callback");});
+    service->submit([]{},[&]{++completions;EXPECT_EQ(thread,std::this_thread::get_id());});
+    auto replacement=Service::makeFakeBackend({});Service::setBackendForTesting(replacement);
+    EXPECT_THROW(Service::pumpRetainedCompletions(service),std::runtime_error);
+    EXPECT_EQ(2,completions);EXPECT_EQ(2,Gamer::getSignedInGamersProperty()->getCountProperty());
+    Service::pumpRetainedCompletions(service);EXPECT_EQ(2,completions);service=std::move(replacement);
+}
+TEST_F(ServiceReadLifetimeTest, ActiveBackendIsNotDrainedBySupersededPump) {
+    int completions=0;service->submit([]{},[&]{++completions;});
+    Service::pumpRetainedCompletions(service);Service::pumpRetainedCompletions({});EXPECT_EQ(0,completions);
+    GamerServicesDispatcher::Update();EXPECT_EQ(1,completions);
 }

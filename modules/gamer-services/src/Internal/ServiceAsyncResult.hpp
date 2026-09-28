@@ -78,14 +78,15 @@ public:
         auto* action=dynamic_cast<ServiceAsyncResult*>(result);
         if(!action||action->operation_!=operation||action->owner_!=owner)throw System::ArgumentException("Invalid asynchronous result.","result");
         if(action->ended_)throw System::InvalidOperationException("End was already called.");
+        // Claim before pumping; the callback can reenter End while this call waits.
+        action->ended_=true;
         const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(30);
         while(!action->getIsCompletedProperty()) {
             Microsoft::Xna::Framework::GamerServices::GamerServicesDispatcher::Update();
+            pumpRetainedCompletions(action->scheduler_);
             if(std::chrono::steady_clock::now()>=deadline)throw System::TimeoutException("CNA service completion timed out.");
             if(!action->getIsCompletedProperty())std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
-        if(action->ended_)throw System::InvalidOperationException("End was already called.");
-        action->ended_=true;
         if(action->state_->error)std::rethrow_exception(action->state_->error);
         return std::move(action->state_->value);
     }
