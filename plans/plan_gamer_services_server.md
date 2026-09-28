@@ -2386,15 +2386,22 @@ the retained audit roots; nothing existing there is modified.
   (`scripts/build-windows-hidef-content.sh`; upstream is Xbox 360-only). 16 random standard-API
   avatars with `CreateShadow` shadows via the compiled `GroundEffect.fx` and a `DepthFormat.None`
   target (`evidence/gs-avatarshadows-20260928/`).
-- [ ] SAMPLE-075 NetworkStateManagement identity flow.
+- [x] SAMPLE-075 NetworkStateManagement (cna-samples 844b717): all 26 compile units, the official
+  Windows/Reach XNBs. `scripts/probe-cna-ngsm-single.sh` (Single Player through the loading worker)
+  and `scripts/capture-cna-ngsm-gs.py --mode systemlink|live` (evidence `evidence/gs-ngsm-20260928/`):
+  Guide sign-in (local profile / account), create/find/join, both ready -> host lobby starts ->
+  gameplay with two players -> host "Return to Lobby" (nobody ready) -> guest leaves, host told;
+  LIVE adds the system-Guide invitation accepted through the sample's `InviteAccepted` ->
+  `BeginJoinInvited`; both processes exit 0 in every mode. The port found GS-007i (readiness) and
+  GS-007l (gamer order); Invites was rerun after GS-007l (`evidence/gs-invites-20260929-order/`).
 - [ ] Minimal XNA-shaped achievements/leaderboards compatibility sample (no original sample exists).
 
 Net fidelity item found by SAMPLE-096, fixed as GS-007l (below): on a joining machine CNA's
 `AllGamers` held the local gamer before the existing ones, so `GamerJoined` (replayed at subscription)
 gave the joiner index 0 and SAMPLE-075's lobby listed the joiner above the host.
 
-Known-good cross-repo set: CNA 45c23451b (+ this plan commit), cna-samples feature/gamer-services-samples
-03d9bfe, server bbfe2d5, sharp-runtime 007280bd.
+Known-good cross-repo set: CNA 0a078200d (+ this plan commit), cna-samples feature/gamer-services-samples
+844b717, server bbfe2d5, sharp-runtime 007280bd. (Previous: CNA 45c23451b / cna-samples 03d9bfe.)
 
 ### GS-007i complete: lobby readiness on every transport
 
