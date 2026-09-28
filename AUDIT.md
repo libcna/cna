@@ -1,5 +1,11 @@
 # CNA XNA 4.0 API Audit
 
+> **GS-007g1 SystemLink regression harness (2026-09-28):** Both survivors acknowledge
+> their complete roster and installed handlers over real ENet before the host disconnects.
+> Thirty consecutive three-process migrations pass; full working-tree Net 385/385 also passes
+> (including pending preparation tests). Production SystemLink code is unchanged. Continue
+> GS-007e2c2 ownership/preparation, then standard public online lifecycle integration.
+
 > **GS-007f1a Ranked admission (2026-09-28):** Server migration 9 repairs legacy
 > join-in-progress flags; Ranked gameplay refuses new ordinary/invited groups without consuming
 > consent. Client/fake/roster validation agrees. GamerServices 433 pass / one known HEADLESS skip,

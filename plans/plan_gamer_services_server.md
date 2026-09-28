@@ -1448,3 +1448,26 @@ service-ranked-policy-native-fix-build.log, server build/service-ranked-policy-c
 (and earlier failure logs retained). Server commit 6d41f41; sharp-runtime unchanged at
 6c4a857de129cf29b5d43430bedf24157d594f12. Latest committed CNA next now equals 8bfb24a42;
 no additional unintegrated committed history or uncommitted samples-agent copying.
+
+### GS-007f1a known-good committed integration set
+
+- CNA 1e3cebfb277610f3bf032a29065ccf6dbd4cd8e2.
+- sharp-runtime 6c4a857de129cf29b5d43430bedf24157d594f12.
+- cna-gamer-services-server 6d41f419eca43b57e939903fd25aa416e465df8f.
+
+### GS-007g1 completed: SystemLink migration test coordination
+
+The pre-existing test disposed its host after the host saw three gamers, before delivery of the
+full roster to both survivors and installation of their migration handlers. Each survivor now sends
+an actual reliable ENet application readiness acknowledgement only after both conditions hold.
+The host validates distinct remote senders and exact readiness payload, and disposes after both
+acknowledgements. The process test checks ROSTER_READY=2 as well as promotion, real rediscovery,
+reconnection and the post-migration application round trip. No sleeps replace the handshake;
+watchdog and all original assertions remain. No SystemLink production transport was modified.
+Incremental target build passed; isolated three-process migration repeated 30/30 successfully
+(service-migration-ready-repeat.log). Full Net working-tree confirmation 385/385, 4.687s includes
+14 still-uncommitted GS-007e2c2 preparation cases; those are separately checkpointed next, not part
+of this test-coordination change. Logs: service-migration-ready-build.log and
+service-owned-preparation-final-net.log under cmake-build-debug.
+
+- [x] GS-007g1: coordinate full-roster readiness before the process harness disconnects its host.

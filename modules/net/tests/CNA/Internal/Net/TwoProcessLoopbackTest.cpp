@@ -268,6 +268,8 @@ TEST(TwoProcessLoopbackTest, HostMigrationPromotesOneSurvivorAndTheOtherReconnec
 
     // The deterministic outcome this whole test exists to prove: SurvivorA (the lower surviving
     // wire id) was promoted, SurvivorB genuinely rediscovered and reconnected to it.
+    EXPECT_NE(hostOutput.find("ROSTER_READY=2"),std::string::npos)
+        << "host exited before both survivors acknowledged their roster; output: " << hostOutput;
     EXPECT_NE(survivorAOutput.find("PROMOTED"), std::string::npos)
         << "expected SurvivorA to be promoted; output: " << survivorAOutput;
     EXPECT_NE(survivorBOutput.find("RECONNECTED"), std::string::npos)

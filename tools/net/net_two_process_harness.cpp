@@ -36,9 +36,11 @@
 #include "Microsoft/Xna/Framework/Net/NetworkSessionEndedEventArgs.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <set>
 #include <string>
 #include <thread>
 #include <vector>
@@ -51,6 +53,7 @@ using Microsoft::Xna::Framework::GamerServices::SignedInGamer;
 
 namespace {
     constexpr SharpRuntime::bytecs kMagicPayload[] = {0x42, 0x13, 0x37, 0x99};
+    constexpr SharpRuntime::bytecs kMigrationReady[] = {0x72, 0x65, 0x61, 0x64, 0x79};
     constexpr auto kPollInterval = std::chrono::milliseconds(2);
     constexpr auto kSendFlushWindow = std::chrono::milliseconds(500);
 
@@ -243,6 +246,24 @@ namespace {
             return 1;
         }
 
+        // A host-side join can precede delivery of the roster broadcast. Wait for each
+        // survivor to acknowledge its full roster and installed migration handlers.
+        auto* local=session->getLocalGamersProperty()[0];std::set<NetworkGamer*> ready;
+        std::vector<SharpRuntime::bytecs> received(sizeof(kMigrationReady));
+        if(!PumpUntil(session,deadline,[&] {
+            while(local->getIsDataAvailableProperty()) {
+                NetworkGamer* sender=nullptr;const auto length=local->ReceiveData(received,sender);
+                if(length!=static_cast<int>(sizeof(kMigrationReady))||!sender||sender->getIsLocalProperty()
+                    ||!std::equal(received.begin(),received.end(),std::begin(kMigrationReady)))
+                    throw std::runtime_error("Invalid migration readiness acknowledgement");
+                ready.insert(sender);
+            }
+            return ready.size()==2;
+        })) {
+            std::fprintf(stderr,"migration-host: timed out waiting for survivor roster acknowledgements\n");
+            session->Dispose();return 1;
+        }
+        std::printf("ROSTER_READY=2\n");std::fflush(stdout);
         session->Dispose();
         return 0;
     }
@@ -303,6 +324,9 @@ namespace {
         session->SessionEnded += [&](System::Object*, const NetworkSessionEndedEventArgs&) {
             sessionEnded = true;
         };
+        session->getLocalGamersProperty()[0]->SendData(
+            std::vector<SharpRuntime::bytecs>(std::begin(kMigrationReady),std::end(kMigrationReady)),
+            SendDataOptions::ReliableInOrder,session->getHostProperty());
 
         if (!PumpUntil(session, deadline, [&] { return hostChanged || sessionEnded; })) {
             std::fprintf(stderr, "%s: timed out waiting for host migration to complete\n", gamertag.c_str());
