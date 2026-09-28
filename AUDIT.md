@@ -1,5 +1,11 @@
 # CNA XNA 4.0 API Audit
 
+> **GS-008c3b dispatcher progress boundary (2026-09-28):** Private owned subscriptions
+> progress pending online work after backend events, including nested End waits. Cancellation,
+> callback lifetime/errors and saturated presence no longer starve the pump. Twelve new cases;
+> GamerServices 459 pass / one known HEADLESS skip, Net 400/400, private gates 5/5 and full
+> actual server corpus 11/11 pass. Public online session construction/lifecycle remains open.
+
 > **GS-004k2 retained completion/presence lifetime (2026-09-28):** End drains its
 > originating scheduler after backend replacement without publishing superseded identities.
 > Presence no longer strongly captures its own queued executor. Sixteen new behavioral cases;

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
+#include "CNA/Internal/GamerServices/ServiceUpdateSubscription.hpp"
 #include "../../modules/net/src/Internal/OnlineSessionPreparation.hpp"
 #include "../../modules/net/src/Internal/ServiceSessionPump.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
@@ -78,8 +79,13 @@ int main(int argc,char** argv) {
                 check(std::this_thread::get_id()==ownerThread,"preparation callback owner thread");++completions;
             },std::move(dependencies));
             check(!pending->complete(),"preparation begins pending");
+            bool observed=false;
+            Service::ServiceUpdateSubscription progress([&] {
+                check(std::this_thread::get_id()==ownerThread,"preparation progress owner thread");
+                if(pending->complete()){check(completions==1,"completion precedes progress");observed=true;}
+            });
             const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(20);
-            while(!pending->complete()) {
+            while(!observed) {
                 GamerServicesDispatcher::Update();check(std::chrono::steady_clock::now()<deadline,"preparation deadline");
                 std::this_thread::sleep_for(std::chrono::milliseconds(2));
             }
@@ -118,15 +124,22 @@ int main(int argc,char** argv) {
             }
             std::cout<<"directory-host "<<session.session<<' '<<invitation.invite<<'\n'<<std::flush;advance();
             Transport::ServiceSessionPump snapshots(backend,users[0],hostLease->snapshot());
+            bool waiting=false;
+            std::optional<Transport::ServiceSessionObservation> observation;
+            Service::ServiceUpdateSubscription renewals([&] {
+                if(waiting&&!observation)observation=snapshots.update();
+            });
             const auto observe=[&] {
+                waiting=true;
                 const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(15);
                 const auto ownerThread=std::this_thread::get_id();
                 for(;;) {
-                    GamerServicesDispatcher::Update();auto observation=snapshots.update();
+                    GamerServicesDispatcher::Update();
                     if(observation) {
                         if(!observation->failure.empty())throw Service::ServiceOperationError(observation->failure);
                         check(std::this_thread::get_id()==ownerThread&&observation->snapshot.has_value(),"snapshot owner publication");
-                        check(observation->renewed,"explicit pump renewal");return *observation->snapshot;
+                        check(observation->renewed,"explicit pump renewal");
+                        waiting=false;auto value=std::move(*observation->snapshot);observation.reset();return value;
                     }
                     check(std::chrono::steady_clock::now()<deadline,"snapshot pump deadline");
                     std::this_thread::sleep_for(std::chrono::milliseconds(2));

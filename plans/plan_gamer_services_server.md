@@ -1629,3 +1629,51 @@ backend identity events are intentionally discarded: they no longer have authori
 active global sign-in list. Pending completions alone remain valid, bound to their original title.
 Service End now claims consumption before waiting, including callback exceptions/timeouts;
 callers own result metadata until destruction. Public online lifecycle remains GS-007e2c3/GS-008c3.
+
+### GS-008c3b completed: private dispatcher progress subscriptions
+
+The owned preparation/session pump needs owner-thread progress before a public NetworkSession
+exists, including End waits inside other callbacks. Use sharp-runtime's existing generic
+System::EventHandler token/snapshot primitives; no new runtime primitive or GamerServices policy
+belongs in sharp-runtime. A CNA-private RAII subscription weakly references its state from the
+registry, suppresses canceled copied snapshots and self-reentry, and permits other operations
+at nested Update boundaries. Observe only after the backend's completion/identity batch. Drain
+all callbacks before rethrowing the first error; nested identity events remain deferred. Cover
+cancellation/self-destruction/new subscriptions/nested End progress/errors/thread ownership.
+Then run actual directory preparation and renewal through this hook. This is a prerequisite
+boundary, not yet public Create/Join or XNA lifecycle conversion (parent GS-008c3 remains open).
+
+GS-004k2 known-good set: CNA 9f392f62b41399609467e10a51016f67b3f877a9,
+sharp-runtime 6c4a857de129cf29b5d43430bedf24157d594f12, server
+0b6f2fc17fe184da65dd54f0568ef6fbdd50b8d9.
+
+GS-008c3b audit also found an actual pump starvation path: when automatic presence is dirty and
+the 128-entry service queue is full, scheduling threw before draining any work, so every Update
+could repeat the same failure forever. Treat only automatic presence queue-unavailability as a
+retryable dirty state; still drain the bounded batch and progress observers. User-requested Begin
+queue limits remain errors. Add a saturated queue plus dirty presence test proving all 128 jobs,
+progress callbacks and the eventual presence revision are delivered. No protocol limit enlarged.
+
+GS-008c3b validation so far: twelve new behavior cases cover owner/completion ordering,
+cancellation and callback lifetime, self-destruction, removal from a copied dispatch snapshot,
+next-boundary registration, nested independent operation progress, deferred identities, full
+error-batch dispatch and guard restoration, foreign-thread refusal, and dirty presence with a
+saturated 128-entry queue. First full run used a stale dispatcher object (compiled four seconds
+before the final presence catch edit), reproducing the starvation failure; rebuild the final
+object before testing. Final affected build passes; native GamerServices **460 run / 459 pass /
+one known HEADLESS skip, 4.534s**, Net **400/400, 15.245s**, private C API/header/export/protocol
+**5/5, 0.99s**. Genuine two-process TLS/WSS directory preparation and restart/expired credential
+renewal through the subscriptions **1/1, 15.78s** before the final automatic-presence correction.
+Full matching server corpus is running with all native clients and isolated-NAT tools configured.
+Inventory regenerated: **472 public headers / 8134 symbols**, **472 excluded headers** (one new
+CNA-internal subscription header); no public XNA/C ABI expansion. Runtime/server/wire/schema unchanged.
+Logs: cmake-build-debug/service-update-subscription-{build,final-build,gamer,final-gamer,net,
+final-net,private}.log and server build/service-update-subscription-{directory,e2e}.log.
+
+Final GS-008c3b matching server corpus **11/11, 172.77s**, including actual C/C++ TLS/WSS,
+independent users/titles, restart, expired credentials, owned rollback, private update-hook
+preparation/renewal, fragmented/unreliable ENet, malicious fragment/claim checks, revocation,
+server failure and rootless isolated-NAT clients. No cases skipped. Standard public online
+Create/Join, ENet-to-XNA gamer/lifecycle conversion and avatars are still unfinished. No new
+original XNA sample unblocked by this prerequisite alone. Next GS-008c3c/GS-007e2c3: authenticated
+realtime handshake/data authority and public session ownership/ENet welcome integration.

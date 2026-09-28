@@ -3,7 +3,9 @@
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
+#include "CNA/Internal/GamerServices/ServiceUpdateSubscription.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
 #include "../Internal/GuideOverlay.hpp"
@@ -42,11 +44,16 @@ void GamerServicesDispatcher::Update() {
     // End inside a service callback must progress work without publishing nested identity events.
     if(updating) {
         auto events=CNA::Internal::GamerServices::backend()->pump();
+        std::exception_ptr firstError;
         for(auto& event:events) {
             if(event.type==CNA::Internal::GamerServices::BackendEvent::Type::Completion) {
-                if(event.completion)event.completion();
+                try {if(event.completion)event.completion();}
+                catch(...) {if(!firstError)firstError=std::current_exception();}
             } else deferred.push_back(std::move(event));
         }
+        try {CNA::Internal::GamerServices::dispatchServiceUpdates();}
+        catch(...) {if(!firstError)firstError=std::current_exception();}
+        if(firstError)std::rethrow_exception(firstError);
         return;
     }
     struct Guard {Guard(){updating=true;}~Guard(){updating=false;}} guard;
@@ -57,9 +64,13 @@ void GamerServicesDispatcher::Update() {
         const auto user=gamer->serviceUserId_;const auto mode=static_cast<int>(presence.presenceMode_);
         auto succeeded=std::make_shared<bool>(false);
         auto* executor=service.get();
-        service->submit([executor,user,mode,text,succeeded]{try{executor->setPresence(user,mode,text);*succeeded=true;}catch(...){}},
-            [gamer,revision,succeeded]{auto& state=gamer->presence_;state.pending_=false;if(*succeeded&&revision==state.revision_)state.changed_=false;});
-        presence.pending_=true;
+        try {
+            service->submit([executor,user,mode,text,succeeded]{try{executor->setPresence(user,mode,text);*succeeded=true;}catch(...){}},
+                [gamer,revision,succeeded]{auto& state=gamer->presence_;state.pending_=false;if(*succeeded&&revision==state.revision_)state.changed_=false;});
+            presence.pending_=true;
+        }catch(const GamerServicesNotAvailableException&) {
+            // Automatic presence remains dirty for retry; a full queue must still be drained.
+        }
     }
     auto incoming=service->pump();
     std::vector<CNA::Internal::GamerServices::BackendEvent> events;
@@ -84,6 +95,8 @@ void GamerServicesDispatcher::Update() {
             }
         }catch(...){if(!firstError)firstError=std::current_exception();}
     }
+    try {CNA::Internal::GamerServices::dispatchServiceUpdates();}
+    catch(...) {if(!firstError)firstError=std::current_exception();}
     if(firstError)std::rethrow_exception(firstError);
 }
 bool GamerServicesDispatcher::UpdateAsync(){if(isInitialized_)Update();return isInitialized_;}
