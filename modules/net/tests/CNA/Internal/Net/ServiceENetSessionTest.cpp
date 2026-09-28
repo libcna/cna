@@ -236,6 +236,19 @@ TEST(ServiceENetSessionTest, LobbyReadinessIsRelayedOwnedAndReplayedToALateJoine
     // Nobody echoes a machine's own gamers back to it, so a change in flight is never undone.
     EXPECT_FALSE(readiness(fixture.clientEvents).contains(2));EXPECT_FALSE(readiness(thirdEvents).contains(3));
 }
+// XNA NetworkMachine.RemoveFromSession over the service: the directory removes the machine, the
+// host's peers see it leave, and the removed machine fails with REMOVED_BY_HOST.
+TEST(ServiceENetSessionTest, TheHostRemovesAMachineWhichFailsWithRemovedByHost) {
+    Fixture fixture;fixture.pair();
+    EXPECT_THROW(fixture.client->removeMachine(fixture.host->snapshot().machine),Service::ServiceOperationError);
+    EXPECT_THROW(fixture.host->removeMachine(fixture.host->snapshot().machine),Service::ServiceOperationError);
+    fixture.host->removeMachine(fixture.client->snapshot().machine);
+    fixture.until([&]{return Fixture::count(fixture.hostEvents,ServiceENetObservation::Type::Left)==1
+        &&Fixture::count(fixture.clientEvents,ServiceENetObservation::Type::Failed)==1;});
+    auto failed=std::find_if(fixture.clientEvents.begin(),fixture.clientEvents.end(),[](const auto& event){return event.type==ServiceENetObservation::Type::Failed;});
+    EXPECT_EQ("REMOVED_BY_HOST",failed->failure);
+    EXPECT_EQ(2,fixture.host->snapshot().currentGamers);
+}
 TEST(OnlineSessionOperationTest, HostReadinessAndConsumptionArePublishedOnceOnOwnerSubscription) {
     Fixture fixture;int callbacks=0;const auto owner=std::this_thread::get_id();
     OnlineSessionOperation operation(fixture.backend,fixture.operationRequest(),{"Alice","Charlie"},[&]{EXPECT_EQ(owner,std::this_thread::get_id());++callbacks;},fixture.preparationDependencies(),fixture.routes());

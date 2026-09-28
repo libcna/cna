@@ -46,6 +46,8 @@ struct ServiceENetSession::Impl {
     ENetPeer* upstream=nullptr;
     std::map<ENetPeer*,Peer> peers;
     std::map<unsigned char,RosterEntry> remoteGamers;
+    // Machines this host asked the directory to remove, disconnected with that reason once gone.
+    std::set<std::string> removing;
     // Lobby readiness by gamer ID, as last published or reported; cleared when a game starts or ends.
     std::map<unsigned char,bool> readiness;
     std::vector<ServiceENetObservation> observations;
@@ -117,7 +119,7 @@ struct ServiceENetSession::Impl {
                 std::optional<ServiceRelayTicket> issued;std::string refused;
                 try{issued=executor->sessionDirectory().issueRelayTicket(account,users,session);}
                 catch(const ServiceOperationError& error) {
-                    if(error.code=="NOT_AUTHORIZED"||error.code=="UNAUTHENTICATED"||error.code=="NOT_FOUND")refused=error.code;
+                    if(error.code=="NOT_AUTHORIZED"||error.code=="UNAUTHENTICATED"||error.code=="NOT_FOUND"||error.code=="REMOVED_BY_HOST")refused=error.code;
                 }catch(...){}
                 std::lock_guard lock(state->mutex);state->pending=false;state->ticket=std::move(issued);state->refused=refused;
             },{});
@@ -201,7 +203,10 @@ struct ServiceENetSession::Impl {
         }
         if(!host&&changed.contains(current.hostMachine)){fail("HOST_ENDED_SESSION");return;}
         for(auto it=peers.begin();it!=peers.end();) {
-            if(changed.contains(it->second.machine)){transport().Disconnect(it->first,0);it=peers.erase(it);}else ++it;
+            if(changed.contains(it->second.machine)) {
+                // A machine this host removed is told so; one that left needs no reason.
+                transport().Disconnect(it->first,removing.erase(it->second.machine)?DisconnectRemovedByHost:0);it=peers.erase(it);
+            }else ++it;
         }
         std::vector<unsigned char> departed;for(const auto& [id,row]:remoteGamers)if(changed.contains(machineFor(id)))departed.push_back(id);
         remove(departed,host);
@@ -318,10 +323,10 @@ struct ServiceENetSession::Impl {
             }
         }
     }
-    void disconnect(ENetPeer* peer) {
+    void disconnect(ENetPeer* peer,std::uint32_t data) {
         auto found=peers.find(peer);if(found==peers.end())return;
         const auto machine=found->second.machine;peers.erase(found);
-        if(peer==upstream){upstream=nullptr;fail("HOST_ENDED_SESSION");return;}
+        if(peer==upstream){upstream=nullptr;fail(data==DisconnectRemovedByHost?"REMOVED_BY_HOST":"HOST_ENDED_SESSION");return;}
         std::vector<unsigned char> departed;
         for(const auto& [id,row]:remoteGamers)if(machineFor(id)==machine)departed.push_back(id);
         remove(departed,host);
@@ -354,7 +359,7 @@ struct ServiceENetSession::Impl {
                     if(result<0){fail("GAME_TRANSPORT_UNAVAILABLE");break;}
                     if(event.type==ENET_EVENT_TYPE_CONNECT)connect(event.peer);
                     else if(event.type==ENET_EVENT_TYPE_RECEIVE){std::unique_ptr<ENetPacket,PacketDelete> packet(event.packet);receive(event.peer,packet.get(),event.channelID);}
-                    else if(event.type==ENET_EVENT_TYPE_DISCONNECT)disconnect(event.peer);
+                    else if(event.type==ENET_EVENT_TYPE_DISCONNECT)disconnect(event.peer,event.data);
                     if(stopped)break;
                 }
                 if(!stopped&&!host&&(!ready||recoverRoster)&&now()>=nextHello)hello();
@@ -397,6 +402,15 @@ void ServiceENetSession::publishReady(const std::vector<GamerReadyEntry>& entrie
     if(impl.host){for(const auto& [peer,value]:impl.peers)if(value.admitted)impl.transmit(peer,bytes);}
     else if(impl.upstream)impl.transmit(impl.upstream,bytes);
     impl.transport().Flush();
+}
+void ServiceENetSession::removeMachine(const std::string& machine) {
+    impl_->checkOwner();auto& impl=*impl_;
+    if(!impl.host)throw ServiceOperationError("NOT_AUTHORIZED");
+    if(machine==impl.current.machine)throw ServiceOperationError("INVALID_ARGUMENT");
+    if(impl.stopped)return;
+    const bool member=std::any_of(impl.current.members.begin(),impl.current.members.end(),[&](const auto& row){return row.machine==machine;});
+    if(!member)return;
+    impl.removing.insert(machine);impl.control->remove(machine);
 }
 void ServiceENetSession::publish(const ServiceSessionSettings& settings) {
     impl_->checkOwner();if(!impl_->host)throw ServiceOperationError("NOT_AUTHORIZED");

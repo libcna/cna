@@ -130,6 +130,10 @@ public:
     /** @brief Removes the owning machine's group. @param actor Machine owner. @param session ID.
      * @return Whether host departure closed the session. */
     virtual bool leave(const std::string& actor,const std::string& session)=0;
+    /** @brief Removes another machine and all its users (XNA NetworkMachine.RemoveFromSession).
+     * Its users are then answered REMOVED_BY_HOST. @param owner Host identity. @param session ID.
+     * @param machine The machine to remove. @return The host's updated snapshot. */
+    virtual ServiceSessionSnapshot remove(const std::string& owner,const std::string& session,const std::string& machine)=0;
     /** @brief Issues one-use secure relay authority for the exact authenticated local group.
      * @param actor Machine owner. @param users Local identities. @param session ID.
      * @return Ephemeral authority; issuance alone does not establish a data connection. */

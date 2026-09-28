@@ -15,6 +15,9 @@
 
 namespace CNA::Internal::Net
 {
+    /** @brief ENet disconnect data a host sends to a machine it removes (XNA NetworkMachine.RemoveFromSession). */
+    inline constexpr std::uint32_t DisconnectRemovedByHost = 0x524D5648u;
+
     using Microsoft::Xna::Framework::Net::NetworkSessionState;
     using Microsoft::Xna::Framework::Net::NetworkSessionProperties;
     using Microsoft::Xna::Framework::Net::PacketReader;

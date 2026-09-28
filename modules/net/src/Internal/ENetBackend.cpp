@@ -9,6 +9,7 @@
 #include "Microsoft/Xna/Framework/Net/AvailableNetworkSession.hpp"
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkGamer.hpp"
+#include "Microsoft/Xna/Framework/Net/NetworkMachine.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 
 #include <algorithm>
@@ -485,10 +486,15 @@ namespace CNA::Internal::Net
             GamerJoinBroadcastMessage broadcastMsg;
             std::vector<uint8_t> newWireIds;
             std::vector<NetworkGamer*> newGamers;
+            // The connecting peer is one machine: its gamers share it (NetworkGamer.Machine).
+            auto machine = std::make_shared<Microsoft::Xna::Framework::Net::NetworkMachine>(
+                Microsoft::Xna::Framework::Net::NetworkMachine::CreateInternal());
             for (const std::string& gamertag : hello.LocalGamertags)
             {
                 auto* gamer = new NetworkGamer(NetworkGamer::CreateInternal(session, gamertag));
                 state.OwnedRemoteGamers.emplace_back(gamer); // Task 3.1
+                gamer->SetSharedMachine(machine);
+                machine->AddGamerInternal(gamer);
                 // We are the host handling an incoming ClientHello, so this gamer belongs to the
                 // connecting client - never the host.
                 gamer->SetIsHost(false);
@@ -988,8 +994,23 @@ namespace CNA::Internal::Net
             return false;
         }
 
-        void HandleDisconnect(NetworkSession* session, SessionState& state, ENetPeer* peer)
+        void RemovePeerGamers(NetworkSession* session, SessionState& state, ENetPeer* peer);
+
+        void HandleDisconnect(NetworkSession* session, SessionState& state, ENetPeer* peer, uint32_t data)
         {
+            if (peer == state.HostPeer && data == DisconnectRemovedByHost)
+            {
+                // The host removed this machine (NetworkMachine.RemoveFromSession): no migration.
+                const auto& locals = session->getLocalGamersProperty();
+                if (locals.getCountProperty() > 0)
+                {
+                    session->RemoveGamer(locals[0], NetworkSessionEndReason::RemovedByHost);
+                }
+                state.HostPeer = nullptr;
+                droppedAppDataCount_ += state.PendingPreHandshakeSends.size();
+                state.PendingPreHandshakeSends.clear();
+                return;
+            }
             if (peer == state.HostPeer)
             {
                 // Task 5.2/5.3/5.4: migration replaces the old immediate-end behavior only when
@@ -1024,6 +1045,12 @@ namespace CNA::Internal::Net
 
             // We're the host (or at least not this peer's upstream) and one of our clients
             // disconnected: remove every gamer it owned and tell the remaining peers.
+            RemovePeerGamers(session, state, peer);
+        }
+
+        // Removes every gamer a client peer owned and tells the remaining peers they left.
+        void RemovePeerGamers(NetworkSession* session, SessionState& state, ENetPeer* peer)
+        {
             auto peerWireIdsIt = state.PeerWireIds.find(peer);
             if (peerWireIdsIt == state.PeerWireIds.end())
             {
@@ -1202,6 +1229,31 @@ namespace CNA::Internal::Net
         NetworkSession::ApplyGamerReadyInternal(gamer, value);
     }
 
+    void ENetBackend::RemoveMachine(NetworkSession* session, NetworkGamer* gamer)
+    {
+        auto found = Sessions().find(session);
+        if (found == Sessions().end())
+        {
+            return;
+        }
+        SessionState& state = *found->second;
+        const auto wireId = state.GamerToWireId.find(gamer);
+        if (wireId == state.GamerToWireId.end())
+        {
+            return;
+        }
+        const auto peer = state.WireIdToPeer.find(wireId->second);
+        if (peer == state.WireIdToPeer.end())
+        {
+            return;
+        }
+        ENetPeer* removed = peer->second;
+        // The host's view changes now; the removed machine learns why from the disconnect data.
+        RemovePeerGamers(session, state, removed);
+        state.Host.Disconnect(removed, DisconnectRemovedByHost);
+        state.Host.Flush();
+    }
+
     void ENetBackend::OrderTransportGamers(NetworkSession* session)
     {
         session->OrderGamersInternal();
@@ -1297,7 +1349,7 @@ namespace CNA::Internal::Net
             }
             else if (evt.type == ENET_EVENT_TYPE_DISCONNECT)
             {
-                HandleDisconnect(session, state, evt.peer);
+                HandleDisconnect(session, state, evt.peer, evt.data);
             }
         }
 

@@ -485,6 +485,7 @@ private:
             if(op=="presence.set"&&!capabilities_.contains("presence"))throw Unavailable("CNA service presence capability missing.");
             if(op.starts_with("sessions.")&&!capabilities_.contains("session-directory"))throw Unavailable("CNA service directory capability missing.");
             if(op=="sessions.relayTicket"&&!capabilities_.contains("relay-tickets"))throw Unavailable("CNA service relay-ticket capability missing.");
+            if(op=="sessions.remove"&&!capabilities_.contains("session-removal"))throw Unavailable("CNA service session-removal capability missing.");
             if((op.starts_with("invites.")||op=="sessions.joinInvited")&&!capabilities_.contains("session-invitations"))throw Unavailable("CNA service invitation capability missing.");
             auto participantArguments=[&] {
                 if(participants.empty())return;

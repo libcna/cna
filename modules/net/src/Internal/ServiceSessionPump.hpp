@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
+#include <deque>
 #include <chrono>
 
 namespace CNA::Internal::Net {
@@ -42,6 +43,9 @@ public:
      * A stale revision is re-read and retried a bounded number of times in the same worker job.
      * @param settings Complete desired host settings. */
     void publish(GamerServices::ServiceSessionSettings settings);
+    /** @brief Queues the host's removal of another machine; one that has already left is read over.
+     * @param machine The machine to remove. */
+    void remove(std::string machine);
     /** @brief Schedules an authoritative read as soon as the current request completes,
      * spaced at least 100 ms from the previous request. */
     void expedite();
@@ -56,6 +60,8 @@ private:
     std::function<Time()> clock_;
     Time nextRead_,nextRenew_,lastRequest_;
     std::optional<GamerServices::ServiceSessionSettings> desired_,sending_;
+    std::deque<std::string> removals_;
+    std::optional<std::string> removing_;
     bool busy_=false,stopped_=false,canceled_=false,again_=false;
     int revision_=0;
 };

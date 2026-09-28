@@ -248,3 +248,27 @@ TEST(ServiceSessionDirectoryTest, ExplicitFakeBackendUsesSignedInIdentityPrivile
     EXPECT_EQ(2,directory.join("b",{"b"},host.session).currentGamers);
     backend->signOut(1);(void)backend->pump();EXPECT_THROW((void)directory.get("b",host.session),Microsoft::Xna::Framework::GamerServices::GamerServicesNotAvailableException);
 }
+// XNA NetworkMachine.RemoveFromSession: the host alone removes another machine; its users are
+// then answered REMOVED_BY_HOST (fake and typed client agree with the server contract).
+TEST(ServiceSessionDirectoryTest, TheHostRemovesAnotherMachineWhoseUsersAreToldWhy) {
+    Fixture fixture;auto& directory=*fixture.directory;ServiceSessionSettings settings;settings.maxGamers=6;
+    const auto host=directory.create("a",{"a","c"},ServiceSessionKind::PlayerMatch,settings);
+    const auto guest=directory.join("b",{"b","d"},host.session);
+    expectCode([&]{(void)directory.remove("b",host.session,host.machine);},"NOT_AUTHORIZED");
+    expectCode([&]{(void)directory.remove("a",host.session,host.machine);},"INVALID_ARGUMENT");
+    expectCode([&]{(void)directory.remove("a",host.session,std::string(32,'9'));},"NOT_FOUND");
+    const auto after=directory.remove("a",host.session,guest.machine);
+    EXPECT_EQ(2U,after.members.size());EXPECT_EQ(guest.revision+1,after.revision);
+    for(const auto* user:{"b","d"})expectCode([&]{(void)directory.get(user,host.session);},"REMOVED_BY_HOST");
+    expectCode([&]{(void)directory.issueRelayTicket("b",{"b","d"},host.session);},"REMOVED_BY_HOST");
+
+    std::string op;Json args;
+    auto result=roster();
+    auto client=makeSessionDirectoryClient([&](const auto& operation,Json fields,const auto&,const auto&){op=operation;args=std::move(fields);return result;});
+    const std::string other(32,'4');
+    EXPECT_EQ(1U,client->remove("alice-id",sessionId,other).members.size());
+    EXPECT_EQ("sessions.remove",op);EXPECT_EQ(sessionId,args["session"]);EXPECT_EQ(other,args["machine"]);
+    // The reply must be the host's own snapshot without the removed machine.
+    expectCode([&]{(void)client->remove("alice-id",sessionId,machineId);},"INVALID_RESPONSE");
+    expectCode([&]{(void)client->remove("alice-id",sessionId,"../x");},"INVALID_ARGUMENT");
+}

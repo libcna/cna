@@ -135,6 +135,39 @@ TEST_F(OnlineNetworkSessionTest, LobbyReadinessCrossesTheServiceSessionAndClears
     until([&]{return reported(3)==false;});
 }
 
+// Reference NetworkMachine.RemoveFromSession over the service: CNA's host removes a peer, and a
+// peer host removes CNA's session.
+TEST_F(OnlineNetworkSessionTest, TheHostRemovesAMachineWhoseGamersLeave) {
+    session=NetworkSession::Create(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(0),gamer(2)},6,0,properties());
+    std::vector<std::string> left;
+    session->GamerLeft+=[&](auto*,const GamerLeftEventArgs& args){left.push_back(args.getGamerProperty()->getGamertagProperty());};
+    privatePeer(true,sessionId("b"));
+    until([&]{return peer->ready()&&session->getAllGamersProperty().getCountProperty()==4;});
+    EXPECT_THROW(session->getLocalGamersProperty()[0]->getMachineProperty().RemoveFromSession(),System::InvalidOperationException);
+    session->getRemoteGamersProperty()[0]->getMachineProperty().RemoveFromSession();
+    until([&]{return left.size()==2&&count(ServiceENetObservation::Type::Failed)==1;});
+    EXPECT_EQ((std::vector<std::string>{"Bob","Dana"}),left);
+    auto failed=std::find_if(observed.begin(),observed.end(),[](const auto& value){return value.type==ServiceENetObservation::Type::Failed;});
+    EXPECT_EQ("REMOVED_BY_HOST",failed->failure);
+}
+
+TEST_F(OnlineNetworkSessionTest, AMachineTheHostRemovesEndsWithRemovedByHost) {
+    privatePeer(false);
+    auto found=NetworkSession::Find(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(1),gamer(3)},{});
+    ASSERT_EQ(1,found.getCountProperty());
+    // The peer host must keep running while CNA joins, so the join is asynchronous here.
+    std::unique_ptr<System::IAsyncResult> result(NetworkSession::BeginJoin(&std::as_const(found)[0],{},{}));
+    until([&]{return result->getIsCompletedProperty();});
+    session=NetworkSession::EndJoin(result.get());
+    std::optional<NetworkSessionEndReason> reason;
+    session->SessionEnded+=[&](auto*,const NetworkSessionEndedEventArgs& args){reason=args.getEndReasonProperty();};
+    until([&]{return peer->snapshot().currentGamers==4;});
+    std::string joined;for(const auto& row:peer->snapshot().members)if(row.machine!=peer->snapshot().machine)joined=row.machine;
+    peer->removeMachine(joined);
+    until([&]{return reason.has_value();});
+    EXPECT_EQ(NetworkSessionEndReason::RemovedByHost,*reason);
+}
+
 TEST_F(OnlineNetworkSessionTest, PublicJoinUsesTheFindGroupAndFollowsDirectoryAuthority) {
     privatePeer(false);
     auto found=NetworkSession::Find(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(1),gamer(3)},{});

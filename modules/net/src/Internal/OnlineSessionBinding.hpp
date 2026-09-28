@@ -48,6 +48,9 @@ public:
     /** @brief Sends gamers' lobby ready state to the other machines.
      * @param gamers Gamers whose ready state changed. */
     void publishReady(const std::vector<Microsoft::Xna::Framework::Net::NetworkGamer*>& gamers);
+    /** @brief Host: removes the machine that owns @p gamer from the session.
+     * @param gamer Any gamer of that machine. */
+    void removeMachine(Microsoft::Xna::Framework::Net::NetworkGamer* gamer);
     /** @brief Records the host's requested gameplay state for directory publication.
      * @param state Lobby or Playing. */
     void requestState(NetworkSessionState state);

@@ -6859,7 +6859,7 @@
         "method"
       ],
       "mapping": "an owned `CNA_NetworkGamerHandle` with every canonical flag, the session-local identifier, the round-trip time as 100-nanosecond ticks and the owning session handle. The CNA extension setters keep their `_ext` suffix so a consumer can see which state the canonical API leaves permanently fixed. `getMachineProperty` becomes an independent owned copy rather than an alias, because the canonical setter already takes its machine by value and the canonical machine exposes no mutator, so a copy is observationally identical. No `NetworkSession` or `System::TimeSpan` pointer crosses the boundary",
-      "tests": "`NetSmoke.c` creation with and without a gamertag, every default flag, the identifier, round-trip time and session answers, each extension setter observed through its getter, machine copy-and-set round trip with the independent-copy check, the empty roster and its out-of-range refusals, the canonical always-throwing removal reported as unsupported, and stale-handle refusals, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`NetSmoke.c` creation with and without a gamertag, every default flag, the identifier, round-trip time and session answers, each extension setter observed through its getter, machine copy-and-set round trip with the independent-copy check, the empty roster and its out-of-range refusals, removal of the empty machine refused as invalid state, and stale-handle refusals, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-036D",
       "approved_symbols": [
@@ -6940,7 +6940,7 @@
         "constructor",
         "method"
       ],
-      "mapping": "an owned `CNA_NetworkMachineHandle` with a gamer count and indexed borrowed-view access to its roster, and a removal route that reports the canonical always-throwing placeholder as `CNA_RESULT_NOT_SUPPORTED` rather than pretending it succeeded. A borrowed gamer view keeps its machine alive and blocks the machine's release; only a session populates the roster, so a machine created from C reports none",
+      "mapping": "an owned `CNA_NetworkMachineHandle` with a gamer count and indexed borrowed-view access to its roster, and a removal route that follows the canonical checks (a machine with no gamers, one that left, the local machine or a non-host caller answers `CNA_RESULT_INVALID_STATE`) and otherwise removes the machine from the session the caller hosts. A borrowed gamer view keeps its machine alive and blocks the machine's release; only a session populates the roster, so a machine created from C reports none",
       "tests": "`NetSmoke.c` creation with and without a gamertag, every default flag, the identifier, round-trip time and session answers, each extension setter observed through its getter, machine copy-and-set round trip with the independent-copy check, the empty roster and its out-of-range refusals, the canonical always-throwing removal reported as unsupported, and stale-handle refusals, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-036D",
@@ -6948,7 +6948,7 @@
         "CPP-056E161E3226",
         "CPP-1AB77B4994AA",
         "CPP-6FA9A1079D1B",
-        "CPP-D574F3A773AE"
+        "CPP-4A1CF755C011"
       ]
     },
     {

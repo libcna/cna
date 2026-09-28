@@ -190,6 +190,7 @@ void OnlineSessionBinding::end(const std::string& failure) {
     auto reason=NetworkSessionEndReason::Disconnected;
     if(failure=="HOST_ENDED_SESSION"||failure=="NOT_FOUND")reason=NetworkSessionEndReason::HostEndedSession;
     else if(failure=="UNAUTHENTICATED"||failure=="NOT_AUTHORIZED")reason=NetworkSessionEndReason::ClientSignedOut;
+    else if(failure=="REMOVED_BY_HOST")reason=NetworkSessionEndReason::RemovedByHost;
     NetworkSession::NetworkEvent event;event.Type=NetworkSession::NetworkEventType::StateChange;
     event.State=NetworkSessionState::Ended;event.Reason=reason;session_.SendNetworkEvent(std::move(event));
 }
@@ -233,6 +234,13 @@ void OnlineSessionBinding::publishReady(const std::vector<NetworkGamer*>& gamers
     }
     // A transport failure is reported as SessionEnded by the next observation.
     try{engine_->publishReady(entries);}catch(const ServiceOperationError&){}
+}
+void OnlineSessionBinding::removeMachine(NetworkGamer* gamer) {
+    if(ended_||!engine_)return;
+    const auto* row=member(snapshot_,gamer->getIdProperty());
+    if(!row||row->machine==snapshot_.machine)return;
+    // A refusal races a transport failure that the next observation reports as SessionEnded.
+    try{engine_->removeMachine(row->machine);}catch(const ServiceOperationError&){}
 }
 void OnlineSessionBinding::requestState(NetworkSessionState state) {
     desiredState_=state==NetworkSessionState::Playing?ServiceSessionState::Playing:ServiceSessionState::Lobby;

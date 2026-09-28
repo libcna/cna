@@ -21,11 +21,14 @@ namespace Microsoft::Xna::Framework::Net
         [[nodiscard]] const GamerServices::GamerCollection<NetworkGamer>& getGamersProperty() const;
 
         /**
-         * @brief Removes this machine's gamers from the network session.
+         * @brief Removes this machine from the session: its gamers leave for everyone else, and
+         * its own session ends with NetworkSessionEndReason::RemovedByHost.
          *
-         * Always throws NotImplementedException, matching FNA's stub.
+         * @throws System::ObjectDisposedException if the machine has no gamers.
+         * @throws System::InvalidOperationException if the machine has left the session, is the
+         *         local machine, or this machine is not the host.
          */
-        void RemoveFromSession();
+        void RemoveFromSession() const;
 
         /** @brief Creates a NetworkMachine for CNA internal use. */
         CNAEXT static NetworkMachine CreateInternal();

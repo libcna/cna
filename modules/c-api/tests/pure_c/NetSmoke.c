@@ -461,8 +461,8 @@ static int validate_machine(const CNA_NetworkGamerHandle gamer)
         cna_network_machine_get_gamer(machine, -1, &view) != CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
-    /* The canonical removal is a declared placeholder that always throws. */
-    if (cna_network_machine_remove_from_session(machine) != CNA_RESULT_NOT_SUPPORTED) {
+    /* The canonical removal refuses a machine with no gamers (ObjectDisposedException). */
+    if (cna_network_machine_remove_from_session(machine) != CNA_RESULT_INVALID_STATE) {
         return 0;
     }
     if (cna_network_gamer_set_machine(gamer, machine) != CNA_RESULT_SUCCESS ||

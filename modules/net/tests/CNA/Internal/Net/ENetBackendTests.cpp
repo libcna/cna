@@ -19,6 +19,7 @@
 #include "Microsoft/Xna/Framework/Net/NetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionEndedEventArgs.hpp"
+#include "System/InvalidOperationException.hpp"
 #include <limits>
 #include <string>
 #include <vector>
@@ -1835,6 +1836,81 @@ TEST(ENetBackendTest, LobbyReadinessTravelsBetweenHostAndClient) {
     ASSERT_TRUE(heard.has_value());
     EXPECT_EQ(heard->Entries.size(), 2u);
     for (const auto& entry : heard->Entries) EXPECT_FALSE(entry.IsReady);
+}
+
+// Reference NetworkMachine.RemoveFromSession on a SystemLink host: the local machine is refused;
+// a client machine's gamers leave at once and the client is disconnected with the removal reason.
+TEST(ENetBackendTest, HostRemovesAClientMachineWhichIsToldWhy) {
+    SystemLinkSessionFixture host("HostPlayer");
+    ENetHostHandle fakeClient = ENetHostHandle::CreateClient(2);
+    ENetPeer* hostFromClientSide = nullptr;
+    (void)ConnectFakeClientAndCompleteHandshake(fakeClient, host.session, &hostFromClientSide);
+    for (int i = 0; i < 200 && host.session->getAllGamersProperty().getCountProperty() < 2; ++i, PollYield()) host.session->Update();
+    ASSERT_EQ(host.session->getAllGamersProperty().getCountProperty(), 2);
+    std::vector<std::string> left;
+    host.session->GamerLeft += [&left](System::Object*, const GamerLeftEventArgs& e) {
+        left.push_back(e.getGamerProperty()->getGamertagProperty());
+    };
+    EXPECT_THROW(host.session->getLocalGamersProperty()[0]->getMachineProperty().RemoveFromSession(),
+                 System::InvalidOperationException);
+
+    host.session->getRemoteGamersProperty()[0]->getMachineProperty().RemoveFromSession();
+    std::optional<uint32_t> reason;
+    for (int i = 0; i < 200 && !reason; ++i, PollYield()) {
+        host.session->Update();
+        ENetEvent evt{};
+        if (fakeClient.Service(0, evt) > 0) {
+            if (evt.type == ENET_EVENT_TYPE_DISCONNECT) reason = evt.data;
+            else if (evt.type == ENET_EVENT_TYPE_RECEIVE) enet_packet_destroy(evt.packet);
+        }
+    }
+    ASSERT_TRUE(reason.has_value());
+    EXPECT_EQ(*reason, DisconnectRemovedByHost);
+    for (int i = 0; i < 50 && left.empty(); ++i, PollYield()) host.session->Update();
+    EXPECT_EQ(left, std::vector<std::string>{"RemotePlayer"});
+    EXPECT_EQ(host.session->getAllGamersProperty().getCountProperty(), 1);
+    EXPECT_EQ(host.session->getRemoteGamersProperty().getCountProperty(), 0);
+}
+
+TEST(ENetBackendTest, AClientTheHostRemovedEndsWithRemovedByHost) {
+    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(kFakeHostTestPort, 4, 2);
+    SystemLinkSessionFixture client("ClientPlayer");
+    ENetBackend::ConnectToHost(client.session, "127.0.0.1", fakeHost.getBoundPortProperty());
+    ENetPeer* clientFromHostSide = nullptr;
+    bool gotHello = false;
+    for (int i = 0; i < 200 && !gotHello; ++i, PollYield()) {
+        client.session->Update();
+        ENetEvent evt{};
+        if (fakeHost.Service(0, evt) > 0) {
+            if (evt.type == ENET_EVENT_TYPE_CONNECT) clientFromHostSide = evt.peer;
+            else if (evt.type == ENET_EVENT_TYPE_RECEIVE) {
+                std::vector<SharpRuntime::bytecs> data(evt.packet->data, evt.packet->data + evt.packet->dataLength);
+                gotHello = NetPacketCodec::PeekTag(data) == MessageTag::ClientHello;
+                enet_packet_destroy(evt.packet);
+            }
+        }
+    }
+    ASSERT_TRUE(gotHello);
+    ServerWelcomeMessage welcome;
+    welcome.AssignedWireIds = {1};
+    welcome.ExistingRoster = {RosterEntry{0, "HostPlayer", true}};
+    auto welcomeBytes = NetPacketCodec::Encode(welcome);
+    fakeHost.Send(clientFromHostSide, 0, welcomeBytes.data(), welcomeBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeHost.Flush();
+    for (int i = 0; i < 200 && client.session->getAllGamersProperty().getCountProperty() < 2; ++i, PollYield()) client.session->Update();
+    ASSERT_EQ(client.session->getAllGamersProperty().getCountProperty(), 2);
+
+    std::optional<NetworkSessionEndReason> ended;
+    client.session->SessionEnded += [&ended](System::Object*, const NetworkSessionEndedEventArgs& e) { ended = e.getEndReasonProperty(); };
+    fakeHost.Disconnect(clientFromHostSide, DisconnectRemovedByHost);
+    fakeHost.Flush();
+    for (int i = 0; i < 200 && !ended; ++i, PollYield()) {
+        client.session->Update();
+        ENetEvent evt{};
+        (void)fakeHost.Service(0, evt);
+    }
+    ASSERT_TRUE(ended.has_value());
+    EXPECT_EQ(*ended, NetworkSessionEndReason::RemovedByHost);
 }
 
 TEST(ENetBackendTest, AJoiningMachineLearnsWhoIsAlreadyReady) {

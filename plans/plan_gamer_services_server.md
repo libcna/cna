@@ -2516,3 +2516,21 @@ the C struct field documents local ticks. CnaGamerServicesTests 485 + 1 skip.
   `cna_guide_get_is_visible` reports `CNA_RESULT_INVALID_STATE` before initialization (GuideSmoke).
   CnaGamerServicesTests 488 + 1 skip. The reference setter is internal; CNA's public no-op setter
   is left for the ABI removal batch.
+- [x] GS-007j (first half) `NetworkMachine.RemoveFromSession`, which threw `NotImplementedException`
+  (the final audit's OPEN list). Reference checks in order: no gamers -> `ObjectDisposedException`,
+  gamer left / local machine / caller not host -> `InvalidOperationException`; the method is `const`
+  so `gamer->getMachineProperty().RemoveFromSession()` compiles. SystemLink: the host removes the
+  peer's gamers at once (GamerLeave to the others) and disconnects it with ENet data
+  `DisconnectRemovedByHost`; that client ends with `RemovedByHost` and does not attempt migration.
+  The host now groups each connecting peer's gamers into one `NetworkMachine` (they had none).
+  Online: server `sessions.remove` (capability `session-removal`, schema 13 `directory_removals`),
+  host-only, never its own machine; removed users get `REMOVED_BY_HOST` from get/touch/leave and
+  relay-ticket issuance. The session pump queues removals (a machine that already left is read
+  over); the host disconnects a machine it removed with the same ENet code, so the removed client
+  ends with `RemovedByHost` whichever it hears first. C: `cna_network_machine_remove_from_session`
+  documented and `NetSmoke` updated; coverage rule re-approved for the `const` signature.
+  Tests: `NetworkMachineTest.RemoveFromSessionFollowsTheReferenceChecks`, two ENet tests, the
+  engine test `TheHostRemovesAMachineWhichFailsWithRemovedByHost`, two XNA-level online tests,
+  directory fake/typed-client tests, server DirectoryTests (130 assertions), server f23f7c5 (full suite 23/23). Still open in GS-007j:
+  online `AddLocalGamer`, and SystemLink clients do not learn the host's machine grouping (their
+  remote gamers have no shared `Machine`).

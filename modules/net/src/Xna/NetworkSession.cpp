@@ -674,6 +674,18 @@ namespace Microsoft::Xna::Framework::Net
         gamer.SetIsReadyInternal(value);
     }
 
+    void NetworkSession::RemoveMachineInternal(NetworkGamer* gamer)
+    {
+        if (isDisposed_) throw System::ObjectDisposedException("NetworkSession");
+        if (online_)
+        {
+            online_->removeMachine(gamer);
+            return;
+        }
+        if (CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(sessionType_))
+            CNA::Internal::Net::ENetBackend::RemoveMachine(this, gamer);
+    }
+
     void NetworkSession::OrderGamersInternal()
     {
         // Reference GamerCollection.Insert keeps every collection sorted by the gamer's session

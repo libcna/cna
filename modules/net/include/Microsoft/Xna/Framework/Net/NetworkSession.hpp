@@ -817,6 +817,15 @@ namespace Microsoft::Xna::Framework::Net
         friend class CNA::Internal::Net::ENetBackend;
         friend class CNA::Internal::Net::OnlineSessionBinding;
         friend class NetworkGamer;
+        friend class NetworkMachine;
+
+        /**
+         * @brief Removes the remote machine that owns @p gamer (NetworkMachine.RemoveFromSession,
+         * after its checks).
+         *
+         * @param gamer Any gamer of the machine to remove.
+         */
+        CNAEXT void RemoveMachineInternal(NetworkGamer* gamer);
 
         /**
          * @brief Sends the ready state of gamers to the other machines of the session: a client

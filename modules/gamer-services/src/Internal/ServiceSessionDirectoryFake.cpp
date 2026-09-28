@@ -93,6 +93,13 @@ public:
         if(machine==session.value.hostMachine){close(id);return true;}
         removeMachine(session,machine);return false;
     }
+    ServiceSessionSnapshot remove(const std::string& actor,const std::string& id,const std::string& machine) override {
+        authorize_(actor);prune();auto& session=lookup(id);const auto own=ownedMachine(session,actor);
+        require(session.value.hostId==actor&&session.value.hostMachine==own,"NOT_AUTHORIZED");
+        require(machine!=own);require(session.owners.contains(machine),"NOT_FOUND");
+        for(const auto& row:session.value.members)if(row.machine==machine)session.removed.insert(row.userId);
+        removeMachine(session,machine);return view(session,own);
+    }
     ServiceRelayTicket issueRelayTicket(const std::string& actor,const std::vector<std::string>& users,const std::string& id) override {
         prune();participants(actor,users);auto& session=lookup(id);const auto machine=ownedMachine(session,actor);
         std::set<std::string> group;for(const auto& member:session.value.members)if(member.machine==machine)group.insert(member.userId);
@@ -135,7 +142,7 @@ public:
         value.state=ServiceInvitationState::Dismissed;return value;
     }
 private:
-    struct Session {ServiceSessionSnapshot value;std::map<std::string,std::string> owners;std::map<std::string,long long> leases;};
+    struct Session {ServiceSessionSnapshot value;std::map<std::string,std::string> owners;std::map<std::string,long long> leases;std::set<std::string> removed;};
     struct Invitation {ServiceInvitation value;std::string recipient,usedMachine;};
     long long now() const{return clock_();}
     std::string nextId(){std::ostringstream stream;stream<<std::hex<<std::setfill('0')<<std::setw(32)<<++sequence_;return stream.str();}
@@ -166,7 +173,8 @@ private:
     Session& lookup(const std::string& id){const auto found=sessions_.find(id);if(found==sessions_.end())fail("NOT_FOUND");return found->second;}
     std::string valueMachine(const std::string& id,const std::string& actor){return memberMachine(lookup(id),actor);}
     static std::string memberMachine(const Session& session,const std::string& actor) {
-        for(const auto& row:session.value.members)if(row.userId==actor)return row.machine;fail("NOT_AUTHORIZED");
+        for(const auto& row:session.value.members)if(row.userId==actor)return row.machine;
+        fail(session.removed.contains(actor)?"REMOVED_BY_HOST":"NOT_AUTHORIZED");
     }
     static std::string ownedMachine(const Session& session,const std::string& actor) {
         const auto machine=memberMachine(session,actor);require(session.owners.at(machine)==actor,"NOT_AUTHORIZED");return machine;

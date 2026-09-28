@@ -302,5 +302,14 @@ namespace CNA::Internal::Net
          * @param session The session whose gamers were renumbered.
          */
         static void OrderTransportGamers(NetworkSession* session);
+
+        /**
+         * @brief Removes the client machine that owns @p gamer from a hosted session: its gamers
+         * leave for everyone else, and its session ends with RemovedByHost.
+         *
+         * @param session The hosted session.
+         * @param gamer Any gamer of the machine to remove.
+         */
+        static void RemoveMachine(NetworkSession* session, NetworkGamer* gamer);
     };
 }

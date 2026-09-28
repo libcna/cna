@@ -67,6 +67,10 @@ public:
      * client); the host also reports any gamer, as ResetReady does.
      * @param entries Changed ready states. */
     void publishReady(const std::vector<GamerReadyEntry>& entries);
+    /** @brief Host only: removes another machine from the session (XNA NetworkMachine.RemoveFromSession).
+     * The directory removes it; the host then disconnects it with DisconnectRemovedByHost.
+     * @param machine The machine to remove. */
+    void removeMachine(const std::string& machine);
     /** @brief Publishes host-owned directory settings; clients observe them through authority.
      * @param settings Complete desired state, capacity, join-in-progress and properties. */
     void publish(const GamerServices::ServiceSessionSettings& settings);
