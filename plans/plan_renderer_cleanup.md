@@ -968,10 +968,12 @@ failure was classified; none is a defect this change introduced:
   also still carried the unregenerated `0.32.0` and planned-symbol count).
 
 
-The Emscripten bundle the CI job now builds (`WEBGL2;WEBGL1;CANVAS`, emsdk 6.0.9) configures, links
-all 82 browser executables except six unrelated to renderers (`posix_spawnp` in the content-pipeline
-host process, host headers in two net harnesses, a missing `<algorithm>` in `PathUtf8Tests`), and
-passes the job's own assertions: both JS selection exports, the `easygl` and `canvas` archives, three
+The Emscripten bundle the CI job now builds (`WEBGL2;WEBGL1;CANVAS`, emsdk 6.0.9) configures and
+links 54 of its 82 executables -- every Canvas/WebGL example, demo and the benchmark -- and every
+graphics test object compiles. The other 28 (the 21 gtest suite binaries, the strict-API leak check
+and six tools/harnesses) are blocked by six failures unrelated to renderers (`posix_spawnp` in the
+content-pipeline host process, host headers in two net harnesses, a missing `<algorithm>` in
+`PathUtf8Tests` under this newer emsdk). The bundle passes the job's own assertions: both JS selection exports, the `easygl` and `canvas` archives, three
 registered renderers. In headless Chrome the renderer benchmark ran to completion under each of the
 three, each selected at runtime.
 

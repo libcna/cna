@@ -99,8 +99,8 @@ built. `SOFTWARE` (`cmake-build-software`): the full ctest corpus passes except 
 predate this change, every Software test green, and all 208 Software and compiled-effect cases with
 `CNA_SOFTWARE_COMPILED_EFFECTS=ON`. `cmake-build-multi` (`OPENGL33` default, `VULKAN`, `SOFTWARE`,
 `HEADLESS`, `STUB`) builds, and its `CnaTests` corpus on the real GPU fails only on causes measured
-or traced to before this change or to the shared host. The `WEBGL2`+`WEBGL1`+`CANVAS` wasm bundle
-builds and each renderer runs in headless Chrome. A MinGW-w64 cross-build of `DIRECTX11`,
+or traced to before this change or to the shared host. The `WEBGL2`+`WEBGL1`+`CANVAS` wasm bundle's
+renderer, example and benchmark targets build, and each renderer runs in headless Chrome. A MinGW-w64 cross-build of `DIRECTX11`,
 `DIRECTX12`, `SOFTWARE` and `HEADLESS` compiles and links, and under Wine its benchmark runs with
 `SOFTWARE` and with `DIRECTX11`. **Not run:** native Windows (MSVC, the
 `DIRECTX9`/`11`/`12` runtimes), macOS (`METAL`), and a WebGL-1-only browser. Details:
