@@ -1,5 +1,11 @@
 # NEXT.md
 
+> **GS-008c3c2 owned online ENet engine (2026-09-28):** Prepared service membership,
+> verified relay, exact multi-local welcome, roster/lease pumping and bounded source-checked
+> delivery now share one private owner. Thirteen engine cases; Net 430/430, private gates 5/5,
+> matching server 13/13 without skips, including actual native/NAT owned engines, pass.
+> Public online Create/Join/APM/lifecycle conversion and standard avatars remain unfinished.
+
 > **GS-008c3c1 service game packet admission (2026-09-28):** Authenticated machine
 > groups and completed handshake govern sender/target IDs, control direction and complete roster
 > changes before mutation/payload copy. Seventeen new cases and 20,000 mutations; Net 417/417,

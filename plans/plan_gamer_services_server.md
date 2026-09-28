@@ -1731,3 +1731,70 @@ This uncertainty is not a blocker for all other public lifecycle work.
 
 GS-008c3c1 tested server commit: d153226aefd15428bfccdbdf74bfae97f1f4d8a5;
 sharp-runtime remains 6c4a857de129cf29b5d43430bedf24157d594f12.
+
+### GS-008c3c2 complete: owned service ENet session engine
+
+Consume the prepared lease into a private single-owner realtime engine. Combine authenticated
+snapshot/lease pumping, stable relay routes, exact service ordinal IDs, host/client welcome,
+complete remote group join/leave and source-checked local delivery/host forwarding. Produce owned
+logical observations only; the subsequent public APM/session adapter will turn these into XNA
+objects/events. Keep SystemLink's mature backend intact. Bound handshake/recovery by steady time,
+retry welcome after stale directory metadata with bounded hello cadence, reconcile removed
+membership before accepting later packets, retain origin outside queued work and release resources
+on abandonment. Test two logical engines/four locals with explicit fake-directory/native-loopback
+route providers, then actual multi-process TLS/WSS/NAT. Do not publish public Join completion
+before the authorized ENet welcome. Parent GS-007e2c3/GS-008c3 remains unfinished until that adapter.
+
+GS-008c3c1 known-good committed set: CNA b1ea16aeb4fd10d436fc07ce482fbc8be6d483fe,
+sharp-runtime 6c4a857de129cf29b5d43430bedf24157d594f12, server
+ d153226aefd15428bfccdbdf74bfae97f1f4d8a5. Net 417/417 and actual native/NAT 2/2 as above.
+
+GS-008c3c2 implementation now consumes the lease into the owner-thread engine. Exact host/client
+welcome, complete group observations, stable local IDs, source-checked game routing, local delivery,
+three-machine host forwarding, revision recovery and single failure are covered. Receive/local
+observations have 128-data/4MiB bounds; unacknowledged outgoing packet allocations now retain
+separate counters through ENet free callbacks, capped globally at 128-data/4MiB with reserved
+64-control/256KiB capacity. ACK/destruction release the counters. Existing SystemLink Send wrapper
+and backend are untouched. Host identity/group changes fail deterministically rather than using a
+stale upstream pointer. No public XNA/C ABI, runtime primitive, protocol byte or schema change.
+
+Thirteen engine cases pass, including three machines/full groups, both local player slots,
+fragmented reliable/unreliable data, 128-local and 4MiB local/outgoing limits, authority removal,
+host failure, malformed constructor cleanup, thread ownership and exact no-welcome timeout.
+Focused 13/13 in 2.083s; final native Net 430/430 in 17.647s; private native C API/header/export/
+canonical protocol gates 5/5 in 1.65s. Real owned TLS/WSS/native plus rootless-NAT preliminary
+2/2 in 20.43s (10.38s/10.05s); final matching server corpus **13/13, zero skips, 206.58s**. Exact test times: unit 7.31s, TLS
+68.96s, directory 5.17s, invitations 9.01s, native directory 17.80s, relay protocol 0.08s, relay
+authorization 6.57s, flow 0.04s, adversarial WSS 46.52s, raw native 11.76s, raw NAT 11.73s,
+owned native 9.96s, owned NAT 11.59s.
+Raw hostile-packet probes remain separate and retain malicious fragment/UDP source/size and
+forged incoming ID proofs. Owned probes explicitly validate preparation pending, client welcome
+before readiness, both local account sender/target slots, complete departure after secondary
+revocation, failure once and owned cleanup. They are not public online NetworkSession acceptance.
+
+Concurrent committed-state inspection: CNA next was advanced externally to the existing feature
+checkpoint b1ea16aeb4fd10d436fc07ce482fbc8be6d483fe; it is already an ancestor here, so no merge
+or shared-worktree edits are needed. Sharp-runtime is now clean at committed SAMPLE-104
+007280bd1cc789f851f7f454a5041c8ce2479e13 on feature/gamer-services-collections (tracking origin).
+Its dictionary enumeration / Framework diagnostics are samples work, not this task. The CNA build
+consumes this sibling source directly; ArgumentException/String object timestamps are newer than
+current source and the final incremental build is current. Use 007280bd in the next verified set,
+rather than repeating the stale 6c4a857 plan runtime entry. No edits/commits/push to runtime here.
+Current instruction hashes unchanged: CNA AGENTS b91ae2908fd327a76011e4522a9a9b718dd9814371f680b2d029c2b431e24920,
+CLAUDE 6a532dae21d07f21faaade89be4a426a349da01c3e6d8ecbd335396c0596f13e; runtime AGENTS
+37d7bca7a91556fa5af614fd59406af72c0187f8f6d31c4fd970ac1a3e3ab179 / CLAUDE
+243e4729343347d64827db09ff7e40187b1ed226e01d4b122ee3dc7d7d722512. Server has no such files.
+All builds reuse CNA cmake-build-debug and server build, at maximum two compilation jobs.
+
+- [x] GS-008c3c2: owned private ENet/membership engine with thirteen deterministic cases and
+  actual secure two-process/NAT acceptance; public parents remain unchecked.
+
+Server acceptance commit tested with this CNA change: 8d50c8079c806485cc433251c356299d0a7fe356;
+sharp-runtime 007280bd1cc789f851f7f454a5041c8ce2479e13. CNA engine revision is the thematic
+GS-008c3c2 commit containing this section; record its exact hash at the next milestone.
+Logs: CNA cmake-build-debug/service-{enet-session-focused,owned-enet-build,
+owned-enet-hardened-build,owned-enet-hardened-focused,owned-enet-final-net,
+owned-enet-private}.log; server build/service-owned-enet-{configure,e2e,full-e2e}.log.
+No newly ported original XNA sample or avatar EXT migration is claimed. Endpoint credentials
+remain verified TLS/WSS, never sharp-runtime plaintext HTTP. Browser service support, reconnect,
+public online lifecycle, Ranked epochs, social Guide/InviteAccepted and standard avatars remain open.

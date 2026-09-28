@@ -2,6 +2,7 @@
 #include "../../modules/net/src/Internal/RelayTransport.hpp"
 #include "../../modules/net/src/Internal/ServiceRoster.hpp"
 #include "../../modules/net/src/Internal/ServiceGamePacketPolicy.hpp"
+#include "../../modules/net/src/Internal/ServiceENetSession.hpp"
 #include "../../modules/net/src/Internal/RelayEnetPolicy.hpp"
 #include "CnaService/Protocol.hpp"
 #include "CNA/Internal/Net/ENetLibrary.hpp"
@@ -22,6 +23,7 @@
 #include <set>
 #include <thread>
 #include <cstring>
+#include <cstdlib>
 
 namespace Service=CNA::Internal::GamerServices;
 namespace Transport=CNA::Internal::Net;
@@ -152,15 +154,56 @@ void exchange(NativeHost& native,Transport::RelayTransport& bridge,const std::st
     check(bridge.status().rejectedEnet>=1,"malformed remote fragment refused before ENet allocation");
     const auto status=bridge.status();check(status.sent>0&&status.received>0&&status.queued<=64,"bounded bidirectional relay traffic");
 }
+void ownedExchange(Transport::ServiceENetSession& engine,bool host,const std::string& remote,
+    const std::vector<std::string>& locals,const std::vector<std::string>& remotes) {
+    const auto owner=std::this_thread::get_id();
+    const Transport::ServiceRoster authority(engine.snapshot());
+    const auto localIds=authority.idsFor(engine.snapshot().machine,locals),remoteIds=authority.idsFor(remote,remotes);
+    bool readySeen=false,remoteSeen=false,sent=false;std::set<int> received;
+    until([&] {
+        for(auto& event:engine.update()) {
+            check(std::this_thread::get_id()==owner,"owned observations stay on owner");
+            check(event.type!=Transport::ServiceENetObservation::Type::Failed,"owned exchange remained available");
+            if(event.type==Transport::ServiceENetObservation::Type::Ready) {
+                check(!readySeen&&event.ids==localIds,"one exact owned welcome");readySeen=true;
+                if(!host){check(event.gamers.size()==2,"complete owned welcome host group");remoteSeen=true;}
+            }else if(event.type==Transport::ServiceENetObservation::Type::Joined) {
+                check(host&&!remoteSeen&&event.gamers.size()==2,"complete owned remote group join");remoteSeen=true;
+            }else if(event.type==Transport::ServiceENetObservation::Type::Data) {
+                check(event.data.has_value(),"owned payload observation");const auto& message=*event.data;
+                check(!message.Payload.empty(),"owned game payload length");const int index=message.Payload.front();
+                check(index>=0&&index<4,"owned packet index");
+                check(message.SenderWireId==remoteIds[(index+1)%2]&&message.TargetWireId==localIds[index%2],"both owned local account slots");
+                check(message.Payload==payload(index,!host),"owned unaltered game payload");
+                check(message.Options==(index==3?Microsoft::Xna::Framework::Net::SendDataOptions::InOrder:Microsoft::Xna::Framework::Net::SendDataOptions::ReliableInOrder),"owned game delivery options");
+                check(received.insert(index).second,"owned duplicate payload");
+            }
+        }
+        if(readySeen&&remoteSeen&&!sent) {
+            check(engine.ready(),"owned handshake establishment precedes data");
+            for(int index=0;index<4;++index)engine.send(localIds[(index+1)%2],remoteIds[index%2],payload(index,host),
+                index==3?Microsoft::Xna::Framework::Net::SendDataOptions::InOrder:Microsoft::Xna::Framework::Net::SendDataOptions::ReliableInOrder);
+            sent=true;
+        }
+        return received.size()==4&&sent;
+    });
+    for(const auto ids:{std::pair{remoteIds[0],localIds[0]},std::pair{localIds[0],static_cast<unsigned char>(31)}}) {
+        bool denied=false;try{engine.send(ids.first,ids.second,{0},Microsoft::Xna::Framework::Net::SendDataOptions::Reliable);}
+        catch(const Service::ServiceOperationError& error){denied=error.code=="NOT_AUTHORIZED";}
+        check(denied,"owned foreign sender/target send refused");
+    }
+}
 }
 int main(int argc,char** argv) {
     try {
-        check(argc==3,"arguments");const std::string role=argv[1],kind=argv[2];NativeHost native;
+        check(argc==3,"arguments");const std::string role=argv[1],kind=argv[2];
+        const auto* mode=std::getenv("CNA_SERVICE_RELAY_OWNED");const bool owned=mode&&std::string(mode)=="1";
+        std::unique_ptr<NativeHost> native;if(!owned||role=="refusal")native=std::make_unique<NativeHost>();
         const auto configuration=CNA::GamerServices::resolveConfiguration();
         if(role=="refusal") {
             phase="tls-refusal";
             Service::ServiceRelayTicket fake{std::string(64,'a'),std::string(32,'1'),std::string(32,'2'),1,61};
-            Transport::RelayTransport bridge(configuration,std::move(fake),native.host->address.port,{});
+            Transport::RelayTransport bridge(configuration,std::move(fake),native->host->address.port,{});
             const auto deadline=Clock::now()+std::chrono::seconds(8);
             while(bridge.status().state==Transport::RelayTransportState::Connecting&&Clock::now()<deadline)std::this_thread::sleep_for(std::chrono::milliseconds(2));
             const auto status=bridge.status();check(status.state==Transport::RelayTransportState::Failed&&status.error=="RELAY_TRANSPORT_UNAVAILABLE","verified TLS refusal");
@@ -191,7 +234,41 @@ int main(int argc,char** argv) {
             check(static_cast<bool>(std::getline(std::cin,remote)),"directory remote machine");session=directory.get(users[0],session.session);
         }else remote=session.hostMachine;
         check(std::count_if(session.members.begin(),session.members.end(),[&](const auto& member){return member.machine==remote;})==2,"authoritative two-user remote roster");
-        phase="relay-connect";Transport::RelayTransport bridge(Service::configurationForBackend(*backend),directory.issueRelayTicket(users[0],users,session.session),native.host->address.port,{remote});
+        std::vector<std::string> locals,remotes;
+        for(int index=0;index<2;++index)locals.push_back((*signedIn)[index]->getGamertagProperty());
+        for(const auto& member:session.members)if(member.machine==remote)remotes.push_back(member.gamertag);
+        if(owned) {
+            phase="owned-preparation";Transport::OnlineSessionRequest request;request.operation=Transport::OnlineSessionRequest::Operation::Join;
+            request.owner=users[0];request.users=users;request.kind=category;request.session=session.session;
+            Transport::OnlineSessionPreparation pending(backend,std::move(request));
+            check(!pending.complete(),"owned preparation begins pending");until([&]{return pending.complete();},20);
+            Transport::ServiceENetSession engine(pending.take(),locals);
+            check(engine.snapshot().session==session.session&&engine.snapshot().machine==session.machine,"owned membership replay authority");
+            check(engine.ready()==host,"client completion waits for verified welcome");
+            std::cout<<"relay-ready\n"<<std::flush;command();phase="owned-exchange";ownedExchange(engine,host,remote,locals,remotes);
+            std::cout<<"relay-exchanged\n"<<std::flush;command();phase="owned-failure";
+            if(host&&kind=="player") {
+                bool left=false;until([&] {
+                    for(const auto& event:engine.update()) {
+                        check(event.type!=Transport::ServiceENetObservation::Type::Failed,"secondary revocation preserves owned host");
+                        if(event.type==Transport::ServiceENetObservation::Type::Left){check(!left&&event.ids.size()==2,"owned full remote group departure once");left=true;}
+                    }
+                    return left;
+                });
+                check(engine.ready(),"secondary revocation preserves established host");
+                std::cout<<"relay-still-open\n"<<std::flush;command();
+            }
+            bool failed=false;until([&] {
+                for(const auto& event:engine.update())if(event.type==Transport::ServiceENetObservation::Type::Failed) {
+                    check(!failed&&!event.failure.empty(),"owned safe failure once");failed=true;
+                }
+                return failed;
+            },15);
+            check(!engine.ready(),"owned failure closes session readiness");
+            check(engine.update().empty(),"owned failure does not repeat");
+            std::cout<<"relay-done "<<checks<<" checks\n"<<std::flush;return 0;
+        }
+        phase="relay-connect";Transport::RelayTransport bridge(Service::configurationForBackend(*backend),directory.issueRelayTicket(users[0],users,session.session),native->host->address.port,{remote});
         until([&]{const auto state=bridge.status().state;check(state!=Transport::RelayTransportState::Failed,"relay connect failure");return state==Transport::RelayTransportState::Ready;});
         const auto port=bridge.routePort(remote);bridge.setRoutes({remote});check(bridge.routePort(remote)==port,"stable route port");
         phase="udp-guards";
@@ -201,13 +278,10 @@ int main(int argc,char** argv) {
         const auto before=bridge.status().dropped;
         const auto foreignSent=enet_socket_send(foreign,&guardDestination,&guardBuffer,1);enet_socket_destroy(foreign);
         check(foreignSent==1,"foreign UDP fixture");guardBuffer.dataLength=oversized.size();
-        check(enet_socket_send(native.host->socket,&guardDestination,&guardBuffer,1)==4097,"oversized local UDP fixture");
+        check(enet_socket_send(native->host->socket,&guardDestination,&guardBuffer,1)==4097,"oversized local UDP fixture");
         until([&]{return bridge.status().dropped>=before+2;});
-        std::vector<std::string> locals,remotes;
-        for(int index=0;index<2;++index)locals.push_back((*signedIn)[index]->getGamertagProperty());
-        for(const auto& member:session.members)if(member.machine==remote)remotes.push_back(member.gamertag);
         const Transport::ServiceRoster authority(session);const Transport::ServiceGamePacketPolicy policy(session);
-        std::cout<<"relay-ready\n"<<std::flush;command();phase="exchange";exchange(native,bridge,remote,host,authority,policy,session.machine,locals,remotes);
+        std::cout<<"relay-ready\n"<<std::flush;command();phase="exchange";exchange(*native,bridge,remote,host,authority,policy,session.machine,locals,remotes);
         std::cout<<"relay-exchanged\n"<<std::flush;command();phase="failure";
         if(host&&kind=="player") {
             check(bridge.status().state==Transport::RelayTransportState::Ready,"secondary peer revocation preserves host authority");

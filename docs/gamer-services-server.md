@@ -200,3 +200,24 @@ reject both a forged existing sender ID and an unknown target, while fragmented 
 application exchange still passes. The service host remains trusted to relay game payloads; this
 is membership validation, not malicious-host anti-cheat. Public Create/Join, lifecycle conversion,
 reconnect and migration remain open. SystemLink keeps its existing codec and transport behavior.
+
+The private owned `ServiceENetSession` now consumes prepared membership and TLS/WSS/native ENet
+resources. Hosts become ready after transport preparation; joining clients become ready only after
+an exact authenticated welcome. Stable service ordinals produce all local/remote IDs, with one
+primary host. Complete connected groups produce owned join/leave observations; directory removal
+revokes delivery before later packets. Directory revisions trigger bounded welcome recovery.
+The owner pump combines lease renewal, source admission, host forwarding between clients,
+local-target data and a single safe failure. Destruction closes transport and releases membership.
+Pending/local deliveries are bounded to 128 data messages and 4 MiB; global unacknowledged outgoing
+data has the same limits, with a separate 64-message control allowance. This preserves room for
+control even under game-data pressure. Existing SystemLink transport is unchanged.
+
+Thirteen deterministic engine cases include three-machine forwarding, both local player slots,
+handshake timeout, authority removal and acknowledged-packet ownership limits. Real-server CTests
+`service_cna_owned_enet` and `service_cna_owned_enet_nat` use two separate processes, four accounts,
+both categories/titles, owned preparation, verified welcome, fragmented/unreliable delivery,
+secondary-account revocation, group departure and server failure. Use the same harness and NAT
+helper environment as the raw relay tests. They explicitly skip if the required harness/helpers
+are absent; a skip is not multiplayer evidence. The raw relay cases separately retain malicious
+fragments, source/size and forged incoming ID tests. These remain private-engine acceptance,
+not public NetworkSession Create/Join completion, reconnect or a public Internet deployment.
