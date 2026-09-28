@@ -306,3 +306,19 @@ is claimed at this milestone. Next independent implementation: GS-006c leave/abo
 User explicitly selected MIT for independently written server code. Server 317b3aae01a6af7373784e11b2f8ddced2363baf
 adds LICENCE, ignore rules and dependency notices. No FNA or proprietary implementation is imported.
 SPDX synchronization is a separate clean checkpoint after GS-006b, preserving XNA port MS-PL files.
+
+
+### Known-good GS-006b integration and MIT checkpoint
+
+CNA **684d453bb6f15a037bb0e723ca3ad82b0093280b**, server
+**bb73b6674fcb487918c60f10293056eb3dc441c9**, sharp-runtime
+**fc033a0e8541a81498c4a496f56a0f59475c6e34** were built/tested together with the exact
+GS-006b results above. Server license-only **130d2a3fe650bf85c85cbf348076f6f8d782c578**
+synchronizes all original source notices to MIT; CNA copies the same canonical parser/header and
+MIT notice into its private protocol directory. XNA port sources retain MS-PL. Protocol drift check
+passes after synchronization. No functionality changed in the license checkpoint, so no redundant
+full rebuild; the next functional build recompiles the changed source notice naturally.
+The original license staging proposal was automatically rejected because it used index plumbing
+against then-uncommitted gameplay changes. It did not execute; ordinary explicit-file staging at
+clean checkpoints completed licensing without loss of code. Both feature repos clean at this
+checkpoint. No server repository created or pushed; the existing product checkout is used.

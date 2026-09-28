@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MS-PL
+// SPDX-License-Identifier: MIT
 #pragma once
 #include <nlohmann/json.hpp>
 #include <stdexcept>
