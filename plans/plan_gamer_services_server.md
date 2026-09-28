@@ -2282,6 +2282,18 @@ new `cmake-build-vulkan` (only these targets built, 89% ccache hits) `Vulkan_Ava
 the four standard demos ran `--smoke` with screenshots inspected.
 Open: `demo_net_avatar_sync` aborts without a signed-in gamer because GS-004 removed fabricated
 profiles and no offline local profile exists yet -> GS-004l (offline local profiles).
-Deferred to the next committed-next integration (one rebuild): stale avatar-EXT comments in
-`VertexPositionNormalTextureSkinned.hpp`, `SkinnedModelEXT.hpp` (widely included) and
-`ContentManager.cpp`.
+The stale avatar-EXT comments in `VertexPositionNormalTextureSkinned.hpp`, `SkinnedModelEXT.hpp`
+(widely included) and `ContentManager.cpp` were fixed together with GS-001i so one rebuild covered
+both.
+
+### GS-001i complete: integrate committed next (FULLSCREEN-001/002)
+
+Merged committed `next` 9bbba48d8 (the GS-007e2c3b commits were already on this branch; new:
+FULLSCREEN-001/002 renderer presentation/recovery fixes). Those commits change
+`GraphicsDevice.hpp` without refreshing the C API coverage inventory, so `CApiCoverageMatrix`
+failed after the merge; `docs/c-api/COVERAGE.md` is regenerated here (hash only, 8,126 symbols
+unchanged). Post-merge debug rebuild (95% ccache misses from the changed renderer headers):
+GamerServices 463/1 skip, Net 466/466, SkinnedModel/skinned-vertex/AnimationPlayer/containment
+94/94, C API gates pass (the three environment smoke failures above remain).
+Known-good set: CNA feature/gamer-services-server (this checkpoint), server bbfe2d5,
+sharp-runtime 007280bd.

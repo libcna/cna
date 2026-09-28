@@ -50,14 +50,6 @@ namespace Microsoft::Xna::Framework::Graphics
     };
 
     /**
-     * @brief A named animation clip: a fixed duration and a set of per-bone keyframe tracks.
-     *
-     * @note CNAEXT — not part of the XNA 4.0 API. CNA extension. Clip names conventionally
-     * match Microsoft::Xna::Framework::GamerServices::AvatarAnimationPreset enumerator names
-     * (see AvatarAnimationPresetToClipNameEXT), but SkinnedModelEXT itself has no dependency
-     * on that enum.
-     */
-    /**
      * @brief Which index space a clip's `BoneTrackEXT::BoneIndex` values live in.
      *
      * @note CNAEXT — not part of the XNA 4.0 API. The two are deliberately distinct and must never
@@ -77,10 +69,8 @@ namespace Microsoft::Xna::Framework::Graphics
     /**
      * @brief A named animation clip: a fixed duration and a set of per-bone keyframe tracks.
      *
-     * @note CNAEXT — not part of the XNA 4.0 API. CNA extension. Clip names conventionally
-     * match Microsoft::Xna::Framework::GamerServices::AvatarAnimationPreset enumerator names
-     * (see AvatarAnimationPresetToClipNameEXT), but SkinnedModelEXT itself has no dependency
-     * on that enum.
+     * @note CNAEXT — not part of the XNA 4.0 API. CNA extension. Clips are looked up by the
+     * name they were loaded under (see SkinnedModelEXT::Clips).
      */
     CNAEXT struct AnimationClipEXT
     {
@@ -100,13 +90,11 @@ namespace Microsoft::Xna::Framework::Graphics
     /**
      * @brief A real, GPU-skinnable mesh + skeleton + animation clip set.
      *
-     * @note CNAEXT — not part of the XNA 4.0 API. CNA extension used by
-     * AvatarRenderer::EnableRealRenderingEXT for real avatar rendering. Deliberately not built
-     * on Model/ModelBone/ModelMesh, which encode a *rigid* per-mesh parent-bone-transform
-     * hierarchy (real XNA's multi-part model animation) rather than per-vertex GPU skinning.
-     * This type's bone count/hierarchy is entirely independent of the real Xbox Avatar's
-     * 71-bone arrays exposed by AvatarRenderer::ParentBones/IAvatarAnimation::BoneTransforms —
-     * no attempt is made to align indices, counts, or semantics between the two.
+     * @note CNAEXT — not part of the XNA 4.0 API. CNA extension for games that bring their own
+     * skinned characters (docs/skinned-model-ext.md). Deliberately not built on
+     * Model/ModelBone/ModelMesh, which encode a *rigid* per-mesh parent-bone-transform hierarchy
+     * (real XNA's multi-part model animation) rather than per-vertex GPU skinning. Unrelated to
+     * the XNA avatar API, whose 71-bone rig is AvatarRenderer's own.
      */
     CNAEXT class SkinnedModelEXT
     {
@@ -117,10 +105,8 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT struct PartEXT
         {
             /**
-             * @brief Part name, used for appearance tinting (AvatarRenderer::PartTintEXT
-             * matches by substring, e.g. "Hair"/"Shirt"/"Pants"/"Shoes" — not exact
-             * equality, since this is the source Blender object name baked straight
-             * through by the content pipeline, e.g. "CNAAvatarHair").
+             * @brief Part name as written by the content pipeline (the source mesh name);
+             * AttachPartEXT and RemovePartEXT address parts by it.
              */
             std::string Name;
             /** @brief The part's geometry; SkinnedModelEXT owns the referenced buffers. */
@@ -196,24 +182,17 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Attaches every part from another, independently-loaded SkinnedModelEXT
          * onto this model, taking ownership of its buffers.
          *
-         * @note CNAEXT — CNA extension (Task 11.21). Lets a standalone-converted wardrobe
-         * piece (`tools/avatar_builder/generate_wardrobe.py` + `convert_avatar.py`, Task
-         * 11.14) actually be worn by an already-loaded, running avatar — until this
-         * method existed, such a piece could be converted but never attached at
-         * runtime. Requires @p other to share this model's exact bone count and index
-         * order (guaranteed for any two models built from the same canonical skeleton —
-         * `tools/avatar_builder/generate_skeleton.py`'s `BONES` table, via
-         * `convert_avatar.py`'s deterministic topological bone sort — since a wardrobe
-         * piece's per-vertex joint indices are then already correct for this model's own
-         * `ParentBoneIndices`/`BindPoseLocal` arrays with no remapping needed). Does not
-         * support attaching a model built from a different skeleton (see @throws).
+         * @note CNAEXT — CNA extension. Lets a separately converted piece (clothing, hair,
+         * a prop) be worn by an already-loaded model at runtime. Requires @p other to share
+         * this model's exact bone count and index order, as any two models converted from the
+         * same skeleton by `tools/avatar_asset_pipeline/convert_avatar.py` do (its bone sort is
+         * deterministic), so the piece's per-vertex joint indices are already correct for this
+         * model's `ParentBoneIndices`/`BindPoseLocal` with no remapping. A model built from a
+         * different skeleton is not supported (see @throws).
          *
-         * Task 11.4: replace-by-name — any part(s) of this model already sharing a name
-         * with an incoming part are removed (via RemovePartEXT, freeing their owned GPU
-         * resources) before the incoming part is appended. Without this, re-attaching a
-         * same-named replacement (e.g. swapping hairstyles at runtime) silently left both
-         * the old and new part rendered simultaneously, since this method previously only
-         * ever appended.
+         * Replace-by-name: any part of this model already sharing a name with an incoming part
+         * is removed (via RemovePartEXT, freeing its owned GPU resources) before the incoming
+         * part is appended, so swapping a same-named piece never leaves both drawn.
          *
          * @param other Another SkinnedModelEXT sharing this model's exact bone layout;
          *              left with no parts of its own afterward (moved-from).
