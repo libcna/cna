@@ -3,6 +3,8 @@
 #include "CNA/GamerServices/Configuration.hpp"
 #include "CnaService/Protocol.hpp"
 #include "CredentialStore.hpp"
+#include "ServiceSessionDirectoryClient.hpp"
+#include "ServiceSessionDirectoryFake.hpp"
 #include <chrono>
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -27,10 +29,7 @@ namespace CNA::Internal::GamerServices {
 using CnaService::Json;
 namespace {
 using Unavailable=Microsoft::Xna::Framework::GamerServices::GamerServicesNotAvailableException;
-struct ServiceError : Unavailable {
-    explicit ServiceError(std::string value):Unavailable("CNA service request failed"),code(std::move(value)){}
-    std::string code;
-};
+using ServiceError=ServiceOperationError;
 long long unixTime(){return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();}
 void slotGuard(int slot) {if(slot<0||slot>3)throw System::ArgumentOutOfRangeException("slot");}
 ServiceIdentity identity(const Json& j) {
@@ -101,6 +100,9 @@ private:
 class OnlineBackend final : public QueuedBackend {
 public:
     explicit OnlineBackend(CNA::GamerServices::Configuration config):QueuedBackend(true),config_(std::move(config)),credentials_(config_) {
+        directory_=makeSessionDirectoryClient([this](const std::string& op,Json args,const std::string& actor,const std::vector<std::string>& users) {
+            return request(op,std::move(args),tokenFor(actor),users);
+        });
         std::set<std::string> seen;
         for(int slot=0;slot<4;++slot)if(const auto stored=credentials_.load(slot)) {
             if(!seen.insert(stored->refreshToken).second||stored->expires<=unixTime()){credentials_.remove(slot);continue;}
@@ -109,6 +111,7 @@ public:
     }
     ~OnlineBackend() override {stop();}
     bool serviceEnabled() const override {return !config_.endpoint.empty();}
+    IServiceSessionDirectory& sessionDirectory() override {return *directory_;}
     void signIn(int slot,std::string username,std::string password) override {
         slotGuard(slot);
         unsigned long long generation;{std::lock_guard lock(slotMutex_);generation=++slots_[slot].generation;slots_[slot].busy=true;}
@@ -256,8 +259,7 @@ public:
     }
     std::string beginLeaderboardGame(const std::vector<std::string>& users) override {
         if(users.empty()||users.size()>4)throw Unavailable("Invalid local leaderboard membership.");
-        Json participants=Json::array();for(const auto& user:users)participants.push_back(tokenFor(user));
-        const auto result=request("leaderboards.game.begin",{{"kind","local"},{"participants",participants}},tokenFor(users.front()));
+        const auto result=request("leaderboards.game.begin",{{"kind","local"}},tokenFor(users.front()),users);
         auto id=CnaService::stringField(result,"gameplay",32);
         if(id.size()!=32||id.find_first_not_of("0123456789abcdef")!=std::string::npos)throw Unavailable("Invalid leaderboard gameplay identifier.");return id;
     }
@@ -383,7 +385,7 @@ private:
         if(error!="OK")throw ServiceError(error);
         return response["result"];
     }
-    Json request(const std::string& op,Json args,const std::string& token) {
+    Json request(const std::string& op,Json args,const std::string& token,const std::vector<std::string>& participants={}) {
         std::lock_guard lock(transportMutex_);
         try {
             negotiateLocked();
@@ -394,14 +396,29 @@ private:
             if(op.starts_with("leaderboards.")&&!capabilities_.contains("leaderboard-reads"))throw Unavailable("CNA service leaderboard-read capability missing.");
             if(op=="assets.read"&&!capabilities_.contains("assets"))throw Unavailable("CNA service asset capability missing.");
             if(op=="presence.set"&&!capabilities_.contains("presence"))throw Unavailable("CNA service presence capability missing.");
+            if(op.starts_with("sessions.")&&!capabilities_.contains("session-directory"))throw Unavailable("CNA service directory capability missing.");
+            if((op.starts_with("invites.")||op=="sessions.joinInvited")&&!capabilities_.contains("session-invitations"))throw Unavailable("CNA service invitation capability missing.");
+            auto participantArguments=[&] {
+                if(participants.empty())return;
+                Json values=Json::array();for(const auto& user:participants)values.push_back(tokenFor(user));
+                args["participants"]=std::move(values);
+            };
+            participantArguments();
             auto current=latestToken(token);
             try {return exchange(op,args,current);}
             catch(const ServiceError& error) {
+                if(error.code=="NOT_AUTHORIZED"&&!participants.empty()) {
+                    renewParticipantsLocked(participants);participantArguments();
+                    return exchange(op,args,latestToken(current));
+                }
                 if(error.code!="UNAUTHENTICATED"||current.empty())throw;
                 int slot=-1;unsigned long long generation=0;bool refresh=false;
                 {std::lock_guard lock(slotMutex_);for(int i=0;i<4;++i)if(slots_[i].token==current){slot=i;generation=slots_[i].generation;refresh=!slots_[i].refresh.empty();break;}}
                 if(slot>=0&&refresh) {
-                    try {renewLocked(slot,generation);return exchange(op,args,latestToken(current));}
+                    try {renewLocked(slot,generation);}
+                    catch(const ServiceError& failed){if(failed.code=="UNAUTHENTICATED")invalidateSlot(slot,generation);throw;}
+                    if(!participants.empty()){renewParticipantsLocked(participants);participantArguments();}
+                    try{return exchange(op,args,latestToken(current));}
                     catch(const ServiceError& failed){if(failed.code=="UNAUTHENTICATED")invalidateSlot(slot,generation);throw;}
                 }
                 if(slot>=0)invalidateSlot(slot,generation);throw;
@@ -423,6 +440,21 @@ private:
                 }
                 negotiated_=true;
             }
+    }
+    void renewParticipantsLocked(const std::vector<std::string>& users) {
+        if(!capabilities_.contains("heartbeat"))throw Unavailable("CNA service participant validation capability missing.");
+        for(const auto& user:users) {
+            const auto credential=tokenFor(user);
+            try{(void)exchange("auth.ping",Json::object(),credential);}
+            catch(const ServiceError& error) {
+                if(error.code!="UNAUTHENTICATED")throw;
+                int slot=-1;unsigned long long generation=0;
+                {std::lock_guard lock(slotMutex_);for(int i=0;i<4;++i)if(slots_[i].token==credential&&slots_[i].identity.userId==user){slot=i;generation=slots_[i].generation;break;}}
+                if(slot<0)throw;
+                try{renewLocked(slot,generation);}
+                catch(const ServiceError& failed){if(failed.code=="UNAUTHENTICATED")invalidateSlot(slot,generation);throw;}
+            }
+        }
     }
     Slot decodeCredentials(const Json& result) {
         Slot state;state.identity=identity(result.at("identity"));state.token=CnaService::stringField(result,"token",64);
@@ -481,6 +513,7 @@ private:
     }
     CNA::GamerServices::Configuration config_;
     CredentialStore credentials_;
+    std::unique_ptr<IServiceSessionDirectory> directory_;
     std::mutex slotMutex_,transportMutex_,cacheMutex_;
     std::array<Slot,4> slots_{};
     std::string prefix_=prefix();
@@ -490,8 +523,13 @@ private:
 };
 class FakeBackend final : public QueuedBackend {
 public:
-    FakeBackend(std::vector<ServiceIdentity> identities,std::vector<ServiceAchievement> catalog,std::vector<ServiceLeaderboardFixture> boards):QueuedBackend(false),identities_(std::move(identities)),catalog_(std::move(catalog)),boards_(std::move(boards)) {}
+    FakeBackend(std::vector<ServiceIdentity> identities,std::vector<ServiceAchievement> catalog,std::vector<ServiceLeaderboardFixture> boards):QueuedBackend(false),identities_(std::move(identities)),catalog_(std::move(catalog)),boards_(std::move(boards)) {
+        directory_=makeFakeSessionDirectory([this](const std::string& user){require(user);if(!profileById(user).allowOnlineSessions)throw ServiceError("NOT_AUTHORIZED");},
+            [this](const std::string& user){return profileById(user).gamertag;},
+            [this](const std::string& tag){const auto person=profile(tag);if(!person.allowOnlineSessions)throw ServiceError("NOT_AUTHORIZED");return person.userId;});
+    }
     bool serviceEnabled() const override{return true;}
+    IServiceSessionDirectory& sessionDirectory() override {return *directory_;}
     void signIn(int slot,std::string username,std::string password) override {
         slotGuard(slot);std::fill(password.begin(),password.end(),'\0');
         queue([this,slot,username=std::move(username)] {
@@ -582,6 +620,7 @@ private:
     ServiceIdentity profileById(const std::string& id) {for(const auto& person:identities_)if(person.userId==id)return person;throw Unavailable("Unknown fixture gamer.");}
     std::map<std::string,std::vector<std::string>> games_;
     int gameSequence_=0;
+    std::unique_ptr<IServiceSessionDirectory> directory_;
     void require(const std::string& user) {if(user.empty()||std::find(slots_.begin(),slots_.end(),user)==slots_.end())throw Unavailable("Gamer signed out.");}
     std::vector<ServiceIdentity> identities_;
     std::vector<ServiceAchievement> catalog_;

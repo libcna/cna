@@ -4,7 +4,8 @@
 > overstate Xbox behavior. The authoritative measured boundary is §9 and
 > [the living plan](../plans/plan_gamer_services_server.md). TLS CNA accounts, four local
 > player slots, Dispatcher pumping, Guide sign-in, lookup/profile and achievement catalog/awards
-> have real-server tests. Leaderboards remain local, PlayerMatch/Ranked/invites remain unfinished,
+> have real-server tests. Online leaderboard reads and LocalWithLeaderboards final writes use the server.
+> Typed client directory/invitation control is implemented; public PlayerMatch/Ranked/invited joins and relay remain unfinished,
 > and standard Avatar rendering still needs migration from EXT. These are active work, not
 > intentional exclusions. API symbol presence and historical percentages are not evidence of
 > behavioral completeness. The CNA server/accounts/protocol are not Xbox LIVE compatible.

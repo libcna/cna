@@ -672,7 +672,7 @@ Logs server `build/invitations-{build,unit,tls,final}.log`; CNA
 `cmake-build-debug/invitation-protocol-{build,gates}.log`.
 
 Reproduce server: `CCACHE_DIR=/rv/cnaccache CCACHE_BASEDIR=/rv cmake --build build --parallel 2`,
-then set CNA_SERVICE_CLIENT_HARNESS and CNA_SERVICE_C_API_CLIENT to dedicated CNA build binaries
+then set CNA_SERVICE_CLIENT_HARNESS and CNA_SERVICE_C_API_HARNESS to dedicated CNA build binaries
 (as existing TLS harness documentation) and `ctest --test-dir build --output-on-failure`.
 Opening the DB migrates transactionally; back up production DB before upgrade. Control protocol
 remains HTTPS POST /cna/v1 with negotiated session-directory/session-invitations capabilities.
@@ -682,3 +682,58 @@ Known-good integration set at this checkpoint (CNA protocol-sync commit immediat
 CNA parent 744f51a5c388fcfbc18a34bea1fbe12517e99bcb;
 sharp-runtime 6c4a857de129cf29b5d43430bedf24157d594f12;
 server c1dcdda99401133ccf146530592a0fe81638b248.
+
+### GS-007d typed private client control checkpoint
+
+- [x] Typed private IServiceSessionDirectory operations: create/find/ordinary and invited join,
+  member read/lease renewal/host conditional update/group leave; send/list/get/accept/dismiss.
+  DTOs contain logical identities, fixed properties and snapshots; no credentials/JSON/SQL in
+  public Microsoft::Xna APIs. Hold owning backend lifetime while using its directory reference.
+- [x] Strict bounded response checks: exact fields, numeric types/overflow, fixed eight properties,
+  opaque IDs/correlation, host/local group identity, unique user/ordinal/at-most-four-per-machine,
+  slot/count consistency, page bounds/filter/category, invitation states/timestamps and inbox IDs.
+- [x] Online capability gates; explicit fake with injected clock, host CAS, join-in-progress,
+  group membership, private-first accepted invites, retry/leave rules, host/remote leases and quota
+  survival across close/recreate. Fake is opt-in and has no disk/network fallback authority.
+- [x] Participant credentials are resolved under the transport lock. Owner or secondary expiry
+  refreshes independently and rebuilds all participant arguments before retry. Secondary revocation
+  signs out only that identity at Dispatcher.Update; a valid owner is retained. The existing
+  LocalWithLeaderboards begin operation uses the same repair. No arbitrary per-operation threads.
+- [x] Genuine two-CNA-process/four-account TLS control probe, both directory kinds/two game IDs,
+  explicit Guide sign-in, real server restart/invite persistence, ordinary then private invited
+  join/leave/retry/filtering, expired owner+secondary/secondary-only credentials, revoked secondary
+  at Update and multi-local leaderboard scope recovery. Private control probe is NOT an original
+  XNA online NetworkSession gameplay sample or Internet-connectivity proof.
+- [ ] Next GS-008a: canonical bounded realtime relay framing/tickets; GS-008b secure relay and
+  loopback ENet bridge, then public online NetworkSession/Guide invitation integration (GS-007e).
+
+Validation: clean affected native/C API build, zero new warnings. 11/11 new deterministic tests
+(6ms); complete GamerServices 408 run/407 pass/one existing HEADLESS screensaver skip (2.270s);
+Net 325/325 pass (4.372s), including existing real ENet/SystemLink multi-process tests. Private
+fake/protocol/property/C API header/exports/ABI/scope/coverage/Net/boards gates 13/13 pass (14.99s).
+Generated C inventory stays 472 public headers/8,130 symbols; new directory header explicitly
+excluded as internal (469 excluded headers). ABI 0.32/3,215 exports unchanged.
+Server full gate 5/5 pass (75.37s): 5,216 unit, 99 directory, 153 invitation assertions; general TLS
+59.24s, two-CNA directory 6.85s (31 join/16 host checks per kind). No server test skipped with
+CNA probe variables configured. Server ded9163bc48aed90a74f887c176224728709b245; runtime
+6c4a857de129cf29b5d43430bedf24157d594f12. CNA implementation checkpoint is the next GS-007d
+commit, based on 594bf03f5. Exact commit set appended before the next implementation milestone.
+
+Commands: build CNA targets CnaGamerServicesTests CnaNetTests cna_service_client_harness
+cna_service_directory_client_harness cna_c_api_service_client cna_c_api_net_smoke
+cna_c_api_leaderboards_smoke with shared ccache/--parallel 2. Server test env:
+CNA_SERVICE_CLIENT_HARNESS=<task CNA build>/cna_service_client_harness;
+CNA_SERVICE_C_API_HARNESS=<task CNA build>/cna_c_api_service_client;
+CNA_SERVICE_DIRECTORY_CLIENT_HARNESS=<task CNA build>/cna_service_directory_client_harness.
+`ctest --test-dir build --output-on-failure`; dedicated control test `-R '^service_cna_directory$'`
+skips explicitly with code 77 if its probe is absent. TLS fixture provisions/migrates SQLite and
+test CA in owned build temp, removes them and never puts secrets in argv/logs.
+Logs: CNA `cmake-build-debug/directory-client-{final-build,unit,gamers,net,gates}.log`;
+server `build/cna-directory-{build,e2e,final}.log` and `build/Testing/Temporary/LastTest.log`.
+
+Initial new E2E exposed an incorrect internal heartbeat operation name; corrected to canonical
+auth.ping. Response/fake unit tests did not cover that real negotiation path, so real E2E is
+required. Additional review isolated secondary-auth failure from owner invalidation; tested by
+secondary-only admin revocation. One initial C API inventory gate was stale after adding an
+internal header; regenerated its source-derived scope report and final 13/13 gate passed.
+Latest committed next remains 8d56fa2fa; no samples-agent uncommitted state touched.

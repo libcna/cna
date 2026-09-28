@@ -8,6 +8,7 @@
 #include <vector>
 #include <optional>
 #include <variant>
+#include "CNA/Internal/GamerServices/ServiceSessionDirectory.hpp"
 namespace CNA::Internal::GamerServices {
 /** @brief Service identity/profile data, independent of XNA objects and wire representation. */
 struct ServiceIdentity {
@@ -126,6 +127,9 @@ public:
     virtual ~IGamerServicesBackend() = default;
     /** @brief Reports configured service/fake mode. @return Whether enabled. */
     virtual bool serviceEnabled() const = 0;
+    /** @brief Gets typed session control, retaining this backend throughout its use.
+     * @return Directory and invitation operations without wire/credential data. */
+    virtual IServiceSessionDirectory& sessionDirectory() = 0;
     /** @brief Queues authentication. @param slot Local slot. @param username Account login.
      * @param password Secret, never logged. */
     virtual void signIn(int slot,std::string username,std::string password) = 0;

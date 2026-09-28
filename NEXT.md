@@ -1,5 +1,13 @@
 # NEXT.md
 
+> **GS-007d private session control (2026-09-28):** Typed online directory/invitation backend,
+> strict roster/response validation and explicit deterministic fake are implemented. Two genuine
+> CNA processes/four accounts pass verified-TLS restart, property filtering, ordinary/private
+> invited joins and multi-local credential refresh/revocation tests. Public online NetworkSession,
+> Guide InviteAccepted/invited joins and authenticated Internet relay remain unfinished.
+> No new XNA or native C ABI surface is added; see the Gamer Services living plan.
+
+
 ## SAMPLE-100 native acceptance repairs — 2026-09-28
 
 The current account backend exposed two pre-existing owning-layer defects in the unchanged
@@ -37,7 +45,7 @@ not browser multiplayer completion. Evidence is in sibling cna-samples SAMPLE-10
 > achievement/profile pictures, remote leaderboard reads and LocalWithLeaderboards EndGame/early-leave commits. Pure C clients exercise the same real TLS service; ABI 0.32 adds
 > picture copying. POSIX private refresh persistence, four-account resume, heartbeat and service-control
 > reconnect are tested. This is not Xbox behavioral completeness. Ranked leaderboard lifecycle,
-> PlayerMatch/Ranked/invites/relay, standard avatars and acceptance samples remain active. See
+> Public PlayerMatch/Ranked/invited joins and relay, standard avatars and acceptance samples remain active. See
 > [living plan](plans/plan_gamer_services_server.md) for reproducible commands/results and gaps.
 
 > GS-007b corrects NetworkSessionProperties to the reference eight-slot contract and enforces

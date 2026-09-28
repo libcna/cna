@@ -77,3 +77,13 @@ The invitation control service now persists recipient-bound pending/accepted inv
 atomically joins up to four authenticated local users through an explicitly accepted invite,
 using available private then public slots. Client Guide/InviteAccepted/public invited joins and
 Internet relay are still pending. Invitations are CNA service IDs, not Xbox LIVE tokens.
+
+CNA's private backend now provides typed directory create/find/join/get/touch/update/leave and
+recipient send/list/get/accept/dismiss invitation operations with strict response validation.
+Public XNA classes receive logical snapshots, not JSON, credentials or persistence objects.
+An explicitly selected deterministic fake covers leases, host revisions, fixed-property filtering,
+private slot allocation, consent, replay and quotas. It never substitutes for the real online backend.
+Multi-local requests collect current credentials under the transport lock and can refresh expired
+secondary players without signing out a valid machine owner. The real two-CNA-process TLS probe
+uses internal control APIs for this validation; it is not a standard-API gameplay acceptance sample
+and it proves neither relay nor Internet realtime connectivity.

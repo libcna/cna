@@ -1,5 +1,13 @@
 # CNA XNA 4.0 API Audit
 
+> **GS-007d private session control (2026-09-28):** Typed online directory/invitation backend,
+> strict roster/response validation and explicit deterministic fake are implemented. Two genuine
+> CNA processes/four accounts pass verified-TLS restart, property filtering, ordinary/private
+> invited joins and multi-local credential refresh/revocation tests. Public online NetworkSession,
+> Guide InviteAccepted/invited joins and authenticated Internet relay remain unfinished.
+> No new XNA or native C ABI surface is added; see the Gamer Services living plan.
+
+
 > **SAMPLE-100 acceptance repair (2026-09-28):** Game.IsActive now respects real modal Guide
 > visibility through the optional internal overlay, and LocalNetworkGamer preserves its actual
 > SignedInGamer's Gamertag/DisplayName. All 170 focused runtime/Guide/network tests and genuine
@@ -13,7 +21,7 @@
 > achievement/profile pictures, remote leaderboard reads and LocalWithLeaderboards EndGame/early-leave commits. Pure C clients exercise the same real TLS service; ABI 0.32 adds
 > picture copying. POSIX private refresh persistence, four-account resume, heartbeat and service-control
 > reconnect are tested. This is not Xbox behavioral completeness. Ranked leaderboard lifecycle,
-> PlayerMatch/Ranked/invites/relay, standard avatars and acceptance samples remain active. See
+> Public PlayerMatch/Ranked/invited joins and relay, standard avatars and acceptance samples remain active. See
 > [living plan](plans/plan_gamer_services_server.md) for reproducible commands/results and gaps.
 
 > **Current graphics-extension scope (MOD-RETIRE-1, 2026-09-27):** The former modern
