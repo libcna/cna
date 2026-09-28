@@ -6,6 +6,9 @@
 #include "Microsoft/Xna/Framework/Net/QualityOfService.hpp"
 #include <cstdint>
 #include <string>
+#include <memory>
+
+namespace CNA::Internal::GamerServices {struct ServiceSessionSnapshot;}
 
 namespace Microsoft::Xna::Framework::Net
 {
@@ -125,6 +128,8 @@ namespace Microsoft::Xna::Framework::Net
         );
 
     private:
+        friend class NetworkSession;
+        std::shared_ptr<const CNA::Internal::GamerServices::ServiceSessionSnapshot> serviceSnapshot_;
         AvailableNetworkSession(
             int numGamers,
             const std::string& host,

@@ -2233,13 +2233,13 @@ CNA_Result cna_network_session_create_async(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        System::IAsyncResult* const pending = NetworkSession::BeginCreate(
+        std::unique_ptr<System::IAsyncResult> pending(NetworkSession::BeginCreate(
             static_cast<NetworkSessionType>(sessionType),
             static_cast<int>(maxLocalGamers),
             static_cast<int>(maxGamers),
             CompletionDelegate(callback, context),
-            std::any{});
-        return CreateSessionResourceHandle(NetworkSession::EndCreate(pending), outSession);
+            std::any{}));
+        return CreateSessionResourceHandle(NetworkSession::EndCreate(pending.get()), outSession);
     });
 }
 
@@ -2267,15 +2267,15 @@ CNA_Result cna_network_session_create_with_properties_async(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        System::IAsyncResult* const pending = NetworkSession::BeginCreate(
+        std::unique_ptr<System::IAsyncResult> pending(NetworkSession::BeginCreate(
             static_cast<NetworkSessionType>(sessionType),
             static_cast<int>(maxLocalGamers),
             static_cast<int>(maxGamers),
             static_cast<int>(privateGamerSlots),
             std::move(properties),
             CompletionDelegate(callback, context),
-            std::any{});
-        return CreateSessionResourceHandle(NetworkSession::EndCreate(pending), outSession);
+            std::any{}));
+        return CreateSessionResourceHandle(NetworkSession::EndCreate(pending.get()), outSession);
     });
 }
 
@@ -2309,15 +2309,15 @@ CNA_Result cna_network_session_create_with_local_gamers_async(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        System::IAsyncResult* const pending = NetworkSession::BeginCreate(
+        std::unique_ptr<System::IAsyncResult> pending(NetworkSession::BeginCreate(
             static_cast<NetworkSessionType>(sessionType),
             gamers,
             static_cast<int>(maxGamers),
             static_cast<int>(privateGamerSlots),
             std::move(properties),
             CompletionDelegate(callback, context),
-            std::any{});
-        return CreateSessionResourceHandle(NetworkSession::EndCreate(pending), outSession);
+            std::any{}));
+        return CreateSessionResourceHandle(NetworkSession::EndCreate(pending.get()), outSession);
     });
 }
 
@@ -2407,13 +2407,13 @@ CNA_Result cna_network_session_find_async(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        System::IAsyncResult* const pending = NetworkSession::BeginFind(
+        std::unique_ptr<System::IAsyncResult> pending(NetworkSession::BeginFind(
             static_cast<NetworkSessionType>(sessionType),
             static_cast<int>(maxLocalGamers),
             std::move(properties),
             CompletionDelegate(callback, context),
-            std::any{});
-        return CreateCollectionHandle(NetworkSession::EndFind(pending), outCollection);
+            std::any{}));
+        return CreateCollectionHandle(NetworkSession::EndFind(pending.get()), outCollection);
     });
 }
 
@@ -2445,13 +2445,13 @@ CNA_Result cna_network_session_find_with_local_gamers_async(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        System::IAsyncResult* const pending = NetworkSession::BeginFind(
+        std::unique_ptr<System::IAsyncResult> pending(NetworkSession::BeginFind(
             static_cast<NetworkSessionType>(sessionType),
             gamers,
             std::move(properties),
             CompletionDelegate(callback, context),
-            std::any{});
-        return CreateCollectionHandle(NetworkSession::EndFind(pending), outCollection);
+            std::any{}));
+        return CreateCollectionHandle(NetworkSession::EndFind(pending.get()), outCollection);
     });
 }
 
@@ -2491,11 +2491,11 @@ CNA_Result cna_network_session_join_async(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        System::IAsyncResult* const pending = NetworkSession::BeginJoin(
+        std::unique_ptr<System::IAsyncResult> pending(NetworkSession::BeginJoin(
             available->value.get(),
             CompletionDelegate(callback, context),
-            std::any{});
-        return CreateSessionResourceHandle(NetworkSession::EndJoin(pending), outSession);
+            std::any{}));
+        return CreateSessionResourceHandle(NetworkSession::EndJoin(pending.get()), outSession);
     });
 }
 
@@ -2544,11 +2544,11 @@ CNA_Result cna_network_session_join_invited_async(
             return InvalidArgument("The NetworkSession output handle is null.");
         }
         *outSession = CNA_INVALID_HANDLE;
-        System::IAsyncResult* const pending = NetworkSession::BeginJoinInvited(
+        std::unique_ptr<System::IAsyncResult> pending(NetworkSession::BeginJoinInvited(
             static_cast<int>(maxLocalGamers),
             CompletionDelegate(callback, context),
-            std::any{});
-        return CreateSessionResourceHandle(NetworkSession::EndJoinInvited(pending), outSession);
+            std::any{}));
+        return CreateSessionResourceHandle(NetworkSession::EndJoinInvited(pending.get()), outSession);
     });
 }
 
@@ -2569,11 +2569,11 @@ CNA_Result cna_network_session_join_invited_with_local_gamers_async(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        System::IAsyncResult* const pending = NetworkSession::BeginJoinInvited(
+        std::unique_ptr<System::IAsyncResult> pending(NetworkSession::BeginJoinInvited(
             gamers,
             CompletionDelegate(callback, context),
-            std::any{});
-        return CreateSessionResourceHandle(NetworkSession::EndJoinInvited(pending), outSession);
+            std::any{}));
+        return CreateSessionResourceHandle(NetworkSession::EndJoinInvited(pending.get()), outSession);
     });
 }
 

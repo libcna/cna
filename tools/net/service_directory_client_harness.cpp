@@ -7,6 +7,8 @@
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "System/IServiceProvider.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 #include <chrono>
 #include <iostream>
 #include <memory>
@@ -31,7 +33,7 @@ void advance() {std::string line;check(static_cast<bool>(std::getline(std::cin,l
 int main(int argc,char** argv) {
     try {
         check(argc==3,"arguments");const std::string role=argv[1],kind=argv[2];
-        check(role=="host"||role=="join","role");check(kind=="player"||kind=="ranked","kind");
+        check(role=="host"||role=="join"||role=="search-empty","role");check(kind=="player"||kind=="ranked","kind");
         const bool host=role=="host";
         const auto category=kind=="player"?Service::ServiceSessionKind::PlayerMatch:Service::ServiceSessionKind::Ranked;
         const std::array<std::string,2> accounts=host?std::array<std::string,2>{"alice","charlie"}:std::array<std::string,2>{"bob","dana"};
@@ -49,6 +51,17 @@ int main(int argc,char** argv) {
         std::vector<std::string> users;for(int index=0;index<2;++index)users.push_back(backend->profile((*signedIn)[index]->getGamertagProperty()).userId);
         Service::ServiceSessionSettings settings;settings.maxGamers=6;settings.privateSlots=2;settings.properties[0]=37;settings.properties[7]=-2147483647-1;
         std::cout<<"directory-signed\n"<<std::flush;advance();
+        Microsoft::Xna::Framework::Net::NetworkSessionProperties search;
+        for(int index=0;index<8;++index)search.setItem(index,settings.properties[index]);
+        const auto sessionType=category==Service::ServiceSessionKind::Ranked
+            ? Microsoft::Xna::Framework::Net::NetworkSessionType::Ranked
+            : Microsoft::Xna::Framework::Net::NetworkSessionType::PlayerMatch;
+        if(argc>1 && std::string(argv[1])=="search-empty") {
+            phase="public-cross-title-find";
+            auto found=Microsoft::Xna::Framework::Net::NetworkSession::Find(sessionType,2,search);
+            check(found.getCountProperty()==0,"other title advertisements escaped service scope");
+            std::cout<<"directory-done "<<checks<<" checks\n"<<std::flush;return 0;
+        }
         if(host) {
             phase="create";auto session=directory.create(users[0],users,category,settings);check(session.currentGamers==2,"host local group");
             const auto authority=directory.issueRelayTicket(users[0],users,session.session);
@@ -68,6 +81,36 @@ int main(int argc,char** argv) {
             check(directory.leave(users[0],session.session),"host close");
         }else {
             std::string session,invite;check(static_cast<bool>(std::getline(std::cin,session))&&static_cast<bool>(std::getline(std::cin,invite)),"control identifiers");
+            phase="public-find";
+            using Microsoft::Xna::Framework::Net::NetworkSession;
+            using Microsoft::Xna::Framework::Net::AvailableNetworkSessionCollection;
+            int callbacks=0;const auto updateThread=std::this_thread::get_id();
+            std::unique_ptr<AvailableNetworkSessionCollection> publicFound;
+            std::unique_ptr<System::IAsyncResult> pending(NetworkSession::BeginFind(sessionType,2,search,
+                [&](System::IAsyncResult& result) {
+                    check(std::this_thread::get_id()==updateThread,"search callback thread");
+                    ++callbacks;publicFound=std::make_unique<AvailableNetworkSessionCollection>(NetworkSession::EndFind(&result));
+                },37));
+            check(!pending->getIsCompletedProperty()&&!pending->getCompletedSynchronouslyProperty(),"public search begins pending");
+            check(!pending->getAsyncWaitHandleProperty().WaitOne(0),"search completion signal too early");
+            const auto findDeadline=std::chrono::steady_clock::now()+std::chrono::seconds(15);
+            while(!publicFound) {
+                GamerServicesDispatcher::Update();
+                check(std::chrono::steady_clock::now()<findDeadline,"public search deadline");
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            check(callbacks==1&&pending->getAsyncWaitHandleProperty().WaitOne(0),"search completion once");
+            check(std::any_cast<int>(pending->getAsyncStateProperty())==37,"metadata survived callback End");
+            check(publicFound->getCountProperty()==1,"public matched directory count");
+            const auto& listing=static_cast<const AvailableNetworkSessionCollection&>(*publicFound)[0];
+            check(listing.getHostGamertagProperty()=="Alice"&&listing.getCurrentGamerCountProperty()==2,"public service identity");
+            check(listing.getOpenPublicGamerSlotsProperty()==2&&listing.getOpenPrivateGamerSlotsProperty()==2,"public service capacity");
+            check(listing.getSessionPropertiesProperty().getItem(0)==37&&listing.getSessionPropertiesProperty().getItem(7)==-2147483647-1,"public sparse properties");
+            check(listing.GetConnectAddress().empty()&&listing.GetConnectPort()==0,"relay listing has no direct peer endpoint");
+            try {(void)NetworkSession::EndFind(pending.get());throw std::runtime_error("duplicate End accepted");}
+            catch(const System::InvalidOperationException&) {++checks;}
+            auto wrongFilter=search;wrongFilter[0]=38;
+            check(NetworkSession::Find(sessionType,2,wrongFilter).getCountProperty()==0,"public filter mismatch");
             phase="find";const auto page=directory.find(users[0],category,2,settings.properties,0,32);
             check(page.sessions.size()==1&&page.sessions[0].session==session,"service filtering/correlation");
             auto mismatch=settings.properties;mismatch[0]=38;check(directory.find(users[0],category,2,mismatch,0,32).sessions.empty(),"filter mismatch");

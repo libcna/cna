@@ -16,6 +16,10 @@
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include <chrono>
+#include <atomic>
+#include <algorithm>
+#include <set>
+#include "System/TimeoutException.hpp"
 #include <thread>
 #include <map>
 #include <tuple>
@@ -27,8 +31,8 @@ namespace Microsoft::Xna::Framework::Net
 
     namespace
     {
-        // The service directory is still pending GS-007; SystemLink uses ENet discovery.
-        void ThrowIfSessionTypeNeedsMatchmakingService(NetworkSessionType sessionType)
+        // Public online creation/join needs authenticated transport/lifecycle integration; search is service-backed.
+        void ThrowIfOnlineSessionLifecycleUnavailable(NetworkSessionType sessionType)
         {
             if (sessionType == NetworkSessionType::PlayerMatch
                 || sessionType == NetworkSessionType::Ranked)
@@ -38,9 +42,7 @@ namespace Microsoft::Xna::Framework::Net
                     + std::string(sessionType == NetworkSessionType::PlayerMatch
                                       ? "PlayerMatch"
                                       : "Ranked")
-                    + " requires the CNA session directory, which is not yet implemented. "
-                      "Use NetworkSessionType::SystemLink for a local network "
-                      "session, or NetworkSessionType::Local for a single-machine one."
+                    + " creation/join awaits CNA authenticated online session lifecycle integration."
                 );
             }
         }
@@ -53,7 +55,15 @@ namespace Microsoft::Xna::Framework::Net
     uint16_t NetworkSession::pendingJoinPort_ = 0;
     int NetworkSession::instanceCount_ = 0;
 
-    // --- NetworkSessionAction ---
+    struct NetworkSession::NetworkSessionAction::Storage
+    {
+        std::any value;
+        std::exception_ptr error;
+        std::atomic<bool> complete{true};
+        NetworkSessionAction* target=nullptr;
+        System::Threading::EventWaitHandle wait{true, System::Threading::EventResetMode::ManualReset};
+    };
+    std::vector<NetworkSession::NetworkSessionAction*> NetworkSession::NetworkSessionAction::live_;
 
     NetworkSession::NetworkSessionAction::NetworkSessionAction(
         NetworkSessionOperation operation,
@@ -75,21 +85,10 @@ namespace Microsoft::Xna::Framework::Net
         , SessionProperties(std::move(properties))
         , SessionType(type)
         , asyncState_(std::move(state))
-        // Deviation from FNA: FNA's NetworkSessionAction sets IsCompleted = false here and relies
-        // on GamerServicesDispatcher.Update() to eventually complete it. GamerServicesDispatcher's
-        // Update() is a permanently empty no-op in both FNA and CNA, so once a
-        // GamerServicesComponent exists (isInitialized == true, i.e. every real sample's own
-        // constructor), UpdateAsync() unconditionally returns true forever and nothing ever
-        // completes the pending action - Create()/Find()/Join()'s synchronous polling loop spins
-        // forever (confirmed to reproduce identically against the real FNA reference source, not
-        // just CNA's port). CNA's Create/Find/Join/JoinInvited already perform all of their real
-        // work synchronously inside EndCreate/EndFind/EndJoin/EndJoinInvited (constructing the
-        // NetworkSession or calling into ENetBackend/ENetDiscoveryService directly, no multi-frame
-        // deferred I/O), so there is no real pending operation for the loop to ever be waiting on;
-        // marking every action completed immediately is a correctness fix, not a design change.
-        , isCompleted_(true)
-        , asyncWaitHandle_(true, System::Threading::EventResetMode::ManualReset)
+        , storage_(std::make_shared<Storage>())
     {
+        live_.push_back(this);
+        storage_->target=this;
         ++instanceCount_;
     }
 
@@ -97,6 +96,9 @@ namespace Microsoft::Xna::Framework::Net
 
     NetworkSession::NetworkSessionAction::~NetworkSessionAction()
     {
+        storage_->target=nullptr;
+        std::erase(live_, this);
+        if(activeAction_==this) activeAction_=nullptr;
         --instanceCount_;
     }
 
@@ -106,32 +108,69 @@ namespace Microsoft::Xna::Framework::Net
     }
 
     const std::any& NetworkSession::NetworkSessionAction::getAsyncStateProperty() const { return asyncState_; }
-    bool NetworkSession::NetworkSessionAction::getCompletedSynchronouslyProperty() const { return false; }
-    bool NetworkSession::NetworkSessionAction::getIsCompletedProperty() const { return isCompleted_; }
-    void NetworkSession::NetworkSessionAction::setIsCompletedProperty(bool value) { isCompleted_ = value; }
+    bool NetworkSession::NetworkSessionAction::getCompletedSynchronouslyProperty() const { return completedSynchronously_; }
+    bool NetworkSession::NetworkSessionAction::getIsCompletedProperty() const { return storage_->complete.load(); }
+    void NetworkSession::NetworkSessionAction::setIsCompletedProperty(bool value) { storage_->complete=value; if(value) storage_->wait.Set(); else storage_->wait.Reset(); }
 
     System::Threading::WaitHandle& NetworkSession::NetworkSessionAction::getAsyncWaitHandleProperty() const
     {
-        return asyncWaitHandle_;
+        return storage_->wait;
     }
 
-    // Task 12/audit_net.md High finding: the public headers document that AsyncCallback runs on
-    // completion, but every Begin* used to only store it in NetworkSessionAction, never invoke it.
-    // Every Begin* already completes activeAction_ synchronously at construction time, so this is
-    // called once, right after activeAction_ is assigned - never from inside NetworkSessionAction's
-    // own constructor, so a re-entrant callback always observes activeAction_ already installed.
-    NetworkSession::NetworkSessionAction* NetworkSession::InvokeActiveActionCallback()
+    void NetworkSession::NetworkSessionAction::Queue(std::function<std::any()> work)
     {
-        // Captured before invoking, not re-read from activeAction_ afterward: a re-entrant
-        // callback that calls the matching End* nulls activeAction_ as a side effect, and the
-        // caller (some Begin* overload, about to `return` this) must still get back the action it
-        // just created, not that now-stale null.
-        NetworkSessionAction* action = activeAction_;
-        if (action->Callback)
-        {
-            action->Callback(*action);
+        completedSynchronously_=false;
+        setIsCompletedProperty(false);
+        auto state=storage_;
+        executor_=CNA::Internal::GamerServices::backend();
+        executor_->submit(
+            [state,work=std::move(work)] {
+                try {state->value=work();} catch(...) {state->error=std::current_exception();}
+            },
+            [state] {
+                state->complete=true;
+                state->wait.Set();
+                if(auto* target=state->target; target && target->Callback) {
+                    auto callback=target->Callback;
+                    callback(*target);
+                }
+            });
+    }
+
+    NetworkSession::NetworkSessionAction* NetworkSession::NetworkSessionAction::PrepareEnd(
+        System::IAsyncResult* result, NetworkSessionOperation operation)
+    {
+        if(!result) throw System::ArgumentNullException("result");
+        auto found=std::find_if(live_.begin(),live_.end(),[result](auto* action) {return action==result;});
+        if(found==live_.end() || (*found)->Operation!=operation) throw System::ArgumentException("result");
+        auto* action=*found;
+        if(action->ended_) throw System::InvalidOperationException("End was already called.");
+        if(action!=activeAction_) throw System::ArgumentException("result");
+        // Claim before pumping: a callback may reenter End while the outer End is waiting.
+        action->ended_=true;
+        try {
+            const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(30);
+            while(!action->getIsCompletedProperty()) {
+                GamerServices::GamerServicesDispatcher::Update();
+                if(std::chrono::steady_clock::now()>=deadline) throw System::TimeoutException("CNA session operation timed out.");
+                if(!action->getIsCompletedProperty()) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            if(action->storage_->error) std::rethrow_exception(action->storage_->error);
+        } catch(...) {
+            if(activeAction_==action) activeAction_=nullptr;
+            throw;
         }
         return action;
+    }
+
+    std::any NetworkSession::NetworkSessionAction::TakeValue() {return std::move(storage_->value);}
+
+    NetworkSession::NetworkSessionAction* NetworkSession::InvokeActiveActionCallback()
+    {
+        // Begin retains ownership until it returns, including when the callback calls End or throws.
+        std::unique_ptr<NetworkSessionAction> action(activeAction_);
+        if(action->Callback) {auto callback=action->Callback;callback(*action);}
+        return action.release();
     }
 
     // --- Constructor ---
@@ -718,15 +757,8 @@ namespace Microsoft::Xna::Framework::Net
 
     NetworkSession* NetworkSession::Create(NetworkSessionType sessionType, int maxLocalGamers, int maxGamers)
     {
-        System::IAsyncResult* result = BeginCreate(sessionType, maxLocalGamers, maxGamers, System::AsyncCallback{}, std::any{});
-        while (!result->getIsCompletedProperty())
-        {
-            if (!GamerServices::GamerServicesDispatcher::UpdateAsync())
-            {
-                activeAction_->setIsCompletedProperty(true);
-            }
-        }
-        return EndCreate(result);
+        std::unique_ptr<System::IAsyncResult> result(BeginCreate(sessionType, maxLocalGamers, maxGamers, System::AsyncCallback{}, std::any{}));
+        return EndCreate(result.get());
     }
 
     NetworkSession* NetworkSession::Create(
@@ -737,18 +769,11 @@ namespace Microsoft::Xna::Framework::Net
         NetworkSessionProperties sessionProperties
     )
     {
-        System::IAsyncResult* result = BeginCreate(
+        std::unique_ptr<System::IAsyncResult> result(BeginCreate(
             sessionType, maxLocalGamers, maxGamers, privateGamerSlots,
             std::move(sessionProperties), System::AsyncCallback{}, std::any{}
-        );
-        while (!result->getIsCompletedProperty())
-        {
-            if (!GamerServices::GamerServicesDispatcher::UpdateAsync())
-            {
-                activeAction_->setIsCompletedProperty(true);
-            }
-        }
-        return EndCreate(result);
+        ));
+        return EndCreate(result.get());
     }
 
     NetworkSession* NetworkSession::Create(
@@ -759,18 +784,11 @@ namespace Microsoft::Xna::Framework::Net
         NetworkSessionProperties sessionProperties
     )
     {
-        System::IAsyncResult* result = BeginCreate(
+        std::unique_ptr<System::IAsyncResult> result(BeginCreate(
             sessionType, localGamers, maxGamers, privateGamerSlots,
             std::move(sessionProperties), System::AsyncCallback{}, std::any{}
-        );
-        while (!result->getIsCompletedProperty())
-        {
-            if (!GamerServices::GamerServicesDispatcher::UpdateAsync())
-            {
-                activeAction_->setIsCompletedProperty(true);
-            }
-        }
-        return EndCreate(result);
+        ));
+        return EndCreate(result.get());
     }
 
     System::IAsyncResult* NetworkSession::BeginCreate(
@@ -790,7 +808,7 @@ namespace Microsoft::Xna::Framework::Net
         {
             throw System::ArgumentOutOfRangeException("maxGamers");
         }
-        ThrowIfSessionTypeNeedsMatchmakingService(sessionType);
+        ThrowIfOnlineSessionLifecycleUnavailable(sessionType);
 
         if (activeAction_ != nullptr || activeSession_ != nullptr)
         {
@@ -827,7 +845,7 @@ namespace Microsoft::Xna::Framework::Net
         {
             throw System::ArgumentOutOfRangeException("privateGamerSlots");
         }
-        ThrowIfSessionTypeNeedsMatchmakingService(sessionType);
+        ThrowIfOnlineSessionLifecycleUnavailable(sessionType);
 
         if (activeAction_ != nullptr || activeSession_ != nullptr)
         {
@@ -860,7 +878,7 @@ namespace Microsoft::Xna::Framework::Net
         {
             throw System::ArgumentOutOfRangeException("privateGamerSlots");
         }
-        ThrowIfSessionTypeNeedsMatchmakingService(sessionType);
+        ThrowIfOnlineSessionLifecycleUnavailable(sessionType);
 
         if (activeAction_ != nullptr || activeSession_ != nullptr)
         {
@@ -877,12 +895,7 @@ namespace Microsoft::Xna::Framework::Net
     NetworkSession* NetworkSession::EndCreate(System::IAsyncResult* result)
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
-        if (!result) throw System::ArgumentNullException("result");
-        if (result != activeAction_
-            || activeAction_->Operation != NetworkSessionOperation::Create)
-        {
-            throw System::ArgumentException("result");
-        }
+        auto* action=NetworkSessionAction::PrepareEnd(result, NetworkSessionOperation::Create);
 
         // Task 6.1: the constructor call below can throw (e.g. the maxLocalGamers-only overload
         // falls back to an empty global Gamer::SignedInGamers list, making `host_ =
@@ -896,28 +909,23 @@ namespace Microsoft::Xna::Framework::Net
             // Intentional correction over FNA's stub: XNA documents this exact value as the
             // session limit, and CNA's functional networking consumes it for capacity/discovery.
             created = new NetworkSession(
-                activeAction_->SessionProperties,
-                activeAction_->SessionType,
-                activeAction_->MaxGamers,
-                activeAction_->MaxPrivateSlots,
-                activeAction_->MaxLocalGamers,
-                activeAction_->LocalGamers,
+                action->SessionProperties,
+                action->SessionType,
+                action->MaxGamers,
+                action->MaxPrivateSlots,
+                action->MaxLocalGamers,
+                action->LocalGamers,
                 true // EndCreate: this machine is hosting (see DEFERRED.md item #20)
             );
         }
         catch (...)
         {
-            delete activeAction_;
             activeAction_ = nullptr;
             throw;
         }
 
         activeSession_ = created;
 
-        // Task 3.2: every End* used to just drop activeAction_ (a bare `= nullptr;`) with no prior
-        // delete - `new NetworkSessionAction(...)` in every Begin* permanently leaked one object
-        // per Begin*/End* cycle.
-        delete activeAction_;
         activeAction_ = nullptr;
         return activeSession_;
     }
@@ -930,17 +938,10 @@ namespace Microsoft::Xna::Framework::Net
         NetworkSessionProperties searchProperties
     )
     {
-        System::IAsyncResult* result = BeginFind(
+        std::unique_ptr<System::IAsyncResult> result(BeginFind(
             sessionType, maxLocalGamers, std::move(searchProperties), System::AsyncCallback{}, std::any{}
-        );
-        while (!result->getIsCompletedProperty())
-        {
-            if (!GamerServices::GamerServicesDispatcher::UpdateAsync())
-            {
-                activeAction_->setIsCompletedProperty(true);
-            }
-        }
-        return EndFind(result);
+        ));
+        return EndFind(result.get());
     }
 
     AvailableNetworkSessionCollection NetworkSession::Find(
@@ -949,17 +950,75 @@ namespace Microsoft::Xna::Framework::Net
         NetworkSessionProperties searchProperties
     )
     {
-        System::IAsyncResult* result = BeginFind(
+        std::unique_ptr<System::IAsyncResult> result(BeginFind(
             sessionType, localGamers, std::move(searchProperties), System::AsyncCallback{}, std::any{}
-        );
-        while (!result->getIsCompletedProperty())
-        {
-            if (!GamerServices::GamerServicesDispatcher::UpdateAsync())
-            {
-                activeAction_->setIsCompletedProperty(true);
-            }
+        ));
+        return EndFind(result.get());
+    }
+
+    std::pair<std::string,int> NetworkSession::ServiceSearchActor(
+        int maxLocalGamers, const std::optional<std::vector<SignedInGamer*>>& explicitGamers)
+    {
+        using GamerServices::Gamer;
+        if(!GamerServices::GamerServicesDispatcher::getIsInitializedProperty()
+            || !CNA::Internal::GamerServices::backend()->serviceEnabled())
+            throw GamerServices::GamerServicesNotAvailableException("Configure and initialize CNA Gamer Services before online session search.");
+        const auto* published=Gamer::getSignedInGamersProperty();
+        std::vector<SignedInGamer*> gamers;
+        if(explicitGamers) gamers=*explicitGamers;
+        else for(auto* gamer:*published) {
+            if(!gamer->getIsGuestProperty() && gamers.size()<static_cast<std::size_t>(maxLocalGamers)) gamers.push_back(gamer);
         }
-        return EndFind(result);
+        if(gamers.empty() || gamers.size()>4) throw System::ArgumentException("localGamers");
+        std::set<std::string> users;
+        for(auto* gamer:gamers) {
+            if(!gamer || std::find(published->begin(),published->end(),gamer)==published->end())
+                throw System::ArgumentException("localGamers");
+            if(gamer->getIsDisposedProperty()) throw System::ObjectDisposedException("localGamers");
+            if(!gamer->getIsSignedInToLiveProperty() || gamer->getIsGuestProperty()
+                || !gamer->getPrivilegesProperty().getAllowOnlineSessionsProperty() || gamer->serviceUserId_.empty())
+                throw GamerServices::GamerServicesNotAvailableException("A local gamer is not authorized for CNA online sessions.");
+            if(!users.insert(gamer->serviceUserId_).second) throw System::ArgumentException("localGamers");
+        }
+        return {gamers.front()->serviceUserId_,explicitGamers ? static_cast<int>(gamers.size()) : maxLocalGamers};
+    }
+
+    System::IAsyncResult* NetworkSession::QueueServiceSearch()
+    {
+        using namespace CNA::Internal::GamerServices;
+        std::unique_ptr<NetworkSessionAction> action(activeAction_);
+        const auto [actor,locals]=ServiceSearchActor(action->MaxLocalGamers,action->LocalGamers);
+        const auto kind=action->SessionType==NetworkSessionType::Ranked ? ServiceSessionKind::Ranked : ServiceSessionKind::PlayerMatch;
+        ServiceSessionProperties filters{};
+        for(int index=0;index<8;++index) filters[index]=action->SessionProperties.getItem(index);
+        auto service=backend();
+        auto* executor=service.get();
+        // The result owns this executor; a queued job must not own its own backend.
+        action->Queue([executor,actor,locals,kind,filters]() -> std::any {
+            std::vector<ServiceSessionSnapshot> results;
+            std::set<std::string> seen;
+            for(int offset=0;offset<256;offset+=32) {
+                auto page=executor->sessionDirectory().find(actor,kind,locals,filters,offset,32);
+                if(page.start!=offset || page.sessions.size()>32 || (page.more && page.sessions.size()!=32))
+                    throw ServiceOperationError("INVALID_RESPONSE");
+                for(auto& item:page.sessions) {
+                    if(item.kind!=kind || item.currentGamers<1 || item.maxGamers<2 || item.maxGamers>31
+                        || item.currentGamers>item.maxGamers || item.privateSlots<0 || item.privateSlots>=item.maxGamers
+                        || item.openPublicSlots<locals || item.openPrivateSlots<0 || item.openPrivateSlots>item.privateSlots
+                        || item.currentGamers+item.openPublicSlots+item.openPrivateSlots!=item.maxGamers
+                        || (item.state!=ServiceSessionState::Lobby && !item.allowJoinInProgress)
+                        || item.hostGamertag.empty() || item.hostGamertag.size()>32 || !item.members.empty()
+                        || item.session.size()!=32 || !seen.insert(item.session).second)
+                        throw ServiceOperationError("INVALID_RESPONSE");
+                    for(int index=0;index<8;++index) if(filters[index] && filters[index]!=item.properties[index])
+                        throw ServiceOperationError("INVALID_RESPONSE");
+                    results.push_back(std::move(item));
+                }
+                if(!page.more) return results;
+            }
+            throw ServiceOperationError("LIMIT_EXCEEDED");
+        });
+        return action.release();
     }
 
     System::IAsyncResult* NetworkSession::BeginFind(
@@ -979,7 +1038,6 @@ namespace Microsoft::Xna::Framework::Net
         {
             throw System::ArgumentOutOfRangeException("maxLocalGamers");
         }
-        ThrowIfSessionTypeNeedsMatchmakingService(sessionType);
 
         if (activeAction_ != nullptr || activeSession_ != nullptr)
         {
@@ -990,6 +1048,8 @@ namespace Microsoft::Xna::Framework::Net
             NetworkSessionOperation::Find, std::move(asyncState), std::move(callback), maxLocalGamers, std::nullopt, 0,
             std::move(searchProperties), sessionType
         );
+        if(sessionType==NetworkSessionType::PlayerMatch || sessionType==NetworkSessionType::Ranked)
+            return QueueServiceSearch();
         return InvokeActiveActionCallback();
     }
 
@@ -1006,7 +1066,6 @@ namespace Microsoft::Xna::Framework::Net
         {
             throw System::ArgumentException("sessionType");
         }
-        ThrowIfSessionTypeNeedsMatchmakingService(sessionType);
 
         if (activeAction_ != nullptr || activeSession_ != nullptr)
         {
@@ -1019,21 +1078,32 @@ namespace Microsoft::Xna::Framework::Net
             NetworkSessionOperation::Find, std::move(asyncState), std::move(callback), locals, localGamers, 0,
             std::move(searchProperties), sessionType
         );
+        if(sessionType==NetworkSessionType::PlayerMatch || sessionType==NetworkSessionType::Ranked)
+            return QueueServiceSearch();
         return InvokeActiveActionCallback();
     }
 
     AvailableNetworkSessionCollection NetworkSession::EndFind(System::IAsyncResult* result)
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
-        if (!result) throw System::ArgumentNullException("result");
-        if (result != activeAction_
-            || activeAction_->Operation != NetworkSessionOperation::Find)
-        {
-            throw System::ArgumentException("result");
-        }
+        auto* action=NetworkSessionAction::PrepareEnd(result, NetworkSessionOperation::Find);
 
-        NetworkSessionType type = activeAction_->SessionType;
-        delete activeAction_; // Task 3.2
+        NetworkSessionType type = action->SessionType;
+        if(type==NetworkSessionType::PlayerMatch || type==NetworkSessionType::Ranked) {
+            activeAction_=nullptr;
+            auto snapshots=std::any_cast<std::vector<CNA::Internal::GamerServices::ServiceSessionSnapshot>>(action->TakeValue());
+            std::vector<AvailableNetworkSession> available;
+            available.reserve(snapshots.size());
+            for(auto& snapshot:snapshots) {
+                NetworkSessionProperties properties;
+                for(int index=0;index<8;++index) properties.setItem(index,snapshot.properties[index]);
+                auto item=AvailableNetworkSession::CreateInternal(snapshot.currentGamers,snapshot.hostGamertag,
+                    snapshot.openPrivateSlots,snapshot.openPublicSlots,std::move(properties),QualityOfService::CreateInternal(),"",0,type);
+                item.serviceSnapshot_=std::make_shared<const CNA::Internal::GamerServices::ServiceSessionSnapshot>(std::move(snapshot));
+                available.push_back(std::move(item));
+            }
+            return AvailableNetworkSessionCollection::CreateInternal(std::move(available));
+        }
         activeAction_ = nullptr;
 
         if (CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(type))
@@ -1052,15 +1122,8 @@ namespace Microsoft::Xna::Framework::Net
 
     NetworkSession* NetworkSession::Join(const AvailableNetworkSession* availableSession)
     {
-        System::IAsyncResult* result = BeginJoin(availableSession, System::AsyncCallback{}, std::any{});
-        while (!result->getIsCompletedProperty())
-        {
-            if (!GamerServices::GamerServicesDispatcher::UpdateAsync())
-            {
-                activeAction_->setIsCompletedProperty(true);
-            }
-        }
-        return EndJoin(result);
+        std::unique_ptr<System::IAsyncResult> result(BeginJoin(availableSession, System::AsyncCallback{}, std::any{}));
+        return EndJoin(result.get());
     }
 
     System::IAsyncResult* NetworkSession::BeginJoin(
@@ -1078,6 +1141,10 @@ namespace Microsoft::Xna::Framework::Net
         {
             throw System::InvalidOperationException();
         }
+
+        if(availableSession->GetSessionType()==NetworkSessionType::PlayerMatch
+            || availableSession->GetSessionType()==NetworkSessionType::Ranked)
+            ThrowIfOnlineSessionLifecycleUnavailable(availableSession->GetSessionType());
 
         // Task 2.15: FNA hardcodes NetworkSessionType.PlayerMatch here (marked FIXME upstream) -
         // harmless in FNA itself (networking is entirely stubbed out there regardless of session
@@ -1100,17 +1167,11 @@ namespace Microsoft::Xna::Framework::Net
     NetworkSession* NetworkSession::EndJoin(System::IAsyncResult* result)
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
-        if (!result) throw System::ArgumentNullException("result");
-        if (result != activeAction_
-            || activeAction_->Operation != NetworkSessionOperation::Join)
-        {
-            throw System::ArgumentException("result");
-        }
+        auto* action=NetworkSessionAction::PrepareEnd(result, NetworkSessionOperation::Join);
 
-        int actionMaxLocalGamers = activeAction_->MaxLocalGamers;
-        auto actionLocalGamers = activeAction_->LocalGamers;
-        NetworkSessionType actionSessionType = activeAction_->SessionType;
-        delete activeAction_; // Task 3.2
+        int actionMaxLocalGamers = action->MaxLocalGamers;
+        auto actionLocalGamers = action->LocalGamers;
+        NetworkSessionType actionSessionType = action->SessionType;
         activeAction_ = nullptr;
 
         activeSession_ = new NetworkSession(
@@ -1207,28 +1268,14 @@ namespace Microsoft::Xna::Framework::Net
 
     NetworkSession* NetworkSession::JoinInvited(int maxLocalGamers)
     {
-        System::IAsyncResult* result = BeginJoinInvited(maxLocalGamers, System::AsyncCallback{}, std::any{});
-        while (!result->getIsCompletedProperty())
-        {
-            if (!GamerServices::GamerServicesDispatcher::UpdateAsync())
-            {
-                activeAction_->setIsCompletedProperty(true);
-            }
-        }
-        return EndJoinInvited(result);
+        std::unique_ptr<System::IAsyncResult> result(BeginJoinInvited(maxLocalGamers, System::AsyncCallback{}, std::any{}));
+        return EndJoinInvited(result.get());
     }
 
     NetworkSession* NetworkSession::JoinInvited(const std::vector<SignedInGamer*>& localGamers)
     {
-        System::IAsyncResult* result = BeginJoinInvited(localGamers, System::AsyncCallback{}, std::any{});
-        while (!result->getIsCompletedProperty())
-        {
-            if (!GamerServices::GamerServicesDispatcher::UpdateAsync())
-            {
-                activeAction_->setIsCompletedProperty(true);
-            }
-        }
-        return EndJoinInvited(result);
+        std::unique_ptr<System::IAsyncResult> result(BeginJoinInvited(localGamers, System::AsyncCallback{}, std::any{}));
+        return EndJoinInvited(result.get());
     }
 
     System::IAsyncResult* NetworkSession::BeginJoinInvited(
@@ -1247,15 +1294,10 @@ namespace Microsoft::Xna::Framework::Net
             throw System::InvalidOperationException();
         }
 
-        // CNA has no invitation service, so no invitation can ever be pending and there is
-        // no session to join. Nothing raises NetworkSession::InviteAccepted either, which is
-        // the only place XNA's own contract calls this from. Refusing here is what keeps the
-        // two consistent: previously this fabricated a PlayerMatch session with no host
-        // address and no transport, so a caller following XNA's contract got an object back
-        // and simply never saw another gamer.
+        // Private recipient-bound invitations exist; public Guide acceptance and Net joining
+        // still need the real authenticated session lifecycle before this entry point is enabled.
         throw GamerServices::GamerServicesNotAvailableException(
-            "NetworkSession::JoinInvited requires an invitation delivered by an online "
-            "service, which this platform does not have; no invitation can be pending."
+            "NetworkSession::JoinInvited awaits CNA Guide invitation acceptance and online session lifecycle integration."
         );
     }
 
@@ -1271,20 +1313,16 @@ namespace Microsoft::Xna::Framework::Net
             throw System::InvalidOperationException();
         }
 
-        // CNA has no invitation service, so no invitation can ever be pending and there is
-        // no session to join. Nothing raises NetworkSession::InviteAccepted either, which is
-        // the only place XNA's own contract calls this from. Refusing here is what keeps the
-        // two consistent: previously this fabricated a PlayerMatch session with no host
-        // address and no transport, so a caller following XNA's contract got an object back
-        // and simply never saw another gamer.
+        // Private recipient-bound invitations exist; public Guide acceptance and Net joining
+        // still need the real authenticated session lifecycle before this entry point is enabled.
         throw GamerServices::GamerServicesNotAvailableException(
-            "NetworkSession::JoinInvited requires an invitation delivered by an online "
-            "service, which this platform does not have; no invitation can be pending."
+            "NetworkSession::JoinInvited awaits CNA Guide invitation acceptance and online session lifecycle integration."
         );
     }
 
-    NetworkSession* NetworkSession::EndJoinInvited(System::IAsyncResult*)
+    NetworkSession* NetworkSession::EndJoinInvited(System::IAsyncResult* result)
     {
+        if(!result) throw System::ArgumentNullException("result");
         // BeginJoinInvited always refuses, so no IAsyncResult can ever have come from it. Any
         // result reaching here was produced by a different Begin* call, which is exactly what
         // XNA's ArgumentException for this parameter means. Completing it as an invited join --

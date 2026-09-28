@@ -6,7 +6,8 @@
 > player slots, Dispatcher pumping, Guide sign-in, lookup/profile and achievement catalog/awards
 > have real-server tests. Online leaderboard reads and LocalWithLeaderboards final writes use the server.
 > Typed directory/invitation control and private verified-WSS/ENet relay are implemented/tested;
-> public PlayerMatch/Ranked/invited joins and isolated Internet acceptance remain unfinished,
+> standard PlayerMatch/Ranked Find now has pending Begin/End and real-server restart/title tests;
+> public create/join/invited lifecycle and public Internet acceptance remain unfinished,
 > and standard Avatar rendering still needs migration from EXT. These are active work, not
 > intentional exclusions. API symbol presence and historical percentages are not evidence of
 > behavioral completeness. The CNA server/accounts/protocol are not Xbox LIVE compatible.
@@ -880,7 +881,7 @@ maturity levels.
 | `Input::Touch` | ~98 % behavior | Gesture pipeline (Tap…PinchComplete) byte-faithful FNA port, wired end-to-end and tested with a deterministic clock (`feature/input` Phase I2, I9). Documented deviations only: event-driven vs. poll-based `GetState()`. `MaximumTouchCount` reports 4 and `GetState()` caps at `MAX_TOUCHES` (8), both matching FNA (DEC-09/DEC-10). |
 | `GamerServices` | Not quantified | API shape exists; partial service behavior measured separately in §9. |
 | `Audio (XACT)` — AudioEngine/SoundBank/WaveBank/Cue | ~97 % | Real `.xgs`/`.xsb`/`.xwb` parser + SDL3_mixer playback; category/lifecycle/3D/instance-limit+fade (both category- and cue-level)/continuous RPC volume+pitch all real, including the built-in `AttackTime`/`ReleaseTime` envelope variables (`P10-RPC-002/003/004`); gaps are documented accepted deviations (no HRTF/elevation, no DSP-preset RPC destination), not missing implementation |
-| `Framework.Net` (NetworkSession, etc.) | ~80 % | **Updated (`feature/net`):** real ENet-backed transport, not excluded. `SystemLink` (LAN-style local play, host migration, simulated latency/packet-loss) is fully implemented; `PlayerMatch`/`Ranked`/invites remain documented stubs (no matchmaking renderer to implement them against). See §9 for the per-feature breakdown. |
+| `Framework.Net` (NetworkSession, etc.) | ~80 % | **Updated (`feature/net`):** real ENet-backed transport, not excluded. `SystemLink` (LAN-style local play, host migration, simulated latency/packet-loss) is fully implemented; online Find uses the CNA service, while PlayerMatch/Ranked create/join and invites await authenticated lifecycle integration. See §9 for the per-feature breakdown. |
 | **Overall (EasyGL renderer, 2D+3D game)** | Historical estimate superseded | This old blended behavior estimate was never derived from a reproducible checklist and predates the current XNB implementation. Use the Microsoft XML audit above for runtime type existence and the renderer/content reports for their respective behavior. |
 
 ---
@@ -918,8 +919,8 @@ Full Xbox validation order, lifetime and asynchronous compatibility are still be
 | `SimulatedLatency` / `SimulatedPacketLoss` | Implemented | Phase 6 — a real receive-side delayed-delivery queue / probabilistic drop on real ENet traffic, deterministic under test (injectable clock/seeded RNG); scoped to AppData delivered to local gamers, not session-management/relay traffic. |
 | `LocalNetworkGamer.SendData`/`ReceiveData`, `PacketReader`/`PacketWriter` | Implemented | Real serialization over the real transport. |
 | `NetworkSession.Dispose()` / lifecycle | Implemented | Phases 2, 12-14 — several confirmed real bugs (double-dispose use-after-free, async callbacks never invoked, enumerator null-deref after Dispose) found and fixed. |
-| `NetworkSessionType::PlayerMatch` / `Ranked` | Unfinished (GS-007) | Current Create/Find still refuse; service directory, relay and Xbox state semantics are active requirements. |
-| Session invites | Unfinished (GS-007) | InviteAccepted/JoinInvited need real service tokens and event delivery. No Internet multiplayer claim; relay remains GS-008. |
+| `NetworkSessionType::PlayerMatch` / `Ranked` | Service Find; create/join unfinished (GS-007) | Standard pending BeginFind/EndFind validates signed-in users, sparse filters, category/local capacity/title scope and bounded paging. Real-server restart/refresh and callback/metadata/End-once are tested. Secure relay is private; create/join/Net Update lifecycle and Ranked arbitration remain unfinished. |
+| Session invites | Private control; public flows unfinished (GS-007) | Recipient-bound invites persist and private invited membership is tested. Guide acceptance/InviteAccepted/JoinInvited still need public lifecycle integration. Private WSS/ENet relay works under separate rootless NATs; public Internet acceptance remains unfinished. |
 
 ---
 

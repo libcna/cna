@@ -26,6 +26,7 @@
 #include "System/Threading/EventWaitHandle.hpp"
 #include "System/TimeSpan.hpp"
 #include <any>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <queue>
@@ -35,6 +36,8 @@ namespace Microsoft::Xna::Framework::GamerServices
 {
     class SignedInGamer;
 }
+
+namespace CNA::Internal::GamerServices {class IGamerServicesBackend;}
 
 namespace CNA::Internal::Net
 {
@@ -433,7 +436,7 @@ namespace Microsoft::Xna::Framework::Net
 
         /**
          * @brief CNAEXT: how many `NetworkSessionAction` instances are currently live (`new`'d by
-         * some `Begin*` call, not yet `delete`d by its `End*` counterpart). `NetworkSessionAction`
+         * some `Begin*` call, not yet released by its caller). `NetworkSessionAction`
          * itself is private, so this forwards to its own `GetInstanceCountForTesting()`. Exists
          * purely to make Task 3.2's leak fix testable; not part of real XNA.
          *
@@ -583,7 +586,7 @@ namespace Microsoft::Xna::Framework::Net
          * @param maxGamers The maximum number of total gamers.
          * @param callback The callback to invoke on completion.
          * @param asyncState A user-defined state object.
-         * @return An IAsyncResult representing the pending operation.
+         * @return A caller-owned IAsyncResult; retain it through End, then release it.
          */
         [[nodiscard]] static System::IAsyncResult* BeginCreate(
             NetworkSessionType sessionType,
@@ -603,7 +606,7 @@ namespace Microsoft::Xna::Framework::Net
          * @param sessionProperties Custom properties to advertise for the session.
          * @param callback The callback to invoke on completion.
          * @param asyncState A user-defined state object.
-         * @return An IAsyncResult representing the pending operation.
+         * @return A caller-owned IAsyncResult; retain it through End, then release it.
          */
         [[nodiscard]] static System::IAsyncResult* BeginCreate(
             NetworkSessionType sessionType,
@@ -625,7 +628,7 @@ namespace Microsoft::Xna::Framework::Net
          * @param sessionProperties Custom properties to advertise for the session.
          * @param callback The callback to invoke on completion.
          * @param asyncState A user-defined state object.
-         * @return An IAsyncResult representing the pending operation.
+         * @return A caller-owned IAsyncResult; retain it through End, then release it.
          */
         [[nodiscard]] static System::IAsyncResult* BeginCreate(
             NetworkSessionType sessionType,
@@ -681,7 +684,7 @@ namespace Microsoft::Xna::Framework::Net
          * @param searchProperties Properties to filter the search by.
          * @param callback The callback to invoke on completion.
          * @param asyncState A user-defined state object.
-         * @return An IAsyncResult representing the pending operation.
+         * @return A caller-owned IAsyncResult; retain it through End, then release it.
          */
         [[nodiscard]] static System::IAsyncResult* BeginFind(
             NetworkSessionType sessionType,
@@ -699,7 +702,7 @@ namespace Microsoft::Xna::Framework::Net
          * @param searchProperties Properties to filter the search by.
          * @param callback The callback to invoke on completion.
          * @param asyncState A user-defined state object.
-         * @return An IAsyncResult representing the pending operation.
+         * @return A caller-owned IAsyncResult; retain it through End, then release it.
          */
         [[nodiscard]] static System::IAsyncResult* BeginFind(
             NetworkSessionType sessionType,
@@ -733,7 +736,7 @@ namespace Microsoft::Xna::Framework::Net
          * @param availableSession The session to join.
          * @param callback The callback to invoke on completion.
          * @param asyncState A user-defined state object.
-         * @return An IAsyncResult representing the pending operation.
+         * @return A caller-owned IAsyncResult; retain it through End, then release it.
          */
         [[nodiscard]] static System::IAsyncResult* BeginJoin(
             const AvailableNetworkSession* availableSession,
@@ -774,7 +777,7 @@ namespace Microsoft::Xna::Framework::Net
          * @param maxLocalGamers The maximum number of local gamers.
          * @param callback The callback to invoke on completion.
          * @param asyncState A user-defined state object.
-         * @return An IAsyncResult representing the pending operation.
+         * @return A caller-owned IAsyncResult; retain it through End, then release it.
          */
         [[nodiscard]] static System::IAsyncResult* BeginJoinInvited(
             int maxLocalGamers,
@@ -788,7 +791,7 @@ namespace Microsoft::Xna::Framework::Net
          * @param localGamers The local gamers joining.
          * @param callback The callback to invoke on completion.
          * @param asyncState A user-defined state object.
-         * @return An IAsyncResult representing the pending operation.
+         * @return A caller-owned IAsyncResult; retain it through End, then release it.
          */
         [[nodiscard]] static System::IAsyncResult* BeginJoinInvited(
             const std::vector<GamerServices::SignedInGamer*>& localGamers,
@@ -858,15 +861,13 @@ namespace Microsoft::Xna::Framework::Net
             );
 
             /**
-             * @brief Task 3.2: decrements the live-instance counter `GetInstanceCountForTesting()`
-             * reports, so a leaked `NetworkSessionAction` (one `new`'d by a `Begin*` call but never
-             * `delete`d by its `End*` counterpart) is observable.
+             * @brief Releases result metadata and abandons an unconsumed pending operation.
              */
             ~NetworkSessionAction() override;
 
             /**
              * @brief CNAEXT: how many `NetworkSessionAction` instances are currently live (`new`'d
-             * by some `Begin*` call, not yet `delete`d by its `End*` counterpart). Exists purely to
+             * by some `Begin*` call, not yet released by its caller). Exists purely to
              * make Task 3.2's leak fix testable; not part of real XNA.
              *
              * @return The number of currently-live instances.
@@ -875,7 +876,7 @@ namespace Microsoft::Xna::Framework::Net
 
             /** @brief Gets the user-defined state supplied to the Begin* call. */
             [[nodiscard]] const std::any& getAsyncStateProperty() const override;
-            /** @brief Always false; this stub never completes synchronously. */
+            /** @brief Gets whether completion happened during Begin. */
             [[nodiscard]] bool getCompletedSynchronouslyProperty() const override;
             /** @brief Gets whether the asynchronous operation has completed. */
             [[nodiscard]] bool getIsCompletedProperty() const override;
@@ -888,6 +889,16 @@ namespace Microsoft::Xna::Framework::Net
             /** @brief Gets the wait handle signalled when the operation completes. */
             [[nodiscard]] System::Threading::WaitHandle& getAsyncWaitHandleProperty() const override;
 
+            /** @brief Queues service work with completion delivered during Dispatcher.Update.
+             * @param work Background operation producing a logical value. */
+            CNAEXT void Queue(std::function<std::any()> work);
+            /** @brief Validates and claims exactly one End for a live result.
+             * @param result Caller-owned Begin result. @param operation Required family.
+             * @return Validated completed action; rethrows its deferred failure. */
+            CNAEXT static NetworkSessionAction* PrepareEnd(System::IAsyncResult* result, NetworkSessionOperation operation);
+            /** @brief Moves the prepared service value to End. @return Logical result. */
+            CNAEXT std::any TakeValue();
+
             const NetworkSessionOperation Operation;
             const System::AsyncCallback Callback;
             const int MaxLocalGamers;
@@ -899,11 +910,12 @@ namespace Microsoft::Xna::Framework::Net
 
         private:
             std::any asyncState_;
-            bool isCompleted_{false};
-
-            // Mutable: IAsyncResult::getAsyncWaitHandleProperty() is const but returns a
-            // non-const WaitHandle&, so the handle exposed through it must be mutable.
-            mutable System::Threading::EventWaitHandle asyncWaitHandle_;
+            struct Storage;
+            std::shared_ptr<Storage> storage_;
+            std::shared_ptr<CNA::Internal::GamerServices::IGamerServicesBackend> executor_;
+            bool completedSynchronously_=true;
+            bool ended_=false;
+            static std::vector<NetworkSessionAction*> live_;
 
             CNAEXT static int instanceCount_;
         };
@@ -961,19 +973,13 @@ namespace Microsoft::Xna::Framework::Net
         std::string leaderboardGameplay_,leaderboardOwner_;
         bool leaderboardTransitionPending_=false;
 
+        static std::pair<std::string,int> ServiceSearchActor(
+            int maxLocalGamers, const std::optional<std::vector<GamerServices::SignedInGamer*>>& gamers);
+        static System::IAsyncResult* QueueServiceSearch();
         static NetworkSessionAction* activeAction_;
         static NetworkSession* activeSession_;
 
-        // Task 12: audit_net.md High finding - every Begin* overload used to leave activeAction_'s
-        // Callback stored but never invoked. Every Begin* already fully completes activeAction_
-        // synchronously (see NetworkSessionAction's constructor comment), so the callback is
-        // invoked once, right here, immediately after activeAction_ is assigned - never from
-        // inside NetworkSessionAction's own constructor, so a re-entrant callback (one that itself
-        // calls back into NetworkSession, e.g. a fresh Begin*/End*) always observes activeAction_
-        // already installed, never null/stale. Returns the action captured *before* invoking the
-        // callback, not activeAction_ read again afterward - a re-entrant callback that calls the
-        // matching End* nulls activeAction_ as a side effect, and the Begin* caller must still get
-        // back the real action it just created, not that now-stale null.
+        // Keeps the returned metadata alive when an immediate callback calls End.
         CNAEXT static NetworkSessionAction* InvokeActiveActionCallback();
 
         // Task 2.15: the connect address/port BeginJoin captured from its AvailableNetworkSession

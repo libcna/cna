@@ -762,6 +762,9 @@ CNA-specific transport routing; generic proxy change remains the only runtime mo
 - [ ] GS-008d: genuine ENet exchange under relay-only isolated routing/firewall conditions,
   forged source/destination/malformed/rate/disconnect/revoke/server failure/reconnect corpus.
 - [x] GS-007e1: private authenticated roster/control gate and genuine spoof/refusal relay probes.
+- [x] GS-007e2a: exact null/family guards for public Net End operations.
+- [x] GS-007e2b: caller-owned metadata/End-once and standard pending service Find.
+- [ ] GS-007e2c: owned online create/join preparation, including cleanup on abandonment/failure.
 - [ ] GS-007e2: public async operation ownership/preparation and online lifecycle wiring.
 - [ ] GS-007e: publish standard PlayerMatch/Ranked lifecycle and Guide/invited joins once directory
   plus realtime transport succeeds; do not report membership-only success as multiplayer.
@@ -1127,7 +1130,7 @@ an explicit lifetime solution. Ranked leaderboard arbitration, Guide invites, re
 standard Avatar migration and original acceptance samples remain unfinished.
 
 
-### GS-007e2a active: exact public Net End ownership guards
+### GS-007e2a complete: exact public Net End ownership guards
 
 Existing EndCreate/EndFind/EndJoin compared only pointer identity, admitting null when no action
 exists and accepting a different Begin family. Add a private operation discriminator and validate
@@ -1146,3 +1149,56 @@ Server 5a850401da339ec44b67ed93fde8f019f44c6e9d and runtime
 6c4a857de129cf29b5d43430bedf24157d594f12 unchanged. GS-007e2a complete; parent public
 online APM/lifecycle remains unfinished. Next: caller-owned result lifetime and real pending
 service searches, then authenticated online transport/session preparation.
+
+
+### GS-007e2b checkpoint: caller-owned APM metadata and public online Find
+
+After GS-007e2a commit 34abca070, preserve Net results through End (same caller-owned C++ policy as
+GamerServices APM). Sync/C API adapters own them with RAII. Registry lookup compares pointer
+identities without dereferencing foreign pointers. End-once, busy cleanup on errors/abandonment,
+callback reentry/throws and metadata/wait lifetime are tested. Immediate legacy offline results
+report CompletedSynchronously=true; queued online searches false. This differs from the managed
+shared XOverlapped result's always-false native-operation flag; CNA's completion timing is explicit.
+SystemLink Join preparation/handshake still occurs in End and needs its separate lifecycle audit.
+
+PlayerMatch/Ranked BeginFind queues typed directory work on the existing bounded backend executor;
+only Dispatcher.Update publishes completion/callback. Capture immutable identity/filter values,
+validate authenticated current local identities, page up to 256 listings with duplicate/category/
+capacity/filter checks, and carry an opaque private listing snapshot for later real joins. More
+than 256 matches fails LIMIT_EXCEEDED rather than silently inventing/truncating sessions.
+No packet/config/credential methods added to XNA. Create/Join online remain refused pending actual
+secure transport/lifecycle wiring; synthetic online listings no longer bypass membership by
+creating disconnected placeholder sessions. Fake and genuine multiprocess validation pending.
+
+GS-007e2b audit follow-up: a queued search must not retain its own backend (self-destruction on
+worker/cyclic fake lifetime). The result now retains the executor; queued work uses its raw
+pointer while backend shutdown joins work before field destruction. A fake lifetime regression
+proves pending result release destroys a replaced backend without a self-retention cycle.
+The test-only backend replacement hook is intended for quiescent use; production backend remains
+fixed for the dispatcher lifetime. Existing SystemLink threading policy remains the update owner.
+
+
+GS-007e2b verified results (2026-09-28): Net 363/363 (4.669s), including 13 new cases across pending
+service searches and metadata lifetime. Private C API/ABI/protocol/fake gates 13/13 (17.94s),
+8134-symbol inventory unchanged except declaration digest; native C ABI exports/baseline unchanged.
+Incremental affected targets build. Initial fake-auth test expected a private ServiceOperationError,
+but the fake's established signout error is the public GamerServicesNotAvailableException; fixed
+that assertion. Initial private gate 11/13 caught the outdated successful synthetic online join
+smoke and generated digest; corrected both. First expanded E2E failed because the new search-empty
+role was absent from the harness allowlist; corrected that test setup. No unresolved failure.
+Full configured server suite 11/11, no skip, 148.70s (public directory 7.78s, relay 9.95s, NAT relay
+13.01s). After the final lifetime-only executor retention adjustment, matching public directory
+E2E 1/1 (8.94s) and final Net/private gates above passed. Logs: server
+build/service-public-find-{integration,final}.log and CNA cmake-build-debug/service-search-
+{final-build,net,private}.log. Server commit 0cd1d08984210a120e7b0b7cb238f6f438f4d8af;
+runtime 6c4a857de129cf29b5d43430bedf24157d594f12. CNA source in this GS-007e2b commit;
+exact resulting code hash is pinned at the next plan checkpoint. next remains 967305dd7, already
+an ancestor; samples worktree untouched. No XNA sample is claimed newly unblocked by Find alone.
+
+Immediate audit prerequisite before mutating online preparation: other GamerServices APM closures
+still retain their own backend, and leaderboard BeginServiceRead constructs public reader/gamer
+objects on the executor. GS-004k will move these to caller-owned executor lifetime and logical
+background results with public-object construction during End on the update owner. Then continue
+GS-007e2c owned online create/join preparation plus GS-008c3 roster/lease/update wiring.
+Public online creation/joins/invites, Ranked arbitration, reconnect, standard avatars and real
+acceptance samples remain unfinished. This checkpoint is not project completion.

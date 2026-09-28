@@ -1,5 +1,12 @@
 # CNA XNA 4.0 API Audit
 
+> **GS-007e2b public online search (2026-09-28):** Standard pending BeginFind/EndFind now
+> uses the authenticated directory for PlayerMatch/Ranked, with Update-thread callbacks, filters,
+> capacity, title isolation and restart/refresh tests. Caller-owned metadata survives End; End-once,
+> errors, abandoned results and reentry are checked. Net 363/363, private gates 13/13; server
+> 11/11 plus final matching directory 1/1. Create/join/invited lifecycle remains unfinished.
+
+
 > **GS-007e2a Net End guards (2026-09-28):** Null results now throw the reference
 > ArgumentNullException; foreign and wrong-family results are refused without consuming the action.
 > All six cross-family pairs recover through the correct End. Net 350/350, private gates 13/13.

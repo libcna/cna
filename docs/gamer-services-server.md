@@ -61,8 +61,8 @@ are service-control evidence; they do not prove Internet game-data transport or 
 
 
 The server now implements a persistent control-only PlayerMatch/Ranked directory with authenticated
-multi-local membership, property filtering and leased host revisions. The CNA public online
-NetworkSession path and Internet relay are still unfinished. Membership in this directory alone
+multi-local membership, property filtering and leased host revisions. Standard online Find now consumes this directory; public create/join/lifecycle integration
+and public Internet deployment acceptance remain unfinished. Membership in this directory alone
 cannot establish Internet connectivity or provide Ranked arbitration.
 
 NetworkSessionProperties follows the fixed XNA eight-slot shape: Count=8, nullable signed integers
@@ -75,8 +75,8 @@ sharp-runtime's GS-007b proxy layout (16->24 bytes on the measured 64-bit ABI).
 
 The invitation control service now persists recipient-bound pending/accepted invitations and
 atomically joins up to four authenticated local users through an explicitly accepted invite,
-using available private then public slots. Client Guide/InviteAccepted/public invited joins and
-Internet relay are still pending. Invitations are CNA service IDs, not Xbox LIVE tokens.
+using available private then public slots. Client Guide/InviteAccepted/public invited joins remain pending; the private WSS relay is
+implemented and measured separately below. Invitations are CNA service IDs, not Xbox LIVE tokens.
 
 CNA's private backend now provides typed directory create/find/join/get/touch/update/leave and
 recipient send/list/get/accept/dismiss invitation operations with strict response validation.
@@ -141,4 +141,21 @@ gamer mutation. The real native probe now exchanges the existing Net ClientHello
 and AppData codec through ENet, rejects a cross-machine account spoof and verifies application
 sender/target IDs. Controls are preflighted for bounded counts/strings/UTF-8/canonical booleans/
 IDs/eight properties/exact length before decode/allocation. These helpers are still private;
-public PlayerMatch/Ranked, Net Update roster/lease handling and APM ownership are not yet enabled.
+public PlayerMatch/Ranked create/join and Net Update roster/lease handling remain unfinished.
+Caller-owned APM metadata and public service Find are implemented as described below.
+
+
+Standard PlayerMatch/Ranked Find/BeginFind/EndFind now uses the authenticated directory, including
+nullable filters, local capacity, category and title isolation. BeginFind is pending until
+Dispatcher.Update publishes completion, wait signal and callback on the update thread. End waits
+by pumping and can consume a result once. The raw C++ Begin result is caller-owned (use
+`std::unique_ptr<System::IAsyncResult>`); its metadata remains valid after End. Synchronous and C API
+adapters release metadata themselves. The existing C API `_async` functions remain blocking
+Begin/End adapters with a completion callback; they do not expose an asynchronous-result handle.
+Net Begin/End/result release and Dispatcher.Update currently belong on the owning update thread.
+Dropping a pending search suppresses its callback and releases the Net busy slot; background
+read-only work can still finish. Search refuses more than 256 matches with LIMIT_EXCEEDED.
+Create/join/invited lifecycle remains unfinished; listings carry private service identity rather
+than a purported direct Internet endpoint. SystemLink transport is unchanged. Legacy offline
+immediate actions report CompletedSynchronously=true; online actions false. SystemLink's existing
+Join preparation still happens in End and awaits the separate APM/lifecycle audit.

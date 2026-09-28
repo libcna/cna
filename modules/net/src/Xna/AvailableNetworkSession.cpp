@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Net/AvailableNetworkSession.hpp"
+#include "CNA/Internal/GamerServices/ServiceSessionDirectory.hpp"
 
 namespace Microsoft::Xna::Framework::Net
 {
@@ -71,7 +72,9 @@ namespace Microsoft::Xna::Framework::Net
             && openPublicGamerSlots_ == other.openPublicGamerSlots_
             && hostAddress_ == other.hostAddress_
             && hostPort_ == other.hostPort_
-            && sessionType_ == other.sessionType_;
+            && sessionType_ == other.sessionType_
+            && ((!serviceSnapshot_ && !other.serviceSnapshot_)
+                || (serviceSnapshot_ && other.serviceSnapshot_ && serviceSnapshot_->session==other.serviceSnapshot_->session));
     }
 
     bool AvailableNetworkSession::operator!=(const AvailableNetworkSession& other) const

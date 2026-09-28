@@ -1523,8 +1523,8 @@ static int validate_session_discovery(const CNA_SignedInGamerHandle signed_in)
     int32_t number = -1;
 
     /* The canonical search refuses a local-only session type outright (INVALID_ARGUMENT: Local
-       sessions are not discoverable), and refuses PlayerMatch/Ranked as unsupported, because
-       matchmaking is a service this platform does not have. Neither refusal produces a collection,
+       sessions are not discoverable), and refuses online searches here because this smoke test
+       has no configured service or authenticated accounts. Neither refusal produces a collection,
        and an async refusal never reaches its callback, so `completions` stays where it was. */
     if (cna_network_session_find(
             CNA_NETWORK_SESSION_TYPE_LOCAL, 1, CNA_INVALID_HANDLE, &collection) !=
@@ -1602,9 +1602,23 @@ static int validate_session_discovery(const CNA_SignedInGamerHandle signed_in)
     if (cna_available_network_session_create_ext(&info, 0, &available) != CNA_RESULT_SUCCESS) {
         return 0;
     }
+    /* Descriptive C API metadata cannot manufacture authenticated online membership. */
+    if (cna_network_session_join(available, &session) != CNA_RESULT_NOT_SUPPORTED ||
+        session != CNA_INVALID_HANDLE ||
+        cna_network_session_join_async(available, on_async_completed, &completions, &session) !=
+            CNA_RESULT_NOT_SUPPORTED ||
+        session != CNA_INVALID_HANDLE || completions != 3 ||
+        cna_available_network_session_destroy(available) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    /* The explicit factory's local fixture exercises the generic Join adapters only. */
+    info.session_type = CNA_NETWORK_SESSION_TYPE_LOCAL;
+    if (cna_available_network_session_create_ext(&info, 0, &available) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
     if (cna_network_session_join(available, &session) != CNA_RESULT_SUCCESS ||
         cna_network_session_get_session_type(session, &type) != CNA_RESULT_SUCCESS ||
-        type != CNA_NETWORK_SESSION_TYPE_PLAYER_MATCH ||
+        type != CNA_NETWORK_SESSION_TYPE_LOCAL ||
         cna_network_session_get_is_host(session, &host) != CNA_RESULT_SUCCESS ||
         host != CNA_FALSE ||
         cna_network_session_destroy(session) != CNA_RESULT_SUCCESS) {

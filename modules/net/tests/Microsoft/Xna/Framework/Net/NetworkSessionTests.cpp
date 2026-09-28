@@ -151,6 +151,7 @@ TEST(NetworkSessionTest, BeginCreateInvokesCallbackExactlyOnceWithCorrectIdentit
         },
         state
     );
+    std::unique_ptr<System::IAsyncResult> resultOwner(result);
 
     EXPECT_EQ(callCount, 1);
     EXPECT_EQ(observedResult, result);
@@ -178,7 +179,7 @@ TEST(NetworkSessionTest, BeginCreateCallbackCanReentrantlyCallEndCreate) {
     } restoreGuard;
 
     NetworkSession* completedSession = nullptr;
-    NetworkSession::BeginCreate(
+    auto* result=NetworkSession::BeginCreate(
         NetworkSessionType::Local, 1, 8,
         [&completedSession](System::IAsyncResult& ar) {
             completedSession = NetworkSession::EndCreate(&ar);
@@ -186,6 +187,11 @@ TEST(NetworkSessionTest, BeginCreateCallbackCanReentrantlyCallEndCreate) {
         std::any{}
     );
 
+    std::unique_ptr<System::IAsyncResult> owner(result);
+    EXPECT_TRUE(result->getIsCompletedProperty());
+    EXPECT_TRUE(result->getCompletedSynchronouslyProperty());
+    EXPECT_TRUE(result->getAsyncWaitHandleProperty().WaitOne(0));
+    EXPECT_THROW((void)NetworkSession::EndCreate(result), System::InvalidOperationException);
     ASSERT_NE(completedSession, nullptr);
     EXPECT_EQ(completedSession->getSessionTypeProperty(), NetworkSessionType::Local);
     completedSession->Dispose();
@@ -538,8 +544,9 @@ TEST(NetworkSessionTest, FailedCreateDoesNotPermanentlyStrandActiveAction) {
     System::IAsyncResult* result = NetworkSession::BeginCreate(
         NetworkSessionType::Local, 1, 8, System::AsyncCallback{}, std::any{}
     );
+    std::unique_ptr<System::IAsyncResult> resultOwner(result);
 
-    EXPECT_THROW(NetworkSession::EndCreate(result), std::exception);
+    EXPECT_THROW((void)NetworkSession::EndCreate(result), std::exception);
 
     // The real proof: activeAction_ must not still be stuck - a fresh Begin*/End* cycle (using a
     // real, non-empty local-gamer list via the same RAII global-swap technique used throughout
@@ -558,6 +565,7 @@ TEST(NetworkSessionTest, FailedCreateDoesNotPermanentlyStrandActiveAction) {
     System::IAsyncResult* recovery = NetworkSession::BeginCreate(
         NetworkSessionType::Local, 1, 8, System::AsyncCallback{}, std::any{}
     );
+    std::unique_ptr<System::IAsyncResult> recoveryOwner(recovery);
     NetworkSession* session = NetworkSession::EndCreate(recovery);
     ASSERT_NE(session, nullptr);
     session->Dispose();
@@ -822,6 +830,7 @@ TEST(NetworkSessionTest, BeginCreateWhileActionPendingThrows) {
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0,
         NetworkSessionProperties{}, System::AsyncCallback{}, std::any{}
     );
+    std::unique_ptr<System::IAsyncResult> resultOwner(result);
 
     EXPECT_THROW(
         NetworkSession::BeginCreate(NetworkSessionType::Local, 1, 4, System::AsyncCallback{}, std::any{}),
@@ -838,9 +847,10 @@ TEST(NetworkSessionTest, EndCreateWithMismatchedResultThrows) {
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0,
         NetworkSessionProperties{}, System::AsyncCallback{}, std::any{}
     );
+    std::unique_ptr<System::IAsyncResult> resultOwner(result);
 
     auto* bogus = reinterpret_cast<System::IAsyncResult*>(0x1);
-    EXPECT_THROW(NetworkSession::EndCreate(bogus), System::ArgumentException);
+    EXPECT_THROW((void)NetworkSession::EndCreate(bogus), System::ArgumentException);
 
     NetworkSession* session = NetworkSession::EndCreate(result);
     session->Dispose();
@@ -887,9 +897,10 @@ TEST(NetworkSessionTest, EndFindWithMismatchedResultThrows) {
     System::IAsyncResult* result = NetworkSession::BeginFind(
         NetworkSessionType::SystemLink, 1, NetworkSessionProperties{}, System::AsyncCallback{}, std::any{}
     );
+    std::unique_ptr<System::IAsyncResult> resultOwner(result);
 
     auto* bogus = reinterpret_cast<System::IAsyncResult*>(0x1);
-    EXPECT_THROW(NetworkSession::EndFind(bogus), System::ArgumentException);
+    EXPECT_THROW((void)NetworkSession::EndFind(bogus), System::ArgumentException);
 
     NetworkSession::EndFind(result);
 }
@@ -1026,35 +1037,10 @@ TEST(NetworkSessionTest, JoinActivatesRealNetworkingForTheCorrectSessionType) {
 // synthetic PlayerMatch entry is descriptive only: CNA has no PlayerMatch transport, so Join must
 // not interpret that address as a SystemLink endpoint and wait for a ServerWelcome that can never
 // arrive. The SAMPLE-091 handshake wait originally missed this session-type gate.
-TEST(NetworkSessionTest, JoinDoesNotActivateTransportForSyntheticPlayerMatchSession) {
-    SignedInGamer joiningGamer = MakeSignedInGamer("PlayerMatchJoiner");
-    Gamer::setSignedInGamersProperty(new SignedInGamerCollection(
-        SignedInGamerCollection::CreateInternal({&joiningGamer})
-    ));
-    struct RestoreGlobalGuard {
-        ~RestoreGlobalGuard() {
-            Gamer::setSignedInGamersProperty(
-                new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({}))
-            );
-        }
-    } restoreGuard;
-
-    AvailableNetworkSession availableSession = AvailableNetworkSession::CreateInternal(
-        1, "SyntheticHost", 0, 8, NetworkSessionProperties{},
-        QualityOfService::CreateInternal(), "127.0.0.1", 27015,
-        NetworkSessionType::PlayerMatch
-    );
-
-    NetworkSession* joined = nullptr;
-    ASSERT_NO_THROW(joined = NetworkSession::Join(&availableSession));
-    ASSERT_NE(joined, nullptr);
-    EXPECT_EQ(joined->getSessionTypeProperty(), NetworkSessionType::PlayerMatch);
-    EXPECT_FALSE(joined->getIsHostProperty());
-    EXPECT_EQ(joined->getHostProperty(), joined->getLocalGamersProperty()[0]);
-    EXPECT_EQ(CNA::Internal::Net::ENetBackend::GetBoundPort(joined), 0);
-
-    joined->Dispose();
-    delete joined;
+TEST(NetworkSessionTest, SyntheticPlayerMatchListingCannotBypassServiceMembership) {
+    auto available=AvailableNetworkSession::CreateInternal(1,"SyntheticHost",0,8,{},
+        QualityOfService::CreateInternal(),"127.0.0.1",27015,NetworkSessionType::PlayerMatch);
+    EXPECT_THROW((void)NetworkSession::Join(&available), GamerServicesNotAvailableException);
 }
 
 // --- Static JoinInvited/BeginJoinInvited/EndJoinInvited family ---
@@ -1090,7 +1076,8 @@ TEST(NetworkSessionTest, EndJoinInvitedRefusesAnyResultBecauseNoBeginCanProduceO
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0,
         NetworkSessionProperties{}, System::AsyncCallback{}, std::any{}
     );
-    EXPECT_THROW(NetworkSession::EndJoinInvited(createResult), System::ArgumentException);
+    std::unique_ptr<System::IAsyncResult> createResultOwner(createResult);
+    EXPECT_THROW((void)NetworkSession::EndJoinInvited(createResult), System::ArgumentException);
 
     // The create action is still pending and still completable, so the refusal stranded nothing.
     NetworkSession* session = NetworkSession::EndCreate(createResult);
@@ -1106,7 +1093,7 @@ TEST(NetworkSessionTest, EndJoinInvitedWithMismatchedResultThrows) {
     // pair lives in EndJoinInvitedRefusesAnyResultBecauseNoBeginCanProduceOne, which proves a
     // real pending action survives the refusal.
     auto* bogus = reinterpret_cast<System::IAsyncResult*>(0x1);
-    EXPECT_THROW(NetworkSession::EndJoinInvited(bogus), System::ArgumentException);
+    EXPECT_THROW((void)NetworkSession::EndJoinInvited(bogus), System::ArgumentException);
 }
 
 // --- LocalNetworkGamer ---
@@ -1388,12 +1375,13 @@ TEST(NetworkSessionTest, DisposeClearsHostProperty) {
 
 TEST(NetworkSessionTest, EndFamiliesRejectNullAndForeignResultsWithoutAnAction) {
     auto* foreign = reinterpret_cast<System::IAsyncResult*>(0x1);
-    EXPECT_THROW(NetworkSession::EndCreate(nullptr), System::ArgumentNullException);
-    EXPECT_THROW(NetworkSession::EndFind(nullptr), System::ArgumentNullException);
-    EXPECT_THROW(NetworkSession::EndJoin(nullptr), System::ArgumentNullException);
-    EXPECT_THROW(NetworkSession::EndCreate(foreign), System::ArgumentException);
-    EXPECT_THROW(NetworkSession::EndFind(foreign), System::ArgumentException);
-    EXPECT_THROW(NetworkSession::EndJoin(foreign), System::ArgumentException);
+    EXPECT_THROW((void)NetworkSession::EndCreate(nullptr), System::ArgumentNullException);
+    EXPECT_THROW((void)NetworkSession::EndFind(nullptr), System::ArgumentNullException);
+    EXPECT_THROW((void)NetworkSession::EndJoin(nullptr), System::ArgumentNullException);
+    EXPECT_THROW((void)NetworkSession::EndJoinInvited(nullptr), System::ArgumentNullException);
+    EXPECT_THROW((void)NetworkSession::EndCreate(foreign), System::ArgumentException);
+    EXPECT_THROW((void)NetworkSession::EndFind(foreign), System::ArgumentException);
+    EXPECT_THROW((void)NetworkSession::EndJoin(foreign), System::ArgumentException);
 }
 
 TEST(NetworkSessionTest, WrongEndFamilyPreservesPendingCreate) {
@@ -1401,14 +1389,16 @@ TEST(NetworkSessionTest, WrongEndFamilyPreservesPendingCreate) {
     const int before = NetworkSession::GetActiveActionInstanceCountForTesting();
     auto* result = NetworkSession::BeginCreate(NetworkSessionType::Local,
         std::vector<SignedInGamer*>{&gamer}, 8, 0, {}, {}, {});
-    EXPECT_THROW(NetworkSession::EndFind(result), System::ArgumentException);
-    EXPECT_THROW(NetworkSession::EndJoin(result), System::ArgumentException);
-    EXPECT_THROW(NetworkSession::EndCreate(nullptr), System::ArgumentNullException);
+    std::unique_ptr<System::IAsyncResult> resultOwner(result);
+    EXPECT_THROW((void)NetworkSession::EndFind(result), System::ArgumentException);
+    EXPECT_THROW((void)NetworkSession::EndJoin(result), System::ArgumentException);
+    EXPECT_THROW((void)NetworkSession::EndCreate(nullptr), System::ArgumentNullException);
     EXPECT_EQ(NetworkSession::GetActiveActionInstanceCountForTesting(), before + 1);
-    EXPECT_THROW(NetworkSession::BeginFind(NetworkSessionType::SystemLink, 1, {}, {}, {}),
+    EXPECT_THROW((void)NetworkSession::BeginFind(NetworkSessionType::SystemLink, 1, {}, {}, {}),
         System::InvalidOperationException);
     auto* session = NetworkSession::EndCreate(result);
     EXPECT_EQ(session->getMaxGamersProperty(), 8);
+    resultOwner.reset();
     EXPECT_EQ(NetworkSession::GetActiveActionInstanceCountForTesting(), before);
     session->Dispose();
     delete session;
@@ -1417,13 +1407,15 @@ TEST(NetworkSessionTest, WrongEndFamilyPreservesPendingCreate) {
 TEST(NetworkSessionTest, WrongEndFamilyPreservesPendingFind) {
     const int before = NetworkSession::GetActiveActionInstanceCountForTesting();
     auto* result = NetworkSession::BeginFind(NetworkSessionType::SystemLink, 1, {}, {}, {});
-    EXPECT_THROW(NetworkSession::EndCreate(result), System::ArgumentException);
-    EXPECT_THROW(NetworkSession::EndJoin(result), System::ArgumentException);
-    EXPECT_THROW(NetworkSession::EndFind(nullptr), System::ArgumentNullException);
+    std::unique_ptr<System::IAsyncResult> resultOwner(result);
+    EXPECT_THROW((void)NetworkSession::EndCreate(result), System::ArgumentException);
+    EXPECT_THROW((void)NetworkSession::EndJoin(result), System::ArgumentException);
+    EXPECT_THROW((void)NetworkSession::EndFind(nullptr), System::ArgumentNullException);
     EXPECT_EQ(NetworkSession::GetActiveActionInstanceCountForTesting(), before + 1);
-    EXPECT_THROW(NetworkSession::BeginFind(NetworkSessionType::SystemLink, 1, {}, {}, {}),
+    EXPECT_THROW((void)NetworkSession::BeginFind(NetworkSessionType::SystemLink, 1, {}, {}, {}),
         System::InvalidOperationException);
     EXPECT_EQ(NetworkSession::EndFind(result).getCountProperty(), 0);
+    resultOwner.reset();
     EXPECT_EQ(NetworkSession::GetActiveActionInstanceCountForTesting(), before);
 }
 
@@ -1441,16 +1433,41 @@ TEST(NetworkSessionTest, WrongEndFamilyPreservesPendingJoin) {
         QualityOfService::CreateInternal(), "", 0, NetworkSessionType::Local);
     const int before = NetworkSession::GetActiveActionInstanceCountForTesting();
     auto* result = NetworkSession::BeginJoin(&available, {}, {});
-    EXPECT_THROW(NetworkSession::EndCreate(result), System::ArgumentException);
-    EXPECT_THROW(NetworkSession::EndFind(result), System::ArgumentException);
-    EXPECT_THROW(NetworkSession::EndJoin(nullptr), System::ArgumentNullException);
-    EXPECT_THROW(NetworkSession::EndJoin(reinterpret_cast<System::IAsyncResult*>(0x1)),
+    std::unique_ptr<System::IAsyncResult> resultOwner(result);
+    EXPECT_THROW((void)NetworkSession::EndCreate(result), System::ArgumentException);
+    EXPECT_THROW((void)NetworkSession::EndFind(result), System::ArgumentException);
+    EXPECT_THROW((void)NetworkSession::EndJoin(nullptr), System::ArgumentNullException);
+    EXPECT_THROW((void)NetworkSession::EndJoin(reinterpret_cast<System::IAsyncResult*>(0x1)),
         System::ArgumentException);
     EXPECT_EQ(NetworkSession::GetActiveActionInstanceCountForTesting(), before + 1);
-    EXPECT_THROW(NetworkSession::BeginJoin(&available, {}, {}), System::InvalidOperationException);
+    EXPECT_THROW((void)NetworkSession::BeginJoin(&available, {}, {}), System::InvalidOperationException);
     auto* session = NetworkSession::EndJoin(result);
     EXPECT_FALSE(session->getIsHostProperty());
+    resultOwner.reset();
     EXPECT_EQ(NetworkSession::GetActiveActionInstanceCountForTesting(), before);
     session->Dispose();
     delete session;
+}
+
+TEST(NetworkSessionTest, DroppingAnUnconsumedResultReleasesBusyState) {
+    auto gamer=MakeSignedInGamer();
+    const int before=NetworkSession::GetActiveActionInstanceCountForTesting();
+    {
+        std::unique_ptr<System::IAsyncResult> result(NetworkSession::BeginCreate(
+            NetworkSessionType::Local,std::vector<SignedInGamer*>{&gamer},8,0,{}, {},42));
+        EXPECT_EQ(before+1,NetworkSession::GetActiveActionInstanceCountForTesting());
+    }
+    EXPECT_EQ(before,NetworkSession::GetActiveActionInstanceCountForTesting());
+    auto* session=NetworkSession::Create(NetworkSessionType::Local,std::vector<SignedInGamer*>{&gamer},8,0,{});
+    session->Dispose();delete session;
+}
+
+TEST(NetworkSessionTest, ThrowingImmediateCallbackDoesNotLeakOrStrandTheResult) {
+    auto gamer=MakeSignedInGamer();
+    const int before=NetworkSession::GetActiveActionInstanceCountForTesting();
+    EXPECT_THROW((void)NetworkSession::BeginCreate(NetworkSessionType::Local,
+        std::vector<SignedInGamer*>{&gamer},8,0,{},[](auto&) {throw std::runtime_error("callback");},{}),std::runtime_error);
+    EXPECT_EQ(before,NetworkSession::GetActiveActionInstanceCountForTesting());
+    auto* session=NetworkSession::Create(NetworkSessionType::Local,std::vector<SignedInGamer*>{&gamer},8,0,{});
+    session->Dispose();delete session;
 }
