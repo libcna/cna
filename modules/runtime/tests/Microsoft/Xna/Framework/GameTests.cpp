@@ -482,7 +482,9 @@ TEST(GameTest, SystemOverlayRunsAfterGameDrawBeforePresentation)
     private:
         std::vector<std::string>& sequence_;
     } game(order);
+    CNA::Internal::GameTestPeer::SetWindowActive(game, true);
     game.getServicesProperty().AddService<CNA::Internal::Runtime::IGameOverlay>(&overlay);
+    EXPECT_TRUE(game.getIsActiveProperty()); // A drawing-only overlay does not take game focus.
     game.RunOneFrame();
     EXPECT_EQ(order, (std::vector<std::string>{"game", "overlay", "present"}));
 }
