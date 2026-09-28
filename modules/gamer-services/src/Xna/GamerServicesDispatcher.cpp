@@ -50,7 +50,17 @@ void GamerServicesDispatcher::Update() {
         return;
     }
     struct Guard {Guard(){updating=true;}~Guard(){updating=false;}} guard;
-    auto incoming=CNA::Internal::GamerServices::backend()->pump();
+    auto service=CNA::Internal::GamerServices::backend();
+    for(auto* gamer:slots)if(gamer&&gamer->presence_.changed_&&!gamer->presence_.pending_) {
+        auto& presence=gamer->presence_;const auto revision=presence.revision_;auto text=presence.presence_;
+        if(const auto parameter=text.find("{0}");parameter!=std::string::npos)text.replace(parameter,3,std::to_string(presence.presenceValue_));
+        const auto user=gamer->serviceUserId_;const auto mode=static_cast<int>(presence.presenceMode_);
+        auto succeeded=std::make_shared<bool>(false);
+        service->submit([service,user,mode,text,succeeded]{try{service->setPresence(user,mode,text);*succeeded=true;}catch(...){}},
+            [gamer,revision,succeeded]{auto& state=gamer->presence_;state.pending_=false;if(*succeeded&&revision==state.revision_)state.changed_=false;});
+        presence.pending_=true;
+    }
+    auto incoming=service->pump();
     std::vector<CNA::Internal::GamerServices::BackendEvent> events;
     while(!deferred.empty()){events.push_back(std::move(deferred.front()));deferred.pop_front();}
     for(auto& event:incoming)events.push_back(std::move(event));

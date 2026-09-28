@@ -142,3 +142,33 @@ remaining profile/privilege metadata. Independent GS-005 work proceeds on presen
 Full service push, friends mutual/privacy model, pictures/cache, leaderboard/online sessions/relay,
 standard avatars, standard samples, C API and final audit remain incomplete. No new stubs or sharp-runtime
 changes. Latest next remains b2fd47a45; test server commit eb51d1f, runtime fc033a0e.
+
+### GS-005a social/presence checkpoint
+
+Server `fb02f71cc93824288fa6d475366bf3b284a12f6c` persists mutual request/accept/removal using
+existing account-global directed edges; existing one-direction development rows become requests.
+Added capability `friend-requests`; client validates negotiation and refuses missing capability.
+Pending friends do not see private online/presence state. Limits bound both incoming/outgoing edges.
+Lists expose accepted/incoming/outgoing flags; title presence isolated, server restarts preserve graph.
+Full account privacy/block/voice/invite state and social push remain unfinished.
+
+Standard ShowFriendRequest confirms/queues requests; ShowFriends pages snapshots and finds a gamertag;
+ShowGamerCard retrieves profile and permits accept/remove/cancel/request. Reuses automatic system
+message/keyboard overlay; online network operations complete at Update. Actor/profile validation
+implemented from local XML; exact Xbox exception order remains unmeasured. Friend snapshots own
+objects without the old moved-factory owner-pointer issue. IsFriend requires mutual acceptance.
+
+Presence setters mark dirty and publish via bounded executor at Dispatcher.Update; coalesced revisions
+avoid losing newer changes while a previous request is pending. Value substitution is applied to rich
+presence text. Fixed a pre-existing mismatch: the old alphabetical string table was indexed with the
+nonalphabetical reference enum. Enum order verified against local reference assembly and descriptions
+against XML. Full 60-mode text mapping now follows enum order. Generic custom string EXT retained.
+Heartbeat, backoff and authenticated refresh remain unfinished (online last-seen expires after 90s).
+
+Validation: deterministic harness now 58 checks, including request/accept/remove, pending flags,
+Guide navigation/error, owned snapshot disposal and Level 12 publication only at Update. GamerServices
+387 run: 386 pass/1 existing skip. Server CTest 2/2 pass in 8.14s including actual concurrent CNA
+clients, mutual friendship, rich presence across processes and admin revoke → failed operation plus
+SignedOut at Update. No Internet realtime/connectivity claim; no assets or standard-avatar claim yet.
+Next GS-005b: hash-addressed immutable picture/asset storage and client cache; achievement/profile
+picture APIs, corrupt/missing/cache/restart tests. GS-004 refresh remains independent unfinished work.

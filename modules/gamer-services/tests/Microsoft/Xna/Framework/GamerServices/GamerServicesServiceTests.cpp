@@ -930,11 +930,11 @@ TEST(GuideTest, DelayNotificationsDoesNotThrow) {
 
 TEST(GuideTest, ShowMethodsDoNotThrow) {
     EXPECT_NO_THROW(Guide::ShowComposeMessage(PlayerIndex::One, "hi", {}));
-    EXPECT_NO_THROW(Guide::ShowFriendRequest(PlayerIndex::One, nullptr));
-    EXPECT_NO_THROW(Guide::ShowFriends(PlayerIndex::One));
+    EXPECT_THROW(Guide::ShowFriendRequest(PlayerIndex::One, nullptr), GamerServicesNotAvailableException);
+    EXPECT_THROW(Guide::ShowFriends(PlayerIndex::One), GamerServicesNotAvailableException);
     EXPECT_NO_THROW(Guide::ShowGameInvite(PlayerIndex::One, std::vector<Gamer*>{}));
     EXPECT_NO_THROW(Guide::ShowGameInvite(std::string("session-id")));
-    EXPECT_NO_THROW(Guide::ShowGamerCard(PlayerIndex::One, nullptr));
+    EXPECT_THROW(Guide::ShowGamerCard(PlayerIndex::One, nullptr), GamerServicesNotAvailableException);
     EXPECT_NO_THROW(Guide::ShowMarketplace(PlayerIndex::One));
     EXPECT_NO_THROW(Guide::ShowMessages(PlayerIndex::One));
     EXPECT_NO_THROW(Guide::ShowParty(PlayerIndex::One));

@@ -101,6 +101,59 @@ int main(int argc,char** argv) {
             std::unique_ptr<System::IAsyncResult> failure(gamer->BeginAwardAchievement("missing",{},{}));
             bool failed=false;try{gamer->EndAwardAchievement(failure.get());}catch(const GamerServicesNotAvailableException&){failed=true;}check(failed,"async exception propagation");
         }
+        if(!real) {
+            auto* other=(*collection)[1];
+            Guide::ShowFriendRequest(Microsoft::Xna::Framework::PlayerIndex::One,other);
+            check(Guide::getHasPendingMessageBoxEXTProperty(),"friend confirmation UI");Guide::SimulateMessageBoxClickEXT(0);
+            check(Guide::getIsVisibleProperty()&&!Guide::getHasPendingMessageBoxEXTProperty(),"pending social request");
+            GamerServicesDispatcher::Update();check(Guide::getHasPendingMessageBoxEXTProperty(),"friends UI after request");
+            check(!gamer->IsFriend(other)&&gamer->GetFriends()[0]->getFriendRequestSentToProperty(),"pending not accepted");
+            check(other->GetFriends()[0]->getFriendRequestReceivedFromProperty(),"incoming friend request");
+            Guide::SimulateMessageBoxClickEXT(2);
+            Guide::ShowGamerCard(Microsoft::Xna::Framework::PlayerIndex::Two,gamer);Guide::SimulateMessageBoxClickEXT(0);
+            GamerServicesDispatcher::Update();check(gamer->IsFriend(other)&&other->IsFriend(gamer),"mutual accepted friendship");
+            Guide::SimulateMessageBoxClickEXT(2);
+            other->getPresenceProperty().setPresenceModeProperty(GamerPresenceMode::Level);
+            other->getPresenceProperty().setPresenceValueProperty(12);
+            check(gamer->GetFriends()[0]->getPresenceProperty().empty(),"presence changed before Update");
+            GamerServicesDispatcher::Update();check(gamer->GetFriends()[0]->getPresenceProperty()=="Level 12","presence mode ordinal/value");
+            auto snapshot=gamer->GetFriends();snapshot.Dispose();check(snapshot.getIsDisposedProperty(),"owned friend snapshot disposal");
+            Guide::ShowFriends(Microsoft::Xna::Framework::PlayerIndex::One);Guide::SimulateMessageBoxClickEXT(0);
+            enterText("missing");check(Guide::getHasPendingMessageBoxEXTProperty(),"missing profile error UI");Guide::SimulateMessageBoxClickEXT(0);
+            Guide::ShowGamerCard(Microsoft::Xna::Framework::PlayerIndex::One,other);Guide::SimulateMessageBoxClickEXT(0);
+            GamerServicesDispatcher::Update();check(!gamer->IsFriend(other)&&other->GetFriends().getCountProperty()==0,"mutual friend removal");Guide::SimulateMessageBoxClickEXT(2);
+        }
+        if(real&&(std::string(argv[4])=="request"||std::string(argv[4])=="presence-wait")) {
+            std::unique_ptr<Gamer> target(Gamer::GetFromGamertag(std::string(argv[4])=="request"?"Bob":"Alice"));
+            if(std::string(argv[4])=="request")Guide::ShowFriendRequest(Microsoft::Xna::Framework::PlayerIndex::One,target.get());
+            else Guide::ShowGamerCard(Microsoft::Xna::Framework::PlayerIndex::One,target.get());
+            Guide::SimulateMessageBoxClickEXT(0);
+            const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(12);
+            while(!Guide::getHasPendingMessageBoxEXTProperty()) {
+                GamerServicesDispatcher::Update();if(std::chrono::steady_clock::now()>deadline)throw std::runtime_error("social completion timeout");
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            Guide::SimulateMessageBoxClickEXT(2);
+            if(std::string(argv[4])=="presence-wait") {
+                check(gamer->IsFriend(target.get()),"real mutual friendship");
+                gamer->getPresenceProperty().setPresenceModeProperty(GamerPresenceMode::Level);gamer->getPresenceProperty().setPresenceValueProperty(12);
+                GamerServicesDispatcher::Update();bool barrier=false;Service::backend()->submit([]{},[&]{barrier=true;});
+                while(!barrier){GamerServicesDispatcher::Update();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+                std::cout<<"READY_PRESENCE"<<std::endl;std::string command;std::getline(std::cin,command);
+            }else check(!gamer->IsFriend(target.get()),"real pending request");
+        }
+        if(real&&std::string(argv[4])=="friends") {
+            std::unique_ptr<Gamer> other(Gamer::GetFromGamertag("Bob"));check(gamer->IsFriend(other.get()),"real accepted friend");
+            auto friends=gamer->GetFriends();check(friends.getCountProperty()==1&&friends[0]->getIsOnlineProperty(),"real online friend");
+            check(friends[0]->getPresenceProperty()=="Level 12","real rich presence/value");
+            Guide::ShowFriends(Microsoft::Xna::Framework::PlayerIndex::One);Guide::SimulateMessageBoxClickEXT(2);
+        }
+        if(real&&std::string(argv[4])=="revoke-wait") {
+            std::cout<<"READY_REVOKE"<<std::endl;std::string command;std::getline(std::cin,command);
+            bool denied=false;try{(void)gamer->GetAchievements();}catch(const GamerServicesNotAvailableException&){denied=true;}
+            check(denied,"revoked operation allowed");waitFor(0);check(signedOut==1,"revoked credential signout event");
+            std::cout<<checks<<" revocation checks passed\n";return 0;
+        }
         auto* retired=gamer;Service::backend()->signOut(0);check(retired->getIsSignedInToLiveProperty(),"signout before pump");waitFor(real?0:3);
         check(signedOut==1&&!retired->getIsSignedInToLiveProperty(),"retired identity/event lifetime");
         if(!real) {

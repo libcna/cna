@@ -58,7 +58,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         if (!serviceUserId_.empty()) {
             if (!gamer) throw System::ArgumentException("Gamer is null.", "gamer");
             for (const auto& entry : CNA::Internal::GamerServices::backend()->friends(serviceUserId_))
-                if (entry.gamertag == gamer->getGamertagProperty()) return true;
+                if (entry.accepted && entry.gamertag == gamer->getGamertagProperty()) return true;
         }
         return false;
     }
@@ -74,7 +74,8 @@ namespace Microsoft::Xna::Framework::GamerServices
             std::vector<std::shared_ptr<FriendGamer>> owned;
             std::vector<FriendGamer*> friends;
             for (const auto& entry : CNA::Internal::GamerServices::backend()->friends(serviceUserId_)) {
-                auto friendGamer = std::make_shared<FriendGamer>(FriendGamer::CreateInternal(entry.gamertag, entry.gamertag, entry.online, false, false, false, false, false));
+                auto friendGamer = std::shared_ptr<FriendGamer>(new FriendGamer(entry.gamertag, entry.gamertag, entry.online, entry.online, false, false, entry.requestSent, entry.requestReceived));
+                friendGamer->presence_ = entry.presence;
                 friends.push_back(friendGamer.get()); owned.push_back(std::move(friendGamer));
             }
             auto collection = FriendCollection::CreateInternal(std::move(friends));

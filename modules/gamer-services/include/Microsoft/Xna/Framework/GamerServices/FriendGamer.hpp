@@ -116,6 +116,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         );
 
     private:
+        friend class SignedInGamer;
         FriendGamer(
             const std::string& gamertag,
             const std::string& displayName,

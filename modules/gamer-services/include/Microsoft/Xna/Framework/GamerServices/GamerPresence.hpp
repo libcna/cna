@@ -46,7 +46,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Sets the platform presence string directly.
          *
-         * This is an FNA extension point; calling it has no effect on non-Xbox platforms.
+         * Service identities publish this string at the next dispatcher update.
          *
          * @param mode The presence mode string.
          */
@@ -56,6 +56,10 @@ namespace Microsoft::Xna::Framework::GamerServices
         CNAEXT static GamerPresence CreateInternal();
 
     private:
+        friend class GamerServicesDispatcher;
+        bool changed_ = false;
+        bool pending_ = false;
+        unsigned long long revision_ = 0;
         GamerPresence();
 
         std::string presence_;

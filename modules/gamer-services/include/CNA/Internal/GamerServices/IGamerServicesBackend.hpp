@@ -44,6 +44,10 @@ struct ServiceFriend {
     std::string gamertag;
     /** @brief Recent authenticated activity. */
     bool online = false;
+    /** @brief Mutual friendship, or pending request flags. */
+    bool accepted = false, requestSent = false, requestReceived = false;
+    /** @brief Friend's current title-scoped rich presence. */
+    std::string presence;
 };
 /** @brief Work completion applied at the dispatcher's controlled update boundary. */
 struct BackendEvent {
@@ -85,6 +89,11 @@ public:
     virtual void award(const std::string& userId,const std::string& key) = 0;
     /** @brief Gets friend snapshot. @param userId Identity. @return Friends. */
     virtual std::vector<ServiceFriend> friends(const std::string& userId) = 0;
+    /** @brief Changes an account friendship. @param userId Actor. @param gamertag Target.
+     * @param action Request, accept, or remove. */
+    virtual void changeFriend(const std::string& userId,const std::string& gamertag,const std::string& action) = 0;
+    /** @brief Publishes rich presence. @param userId Actor. @param mode Stable mode. @param text Display text. */
+    virtual void setPresence(const std::string& userId,int mode,const std::string& text) = 0;
 };
 /** @brief Gets lazily configured backend. @return Shared backend lifetime. */
 std::shared_ptr<IGamerServicesBackend> backend();

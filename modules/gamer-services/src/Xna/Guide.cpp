@@ -30,6 +30,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "../Internal/GuideOverlay.hpp"
+#include "../Internal/ServiceAsyncResult.hpp"
 #include "System/Threading/EventWaitHandle.hpp"
 #include <algorithm>
 
@@ -365,6 +366,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     namespace {
         bool signInActive = false;
+        bool socialPending = false;
         int signInPaneCount = 0;
         int signInSlot = 0;
         std::string signInUsername;
@@ -422,7 +424,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     bool Guide::getIsVisibleProperty()
     {
-        return pendingMessageBox_ != nullptr || pendingKeyboardInput_ != nullptr || signInActive;
+        return pendingMessageBox_ != nullptr || pendingKeyboardInput_ != nullptr || signInActive || socialPending;
     }
     void Guide::setIsVisibleProperty(bool /*value*/) { }
 
@@ -894,12 +896,90 @@ namespace Microsoft::Xna::Framework::GamerServices
     ) {
     }
 
-    void Guide::ShowFriendRequest(Microsoft::Xna::Framework::PlayerIndex /*player*/, Gamer* /*gamer*/)
-    {
+    namespace {
+        namespace Service = CNA::Internal::GamerServices;
+        SignedInGamer* SocialActor(PlayerIndex player) {
+            const auto index=static_cast<int>(player);
+            if(index<0||index>3)throw System::ArgumentOutOfRangeException("player");
+            if(!Service::backend()->serviceEnabled())throw GamerServicesNotAvailableException("No CNA account service is configured.");
+            for(auto* gamer:*Gamer::getSignedInGamersProperty())
+                if(gamer->getPlayerIndexProperty()==player&&gamer->getIsSignedInToLiveProperty())return gamer;
+            throw GamerServicesNotAvailableException("The requested player is not signed in.");
+        }
+        void SocialMessage(PlayerIndex player,const std::string& title,const std::string& text) {
+            (void)Guide::BeginShowMessageBox(player,title,text,{"OK"},0,MessageBoxIcon::None,[](System::IAsyncResult& result){
+                std::unique_ptr<System::IAsyncResult> owned(&result);(void)Guide::EndShowMessageBox(&result);
+            },{});
+        }
+        void ChangeFriend(PlayerIndex player,const std::string& target,const std::string& action) {
+            auto service=Service::backend();const auto user=service->profile(SocialActor(player)->getGamertagProperty()).userId;
+            socialPending=true;
+            try {
+                (void)Service::ServiceAsyncResult::begin("guide.friend",nullptr,[service,user,target,action]()->std::any{
+                    service->changeFriend(user,target,action);return {};
+                },[player](System::IAsyncResult& result){
+                    std::unique_ptr<System::IAsyncResult> owned(&result);socialPending=false;
+                    try{(void)Service::ServiceAsyncResult::end(&result,"guide.friend",nullptr);Guide::ShowFriends(player);}
+                    catch(...){SocialMessage(player,"CNA Gamer Services","The friendship change could not be completed.");}
+                },{});
+            }catch(...){socialPending=false;throw;}
+        }
+        void ProfileCard(PlayerIndex player,const std::string& tag) {
+            auto* actor=SocialActor(player);auto service=Service::backend();const auto person=service->profile(tag);
+            const auto user=service->profile(actor->getGamertagProperty()).userId;
+            std::string action="add",label="Request friendship";
+            for(const auto& entry:service->friends(user))if(entry.gamertag==person.gamertag) {
+                if(entry.accepted){action="remove";label="Remove friend";}
+                else if(entry.requestReceived){action="accept";label="Accept request";}
+                else if(entry.requestSent){action="remove";label="Cancel request";}
+            }
+            const auto text=person.displayName+"\n"+person.motto+"\nGamer score: "+std::to_string(person.gamerScore)+
+                "    Achievements: "+std::to_string(person.totalAchievements)+"\nRegion: "+person.region;
+            const bool self=person.userId==user;
+            (void)Guide::BeginShowMessageBox(player,person.gamertag,text,self?std::vector<std::string>{"Friends","Close"}:std::vector<std::string>{label,"Friends","Close"},0,MessageBoxIcon::None,
+                [player,tag=person.gamertag,action,self](System::IAsyncResult& result){
+                    std::unique_ptr<System::IAsyncResult> owned(&result);const auto answer=Guide::EndShowMessageBox(&result);
+                    if(!answer)return;
+                    if(!self&&*answer==0)ChangeFriend(player,tag,action);
+                    else if(*answer==(self?0:1))Guide::ShowFriends(player);
+                },{});
+        }
+        void FriendsPage(PlayerIndex player,std::size_t offset) {
+            auto* actor=SocialActor(player);const auto friends=actor->GetFriends();std::string text;
+            const auto count=static_cast<std::size_t>(friends.getCountProperty());
+            for(std::size_t i=offset;i<std::min(offset+8,count);++i) {
+                auto* entry=friends[static_cast<int>(i)];text+=entry->getGamertagProperty();
+                if(entry->getFriendRequestReceivedFromProperty())text+=" - incoming request";
+                else if(entry->getFriendRequestSentToProperty())text+=" - sent request";
+                else text+=entry->getIsOnlineProperty()?" - online":" - offline";
+                if(!entry->getPresenceProperty().empty())text+=" - "+entry->getPresenceProperty();text+="\n";
+            }
+            if(text.empty())text="No friends or pending requests.";
+            (void)Guide::BeginShowMessageBox(player,"CNA Friends",text,{"Find gamer","More","Close"},0,MessageBoxIcon::None,
+                [player,offset,count](System::IAsyncResult& result){
+                    std::unique_ptr<System::IAsyncResult> owned(&result);const auto answer=Guide::EndShowMessageBox(&result);
+                    if(answer&&*answer==1)FriendsPage(player,offset+8<count?offset+8:0);
+                    else if(answer&&*answer==0) {
+                        (void)Guide::BeginShowKeyboardInput(player,"CNA Gamer Card","Gamertag","",[player](System::IAsyncResult& input){
+                            std::unique_ptr<System::IAsyncResult> ownedInput(&input);
+                            if(Guide::WasKeyboardInputCanceledEXT(&input))return;
+                            const auto tag=Guide::EndShowKeyboardInput(&input);
+                            try{ProfileCard(player,tag);}catch(...){SocialMessage(player,"CNA Gamer Card","The gamer could not be found.");}
+                        },{});
+                    }
+                },{});
+        }
     }
-
-    void Guide::ShowFriends(Microsoft::Xna::Framework::PlayerIndex /*player*/)
-    {
+    void Guide::ShowFriendRequest(PlayerIndex player,Gamer* gamer) {
+        if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
+        (void)SocialActor(player);if(!gamer)throw System::ArgumentException("Gamer is null.","gamer");
+        const auto tag=gamer->getGamertagProperty();
+        (void)BeginShowMessageBox(player,"Friend request","Send a friendship request to "+tag+"?",{"Send request","Cancel"},0,MessageBoxIcon::None,
+            [player,tag](System::IAsyncResult& result){std::unique_ptr<System::IAsyncResult> owned(&result);const auto answer=EndShowMessageBox(&result);if(answer&&*answer==0)ChangeFriend(player,tag,"add");},{});
+    }
+    void Guide::ShowFriends(PlayerIndex player) {
+        if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
+        FriendsPage(player,0);
     }
 
     void Guide::ShowGameInvite(
@@ -912,8 +992,10 @@ namespace Microsoft::Xna::Framework::GamerServices
     {
     }
 
-    void Guide::ShowGamerCard(Microsoft::Xna::Framework::PlayerIndex /*player*/, Gamer* /*gamer*/)
-    {
+    void Guide::ShowGamerCard(PlayerIndex player,Gamer* gamer) {
+        if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
+        (void)SocialActor(player);if(!gamer)throw System::ArgumentException("Gamer is null.","gamer");
+        ProfileCard(player,gamer->getGamertagProperty());
     }
 
     void Guide::ShowMarketplace(Microsoft::Xna::Framework::PlayerIndex /*player*/)

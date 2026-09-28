@@ -8,6 +8,7 @@
 #include <condition_variable>
 #include <deque>
 #include <map>
+#include <set>
 #include <mutex>
 #include <random>
 #include <thread>
@@ -140,8 +141,18 @@ public:
         if(!entries.is_array()||entries.size()>256)throw Unavailable("Invalid friend response.");
         std::vector<ServiceFriend> values;for(const auto& e:entries) {
             if(!e.at("online").is_boolean())throw Unavailable("Invalid friend response.");
-            values.push_back({CnaService::stringField(e,"gamertag",32),e["online"].get<bool>()});
+            ServiceFriend friendState;friendState.gamertag=CnaService::stringField(e,"gamertag",32);friendState.online=e["online"].get<bool>();
+            for(const auto* key:{"accepted","requestSent","requestReceived"})if(!e.at(key).is_boolean())throw Unavailable("Invalid friend response.");
+            friendState.accepted=e["accepted"].get<bool>();friendState.requestSent=e["requestSent"].get<bool>();friendState.requestReceived=e["requestReceived"].get<bool>();
+            friendState.presence=CnaService::stringField(e,"presenceText",256);values.push_back(std::move(friendState));
         }return values;
+    }
+    void changeFriend(const std::string& user,const std::string& tag,const std::string& action) override {
+        if(action!="add"&&action!="accept"&&action!="remove")throw Unavailable("Invalid friendship operation.");
+        (void)request("friends."+action,{{"gamertag",tag}},tokenFor(user));
+    }
+    void setPresence(const std::string& user,int mode,const std::string& text) override {
+        (void)request("presence.set",{{"mode",mode},{"text",text}},tokenFor(user));
     }
 private:
     struct Slot {ServiceIdentity identity;std::string token;};
@@ -203,13 +214,19 @@ private:
         try {
             if(!negotiated_) {
                 const auto hello=exchange("hello",Json::object(),{});
-                if(hello.at("version")!=1||!hello.at("capabilities").is_array())throw Unavailable("CNA service negotiation failed.");
+                if(hello.at("version")!=1||!hello.at("capabilities").is_array()||hello["capabilities"].size()>64)throw Unavailable("CNA service negotiation failed.");
                 for(const auto* required:{"identity","authentication","achievements"}) {
                     const auto& caps=hello["capabilities"];
                     if(std::find(caps.begin(),caps.end(),Json(required))==caps.end())throw Unavailable("CNA service capability missing.");
                 }
+                for(const auto& capability:hello["capabilities"]) {
+                    if(!capability.is_string()||capability.get_ref<const std::string&>().size()>64)throw Unavailable("Invalid service capability.");
+                    capabilities_.insert(capability.get<std::string>());
+                }
                 negotiated_=true;
             }
+            if(op.starts_with("friends.")&&!capabilities_.contains("friend-requests"))throw Unavailable("CNA service friend-request capability missing.");
+            if(op=="presence.set"&&!capabilities_.contains("presence"))throw Unavailable("CNA service presence capability missing.");
             return exchange(op,std::move(args),token);
         }catch(const Unavailable&){throw;}
          catch(...){throw Unavailable("CNA service response validation failed.");}
@@ -224,6 +241,7 @@ private:
     std::string prefix_=prefix();
     unsigned long long sequence_=0;
     bool negotiated_=false;
+    std::set<std::string> capabilities_;
 };
 class FakeBackend final : public QueuedBackend {
 public:
@@ -242,7 +260,12 @@ public:
     void signOut(int slot) override {
         slotGuard(slot);queue([this,slot]{slots_[slot].clear();BackendEvent event;event.slot=slot;event.type=BackendEvent::Type::SignedOut;return event;});
     }
-    ServiceIdentity profile(const std::string& tag) override {for(const auto& person:identities_)if(person.gamertag==tag)return person;throw Unavailable("Gamer not found.");}
+    ServiceIdentity profile(const std::string& tag) override {
+        for(const auto& person:identities_)if(person.gamertag==tag) {
+            auto value=person;for(const auto& entry:catalog_)if(earned_[person.userId][entry.key]){value.gamerScore+=entry.score;++value.totalAchievements;}
+            return value;
+        }throw Unavailable("Gamer not found.");
+    }
     std::vector<ServiceAchievement> achievements(const std::string& user) override {
         require(user);auto values=catalog_;for(auto& entry:values)entry.earnedTicks=earned_[user][entry.key];return values;
     }
@@ -250,13 +273,33 @@ public:
         require(user);for(const auto& entry:catalog_)if(entry.key==key){if(!earned_[user][key])earned_[user][key]=638000000000000000LL;return;}
         throw Unavailable("Achievement not found.");
     }
-    std::vector<ServiceFriend> friends(const std::string& user) override {require(user);return {};}
+    std::vector<ServiceFriend> friends(const std::string& user) override {
+        require(user);std::vector<ServiceFriend> result;
+        for(const auto& target:identities_)if(target.userId!=user) {
+            const bool sent=edges_.contains({user,target.userId}),received=edges_.contains({target.userId,user});
+            if(!sent&&!received)continue;
+            ServiceFriend value;value.gamertag=target.gamertag;value.accepted=sent&&received;
+            value.requestSent=sent&&!received;value.requestReceived=received&&!sent;
+            value.online=value.accepted&&std::find(slots_.begin(),slots_.end(),target.userId)!=slots_.end();
+            value.presence=value.online?presence_[target.userId]:"";result.push_back(std::move(value));
+        }return result;
+    }
+    void changeFriend(const std::string& user,const std::string& tag,const std::string& action) override {
+        require(user);auto target=profile(tag).userId;if(target==user)throw Unavailable("Self friendship.");
+        if(action=="accept"&&!edges_.contains({target,user}))throw Unavailable("No incoming request.");
+        if(action=="remove"){edges_.erase({target,user});edges_.erase({user,target});}
+        else if(action=="add"||action=="accept")edges_.insert({user,target});
+        else throw Unavailable("Invalid friendship operation.");
+    }
+    void setPresence(const std::string& user,int,const std::string& text) override {require(user);presence_[user]=text;}
 private:
     void require(const std::string& user) {if(user.empty()||std::find(slots_.begin(),slots_.end(),user)==slots_.end())throw Unavailable("Gamer signed out.");}
     std::vector<ServiceIdentity> identities_;
     std::vector<ServiceAchievement> catalog_;
     std::array<std::string,4> slots_{};
     std::map<std::string,std::map<std::string,long long>> earned_;
+    std::set<std::pair<std::string,std::string>> edges_;
+    std::map<std::string,std::string> presence_;
 };
 std::mutex registryMutex;
 std::shared_ptr<IGamerServicesBackend> current;

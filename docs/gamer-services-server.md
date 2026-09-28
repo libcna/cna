@@ -11,3 +11,11 @@ Environment: `CNA_GAMER_SERVICES_ENDPOINT`, `CNA_GAME_ID`, `CNA_GAMER_SERVICES_C
 ```
 
 Server canonical protocol and administration commands live in sibling `cna-gamer-services-server/README.md` and `protocol/v1.md`. Desktop client depends on libcurl with TLS support and nlohmann/json. Browser/other secure platform transport integration remains unverified.
+
+Measured service features include four local authenticated players, standard Guide sign-in, profiles/
+lookup, achievements (metadata/awards), mutual friends and rich presence. Standard ShowFriends,
+ShowGamerCard and ShowFriendRequest use CNA system overlays. Picture/assets, refresh/reconnect,
+leaderboards, PlayerMatch/Ranked/invites/relay and standard Avatar migration remain unfinished.
+Rich presence is sent during Dispatcher.Update; friend online state currently reflects authenticated
+activity within 90 seconds, so idle heartbeat must still be added. Do not treat this as a production
+service release or a claim of measured Xbox event/validation parity across every method.

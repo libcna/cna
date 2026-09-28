@@ -900,11 +900,12 @@ behavior or a genuinely unimplemented feature).
 | `SignedInGamer` / `Gamer` / collections | Service foundation | No fabricated profiles. Four separate service identities; controlled Update events and owned Begin/End completions. Collection/lifetime edge cases remain under audit. |
 | Achievements | Service-backed metadata/awards | Configured online identities use persistent server catalog and earned state. Two users/titles, duplicate awards and restart tested. Picture retrieval/cache remains unfinished. Explicit legacy factory/offline objects still use local storage. |
 | Leaderboards | Local approximation; migration pending | Session-scoped writes/EndGame flushing and service reads/writes remain GS-006. Local files are not online service behavior. |
-| Presence | Local state; service integration pending | Server presence operation exists; client setter publication/heartbeat remains unfinished. |
-| Friends | Service read foundation | Server-directed subscription snapshot can populate GetFriends/IsFriend. Mutual friend request/privacy/social UI semantics remain unfinished. |
+| Presence | Service-backed at Update | Correct enum/value text and revision-coalesced publication tested across real clients. Heartbeat/refresh/backoff remain unfinished. |
+| Friends | Service mutual workflow | Persistent request/accept/removal, pending flags, accepted-only online/presence, owned GetFriends snapshots and IsFriend. General privacy/block/voice/invite semantics remain unfinished. |
 | Privileges/profile | Partial service data | Server online-session permission, public names/motto/region/score/earned count. Other privilege fields/pictures require service metadata. |
 | Guide sign-in | Service flow | Standard ShowSignIn uses masked keyboard and failure message overlay; four slots and cancellation tested. Automatic Game draw hook added. Offline/guest and credential refresh remain unfinished. |
-| Guide social/commerce/party/review | Unfinished | Requires Xbox contract evidence and corresponding CNA service/UI behavior. |
+| Guide friends/gamer card/request | Service UI | Standard APIs present profiles, page friends/find gamer and confirm/manage friendship changes. Exact Xbox validation order remains unmeasured. |
+| Guide commerce/party/messages/review/invites | Unfinished | Requires Xbox contract evidence and corresponding CNA service/UI behavior. |
 | Guide keyboard/message box | Functional | Existing text-input/message overlays reused by automatic system overlay. |
 | Avatar standard API | Unfinished migration | Working original CNA GLB/EXT rendering preserved; standard AvatarRenderer still unavailable. 71-slot public rig, description encoding/service assets and standard Draw migration remain GS-009. |
 | Dispatcher/Component | Event pump foundation | Initialize rejects duplicate initialization and starts with zero accounts. Backend completions/events applied at Update. Full reconnect/push/update-thread contract audit remains. |
