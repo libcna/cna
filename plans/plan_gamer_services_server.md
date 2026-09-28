@@ -353,3 +353,52 @@ the 24-hour/16-epoch bound. Crash cleanup cannot be guaranteed on a failed Inter
 Stream columns, TrueSkill and Xbox validation/order measurements stay unfinished. Next independent
 work is GS-004b rotating refresh credentials/user-level persistence and maintenance heartbeat,
 then GS-007 session directory; no original sample or standard-avatar acceptance is yet claimed.
+
+### Known-good GS-006c set / next authentication slice (GS-004b/004c)
+
+CNA 911eb90740e9a9b55221e676caaf196cb785a9f7; server
+2d10c69d69d78f294c91ea3797fee1a9bf5d6cc4; sharp-runtime
+fc033a0e8541a81498c4a496f56a0f59475c6e34. Source checkpoints clean before continuing.
+
+Design before implementation: schema 5 adds title-bound refresh families/hashed rotating 256-bit
+credentials, absolute 30-day lifetime, max 32 active families per user and <=1,024 rotations/family.
+Access tokens remain one hour. Each refresh invalidates the earlier access token and rotates the
+refresh credential atomically; reuse revokes that family, not unrelated devices/titles. Logout and
+admin revocation cover access plus refresh authority. Rate-limit unauthenticated refresh attempts;
+never log/put credentials in argv. Existing schema-4 access tokens remain valid without refresh.
+Negotiated heartbeat updates activity without requiring gameplay to repeatedly fetch profiles.
+[Token rotation/replay principles](https://www.rfc-editor.org/info/rfc9700/) guide the credential
+lifecycle; CNA's protocol is not OAuth or Xbox LIVE. Lost rotation responses may require fresh
+Guide authentication; do not silently replay a used refresh credential indefinitely.
+
+Client follow-up GS-004c: user-level refresh records only (no passwords/access tokens/title-manifest
+credentials); endpoint/title/slot isolation, strict sizes and atomic private files on POSIX using
+owner checks, 0700 directories, 0600 files, O_NOFOLLOW/O_EXCL and fsync. No private-file persistence
+claim on platforms without equivalent enforcement; keep ephemeral sign-in there until an OS
+credential provider exists. CI can explicitly disable/isolate this storage via CNA environment
+configuration. Dispatcher boundaries publish resumed identities; one executor serializes refresh,
+heartbeat and ordinary requests with bounded retry/backoff, avoiding per-operation threads.
+Credential cache tests must cover insecure permissions, symlinks/corruption, isolation, restart,
+revocation, four slots and password absence. Real test harnesses isolate or disable persistence so
+no owner's credentials are created or consumed.
+
+### GS-004b server refresh/heartbeat checkpoint
+
+- [x] Schema-5 migration preserves legacy access tokens; new credentials are hashed and title-bound.
+- [x] Refresh rotation retires previous access/refresh atomically, keeps absolute lifetime, detects
+  reuse and revokes only that family. Logout/admin revocation cover refresh authority; no bearer
+  plaintext persisted in the database, logged or passed via administration argv.
+- [x] Server heartbeat capability and development expire-access tool, source throttle, family/
+  rotation caps, expired/revoked pruning and deterministic malformed/expired/wrong-title errors.
+- [x] Unit expiry, replay, logout, another account/title/device, restart and v1 upgrade/future refusal;
+  real TLS/server restart rotation, wrong-title refusal, replay revocation and heartbeat tested.
+- [ ] GS-004c: CNA automatic maintenance, user credential persistence/resume and reconnect corpus.
+
+Final server **5,214 assertions pass**, full genuine TLS C++/native C suite **2/2 pass in 21.00s**
+(`refresh-final-e2e.log`). Simulated v1 downgrade fixture initially forgot the new session-column
+index; fixed the fixture before final pass, not an actual forward-migration failure. Final source
+set: CNA 911eb90740e9a9b55221e676caaf196cb785a9f7 / server
+93a92901abc86c4884c7329a87e2723fac35fc59 / sharp-runtime
+fc033a0e8541a81498c4a496f56a0f59475c6e34. Reproduce with the GS-006b harness variables/commands.
+Server source committed/clean; no sharp-runtime changes. Client does not yet consume refresh or
+schedule heartbeat, so no completed persistent XNA sign-in/reconnect claim. Continue GS-004c now.
