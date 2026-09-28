@@ -26,6 +26,7 @@
 #include <tuple>
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
 #include "../Internal/OnlineSessionBinding.hpp"
+#include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
 #include "System/NotSupportedException.hpp"
 
 namespace Microsoft::Xna::Framework::Net
@@ -49,6 +50,9 @@ namespace Microsoft::Xna::Framework::Net
     NetworkSession::NetworkSessionAction* NetworkSession::activeAction_ = nullptr;
     NetworkSession* NetworkSession::activeSession_ = nullptr;
     System::EventHandler<GamerServices::InviteAcceptedEventArgs> NetworkSession::InviteAccepted;
+    std::optional<GamerServices::InviteAcceptedEventArgs> NetworkSession::pendingInviteAccepted_;
+    // After InviteAccepted in this translation unit's initialization order.
+    bool NetworkSession::inviteSinkInstalled_ = NetworkSession::InstallInviteSink();
     std::string NetworkSession::pendingJoinAddress_;
     uint16_t NetworkSession::pendingJoinPort_ = 0;
     int NetworkSession::instanceCount_ = 0;
@@ -887,7 +891,7 @@ namespace Microsoft::Xna::Framework::Net
             NetworkSessionOperation::Create, std::move(asyncState), std::move(callback), maxLocalGamers, std::nullopt, 0,
             NetworkSessionProperties{}, sessionType, maxGamers
         );
-        if (IsOnlineType(sessionType)) return QueueOnlineSession(nullptr);
+        if (IsOnlineType(sessionType)) return QueueOnlineSession({}, {});
         return InvokeActiveActionCallback();
     }
 
@@ -926,7 +930,7 @@ namespace Microsoft::Xna::Framework::Net
             NetworkSessionOperation::Create, std::move(asyncState), std::move(callback), maxLocalGamers, std::nullopt, privateGamerSlots,
             std::move(sessionProperties), sessionType, maxGamers
         );
-        if (IsOnlineType(sessionType)) return QueueOnlineSession(nullptr);
+        if (IsOnlineType(sessionType)) return QueueOnlineSession({}, {});
         return InvokeActiveActionCallback();
     }
 
@@ -961,7 +965,7 @@ namespace Microsoft::Xna::Framework::Net
             NetworkSessionOperation::Create, std::move(asyncState), std::move(callback), 0, localGamers, privateGamerSlots,
             std::move(sessionProperties), sessionType, maxGamers
         );
-        if (IsOnlineType(sessionType)) return QueueOnlineSession(nullptr);
+        if (IsOnlineType(sessionType)) return QueueOnlineSession({}, {});
         return InvokeActiveActionCallback();
     }
 
@@ -1004,12 +1008,12 @@ namespace Microsoft::Xna::Framework::Net
         return activeSession_;
     }
 
-    System::IAsyncResult* NetworkSession::QueueOnlineSession(const AvailableNetworkSession* target)
+    System::IAsyncResult* NetworkSession::QueueOnlineSession(const std::string& session, const std::string& invite)
     {
         using namespace CNA::Internal::GamerServices;
         using namespace CNA::Internal::Net;
         std::unique_ptr<NetworkSessionAction> action(activeAction_);
-        const bool joining=target!=nullptr;
+        const bool joining=!session.empty();
         action->onlineGamers_=ServiceLocalGamers(action->MaxLocalGamers,action->LocalGamers);
         OnlineSessionRequest request;
         request.operation=joining ? OnlineSessionRequest::Operation::Join : OnlineSessionRequest::Operation::Create;
@@ -1020,7 +1024,7 @@ namespace Microsoft::Xna::Framework::Net
             names.push_back(gamer->getGamertagProperty());
         }
         request.owner=action->onlineUsers_.front();request.users=action->onlineUsers_;
-        if(joining) request.session=target->serviceSnapshot_->session;
+        if(joining) {request.session=session;request.invite=invite;}
         else {
             request.settings.maxGamers=action->MaxGamers;request.settings.privateSlots=action->MaxPrivateSlots;
             for(int index=0;index<8;++index) request.settings.properties[index]=action->SessionProperties.getItem(index);
@@ -1041,7 +1045,7 @@ namespace Microsoft::Xna::Framework::Net
     NetworkSession* NetworkSession::CompleteOnlineSession(NetworkSessionAction* action)
     {
         using namespace CNA::Internal::Net;
-        const bool joining=action->Operation==NetworkSessionOperation::Join;
+        const bool joining=action->Operation!=NetworkSessionOperation::Create;
         activeAction_=nullptr;
         EstablishedOnlineSession established;
         try {established=action->online_->take();}
@@ -1071,6 +1075,10 @@ namespace Microsoft::Xna::Framework::Net
             created->Dispose();
             throw;
         }
+        // A consumed invitation cannot be joined again.
+        auto& accepted=CNA::Internal::GamerServices::acceptedInvitation();
+        if(action->Operation==NetworkSessionOperation::JoinInvited && accepted
+            && accepted->invitation.session==created->online_->session()) accepted.reset();
         return created.release();
     }
 
@@ -1302,7 +1310,7 @@ namespace Microsoft::Xna::Framework::Net
                 NetworkSessionOperation::Join, std::move(asyncState), std::move(callback),
                 static_cast<int>(availableSession->serviceLocals_->size()), *availableSession->serviceLocals_, 0,
                 NetworkSessionProperties{}, availableSession->GetSessionType());
-            return QueueOnlineSession(availableSession);
+            return QueueOnlineSession(availableSession->serviceSnapshot_->session, {});
         }
 
         // Task 2.15: FNA hardcodes NetworkSessionType.PlayerMatch here (marked FIXME upstream) -
@@ -1440,11 +1448,11 @@ namespace Microsoft::Xna::Framework::Net
 
     System::IAsyncResult* NetworkSession::BeginJoinInvited(
         int maxLocalGamers,
-        System::AsyncCallback,
-        std::any
+        System::AsyncCallback callback,
+        std::any asyncState
     )
     {
-        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
+        ThrowIfRestricted();
         if (maxLocalGamers < 1 || maxLocalGamers > 4)
         {
             throw System::ArgumentOutOfRangeException("maxLocalGamers");
@@ -1453,42 +1461,86 @@ namespace Microsoft::Xna::Framework::Net
         {
             throw System::InvalidOperationException();
         }
-
-        // Private recipient-bound invitations exist; public Guide acceptance and Net joining
-        // still need the real authenticated session lifecycle before this entry point is enabled.
-        throw GamerServices::GamerServicesNotAvailableException(
-            "NetworkSession::JoinInvited awaits CNA Guide invitation acceptance and online session lifecycle integration."
-        );
+        return QueueInvitedSession(maxLocalGamers, std::nullopt, std::move(callback), std::move(asyncState));
     }
 
     System::IAsyncResult* NetworkSession::BeginJoinInvited(
-        const std::vector<SignedInGamer*>&,
-        System::AsyncCallback,
-        std::any
+        const std::vector<SignedInGamer*>& localGamers,
+        System::AsyncCallback callback,
+        std::any asyncState
     )
     {
-        if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
+        ThrowIfRestricted();
+        // Reference GetLocalGamers: null entries, disposed gamers and an empty list are refused first.
+        for (SignedInGamer* gamer : localGamers)
+        {
+            if (gamer == nullptr) throw System::ArgumentException("Gamer is null.", "localGamers");
+        }
+        if (localGamers.empty() || localGamers.size() > 4) throw System::ArgumentException("localGamers");
         if (activeAction_ != nullptr || activeSession_ != nullptr)
         {
             throw System::InvalidOperationException();
         }
+        return QueueInvitedSession(static_cast<int>(localGamers.size()), localGamers, std::move(callback), std::move(asyncState));
+    }
 
-        // Private recipient-bound invitations exist; public Guide acceptance and Net joining
-        // still need the real authenticated session lifecycle before this entry point is enabled.
-        throw GamerServices::GamerServicesNotAvailableException(
-            "NetworkSession::JoinInvited awaits CNA Guide invitation acceptance and online session lifecycle integration."
-        );
+    System::IAsyncResult* NetworkSession::QueueInvitedSession(
+        int maxLocalGamers, std::optional<std::vector<SignedInGamer*>> localGamers,
+        System::AsyncCallback callback, std::any asyncState)
+    {
+        using namespace CNA::Internal::GamerServices;
+        if(!GamerServices::GamerServicesDispatcher::getIsInitializedProperty() || !backend()->serviceEnabled())
+            throw GamerServices::GamerServicesNotAvailableException("Configure and initialize CNA Gamer Services before joining an invitation.");
+        // Only a Guide-accepted invitation can be joined (reference NotInvited/InviteeNotSignedIn).
+        const auto& accepted=acceptedInvitation();
+        if(!accepted) throw System::InvalidOperationException("No game invitation has been accepted.");
+        const auto* published=GamerServices::Gamer::getSignedInGamersProperty();
+        auto* invitee=accepted->gamer;
+        if(std::find(published->begin(),published->end(),invitee)==published->end() || invitee->serviceUserId_!=accepted->user)
+            throw System::InvalidOperationException("The gamer who accepted the invitation is no longer signed in.");
+        // The invitee owns the join request, so it always comes first.
+        std::vector<SignedInGamer*> gamers{invitee};
+        if(localGamers) {
+            if(std::find(localGamers->begin(),localGamers->end(),invitee)==localGamers->end())
+                throw System::InvalidOperationException("The gamer who accepted the invitation must join.");
+            for(auto* gamer:*localGamers) if(gamer!=invitee) gamers.push_back(gamer);
+        } else {
+            for(auto* gamer:*published)
+                if(gamer!=invitee && !gamer->getIsGuestProperty() && gamers.size()<static_cast<std::size_t>(maxLocalGamers)) gamers.push_back(gamer);
+        }
+        const auto type=accepted->invitation.kind==ServiceSessionKind::Ranked ? NetworkSessionType::Ranked : NetworkSessionType::PlayerMatch;
+        activeAction_ = new NetworkSessionAction(
+            NetworkSessionOperation::JoinInvited, std::move(asyncState), std::move(callback),
+            static_cast<int>(gamers.size()), gamers, 0, NetworkSessionProperties{}, type);
+        return QueueOnlineSession(accepted->invitation.session, accepted->invitation.invite);
     }
 
     NetworkSession* NetworkSession::EndJoinInvited(System::IAsyncResult* result)
     {
-        if(!result) throw System::ArgumentNullException("result");
-        // BeginJoinInvited always refuses, so no IAsyncResult can ever have come from it. Any
-        // result reaching here was produced by a different Begin* call, which is exactly what
-        // XNA's ArgumentException for this parameter means. Completing it as an invited join --
-        // as this used to, by hardcoding a PlayerMatch session -- would have made EndJoinInvited
-        // a way around the refusal, since a BeginCreate result also compares equal to
-        // activeAction_.
-        throw System::ArgumentException("result");
+        ThrowIfRestricted();
+        auto* action=NetworkSessionAction::PrepareEnd(result, NetworkSessionOperation::JoinInvited);
+        return CompleteOnlineSession(action);
+    }
+
+    bool NetworkSession::InstallInviteSink()
+    {
+        CNA::Internal::GamerServices::setInviteAcceptedSink([](const CNA::Internal::GamerServices::AcceptedInvitation& accepted) {
+            DeliverInviteAccepted(accepted.gamer, accepted.invitation.session);
+        });
+        // Reference InviteAccepted add accessor: a pending acceptance is delivered to the first subscriber.
+        InviteAccepted.SetReplayHook([](const System::EventHandler<GamerServices::InviteAcceptedEventArgs>::HandlerType& handler) {
+            if(!pendingInviteAccepted_) return;
+            const auto args=*pendingInviteAccepted_;pendingInviteAccepted_.reset();
+            handler(nullptr, args);
+        });
+        return true;
+    }
+
+    void NetworkSession::DeliverInviteAccepted(SignedInGamer* gamer, const std::string& session)
+    {
+        const bool current=activeSession_ && activeSession_->online_ && activeSession_->online_->session()==session;
+        GamerServices::InviteAcceptedEventArgs args(gamer, current);
+        if(InviteAccepted.Empty()) pendingInviteAccepted_=args;
+        else {pendingInviteAccepted_.reset();InviteAccepted.Raise(nullptr, args);}
     }
 }

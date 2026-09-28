@@ -54,6 +54,8 @@ public:
     bool ended() const {return ended_;}
     /** @brief Gets whether this machine hosts the session. @return Host flag. */
     bool host() const {return host_;}
+    /** @brief Gets the opaque directory session. @return Session identifier. */
+    const std::string& session() const {return snapshot_.session;}
 private:
     using NetworkGamer=Microsoft::Xna::Framework::Net::NetworkGamer;
     void project(const ServiceENetObservation& ready);

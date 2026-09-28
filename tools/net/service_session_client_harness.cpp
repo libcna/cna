@@ -4,6 +4,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/InviteAcceptedEventArgs.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
@@ -62,6 +63,9 @@ std::string line() {
     }
 }
 void command(){check(line()=="continue","parent boundary");}
+bool messageBoxPending() {
+    try{(void)Guide::GetPendingMessageBoxFocusButtonForTestingEXT();return true;}catch(const std::exception&){return false;}
+}
 // Payload identifies its sender and recipient so each receiver can verify the reported sender.
 std::vector<SharpRuntime::bytecs> payload(const std::string& from,const std::string& to,std::size_t size) {
     std::vector<SharpRuntime::bytecs> result(size);const auto label=from+">"+to;
@@ -72,7 +76,8 @@ std::vector<SharpRuntime::bytecs> payload(const std::string& from,const std::str
 }
 int main(int argc,char** argv) {
     try {
-        check(argc==3,"arguments");const std::string role=argv[1],kind=argv[2];
+        check(argc==3||(argc==4&&std::string(argv[3])=="invite"),"arguments");const std::string role=argv[1],kind=argv[2];
+        const bool invited=argc==4;
         check(role=="host"||role=="join","role");check(kind=="player"||kind=="ranked","kind");
         const bool host=role=="host";const auto type=kind=="player"?NetworkSessionType::PlayerMatch:NetworkSessionType::Ranked;
         const std::array<std::string,2> accounts=host?std::array<std::string,2>{"alice","charlie"}:std::array<std::string,2>{"bob","dana"};
@@ -99,6 +104,27 @@ int main(int argc,char** argv) {
                 check(refused&&!session->getAllowJoinInProgressProperty(),"Ranked refuses join-in-progress");
             }
             std::cout<<"session-created\n"<<std::flush;
+            if(invited) {
+                // Standard Guide invitation: no recipients means the Guide asks for a gamertag.
+                phase="invite";Guide::ShowGameInvite(Microsoft::Xna::Framework::PlayerIndex::One,std::vector<Gamer*>{});
+                until([]{return Guide::getIsVisibleProperty();});enter("Bob");
+                until(messageBoxPending);Guide::SimulateMessageBoxClickEXT(0);
+                until([]{return !Guide::getIsVisibleProperty();});
+                std::cout<<"invite-sent\n"<<std::flush;
+            }
+        }else if(invited) {
+            // SAMPLE-096 shape: accept in the Guide, then JoinInvited synchronously from InviteAccepted.
+            phase="invited-join";int raised=0;
+            NetworkSession::InviteAccepted+=[&](auto*,const InviteAcceptedEventArgs& args) {
+                ++raised;check(args.getGamerProperty()==gamers[0]&&!args.getIsCurrentSessionProperty(),"invitee and foreign session");
+                session=NetworkSession::JoinInvited(2);
+            };
+            until(messageBoxPending,30);Guide::SimulateMessageBoxClickEXT(0);
+            until([&]{return session!=nullptr;});check(raised==1,"InviteAccepted once");
+            check(!session->getIsHostProperty()&&session->getAllGamersProperty().getCountProperty()==4,"invited join complete roster");
+            check(session->getLocalGamersProperty()[0]->getGamertagProperty()=="Bob","invitee joins first");
+            check(session->getHostProperty()&&session->getHostProperty()->getGamertagProperty()=="Alice","invited remote host");
+            std::cout<<"session-joined\n"<<std::flush;
         }else {
             phase="find";auto mismatched=properties;mismatched[7]=74;
             check(NetworkSession::Find(type,gamers,mismatched).getCountProperty()==0,"property filter excludes the session");

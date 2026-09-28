@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
+#include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GuideAlreadyVisibleException.hpp"
@@ -24,6 +25,7 @@
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/ObjectDisposedException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
@@ -926,6 +928,22 @@ namespace Microsoft::Xna::Framework::GamerServices
                 },{},std::move(service)));
             }catch(...){socialPending=false;throw;}
         }
+        void SendInvitations(PlayerIndex player,const std::string& user,const std::vector<std::string>& tags) {
+            try {
+                Service::sendInvitations(user,tags,[player,count=tags.size()](int failures) {
+                    if(failures)SocialMessage(player,"Game invitation",failures==static_cast<int>(count)
+                        ?"The invitation could not be sent.":"Some invitations could not be sent.");
+                });
+            }catch(...){SocialMessage(player,"Game invitation","There is no online game to invite gamers to.");}
+        }
+        void ConfirmInvitations(PlayerIndex player,const std::string& user,const std::vector<std::string>& tags) {
+            std::string names;for(const auto& tag:tags)names+=(names.empty()?"":", ")+tag;
+            (void)Guide::BeginShowMessageBox(player,"Game invitation","Invite "+names+" to join your game?",{"Send invitation","Cancel"},0,
+                MessageBoxIcon::None,[player,user,tags](System::IAsyncResult& result) {
+                    std::unique_ptr<System::IAsyncResult> owned(&result);const auto answer=Guide::EndShowMessageBox(&result);
+                    if(answer&&*answer==0)SendInvitations(player,user,tags);
+                },{});
+        }
         void ProfileCard(PlayerIndex player,const std::string& tag) {
             auto* actor=SocialActor(player);auto service=Service::backend();const auto person=service->profile(tag);
             const auto user=service->profile(actor->getGamertagProperty()).userId;
@@ -938,12 +956,21 @@ namespace Microsoft::Xna::Framework::GamerServices
             const auto text=person.displayName+"\n"+person.motto+"\nGamer score: "+std::to_string(person.gamerScore)+
                 "    Achievements: "+std::to_string(person.totalAchievements)+"\nRegion: "+person.region;
             const bool self=person.userId==user;
-            (void)Guide::BeginShowMessageBox(player,person.gamertag,text,self?std::vector<std::string>{"Friends","Close"}:std::vector<std::string>{label,"Friends","Close"},0,MessageBoxIcon::None,
-                [player,tag=person.gamertag,action,self](System::IAsyncResult& result){
+            const bool invite=!self&&Service::activeOnlineSession().has_value();
+            std::vector<std::string> buttons;
+            if(!self)buttons.push_back(label);
+            if(invite)buttons.push_back("Invite to game");
+            buttons.push_back("Friends");buttons.push_back("Close");
+            (void)Guide::BeginShowMessageBox(player,person.gamertag,text,buttons,0,MessageBoxIcon::None,
+                [player,tag=person.gamertag,action,self,invite,user](System::IAsyncResult& result){
                     std::unique_ptr<System::IAsyncResult> owned(&result);const auto answer=Guide::EndShowMessageBox(&result);
                     if(!answer)return;
-                    if(!self&&*answer==0)ChangeFriend(player,tag,action);
-                    else if(*answer==(self?0:1))Guide::ShowFriends(player);
+                    int index=*answer;
+                    if(!self&&index==0){ChangeFriend(player,tag,action);return;}
+                    if(!self)--index;
+                    if(invite&&index==0){SendInvitations(player,user,{tag});return;}
+                    if(invite)--index;
+                    if(index==0)Guide::ShowFriends(player);
                 },{});
         }
         void FriendsPage(PlayerIndex player,std::size_t offset) {
@@ -984,14 +1011,33 @@ namespace Microsoft::Xna::Framework::GamerServices
         FriendsPage(player,0);
     }
 
-    void Guide::ShowGameInvite(
-        Microsoft::Xna::Framework::PlayerIndex /*player*/,
-        const std::vector<Gamer*>& /*recipients*/
-    ) {
+    void Guide::ShowGameInvite(PlayerIndex player,const std::vector<Gamer*>& recipients) {
+        // Reference ShowGameInvite validates the recipient list (at most 100, no null/disposed
+        // gamers) before showing the Guide; an empty list prompts for the recipient.
+        if(recipients.size()>100)throw System::ArgumentException("Too many gamers.","recipients");
+        for(auto* gamer:recipients) {
+            if(!gamer)throw System::ArgumentException("Gamer is null.","recipients");
+            if(gamer->getIsDisposedProperty())throw System::ObjectDisposedException("recipients");
+        }
+        if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
+        auto* actor=SocialActor(player);
+        if(!Service::activeOnlineSession())
+            throw System::InvalidOperationException("There is no online network session to invite gamers to.");
+        const auto user=Service::GamerAccess::userId(*actor);
+        std::vector<std::string> tags;for(auto* gamer:recipients)tags.push_back(gamer->getGamertagProperty());
+        if(!tags.empty()){ConfirmInvitations(player,user,tags);return;}
+        (void)BeginShowKeyboardInput(player,"Game invitation","Gamertag to invite","",[player,user](System::IAsyncResult& input) {
+            std::unique_ptr<System::IAsyncResult> owned(&input);
+            if(Guide::WasKeyboardInputCanceledEXT(&input))return;
+            const auto tag=Guide::EndShowKeyboardInput(&input);
+            if(!tag.empty())ConfirmInvitations(player,user,{tag});
+        },{});
     }
 
     void Guide::ShowGameInvite(const std::string& /*sessionId*/)
     {
+        // The reference assembly supports this overload only for Windows Phone LIVE titles.
+        throw System::NotSupportedException("ShowGameInvite(sessionId) is supported only on Windows Phone.");
     }
 
     void Guide::ShowGamerCard(PlayerIndex player,Gamer* gamer) {

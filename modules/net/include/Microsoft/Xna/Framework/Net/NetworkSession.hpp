@@ -832,7 +832,7 @@ namespace Microsoft::Xna::Framework::Net
          */
         CNAEXT void SetSessionPropertiesFromTransport(NetworkSessionProperties properties);
 
-        enum class NetworkSessionOperation { Create, Find, Join };
+        enum class NetworkSessionOperation { Create, Find, Join, JoinInvited };
 
         /**
          * @brief Internal IAsyncResult implementation backing NetworkSession's Begin/End pairs.
@@ -987,8 +987,16 @@ namespace Microsoft::Xna::Framework::Net
         static std::vector<GamerServices::SignedInGamer*> ServiceLocalGamers(
             int maxLocalGamers, const std::optional<std::vector<GamerServices::SignedInGamer*>>& gamers);
         static System::IAsyncResult* QueueServiceSearch();
-        static System::IAsyncResult* QueueOnlineSession(const AvailableNetworkSession* target);
+        static System::IAsyncResult* QueueOnlineSession(const std::string& session, const std::string& invite);
         static NetworkSession* CompleteOnlineSession(NetworkSessionAction* action);
+        static System::IAsyncResult* QueueInvitedSession(
+            int maxLocalGamers, std::optional<std::vector<GamerServices::SignedInGamer*>> localGamers,
+            System::AsyncCallback callback, std::any asyncState);
+        // Guide acceptance sink: raises InviteAccepted, or keeps it until the first subscription.
+        static bool InstallInviteSink();
+        static void DeliverInviteAccepted(GamerServices::SignedInGamer* gamer, const std::string& session);
+        static std::optional<GamerServices::InviteAcceptedEventArgs> pendingInviteAccepted_;
+        static bool inviteSinkInstalled_;
         // Authenticated PlayerMatch/Ranked projection; absent for Local/SystemLink sessions.
         std::unique_ptr<CNA::Internal::Net::OnlineSessionBinding> online_;
         static NetworkSessionAction* activeAction_;

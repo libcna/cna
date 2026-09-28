@@ -6,6 +6,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
 #include "CNA/Internal/GamerServices/ServiceUpdateSubscription.hpp"
+#include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
 #include "../Internal/GuideOverlay.hpp"
@@ -96,6 +97,9 @@ void GamerServicesDispatcher::Update() {
         }catch(...){if(!firstError)firstError=std::current_exception();}
     }
     try {CNA::Internal::GamerServices::dispatchServiceUpdates();}
+    catch(...) {if(!firstError)firstError=std::current_exception();}
+    // Invitation prompts and InviteAccepted belong to the outer update, never a nested End pump.
+    try {CNA::Internal::GamerServices::pumpInvitations();}
     catch(...) {if(!firstError)firstError=std::current_exception();}
     if(firstError)std::rethrow_exception(firstError);
 }

@@ -312,4 +312,5 @@ void ServiceENetSession::send(unsigned char sender,unsigned char target,const st
 bool ServiceENetSession::ready()const{impl_->checkOwner();return impl_->ready;}
 const ServiceSessionSnapshot& ServiceENetSession::snapshot()const{impl_->checkOwner();return impl_->current;}
 std::uint64_t ServiceENetSession::rejected()const{impl_->checkOwner();return impl_->rejected;}
+const std::shared_ptr<IGamerServicesBackend>& ServiceENetSession::origin()const{return impl_->lease->backend();}
 }

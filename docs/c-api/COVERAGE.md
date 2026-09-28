@@ -12,7 +12,7 @@ or renamed module stops this gate rather than inheriting a default. Paths whose 
 are `Internal` or `Detail` in any capitalization are excluded as implementation detail.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **472 headers**, **8140 symbols**, **7054 implemented**, **15 partial**, **640 planned**, **431 not applicable**. Explicitly excluded headers: **473**.
+Snapshot: **472 headers**, **8141 symbols**, **7054 implemented**, **15 partial**, **640 planned**, **432 not applicable**. Explicitly excluded headers: **474**.
 
 ## Out of runtime C API scope
 
@@ -34,7 +34,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/core` internal/detail paths | 7 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/devices` internal/detail paths | 13 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/devices-ext` internal/detail paths | 1 | implementation detail: a path segment is `Internal` or `Detail` |
-| `modules/gamer-services` internal/detail paths | 5 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/gamer-services` internal/detail paths | 6 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/graphics` internal/detail paths | 36 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/graphics-ext` internal/detail paths | 2 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/input` internal/detail paths | 4 | implementation detail: a path segment is `Internal` or `Detail` |
@@ -44,7 +44,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `c760aa8019c45e5773921e85554e173c2a2f229bd467b8c7684951a2899042e3`.
+Full inventory SHA-256: `aa6639d7dff6bffb83efe7ba6112cf1ca4b85834b3cb9e28f9b574d26954368d`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:
@@ -68,7 +68,7 @@ owner, hashes the complete matrix, and compares this summary. The CTest
 | `core` | 15 | 140 | 134 | 0 | 0 | 6 |
 | `devices` | 20 | 217 | 187 | 0 | 2 | 28 |
 | `devices-ext` | 17 | 84 | 79 | 0 | 0 | 5 |
-| `gamer-services` | 55 | 698 | 637 | 0 | 21 | 40 |
+| `gamer-services` | 55 | 699 | 637 | 0 | 21 | 41 |
 | `graphics` | 143 | 2938 | 2606 | 0 | 269 | 63 |
 | `graphics-ext` | 11 | 110 | 68 | 0 | 40 | 2 |
 | `input` | 51 | 894 | 836 | 0 | 30 | 28 |

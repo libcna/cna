@@ -1055,13 +1055,12 @@ TEST(NetworkSessionTest, BeginJoinInvitedValidatesMaxLocalGamers) {
     );
 }
 
-// Both JoinInvited overloads refuse: nothing raises NetworkSession::InviteAccepted, which is the
-// only place XNA's contract calls JoinInvited from, so no invitation can ever be pending. This
-// overload used to succeed and return a PlayerMatch session built out of nothing -- no invitation
-// token, no host address, no transport -- which is the behaviour SAMPLE-096 measured against the
-// real XNA runtime (see misc/known_gaps.md). The per-type sweep lives in
-// NetworkSessionTypePolicyTests.cpp; these two cases pin the argument-validation ordering and the
-// EndJoinInvited half that no Begin can now feed.
+// Without a configured CNA service no Guide invitation can have been accepted, so both
+// JoinInvited overloads refuse before doing anything. This overload used to succeed and return a
+// PlayerMatch session built out of nothing -- no invitation, no host, no transport -- which is not
+// what SAMPLE-096 observed. The accepted-invitation path (Guide acceptance -> InviteAccepted ->
+// JoinInvited) is covered by OnlineInvitationTest and the real two-process service E2E; these two
+// cases pin the unconfigured refusal and that EndJoinInvited refuses another family's result.
 TEST(NetworkSessionTest, JoinInvitedWithExplicitLocalGamersRefuses) {
     auto gamer = MakeSignedInGamer();
     EXPECT_THROW(
@@ -1071,9 +1070,9 @@ TEST(NetworkSessionTest, JoinInvitedWithExplicitLocalGamersRefuses) {
 }
 
 TEST(NetworkSessionTest, EndJoinInvitedRefusesAnyResultBecauseNoBeginCanProduceOne) {
-    // A BeginCreate result compares equal to activeAction_, so before the refusal this was a way
-    // around it: EndJoinInvited hardcoded a PlayerMatch session regardless of which Begin* had
-    // produced the action.
+    // A BeginCreate result compares equal to activeAction_, so this was once a way around the
+    // refusal: EndJoinInvited hardcoded a PlayerMatch session regardless of the producing Begin*.
+    // The operation-family guard now refuses any result that BeginJoinInvited did not produce.
     auto gamer = MakeSignedInGamer();
     System::IAsyncResult* createResult = NetworkSession::BeginCreate(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0,
@@ -1091,10 +1090,9 @@ TEST(NetworkSessionTest, EndJoinInvitedRefusesAnyResultBecauseNoBeginCanProduceO
 }
 
 TEST(NetworkSessionTest, EndJoinInvitedWithMismatchedResultThrows) {
-    // BeginJoinInvited now refuses, so there is no matching result to contrast the mismatched one
-    // against; EndJoinInvited refuses every result for that reason. The positive half of this
-    // pair lives in EndJoinInvitedRefusesAnyResultBecauseNoBeginCanProduceOne, which proves a
-    // real pending action survives the refusal.
+    // A pointer no Begin* produced is refused without being dereferenced. The accepted-invitation
+    // half lives in OnlineInvitationTest; EndJoinInvitedRefusesAnyResultBecauseNoBeginCanProduceOne
+    // proves a real pending action of another family survives the refusal.
     auto* bogus = reinterpret_cast<System::IAsyncResult*>(0x1);
     EXPECT_THROW((void)NetworkSession::EndJoinInvited(bogus), System::ArgumentException);
 }

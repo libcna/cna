@@ -8,6 +8,7 @@
 #include "Microsoft/Xna/Framework/Net/NetworkSessionJoinException.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
 #include <algorithm>
 #include <mutex>
 
@@ -106,6 +107,8 @@ void OnlineSessionBinding::project(const ServiceENetObservation& ready) {
     apply(snapshot_,true);
     desiredState_=observedState_=snapshot_.state;
     if(host_)requested_=desired();
+    // Guide invitations target the session this process currently belongs to.
+    setActiveOnlineSession(ActiveOnlineSession{snapshot_.session,snapshot_.kind,users_,engine_->origin()});
 }
 NetworkGamer* OnlineSessionBinding::addRemote(const RosterEntry& entry) {
     const auto* row=member(snapshot_,entry.WireId);
@@ -213,5 +216,8 @@ void OnlineSessionBinding::send(NetworkGamer* sender,NetworkGamer* target,const 
 void OnlineSessionBinding::requestState(NetworkSessionState state) {
     desiredState_=state==NetworkSessionState::Playing?ServiceSessionState::Playing:ServiceSessionState::Lobby;
 }
-void OnlineSessionBinding::close() noexcept {engine_.reset();}
+void OnlineSessionBinding::close() noexcept {
+    if(const auto& active=activeOnlineSession();active&&active->session==snapshot_.session)setActiveOnlineSession(std::nullopt);
+    engine_.reset();
+}
 }

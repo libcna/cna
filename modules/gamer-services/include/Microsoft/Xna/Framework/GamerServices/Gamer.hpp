@@ -10,6 +10,7 @@
 #include <string>
 
 namespace Microsoft::Xna::Framework::Net { class NetworkSession; class LocalNetworkGamer; }
+namespace CNA::Internal::GamerServices { class GamerAccess; }
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
@@ -256,6 +257,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         };
 
         friend class GamerServicesDispatcher;
+        friend class CNA::Internal::GamerServices::GamerAccess;
         friend class LeaderboardReader;
         friend class LeaderboardWriter;
         friend class Microsoft::Xna::Framework::Net::NetworkSession;

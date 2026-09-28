@@ -67,6 +67,8 @@ public:
     bool ready() const;
     /** @brief Gets current authenticated metadata. @return Owner-thread snapshot. */
     const GamerServices::ServiceSessionSnapshot& snapshot() const;
+    /** @brief Gets the backend that owns this membership. @return Retained origin. */
+    const std::shared_ptr<GamerServices::IGamerServicesBackend>& origin() const;
     /** @brief Gets rejected source/control/application packet count. @return Cumulative drops. */
     std::uint64_t rejected() const;
 private:

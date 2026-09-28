@@ -932,8 +932,10 @@ TEST(GuideTest, ShowMethodsDoNotThrow) {
     EXPECT_NO_THROW(Guide::ShowComposeMessage(PlayerIndex::One, "hi", {}));
     EXPECT_THROW(Guide::ShowFriendRequest(PlayerIndex::One, nullptr), GamerServicesNotAvailableException);
     EXPECT_THROW(Guide::ShowFriends(PlayerIndex::One), GamerServicesNotAvailableException);
-    EXPECT_NO_THROW(Guide::ShowGameInvite(PlayerIndex::One, std::vector<Gamer*>{}));
-    EXPECT_NO_THROW(Guide::ShowGameInvite(std::string("session-id")));
+    // Invitations need the configured service; the session-ID overload is Windows Phone only.
+    EXPECT_THROW(Guide::ShowGameInvite(PlayerIndex::One, std::vector<Gamer*>{}), GamerServicesNotAvailableException);
+    EXPECT_THROW(Guide::ShowGameInvite(PlayerIndex::One, std::vector<Gamer*>{nullptr}), System::ArgumentException);
+    EXPECT_THROW(Guide::ShowGameInvite(std::string("session-id")), System::NotSupportedException);
     EXPECT_THROW(Guide::ShowGamerCard(PlayerIndex::One, nullptr), GamerServicesNotAvailableException);
     EXPECT_NO_THROW(Guide::ShowMarketplace(PlayerIndex::One));
     EXPECT_NO_THROW(Guide::ShowMessages(PlayerIndex::One));
