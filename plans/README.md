@@ -56,21 +56,17 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 
 ## Graphics backends and renderers
 
-- [`plan_renderer_cleanup.md`](plan_renderer_cleanup.md) — retirement of 28 renderer identities and the
+- [`plan_renderer_cleanup.md`](plan_renderer_cleanup.md) — retirement of 32 renderer identities and the
   curated renderer set that remains.
 - [`plan_canvas.md`](plan_canvas.md) — HTML Canvas 2D.
 - [`plan_dx.md`](plan_dx.md) — Direct3D 11 and Direct3D 12.
 - [`plan_dx9.md`](plan_dx9.md) — Direct3D 9.
-- [`plan_gdi.md`](plan_gdi.md) — Win32 GDI.
 - [`plan_headless.md`](plan_headless.md) — headless rendering.
-- [`plan_html_dom.md`](plan_html_dom.md) — HTML DOM rendering.
 - [`plan_metal.md`](plan_metal.md) — native Metal.
-- [`plan_opengl4.md`](plan_opengl4.md) — desktop OpenGL 4.
 - [`plan_opengles2.md`](plan_opengles2.md) — the OpenGL ES 2.0 profile of the EasyGL family.
 - [`plan_sdlgpu.md`](plan_sdlgpu.md) — SDL GPU.
 - [`plan_software.md`](plan_software.md) — CPU software rasterizer.
 - [`plan_stub.md`](plan_stub.md) — no-op stub renderer.
-- [`plan_svg_dom.md`](plan_svg_dom.md) — SVG DOM rendering.
 - [`plan_vulkan.md`](plan_vulkan.md) — Vulkan renderer parity, correctness, validation and
   EasyGL-equivalence plan.
 - [`plan_webgpu.md`](plan_webgpu.md) — WebGPU.
@@ -83,7 +79,9 @@ These renderers no longer exist in CNA (`docs/removed-renderers.md`). Their plan
 record of the work; each carries a retired banner, and none of them describes current support.
 Their standalone probes were removed from the current `spikes/` tree under
 `plan_renderer_cleanup.md` RRC-011; probe paths inside historical plans refer to Git history.
-Skia's own plan was deleted with that renderer in 2026-08; the tombstone is the record.
+Skia's own plan was deleted with that renderer in 2026-08, and the plans of `GDI`, `HTML_DOM`,
+`SVG_DOM` and `OPENGL4` with those renderers on 2026-09-28; `docs/removed-renderers.md` and Git
+history are their record.
 
 - [`plan_ascii.md`](plan_ascii.md) — the former ASCII renderer identity, replaced by a
   renderer-neutral post-process effect.

@@ -438,10 +438,10 @@ individual task. Do not push unless the user explicitly asks to push.
 | Renderer implementations  | `modules/renderers/<family>/{src,include}/…`                    | Hidden from XNA API            |
 | CNA utilities             | `modules/core/include/CNA/…`, `modules/*-ext/…`                 | CNAEXT helpers, logging, etc.  |
 
-Renderer selection is compile-time via the `CNA_GRAPHICS_RENDERER` CMake option (22 public identities
-including `SDL_RENDERER`, `OPENGL33`, `OPENGL4`, `VULKAN`, `WEBGPU`, `DIRECTX9/11/12`, `METAL`,
+Renderer selection is compile-time via the `CNA_GRAPHICS_RENDERER` CMake option (18 public identities
+including `SDL_RENDERER`, `OPENGL33`, `VULKAN`, `WEBGPU`, `DIRECTX9/11/12`, `METAL`,
 `FNA3D`, `SOFTWARE`, `HEADLESS`, …; the canonical list is `cmake/RendererIdentities.cmake`, and
-`docs/removed-renderers.md` lists the twenty-nine retired ones, whose selectors are refused by name). A second opt-in mode compiles
+`docs/removed-renderers.md` lists the thirty-three retired ones, whose selectors are refused by name). A second opt-in mode compiles
 several renderers into one binary and selects at runtime (`CNA_GRAPHICS_RENDERERS`). `WEBGPU` is
 experimental but well past a 2D baseline — desktop 3D with every stock effect (incl. fog parity across
 BasicEffect/AlphaTest/DualTexture/EnvironmentMap/Skinned), instancing, `RenderTarget2D`/`RenderTargetCube`,

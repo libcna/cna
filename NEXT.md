@@ -1,5 +1,14 @@
 # NEXT.md
 
+> **RRC-014..RRC-017 renderer retirement (2026-09-28):** `GDI`, `HTML_DOM`, `SVG_DOM` and
+> `OPENGL4` are retired by owner decision, not replaced: **18 public renderer identities over 14
+> implementation families** remain, C ABI `0.33.0`, values 18/33/40/44 permanently reserved,
+> `CNA_GRAPHICS_RENDERER_MAXIMUM` = 43 (`FNA3D`). The GDI-only reduced Software build
+> (`CNA_SOFTWARE_2D_ONLY`) is gone; `SOFTWARE` is one full implementation, and the Software
+> contracts only GDI's suite tested now live in the Software suite. `OPENGL33` stays the desktop GL
+> identity (no EasyGL OpenGL 4 profile). Record: `docs/removed-renderers.md`; tasks:
+> `plans/plan_renderer_cleanup.md`.
+
 > **FULLSCREEN-002 DirectX9 motion/presentation (2026-09-28):** Successful native resize
 > resets invalidate retained blend/depth/rasterizer state without another public Reset event.
 > Logical viewport/projection is independent of physical presentation; Letterbox/input and

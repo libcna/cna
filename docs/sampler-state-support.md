@@ -341,10 +341,6 @@ descriptor set 1), which is why the two renderers have sibling tests rather than
 Asserted by `modules/renderers/easygl/examples/easygl_texture3d_addressw_test.cpp`
 (`EasyGL_Texture3DAddressW`), the sibling of `Vulkan_Texture3DAddressW`.
 
-**Still unmeasured:** `OpenGL4` implements `BindTexture3D` and
-reports `false` from `SupportsTexture3DSamplingEXT()`. It under-claims rather than over-claims until
-someone runs a volume through it; tracked as `plans/plan_vulkan.md` VULKAN-167.
-
 Pixel-proven on Vulkan by `Vulkan_ShaderEffect_PerUnitSampler`
 (`modules/renderers/vulkan/examples/vulkan_shader_effect_per_unit_sampler_test.cpp`): two 1×1×2
 volumes bound to units 0 and 1 of one `ShaderEffect`, sampled at `W = 1.25`, with `AddressW = Wrap`

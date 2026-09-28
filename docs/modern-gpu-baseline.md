@@ -1,5 +1,9 @@
 # Modern GPU implementation baseline
 
+> `OPENGL4` was retired on 2026-09-28 (`docs/removed-renderers.md`). Its columns below are the
+> historical 2026-09-09 measurement; `cna_probe_modern_gpu_capabilities` is now registered for the
+> `OPENGLES3` and `VULKAN` configurations only.
+
 This document is the implementation re-baseline required by
 `plans/plan_modern.md` `MOD-2201`. It records what CNA actually shipped immediately before the
 Phase 22 resource/API work started, so later tasks extend the existing seams instead of creating

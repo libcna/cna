@@ -558,18 +558,18 @@ task/evidence log is `plans/plan_platform.md`.
 
 Renderer selection is compile-time via `CNA_GRAPHICS_RENDERER` CMake option
 (`SDL_RENDERER` | `OPENGLES2` | `OPENGLES3` | `OPENGL33` | `WEBGL1` | `WEBGL2` | `VULKAN` | `WEBGPU` |
-`HEADLESS` | `SOFTWARE` | `STUB` | `DIRECTX11` | `DIRECTX12` | `CANVAS` | `HTML_DOM` |
-`DIRECTX9` | `SDL_GPU` | `OPENGL4` | `GDI` | `METAL` | `FNA3D` | `SVG_DOM`). These are exactly
-**22 public identities** over 18 implementation families; EasyGL remains an internal implementation
-shared by five GL profiles. The canonical list lives in
+`HEADLESS` | `SOFTWARE` | `STUB` | `DIRECTX11` | `DIRECTX12` | `CANVAS` | `DIRECTX9` | `SDL_GPU` |
+`METAL` | `FNA3D`). These are exactly **18 public identities** over 14 implementation families;
+EasyGL remains an internal implementation shared by five GL profiles. The canonical list lives in
 `cmake/RendererIdentities.cmake` and is pinned by `scripts/check_renderer_identities.py`.
 
 CNA intentionally maintains a curated renderer set. A new renderer is added only when it provides
 meaningful platform coverage, compatibility value, architectural value, or a capability not
-reasonably covered by the existing set -- never because the count would grow. Twenty-nine identities
+reasonably covered by the existing set -- never because the count would grow. Thirty-three identities
 are retired (`BGFX`, `MAGNUM`, `SKIA`, `BLEND2D`, `DIRECTX1`/`2`/`3`/`5`/`6`/`7`/`8`/`10`,
 `OPENGLES1`, `OPENGL1`, `OPENGL2`, `WICKED`, `SOKOL`, `DILIGENT`, `GLIDE`, `LLGL`, `OPENVG`,
-`TINYGL`, `IGL`, `PIXIJS`, `NANOVG`, `RLGL`, `DIRECT2D`, `FREEDIRECT`, `PORTABLEGL`), and the
+`TINYGL`, `IGL`, `PIXIJS`, `NANOVG`, `RLGL`, `DIRECT2D`, `FREEDIRECT`, `PORTABLEGL`, `GDI`,
+`HTML_DOM`, `SVG_DOM`, `OPENGL4`), and the
 former `ASCII` identity was replaced by the renderer-neutral `CNA::Graphics::AsciiPostProcessEffect`
 (`modules/graphics-ext/`, see `docs/ascii-post-process-effect.md`). A retired selector is refused at configure time, by name and
 with its permanently reserved C ABI value; its number is never reassigned. Do not resurrect one
@@ -666,7 +666,7 @@ sudo apt-get install -y libavcodec-dev libavformat-dev libavutil-dev libswresamp
 # CNA implements YUV→RGBA conversion internally and does NOT depend on libswscale headers.
 
 # Desktop OpenGL and X11 development headers -- needed by the desktop GL renderers (OPENGL33,
-# OPENGL4, OPENGLES2/3) and by the X11 platform backend.
+# OPENGLES2/3) and by the X11 platform backend.
 sudo apt-get install -y libgl1-mesa-dev libglx-dev libx11-dev
 
 # Draco — optional, enables KHR_draco_mesh_compression decoding in GltfImportCore

@@ -42,9 +42,6 @@ on it) rather than assuming either way.
 - **[`canvas-renderer.md`](canvas-renderer.md)** — current status for the Emscripten-only HTML Canvas
   2D renderer, incl. a manual browser verification checklist (this dev loop has no real browser DOM
   to pixel-verify against); detailed task breakdown is in `../plans/plan_canvas.md`.
-- **[`html-dom-renderer.md`](html-dom-renderer.md)** — current status for the Emscripten-only HTML DOM
-  renderer, which renders SpriteBatch output as pooled CSS-transformed `<div>` elements instead of
-  rasterizing into a canvas; detailed task breakdown is in `../plans/plan_html_dom.md`.
 - **[`xna-4-runtime-member-coverage.md`](xna-4-runtime-member-coverage.md)** — current
   Microsoft-reference runtime type and member census, with every missing declaration listed;
   the separate [Content Pipeline parity report](xna-content-pipeline-parity-report.md) covers build-time APIs.
@@ -133,8 +130,6 @@ Kept for their investigation methodology and root-cause detail, not as current s
 - `canvas-renderer.md` — the CANVAS (HTML Canvas 2D) renderer's own completeness status; unlike the
   others here, its ✅ marks mean "implemented and structurally reviewed," not "pixel-verified" — see
   the doc's own caveat.
-- `html-dom-renderer.md` — the HTML_DOM (DOM/CSS) renderer's own capability status; its ✅ marks are
-  backed by a real headless-browser run, not only a structural review.
 - **[`ascii-post-process-effect.md`](ascii-post-process-effect.md)** — `CNA::Graphics::AsciiPostProcessEffect`,
   the renderer-neutral ASCII/glyph-grid post-process effect (`modules/graphics-ext/`) that replaced
   the former `ASCII` graphics-renderer identity.

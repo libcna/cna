@@ -32,7 +32,7 @@ renderer count is not a goal.
 | RRC-014 | Move the Software contracts only the GDI suite held into the Software suite | ✅ |
 | RRC-015 | Retire `GDI`, `HTML_DOM`, `SVG_DOM` and `OPENGL4`: remove their families and every integration that existed only for them | ✅ |
 | RRC-016 | Remove `CNA_SOFTWARE_2D_ONLY`, the reduced Software build that existed only for `GDI` | ✅ |
-| RRC-017 | Remove the four renderers' documents, plans and handoffs; one retirement record | ⬜ |
+| RRC-017 | Remove the four renderers' documents, plans and handoffs; one retirement record | ✅ |
 
 **2026-09-19 owner decision (`RRC-011`).** Retired renderer probes and the rejected Three.js
 candidate probe no longer belong in the current `spikes/` tree. The earlier archive-retention
@@ -1003,3 +1003,41 @@ failures being the pre-existing ones classified in `RRC-015`; then, reconfigured
 `CNA_SOFTWARE_COMPILED_EFFECTS=ON` (MojoShader from the shared `~/deps/FNA3D` pin), all 208
 Software-labelled, compiled-effect and Software gtest cases pass, including
 `Software_CompiledEffectRuntime`.
+
+## RRC-017 — Documentation: one retirement record, no archive
+
+The four renderers' own documents, plans and handoff were deleted, not marked retired: Git history
+is the archive (`docs/{gdi,html-dom,svg-dom,opengl4}-renderer.md`, `NEXT_gdi.md`,
+`plans/plan_{gdi,html_dom,svg_dom,opengl4,opengl4_modern_graphics,street_opengl4}.md`, 6,017
+lines). `docs/removed-renderers.md` carries the one concise record: identity, retired value, date,
+reason and the coverage that remains, plus the shared-code outcome. Active documents that listed
+the four as current were corrected (README, CLAUDE/AGENTS, indexes, feature matrices, platform
+notes, glTF limits, CHANGELOG, NEXT); open plan rows that depended on them are withdrawn with the
+reason in the row (`plan_modern.md`, `plan_csl.md`). Dated history -- task rows, ledgers,
+retrospectives, `integration/`, `modularization/`, `remediation/` -- is left as written.
+
+**Verification of the whole retirement** (after `RRC-016`):
+
+- `cmake-build-multi` (`OPENGL33` default, `VULKAN`, `SOFTWARE`, `HEADLESS`, `STUB`) configures and
+  builds; its `CnaTests` corpus on the private display's real GPU passes 10,210 of 10,232 (the hung
+  Guide case excluded). The 22 failures: four `EasyGLRedundantStateTest` aborts measured identically
+  at the parent commit; three `IndexedDrawDeferredTest` strip cases whose Vulkan-only block is gated
+  on Vulkan being compiled in rather than active (a multi-tree test defect this change does not
+  touch); the WebGPU policy evidence and glTF L0 from `RRC-015`; shared-`/tmp` and host collisions
+  (four Unicode-path cases, a storage sentinel, the content-CLI staging scavenger, a keyboard
+  orientation case, the Wine differential timeout); and load-sensitive ENet and audio cases.
+- A MinGW-w64 cross-build (`cmake-build-d3d11`: `DIRECTX11`, `DIRECTX12`, `SOFTWARE`, `HEADLESS`)
+  compiles 535 units and links; under Wine its renderer benchmark runs with `SOFTWARE` and with
+  `DIRECTX11`, each selected at runtime. That tree now has `CNA_ENABLE_NET=OFF`: networking needs a
+  MinGW CURL this host does not have, a requirement added after the tree was last configured.
+- A case-insensitive scan for every spelling of the four names leaves only the retired-identity
+  machinery (tables, reserved-value comments, refusal tests), `docs/removed-renderers.md` and this
+  plan, one test note marked historical, Windows API facts (the Win32 platform's GDI surface
+  presenter, GDI+, `gdi32`, GDI-object accounting, the D3D/GDI line rule, the `gdi` abbreviation of
+  `GraphicsDeviceInformation`), substrings of unrelated words, and dated history (task rows,
+  ledgers, retrospectives, `integration/`, `modularization/`, `remediation/`, `audit/`).
+- Found, not fixed (outside scope): the full ctest run rewrites
+  `docs/xna-content-pipeline-parity-report.md` and deletes
+  `tests/assets/media/video/video_xnb_object_fixture.xnb`; the renderer benchmark's banner names
+  the compile-time default rather than the runtime renderer; `check_renderer_configure_sweep.sh`
+  parses identities from a STRINGS line that no longer lists them literally.

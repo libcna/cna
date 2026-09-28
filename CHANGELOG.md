@@ -70,6 +70,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
   unchanged. Their C ABI values 16, 21 and 46 are permanently reserved,
   `CNA_GRAPHICS_RENDERER_MAXIMUM` moves to 44 (`SVG_DOM`), and the experimental C ABI goes to
   `0.31.0`; no surviving identity is renumbered.
+- **Four more renderer identities**, `GDI`, `HTML_DOM`, `SVG_DOM` and `OPENGL4`, leaving 18 public
+  identities over 14 implementation families: their implementation families, examples and tests,
+  the GDI Windows and HTML DOM browser CI jobs, the DOM browser scripts, the OpenGL4 GL-error test
+  gate, the GDI-only reduced Software build (`CNA_SOFTWARE_2D_ONLY`) and their documentation
+  ([`docs/removed-renderers.md`](docs/removed-renderers.md)). None is replaced: `OPENGL33` stays
+  CNA's desktop OpenGL identity with its 3.3 contract, and there is no EasyGL OpenGL 4 profile.
+  `SOFTWARE` keeps its full CPU renderer; the Software contracts only GDI's suite had tested moved
+  into the Software suite. `ColorMatrixEffect` is now documented as a `SOFTWARE` extension. Their C
+  ABI values 18, 33, 40 and 44 are permanently reserved, `CNA_GRAPHICS_RENDERER_MAXIMUM` moves to
+  43 (`FNA3D`), and the experimental C ABI goes to `0.33.0`; no surviving identity is renumbered.
 
 ### Changed
 

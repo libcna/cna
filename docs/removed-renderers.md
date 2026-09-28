@@ -8,8 +8,9 @@ were excellent reconnaissance; what is kept here is the finding, not the code.
 
 **The code is not gone.** Each entry names the commit that removed it; the parent of that commit
 holds the whole implementation (`git show <commit>^:modules/renderers/<family>/...`, or
-`git checkout <commit>^ -- modules/renderers/<family>`). The per-renderer plans stay in `plans/`
-as history, marked retired. What git does *not* preserve is the third-party project each renderer
+`git checkout <commit>^ -- modules/renderers/<family>`). Plans of renderers retired up to
+2026-09-27 stay in `plans/` as history, marked retired; those of the 2026-09-28 retirement were
+deleted with their renderers and live only in git history. What git does *not* preserve is the third-party project each renderer
 wrapped, so every entry records the exact dependency it was pinned to. That pairing — CNA's code in
 git history, the dependency's coordinates here — is the archive.
 
@@ -34,6 +35,7 @@ and in `scripts/check_renderer_identities.py` (which fails if a value or a name 
 | 7 | `BGFX` | 2026-09-17 |
 | 10 | `MAGNUM` | 2026-09-17 |
 | 16 | `DIRECT2D` | 2026-09-27 |
+| 18 | `HTML_DOM` | 2026-09-28 |
 | 19 | `SKIA` | 2026-08-30 |
 | 20 | `BLEND2D` | 2026-09-17 |
 | 21 | `FREEDIRECT` | 2026-09-27 |
@@ -46,13 +48,16 @@ and in `scripts/check_renderer_identities.py` (which fails if a value or a name 
 | 29 | `DIRECTX8` | 2026-09-17 |
 | 30 | `DIRECTX10` | 2026-09-17 |
 | 32 | `OPENGLES1` | 2026-09-17 |
+| 33 | `OPENGL4` | 2026-09-28 |
 | 34 | `OPENGL1` | 2026-09-17 |
 | 35 | `OPENGL2` | 2026-09-17 |
 | 36 | `WICKED` | 2026-09-17 |
 | 37 | `SOKOL` | 2026-09-17 |
 | 38 | `DILIGENT` | 2026-09-17 |
 | 39 | `GLIDE` | 2026-09-17 |
+| 40 | `GDI` | 2026-09-28 |
 | 41 | `LLGL` | 2026-09-17 |
+| 44 | `SVG_DOM` | 2026-09-28 |
 | 45 | `OPENVG` | 2026-09-17 |
 | 46 | `PORTABLEGL` | 2026-09-27 |
 | 47 | `TINYGL` | 2026-09-17 |
@@ -61,15 +66,52 @@ and in `scripts/check_renderer_identities.py` (which fails if a value or a name 
 | 50 | `NANOVG` | 2026-09-17 |
 | 51 | `RLGL` | 2026-09-17 |
 
-The C ABI went to `0.28.0` for the 2026-09-17 retirement and to `0.31.0` for the 2026-09-27 one
-(`docs/c-api/ABI_VERSIONING.md`).
+The C ABI went to `0.28.0` for the 2026-09-17 retirement, to `0.31.0` for the 2026-09-27 one and
+to `0.33.0` for the 2026-09-28 one (`docs/c-api/ABI_VERSIONING.md`).
+
+## The 2026-09-28 retirement
+
+An owner decision to reduce CNA's maintenance surface for long-term human development: `GDI`,
+`HTML_DOM`, `SVG_DOM` and `OPENGL4` were removed in `261cb5f7f` (`RRC-015`), and the reduced
+Software build that existed only for `GDI` in `590ac27c8` (`RRC-016`). None is replaced. CNA keeps
+18 public renderer identities over 14 implementation families; EasyGL implements five of them.
+
+| Identity | C ABI | Reason | Coverage that remains |
+|---|---:|---|---|
+| `GDI` | 40 | Windows-specific duplicate 2D path: Software's CPU 2D rasterizer presented through Win32 GDI. | The full CPU `SOFTWARE` renderer for deterministic/reference rasterization; `DIRECTX9`/`11`/`12`, `SDL_RENDERER` and `SDL_GPU` for Windows presentation. |
+| `HTML_DOM` | 18 | Specialized browser DOM/CSS 2D path (pooled `<div>` sprites). | `CANVAS`, `WEBGL1`/`WEBGL2` and `WEBGPU` in the browser. |
+| `SVG_DOM` | 44 | Specialized, experimental SVG DOM 2D path. | `CANVAS`, `WEBGL1`/`WEBGL2` and `WEBGPU` in the browser. |
+| `OPENGL4` | 33 | A second desktop GL implementation overlapping EasyGL. | `OPENGL33` stays CNA's desktop OpenGL identity with its 3.3 contract (there is deliberately no EasyGL OpenGL 4 profile); modern-GPU work is covered by `VULKAN`, `DIRECTX12`, `METAL`, `WEBGPU` and `SDL_GPU`. |
+
+**Shared code.** `GDI` recompiled eight Software CPU-2D units with `CNA_SOFTWARE_2D_ONLY`; that
+mode, `SoftwareRenderer2D.cpp`, the `CNA_GDI_SOFTWARE_SOURCES` list, the
+`cna_renderer_software_headers` target, the `GDI`+`SOFTWARE` combination rule and the Software
+hooks only `GDI` overrode are gone, and `SOFTWARE` compiles one full implementation. The Software
+contracts only `GDI`'s suite had tested (allocation layouts and refusals, `ColorMatrixEffect`)
+moved into the Software suite first (`RRC-014`). The two GL headers `OPENGL4` shared with EasyGL
+(`GlStockShaderSources.hpp`, `GlPresentationSurfaceState.hpp`) moved back under
+`modules/renderers/easygl`. No browser harness was shared: the Emscripten multi-renderer CI job
+now builds `WEBGL2`+`WEBGL1`+`CANVAS`.
+
+**Validation** (Linux x86-64). The identity, ABI, combination and discipline gates pass, and a real
+configure refuses each name, with its value, on every selection route before any dependency is
+built. `SOFTWARE` (`cmake-build-software`): the full ctest corpus passes except 8 failures that
+predate this change, every Software test green, and all 208 Software and compiled-effect cases with
+`CNA_SOFTWARE_COMPILED_EFFECTS=ON`. `cmake-build-multi` (`OPENGL33` default, `VULKAN`, `SOFTWARE`,
+`HEADLESS`, `STUB`) builds, and its `CnaTests` corpus on the real GPU fails only on causes measured
+or traced to before this change or to the shared host. The `WEBGL2`+`WEBGL1`+`CANVAS` wasm bundle
+builds and each renderer runs in headless Chrome. A MinGW-w64 cross-build of `DIRECTX11`,
+`DIRECTX12`, `SOFTWARE` and `HEADLESS` compiles and links, and under Wine its benchmark runs with
+`SOFTWARE` and with `DIRECTX11`. **Not run:** native Windows (MSVC, the
+`DIRECTX9`/`11`/`12` runtimes), macOS (`METAL`), and a WebGL-1-only browser. Details:
+`plans/plan_renderer_cleanup.md` `RRC-015`–`RRC-017`.
 
 ## The 2026-09-27 retirement
 
 An intentional, permanent scope reduction (`plans/plan_renderer_cleanup.md` `RRC-012`): `DIRECT2D`,
 `FREEDIRECT` and `PORTABLEGL` were removed in one commit, found with `git log --grep=RRC-012`, leaving
 22 public renderer identities over 18 implementation families. None of the three was replaced, and
-each was already covered by a renderer that stays:
+each was already covered by a renderer that stayed (`GDI` was itself retired on 2026-09-28):
 
 - `DIRECT2D`, a Windows 2D-only renderer, by `GDI` (Windows 2D), `DIRECTX9`/`DIRECTX11`/`DIRECTX12`
   (Windows GPU) and `SDL_RENDERER`.
@@ -205,7 +247,8 @@ stays:
   and SDL_GPU, and on the CPU through `SOFTWARE`.
 - **Duplicate CPU and browser routes** — `TINYGL` (covered by `SOFTWARE` and `PORTABLEGL`, the
   latter itself retired on 2026-09-27) and
-  `PIXIJS` (covered by `WEBGL2`, `CANVAS`, `HTML_DOM` and `SVG_DOM`).
+  `PIXIJS` (covered by `WEBGL2`, `CANVAS`, `HTML_DOM` and `SVG_DOM`, the last two themselves
+  retired on 2026-09-28).
 
 The sizes below count the family directory only; each renderer also had documentation, CI and
 scripts, removed or marked retired in the same workstream.
@@ -310,7 +353,8 @@ removed as dead code.
 
 **What they proved.** Desktop fixed-function GL 1.x (including real `ARB_occlusion_query`) and a
 GLSL 1.10 compatibility-profile renderer with runtime-resolved post-1.1 entry points
-(`plans/plan_opengl1.md`, `plans/plan_opengl2.md`). `OPENGL33` and `OPENGL4` cover desktop GL.
+(`plans/plan_opengl1.md`, `plans/plan_opengl2.md`). `OPENGL33` covers desktop GL (`OPENGL4` did too
+until its 2026-09-28 retirement).
 
 ### WICKED
 
