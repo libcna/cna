@@ -13,10 +13,12 @@
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "System/IServiceProvider.hpp"
+#include "System/InvalidOperationException.hpp"
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <optional>
+#include <sys/wait.h>
 #include <thread>
 #include <unistd.h>
 
@@ -158,3 +160,37 @@ TEST_F(SystemGuideTest, NothingOpensWhileTheGuideIsVisible) {
     Service::openSystemGuide(static_cast<PlayerIndex>(7));
     EXPECT_FALSE(Guide::getIsVisibleProperty());
 }
+
+TEST_F(SystemGuideTest, IsVisibleIsThePublicViewOfTheGuidePanes) {
+    Offline();
+    EXPECT_FALSE(Guide::getIsVisibleProperty());
+    auto* result = Guide::BeginShowMessageBox("Game", "Busy", {"OK"}, 0, MessageBoxIcon::None, {}, {});
+    EXPECT_TRUE(Guide::getIsVisibleProperty());
+    Guide::SimulateMessageBoxClickEXT(0);
+    EXPECT_FALSE(Guide::getIsVisibleProperty());
+    delete result;
+}
+
+// Reference Guide.IsVisible throws InvalidOperationException before gamer services are
+// initialized. Initialization cannot be undone in a process, so a fresh one observes it.
+#ifdef __linux__
+TEST(GuideVisibilityTest, IsVisibleRequiresInitializedGamerServices) {
+    if (std::getenv("CNA_TEST_GUIDE_VISIBLE_CHILD") != nullptr) {
+        ASSERT_FALSE(GamerServicesDispatcher::getIsInitializedProperty());
+        EXPECT_THROW((void)Guide::getIsVisibleProperty(), System::InvalidOperationException);
+        return;
+    }
+    const pid_t pid = fork();
+    ASSERT_GE(pid, 0);
+    if (pid == 0) {
+        setenv("CNA_TEST_GUIDE_VISIBLE_CHILD", "1", 1);
+        execl("/proc/self/exe", "cna-guide-visible",
+              "--gtest_filter=GuideVisibilityTest.IsVisibleRequiresInitializedGamerServices", static_cast<char*>(nullptr));
+        _exit(127);
+    }
+    int status = 0;
+    ASSERT_EQ(pid, waitpid(pid, &status, 0));
+    ASSERT_TRUE(WIFEXITED(status));
+    EXPECT_EQ(0, WEXITSTATUS(status));
+}
+#endif

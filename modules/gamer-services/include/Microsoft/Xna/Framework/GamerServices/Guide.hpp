@@ -62,15 +62,11 @@ namespace Microsoft::Xna::Framework::GamerServices
         static void setIsTrialModeProperty(bool value);
 
         /**
-         * @brief Gets whether the Guide overlay is currently visible.
+         * @brief Gets whether the Guide is currently visible: a message box, keyboard input,
+         * sign-in pane or any other Guide screen (including the system Guide) is up.
          *
-         * Unlike real XNA off-Xbox (and FNA, which always returns false - there is no system
-         * guide overlay to track), this reflects CNA's own real message-box/keyboard-input
-         * overlays: true whenever BeginShowMessageBox or BeginShowKeyboardInput has an operation
-         * pending. Matches this project's decision 1a reasoning (real observable behavior over a
-         * PC no-op stub) now that those two overlays are genuinely real, not stubs.
-         *
-         * @return true if a message box or keyboard input overlay is currently pending.
+         * @return true while a Guide screen is visible.
+         * @throws System::InvalidOperationException if gamer services are not initialized.
          */
         [[nodiscard]] static bool getIsVisibleProperty();
 

@@ -23,6 +23,10 @@ void openSystemGuide(Microsoft::Xna::Framework::PlayerIndex player);
 /** @brief Opens the system Guide on a new Home key or Guide-button press
  * (`CNA_GAMER_SERVICES_GUIDE_BUTTON=0` disables it). */
 void pollSystemGuideButton();
+/** @brief Reports whether any Guide pane is up, without the public getter's initialization check
+ * (the reference's IsVisibleNoThrow). @return True while a message box, keyboard, sign-in or
+ * social pane is visible. */
+bool guideIsVisible();
 /** @brief Opens a message box for the Guide's own panes, which the public argument rules
  * (Guide::BeginShowMessageBox: one to three buttons, text under 256 characters) do not bind.
  * @param player Player the pane belongs to. @param title Title. @param text Body text.

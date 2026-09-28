@@ -138,7 +138,7 @@ void pumpInvitations() {
     }
     if(!service||!service->serviceEnabled())return;
     if(!current.polling&&Clock::now()>=current.nextPoll)poll();
-    if(!current.prompting&&!current.accepting&&!Guide::getIsVisibleProperty()&&Clock::now()>=current.quietUntil)prompt();
+    if(!current.prompting&&!current.accepting&&!guideIsVisible()&&Clock::now()>=current.quietUntil)prompt();
 }
 void delayNotifications(long long milliseconds) {
     auto& current=state();const auto now=Clock::now();

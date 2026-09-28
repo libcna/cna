@@ -20,10 +20,10 @@ using Guide = Microsoft::Xna::Framework::GamerServices::Guide;
 class Overlay final : public CNA::Internal::Runtime::IGameOverlay {
 public:
     XnaGraphics::IGraphicsDeviceService* graphics=nullptr;
-    [[nodiscard]] bool isModalVisible() const override { return Guide::getIsVisibleProperty(); }
+    [[nodiscard]] bool isModalVisible() const override { return guideIsVisible(); }
     void reset() { batch_.reset(); font_.reset(); white_.reset(); device_=nullptr; }
     void draw() override {
-        if(!Guide::getIsVisibleProperty()||!graphics)return;
+        if(!guideIsVisible()||!graphics)return;
         auto* device=graphics->getGraphicsDeviceProperty();if(!device)return;
         if(device!=device_) {
             batch_=std::make_unique<XnaGraphics::SpriteBatch>(*device);

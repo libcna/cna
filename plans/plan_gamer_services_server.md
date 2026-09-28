@@ -2505,3 +2505,14 @@ the C struct field documents local ticks. CnaGamerServicesTests 485 + 1 skip.
   no collection and stay joinable (a CNA extension the C API and SystemLink tests use; XNA has no
   public constructor). Test `AvailableNetworkSessionCollectionTest.DisposingTheCollectionMakesItsListingsUnjoinable`;
   CnaNetTests 473/473.
+- [x] GS-005g `Guide.IsVisible` getter. Reference: it throws `InvalidOperationException` before
+  gamer services are initialized, and is true while any Guide screen is up. CNA answered false
+  instead of throwing. The public getter now checks initialization; the Guide's own checks (message
+  box/pane refusals, touch suppression, the overlay's modal flag, invitation prompts) use the
+  internal `guideIsVisible()` (the reference's `IsVisibleNoThrow`), so a message box still opens
+  without initialized gamer services where it did before. Tests that relied on another test having
+  initialized the dispatcher were made self-contained; `SystemGuideTest.IsVisibleIsThePublicViewOfTheGuidePanes`
+  and the fresh-process `GuideVisibilityTest.IsVisibleRequiresInitializedGamerServices`;
+  `cna_guide_get_is_visible` reports `CNA_RESULT_INVALID_STATE` before initialization (GuideSmoke).
+  CnaGamerServicesTests 488 + 1 skip. The reference setter is internal; CNA's public no-op setter
+  is left for the ABI removal batch.

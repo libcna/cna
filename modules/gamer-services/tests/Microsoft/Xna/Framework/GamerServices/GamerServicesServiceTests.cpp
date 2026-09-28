@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "../../../../../../platform/tests/CNA/Platform/PlatformTestDecorator.hpp"
+#include "../../../../../src/Internal/GuideOverlay.hpp"
 #include "CNA/Platform/Input/IPlatformKeyboard.hpp"
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.hpp"
@@ -119,10 +120,12 @@ TEST(GuideTest, SimulateTrialModeGetSet) {
 // message-box/keyboard-input state (decision 1a - real observable behavior over a PC no-op stub,
 // now that both overlays are genuinely real). With nothing pending, it still reads false, and the
 // setter is still a no-op - only the "always" part of the old test name/assumption was wrong.
+// The public getter needs initialized gamer services, which this suite never initializes; the
+// pane state behind it is read directly (SystemGuideTests covers the public property).
 TEST(GuideTest, IsVisibleFalseWithNothingPendingAndSetterIsNoOp) {
-    EXPECT_FALSE(Guide::getIsVisibleProperty());
+    EXPECT_FALSE(CNA::Internal::GamerServices::guideIsVisible());
     Guide::setIsVisibleProperty(true);
-    EXPECT_FALSE(Guide::getIsVisibleProperty());
+    EXPECT_FALSE(CNA::Internal::GamerServices::guideIsVisible());
 }
 
 TEST(GuideTest, NotificationPositionDefaultAndSet) {
@@ -443,13 +446,13 @@ TEST(GuideTest, AVisibleKeyboardPromptWithholdsTouchInputFromTheGame) {
 
 TEST(GuideTest, IsVisibleReflectsPendingKeyboardInput) {
     KeyboardInputGuard guard;
-    EXPECT_FALSE(Guide::getIsVisibleProperty());
+    EXPECT_FALSE(CNA::Internal::GamerServices::guideIsVisible());
     System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
         PlayerIndex::One, "title", "description", "", System::AsyncCallback{}, std::any{}
     );
-    EXPECT_TRUE(Guide::getIsVisibleProperty());
+    EXPECT_TRUE(CNA::Internal::GamerServices::guideIsVisible());
     PressEnter();
-    EXPECT_FALSE(Guide::getIsVisibleProperty());
+    EXPECT_FALSE(CNA::Internal::GamerServices::guideIsVisible());
     delete result;
 }
 
@@ -1048,5 +1051,5 @@ TEST(GuideTest, ShowMethodsValidateThenRequireTheService) {
     EXPECT_THROW(Guide::ShowPlayers(PlayerIndex::One), GamerServicesNotAvailableException);
     EXPECT_THROW(Guide::ShowSignIn(1, false), GamerServicesNotAvailableException);
     EXPECT_THROW(Guide::ShowAchievementsEXT(PlayerIndex::One), GamerServicesNotAvailableException);
-    EXPECT_FALSE(Guide::getIsVisibleProperty());
+    EXPECT_FALSE(CNA::Internal::GamerServices::guideIsVisible());
 }

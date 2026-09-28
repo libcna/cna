@@ -39,8 +39,9 @@ static int validate_settings(void)
         cna_guide_get_is_trial_mode(&flag) != CNA_RESULT_SUCCESS || flag != CNA_FALSE) {
         return 0;
     }
+    /* The canonical getter refuses before gamer services are initialized. */
     if (cna_guide_set_is_visible(CNA_TRUE) != CNA_RESULT_SUCCESS ||
-        cna_guide_get_is_visible(&flag) != CNA_RESULT_SUCCESS ||
+        cna_guide_get_is_visible(&flag) != CNA_RESULT_INVALID_STATE ||
         cna_guide_set_is_visible(CNA_FALSE) != CNA_RESULT_SUCCESS) {
         return 0;
     }

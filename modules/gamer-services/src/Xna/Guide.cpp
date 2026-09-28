@@ -335,7 +335,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         void SyncTouchInputSuppression()
         {
             Input::Touch::TouchPanel::setInputSuppressedEXT(
-                Guide::getIsVisibleProperty() ||
+                CNA::Internal::GamerServices::guideIsVisible() ||
                 suppressTouchUntilMouseRelease_);
         }
 
@@ -506,7 +506,10 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     bool Guide::getIsVisibleProperty()
     {
-        return pendingMessageBox_ != nullptr || pendingKeyboardInput_ != nullptr || signInActive || socialPending;
+        // Reference Guide.IsVisible: reading it before gamer services are initialized is an error.
+        if (!GamerServicesDispatcher::getIsInitializedProperty())
+            throw System::InvalidOperationException("Gamer services are not initialized.");
+        return CNA::Internal::GamerServices::guideIsVisible();
     }
     void Guide::setIsVisibleProperty(bool /*value*/) { }
 
@@ -784,7 +787,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         std::any state
     ) {
         ValidateShowMessageBoxArgs(player, title, text, buttons, focusButton);
-        if (getIsVisibleProperty())
+        if (CNA::Internal::GamerServices::guideIsVisible())
             throw GuideAlreadyVisibleException();
         return CNA::Internal::GamerServices::showGuideMessageBox(
             player, title, text, buttons, focusButton, icon, std::move(callback), std::move(state));
@@ -1162,21 +1165,21 @@ namespace Microsoft::Xna::Framework::GamerServices
         // Reference: text shorter than 256 characters, then the recipient list, then the Guide.
         if(text.size()>=256)throw System::ArgumentException("Text is too long.","text");
         ValidateRecipients(recipients);
-        if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
+        if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException();
         auto* actor=SocialActor(player);std::vector<std::string> tags;
         for(auto* gamer:recipients)tags.push_back(gamer->getGamertagProperty());
         Compose(player,Service::GamerAccess::userId(*actor),tags,text);
     }
     void Guide::ShowFriendRequest(PlayerIndex player,Gamer* gamer) {
         ValidateGamer(gamer);
-        if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
+        if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException();
         (void)SocialActor(player);
         const auto tag=gamer->getGamertagProperty();
         (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"Friend request","Send a friendship request to "+tag+"?",{"Send request","Cancel"},0,MessageBoxIcon::None,
             [player,tag](System::IAsyncResult& result){std::unique_ptr<System::IAsyncResult> owned(&result);const auto answer=EndShowMessageBox(&result);if(answer&&*answer==0)ChangeFriend(player,tag,"add");},{});
     }
     void Guide::ShowFriends(PlayerIndex player) {
-        if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
+        if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException();
         FriendsPage(player,0);
     }
 
@@ -1188,7 +1191,7 @@ namespace Microsoft::Xna::Framework::GamerServices
             if(!gamer)throw System::ArgumentException("Gamer is null.","recipients");
             if(gamer->getIsDisposedProperty())throw System::ObjectDisposedException("recipients");
         }
-        if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
+        if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException();
         auto* actor=SocialActor(player);
         if(!Service::activeOnlineSession())
             throw System::InvalidOperationException("There is no online network session to invite gamers to.");
@@ -1211,7 +1214,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void Guide::ShowGamerCard(PlayerIndex player,Gamer* gamer) {
         ValidateGamer(gamer);
-        if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
+        if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException();
         (void)SocialActor(player);
         ProfileCard(player,gamer->getGamertagProperty());
     }
@@ -1223,14 +1226,14 @@ namespace Microsoft::Xna::Framework::GamerServices
         for(auto* candidate:*Gamer::getSignedInGamersProperty())if(candidate->getPlayerIndexProperty()==player)gamer=candidate;
         if(!gamer||!gamer->getIsSignedInToLiveProperty())throw GamerPrivilegeException("The profile is not signed in.");
         if(!gamer->getPrivilegesProperty().getAllowPurchaseContentProperty())throw GamerPrivilegeException("The profile may not purchase content.");
-        if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
+        if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException();
         // CNA runs no store or payment service; titles are fully licensed (IsTrialMode stays false).
         Information(player,"Marketplace","CNA Gamer Services has no marketplace. This title is fully licensed; there is nothing to purchase.");
     }
 
     void Guide::ShowMessages(PlayerIndex player)
     {
-        if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
+        if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException();
         auto* actor=SocialActor(player);
         try{Inbox(player,Service::GamerAccess::userId(*actor),0);}
         catch(const GuideAlreadyVisibleException&){throw;}
@@ -1239,21 +1242,21 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void Guide::ShowParty(PlayerIndex player)
     {
-        if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
+        if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException();
         // There is no cross-title voice/party service in CNA; the Guide says so instead of doing nothing.
         Information(player,"Party","CNA Gamer Services has no party service. Use game invitations to play with friends.");
     }
 
     void Guide::ShowPartySessions(PlayerIndex player)
     {
-        if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
+        if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException();
         Information(player,"Party sessions","CNA Gamer Services has no party service, so there are no party sessions to join.");
     }
 
     void Guide::ShowPlayerReview(PlayerIndex player, Gamer* gamer)
     {
         ValidateGamer(gamer);
-        if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
+        if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException();
         auto* actor=SocialActor(player);const auto user=Service::GamerAccess::userId(*actor);const auto tag=gamer->getGamertagProperty();
         (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"Player review","How was playing with "+tag+"?\nAvoided players' games are not offered to you.",
             {"Prefer","Avoid","Clear review","Cancel"},0,MessageBoxIcon::None,[player,user,tag](System::IAsyncResult& result) {
@@ -1266,7 +1269,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void Guide::ShowPlayers(PlayerIndex player)
     {
-        if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
+        if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException();
         (void)SocialActor(player);
         std::string text;int shown=0;
         for(const auto& tag:Service::recentPlayers()){if(shown++==8)break;text+=tag+"\n";}
@@ -1286,7 +1289,7 @@ namespace Microsoft::Xna::Framework::GamerServices
     void Guide::ShowSignIn(int paneCount, bool onlineOnly) {
         // Xbox 360 documentation accepts 1, 2, 4; Windows stub IL is not the target.
         if (paneCount != 1 && paneCount != 2 && paneCount != 4) throw System::ArgumentException("paneCount must be 1, 2 or 4.", "paneCount");
-        if (getIsVisibleProperty()) throw GuideAlreadyVisibleException();
+        if (CNA::Internal::GamerServices::guideIsVisible()) throw GuideAlreadyVisibleException();
         if (!GamerServicesDispatcher::getIsInitializedProperty())
             throw GamerServicesNotAvailableException("Gamer services are not initialized.");
         // Without a service only local offline profiles exist, which an online-only sign-in excludes.
@@ -1311,7 +1314,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void Guide::ShowAchievementsEXT(PlayerIndex player)
     {
-        if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
+        if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException();
         auto* actor=SocialActor(player);std::string text;int earned=0,shown=0;
         const auto achievements=Service::backend()->achievements(Service::GamerAccess::userId(*actor));
         for(const auto& achievement:achievements) {
@@ -1324,6 +1327,10 @@ namespace Microsoft::Xna::Framework::GamerServices
 }
 
 namespace CNA::Internal::GamerServices {
+bool guideIsVisible() {
+    namespace Xna=Microsoft::Xna::Framework::GamerServices;
+    return Xna::pendingMessageBox_!=nullptr||Xna::pendingKeyboardInput_!=nullptr||Xna::signInActive||Xna::socialPending;
+}
 System::IAsyncResult* showGuideMessageBox(Microsoft::Xna::Framework::PlayerIndex,const std::string& title,const std::string& text,
     const std::vector<std::string>& buttons,int focusButton,Microsoft::Xna::Framework::GamerServices::MessageBoxIcon icon,
     System::AsyncCallback callback,std::any state) {
@@ -1336,7 +1343,7 @@ System::IAsyncResult* showGuideMessageBox(Microsoft::Xna::Framework::PlayerIndex
     return action;
 }
 std::string guideSignInStatus() {
-    return Microsoft::Xna::Framework::GamerServices::Guide::getIsVisibleProperty() ? "CNA Gamer Services: signing in..." : "";
+    return guideIsVisible() ? "CNA Gamer Services: signing in..." : "";
 }
 
 namespace {
@@ -1355,7 +1362,7 @@ void openSystemGuide(Microsoft::Xna::Framework::PlayerIndex player) {
     using namespace Microsoft::Xna::Framework::GamerServices;
     using Microsoft::Xna::Framework::PlayerIndex;
     const int index=static_cast<int>(player);
-    if(index<0||index>3||!GamerServicesDispatcher::getIsInitializedProperty()||Guide::getIsVisibleProperty())return;
+    if(index<0||index>3||!GamerServicesDispatcher::getIsInitializedProperty()||guideIsVisible())return;
     SignedInGamer* gamer=nullptr;
     for(auto* candidate:*Gamer::getSignedInGamersProperty())if(candidate->getPlayerIndexProperty()==player)gamer=candidate;
     auto close=[](System::IAsyncResult& result){std::unique_ptr<System::IAsyncResult> owned(&result);return Guide::EndShowMessageBox(&result);};

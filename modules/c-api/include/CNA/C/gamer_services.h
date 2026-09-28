@@ -1835,7 +1835,8 @@ CNA_C_API CNA_Result cna_guide_set_is_trial_mode(CNA_Bool is_trial_mode);
  * @brief Reports whether a guide screen is currently up.
  *
  * @param out_is_visible Receives non-zero when the guide is visible.
- * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output, or
+ *         `CNA_RESULT_INVALID_STATE` before gamer services are initialized.
  */
 CNA_C_API CNA_Result cna_guide_get_is_visible(CNA_Bool* out_is_visible);
 
