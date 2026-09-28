@@ -1677,3 +1677,57 @@ server failure and rootless isolated-NAT clients. No cases skipped. Standard pub
 Create/Join, ENet-to-XNA gamer/lifecycle conversion and avatars are still unfinished. No new
 original XNA sample unblocked by this prerequisite alone. Next GS-008c3c/GS-007e2c3: authenticated
 realtime handshake/data authority and public session ownership/ENet welcome integration.
+
+### GS-008c3c1 completed: service-bound realtime packet admission
+
+Before public session/gamer mutation, add a private policy over authenticated directory snapshots
+and relay-supplied machine identity. Control preflight bounds allocation; enforce host/client
+direction, exact complete local groups, welcome authority, complete broadcast groups and
+server-owned state/properties. Host leave broadcasts require complete known admitted remote groups; removal/end reconcile
+authenticated authority rather than trusting arbitrary IDs. Application messages validate tag/header/options/channel/1MiB bound,
+handshake-established source and admitted connected groups, exact sender ownership and target
+membership before the single owned payload allocation. The host can relay to another admitted
+machine; clients accept only host-delivered packets addressed to their local group, with senders
+from admitted remote groups. This does not provide malicious-host anti-cheat, migration, lifecycle
+or public Create/Join by itself. Preserve the existing SystemLink codec/backend; use the same
+codec bytes behind a service-specific private admission boundary. Validate deterministic negative
+cases/mutations plus the actual native TLS/WSS/NAT relay harness; never treat directory reservation
+alone as a connected gamer.
+
+GS-008c3b known-good committed set: CNA 73011288ea4d5fe2a4c4bf8bd2f61f99c4d2abe3,
+sharp-runtime 6c4a857de129cf29b5d43430bedf24157d594f12, server
+0b6f2fc17fe184da65dd54f0568ef6fbdd50b8d9. Full matching server 11/11 as above.
+
+GS-008c3c1 implementation: controls preflight before decoding, enforce authenticated source and
+host/client direction, exact hello/welcome groups and complete join/leave groups. Host leave may
+remove only complete already-admitted remote groups, never local/host/duplicate/unknown IDs.
+State/properties must match the service snapshot; end is reconciled through authority/transport
+closure. Game headers/options/channels/1MiB ceiling, establishment, connected admission and source/
+target membership are checked before the single owned payload copy. Host relays may target other
+admitted groups; clients receive host-relayed remote senders addressed to their own local group.
+The host is trusted for forwarding; this does not add malicious-host anti-cheat or Xbox wire
+compatibility. No public XNA/C ABI expansion, server game decoder, protocol/schema/runtime change.
+
+Seventeen deterministic cases, including all 31 IDs and **20,000 control/application mutations**.
+Initial compile failed only because the new CNA/Internal test used the deeper Microsoft namespace
+relative include path; corrected to four parent segments. Final affected builds pass, full native
+Net **417/417, 14.805s**, private C API/header/export/protocol **5/5, 0.65s**. Actual native and
+separate rootless-NAT relay acceptance **2/2, 16.47s**, with both PlayerMatch/Ranked categories,
+two titles/four identities, valid hello/welcome, rejected forged account claims, newly rejected
+existing sender and unknown target IDs before delivery, malicious fragments/UDP source/size
+checks, legitimate fragmented/unreliable exchange, secondary revocation and server failure.
+No skip substituted. Server reporting/docs compile and preserve CNR v1/golden bytes. Logs:
+cmake-build-debug/service-packet-policy-{build,final-build,final-tests-build,hardened-build,
+net,final-net,private,final-private}.log; server build/service-packet-policy-{relay,final-relay}.log.
+Normal public online session creation/join, reconciling later roster revisions/lease/transport
+changes into XNA lifecycle, EndGame Ranked epochs and avatar migration remain unfinished.
+
+Before public creation integration, review private-slot semantics: local NetworkSession.xml
+exception range permits <=maximumGamers, while the parameter text says strictly less. Server
+currently reserves at least one public slot and rejects a host group exceeding public capacity.
+Do not change this based on the contradictory XML alone; managed/native evidence or a console
+probe is needed for the edge, while ordinary supported configurations can be integrated now.
+This uncertainty is not a blocker for all other public lifecycle work.
+
+GS-008c3c1 tested server commit: d153226aefd15428bfccdbdf74bfae97f1f4d8a5;
+sharp-runtime remains 6c4a857de129cf29b5d43430bedf24157d594f12.

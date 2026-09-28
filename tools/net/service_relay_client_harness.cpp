@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "../../modules/net/src/Internal/RelayTransport.hpp"
 #include "../../modules/net/src/Internal/ServiceRoster.hpp"
+#include "../../modules/net/src/Internal/ServiceGamePacketPolicy.hpp"
 #include "../../modules/net/src/Internal/RelayEnetPolicy.hpp"
 #include "CnaService/Protocol.hpp"
 #include "CNA/Internal/Net/ENetLibrary.hpp"
@@ -55,7 +56,7 @@ std::vector<unsigned char> payload(int index,bool host) {
     return result;
 }
 void exchange(NativeHost& native,Transport::RelayTransport& bridge,const std::string& remote,bool host,
-    const Transport::ServiceRoster& authority,const std::string& machine,const std::vector<std::string>& locals,
+    const Transport::ServiceRoster& authority,const Transport::ServiceGamePacketPolicy& policy,const std::string& machine,const std::vector<std::string>& locals,
     const std::vector<std::string>& remotes) {
     const auto localIds=authority.idsFor(machine,locals),remoteIds=authority.idsFor(remote,remotes);
     ENetProtocolSendFragment malformed{};malformed.header.command=ENET_PROTOCOL_COMMAND_SEND_FRAGMENT;
@@ -68,7 +69,7 @@ void exchange(NativeHost& native,Transport::RelayTransport& bridge,const std::st
     malformedBuffer.data=malformedBytes.data();malformedBuffer.dataLength=malformedBytes.size();
     check(enet_socket_send(native.host->socket,&malformedDestination,&malformedBuffer,1)==static_cast<int>(malformedBytes.size()),"untrusted fragment fixture");
     ENetPeer* connected=nullptr;
-    bool handshaked=false,applicationSent=false;int rejectedClaims=0;
+    bool handshaked=false,applicationSent=false;int rejectedClaims=0,rejectedApplication=0;
     const auto send=[&](const std::vector<unsigned char>& bytes,int channel,bool reliable) {
         auto* packet=enet_packet_create(bytes.data(),bytes.size(),reliable?ENET_PACKET_FLAG_RELIABLE:0);
         check(packet!=nullptr,"packet allocation");
@@ -77,6 +78,10 @@ void exchange(NativeHost& native,Transport::RelayTransport& bridge,const std::st
     };
     const auto application=[&] {
         check(!applicationSent,"single application batch");applicationSent=true;
+        if(!host) {
+            send(Transport::NetPacketCodec::Encode(Transport::AppDataMessage{remoteIds[0],remoteIds[0],Microsoft::Xna::Framework::Net::SendDataOptions::Reliable,{0}}),0,true);
+            send(Transport::NetPacketCodec::Encode(Transport::AppDataMessage{localIds[0],31,Microsoft::Xna::Framework::Net::SendDataOptions::Reliable,{0}}),0,true);
+        }
         for(int index=0;index<4;++index) {
             const auto options=index==3?Microsoft::Xna::Framework::Net::SendDataOptions::InOrder:Microsoft::Xna::Framework::Net::SendDataOptions::ReliableInOrder;
             send(Transport::NetPacketCodec::Encode(Transport::AppDataMessage{localIds[0],remoteIds[0],options,payload(index,host)}),index==3?1:0,index!=3);
@@ -106,23 +111,33 @@ void exchange(NativeHost& native,Transport::RelayTransport& bridge,const std::st
                 check(packet->dataLength>0,"packet length");
                 check(event.peer==connected&&event.peer->address.port==bridge.routePort(remote),"authenticated service source route");
                 const auto tag=static_cast<Transport::MessageTag>(packet->data[0]);
-                if(tag!=Transport::MessageTag::AppData)Transport::validateServiceControlPacket(std::span(packet->data,packet->dataLength));
-                else check(packet->dataLength<=65536,"bounded native test application packet");
-                std::vector<unsigned char> bytes(packet->data,packet->data+packet->dataLength);
+                std::optional<Transport::ServiceGameControl> control;
+                if(tag!=Transport::MessageTag::AppData) {
+                    try{control=policy.control(remote,std::span(packet->data,packet->dataLength),event.channelID,handshaked,locals);}
+                    catch(const CnaService::Error& error) {
+                        if(host&&tag==Transport::MessageTag::ClientHello&&!handshaked&&error.code()=="INVALID_SERVICE_ROSTER") {
+                            ++rejectedClaims;continue;
+                        }
+                        throw;
+                    }
+                }
                 if(tag==Transport::MessageTag::ClientHello) {
                     check(host&&!handshaked,"host handshake direction");
-                    const auto hello=Transport::NetPacketCodec::DecodeClientHello(bytes);
-                    try{(void)authority.idsFor(remote,hello.LocalGamertags);}
-                    catch(const CnaService::Error& error){check(error.code()=="INVALID_SERVICE_ROSTER","forged claim refused before mutation");++rejectedClaims;continue;}
+                    const auto& hello=std::get<Transport::ClientHelloMessage>(*control);
                     send(Transport::NetPacketCodec::Encode(authority.welcomeFor(remote,hello.LocalGamertags)),0,true);
                     handshaked=true;application();continue;
                 }
                 if(tag==Transport::MessageTag::ServerWelcome) {
                     check(!host&&!handshaked,"client handshake direction");
-                    authority.validateWelcome(Transport::NetPacketCodec::DecodeServerWelcome(bytes),locals);
+                    check(std::holds_alternative<Transport::ServerWelcomeMessage>(*control),"policy admitted complete welcome");
                     handshaked=true;application();continue;
                 }
-                check(tag==Transport::MessageTag::AppData,"application packet tag");const auto message=Transport::NetPacketCodec::DecodeAppData(bytes);
+                check(tag==Transport::MessageTag::AppData,"application packet tag");Transport::AppDataMessage message;
+                try{message=policy.application(remote,std::span(packet->data,packet->dataLength),event.channelID,handshaked,{remote});}
+                catch(const CnaService::Error& error) {
+                    if(host&&handshaked&&error.code()=="INVALID_SERVICE_ROSTER"){++rejectedApplication;continue;}
+                    throw;
+                }
                 check(message.SenderWireId==remoteIds[0]&&message.TargetWireId==localIds[0],"authority-bound application IDs");
                 check(!message.Payload.empty(),"application payload length");const int index=message.Payload[0];check(index>=0&&index<4,"packet index");
                 const auto expected=payload(index,!host);
@@ -133,6 +148,7 @@ void exchange(NativeHost& native,Transport::RelayTransport& bridge,const std::st
         return received.size()==4&&handshaked&&bridge.status().rejectedEnet>=1;
     });
     check(!host||rejectedClaims==1,"cross-machine gamertag spoof test");
+    check(!host||rejectedApplication==2,"forged existing sender and unknown target refused before delivery");
     check(bridge.status().rejectedEnet>=1,"malformed remote fragment refused before ENet allocation");
     const auto status=bridge.status();check(status.sent>0&&status.received>0&&status.queued<=64,"bounded bidirectional relay traffic");
 }
@@ -190,8 +206,8 @@ int main(int argc,char** argv) {
         std::vector<std::string> locals,remotes;
         for(int index=0;index<2;++index)locals.push_back((*signedIn)[index]->getGamertagProperty());
         for(const auto& member:session.members)if(member.machine==remote)remotes.push_back(member.gamertag);
-        const Transport::ServiceRoster authority(session);
-        std::cout<<"relay-ready\n"<<std::flush;command();phase="exchange";exchange(native,bridge,remote,host,authority,session.machine,locals,remotes);
+        const Transport::ServiceRoster authority(session);const Transport::ServiceGamePacketPolicy policy(session);
+        std::cout<<"relay-ready\n"<<std::flush;command();phase="exchange";exchange(native,bridge,remote,host,authority,policy,session.machine,locals,remotes);
         std::cout<<"relay-exchanged\n"<<std::flush;command();phase="failure";
         if(host&&kind=="player") {
             check(bridge.status().state==Transport::RelayTransportState::Ready,"secondary peer revocation preserves host authority");

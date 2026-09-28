@@ -181,3 +181,22 @@ originating online backend. Later environment or programmatic changes cannot red
 backend's credentials/tickets. Fake and unconfigured backends cannot silently acquire a network
 authority. This is an internal deployment boundary; XNA gameplay and the C API gain no transport
 configuration methods.
+
+Private dispatcher subscriptions now drive preparation/lease observations after the backend event
+batch, including nested End waits. Cancellation suppresses copied callback snapshots, self-entry
+is skipped and other pending operations can progress. Callback errors do not starve the batch.
+Automatic presence retains its dirty revision when the service queue is full and retries after
+queued work drains. This boundary does not yet construct public online sessions or XNA lifecycle
+events. Pending service and Net End calls also drain their retained origin after backend replacement;
+superseded identity events have no authority to replace current signed-in gamers.
+
+Service-bound game packet admission validates the authenticated relay source, complete machine
+hello/welcome/broadcast groups, directory-owned state/properties and established realtime groups.
+Application sender IDs must belong to the source machine on the host; client deliveries arrive
+from the host for known remote senders and their own local targets. Length/tag/options/channel,
+1 MiB logical-packet ceiling and membership checks precede the single payload copy. Leave broadcasts from the authenticated host must name complete admitted remote groups; arbitrary
+unknown/partial leave or end claims cannot replace authority reconciliation. Genuine native and isolated-NAT probes
+reject both a forged existing sender ID and an unknown target, while fragmented and unreliable
+application exchange still passes. The service host remains trusted to relay game payloads; this
+is membership validation, not malicious-host anti-cheat. Public Create/Join, lifecycle conversion,
+reconnect and migration remain open. SystemLink keeps its existing codec and transport behavior.

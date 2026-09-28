@@ -1,5 +1,11 @@
 # CNA XNA 4.0 API Audit
 
+> **GS-008c3c1 service game packet admission (2026-09-28):** Authenticated machine
+> groups and completed handshake govern sender/target IDs, control direction and complete roster
+> changes before mutation/payload copy. Seventeen new cases and 20,000 mutations; Net 417/417,
+> private gates 5/5, genuine native and isolated-NAT relay 2/2 pass. Standard public online
+> Create/Join/lifecycle and avatars remain unfinished; continue their owned session integration.
+
 > **GS-008c3b dispatcher progress boundary (2026-09-28):** Private owned subscriptions
 > progress pending online work after backend events, including nested End waits. Cancellation,
 > callback lifetime/errors and saturated presence no longer starve the pump. Twelve new cases;
