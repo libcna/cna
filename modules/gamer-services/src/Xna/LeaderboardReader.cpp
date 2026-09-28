@@ -10,6 +10,10 @@
 #include "System/Threading/EventWaitHandle.hpp"
 #include <algorithm>
 #include <optional>
+#include "../Internal/ServiceAsyncResult.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
@@ -145,6 +149,66 @@ namespace Microsoft::Xna::Framework::GamerServices
         }
     }
 
+    void LeaderboardReader::EnsureUsable() const {
+        if(isDisposed_)throw System::ObjectDisposedException("LeaderboardReader");
+    }
+    void LeaderboardReader::ApplyServicePage(const CNA::Internal::GamerServices::ServiceLeaderboardPage& page) {
+        entries_.clear();pageStart_=page.start;totalLeaderboardSize_=page.total;
+        for(const auto& row:page.entries) {
+            auto& gamer=serviceGamers_[row.userId];
+            if(!gamer){gamer=std::shared_ptr<Gamer>(new Gamer(row.gamertag));gamer->serviceUserId_=row.userId;}
+            auto entry=LeaderboardEntry::CreateInternal(gamer.get(),row.rating,row.rank);
+            auto& columns=entry.getColumnsProperty();
+            for(const auto& [key,column]:row.columns) {
+                if(column.type=="string")columns.SetValue(key,std::get<std::string>(column.value));
+                else if(column.type=="single")columns.SetValue(key,static_cast<float>(std::get<double>(column.value)));
+                else if(column.type=="double")columns.SetValue(key,std::get<double>(column.value));
+                else {
+                    const auto value=std::get<long long>(column.value);
+                    if(column.type=="int32")columns.SetValue(key,static_cast<int>(value));
+                    else if(column.type=="outcome")columns.SetValue(key,static_cast<LeaderboardOutcome>(value));
+                    else if(column.type=="datetime")columns.SetValue(key,System::DateTime(value));
+                    else if(column.type=="timespan")columns.SetValue(key,System::TimeSpan(value));
+                    else columns.SetValue(key,value);
+                }
+            }
+            entries_.push_back(std::move(entry));
+        }
+    }
+    System::IAsyncResult* LeaderboardReader::BeginServiceRead(const LeaderboardIdentity& identity,int start,int size,
+        const std::string& pivot,std::optional<std::vector<std::string>> gamers,System::AsyncCallback callback,std::any state) {
+        if(start<0)throw System::ArgumentOutOfRangeException("pageStart");
+        if(size<1||size>100)throw System::ArgumentOutOfRangeException("pageSize");
+        if(identity.getKeyProperty().empty())throw System::ArgumentException("Invalid leaderboard identity.","leaderboardId");
+        if(gamers&&gamers->size()>100)throw System::ArgumentOutOfRangeException("gamers");
+        auto query=std::make_shared<RemoteQuery>();query->service=CNA::Internal::GamerServices::backend();query->gamers=std::move(gamers);
+        return CNA::Internal::GamerServices::ServiceAsyncResult::begin("leaderboard-read",nullptr,
+            [identity,start,size,pivot,query]() -> std::any {
+                const auto page=query->service->readLeaderboard(identity.getKeyProperty(),identity.getGameModeProperty(),start,size,pivot,query->gamers);
+                LeaderboardReader reader(identity,start,size,{},query->gamers.has_value());reader.remoteQuery_=query;reader.ApplyServicePage(page);return reader;
+            },std::move(callback),std::move(state));
+    }
+    System::IAsyncResult* LeaderboardReader::BeginServicePage(int start,const std::string& operation,System::AsyncCallback callback,std::any state) {
+        EnsureUsable();if(pagePending_)throw System::InvalidOperationException("A leaderboard page request is already pending.");
+        const auto query=remoteQuery_;const auto identity=leaderboardIdentity_;const auto size=pageSize_;
+        pagePending_=true;
+        try {
+            return CNA::Internal::GamerServices::ServiceAsyncResult::begin(operation,this,[query,identity,start,size]() -> std::any {
+                return query->service->readLeaderboard(identity.getKeyProperty(),identity.getGameModeProperty(),start,size,{},query->gamers);
+            },std::move(callback),std::move(state));
+        }catch(...){pagePending_=false;throw;}
+    }
+
+    void LeaderboardReader::EndServicePage(System::IAsyncResult* result,const std::string& operation) {
+        EnsureUsable();
+        try {
+            const auto page=std::any_cast<CNA::Internal::GamerServices::ServiceLeaderboardPage>(CNA::Internal::GamerServices::ServiceAsyncResult::end(result,operation,this));
+            pagePending_=false;ApplyServicePage(page);
+        }catch(const System::ArgumentException&){throw;}
+         catch(const System::TimeoutException&){throw;}
+         catch(...){pagePending_=false;throw;}
+    }
+
     LeaderboardReader::LeaderboardReader(
         const LeaderboardIdentity& identity,
         int start,
@@ -196,6 +260,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     bool LeaderboardReader::getCanPageDownProperty() const
     {
+        if(remoteQuery_){EnsureUsable();return static_cast<long long>(pageStart_)+pageSize_<totalLeaderboardSize_;}
         // Both board kinds use the same bounded-array check: entryCache_ always holds this
         // reader's *complete* board (full local leaderboard, or the gamer-restricted subset for a
         // friends board) rather than a partial client-side window of a larger remote total, so
@@ -208,26 +273,30 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     bool LeaderboardReader::getCanPageUpProperty() const
     {
+        if(remoteQuery_)EnsureUsable();
         return pageStart_ > 0;
     }
 
     System::Collections::ObjectModel::ReadOnlyCollection<LeaderboardEntry> LeaderboardReader::getEntriesProperty() const
     {
+        if(remoteQuery_)EnsureUsable();
         return System::Collections::ObjectModel::ReadOnlyCollection<LeaderboardEntry>(entries_);
     }
 
-    const LeaderboardIdentity& LeaderboardReader::getLeaderboardIdentityProperty() const { return leaderboardIdentity_; }
-    int LeaderboardReader::getPageStartProperty() const                                   { return pageStart_; }
-    int LeaderboardReader::getTotalLeaderboardSizeProperty() const                        { return totalLeaderboardSize_; }
+    const LeaderboardIdentity& LeaderboardReader::getLeaderboardIdentityProperty() const { if(remoteQuery_)EnsureUsable();return leaderboardIdentity_; }
+    int LeaderboardReader::getPageStartProperty() const                                   { if(remoteQuery_)EnsureUsable();return pageStart_; }
+    int LeaderboardReader::getTotalLeaderboardSizeProperty() const                        { if(remoteQuery_)EnsureUsable();return totalLeaderboardSize_; }
 
     void LeaderboardReader::Dispose()
     {
         isDisposed_ = true;
+        if(remoteQuery_)entries_.clear();
     }
 
     void LeaderboardReader::PageDown()
     {
         System::IAsyncResult* result = BeginPageDown(System::AsyncCallback{}, std::any{});
+        std::unique_ptr<System::IAsyncResult> owned(result);
         while (!result->getIsCompletedProperty())
         {
             GamerServicesDispatcher::UpdateAsync();
@@ -241,6 +310,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         {
             throw System::InvalidOperationException("Cannot page down: no further leaderboard entries are available.");
         }
+        if(remoteQuery_)return BeginServicePage(pageStart_+pageSize_,"leaderboard-down",std::move(callback),std::move(asyncState));
         return CompletePageEXT(std::move(callback), std::move(asyncState));
     }
 
@@ -255,6 +325,10 @@ namespace Microsoft::Xna::Framework::GamerServices
     // silently stop working.
     void LeaderboardReader::EndPageDown(System::IAsyncResult* result)
     {
+        if(remoteQuery_) {
+            EndServicePage(result,"leaderboard-down");return;
+        }
+
         if (dynamic_cast<LeaderboardAction*>(result) == nullptr)
         {
             throw System::ArgumentException("result was not returned by a call to BeginPageDown.", "result");
@@ -266,6 +340,7 @@ namespace Microsoft::Xna::Framework::GamerServices
     void LeaderboardReader::PageUp()
     {
         System::IAsyncResult* result = BeginPageUp(System::AsyncCallback{}, std::any{});
+        std::unique_ptr<System::IAsyncResult> owned(result);
         while (!result->getIsCompletedProperty())
         {
             GamerServicesDispatcher::UpdateAsync();
@@ -279,11 +354,16 @@ namespace Microsoft::Xna::Framework::GamerServices
         {
             throw System::InvalidOperationException("Cannot page up: no earlier leaderboard entries are available.");
         }
+        if(remoteQuery_)return BeginServicePage(std::max(0,pageStart_-pageSize_),"leaderboard-up",std::move(callback),std::move(asyncState));
         return CompletePageEXT(std::move(callback), std::move(asyncState));
     }
 
     void LeaderboardReader::EndPageUp(System::IAsyncResult* result)
     {
+        if(remoteQuery_) {
+            EndServicePage(result,"leaderboard-up");return;
+        }
+
         if (dynamic_cast<LeaderboardAction*>(result) == nullptr)
         {
             throw System::ArgumentException("result was not returned by a call to BeginPageUp.", "result");
@@ -295,6 +375,7 @@ namespace Microsoft::Xna::Framework::GamerServices
     LeaderboardReader LeaderboardReader::Read(const LeaderboardIdentity& leaderboardId, int pageStart, int pageSize)
     {
         System::IAsyncResult* result = BeginRead(leaderboardId, pageStart, pageSize, System::AsyncCallback{}, std::any{});
+        std::unique_ptr<System::IAsyncResult> owned(result);
         while (!result->getIsCompletedProperty())
         {
             GamerServicesDispatcher::UpdateAsync();
@@ -305,6 +386,7 @@ namespace Microsoft::Xna::Framework::GamerServices
     LeaderboardReader LeaderboardReader::Read(const LeaderboardIdentity& leaderboardId, Gamer* pivotGamer, int pageSize)
     {
         System::IAsyncResult* result = BeginRead(leaderboardId, pivotGamer, pageSize, System::AsyncCallback{}, std::any{});
+        std::unique_ptr<System::IAsyncResult> owned(result);
         while (!result->getIsCompletedProperty())
         {
             GamerServicesDispatcher::UpdateAsync();
@@ -319,6 +401,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         int pageSize
     ) {
         System::IAsyncResult* result = BeginRead(leaderboardId, gamers, pivotGamer, pageSize, System::AsyncCallback{}, std::any{});
+        std::unique_ptr<System::IAsyncResult> owned(result);
         while (!result->getIsCompletedProperty())
         {
             GamerServicesDispatcher::UpdateAsync();
@@ -333,6 +416,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         System::AsyncCallback callback,
         std::any asyncState
     ) {
+        if(CNA::Internal::GamerServices::backend()->serviceEnabled())return BeginServiceRead(leaderboardId,pageStart,pageSize,{},std::nullopt,std::move(callback),std::move(asyncState));
+
         std::vector<LeaderboardEntry> entries = LoadFullLocalLeaderboardEXT(leaderboardId);
         LeaderboardReader reader = LeaderboardReader::CreateInternal(
             leaderboardId, pageStart, pageSize, std::move(entries), false
@@ -351,6 +436,11 @@ namespace Microsoft::Xna::Framework::GamerServices
         System::AsyncCallback callback,
         std::any asyncState
     ) {
+        if(CNA::Internal::GamerServices::backend()->serviceEnabled()) {
+            if(!pivotGamer)throw System::ArgumentNullException("pivotGamer");
+            return BeginServiceRead(leaderboardId,0,pageSize,pivotGamer->getGamertagProperty(),std::nullopt,std::move(callback),std::move(asyncState));
+        }
+
         std::vector<LeaderboardEntry> entries = LoadFullLocalLeaderboardEXT(leaderboardId);
         const int pageStart = CenterPageOnPivot(FindGamerIndex(entries, pivotGamer), pageSize);
         LeaderboardReader reader = LeaderboardReader::CreateInternal(
@@ -368,6 +458,13 @@ namespace Microsoft::Xna::Framework::GamerServices
         System::AsyncCallback callback,
         std::any asyncState
     ) {
+        if(CNA::Internal::GamerServices::backend()->serviceEnabled()) {
+            if(!pivotGamer)throw System::ArgumentNullException("pivotGamer");
+            std::vector<std::string> names;names.reserve(gamers.size());
+            for(auto* gamer:gamers){if(!gamer)throw System::ArgumentNullException("gamers");names.push_back(gamer->getGamertagProperty());}
+            return BeginServiceRead(leaderboardId,0,pageSize,pivotGamer->getGamertagProperty(),std::move(names),std::move(callback),std::move(asyncState));
+        }
+
         std::vector<LeaderboardEntry> allEntries = LoadFullLocalLeaderboardEXT(leaderboardId);
         std::vector<LeaderboardEntry> restricted;
         for (const LeaderboardEntry& entry : allEntries)
@@ -392,6 +489,8 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     LeaderboardReader LeaderboardReader::EndRead(System::IAsyncResult* result)
     {
+        if(dynamic_cast<CNA::Internal::GamerServices::ServiceAsyncResult*>(result))return std::any_cast<LeaderboardReader>(CNA::Internal::GamerServices::ServiceAsyncResult::end(result,"leaderboard-read",nullptr));
+
         auto* action = dynamic_cast<LeaderboardAction*>(result);
         if (action == nullptr || !action->Reader.has_value())
         {

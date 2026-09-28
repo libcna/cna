@@ -3,8 +3,11 @@
 #include <array>
 #include <functional>
 #include <memory>
+#include <map>
 #include <string>
 #include <vector>
+#include <optional>
+#include <variant>
 namespace CNA::Internal::GamerServices {
 /** @brief Service identity/profile data, independent of XNA objects and wire representation. */
 struct ServiceIdentity {
@@ -50,6 +53,41 @@ struct ServiceFriend {
     bool accepted = false, requestSent = false, requestReceived = false;
     /** @brief Friend's current title-scoped rich presence. */
     std::string presence;
+};
+/** @brief Typed service column, independent of public dictionary objects. */
+struct ServiceLeaderboardColumn {
+    /** @brief Provisioned type name. */
+    std::string type;
+    /** @brief Scalar data preserving integer precision. */
+    std::variant<long long,double,std::string> value;
+};
+/** @brief One ranked entry returned by a bounded service read. */
+struct ServiceLeaderboardEntry {
+    /** @brief Stable identity and public name. */
+    std::string userId, gamertag;
+    /** @brief Rating and global one-based rank. */
+    long long rating=0;
+    int rank=0;
+    /** @brief Provisioned typed columns. */
+    std::map<std::string,ServiceLeaderboardColumn> columns;
+};
+/** @brief Remote page with total independent of its bounded entry count. */
+struct ServiceLeaderboardPage {
+    /** @brief Zero-based page start and filtered total. */
+    int start=0, total=0;
+    /** @brief Entries on this page. */
+    std::vector<ServiceLeaderboardEntry> entries;
+};
+/** @brief Explicit deterministic test board; never installed in normal service mode. */
+struct ServiceLeaderboardFixture {
+    /** @brief Board identity. */
+    std::string key;
+    /** @brief Game mode. */
+    int mode=0;
+    /** @brief Sort direction. */
+    bool ascending=false;
+    /** @brief Supplied test data. */
+    std::vector<ServiceLeaderboardEntry> entries;
 };
 /** @brief Work completion applied at the dispatcher's controlled update boundary. */
 struct BackendEvent {
@@ -99,13 +137,19 @@ public:
     /** @brief Retrieves immutable asset bytes, with verified local cache where configured.
      * @param hash SHA-256 identifier. @return Resource bytes. */
     virtual std::vector<unsigned char> asset(const std::string& hash) = 0;
+    /** @brief Reads a remote page. @param key Board key. @param mode Game mode.
+     * @param start Page start. @param size Page size. @param pivot Optional centered gamer.
+     * @param gamers Optional restricted names. @return Ranked page. */
+    virtual ServiceLeaderboardPage readLeaderboard(const std::string& key,int mode,int start,int size,
+        const std::string& pivot,const std::optional<std::vector<std::string>>& gamers) = 0;
 };
 /** @brief Gets lazily configured backend. @return Shared backend lifetime. */
 std::shared_ptr<IGamerServicesBackend> backend();
 /** @brief Injects an explicit test backend. @param value Backend or null to reset configuration. */
 void setBackendForTesting(std::shared_ptr<IGamerServicesBackend> value);
 /** @brief Creates deterministic fake with explicitly supplied identities and catalog.
- * @param identities Accounts. @param catalog Title catalog. @return Fake backend. */
+ * @param identities Accounts. @param catalog Title catalog. @param boards Explicit test boards.
+ * @return Fake backend. */
 std::shared_ptr<IGamerServicesBackend> makeFakeBackend(std::vector<ServiceIdentity> identities,
-                                                     std::vector<ServiceAchievement> catalog = {});
+    std::vector<ServiceAchievement> catalog = {},std::vector<ServiceLeaderboardFixture> boards = {});
 }

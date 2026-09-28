@@ -3560,13 +3560,10 @@ CNA_C_API CNA_Result cna_leaderboard_identity_init(
  * @param out_reader Receives an owned reader handle, or `CNA_INVALID_HANDLE` on failure.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/thread/IO failure.
  *
- * **The read is complete when this returns.** The canonical asynchronous form completes before its
- * own begin route returns, so there is nothing here to wait for; the callback form below exists
- * because the canonical API has one, not because anything defers.
- *
- * One deviation is worth knowing: the canonical synchronous read **leaks the operation it creates**,
- * unlike every other route of its shape. This one does the same work through the same two public
- * halves and releases the operation afterwards.
+ * The C read is complete when this returns. Configured service mode queues the canonical
+ * BeginRead/EndRead operation and pumps completion before returning. Its callback form invokes
+ * the callback after completion; this C form does not expose a pending XNA IAsyncResult.
+ * Owned entry handles retain remote gamer storage after their reader handle is released.
  */
 CNA_C_API CNA_Result cna_leaderboard_reader_read(
     const CNA_LeaderboardIdentity* identity,

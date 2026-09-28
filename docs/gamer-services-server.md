@@ -14,8 +14,8 @@ Server canonical protocol and administration commands live in sibling `cna-gamer
 
 Measured service features include four local authenticated players, standard Guide sign-in, profiles/
 lookup, achievements (metadata/awards), mutual friends and rich presence. Standard ShowFriends,
-ShowGamerCard and ShowFriendRequest use CNA system overlays. Picture/assets, refresh/reconnect,
-leaderboards, PlayerMatch/Ranked/invites/relay and standard Avatar migration remain unfinished.
+ShowGamerCard and ShowFriendRequest use CNA system overlays. Refresh/reconnect,
+gameplay leaderboard submission, PlayerMatch/Ranked/invites/relay and standard Avatar migration remain unfinished.
 Rich presence is sent during Dispatcher.Update; friend online state currently reflects authenticated
 activity within 90 seconds, so idle heartbeat must still be added. Do not treat this as a production
 service release or a claim of measured Xbox event/validation parity across every method.
@@ -29,3 +29,12 @@ Cache writes stop at 256 MiB (eviction is not implemented); a full/unwritable ca
 retrieval. PNG assets are bounded to 512x512/512 KiB; larger version-2 GLB resources have a 16-MiB
 transport ceiling. Hashes do not make malformed image/model content valid. No live avatar catalog
 or standard-avatar rendering is implied by this initial generic resource mechanism.
+
+
+Online leaderboard reads use server-provisioned title/key/game-mode definitions, sort direction and
+scalar columns. Offset, gamer-centered and gamer-restricted reads page remotely rather than loading
+an entire board or dropping gamers signed in on another machine. Begin/End completions use the
+Dispatcher update boundary; native C callbacks return completed reads. Online writer setters now
+retain transient data: EndGame submission remains the next unfinished milestone. Admin seed commands
+are development fixtures, not a gameplay write mechanism. Page limits and unsupported Stream/recent
+window/TrueSkill behavior are documented in the server protocol.

@@ -9,6 +9,11 @@
 #include "System/IDisposable.hpp"
 #include <any>
 #include <vector>
+#include <memory>
+#include <optional>
+#include <map>
+
+namespace CNA::Internal::GamerServices { class IGamerServicesBackend; struct ServiceLeaderboardPage; }
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
@@ -82,13 +87,12 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Begins an asynchronous request to advance to the next page.
          *
-         * Task 4.4 (plans/plan_net.md Phase 4): completes synchronously (a local reslice of the
-         * already-cached entries, no disk I/O) - unlike a real networked page fetch, there is no
-         * real deferred work to wait on.
+         * Service reads queue a remote request; completion is delivered at Dispatcher.Update.
+         * Explicit offline fixture pages reslice synchronously.
          *
          * @param callback   Invoked when the operation completes.
          * @param asyncState User-defined state passed through to the callback.
-         * @return An IAsyncResult already marked complete; pass to EndPageDown.
+         * @return A caller-owned result; pass to EndPageDown.
          * @throws System::InvalidOperationException if getCanPageDownProperty() is false.
          */
         [[nodiscard]] System::IAsyncResult* BeginPageDown(System::AsyncCallback callback, std::any asyncState);
@@ -109,11 +113,11 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Begins an asynchronous request to move to the previous page.
          *
-         * Completes synchronously - see BeginPageDown's own doc comment for why.
+         * Queues a remote request in service mode; offline fixture pages reslice synchronously.
          *
          * @param callback   Invoked when the operation completes.
          * @param asyncState User-defined state passed through to the callback.
-         * @return An IAsyncResult already marked complete; pass to EndPageUp.
+         * @return A caller-owned result; pass to EndPageUp.
          * @throws System::InvalidOperationException if getCanPageUpProperty() is false.
          */
         [[nodiscard]] System::IAsyncResult* BeginPageUp(System::AsyncCallback callback, std::any asyncState);
@@ -129,11 +133,9 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Synchronously reads a page of a leaderboard.
          *
-         * Task 4.4 (plans/plan_net.md Phase 4): real, local-store-backed implementation. Entries are
-         * sorted by Rating descending (CNA-original default - no FNA reference behavior exists to
-         * match, since FNA's own LeaderboardReader is identically all-NotSupportedException); a
-         * persisted gamertag with no currently signed-in Gamer* match is skipped (documented
-         * limitation - LeaderboardEntry needs a real, live Gamer* to attach to).
+         * Configured service reads use provisioned sort policy and remote paging. Returned
+         * gamer objects belong to the reader, including users signed in on other machines.
+         * Explicit offline factory fixtures continue to read the local store.
          *
          * @param leaderboardId The leaderboard to read.
          * @param pageStart     The index of the first entry to read.
@@ -149,9 +151,9 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Synchronously reads a page of a leaderboard centered on a gamer.
          *
-         * CNA-original default: centers the page on pivotGamer's rank
+         * Centers the page on pivotGamer's rank
          * (`max(0, rank - pageSize / 2)`); if pivotGamer has no entry on this leaderboard, starts
-         * at the top instead (a conservative fallback - no reference behavior exists to match).
+         * at the top instead (the current CNA service policy).
          *
          * @param leaderboardId The leaderboard to read.
          * @param pivotGamer    The gamer around which the page is centered.
@@ -167,7 +169,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Synchronously reads a page of a leaderboard restricted to a set of gamers.
          *
-         * CNA-original default: restricts the full leaderboard to only the given gamers (real
+         * Restricts the leaderboard to only the given gamers (real
          * XNA's "friends leaderboard" pattern), then centers on pivotGamer as the pivotGamer
          * overload above does. Paging uses the same bounded-array math as every other reader -
          * getCanPageDownProperty()/getCanPageUpProperty() only ever look at this reader's own
@@ -292,6 +294,18 @@ namespace Microsoft::Xna::Framework::GamerServices
         );
 
     private:
+        struct RemoteQuery {
+            std::shared_ptr<CNA::Internal::GamerServices::IGamerServicesBackend> service;
+            std::optional<std::vector<std::string>> gamers;
+        };
+        static System::IAsyncResult* BeginServiceRead(const LeaderboardIdentity& identity,int start,int size,
+            const std::string& pivot,std::optional<std::vector<std::string>> gamers,
+            System::AsyncCallback callback,std::any state);
+        System::IAsyncResult* BeginServicePage(int start,const std::string& operation,
+            System::AsyncCallback callback,std::any state);
+        void ApplyServicePage(const CNA::Internal::GamerServices::ServiceLeaderboardPage& page);
+        void EndServicePage(System::IAsyncResult* result,const std::string& operation);
+        void EnsureUsable() const;
         LeaderboardReader(
             const LeaderboardIdentity& identity,
             int start,
@@ -318,5 +332,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         std::vector<LeaderboardEntry> entries_;
         std::vector<LeaderboardEntry> entryCache_;
         bool isDisposed_{false};
+        std::shared_ptr<RemoteQuery> remoteQuery_;
+        std::map<std::string,std::shared_ptr<Gamer>> serviceGamers_;
+        bool pagePending_=false;
     };
 }

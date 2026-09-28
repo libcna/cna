@@ -19,13 +19,9 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Gets the leaderboard entry identified by the given leaderboard identity.
          *
-         * Task 4.3 (plans/plan_net.md Phase 4): loads (or creates, on first access) a real entry for
-         * the owning gamer from the local store, keyed by LeaderboardIdentity. The returned
-         * pointer is owned by this writer (stored by value in entriesByLeaderboardKeyEXT_, a
-         * std::map - reference/pointer-stable across further insertions) and stays valid until
-         * the owning Gamer is destroyed. Callers set Rating (and optionally Columns) on it; see
-         * LeaderboardEntry::setRatingProperty()'s own doc comment for exactly when that gets
-         * persisted.
+         * Service identities keep mutable writes in memory. Explicit offline factory objects
+         * retain local fixture persistence. The returned entry is owned by this writer and
+         * remains valid until its gamer is destroyed.
          *
          * @param leaderboardId The leaderboard to query.
          * @return A real, mutable LeaderboardEntry for the owning gamer on this leaderboard.

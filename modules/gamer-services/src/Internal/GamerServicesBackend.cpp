@@ -16,6 +16,8 @@
 #include <filesystem>
 #include <fstream>
 #include <cstdlib>
+#include <cmath>
+#include <limits>
 #include "System/Security/Cryptography/SHA256.hpp"
 
 namespace CNA::Internal::GamerServices {
@@ -158,6 +160,46 @@ public:
     void setPresence(const std::string& user,int mode,const std::string& text) override {
         (void)request("presence.set",{{"mode",mode},{"text",text}},tokenFor(user));
     }
+    ServiceLeaderboardPage readLeaderboard(const std::string& key,int mode,int start,int size,const std::string& pivot,const std::optional<std::vector<std::string>>& gamers) override {
+        Json args{{"key",key},{"mode",mode},{"start",start},{"size",size}};
+        if(!pivot.empty())args["pivot"]=pivot;
+        if(gamers)args["gamers"]=*gamers;
+        const auto result=request("leaderboards.read",std::move(args),tokenFor({}));
+        auto integer=[](const Json& object,const char* name,long long low,long long high) {
+            const auto& value=object.at(name);
+            if(!value.is_number_integer()||(value.is_number_unsigned()&&value.get<unsigned long long>()>9223372036854775807ULL))throw Unavailable("Invalid leaderboard integer.");
+            const auto number=value.get<long long>();if(number<low||number>high)throw Unavailable("Invalid leaderboard integer.");return number;
+        };
+        ServiceLeaderboardPage page;page.start=static_cast<int>(integer(result,"start",0,2147483647));page.total=static_cast<int>(integer(result,"total",0,2147483647));
+        const auto& entries=result.at("entries");if(!entries.is_array()||entries.size()>static_cast<std::size_t>(size))throw Unavailable("Invalid leaderboard page.");
+        if(static_cast<long long>(page.start)+entries.size()>page.total&&!entries.empty())throw Unavailable("Invalid leaderboard total.");
+        std::set<std::string> seen;
+        for(const auto& row:entries) {
+            ServiceLeaderboardEntry entry;entry.userId=CnaService::stringField(row,"userId",64);entry.gamertag=CnaService::stringField(row,"gamertag",32);
+            if(entry.userId.empty()||entry.gamertag.empty()||!seen.insert(entry.userId).second)throw Unavailable("Invalid leaderboard identity.");
+            entry.rating=integer(row,"rating",std::numeric_limits<long long>::min(),std::numeric_limits<long long>::max());entry.rank=static_cast<int>(integer(row,"rank",1,2147483647));
+            const auto& columns=row.at("columns");if(!columns.is_object()||columns.size()>32||columns.dump().size()>2048)throw Unavailable("Invalid leaderboard columns.");
+            for(const auto& [name,field]:columns.items()) {
+                if(!CnaService::identifier(name)||name.size()>64||!field.is_object()||field.size()!=2)throw Unavailable("Invalid leaderboard column.");
+                ServiceLeaderboardColumn column;column.type=CnaService::stringField(field,"type",16);
+                if(column.type=="string")column.value=CnaService::stringField(field,"value",256);
+                else if(column.type=="single"||column.type=="double") {
+                    if(!field.at("value").is_number())throw Unavailable("Invalid leaderboard floating value.");
+                    const auto number=field["value"].get<double>();if(!std::isfinite(number)||(column.type=="single"&&std::abs(number)>std::numeric_limits<float>::max()))throw Unavailable("Invalid leaderboard floating value.");column.value=number;
+                }else {
+                    long long low=std::numeric_limits<long long>::min(),high=std::numeric_limits<long long>::max();
+                    if(column.type=="int32"){low=-2147483648LL;high=2147483647LL;}
+                    else if(column.type=="datetime"){low=0;high=3155378975999999999LL;}
+                    else if(column.type=="outcome"){low=0;high=3;}
+                    else if(column.type!="int64"&&column.type!="timespan")throw Unavailable("Unknown leaderboard column type.");
+                    column.value=integer(field,"value",low,high);
+                }
+                entry.columns.emplace(name,std::move(column));
+            }
+            page.entries.push_back(std::move(entry));
+        }
+        return page;
+    }
     std::vector<unsigned char> asset(const std::string& hash) override {
         if(hash.size()!=64||hash.find_first_not_of("0123456789abcdef")!=std::string::npos)throw Unavailable("Invalid service asset identifier.");
         const auto token=tokenFor({});
@@ -286,6 +328,7 @@ private:
                 negotiated_=true;
             }
             if(op.starts_with("friends.")&&!capabilities_.contains("friend-requests"))throw Unavailable("CNA service friend-request capability missing.");
+            if(op.starts_with("leaderboards.")&&!capabilities_.contains("leaderboard-reads"))throw Unavailable("CNA service leaderboard-read capability missing.");
             if(op=="assets.read"&&!capabilities_.contains("assets"))throw Unavailable("CNA service asset capability missing.");
             if(op=="presence.set"&&!capabilities_.contains("presence"))throw Unavailable("CNA service presence capability missing.");
             return exchange(op,std::move(args),token);
@@ -306,7 +349,7 @@ private:
 };
 class FakeBackend final : public QueuedBackend {
 public:
-    FakeBackend(std::vector<ServiceIdentity> identities,std::vector<ServiceAchievement> catalog):QueuedBackend(false),identities_(std::move(identities)),catalog_(std::move(catalog)) {}
+    FakeBackend(std::vector<ServiceIdentity> identities,std::vector<ServiceAchievement> catalog,std::vector<ServiceLeaderboardFixture> boards):QueuedBackend(false),identities_(std::move(identities)),catalog_(std::move(catalog)),boards_(std::move(boards)) {}
     bool serviceEnabled() const override{return true;}
     void signIn(int slot,std::string username,std::string password) override {
         slotGuard(slot);std::fill(password.begin(),password.end(),'\0');
@@ -353,11 +396,28 @@ public:
         else throw Unavailable("Invalid friendship operation.");
     }
     void setPresence(const std::string& user,int,const std::string& text) override {require(user);presence_[user]=text;}
+    ServiceLeaderboardPage readLeaderboard(const std::string& key,int mode,int start,int size,const std::string& pivot,const std::optional<std::vector<std::string>>& gamers) override {
+        if(std::all_of(slots_.begin(),slots_.end(),[](const auto& id){return id.empty();}))throw Unavailable("No authenticated fixture gamer.");
+        const auto board=std::find_if(boards_.begin(),boards_.end(),[&](const auto& value){return value.key==key&&value.mode==mode;});
+        if(board==boards_.end())throw Unavailable("Fixture leaderboard not found.");
+        auto entries=board->entries;
+        std::sort(entries.begin(),entries.end(),[&](const auto& a,const auto& b){return a.rating==b.rating?a.userId<b.userId:(board->ascending?a.rating<b.rating:a.rating>b.rating);});
+        for(std::size_t i=0;i<entries.size();++i)entries[i].rank=static_cast<int>(i)+1;
+        if(gamers)std::erase_if(entries,[&](const auto& row){return std::find(gamers->begin(),gamers->end(),row.gamertag)==gamers->end();});
+        if(!pivot.empty()) {
+            const auto found=std::find_if(entries.begin(),entries.end(),[&](const auto& row){return row.gamertag==pivot;});
+            start=found==entries.end()?0:std::max(0,static_cast<int>(std::distance(entries.begin(),found))-size/2);
+        }
+        ServiceLeaderboardPage page;page.start=start;page.total=static_cast<int>(entries.size());
+        for(int i=start;i<page.total&&static_cast<long long>(i)<static_cast<long long>(start)+size;++i)page.entries.push_back(entries[static_cast<std::size_t>(i)]);
+        return page;
+    }
     std::vector<unsigned char> asset(const std::string&) override {throw Unavailable("Fake fixture has no assets.");}
 private:
     void require(const std::string& user) {if(user.empty()||std::find(slots_.begin(),slots_.end(),user)==slots_.end())throw Unavailable("Gamer signed out.");}
     std::vector<ServiceIdentity> identities_;
     std::vector<ServiceAchievement> catalog_;
+    std::vector<ServiceLeaderboardFixture> boards_;
     std::array<std::string,4> slots_{};
     std::map<std::string,std::map<std::string,long long>> earned_;
     std::set<std::pair<std::string,std::string>> edges_;
@@ -370,7 +430,7 @@ std::shared_ptr<IGamerServicesBackend> backend() {
     std::lock_guard lock(registryMutex);if(!current)current=std::make_shared<OnlineBackend>(CNA::GamerServices::resolveConfiguration());return current;
 }
 void setBackendForTesting(std::shared_ptr<IGamerServicesBackend> value) {std::lock_guard lock(registryMutex);current=std::move(value);}
-std::shared_ptr<IGamerServicesBackend> makeFakeBackend(std::vector<ServiceIdentity> people,std::vector<ServiceAchievement> catalog) {
-    return std::make_shared<FakeBackend>(std::move(people),std::move(catalog));
+std::shared_ptr<IGamerServicesBackend> makeFakeBackend(std::vector<ServiceIdentity> people,std::vector<ServiceAchievement> catalog,std::vector<ServiceLeaderboardFixture> boards) {
+    return std::make_shared<FakeBackend>(std::move(people),std::move(catalog),std::move(boards));
 }
 }

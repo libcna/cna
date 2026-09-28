@@ -2,6 +2,8 @@
 #include "Microsoft/Xna/Framework/GamerServices/LeaderboardWriter.hpp"
 #include "CNA/Internal/GamerServices/LocalGamerServicesStore.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
+#include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
@@ -20,6 +22,15 @@ namespace Microsoft::Xna::Framework::GamerServices
         if (existing != entriesByLeaderboardKeyEXT_.end())
         {
             return &existing->second;
+        }
+
+        if(!owner_->serviceUserId_.empty()) {
+            if(owner_->getIsDisposedProperty())throw System::ObjectDisposedException("Gamer");
+            const auto page=CNA::Internal::GamerServices::backend()->readLeaderboard(leaderboardId.getKeyProperty(),leaderboardId.getGameModeProperty(),0,1,owner_->getGamertagProperty(),std::vector<std::string>{owner_->getGamertagProperty()});
+            auto entry=LeaderboardEntry::CreateInternal(owner_,page.entries.empty()?0:page.entries[0].rating,0);
+            auto [inserted,created]=entriesByLeaderboardKeyEXT_.emplace(fileKey,std::move(entry));(void)created;
+            // Service writers are transient; the session boundary will own submission (GS-006b).
+            return &inserted->second;
         }
 
         // First access for this leaderboard from this writer: seed the entry from whatever is

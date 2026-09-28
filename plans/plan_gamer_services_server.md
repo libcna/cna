@@ -211,3 +211,42 @@ C API/coverage/ABI/protocol gates 17/17 pass in 53.93s. Fake backend 58 checks u
 checkpoint a2f8493 (full hash recorded with next integration set). CNA built C API shared library,
 ABI/Guide/Gamers smokes, real-client and protocol harnesses with two compile jobs. No new stubs,
 no sharp-runtime changes. `next` remains b2fd47a45; samples worktree untouched.
+
+
+### Known-good GS-005b integration set
+
+CNA 32c0002ffdc191a118689a3058c64390a8f882ce; server
+a2f849356c5eed23f55256a3c87caf2de45bf5ec; sharp-runtime
+fc033a0e8541a81498c4a496f56a0f59475c6e34. Both task repositories clean at this checkpoint.
+
+### GS-006a leaderboard catalog and remote reads (in progress)
+
+Schema 3 defines title/key/game-mode sort, aggregation, arbitration and typed-column metadata.
+Only trusted administration can seed development entries. Runtime capability `leaderboard-reads`
+provides prepared-query offset/centered/restricted reads, remote total and global ordinal rank;
+no write capability is advertised. SQLite >=3.38 supplies fixed-SQL JSON set filtering. Limits:
+128 definitions/title, page/gamer set <=100, columns <=32 and <=2 KiB, envelope <=64 KiB.
+Large column-heavy pages can refuse LIMIT_EXCEEDED; Stream columns, snapshot paging and rotating
+recent windows remain open. Stable user IDs resolve tie order; exact Xbox pivot/tie policy unmeasured.
+
+Standard Reader now creates owned remote Gamer objects and queues Begin/End/page operations through
+existing backend executor; operation/owner/repeated-End/pending/disposal checks. C++ wrappers release
+old leaked async results. Standard online Writer setters are transient rather than local file writes;
+EndGame submission is still the next GS-006b item, not claimed implemented. Explicit legacy factory
+fixtures remain local. Native C entry handles retain the reader that owns their remote gamers even
+after reader handle destruction; remote gamer storage lasts to reader destruction, not Dispose.
+
+Primary behavior evidence recovered from Microsoft Learn, [LeaderboardWriter class](https://learn.microsoft.com/en-us/previous-versions/windows/xna/ff434258(v=xnagamestudio.40)):
+writes during Playing are flushed only by host EndGame; Ranked permits arbitrated and nonarbitrated,
+other sessions only nonarbitrated. All machines report arbitrated rows for all gamers; nonarbitrated
+rows belong to their local machine. Ranked all machines report TrueSkill, otherwise host does.
+LocalWithLeaderboards is the single-player write path. Local XML lacks these useful class paragraphs;
+the linked Microsoft page supplies them. Full arbitration/TrueSkill remains pending directory support.
+
+GS-006a validation: fake backend 71 checks; GamerServices 388 run, 387 pass/1 existing skip.
+Server 5,136 assertions; final genuine TLS C++/pure C clients and persistence suite 2/2 pass in
+14.53s. Private C API leaderboard/header/export/ABI/protocol gates 9/9 pass in 1.30s; ABI remains
+0.32.0 with unchanged 3,215 exports. Native C read entry remains usable after reader handle release.
+Server committed a13e20d. Next committed next still b2fd47a45; shared samples worktree untouched.
+Next GS-006b: authenticated LocalWithLeaderboards game epochs, transient writer scope, final write
+callback before Lobby and atomic/idempotent server commit. Ranked arbitration follows GS-007.

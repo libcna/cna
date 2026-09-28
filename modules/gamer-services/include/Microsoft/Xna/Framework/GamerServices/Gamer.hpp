@@ -254,6 +254,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         };
 
         friend class GamerServicesDispatcher;
+        friend class LeaderboardReader;
+        friend class LeaderboardWriter;
         std::string serviceUserId_;
         std::string displayName_;
         std::string gamertag_;

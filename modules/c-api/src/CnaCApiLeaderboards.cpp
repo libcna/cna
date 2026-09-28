@@ -45,6 +45,7 @@ struct LeaderboardReaderResource final {
 // here at all -- see the coverage record for why -- so there is no borrowed kind to keep alive.
 struct LeaderboardEntryResource final {
     std::shared_ptr<LeaderboardEntry> owned;
+    std::shared_ptr<LeaderboardReader> readerOwner;
 
     [[nodiscard]] LeaderboardEntry* Value() const noexcept { return owned.get(); }
 };
@@ -166,10 +167,7 @@ struct LeaderboardEntryResource final {
     return CNA_RESULT_SUCCESS;
 }
 
-// The canonical `Read` overloads call their own `BeginRead` and `EndRead` and then **never release
-// the operation those create** -- unlike `Gamer::GetProfile`, which deletes its own. Doing the same
-// two public calls here and releasing the operation performs exactly the work `Read` performs without
-// leaking it, which is the deviation this ABI takes and records rather than passing on.
+// The C ABI exposes a completed read and owns the underlying queued Begin/End operation.
 template<typename TBegin>
 [[nodiscard]] CNA_Result ReadThroughOperation(TBegin&& begin, CNA_Handle* const outReader)
 {
@@ -177,10 +175,11 @@ template<typename TBegin>
     return PublishReader(LeaderboardReader::EndRead(action.get()), outReader);
 }
 
-[[nodiscard]] CNA_Result PublishOwnedEntry(LeaderboardEntry value, CNA_Handle* const outEntry)
+[[nodiscard]] CNA_Result PublishOwnedEntry(LeaderboardEntry value, CNA_Handle* const outEntry, std::shared_ptr<LeaderboardReader> readerOwner = {})
 {
     const auto resource = std::make_shared<LeaderboardEntryResource>();
     resource->owned = std::make_shared<LeaderboardEntry>(std::move(value));
+    resource->readerOwner = std::move(readerOwner);
     const CNA_Result result =
         GetRuntimeHandles().Create(ObjectKind::LeaderboardEntry, resource, outEntry);
     if (result != CNA_RESULT_SUCCESS) {
@@ -486,7 +485,7 @@ CNA_Result cna_leaderboard_reader_get_entry_at(
         if (index < 0 || index >= entries.getCountProperty()) {
             return InvalidInput("The entry index is outside the reader's page.");
         }
-        return PublishOwnedEntry(entries[static_cast<int>(index)], outEntry);
+        return PublishOwnedEntry(entries[static_cast<int>(index)], outEntry, reader->value);
     });
 }
 

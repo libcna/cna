@@ -1,9 +1,9 @@
 # NEXT.md
 
-> **GS-003/005 partial service (2026-09-28):** Dedicated `feature/gamer-services-server`
+> **GS-003/006 partial service (2026-09-28):** Dedicated `feature/gamer-services-server`
 > worktree provides verified-TLS accounts, four slots, Dispatcher event pumping, standard Guide
 > sign-in/social screens, persistent achievements, mutual friends/presence and hash-verified
-> achievement/profile pictures. Pure C clients exercise the same real TLS service; ABI 0.32 adds
+> achievement/profile pictures and remote leaderboard reads. Pure C clients exercise the same real TLS service; ABI 0.32 adds
 > picture copying. This is not Xbox behavioral completeness. Refresh, leaderboard lifecycle,
 > PlayerMatch/Ranked/invites/relay, standard avatars and acceptance samples remain active. See
 > [living plan](plans/plan_gamer_services_server.md) for reproducible commands/results and gaps.

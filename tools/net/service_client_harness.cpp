@@ -5,6 +5,8 @@
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerProfile.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/LeaderboardReader.hpp"
+#include "System/ObjectDisposedException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -21,6 +23,7 @@ using namespace Microsoft::Xna::Framework::GamerServices;
 namespace Service=CNA::Internal::GamerServices;
 int checks=0;
 void check(bool condition,const char* reason){++checks;if(!condition)throw std::runtime_error(reason);}
+LeaderboardEntry firstEntry(const LeaderboardReader& reader) {const auto entries=reader.getEntriesProperty();return entries[0];}
 class Provider : public System::IServiceProvider {public:void* GetService(const std::type_info&)const override{return nullptr;}};
 void waitFor(int count) {
     const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(12);
@@ -41,7 +44,9 @@ int main(int argc,char** argv) {
             std::vector<Service::ServiceIdentity> people;
             for(int i=0;i<4;++i){Service::ServiceIdentity person;person.userId="id"+std::to_string(i);person.gamertag="Player"+std::to_string(i);person.displayName=person.gamertag;person.allowOnlineSessions=true;people.push_back(person);}
             Service::ServiceAchievement achievement;achievement.key="first";achievement.name="First";achievement.description="A real catalog entry";achievement.howToEarn="Play";achievement.score=10;
-            Service::setBackendForTesting(Service::makeFakeBackend(people,{achievement}));
+            Service::ServiceLeaderboardFixture board;board.key="BestScoreLifeTime";
+            for(int i=0;i<4;++i){Service::ServiceLeaderboardEntry row;row.userId=people[i].userId;row.gamertag=people[i].gamertag;row.rating=(i+1)*100;row.columns["Rounds"]={"int32",3LL};board.entries.push_back(row);}
+            Service::setBackendForTesting(Service::makeFakeBackend(people,{achievement},{board}));
         }
         Provider provider;GamerServicesDispatcher::Initialize(provider);
         auto* collection=Gamer::getSignedInGamersProperty();check(collection->getCountProperty()==0,"Initialize fabricated gamers");
@@ -108,6 +113,54 @@ int main(int argc,char** argv) {
             check(texture.getWidthProperty()==2&&texture.getHeightProperty()==2,"achievement PNG texture decode");
             std::unique_ptr<System::IO::Stream> again(picturedAchievement.GetPicture());check(again.get()!=picture.get()&&again->getPositionProperty()==0,"independent cached streams");
             std::unique_ptr<System::IO::Stream> gamerPicture(profile->GetGamerPicture());check(gamerPicture&&gamerPicture->getLengthProperty()==again->getLengthProperty(),"profile picture retrieval");
+        }
+        if(!real) {
+            const auto id=LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
+            bool complete=false;std::unique_ptr<System::IAsyncResult> pending(LeaderboardReader::BeginRead(id,0,2,[&](auto& value){complete=true;check(!value.getCompletedSynchronouslyProperty(),"fake queued leaderboard flag");},{}));
+            check(!complete&&!pending->getIsCompletedProperty(),"fake leaderboard update boundary");
+            auto reader=LeaderboardReader::EndRead(pending.get());check(complete&&reader.getTotalLeaderboardSizeProperty()==4&&reader.getEntriesProperty().getCountProperty()==2,"fake remote total/page");
+            check(firstEntry(reader).getGamerProperty()->getGamertagProperty()=="Player3"&&firstEntry(reader).getColumnsProperty().GetValueInt32("Rounds")==3,"fake owned gamer/column");
+            std::unique_ptr<System::IAsyncResult> down(reader.BeginPageDown({},{}));
+            bool overlap=false;try{std::unique_ptr<System::IAsyncResult> bad(reader.BeginPageDown({},{}));}catch(const System::InvalidOperationException&){overlap=true;}check(overlap,"fake page overlap");
+            bool wrong=false;try{reader.EndPageUp(down.get());}catch(const System::ArgumentException&){wrong=true;}check(wrong,"fake page wrong operation");
+            reader.EndPageDown(down.get());check(reader.getPageStartProperty()==2&&!reader.getCanPageDownProperty()&&reader.getCanPageUpProperty(),"fake page down");reader.PageUp();check(reader.getPageStartProperty()==0,"fake page up");
+            auto centered=LeaderboardReader::Read(id,gamer,1);check(centered.getPageStartProperty()==3,"fake centered read");
+            auto restricted=LeaderboardReader::Read(id,std::vector<Gamer*>{gamer},gamer,1);check(restricted.getTotalLeaderboardSizeProperty()==1&&firstEntry(restricted).getRankingEXTProperty()==4,"fake restricted global rank");
+            auto empty=LeaderboardReader::Read(id,std::vector<Gamer*>{},gamer,1);check(empty.getTotalLeaderboardSizeProperty()==0,"fake explicit empty gamers");
+            reader.Dispose();bool disposed=false;try{reader.PageDown();}catch(const System::ObjectDisposedException&){disposed=true;}check(disposed,"fake disposed remote reader");
+            bool badSize=false;try{std::unique_ptr<System::IAsyncResult> bad(LeaderboardReader::BeginRead(id,0,0,{},{}));}catch(const System::ArgumentOutOfRangeException&){badSize=true;}check(badSize,"fake remote size validation");
+        }
+        if(real) {
+            const auto id=LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
+            bool callback=false;int callbackCount=0;
+            std::unique_ptr<System::IAsyncResult> pending(LeaderboardReader::BeginRead(id,0,1,[&](auto& value){callback=true;++callbackCount;check(!value.getCompletedSynchronouslyProperty(),"remote leaderboard synchronous flag");},77));
+            check(!pending->getIsCompletedProperty()&&!callback,"leaderboard premature callback");
+            auto reader=LeaderboardReader::EndRead(pending.get());check(callback&&callbackCount==1,"leaderboard callback");
+            const bool mainTitle=CNA::GamerServices::resolveConfiguration().gameId=="one";
+            check(reader.getTotalLeaderboardSizeProperty()==(mainTitle?2:0),"remote board title isolation");
+            bool repeated=false;try{(void)LeaderboardReader::EndRead(pending.get());}catch(const System::InvalidOperationException&){repeated=true;}check(repeated,"leaderboard repeated End");
+            if(mainTitle) {
+                check(firstEntry(reader).getGamerProperty()->getGamertagProperty()=="Bob"&&firstEntry(reader).getRatingProperty()==200,"remote gamer/descending rating");
+                auto columns=firstEntry(reader).getColumnsProperty();
+                check(columns.GetValueInt32("Rounds")==3&&columns.GetValueString("Label")=="Original"&&columns.GetValueInt64("Total")==9223372036854775807LL,"typed integer/string precision");
+                check(columns.GetValueSingle("Scale")==1.25f&&columns.GetValueDouble("Precision")==2.5&&columns.GetValueDateTime("When").getTicksProperty()==123456&&columns.GetValueTimeSpan("Duration").getTicksProperty()==-1000&&columns.GetValueOutcome("Outcome")==LeaderboardOutcome::Win,"remaining scalar board column types");
+                auto second=LeaderboardReader::Read(id,1,1);check(second.getPageStartProperty()==1&&firstEntry(second).getGamerProperty()->getGamertagProperty()=="Alice","nonzero page start");
+                check(reader.getCanPageDownProperty()&&!reader.getCanPageUpProperty(),"remote first page flags");
+                std::unique_ptr<System::IAsyncResult> down(reader.BeginPageDown({},{}));
+                bool overlap=false;try{std::unique_ptr<System::IAsyncResult> other(reader.BeginPageDown({},{}));}catch(const System::InvalidOperationException&){overlap=true;}check(overlap,"overlapping page requests");
+                bool wrongOwner=false;try{second.EndPageDown(down.get());}catch(const System::ArgumentException&){wrongOwner=true;}check(wrongOwner,"remote page foreign owner");
+                bool wrongOperation=false;try{reader.EndPageUp(down.get());}catch(const System::ArgumentException&){wrongOperation=true;}check(wrongOperation,"remote page wrong End");
+                reader.EndPageDown(down.get());check(reader.getPageStartProperty()==1&&!reader.getCanPageDownProperty()&&reader.getCanPageUpProperty(),"remote next page flags");
+                reader.PageUp();check(reader.getPageStartProperty()==0,"remote PageUp");
+                std::unique_ptr<Gamer> alice(Gamer::GetFromGamertag("Alice"));
+                auto centered=LeaderboardReader::Read(id,alice.get(),1);check(centered.getPageStartProperty()==1&&firstEntry(centered).getGamerProperty()->getGamertagProperty()=="Alice","remote centered read");
+                auto restricted=LeaderboardReader::Read(id,std::vector<Gamer*>{alice.get()},alice.get(),1);check(restricted.getTotalLeaderboardSizeProperty()==1&&firstEntry(restricted).getRankingEXTProperty()==2,"remote restricted/global rank");
+                auto empty=LeaderboardReader::Read(id,std::vector<Gamer*>{},alice.get(),1);check(empty.getTotalLeaderboardSizeProperty()==0,"remote empty gamer set");
+                auto* write=gamer->getLeaderboardWriterProperty().GetLeaderboard(id);write->setRatingProperty(999);
+                auto after=LeaderboardReader::Read(id,0,2);check(firstEntry(after).getRatingProperty()==200,"setter persisted without session commit");
+            }
+            reader.Dispose();bool disposed=false;try{(void)reader.getEntriesProperty();}catch(const System::ObjectDisposedException&){disposed=true;}check(disposed,"remote reader disposal");
+            bool sizeInvalid=false;try{std::unique_ptr<System::IAsyncResult> bad(LeaderboardReader::BeginRead(id,0,0,{},{}));}catch(const System::ArgumentOutOfRangeException&){sizeInvalid=true;}check(sizeInvalid,"remote page size validation");
         }
         profile->Dispose();
         if(!real) {
