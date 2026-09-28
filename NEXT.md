@@ -1,5 +1,12 @@
 # NEXT.md
 
+> **SAMPLE-104 XNA host diagnostics (2026-09-28):** Game selects shared Framework 4
+> ArgumentException formatting only when the caller has not explicitly chosen a profile.
+> Two new regressions and the full private OPENGLES3 Runtime gate pass: 191 passed, zero failed,
+> two intentional incompatible-platform skips. Native help/error frames now match XNA exactly;
+> browser transport/remote peer qualification remain owner-deferred. No public XNA/C ABI change.
+> See [compatibility record](docs/xna4-runtime-compatibility.md).
+
 > **GS-008c2 private CNA relay (2026-09-28):** Verified libcurl WSS now bridges unchanged
 > ENet datagrams through authorized stable loopback routes, bounded queues and an owned worker.
 > Two real CNA processes/four accounts pass bidirectional fragmented/unreliable data, UDP guards,

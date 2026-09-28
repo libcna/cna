@@ -14,6 +14,7 @@
 #include "CNA/Platform/PlatformFactory.hpp"
 #include "CNA/TargetPlatform.hpp"
 #include "System/Globalization/CultureInfo.hpp"
+#include "System/AppContext.hpp"
 
 #include <algorithm>
 #include <iterator>
@@ -322,6 +323,14 @@ namespace Microsoft::Xna::Framework
           worstCaseSleepPrecision_(System::TimeSpan::FromMilliseconds(1.0)),
           RunApplication(true)
     {
+        // XNA 4 runs on .NET Framework 4. Select its exception diagnostics at the
+        // common host boundary, while honoring an explicit application profile.
+        bool legacyArgumentMessages = false;
+        if (!System::AppContext::TryGetSwitch(
+                "SharpRuntime.UseNetFrameworkArgumentExceptionMessages", legacyArgumentMessages))
+            System::AppContext::SetSwitch(
+                "SharpRuntime.UseNetFrameworkArgumentExceptionMessages", true);
+
         InitializeDefaultCulture(*platform_);
 
         for (auto& previousSleepTime : previousSleepTimes_)
