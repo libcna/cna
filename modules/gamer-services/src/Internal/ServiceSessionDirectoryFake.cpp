@@ -21,6 +21,7 @@ public:
     ServiceSessionSnapshot create(const std::string& actor,const std::vector<std::string>& users,
         ServiceSessionKind kind,const ServiceSessionSettings& settings) override {
         prune();participants(actor,users);settingsGuard(settings);kindGuard(kind);
+        require(kind!=ServiceSessionKind::Ranked||!settings.allowJoinInProgress);
         require(settings.state==ServiceSessionState::Lobby&&users.size()<=static_cast<std::size_t>(settings.maxGamers));
         require(sessions_.size()<1024,"LIMIT_EXCEEDED");int hosts=0;
         for(const auto& [id,session]:sessions_){(void)id;if(session.value.hostId==actor)++hosts;}
@@ -61,7 +62,7 @@ public:
             return view(session,machine);
         }
         if(invitation)require(invitation->value.state!=ServiceInvitationState::Used,"INVALID_STATE");
-        require(value.state!=ServiceSessionState::Playing||value.allowJoinInProgress,"INVALID_STATE");
+        require(value.state!=ServiceSessionState::Playing||(value.kind==ServiceSessionKind::PlayerMatch&&value.allowJoinInProgress),"INVALID_STATE");
         int privateFree=invitation?value.openPrivateSlots:0;
         require(users.size()<=static_cast<std::size_t>(value.openPublicSlots+privateFree),"SESSION_FULL");unoccupied(users);
         const auto machine=nextId();std::set<int> ordinals;for(const auto& row:value.members)ordinals.insert(row.ordinal);
@@ -82,6 +83,7 @@ public:
         authorize_(actor);prune();settingsGuard(settings);require(revision>=1&&revision<=2147483646);
         auto& session=lookup(id);const auto machine=memberMachine(session,actor);auto& value=session.value;
         require(value.hostId==actor&&value.hostMachine==machine,"NOT_AUTHORIZED");require(value.revision==revision,"CONFLICT");
+        require(value.kind!=ServiceSessionKind::Ranked||!settings.allowJoinInProgress);
         require(settings.privateSlots>=value.privateSlots-value.openPrivateSlots&&
             settings.maxGamers-settings.privateSlots>=value.maxGamers-value.privateSlots-value.openPublicSlots);
         apply(value,settings);++value.revision;recount(value);session.leases[machine]=now()+90;return view(session,machine);

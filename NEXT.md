@@ -1,5 +1,12 @@
 # NEXT.md
 
+> **GS-007f1a Ranked admission (2026-09-28):** Server migration 9 repairs legacy
+> join-in-progress flags; Ranked gameplay refuses new ordinary/invited groups without consuming
+> consent. Client/fake/roster validation agrees. GamerServices 433 pass / one known HEADLESS skip,
+> Net 371/371, private gates 13/13 and final server corpus 11/11 pass, including real TLS,
+> restart and isolated NAT. Public online construction/arbitration remain unfinished. Next:
+> owned preparation/cancellation/rollback and separate SystemLink harness coordination.
+
 > **SAMPLE-104 XNA host diagnostics (2026-09-28):** Game selects shared Framework 4
 > ArgumentException formatting only when the caller has not explicitly chosen a profile.
 > Two new regressions and the full private OPENGLES3 Runtime gate pass: 191 passed, zero failed,

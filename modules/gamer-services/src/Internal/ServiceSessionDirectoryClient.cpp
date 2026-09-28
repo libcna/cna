@@ -70,6 +70,7 @@ ServiceSessionSnapshot snapshot(const Json& value,bool roster) {
     if(result.currentGamers+result.openPublicSlots+result.openPrivateSlots!=result.maxGamers)invalid();
     result.revision=static_cast<int>(number(value,"revision",1,2147483647));
     result.allowJoinInProgress=boolean(value,"allowJoinInProgress");
+    if(result.kind==ServiceSessionKind::Ranked&&result.allowJoinInProgress)invalid();
     CnaService::validateSessionProperties(value.at("properties"));
     for(std::size_t index=0;index<result.properties.size();++index)
         if(!value["properties"][index].is_null())result.properties[index]=value["properties"][index].get<int>();
@@ -126,6 +127,7 @@ public:
     ServiceSessionSnapshot create(const std::string& actor,const std::vector<std::string>& users,
         ServiceSessionKind category,const ServiceSessionSettings& settings) override {
         usersGuard(actor,users);settingsGuard(settings);argument(settings.state==ServiceSessionState::Lobby&&users.size()<=static_cast<std::size_t>(settings.maxGamers));
+        argument(category!=ServiceSessionKind::Ranked||!settings.allowJoinInProgress);
         auto args=settingsArgs(settings);args.erase("state");args["kind"]=kindName(category);
         auto value=decode([&]{return snapshot(request_("sessions.create",args,actor,users),true);});
         groupGuard(value,actor,users);

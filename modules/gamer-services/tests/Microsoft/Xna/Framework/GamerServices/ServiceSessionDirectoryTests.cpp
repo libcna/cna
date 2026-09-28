@@ -168,6 +168,37 @@ TEST(ServiceSessionDirectoryTest, FakeModelsBothKindsFourLocalsFilteringAndPriva
         expectCode([&]{(void)directory.get("a",host.session);},"NOT_FOUND");
     }
 }
+TEST(ServiceSessionDirectoryTest, RankedCreateCannotEnableJoinInProgressBeforeDispatch) {
+    int calls=0;auto client=makeSessionDirectoryClient([&](const auto&,auto,const auto&,const auto&){++calls;return roster();});
+    ServiceSessionSettings settings;settings.maxGamers=4;settings.allowJoinInProgress=true;
+    expectCode([&]{(void)client->create("alice-id",{"alice-id"},ServiceSessionKind::Ranked,settings);},"INVALID_ARGUMENT");
+    EXPECT_EQ(0,calls);
+}
+TEST(ServiceSessionDirectoryTest, RankedJoinInProgressSnapshotsAreInvalidAuthority) {
+    auto data=roster();data["kind"]="ranked";data["allowJoinInProgress"]=true;
+    auto client=makeSessionDirectoryClient([&](const auto&,auto,const auto&,const auto&){return data;});
+    expectCode([&]{(void)client->get("alice-id",sessionId);},"INVALID_RESPONSE");
+    auto advertised=advertisement();advertised["kind"]="ranked";advertised["allowJoinInProgress"]=true;
+    data={{"start",0},{"more",false},{"sessions",Json::array({advertised})}};
+    expectCode([&]{(void)client->find("bob-id",ServiceSessionKind::Ranked,1,{},0,32);},"INVALID_RESPONSE");
+}
+TEST(ServiceSessionDirectoryTest, FakeRankedGameplayCannotAdmitOrdinaryOrInvitedNewGroups) {
+    Fixture fixture;auto& directory=*fixture.directory;ServiceSessionSettings settings;settings.maxGamers=4;settings.allowJoinInProgress=true;
+    expectCode([&]{(void)directory.create("a",{"a","c"},ServiceSessionKind::Ranked,settings);},"INVALID_ARGUMENT");
+    settings.allowJoinInProgress=false;const auto host=directory.create("a",{"a","c"},ServiceSessionKind::Ranked,settings);
+    const auto invite=directory.sendInvite("a",host.session,"Tagb");(void)directory.acceptInvite("b",invite.invite);
+    settings.allowJoinInProgress=true;
+    expectCode([&]{(void)directory.update("a",host.session,host.revision,settings);},"INVALID_ARGUMENT");
+    auto unchanged=directory.get("a",host.session);EXPECT_EQ(host.revision,unchanged.revision);EXPECT_FALSE(unchanged.allowJoinInProgress);
+    settings.allowJoinInProgress=false;settings.state=ServiceSessionState::Playing;
+    const auto playing=directory.update("a",host.session,host.revision,settings);
+    EXPECT_TRUE(directory.find("b",ServiceSessionKind::Ranked,2,{},0,32).sessions.empty());
+    expectCode([&]{(void)directory.join("b",{"b","d"},host.session);},"INVALID_STATE");
+    expectCode([&]{(void)directory.join("b",{"b","d"},host.session,invite.invite);},"INVALID_STATE");
+    EXPECT_EQ(ServiceInvitationState::Accepted,directory.getInvite("b",invite.invite).state);
+    unchanged=directory.get("a",host.session);EXPECT_EQ(2,unchanged.currentGamers);EXPECT_EQ(playing.revision,unchanged.revision);
+    EXPECT_EQ(host.machine,directory.join("a",{"a","c"},host.session).machine);
+}
 TEST(ServiceSessionDirectoryTest, FakeCapacityFailureKeepsAcceptedInviteAndAllMembersUntouched) {
     Fixture f;ServiceSessionSettings settings;settings.maxGamers=3;settings.privateSlots=1;
     const auto host=f.directory->create("a",{"a","c"},ServiceSessionKind::PlayerMatch,settings);
@@ -179,10 +210,10 @@ TEST(ServiceSessionDirectoryTest, FakeCapacityFailureKeepsAcceptedInviteAndAllMe
 }
 TEST(ServiceSessionDirectoryTest, FakeHostRevisionsPlayingPolicyExpiryAndAuthentication) {
     Fixture f;ServiceSessionSettings settings;settings.maxGamers=4;
-    auto host=f.directory->create("a",{"a"},ServiceSessionKind::Ranked,settings);
+    auto host=f.directory->create("a",{"a"},ServiceSessionKind::PlayerMatch,settings);
     expectCode([&]{(void)f.directory->update("a",host.session,host.revision+1,settings);},"CONFLICT");
     settings.state=ServiceSessionState::Playing;host=f.directory->update("a",host.session,host.revision,settings);
-    EXPECT_TRUE(f.directory->find("b",ServiceSessionKind::Ranked,1,{},0,32).sessions.empty());
+    EXPECT_TRUE(f.directory->find("b",ServiceSessionKind::PlayerMatch,1,{},0,32).sessions.empty());
     expectCode([&]{(void)f.directory->join("b",{"b"},host.session);},"INVALID_STATE");
     settings.allowJoinInProgress=true;host=f.directory->update("a",host.session,host.revision,settings);
     const auto joined=f.directory->join("b",{"b","d"},host.session);EXPECT_EQ(3,joined.currentGamers);
@@ -190,7 +221,7 @@ TEST(ServiceSessionDirectoryTest, FakeHostRevisionsPlayingPolicyExpiryAndAuthent
     EXPECT_EQ(1,f.directory->get("a",host.session).currentGamers);
     expectCode([&]{(void)f.directory->get("b",host.session);},"NOT_AUTHORIZED");
     f.authorized.erase("a");expectCode([&]{(void)f.directory->touch("a",host.session);},"UNAUTHENTICATED");
-    f.authorized.insert("a");f.time+=60;EXPECT_TRUE(f.directory->find("b",ServiceSessionKind::Ranked,1,{},0,32).sessions.empty());
+    f.authorized.insert("a");f.time+=60;EXPECT_TRUE(f.directory->find("b",ServiceSessionKind::PlayerMatch,1,{},0,32).sessions.empty());
     expectCode([&]{(void)f.directory->get("a",host.session);},"NOT_FOUND");
 }
 TEST(ServiceSessionDirectoryTest, FakeInvitationExpiryAndQuotaSurviveSessionCloseRecreate) {

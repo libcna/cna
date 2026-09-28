@@ -1377,3 +1377,74 @@ other two unit executables). Do not compare this HEADLESS Runtime count directly
 agent's OPENGLES3 registration; these are separate configured corpora. No new server/runtime
 repository changes. Argument-profile selection is credited to the samples agent's committed work,
 not a newly unblocked online GamerServices/Net sample in this project.
+
+### GS-001f known-good committed integration set
+
+- CNA 8bfb24a42a58c457d424b6a821c30dfccff7efa2 (contains next 092fc7f91).
+- sharp-runtime 6c4a857de129cf29b5d43430bedf24157d594f12.
+- cna-gamer-services-server 0cd1d08984210a120e7b0b7cb238f6f438f4d8af.
+
+### GS-007f1a completed: Ranked service admission semantics
+
+Evidence: local xna4-spec/Microsoft.Xna.Framework.Net/NetworkSessionType.xml explicitly forbids
+Ranked join-in-progress; NetworkSession.xml AllowJoinInProgress declares NotSupportedException.
+Available Windows managed NetworkSession.cs lines 200–218 skips unchanged values and rejects
+Ranked changes before SendAllowCommand. This establishes a functional service admission rule;
+exact console corner-case exception order still lacks a measured probe.
+
+Server schema migration 9 repairs legacy Ranked true flags and advances revision while keeping
+members. Reject enabled Ranked create/update atomically, hide gameplay Ranked listings and
+refuse new ordinary/invited groups even with legacy true flags. Existing identical membership
+replay stays idempotent. Client typed response/roster authority refuses true Ranked snapshots;
+client create validates before dispatch and deterministic fake mirrors the rule/atomicity.
+Three new service cases and one roster case; extend server directory assertions for ordinary/
+invited refusal, untouched invitation/membership, migration and restart. Canonical protocol
+doc updated; envelope/CNR v1/header/golden encodings unchanged. Validation below.
+
+- [x] GS-007f1a: server persistence/client/fake Ranked lobby-only admission, tests and integration.
+- [ ] GS-007f1b: public AllowJoinInProgress validation/event propagation after public Ranked
+  construction is enabled; host/dispose/unchanged-value order needs focused standard API tests.
+Public online construction is still refused, so do not invent a public test factory solely to
+instantiate an otherwise unreachable Ranked session. Existing public setter/migration guard
+gaps and SystemLink flag propagation remain unfinished; no claims of full Ranked API parity.
+Owned online preparation/cancellation/rollback remains the next main GS-007e2c2 task.
+
+### GS-007e2c2 active design: owned preparation and cancellation
+
+The result owns its originating backend, while queued work/completions own only a separate
+mutex-protected state. Work borrows the executor; no state queued by a backend may strongly
+own that same backend. Acquire membership, validate full local-group authority, issue a relay
+ticket, allocate the bounded loopback host and wait for verified relay readiness before publishing
+resources. No XNA objects are constructed on the worker. Cancellation and publication serialize
+under the same lock. A running canceled job rolls back its own membership; a canceled ready
+result claims the prepared resources, closes sockets and performs bounded best-effort leave
+while the result still retains the backend. A consumed lease independently retains the origin
+and owns subsequent release. Destruction may wait for an in-flight request or bounded leave;
+there are no detached cleanup threads. An unreachable leave relies on the documented 90-second
+membership lease; never claim immediate cleanup during outage. Deterministic fake dependencies
+are explicit private injections; normal fake/unconfigured mode cannot obtain network authority.
+This slice establishes ownership and relay readiness, not the ENet welcome/public join lifecycle.
+
+### GS-007f1a validation and server checkpoint
+
+Incremental CNA/server builds passed. GamerServices 434 run / 433 pass / one known HEADLESS
+screensaver skip (6.231s); Net 371/371 (5.083s); private C API/protocol gates 13/13 (85.77s).
+Full server configured corpus finally 11/11 (155.14s), no skipped native/NAT scenarios. Real
+Ranked host update rejects true without revision mutation; auxiliary verified TLS Bob requests
+prove hidden gameplay listings, ordinary/invited refusal and accepted consent preserved. Native
+host verifies unchanged two-local roster and issues a fresh lobby invite after legitimate recipient
+dismissal. Four-user ordinary/invited directory joins, public Find and server restart still pass.
+No public online Create/Join or Ranked arbitration completeness assertion.
+
+Initial fake playing-policy case incorrectly enabled Ranked JIP: retargeted the existing positive
+case to PlayerMatch, alongside new negative Ranked cases. Initial native negative probe tried to
+read a recipient-only invite as its sender: removed that unauthorized assertion, kept recipient TLS
+checks. Full server first run 9/11 (228.72s), two old schema-version assertions expected 8; updated
+both to 9 and the future-schema refusal to 10, then reran all 11 successfully. A pre-existing
+SystemLink migration race failed once (370/371) before an isolated pass and full 371/371 confirmation;
+separate GS-007g1 harness coordination task follows. No production SystemLink code changed.
+Logs: cmake-build-debug/service-ranked-policy-{final-build,final-gamer,final-net,final-private}.log,
+service-ranked-policy-native-fix-build.log, server build/service-ranked-policy-confirmation-e2e.log
+(and earlier failure logs retained). Server commit 6d41f41; sharp-runtime unchanged at
+6c4a857de129cf29b5d43430bedf24157d594f12. Latest committed CNA next now equals 8bfb24a42;
+no additional unintegrated committed history or uncommitted samples-agent copying.

@@ -72,6 +72,7 @@ ServiceRoster::ServiceRoster(const GamerServices::ServiceSessionSnapshot& value)
        value.openPublicSlots<0||value.openPublicSlots>value.maxGamers-value.privateSlots||
        value.currentGamers+value.openPrivateSlots+value.openPublicSlots!=value.maxGamers||value.revision<1||
        (value.kind!=GamerServices::ServiceSessionKind::PlayerMatch&&value.kind!=GamerServices::ServiceSessionKind::Ranked)||
+       (value.kind==GamerServices::ServiceSessionKind::Ranked&&value.allowJoinInProgress)||
        (value.state!=GamerServices::ServiceSessionState::Lobby&&value.state!=GamerServices::ServiceSessionState::Playing))invalid();
     try{(void)CnaService::relayMachineId(value.machine);(void)CnaService::relayMachineId(value.hostMachine);}catch(...){invalid();}
     text(value.hostId,64);text(value.hostGamertag,32);

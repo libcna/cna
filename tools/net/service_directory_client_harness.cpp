@@ -66,11 +66,25 @@ int main(int argc,char** argv) {
             phase="create";auto session=directory.create(users[0],users,category,settings);check(session.currentGamers==2,"host local group");
             const auto authority=directory.issueRelayTicket(users[0],users,session.session);
             check(authority.machine==session.machine&&authority.session==session.session&&authority.ticket.size()==64,"host relay authority");
-            phase="send-invite";const auto invitation=directory.sendInvite(users[0],session.session,"Bob");
+            phase="send-invite";auto invitation=directory.sendInvite(users[0],session.session,"Bob");
             check(invitation.invite==directory.sendInvite(users[0],session.session,"Bob").invite,"duplicate invite identity");
             rejected([&]{(void)directory.update(users[0],session.session,session.revision+1,settings);},"CONFLICT");
+            if(category==Service::ServiceSessionKind::Ranked) {
+                phase="ranked-policy";auto invalid=settings;invalid.allowJoinInProgress=true;
+                rejected([&]{(void)directory.update(users[0],session.session,session.revision,invalid);},"INVALID_ARGUMENT");
+                const auto unchanged=directory.get(users[0],session.session);
+                check(unchanged.revision==session.revision&&!unchanged.allowJoinInProgress,"invalid ranked update mutated authority");
+            }
             phase="host-update";settings.state=Service::ServiceSessionState::Playing;session=directory.update(users[0],session.session,session.revision,settings);
+            if(category==Service::ServiceSessionKind::Ranked) {
+                std::cout<<"directory-playing "<<session.session<<' '<<invitation.invite<<'\n'<<std::flush;advance();
+                check(directory.get(users[0],session.session).currentGamers==2,"ranked admission mutated membership");
+            }
             settings.state=Service::ServiceSessionState::Lobby;session=directory.update(users[0],session.session,session.revision,settings);
+            if(category==Service::ServiceSessionKind::Ranked) {
+                const auto previous=invitation.invite;invitation=directory.sendInvite(users[0],session.session,"Bob");
+                check(invitation.invite!=previous&&invitation.state==Service::ServiceInvitationState::Pending,"new lobby invitation");
+            }
             std::cout<<"directory-host "<<session.session<<' '<<invitation.invite<<'\n'<<std::flush;advance();
             phase="host-touch";session=directory.touch(users[0],session.session);check(session.currentGamers==2,"remote group left after restart");
             check(directory.get(users[1],session.session).machine==session.machine,"secondary local roster authority");

@@ -48,6 +48,11 @@ TEST(ServiceRosterTest, ExactMachineGroupsOwnStableIdsAndOnlyOwnerHostFlag) {
     refused([&]{(void)authority.welcomeFor(host,{"Alice","Charlie"});});
     refused([&]{(void)ServiceRoster(fixture(true)).welcomeFor(remote,{"Bob","Dana"});});
 }
+TEST(ServiceRosterTest, RankedAuthorityNeverPermitsJoinInProgress) {
+    auto value=fixture();value.kind=Service::ServiceSessionKind::Ranked;
+    EXPECT_NO_THROW((void)ServiceRoster(value));value.allowJoinInProgress=true;
+    refused([&]{(void)ServiceRoster(value);});
+}
 TEST(ServiceRosterTest, AllThirtyOneSlotsAndFourLocalAccountsRoundTripWithoutReducedIds) {
     auto value=fixture();value.maxGamers=31;value.currentGamers=31;value.privateSlots=0;value.openPrivateSlots=0;value.openPublicSlots=0;value.members.clear();
     value.hostId="u0";value.hostGamertag="Gamer0";value.hostMachine=std::string(32,'1');value.machine=value.hostMachine;
