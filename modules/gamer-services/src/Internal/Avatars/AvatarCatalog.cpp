@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/GamerServices/AvatarAssets.hpp"
+#include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
+#include <chrono>
+#include <future>
 #include "System/Security/Cryptography/SHA256.hpp"
 #include <algorithm>
 #include <mutex>
@@ -65,6 +68,30 @@ const EmbeddedFile* embedded(std::string_view name)
     return found==files.end()?nullptr:&*found;
 }
 }
+
+template<typename T>
+std::optional<T> onServiceExecutor(std::function<T(IGamerServicesBackend&)> work)
+{
+    try {
+        auto service=backend();
+        if(!service->serviceEnabled())return std::nullopt;
+        auto promise=std::make_shared<std::promise<T>>();
+        auto future=promise->get_future();
+        const std::weak_ptr<IGamerServicesBackend> origin=service;
+        service->submit([promise,origin,work=std::move(work)] {
+            try {
+                const auto executor=origin.lock();
+                if(!executor)throw std::runtime_error("the service backend was replaced");
+                promise->set_value(work(*executor));
+            } catch(...) {promise->set_exception(std::current_exception());}
+        },[]{});
+        if(future.wait_for(std::chrono::seconds(30))!=std::future_status::ready)return std::nullopt;
+        return future.get();
+    } catch(...) {
+        return std::nullopt;
+    }
+}
+template std::optional<std::string> onServiceExecutor(std::function<std::string(IGamerServicesBackend&)>);
 
 const std::array<int,BoneCount>& parentBones(){return Parents;}
 std::string_view boneName(int slot){return slot>=0&&slot<BoneCount?Names[slot]:std::string_view{};}
@@ -185,14 +212,22 @@ std::optional<AssetBytes> resolveAsset(const CatalogManifest& manifest,std::stri
 {
     auto listed=manifest.assets.find(name);
     if(listed==manifest.assets.end())return std::nullopt;
-    const auto* file=embedded(name);
-    if(!file||file->size!=listed->second.size)return std::nullopt;
-    // Embedded contents are checked against the manifest once per process.
-    std::lock_guard guard(verifiedLock);
-    if(!verified.contains(listed->second.sha256)) {
-        if(sha256Hex(file->bytes())!=listed->second.sha256)return std::nullopt;
-        verified.insert(listed->second.sha256);
+    const auto& expected=listed->second;
+    if(const auto* file=embedded(name);file&&file->size==expected.size) {
+        // Embedded contents are checked against the manifest once per process.
+        std::lock_guard guard(verifiedLock);
+        if(verified.contains(expected.sha256)||sha256Hex(file->bytes())==expected.sha256) {
+            verified.insert(expected.sha256);
+            return AssetBytes{nullptr,file->bytes()};
+        }
     }
-    return AssetBytes{nullptr,file->bytes()};
+    // Not compiled in (a newer catalog): the service's immutable, hash-addressed copy, which the
+    // backend caches on disk and verifies; checked again here against this manifest.
+    auto bytes=onServiceExecutor<std::vector<unsigned char>>([hash=expected.sha256](IGamerServicesBackend& service) {
+        return service.asset(hash);
+    });
+    if(!bytes||bytes->size()!=expected.size||sha256Hex(*bytes)!=expected.sha256)return std::nullopt;
+    auto owned=std::make_shared<const std::vector<std::uint8_t>>(std::move(*bytes));
+    return AssetBytes{owned,std::span<const std::uint8_t>(*owned)};
 }
 }

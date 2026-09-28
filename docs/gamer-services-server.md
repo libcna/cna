@@ -15,8 +15,8 @@ Server canonical protocol and administration commands live in sibling `cna-gamer
 Measured service features include four local authenticated players, standard Guide sign-in, profiles/
 lookup, achievements (metadata/awards), mutual friends and rich presence. Standard ShowFriends,
 ShowGamerCard and ShowFriendRequest use CNA system overlays. LocalWithLeaderboards submits final
-rows at EndGame or explicit early leave. PlayerMatch/Ranked/invites/relay and standard Avatar migration
-remain unfinished.
+rows at EndGame or explicit early leave. PlayerMatch/Ranked, invitations,
+relay and standard avatars are implemented; see the living plan for what remains.
 Rich presence is sent during Dispatcher.Update; friend online state currently reflects authenticated
 activity within 90 seconds; Update schedules authenticated heartbeat every 30 seconds. Do not treat this as a production
 service release or a claim of measured Xbox event/validation parity across every method.
@@ -28,8 +28,13 @@ Only content hashes form filenames; data is verified on download and on cache re
 are replaced atomically, and each API call returns a separate read-only stream at position zero.
 Cache writes stop at 256 MiB (eviction is not implemented); a full/unwritable cache still allows
 retrieval. PNG assets are bounded to 512x512/512 KiB; larger version-2 GLB resources have a 16-MiB
-transport ceiling. Hashes do not make malformed image/model content valid. No live avatar catalog
-or standard-avatar rendering is implied by this initial generic resource mechanism.
+transport ceiling. Hashes do not make malformed image/model content valid.
+
+Avatars (`avatars` capability, server schema 12): the service stores one CNA-encoded description
+per account and imports CNA's avatar catalogs (`cna-gamer-services-admin <db> avatar-catalog
+<CNA>/modules/gamer-services/assets/avatars/v1`). `AvatarDescription.BeginGetFromGamer` reads a
+gamer's description; the renderer downloads only the files of a newer catalog that the library
+does not embed, through the same verified hash cache. See `docs/avatars.md`.
 
 
 Online leaderboard reads use server-provisioned title/key/game-mode definitions, sort direction and

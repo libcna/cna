@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp"
 #include "CNA/Internal/GamerServices/AvatarDescriptionCodec.hpp"
+#include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
+#include "../Internal/ServiceAsyncResult.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
@@ -133,6 +135,18 @@ namespace Microsoft::Xna::Framework::GamerServices
             throw System::ObjectDisposedException("gamer");
         }
 
+        // A gamer with a service identity (signed in, or met in an online session) has its
+        // avatar read from the service; anyone else has none.
+        const auto userId = CNA::Internal::GamerServices::GamerAccess::userId(*gamer);
+        auto service = CNA::Internal::GamerServices::backend();
+        if (service->serviceEnabled() && !userId.empty())
+        {
+            return CNA::Internal::GamerServices::ServiceAsyncResult::begin(
+                "avatar", nullptr,
+                [userId](auto& executor) -> std::any { return executor.avatars({userId}).at(0); },
+                std::move(callback), std::move(state), std::move(service));
+        }
+
         auto* result = new AvatarDescriptionAsyncResult(std::move(state));
         if (callback)
         {
@@ -143,7 +157,35 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     AvatarDescription AvatarDescription::EndGetFromGamer(System::IAsyncResult* result)
     {
-        // Always an all-zero (invalid) description, matching the real XNA implementation.
+        if (dynamic_cast<CNA::Internal::GamerServices::ServiceAsyncResult*>(result) != nullptr)
+        {
+            std::vector<unsigned char> bytes;
+            try
+            {
+                bytes = std::any_cast<std::vector<unsigned char>>(
+                    CNA::Internal::GamerServices::ServiceAsyncResult::end(result, "avatar", nullptr));
+            }
+            catch (const System::ArgumentException&)
+            {
+                throw;
+            }
+            catch (const System::InvalidOperationException&)
+            {
+                throw;
+            }
+            catch (const std::exception&)
+            {
+                // An unreachable service reads as "no avatar", as it would for a gamer without one.
+                bytes.clear();
+            }
+            if (static_cast<int>(bytes.size()) == DescriptionSize)
+            {
+                return AvatarDescription(std::vector<SharpRuntime::bytecs>(bytes.begin(), bytes.end()), false);
+            }
+            return AvatarDescription(std::vector<SharpRuntime::bytecs>(DescriptionSize, 0), false);
+        }
+
+        // Without a service identity there is no avatar: an all-zero (invalid) description.
         std::vector<SharpRuntime::bytecs> zeroData(DescriptionSize, 0);
 
         if (dynamic_cast<AvatarDescriptionAsyncResult*>(result) == nullptr)

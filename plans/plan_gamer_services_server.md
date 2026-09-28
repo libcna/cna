@@ -2209,3 +2209,29 @@ here: `tools/platform/sdl_classify.py --check` fails on `SDL_TOUCH_MOUSEID` intr
 committed c74569ae5 (SAMPLE-046).
 Known limits: `AvatarDescription.Changed` is still never raised (value-type C++ mapping; see
 GS-009e); the Blender pipeline/EXT content remains until GS-009f.
+
+### GS-009e complete: service-backed avatar descriptions and catalog distribution
+
+- [x] Server schema 12 (`avatars`, `avatar_catalogs`, `avatar_catalog_items`,
+  `avatar_catalog_assets`), capability `avatars`: `avatars.get` (1..16 ids, hex or null),
+  `avatars.set` (own avatar; v1 layout/CRC/reserved/ranges and catalog items/slots validated;
+  2 s spacing), `avatars.catalog` (newest or requested manifest). Catalog files live in the
+  immutable asset store and `assets.read` authorizes them for every title. Admin:
+  `avatar-catalog <dir>` (strict manifest, per-file hash/size/type, versions immutable, items
+  never disappear or change slot) and `avatar <user> random [female|male] | set | clear`.
+- [x] Client: `IGamerServicesBackend::avatars/avatarCatalog` (online with strict response
+  validation; fake fixture avatars + `setFakeAvatarCatalog`). `BeginGetFromGamer` reads a
+  service-identity gamer's avatar through the executor (Update-boundary completion);
+  otherwise the synchronous all-zero path. Unreachable service -> invalid description.
+- [x] Newer catalogs: the loader thread asks the service for the manifest (cached per process)
+  and resolves each file by hash: embedded when the library has the same name+SHA-256, else the
+  backend's verified disk cache/`assets.read`, re-verified against the manifest; unresolvable
+  items substitute the slot default. Face atlases cached per atlas hash.
+
+Validation: GamerServices **496 pass / 1 known skip** (ServiceAvatarTests 7, named Service* so
+`IsInitializedDefaultsFalse` keeps running first); server `service_avatars` **66 assertions**;
+real E2E `service_cna_avatars`: Guide sign-in, own/lookup/absent descriptions, catalog v2 hat
+fetched by hash + cached (only that file), renderer Ready with 0 substitutions, twice (first/
+cached); server full corpus **23/23, zero skips, 340.19s** (`build/avatars-full.log`) with every
+CNA probe and the NAT helper.
+Known gap: `AvatarDescription.Changed` is not raised (documented in docs/avatars.md).

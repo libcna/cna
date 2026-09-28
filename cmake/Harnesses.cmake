@@ -622,6 +622,9 @@ if(CNA_ENABLE_NET AND CNA_BUILD_TESTS)
     # GS-007e2c3b: public XNA NetworkSession acceptance client; links no private service header.
     add_executable(cna_service_session_client_harness tools/net/service_session_client_harness.cpp)
     target_link_libraries(cna_service_session_client_harness PRIVATE CNA_Net)
+    # GS-009e: standard XNA avatar reads and rendering against a real service.
+    add_executable(cna_service_avatar_client_harness tools/net/service_avatar_client_harness.cpp)
+    target_link_libraries(cna_service_avatar_client_harness PRIVATE CNA_GamerServices)
     add_test(NAME GamerServices_FakeBackend COMMAND cna_service_client_harness)
     set_tests_properties(GamerServices_FakeBackend PROPERTIES TIMEOUT 45)
 endif()

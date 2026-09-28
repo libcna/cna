@@ -30,6 +30,8 @@ struct ServiceIdentity {
     int totalAchievements = 0;
     /** @brief Account online-session permission. */
     bool allowOnlineSessions = false;
+    /** @brief Fixture-only avatar description (1021 bytes), empty for none. */
+    std::vector<unsigned char> avatar;
 };
 /** @brief Title-scoped catalog entry and user-earned state. */
 struct ServiceAchievement {
@@ -192,6 +194,12 @@ public:
     virtual void reviewPlayer(const std::string& userId,const std::string& gamertag,const std::string& rating) = 0;
     /** @brief Publishes rich presence. @param userId Actor. @param mode Stable mode. @param text Display text. */
     virtual void setPresence(const std::string& userId,int mode,const std::string& text) = 0;
+    /** @brief Reads accounts' avatar descriptions. @param userIds 1..16 service identities.
+     * @return Description bytes per identity, in order; empty when the account has no avatar. */
+    virtual std::vector<std::vector<unsigned char>> avatars(const std::vector<std::string>& userIds) = 0;
+    /** @brief Reads an imported avatar catalog manifest. @param version Catalog version, 0 for the newest.
+     * @return catalog.json text. */
+    virtual std::string avatarCatalog(int version) = 0;
     /** @brief Retrieves immutable asset bytes, with verified local cache where configured.
      * @param hash SHA-256 identifier. @return Resource bytes. */
     virtual std::vector<unsigned char> asset(const std::string& hash) = 0;
@@ -227,6 +235,9 @@ bool serviceCallsRestricted();
 void withRestrictedServiceCalls(const std::function<void()>& callback);
 /** @brief Injects an explicit test backend. @param value Backend or null to reset configuration. */
 void setBackendForTesting(std::shared_ptr<IGamerServicesBackend> value);
+/** @brief Gives a fake backend an avatar catalog to serve. @param fake Backend from makeFakeBackend.
+ * @param manifest catalog.json text. @param assets File bytes by SHA-256. */
+void setFakeAvatarCatalog(IGamerServicesBackend& fake,std::string manifest,std::map<std::string,std::vector<unsigned char>> assets);
 /** @brief Creates deterministic fake with explicitly supplied identities and catalog.
  * @param identities Accounts. @param catalog Title catalog. @param boards Explicit test boards.
  * @return Fake backend. */

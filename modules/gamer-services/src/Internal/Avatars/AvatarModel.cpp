@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/GamerServices/AvatarAssets.hpp"
+#include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include <algorithm>
 #include <cmath>
@@ -30,12 +31,14 @@ AvatarImage decodePng(std::span<const std::uint8_t> png)
 
 // Namespace scope (not function statics): they must outlive the loader thread at exit.
 std::mutex faceLock;
-std::shared_ptr<const std::vector<AvatarImage>> cached;
+std::map<std::string,std::shared_ptr<const std::vector<AvatarImage>>,std::less<>> cachedTiles;
 
 std::shared_ptr<const std::vector<AvatarImage>> faceTiles(const CatalogManifest& manifest)
 {
+    // One decoded atlas per distinct atlas file.
+    const auto& hash=manifest.assets.at(manifest.faceAsset).sha256;
     std::lock_guard guard(faceLock);
-    if(cached)return cached;
+    if(auto found=cachedTiles.find(hash);found!=cachedTiles.end())return found->second;
     const auto bytes=resolveAsset(manifest,manifest.faceAsset);
     if(!bytes)throw std::runtime_error("avatar face atlas is unavailable");
     const auto atlas=decodePng(bytes->view);
@@ -51,8 +54,7 @@ std::shared_ptr<const std::vector<AvatarImage>> faceTiles(const CatalogManifest&
             }
             tiles->push_back(std::move(tile));
         }
-    cached=tiles;
-    return cached;
+    return cachedTiles.emplace(hash,std::move(tiles)).first->second;
 }
 
 Vector3 toVector(const AvatarColor& color){return Vector3(color.r/255.0f,color.g/255.0f,color.b/255.0f);}
@@ -100,9 +102,36 @@ void applyBuild(std::vector<AvatarVertex>& vertices,const std::array<Vector3,Bon
 }
 }
 
+namespace {
+std::mutex catalogLock;
+std::map<std::uint16_t,std::shared_ptr<const CatalogManifest>> serviceCatalogs;
+}
+
+std::shared_ptr<const CatalogManifest> catalogManifest(std::uint16_t version)
+{
+    const auto& embedded=embeddedManifest();
+    const std::shared_ptr<const CatalogManifest> builtIn(std::shared_ptr<const CatalogManifest>{},&embedded);
+    if(version<=embedded.version)return builtIn;
+    {
+        std::lock_guard guard(catalogLock);
+        if(auto found=serviceCatalogs.find(version);found!=serviceCatalogs.end())return found->second;
+    }
+    const auto text=onServiceExecutor<std::string>([version](IGamerServicesBackend& service){return service.avatarCatalog(version);});
+    if(!text)return builtIn;
+    try {
+        auto manifest=std::make_shared<const CatalogManifest>(parseManifest(*text));
+        if(manifest->version!=version)return builtIn;
+        std::lock_guard guard(catalogLock);
+        return serviceCatalogs.emplace(version,std::move(manifest)).first->second;
+    } catch(const std::runtime_error&) {
+        return builtIn;
+    }
+}
+
 std::shared_ptr<const AvatarModel> buildAvatarModel(const AvatarDescriptor& descriptor)
 {
-    const auto& manifest=embeddedManifest();
+    const auto catalog=catalogManifest(descriptor.catalogVersion);
+    const auto& manifest=*catalog;
     const int body=descriptor.bodyType==1?1:0;
     auto model=std::make_shared<AvatarModel>();
     const auto bodyBytes=resolveAsset(manifest,manifest.bodies[body]);

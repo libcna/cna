@@ -30,6 +30,24 @@ avatar. A buffer that is not a CNA v1 description (another format, a damaged che
 reserved bytes) keeps XNA's `IsValid` answer, which only looks at the first byte, but reports
 height 0 and the female body type, and a renderer given it is `Unavailable`.
 
+## Descriptions from the service
+
+`AvatarDescription.BeginGetFromGamer`/`EndGetFromGamer` read a gamer's avatar from the configured
+CNA service (see `docs/gamer-services-server.md`): a signed-in gamer, a gamer returned by
+`Gamer.GetFromGamertag`, or a remote `NetworkGamer` met in an online session all carry a service
+identity. The operation completes during `GamerServicesDispatcher.Update` (never synchronously)
+and `EndGetFromGamer` returns the stored description. A gamer without an avatar, without a service
+identity (offline, System Link, no service configured), or an unreachable service yields an
+invalid, all-zero description, so games take their usual "no avatar" path. The service stores one
+avatar per account and accepts only CNA v1 descriptions whose items exist in a catalog it has
+imported; administration assigns them (`cna-gamer-services-admin <db> avatar <user> random`).
+
+Games that share avatars in a session the XNA way (sending `Description` bytes to other machines
+and constructing an `AvatarDescription` from them) need nothing from the service at all.
+
+`AvatarDescription.Changed` is never raised: C++ descriptions are values, so the cached instance
+XNA raised it on has no counterpart; read the description again to see a change.
+
 ## Rendering
 
 `AvatarRenderer` needs nothing beyond the XNA API. A game that creates a
@@ -89,5 +107,17 @@ other rigs, non-identity bind rotations, out-of-range indices or weights, and ov
 `GamerServices_AvatarCatalogUpToDate` test regenerates the catalog and compares it byte for byte;
 `tools/avatar_builder/preview_avatar.py` renders previews for development.
 
-An item a description names that the catalog cannot provide is replaced by the first item of its
-slot (optional accessories are omitted), so a newer description still renders.
+### Newer catalogs from the service
+
+A description names the catalog version its items come from. For a version newer than the one
+compiled in, the renderer's loader asks the service for that catalog's manifest (`avatars.catalog`)
+and resolves each file by content hash: a file the embedded catalog also has (same name and
+SHA-256) is used from the library; any other is downloaded from the service's immutable asset
+store (`assets.read`), verified against the manifest hash and size, and cached on disk by hash
+(`CNA_GAMER_SERVICES_CACHE_DIR`, else `$XDG_CACHE_HOME/cna/gamer-services/assets`), where every
+later read is verified again. Only item files travel; bones and geometry are never streamed
+during play.
+
+An item that cannot be resolved (no service, an unknown id, a missing or corrupt file) is replaced
+by the first item of its slot (optional accessories are omitted), so the avatar still renders; a
+body that cannot be resolved makes the renderer `Unavailable`.

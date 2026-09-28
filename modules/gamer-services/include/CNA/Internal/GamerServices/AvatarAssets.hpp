@@ -8,6 +8,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include <array>
+#include <functional>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -17,6 +18,8 @@
 #include <string>
 #include <string_view>
 #include <vector>
+
+namespace CNA::Internal::GamerServices { class IGamerServicesBackend; }
 
 namespace CNA::Internal::GamerServices::Avatars {
 /** @brief Bones in the XNA avatar skeleton. */
@@ -97,6 +100,16 @@ const CatalogManifest& embeddedManifest();
 /** @brief Lower-case hex SHA-256. @param bytes Input. @return Digest. */
 std::string sha256Hex(std::span<const std::uint8_t> bytes);
 
+/** @brief Runs service work on the backend executor and waits (bounded) for it; for background
+ * threads, never the game thread. @param work Work. @return Result, or empty when the service is
+ * disabled, unreachable or failed. */
+template<typename T>
+std::optional<T> onServiceExecutor(std::function<T(IGamerServicesBackend&)> work);
+/** @brief The manifest describing a catalog version: the embedded one for versions it covers,
+ * otherwise the service's (cached per process); falls back to the embedded manifest when the
+ * service cannot provide it. @param version Catalog version a description names. @return Manifest. */
+std::shared_ptr<const CatalogManifest> catalogManifest(std::uint16_t version);
+
 /** @brief Bytes of one asset, either static embedded data or an owned copy. */
 struct AssetBytes {
     /** @brief Keeps downloaded or cached contents alive. */
@@ -104,9 +117,10 @@ struct AssetBytes {
     /** @brief The contents. */
     std::span<const std::uint8_t> view;
 };
-/** @brief Resolves a manifest asset to verified bytes (embedded catalog only; the service cache
- * extends this). @param manifest Manifest listing it. @param name Asset name. @return Bytes, or
- * empty when unavailable or when the contents do not match the manifest hash. */
+/** @brief Resolves a manifest asset to verified bytes: the embedded catalog when it holds the same
+ * file, otherwise the service's hash-addressed copy (cached on disk by the backend).
+ * @param manifest Manifest listing it. @param name Asset name. @return Bytes, or empty when
+ * unavailable or when the contents do not match the manifest hash and size. */
 std::optional<AssetBytes> resolveAsset(const CatalogManifest& manifest,std::string_view name);
 
 /** @brief Vertex of an avatar mesh in bind pose. */

@@ -79,8 +79,9 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Begins retrieving the avatar description for the specified gamer.
          *
-         * Invokes @p callback synchronously before returning, matching the real XNA
-         * implementation (a fully synchronous fake-async operation).
+         * A gamer with a CNA service identity (signed in, or met in an online session) has its
+         * description read from the service; the operation completes during
+         * GamerServicesDispatcher.Update. Any other gamer completes at once, synchronously.
          *
          * @param gamer The gamer to retrieve the avatar description for.
          * @param callback The method to call when the operation completes.
@@ -99,11 +100,9 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @brief Ends a pending request to retrieve an avatar description started with
          * BeginGetFromGamer.
          *
-         * Always returns an all-zero, invalid AvatarDescription, matching the real XNA
-         * implementation.
-         *
          * @param result The IAsyncResult returned by BeginGetFromGamer.
-         * @return An all-zero, invalid AvatarDescription.
+         * @return The gamer's avatar description; an invalid (all-zero) one when the gamer has no
+         * avatar, has no service identity, or the service cannot be reached.
          * @throws System::ArgumentException if result was not returned by BeginGetFromGamer.
          */
         [[nodiscard]] static AvatarDescription EndGetFromGamer(System::IAsyncResult* result);
