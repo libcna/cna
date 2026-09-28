@@ -396,10 +396,10 @@ int main(void)
         cna_gamer_get_signed_in_gamer_count(&count) != CNA_RESULT_SUCCESS || count != 1) {
         return CNA_TEST_FAIL(9);
     }
-    /* The canonical indexer is **positional**: it reads the collection at the player index rather
-       than searching for the gamer whose own player index matches. One published gamer therefore
-       answers at index one, not at the index it was created with. */
-    if (cna_gamer_get_signed_in_gamer_at_player_index(CNA_PLAYER_INDEX_ONE, &has_gamer,
+    /* The canonical indexer finds the gamer whose own player index matches (XNA IL
+       SignedInGamerCollection.get_Item(PlayerIndex)): the one published gamer, created for player
+       two, answers at index two even though it is the collection's first element. */
+    if (cna_gamer_get_signed_in_gamer_at_player_index(CNA_PLAYER_INDEX_TWO, &has_gamer,
                                                       &borrowed) != CNA_RESULT_SUCCESS ||
         has_gamer != CNA_TRUE || borrowed == CNA_INVALID_HANDLE) {
         return CNA_TEST_FAIL(10);
@@ -409,8 +409,8 @@ int main(void)
         cna_gamer_get_signed_in_gamer_count(&count) != CNA_RESULT_SUCCESS || count != 1) {
         return CNA_TEST_FAIL(11);
     }
-    /* A player index past the published gamers is still an ordinary success with the flag clear. */
-    if (cna_gamer_get_signed_in_gamer_at_player_index(CNA_PLAYER_INDEX_TWO, &has_gamer,
+    /* A player nobody signed in as is still an ordinary success with the flag clear. */
+    if (cna_gamer_get_signed_in_gamer_at_player_index(CNA_PLAYER_INDEX_ONE, &has_gamer,
                                                       &borrowed) != CNA_RESULT_SUCCESS ||
         has_gamer != CNA_FALSE ||
         cna_gamer_get_signed_in_gamer_at_player_index(CNA_PLAYER_INDEX_FOUR, &has_gamer,

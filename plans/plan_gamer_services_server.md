@@ -2450,3 +2450,16 @@ positions). Tests: `ENetBackendTest.ClientSendsClientHelloAndProcessesServerWelc
 `OnlineNetworkSessionTest.PublicJoinUsesTheFindGroupAndFollowsDirectoryAuthority` assert host-first
 `AllGamers` and replay order. CnaNetTests 472/472, CnaGamerServicesTests 483 + 1 skip, C API gates
 unchanged (inventory current).
+
+### GS-004m complete: `SignedInGamers[PlayerIndex]` finds the player
+
+Found while porting the achievements/leaderboards sample (`Gamer.SignedInGamers[PlayerIndex.One]`).
+XNA IL `SignedInGamerCollection.get_Item(PlayerIndex)` walks the collection and returns the gamer
+whose `PlayerIndex` matches, else null; CNA indexed by the enum's ordinal (the FNA-era port), so
+with only player two signed in, `[PlayerIndex.One]` named player two. Fixed at the one operator, which
+`cna_gamer_get_signed_in_gamer_at_player_index` also uses; the C header/doc text that described the
+positional lookup as canonical was corrected, and the divergence has its row in
+`plans/plan_bindings_upstream.md`. The dispatcher already publishes gamers in slot order. Tests:
+`SignedInGamerCollectionTest.PlayerIndexOperatorFindsThePlayerNotThePosition`, `GamersSmoke` step 10-12
+rewritten. CnaGamerServicesTests 484 + 1 skip; C API gates unchanged apart from the three environment
+smokes.

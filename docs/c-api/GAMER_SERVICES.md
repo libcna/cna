@@ -127,10 +127,10 @@ the collection does not hold is a no-op that reports success, which is what the 
 does.
 
 The signed-in collection is **process-wide and gets no handle**, the same rule the display metrics,
-the component collection and the game window already follow. Its player-index lookup is
-**positional**: it reads the collection at that index rather than searching for the gamer whose own
-player index matches, so one published gamer answers at `CNA_PLAYER_INDEX_ONE` whatever index it was
-created with.
+the component collection and the game window already follow. Its player-index lookup finds
+the gamer whose own player index matches (XNA's `SignedInGamerCollection.get_Item(PlayerIndex)`), so
+one published gamer created for player two answers at `CNA_PLAYER_INDEX_TWO` and player one has none;
+`cna_gamer_get_signed_in_gamer_at` is the positional route.
 
 ### Two things with no C form at all
 

@@ -1136,23 +1136,6 @@ CNA_C_API CNA_Result cna_gamer_begin_get_partner_token(
     uint64_t* out_bytes);
 
 /**
- * @brief Reads the signed-in gamer at a player index.
- *
- * @param player_index One of the `CNA_PLAYER_INDEX_*` identities.
- * @param out_has_gamer Receives non-zero when a gamer is signed in at that index.
- * @param out_gamer Receives a borrowed gamer handle when @p out_has_gamer is non-zero, and is left
- *        exactly as the caller set it otherwise.
- * @return `CNA_RESULT_SUCCESS` or a documented argument/thread failure.
- *
- * Availability is separate from the answer: no gamer at that index is an ordinary success with the
- * flag clear, not a failure.
- *
- * **The lookup is positional.** The canonical indexer reads the signed-in collection at that index
- * rather than searching for the gamer whose own player index matches, so a single signed-in gamer
- * answers at `CNA_PLAYER_INDEX_ONE` whatever player index it was created with. That is the canonical
- * behavior, reported rather than corrected.
- */
-/**
  * @brief Gets the signed-in gamer at a position in the process-wide collection.
  *
  * @param index Zero-based position, which is **not** a player index.
@@ -1196,6 +1179,20 @@ CNA_C_API CNA_Result cna_gamer_signed_in_contains(
     CNA_SignedInGamerHandle gamer,
     CNA_Bool* out_contains);
 
+/**
+ * @brief Reads the signed-in gamer at a player index.
+ *
+ * @param player_index One of the `CNA_PLAYER_INDEX_*` identities.
+ * @param out_has_gamer Receives non-zero when a gamer is signed in at that index.
+ * @param out_gamer Receives a borrowed gamer handle when @p out_has_gamer is non-zero, and is left
+ *        exactly as the caller set it otherwise.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/thread failure.
+ *
+ * Availability is separate from the answer: no gamer at that index is an ordinary success with the
+ * flag clear, not a failure. The lookup finds the gamer whose own player index matches, so with only
+ * player two signed in, player one has no gamer and player two answers although it is the
+ * collection's first element (@ref cna_gamer_get_signed_in_gamer_at is the positional route).
+ */
 CNA_C_API CNA_Result cna_gamer_get_signed_in_gamer_at_player_index(
     CNA_PlayerIndex player_index,
     CNA_Bool* out_has_gamer,
