@@ -19,6 +19,8 @@
 #include "System/ArgumentException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include <chrono>
+#include <array>
+#include <cstdlib>
 #include <iostream>
 #include <thread>
 using namespace Microsoft::Xna::Framework::GamerServices;
@@ -105,6 +107,8 @@ void exerciseLocalLeave(SignedInGamer* gamer,const std::vector<SignedInGamer*>& 
 int main(int argc,char** argv) {
     try {
         const bool real=argc>1&&std::string(argv[1])=="--real";
+        const std::string action=real&&argc==5?argv[4]:"";
+        const int localCount=!real||action=="remember-four"||action=="resume-four"?4:1;
         if(!real) {
             std::vector<Service::ServiceIdentity> people;
             for(int i=0;i<4;++i){Service::ServiceIdentity person;person.userId="id"+std::to_string(i);person.gamertag="Player"+std::to_string(i);person.displayName=person.gamertag;person.allowOnlineSessions=true;people.push_back(person);}
@@ -113,6 +117,13 @@ int main(int argc,char** argv) {
             for(int i=0;i<4;++i){Service::ServiceLeaderboardEntry row;row.userId=people[i].userId;row.gamertag=people[i].gamertag;row.rating=(i+1)*100;row.columns["Rounds"]={"int32",3LL};board.entries.push_back(row);}
             Service::setBackendForTesting(Service::makeFakeBackend(people,{achievement},{board}));
         }
+        if(real&&!std::getenv("CNA_GAMER_SERVICES_CREDENTIALS_DIR")) {
+#if defined(_WIN32)
+            _putenv_s("CNA_GAMER_SERVICES_CREDENTIALS_DIR","0");
+#else
+            setenv("CNA_GAMER_SERVICES_CREDENTIALS_DIR","0",1);
+#endif
+        }
         Provider provider;GamerServicesDispatcher::Initialize(provider);
         auto* collection=Gamer::getSignedInGamersProperty();check(collection->getCountProperty()==0,"Initialize fabricated gamers");
         int signedIn=0,signedOut=0;
@@ -120,11 +131,16 @@ int main(int argc,char** argv) {
         auto out=SignedInGamer::SignedOut.Add([&](auto*,const SignedOutEventArgs& e){++signedOut;check(!e.getGamerProperty()->getIsSignedInToLiveProperty(),"signout state before event");});
         std::string password;
         if(real){check(argc==5,"real arguments");std::getline(std::cin,password);}
-        Guide::ShowSignIn(real?1:4,true);
+        if(real&&(action=="resume"||action=="resume-four")) {
+            waitFor(localCount);check((*collection)[0]->getGamertagProperty()=="Alice","restored service identity");
+        }else {
+        Guide::ShowSignIn(localCount,true);
         check(Guide::getIsVisibleProperty()&&Guide::getHasPendingKeyboardInputEXTProperty(),"Guide username pane");
         bool busy=false;try{Guide::ShowSignIn(1,true);}catch(const GuideAlreadyVisibleException&){busy=true;}check(busy,"Guide overlapping sign-in");
-        for(int i=0;i<(real?1:4);++i) {
-            enterText(real?argv[2]:"Player"+std::to_string(i));
+        for(int i=0;i<localCount;++i) {
+            const std::array<std::string,4> accounts{"alice","bob","charlie","dana"};
+            if(real&&i>0)check(static_cast<bool>(std::getline(std::cin,password)),"local credential input");
+            enterText(real?(localCount==4?accounts[i]:argv[2]):"Player"+std::to_string(i));
             const auto secret=real?password:std::string("test-fixture");
             for(unsigned char c:secret)Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextInput(c);
             check(Guide::GetPendingKeyboardInputDisplayTextForTestingEXT()==std::string(secret.size(),'*'),"password masking");
@@ -143,8 +159,9 @@ int main(int argc,char** argv) {
             }
             waitFor(i+1);
         }
+        }
         check(!Guide::getIsVisibleProperty(),"Guide sign-in completed");
-        check(collection==Gamer::getSignedInGamersProperty(),"collection lifetime changed");check(signedIn==(real?1:4),"sign-in count");
+        check(collection==Gamer::getSignedInGamersProperty(),"collection lifetime changed");check(signedIn==localCount,"sign-in count");
         auto* gamer=(*collection)[0];
         if(!real)for(int i=0;i<4;++i)check((*collection)[i]->getPlayerIndexProperty()==static_cast<Microsoft::Xna::Framework::PlayerIndex>(i),"local slot mapping");
         bool callback=false;
@@ -290,7 +307,26 @@ int main(int argc,char** argv) {
             check(denied,"revoked operation allowed");waitFor(0);check(signedOut==1,"revoked credential signout event");
             std::cout<<checks<<" revocation checks passed\n";return 0;
         }
-        auto* retired=gamer;Service::backend()->signOut(0);check(retired->getIsSignedInToLiveProperty(),"signout before pump");waitFor(real?0:3);
+        if(real&&(action=="remember"||action=="remember-four")) {
+            SignedInGamer::SignedIn.Remove(in);SignedInGamer::SignedOut.Remove(out);
+            std::fill(password.begin(),password.end(),'\0');std::cout<<checks<<" remembered-client checks passed\n";return 0;
+        }
+        if(real&&std::string(argv[4])=="maintenance") {
+            std::string command;std::cout<<"maintenance-ready"<<std::endl;check(static_cast<bool>(std::getline(std::cin,command)),"expiry command");
+            std::unique_ptr<GamerProfile> renewed(gamer->GetProfile());GamerServicesDispatcher::Update();
+            check(signedIn==1&&signedOut==0&&renewed->getGamerScoreProperty()==10,"refresh changed gamer lifetime/events");
+            std::cout<<"maintenance-refreshed"<<std::endl;check(static_cast<bool>(std::getline(std::cin,command)),"heartbeat command");
+            const auto until=std::chrono::steady_clock::now()+std::chrono::seconds(33);
+            while(std::chrono::steady_clock::now()<until){GamerServicesDispatcher::Update();std::this_thread::sleep_for(std::chrono::milliseconds(2));}
+            check(signedIn==1&&signedOut==0,"heartbeat changed identity events");
+            std::cout<<"maintenance-heartbeat"<<std::endl;check(static_cast<bool>(std::getline(std::cin,command)),"offline command");
+            bool failed=false;try{std::unique_ptr<GamerProfile> offline(gamer->GetProfile());}catch(const GamerServicesNotAvailableException&){failed=true;}
+            check(failed&&signedOut==0,"server loss fabricated success or signout");
+            std::cout<<"maintenance-offline"<<std::endl;check(static_cast<bool>(std::getline(std::cin,command)),"reconnect command");
+            std::unique_ptr<GamerProfile> reconnected(gamer->GetProfile());GamerServicesDispatcher::Update();
+            check(reconnected->getGamerScoreProperty()==10&&signedIn==1&&signedOut==0,"reconnect lost identity or persistence");
+        }
+        auto* retired=gamer;Service::backend()->signOut(0);check(retired->getIsSignedInToLiveProperty(),"signout before pump");waitFor(localCount-1);
         check(signedOut==1&&!retired->getIsSignedInToLiveProperty(),"retired identity/event lifetime");
         if(!real) {
             Guide::ShowSignIn(1,true);Guide::SimulateKeyboardInputCancelEXT();

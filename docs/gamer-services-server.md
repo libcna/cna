@@ -14,10 +14,11 @@ Server canonical protocol and administration commands live in sibling `cna-gamer
 
 Measured service features include four local authenticated players, standard Guide sign-in, profiles/
 lookup, achievements (metadata/awards), mutual friends and rich presence. Standard ShowFriends,
-ShowGamerCard and ShowFriendRequest use CNA system overlays. Refresh/reconnect,
-gameplay leaderboard submission, PlayerMatch/Ranked/invites/relay and standard Avatar migration remain unfinished.
+ShowGamerCard and ShowFriendRequest use CNA system overlays. LocalWithLeaderboards submits final
+rows at EndGame or explicit early leave. PlayerMatch/Ranked/invites/relay and standard Avatar migration
+remain unfinished.
 Rich presence is sent during Dispatcher.Update; friend online state currently reflects authenticated
-activity within 90 seconds, so idle heartbeat must still be added. Do not treat this as a production
+activity within 90 seconds; Update schedules authenticated heartbeat every 30 seconds. Do not treat this as a production
 service release or a claim of measured Xbox event/validation parity across every method.
 
 Achievement/profile picture streams now read immutable SHA-256 resources from the service. The
@@ -35,6 +36,25 @@ Online leaderboard reads use server-provisioned title/key/game-mode definitions,
 scalar columns. Offset, gamer-centered and gamer-restricted reads page remotely rather than loading
 an entire board or dropping gamers signed in on another machine. Begin/End completions use the
 Dispatcher update boundary; native C callbacks return completed reads. Online writer setters now
-retain transient data: EndGame submission remains the next unfinished milestone. Admin seed commands
+retain transient data while Playing and flush after final write events at host EndGame;
+explicit early leave uses IsLeaving=true. Ranked arbitration, Stream columns and TrueSkill are unfinished. Admin seed commands
 are development fixtures, not a gameplay write mechanism. Page limits and unsupported Stream/recent
 window/TrueSkill behavior are documented in the server protocol.
+
+
+Refresh authority is user-level data. On POSIX, the private credential directory defaults to
+`$XDG_STATE_HOME/cna/gamer-services/credentials` or `$HOME/.local/state/cna/gamer-services/credentials`.
+`CNA_GAMER_SERVICES_CREDENTIALS_DIR` chooses a CI/deployment directory; `0` disables persistence.
+Only rotating refresh credentials and estimated expiry are stored, bound to endpoint, title and
+local slot. Passwords, access tokens and gameplay metadata are absent. Owner-only 0700 directories,
+0600 atomic files, no-follow opens, hard-link/size checks and a process lease prevent unsafe reads
+and concurrent use of the same refresh family. These are protected plaintext files, not an OS
+keychain. Windows/browser credentials remain ephemeral until a secure platform provider exists.
+
+Dispatcher.Update restores up to four real service identities, refreshes access before expiry and
+maintains heartbeat. Transport loss retains the last authenticated identity and uses bounded
+maintenance backoff; confirmed revocation signs it out at the Update boundary. Explicit sign-out
+clears that slot's persistent authority. Rotation uses server remaining lifetimes to tolerate clock
+offset. A lost successful refresh response or interrupted persistence may require fresh Guide
+sign-in because replaying an old refresh credential revokes its family. Reconnect and restart tests
+are service-control evidence; they do not prove Internet game-data transport or every Xbox event rule.

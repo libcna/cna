@@ -4,7 +4,8 @@
 > worktree provides verified-TLS accounts, four slots, Dispatcher event pumping, standard Guide
 > sign-in/social screens, persistent achievements, mutual friends/presence and hash-verified
 > achievement/profile pictures, remote leaderboard reads and LocalWithLeaderboards EndGame/early-leave commits. Pure C clients exercise the same real TLS service; ABI 0.32 adds
-> picture copying. This is not Xbox behavioral completeness. Refresh, Ranked leaderboard lifecycle,
+> picture copying. POSIX private refresh persistence, four-account resume, heartbeat and service-control
+> reconnect are tested. This is not Xbox behavioral completeness. Ranked leaderboard lifecycle,
 > PlayerMatch/Ranked/invites/relay, standard avatars and acceptance samples remain active. See
 > [living plan](plans/plan_gamer_services_server.md) for reproducible commands/results and gaps.
 

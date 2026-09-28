@@ -2,6 +2,8 @@
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
 #include "CNA/GamerServices/Configuration.hpp"
 #include "CnaService/Protocol.hpp"
+#include "CredentialStore.hpp"
+#include <chrono>
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
@@ -25,6 +27,11 @@ namespace CNA::Internal::GamerServices {
 using CnaService::Json;
 namespace {
 using Unavailable=Microsoft::Xna::Framework::GamerServices::GamerServicesNotAvailableException;
+struct ServiceError : Unavailable {
+    explicit ServiceError(std::string value):Unavailable("CNA service request failed"),code(std::move(value)){}
+    std::string code;
+};
+long long unixTime(){return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();}
 void slotGuard(int slot) {if(slot<0||slot>3)throw System::ArgumentOutOfRangeException("slot");}
 ServiceIdentity identity(const Json& j) {
     ServiceIdentity value;
@@ -93,26 +100,39 @@ private:
 };
 class OnlineBackend final : public QueuedBackend {
 public:
-    explicit OnlineBackend(CNA::GamerServices::Configuration config):QueuedBackend(true),config_(std::move(config)) {}
+    explicit OnlineBackend(CNA::GamerServices::Configuration config):QueuedBackend(true),config_(std::move(config)),credentials_(config_) {
+        std::set<std::string> seen;
+        for(int slot=0;slot<4;++slot)if(const auto stored=credentials_.load(slot)) {
+            if(!seen.insert(stored->refreshToken).second||stored->expires<=unixTime()){credentials_.remove(slot);continue;}
+            {std::lock_guard lock(slotMutex_);slots_[slot].refresh=stored->refreshToken;slots_[slot].refreshExpires=stored->expires;}
+        }
+    }
     ~OnlineBackend() override {stop();}
     bool serviceEnabled() const override {return !config_.endpoint.empty();}
     void signIn(int slot,std::string username,std::string password) override {
         slotGuard(slot);
-        queue([this,slot,username=std::move(username),password=std::move(password)]() mutable {
+        unsigned long long generation;{std::lock_guard lock(slotMutex_);generation=++slots_[slot].generation;slots_[slot].busy=true;}
+        queue([this,slot,generation,username=std::move(username),password=std::move(password)]() mutable {
             BackendEvent event;event.slot=slot;std::string issuedToken;
             try {
                 const auto result=request("auth.login",{{"username",username},{"password",password}},{});
                 auto person=identity(result.at("identity"));issuedToken=CnaService::stringField(result,"token",128);
                 if(issuedToken.size()!=64)throw CnaService::Error("INVALID_RESPONSE");
+                std::lock_guard transport(transportMutex_);
                 std::string previous;
                 {std::lock_guard lock(slotMutex_);
                  for(int i=0;i<4;++i)if(i!=slot&&slots_[i].identity.userId==person.userId)throw CnaService::Error("ALREADY_SIGNED_IN");
-                 previous=slots_[slot].token;slots_[slot]={person,issuedToken};}
+                 if(slots_[slot].generation!=generation)throw CnaService::Error("STALE_AUTHENTICATION");
+                 previous=slots_[slot].token;
+                 auto replacement=decodeCredentials(result);replacement.generation=generation;slots_[slot]=std::move(replacement);}
+                persist(slot);
+                {std::lock_guard lock(slotMutex_);slots_[slot].busy=false;}
                 issuedToken.clear();
-                if(!previous.empty()){try{(void)request("auth.logout",Json::object(),previous);}catch(...){}}
+                if(!previous.empty()){try{(void)exchange("auth.logout",Json::object(),previous);}catch(...){}}
                 event.type=BackendEvent::Type::SignedIn;event.identity=std::move(person);
             }catch(const std::exception&){
                 if(issuedToken.size()==64){try{(void)request("auth.logout",Json::object(),issuedToken);}catch(...){}}
+                {std::lock_guard lock(slotMutex_);if(slots_[slot].generation==generation)slots_[slot].busy=false;}
                 event.type=BackendEvent::Type::Failed;event.error="Sign-in failed.";
             }
             std::fill(password.begin(),password.end(),'\0');return event;
@@ -120,13 +140,46 @@ public:
     }
     void signOut(int slot) override {
         slotGuard(slot);
-        queue([this,slot]{
+        unsigned long long generation;{std::lock_guard lock(slotMutex_);generation=++slots_[slot].generation;slots_[slot].busy=true;}
+        queue([this,slot,generation]{
             BackendEvent event;event.type=BackendEvent::Type::SignedOut;event.slot=slot;
-            Slot previous;{std::lock_guard lock(slotMutex_);previous=slots_[slot];slots_[slot]={};}
-            event.identity=previous.identity;
+            Slot previous;{std::lock_guard lock(slotMutex_);previous=slots_[slot];slots_[slot]={};slots_[slot].generation=generation;}
+            credentials_.remove(slot);event.identity=previous.identity;
             if(!previous.token.empty()){try{(void)request("auth.logout",Json::object(),previous.token);}catch(...){}}
             return event;
         });
+    }
+    std::vector<BackendEvent> pump() override {
+        const auto timestamp=unixTime();
+        for(int slot=0;slot<4;++slot) {
+            unsigned long long generation=0;bool schedule=false;
+            {std::lock_guard lock(slotMutex_);auto& state=slots_[slot];
+             if(!state.busy&&state.retryAt<=timestamp&&(!state.token.empty()||!state.refresh.empty())&&
+                (state.expires<=timestamp+300||state.heartbeatAt<=timestamp)) {state.busy=true;generation=state.generation;schedule=true;}}
+            if(schedule)try {
+                queue([this,slot,generation]{
+                    bool succeeded=false;
+                    try {
+                        std::lock_guard transport(transportMutex_);negotiateLocked();
+                        Slot state;{std::lock_guard lock(slotMutex_);state=slots_[slot];}
+                        if(state.generation==generation) {
+                            if(state.expires<=unixTime()+300&&!state.refresh.empty())renewLocked(slot,generation);
+                            else if(capabilities_.contains("heartbeat")&&!state.token.empty()) {
+                                try{(void)exchange("auth.ping",Json::object(),state.token);}
+                                catch(const ServiceError& error){if(error.code!="UNAUTHENTICATED")throw;renewLocked(slot,generation);}
+                            }
+                            succeeded=true;
+                        }
+                    }catch(const ServiceError& error) {if(error.code=="UNAUTHENTICATED")invalidateSlot(slot,generation);}
+                     catch(...) {}
+                    {std::lock_guard lock(slotMutex_);auto& state=slots_[slot];if(state.generation==generation){state.busy=false;
+                        if(succeeded){state.failures=0;state.retryAt=0;state.heartbeatAt=unixTime()+30;}
+                        else {state.failures=std::min(state.failures+1,6);state.retryAt=unixTime()+std::min(300,10*(1<<state.failures));}}}
+                    BackendEvent event;event.type=BackendEvent::Type::Completion;return event;
+                });
+            }catch(...) {std::lock_guard lock(slotMutex_);slots_[slot].busy=false;slots_[slot].retryAt=timestamp+5;}
+        }
+        return QueuedBackend::pump();
     }
     ServiceIdentity profile(const std::string& tag) override {return identity(request("profile.get",{{"gamertag",tag}},tokenFor({})));}
     std::vector<ServiceAchievement> achievements(const std::string& user) override {
@@ -278,7 +331,12 @@ public:
         return bytes;
     }
 private:
-    struct Slot {ServiceIdentity identity;std::string token;};
+    struct Slot {
+        ServiceIdentity identity;std::string token,previousToken,refresh;
+        long long expires=0,refreshExpires=0,heartbeatAt=0,retryAt=0;
+        int failures=0;
+        unsigned long long generation=0;bool busy=false;
+    };
     std::string tokenFor(const std::string& user) {
         std::lock_guard lock(slotMutex_);
         for(const auto& slot:slots_)if(!slot.token.empty()&&(user.empty()||slot.identity.userId==user))return slot.token;
@@ -322,19 +380,36 @@ private:
         if(!response.is_object()||response.size()!=4||response.at("v")!=1||CnaService::stringField(response,"id",64)!=id||!response.at("result").is_object())
             throw Unavailable("CNA service protocol mismatch.");
         const auto error=CnaService::stringField(response,"error",64);
-        if(error=="UNAUTHENTICATED"&&!token.empty()) {
-            std::lock_guard lock(slotMutex_);
-            for(int i=0;i<4;++i)if(slots_[i].token==token) {
-                BackendEvent event;event.type=BackendEvent::Type::SignedOut;event.slot=i;event.identity=slots_[i].identity;
-                slots_[i]={};ready(std::move(event));
-            }
-        }
-        if(error!="OK")throw Unavailable("CNA service error: "+error);
+        if(error!="OK")throw ServiceError(error);
         return response["result"];
     }
     Json request(const std::string& op,Json args,const std::string& token) {
         std::lock_guard lock(transportMutex_);
         try {
+            negotiateLocked();
+            if(op=="auth.refresh"&&!capabilities_.contains("session-refresh"))throw Unavailable("CNA service refresh capability missing.");
+            if(op.starts_with("friends.")&&!capabilities_.contains("friend-requests"))throw Unavailable("CNA service friend-request capability missing.");
+            if(op=="leaderboards.game.abort"&&!capabilities_.contains("leaderboard-epoch-abort"))throw Unavailable("CNA service leaderboard abort capability missing.");
+            if(op.starts_with("leaderboards.game.")&&!capabilities_.contains("local-leaderboard-commit"))throw Unavailable("CNA service local leaderboard commit capability missing.");
+            if(op.starts_with("leaderboards.")&&!capabilities_.contains("leaderboard-reads"))throw Unavailable("CNA service leaderboard-read capability missing.");
+            if(op=="assets.read"&&!capabilities_.contains("assets"))throw Unavailable("CNA service asset capability missing.");
+            if(op=="presence.set"&&!capabilities_.contains("presence"))throw Unavailable("CNA service presence capability missing.");
+            auto current=latestToken(token);
+            try {return exchange(op,args,current);}
+            catch(const ServiceError& error) {
+                if(error.code!="UNAUTHENTICATED"||current.empty())throw;
+                int slot=-1;unsigned long long generation=0;bool refresh=false;
+                {std::lock_guard lock(slotMutex_);for(int i=0;i<4;++i)if(slots_[i].token==current){slot=i;generation=slots_[i].generation;refresh=!slots_[i].refresh.empty();break;}}
+                if(slot>=0&&refresh) {
+                    try {renewLocked(slot,generation);return exchange(op,args,latestToken(current));}
+                    catch(const ServiceError& failed){if(failed.code=="UNAUTHENTICATED")invalidateSlot(slot,generation);throw;}
+                }
+                if(slot>=0)invalidateSlot(slot,generation);throw;
+            }
+        }catch(const Unavailable&){throw;}
+         catch(...){throw Unavailable("CNA service response validation failed.");}
+    }
+    void negotiateLocked() {
             if(!negotiated_) {
                 const auto hello=exchange("hello",Json::object(),{});
                 if(hello.at("version")!=1||!hello.at("capabilities").is_array()||hello["capabilities"].size()>64)throw Unavailable("CNA service negotiation failed.");
@@ -348,21 +423,64 @@ private:
                 }
                 negotiated_=true;
             }
-            if(op.starts_with("friends.")&&!capabilities_.contains("friend-requests"))throw Unavailable("CNA service friend-request capability missing.");
-            if(op=="leaderboards.game.abort"&&!capabilities_.contains("leaderboard-epoch-abort"))throw Unavailable("CNA service leaderboard abort capability missing.");
-            if(op.starts_with("leaderboards.game.")&&!capabilities_.contains("local-leaderboard-commit"))throw Unavailable("CNA service local leaderboard commit capability missing.");
-            if(op.starts_with("leaderboards.")&&!capabilities_.contains("leaderboard-reads"))throw Unavailable("CNA service leaderboard-read capability missing.");
-            if(op=="assets.read"&&!capabilities_.contains("assets"))throw Unavailable("CNA service asset capability missing.");
-            if(op=="presence.set"&&!capabilities_.contains("presence"))throw Unavailable("CNA service presence capability missing.");
-            return exchange(op,std::move(args),token);
-        }catch(const Unavailable&){throw;}
-         catch(...){throw Unavailable("CNA service response validation failed.");}
+    }
+    Slot decodeCredentials(const Json& result) {
+        Slot state;state.identity=identity(result.at("identity"));state.token=CnaService::stringField(result,"token",64);
+        if(state.token.size()!=64||state.token.find_first_not_of("0123456789abcdef")!=std::string::npos)throw Unavailable("Invalid access credential.");
+        const auto localNow=unixTime();long long serverNow=localNow;
+        if(result.contains("serverTime")) {
+            if(!result["serverTime"].is_number_integer()||result["serverTime"]<0||result["serverTime"]>253402300799LL)throw Unavailable("Invalid service time.");
+            serverNow=result["serverTime"].get<long long>();
+        }
+        if(!result.contains("expires")||!result["expires"].is_number_integer()||result["expires"]<=serverNow||result["expires"]>serverNow+3600)throw Unavailable("Invalid credential expiry.");
+        state.expires=localNow+(result["expires"].get<long long>()-serverNow);state.heartbeatAt=localNow+30;
+        if(capabilities_.contains("session-refresh")) {
+            state.refresh=CnaService::stringField(result,"refreshToken",64);
+            if(state.refresh.size()!=64||state.refresh.find_first_not_of("0123456789abcdef")!=std::string::npos||!result.contains("refreshExpires")||!result["refreshExpires"].is_number_integer()||result["refreshExpires"]<result["expires"]||result["refreshExpires"]>serverNow+30LL*86400)throw Unavailable("Invalid refresh credential.");
+            state.refreshExpires=localNow+(result["refreshExpires"].get<long long>()-serverNow);
+        }
+        return state;
+    }
+    void persist(int slot) {
+        StoredCredential stored;{std::lock_guard lock(slotMutex_);stored={slots_[slot].refresh,slots_[slot].refreshExpires};}
+        if(!stored.refreshToken.empty())(void)credentials_.save(slot,stored);else credentials_.remove(slot);
+    }
+    std::string latestToken(const std::string& token) {
+        if(token.empty())return token;
+        std::lock_guard lock(slotMutex_);for(const auto& state:slots_)if(state.previousToken==token)return state.token;return token;
+    }
+    void invalidateSlot(int slot,unsigned long long generation) {
+        BackendEvent event;event.type=BackendEvent::Type::SignedOut;event.slot=slot;
+        {std::lock_guard lock(slotMutex_);if(slots_[slot].generation!=generation)return;
+         event.identity=slots_[slot].identity;slots_[slot]={};slots_[slot].generation=generation+1;}
+        credentials_.remove(slot);if(!event.identity.userId.empty())ready(std::move(event));
+    }
+    void renewLocked(int slot,unsigned long long generation) {
+        Slot previous;{std::lock_guard lock(slotMutex_);previous=slots_[slot];}
+        if(previous.generation!=generation)return;
+        if(!capabilities_.contains("session-refresh")||previous.refresh.empty())throw ServiceError("UNAUTHENTICATED");
+        const auto result=exchange("auth.refresh",{{"refreshToken",previous.refresh}},{});
+        auto renewed=decodeCredentials(result);
+        if(!previous.identity.userId.empty()&&renewed.identity.userId!=previous.identity.userId)throw Unavailable("Refresh identity mismatch.");
+        renewed.previousToken=previous.token;renewed.generation=generation;
+        bool stale=false,duplicate=false;
+        {std::lock_guard lock(slotMutex_);
+         stale=slots_[slot].generation!=generation;
+         for(int i=0;i<4;++i)if(i!=slot&&slots_[i].identity.userId==renewed.identity.userId)duplicate=true;
+         if(!stale&&!duplicate)slots_[slot]=renewed;}
+        if(stale||duplicate) {
+            try{(void)exchange("auth.logout",Json::object(),renewed.token);}catch(...){}
+            if(duplicate){invalidateSlot(slot,generation);throw ServiceError("UNAUTHENTICATED");}return;
+        }
+        persist(slot);
+        if(previous.identity.userId.empty()){BackendEvent event;event.type=BackendEvent::Type::SignedIn;event.slot=slot;event.identity=std::move(renewed.identity);ready(std::move(event));}
     }
     static std::string prefix() {
         std::random_device source;std::string value;constexpr char hex[]="0123456789abcdef";
         for(int i=0;i<16;++i){auto byte=source();value+=hex[(byte>>4)&15];value+=hex[byte&15];}return value;
     }
     CNA::GamerServices::Configuration config_;
+    CredentialStore credentials_;
     std::mutex slotMutex_,transportMutex_,cacheMutex_;
     std::array<Slot,4> slots_{};
     std::string prefix_=prefix();

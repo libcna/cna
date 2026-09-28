@@ -392,7 +392,7 @@ no owner's credentials are created or consumed.
   rotation caps, expired/revoked pruning and deterministic malformed/expired/wrong-title errors.
 - [x] Unit expiry, replay, logout, another account/title/device, restart and v1 upgrade/future refusal;
   real TLS/server restart rotation, wrong-title refusal, replay revocation and heartbeat tested.
-- [ ] GS-004c: CNA automatic maintenance, user credential persistence/resume and reconnect corpus.
+- [x] GS-004c: POSIX private persistence/resume, automatic refresh/heartbeat and real reconnect corpus (platform limits below).
 
 Final server **5,214 assertions pass**, full genuine TLS C++/native C suite **2/2 pass in 21.00s**
 (`refresh-final-e2e.log`). Simulated v1 downgrade fixture initially forgot the new session-column
@@ -402,3 +402,53 @@ set: CNA 911eb90740e9a9b55221e676caaf196cb785a9f7 / server
 fc033a0e8541a81498c4a496f56a0f59475c6e34. Reproduce with the GS-006b harness variables/commands.
 Server source committed/clean; no sharp-runtime changes. Client does not yet consume refresh or
 schedule heartbeat, so no completed persistent XNA sign-in/reconnect claim. Continue GS-004c now.
+
+
+### GS-004c client credential checkpoint
+
+- [x] Private POSIX credential records, endpoint/title/slot namespace, atomic owner-only files,
+  bounded validated reads, symlink/hard-link refusal and exclusive process lease. No passwords or
+  access tokens persisted; explicit CI disable/override, unsupported platforms stay ephemeral.
+- [x] Update-boundary resume of one/four accounts; serialized rotation, proactive renewal, 401
+  renewal and heartbeat, bounded maintenance backoff, stale-operation generation guards, no
+  duplicated SignedIn events on ordinary renewal/reconnect. Confirmed revocation clears authority.
+- [x] Server issuance exposes serverTime so client deadlines use remaining lifetimes despite clock
+  offset. Error messages do not echo arbitrary response error strings, which could contain secrets.
+- [x] Seven credential-store unit tests (lease, private mode, isolation, unsafe links/permissions,
+  corrupt/oversized input, disable); genuine TLS one/four-account persistence across process/server
+  restart, explicit slot signout, expired-access refresh, Update-only heartbeat, outage/reconnect.
+
+Affected targets build with max two jobs. Final fake harness **113 checks pass**; GamerServices
+**395 run / 394 pass / 1 existing HEADLESS screen-saver skip** (`credentials-gamers-authorized.log`);
+Net/SystemLink **316/316 pass** (`credentials-net-authorized.log`); private runner ABI/header/export/
+coverage/Net/leaderboard/protocol gates **11/11 pass, 15.78s** (`credentials-c-api.log`). Server unit
+**5,214 assertions pass**, complete real TLS C++/native-C corpus **2/2 pass, 60.73s**
+(`build/credentials-complete-e2e.log`, TLS test 56.87s). Initial sandbox runs could not create UDP
+sockets or write existing offline test storage; authorized runs passed. Earlier expanded fixture
+hit the legitimate 10/min authentication cap; isolate test batches through restart instead of
+weakening it. Another fixture checked an intentionally expired Alice token; renew that independent
+family before its final persistence check. Final corpus includes both corrections.
+
+User configuration/reproduction is in docs/gamer-services-server.md and server README/protocol.
+Protected plaintext refresh files are not an OS keychain. Windows/browser secure credential
+providers and transport/platform verification remain open. Lost successful rotation replies or
+failed persistence can require fresh Guide sign-in; no unsafe perpetual refresh replay. Full push,
+privacy/guest semantics and Xbox event/validation measurements remain open. Source set commits are
+recorded immediately after checkpoint commits. No sharp-runtime changes. CNA next remains
+9473f5c8972027d0a5f3e484dc5e4374bd095669 (ancestor, no new committed history to integrate).
+
+### GS-007a next implementation design (before code)
+
+Implement a transport-independent persistent server session directory first: PlayerMatch/Ranked
+logical session type, title-scoped random identity, host ownership, 1..4 authenticated local users,
+capacity/private slots, full sparse 32-property array and null-wildcard search. Server validates all
+participant credentials and online privileges before an atomic join; never trust user IDs supplied
+without authority. Host-controlled Lobby/Playing/Ended state, monotonic revision/CAS updates,
+join-in-progress policy, heartbeat TTL, stale-session pruning, bounded listings/membership/creation
+quotas and deterministic errors. Leaving/disconnecting releases membership; host leave ends the
+session until migration is implemented. Restart preserves directory state only within its live TTL.
+Directory operation success alone must not cause public Join success: realtime connectivity must
+be established before GamerJoined/usable NetworkSession. GS-008 relay remains required for Internet
+reliability; no direct IP/port Internet success claim. Document server-only capability until CNA
+integration, invites, relay and XNA lifecycle are actually tested. Extend canonical protocol and
+migration tests; no invented Xbox wire compatibility.
