@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "RelayTransport.hpp"
 #include "RelayWebSocket.hpp"
+#include "RelayEnetPolicy.hpp"
 #include "CNA/Internal/Net/ENetLibrary.hpp"
 #include "CNA/Internal/Net/ENetHostHandle.hpp"
 #include <array>
@@ -111,6 +112,7 @@ struct RelayTransport::Impl {
                         const auto decoded=CnaService::parseRelayFrame(*frame);std::lock_guard lock(mutex);
                         const auto route=sockets.find(decoded.machine);
                         if(route==sockets.end()){++observation.dropped;continue;}
+                        if(!validateRelayEnetDatagram(decoded.datagram)){++observation.dropped;++observation.rejectedEnet;continue;}
                         ENetBuffer buffer{};buffer.data=const_cast<unsigned char*>(decoded.datagram.data());buffer.dataLength=decoded.datagram.size();
                         const int sent=enet_socket_send(route->second->socket,&endpoint,&buffer,1);
                         if(sent==static_cast<int>(decoded.datagram.size()))++observation.received;

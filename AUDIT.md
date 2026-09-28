@@ -1,5 +1,11 @@
 # CNA XNA 4.0 API Audit
 
+> **GS-007e2c1 relay ENet boundary (2026-09-28):** A separate native loopback-only host
+> and allocation preflight constrain untrusted ENet fragments before UDP injection. Seven new
+> cases/10,000 mutations, Net 370/370 and final matching native/NAT relay 2/2 pass; private
+> gates 13/13 before the fragment-count-only minimum-MTU adjustment. Direct SystemLink stays
+> unchanged. Next: immutable backend authority and owned create/join cancellation/rollback.
+
 > **GS-004k service APM lifetime (2026-09-28):** Results retain their executor without
 > queued self-cycles. EndRead materializes public objects on the owner thread; readers keep
 > their original title context until Dispose. Guide owns pending social results. New cases

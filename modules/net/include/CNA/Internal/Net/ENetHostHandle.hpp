@@ -46,6 +46,13 @@ namespace CNA::Internal::Net
         [[nodiscard]] static ENetHostHandle CreateHost(uint16_t port, size_t maxPeers, size_t channelLimit);
 
         /**
+         * @brief Creates the bounded loopback-only host used behind the private service relay.
+         *
+         * @return A native host with an ephemeral loopback port, two channels and relay allocation limits.
+         */
+        [[nodiscard]] static ENetHostHandle CreateRelayHost();
+
+        /**
          * @brief Creates an unbound host that can make exactly one outgoing connection.
          *
          * @param channelLimit Maximum number of channels to request when connecting.

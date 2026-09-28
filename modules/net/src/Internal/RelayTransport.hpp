@@ -13,6 +13,8 @@ struct RelayTransportStatus {
     RelayTransportState state=RelayTransportState::Connecting;
     std::string error;
     std::uint64_t sent=0,received=0,dropped=0;
+    /** @brief Authorized remote ENet datagrams refused by the allocation preflight. */
+    std::uint64_t rejectedEnet=0;
     std::size_t queued=0;
 };
 /** @brief Bounded worker-owned WSS/UDP bridge; ENet payload remains unchanged. */

@@ -2,6 +2,8 @@
 // Copyright (c) Robert Vokac and contributors
 #include "CNA/Internal/Net/ENetHostHandle.hpp"
 #include "CNA/Internal/Net/ENetLibrary.hpp"
+#include "RelayEnetPolicy.hpp"
+#include "CnaService/Protocol.hpp"
 
 #include <stdexcept>
 
@@ -38,6 +40,25 @@ namespace CNA::Internal::Net
             throw std::runtime_error("Failed to create ENet client host.");
         }
         return ENetHostHandle(host);
+    }
+
+    ENetHostHandle ENetHostHandle::CreateRelayHost()
+    {
+#ifdef __EMSCRIPTEN__
+        throw std::runtime_error("CNA service relay ENet hosting requires native loopback sockets.");
+#else
+        ENetLibrary::EnsureInitialized();
+        ENetAddress address{};
+        if (enet_address_set_host_ip(&address,"127.0.0.1") != 0)
+            throw std::runtime_error("Failed to resolve relay loopback address.");
+        auto* host=enet_host_create(&address,CnaService::MaxSessionGamers,2,0,0);
+        if (!host) throw std::runtime_error("Failed to create relay ENet host.");
+        ENetHostHandle result(host);
+        if (!result.getBoundPortProperty()) throw std::runtime_error("Relay ENet host has no assigned port.");
+        host->maximumPacketSize=MaxRelayGamePacketBytes;
+        host->maximumWaitingData=MaxRelayWaitingBytes;
+        return result;
+#endif
     }
 
     ENetHostHandle::ENetHostHandle(ENetHostHandle&& other) noexcept

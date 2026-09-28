@@ -167,3 +167,11 @@ caller thread. A service reader keeps its original title/backend for subsequent 
 releases that context while existing gamer snapshots remain owned until the reader is destroyed.
 Guide owns pending social operations internally. These operations and result release belong on
 the dispatcher owner thread. Broader measured Xbox APM/error-order parity remains incomplete.
+
+The private relay client now checks ENet datagrams before UDP injection, including command/payload
+lengths and reassembly fragment bounds. Its separate native loopback host caps logical packets
+at 1 MiB, waiting data at 4 MiB per peer and fragment bitmaps at 2,048 slots (including minimum
+ENet MTU support). These are CNA resource policies, not measured Xbox packet-size compatibility.
+The server continues forwarding opaque datagrams; the control and CNR v1 protocols are unchanged.
+Malformed remote fragments are refused in both native and separate-NAT E2E while valid ENet
+exchange succeeds. Direct SystemLink retains its existing host and transport behavior.

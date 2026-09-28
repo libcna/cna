@@ -3,6 +3,11 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Internal/Net/ENetHostHandle.hpp"
+#include "../../../../src/Internal/RelayEnetPolicy.hpp"
+#include <chrono>
+#include <thread>
+#include <vector>
+#include <stdexcept>
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -145,6 +150,57 @@ TEST(ENetHostHandleTest, BroadcastWithZeroConnectedPeersDoesNotThrow) {
     ENetHostHandle server = ENetHostHandle::CreateHost(0, 4, 2);
     const char payload[] = "hello";
     EXPECT_NO_THROW(server.Broadcast(0, payload, sizeof(payload), ENET_PACKET_FLAG_RELIABLE));
+}
+
+TEST(ENetHostHandleTest, RelayHostBindsOnlyLoopbackWithPrivateAllocationLimits) {
+#ifdef __EMSCRIPTEN__
+    EXPECT_THROW((void)ENetHostHandle::CreateRelayHost(),std::runtime_error);
+#else
+    using namespace CNA::Internal::Net;
+    auto relay=ENetHostHandle::CreateRelayHost();ASSERT_GT(relay.getBoundPortProperty(),0);
+    auto* peer=relay.Connect("127.0.0.1",relay.getBoundPortProperty(),2);ASSERT_NE(nullptr,peer);
+    ENetAddress expected{};ASSERT_EQ(0,enet_address_set_host_ip(&expected,"127.0.0.1"));
+    EXPECT_EQ(expected.host,peer->host->address.host);EXPECT_NE(ENET_HOST_ANY,peer->host->address.host);
+    EXPECT_EQ(2u,peer->host->channelLimit);EXPECT_EQ(31u,peer->host->peerCount);
+    EXPECT_EQ(MaxRelayGamePacketBytes,peer->host->maximumPacketSize);
+    EXPECT_EQ(MaxRelayWaitingBytes,peer->host->maximumWaitingData);
+    EXPECT_EQ(nullptr,peer->host->checksum);EXPECT_EQ(nullptr,peer->host->compressor.context);
+#endif
+}
+
+TEST(ENetHostHandleTest, RelayHostExchangesFragmentsAndRefusesOversizedOutgoingPackets) {
+#ifdef __EMSCRIPTEN__
+    EXPECT_THROW((void)ENetHostHandle::CreateRelayHost(),std::runtime_error);
+#else
+    using namespace CNA::Internal::Net;
+    auto server=ENetHostHandle::CreateRelayHost(),client=ENetHostHandle::CreateRelayHost();
+    auto* outgoing=client.Connect("127.0.0.1",server.getBoundPortProperty(),2);
+    bool connected=false;ENetPeer* incoming=nullptr;
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(3);
+    while((!connected||!incoming)&&std::chrono::steady_clock::now()<deadline) {
+        ENetEvent event{};
+        while(server.Service(0,event)>0) {if(event.type==ENET_EVENT_TYPE_CONNECT)incoming=event.peer;else if(event.type==ENET_EVENT_TYPE_RECEIVE)enet_packet_destroy(event.packet);}
+        while(client.Service(0,event)>0) {if(event.type==ENET_EVENT_TYPE_CONNECT)connected=true;else if(event.type==ENET_EVENT_TYPE_RECEIVE)enet_packet_destroy(event.packet);}
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    ASSERT_TRUE(connected);ASSERT_NE(nullptr,incoming);
+    std::vector<unsigned char> oversized(MaxRelayGamePacketBytes+1);
+    auto* packet=enet_packet_create(oversized.data(),oversized.size(),ENET_PACKET_FLAG_RELIABLE);ASSERT_NE(nullptr,packet);
+    EXPECT_LT(enet_peer_send(outgoing,0,packet),0);enet_packet_destroy(packet);
+    std::vector<unsigned char> payload(32769,73);client.Send(outgoing,0,payload.data(),payload.size(),ENET_PACKET_FLAG_RELIABLE);client.Flush();
+    bool received=false;
+    while(!received&&std::chrono::steady_clock::now()<deadline) {
+        ENetEvent event{};
+        while(server.Service(0,event)>0)if(event.type==ENET_EVENT_TYPE_RECEIVE) {
+            EXPECT_EQ(payload.size(),event.packet->dataLength);
+            EXPECT_EQ(payload,std::vector<unsigned char>(event.packet->data,event.packet->data+event.packet->dataLength));
+            enet_packet_destroy(event.packet);received=true;
+        }
+        while(client.Service(0,event)>0)if(event.type==ENET_EVENT_TYPE_RECEIVE)enet_packet_destroy(event.packet);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    EXPECT_TRUE(received);
+#endif
 }
 
 // Task 5.15: the `if (!packet) return;` guard in both Send() and Broadcast(), for when

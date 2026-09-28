@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "../../modules/net/src/Internal/RelayTransport.hpp"
 #include "../../modules/net/src/Internal/ServiceRoster.hpp"
+#include "../../modules/net/src/Internal/RelayEnetPolicy.hpp"
 #include "CnaService/Protocol.hpp"
 #include "CNA/Internal/Net/ENetLibrary.hpp"
 #include "CNA/Internal/Net/ENetHostHandle.hpp"
@@ -18,6 +19,7 @@
 #include <iostream>
 #include <set>
 #include <thread>
+#include <cstring>
 
 namespace Service=CNA::Internal::GamerServices;
 namespace Transport=CNA::Internal::Net;
@@ -42,6 +44,7 @@ struct NativeHost {
         Transport::ENetLibrary::EnsureInitialized();ENetAddress address{};
         check(enet_address_set_host_ip(&address,"127.0.0.1")==0,"loopback address");
         host.reset(enet_host_create(&address,4,2,0,0));check(static_cast<bool>(host),"native host");
+        host->maximumPacketSize=Transport::MaxRelayGamePacketBytes;host->maximumWaitingData=Transport::MaxRelayWaitingBytes;
     }
 };
 std::vector<unsigned char> payload(int index,bool host) {
@@ -54,6 +57,15 @@ void exchange(NativeHost& native,Transport::RelayTransport& bridge,const std::st
     const Transport::ServiceRoster& authority,const std::string& machine,const std::vector<std::string>& locals,
     const std::vector<std::string>& remotes) {
     const auto localIds=authority.idsFor(machine,locals),remoteIds=authority.idsFor(remote,remotes);
+    ENetProtocolSendFragment malformed{};malformed.header.command=ENET_PROTOCOL_COMMAND_SEND_FRAGMENT;
+    malformed.dataLength=ENET_HOST_TO_NET_16(1);malformed.fragmentCount=ENET_HOST_TO_NET_32(1048576);
+    malformed.totalLength=ENET_HOST_TO_NET_32(1);
+    std::array<unsigned char,sizeof(enet_uint16)+sizeof(malformed)+1> malformedBytes{};
+    std::memcpy(malformedBytes.data()+sizeof(enet_uint16),&malformed,sizeof(malformed));
+    ENetAddress malformedDestination{};check(enet_address_set_host_ip(&malformedDestination,"127.0.0.1")==0,"malformed route address");
+    malformedDestination.port=bridge.routePort(remote);ENetBuffer malformedBuffer{};
+    malformedBuffer.data=malformedBytes.data();malformedBuffer.dataLength=malformedBytes.size();
+    check(enet_socket_send(native.host->socket,&malformedDestination,&malformedBuffer,1)==static_cast<int>(malformedBytes.size()),"untrusted fragment fixture");
     ENetPeer* connected=nullptr;
     bool handshaked=false,applicationSent=false;int rejectedClaims=0;
     const auto send=[&](const std::vector<unsigned char>& bytes,int channel,bool reliable) {
@@ -117,9 +129,10 @@ void exchange(NativeHost& native,Transport::RelayTransport& bridge,const std::st
                 check(event.channelID==(index==3?1:0),"ENet channel");check(received.insert(index).second,"duplicate application packet");
             }else if(event.type==ENET_EVENT_TYPE_DISCONNECT)check(false,"unexpected ENet disconnect");
         }
-        return received.size()==4&&handshaked;
+        return received.size()==4&&handshaked&&bridge.status().rejectedEnet>=1;
     });
     check(!host||rejectedClaims==1,"cross-machine gamertag spoof test");
+    check(bridge.status().rejectedEnet>=1,"malformed remote fragment refused before ENet allocation");
     const auto status=bridge.status();check(status.sent>0&&status.received>0&&status.queued<=64,"bounded bidirectional relay traffic");
 }
 }

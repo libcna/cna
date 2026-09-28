@@ -764,7 +764,7 @@ CNA-specific transport routing; generic proxy change remains the only runtime mo
 - [x] GS-007e1: private authenticated roster/control gate and genuine spoof/refusal relay probes.
 - [x] GS-007e2a: exact null/family guards for public Net End operations.
 - [x] GS-007e2b: caller-owned metadata/End-once and standard pending service Find.
-- [ ] GS-007e2c1: private loopback ENet host and relay-only preallocation packet/fragment limits.
+- [x] GS-007e2c1: private loopback ENet host and relay-only preallocation packet/fragment limits.
 - [ ] GS-007e2c2: immutable backend deployment authority and owned online preparation/rollback.
 - [ ] GS-007e2c3: consume prepared transport in standard public create/join and E2E.
 - [ ] GS-007e2c: owned online create/join preparation, including cleanup on abandonment/failure.
@@ -1273,3 +1273,49 @@ an ancestor already integrated. No samples-agent worktree modification. Broader 
 null/family/reentrant timeout semantics and abandoned reader-page busy state remain follow-up
 audit, not a claim of full Xbox APM parity. Public online create/join/invites and standard
 avatars remain unfinished. Next GS-007e2c1 followed by authority-bound owned preparation.
+
+### GS-004k known-good integration set
+
+- CNA 72df8cd6e6f9b63c9181686ba0b776a355948150.
+- sharp-runtime 6c4a857de129cf29b5d43430bedf24157d594f12.
+- cna-gamer-services-server 0cd1d08984210a120e7b0b7cb238f6f438f4d8af.
+
+Exact tests/times and commands are recorded above and in the existing reproduction sections.
+
+### GS-007e2c1 completed: relay ENet allocation and endpoint boundary
+
+Implemented private CreateRelayHost: numeric 127.0.0.1 only, ephemeral port, canonical 31-peer
+ceiling, two channels, 1-MiB logical packet and 4-MiB waiting data per peer. Native only; browser
+provider throws explicitly. Existing CreateHost/CreateClient and SystemLink remain unchanged.
+Private relay ingress now validates uncompressed/checksum-free ENet framing before UDP injection:
+32 commands maximum, exact bounded fixed/payload lengths, known flags/types, nonzero fragment
+count, count <= logical byte length, 2,048 bitmap slots maximum and safe offset/length arithmetic.
+2,048 accommodates the maximum packet at ENet's minimum negotiated 576-byte MTU. Unknown
+compression is refused because these hosts do not configure a compressor. No dependency fork,
+server/control protocol change, sharp-runtime primitive or native C ABI/XNA addition. These
+are CNA resource policies, not measured Xbox packet-size limits.
+
+New tests cover every fragment truncation, malicious bitmap/offset/length values, 10,000 seeded
+mutations, minimum MTU, loopback binding/native limits, fragmentation and oversized sends. Real
+CNA peers inject a hostile million-slot/one-byte fragment through the actual server; each other
+peer confirms rejection before ENet allocation while normal handshake/game traffic succeeds.
+Native probe also applies the same host allocation limits. Ready/failure counters remain private.
+Final matching MTU-adjusted validation: **370/370 Net tests, 4.744s**, including seven new
+cases and 10,000 mutations; actual native plus separate-NAT relay **2/2, 17.80s**
+(native 8.60s; NAT 9.20s). Private C ABI/protocol/fake
+gates **13/13, 31.16s** before the private fragment-count-only MTU adjustment; shape/exports are
+unchanged (472 headers / 8,134 symbols). Final MTU build succeeded without new warnings. Initial
+new enum-mixing warnings were fixed with explicit conversions before final validation.
+
+Next: bind relay deployment authority to the exact originating backend and implement owned
+preparation/cancellation/rollback; then consume it in public create/join and wire roster/leases
+to Net Update. Also found a genuine ranked gap from local NetworkSessionType.xml: Ranked
+forbids join-in-progress; current private directory permits enabling it. Record GS-007f1 to
+fix server/fake/client validation and persisted legacy rows before claiming ranked lifecycle.
+
+GS-007e2c1 logs: CNA cmake-build-debug/service-relay-enet-{mtu-build,mtu-net,private}.log;
+server build/service-relay-enet-mtu-e2e.log. Reproduce build target CnaNetTests,
+cna_service_relay_client_harness and cna_c_api_net_smoke with the standard -j2/cache settings;
+run Net headless; run server service_cna_relay and service_cna_relay_nat with the harness and
+external NAT helper variables recorded in GS-008d1. Native/NAT probes are private transport
+acceptance, not yet standard public online NetworkSession samples. Server/runtime unchanged.
