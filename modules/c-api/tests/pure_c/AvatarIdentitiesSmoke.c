@@ -187,53 +187,6 @@ static int bones_are_canonical(void)
         CNA_AVATAR_BONE_MAXIMUM == CNA_AVATAR_BONE_FINGER_THUMB_3_RIGHT;
 }
 
-/* Both name routes are pure value operations: no gamer, no handle, no game. */
-static int names_are_canonical(void)
-{
-    uint64_t size = UINT64_C(0);
-    char text[64];
-
-    /* An animation clip name is the identity's own canonical spelling. */
-    if (cna_avatar_animation_preset_get_clip_name_size_ext(
-            CNA_AVATAR_ANIMATION_PRESET_WAVE, &size) != CNA_RESULT_SUCCESS ||
-        size != UINT64_C(4) ||
-        cna_avatar_animation_preset_copy_clip_name_ext(
-            CNA_AVATAR_ANIMATION_PRESET_WAVE, text, sizeof(text), &size) !=
-            CNA_RESULT_SUCCESS ||
-        memcmp(text, "Wave", (size_t)size) != 0) {
-        return 0;
-    }
-    /* A body-type name is a content path instead, so it is not the identity spelling. */
-    if (cna_avatar_body_type_get_content_name_size_ext(CNA_AVATAR_BODY_TYPE_MALE, &size) !=
-            CNA_RESULT_SUCCESS ||
-        size == UINT64_C(0) || size > sizeof(text) ||
-        cna_avatar_body_type_copy_content_name_ext(
-            CNA_AVATAR_BODY_TYPE_MALE, text, sizeof(text), &size) != CNA_RESULT_SUCCESS ||
-        memcmp(text, "avatar/male/", (size_t)12) != 0) {
-        return 0;
-    }
-    /* A buffer that cannot hold the whole name is refused with nothing written. */
-    if (cna_avatar_animation_preset_copy_clip_name_ext(
-            CNA_AVATAR_ANIMATION_PRESET_WAVE, text, UINT64_C(1), &size) !=
-            CNA_RESULT_BUFFER_TOO_SMALL ||
-        size != UINT64_C(4)) {
-        return 0;
-    }
-    /* An undefined identity is refused rather than mapped to something plausible. */
-    return cna_avatar_animation_preset_get_clip_name_size_ext(UINT32_C(9999), &size) ==
-            CNA_RESULT_INVALID_ARGUMENT &&
-        cna_avatar_animation_preset_copy_clip_name_ext(
-            UINT32_C(9999), text, sizeof(text), &size) == CNA_RESULT_INVALID_ARGUMENT &&
-        cna_avatar_body_type_get_content_name_size_ext(UINT32_C(9999), &size) ==
-            CNA_RESULT_INVALID_ARGUMENT &&
-        cna_avatar_body_type_copy_content_name_ext(
-            UINT32_C(9999), text, sizeof(text), &size) == CNA_RESULT_INVALID_ARGUMENT &&
-        cna_avatar_animation_preset_get_clip_name_size_ext(
-            CNA_AVATAR_ANIMATION_PRESET_WAVE, 0) == CNA_RESULT_INVALID_ARGUMENT &&
-        cna_avatar_body_type_get_content_name_size_ext(
-            CNA_AVATAR_BODY_TYPE_MALE, 0) == CNA_RESULT_INVALID_ARGUMENT;
-}
-
 int main(void)
 {
     if (!ordinals_are_canonical(avatarBodyType, COUNT_OF(avatarBodyType),
@@ -262,9 +215,6 @@ int main(void)
     }
     if (!bones_are_canonical()) {
         return CNA_TEST_FAIL(7);
-    }
-    if (!names_are_canonical()) {
-        return CNA_TEST_FAIL(8);
     }
     return sizeof(CNA_AvatarBone) == sizeof(uint32_t) &&
             sizeof(CNA_AvatarAnimationPreset) == sizeof(uint32_t)

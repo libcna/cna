@@ -46,7 +46,6 @@ static void on_complete(void* const context)
 static int validate_values(void)
 {
     CNA_AvatarExpression expression;
-    CNA_AvatarAppearanceEXT appearance;
 
     if (cna_avatar_expression_init(&expression) != CNA_RESULT_SUCCESS ||
         cna_avatar_expression_init(0) != CNA_RESULT_INVALID_ARGUMENT) {
@@ -60,13 +59,7 @@ static int validate_values(void)
         expression.right_eyebrow != CNA_AVATAR_EYEBROW_NEUTRAL) {
         return 0;
     }
-    if (cna_avatar_appearance_init_ext(&appearance) != CNA_RESULT_SUCCESS ||
-        cna_avatar_appearance_init_ext(0) != CNA_RESULT_INVALID_ARGUMENT) {
-        return 0;
-    }
-    /* The default colors are opaque, which is what makes them usable without further setup. */
-    return appearance.skin_color.a == UINT8_C(255) && appearance.hair_color.a == UINT8_C(255) &&
-        appearance.shoes_color.a == UINT8_C(255);
+    return 1;
 }
 
 static int validate_description(const CNA_SignedInGamerHandle gamer)
@@ -151,8 +144,6 @@ static int validate_animation(void)
                                     {0U, 0U, 0U}, INT64_C(0), INT64_C(0)};
     CNA_AvatarExpression expression;
     CNA_Matrix transform;
-    uint64_t size = UINT64_C(0);
-    char text[64];
     int ok;
 
     if (cna_avatar_animation_create(CNA_AVATAR_ANIMATION_PRESET_WAVE, &animation) !=
@@ -192,25 +183,6 @@ static int validate_animation(void)
     ok = ok && cna_avatar_animation_update(animation, INT64_C(1), UINT8_C(9)) ==
                    CNA_RESULT_INVALID_ARGUMENT;
 
-    /* A preset's clip name is the identity's own spelling, and it can be replaced. */
-    ok = ok && cna_avatar_animation_get_real_clip_name_size_ext(animation, &size) ==
-                   CNA_RESULT_SUCCESS &&
-        size <= sizeof(text);
-    if (ok) {
-        const CNA_Result copied =
-            cna_avatar_animation_copy_real_clip_name_ext(animation, text, sizeof(text), &size);
-        ok = copied == CNA_RESULT_SUCCESS && size == UINT64_C(4) &&
-            memcmp(text, "Wave", (size_t)4) == 0;
-    }
-    ok = ok && cna_avatar_animation_set_real_clip_name_ext(animation, view("CustomWave")) ==
-                   CNA_RESULT_SUCCESS;
-    if (ok) {
-        const CNA_Result copied =
-            cna_avatar_animation_copy_real_clip_name_ext(animation, text, sizeof(text), &size);
-        ok = copied == CNA_RESULT_SUCCESS && size == UINT64_C(10) &&
-            memcmp(text, "CustomWave", (size_t)10) == 0;
-    }
-
     ok = (cna_avatar_animation_destroy(animation) == CNA_RESULT_SUCCESS) && ok;
     return ok && cna_avatar_animation_destroy(animation) == CNA_RESULT_INVALID_HANDLE;
 }
@@ -222,7 +194,7 @@ static int validate_ready_renderer(void)
     CNA_AvatarDescriptionHandle description = CNA_INVALID_HANDLE;
     CNA_AvatarRendererHandle renderer = CNA_INVALID_HANDLE;
     CNA_AvatarRendererInfo info = {sizeof(CNA_AvatarRendererInfo), UINT32_C(1), UINT32_C(0),
-                                   UINT8_C(0), UINT8_C(0), {0U, 0U}};
+                                   UINT8_C(0), {0U, 0U, 0U}};
     CNA_AvatarAnimationHandle animation = CNA_INVALID_HANDLE;
     CNA_Matrix root;
     CNA_Matrix head;
@@ -260,9 +232,8 @@ static int validate_renderer(void)
     CNA_AvatarRendererHandle renderer = CNA_INVALID_HANDLE;
     CNA_AvatarAnimationHandle animation = CNA_INVALID_HANDLE;
     CNA_AvatarRendererInfo info = {sizeof(CNA_AvatarRendererInfo), UINT32_C(1), UINT32_C(0),
-                                   UINT8_C(0), UINT8_C(0), {0U, 0U}};
+                                   UINT8_C(0), {0U, 0U, 0U}};
     CNA_AvatarExpression expression;
-    CNA_AvatarAppearanceEXT appearance;
     CNA_Matrix world;
     CNA_Matrix view_matrix;
     CNA_Matrix projection;
@@ -286,8 +257,7 @@ static int validate_renderer(void)
     /* The renderer keeps the description alive, so releasing the caller's handle is safe. */
     ok = cna_avatar_description_destroy(description) == CNA_RESULT_SUCCESS;
     ok = ok && cna_avatar_renderer_get_info(renderer, &info) == CNA_RESULT_SUCCESS &&
-        info.is_disposed == CNA_FALSE && info.state <= CNA_AVATAR_RENDERER_STATE_MAXIMUM &&
-        info.is_real_rendering_enabled == CNA_FALSE;
+        info.is_disposed == CNA_FALSE && info.state == CNA_AVATAR_RENDERER_STATE_UNAVAILABLE;
 
     ok = ok && cna_avatar_renderer_get_transforms(renderer, &world, &view_matrix, &projection) ==
                    CNA_RESULT_SUCCESS;
@@ -350,19 +320,6 @@ static int validate_renderer(void)
         cna_avatar_renderer_draw_animation(renderer, animation) == CNA_RESULT_SUCCESS &&
         cna_avatar_renderer_draw_animation(renderer, CNA_INVALID_HANDLE) ==
             CNA_RESULT_INVALID_HANDLE;
-
-    ok = ok && cna_avatar_appearance_init_ext(&appearance) == CNA_RESULT_SUCCESS &&
-        cna_avatar_renderer_set_appearance_ext(renderer, &appearance) == CNA_RESULT_SUCCESS &&
-        cna_avatar_renderer_set_appearance_ext(renderer, 0) == CNA_RESULT_INVALID_ARGUMENT;
-
-    /* Real rendering needs a device and a model; refusing an invalid one is the boundary this
-       container can exercise. */
-    ok = ok && cna_avatar_renderer_enable_real_rendering_ext(renderer, CNA_INVALID_HANDLE,
-                                                             CNA_INVALID_HANDLE) ==
-                   CNA_RESULT_INVALID_HANDLE;
-    /* Drawing the real model without one is a state failure rather than a silent no-op. */
-    ok = ok && cna_avatar_renderer_draw_real_ext(renderer, view("Wave"), INT64_C(0), CNA_FALSE) ==
-                   CNA_RESULT_INVALID_STATE;
 
     if (animation != CNA_INVALID_HANDLE) {
         ok = (cna_avatar_animation_destroy(animation) == CNA_RESULT_SUCCESS) && ok;

@@ -34,7 +34,7 @@ extern "C" {
 #define CNA_ABI_VERSION_MAJOR UINT32_C(0)
 
 /** @brief Minor component of the experimental CNA C ABI version. */
-#define CNA_ABI_VERSION_MINOR UINT32_C(32)
+#define CNA_ABI_VERSION_MINOR UINT32_C(33)
 
 /** @brief Patch component of the current experimental CNA C ABI version. */
 #define CNA_ABI_VERSION_PATCH UINT32_C(0)

@@ -85,24 +85,6 @@ namespace Microsoft::Xna::Framework::GamerServices
         /** @brief Releases all resources used by this instance. */
         void Dispose() override;
 
-        /**
-         * @brief Sets the real-rendering clip name paired with this preset.
-         *
-         * @note CNAEXT — CNA extension. Defaults to AvatarAnimationPresetToClipNameEXT(preset)
-         * at construction; this setter allows overriding it (e.g. to a documented best-effort
-         * substitute clip name — see tools/avatar_asset_pipeline/README.md).
-         * @param clipName The clip name to look up in a SkinnedModelEXT's Clips.
-         */
-        CNAEXT void SetRealClipNameEXT(const std::string& clipName);
-
-        /**
-         * @brief Gets the real-rendering clip name paired with this preset.
-         *
-         * @note CNAEXT — CNA extension.
-         * @return The current clip name.
-         */
-        CNAEXT [[nodiscard]] const std::string& GetRealClipNameEXT() const;
-
     protected:
         /**
          * @brief Releases the unmanaged resources used by this instance.
@@ -121,6 +103,5 @@ namespace Microsoft::Xna::Framework::GamerServices
         System::TimeSpan currentPosition_;
         System::TimeSpan length_;
         bool isDisposed_{false};
-        std::string realClipName_;
     };
 }

@@ -2235,3 +2235,53 @@ fetched by hash + cached (only that file), renderer Ready with 0 substitutions, 
 cached); server full corpus **23/23, zero skips, 340.19s** (`build/avatars-full.log`) with every
 CNA probe and the NAT helper.
 Known gap: `AvatarDescription.Changed` is not raised (documented in docs/avatars.md).
+
+### GS-009f complete: demos on the standard API, Avatar EXT retired
+
+- [x] Demos rewritten on the standard API only (`GraphicsDeviceManager` + `GamerServicesComponent`,
+  `AvatarDescription::CreateRandom`, `AvatarAnimation`, `AvatarRenderer`, HiDef so `--screenshot`
+  can read the back buffer): `demo_avatar` (presets, new avatar, body type, expression override,
+  orbit), `demo_avatar_animation_gallery` (8 avatars, 31 presets paged),
+  `demo_avatar_dual_compare` (female/male same preset), `demo_avatar_bone_state_boundary`
+  (Unavailable/Loading/Ready/BindPose/ParentBones printed, then custom bone transforms), and
+  `demo_net_avatar_sync` (description bytes sent ReliableInOrder, then position/yaw/preset).
+  `demo_avatar_appearance_tint_studio`, `demo_avatar_wardrobe_hotswap`,
+  `demo_avatar_multi_attach_stress` and the EXT content directory are removed (nothing in them
+  is expressible through XNA). Demo link order fixed to `PRIVATE CNA CNA_GamerServices`
+  (static module archives ahead of libcna.so duplicated the runtime and the GL loader; the
+  untouched `cna_demo_gamer_roster_hud` aborted the same way before).
+- [x] Avatar EXT surface removed: `AvatarAppearanceEXT`, preset/body-type name helpers,
+  `AvatarRenderer::EnableRealRenderingEXT`/`DrawRealEXT`/`SetAppearanceEXT`/`PartTintEXT`,
+  `AvatarAnimation::Set/GetRealClipNameEXT`, their tests and the three EXT GPU tests.
+  Generic `SkinnedModelEXT` stays: its attach/remove test moved to
+  `modules/graphics/examples/skinned_model_attach_part_integration_test.cpp`
+  (`EasyGL_SkinnedModel_AttachPart`, `Vulkan_SkinnedModel_AttachPart`, OpenGL4 corpus);
+  `Vulkan_AvatarRenderer_Standard` and the OpenGL4 corpus entry reuse
+  `avatar_standard_render_test.cpp`.
+- [x] C API 0.33.0: eleven avatar EXT routes and `CNA_AvatarAppearanceEXT` removed (3,204
+  exports), `CNA_AvatarRendererInfo` keeps its size with `is_disposed` + reserved bytes; abi
+  baseline, bool contract, compatibility matrix, coverage (rules re-approved), limitations,
+  release gate, ABI_VERSIONING and GAMER_SERVICES regenerated/updated. `GuideSmoke` expectations
+  corrected to GS-005c behavior (panes needing a service player are NOT_SUPPORTED without one,
+  marketplace INVALID_STATE).
+- [x] Docs/tools: `docs/avatar-real-rendering-ext.md` removed; generic `docs/skinned-model-ext.md`
+  added; `docs/avatar-demos.md` rewritten; coverage/model-pipeline/README references updated;
+  THIRD_PARTY_NOTICES' MakeHuman/Mixamo section replaced by the original-catalog statement;
+  Blender pipeline scripts removed from `tools/avatar_builder/` (README now documents only the
+  catalog generator); `tools/avatar_asset_pipeline/` kept as a generic glTF -> SkinnedModelEXT
+  converter without MakeHuman/Mixamo instructions.
+
+Validation: GamerServices **463 pass / 1 known skip**; Net **466/466**
+(`ENetDiscoveryServiceTest.*` and one host-promotion test fail only when ctest runs them
+concurrently with other discovery users on UDP 61190; 9/9 serially); C API 110 ctests with
+three environment failures that predate this work (`CApi_AudioSmoke`/`AudioUnavailableSmoke`
+expect the NULL audio platform, `CApi_ContentSmoke` the content corpus); all C API gates pass;
+EasyGL private runner `EasyGL_AvatarRenderer_Standard` + `EasyGL_SkinnedModel_AttachPart` 2/2;
+new `cmake-build-vulkan` (only these targets built, 89% ccache hits) `Vulkan_AvatarRenderer_Standard`
++ `Vulkan_SkinnedModel_AttachPart` 2/2 on the private runner; OpenGL4 parity corpus regenerated;
+the four standard demos ran `--smoke` with screenshots inspected.
+Open: `demo_net_avatar_sync` aborts without a signed-in gamer because GS-004 removed fabricated
+profiles and no offline local profile exists yet -> GS-004l (offline local profiles).
+Deferred to the next committed-next integration (one rebuild): stale avatar-EXT comments in
+`VertexPositionNormalTextureSkinned.hpp`, `SkinnedModelEXT.hpp` (widely included) and
+`ContentManager.cpp`.

@@ -8,7 +8,6 @@
 #include <thread>
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
-#include "Microsoft/Xna/Framework/GamerServices/AvatarBodyTypeNamesEXT.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
@@ -21,15 +20,16 @@
 #include "Microsoft/Xna/Framework/Net/PacketWriter.hpp"
 #include "System/IServiceProvider.hpp"
 #include "common/ScreenshotEXT.hpp"
+#include "common/AvatarPresetNamesEXT.hpp"
 #include "common/SimpleFontEXT.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using namespace Microsoft::Xna::Framework::Input;
 using namespace Microsoft::Xna::Framework::Net;
-using Microsoft::Xna::Framework::GamerServices::AvatarAppearanceEXT;
+using Microsoft::Xna::Framework::GamerServices::AvatarAnimation;
 using Microsoft::Xna::Framework::GamerServices::AvatarBodyType;
-using Microsoft::Xna::Framework::GamerServices::AvatarBodyTypeToContentNameEXT;
+using Microsoft::Xna::Framework::GamerServices::AvatarDescription;
 using Microsoft::Xna::Framework::GamerServices::AvatarRenderer;
 using Microsoft::Xna::Framework::GamerServices::SignedInGamer;
 
@@ -46,31 +46,6 @@ namespace
     public:
         [[nodiscard]] void* GetService(const std::type_info& /*type*/) const override { return nullptr; }
     };
-
-    std::vector<std::string> ClipNamesForGender(AvatarBodyType gender)
-    {
-        std::vector<std::string> names = {"Stand0", "Stand1", "Stand2", "Stand3", "Stand4",
-                                           "Stand5", "Stand6", "Stand7", "Wave", "Clap", "Celebrate"};
-        if (gender == AvatarBodyType::Female)
-        {
-            for (const char* n : {"FemaleIdleCheckNails", "FemaleIdleLookAround", "FemaleIdleShiftWeight",
-                                   "FemaleIdleFixShoe", "FemaleAngry", "FemaleConfused", "FemaleLaugh",
-                                   "FemaleCry", "FemaleShocked", "FemaleYawn"})
-            {
-                names.emplace_back(n);
-            }
-        }
-        else
-        {
-            for (const char* n : {"MaleIdleLookAround", "MaleIdleStretch", "MaleIdleShiftWeight",
-                                   "MaleIdleCheckHand", "MaleAngry", "MaleConfused", "MaleLaugh",
-                                   "MaleCry", "MaleSurprised", "MaleYawn"})
-            {
-                names.emplace_back(n);
-            }
-        }
-        return names;
-    }
 
     // Post-plans/plan_net.md remediation (2026-07-18): now uses the shared, real-bitmap-font
     // CNAExamplesEXT::MakeSimpleFontEXT() (examples/common/SimpleFontEXT.hpp) instead of a
@@ -89,12 +64,9 @@ namespace
         "Left/Right: Rotate local avatar",
         "Space: Next animation for the local avatar",
         "",
-        "Launch with --host (Male avatar, creates a SystemLink session) or",
-        "--join (Female avatar, finds/joins the host). Only position/yaw/",
-        "clip-index sync over the wire - no asset bytes.",
-        "",
-        "This demo uses CNA real avatar rendering extensions.",
-        "XNA-compatible AvatarRenderer.Draw remains a no-op on Windows-like platforms.",
+        "Launch with --host (male avatar, creates a SystemLink session) or",
+        "--join (female avatar, finds/joins the host). Each side sends its",
+        "AvatarDescription bytes once, then only position/yaw/preset.",
     };
 }
 
@@ -168,40 +140,28 @@ void SyncGame::Initialize()
     localNetworkGamer_ = session_->getLocalGamersProperty()[0];
 }
 
-void SyncGame::LoadAvatarView(AvatarView& view, AvatarBodyType gender)
+// The XNA way to share avatars in a session: send AvatarDescription.Description once, and let
+// every machine build its own renderer from the bytes.
+void SyncGame::ShowAvatar(AvatarView& view, const std::vector<SharpRuntime::bytecs>& description)
 {
-    auto& content = getContentProperty();
-    view.model = content.Load<std::shared_ptr<SkinnedModelEXT>>(AvatarBodyTypeToContentNameEXT(gender));
-
-    auto& device = getGraphicsDeviceProperty();
-    Microsoft::Xna::Framework::GamerServices::AvatarDescription noAvatar(std::vector<SharpRuntime::bytecs>(1021, 0));
-    view.renderer = std::make_unique<AvatarRenderer>(&noAvatar);
-    view.renderer->EnableRealRenderingEXT(device, view.model);
-
-    AvatarAppearanceEXT appearance;
-    if (gender == AvatarBodyType::Male)
-    {
-        appearance.setSkinColorProperty(Color(210, 170, 130, 255));
-        appearance.setHairColorProperty(Color(40, 25, 15, 255));
-    }
-    else
-    {
-        appearance.setSkinColorProperty(Color(235, 200, 170, 255));
-        appearance.setHairColorProperty(Color(200, 60, 30, 255));
-    }
-    view.renderer->SetAppearanceEXT(appearance);
-
-    view.renderer->setAmbientLightColorProperty(Vector3(0.35f, 0.35f, 0.35f));
-    view.renderer->setLightColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+    view.description = std::make_unique<AvatarDescription>(description);
+    view.renderer = std::make_unique<AvatarRenderer>(view.description.get());
     view.renderer->setLightDirectionProperty(Vector3(-0.4f, -0.6f, -0.7f));
+    if (!view.animation)
+    {
+        StartPreset(view, view.preset);
+    }
+}
 
-    view.clipNames = ClipNamesForGender(gender);
+void SyncGame::StartPreset(AvatarView& view, std::size_t preset)
+{
+    view.preset = preset % CNAExamplesEXT::kAvatarPresets.size();
+    view.animation = std::make_unique<AvatarAnimation>(CNAExamplesEXT::kAvatarPresets[view.preset].value);
 }
 
 void SyncGame::LoadContent()
 {
-    LoadAvatarView(localView_, localGender_);
-    LoadAvatarView(remoteView_, remoteGender_);
+    ShowAvatar(localView_, AvatarDescription::CreateRandom(localGender_).getDescriptionProperty());
 
     // Task 8.1/8.3 (plans/plan_net.md Phase 8): F1 help overlay plumbing.
     auto& device = getGraphicsDeviceProperty();
@@ -241,8 +201,7 @@ void SyncGame::Update(GameTime& gameTime)
 
     if (kb.IsKeyDown(Keys::Space) && !previousKeys_.IsKeyDown(Keys::Space))
     {
-        localClipIndex_ = (localClipIndex_ + 1) % localView_.clipNames.size();
-        localClipSeconds_ = 0.0;
+        StartPreset(localView_, localView_.preset + 1);
     }
     previousKeys_ = kb;
 
@@ -254,20 +213,34 @@ void SyncGame::Update(GameTime& gameTime)
         localPos_.Y += (isHost_ ? 1.0f : -1.0f) * 0.3f * dt;
         if (smokeFramesLeft_ % 30 == 0)
         {
-            localClipIndex_ = (localClipIndex_ + 1) % localView_.clipNames.size();
-            localClipSeconds_ = 0.0;
+            StartPreset(localView_, localView_.preset + 1);
         }
     }
 
-    localClipSeconds_ += static_cast<double>(dt);
-    remoteClipSeconds_ += static_cast<double>(dt);
+    localView_.animation->Update(gameTime.getElapsedGameTimeProperty(), true);
+    if (remoteView_.animation)
+    {
+        remoteView_.animation->Update(gameTime.getElapsedGameTimeProperty(), true);
+    }
 
     if (localNetworkGamer_ != nullptr)
     {
+        // Packet 1: the avatar description, reliably and only now and then (a late joiner gets
+        // the next one). Packet 2: where the avatar is and what it plays, every frame.
+        if (descriptionResend_-- <= 0)
+        {
+            PacketWriter description;
+            description.Write(static_cast<std::uint8_t>(1));
+            const auto bytes = localView_.description->getDescriptionProperty();
+            description.Write(bytes.data(), 0, static_cast<SharpRuntime::intcs>(bytes.size()));
+            localNetworkGamer_->SendData(description, SendDataOptions::ReliableInOrder);
+            descriptionResend_ = 120;
+        }
         PacketWriter writer;
+        writer.Write(static_cast<std::uint8_t>(2));
         writer.Write(localPos_);
         writer.Write(localYaw_);
-        writer.Write(static_cast<int32_t>(localClipIndex_));
+        writer.Write(static_cast<int32_t>(localView_.preset));
         localNetworkGamer_->SendData(writer, SendDataOptions::InOrder);
 
         PacketReader reader;
@@ -275,18 +248,27 @@ void SyncGame::Update(GameTime& gameTime)
         while (localNetworkGamer_->getIsDataAvailableProperty())
         {
             localNetworkGamer_->ReceiveData(reader, sender);
-            if (sender != nullptr && !sender->getIsLocalProperty())
+            if (sender == nullptr || sender->getIsLocalProperty())
             {
-                remotePos_ = reader.ReadVector2();
-                remoteYaw_ = reader.ReadSingle();
-                const auto newClipIndex = static_cast<std::size_t>(reader.ReadInt32());
-                if (newClipIndex != remoteClipIndex_)
-                {
-                    remoteClipIndex_ = newClipIndex % remoteView_.clipNames.size();
-                    remoteClipSeconds_ = 0.0;
-                }
-                haveRemote_ = true;
+                continue;
             }
+            if (reader.ReadByte() == 1)
+            {
+                const auto bytes = reader.ReadBytes(1021);
+                if (!remoteView_.description || remoteView_.description->getDescriptionProperty() != bytes)
+                {
+                    ShowAvatar(remoteView_, bytes);
+                }
+                continue;
+            }
+            remotePos_ = reader.ReadVector2();
+            remoteYaw_ = reader.ReadSingle();
+            const auto preset = static_cast<std::size_t>(reader.ReadInt32());
+            if (!remoteView_.animation || preset != remoteView_.preset)
+            {
+                StartPreset(remoteView_, preset);
+            }
+            haveRemote_ = remoteView_.renderer != nullptr;
         }
     }
 
@@ -294,19 +276,19 @@ void SyncGame::Update(GameTime& gameTime)
     if (positionLogTimer_ >= 1.0f)
     {
         positionLogTimer_ = 0.0f;
-        std::printf("[NetAvatarSync] local=(%.2f,%.2f) clip=%s haveRemote=%s remote=(%.2f,%.2f) "
-                    "remoteClip=%s\n",
-                    localPos_.X, localPos_.Y, localView_.clipNames[localClipIndex_].c_str(),
+        std::printf("[NetAvatarSync] local=(%.2f,%.2f) preset=%s haveRemote=%s remote=(%.2f,%.2f) "
+                    "remotePreset=%s\n",
+                    localPos_.X, localPos_.Y, CNAExamplesEXT::kAvatarPresets[localView_.preset].name,
                     haveRemote_ ? "true" : "false", remotePos_.X, remotePos_.Y,
-                    haveRemote_ ? remoteView_.clipNames[remoteClipIndex_].c_str() : "-");
+                    haveRemote_ ? CNAExamplesEXT::kAvatarPresets[remoteView_.preset].name : "-");
     }
 
     if (smokeFramesLeft_ > 0)
     {
         if (--smokeFramesLeft_ == 0)
         {
-            std::printf("[NetAvatarSync] Smoke test complete: haveRemote=%s localClip=%s\n",
-                        haveRemote_ ? "true" : "false", localView_.clipNames[localClipIndex_].c_str());
+            std::printf("[NetAvatarSync] Smoke test complete: haveRemote=%s localPreset=%s\n",
+                        haveRemote_ ? "true" : "false", CNAExamplesEXT::kAvatarPresets[localView_.preset].name);
             Exit();
         }
     }
@@ -332,8 +314,7 @@ void SyncGame::Draw(const GameTime& /*gameTime*/)
         Matrix::CreateRotationY(localYaw_) * Matrix::CreateTranslation(Vector3(localPos_.X, 0.0f, localPos_.Y)));
     localView_.renderer->setViewProperty(view);
     localView_.renderer->setProjectionProperty(projection);
-    localView_.renderer->DrawRealEXT(localView_.clipNames[localClipIndex_],
-                                      System::TimeSpan::FromSeconds(localClipSeconds_), /*loop=*/true);
+    localView_.renderer->Draw(localView_.animation.get());
 
     if (haveRemote_)
     {
@@ -341,8 +322,7 @@ void SyncGame::Draw(const GameTime& /*gameTime*/)
             Matrix::CreateRotationY(remoteYaw_) * Matrix::CreateTranslation(Vector3(remotePos_.X, 0.0f, remotePos_.Y)));
         remoteView_.renderer->setViewProperty(view);
         remoteView_.renderer->setProjectionProperty(projection);
-        remoteView_.renderer->DrawRealEXT(remoteView_.clipNames[remoteClipIndex_],
-                                           System::TimeSpan::FromSeconds(remoteClipSeconds_), /*loop=*/true);
+        remoteView_.renderer->Draw(remoteView_.animation.get());
     }
 
     // Task 8.2: 3D scene drawn first (above), then the 2D help overlay on top.

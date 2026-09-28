@@ -3,15 +3,12 @@
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarAnimation.hpp"
-#include "Microsoft/Xna/Framework/GamerServices/AvatarAppearanceEXT.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
-#include "System/TimeSpan.hpp"
-#include "AvatarRendererTestAccess.hpp"
 #include "CNA/Internal/GamerServices/AvatarDescriptionCodec.hpp"
 #include "CNA/Internal/GamerServices/DispatcherGraphics.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarBone.hpp"
@@ -303,146 +300,4 @@ TEST(AvatarRendererTest, DrawThrowsAfterDispose) {
     std::vector<Matrix> bones(71);
     AvatarExpression expression;
     EXPECT_THROW(renderer.Draw(bones, expression), System::ObjectDisposedException);
-}
-
-// --- Real-rendering extension (CNAEXT) ---
-// EnableRealRenderingEXT itself needs a real GraphicsDevice, which (consistent with every
-// other GPU-resource-touching type in this codebase) is exercised via an examples/ integration
-// test, not a CnaTests unit test. These tests cover the parts reachable without a device.
-
-TEST(AvatarRendererTest, RealRenderingDisabledByDefault) {
-    AvatarRenderer renderer(&NoAvatar());
-    EXPECT_FALSE(renderer.IsRealRenderingEnabledEXT());
-}
-
-TEST(AvatarRendererTest, DrawRealThrowsInvalidOperationWhenNotEnabled) {
-    AvatarRenderer renderer(&NoAvatar());
-    EXPECT_THROW(
-        renderer.DrawRealEXT("Wave", System::TimeSpan::Zero, false),
-        System::InvalidOperationException);
-}
-
-TEST(AvatarRendererTest, DrawRealThrowsAfterDispose) {
-    AvatarRenderer renderer(&NoAvatar());
-    renderer.Dispose();
-    EXPECT_THROW(
-        renderer.DrawRealEXT("Wave", System::TimeSpan::Zero, false),
-        System::ObjectDisposedException);
-}
-
-TEST(AvatarRendererTest, SetAppearanceDoesNotThrowWithoutRealRendering) {
-    AvatarRenderer renderer(&NoAvatar());
-    AvatarAppearanceEXT appearance;
-    EXPECT_NO_THROW(renderer.SetAppearanceEXT(appearance));
-}
-
-// Task 11.6: unlike DrawRealEXT/Draw/getStateProperty/getBindPoseProperty (which all already
-// threw ObjectDisposedException), EnableRealRenderingEXT/SetAppearanceEXT used to silently
-// succeed after Dispose() - EnableRealRenderingEXT even re-populated realDevice_/realModel_/
-// realEffect_, effectively "undisposing" the object.
-TEST(AvatarRendererTest, EnableRealRenderingThrowsAfterDispose) {
-    GraphicsDevice device;
-    AvatarRenderer renderer(&NoAvatar());
-    renderer.Dispose();
-    EXPECT_THROW(
-        renderer.EnableRealRenderingEXT(device, nullptr),
-        System::ObjectDisposedException);
-}
-
-// Task 1.6 / audit_net.md Medium finding: a null/empty model used to be silently accepted here
-// and only surfaced later, inside DrawRealEXT, as InvalidOperationException("real rendering is
-// disabled") - misleading, since that exception says nothing about the null model actually
-// passed. Confirms it is now rejected at this call site instead.
-TEST(AvatarRendererTest, EnableRealRenderingThrowsArgumentNullForNullModel) {
-    GraphicsDevice device;
-    AvatarRenderer renderer(&NoAvatar());
-    EXPECT_THROW(
-        renderer.EnableRealRenderingEXT(device, nullptr),
-        System::ArgumentNullException);
-    EXPECT_FALSE(renderer.IsRealRenderingEnabledEXT());
-}
-
-TEST(AvatarRendererTest, SetAppearanceThrowsAfterDispose) {
-    AvatarRenderer renderer(&NoAvatar());
-    renderer.Dispose();
-    AvatarAppearanceEXT appearance;
-    EXPECT_THROW(renderer.SetAppearanceEXT(appearance), System::ObjectDisposedException);
-}
-
-// --- PartTintEXT substring-match routing (Task 13.1) ---
-// The only other coverage (avatar_tint_routing_integration_test.cpp) goes through DrawRealEXT +
-// real GPU pixel readback, and only ever exercised Hair/Shirt. These tests use
-// AvatarRendererTestAccess for direct, GPU-independent coverage of every routing branch.
-
-namespace {
-    AvatarAppearanceEXT MakeDistinctAppearance() {
-        AvatarAppearanceEXT appearance;
-        appearance.setHairColorProperty(Color(10, 0, 0, 255));
-        appearance.setShirtColorProperty(Color(0, 20, 0, 255));
-        appearance.setPantsColorProperty(Color(0, 0, 30, 255));
-        appearance.setShoesColorProperty(Color(40, 40, 0, 255));
-        appearance.setSkinColorProperty(Color(0, 40, 40, 255));
-        return appearance;
-    }
-}
-
-TEST(AvatarRendererTest, PartTintRoutesHairSubstring) {
-    AvatarRenderer renderer(&NoAvatar());
-    auto appearance = MakeDistinctAppearance();
-    renderer.SetAppearanceEXT(appearance);
-    EXPECT_EQ(appearance.getHairColorProperty(),
-              AvatarRendererTestAccess::PartTintEXT(renderer, "CNAAvatarHair"));
-}
-
-TEST(AvatarRendererTest, PartTintRoutesShirtSubstring) {
-    AvatarRenderer renderer(&NoAvatar());
-    auto appearance = MakeDistinctAppearance();
-    renderer.SetAppearanceEXT(appearance);
-    EXPECT_EQ(appearance.getShirtColorProperty(),
-              AvatarRendererTestAccess::PartTintEXT(renderer, "CNAAvatarShirt"));
-}
-
-TEST(AvatarRendererTest, PartTintRoutesPantsSubstring) {
-    AvatarRenderer renderer(&NoAvatar());
-    auto appearance = MakeDistinctAppearance();
-    renderer.SetAppearanceEXT(appearance);
-    EXPECT_EQ(appearance.getPantsColorProperty(),
-              AvatarRendererTestAccess::PartTintEXT(renderer, "CNAAvatarPants"));
-}
-
-TEST(AvatarRendererTest, PartTintRoutesShoesSubstring) {
-    AvatarRenderer renderer(&NoAvatar());
-    auto appearance = MakeDistinctAppearance();
-    renderer.SetAppearanceEXT(appearance);
-    EXPECT_EQ(appearance.getShoesColorProperty(),
-              AvatarRendererTestAccess::PartTintEXT(renderer, "CNAAvatarShoes"));
-}
-
-TEST(AvatarRendererTest, PartTintFallsBackToSkinColorWhenNoKeywordMatches) {
-    AvatarRenderer renderer(&NoAvatar());
-    auto appearance = MakeDistinctAppearance();
-    renderer.SetAppearanceEXT(appearance);
-    EXPECT_EQ(appearance.getSkinColorProperty(),
-              AvatarRendererTestAccess::PartTintEXT(renderer, "CNAAvatarBody"));
-}
-
-// Task 11.17's own real-bug precedent: matching was once exact-equality against a lowercase
-// literal ("hair"), which never matched real part names like "CNAAvatarHair". Confirms the fix
-// (substring `find`) is still genuinely case-sensitive - a lowercase keyword must NOT match.
-TEST(AvatarRendererTest, PartTintIsCaseSensitive) {
-    AvatarRenderer renderer(&NoAvatar());
-    auto appearance = MakeDistinctAppearance();
-    renderer.SetAppearanceEXT(appearance);
-    EXPECT_EQ(appearance.getSkinColorProperty(),
-              AvatarRendererTestAccess::PartTintEXT(renderer, "cnaavatarhair"));
-}
-
-// A part name containing more than one garment keyword must route to whichever keyword is
-// checked first (Hair), not silently match a later branch instead.
-TEST(AvatarRendererTest, PartTintFirstMatchWinsOnSubstringCollision) {
-    AvatarRenderer renderer(&NoAvatar());
-    auto appearance = MakeDistinctAppearance();
-    renderer.SetAppearanceEXT(appearance);
-    EXPECT_EQ(appearance.getHairColorProperty(),
-              AvatarRendererTestAccess::PartTintEXT(renderer, "CNAAvatarHairShirt"));
 }

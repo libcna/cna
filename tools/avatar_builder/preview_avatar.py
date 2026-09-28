@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: MS-PL
 """Development preview of generated avatar GLBs (needs Pillow): CPU skinning + painter's raster.
 
-    python3 tools/avatar_builder/preview_avatar.py OUT.png BODY.glb [ITEM.glb ...] [--pose ANIM.glb NAME TIME]
+    python3 tools/avatar_builder/preview_avatar.py OUT.png BODY.glb [ITEM.glb ...]
+        [--pose ANIM.glb NAME TIME] [--focus X Y Z]
 """
 import math
 import sys
@@ -66,6 +67,8 @@ def main():
         i = args.index("--focus")
         focus = (float(args[i + 1]), float(args[i + 2]), float(args[i + 3]))
         args = args[:i] + args[i + 4:]
+    if len(args) < 2 or args[0] in ("-h", "--help"):
+        sys.exit(__doc__.strip())
     out, files = args[0], args[1:]
     first, _ = glbread.read(Path(files[0]).read_bytes())
     translations = [tuple(first["nodes"][i]["translation"]) for i in range(rig.BONE_COUNT)]

@@ -45,20 +45,6 @@ onto the wrong joint. The test pins each bone against its exact canonical ordina
 its position in a list, and additionally asserts the sequence is strictly ascending, so a duplicate or
 a reordering fails as well.
 
-### Two name routes with no gamer in sight
-
-`cna_avatar_animation_preset_get_clip_name_size_ext` / `..._copy_clip_name_ext` and
-`cna_avatar_body_type_get_content_name_size_ext` / `..._copy_content_name_ext` are count/copy pairs
-over an identity. They take **no game handle and no thread affinity**, because they are pure value
-operations — the same shape the static sample computations in the audio surface already use.
-
-The two answer different kinds of string, and the test asserts that difference rather than assuming
-it. A clip name is the identity's **own canonical spelling** (`CNA_AVATAR_ANIMATION_PRESET_WAVE` is
-`"Wave"`), because that is what the offline asset pipeline writes into a skinned model. A body-type
-name is a **content path** (`"avatar/male/avatar"`), because it is what a content manager loads. An
-undefined identity is refused at the boundary, so the diagnostic names the identity rather than
-surfacing a generic argument failure from underneath.
-
 ## Six exceptions, four answers
 
 The gamer-services exception types are not bound; their **conversion** is, in the same exception
@@ -292,30 +278,30 @@ Two things are deliberately absent:
   which deletes its own. These routes do the same work through the same two public halves and release
   the operation afterwards; the ASan tree is what would catch it if that release were ever dropped.
 
-## Avatars, and what an avatar can honestly report
+## Avatars
 
-An expression and an appearance are **fixed values**: both canonical types carry settings and no
-behavior, so neither earns a handle and every property is a field. An expression is validated where it
-is *used* — the draw and set routes refuse an undefined identity in any of its five parts rather than
-letting one reach the renderer.
+An expression is a **fixed value**: the canonical type carries settings and no behavior, so it earns
+no handle and every property is a field. It is validated where it is *used* — the draw routes refuse
+an undefined identity in any of its five parts rather than letting one reach the renderer.
 
 A **description** is exactly `CNA_AVATAR_DESCRIPTION_BYTE_COUNT` bytes and any other length is
 refused, which is what the canonical constructor does; whether it is *valid* is a separate question
 its first byte answers. A random description is a real CNA avatar (see `docs/avatars.md`): it
 reports its body type and its height in meters, and a requested body type is the one it carries.
 Bytes the runtime cannot read keep that validity rule but report height zero and the female body
-type.
+type. Reading a gamer's description is one call that runs the callback once; for a gamer with a
+service identity it waits for the service, otherwise it returns a description without an avatar.
 
-An **animation** built from a preset carries the whole skeleton but **no timeline**: its length is
-zero until a real clip is loaded, so advancing it moves nothing. The canonical animation *interface*
-has no separate C form, because a C caller cannot implement a C++ interface and this ABI's animation
-handle is the only thing that does — the renderer's draw route takes an animation handle exactly where
-the canonical one takes the interface.
+An **animation** built from a preset is a real clip: it has a length, its 71 bone transforms move as
+it advances, and its expression is keyed. The canonical animation *interface* has no separate C
+form, because a C caller cannot implement a C++ interface and this ABI's animation handle is the
+only thing that does — the renderer's draw route takes an animation handle exactly where the
+canonical one takes the interface.
 
 A **renderer** keeps its description alive, since the canonical one holds a raw pointer to it.
 Transforms and lighting are read and written as sets, each part optional, because a caller that wants
-one almost always wants the group. **The bind pose is not readable on this runtime**: the renderer's
-state is always unavailable, so that route always refuses with a state failure while the parent-bone
-hierarchy still reads — the renderer's real state rather than a gap in the binding. Real rendering
-takes a graphics device and a skinned model the game supplies, because no avatar asset service exists
-here.
+one almost always wants the group. Its state follows the canonical contract — unavailable for a
+description without a readable avatar, otherwise loading and then ready — and the bind pose is
+readable once it is ready (a state failure before). Drawing a ready avatar uses the graphics device
+of initialized gamer services, and is a state failure without one. The Avatar real-rendering
+extension routes were removed in ABI 0.33.0.

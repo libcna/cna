@@ -240,15 +240,19 @@ static int validate_message_box(void)
 
 /* Every guide screen is a no-op here, so what a caller can observe is that it is accepted and that
    a bad identity is still refused at the boundary. */
+/* Without a configured CNA account service (this container's case) every screen that belongs to
+   a signed-in service player -- the social screens and the marketplace, party and achievement
+   information panes -- refuses: as unavailable, or for the marketplace as a profile without the
+   purchase privilege. The session overload of the game invite is Windows Phone only. */
 static int validate_screens(const CNA_SignedInGamerHandle gamer)
 {
     const CNA_GamerHandle recipients[1] = {gamer};
 
     if (cna_guide_delay_notifications(INT64_C(1000000)) != CNA_RESULT_SUCCESS ||
         cna_guide_show_compose_message(CNA_PLAYER_INDEX_ONE, view("Hi"), recipients,
-                                       UINT64_C(1)) != CNA_RESULT_SUCCESS ||
+                                       UINT64_C(1)) != CNA_RESULT_NOT_SUPPORTED ||
         cna_guide_show_compose_message(CNA_PLAYER_INDEX_ONE, view("Hi"), 0, UINT64_C(0)) !=
-            CNA_RESULT_SUCCESS ||
+            CNA_RESULT_NOT_SUPPORTED ||
         cna_guide_show_compose_message(CNA_PLAYER_INDEX_ONE, view("Hi"), 0, UINT64_C(1)) !=
             CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
@@ -256,22 +260,24 @@ static int validate_screens(const CNA_SignedInGamerHandle gamer)
     if (cna_guide_show_friend_request(CNA_PLAYER_INDEX_ONE, gamer) != CNA_RESULT_NOT_SUPPORTED ||
         cna_guide_show_friends(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_NOT_SUPPORTED ||
         cna_guide_show_game_invite(CNA_PLAYER_INDEX_ONE, recipients, UINT64_C(1)) !=
-            CNA_RESULT_SUCCESS ||
-        cna_guide_show_game_invite_for_session(view("session")) != CNA_RESULT_SUCCESS ||
+            CNA_RESULT_NOT_SUPPORTED ||
+        cna_guide_show_game_invite_for_session(view("session")) != CNA_RESULT_NOT_SUPPORTED ||
         cna_guide_show_gamer_card(CNA_PLAYER_INDEX_ONE, gamer) != CNA_RESULT_NOT_SUPPORTED) {
         return 0;
     }
-    if (cna_guide_show_marketplace(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_SUCCESS ||
-        cna_guide_show_messages(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_SUCCESS ||
-        cna_guide_show_party(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_SUCCESS ||
-        cna_guide_show_party_sessions(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_SUCCESS ||
-        cna_guide_show_player_review(CNA_PLAYER_INDEX_ONE, gamer) != CNA_RESULT_SUCCESS ||
-        cna_guide_show_players(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_SUCCESS ||
+    if (cna_guide_show_marketplace(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_INVALID_STATE ||
+        cna_guide_show_messages(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_guide_show_player_review(CNA_PLAYER_INDEX_ONE, gamer) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_guide_show_players(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_NOT_SUPPORTED ||
         cna_guide_show_sign_in(2, CNA_FALSE) != CNA_RESULT_NOT_SUPPORTED ||
-        cna_guide_show_achievements_ext(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_SUCCESS) {
+        cna_guide_show_achievements_ext(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_NOT_SUPPORTED) {
         return 0;
     }
-    /* An undefined player index is refused even though nothing would have used it. */
+    if (cna_guide_show_party(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_guide_show_party_sessions(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_NOT_SUPPORTED) {
+        return 0;
+    }
+    /* An undefined player index is refused before anything else is looked at. */
     return cna_guide_show_friends(UINT32_C(99)) == CNA_RESULT_INVALID_ARGUMENT &&
         cna_guide_show_marketplace(UINT32_C(99)) == CNA_RESULT_INVALID_ARGUMENT &&
         cna_guide_show_gamer_card(CNA_PLAYER_INDEX_ONE, CNA_INVALID_HANDLE) ==

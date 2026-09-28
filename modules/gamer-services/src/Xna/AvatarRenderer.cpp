@@ -8,13 +8,11 @@
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
-#include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
-#include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
@@ -486,94 +484,6 @@ namespace Microsoft::Xna::Framework::GamerServices
         device.DrawIndexedPrimitives(Graphics::PrimitiveType::TriangleList, 0, 0, r.loadingVertexCount, 0, r.loadingPrimitiveCount);
     }
 
-    void AvatarRenderer::EnableRealRenderingEXT(Graphics::GraphicsDevice& device,
-                                                 std::shared_ptr<Graphics::SkinnedModelEXT> model)
-    {
-        if (isDisposed_)
-        {
-            throw System::ObjectDisposedException("AvatarRenderer");
-        }
-        if (model == nullptr)
-        {
-            throw System::ArgumentNullException("model");
-        }
-        realDevice_ = &device;
-        realModel_ = std::move(model);
-        realEffect_ = std::make_unique<Graphics::SkinnedEffect>(device);
-    }
-
-    bool AvatarRenderer::IsRealRenderingEnabledEXT() const
-    {
-        return realModel_ != nullptr;
-    }
-
-    void AvatarRenderer::SetAppearanceEXT(const AvatarAppearanceEXT& appearance)
-    {
-        if (isDisposed_)
-        {
-            throw System::ObjectDisposedException("AvatarRenderer");
-        }
-        appearance_ = appearance;
-    }
-
-    Microsoft::Xna::Framework::Color AvatarRenderer::PartTintEXT(const std::string& partName) const
-    {
-        if (partName.find("Hair") != std::string::npos) { return appearance_.getHairColorProperty(); }
-        if (partName.find("Shirt") != std::string::npos) { return appearance_.getShirtColorProperty(); }
-        if (partName.find("Pants") != std::string::npos) { return appearance_.getPantsColorProperty(); }
-        if (partName.find("Shoes") != std::string::npos) { return appearance_.getShoesColorProperty(); }
-        return appearance_.getSkinColorProperty();
-    }
-
-    void AvatarRenderer::DrawRealEXT(const std::string& animationClipName,
-                                      System::TimeSpan position, bool loop)
-    {
-        if (isDisposed_)
-        {
-            throw System::ObjectDisposedException("AvatarRenderer");
-        }
-        if (!IsRealRenderingEnabledEXT())
-        {
-            throw System::InvalidOperationException(
-                "Real rendering has not been enabled; call EnableRealRenderingEXT first.");
-        }
-
-        std::vector<Microsoft::Xna::Framework::Matrix> boneTransforms;
-        realModel_->ComputeBoneTransformsEXT(animationClipName, position, loop, boneTransforms);
-
-        realEffect_->setWorldProperty(world_);
-        realEffect_->setViewProperty(view_);
-        realEffect_->setProjectionProperty(projection_);
-        realEffect_->SetBoneTransforms(boneTransforms);
-        realEffect_->getDirectionalLight0Property().setEnabledProperty(true);
-        realEffect_->getDirectionalLight0Property().setDirectionProperty(lightDirection_);
-        realEffect_->getDirectionalLight0Property().setDiffuseColorProperty(lightColor_);
-        realEffect_->getDirectionalLight0Property().setSpecularColorProperty(
-            Microsoft::Xna::Framework::Vector3::Zero);
-        realEffect_->getDirectionalLight1Property().setEnabledProperty(false);
-        realEffect_->getDirectionalLight2Property().setEnabledProperty(false);
-        realEffect_->setSpecularColorProperty(Microsoft::Xna::Framework::Vector3::Zero);
-        realEffect_->setEmissiveColorProperty(Microsoft::Xna::Framework::Vector3::Zero);
-        realEffect_->setAmbientLightColorProperty(ambientLightColor_);
-
-        for (const auto& part : realModel_->Parts)
-        {
-            realEffect_->setDiffuseColorProperty(PartTintEXT(part.Name).ToVector3());
-            realEffect_->setTextureProperty(part.Texture);
-            realEffect_->Apply();
-
-            realDevice_->SetVertexBuffer(part.Part->getVertexBufferProperty());
-            realDevice_->SetIndexBuffer(part.Part->getIndexBufferProperty());
-            realDevice_->DrawIndexedPrimitives(
-                Graphics::PrimitiveType::TriangleList,
-                part.Part->getVertexOffsetProperty(),
-                0,
-                part.Part->getNumVerticesProperty(),
-                part.Part->getStartIndexProperty(),
-                part.Part->getPrimitiveCountProperty());
-        }
-    }
-
     void AvatarRenderer::Dispose()
     {
         Dispose(true);
@@ -590,8 +500,5 @@ namespace Microsoft::Xna::Framework::GamerServices
         resources_->Release();
         resources_->load.reset();
         resources_->model.reset();
-        realEffect_.reset();
-        realModel_.reset();
-        realDevice_ = nullptr;
     }
 }

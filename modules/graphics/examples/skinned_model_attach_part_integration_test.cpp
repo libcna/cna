@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 // Task 11.21: SkinnedModelEXT::AttachPartEXT -- proves a second, independently-built
-// SkinnedModelEXT's part can be attached onto a first model at runtime and both parts
-// then render correctly through one AvatarRenderer::DrawRealEXT call, exercising the
-// exact real-buffer-ownership-transfer path a converted standalone wardrobe piece
-// (tools/avatar_builder/generate_wardrobe.py + convert_avatar.py, Task 11.14) would use.
+// SkinnedModelEXT's part can be attached onto a first model at runtime and both parts then
+// render correctly through one SkinnedEffect pass over the host's parts, exercising the
+// buffer-ownership transfer an attached part relies on.
 //
 // Two single-bone quads, each built as its own SkinnedModelEXT (mirroring
 // avatar_real_render_integration_test.cpp's synthetic-fixture approach): "host" covers
@@ -23,8 +22,7 @@
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
-#include "Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp"
-#include "Microsoft/Xna/Framework/GamerServices/AvatarRenderer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
@@ -43,7 +41,6 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using Microsoft::Xna::Framework::GamerServices::AvatarRenderer;
 
 namespace
 {
@@ -85,7 +82,7 @@ namespace
     }
 }
 
-class AvatarAttachPartIntegrationTest : public Game
+class SkinnedModelAttachPartIntegrationTest : public Game
 {
     Texture2D redTex_;
     Texture2D blueTex_;
@@ -125,13 +122,24 @@ protected:
         // moved into host, taking ownership of its buffers; wardrobe itself is left empty.
         host->AttachPartEXT(std::move(*wardrobe));
 
-        Microsoft::Xna::Framework::GamerServices::AvatarDescription noAvatar(std::vector<SharpRuntime::bytecs>(1021, 0));
-        AvatarRenderer renderer(&noAvatar);
-        renderer.EnableRealRenderingEXT(device, host);
-        renderer.setAmbientLightColorProperty(Vector3(1.0f, 1.0f, 1.0f));
-        renderer.setLightColorProperty(Vector3(1.0f, 1.0f, 1.0f));
-        renderer.setLightDirectionProperty(Vector3(0.0f, 0.0f, -1.0f));
-        renderer.DrawRealEXT("Test", System::TimeSpan::Zero, false);
+        std::vector<Matrix> bones;
+        host->ComputeBoneTransformsEXT("Test", System::TimeSpan::Zero, false, bones);
+        SkinnedEffect effect(device);
+        effect.SetBoneTransforms(bones);
+        effect.setAmbientLightColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+        effect.getDirectionalLight0Property().setEnabledProperty(false);
+        effect.getDirectionalLight1Property().setEnabledProperty(false);
+        effect.getDirectionalLight2Property().setEnabledProperty(false);
+        for (const auto& part : host->Parts)
+        {
+            effect.setTextureProperty(part.Texture);
+            effect.Apply();
+            device.SetVertexBuffer(part.Part->getVertexBufferProperty());
+            device.SetIndexBuffer(part.Part->getIndexBufferProperty());
+            device.DrawIndexedPrimitives(PrimitiveType::TriangleList, part.Part->getVertexOffsetProperty(), 0,
+                                         part.Part->getNumVerticesProperty(), part.Part->getStartIndexProperty(),
+                                         part.Part->getPrimitiveCountProperty());
+        }
 
         const Rectangle leftReg(W / 4, H / 2, 1, 1);
         const Rectangle rightReg(3 * W / 4, H / 2, 1, 1);
@@ -147,7 +155,7 @@ protected:
 
         if (leftOk && rightOk && partCountOk)
         {
-            std::printf("[PASS] AvatarAttachPartIntegration: left=(%d,%d,%d) right=(%d,%d,%d) parts=%zu\n",
+            std::printf("[PASS] SkinnedModelAttachPartIntegration: left=(%d,%d,%d) right=(%d,%d,%d) parts=%zu\n",
                         leftPx.getRProperty(), leftPx.getGProperty(), leftPx.getBProperty(),
                         rightPx.getRProperty(), rightPx.getGProperty(), rightPx.getBProperty(),
                         host->Parts.size());
@@ -155,7 +163,7 @@ protected:
         }
         else
         {
-            std::printf("[FAIL] AvatarAttachPartIntegration: left=(%d,%d,%d) right=(%d,%d,%d) parts=%zu\n"
+            std::printf("[FAIL] SkinnedModelAttachPartIntegration: left=(%d,%d,%d) right=(%d,%d,%d) parts=%zu\n"
                         "       expected: left=red, right=blue, parts=2\n",
                         leftPx.getRProperty(), leftPx.getGProperty(), leftPx.getBProperty(),
                         rightPx.getRProperty(), rightPx.getGProperty(), rightPx.getBProperty(),
@@ -170,7 +178,7 @@ public:
 
 int main()
 {
-    AvatarAttachPartIntegrationTest game;
+    SkinnedModelAttachPartIntegrationTest game;
     game.getGraphicsDeviceProperty().SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     game.Run();
     return game.getResult();

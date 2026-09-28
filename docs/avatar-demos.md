@@ -1,74 +1,25 @@
-# Avatar demo controls and troubleshooting
+# Avatar demos
 
-**Date:** 2026-07-17 (`plans/plan_net.md` Tasks 9.6/9.7)
-
-Quick reference for the 8 avatar-related demos (`demo_avatar`, `demo_avatar_animation_gallery`,
-`demo_avatar_appearance_tint_studio`, `demo_avatar_bone_state_boundary`,
-`demo_avatar_dual_compare`, `demo_avatar_multi_attach_stress`, `demo_avatar_wardrobe_hotswap`,
-`demo_net_avatar_sync`) plus troubleshooting for the asset-generation pipeline behind them and for
-network demo startup in general.
+The avatar demos use only the standard XNA avatar API (`AvatarDescription`, `AvatarAnimation`,
+`AvatarRenderer`) on CNA's original avatar catalog, described in `avatars.md`. Each creates a
+`GraphicsDeviceManager` and adds a `GamerServicesComponent`, which is all `AvatarRenderer` needs;
+no extension call and no content directory is involved.
 
 ## Controls
 
-**The authoritative control reference is each demo's own in-app F1 help overlay** (`plans/plan_net.md`
-Phase 8) — press F1 while any of the 8 demos is running to see its exact current controls. This
-file deliberately does not duplicate that text line-by-line (a duplicated list drifts out of sync
-the next time a control changes); it only summarizes what's common across demos and points at
-each one's own overlay for the rest.
+Each demo's in-app **F1** overlay is the authoritative control reference; **Esc** quits.
 
-Common to all 8: **F1** toggles the help overlay, **Esc** quits.
-
-| Demo | What it demonstrates | Notable CLI flags |
+| Demo | What it demonstrates | CLI flags |
 |---|---|---|
-| `demo_avatar` | Baseline real avatar rendering | `--gender male\|female`, `--wardrobe-hair Cap\|Ponytail`, `--yaw`, `--clip`, `--smoke N`, `--screenshot <path>`, `--show-help` |
-| `demo_avatar_animation_gallery` | Auto-cycles all 31 `AvatarAnimationPreset` clips across both genders | `--smoke N`, `--screenshot <path>`, `--show-help` |
-| `demo_avatar_appearance_tint_studio` | Live per-slot (Skin/Hair/Shirt/Pants/Shoes) color tinting via `AvatarAppearanceEXT` | `--smoke N`, `--screenshot <path>`, `--show-help` |
-| `demo_avatar_bone_state_boundary` | Documents the real, faithful-XNA `AvatarRenderer` skeleton API boundary (console output) vs. the working `SkinnedModelEXT` EXT path | `--screenshot <path>`, `--show-help` (no `--smoke` — always runs a fixed ~30-frame window) |
-| `demo_avatar_dual_compare` | Two independent `AvatarRenderer`/`SkinnedModelEXT` instances drawing simultaneously, proving per-instance appearance isolation | `--smoke N`, `--screenshot <path>`, `--show-help` |
-| `demo_avatar_multi_attach_stress` | Repeated `SkinnedModelEXT::AttachPartEXT` calls, proving accumulation doesn't break skinning/tinting | `--smoke N`, `--screenshot <path>`, `--show-help` |
-| `demo_avatar_wardrobe_hotswap` | `AttachPartEXT`/`RemovePartEXT` used live at runtime (hair changes without restarting) | `--smoke N`, `--screenshot <path>`, `--show-help` |
-| `demo_net_avatar_sync` | Net + Avatar combined: two real processes sync position/yaw/clip over a real `NetworkSession` | `--host` / `--join`, `--smoke N`, `--screenshot <path>`, `--show-help` |
+| `demo_avatar` | One random avatar playing any preset, with a free camera. Space: next preset, R: new avatar, G: other body type, E: cycle expression overrides, Left/Right: orbit. | `--gender male\|female`, `--clip <preset>`, `--yaw <degrees>`, `--smoke N`, `--screenshot <path>`, `--show-help` |
+| `demo_avatar_animation_gallery` | Eight avatars playing the 31 presets a page at a time. Space: next page, R: new avatars. | `--smoke N`, `--screenshot <path>`, `--show-help` |
+| `demo_avatar_dual_compare` | A female and a male avatar playing the same preset side by side, showing how one standard animation fits different heights and builds. Space: next preset, R: new pair. | `--smoke N`, `--screenshot <path>`, `--show-help` |
+| `demo_avatar_bone_state_boundary` | The renderer lifecycle (`Unavailable`, `Loading`, `Ready`, `BindPose`, `ParentBones`) printed to the console, then a draw from game-supplied bone transforms instead of an `AvatarAnimation`. | `--screenshot <path>`, `--show-help` (runs a fixed window of frames) |
+| `demo_net_avatar_sync` | Two processes in a System Link `NetworkSession`: each sends its avatar's `Description` bytes (reliable, in order) and its position, yaw and preset, and draws the other player's avatar. Arrows: move and turn, Space: next preset. | `--host` / `--join`, `--smoke N`, `--screenshot <path>`, `--show-help` |
 
-`--smoke N` exits cleanly after N `Draw()` frames (automated verification, no interactive input
-needed). `--show-help`/`--screenshot <path>` together let a non-interactive run verify the F1
-overlay actually renders, without simulating keyboard input — see `plans/plan_net.md` Phase 8 for why
-that pairing exists.
-
-## Troubleshooting: avatar asset generation (mesh-craft + Blender pipeline)
-
-See `tools/avatar_builder/README.md` for the full pipeline description. Common failure points:
-
-- **`mc3togltf` not found** — `generate_body_meshcraft.py`/`generate_clothes_meshcraft.py` need
-  the sibling [`mesh-craft`](../../mesh-craft) tool's `mc3togltf` CLI built and resolvable.
-  `_locate_mc3togltf()` checks the `$MC3TOGLTF` environment variable first, then a handful of
-  conventional build-output paths relative to the sibling repo. If neither resolves, set
-  `MC3TOGLTF=/path/to/mc3togltf` explicitly before running `generate_avatar.py`/
-  `generate_wardrobe.py`.
-- **Body/clothing geometry looks disproportionate or intersecting** — confirm you're actually
-  running the mesh-craft pipeline, not the older primitive-join one: `generate_avatar.py`/
-  `generate_wardrobe.py` alias `generate_body_meshcraft`/`generate_clothes_meshcraft` in as
-  `generate_body`/`generate_clothes`, but the original, unmerged-geometry modules
-  (`generate_body.py`/`generate_clothes.py`) remain independently runnable and will reproduce the
-  original "monster" mesh-explosion symptoms if invoked directly by mistake.
-  See `docs/avatar-real-rendering-ext.md`'s "Phase 7" section for the root cause.
-  **Known, still-open residual gaps** (not bugs to re-report): a shoe-area dark artifact and a
-  `Wave`-pose chest-band artifact — see `plans/plan_net.md` Phase 7's own "Honest overall assessment".
-  Genuinely new/different-looking artifacts are worth investigating; these two specific ones are
-  already tracked.
-- **`validate_gltf.py` passes but the content still looks wrong at runtime** — `validate_gltf.py`
-  checks mesh/joint/animation/shape-key *presence*, not per-vertex correctness — it does not catch
-  NaN/Inf weight values or out-of-range bone indices (a known gap, `plans/plan_net.md` Task 7.8/7.10).
-  If a model loads but renders garbled, inspect the actual buffer data, don't assume `validate_gltf.py`
-  passing rules that out.
-- **CMake doesn't pick up regenerated `Content/` after re-running the pipeline** — CMake's own
-  `Content/` copy step only re-triggers on a build reconfigure, not automatically when only binary
-  content files change underneath it. Re-run `cmake --build` after touching `CMakeLists.txt` (or
-  manually copy `modules/gamer-services/examples/demo_avatar/Content/` into the build directory) if a demo still shows
-  stale content after regenerating assets.
-- **Regenerating content changes vertex/animation output slightly between runs** — expected:
-  Blender's own floating-point rounding introduces ~1-ULP (`2^-23`) noise between otherwise
-  byte-identical exports (`tools/avatar_builder/README.md`'s own "Orchestration and export"
-  section documents this precisely) — not a sign of a broken pipeline.
+`--smoke N` exits after N drawn frames without input; `--screenshot <path>` saves the last frame's
+back buffer as a PNG (the demos use the HiDef profile so it can be read back). Run them through
+`tools/platform/run_gpu_tests_private.sh`'s private display, never on a live desktop.
 
 ## Troubleshooting: network demo startup (ENet port binding, discovery)
 
@@ -78,7 +29,7 @@ Applies to any Net-using demo (`demo_net_avatar_sync`, `demo_net_client_server_a
 
 - **"No session found after searching - is a host running?"** — the client
   (`NetworkSession::Find`) searches for `kSearchWindowMs` (150ms) per attempt and retries up to
-  100 times (`src/Net/Internal/ENetDiscoveryService.cpp`); a host must already be running and
+  100 times (`modules/net/src/Internal/ENetDiscoveryService.cpp`); a host must already be running and
   past its own `NetworkSession::Create` call before the client starts searching. Launch the host
   process first, give it a moment to finish creating its session, then launch the client — a tight
   race between the two process launches (both started in the same shell command with no delay) is

@@ -7,12 +7,10 @@
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarAnimation.hpp"
-#include "Microsoft/Xna/Framework/GamerServices/AvatarAppearanceEXT.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarExpression.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarRenderer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
-#include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "System/EventHandler.hpp"
@@ -29,12 +27,9 @@
 namespace {
 
 using CNA::C::Detail::BorrowAnyGamer;
-using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
-using CNA::C::Detail::GetBorrowedGraphicsDevice;
-using CNA::C::Detail::GetOwnedSkinnedModelValue;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::ObjectKind;
 
@@ -43,7 +38,6 @@ using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::GamerServices::AvatarAnimation;
 using Microsoft::Xna::Framework::GamerServices::AvatarAnimationPreset;
-using Microsoft::Xna::Framework::GamerServices::AvatarAppearanceEXT;
 using Microsoft::Xna::Framework::GamerServices::AvatarBodyType;
 using Microsoft::Xna::Framework::GamerServices::AvatarDescription;
 using Microsoft::Xna::Framework::GamerServices::AvatarExpression;
@@ -68,7 +62,6 @@ struct AvatarAnimationResource final {
 struct AvatarRendererResource final {
     std::shared_ptr<AvatarRenderer> value;
     std::shared_ptr<AvatarDescriptionResource> description;
-    bool realRenderingEnabled = false;
 };
 
 [[nodiscard]] CNA_Result InvalidInput(const char* const message)
@@ -182,21 +175,6 @@ struct AvatarRendererResource final {
     return CNA_RESULT_SUCCESS;
 }
 
-[[nodiscard]] CNA_Color ToC(const Color& value) noexcept
-{
-    CNA_Color out;
-    out.r = value.getRProperty();
-    out.g = value.getGProperty();
-    out.b = value.getBProperty();
-    out.a = value.getAProperty();
-    return out;
-}
-
-[[nodiscard]] Color ToNative(const CNA_Color value) noexcept
-{
-    return Color(value.r, value.g, value.b, value.a);
-}
-
 [[nodiscard]] CNA_Result PublishDescription(
     AvatarDescription value,
     CNA_Handle* const outDescription)
@@ -223,27 +201,6 @@ CNA_Result cna_avatar_expression_init(CNA_AvatarExpression* const outExpression)
             return InvalidInput("The AvatarExpression output is null.");
         }
         *outExpression = ToC(AvatarExpression{});
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_avatar_appearance_init_ext(CNA_AvatarAppearanceEXT* const outAppearance)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outAppearance == nullptr) {
-            return InvalidInput("The AvatarAppearance output is null.");
-        }
-        const AvatarAppearanceEXT appearance;
-        const CNA_AvatarAppearanceEXT value = {
-            sizeof(CNA_AvatarAppearanceEXT),
-            StructureVersion,
-            ToC(appearance.getSkinColorProperty()),
-            ToC(appearance.getHairColorProperty()),
-            ToC(appearance.getShirtColorProperty()),
-            ToC(appearance.getPantsColorProperty()),
-            ToC(appearance.getShoesColorProperty())
-        };
-        *outAppearance = value;
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -599,74 +556,6 @@ CNA_Result cna_avatar_animation_get_bone_transform_at(
     });
 }
 
-CNA_Result cna_avatar_animation_get_real_clip_name_size_ext(
-    const CNA_AvatarAnimationHandle animationHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr) {
-            return InvalidInput("The clip-name size output is null.");
-        }
-        std::shared_ptr<AvatarAnimationResource> animation;
-        if (const CNA_Result result = BorrowAnimation(animationHandle, &animation);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = animation->value->GetRealClipNameEXT().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_avatar_animation_copy_real_clip_name_ext(
-    const CNA_AvatarAnimationHandle animationHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
-            return InvalidInput("The clip-name output buffer is invalid.");
-        }
-        std::shared_ptr<AvatarAnimationResource> animation;
-        if (const CNA_Result result = BorrowAnimation(animationHandle, &animation);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        const std::string& name = animation->value->GetRealClipNameEXT();
-        *outBytes = name.size();
-        if (capacity < name.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The destination capacity is smaller than the clip name.");
-        }
-        if (!name.empty()) {
-            std::memcpy(destination, name.data(), name.size());
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_avatar_animation_set_real_clip_name_ext(
-    const CNA_AvatarAnimationHandle animationHandle,
-    const CNA_StringView clipName)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (clipName.data == nullptr && clipName.byte_length != UINT64_C(0)) {
-            return InvalidInput("The clip name is invalid.");
-        }
-        std::shared_ptr<AvatarAnimationResource> animation;
-        if (const CNA_Result result = BorrowAnimation(animationHandle, &animation);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        animation->value->SetRealClipNameEXT(std::string(
-            clipName.data == nullptr ? "" : clipName.data,
-            static_cast<std::size_t>(clipName.byte_length)));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_avatar_renderer_create(
     const CNA_AvatarDescriptionHandle descriptionHandle,
     const CNA_Bool useLoadingEffect,
@@ -741,8 +630,7 @@ CNA_Result cna_avatar_renderer_get_info(
             StructureVersion,
             static_cast<CNA_AvatarRendererState>(renderer->value->getStateProperty()),
             renderer->value->getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE,
-            renderer->value->IsRealRenderingEnabledEXT() ? CNA_TRUE : CNA_FALSE,
-            {0U, 0U}
+            {0U, 0U, 0U}
         };
         *outInfo = info;
         return CNA_RESULT_SUCCESS;
@@ -954,86 +842,6 @@ CNA_Result cna_avatar_renderer_draw_bones(
             nativeBones.push_back(ToNative(bones[index]));
         }
         renderer->value->Draw(nativeBones, nativeExpression);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_avatar_renderer_enable_real_rendering_ext(
-    const CNA_AvatarRendererHandle rendererHandle,
-    const CNA_Handle deviceHandle,
-    const CNA_Handle modelHandle)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<AvatarRendererResource> renderer;
-        if (const CNA_Result result = BorrowRenderer(rendererHandle, &renderer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> device;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(deviceHandle, &device);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        std::shared_ptr<Microsoft::Xna::Framework::Graphics::SkinnedModelEXT> model;
-        if (const CNA_Result result = GetOwnedSkinnedModelValue(modelHandle, &model);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        renderer->value->EnableRealRenderingEXT(*device->value, std::move(model));
-        renderer->realRenderingEnabled = true;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_avatar_renderer_set_appearance_ext(
-    const CNA_AvatarRendererHandle rendererHandle,
-    const CNA_AvatarAppearanceEXT* const appearance)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (appearance == nullptr || appearance->struct_size < sizeof(CNA_AvatarAppearanceEXT) ||
-            appearance->struct_version != StructureVersion) {
-            return InvalidInput("The AvatarAppearance structure is invalid.");
-        }
-        std::shared_ptr<AvatarRendererResource> renderer;
-        if (const CNA_Result result = BorrowRenderer(rendererHandle, &renderer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        AvatarAppearanceEXT native;
-        native.setSkinColorProperty(ToNative(appearance->skin_color));
-        native.setHairColorProperty(ToNative(appearance->hair_color));
-        native.setShirtColorProperty(ToNative(appearance->shirt_color));
-        native.setPantsColorProperty(ToNative(appearance->pants_color));
-        native.setShoesColorProperty(ToNative(appearance->shoes_color));
-        renderer->value->SetAppearanceEXT(native);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_avatar_renderer_draw_real_ext(
-    const CNA_AvatarRendererHandle rendererHandle,
-    const CNA_StringView animationClipName,
-    const int64_t positionTicks,
-    const CNA_Bool loop)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (animationClipName.data == nullptr && animationClipName.byte_length != UINT64_C(0)) {
-            return InvalidInput("The animation clip name is invalid.");
-        }
-        if (loop != CNA_FALSE && loop != CNA_TRUE) {
-            return InvalidInput("The animation loop flag is invalid.");
-        }
-        std::shared_ptr<AvatarRendererResource> renderer;
-        if (const CNA_Result result = BorrowRenderer(rendererHandle, &renderer);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        renderer->value->DrawRealEXT(
-            std::string(
-                animationClipName.data == nullptr ? "" : animationClipName.data,
-                static_cast<std::size_t>(animationClipName.byte_length)),
-            System::TimeSpan(positionTicks),
-            loop == CNA_TRUE);
         return CNA_RESULT_SUCCESS;
     });
 }

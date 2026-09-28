@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/AvatarAnimation.hpp"
 #include "CNA/Internal/GamerServices/AvatarAssets.hpp"
-#include "Microsoft/Xna/Framework/GamerServices/AvatarAnimationPresetNamesEXT.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "System/OverflowException.hpp"
@@ -37,7 +36,6 @@ namespace Microsoft::Xna::Framework::GamerServices
         if (preset >= 0 && preset < static_cast<int>(library.clips.size()))
         {
             preset_ = preset;
-            realClipName_ = AvatarAnimationPresetToClipNameEXT(animationPreset);
             length_ = System::TimeSpan::FromTicks(
                 static_cast<SharpRuntime::longcs>(std::llround(library.clips[preset].duration * 1.0e7)));
         }
@@ -122,16 +120,6 @@ namespace Microsoft::Xna::Framework::GamerServices
     }
 
     bool AvatarAnimation::getIsDisposedProperty() const { return isDisposed_; }
-
-    void AvatarAnimation::SetRealClipNameEXT(const std::string& clipName)
-    {
-        realClipName_ = clipName;
-    }
-
-    const std::string& AvatarAnimation::GetRealClipNameEXT() const
-    {
-        return realClipName_;
-    }
 
     void AvatarAnimation::Dispose()
     {

@@ -196,19 +196,3 @@ TEST(AvatarAnimationTest, ImplementsIAvatarAnimationInterface) {
     EXPECT_GT(asInterface.getLengthProperty(), System::TimeSpan::Zero);
     EXPECT_EQ(asInterface.getBoneTransformsProperty().getCountProperty(), 71);
 }
-
-// --- Real-rendering extension (CNAEXT) ---
-
-TEST(AvatarAnimationTest, RealClipNameDefaultsToPresetName) {
-    AvatarAnimation wave(AvatarAnimationPreset::Wave);
-    EXPECT_EQ(wave.GetRealClipNameEXT(), "Wave");
-
-    AvatarAnimation nails(AvatarAnimationPreset::FemaleIdleCheckNails);
-    EXPECT_EQ(nails.GetRealClipNameEXT(), "FemaleIdleCheckNails");
-}
-
-TEST(AvatarAnimationTest, RealClipNameRoundTrips) {
-    AvatarAnimation animation(AvatarAnimationPreset::Stand0);
-    animation.SetRealClipNameEXT("SubstituteIdle");
-    EXPECT_EQ(animation.GetRealClipNameEXT(), "SubstituteIdle");
-}

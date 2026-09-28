@@ -10,10 +10,12 @@
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarBodyType.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/AvatarAnimation.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarRenderer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
-#include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -55,14 +57,17 @@ public:
 private:
     struct AvatarView
     {
-        std::shared_ptr<Microsoft::Xna::Framework::Graphics::SkinnedModelEXT> model;
+        std::unique_ptr<Microsoft::Xna::Framework::GamerServices::AvatarDescription> description;
         std::unique_ptr<Microsoft::Xna::Framework::GamerServices::AvatarRenderer> renderer;
-        std::vector<std::string> clipNames;
+        std::unique_ptr<Microsoft::Xna::Framework::GamerServices::AvatarAnimation> animation;
+        std::size_t preset = 0;
     };
 
-    void LoadAvatarView(AvatarView& view, Microsoft::Xna::Framework::GamerServices::AvatarBodyType gender);
+    static void ShowAvatar(AvatarView& view, const std::vector<SharpRuntime::bytecs>& description);
+    static void StartPreset(AvatarView& view, std::size_t preset);
     void OnSessionEnded(System::Object* sender, const Microsoft::Xna::Framework::Net::NetworkSessionEndedEventArgs& e);
 
+    Microsoft::Xna::Framework::GraphicsDeviceManager graphics_{this};
     bool isHost_;
     Microsoft::Xna::Framework::GamerServices::AvatarBodyType localGender_;
     Microsoft::Xna::Framework::GamerServices::AvatarBodyType remoteGender_;
@@ -76,14 +81,11 @@ private:
 
     Microsoft::Xna::Framework::Vector2 localPos_{0.0f, 0.0f}; // world X/Z
     float localYaw_ = 0.0f;
-    std::size_t localClipIndex_ = 0;
-    double localClipSeconds_ = 0.0;
+    int descriptionResend_ = 0;
 
     bool haveRemote_ = false;
     Microsoft::Xna::Framework::Vector2 remotePos_{1.5f, 0.0f};
     float remoteYaw_ = 0.0f;
-    std::size_t remoteClipIndex_ = 0;
-    double remoteClipSeconds_ = 0.0;
 
     Microsoft::Xna::Framework::Input::KeyboardState previousKeys_;
     float cameraYaw_ = 0.0f;

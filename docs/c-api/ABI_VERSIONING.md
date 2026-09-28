@@ -2,7 +2,23 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.32.0** (`GS-005b`). It adds caller-buffer picture copy
+The current experimental ABI is **0.33.0** (`GS-009f`). The standard avatar types now behave as
+real avatars (`docs/avatars.md`): a random description reports its body type and height, a preset
+animation has a length and moving bones, and a renderer loads (`LOADING` -> `READY`), reads its
+bind pose once ready and draws through initialized gamer services. The Avatar real-rendering
+extension that stood in for them is **removed**: `cna_avatar_appearance_init_ext` and the
+`CNA_AvatarAppearanceEXT` value, `cna_avatar_renderer_enable_real_rendering_ext`,
+`cna_avatar_renderer_set_appearance_ext`, `cna_avatar_renderer_draw_real_ext`, the three
+`cna_avatar_animation_*_real_clip_name_ext` routes and the four preset clip-name / body-type
+content-name routes (eleven fewer exports, now 3,204, and one structure). In
+`CNA_AvatarRendererInfo` the `is_real_rendering_enabled` byte becomes part of `reserved[3]`, so the
+structure keeps its size and every other offset. A binding that names a removed route or field no
+longer compiles; that incompatible change takes this minor increment, these notes and an updated
+baseline under the `0.x` rule below.
+
+### Previous ABI 0.32.0
+
+The ABI was **0.32.0** (`GS-005b`). It adds caller-buffer picture copy
 routes for achievements and gamer profiles, releases temporary stream ownership in both size
 routes, and makes the existing Guide/Dispatcher routes reflect configured service availability
 and real authentication. Unconfigured social/sign-in calls now refuse, duplicate initialization
@@ -465,7 +481,7 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-The current baseline records 3,215 exports; build configurations must export the same surface.
+The current baseline records 3,204 exports; build configurations must export the same surface.
 That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose backend or layer is absent exists and refuses, rather than

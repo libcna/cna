@@ -21,33 +21,12 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33"
         OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL1" OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2"
         OR CNA_GRAPHICS_RENDERER STREQUAL "VULKAN"))
-    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
-        file(GLOB_RECURSE _cna_avatar_content_files CONFIGURE_DEPENDS
-            "${CMAKE_CURRENT_SOURCE_DIR}/demo_avatar/Content/*")
-        set(_cna_avatar_content_stamp
-            "${CMAKE_CURRENT_BINARY_DIR}/cna-demo-avatar-content.stamp")
-        add_custom_command(
-            OUTPUT "${_cna_avatar_content_stamp}"
-            COMMAND ${CMAKE_COMMAND}
-                -DCNA_COPY_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}/demo_avatar/Content
-                -DCNA_COPY_DESTINATION=${CMAKE_BINARY_DIR}/Content
-                -DCNA_COPY_LOCK=${CMAKE_BINARY_DIR}/CMakeFiles/cna-example-content.lock
-                -P ${CMAKE_SOURCE_DIR}/cmake/CopyDirectoryLocked.cmake
-            COMMAND ${CMAKE_COMMAND} -E touch "${_cna_avatar_content_stamp}"
-            DEPENDS ${_cna_avatar_content_files}
-                    "${CMAKE_SOURCE_DIR}/cmake/CopyDirectoryLocked.cmake"
-            COMMENT "Copying shared avatar Content next to the demo executables"
-            VERBATIM)
-        add_custom_target(cna_demo_avatar_content
-            DEPENDS "${_cna_avatar_content_stamp}")
-    endif()
-
-    # Task 11.11 (Phase 11b): real windowed proof that AvatarRenderer's real-rendering
-    # extension (Phase 10) draws Phase 11a's procedurally-generated, non-synthetic avatar
-    # content (tools/avatar_builder/ + tools/avatar_asset_pipeline/convert_avatar.py,
-    # Task 11.10). Needs CNA_GamerServices (AvatarRenderer lives there, same gating as
-    # cna_test_avatar_real_render below), already inside this EASYGL/VULKAN-only scope.
-    # Emscripten isn't wired up for this demo yet (deferred, no immediate need).
+    # Every demo below links CNA ahead of CNA_GamerServices: in a shared CNA build, the static module
+    # archives CNA_GamerServices pulls in must not supply a second copy of the runtime (and of the GL
+    # loader state) ahead of libcna, which aborted every one of these demos at device creation.
+    # GS-009: the standard XNA avatar demos. They use only AvatarDescription/AvatarAnimation/
+    # AvatarRenderer, whose original CNA catalog is compiled into CNA_GamerServices, so no content
+    # is copied. Emscripten isn't wired up for these demos yet.
     if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
         add_executable(cna_demo_avatar
             demo_avatar/src/Main.cpp
@@ -57,7 +36,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
             ${CMAKE_CURRENT_SOURCE_DIR}/demo_avatar/src
             ${CNA_GRAPHICS_EXAMPLES_DIR}
         )
-        target_link_libraries(cna_demo_avatar PRIVATE CNA_GamerServices)
+        target_link_libraries(cna_demo_avatar PRIVATE CNA CNA_GamerServices)
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_avatar PRIVATE
@@ -69,7 +48,6 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         if(TARGET SDL3::SDL3main)
             target_link_libraries(cna_demo_avatar PRIVATE SDL3::SDL3main)
         endif()
-        add_dependencies(cna_demo_avatar cna_demo_avatar_content)
         if(WIN32)
             cna_windows_gui_executable(cna_demo_avatar)
             cna_copy_sdl_runtime(cna_demo_avatar)
@@ -88,7 +66,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         target_include_directories(cna_demo_gamerservices_signin_presence PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/demo_gamerservices_signin_presence/src
         )
-        target_link_libraries(cna_demo_gamerservices_signin_presence PRIVATE CNA_GamerServices)
+        target_link_libraries(cna_demo_gamerservices_signin_presence PRIVATE CNA CNA_GamerServices)
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_gamerservices_signin_presence PRIVATE
@@ -117,7 +95,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         target_include_directories(cna_demo_achievement_showcase PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/demo_achievement_showcase/src
         )
-        target_link_libraries(cna_demo_achievement_showcase PRIVATE CNA_GamerServices)
+        target_link_libraries(cna_demo_achievement_showcase PRIVATE CNA CNA_GamerServices)
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_achievement_showcase PRIVATE
@@ -147,7 +125,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         target_include_directories(cna_demo_leaderboard_viewer PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/demo_leaderboard_viewer/src
         )
-        target_link_libraries(cna_demo_leaderboard_viewer PRIVATE CNA_GamerServices)
+        target_link_libraries(cna_demo_leaderboard_viewer PRIVATE CNA CNA_GamerServices)
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_leaderboard_viewer PRIVATE
@@ -172,7 +150,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         add_executable(cna_demo_guide_overlay_console
             demo_guide_overlay_console/src/Main.cpp
         )
-        target_link_libraries(cna_demo_guide_overlay_console PRIVATE CNA_GamerServices SHARP_RUNTIME)
+        target_link_libraries(cna_demo_guide_overlay_console PRIVATE CNA CNA_GamerServices SHARP_RUNTIME)
     endif()
 
     # Task 15.12: cna_demo_gamerservices_dispatcher_watchdog - visual proof that Task 12.1's/Task
@@ -187,7 +165,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         target_include_directories(cna_demo_gamerservices_dispatcher_watchdog PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/demo_gamerservices_dispatcher_watchdog/src
         )
-        target_link_libraries(cna_demo_gamerservices_dispatcher_watchdog PRIVATE CNA_GamerServices CNA_Net)
+        target_link_libraries(cna_demo_gamerservices_dispatcher_watchdog PRIVATE CNA CNA_GamerServices CNA_Net)
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_gamerservices_dispatcher_watchdog PRIVATE
@@ -216,7 +194,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         target_include_directories(cna_demo_gamer_profile_privileges PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/demo_gamer_profile_privileges/src
         )
-        target_link_libraries(cna_demo_gamer_profile_privileges PRIVATE CNA_GamerServices)
+        target_link_libraries(cna_demo_gamer_profile_privileges PRIVATE CNA CNA_GamerServices)
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_gamer_profile_privileges PRIVATE
@@ -245,7 +223,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         target_include_directories(cna_demo_friends_and_gamercard PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/demo_friends_and_gamercard/src
         )
-        target_link_libraries(cna_demo_friends_and_gamercard PRIVATE CNA_GamerServices)
+        target_link_libraries(cna_demo_friends_and_gamercard PRIVATE CNA CNA_GamerServices)
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_friends_and_gamercard PRIVATE
@@ -263,10 +241,8 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         endif()
     endif()
 
-    # Task 15.15: cna_demo_avatar_animation_gallery - a completionist version of demo_avatar's
-    # Space-cycling, iterating all 31 AvatarAnimationPreset values across both genders. Reuses
-    # demo_avatar's Content/ directory (copied by CMake, not duplicated) - same gating as
-    # cna_demo_avatar above.
+    # Task 15.15 / GS-009: cna_demo_avatar_animation_gallery - eight random avatars playing all 31
+    # AvatarAnimationPreset values a page at a time - same gating as cna_demo_avatar above.
     if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
         add_executable(cna_demo_avatar_animation_gallery
             demo_avatar_animation_gallery/src/Main.cpp
@@ -276,7 +252,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
             ${CMAKE_CURRENT_SOURCE_DIR}/demo_avatar_animation_gallery/src
             ${CNA_GRAPHICS_EXAMPLES_DIR}
         )
-        target_link_libraries(cna_demo_avatar_animation_gallery PRIVATE CNA_GamerServices)
+        target_link_libraries(cna_demo_avatar_animation_gallery PRIVATE CNA CNA_GamerServices)
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_avatar_animation_gallery PRIVATE
@@ -288,79 +264,14 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         if(TARGET SDL3::SDL3main)
             target_link_libraries(cna_demo_avatar_animation_gallery PRIVATE SDL3::SDL3main)
         endif()
-        add_dependencies(cna_demo_avatar_animation_gallery cna_demo_avatar_content)
         if(WIN32)
             cna_windows_gui_executable(cna_demo_avatar_animation_gallery)
             cna_copy_sdl_runtime(cna_demo_avatar_animation_gallery)
         endif()
     endif()
 
-    # Task 15.16: cna_demo_avatar_wardrobe_hotswap - SkinnedModelEXT::AttachPartEXT/RemovePartEXT
-    # used repeatedly at runtime (Tab cycles baked-in hair / hair_Cap / hair_Ponytail). Reuses
-    # demo_avatar's Content/ directory (copied by CMake, not duplicated) - same gating as
-    # cna_demo_avatar above.
-    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
-        add_executable(cna_demo_avatar_wardrobe_hotswap
-            demo_avatar_wardrobe_hotswap/src/Main.cpp
-            demo_avatar_wardrobe_hotswap/src/HotswapDemo.cpp
-        )
-        target_include_directories(cna_demo_avatar_wardrobe_hotswap PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/demo_avatar_wardrobe_hotswap/src
-            ${CNA_GRAPHICS_EXAMPLES_DIR}
-        )
-        target_link_libraries(cna_demo_avatar_wardrobe_hotswap PRIVATE CNA_GamerServices)
-
-        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
-            target_link_libraries(cna_demo_avatar_wardrobe_hotswap PRIVATE
-                CNA
-                SHARP_RUNTIME)
-        else()
-            target_link_libraries(cna_demo_avatar_wardrobe_hotswap PRIVATE CNA SHARP_RUNTIME)
-        endif()
-        if(TARGET SDL3::SDL3main)
-            target_link_libraries(cna_demo_avatar_wardrobe_hotswap PRIVATE SDL3::SDL3main)
-        endif()
-        add_dependencies(cna_demo_avatar_wardrobe_hotswap cna_demo_avatar_content)
-        if(WIN32)
-            cna_windows_gui_executable(cna_demo_avatar_wardrobe_hotswap)
-            cna_copy_sdl_runtime(cna_demo_avatar_wardrobe_hotswap)
-        endif()
-    endif()
-
-    # Task 15.17: cna_demo_avatar_appearance_tint_studio - AvatarAppearanceEXT's 5 tint slots and
-    # AvatarRenderer::SetAppearanceEXT as a live color customization screen. Reuses demo_avatar's
-    # Content/ directory (copied by CMake, not duplicated) - same gating as cna_demo_avatar above.
-    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
-        add_executable(cna_demo_avatar_appearance_tint_studio
-            demo_avatar_appearance_tint_studio/src/Main.cpp
-            demo_avatar_appearance_tint_studio/src/TintStudioDemo.cpp
-        )
-        target_include_directories(cna_demo_avatar_appearance_tint_studio PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/demo_avatar_appearance_tint_studio/src
-            ${CNA_GRAPHICS_EXAMPLES_DIR}
-        )
-        target_link_libraries(cna_demo_avatar_appearance_tint_studio PRIVATE CNA_GamerServices)
-
-        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
-            target_link_libraries(cna_demo_avatar_appearance_tint_studio PRIVATE
-                CNA
-                SHARP_RUNTIME)
-        else()
-            target_link_libraries(cna_demo_avatar_appearance_tint_studio PRIVATE CNA SHARP_RUNTIME)
-        endif()
-        if(TARGET SDL3::SDL3main)
-            target_link_libraries(cna_demo_avatar_appearance_tint_studio PRIVATE SDL3::SDL3main)
-        endif()
-        add_dependencies(cna_demo_avatar_appearance_tint_studio cna_demo_avatar_content)
-        if(WIN32)
-            cna_windows_gui_executable(cna_demo_avatar_appearance_tint_studio)
-            cna_copy_sdl_runtime(cna_demo_avatar_appearance_tint_studio)
-        endif()
-    endif()
-
-    # Task 15.18: cna_demo_avatar_dual_compare - two independent AvatarRenderer/SkinnedModelEXT
-    # instances alive and drawing simultaneously. Reuses demo_avatar's Content/ directory (copied
-    # by CMake, not duplicated) - same gating as cna_demo_avatar above.
+    # Task 15.18 / GS-009: cna_demo_avatar_dual_compare - a random female and male avatar side by
+    # side on the same preset - same gating as cna_demo_avatar above.
     if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
         add_executable(cna_demo_avatar_dual_compare
             demo_avatar_dual_compare/src/Main.cpp
@@ -370,7 +281,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
             ${CMAKE_CURRENT_SOURCE_DIR}/demo_avatar_dual_compare/src
             ${CNA_GRAPHICS_EXAMPLES_DIR}
         )
-        target_link_libraries(cna_demo_avatar_dual_compare PRIVATE CNA_GamerServices)
+        target_link_libraries(cna_demo_avatar_dual_compare PRIVATE CNA CNA_GamerServices)
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_avatar_dual_compare PRIVATE
@@ -382,49 +293,14 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         if(TARGET SDL3::SDL3main)
             target_link_libraries(cna_demo_avatar_dual_compare PRIVATE SDL3::SDL3main)
         endif()
-        add_dependencies(cna_demo_avatar_dual_compare cna_demo_avatar_content)
         if(WIN32)
             cna_windows_gui_executable(cna_demo_avatar_dual_compare)
             cna_copy_sdl_runtime(cna_demo_avatar_dual_compare)
         endif()
     endif()
 
-    # Task 15.19: cna_demo_avatar_multi_attach_stress - SkinnedModelEXT::AttachPartEXT called
-    # repeatedly (hair variants, then a growing series of synthetic quad accessories), proving
-    # accumulation doesn't break skinning/tinting as Parts.size() grows. Reuses demo_avatar's
-    # Content/ directory (copied by CMake, not duplicated) - same gating as cna_demo_avatar above.
-    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
-        add_executable(cna_demo_avatar_multi_attach_stress
-            demo_avatar_multi_attach_stress/src/Main.cpp
-            demo_avatar_multi_attach_stress/src/StressDemo.cpp
-        )
-        target_include_directories(cna_demo_avatar_multi_attach_stress PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/demo_avatar_multi_attach_stress/src
-            ${CNA_GRAPHICS_EXAMPLES_DIR}
-        )
-        target_link_libraries(cna_demo_avatar_multi_attach_stress PRIVATE CNA_GamerServices)
-
-        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
-            target_link_libraries(cna_demo_avatar_multi_attach_stress PRIVATE
-                CNA
-                SHARP_RUNTIME)
-        else()
-            target_link_libraries(cna_demo_avatar_multi_attach_stress PRIVATE CNA SHARP_RUNTIME)
-        endif()
-        if(TARGET SDL3::SDL3main)
-            target_link_libraries(cna_demo_avatar_multi_attach_stress PRIVATE SDL3::SDL3main)
-        endif()
-        add_dependencies(cna_demo_avatar_multi_attach_stress cna_demo_avatar_content)
-        if(WIN32)
-            cna_windows_gui_executable(cna_demo_avatar_multi_attach_stress)
-            cna_copy_sdl_runtime(cna_demo_avatar_multi_attach_stress)
-        endif()
-    endif()
-
-    # Task 15.20: cna_demo_avatar_bone_state_boundary - documents the real, verified
-    # AvatarRenderer skeleton-API boundary (State/ParentBones/BindPose) vs the working
-    # SkinnedModelEXT EXT path. Reuses demo_avatar's Content/ directory (copied by CMake, not
-    # duplicated) - same gating as cna_demo_avatar above.
+    # Task 15.20 / GS-009: cna_demo_avatar_bone_state_boundary - AvatarRenderer state, ParentBones
+    # and BindPose, then game-posed custom bones - same gating as cna_demo_avatar above.
     if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
         add_executable(cna_demo_avatar_bone_state_boundary
             demo_avatar_bone_state_boundary/src/Main.cpp
@@ -434,7 +310,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
             ${CMAKE_CURRENT_SOURCE_DIR}/demo_avatar_bone_state_boundary/src
             ${CNA_GRAPHICS_EXAMPLES_DIR}
         )
-        target_link_libraries(cna_demo_avatar_bone_state_boundary PRIVATE CNA_GamerServices)
+        target_link_libraries(cna_demo_avatar_bone_state_boundary PRIVATE CNA CNA_GamerServices)
 
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_avatar_bone_state_boundary PRIVATE
@@ -446,7 +322,6 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         if(TARGET SDL3::SDL3main)
             target_link_libraries(cna_demo_avatar_bone_state_boundary PRIVATE SDL3::SDL3main)
         endif()
-        add_dependencies(cna_demo_avatar_bone_state_boundary cna_demo_avatar_content)
         if(WIN32)
             cna_windows_gui_executable(cna_demo_avatar_bone_state_boundary)
             cna_copy_sdl_runtime(cna_demo_avatar_bone_state_boundary)

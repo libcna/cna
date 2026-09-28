@@ -3,23 +3,13 @@
 #include <memory>
 #include <string>
 #include "CNA/CNAHelper.hpp"
-#include "Microsoft/Xna/Framework/Color.hpp"
-#include "Microsoft/Xna/Framework/GamerServices/AvatarAppearanceEXT.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarRendererState.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/IAvatarAnimation.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "System/Collections/ObjectModel/ReadOnlyCollection.hpp"
 #include "System/IDisposable.hpp"
-#include "System/TimeSpan.hpp"
 #include <vector>
-
-namespace Microsoft::Xna::Framework::Graphics
-{
-    class GraphicsDevice;
-    class SkinnedEffect;
-    class SkinnedModelEXT;
-}
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
@@ -155,56 +145,6 @@ namespace Microsoft::Xna::Framework::GamerServices
          */
         void Draw(const std::vector<Microsoft::Xna::Framework::Matrix>& bones, AvatarExpression expression);
 
-        /**
-         * @brief Opts this instance into real (non-XNA-spec) GPU-skinned mesh rendering.
-         *
-         * CNAEXT — CNA extension. The faithful Draw() overloads above remain permanent no-ops
-         * regardless of this call; only DrawRealEXT() renders real geometry, and only after
-         * this method has been called. Not part of the real XNA 4.0 Avatar API — the real
-         * implementation never renders anything off-Xbox (see the class remarks).
-         *
-         * @param device Graphics device used for the real render path.
-         * @param model  A loaded skinned mesh + skeleton + animation clip set.
-         * @throws System::ArgumentNullException if model is null.
-         * @throws System::ObjectDisposedException if this instance has been disposed.
-         */
-        CNAEXT void EnableRealRenderingEXT(Graphics::GraphicsDevice& device,
-                                           std::shared_ptr<Graphics::SkinnedModelEXT> model);
-
-        /**
-         * @brief Gets whether EnableRealRenderingEXT has been called.
-         *
-         * @note CNAEXT — CNA extension.
-         * @return true if real rendering is enabled.
-         */
-        CNAEXT [[nodiscard]] bool IsRealRenderingEnabledEXT() const;
-
-        /**
-         * @brief Sets the skin/hair/clothing tint used by DrawRealEXT.
-         *
-         * @note CNAEXT — CNA extension.
-         * @param appearance The appearance to apply on subsequent DrawRealEXT calls.
-         */
-        CNAEXT void SetAppearanceEXT(const AvatarAppearanceEXT& appearance);
-
-        /**
-         * @brief Really renders the avatar's mesh using GPU skinning, using World/View/Projection
-         * as already set via setWorldProperty/setViewProperty/setProjectionProperty.
-         *
-         * CNAEXT — CNA extension; not part of the real XNA 4.0 Avatar API (which never renders
-         * anything off-Xbox). Rendering happens through the standard GraphicsDevice/SkinnedEffect
-         * path, so on backends without 3D support this throws whatever error that backend already
-         * raises for any 3D draw call.
-         *
-         * @param animationClipName Name of a clip present in the enabled SkinnedModelEXT's Clips.
-         * @param position          Playback position within the clip.
-         * @param loop              Whether to loop playback at the clip's end.
-         * @throws System::ObjectDisposedException if this instance has been disposed.
-         * @throws System::InvalidOperationException if real rendering has not been enabled.
-         */
-        CNAEXT void DrawRealEXT(const std::string& animationClipName,
-                               System::TimeSpan position, bool loop);
-
         /** @brief Releases all resources used by this instance. */
         void Dispose() override;
 
@@ -218,25 +158,6 @@ namespace Microsoft::Xna::Framework::GamerServices
         void Dispose(bool disposing);
 
     private:
-        /**
-         * @brief Resolves the AvatarAppearanceEXT tint for a SkinnedModelEXT part, by
-         * substring match against the part's name (e.g. "CNAAvatarShirt").
-         *
-         * @note CNAEXT — CNA extension helper for DrawRealEXT. Substring match, not exact
-         * equality: part names are Blender object names baked through by the content
-         * pipeline, not a fixed vocabulary CNA itself defines.
-         * @param partName The SkinnedModelEXT part's name.
-         * @return The matching hair/shirt/pants/shoes tint, or the skin tint if no
-         * garment-slot keyword is found in @p partName.
-         */
-        CNAEXT [[nodiscard]] Microsoft::Xna::Framework::Color PartTintEXT(const std::string& partName) const;
-
-        // Task 13.1: PartTintEXT's substring-match routing has no non-GPU-dependent test access
-        // otherwise - the only existing coverage goes through DrawRealEXT + real pixel readback,
-        // which only ever exercised Hair/Shirt. Grants direct access for thorough Pants/Shoes/
-        // skin-fallback/case-sensitivity/substring-collision coverage without needing a GPU.
-        CNAEXT friend struct AvatarRendererTestAccess;
-
         struct Resources;
         void Poll() const;
         void DrawLoadingEffect();
@@ -259,11 +180,5 @@ namespace Microsoft::Xna::Framework::GamerServices
         Microsoft::Xna::Framework::Vector3 lightDirection_{0.0f, 0.0f, -1.0f};
         Microsoft::Xna::Framework::Vector3 ambientLightColor_{0.35f, 0.35f, 0.35f};
         bool isDisposed_{false};
-
-        // --- Real-rendering extension state (CNAEXT) ---
-        Graphics::GraphicsDevice* realDevice_ = nullptr;
-        std::shared_ptr<Graphics::SkinnedModelEXT> realModel_;
-        std::unique_ptr<Graphics::SkinnedEffect> realEffect_;
-        AvatarAppearanceEXT appearance_;
     };
 }

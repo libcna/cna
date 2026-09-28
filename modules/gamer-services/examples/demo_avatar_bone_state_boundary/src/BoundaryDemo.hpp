@@ -1,47 +1,49 @@
 #pragma once
 
+#include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/GameTime.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/AvatarAnimation.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/AvatarRenderer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
+#include "CNA/CNAHelper.hpp"
+
 #include <memory>
 #include <string>
 
-#include "Microsoft/Xna/Framework/Game.hpp"
-#include "Microsoft/Xna/Framework/GameTime.hpp"
-#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
-#include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
-#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
-
-// Task 15.20: cna_demo_avatar_bone_state_boundary. Documents the real, verified
-// AvatarRenderer skeleton-API boundary via console output, contrasted against the working
-// SkinnedModelEXT EXT path demo_avatar actually uses. Minimal window (no meaningful rendering);
-// all the actual content is printed to console during Initialize(), then the demo exits itself
-// after a few frames (or on Esc/F1 interaction extending it - see Update()).
+// GS-009: the renderer's state and skeleton boundary with the standard XNA API. Prints the
+// Loading -> Ready transition, ParentBones and the BindPose, then draws custom bones -- a preset
+// with the head and left arm posed by the game -- and exits after a few seconds.
 class BoundaryDemo : public Microsoft::Xna::Framework::Game
 {
 public:
-    BoundaryDemo() = default;
+    BoundaryDemo();
+    ~BoundaryDemo() override;
 
-    void Initialize() override;
+    void LoadContent() override;
     void Update(Microsoft::Xna::Framework::GameTime& gameTime) override;
     void Draw(const Microsoft::Xna::Framework::GameTime& gameTime) override;
 
-    /** @brief Forces the F1 help overlay's initial visibility - Task 8 (plans/plan_net.md Phase 8):
-     *  lets a non-interactive smoke/screenshot run verify the overlay actually renders. */
-    void SetShowHelpForTestingEXT(bool visible) { showHelpEXT_ = visible; }
+    /** @brief Shows the help overlay from the start. */
+    void SetShowHelpForTestingEXT(bool visible) { showHelp_ = visible; }
+    /** @brief Saves the last frame as a PNG. */
+    void SetScreenshotPathEXT(std::string path) { screenshotPath_ = std::move(path); }
 
-    /** @brief Saves a PNG of the backbuffer on the final smoke frame - Task 8 (plans/plan_net.md
-     *  Phase 8), reusing Task 7.1's own examples/common/ScreenshotEXT.hpp helper. */
-    void SetScreenshotPathEXT(std::string path) { screenshotPathEXT_ = std::move(path); }
+    GetTypeNameHPP()
 
 private:
-    int framesBeforeExit_ = 30;
-
-    // Task 8 (plans/plan_net.md Phase 8): F1 help overlay - same established pattern as demo_avatar's
-    // own AvatarDemo (see that file's own comment for why this is a deliberate per-demo copy).
-    // This demo has no other keyboard handling (it self-exits after a fixed frame count), so F1
-    // and Esc are added here purely for the overlay, matching every other avatar demo's controls.
+    Microsoft::Xna::Framework::GraphicsDeviceManager graphics_{this};
+    std::unique_ptr<Microsoft::Xna::Framework::GamerServices::AvatarDescription> description_;
+    std::unique_ptr<Microsoft::Xna::Framework::GamerServices::AvatarRenderer> renderer_;
+    std::unique_ptr<Microsoft::Xna::Framework::GamerServices::AvatarAnimation> animation_;
+    int frame_ = 0;
+    int readyFrame_ = -1;
+    double seconds_ = 0.0;
+    std::string screenshotPath_;
+    bool showHelp_ = false;
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::SpriteBatch> spriteBatch_;
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::Texture2D> whitePixel_;
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::SpriteFont> font_;
-    bool showHelpEXT_ = false;
-    bool f1WasDownEXT_ = false;
-    std::string screenshotPathEXT_;
 };

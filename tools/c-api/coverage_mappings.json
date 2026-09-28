@@ -12684,21 +12684,6 @@
       ]
     },
     {
-      "id": "avatar-name-functions",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::(AvatarAnimationPresetToClipNameEXT|AvatarBodyTypeToContentNameEXT)$",
-      "kinds": [
-        "function"
-      ],
-      "mapping": "`cna_avatar_animation_preset_get_clip_name_size_ext` / `..._copy_clip_name_ext` and `cna_avatar_body_type_get_content_name_size_ext` / `..._copy_content_name_ext`, count/copy pairs over an identity. They take **no game handle and no thread affinity**, because they are pure value operations -- the same shape the static sample computations already use. An undefined identity is refused at the boundary rather than left to the canonical argument exception, so the diagnostic names the identity",
-      "tests": "`AvatarIdentitiesSmoke.c` asserts a clip name is the identity's own spelling while a body-type name is a content path instead, refuses a buffer that cannot hold the whole name with nothing written, and refuses an undefined identity and a null output on all four routes",
-      "status": "implemented",
-      "task": "CBIND-037G2",
-      "approved_symbols": [
-        "CPP-8DE2D3CD3CCD",
-        "CPP-FA47A2F08DCC"
-      ]
-    },
-    {
       "id": "gamer-services-exceptions",
       "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::(GamerServicesNotAvailableException|GameUpdateRequiredException|NetworkNotAvailableException|NetworkException|GamerPrivilegeException|GuideAlreadyVisibleException)(::[A-Za-z0-9_~]+)?$",
       "kinds": [
@@ -13483,36 +13468,25 @@
       ]
     },
     {
-      "id": "avatar-expression-and-appearance",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::(AvatarExpression(::(get|set)[A-Za-z]+Property)?|AvatarAppearanceEXT(::(get|set)[A-Za-z]+Property)?)$",
+      "id": "avatar-expression",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::AvatarExpression(::(get|set)[A-Za-z]+Property)?$",
       "kinds": [
         "struct",
         "method"
       ],
-      "mapping": "the fixed values `CNA_AvatarExpression` and `CNA_AvatarAppearanceEXT`, each with an `_init` route writing the canonical default. Both canonical types carry settings and no behavior, so neither earns a handle, and every property pair is a field the caller writes directly. An expression is validated where it is *used* -- the draw and set routes refuse an undefined identity in any of its five parts rather than letting one reach the renderer",
-      "tests": "`AvatarsSmoke.c` asserts a default face is neutral in every part and that the default appearance colors are opaque, and pins the refusal for an undefined mouth identity at the point a pose is drawn; C and C++ ABI assertions pin both layouts",
+      "mapping": "the fixed value `CNA_AvatarExpression` with an `_init` route writing the canonical default. The canonical type carries settings and no behavior, so it earns no handle, and every property pair is a field the caller writes directly. An expression is validated where it is *used* -- the draw routes refuse an undefined identity in any of its five parts rather than letting one reach the renderer",
+      "tests": "`AvatarsSmoke.c` asserts a default face is neutral in every part and pins the refusal for an undefined mouth identity at the point a pose is drawn; C and C++ ABI assertions pin the layout",
       "status": "implemented",
-      "task": "CBIND-037G7",
+      "task": "CBIND-037G7 / GS-009f",
       "approved_symbols": [
         "CPP-0ECD8F7987F8",
-        "CPP-100E2860C8D0",
         "CPP-133EFA29ED71",
-        "CPP-3010A317139D",
         "CPP-318423B9E5DE",
-        "CPP-33A236212561",
-        "CPP-4399917A8F3C",
-        "CPP-57C0FF65CF14",
-        "CPP-645B82AC7198",
         "CPP-650384981DD9",
-        "CPP-65A850257ADA",
-        "CPP-6A79435E62B0",
         "CPP-6B43BF44D822",
         "CPP-70CF767B8FA9",
-        "CPP-79AE6DE97924",
         "CPP-8DA0E5D70562",
-        "CPP-8F81720A3658",
         "CPP-BB1A2C01A974",
-        "CPP-C50BA8B89390",
         "CPP-D2C7606F38B2",
         "CPP-DBE162711163",
         "CPP-F4290D1DE231"
@@ -13547,21 +13521,20 @@
     },
     {
       "id": "avatar-animation",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::(IAvatarAnimation(::(~IAvatarAnimation|getBoneTransformsProperty|(get|set)CurrentPositionProperty|getLengthProperty|getExpressionProperty|Update))?|AvatarAnimation(::(AvatarAnimation|getBoneTransformsProperty|(get|set)CurrentPositionProperty|getLengthProperty|getExpressionProperty|Update|getIsDisposedProperty|Dispose|SetRealClipNameEXT|GetRealClipNameEXT))?)$",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::(IAvatarAnimation(::(~IAvatarAnimation|getBoneTransformsProperty|(get|set)CurrentPositionProperty|getLengthProperty|getExpressionProperty|Update))?|AvatarAnimation(::(AvatarAnimation|getBoneTransformsProperty|(get|set)CurrentPositionProperty|getLengthProperty|getExpressionProperty|Update|getIsDisposedProperty|Dispose))?)$",
       "kinds": [
         "class",
         "constructor",
         "method",
         "destructor"
       ],
-      "mapping": "an owned handle created from a preset, with one info snapshot, a position setter, an expression read, an advance route, index-addressed bone transforms and the real-clip-name pair. **The canonical animation interface has no separate C form**: a C caller cannot implement a C++ interface, and this ABI's animation handle is the only thing that does, so the interface's rows are the animation's routes -- the renderer's draw route takes an animation handle exactly where the canonical one takes the interface. **A built-in preset carries the whole skeleton but no timeline**: its length is zero until a real clip is loaded, so advancing it moves nothing, and the binding reports that rather than implying otherwise",
-      "tests": "`AvatarsSmoke.c` asserts a preset carries the full bone count with a zero length and that advancing it leaves the position where it was, reads a bone transform and pins both index refusals, reads the expression, asserts a preset's clip name is the identity's own spelling and can be replaced, and refuses an undefined preset and a non-boolean loop flag",
+      "mapping": "an owned handle created from a preset, with one info snapshot, a position setter, an expression read, an advance route and index-addressed bone transforms. **The canonical animation interface has no separate C form**: a C caller cannot implement a C++ interface, and this ABI's animation handle is the only thing that does, so the interface's rows are the animation's routes -- the renderer's draw route takes an animation handle exactly where the canonical one takes the interface. A preset is a real CNA clip with a length, 71 local bone transforms and a keyed expression (docs/avatars.md)",
+      "tests": "`AvatarsSmoke.c` asserts a preset carries the full bone count and a real length, that advancing it moves the position and setting it returns, reads a bone transform and pins both index refusals, reads the expression, and refuses an undefined preset and a non-boolean loop flag",
       "status": "implemented",
-      "task": "CBIND-037G7",
+      "task": "CBIND-037G7 / GS-009f",
       "signature_regex": "(?!\\(bool disposing\\)).*",
       "approved_symbols": [
         "CPP-072ED400F4A3",
-        "CPP-0829A30D520B",
         "CPP-3F1C6392960E",
         "CPP-48A0399839A2",
         "CPP-57BB3B1AEA3F",
@@ -13571,7 +13544,6 @@
         "CPP-70C8218FDF8E",
         "CPP-7C8C6417C002",
         "CPP-80E5F0AE607C",
-        "CPP-8211E9124C67",
         "CPP-9191CD63623A",
         "CPP-98519E99FA28",
         "CPP-CAD2CA7785C0",
@@ -13600,7 +13572,7 @@
     },
     {
       "id": "avatar-renderer",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::AvatarRenderer(::(BoneCount|AvatarRenderer|~AvatarRenderer|(get|set)(World|View|Projection|LightColor|LightDirection|AmbientLightColor)Property|getParentBonesProperty|getBindPoseProperty|getStateProperty|getIsDisposedProperty|Draw|EnableRealRenderingEXT|IsRealRenderingEnabledEXT|SetAppearanceEXT|DrawRealEXT|Dispose))?$",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::AvatarRenderer(::(BoneCount|AvatarRenderer|~AvatarRenderer|(get|set)(World|View|Projection|LightColor|LightDirection|AmbientLightColor)Property|getParentBonesProperty|getBindPoseProperty|getStateProperty|getIsDisposedProperty|Draw|Dispose))?$",
       "kinds": [
         "class",
         "constant",
@@ -13608,17 +13580,15 @@
         "destructor",
         "method"
       ],
-      "mapping": "an owned handle that **keeps its description alive**, since the canonical renderer holds a raw pointer to one. The three transforms are read and written together, and so are the three lighting vectors, because a caller that wants one almost always wants the set -- each is optional, so a caller asks for only what it needs. The bones are index-addressed against `CNA_AVATAR_RENDERER_BONE_COUNT`. Both canonical draw overloads are separate routes, one taking an animation handle and one a caller-supplied pose. **The bind pose is not readable on this runtime**: the renderer's state is always unavailable, so that route always refuses with a state failure while the parent-bone hierarchy still reads -- the renderer's real state rather than a gap. The real-rendering extension takes a graphics device and a skinned model the game supplies, because no avatar asset service exists here",
-      "tests": "`AvatarsSmoke.c` creates a renderer, releases the caller's description handle and asserts the renderer still works, round-trips one transform and one lighting vector and refuses a non-finite one, walks every parent bone and pins the index refusal, asserts the bind pose refuses with a state failure while the state is unavailable, draws both ways and refuses a wrong-sized pose and an undefined expression, sets an appearance, and asserts real rendering refuses an invalid device and that drawing without a model is a state failure",
+      "mapping": "an owned handle that **keeps its description alive**, since the canonical renderer holds a raw pointer to one. The three transforms are read and written together, and so are the three lighting vectors, because a caller that wants one almost always wants the set -- each is optional, so a caller asks for only what it needs. The bones are index-addressed against `CNA_AVATAR_RENDERER_BONE_COUNT`. Both canonical draw overloads are separate routes, one taking an animation handle and one a caller-supplied pose. The state follows the canonical Loading/Ready/Unavailable contract; the bind pose reads once the renderer is ready and refuses with a state failure before that, and drawing a ready avatar needs initialized gamer services with a graphics device (a state failure otherwise)",
+      "tests": "`AvatarsSmoke.c` creates a renderer for a description without an avatar, releases the caller's description handle and asserts the renderer still works and is unavailable, round-trips one transform and one lighting vector and refuses a non-finite one, walks every parent bone and pins the index refusal, asserts the bind pose refuses with a state failure, draws both ways and refuses a wrong-sized pose and an undefined expression; a second renderer for a random avatar becomes ready, reads its bind pose, and refuses to draw without a graphics device",
       "status": "implemented",
-      "task": "CBIND-037G7",
+      "task": "CBIND-037G7 / GS-009f",
       "signature_regex": "(?!\\(bool disposing\\)).*",
       "approved_symbols": [
         "CPP-01CBFF72523E",
         "CPP-04B72CBA9F1E",
-        "CPP-16F77ECCFCA6",
         "CPP-1F7B94452C44",
-        "CPP-24C31F63B655",
         "CPP-3711737444A5",
         "CPP-4875FF62F8F0",
         "CPP-4B06D44AC397",
@@ -13633,13 +13603,11 @@
         "CPP-807AC52539A4",
         "CPP-89291C588696",
         "CPP-91C3BF473A84",
-        "CPP-B8BEE2C9D7ED",
         "CPP-BC0E4513F355",
         "CPP-C0D71B0C5068",
         "CPP-CAB99F9D55E4",
         "CPP-D82609A11597",
         "CPP-D96604C7BEE9",
-        "CPP-E176192B98EE",
         "CPP-F5E3D9596299",
         "CPP-FD76FBE593AD"
       ]

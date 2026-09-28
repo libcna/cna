@@ -7,8 +7,8 @@
 > have real-server tests. Online leaderboard reads and LocalWithLeaderboards final writes use the server.
 > Typed directory/invitation control and private verified-WSS/ENet relay are implemented/tested;
 > standard PlayerMatch/Ranked Find now has pending Begin/End and real-server restart/title tests;
-> public create/join/invited lifecycle and public Internet acceptance remain unfinished,
-> and standard Avatar rendering still needs migration from EXT. These are active work, not
+> public create/join/invited lifecycle and public Internet acceptance remain unfinished.
+> The standard Avatar API renders original CNA avatars without extension calls. These are active work, not
 > intentional exclusions. API symbol presence and historical percentages are not evidence of
 > behavioral completeness. The CNA server/accounts/protocol are not Xbox LIVE compatible.
 
@@ -285,7 +285,7 @@ none are trivial engineering either.
 | `Microsoft::Xna::Framework::Audio` | ✅ | ✅ | Implemented (see §4 for the small remaining accepted-deviation list) |
 | `Microsoft::Xna::Framework::Content` | ✅ | ✅ | Partial (see §3) |
 | `Microsoft::Xna::Framework::Design` | ✅ | ✅ | Complete opt-in tooling module; all 13 public XNA types (see §6 and `framework-design.md`) |
-| `Microsoft::Xna::Framework::GamerServices` | ❌ (not in FNA) | ✅ | Implemented — real Achievements, Avatar (full real-rendering extension, see `docs/avatar-real-rendering-ext.md`), Friends, Presence, Leaderboards, Privileges, Profile, SignedInGamer, Guide (see §3/§4) |
+| `Microsoft::Xna::Framework::GamerServices` | ❌ (not in FNA) | ✅ | Implemented — real Achievements, Avatar (standard API on original CNA avatars, see `docs/avatars.md`), Friends, Presence, Leaderboards, Privileges, Profile, SignedInGamer, Guide (see §3/§4) |
 | `Microsoft::Xna::Framework::Graphics` | ✅ | ✅ | Implemented / Stub |
 | `Microsoft::Xna::Framework::Graphics::PackedVector` | ✅ | ✅ | Implemented |
 | `Microsoft::Xna::Framework::Input` | ✅ | ✅ | Implemented |
@@ -341,8 +341,8 @@ audits behind them:
 | `FriendGamer` | Represents a friend in the gamer's friend list; implemented, same population gap as `FriendCollection` above. |
 
 Also present and implemented, beyond this table's original scope: `Achievement`/`AchievementCollection`,
-the full `Avatar*` real-rendering extension (`AvatarRenderer`, `AvatarAppearanceEXT`, `AvatarBone`,
-`AvatarAnimation*`, wardrobe attach/detach — see `docs/avatar-real-rendering-ext.md`), `GamerProfile`,
+the standard `Avatar*` API (`AvatarDescription`, `AvatarRenderer`, `AvatarAnimation`, `AvatarBone`,
+`AvatarExpression` — real descriptions, 71-bone animations and rendering, see `docs/avatars.md`), `GamerProfile`,
 `GamerZone`, `LeaderboardReader`/`LeaderboardWriter`/`LeaderboardEntry`/`LeaderboardIdentity`/
 `LeaderboardKey`/`LeaderboardOutcome` (local-fake-persisted, Phase 4), `PropertyDictionary`,
 `GamerServicesDispatcher`, and the full `*EventArgs`/exception family
@@ -676,8 +676,8 @@ both but never throws either from its own Audio source either), not a gap.
 
 The standard API shape exists, but Xbox behavior remains partially implemented. Service identity,
 Guide sign-in, profile/lookup and achievement metadata/awards now have real TLS integration tests.
-Social/pictures, leaderboard lifecycle, standard Avatar rendering and the remaining Guide flows
-are active work. See §9 for measured behavior and the living plan for test evidence.
+Social/pictures, leaderboard lifecycle and the remaining Guide flows are active work; the
+standard Avatar API is implemented (`docs/avatars.md`). See §9 for measured behavior and the living plan for test evidence.
 - **Status:** Partial service implementation; historical symbol coverage is not completeness.
 
 ---
@@ -727,12 +727,11 @@ games even though it's outside FNA's own PC-only scope. All three now have real,
 implementations:
 
 - **GamerServices** — see §2/§3/§4 above for the current per-class implementation status.
-- **Avatar API** — the real-rendering extension is documented in full in
-  `docs/avatar-real-rendering-ext.md`; `AvatarRenderer`, `AvatarAppearanceEXT`, wardrobe attach/
-  detach, and skeletal animation are implemented and exercised by the 8 `demo_avatar_*` examples.
-  (FNA's own faithful-XNA-surface `AvatarRenderer` — `State`/`ParentBones`/`BindPose` — is
-  preserved separately and remains `Unavailable`/throws exactly as real XNA does off-Xbox; see
-  `demo_avatar_bone_state_boundary` for a live comparison of both paths.)
+- **Avatar API** — `AvatarDescription` (CNA's versioned 1021-byte encoding, `CreateRandom`,
+  service-backed `BeginGetFromGamer`), `AvatarAnimation` (31 original 71-bone presets with keyed
+  expressions) and `AvatarRenderer` (`Loading`/`Ready`/`Unavailable`, XNA's bind pose and parent
+  table, lit skinned drawing) work through the standard API alone, on original CNA assets; see
+  `docs/avatars.md` and the `demo_avatar_*` examples (`docs/avatar-demos.md`).
 - **Net** — `Microsoft.Xna.Framework.Net` (`NetworkSession`, `PacketReader`/`Writer`,
   `NetworkGamer`, etc.) is real, ENet-backed transport, not a stub. `NetworkSessionType::SystemLink`
   (LAN-style local play, including real host migration and simulated latency/packet-loss testing
@@ -907,7 +906,7 @@ Full Xbox validation order, lifetime and asynchronous compatibility are still be
 | Guide friends/gamer card/request | Service UI | Standard APIs present profiles, page friends/find gamer and confirm/manage friendship changes. Exact Xbox validation order remains unmeasured. |
 | Guide commerce/party/messages/review/invites | Unfinished | Requires Xbox contract evidence and corresponding CNA service/UI behavior. |
 | Guide keyboard/message box | Functional | Existing text-input/message overlays reused by automatic system overlay. |
-| Avatar standard API | Unfinished migration | Working original CNA GLB/EXT rendering preserved; standard AvatarRenderer still unavailable. 71-slot public rig, description encoding/service assets and standard Draw migration remain GS-009. |
+| Avatar standard API | Implemented (GS-009) | CNA v1 1021-byte descriptions, valid `CreateRandom`, service-backed `BeginGetFromGamer`, 71-slot rig, 31 original presets with expressions, `Loading`/`Ready`/`Unavailable`, lit skinned Draw and loading effect; newer catalogs resolved by hash from the service with a verified cache. The former Avatar EXT surface is removed. `AvatarDescription.Changed` is never raised (descriptions are values). |
 | Dispatcher/Component | Event pump foundation | Initialize rejects duplicate initialization and starts with zero accounts. Backend completions/events applied at Update. Full reconnect/push/update-thread contract audit remains. |
 
 ### Net
@@ -950,7 +949,7 @@ Full Xbox validation order, lifetime and asynchronous compatibility are still be
 
 7. **GamerServices / Net** — In progress: service authentication/identity/achievements foundation
    and existing ENet SystemLink work. Social, leaderboard lifecycle, online sessions/invites/relay,
-   standard avatars and acceptance samples remain incomplete; see §9 and the living plan.
+   acceptance samples remain incomplete; see §9 and the living plan.
 
 ---
 
