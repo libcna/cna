@@ -269,7 +269,7 @@ static int validate_screens(const CNA_SignedInGamerHandle gamer)
         cna_guide_show_messages(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_NOT_SUPPORTED ||
         cna_guide_show_player_review(CNA_PLAYER_INDEX_ONE, gamer) != CNA_RESULT_NOT_SUPPORTED ||
         cna_guide_show_players(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_NOT_SUPPORTED ||
-        cna_guide_show_sign_in(2, CNA_FALSE) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_guide_show_sign_in(2, CNA_TRUE) != CNA_RESULT_NOT_SUPPORTED ||
         cna_guide_show_achievements_ext(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_NOT_SUPPORTED) {
         return 0;
     }
@@ -317,6 +317,16 @@ static int validate_dispatcher(const CNA_Handle game)
         cna_gamer_services_dispatcher_update_async(&flag) != CNA_RESULT_SUCCESS ||
         cna_gamer_services_dispatcher_update_async(0) != CNA_RESULT_INVALID_ARGUMENT ||
         cna_gamer_services_dispatcher_get_freed_gamer_count_ext(&freed) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    /* Initialized without a service, the sign-in screen signs in local offline profiles, which an
+       online-only sign-in excludes; canceling closes it. */
+    CNA_Bool visible = CNA_FALSE;
+    if (cna_guide_show_sign_in(1, CNA_TRUE) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_guide_show_sign_in(1, CNA_FALSE) != CNA_RESULT_SUCCESS ||
+        cna_guide_get_is_visible(&visible) != CNA_RESULT_SUCCESS || visible != CNA_TRUE ||
+        cna_guide_simulate_keyboard_input_cancel_ext() != CNA_RESULT_SUCCESS ||
+        cna_guide_get_is_visible(&visible) != CNA_RESULT_SUCCESS || visible != CNA_FALSE) {
         return 0;
     }
     if (cna_gamer_services_dispatcher_subscribe_installing_title_update_ext(

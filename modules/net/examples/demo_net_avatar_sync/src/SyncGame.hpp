@@ -23,10 +23,9 @@
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 
 // Task 15.21 (bonus, cross-cutting): cna_demo_net_avatar_sync. Combines Net + Avatar: each of two
-// real processes loads its own gendered avatar (host=Male, client=Female) plus a pre-loaded copy
-// of the *other* gender's content for rendering the remote peer (no asset bytes travel over the
-// wire - only position/yaw/clip-index state, same as a real game would sync). Every frame sends
-// local position/yaw plus the current AvatarAnimationPreset-style clip index over
+// real processes shows its signed-in gamer's avatar (AvatarDescription.BeginGetFromGamer) and
+// sends the description bytes to the other, the XNA way to share avatars in a session; after that
+// every frame sends only position/yaw plus the current AvatarAnimationPreset index over
 // LocalNetworkGamer::SendData(SendDataOptions::InOrder) via PacketWriter; each process renders
 // both its own and the remote peer's avatar in one 3D scene. Arrow keys move/rotate the local
 // avatar; Space cycles its animation clip. The smallest possible proof that Net and Avatar/
@@ -65,12 +64,13 @@ private:
 
     static void ShowAvatar(AvatarView& view, const std::vector<SharpRuntime::bytecs>& description);
     static void StartPreset(AvatarView& view, std::size_t preset);
+    void StartSession();
     void OnSessionEnded(System::Object* sender, const Microsoft::Xna::Framework::Net::NetworkSessionEndedEventArgs& e);
 
     Microsoft::Xna::Framework::GraphicsDeviceManager graphics_{this};
     bool isHost_;
-    Microsoft::Xna::Framework::GamerServices::AvatarBodyType localGender_;
-    Microsoft::Xna::Framework::GamerServices::AvatarBodyType remoteGender_;
+    Microsoft::Xna::Framework::GamerServices::AvatarBodyType fallbackBody_;
+    bool sessionStarted_ = false;
 
     Microsoft::Xna::Framework::GamerServices::SignedInGamer* localGamer_ = nullptr;
     Microsoft::Xna::Framework::Net::NetworkSession* session_ = nullptr;

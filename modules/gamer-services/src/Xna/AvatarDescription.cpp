@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp"
+#include "CNA/Internal/GamerServices/LocalProfiles.hpp"
 #include "CNA/Internal/GamerServices/AvatarDescriptionCodec.hpp"
 #include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
 #include "../Internal/ServiceAsyncResult.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -22,11 +24,14 @@ namespace Microsoft::Xna::Framework::GamerServices
         class AvatarDescriptionAsyncResult : public System::IAsyncResult
         {
         public:
-            explicit AvatarDescriptionAsyncResult(std::any state)
+            AvatarDescriptionAsyncResult(std::any state, std::vector<unsigned char> description)
                 : asyncState_(std::move(state))
                 , asyncWaitHandle_(true, System::Threading::EventResetMode::ManualReset)
+                , description_(std::move(description))
             {
             }
+
+            [[nodiscard]] const std::vector<unsigned char>& description() const { return description_; }
 
             [[nodiscard]] bool getIsCompletedProperty() const override { return true; }
             [[nodiscard]] bool getCompletedSynchronouslyProperty() const override { return true; }
@@ -40,6 +45,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         private:
             std::any asyncState_;
             mutable System::Threading::EventWaitHandle asyncWaitHandle_;
+            std::vector<unsigned char> description_;
         };
     }
 
@@ -136,7 +142,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         }
 
         // A gamer with a service identity (signed in, or met in an online session) has its
-        // avatar read from the service; anyone else has none.
+        // avatar read from the service, and a signed-in local profile has the one stored with the
+        // profile; anyone else has none.
         const auto userId = CNA::Internal::GamerServices::GamerAccess::userId(*gamer);
         auto service = CNA::Internal::GamerServices::backend();
         if (service->serviceEnabled() && !userId.empty())
@@ -147,7 +154,13 @@ namespace Microsoft::Xna::Framework::GamerServices
                 std::move(callback), std::move(state), std::move(service));
         }
 
-        auto* result = new AvatarDescriptionAsyncResult(std::move(state));
+        std::vector<unsigned char> local;
+        if (const auto* signedIn = dynamic_cast<const SignedInGamer*>(gamer);
+            signedIn != nullptr && userId.empty() && !signedIn->getIsSignedInToLiveProperty() && !signedIn->getIsGuestProperty())
+        {
+            local = CNA::Internal::GamerServices::localProfileAvatar(signedIn->getGamertagProperty());
+        }
+        auto* result = new AvatarDescriptionAsyncResult(std::move(state), std::move(local));
         if (callback)
         {
             callback(*result);
@@ -185,14 +198,17 @@ namespace Microsoft::Xna::Framework::GamerServices
             return AvatarDescription(std::vector<SharpRuntime::bytecs>(DescriptionSize, 0), false);
         }
 
-        // Without a service identity there is no avatar: an all-zero (invalid) description.
-        std::vector<SharpRuntime::bytecs> zeroData(DescriptionSize, 0);
-
-        if (dynamic_cast<AvatarDescriptionAsyncResult*>(result) == nullptr)
+        const auto* local = dynamic_cast<AvatarDescriptionAsyncResult*>(result);
+        if (local == nullptr)
         {
             throw System::ArgumentException("result was not returned by a call to BeginGetFromGamer.");
         }
+        if (static_cast<int>(local->description().size()) == DescriptionSize)
+        {
+            return AvatarDescription(std::vector<SharpRuntime::bytecs>(local->description().begin(), local->description().end()), false);
+        }
 
-        return AvatarDescription(std::move(zeroData), false);
+        // Without a service identity or local profile there is no avatar: an all-zero (invalid) description.
+        return AvatarDescription(std::vector<SharpRuntime::bytecs>(DescriptionSize, 0), false);
     }
 }

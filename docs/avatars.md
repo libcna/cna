@@ -37,8 +37,11 @@ CNA service (see `docs/gamer-services-server.md`): a signed-in gamer, a gamer re
 `Gamer.GetFromGamertag`, or a remote `NetworkGamer` met in an online session all carry a service
 identity. The operation completes during `GamerServicesDispatcher.Update` (never synchronously)
 and `EndGetFromGamer` returns the stored description. A gamer without an avatar, without a service
-identity (offline, System Link, no service configured), or an unreachable service yields an
-invalid, all-zero description, so games take their usual "no avatar" path. The service stores one
+identity (a remote System Link gamer), or an unreachable service yields an
+invalid, all-zero description, so games take their usual "no avatar" path.
+A signed-in local offline profile (no service configured, see `docs/gamer-services-server.md`) has
+the avatar stored with the profile, created at random when the profile is, and the operation
+completes synchronously with it. The service stores one
 avatar per account and accepts only CNA v1 descriptions whose items exist in a catalog it has
 imported; administration assigns them (`cna-gamer-services-admin <db> avatar <user> random`).
 

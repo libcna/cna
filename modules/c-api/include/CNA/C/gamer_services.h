@@ -2331,11 +2331,16 @@ CNA_C_API CNA_Result cna_guide_show_players(CNA_PlayerIndex player);
 /**
  * @brief Opens the sign-in screen.
  *
+ * With a configured CNA account service each pane signs in an account. Without one each pane
+ * signs in a local offline profile, created on first use (not signed in to LIVE, no online
+ * sessions); see docs/gamer-services-server.md.
+ *
  * @param pane_count How many sign-in panes to show.
  * @param online_only Non-zero to require an online sign-in.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when no CNA account service is
- *         configured or gamer services are not initialized, `CNA_RESULT_INVALID_STATE` while
- *         another Guide screen is open, or a documented argument failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when gamer services are not initialized
+ *         or `online_only` is set without a configured CNA account service,
+ *         `CNA_RESULT_INVALID_STATE` while another Guide screen is open, or a documented argument
+ *         failure.
  */
 CNA_C_API CNA_Result cna_guide_show_sign_in(int32_t pane_count, CNA_Bool online_only);
 

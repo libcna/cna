@@ -17,6 +17,12 @@ Each demo's in-app **F1** overlay is the authoritative control reference; **Esc*
 | `demo_avatar_bone_state_boundary` | The renderer lifecycle (`Unavailable`, `Loading`, `Ready`, `BindPose`, `ParentBones`) printed to the console, then a draw from game-supplied bone transforms instead of an `AvatarAnimation`. | `--screenshot <path>`, `--show-help` (runs a fixed window of frames) |
 | `demo_net_avatar_sync` | Two processes in a System Link `NetworkSession`: each sends its avatar's `Description` bytes (reliable, in order) and its position, yaw and preset, and draws the other player's avatar. Arrows: move and turn, Space: next preset. | `--host` / `--join`, `--smoke N`, `--screenshot <path>`, `--show-help` |
 
+The networking demos (`demo_net_avatar_sync` and the other SystemLink demos in
+`modules/net/examples/`) need a signed-in gamer: they open the Guide's sign-in, which without a
+service signs in a local offline profile. For unattended runs set
+`CNA_GAMER_SERVICES_AUTO_SIGN_IN=<profile name>` (a different name per process), and
+`CNA_GAMER_SERVICES_PROFILES_DIR` to keep the profiles out of your own store.
+
 `--smoke N` exits after N drawn frames without input; `--screenshot <path>` saves the last frame's
 back buffer as a PNG (the demos use the HiDef profile so it can be read back). Run them through
 `tools/platform/run_gpu_tests_private.sh`'s private display, never on a live desktop.

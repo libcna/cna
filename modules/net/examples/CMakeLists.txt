@@ -33,6 +33,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         )
         target_include_directories(cna_demo_net_client_server_arena PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/demo_net_client_server_arena/src
+            ${CNA_GRAPHICS_EXAMPLES_DIR}
         )
         target_link_libraries(cna_demo_net_client_server_arena PRIVATE CNA CNA_GamerServices CNA_Net)
 
@@ -69,6 +70,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         add_executable(cna_demo_qos_probe
             demo_qos_probe/src/Main.cpp
         )
+        target_include_directories(cna_demo_qos_probe PRIVATE ${CNA_GRAPHICS_EXAMPLES_DIR})
         target_link_libraries(cna_demo_qos_probe PRIVATE CNA CNA_GamerServices CNA_Net SHARP_RUNTIME)
     endif()
 
@@ -83,6 +85,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         )
         target_include_directories(cna_demo_simulated_network_conditions PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/demo_simulated_network_conditions/src
+            ${CNA_GRAPHICS_EXAMPLES_DIR}
         )
         target_link_libraries(cna_demo_simulated_network_conditions PRIVATE CNA CNA_GamerServices CNA_Net)
 
@@ -113,6 +116,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         )
         target_include_directories(cna_demo_session_browser PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/demo_session_browser/src
+            ${CNA_GRAPHICS_EXAMPLES_DIR}
         )
         target_link_libraries(cna_demo_session_browser PRIVATE CNA CNA_GamerServices CNA_Net)
 
@@ -143,6 +147,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         )
         target_include_directories(cna_demo_gamer_roster_hud PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/demo_gamer_roster_hud/src
+            ${CNA_GRAPHICS_EXAMPLES_DIR}
         )
         target_link_libraries(cna_demo_gamer_roster_hud PRIVATE CNA CNA_GamerServices CNA_Net)
 
@@ -170,6 +175,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         add_executable(cna_demo_session_lifecycle_events
             demo_session_lifecycle_events/src/Main.cpp
         )
+        target_include_directories(cna_demo_session_lifecycle_events PRIVATE ${CNA_GRAPHICS_EXAMPLES_DIR})
         target_link_libraries(cna_demo_session_lifecycle_events PRIVATE CNA CNA_GamerServices CNA_Net SHARP_RUNTIME)
     endif()
 

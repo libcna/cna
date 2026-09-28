@@ -142,6 +142,8 @@ struct BackendEvent {
     Type type = Type::Failed;
     /** @brief Local player slot, zero through three. */
     int slot = 0;
+    /** @brief Whether a SignedIn identity is a service account (false for a local offline profile). */
+    bool signedInToLive = true;
     /** @brief Identity snapshot. */
     ServiceIdentity identity;
     /** @brief Safe diagnostic code, never credentials. */
@@ -162,6 +164,9 @@ public:
     /** @brief Queues authentication. @param slot Local slot. @param username Account login.
      * @param password Secret, never logged. */
     virtual void signIn(int slot,std::string username,std::string password) = 0;
+    /** @brief Signs a local offline profile into a slot at the next pump; no service is involved.
+     * @param slot Local slot. @param gamertag Validated local profile name. */
+    virtual void signInLocal(int slot,const std::string& gamertag) = 0;
     /** @brief Queues revocation. @param slot Local slot. */
     virtual void signOut(int slot) = 0;
     /** @brief Takes bounded ready events. @return Ordered events. */

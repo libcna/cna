@@ -1,5 +1,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp"
 #include "SyncGame.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerServicesComponent.hpp"
+#include "common/SignInEXT.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -41,12 +43,6 @@ namespace
     constexpr float kCameraHeight = 1.3f;
     constexpr float kTargetHeight = 0.9f;
 
-    class NullServiceProvider : public System::IServiceProvider
-    {
-    public:
-        [[nodiscard]] void* GetService(const std::type_info& /*type*/) const override { return nullptr; }
-    };
-
     // Post-plans/plan_net.md remediation (2026-07-18): now uses the shared, real-bitmap-font
     // CNAExamplesEXT::MakeSimpleFontEXT() (examples/common/SimpleFontEXT.hpp) instead of a
     // per-demo uniform-rectangle "block font" - the old per-file copy was confirmed unreadable
@@ -64,17 +60,19 @@ namespace
         "Left/Right: Rotate local avatar",
         "Space: Next animation for the local avatar",
         "",
-        "Launch with --host (male avatar, creates a SystemLink session) or",
-        "--join (female avatar, finds/joins the host). Each side sends its",
-        "AvatarDescription bytes once, then only position/yaw/preset.",
+        "Launch with --host (creates a SystemLink session) or --join",
+        "(finds/joins the host). Each side shows its signed-in profile's",
+        "avatar, sends the AvatarDescription bytes, then position/yaw/preset.",
     };
 }
 
 SyncGame::SyncGame(bool isHost)
     : isHost_(isHost)
-    , localGender_(isHost ? AvatarBodyType::Male : AvatarBodyType::Female)
-    , remoteGender_(isHost ? AvatarBodyType::Female : AvatarBodyType::Male)
+    , fallbackBody_(isHost ? AvatarBodyType::Male : AvatarBodyType::Female)
 {
+    getComponentsProperty().Add(new Microsoft::Xna::Framework::GamerServices::GamerServicesComponent(*this));
+    // HiDef lets the --screenshot option read the back buffer.
+    graphics_.setGraphicsProfileProperty(GraphicsProfile::HiDef);
     localPos_ = Vector2(isHost_ ? -1.5f : 1.5f, 0.0f);
 
     static constexpr int FPS = 60;
@@ -101,17 +99,27 @@ void SyncGame::Initialize()
 
     auto& device = getGraphicsDeviceProperty();
     device.SetDepthTestEnabled(true);
+}
 
-    NullServiceProvider services;
-    Microsoft::Xna::Framework::GamerServices::GamerServicesDispatcher::Initialize(services);
+// Runs once a gamer is signed in: the gamer's own avatar is shown, and the session is created or
+// joined by that gamer.
+void SyncGame::StartSession()
+{
     localGamer_ = (*Microsoft::Xna::Framework::GamerServices::Gamer::getSignedInGamersProperty())[0];
+    System::IAsyncResult* request = AvatarDescription::BeginGetFromGamer(localGamer_, {}, {});
+    const AvatarDescription profileAvatar = AvatarDescription::EndGetFromGamer(request);
+    delete request;
+    // A gamer without an avatar still gets one to show.
+    ShowAvatar(localView_, profileAvatar.getIsValidProperty()
+                               ? profileAvatar.getDescriptionProperty()
+                               : AvatarDescription::CreateRandom(fallbackBody_).getDescriptionProperty());
+    const char* body = localView_.description->getBodyTypeProperty() == AvatarBodyType::Male ? "male" : "female";
 
     if (isHost_)
     {
         session_ = NetworkSession::Create(NetworkSessionType::SystemLink, 1, 8);
         std::printf("[NetAvatarSync] Hosting as \"%s\" (%s avatar), waiting for a client...\n",
-                    localGamer_->getGamertagProperty().c_str(),
-                    localGender_ == AvatarBodyType::Male ? "male" : "female");
+                    localGamer_->getGamertagProperty().c_str(), body);
     }
     else
     {
@@ -132,8 +140,7 @@ void SyncGame::Initialize()
         const auto& constAvailable = available;
         session_ = NetworkSession::Join(&constAvailable[0]);
         std::printf("[NetAvatarSync] Joined the host's session as \"%s\" (%s avatar).\n",
-                    localGamer_->getGamertagProperty().c_str(),
-                    localGender_ == AvatarBodyType::Male ? "male" : "female");
+                    localGamer_->getGamertagProperty().c_str(), body);
     }
 
     session_->SessionEnded += [this](System::Object* sender, const NetworkSessionEndedEventArgs& e) { OnSessionEnded(sender, e); };
@@ -161,8 +168,6 @@ void SyncGame::StartPreset(AvatarView& view, std::size_t preset)
 
 void SyncGame::LoadContent()
 {
-    ShowAvatar(localView_, AvatarDescription::CreateRandom(localGender_).getDescriptionProperty());
-
     // Task 8.1/8.3 (plans/plan_net.md Phase 8): F1 help overlay plumbing.
     auto& device = getGraphicsDeviceProperty();
     spriteBatch_ = std::make_unique<SpriteBatch>(device);
@@ -173,6 +178,21 @@ void SyncGame::LoadContent()
 
 void SyncGame::Update(GameTime& gameTime)
 {
+    Game::Update(gameTime);
+    if (!sessionStarted_)
+    {
+        if (CNAExamplesEXT::SignedInGamerOrShowSignInEXT() == nullptr)
+        {
+            if (smokeFramesLeft_ > 0 && --smokeFramesLeft_ == 0)
+            {
+                std::printf("[NetAvatarSync] %s\n", CNAExamplesEXT::kNoSignedInGamerEXT);
+                Exit();
+            }
+            return;
+        }
+        sessionStarted_ = true;
+        StartSession();
+    }
     if (session_ == nullptr)
     {
         return;
@@ -283,7 +303,9 @@ void SyncGame::Update(GameTime& gameTime)
                     haveRemote_ ? CNAExamplesEXT::kAvatarPresets[remoteView_.preset].name : "-");
     }
 
-    if (smokeFramesLeft_ > 0)
+    // A requested screenshot holds the last smoke frame until Draw has taken it: a slow frame can
+    // run two Updates before the next Draw.
+    if (smokeFramesLeft_ > 0 && !(smokeFramesLeft_ == 1 && !screenshotPathEXT_.empty()))
     {
         if (--smokeFramesLeft_ == 0)
         {
@@ -310,11 +332,14 @@ void SyncGame::Draw(const GameTime& /*gameTime*/)
     const Matrix view = Matrix::CreateLookAt(eye, target, Vector3::Up);
     const Matrix projection = Matrix::CreatePerspectiveFieldOfView(kPiOver4, aspect, 0.1f, 100.0f);
 
-    localView_.renderer->setWorldProperty(
-        Matrix::CreateRotationY(localYaw_) * Matrix::CreateTranslation(Vector3(localPos_.X, 0.0f, localPos_.Y)));
-    localView_.renderer->setViewProperty(view);
-    localView_.renderer->setProjectionProperty(projection);
-    localView_.renderer->Draw(localView_.animation.get());
+    if (localView_.renderer)
+    {
+        localView_.renderer->setWorldProperty(
+            Matrix::CreateRotationY(localYaw_) * Matrix::CreateTranslation(Vector3(localPos_.X, 0.0f, localPos_.Y)));
+        localView_.renderer->setViewProperty(view);
+        localView_.renderer->setProjectionProperty(projection);
+        localView_.renderer->Draw(localView_.animation.get());
+    }
 
     if (haveRemote_)
     {

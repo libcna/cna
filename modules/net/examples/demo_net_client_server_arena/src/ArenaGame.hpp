@@ -5,6 +5,7 @@
 #include <unordered_map>
 
 #include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
@@ -35,6 +36,10 @@ public:
     void SetSmokeFrames(int n) { smokeFramesLeft_ = n; }
 
 private:
+    void StartSession();
+    // The Guide's sign-in prompt draws through the game's graphics device service.
+    Microsoft::Xna::Framework::GraphicsDeviceManager graphics_{this};
+    bool sessionStarted_ = false;
     void OnGamerJoined(System::Object* sender, const Microsoft::Xna::Framework::Net::GamerJoinedEventArgs& e);
     void OnGamerLeft(System::Object* sender, const Microsoft::Xna::Framework::Net::GamerLeftEventArgs& e);
     void OnSessionEnded(System::Object* sender, const Microsoft::Xna::Framework::Net::NetworkSessionEndedEventArgs& e);

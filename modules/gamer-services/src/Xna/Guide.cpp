@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
 #include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
+#include "CNA/Internal/GamerServices/LocalProfiles.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
@@ -37,6 +38,7 @@
 #include "../Internal/ServiceAsyncResult.hpp"
 #include "System/Threading/EventWaitHandle.hpp"
 #include <algorithm>
+#include <cctype>
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
@@ -374,7 +376,50 @@ namespace Microsoft::Xna::Framework::GamerServices
         std::unique_ptr<System::IAsyncResult> socialAction;
         int signInPaneCount = 0;
         int signInSlot = 0;
+        bool signInLocal = false;
         std::string signInUsername;
+        std::string Folded(std::string value) {
+            for(auto& c:value)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            return value;
+        }
+        bool ProfileSignedIn(const std::string& gamertag) {
+            for(auto* gamer:*Gamer::getSignedInGamersProperty())
+                if(Folded(gamer->getGamertagProperty())==Folded(gamertag))return true;
+            return false;
+        }
+        void EndLocalSignIn(const std::string& message) {
+            signInActive = false; SyncTouchInputSuppression();
+            (void)Guide::BeginShowMessageBox(static_cast<PlayerIndex>(signInSlot), "Sign in", message, {"OK"}, 0, MessageBoxIcon::Error,
+                [](System::IAsyncResult& result) { std::unique_ptr<System::IAsyncResult> owned(&result); (void)Guide::EndShowMessageBox(&result); }, {});
+        }
+        // Without a service, a pane signs in a local offline profile, creating it on first use.
+        void StartLocalSignInPane() {
+            namespace Service = CNA::Internal::GamerServices;
+            std::string known, suggestion; int listed = 0;
+            for (const auto& profile : Service::loadLocalProfiles()) {
+                if (ProfileSignedIn(profile.gamertag)) continue;
+                if (suggestion.empty()) suggestion = profile.gamertag;
+                if (listed++ < 8) known += (known.empty() ? "" : ", ") + profile.gamertag;
+            }
+            const auto player = "Profile for player " + std::to_string(signInSlot + 1);
+            (void)Guide::BeginShowKeyboardInput(static_cast<PlayerIndex>(signInSlot), "Sign in",
+                known.empty() ? player + ". Enter a name to create a profile." : player + ": " + known + ", or a new name.",
+                suggestion, [](System::IAsyncResult& input) {
+                    std::unique_ptr<System::IAsyncResult> owned(&input);
+                    if (Guide::WasKeyboardInputCanceledEXT(&input)) { signInActive = false; SyncTouchInputSuppression(); return; }
+                    auto name = Guide::EndShowKeyboardInput(&input);
+                    const auto first = name.find_first_not_of(' '), last = name.find_last_not_of(' ');
+                    name = first == std::string::npos ? std::string{} : name.substr(first, last - first + 1);
+                    if (!Service::isValidLocalGamertag(name)) {
+                        EndLocalSignIn("Profile names are 1 to 15 letters, digits and single spaces, starting with a letter."); return;
+                    }
+                    if (ProfileSignedIn(name)) { EndLocalSignIn("That profile is already signed in."); return; }
+                    const auto profile = Service::openLocalProfile(name);
+                    try { Service::backend()->signInLocal(signInSlot, profile.gamertag); }
+                    catch (...) { signInActive = false; SyncTouchInputSuppression(); throw; }
+                    SyncTouchInputSuppression();
+                }, {});
+        }
         void StartSignInPane() {
             auto occupied=[](int slot) {
                 for(auto* gamer:*Gamer::getSignedInGamersProperty())
@@ -383,6 +428,7 @@ namespace Microsoft::Xna::Framework::GamerServices
             };
             while (signInSlot < signInPaneCount && occupied(signInSlot)) ++signInSlot;
             if (signInSlot >= signInPaneCount) { signInActive = false; SyncTouchInputSuppression(); return; }
+            if (signInLocal) { StartLocalSignInPane(); return; }
             (void)Guide::BeginShowKeyboardInput(static_cast<PlayerIndex>(signInSlot), "CNA Gamer Services sign-in",
                 "Username for player " + std::to_string(signInSlot + 1), "", [](System::IAsyncResult& usernameResult) {
                     std::unique_ptr<System::IAsyncResult> owned(&usernameResult);
@@ -1180,17 +1226,21 @@ namespace Microsoft::Xna::Framework::GamerServices
         },{});
     }
 
-    void Guide::ShowSignIn(int paneCount, bool /*onlineOnly*/) {
+    void Guide::ShowSignIn(int paneCount, bool onlineOnly) {
         // Xbox 360 documentation accepts 1, 2, 4; Windows stub IL is not the target.
         if (paneCount != 1 && paneCount != 2 && paneCount != 4) throw System::ArgumentException("paneCount must be 1, 2 or 4.", "paneCount");
         if (getIsVisibleProperty()) throw GuideAlreadyVisibleException();
-        if (!GamerServicesDispatcher::getIsInitializedProperty() || !CNA::Internal::GamerServices::backend()->serviceEnabled())
-            throw GamerServicesNotAvailableException("No CNA account service is configured.");
-        signInPaneCount = paneCount; signInSlot = 0; signInActive = true;
+        if (!GamerServicesDispatcher::getIsInitializedProperty())
+            throw GamerServicesNotAvailableException("Gamer services are not initialized.");
+        // Without a service only local offline profiles exist, which an online-only sign-in excludes.
+        const bool service = CNA::Internal::GamerServices::backend()->serviceEnabled();
+        if (!service && onlineOnly) throw GamerServicesNotAvailableException("No CNA account service is configured.");
+        signInPaneCount = paneCount; signInSlot = 0; signInActive = true; signInLocal = !service;
         try { StartSignInPane(); } catch (...) { signInActive = false; SyncTouchInputSuppression(); throw; }
     }
     void Guide::OnSignInResult(int slot, bool success) {
         if (!signInActive || slot != signInSlot) return;
+        if (signInLocal && !success) return;
         if (success) { ++signInSlot; StartSignInPane(); }
         else {
             signInActive = false;

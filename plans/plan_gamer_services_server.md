@@ -2297,3 +2297,49 @@ GamerServices 463/1 skip, Net 466/466, SkinnedModel/skinned-vertex/AnimationPlay
 94/94, C API gates pass (the three environment smoke failures above remain).
 Known-good set: CNA feature/gamer-services-server (this checkpoint), server bbfe2d5,
 sharp-runtime 007280bd.
+
+### GS-004l complete: offline local profiles (SystemLink without a service)
+
+GS-004 removed the fabricated Stub gamers, which left every SystemLink demo (and any offline XNA
+game) without a signed-in gamer. Reference facts (Windows IL, `GamerServicesDispatcher.Update` /
+`SignedInGamer.HandlePlayerSignInChanged`): gamers signed in before the game starts become
+`SignedInGamers` entries, raising `SignedIn`, at the first `Update`; a local profile is a gamer with
+`IsSignedInToLive` false.
+
+- [x] `LocalProfiles` store (`CNA_GAMER_SERVICES_PROFILES_DIR`, else XDG data / `~/.local/share`,
+  else `%LOCALAPPDATA%`): version-1 JSON, at most 32 profiles, 256 KiB bound, names 1-15 ASCII
+  letters/digits/single spaces starting with a letter, unique ignoring case; each profile keeps a
+  random CNA v1 avatar. Atomic writes, a `flock` between processes (the directory is created
+  before the lock -- the concurrency test found the first writers racing without it), an
+  unreadable store is never overwritten, malformed entries are skipped, a lost avatar is replaced.
+- [x] `IGamerServicesBackend::signInLocal` + `BackendEvent::signedInToLive`; the dispatcher builds
+  local gamers with `IsSignedInToLive` false, no online-session or purchase privilege, and skips
+  presence publication for gamers without a service identity.
+- [x] `Guide.ShowSignIn(n, false)` without a service: per pane a keyboard prompt listing stored
+  profiles (first unused suggested), creating new ones; invalid or already-signed-in names end
+  with a message; cancel stops. `ShowSignIn(n, true)` without a service throws
+  GamerServicesNotAvailableException. With a service configured, accounts only (unchanged).
+- [x] Automatic sign-in at `Dispatcher.Initialize` without a service: `CNA_GAMER_SERVICES_AUTO_SIGN_IN`
+  (up to four names, created when missing; invalid/duplicate/fifth -> INVALID_CONFIGURATION) or
+  stored `"autoSignIn": true` profiles, delivered at the first Update.
+- [x] `AvatarDescription.BeginGetFromGamer` for a signed-in local profile returns its stored
+  avatar synchronously.
+- [x] SystemLink demos follow the XNA pattern: `GamerServicesComponent` + `GraphicsDeviceManager`
+  (so the Guide prompt draws), `Guide.ShowSignIn` from Update while nobody is signed in, session
+  started once a gamer exists; console demos wait for automatic sign-in and explain otherwise.
+  `demo_net_avatar_sync` shows each profile's own avatar; its last smoke frame now waits for the
+  screenshot Draw (fixed-timestep catch-up skipped it). C API `cna_guide_show_sign_in` docs and
+  `GuideSmoke` updated (local sign-in opens and cancels; online-only NOT_SUPPORTED).
+
+Validation: GamerServices **477 pass / 1 known skip** (LocalProfileTests 14: store rules, reuse,
+unreadable store, malformed entries, env/flag auto sign-in, six concurrent processes, Guide create/
+offer/second pane/invalid/duplicate/cancel/online-only, profile avatar, and startup sign-in in a
+re-executed fresh process); Net **466/466**; C API ctests pass except the three pre-existing
+environment smokes. Private runner, OPENGL33: all seven networking demos with
+`CNA_GAMER_SERVICES_AUTO_SIGN_IN` exit 0 -- avatar sync (haveRemote=true both sides, screenshots
+inspected: both profile avatars in both processes, persisted across runs), client/server arena,
+simulated conditions, roster HUD, session browser, QoS probe pair, session lifecycle; the QoS probe
+without a signed-in gamer prints the guidance and exits 1.
+Not changed: test runs read the user's profile store like they read the user's service settings;
+a developer who marks profiles `autoSignIn` should point `CNA_GAMER_SERVICES_PROFILES_DIR`
+elsewhere for test runs. Guest sign-in remains unimplemented.

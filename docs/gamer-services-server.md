@@ -10,6 +10,24 @@ Environment: `CNA_GAMER_SERVICES_ENDPOINT`, `CNA_GAME_ID`, `CNA_GAMER_SERVICES_C
 {"endpoint":"https://service.example/cna/v1","gameId":"my-title"}
 ```
 
+**Local offline profiles.** Without an endpoint, gamers are local offline profiles, as on an
+Xbox 360 without Xbox LIVE: `Guide.ShowSignIn(paneCount, false)` asks each pane for a profile name,
+offering the stored profiles and creating a new one on first use (1 to 15 ASCII letters, digits and
+single spaces, starting with a letter; names are unique ignoring case). A local gamer has
+`IsSignedInToLive` false, no online-session or purchase privilege, and its own avatar (a random CNA
+description stored with the profile, returned by `AvatarDescription.BeginGetFromGamer`). It plays
+Local and SystemLink sessions, and its achievements and leaderboards use the local store; service
+Guide panes and PlayerMatch/Ranked refuse it. `ShowSignIn(paneCount, true)` requires the service.
+Profiles are stored in `CNA_GAMER_SERVICES_PROFILES_DIR/profiles.json`, else
+`$XDG_DATA_HOME/cna/gamer-services/profiles.json` or `$HOME/.local/share/cna/gamer-services/profiles.json`
+(`%LOCALAPPDATA%\CNA\gamer-services` on Windows); writes are atomic and serialized between
+processes, and a store that cannot be read is never overwritten. Profiles whose `"autoSignIn"` is
+`true` in that file, or the comma-separated names in `CNA_GAMER_SERVICES_AUTO_SIGN_IN` (up to four,
+created when missing; for unattended runs and CI), are signed in when gamer services start and
+appear, raising `SignedIn`, at the first `Dispatcher.Update`, as XNA reports profiles already signed
+in at startup. Local profiles are never sent to a service. With an endpoint configured, sign-in uses
+accounts only.
+
 Server canonical protocol and administration commands live in sibling `cna-gamer-services-server/README.md` and `protocol/v1.md`. Desktop client depends on libcurl with TLS support and nlohmann/json. Browser/other secure platform transport integration remains unverified.
 
 Measured service features include four local authenticated players, standard Guide sign-in, profiles/

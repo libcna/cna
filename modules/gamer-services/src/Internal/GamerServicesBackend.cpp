@@ -73,6 +73,12 @@ public:
             work();BackendEvent event;event.type=BackendEvent::Type::Completion;event.completion=std::move(completion);return event;
         });
     }
+    void signInLocal(int slot,const std::string& gamertag) override {
+        slotGuard(slot);
+        BackendEvent event;event.type=BackendEvent::Type::SignedIn;event.slot=slot;event.signedInToLive=false;
+        event.identity.gamertag=gamertag;event.identity.displayName=gamertag;
+        ready(std::move(event));
+    }
     std::vector<BackendEvent> pump() override {
         if(!background_) {
             for(int i=0;i<32;++i) {
