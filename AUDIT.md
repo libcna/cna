@@ -1,5 +1,12 @@
 # CNA XNA 4.0 API Audit
 
+> **GS-004k service APM lifetime (2026-09-28):** Results retain their executor without
+> queued self-cycles. EndRead materializes public objects on the owner thread; readers keep
+> their original title context until Dispose. Guide owns pending social results. New cases
+> 18/18; GamerServices 426 pass / 1 known HEADLESS skip, Net 363/363, private gates 13/13,
+> real native/C TLS and restart E2E 1/1. Public create/join/invites and standard avatars
+> remain unfinished; next is bounded relay ENet preparation and owned session rollback.
+
 > **GS-007e2b public online search (2026-09-28):** Standard pending BeginFind/EndFind now
 > uses the authenticated directory for PlayerMatch/Ranked, with Update-thread callbacks, filters,
 > capacity, title isolation and restart/refresh tests. Caller-owned metadata survives End; End-once,

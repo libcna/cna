@@ -218,6 +218,20 @@ int main(int argc,char** argv) {
             std::unique_ptr<System::IAsyncResult> pending(LeaderboardReader::BeginRead(id,0,1,[&](auto& value){callback=true;++callbackCount;check(!value.getCompletedSynchronouslyProperty(),"remote leaderboard synchronous flag");},77));
             check(!pending->getIsCompletedProperty()&&!callback,"leaderboard premature callback");
             auto reader=LeaderboardReader::EndRead(pending.get());check(callback&&callbackCount==1,"leaderboard callback");
+            const auto ownerThread=std::this_thread::get_id();
+            bool callbackReadComplete=false;
+            std::optional<LeaderboardReader> callbackReader;
+            std::unique_ptr<System::IAsyncResult> callbackRead(LeaderboardReader::BeginRead(id,0,1,[&](auto& result) {
+                check(std::this_thread::get_id()==ownerThread,"leaderboard materialization callback thread");
+                callbackReader.emplace(LeaderboardReader::EndRead(&result));callbackReadComplete=true;
+            },{}));
+            const auto callbackDeadline=std::chrono::steady_clock::now()+std::chrono::seconds(15);
+            while(!callbackReadComplete) {
+                GamerServicesDispatcher::Update();
+                if(std::chrono::steady_clock::now()>=callbackDeadline)throw std::runtime_error("callback read timeout");
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            check(callbackRead->getIsCompletedProperty()&&callbackReader.has_value(),"callback EndRead metadata lifetime");
             const bool mainTitle=CNA::GamerServices::resolveConfiguration().gameId=="one";
             check(reader.getTotalLeaderboardSizeProperty()==(mainTitle?2:0),"remote board title isolation");
             bool repeated=false;try{(void)LeaderboardReader::EndRead(pending.get());}catch(const System::InvalidOperationException&){repeated=true;}check(repeated,"leaderboard repeated End");

@@ -159,3 +159,11 @@ Create/join/invited lifecycle remains unfinished; listings carry private service
 than a purported direct Internet endpoint. SystemLink transport is unchanged. Legacy offline
 immediate actions report CompletedSynchronously=true; online actions false. SystemLink's existing
 Join preparation still happens in End and awaits the separate APM/lifecycle audit.
+
+Service profile/lookup/achievement/leaderboard Begin results also retain their backend until the
+caller releases the result. Queued work carries owned logical values and borrows its executor;
+it does not retain its own backend queue. EndRead creates public reader/gamer objects on the
+caller thread. A service reader keeps its original title/backend for subsequent paging; Dispose
+releases that context while existing gamer snapshots remain owned until the reader is destroyed.
+Guide owns pending social operations internally. These operations and result release belong on
+the dispatcher owner thread. Broader measured Xbox APM/error-order parity remains incomplete.

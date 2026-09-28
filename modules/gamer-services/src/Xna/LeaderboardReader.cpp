@@ -19,6 +19,13 @@ namespace Microsoft::Xna::Framework::GamerServices
 {
     namespace
     {
+        struct ServiceReadData {
+            LeaderboardIdentity identity;
+            int start=0,size=0;
+            std::optional<std::vector<std::string>> gamers;
+            CNA::Internal::GamerServices::ServiceLeaderboardPage page;
+        };
+
         // Task 4.4 (plans/plan_net.md Phase 4): no FNA reference exists for any of this - real
         // FNA.NetStub's own LeaderboardReader is identically all-NotSupportedException, so sort
         // order/pivot-centering/friends-restriction semantics below are CNA-original, documented
@@ -181,21 +188,21 @@ namespace Microsoft::Xna::Framework::GamerServices
         if(size<1||size>100)throw System::ArgumentOutOfRangeException("pageSize");
         if(identity.getKeyProperty().empty())throw System::ArgumentException("Invalid leaderboard identity.","leaderboardId");
         if(gamers&&gamers->size()>100)throw System::ArgumentOutOfRangeException("gamers");
-        auto query=std::make_shared<RemoteQuery>();query->service=CNA::Internal::GamerServices::backend();query->gamers=std::move(gamers);
+        auto service=CNA::Internal::GamerServices::backend();
         return CNA::Internal::GamerServices::ServiceAsyncResult::begin("leaderboard-read",nullptr,
-            [identity,start,size,pivot,query]() -> std::any {
-                const auto page=query->service->readLeaderboard(identity.getKeyProperty(),identity.getGameModeProperty(),start,size,pivot,query->gamers);
-                LeaderboardReader reader(identity,start,size,{},query->gamers.has_value());reader.remoteQuery_=query;reader.ApplyServicePage(page);return reader;
-            },std::move(callback),std::move(state));
+            [identity,start,size,pivot,gamers=std::move(gamers)](auto& executor) -> std::any {
+                auto page=executor.readLeaderboard(identity.getKeyProperty(),identity.getGameModeProperty(),start,size,pivot,gamers);
+                return ServiceReadData{identity,start,size,gamers,std::move(page)};
+            },std::move(callback),std::move(state),std::move(service));
     }
     System::IAsyncResult* LeaderboardReader::BeginServicePage(int start,const std::string& operation,System::AsyncCallback callback,std::any state) {
         EnsureUsable();if(pagePending_)throw System::InvalidOperationException("A leaderboard page request is already pending.");
         const auto query=remoteQuery_;const auto identity=leaderboardIdentity_;const auto size=pageSize_;
         pagePending_=true;
         try {
-            return CNA::Internal::GamerServices::ServiceAsyncResult::begin(operation,this,[query,identity,start,size]() -> std::any {
-                return query->service->readLeaderboard(identity.getKeyProperty(),identity.getGameModeProperty(),start,size,{},query->gamers);
-            },std::move(callback),std::move(state));
+            return CNA::Internal::GamerServices::ServiceAsyncResult::begin(operation,this,[gamers=query->gamers,identity,start,size](auto& executor) -> std::any {
+                return executor.readLeaderboard(identity.getKeyProperty(),identity.getGameModeProperty(),start,size,{},gamers);
+            },std::move(callback),std::move(state),query->service);
         }catch(...){pagePending_=false;throw;}
     }
 
@@ -260,7 +267,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     bool LeaderboardReader::getCanPageDownProperty() const
     {
-        if(remoteQuery_){EnsureUsable();return static_cast<long long>(pageStart_)+pageSize_<totalLeaderboardSize_;}
+        if(serviceBacked_){EnsureUsable();return static_cast<long long>(pageStart_)+pageSize_<totalLeaderboardSize_;}
         // Both board kinds use the same bounded-array check: entryCache_ always holds this
         // reader's *complete* board (full local leaderboard, or the gamer-restricted subset for a
         // friends board) rather than a partial client-side window of a larger remote total, so
@@ -273,24 +280,24 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     bool LeaderboardReader::getCanPageUpProperty() const
     {
-        if(remoteQuery_)EnsureUsable();
+        if(serviceBacked_)EnsureUsable();
         return pageStart_ > 0;
     }
 
     System::Collections::ObjectModel::ReadOnlyCollection<LeaderboardEntry> LeaderboardReader::getEntriesProperty() const
     {
-        if(remoteQuery_)EnsureUsable();
+        if(serviceBacked_)EnsureUsable();
         return System::Collections::ObjectModel::ReadOnlyCollection<LeaderboardEntry>(entries_);
     }
 
-    const LeaderboardIdentity& LeaderboardReader::getLeaderboardIdentityProperty() const { if(remoteQuery_)EnsureUsable();return leaderboardIdentity_; }
-    int LeaderboardReader::getPageStartProperty() const                                   { if(remoteQuery_)EnsureUsable();return pageStart_; }
-    int LeaderboardReader::getTotalLeaderboardSizeProperty() const                        { if(remoteQuery_)EnsureUsable();return totalLeaderboardSize_; }
+    const LeaderboardIdentity& LeaderboardReader::getLeaderboardIdentityProperty() const { if(serviceBacked_)EnsureUsable();return leaderboardIdentity_; }
+    int LeaderboardReader::getPageStartProperty() const                                   { if(serviceBacked_)EnsureUsable();return pageStart_; }
+    int LeaderboardReader::getTotalLeaderboardSizeProperty() const                        { if(serviceBacked_)EnsureUsable();return totalLeaderboardSize_; }
 
     void LeaderboardReader::Dispose()
     {
         isDisposed_ = true;
-        if(remoteQuery_)entries_.clear();
+        if(serviceBacked_) {entries_.clear();remoteQuery_.reset();}
     }
 
     void LeaderboardReader::PageDown()
@@ -325,7 +332,7 @@ namespace Microsoft::Xna::Framework::GamerServices
     // silently stop working.
     void LeaderboardReader::EndPageDown(System::IAsyncResult* result)
     {
-        if(remoteQuery_) {
+        if(serviceBacked_) {
             EndServicePage(result,"leaderboard-down");return;
         }
 
@@ -360,7 +367,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void LeaderboardReader::EndPageUp(System::IAsyncResult* result)
     {
-        if(remoteQuery_) {
+        if(serviceBacked_) {
             EndServicePage(result,"leaderboard-up");return;
         }
 
@@ -489,7 +496,12 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     LeaderboardReader LeaderboardReader::EndRead(System::IAsyncResult* result)
     {
-        if(dynamic_cast<CNA::Internal::GamerServices::ServiceAsyncResult*>(result))return std::any_cast<LeaderboardReader>(CNA::Internal::GamerServices::ServiceAsyncResult::end(result,"leaderboard-read",nullptr));
+        if(auto* action=dynamic_cast<CNA::Internal::GamerServices::ServiceAsyncResult*>(result)) {
+            auto data=std::any_cast<ServiceReadData>(CNA::Internal::GamerServices::ServiceAsyncResult::end(result,"leaderboard-read",nullptr));
+            LeaderboardReader reader(data.identity,data.start,data.size,{},data.gamers.has_value());
+            reader.serviceBacked_=true;reader.remoteQuery_=std::make_shared<RemoteQuery>();reader.remoteQuery_->service=action->executor();
+            reader.remoteQuery_->gamers=std::move(data.gamers);reader.ApplyServicePage(data.page);return reader;
+        }
 
         auto* action = dynamic_cast<LeaderboardAction*>(result);
         if (action == nullptr || !action->Reader.has_value())

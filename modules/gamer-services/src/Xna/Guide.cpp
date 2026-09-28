@@ -367,6 +367,7 @@ namespace Microsoft::Xna::Framework::GamerServices
     namespace {
         bool signInActive = false;
         bool socialPending = false;
+        std::unique_ptr<System::IAsyncResult> socialAction;
         int signInPaneCount = 0;
         int signInSlot = 0;
         std::string signInUsername;
@@ -912,16 +913,17 @@ namespace Microsoft::Xna::Framework::GamerServices
             },{});
         }
         void ChangeFriend(PlayerIndex player,const std::string& target,const std::string& action) {
+            if(socialPending)throw System::InvalidOperationException("A social operation is already pending.");
             auto service=Service::backend();const auto user=service->profile(SocialActor(player)->getGamertagProperty()).userId;
             socialPending=true;
             try {
-                (void)Service::ServiceAsyncResult::begin("guide.friend",nullptr,[service,user,target,action]()->std::any{
-                    service->changeFriend(user,target,action);return {};
+                socialAction.reset(Service::ServiceAsyncResult::begin("guide.friend",nullptr,[user,target,action](auto& executor)->std::any{
+                    executor.changeFriend(user,target,action);return {};
                 },[player](System::IAsyncResult& result){
-                    std::unique_ptr<System::IAsyncResult> owned(&result);socialPending=false;
+                    auto owned=std::move(socialAction);socialPending=false;
                     try{(void)Service::ServiceAsyncResult::end(&result,"guide.friend",nullptr);Guide::ShowFriends(player);}
                     catch(...){SocialMessage(player,"CNA Gamer Services","The friendship change could not be completed.");}
-                },{});
+                },{},std::move(service)));
             }catch(...){socialPending=false;throw;}
         }
         void ProfileCard(PlayerIndex player,const std::string& tag) {

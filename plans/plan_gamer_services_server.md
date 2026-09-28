@@ -764,6 +764,9 @@ CNA-specific transport routing; generic proxy change remains the only runtime mo
 - [x] GS-007e1: private authenticated roster/control gate and genuine spoof/refusal relay probes.
 - [x] GS-007e2a: exact null/family guards for public Net End operations.
 - [x] GS-007e2b: caller-owned metadata/End-once and standard pending service Find.
+- [ ] GS-007e2c1: private loopback ENet host and relay-only preallocation packet/fragment limits.
+- [ ] GS-007e2c2: immutable backend deployment authority and owned online preparation/rollback.
+- [ ] GS-007e2c3: consume prepared transport in standard public create/join and E2E.
 - [ ] GS-007e2c: owned online create/join preparation, including cleanup on abandonment/failure.
 - [ ] GS-007e2: public async operation ownership/preparation and online lifecycle wiring.
 - [ ] GS-007e: publish standard PlayerMatch/Ranked lifecycle and Guide/invited joins once directory
@@ -1202,3 +1205,71 @@ background results with public-object construction during End on the update owne
 GS-007e2c owned online create/join preparation plus GS-008c3 roster/lease/update wiring.
 Public online creation/joins/invites, Ranked arbitration, reconnect, standard avatars and real
 acceptance samples remain unfinished. This checkpoint is not project completion.
+
+
+Known-good GS-007e2b tested code set:
+- CNA b7754e45f5259203c9e31fee30b8796cf2e68558.
+- sharp-runtime 6c4a857de129cf29b5d43430bedf24157d594f12.
+- cna-gamer-services-server 0cd1d08984210a120e7b0b7cb238f6f438f4d8af.
+
+### GS-004k completed: service APM executor and object publication lifetime
+
+- [x] GS-004k: retained executor without queued self-cycles; logical worker values; reader/Guide lifetime, 18 new tests and real TLS corpus.
+
+ServiceAsyncResult now retains its selected executor, and queued work receives a borrowed backend
+reference rather than capturing a shared backend itself. Audit and convert all seven callers,
+including profile/lookup, awards/achievement reads, social changes and leaderboard reads/pages.
+Reader work returns only logical page/selector data; EndRead materializes the public reader/gamers
+on the caller/update owner. Completed readers retain their original backend/title for later paging.
+No GamerServices business or secure transport primitive is added to sharp-runtime. Preserve
+existing error/End timeout policy here; broader measured APM/lifecycle work remains GS-007e2.
+Tests: pending abandonment/replacement lifetime, all public async families, selected-executor
+paging/disposal and actual TLS account/leaderboard C API corpus. Validation results below.
+
+GS-004k ownership detail: scheduler lifetime is separate from a retained reader's logical origin;
+work on a different scheduler takes only a temporary weak-origin lease. This preserves old
+reader/title paging without a pending cross-backend self-cycle or use after released origin.
+Dispose releases a reader's query/backend context while retained gamer snapshots live until the
+reader object is released. Guide owns its pending social result so shutdown can release it even
+without a final Update; callback transfers that ownership before opening the next pane.
+
+### GS-007e2c preparation audit (not yet implemented)
+
+The existing ENetHostHandle::CreateHost binds ENET_HOST_ANY; public relay sessions must
+use a separate loopback-only host, preserving direct SystemLink unchanged. Bundled ENet
+protocol.c checks maximumPacketSize before reassembly allocation, but the default host
+limits are broad. Its fragment count can independently reach ENET_PROTOCOL_MAXIMUM_FRAGMENT_COUNT,
+so a byte ceiling alone does not bound the per-command fragment bitmap. Add relay-only
+ENet datagram preflight before UDP injection: bounded command count, exact command/payload
+lengths, no unconfigured compression/checksum, bounded logical packet, waiting bytes,
+fragment count and count-versus-total-byte checks. The server continues forwarding opaque
+game datagrams; this client gate does not make the control protocol an ENet protocol.
+Validate normal reliable/unreliable/fragmented traffic in native and separate-NAT tests.
+
+Prepared session resources cannot hold their own queued backend strongly: ready values in
+backend completion queues would form another retention cycle. Keep cancellation state
+independent of the XNA callback target; rollback failed/abandoned membership on the worker,
+and release ENet/relay sockets when preparation is discarded. Bound relay authority to the
+backend's original validated configuration, not a newly re-resolved environment or server
+supplied URL. A network failure can prevent rollback; document the existing 90-second
+membership lease fallback rather than promising remote cleanup after unreachable servers.
+
+GS-004k validation: final sequential incremental build of CnaGamerServicesTests, CnaNetTests,
+cna_service_client_harness, cna_c_api_service_client and cna_c_api_net_smoke succeeded, maximum
+two jobs. Existing ignored-nodiscard warnings in old GamerServices tests remain; no new compiler
+error or warning in this change. Full GamerServices: **427 run / 426 pass / 1 known HEADLESS
+screensaver skip, 7.840s**, including **18/18** new lifetime cases. Full Net/SystemLink: **363/363,
+5.896s**. Actual TLS server E2E with native/C clients: **1/1, 85.82s** (test 85.79s), including
+new callback-owner EndRead, typed leaderboard paging, multiple users/titles and restart persistence.
+Private C ABI/protocol/fake gates: **13/13, 85.51s**, through the private display runner. Logs: cmake-build-debug/service-apm-lifetime-{final-build,
+gamer,net,private}.log; server build/service-apm-lifetime-tls.log. Earlier overlapping build
+attempts were canceled; their initial combined log is not validation evidence. The final build
+and tests are from one sequential compiler invocation. Coverage generator remains 472 headers /
+8,134 symbols; private reader state does not change native C ABI declarations/exports.
+
+Sharp-runtime unchanged at 6c4a857de129cf29b5d43430bedf24157d594f12; server unchanged at
+0cd1d08984210a120e7b0b7cb238f6f438f4d8af. Committed CNA next remains 967305dd7b93f992f7c177a7055bd5892ba8523e,
+an ancestor already integrated. No samples-agent worktree modification. Broader service End
+null/family/reentrant timeout semantics and abandoned reader-page busy state remain follow-up
+audit, not a claim of full Xbox APM parity. Public online create/join/invites and standard
+avatars remain unfinished. Next GS-007e2c1 followed by authority-bound owned preparation.

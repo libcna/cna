@@ -103,7 +103,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         if (!serviceUserId_.empty()) {
             auto service = CNA::Internal::GamerServices::backend(); const auto user = serviceUserId_;
             return CNA::Internal::GamerServices::ServiceAsyncResult::begin("award", this,
-                [service, user, achievementKey]() -> std::any { service->award(user, achievementKey); return {}; }, std::move(callback), std::move(state));
+                [user, achievementKey](auto& executor) -> std::any { executor.award(user, achievementKey); return {}; }, std::move(callback), std::move(state),std::move(service));
         }
         AwardAchievement(achievementKey);
         // FNA: the overlap check on statStoreAction is intentionally a no-op — the
@@ -154,7 +154,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         if (!serviceUserId_.empty()) {
             auto service = CNA::Internal::GamerServices::backend(); const auto user = serviceUserId_;
             return CNA::Internal::GamerServices::ServiceAsyncResult::begin("achievements", this,
-                [service, user]() -> std::any { return service->achievements(user); }, std::move(callback), std::move(asyncState));
+                [user](auto& executor) -> std::any { return executor.achievements(user); }, std::move(callback), std::move(asyncState),std::move(service));
         }
         if (statReceiveAction_ != nullptr)
         {

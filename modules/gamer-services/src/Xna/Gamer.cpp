@@ -68,7 +68,7 @@ namespace Microsoft::Xna::Framework::GamerServices
             auto service = CNA::Internal::GamerServices::backend();
             const auto tag = gamertag_;
             return CNA::Internal::GamerServices::ServiceAsyncResult::begin("profile", this,
-                [service, tag]() -> std::any { return service->profile(tag); }, std::move(callback), std::move(asyncState));
+                [tag](auto& executor) -> std::any { return executor.profile(tag); }, std::move(callback), std::move(asyncState),std::move(service));
         }
         auto* action = new GamerAction(std::move(asyncState), std::move(callback));
         action->setIsCompletedProperty(true);
@@ -104,7 +104,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         if (gamertag.empty() || gamertag.size() > 32) throw System::ArgumentException("Invalid gamertag.", "gamertag");
         auto service = CNA::Internal::GamerServices::backend();
         return CNA::Internal::GamerServices::ServiceAsyncResult::begin("lookup", nullptr,
-            [service, gamertag]() -> std::any { return service->profile(gamertag); }, std::move(callback), std::move(asyncState));
+            [gamertag](auto& executor) -> std::any { return executor.profile(gamertag); }, std::move(callback), std::move(asyncState),std::move(service));
     }
     Gamer* Gamer::EndGetFromGamertag(System::IAsyncResult* result) {
         if (!CNA::Internal::GamerServices::backend()->serviceEnabled()) throw System::NotSupportedException();

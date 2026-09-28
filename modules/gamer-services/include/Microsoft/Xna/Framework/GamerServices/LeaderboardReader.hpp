@@ -332,6 +332,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         std::vector<LeaderboardEntry> entries_;
         std::vector<LeaderboardEntry> entryCache_;
         bool isDisposed_{false};
+        bool serviceBacked_=false;
         std::shared_ptr<RemoteQuery> remoteQuery_;
         std::map<std::string,std::shared_ptr<Gamer>> serviceGamers_;
         bool pagePending_=false;

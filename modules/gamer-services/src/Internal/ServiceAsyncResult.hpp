@@ -30,9 +30,9 @@ public:
         mutable System::Threading::EventWaitHandle wait{false,System::Threading::EventResetMode::ManualReset};
     };
     /** @brief Constructs a pending operation. @param operation Operation family. @param owner Object identity.
-     * @param callback Completion callback. @param userState Caller state. */
-    ServiceAsyncResult(std::string operation,const void* owner,System::AsyncCallback callback,std::any userState)
-        : operation_(std::move(operation)),owner_(owner),callback_(std::move(callback)),userState_(std::move(userState)),state_(std::make_shared<State>()) {state_->target=this;}
+     * @param callback Completion callback. @param userState Caller state. @param executor Owning backend. */
+    ServiceAsyncResult(std::string operation,const void* owner,System::AsyncCallback callback,std::any userState,std::shared_ptr<IGamerServicesBackend> executor)
+        : operation_(std::move(operation)),owner_(owner),callback_(std::move(callback)),userState_(std::move(userState)),executor_(std::move(executor)),state_(std::make_shared<State>()) {state_->target=this;}
     /** @brief Cancels callback delivery if the caller releases the pending result. */
     ~ServiceAsyncResult() override {state_->target=nullptr;}
     /** @brief Gets published completion. @return Completion flag. */
@@ -44,17 +44,34 @@ public:
     /** @brief Gets completion signal. @return Initially unsignaled handle. */
     System::Threading::WaitHandle& getAsyncWaitHandleProperty() const override{return state_->wait;}
     /** @brief Queues an operation. @param operation Family. @param owner Object. @param work Logical work.
-     * @param callback Update-thread callback. @param userState Caller state. @return Caller-owned result. */
-    static System::IAsyncResult* begin(std::string operation,const void* owner,std::function<std::any()> work,System::AsyncCallback callback,std::any userState) {
-        auto result=std::make_unique<ServiceAsyncResult>(std::move(operation),owner,std::move(callback),std::move(userState));
+     * @param callback Update-thread callback. @param userState Caller state. @param executor Selected backend.
+     * @return Caller-owned result. */
+    static System::IAsyncResult* begin(std::string operation,const void* owner,std::function<std::any(IGamerServicesBackend&)> work,System::AsyncCallback callback,std::any userState,
+        std::shared_ptr<IGamerServicesBackend> executor=backend()) {
+        auto result=std::make_unique<ServiceAsyncResult>(std::move(operation),owner,std::move(callback),std::move(userState),std::move(executor));
         const auto state=result->state_;
-        backend()->submit([state,work=std::move(work)] {try{state->value=work();}catch(...){state->error=std::current_exception();}},[state] {
+        result->scheduler_=backend();
+        auto* worker=result->executor_.get();
+        const bool different=result->executor_.get()!=result->scheduler_.get();
+        const std::weak_ptr<IGamerServicesBackend> origin=result->executor_;
+        // The result retains the backend; its queued job must not retain its own executor.
+        result->scheduler_->submit([state,worker,different,origin,work=std::move(work)] {
+            try {
+                // Paging may retain an older title context; that is a different executor, so
+                // a temporary origin lease cannot retain the job's own scheduling backend.
+                auto lease=different ? origin.lock() : std::shared_ptr<IGamerServicesBackend>{};
+                if(different && !lease) throw System::InvalidOperationException("Origin service backend was released.");
+                state->value=work(different ? *lease : *worker);
+            } catch(...) {state->error=std::current_exception();}
+        },[state] {
             state->complete=true;state->wait.Set();
             auto* target=state->target;
             if(target&&target->callback_) {auto callback=target->callback_;callback(*target);}
         });
         return result.release();
     }
+    /** @brief Gets retained backend ownership for a materialized reader. @return Origin backend. */
+    std::shared_ptr<IGamerServicesBackend> executor() const {return executor_;}
     /** @brief Validates and consumes an operation. @param result Begin result. @param operation Family.
      * @param owner Origin object. @return Logical result, or rethrows its exception. */
     static std::any end(System::IAsyncResult* result,const std::string& operation,const void* owner) {
@@ -77,6 +94,8 @@ private:
     const void* owner_;
     System::AsyncCallback callback_;
     std::any userState_;
+    std::shared_ptr<IGamerServicesBackend> executor_;
+    std::shared_ptr<IGamerServicesBackend> scheduler_;
     std::shared_ptr<State> state_;
     bool ended_=false;
 };
