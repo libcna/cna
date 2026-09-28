@@ -750,7 +750,7 @@ CNA-specific transport routing; generic proxy change remains the only runtime mo
   bounded zero-copy parse and deterministic malformed/mutation tests in both products.
 - [x] GS-008a2: one-use 60s hashed relay tickets, title/session/machine/local-member authentication,
   persistence migration and revocable connection grant validation. No data capability before usable.
-- [ ] GS-008b: Beast/OpenSSL secure WebSocket relay endpoint, single connection per machine,
+- [x] GS-008b: Beast/OpenSSL secure WebSocket relay endpoint, single connection per machine,
   per-connection strand/one writer/bounded queue, frame/rate/timeout limits and grant revocation.
 - [ ] GS-008c: CNA libcurl WSS connection and loopback UDP routes preserving ENet datagrams,
   protocol/certificate validation and controlled Net updates. SystemLink keeps its direct path.
@@ -849,3 +849,91 @@ feature branch, so no merge is necessary. Runtime still 6c4a857de129cf29b5d43430
 The next task is GS-008b secure WSS forwarding, rate/queue/grant failure tests, followed by
 CNA ENet bridge and relay-only connectivity proof; all public online sessions/Guide invites/
 Ranked lifecycle/standard avatars/sample acceptance/final audit remain unfinished.
+
+GS-008a2 exact tested integration: CNA 1978c862fc82af6e9f8ffa540f6bba7f7c111b02;
+server a3af3bf7a13ef5bcc5fd0a3323de4f9d7989a54b; runtime
+6c4a857de129cf29b5d43430bedf24157d594f12. Repositories clean before GS-008b except this
+new active-plan entry. Next currently c90f0e39f, already integrated by ancestry.
+
+GS-008b implementation contract: separate WSS /cna/relay/v1 endpoint; bounded four-field
+version/id/game/ticket encrypted handshake; one connection per machine, server-generated source
+ID, session/title-only destination routing. Beast streams use per-connection Asio strands, one
+reader/one serialized writer, 64-frame bounded queues, handshake/idle/grant deadlines and rate
+limits. Grant revalidation on a periodic timer closes revoked/expired/member-lost connections;
+close releases only that grant. Explicit loopback insecure mode is development-only; TLS is
+mandatory for public binds. Successful relay registration never publishes XNA state on an I/O
+thread. Independent WSS tests precede CNA ENet bridge/public NetworkSession integration.
+
+GS-008b in progress: implemented private server RelayHub plus cross-strand RelayQueue. Reservation
+precedes executor posting, includes active write, and permits one pending wake notification; overflow
+posts one close request. This prevents an unbounded hidden posted-frame queue. Separate authenticated
+streams use a strand per accepted socket, one reader/serialized writer, 5s authentication/validation,
+30s idle keepalive, 512 message/control-frame and 1 MiB ingress per second, 96 active relays/128 total
+connections. Unknown/self destinations drop, never broadcast. Header constants synchronized; build
+and independent verified-WSS security/forwarding tests are in progress, not acceptance evidence yet.
+
+GS-008b tests found and corrected an exact-limit fragmentation edge: Beast async_read needs one
+scratch byte to consume a final zero-length continuation after 4,120 accumulated bytes. Private
+buffer is 4,121 bytes; read_message_max remains 4,120 and rejects extra payload before growth.
+The slow-consumer fixture initially spent its deadline draining an artificially tiny TCP window;
+corrected it to verify grant reclamation first, abort that uncooperative fixture socket and test
+fresh registration/forwarding. Independent corrected WSS run passed 257 checks in 47.19s. A final
+review added unknown-field replacement (not just extra-field) refusal and matching golden vectors;
+all binaries are rebuilding before the final full integration gate. Initial live manifest/binary
+mismatch produced expected old-code failures; these are recorded, not accepted final results.
+
+GS-008c implementation contract (next, not implemented): private Net transport derives same-authority
+WSS URL from validated HTTPS deployment settings; mature libcurl verifies CA/hostname/TLS >=1.2,
+disables proxies/redirects, checks actual ws/wss support and bounds partial-frame reassembly before
+allocation. One owned worker per machine serves persistent TLS plus loopback UDP routes, not arbitrary
+threads wrapping Begin/End. Service tickets stay memory-only. Stable per-remote-machine loopback
+ports preserve ENet peer identity; only local ENet endpoint datagrams are forwarded, incoming source
+IDs must match service-authorized routes. No XNA mutation on worker; Update consumes readiness/failure
+and authoritative directory roster before GamerJoined. Existing SystemLink path remains direct.
+CNA parser tests must cover fragmented/chunked/empty-final/control-interleaved messages and strict
+welcome correlation/limits; native two-process probe must exercise real ENet before public Create/Join.
+Sources consulted for partial sends/receive metadata: https://curl.se/libcurl/c/curl_ws_send.html,
+https://curl.se/libcurl/c/curl_ws_recv.html and https://curl.se/libcurl/c/CURLOPT_CONNECT_ONLY.html.
+
+### GS-008b secure server relay checkpoint
+
+Server cba4235cd539e6ed514ccfcf4b3abe48aa6f2efd implements separate authenticated WSS forwarding,
+exact hello schema/correlation, version/capability response, one live channel per machine, authorized
+source injection and title/session routing; missing/self/foreign destinations drop. Per-socket
+strands, one reader/writer, bounded cross-strand reservation including active writes, one pending
+wake/overflow notification, 96 relay/128 connection caps, 512 messages/control frames + 1 MiB ingress
+per second, 5s authentication/close/periodic grant checks and 30s idle keepalive are active. Secondary
+account revocation/lease expiry invalidates the complete multi-local grant within 5s. Disconnect
+releases only the exact grant; reconnect needs fresh one-use authority. No URLs/header credentials,
+password/token logging, custom crypto or XNA objects over the relay. Admin inspect-online includes
+relay ticket/grant counts; reset-online FK cascade includes grants. MIT server/independent BSD-3-Clause
+Python websockets 15.0.1 test dependency remain separately licensed. No new runtime primitive.
+
+Final matching-build configured CTest 9/9 pass, no skip, 120.48s: service 5,217 assertions,
+directory 99/1.60s, invitations 153/2.70s, protocol 10,027/.02s, authority 60/1.69s,
+flow/hello/queue/rate/routing 725/.01s; general TLS + native C++/C probes/restart 56.96s;
+two native CNA control processes 6.47s/32 join+17 host checks per category; WSS 259 checks/47.36s.
+WSS wire corpus covers both directory categories/titles, two two-user machines, verified trust/
+hostname refusals, exact hello/unknown-field replacement/UTF-8 errors, use-once/duplicate machine,
+max and fragmented datagrams, source injection, self/unknown/foreign session/title destinations,
+repeated reconnect, malformed/type/oversize frames, rate limits, slow-recipient grant reclamation,
+host lease loss and secondary revoke. Explicitly no CNA ENet/isolated Internet/public online sample
+claim. Canonical hello golden vectors now accompany binary frames and match CNA byte-for-byte.
+
+CNA build + Net 328/328 pass (4.400s; includes the existing real SystemLink/subprocess corpus),
+GamerServices 409 run/408 pass/one known HEADLESS screensaver skip (2.343s), private protocol/C API/
+ABI/fake gates 13/13 pass (13.44s); final changed-vector codec 3/3 + drift check pass. No new public
+XNA/C native exports; ABI 0.32/3,215 exports unchanged. Clean server -Werror build. Logs server
+build/relay-wss-{build,final-matching}.log; CNA cmake-build-debug/relay-wss-{build,net,gamers,gates}.log.
+Earlier failing diagnostic logs preserve exact-limit fragmentation and unbounded tiny-TCP-window
+fixture failures; both fixed, final matching gate has no unresolved failure. A source/vector update
+before rebuild caused an intermediate 7/9 old-binary mismatch; final rebuild/gate above supersedes it.
+
+Concurrent inspection: next c90f0e39f remains an ancestor, no merge needed; samples worktree untouched.
+Runtime 6c4a857de129cf29b5d43430bedf24157d594f12 unchanged/clean. Tested CNA source checkpoint is
+this GS-008b protocol-sync commit; exact resulting code commit set is recorded immediately afterward.
+Rootless user+network namespace probe (`unshare --user --map-root-user --net true`) succeeds outside
+sandbox; `unshare`, `ip` and `bwrap` are available, slirp4netns is absent. GS-008d can use separate
+rootless NAT namespaces with a mature external NAT helper, subject to provisioning; no isolation
+claim has yet been measured. First unfinished task is GS-008c private libcurl WSS/loopback UDP
+transport and parser/real-ENet tests, followed by isolation/standard online sessions/invites/avatars.

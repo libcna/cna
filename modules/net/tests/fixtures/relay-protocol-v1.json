@@ -68,5 +68,42 @@
       "hex": "434e52010100000000000000000000000000000000000000000102ff",
       "error": "RELAY_MACHINE_ID"
     }
+  ],
+  "handshakes": [
+    {
+      "name": "valid",
+      "message": "{\"v\":1,\"id\":\"relay-vector\",\"game\":\"sample\",\"ticket\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+      "error": "OK"
+    },
+    {
+      "name": "future-version",
+      "message": "{\"v\":2,\"id\":\"relay-vector\",\"game\":\"sample\",\"ticket\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+      "error": "UNSUPPORTED_VERSION"
+    },
+    {
+      "name": "unknown-field",
+      "message": "{\"v\":1,\"id\":\"relay-vector\",\"game\":\"sample\",\"ticket\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"extra\":1}",
+      "error": "MALFORMED_MESSAGE"
+    },
+    {
+      "name": "invalid-title",
+      "message": "{\"v\":1,\"id\":\"relay-vector\",\"game\":\"../title\",\"ticket\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+      "error": "INVALID_ARGUMENT"
+    },
+    {
+      "name": "uppercase-ticket",
+      "message": "{\"v\":1,\"id\":\"relay-vector\",\"game\":\"sample\",\"ticket\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"}",
+      "error": "INVALID_ARGUMENT"
+    },
+    {
+      "name": "duplicate-version",
+      "message": "{\"v\":1,\"v\":1,\"id\":\"duplicate\",\"game\":\"sample\",\"ticket\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+      "error": "MALFORMED_MESSAGE"
+    },
+    {
+      "name": "replacement-unknown-field",
+      "message": "{\"v\":1,\"id\":\"unknown\",\"game\":\"sample\",\"unknown\":\"x\"}",
+      "error": "MALFORMED_MESSAGE"
+    }
   ]
 }

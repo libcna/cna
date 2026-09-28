@@ -1,5 +1,12 @@
 # NEXT.md
 
+> **GS-008b server relay (2026-09-28):** Canonical WSS handshake/resource constants and vectors
+> are synchronized. The sibling server implements authenticated source/title/session routing,
+> bounded cross-strand queues and periodic grant revalidation; matching-build server gate passes
+> 9/9 (259 WSS checks), CNA Net 328/328 and protocol/C API gates 13/13. CNA WSS/ENet bridge, public online sessions and isolated
+> Internet multiplayer evidence remain unfinished. No XNA or C ABI surface change.
+
+
 > **GS-007d private session control (2026-09-28):** Typed online directory/invitation backend,
 > strict roster/response validation and explicit deterministic fake are implemented. Two genuine
 > CNA processes/four accounts pass verified-TLS restart, property filtering, ordinary/private

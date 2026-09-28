@@ -28,6 +28,20 @@ inline constexpr int RelayGrantLifetimeSeconds=3600;
 inline constexpr int MaxMachineRelayTickets=8;
 /** @brief Maximum ticket/grant records per title. */
 inline constexpr int MaxTitleRelayTickets=8192;
+/** @brief Separate relay upgrade target; credentials never appear in its URL. */
+inline constexpr std::string_view RelayPath="/cna/relay/v1";
+/** @brief Maximum first text authentication message. */
+inline constexpr std::size_t MaxRelayHelloBytes=1024;
+/** @brief Maximum datagrams or peer control frames per one-second window. */
+inline constexpr std::size_t MaxRelayMessagesPerSecond=512;
+/** @brief Maximum received binary bytes per one-second window. */
+inline constexpr std::size_t MaxRelayBytesPerSecond=1048576;
+/** @brief Maximum relay connections; reserves capacity for control requests. */
+inline constexpr std::size_t MaxRelayConnections=96;
+/** @brief Authentication deadline after WebSocket upgrade. */
+inline constexpr int RelayAuthenticationSeconds=5;
+/** @brief Maximum periodic grant revocation detection delay. */
+inline constexpr int RelayValidationSeconds=5;
 /** @brief Machine identity as sixteen opaque service-assigned bytes. */
 using RelayMachineId=std::array<unsigned char,16>;
 /** @brief Deterministic parse refusal; never includes payload or credentials. */

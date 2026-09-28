@@ -94,3 +94,12 @@ ordinary access refresh preserves authority, while revocation/leave/host expiry 
 Tickets are ephemeral and never part of gameplay source, URLs, logs or persistent client files.
 The secure WSS forwarding endpoint and ENet bridge are the next tasks; ticket issuance alone
 does not establish an Internet data path or enable public PlayerMatch/Ranked sessions.
+
+The sibling server now provides a separate authenticated WSS datagram relay at `/cna/relay/v1`.
+Its canonical header/handshake golden vectors are synchronized with CNA. One-use authority binds
+all local users, title, session and machine; outgoing frames carry server-injected source identity.
+Application queues reserve bounded space before executor posting and revalidate revocable grants.
+Standalone verified-WSS forwarding tests are server transport evidence. CNA WSS/loopback ENet
+integration, public online NetworkSession/invites and isolated Internet acceptance remain unfinished.
+Control HTTPS, directory membership and realtime datagrams are separate responsibilities; service
+membership alone does not make direct ENet reachable across NAT. No new XNA or C transport API.
