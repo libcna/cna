@@ -223,13 +223,21 @@ EM_JS(void, CNA_Canvas2D_DrawSprite, (
 EM_JS(void, CNA_Canvas2D_DrawSprites, (const void* commands, int count, int stride,
                                       int compositeOp,
                                       double ta, double tb, double tc,
-                                      double td, double te, double tf), {
+                                      double td, double te, double tf,
+                                      int viewportX, int viewportY, int viewportW, int viewportH), {
     const ops = ['copy', 'source-over', 'source-over', 'lighter'];
     Module['cnaCompositeOp'] = ops[compositeOp] || 'source-over';
     Module['cnaNeedsUnpremultiply'] = (compositeOp === 2);
     CNA_Canvas2D_EnsureMainContext();
     const ctx = Module['cnaCurrentCtx'];
     if (!ctx) return;
+    ctx.save();
+    if (viewportW > 0 && viewportH > 0) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.beginPath();
+        ctx.rect(viewportX, viewportY, viewportW, viewportH);
+        ctx.clip();
+    }
     ctx.setTransform(ta, tb, tc, td, te, tf);
 
     const base = commands >> 2;
@@ -245,6 +253,7 @@ EM_JS(void, CNA_Canvas2D_DrawSprites, (const void* commands, int count, int stri
             color & 0xFF, (color >>> 8) & 0xFF, (color >>> 16) & 0xFF,
             (color >>> 24) & 0xFF, flags & 4, HEAP32[o + 14], HEAP32[o + 15]);
     }
+    ctx.restore();
     Module['cnaCanvasBulkFlushCount'] = (Module['cnaCanvasBulkFlushCount'] || 0) + 1;
     Module['cnaCanvasBulkSpriteCount'] = (Module['cnaCanvasBulkSpriteCount'] || 0) + count;
 });
@@ -377,10 +386,13 @@ namespace CNA::Internal::Renderers::Canvas
 #if defined(__EMSCRIPTEN__)
         if (immediateMode_)
         {
+            const Matrix drawTransform = GetDrawTransform();
             CNA_Canvas2D_DrawSprites(
                 &command, 1, 16, static_cast<int>(activeCompositeOp_),
-                transform_.M11, transform_.M12, transform_.M21,
-                transform_.M22, transform_.M41, transform_.M42);
+                drawTransform.M11, drawTransform.M12, drawTransform.M21,
+                drawTransform.M22, drawTransform.M41, drawTransform.M42,
+                state_->viewport.X, state_->viewport.Y,
+                state_->viewport.Width, state_->viewport.Height);
             return;
         }
 #endif
@@ -399,11 +411,14 @@ namespace CNA::Internal::Renderers::Canvas
 #if defined(__EMSCRIPTEN__)
         if (!commands_.empty())
         {
+            const Matrix drawTransform = GetDrawTransform();
             CNA_Canvas2D_DrawSprites(
                 commands_.data(), static_cast<int>(commands_.size()), 16,
                 static_cast<int>(activeCompositeOp_),
-                transform_.M11, transform_.M12, transform_.M21,
-                transform_.M22, transform_.M41, transform_.M42);
+                drawTransform.M11, drawTransform.M12, drawTransform.M21,
+                drawTransform.M22, drawTransform.M41, drawTransform.M42,
+                state_->viewport.X, state_->viewport.Y,
+                state_->viewport.Width, state_->viewport.Height);
         }
 #endif
         commands_.clear();
@@ -427,6 +442,25 @@ namespace CNA::Internal::Renderers::Canvas
         // setTransform(a,b,c,d,e,f) defines x'=a*x+c*y+e, y'=b*x+d*y+f. Matching terms:
         // a=M11, b=M12, c=M21, d=M22, e=M41, f=M42.
         transform_ = m;
+    }
+
+    void CanvasSpriteBatchRenderer::SetViewportSizeEXT(int width, int height)
+    {
+        viewportWidth_ = width;
+        viewportHeight_ = height;
+    }
+
+    Matrix CanvasSpriteBatchRenderer::GetDrawTransform() const
+    {
+        Matrix presentation = Matrix::getIdentityProperty();
+        const auto& viewport = state_->viewport;
+        if (viewportWidth_ <= 0 || viewportHeight_ <= 0 || viewport.Width <= 0 || viewport.Height <= 0)
+            return transform_;
+        presentation.M11 = static_cast<float>(viewport.Width) / viewportWidth_;
+        presentation.M22 = static_cast<float>(viewport.Height) / viewportHeight_;
+        presentation.M41 = static_cast<float>(viewport.X);
+        presentation.M42 = static_cast<float>(viewport.Y);
+        return transform_ * presentation;
     }
 
     void CanvasSpriteBatchRenderer::SetCustomEffect(Effect* effect)

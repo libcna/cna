@@ -130,6 +130,12 @@ namespace CNA::Internal::Renderers::DirectX9
         transform_ = m;
     }
 
+    void D3D9SpriteBatchRenderer::SetViewportSizeEXT(int width, int height)
+    {
+        projectionWidth_ = width;
+        projectionHeight_ = height;
+    }
+
     void D3D9SpriteBatchRenderer::SetCustomEffect(Effect* effect)
     {
         // D9-112: flush on change (mirrors D3D11SpriteBatchRenderer::SetCustomEffect() exactly) --
@@ -166,6 +172,12 @@ namespace CNA::Internal::Renderers::DirectX9
 
     void D3D9SpriteBatchRenderer::GetCurrentViewportSizeEXT(float& width, float& height) const
     {
+        if (projectionWidth_ > 0 && projectionHeight_ > 0)
+        {
+            width = static_cast<float>(projectionWidth_);
+            height = static_cast<float>(projectionHeight_);
+            return;
+        }
         D3DVIEWPORT9 vp{};
         device_->GetViewport(&vp);
         width = static_cast<float>(vp.Width);
@@ -232,11 +244,29 @@ namespace CNA::Internal::Renderers::DirectX9
         // XNA 4.0 for both SpriteSortMode.Deferred and SpriteSortMode.BackToFront
         // (sprite_sortmode_deferred_quad.scene / sprite_sortmode_backtofront_quad.scene, D9-93).
         // Only the Z row changes; M41/M42's half-pixel shift below depends solely on M11/M22 (X/Y),
-        // so every already-verified D9-90/91/92 scene is unaffected.
+        // so every already-verified D9-90/91/92 scene is unaffected. With virtual resolution,
+        // the correction uses physical viewport dimensions, preserving half a displayed pixel.
         Matrix projection = Matrix::CreateOrthographicOffCenter(
             0.0f, viewportWidth, viewportHeight, 0.0f, 0.0f, -1.0f);
-        projection.M41 += -0.5f * projection.M11;
-        projection.M42 += -0.5f * projection.M22;
+        D3DVIEWPORT9 native{};
+        device_->GetViewport(&native);
+        const auto& requested = owner_->spriteViewport_;
+        if (native.Width > 0 && native.Height > 0)
+        {
+            if (projectionWidth_ > 0 && projectionHeight_ > 0 &&
+                requested.Width > 0 && requested.Height > 0)
+            {
+                projection.M11 *= static_cast<float>(requested.Width) / native.Width;
+                projection.M22 *= static_cast<float>(requested.Height) / native.Height;
+                projection.M41 = 2.0f * (requested.X - static_cast<float>(native.X)) /
+                                 native.Width - 1.0f;
+                projection.M42 = 1.0f - 2.0f * (requested.Y - static_cast<float>(native.Y)) /
+                                        native.Height;
+            }
+            // The D3D9 correction remains half a physical pixel when logical units are scaled.
+            projection.M41 -= 1.0f / native.Width;
+            projection.M42 += 1.0f / native.Height;
+        }
 
         // Row-vector convention (matches every other effect's own World*View*Projection
         // ordering established throughout this renderer): the caller's own transform is applied

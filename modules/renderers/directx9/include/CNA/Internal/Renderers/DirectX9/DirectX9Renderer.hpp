@@ -123,6 +123,34 @@ namespace CNA::Internal::Renderers::DirectX9
 
         // ---- IGraphicsRenderer: pure virtual, real (trivial bookkeeping; no device needed) ----
         void GetViewportSize(int& width, int& height) override;
+        /**
+         * @brief Returns the physical backbuffer presentation rectangle.
+         * @param x Receives the left edge.
+         * @param y Receives the top edge.
+         * @param width Receives the width.
+         * @param height Receives the height.
+         */
+        void GetDefaultViewportRect(int& x, int& y, int& width, int& height) override;
+        /**
+         * @brief Converts window coordinates through the presentation rectangle.
+         * @param windowX Horizontal client coordinate.
+         * @param windowY Vertical client coordinate.
+         * @param logX Receives the logical horizontal coordinate.
+         * @param logY Receives the logical vertical coordinate.
+         * @return True when both coordinate spaces have usable dimensions.
+         */
+        bool TransformWindowToLogical(float windowX, float windowY,
+                                      float& logX, float& logY) const override;
+        /**
+         * @brief Converts logical coordinates to window client coordinates.
+         * @param logX Logical horizontal coordinate.
+         * @param logY Logical vertical coordinate.
+         * @param windowX Receives the horizontal client coordinate.
+         * @param windowY Receives the vertical client coordinate.
+         * @return True when both coordinate spaces have usable dimensions.
+         */
+        bool TransformLogicalToWindow(float logX, float logY,
+                                      float& windowX, float& windowY) const override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
@@ -392,6 +420,16 @@ namespace CNA::Internal::Renderers::DirectX9
         /// Exposes whether this renderer currently considers its device lost (CNAEXT, D9-34
         /// diagnostics/tests). Mirrors GraphicsDevice::GraphicsDeviceStatus at the renderer level.
         [[nodiscard]] bool IsDeviceLostEXT() const { return deviceLost_; }
+        /**
+         * @brief Reports whether the native device currently accepts drawing.
+         * @return True when the device has not been lost.
+         */
+        [[nodiscard]] bool CanBeginDrawEXT() const override { return !deviceLost_; }
+        /**
+         * @brief Polls device recovery and applies pending resizes before the next Draw.
+         * @return True when the native device is ready to draw.
+         */
+        [[nodiscard]] bool TryBeginDrawEXT() override;
         /// Throws when a preceding checked state/target operation left GPU state unproven.  This
         /// keeps a caller that catches the original exception from drawing or clearing into stale
         /// state; a complete successful application of the affected state category (or target
@@ -439,6 +477,11 @@ namespace CNA::Internal::Renderers::DirectX9
         void UnregisterDefaultPoolResourceEXT(ID3D9DefaultPoolResourceEXT* resource);
 
     private:
+        friend class D3D9SpriteBatchRenderer;
+        Rectangle spriteViewport_;
+        void GetLogicalSizeEXT(int& width, int& height) const;
+        void GetPresentedRectEXT(int& x, int& y, int& width, int& height) const;
+        void RestorePresentationViewportEXT();
 #if defined(CNA_DIRECTX9_COMPILED_EFFECTS)
         friend class D3D9CompiledEffect;
 #endif
@@ -649,6 +692,8 @@ namespace CNA::Internal::Renderers::DirectX9
         /// D9-34: true from the moment Present() (or DebugSimulateContextLoss()) first detects/
         /// simulates a lost device, until PerformResetRecovery() completes successfully.
         bool deviceLost_ = false;
+        /** @brief Keeps an injected loss unavailable until DebugRestoreContext is called. */
+        bool simulatedDeviceLoss_ = false;
         /// REMED-GFX-092: per-category safety bits, not a cache of requested XNA state.  D3D9
         /// still sends every native state call; these bits only prevent a caught native failure
         /// from being followed by a draw/clear before the relevant complete application succeeds.

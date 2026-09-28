@@ -4,6 +4,7 @@
 #include "CNA/Internal/Renderers/Canvas/CanvasSpriteBatchRenderer.hpp"
 #include "CNA/Internal/Renderers/Common/NoOp3DResources.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 
@@ -105,6 +106,9 @@ namespace CNA::Internal::Renderers::Canvas
             throw std::runtime_error("CanvasRenderer initialized without a platform window.");
         if (!(surface_.displayScale > 0.0f) || !std::isfinite(surface_.displayScale))
             surface_.displayScale = 1.0f;
+        int x, y, width, height;
+        getPresentedRect(x, y, width, height);
+        SetViewport(x, y, width, height, 0.0f, 1.0f);
         IGraphicsRenderer::RegisterForWindow(surface_.windowId, this);
     }
 
@@ -136,7 +140,7 @@ namespace CNA::Internal::Renderers::Canvas
 
     void CanvasRenderer::getLogicalSize(int& width, int& height) const
     {
-        if (virtualHeight_ <= 0)
+        if (virtualHeight_ <= 0 || presentationMode_ == CnaPresentationMode::NativeBackBuffer)
         {
             getWindowSize(width, height);
             return;
@@ -153,6 +157,37 @@ namespace CNA::Internal::Renderers::Canvas
     void CanvasRenderer::GetViewportSize(int& width, int& height)
     {
         getLogicalSize(width, height);
+    }
+
+    void CanvasRenderer::getPresentedRect(int& x, int& y, int& width, int& height) const
+    {
+        x = y = 0;
+        width = std::max(0, surface_.drawableSize.width);
+        height = std::max(0, surface_.drawableSize.height);
+        if (width <= 0 || height <= 0 || virtualWidth_ <= 0 || virtualHeight_ <= 0 ||
+            (presentationMode_ != CnaPresentationMode::Letterbox &&
+             presentationMode_ != CnaPresentationMode::Overscan))
+            return;
+
+        const int physicalWidth = width, physicalHeight = height;
+        const double sx = static_cast<double>(width) / virtualWidth_;
+        const double sy = static_cast<double>(height) / virtualHeight_;
+        const double scale = presentationMode_ == CnaPresentationMode::Overscan
+            ? std::max(sx, sy) : std::min(sx, sy);
+        width = static_cast<int>(std::lround(virtualWidth_ * scale));
+        height = static_cast<int>(std::lround(virtualHeight_ * scale));
+        x = static_cast<int>(std::lround((physicalWidth - virtualWidth_ * scale) * 0.5));
+        y = static_cast<int>(std::lround((physicalHeight - virtualHeight_ * scale) * 0.5));
+    }
+
+    void CanvasRenderer::GetDefaultViewportRect(int& x, int& y, int& width, int& height)
+    {
+        getPresentedRect(x, y, width, height);
+    }
+
+    void CanvasRenderer::SetViewport(int x, int y, int width, int height, float, float)
+    {
+        state_->viewport = Rectangle(x, y, width, height);
     }
 
     void CanvasRenderer::SetVirtualResolution(int width, int height)
@@ -176,31 +211,28 @@ namespace CNA::Internal::Renderers::Canvas
     }
 
     bool CanvasRenderer::TransformWindowToLogical(float windowX, float windowY,
-                                                          float& logX, float& logY) const
+                                                  float& logX, float& logY) const
     {
-        if (virtualHeight_ <= 0) return false;
-        int physW, physH;
-        getWindowSize(physW, physH);
-        if (physH <= 0) return false;
-        const float scale = static_cast<float>(virtualHeight_) / static_cast<float>(physH);
-        logX = windowX * scale;
-        logY = windowY * scale;
+        int x, y, width, height, logicalWidth, logicalHeight;
+        getPresentedRect(x, y, width, height);
+        getLogicalSize(logicalWidth, logicalHeight);
+        if (width <= 0 || height <= 0 || logicalWidth <= 0 || logicalHeight <= 0)
+            return false;
+        logX = (windowX * surface_.displayScale - x) * logicalWidth / width;
+        logY = (windowY * surface_.displayScale - y) * logicalHeight / height;
         return true;
     }
 
     bool CanvasRenderer::TransformLogicalToWindow(float logX, float logY,
-                                                         float& windowX, float& windowY) const
+                                                  float& windowX, float& windowY) const
     {
-        // Inverse of TransformWindowToLogical -- see EasyGLRenderer::TransformLogicalToWindow
-        // for why this is an exact, offset-free uniform scale under the default
-        // FixedHeightDynamicWidth presentation mode (no letterbox bars to account for).
-        if (virtualHeight_ <= 0) return false;
-        int physW, physH;
-        getWindowSize(physW, physH);
-        if (physH <= 0) return false;
-        const float invScale = static_cast<float>(physH) / static_cast<float>(virtualHeight_);
-        windowX = logX * invScale;
-        windowY = logY * invScale;
+        int x, y, width, height, logicalWidth, logicalHeight;
+        getPresentedRect(x, y, width, height);
+        getLogicalSize(logicalWidth, logicalHeight);
+        if (width <= 0 || height <= 0 || logicalWidth <= 0 || logicalHeight <= 0)
+            return false;
+        windowX = (x + logX * width / logicalWidth) / surface_.displayScale;
+        windowY = (y + logY * height / logicalHeight) / surface_.displayScale;
         return true;
     }
 
@@ -228,12 +260,16 @@ namespace CNA::Internal::Renderers::Canvas
         if (rt)
         {
             rt->BindAsRenderTarget();
+            SetViewport(0, 0, rt->GetWidth(), rt->GetHeight(), 0.0f, 1.0f);
         }
         else
         {
 #if defined(__EMSCRIPTEN__)
             CNA_Canvas2D_UnbindRenderTarget();
 #endif
+            int x, y, width, height;
+            getPresentedRect(x, y, width, height);
+            SetViewport(x, y, width, height, 0.0f, 1.0f);
         }
     }
 

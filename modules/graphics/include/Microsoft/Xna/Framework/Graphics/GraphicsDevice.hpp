@@ -1886,6 +1886,8 @@ namespace Microsoft::Xna::Framework::Graphics
         int referenceStencil_ = 0;
         bool blendStateDirty_ = false;
         bool depthStencilStateDirty_ = false;
+        /** @brief Forces the retained rasterizer state to be reapplied after native reset. */
+        bool rasterizerStateDirty_ = false;
         std::uint16_t spriteBeginCount_ = 0;
         std::uint16_t spriteImmediateBeginCount_ = 0;
 

@@ -378,12 +378,9 @@ namespace Microsoft::Xna::Framework
             return false;
         }
 
-        // FNA normally returns true whenever a device exists. A browser WebGL context has an
-        // asynchronous lost/restored interval, however, during which requestAnimationFrame keeps
-        // ticking while every GL entry point is invalid. The renderer owns that platform fact;
-        // skipping only Draw/Present here preserves the ordinary XNA Update loop and resumes the
-        // unchanged game as soon as restoration completes.
-        if (!graphicsDevice_->GetRenderer().CanBeginDrawEXT())
+        // Native recovery may need another frame before drawing is safe. Poll through the
+        // renderer's gate before entering Draw, while allowing ordinary Update ticks to continue.
+        if (!graphicsDevice_->GetRenderer().TryBeginDrawEXT())
             return false;
 
         frameContextLease_ = graphicsDevice_->AcquireRendererThreadContextLeaseForFrame();

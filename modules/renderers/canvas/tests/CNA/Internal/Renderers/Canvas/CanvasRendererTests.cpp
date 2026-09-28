@@ -53,6 +53,45 @@ namespace
     };
 }
 
+TEST(CanvasPresentation, LetterboxUsesPhysicalBoundsAndInputOffset)
+{
+    auto args=TestArgs();
+    args.surface.drawableSize={1920,1080};
+    args.virtualWidth=800; args.virtualHeight=480;
+    args.presentationMode=CnaPresentationMode::Letterbox;
+    CanvasRenderer renderer(args);
+    int x,y,w,h;
+    renderer.GetDefaultViewportRect(x,y,w,h);
+    EXPECT_EQ(x,60); EXPECT_EQ(y,0); EXPECT_EQ(w,1800); EXPECT_EQ(h,1080);
+    float lx,ly,wx,wy;
+    ASSERT_TRUE(renderer.TransformWindowToLogical(60,0,lx,ly));
+    EXPECT_FLOAT_EQ(lx,0); EXPECT_FLOAT_EQ(ly,0);
+    ASSERT_TRUE(renderer.TransformWindowToLogical(0,0,lx,ly));
+    EXPECT_LT(lx,0);
+    ASSERT_TRUE(renderer.TransformLogicalToWindow(400,240,wx,wy));
+    EXPECT_FLOAT_EQ(wx,960); EXPECT_FLOAT_EQ(wy,540);
+    ASSERT_TRUE(renderer.TransformWindowToLogical(wx,wy,lx,ly));
+    EXPECT_FLOAT_EQ(lx,400); EXPECT_FLOAT_EQ(ly,240);
+    args.surface.drawableSize={1600,900};
+    renderer.OnSurfaceChanged(args.surface);
+    renderer.GetDefaultViewportRect(x,y,w,h);
+    EXPECT_EQ(x,50); EXPECT_EQ(y,0); EXPECT_EQ(w,1500); EXPECT_EQ(h,900);
+}
+
+TEST(CanvasPresentation, StretchAndHiDpiInputUseIndependentAxisScales)
+{
+    auto args=TestArgs();
+    args.surface.drawableSize={1920,1080}; args.surface.displayScale=2;
+    args.virtualWidth=800; args.virtualHeight=480;
+    args.presentationMode=CnaPresentationMode::Stretch;
+    CanvasRenderer renderer(args);
+    float lx,ly,wx,wy;
+    ASSERT_TRUE(renderer.TransformWindowToLogical(960,540,lx,ly));
+    EXPECT_FLOAT_EQ(lx,800); EXPECT_FLOAT_EQ(ly,480);
+    ASSERT_TRUE(renderer.TransformLogicalToWindow(400,240,wx,wy));
+    EXPECT_FLOAT_EQ(wx,480); EXPECT_FLOAT_EQ(wy,270);
+}
+
 TEST(CanvasBlendStateMapping, StandardPresetsMapCorrectly)
 {
     EXPECT_EQ(BlendStateToCompositeOp(0, 0, 1, 1, 0, 0), CanvasCompositeOp::Copy);   // Opaque
