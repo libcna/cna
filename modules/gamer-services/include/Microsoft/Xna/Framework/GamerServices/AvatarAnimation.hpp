@@ -10,29 +10,27 @@
 namespace Microsoft::Xna::Framework::GamerServices
 {
     /**
-     * @brief Provides a preset avatar animation.
+     * @brief Provides methods and properties for animating an avatar using standard animations.
      *
-     * The real XNA implementation's constructor never actually reads its @p animationPreset
-     * argument — every instance ends up with the same 71 zero-valued bone transforms and a
-     * zero-length animation, regardless of which preset is requested. That behavior is
-     * preserved here exactly (see @ref AvatarAnimation(AvatarAnimationPreset)).
+     * Each preset is an original CNA clip on the 71-bone avatar skeleton with a real length,
+     * bone transforms that change over time and a keyed facial expression.
      */
     class AvatarAnimation : public IAvatarAnimation, public System::IDisposable
     {
     public:
         /**
-         * @brief Initializes a new instance of AvatarAnimation for the specified preset.
+         * @brief Creates a new instance of AvatarAnimation, initialized with the specified animation.
          *
-         * @param animationPreset The animation preset (not read by the real XNA implementation;
-         * every instance behaves identically regardless of this argument).
+         * @param animationPreset The standard animation. A value outside AvatarAnimationPreset
+         * yields a zero-length animation holding the bind pose.
+         * @throws System::InvalidOperationException if the built-in animation assets cannot be read.
          */
         explicit AvatarAnimation(AvatarAnimationPreset animationPreset);
 
         /**
-         * @brief Gets the current bone transform matrices for the animation.
+         * @brief Gets the position of the bones at the time specified by CurrentPosition.
          *
-         * @return A read-only collection of 71 bone transform matrices (always zero-valued —
-         * see the class remarks).
+         * @return 71 transforms in local bone space relative to their parent bones.
          */
         [[nodiscard]] System::Collections::ObjectModel::ReadOnlyCollection<Microsoft::Xna::Framework::Matrix>
         getBoneTransformsProperty() const override;
@@ -55,26 +53,25 @@ namespace Microsoft::Xna::Framework::GamerServices
         void setCurrentPositionProperty(System::TimeSpan value) override;
 
         /**
-         * @brief Gets the total length of the animation.
+         * @brief Gets the length of the animation.
          *
-         * @return The animation length (always TimeSpan::Zero() — see the class remarks).
+         * @return The animation length.
          */
         [[nodiscard]] System::TimeSpan getLengthProperty() const override;
 
         /**
-         * @brief Gets the facial expression at the current playback position.
+         * @brief Gets the expression of the animation at the current time position.
          *
-         * @return The current facial expression (always a default-constructed, all-Neutral
-         * AvatarExpression — nothing in this class ever changes it).
+         * @return The current facial expression.
          */
         [[nodiscard]] AvatarExpression getExpressionProperty() const override;
 
         /**
          * @brief Advances the playback position of the animation.
          *
-         * Adds @p elapsedAnimationTime to the current position, then clamps it back into
-         * [TimeSpan::Zero(), Length]: if @p loop is true and Length is non-zero, wraps around
-         * by repeatedly adding/subtracting Length; otherwise clamps to the nearer bound.
+         * Adds @p elapsedAnimationTime to the current position (a negative value plays backward),
+         * then brings it back into [0, Length]: wrapped by the remainder of Length when @p loop is
+         * true and Length is non-zero, otherwise clamped to the nearer bound.
          *
          * @param elapsedAnimationTime The amount of time to advance by.
          * @param loop Whether the animation should loop.
@@ -116,6 +113,9 @@ namespace Microsoft::Xna::Framework::GamerServices
         void Dispose(bool disposing);
 
     private:
+        void Sample();
+
+        int preset_{-1};
         std::vector<Microsoft::Xna::Framework::Matrix> avatarBones_;
         AvatarExpression currentExpression_;
         System::TimeSpan currentPosition_;

@@ -1,11 +1,32 @@
 // SPDX-License-Identifier: MS-PL
 
+#if !defined(_WIN32)
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include <CNA/C/cna.h>
 
 #include "CnaTestReport.h"
 
 #include <math.h>
 #include <string.h>
+
+#if defined(_WIN32)
+#include <windows.h>
+static void pause_briefly(void)
+{
+    Sleep(5);
+}
+#else
+#include <time.h>
+static void pause_briefly(void)
+{
+    struct timespec delay;
+    delay.tv_sec = 0;
+    delay.tv_nsec = 5000000L;
+    nanosleep(&delay, 0);
+}
+#endif
 
 static CNA_StringView view(const char* const text)
 {
@@ -141,12 +162,11 @@ static int validate_animation(void)
         rejected != CNA_INVALID_HANDLE) {
         return 0;
     }
-    /* A preset carries the whole skeleton but **no timeline**: its length is zero until a real clip
-       is loaded, which is why advancing it below moves nothing. */
+    /* A preset is a real clip on the whole skeleton: it has a length and starts at zero. */
     ok = cna_avatar_animation_get_info(animation, &info) == CNA_RESULT_SUCCESS &&
         info.is_disposed == CNA_FALSE &&
         info.bone_transform_count == CNA_AVATAR_RENDERER_BONE_COUNT &&
-        info.length_ticks == INT64_C(0) && info.current_position_ticks == INT64_C(0);
+        info.length_ticks > INT64_C(20000000) && info.current_position_ticks == INT64_C(0);
 
     ok = ok && cna_avatar_animation_get_bone_transform_at(animation, 0, &transform) ==
                    CNA_RESULT_SUCCESS &&
@@ -160,11 +180,11 @@ static int validate_animation(void)
         cna_avatar_animation_get_expression(animation, &expression) == CNA_RESULT_SUCCESS &&
         expression.mouth <= CNA_AVATAR_MOUTH_MAXIMUM;
 
-    /* Advancing a zero-length animation is accepted and leaves the position where it was. */
+    /* Advancing moves the position, and setting it back returns to the start. */
     ok = ok && cna_avatar_animation_update(animation, INT64_C(100000), CNA_TRUE) ==
                    CNA_RESULT_SUCCESS &&
         cna_avatar_animation_get_info(animation, &info) == CNA_RESULT_SUCCESS &&
-        info.current_position_ticks == INT64_C(0);
+        info.current_position_ticks == INT64_C(100000);
     ok = ok && cna_avatar_animation_set_current_position(animation, INT64_C(0)) ==
                    CNA_RESULT_SUCCESS &&
         cna_avatar_animation_get_info(animation, &info) == CNA_RESULT_SUCCESS &&
@@ -195,6 +215,45 @@ static int validate_animation(void)
     return ok && cna_avatar_animation_destroy(animation) == CNA_RESULT_INVALID_HANDLE;
 }
 
+/* A description with an avatar loads in the background, becomes ready and exposes its bind pose;
+   drawing it needs the graphics device of initialized gamer services, which this test has not got. */
+static int validate_ready_renderer(void)
+{
+    CNA_AvatarDescriptionHandle description = CNA_INVALID_HANDLE;
+    CNA_AvatarRendererHandle renderer = CNA_INVALID_HANDLE;
+    CNA_AvatarRendererInfo info = {sizeof(CNA_AvatarRendererInfo), UINT32_C(1), UINT32_C(0),
+                                   UINT8_C(0), UINT8_C(0), {0U, 0U}};
+    CNA_AvatarAnimationHandle animation = CNA_INVALID_HANDLE;
+    CNA_Matrix root;
+    CNA_Matrix head;
+    int attempts;
+    int ok;
+
+    if (cna_avatar_description_create_random(&description) != CNA_RESULT_SUCCESS ||
+        cna_avatar_renderer_create(description, CNA_FALSE, &renderer) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    ok = cna_avatar_description_destroy(description) == CNA_RESULT_SUCCESS;
+    for (attempts = 0; ok && attempts < 4000; ++attempts) {
+        ok = cna_avatar_renderer_get_info(renderer, &info) == CNA_RESULT_SUCCESS;
+        if (info.state != CNA_AVATAR_RENDERER_STATE_LOADING) {
+            break;
+        }
+        pause_briefly();
+    }
+    ok = ok && info.state == CNA_AVATAR_RENDERER_STATE_READY &&
+        cna_avatar_renderer_get_bind_pose_at(renderer, 0, &root) == CNA_RESULT_SUCCESS &&
+        cna_avatar_renderer_get_bind_pose_at(renderer, 19, &head) == CNA_RESULT_SUCCESS &&
+        root.m42 == 0.0F && head.m42 > 0.01F;
+    ok = ok && cna_avatar_animation_create(CNA_AVATAR_ANIMATION_PRESET_WAVE, &animation) ==
+                   CNA_RESULT_SUCCESS &&
+        cna_avatar_renderer_draw_animation(renderer, animation) == CNA_RESULT_INVALID_STATE;
+    if (animation != CNA_INVALID_HANDLE) {
+        ok = (cna_avatar_animation_destroy(animation) == CNA_RESULT_SUCCESS) && ok;
+    }
+    return (cna_avatar_renderer_destroy(renderer) == CNA_RESULT_SUCCESS) && ok;
+}
+
 static int validate_renderer(void)
 {
     CNA_AvatarDescriptionHandle description = CNA_INVALID_HANDLE;
@@ -215,7 +274,11 @@ static int validate_renderer(void)
     int32_t index;
     int ok;
 
-    if (cna_avatar_description_create_random(&description) != CNA_RESULT_SUCCESS ||
+    static uint8_t none[CNA_AVATAR_DESCRIPTION_BYTE_COUNT];
+
+    /* A description without an avatar gives a renderer with nothing to draw. */
+    if (cna_avatar_description_create(none, CNA_AVATAR_DESCRIPTION_BYTE_COUNT, &description) !=
+            CNA_RESULT_SUCCESS ||
         cna_avatar_renderer_create(description, CNA_FALSE, &renderer) != CNA_RESULT_SUCCESS ||
         renderer == CNA_INVALID_HANDLE) {
         return 0;
@@ -250,8 +313,7 @@ static int validate_renderer(void)
     for (index = 0; ok && index < CNA_AVATAR_RENDERER_BONE_COUNT; ++index) {
         ok = cna_avatar_renderer_get_parent_bone_at(renderer, index, &parent) ==
              CNA_RESULT_SUCCESS;
-        /* Start every bone from identity: the bind pose is not readable while the avatar's assets
-           are unavailable, which is what this runtime always reports. */
+        /* Start every bone from identity: an unavailable avatar has no bind pose to start from. */
         memset(&bones[index], 0, sizeof(bones[index]));
         bones[index].m11 = 1.0F;
         bones[index].m22 = 1.0F;
@@ -263,8 +325,8 @@ static int validate_renderer(void)
     /* The first bone is the root, so it has no parent. */
     ok = ok && cna_avatar_renderer_get_parent_bone_at(renderer, 0, &parent) == CNA_RESULT_SUCCESS &&
         parent < 0;
-    /* The bind pose needs assets this runtime has not got, so it refuses with a state failure --
-       which is a different answer from an index outside the skeleton. */
+    /* Without an avatar there is no bind pose, a state failure -- which is a different answer
+       from an index outside the skeleton. */
     ok = ok && info.state == CNA_AVATAR_RENDERER_STATE_UNAVAILABLE &&
         cna_avatar_renderer_get_bind_pose_at(renderer, 0, &world) == CNA_RESULT_INVALID_STATE;
 
@@ -332,6 +394,9 @@ int main(void)
     }
     if (status == 0 && !validate_renderer()) {
         status = CNA_TEST_FAIL(5);
+    }
+    if (status == 0 && !validate_ready_renderer()) {
+        status = CNA_TEST_FAIL(9);
     }
     /* The change notification is an instance event, so the subscription names one description;
        an invalid handle and a null callback are both refused. */

@@ -32,6 +32,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarAppearanceEXT.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -132,7 +133,8 @@ class AvatarTintRoutingIntegrationTest : public Game
         // RasterizerState -- needs CullNone.
         device.setRasterizerStateProperty(RasterizerState::CullNone);
 
-        AvatarRenderer renderer(nullptr);
+        Microsoft::Xna::Framework::GamerServices::AvatarDescription noAvatar(std::vector<SharpRuntime::bytecs>(1021, 0));
+        AvatarRenderer renderer(&noAvatar);
         renderer.EnableRealRenderingEXT(device, model);
         renderer.SetAppearanceEXT(appearance);
         renderer.setAmbientLightColorProperty(ambient);

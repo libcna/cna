@@ -499,6 +499,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             cna_register_renderer_test(NAME EasyGL_AvatarRenderer_RealRender COMMAND cna_test_avatar_real_render
                 TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+            # GS-009: the standard XNA avatar API renders original CNA avatars (no EXT calls).
+            cna_easygl_test(cna_test_avatar_standard_render
+                            ${CMAKE_SOURCE_DIR}/modules/gamer-services/examples/avatar_standard_render_test.cpp)
+            target_link_libraries(cna_test_avatar_standard_render PRIVATE CNA_GamerServices)
+            cna_register_renderer_test(NAME EasyGL_AvatarRenderer_Standard COMMAND cna_test_avatar_standard_render
+                TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
             # Task 11.21: SkinnedModelEXT::AttachPartEXT runtime wardrobe-attach real render.
             cna_easygl_test(cna_test_avatar_attach_part
                             ${CMAKE_SOURCE_DIR}/modules/gamer-services/examples/avatar_attach_part_integration_test.cpp)

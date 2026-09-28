@@ -231,10 +231,14 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQUAL 
     # for the full rationale.
     # plans/plan_runtimerenderer.md P11: several GL identities can now be selected at once, and they all
     # share this one easy-gl subdirectory -- add it only for the first of them.
-    if(NOT TARGET easy-gl AND NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../easy-gl/CMakeLists.txt")
+    # CNA_EASYGL_ROOT points a build at an easy-gl checkout elsewhere (a worktree nested somewhere
+    # else has no sibling of its own), the same way CNA_SHARP_RUNTIME_ROOT does for sharp-runtime.
+    set(CNA_EASYGL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../easy-gl" CACHE PATH
+        "Path to the easy-gl checkout consumed by the GL renderers (sibling by default)")
+    if(NOT TARGET easy-gl AND NOT EXISTS "${CNA_EASYGL_ROOT}/CMakeLists.txt")
         message(FATAL_ERROR
             "CNA: Missing sibling repository 'easy-gl' at "
-            "${CMAKE_CURRENT_SOURCE_DIR}/../easy-gl -- this is a separate git "
+            "${CNA_EASYGL_ROOT} -- this is a separate git "
             "checkout (branch 'develop' of easy-gl) expected next to this repo's "
             "own directory, not a git submodule (git submodule update --init will "
             "not fetch it). easy-gl itself expects its own sibling '../meta-gl' "
@@ -245,7 +249,7 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQUAL 
             set(EASYGL_EMSCRIPTEN_EXCEPTION_MODEL "JS" CACHE STRING
                 "Exception ABI used by easy-gl when embedded in CNA" FORCE)
         endif()
-        add_subdirectory(../easy-gl easy-gl)
+        add_subdirectory("${CNA_EASYGL_ROOT}" easy-gl)
         set(_cna_easygl_subdir_added TRUE)
     endif()
 endif()

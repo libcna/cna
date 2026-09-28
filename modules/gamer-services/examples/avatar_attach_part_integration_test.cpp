@@ -23,6 +23,7 @@
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -124,7 +125,8 @@ protected:
         // moved into host, taking ownership of its buffers; wardrobe itself is left empty.
         host->AttachPartEXT(std::move(*wardrobe));
 
-        AvatarRenderer renderer(nullptr);
+        Microsoft::Xna::Framework::GamerServices::AvatarDescription noAvatar(std::vector<SharpRuntime::bytecs>(1021, 0));
+        AvatarRenderer renderer(&noAvatar);
         renderer.EnableRealRenderingEXT(device, host);
         renderer.setAmbientLightColorProperty(Vector3(1.0f, 1.0f, 1.0f));
         renderer.setLightColorProperty(Vector3(1.0f, 1.0f, 1.0f));

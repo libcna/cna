@@ -1,0 +1,607 @@
+{
+ "animations": {
+  "asset": "animations.glb",
+  "presets": [
+   "Stand0",
+   "Stand1",
+   "Stand2",
+   "Stand3",
+   "Stand4",
+   "Stand5",
+   "Stand6",
+   "Stand7",
+   "Clap",
+   "Wave",
+   "Celebrate",
+   "FemaleIdleCheckNails",
+   "FemaleIdleLookAround",
+   "FemaleIdleShiftWeight",
+   "FemaleIdleFixShoe",
+   "FemaleAngry",
+   "FemaleConfused",
+   "FemaleLaugh",
+   "FemaleCry",
+   "FemaleShocked",
+   "FemaleYawn",
+   "MaleIdleLookAround",
+   "MaleIdleStretch",
+   "MaleIdleShiftWeight",
+   "MaleIdleCheckHand",
+   "MaleAngry",
+   "MaleConfused",
+   "MaleLaugh",
+   "MaleCry",
+   "MaleSurprised",
+   "MaleYawn"
+  ]
+ },
+ "assets": [
+  {
+   "name": "animations.glb",
+   "sha256": "6ba287adb0af16c9ecd2aadda9da52fc6034a048a18915245aa9647127aa8bd0",
+   "size": 619220
+  },
+  {
+   "name": "body.female.glb",
+   "sha256": "0373cd16a058d53dc7722c5505b1a40a5d891a4091812dd4453c310f4b2dbd7f",
+   "size": 236692
+  },
+  {
+   "name": "body.male.glb",
+   "sha256": "7b260e93d03d48c8a1f68b91e91fd3815588198112416cabe1174573ce278c92",
+   "size": 236572
+  },
+  {
+   "name": "bottom_jeans.female.glb",
+   "sha256": "c584d255de651bd700d534c83eb6b0a9d374679c5540aac00a0bd3d5b0daff5d",
+   "size": 61496
+  },
+  {
+   "name": "bottom_jeans.male.glb",
+   "sha256": "9604a94b33429eafa1c98967baa1b06e813f09d3810c24c01ad830af3734d909",
+   "size": 61376
+  },
+  {
+   "name": "bottom_shorts.female.glb",
+   "sha256": "adaf05dc82e4e7ab9af9ade7744e08a8cdf2db22a28732f2a469c1652945f001",
+   "size": 41548
+  },
+  {
+   "name": "bottom_shorts.male.glb",
+   "sha256": "6f30441b1fd6f6195e14b77d8cc364401463b23ab56b2486d47718ca23673301",
+   "size": 41424
+  },
+  {
+   "name": "bottom_skirt.female.glb",
+   "sha256": "6f444c1421529abb3f3a9499b752eaf3046c69f3bcd7499c84bbba837311545e",
+   "size": 31072
+  },
+  {
+   "name": "bottom_skirt.male.glb",
+   "sha256": "0243ec49a56d252bd1495ebdcb3ca86e2b56158dacd96259a86fd3694a181fcd",
+   "size": 30948
+  },
+  {
+   "name": "face_features.png",
+   "sha256": "03ec14e67e450ddfbf2751780780cdf11d621cf8156002fe8cce36a47307e405",
+   "size": 16749
+  },
+  {
+   "name": "glasses_round.female.glb",
+   "sha256": "0425fd5e07fd4e027489761b783a180a443db5187e779c0c1da2f3cb6d5db1fc",
+   "size": 26728
+  },
+  {
+   "name": "glasses_round.male.glb",
+   "sha256": "84599525da651215dbc4214385b1377c2be7e135d2e2330b449c753a3f1d9402",
+   "size": 26604
+  },
+  {
+   "name": "glasses_square.female.glb",
+   "sha256": "d18240e963aa31a4874539dc1f5b2a53f83669d8e48a380b4bf258784fa3f371",
+   "size": 28844
+  },
+  {
+   "name": "glasses_square.male.glb",
+   "sha256": "ba9e4a23fbb027ccdb89395c1e671dd58e2d6df958e403edda796d2df80525b1",
+   "size": 28720
+  },
+  {
+   "name": "hair_bob.female.glb",
+   "sha256": "ab15a8a4773121d96c7231167c0bf705c53d5267a1f3c85fe2c38c3e9359d579",
+   "size": 31360
+  },
+  {
+   "name": "hair_bob.male.glb",
+   "sha256": "760d7bd050cfb9f20fcbd87ff647e78ba218c741004c745a99a1ef450b2d1d8e",
+   "size": 31240
+  },
+  {
+   "name": "hair_buzz.female.glb",
+   "sha256": "108391cacc2a3faadc3cf48e74c30f7ac2491df78b16d9f930c8de4581277fa9",
+   "size": 31364
+  },
+  {
+   "name": "hair_buzz.male.glb",
+   "sha256": "a9371aac63886851a960119ad0fccb62dd7c101347ff791e000d6f3308be3a43",
+   "size": 31244
+  },
+  {
+   "name": "hair_ponytail.female.glb",
+   "sha256": "efb5ae2a881f84ae91bfcb966b39e99a0a367d200e27f4afba517fe1f2056834",
+   "size": 38724
+  },
+  {
+   "name": "hair_ponytail.male.glb",
+   "sha256": "1873258bfde3a1535d459fed9b8986c19e7c53169d9afe7de8a29c8cdded1f7c",
+   "size": 38600
+  },
+  {
+   "name": "hair_short.female.glb",
+   "sha256": "1b648224db2feaff6e328a70e9f3d4f10988eb812fe5edfe65678fa1625edd55",
+   "size": 31368
+  },
+  {
+   "name": "hair_short.male.glb",
+   "sha256": "b8685f2ff207fa5a1162f734ee9e2c81e923cd7a9acbc6065eb1acd500a10a67",
+   "size": 31244
+  },
+  {
+   "name": "hair_spiky.female.glb",
+   "sha256": "0575012458f4648cdff4a14b172f0ea94466db17e75bfdb15a9df9f7e8c23b8f",
+   "size": 68112
+  },
+  {
+   "name": "hair_spiky.male.glb",
+   "sha256": "165aa76cabd48b83de6368956d8c53c0a59566a8ca866b2a7a1044e7c959de6c",
+   "size": 67992
+  },
+  {
+   "name": "hat_beanie.female.glb",
+   "sha256": "549014d47b976bac21551969bd1547b69ba93fd66708e693cbb5611bea353d04",
+   "size": 40248
+  },
+  {
+   "name": "hat_beanie.male.glb",
+   "sha256": "2ac9a4a065d3cc4bc0990f4c98fe95cb256db6fead885a91a0c027873d7c6282",
+   "size": 40128
+  },
+  {
+   "name": "hat_cap.female.glb",
+   "sha256": "b5ba7ae1d4d234f36b9030596d57af841be302bcdf7a5a571df1d5dc212591fe",
+   "size": 39312
+  },
+  {
+   "name": "hat_cap.male.glb",
+   "sha256": "fde73cc994f859989721dfc7cb02fb71fd9541cdcc54f1d899bbf6e8b82bb864",
+   "size": 39192
+  },
+  {
+   "name": "shoes_boots.female.glb",
+   "sha256": "841c425a44314dc150086387263774d1fb12b29ba034a2e6da4812b8c8bc2234",
+   "size": 65552
+  },
+  {
+   "name": "shoes_boots.male.glb",
+   "sha256": "7e49d8b2e81153a619e8743c83a8b97591628cd62348adfefb53de1e956b5780",
+   "size": 65432
+  },
+  {
+   "name": "shoes_sneakers.female.glb",
+   "sha256": "b0480a8b6133d049d9bd148877aa2490a75edd0dda1f06d39c1f9eab52718227",
+   "size": 50372
+  },
+  {
+   "name": "shoes_sneakers.male.glb",
+   "sha256": "65481db53fbc7597989bdca0eb30bfa8d28a3b483c2015103316d1bdda0407a0",
+   "size": 50248
+  },
+  {
+   "name": "top_hoodie.female.glb",
+   "sha256": "d7713e9aa6b7e26c22f4fe690f5993c80b4084a760bff00edaa36e0770e5f013",
+   "size": 73588
+  },
+  {
+   "name": "top_hoodie.male.glb",
+   "sha256": "e499b37ecb413e4151800885b9c735ec7a606be0e6b188ba9f9fca9dfd46a5a0",
+   "size": 73480
+  },
+  {
+   "name": "top_longsleeve.female.glb",
+   "sha256": "e5998a82a286439f4a894bbc23e80c8c6d64205a82781bfdb0fd3acbefbf3640",
+   "size": 57232
+  },
+  {
+   "name": "top_longsleeve.male.glb",
+   "sha256": "1c61b604033a2fcb8b2d5e6d075e9123b6635867f74d2f0900a58c19474f9b5d",
+   "size": 57108
+  },
+  {
+   "name": "top_tank.female.glb",
+   "sha256": "d781b7f02baecfb51e0b9b3b1ca83265064494ea209e1580f4f984fe04930de5",
+   "size": 23812
+  },
+  {
+   "name": "top_tank.male.glb",
+   "sha256": "826a7f2967c1734d41b49ca615e1b6746b9f1111087b5bf0b068b9becae0c3f1",
+   "size": 23700
+  },
+  {
+   "name": "top_tshirt.female.glb",
+   "sha256": "17a70b9b17cc25094e00d763eba0492665b8cd59ecf07b5e8dfb23546d5c4be5",
+   "size": 39480
+  },
+  {
+   "name": "top_tshirt.male.glb",
+   "sha256": "cab43cafaaff5288985bc31b74818d8a27da2de5958ce7613fe7e87d43cc3506",
+   "size": 39360
+  }
+ ],
+ "bodies": {
+  "female": {
+   "asset": "body.female.glb",
+   "authoredHeightMillimeters": 1680
+  },
+  "male": {
+   "asset": "body.male.glb",
+   "authoredHeightMillimeters": 1800
+  }
+ },
+ "catalogVersion": 1,
+ "face": {
+  "asset": "face_features.png",
+  "layout": {
+   "columns": 16,
+   "eyebrows": {
+    "Angry": {
+     "left": 60,
+     "right": 61
+    },
+    "Confused": {
+     "left": 62,
+     "right": 63
+    },
+    "Neutral": {
+     "left": 56,
+     "right": 57
+    },
+    "Raised": {
+     "left": 64,
+     "right": 65
+    },
+    "Sad": {
+     "left": 58,
+     "right": 59
+    }
+   },
+   "eyes": {
+    "Angry": {
+     "left": [
+      8,
+      9
+     ],
+     "right": [
+      10,
+      11
+     ]
+    },
+    "Blink": {
+     "left": [
+      52,
+      53
+     ],
+     "right": [
+      54,
+      55
+     ]
+    },
+    "Confused": {
+     "left": [
+      12,
+      13
+     ],
+     "right": [
+      14,
+      15
+     ]
+    },
+    "Happy": {
+     "left": [
+      24,
+      25
+     ],
+     "right": [
+      26,
+      27
+     ]
+    },
+    "Laughing": {
+     "left": [
+      16,
+      17
+     ],
+     "right": [
+      18,
+      19
+     ]
+    },
+    "LookDown": {
+     "left": [
+      40,
+      41
+     ],
+     "right": [
+      42,
+      43
+     ]
+    },
+    "LookLeft": {
+     "left": [
+      44,
+      45
+     ],
+     "right": [
+      46,
+      47
+     ]
+    },
+    "LookRight": {
+     "left": [
+      48,
+      49
+     ],
+     "right": [
+      50,
+      51
+     ]
+    },
+    "LookUp": {
+     "left": [
+      36,
+      37
+     ],
+     "right": [
+      38,
+      39
+     ]
+    },
+    "Neutral": {
+     "left": [
+      0,
+      1
+     ],
+     "right": [
+      2,
+      3
+     ]
+    },
+    "Sad": {
+     "left": [
+      4,
+      5
+     ],
+     "right": [
+      6,
+      7
+     ]
+    },
+    "Shocked": {
+     "left": [
+      20,
+      21
+     ],
+     "right": [
+      22,
+      23
+     ]
+    },
+    "Sleeping": {
+     "left": [
+      32,
+      33
+     ],
+     "right": [
+      34,
+      35
+     ]
+    },
+    "Yawning": {
+     "left": [
+      28,
+      29
+     ],
+     "right": [
+      30,
+      31
+     ]
+    }
+   },
+   "height": 320,
+   "mouths": {
+    "Angry": 68,
+    "Confused": 69,
+    "Happy": 72,
+    "Laughing": 70,
+    "Neutral": 66,
+    "PhoneticAi": 74,
+    "PhoneticDth": 79,
+    "PhoneticEe": 75,
+    "PhoneticFv": 76,
+    "PhoneticL": 78,
+    "PhoneticO": 73,
+    "PhoneticW": 77,
+    "Sad": 67,
+    "Shocked": 71
+   },
+   "tileSize": 64,
+   "width": 1024
+  }
+ },
+ "format": 1,
+ "items": [
+  {
+   "assets": {
+    "female": "hair_short.female.glb",
+    "male": "hair_short.male.glb"
+   },
+   "id": 1,
+   "name": "hair_short",
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_spiky.female.glb",
+    "male": "hair_spiky.male.glb"
+   },
+   "id": 2,
+   "name": "hair_spiky",
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_bob.female.glb",
+    "male": "hair_bob.male.glb"
+   },
+   "id": 3,
+   "name": "hair_bob",
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_ponytail.female.glb",
+    "male": "hair_ponytail.male.glb"
+   },
+   "id": 4,
+   "name": "hair_ponytail",
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_buzz.female.glb",
+    "male": "hair_buzz.male.glb"
+   },
+   "id": 5,
+   "name": "hair_buzz",
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "top_tshirt.female.glb",
+    "male": "top_tshirt.male.glb"
+   },
+   "id": 20,
+   "name": "top_tshirt",
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_longsleeve.female.glb",
+    "male": "top_longsleeve.male.glb"
+   },
+   "id": 21,
+   "name": "top_longsleeve",
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_hoodie.female.glb",
+    "male": "top_hoodie.male.glb"
+   },
+   "id": 22,
+   "name": "top_hoodie",
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_tank.female.glb",
+    "male": "top_tank.male.glb"
+   },
+   "id": 23,
+   "name": "top_tank",
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "bottom_jeans.female.glb",
+    "male": "bottom_jeans.male.glb"
+   },
+   "id": 40,
+   "name": "bottom_jeans",
+   "slot": "bottom"
+  },
+  {
+   "assets": {
+    "female": "bottom_shorts.female.glb",
+    "male": "bottom_shorts.male.glb"
+   },
+   "id": 41,
+   "name": "bottom_shorts",
+   "slot": "bottom"
+  },
+  {
+   "assets": {
+    "female": "bottom_skirt.female.glb",
+    "male": "bottom_skirt.male.glb"
+   },
+   "id": 42,
+   "name": "bottom_skirt",
+   "slot": "bottom"
+  },
+  {
+   "assets": {
+    "female": "shoes_sneakers.female.glb",
+    "male": "shoes_sneakers.male.glb"
+   },
+   "id": 60,
+   "name": "shoes_sneakers",
+   "slot": "shoes"
+  },
+  {
+   "assets": {
+    "female": "shoes_boots.female.glb",
+    "male": "shoes_boots.male.glb"
+   },
+   "id": 61,
+   "name": "shoes_boots",
+   "slot": "shoes"
+  },
+  {
+   "assets": {
+    "female": "glasses_round.female.glb",
+    "male": "glasses_round.male.glb"
+   },
+   "id": 80,
+   "name": "glasses_round",
+   "slot": "glasses"
+  },
+  {
+   "assets": {
+    "female": "glasses_square.female.glb",
+    "male": "glasses_square.male.glb"
+   },
+   "id": 81,
+   "name": "glasses_square",
+   "slot": "glasses"
+  },
+  {
+   "assets": {
+    "female": "hat_cap.female.glb",
+    "male": "hat_cap.male.glb"
+   },
+   "id": 100,
+   "name": "hat_cap",
+   "slot": "hat"
+  },
+  {
+   "assets": {
+    "female": "hat_beanie.female.glb",
+    "male": "hat_beanie.male.glb"
+   },
+   "id": 101,
+   "name": "hat_beanie",
+   "slot": "hat"
+  }
+ ],
+ "note": "Original CNA avatar assets generated by tools/avatar_builder/generate_avatar_catalog.py.",
+ "rig": "cna-avatar-71"
+}

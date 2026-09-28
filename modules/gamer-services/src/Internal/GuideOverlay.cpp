@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "GuideOverlay.hpp"
+#include "CNA/Internal/GamerServices/DispatcherGraphics.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "CNA/Internal/Runtime/IGameOverlay.hpp"
 #include "CNA/Internal/Graphics/SystemFont.hpp"
 #include "Microsoft/Xna/Framework/GameServiceContainer.hpp"
@@ -44,6 +47,18 @@ private:
 };
 Overlay overlay;
 }
+namespace {
+Microsoft::Xna::Framework::Graphics::GraphicsDevice* testingDevice=nullptr;
+}
+Microsoft::Xna::Framework::Graphics::GraphicsDevice& dispatcherGraphicsDevice() {
+    if(testingDevice)return *testingDevice;
+    if(!Microsoft::Xna::Framework::GamerServices::GamerServicesDispatcher::getIsInitializedProperty())
+        throw System::InvalidOperationException("GamerServicesDispatcher.Initialize must be called before using gamer services graphics.");
+    auto* device=overlay.graphics?overlay.graphics->getGraphicsDeviceProperty():nullptr;
+    if(!device)throw System::InvalidOperationException("No graphics device is available to gamer services.");
+    return *device;
+}
+void setDispatcherGraphicsDeviceForTesting(Microsoft::Xna::Framework::Graphics::GraphicsDevice* device){testingDevice=device;}
 void installGuideOverlay(System::IServiceProvider& provider) {
     auto* container=dynamic_cast<Microsoft::Xna::Framework::GameServiceContainer*>(&provider);
     overlay.graphics=static_cast<Microsoft::Xna::Framework::Graphics::IGraphicsDeviceService*>(provider.GetService(typeid(Microsoft::Xna::Framework::Graphics::IGraphicsDeviceService)));

@@ -1,3 +1,4 @@
+#include "Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp"
 #include "StressDemo.hpp"
 
 #include <algorithm>
@@ -77,7 +78,8 @@ void StressDemo::LoadContent()
     model_ = content.Load<std::shared_ptr<SkinnedModelEXT>>(AvatarBodyTypeToContentNameEXT(gender_));
 
     auto& device = getGraphicsDeviceProperty();
-    renderer_ = std::make_unique<AvatarRenderer>(nullptr);
+    Microsoft::Xna::Framework::GamerServices::AvatarDescription noAvatar(std::vector<SharpRuntime::bytecs>(1021, 0));
+    renderer_ = std::make_unique<AvatarRenderer>(&noAvatar);
     renderer_->EnableRealRenderingEXT(device, model_);
 
     AvatarAppearanceEXT appearance;

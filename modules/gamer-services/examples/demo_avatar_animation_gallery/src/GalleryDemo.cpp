@@ -1,3 +1,4 @@
+#include "Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp"
 #include "GalleryDemo.hpp"
 
 #include <algorithm>
@@ -98,7 +99,8 @@ void GalleryDemo::LoadContentForCurrentGender()
     model_ = content.Load<std::shared_ptr<SkinnedModelEXT>>(AvatarBodyTypeToContentNameEXT(currentGender_));
 
     auto& device = getGraphicsDeviceProperty();
-    renderer_ = std::make_unique<AvatarRenderer>(nullptr);
+    Microsoft::Xna::Framework::GamerServices::AvatarDescription noAvatar(std::vector<SharpRuntime::bytecs>(1021, 0));
+    renderer_ = std::make_unique<AvatarRenderer>(&noAvatar);
     renderer_->EnableRealRenderingEXT(device, model_);
 
     AvatarAppearanceEXT appearance;

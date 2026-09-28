@@ -1,3 +1,4 @@
+#include "Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp"
 #include "SyncGame.hpp"
 
 #include <algorithm>
@@ -173,7 +174,8 @@ void SyncGame::LoadAvatarView(AvatarView& view, AvatarBodyType gender)
     view.model = content.Load<std::shared_ptr<SkinnedModelEXT>>(AvatarBodyTypeToContentNameEXT(gender));
 
     auto& device = getGraphicsDeviceProperty();
-    view.renderer = std::make_unique<AvatarRenderer>(nullptr);
+    Microsoft::Xna::Framework::GamerServices::AvatarDescription noAvatar(std::vector<SharpRuntime::bytecs>(1021, 0));
+    view.renderer = std::make_unique<AvatarRenderer>(&noAvatar);
     view.renderer->EnableRealRenderingEXT(device, view.model);
 
     AvatarAppearanceEXT appearance;

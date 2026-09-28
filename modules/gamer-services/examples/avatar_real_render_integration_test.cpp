@@ -24,6 +24,7 @@
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -119,7 +120,8 @@ protected:
 
         auto model = BuildOneBoneQuadModel(device, tex_);
 
-        AvatarRenderer renderer(nullptr);
+        Microsoft::Xna::Framework::GamerServices::AvatarDescription noAvatar(std::vector<SharpRuntime::bytecs>(1021, 0));
+        AvatarRenderer renderer(&noAvatar);
         renderer.EnableRealRenderingEXT(device, model);
         // AvatarRenderer's LightColor/LightDirection/AmbientLightColor default to black,
         // matching the real (never-drawing) XNA implementation's untouched value-type

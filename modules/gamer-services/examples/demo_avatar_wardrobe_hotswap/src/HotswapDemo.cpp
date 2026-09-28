@@ -1,3 +1,4 @@
+#include "Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp"
 #include "HotswapDemo.hpp"
 
 #include <algorithm>
@@ -79,7 +80,8 @@ void HotswapDemo::Initialize()
 void HotswapDemo::ConfigureRenderer()
 {
     auto& device = getGraphicsDeviceProperty();
-    renderer_ = std::make_unique<AvatarRenderer>(nullptr);
+    Microsoft::Xna::Framework::GamerServices::AvatarDescription noAvatar(std::vector<SharpRuntime::bytecs>(1021, 0));
+    renderer_ = std::make_unique<AvatarRenderer>(&noAvatar);
     renderer_->EnableRealRenderingEXT(device, model_);
 
     AvatarAppearanceEXT appearance;

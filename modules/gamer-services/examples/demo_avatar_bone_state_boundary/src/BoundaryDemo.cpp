@@ -6,6 +6,7 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarBodyType.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarBodyTypeNamesEXT.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarRenderer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarRendererState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -74,7 +75,8 @@ void BoundaryDemo::Initialize()
                 "un-rendered XNA-shaped path a real game calling only the public XNA-shaped API "
                 "would experience):\n\n");
 
-    AvatarRenderer renderer(nullptr);
+    Microsoft::Xna::Framework::GamerServices::AvatarDescription noAvatar(std::vector<SharpRuntime::bytecs>(1021, 0));
+    AvatarRenderer renderer(&noAvatar);
 
     const AvatarRendererState state = renderer.getStateProperty();
     std::printf("1. getStateProperty() = %s (confirmed: forces itself to Unavailable on every "

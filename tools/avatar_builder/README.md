@@ -685,3 +685,22 @@ Verified beyond "runs and prints OK": ran it against a nonexistent path, a garba
 (non-glTF) file, a copy of a real export with `Wave` stripped, and a copy with `Blink`
 removed from `targetNames` — each produced a distinct, correct `FAIL:` message and exit
 code 1. Both real `male_avatar.glb`/`female_avatar.glb` pass clean.
+
+## Standard XNA avatar catalog (GS-009)
+
+`generate_avatar_catalog.py` supersedes the Blender pipeline above for the standard XNA avatar
+API. It is pure Python (no Blender, numpy or downloads) and writes the original CNA avatar catalog
+(v1) to `modules/gamer-services/assets/avatars/v1/`, byte-for-byte reproducibly:
+
+```
+python3 tools/avatar_builder/generate_avatar_catalog.py           # regenerate
+python3 tools/avatar_builder/generate_avatar_catalog.py --check   # verify (also a ctest)
+python3 tools/avatar_builder/preview_avatar.py out.png body.male.glb top_tshirt.male.glb --pose animations.glb Wave 1.2
+```
+
+`cna_avatar/rig.py` defines the canonical rig: XNA's 71 slots and parent table, with identity
+bind rotations. `body.py`, `wardrobe.py` and `face.py` build the meshes and the expression atlas
+from ellipsoids, tapered capsules, lofts and tubes with analytic skin weights. `posing.py` holds
+the forward kinematics, two-bone IK (arms reach targets, feet stay planted) and finger curl that
+`animations.py` uses to author the 31 presets as key poses. `glb.py` writes the glTF.
+See `docs/avatars.md` for the runtime contract.

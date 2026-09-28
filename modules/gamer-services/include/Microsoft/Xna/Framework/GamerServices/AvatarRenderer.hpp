@@ -26,14 +26,13 @@ namespace Microsoft::Xna::Framework::GamerServices
     class AvatarDescription;
 
     /**
-     * @brief Renders a 3D avatar model.
+     * @brief Provides properties and methods for rendering a standard avatar.
      *
-     * The real XNA implementation's constructors never actually read their AvatarDescription
-     * (or, for the 2-argument overload, useLoadingEffect) arguments — every instance ends up in
-     * an identical, permanently AvatarRendererState::Unavailable state, since State's getter
-     * unconditionally forces itself to Unavailable on every single read, and nothing anywhere
-     * in the class ever assigns Ready or Loading. That surprising but verified behavior is
-     * preserved here exactly, not "fixed."
+     * A valid description starts Loading while its original CNA assets are assembled in the
+     * background, then becomes Ready: the bind pose is available and Draw renders the skinned
+     * avatar and its facial expression with the renderer's lights, using the graphics device of
+     * the service provider passed to GamerServicesDispatcher::Initialize. A description without
+     * an avatar (or one CNA cannot read) is Unavailable and draws nothing.
      */
     class AvatarRenderer : public System::IDisposable
     {
@@ -42,29 +41,29 @@ namespace Microsoft::Xna::Framework::GamerServices
         static constexpr int BoneCount = 71;
 
         /**
-         * @brief Initializes a new instance of AvatarRenderer for the specified avatar description.
+         * @brief Creates a new instance of AvatarRenderer with the specified description, using the
+         * standard loading effect while it loads.
          *
-         * @param avatarDescription The avatar description (not read by the real XNA
-         * implementation; every instance behaves identically regardless of this argument).
+         * @param avatarDescription Description of the avatar to be rendered.
+         * @throws System::ArgumentNullException if avatarDescription is null.
          */
         explicit AvatarRenderer(AvatarDescription* avatarDescription);
 
         /**
-         * @brief Initializes a new instance of AvatarRenderer for the specified avatar description.
+         * @brief Creates a new instance of AvatarRenderer with the specified description.
          *
-         * @param avatarDescription The avatar description (not read by the real XNA
-         * implementation; every instance behaves identically regardless of this argument).
-         * @param useLoadingEffect Whether to use a loading effect (not read by the real XNA
-         * implementation).
+         * @param avatarDescription Description of the avatar to be rendered.
+         * @param useLoadingEffect true to draw the animated standard loading effect while the
+         * avatar is loading; otherwise nothing is drawn until it is ready.
+         * @throws System::ArgumentNullException if avatarDescription is null.
          */
         AvatarRenderer(AvatarDescription* avatarDescription, bool useLoadingEffect);
 
         /**
          * @brief Destructor.
          *
-         * CNAEXT: declared (rather than defaulted inline) so that the real-rendering
-         * extension's std::unique_ptr<Graphics::SkinnedEffect> member can be destroyed
-         * where Graphics::SkinnedEffect is a complete type.
+         * CNAEXT: declared (rather than defaulted inline) so that the GPU resources can be
+         * destroyed where their types are complete.
          */
         CNAEXT ~AvatarRenderer();
 
@@ -91,23 +90,20 @@ namespace Microsoft::Xna::Framework::GamerServices
         [[nodiscard]] System::Collections::ObjectModel::ReadOnlyCollection<int> getParentBonesProperty() const;
 
         /**
-         * @brief Gets the bind pose transform matrices for the avatar's skeleton.
+         * @brief Gets the bind pose of each bone, in local space relative to the parent bone.
          *
          * @return A read-only collection of 71 bind pose matrices.
          * @throws System::ObjectDisposedException if this instance has been disposed.
-         * @throws System::InvalidOperationException if State is not AvatarRendererState::Ready
-         * (always the case in practice, since State never becomes Ready — see the class
-         * remarks).
+         * @throws System::InvalidOperationException if State is not AvatarRendererState::Ready.
          */
         [[nodiscard]] System::Collections::ObjectModel::ReadOnlyCollection<Microsoft::Xna::Framework::Matrix>
         getBindPoseProperty() const;
 
         /**
-         * @brief Gets the current loading state of the avatar.
+         * @brief Gets the state of the avatar.
          *
-         * Forces itself to AvatarRendererState::Unavailable on every single read, matching the
-         * real XNA implementation (see the class remarks).
-         *
+         * @return Loading while assets are assembled, then Ready; Unavailable when the description
+         * holds no avatar CNA can render.
          * @throws System::ObjectDisposedException if this instance has been disposed.
          */
         [[nodiscard]] AvatarRendererState getStateProperty() const;
@@ -131,21 +127,31 @@ namespace Microsoft::Xna::Framework::GamerServices
         [[nodiscard]] bool getIsDisposedProperty() const;
 
         /**
-         * @brief Draws the avatar using the specified animation.
+         * @brief Draws the avatar to the current render target using the specified animation.
          *
          * @param animation The animation providing bone transforms and facial expression.
          * @throws System::ArgumentNullException if animation is null.
          * @throws System::ObjectDisposedException if this instance has been disposed.
+         * @throws System::InvalidOperationException if a bone transform is not decomposable, or
+         * if no graphics device is available.
          */
         void Draw(IAvatarAnimation* animation);
 
         /**
-         * @brief Draws the avatar using the specified bone transforms and facial expression.
+         * @brief Draws the avatar to the current render target.
+         *
+         * Each bone's rotation and scale are applied in local space relative to its parent; the
+         * root also takes the supplied translation, while every other bone keeps this avatar's own
+         * bind offset, so standard animations fit every avatar's height and build. While loading,
+         * the standard loading effect is drawn when requested; an unavailable avatar draws
+         * nothing. The model always renders solid and restores the device states it changes.
          *
          * @param bones The bone transform matrices; must contain exactly 71 entries.
-         * @param expression The facial expression to render.
+         * @param expression Current expression of the avatar's face.
          * @throws System::ObjectDisposedException if this instance has been disposed.
          * @throws System::ArgumentException if bones does not contain exactly 71 entries.
+         * @throws System::InvalidOperationException if a bone transform is not decomposable, or
+         * if no graphics device is available.
          */
         void Draw(const std::vector<Microsoft::Xna::Framework::Matrix>& bones, AvatarExpression expression);
 
@@ -231,11 +237,19 @@ namespace Microsoft::Xna::Framework::GamerServices
         // skin-fallback/case-sensitivity/substring-collision coverage without needing a GPU.
         CNAEXT friend struct AvatarRendererTestAccess;
 
+        struct Resources;
+        void Poll() const;
+        void DrawLoadingEffect();
+        void DrawAvatar(const std::vector<Microsoft::Xna::Framework::Matrix>& bones, AvatarExpression expression);
+
+        std::unique_ptr<Resources> resources_;
+        bool useLoadingEffect_{true};
+
         Microsoft::Xna::Framework::Matrix world_;
         Microsoft::Xna::Framework::Matrix view_;
         Microsoft::Xna::Framework::Matrix projection_;
         std::vector<int> parentBoneIds_;
-        std::vector<Microsoft::Xna::Framework::Matrix> bindPoseArray_;
+        mutable std::vector<Microsoft::Xna::Framework::Matrix> bindPoseArray_;
         mutable AvatarRendererState state_{AvatarRendererState::Unavailable};
         // REMED-GFX-008: sensible non-black defaults. Previously these were value-initialized to
         // (0,0,0), so an avatar drawn without an explicit lighting setup rendered pure black. The

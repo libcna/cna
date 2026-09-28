@@ -1,3 +1,4 @@
+#include "Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp"
 #include "DualCompareDemo.hpp"
 
 #include <algorithm>
@@ -88,7 +89,8 @@ void DualCompareDemo::LoadSlot(AvatarSlot& slot)
     slot.model = content.Load<std::shared_ptr<SkinnedModelEXT>>(AvatarBodyTypeToContentNameEXT(slot.gender));
 
     auto& device = getGraphicsDeviceProperty();
-    slot.renderer = std::make_unique<AvatarRenderer>(nullptr);
+    Microsoft::Xna::Framework::GamerServices::AvatarDescription noAvatar(std::vector<SharpRuntime::bytecs>(1021, 0));
+    slot.renderer = std::make_unique<AvatarRenderer>(&noAvatar);
     slot.renderer->EnableRealRenderingEXT(device, slot.model);
 
     // Deliberately distinct tints per slot - proves SetAppearanceEXT is genuine per-AvatarRenderer-

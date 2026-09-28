@@ -2174,3 +2174,38 @@ Decisions:
   LightDirection/LightColor/AmbientLightColor, plus face-feature decals selected by the
   expression.
 - EXT retirement happens only after demos/tests run through the standard API.
+
+### GS-009a..d complete: encoding, original 71-slot catalog, standard AvatarAnimation/AvatarRenderer
+
+- [x] GS-009a (3ff1b02c1): CNA v1 description encoding, real CreateRandom, Height/BodyType decode.
+- [x] GS-009b: `tools/avatar_builder/generate_avatar_catalog.py` (+ `cna_avatar/` package) generates
+  the original catalog deterministically: canonical 71-slot rig in XNA topology with identity
+  bind rotations; toy-like bodies with jointed fingers, face-feature decals and a cheek texture;
+  18 wardrobe items fitted to both bodies; a 1024x320 expression atlas (14 eyes with iris layers,
+  5 eyebrows, 14 mouths); 31 presets authored with FK/two-bone IK key poses as CUBICSPLINE
+  curves with expression keys. 41 files, 2.68 MB (0.8 MB compressed), embedded by
+  `cmake/EmbedBinaryFiles.cmake` (CMake-only generator, ~20 s compile, 360 MB peak).
+- [x] GS-009c: strict GLB reader (cgltf, embedded buffers only, exact rig/topology, bounded
+  vertices/indices/images/keys), manifest parser, SHA-256-verified embedded resolution; standard
+  AvatarAnimation with real lengths, 71 local transforms, keyed expressions and the reference
+  Update wrap/clamp/overflow rules (modulo of ticks, position==Length kept).
+- [x] GS-009d: AvatarRenderer Loading->Ready on one shared loader thread (model cache per
+  description), BindPose scaled to height, Draw with rotation/scale from the supplied bones and
+  the avatar's own bind offsets, decomposability check, expression decals, exact
+  LightDirection/LightColor/Ambient lighting, animated loading silhouette, device from the
+  dispatcher's IGraphicsDeviceService (XNA AvatarHelpers rule), state save/restore, dispose while
+  loading. `CNA_EASYGL_ROOT` added so a nested worktree can build GL renderers.
+- EXT bridge: the Avatar EXT demos/tests pass an explicit no-avatar description (null is now the
+  reference ArgumentNullException); retirement is GS-009f.
+
+Validation: GamerServices **489 pass / 1 known HEADLESS skip** (avatar suites 132); Net
+**466/466**; EasyGL private runner `EasyGL_AvatarRenderer_*` **4/4** incl. new
+`EasyGL_AvatarRenderer_Standard` (standard API only: loading effect, colors, expression-only face
+change, Wave arm, background untouched); private gates **15/15** (13 recorded + CApi_AvatarsSmoke
++ GamerServices_AvatarCatalogUpToDate). Build trees: `cmake-build-debug` (HEADLESS),
+`cmake-build-opengl33` (OPENGL33, system SDL3, `-DCNA_EASYGL_ROOT=<libcna>/easy-gl
+-DCNA_SHARP_RUNTIME_ROOT=<libcna>/sharp-runtime -DCNA_ENABLE_DRACO=OFF`). Observed, not caused
+here: `tools/platform/sdl_classify.py --check` fails on `SDL_TOUCH_MOUSEID` introduced by
+committed c74569ae5 (SAMPLE-046).
+Known limits: `AvatarDescription.Changed` is still never raised (value-type C++ mapping; see
+GS-009e); the Blender pipeline/EXT content remains until GS-009f.
