@@ -623,3 +623,19 @@ if(CNA_ENABLE_NET AND CNA_BUILD_TESTS AND EXISTS "${CNA_GAMER_SERVICES_SERVER_RO
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
     add_test(NAME GamerServices_ProtocolDrift COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/net/check_service_protocol.py ${CNA_GAMER_SERVICES_SERVER_ROOT})
 endif()
+
+if(CNA_ENABLE_NET)
+    find_package(nlohmann_json 3.11 REQUIRED)
+    add_executable(cna_service_protocol_harness tools/net/service_protocol_harness.cpp)
+    target_link_libraries(cna_service_protocol_harness PRIVATE CNA_GamerServices nlohmann_json::nlohmann_json)
+    target_include_directories(cna_service_protocol_harness PRIVATE modules/gamer-services/src/Internal/Protocol)
+    if(CNA_BUILD_TESTS)
+        add_test(NAME GamerServices_ProtocolProperties COMMAND cna_service_protocol_harness
+            ${CMAKE_SOURCE_DIR}/modules/gamer-services/tests/fixtures/service-protocol-v1.json)
+    endif()
+endif()
+
+if(CNA_BUILD_C_API AND UNIX AND NOT EMSCRIPTEN)
+    add_executable(cna_c_api_service_client modules/c-api/tests/pure_c/ServiceClient.c)
+    target_link_libraries(cna_c_api_service_client PRIVATE cna_c_api)
+endif()

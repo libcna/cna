@@ -79,7 +79,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Gets a stream containing the gamer's profile picture.
          *
-         * @return Always nullptr in this platform's implementation.
+         * @return A caller-owned read-only stream at position zero, or null if no picture is configured.
+         * @throws System::ObjectDisposedException if the profile is disposed.
          */
         [[nodiscard]] System::IO::Stream* GetGamerPicture() const;
 
@@ -88,6 +89,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     private:
         friend class Gamer;
+        std::string pictureHash_;
         GamerProfile();
 
         int gamerScore_;

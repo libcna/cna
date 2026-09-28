@@ -7,6 +7,7 @@
 #include "System/ArgumentException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 #include "CNA/Internal/GamerServices/LocalGamerServicesStore.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
@@ -1028,4 +1029,9 @@ TEST(SignedInGamerTest, SignedOutEventFires) {
     SignedInGamerTestAccess::OnSignOut(&gamer);
     EXPECT_EQ(&gamer, seen);
     SignedInGamer::SignedOut.Remove(token);
+}
+
+TEST(GamerProfileTest, PictureRejectsDisposedProfile) {
+    auto profile=GamerProfile::CreateInternal();profile.Dispose();
+    EXPECT_THROW((void)profile.GetGamerPicture(),System::ObjectDisposedException);
 }

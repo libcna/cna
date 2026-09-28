@@ -422,12 +422,21 @@ CNA_Result cna_achievement_get_picture_size(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        // The canonical accessor says outright that it is not implemented, so the refusal that
-        // reaches a C caller is the canonical one rather than an empty answer invented here.
-        System::IO::Stream* const picture = achievement->value->GetPicture();
+        std::unique_ptr<System::IO::Stream> picture(achievement->value->GetPicture());
         *outBytes = picture == nullptr ? UINT64_C(0)
                                        : static_cast<uint64_t>(picture->getLengthProperty());
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_achievement_copy_picture(const CNA_AchievementHandle handle,uint8_t* destination,uint64_t capacity,uint64_t* outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if(!outBytes||(!destination&&capacity))return InvalidInput("The picture output is invalid.");
+        std::shared_ptr<AchievementResource> achievement;
+        if(const auto result=BorrowAchievement(handle,&achievement);result!=CNA_RESULT_SUCCESS)return result;
+        std::unique_ptr<System::IO::Stream> picture(achievement->value->GetPicture());
+        return CNA::C::Detail::CopyPictureStream(picture.get(),destination,capacity,outBytes);
     });
 }
 

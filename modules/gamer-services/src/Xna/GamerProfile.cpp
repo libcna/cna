@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/GamerProfile.hpp"
+#include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
+#include "System/ObjectDisposedException.hpp"
+#include "System/IO/MemoryStream.hpp"
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
@@ -40,6 +43,9 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     System::IO::Stream* GamerProfile::GetGamerPicture() const
     {
-        return nullptr;
+        if(isDisposed_)throw System::ObjectDisposedException("GamerProfile");
+        if(pictureHash_.empty())return nullptr;
+        const auto bytes=CNA::Internal::GamerServices::backend()->asset(pictureHash_);
+        return new System::IO::MemoryStream(bytes.data(),static_cast<SharpRuntime::intcs>(bytes.size()),false);
     }
 }

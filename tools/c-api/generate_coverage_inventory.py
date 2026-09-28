@@ -17,6 +17,7 @@ import argparse
 import dataclasses
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -376,7 +377,14 @@ def discover_headers(root: Path) -> tuple[list[Path], list[Path]]:
 
 def discover_include_paths(root: Path) -> list[Path]:
     candidates: set[Path] = set()
-    for base in (root / "modules", root.parent / "sharp-runtime" / "modules"):
+    explicit = os.environ.get("CNA_SHARP_RUNTIME_ROOT")
+    sharp = Path(explicit).resolve() if explicit else next(
+        (parent / "sharp-runtime" for parent in root.parents if (parent / "sharp-runtime" / "modules").is_dir()),
+        root.parent / "sharp-runtime",
+    )
+    if explicit and not (sharp / "modules").is_dir():
+        raise RuntimeError("CNA_SHARP_RUNTIME_ROOT does not identify a sharp-runtime source tree")
+    for base in (root / "modules", sharp / "modules"):
         if not base.is_dir():
             continue
         for candidate in base.glob("*/include"):
@@ -384,7 +392,7 @@ def discover_include_paths(root: Path) -> list[Path]:
                 candidates.add(candidate.resolve())
 
     extra_candidates = (
-        root.parent / "sharp-runtime" / "vendor",
+        sharp / "vendor",
         root / ".sdl-prebuilt-Linux-x86_64" / "install" / "include",
         root / "third_party" / "enet" / "include",
     )

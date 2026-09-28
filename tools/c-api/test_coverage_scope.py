@@ -500,6 +500,29 @@ class ApprovalCannotWidenSilently(unittest.TestCase):
             self.assertEqual(json.loads(path.read_text())["rules"][0]["approved_symbols"], [])
 
 
+class IncludePathsSupportDedicatedWorktrees(unittest.TestCase):
+    def test_runtime_is_found_above_nested_worktree(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="cna-includes-test-") as temporary:
+            parent = Path(temporary)
+            runtime = parent / "sharp-runtime" / "modules" / "core" / "include"
+            runtime.mkdir(parents=True)
+            worktree = parent / "cnawork" / "cna-gamer-services"
+            worktree.mkdir(parents=True)
+            with mock.patch.dict(gci.os.environ, {}, clear=True):
+                self.assertIn(runtime.resolve(), gci.discover_include_paths(worktree))
+
+    def test_explicit_runtime_takes_precedence_and_must_exist(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="cna-includes-test-") as temporary:
+            root = Path(temporary)
+            runtime = root / "chosen" / "modules" / "core" / "include"
+            runtime.mkdir(parents=True)
+            with mock.patch.dict(gci.os.environ, {"CNA_SHARP_RUNTIME_ROOT": str(root / "chosen")}):
+                self.assertIn(runtime.resolve(), gci.discover_include_paths(root))
+            with mock.patch.dict(gci.os.environ, {"CNA_SHARP_RUNTIME_ROOT": str(root / "missing")}):
+                with self.assertRaisesRegex(RuntimeError, "CNA_SHARP_RUNTIME_ROOT"):
+                    gci.discover_include_paths(root)
+
+
 class GeneratedDataCannotGoStaleUnnoticed(unittest.TestCase):
     def test_the_summary_carries_the_full_inventory_hash(self) -> None:
         summary = (gci.repository_root() / "docs" / "c-api" / "COVERAGE.md").read_text(

@@ -172,3 +172,42 @@ clients, mutual friendship, rich presence across processes and admin revoke → 
 SignedOut at Update. No Internet realtime/connectivity claim; no assets or standard-avatar claim yet.
 Next GS-005b: hash-addressed immutable picture/asset storage and client cache; achievement/profile
 picture APIs, corrupt/missing/cache/restart tests. GS-004 refresh remains independent unfinished work.
+
+
+### GS-005b immutable assets/pictures and C API checkpoint
+
+Implemented server schema migration 2: immutable SHA-256 assets, title authorization, user picture
+association and bounded `assets.read` chunks. Admin imports trusted paths; clients only supply hashes.
+PNG dimensions/size and GLB header/version/length are bounded before import. Full GLB/image content
+validation belongs to asset loaders, not the import header check. Original procedural PNG fixtures;
+no downloaded/proprietary assets. Protocol parser now caps containers before DOM insertion; golden
+vectors plus 5,000 deterministic mutations/truncations run in client and server.
+
+Online backend verifies chunk metadata and SHA-256 and caches immutable resources under the user
+cache directory (`CNA_GAMER_SERVICES_CACHE_DIR` for tests). Reads rehash; corrupt entries redownload;
+unwritable/full cache permits uncached use. Write ceiling 256 MiB; eviction/download deduplication
+remain open. Achievement.GetPicture and GamerProfile.GetGamerPicture return caller-owned read-only
+streams at position zero. Configured pictures decode through standard Texture2D.FromStream.
+No default/sample pictures invented. Missing configured assets fail deterministically.
+
+C ABI 0.32.0 adds achievement/profile picture copy with required-size and buffer-too-small behavior;
+fixes leaked temporary streams in existing size routes. Exact export/header baseline: 3,215 exports,
+198 structs, 295 scalar typedefs, 1,470 constants, 14 strings and 141 color constants. Two pure C
+client processes sign in through Guide, obtain identities/achievements and copy both pictures from
+the TLS server. Coverage generator now finds sharp-runtime above nested worktrees or via explicit
+CNA_SHARP_RUNTIME_ROOT; fixture regression covers this previously broken include discovery.
+
+Validation recorded below after final gates. Previous known-good commits: CNA
+ac56c4f5094b1fde47ace89cb1459337c15d4b18; server fb02f71cc93824288fa6d475366bf3b284a12f6c;
+sharp-runtime fc033a0e8541a81498c4a496f56a0f59475c6e34 (unchanged). Parent GS-005 remains open
+for complete metadata/social privacy and full Xbox semantics. Next implementation GS-006 server
+leaderboard definitions/reads and transient writes plus host EndGame commit. GS-004 refresh and
+persistent credentials remain independent unfinished work.
+
+Final GS-005b validation: server 5,122 assertions pass; real TLS CTest 2/2 pass in 10.90s,
+including simultaneous C++ and pure C clients, persistence/restart, image hash/cache hits and
+corruption recovery. GamerServices 388 run: 387 pass/1 existing screensaver skip. Private runner
+C API/coverage/ABI/protocol gates 17/17 pass in 53.93s. Fake backend 58 checks unchanged. Server
+checkpoint a2f8493 (full hash recorded with next integration set). CNA built C API shared library,
+ABI/Guide/Gamers smokes, real-client and protocol harnesses with two compile jobs. No new stubs,
+no sharp-runtime changes. `next` remains b2fd47a45; samples worktree untouched.

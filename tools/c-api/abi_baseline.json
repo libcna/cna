@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 7936,
+  "encoded": 8192,
   "major": 0,
-  "minor": 31,
+  "minor": 32,
   "patch": 0,
-  "runtime": 7936
+  "runtime": 8192
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -918,6 +918,7 @@
   "cna_achievement_copy_how_to_earn",
   "cna_achievement_copy_key",
   "cna_achievement_copy_name",
+  "cna_achievement_copy_picture",
   "cna_achievement_create_ext",
   "cna_achievement_destroy",
   "cna_achievement_equals",
@@ -2096,6 +2097,7 @@
   "cna_gamer_left_event_info_init",
   "cna_gamer_presence_init",
   "cna_gamer_profile_copy_motto",
+  "cna_gamer_profile_copy_picture",
   "cna_gamer_profile_copy_region_name",
   "cna_gamer_profile_destroy",
   "cna_gamer_profile_get_info",
@@ -4070,9 +4072,9 @@
   "cna_write_leaderboards_event_info_init"
  ],
  "integers": {
-  "CNA_ABI_VERSION": 7936,
+  "CNA_ABI_VERSION": 8192,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 31,
+  "CNA_ABI_VERSION_MINOR": 32,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,

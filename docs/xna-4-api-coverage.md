@@ -885,24 +885,21 @@ maturity levels.
 
 ## 9. GamerServices / Net support matrix (`feature/net`, Task 9.4)
 
-Per-feature status for the two namespaces §5 used to describe as "not planned"/"intentionally
-excluded" (decision 1a superseded that framing — see §5). Categories: **Implemented** (real
-behavior matching the Xbox 360 XNA 4.0 reference) / **Locally persisted** (real disk-backed state
-via CNA's own storage layer, not a live online service — none exists to connect to, and none is
-planned) / **CNA extension** (`CNAEXT`/`*EXT`, beyond the XNA 4.0 API surface) / **No-op** (present,
-callable, does nothing) / **Documented stub** (throws, matching either FNA's own acknowledged stub
-behavior or a genuinely unimplemented feature).
+This matrix separates API shape, measured behavior and actual service backing. CNA's versioned
+TLS service is independent of Xbox LIVE accounts, protocols and assets. Existing local-only
+factory fixtures remain explicit offline support; they are not evidence of online behavior.
+Full Xbox validation order, lifetime and asynchronous compatibility are still being measured.
 
 ### GamerServices
 
 | Feature | Status | Notes |
 |---|---|---|
 | `SignedInGamer` / `Gamer` / collections | Service foundation | No fabricated profiles. Four separate service identities; controlled Update events and owned Begin/End completions. Collection/lifetime edge cases remain under audit. |
-| Achievements | Service-backed metadata/awards | Configured online identities use persistent server catalog and earned state. Two users/titles, duplicate awards and restart tested. Picture retrieval/cache remains unfinished. Explicit legacy factory/offline objects still use local storage. |
+| Achievements | Service-backed metadata/awards | Configured online identities use persistent server catalog and earned state. Two users/titles, duplicate awards and restart tested. Hash-verified picture retrieval and cache tested through C++ and pure C clients. Explicit legacy factory/offline objects still use local storage. |
 | Leaderboards | Local approximation; migration pending | Session-scoped writes/EndGame flushing and service reads/writes remain GS-006. Local files are not online service behavior. |
 | Presence | Service-backed at Update | Correct enum/value text and revision-coalesced publication tested across real clients. Heartbeat/refresh/backoff remain unfinished. |
 | Friends | Service mutual workflow | Persistent request/accept/removal, pending flags, accepted-only online/presence, owned GetFriends snapshots and IsFriend. General privacy/block/voice/invite semantics remain unfinished. |
-| Privileges/profile | Partial service data | Server online-session permission, public names/motto/region/score/earned count. Other privilege fields/pictures require service metadata. |
+| Privileges/profile | Partial service data | Server online-session permission, public names/motto/region/score/earned count. Profile PNG streams and native C picture copying work; other privilege fields require service metadata. |
 | Guide sign-in | Service flow | Standard ShowSignIn uses masked keyboard and failure message overlay; four slots and cancellation tested. Automatic Game draw hook added. Offline/guest and credential refresh remain unfinished. |
 | Guide friends/gamer card/request | Service UI | Standard APIs present profiles, page friends/find gamer and confirm/manage friendship changes. Exact Xbox validation order remains unmeasured. |
 | Guide commerce/party/messages/review/invites | Unfinished | Requires Xbox contract evidence and corresponding CNA service/UI behavior. |

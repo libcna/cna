@@ -16,15 +16,22 @@ bool identifier(std::string_view value) {
 }
 Json parse(std::string_view bytes) {
     if (bytes.empty() || bytes.size() > MaxMessageBytes) throw Error("LIMIT_EXCEEDED");
-    std::vector<std::set<std::string>> keys;
+    struct Frame {bool array=false;std::size_t count=0;std::set<std::string> keys;};
+    std::vector<Frame> frames;
     try {
         return Json::parse(bytes, [&](int depth, Json::parse_event_t event, Json& value) {
             if (depth > 16) throw Error("LIMIT_EXCEEDED");
-            if (event == Json::parse_event_t::object_start) keys.emplace_back();
-            if (event == Json::parse_event_t::key && !keys.back().insert(value.get<std::string>()).second)
-                throw Error("MALFORMED_MESSAGE");
-            if (event == Json::parse_event_t::object_end) keys.pop_back();
-            if (event == Json::parse_event_t::array_end && value.size() > 256) throw Error("LIMIT_EXCEEDED");
+            using Event=Json::parse_event_t;
+            if(event==Event::object_start||event==Event::array_start||event==Event::value) {
+                if(!frames.empty()&&frames.back().array&&++frames.back().count>256)throw Error("LIMIT_EXCEEDED");
+            }
+            if(event==Event::object_start||event==Event::array_start)frames.push_back({event==Event::array_start,0,{}});
+            if(event==Event::key) {
+                auto& frame=frames.back();
+                if(!frame.keys.insert(value.get<std::string>()).second)throw Error("MALFORMED_MESSAGE");
+                if(++frame.count>256)throw Error("LIMIT_EXCEEDED");
+            }
+            if(event==Event::object_end||event==Event::array_end)frames.pop_back();
             return true;
         });
     } catch (const Error&) { throw; }

@@ -87,7 +87,7 @@ namespace Microsoft::Xna::Framework::GamerServices
             const auto person = std::any_cast<CNA::Internal::GamerServices::ServiceIdentity>(
                 CNA::Internal::GamerServices::ServiceAsyncResult::end(result, "profile", this));
             auto profile = std::make_unique<GamerProfile>(GamerProfile::CreateInternal());
-            profile->motto_ = person.motto; profile->gamerScore_ = person.gamerScore;
+            profile->pictureHash_=person.picture;profile->motto_ = person.motto; profile->gamerScore_ = person.gamerScore;
             profile->totalAchievements_ = person.totalAchievements;
             profile->region_ = System::Globalization::RegionInfo(person.region);
             return profile.release();

@@ -10,6 +10,8 @@ namespace CNA::Internal::GamerServices {
 struct ServiceIdentity {
     /** @brief Stable service user identifier. */
     std::string userId;
+    /** @brief Immutable public picture hash. */
+    std::string picture;
     /** @brief Public gamer name. */
     std::string gamertag;
     /** @brief Public display name. */
@@ -94,6 +96,9 @@ public:
     virtual void changeFriend(const std::string& userId,const std::string& gamertag,const std::string& action) = 0;
     /** @brief Publishes rich presence. @param userId Actor. @param mode Stable mode. @param text Display text. */
     virtual void setPresence(const std::string& userId,int mode,const std::string& text) = 0;
+    /** @brief Retrieves immutable asset bytes, with verified local cache where configured.
+     * @param hash SHA-256 identifier. @return Resource bytes. */
+    virtual std::vector<unsigned char> asset(const std::string& hash) = 0;
 };
 /** @brief Gets lazily configured backend. @return Shared backend lifetime. */
 std::shared_ptr<IGamerServicesBackend> backend();

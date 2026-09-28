@@ -19,3 +19,13 @@ leaderboards, PlayerMatch/Ranked/invites/relay and standard Avatar migration rem
 Rich presence is sent during Dispatcher.Update; friend online state currently reflects authenticated
 activity within 90 seconds, so idle heartbeat must still be added. Do not treat this as a production
 service release or a claim of measured Xbox event/validation parity across every method.
+
+Achievement/profile picture streams now read immutable SHA-256 resources from the service. The
+per-user cache defaults to `$XDG_CACHE_HOME/cna/gamer-services/assets` or
+`$HOME/.cache/cna/gamer-services/assets`; CI can override `CNA_GAMER_SERVICES_CACHE_DIR`.
+Only content hashes form filenames; data is verified on download and on cache read, corrupt entries
+are replaced atomically, and each API call returns a separate read-only stream at position zero.
+Cache writes stop at 256 MiB (eviction is not implemented); a full/unwritable cache still allows
+retrieval. PNG assets are bounded to 512x512/512 KiB; larger version-2 GLB resources have a 16-MiB
+transport ceiling. Hashes do not make malformed image/model content valid. No live avatar catalog
+or standard-avatar rendering is implied by this initial generic resource mechanism.

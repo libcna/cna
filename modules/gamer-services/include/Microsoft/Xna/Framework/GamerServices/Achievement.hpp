@@ -79,14 +79,9 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Returns a stream containing the achievement picture.
          *
-         * Task 4.6 (plans/plan_net.md Phase 4): deliberately left throwing, matching FNA's own
-         * unimplemented stub - real Xbox 360 achievement artwork was streamed from Xbox LIVE at
-         * request time and has no local equivalent, the same genuine-platform-unavailability
-         * reasoning already applied elsewhere in this codebase (e.g. Guide's Xbox-Live-only
-         * methods). Not a local-persistence gap Phase 4's disk-store work is meant to close.
-         *
-         * @return Never returns; always throws in this implementation.
-         * @throws System::NotImplementedException always.
+         * Service catalog pictures are immutable and cached by content hash.
+         * @return A caller-owned, read-only picture stream at position zero.
+         * @throws GamerServicesNotAvailableException if the picture is absent or cannot be retrieved.
          */
         System::IO::Stream* GetPicture();
 
@@ -123,6 +118,8 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     private:
         friend class SignedInGamer;
+        std::string pictureHash_;
+        bool serviceBacked_=false;
         Achievement(
             const std::string& key,
             const std::string& name,

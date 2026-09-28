@@ -18,6 +18,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include "System/IO/Stream.hpp"
 
 namespace {
 
@@ -468,4 +469,21 @@ CNA_Result cna_avatar_body_type_copy_content_name_ext(
             capacity,
             outBytes);
     });
+}
+
+namespace CNA::C::Detail {
+CNA_Result CopyPictureStream(System::IO::Stream* stream,uint8_t* destination,uint64_t capacity,uint64_t* outBytes) {
+    if(!outBytes||(!destination&&capacity))return Fail(CNA_RESULT_INVALID_ARGUMENT,CNA_ERROR_CATEGORY_ARGUMENT,"The picture output is invalid.");
+    const auto length=stream?stream->getLengthProperty():0;
+    if(length<0||length>16777216)return Fail(CNA_RESULT_IO,CNA_ERROR_CATEGORY_IO,"Invalid picture stream size.");
+    *outBytes=static_cast<uint64_t>(length);
+    if(capacity<*outBytes)return Fail(CNA_RESULT_BUFFER_TOO_SMALL,CNA_ERROR_CATEGORY_RANGE,"The picture destination is too small.");
+    int position=0;
+    while(position<length) {
+        const auto read=stream->Read(destination,position,length-position);
+        if(read<=0)return Fail(CNA_RESULT_IO,CNA_ERROR_CATEGORY_IO,"Truncated picture stream.");
+        position+=read;
+    }
+    return CNA_RESULT_SUCCESS;
+}
 }

@@ -12,7 +12,7 @@ or renamed module stops this gate rather than inheriting a default. Paths whose 
 are `Internal` or `Detail` in any capitalization are excluded as implementation detail.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **471 headers**, **8111 symbols**, **7055 implemented**, **15 partial**, **615 planned**, **426 not applicable**. Explicitly excluded headers: **465**.
+Snapshot: **472 headers**, **8121 symbols**, **7055 implemented**, **15 partial**, **625 planned**, **426 not applicable**. Explicitly excluded headers: **468**.
 
 ## Out of runtime C API scope
 
@@ -34,16 +34,17 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/core` internal/detail paths | 7 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/devices` internal/detail paths | 13 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/devices-ext` internal/detail paths | 1 | implementation detail: a path segment is `Internal` or `Detail` |
-| `modules/gamer-services` internal/detail paths | 1 | implementation detail: a path segment is `Internal` or `Detail` |
-| `modules/graphics` internal/detail paths | 35 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/gamer-services` internal/detail paths | 2 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/graphics` internal/detail paths | 36 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/graphics-ext` internal/detail paths | 2 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/input` internal/detail paths | 4 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/media` internal/detail paths | 12 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/net` internal/detail paths | 6 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/runtime` internal/detail paths | 1 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `fce7d324044d9acea8b77cb831da4a460a480a54f05afa84e39c0f6eef175737`.
+Full inventory SHA-256: `2a20d661818f9ebb0ea383cda540b81ba0f99d7539ca3936df932901705a0762`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:
@@ -67,7 +68,7 @@ owner, hashes the complete matrix, and compares this summary. The CTest
 | `core` | 15 | 140 | 134 | 0 | 0 | 6 |
 | `devices` | 20 | 215 | 187 | 0 | 0 | 28 |
 | `devices-ext` | 17 | 84 | 79 | 0 | 0 | 5 |
-| `gamer-services` | 54 | 683 | 637 | 0 | 11 | 35 |
+| `gamer-services` | 55 | 693 | 637 | 0 | 21 | 35 |
 | `graphics` | 143 | 2938 | 2606 | 0 | 269 | 63 |
 | `graphics-ext` | 11 | 110 | 68 | 0 | 40 | 2 |
 | `input` | 51 | 894 | 836 | 0 | 30 | 28 |

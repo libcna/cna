@@ -13,6 +13,10 @@
 #include <random>
 #include <thread>
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
+#include <cstdlib>
+#include "System/Security/Cryptography/SHA256.hpp"
 
 namespace CNA::Internal::GamerServices {
 using CnaService::Json;
@@ -23,7 +27,7 @@ ServiceIdentity identity(const Json& j) {
     ServiceIdentity value;
     value.userId=CnaService::stringField(j,"userId",64);value.gamertag=CnaService::stringField(j,"gamertag",32);
     value.displayName=CnaService::stringField(j,"displayName",128);value.motto=CnaService::stringField(j,"motto",256);
-    value.region=CnaService::stringField(j,"region",16);
+    value.region=CnaService::stringField(j,"region",16);value.picture=CnaService::stringField(j,"picture",64);
     for(auto field:{"gamerScore","totalAchievements"})
         if(!j.contains(field)||!j[field].is_number_integer()||j[field]<0||j[field]>2147483647)throw CnaService::Error("INVALID_RESPONSE");
     if(!j.contains("allowOnlineSessions")||!j["allowOnlineSessions"].is_boolean())throw CnaService::Error("INVALID_RESPONSE");
@@ -154,6 +158,62 @@ public:
     void setPresence(const std::string& user,int mode,const std::string& text) override {
         (void)request("presence.set",{{"mode",mode},{"text",text}},tokenFor(user));
     }
+    std::vector<unsigned char> asset(const std::string& hash) override {
+        if(hash.size()!=64||hash.find_first_not_of("0123456789abcdef")!=std::string::npos)throw Unavailable("Invalid service asset identifier.");
+        const auto token=tokenFor({});
+        std::lock_guard cacheLock(cacheMutex_);
+        std::filesystem::path root;
+        if(const auto* configured=std::getenv("CNA_GAMER_SERVICES_CACHE_DIR");configured&&*configured)root=configured;
+        else if(const auto* xdg=std::getenv("XDG_CACHE_HOME");xdg&&*xdg)root=std::filesystem::path(xdg)/"cna/gamer-services/assets";
+        else if(const auto* home=std::getenv("HOME");home&&*home)root=std::filesystem::path(home)/".cache/cna/gamer-services/assets";
+        const auto path=root/hash;
+        auto valid=[&hash](const std::vector<unsigned char>& bytes) {
+            System::Security::Cryptography::SHA256 algorithm;const auto digest=algorithm.ComputeHash(bytes);
+            constexpr char digits[]="0123456789abcdef";std::string actual;
+            for(auto byte:digest){actual+=digits[byte>>4];actual+=digits[byte&15];}return actual==hash;
+        };
+        if(!root.empty()) {
+            std::error_code error;
+            const auto size=std::filesystem::file_size(path,error);
+            if(!error&&size>0&&size<=16777216&&!std::filesystem::is_symlink(path,error)) {
+                std::ifstream stream(path,std::ios::binary);std::vector<unsigned char> bytes(static_cast<std::size_t>(size));
+                if(stream.read(reinterpret_cast<char*>(bytes.data()),bytes.size())&&valid(bytes))return bytes;
+            }
+        }
+        std::vector<unsigned char> bytes;long long expected=0;std::string mime;
+        while(bytes.empty()||static_cast<long long>(bytes.size())<expected) {
+            const auto part=request("assets.read",{{"hash",hash},{"offset",bytes.size()},{"length",12288}},token);
+            if(CnaService::stringField(part,"hash",64)!=hash||!part.at("size").is_number_integer()||part["size"]<1||part["size"]>16777216||
+               !part.at("offset").is_number_integer()||part["offset"]!=bytes.size())throw Unavailable("Invalid asset response.");
+            const auto size=part["size"].get<long long>();const auto type=CnaService::stringField(part,"mime",64);
+            if(type!="image/png"&&type!="image/jpeg"&&type!="model/gltf-binary")throw Unavailable("Unsupported service asset type.");
+            if(expected&&(expected!=size||mime!=type))throw Unavailable("Changing immutable asset response.");
+            expected=size;mime=type;const auto hex=CnaService::stringField(part,"hex",24576);
+            if(hex.size()/2!=std::min<std::size_t>(12288,static_cast<std::size_t>(expected)-bytes.size())||hex.empty()||hex.size()%2||hex.find_first_not_of("0123456789abcdef")!=std::string::npos||bytes.size()+hex.size()/2>static_cast<std::size_t>(expected))
+                throw Unavailable("Invalid asset chunk.");
+            bytes.reserve(static_cast<std::size_t>(expected));
+            auto digit=[](char c){return c<='9'?c-'0':c-'a'+10;};
+            for(std::size_t i=0;i<hex.size();i+=2)bytes.push_back(static_cast<unsigned char>((digit(hex[i])<<4)|digit(hex[i+1])));
+        }
+        if(!valid(bytes))throw Unavailable("Corrupt service asset.");
+        if(!root.empty()) {
+            std::error_code error;std::filesystem::create_directories(root,error);
+            if(!error) {
+                std::uintmax_t cachedBytes=0;
+                for(std::filesystem::directory_iterator entry(root,error),end;!error&&entry!=end;entry.increment(error)) {
+                    const auto name=entry->path().filename().string();
+                    if(name.size()!=64||name.find_first_not_of("0123456789abcdef")!=std::string::npos||!entry->is_regular_file(error))continue;
+                    cachedBytes+=entry->file_size(error);if(cachedBytes>268435456)return bytes;
+                }
+                if(error||bytes.size()>268435456-cachedBytes)return bytes;
+                const auto temporary=root/(hash+"."+prefix_+".tmp");
+                {std::ofstream output(temporary,std::ios::binary);output.write(reinterpret_cast<const char*>(bytes.data()),bytes.size());
+                 if(!output){std::filesystem::remove(temporary,error);return bytes;}}
+                std::filesystem::rename(temporary,path,error);if(error)std::filesystem::remove(temporary,error);
+            }
+        }
+        return bytes;
+    }
 private:
     struct Slot {ServiceIdentity identity;std::string token;};
     std::string tokenFor(const std::string& user) {
@@ -226,6 +286,7 @@ private:
                 negotiated_=true;
             }
             if(op.starts_with("friends.")&&!capabilities_.contains("friend-requests"))throw Unavailable("CNA service friend-request capability missing.");
+            if(op=="assets.read"&&!capabilities_.contains("assets"))throw Unavailable("CNA service asset capability missing.");
             if(op=="presence.set"&&!capabilities_.contains("presence"))throw Unavailable("CNA service presence capability missing.");
             return exchange(op,std::move(args),token);
         }catch(const Unavailable&){throw;}
@@ -236,7 +297,7 @@ private:
         for(int i=0;i<16;++i){auto byte=source();value+=hex[(byte>>4)&15];value+=hex[byte&15];}return value;
     }
     CNA::GamerServices::Configuration config_;
-    std::mutex slotMutex_,transportMutex_;
+    std::mutex slotMutex_,transportMutex_,cacheMutex_;
     std::array<Slot,4> slots_{};
     std::string prefix_=prefix();
     unsigned long long sequence_=0;
@@ -292,6 +353,7 @@ public:
         else throw Unavailable("Invalid friendship operation.");
     }
     void setPresence(const std::string& user,int,const std::string& text) override {require(user);presence_[user]=text;}
+    std::vector<unsigned char> asset(const std::string&) override {throw Unavailable("Fake fixture has no assets.");}
 private:
     void require(const std::string& user) {if(user.empty()||std::find(slots_.begin(),slots_.end(),user)==slots_.end())throw Unavailable("Gamer signed out.");}
     std::vector<ServiceIdentity> identities_;

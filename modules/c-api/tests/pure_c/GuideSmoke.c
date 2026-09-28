@@ -253,12 +253,12 @@ static int validate_screens(const CNA_SignedInGamerHandle gamer)
             CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
-    if (cna_guide_show_friend_request(CNA_PLAYER_INDEX_ONE, gamer) != CNA_RESULT_SUCCESS ||
-        cna_guide_show_friends(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_SUCCESS ||
+    if (cna_guide_show_friend_request(CNA_PLAYER_INDEX_ONE, gamer) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_guide_show_friends(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_NOT_SUPPORTED ||
         cna_guide_show_game_invite(CNA_PLAYER_INDEX_ONE, recipients, UINT64_C(1)) !=
             CNA_RESULT_SUCCESS ||
         cna_guide_show_game_invite_for_session(view("session")) != CNA_RESULT_SUCCESS ||
-        cna_guide_show_gamer_card(CNA_PLAYER_INDEX_ONE, gamer) != CNA_RESULT_SUCCESS) {
+        cna_guide_show_gamer_card(CNA_PLAYER_INDEX_ONE, gamer) != CNA_RESULT_NOT_SUPPORTED) {
         return 0;
     }
     if (cna_guide_show_marketplace(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_SUCCESS ||
@@ -267,7 +267,7 @@ static int validate_screens(const CNA_SignedInGamerHandle gamer)
         cna_guide_show_party_sessions(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_SUCCESS ||
         cna_guide_show_player_review(CNA_PLAYER_INDEX_ONE, gamer) != CNA_RESULT_SUCCESS ||
         cna_guide_show_players(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_SUCCESS ||
-        cna_guide_show_sign_in(2, CNA_FALSE) != CNA_RESULT_SUCCESS ||
+        cna_guide_show_sign_in(2, CNA_FALSE) != CNA_RESULT_NOT_SUPPORTED ||
         cna_guide_show_achievements_ext(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_SUCCESS) {
         return 0;
     }
@@ -300,6 +300,11 @@ static int validate_dispatcher(const CNA_Handle game)
         cna_gamer_services_dispatcher_get_is_initialized(&flag) != CNA_RESULT_SUCCESS ||
         flag != CNA_TRUE ||
         cna_gamer_services_dispatcher_initialize(CNA_INVALID_HANDLE) != CNA_RESULT_INVALID_HANDLE) {
+        return 0;
+    }
+    int32_t signed_in_count = -1;
+    if (cna_gamer_get_signed_in_gamer_count(&signed_in_count) != CNA_RESULT_SUCCESS || signed_in_count != 0 ||
+        cna_gamer_services_dispatcher_initialize(game) != CNA_RESULT_INVALID_STATE) {
         return 0;
     }
     if (cna_gamer_services_dispatcher_update() != CNA_RESULT_SUCCESS ||

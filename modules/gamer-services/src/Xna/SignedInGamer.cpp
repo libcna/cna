@@ -191,7 +191,7 @@ namespace Microsoft::Xna::Framework::GamerServices
             for (const auto& record : records) {
                 auto value = Achievement::CreateInternal(record.key, record.name, record.description,
                     record.displayBeforeEarned, record.earnedTicks != 0, System::DateTime(record.earnedTicks));
-                value.gamerScore_ = record.score; value.howToEarn_ = record.howToEarn;
+                value.gamerScore_ = record.score; value.howToEarn_ = record.howToEarn;value.pictureHash_=record.picture;value.serviceBacked_=true;
                 values.push_back(std::move(value));
             }
             return AchievementCollection::CreateInternal(std::move(values));

@@ -110,7 +110,7 @@ static int validate_profile(const CNA_GamerHandle gamer)
         cna_gamer_profile_copy_region_name(profile, text, sizeof(text), &size) ==
             CNA_RESULT_SUCCESS;
 
-    /* No runtime here carries a gamer picture, so the flag is clear and that is a success. */
+    /* This explicit offline factory fixture has no picture association. */
     ok = ok && cna_gamer_profile_get_picture_size(profile, &has_picture, &size) ==
                    CNA_RESULT_SUCCESS &&
         has_picture == CNA_FALSE && size == UINT64_C(0);
@@ -246,7 +246,7 @@ static int validate_friends(const CNA_SignedInGamerHandle signed_in)
     char text[64];
     int ok;
 
-    /* There is no friend service, so the canonical answer is an empty collection -- a success. */
+    /* This explicit offline factory fixture has no service friend graph. */
     if (cna_signed_in_gamer_get_friends(signed_in, &empty) != CNA_RESULT_SUCCESS ||
         empty == CNA_INVALID_HANDLE ||
         cna_gamer_collection_get_count(empty, &count) != CNA_RESULT_SUCCESS || count != 0 ||

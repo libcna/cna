@@ -51,7 +51,7 @@ is unavailable; no sample-side substitution is needed.
 
 ---
 
-## 4. There is no online matchmaking or invitation service
+## 4. Online matchmaking and invitations remain unfinished
 
 **Found:** 2026-09-09, through SAMPLE-096 (Invites).
 **Partly closed the same day:** the divergence half — see below.
@@ -65,9 +65,11 @@ return sessionType == NetworkSessionType::SystemLink;
 
 `Local` and `LocalWithLeaderboards` are offline session types in XNA too, so a single machine
 genuinely is the whole session and nothing is missing about them. `PlayerMatch` and `Ranked` are
-different: they are Xbox LIVE matchmaking types, where the service finds the peers. There is no such
-service here. The owner has expressed an intention to build a separate CNA server, but no
-replacement matchmaking/invitation backend has been scoped or implemented in this repository.
+different: they are service matchmaking types, where the service finds the peers. The active
+`plans/plan_gamer_services_server.md` mission now implements the independent CNA server and TLS
+identity/achievements/friends/presence/pictures foundation. Session directory, invite delivery and
+relay are scoped GS-007/008 work still awaiting implementation; the old intentional refusal policy
+is superseded. This CNA service is not Xbox LIVE protocol/account compatible.
 The same absence covers invitations — nothing can raise `NetworkSession::InviteAccepted`,
 because nothing delivers an invitation.
 
@@ -99,6 +101,6 @@ path from waiting on a handshake that will never arrive (a real SAMPLE-091 bug).
 would delete that regression guard without closing anything a game can reach.
 
 **Closing the rest** means the service itself: identity, friends/presence, matchmaking, invitation
-delivery and address handoff, for native and browser. That is the scope `SAMPLES-DEC-004` and
-`SAMPLES-DEC-006` put to the owner, and it is why SAMPLE-096 is a non-port rather than a blocked
-port.
+delivery and relay-capable Internet connectivity, for native and browser. The current authorized
+mission includes this scope. SAMPLE-096 remains blocked by the unfinished session/invite layer;
+its existing offline XNA evidence is retained, without treating Windows probes as full Xbox parity.

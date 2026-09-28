@@ -12900,8 +12900,8 @@
         "class",
         "method"
       ],
-      "mapping": "an owned handle, because a profile is disposable and carries a stream. The numbers are one `CNA_GamerProfileInfo` snapshot; the motto and the region **name** are count/copy pairs, since a fixed size would not be honest for either and the canonical region object has no reason to cross the ABI whole. The gamer picture follows the availability-separate-from-the-answer rule: `cna_gamer_profile_get_picture_size` reports a clear flag and a zero size, which is an ordinary success -- no runtime this ABI builds on carries one",
-      "tests": "`GamersSmoke.c` reads the snapshot, both strings and the picture availability, refuses a structure with the wrong version, and asserts a released profile handle is gone",
+      "mapping": "owned profile snapshot handle; numeric info and motto/region count/copy routes, with standard service picture size and caller-buffer copy routes. An absent picture remains success with zero size; configured immutable resources use verified cache. Temporary picture streams are released by both adapters.",
+      "tests": "`GamersSmoke.c` reads the snapshot, both strings and the picture availability, refuses a structure with the wrong version, and asserts a released profile handle is gone; GS-005b pure-C real-server ServiceClient.c checks profile picture size and bytes for two accounts, plus existing offline absence checks",
       "status": "implemented",
       "task": "CBIND-037G4",
       "approved_symbols": [
@@ -12926,7 +12926,7 @@
         "class",
         "method"
       ],
-      "mapping": "a gamer handle with a friend behind it, so every `cna_gamer_*` route works on one and the friend-only routes refuse an ordinary gamer. The twelve predicates are one `CNA_FriendGamerInfo` snapshot. A friend's presence is **free text** while a signed-in gamer's is a mode and a value; that asymmetry is canonical and is preserved rather than evened out. `cna_friend_gamer_create_ext` maps the canonical factory, and is also the only way a C caller obtains a friend at all, since no runtime here has a friend service",
+      "mapping": "a gamer handle with a friend behind it, so every `cna_gamer_*` route works on one and the friend-only routes refuse an ordinary gamer. The twelve predicates are one `CNA_FriendGamerInfo` snapshot. A friend's presence is **free text** while a signed-in gamer's is a mode and a value; that asymmetry is canonical and is preserved rather than evened out. `cna_friend_gamer_create_ext` maps the canonical factory, while authenticated GetFriends populates owned snapshots from the service mutual graph",
       "tests": "`GamersSmoke.c` creates two friends with opposite flags and asserts each predicate independently, reads the free-text presence, asserts the friend-only routes refuse a signed-in gamer, and drives the whole gamer base surface through a friend handle",
       "status": "implemented",
       "task": "CBIND-037G4",

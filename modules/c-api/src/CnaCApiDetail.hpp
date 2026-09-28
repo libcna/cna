@@ -300,8 +300,8 @@ template<typename TCallable>
         return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
     } catch (const Microsoft::Xna::Framework::GamerServices::GamerServicesNotAvailableException&
                  exception) {
-        // The platform has no gamer services at all. Nothing the caller supplies or retries changes
-        // that, which is what separates it from every arm below.
+        // Preserve the ABI category for unavailable service operations; the runtime now also
+        // uses this exception for configured-service authentication and transport failures.
         return Fail(CNA_RESULT_NOT_SUPPORTED, CNA_ERROR_CATEGORY_NOT_SUPPORTED, exception.what());
     } catch (const Microsoft::Xna::Framework::GamerServices::GameUpdateRequiredException&
                  exception) {

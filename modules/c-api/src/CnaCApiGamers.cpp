@@ -1303,13 +1303,24 @@ CNA_Result cna_gamer_profile_get_picture_size(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        System::IO::Stream* const picture = profile->value->GetGamerPicture();
+        std::unique_ptr<System::IO::Stream> picture(profile->value->GetGamerPicture());
         if (picture == nullptr) {
             return CNA_RESULT_SUCCESS;
         }
         *outHasPicture = CNA_TRUE;
         *outBytes = static_cast<uint64_t>(picture->getLengthProperty());
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamer_profile_copy_picture(const CNA_GamerProfileHandle handle,uint8_t* destination,uint64_t capacity,uint64_t* outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if(!outBytes||(!destination&&capacity))return InvalidInput("The picture output is invalid.");
+        std::shared_ptr<GamerProfileResource> profile;
+        if(const auto result=BorrowProfile(handle,&profile);result!=CNA_RESULT_SUCCESS)return result;
+        std::unique_ptr<System::IO::Stream> picture(profile->value->GetGamerPicture());
+        return CNA::C::Detail::CopyPictureStream(picture.get(),destination,capacity,outBytes);
     });
 }
 

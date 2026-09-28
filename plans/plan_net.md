@@ -1,5 +1,13 @@
 # Plan: CNA XNA 4.0 Net / GamerServices / Avatar — 2026-07-07 Re-Audit and Hardening
 
+> **Current mission supersession (2026-09-28):** This historical hardening plan is retained as
+> evidence. Its SystemLink-only PlayerMatch/Ranked/invite refusal and public Avatar EXT split are
+> superseded by [plan_gamer_services_server.md](plan_gamer_services_server.md). Xbox 360 remains
+> the behavioral target; proprietary/third-party avatar assets remain prohibited. Current service
+> foundation is implemented in the dedicated feature worktree; matchmaking/invites/relay and
+> standard Avatar migration are active incomplete requirements, not intentional exclusions.
+
+
 This is a fresh, second-pass hardening plan. The prior plan (`plan_net_20260707.md`, formerly
 `plan_net.md`) closed out 132/132 tasks and is archived, not deleted — some findings below
 reference it directly where this pass revisits or extends a decision made there.

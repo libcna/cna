@@ -1568,13 +1568,24 @@ CNA_C_API CNA_Result cna_gamer_profile_copy_region_name(
  * @param out_bytes Receives the picture size in bytes, zero when there is none.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * **No runtime this ABI builds on carries gamer pictures**, so the flag is always clear. Availability
- * is separate from the answer: no picture is an ordinary success, not a failure.
+ * Service profile pictures are retrieved and cached by the runtime. No configured picture is
+ * an ordinary success with a clear flag.
  */
 CNA_C_API CNA_Result cna_gamer_profile_get_picture_size(
     CNA_GamerProfileHandle profile,
     CNA_Bool* out_has_picture,
     uint64_t* out_bytes);
+
+/**
+ * @brief Copies the standard gamer picture into caller storage.
+ * @param profile Owned profile handle.
+ * @param destination Output bytes, or null with zero capacity.
+ * @param capacity Output capacity in bytes.
+ * @param out_bytes Required size; zero when no picture is configured.
+ * @return Success, buffer-too-small, or a documented argument/handle/service failure.
+ */
+CNA_C_API CNA_Result cna_gamer_profile_copy_picture(CNA_GamerProfileHandle profile,
+    uint8_t* destination, uint64_t capacity, uint64_t* out_bytes);
 
 /**
  * @brief Releases a gamer profile.
@@ -2433,13 +2444,11 @@ CNA_C_API CNA_Result cna_gamer_services_dispatcher_update(void);
 CNA_C_API CNA_Result cna_gamer_services_dispatcher_update_async(CNA_Bool* out_did_work);
 
 /**
- * @brief Reports how many gamers the dispatcher has released.
+ * @brief Reports how many retired dispatcher identities have been released.
  *
- * @param out_count Receives the count.
- * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
- *
- * CNAEXT: a counter the canonical implementation keeps for its own tests, exposed because it is the
- * only way to observe the dispatcher having done anything.
+ * Retired identities remain alive until shutdown; the value currently remains zero.
+ * @param out_count Output for the released identity count.
+ * @return A result code.
  */
 CNA_C_API CNA_Result cna_gamer_services_dispatcher_get_freed_gamer_count_ext(uint64_t* out_count);
 
@@ -2521,7 +2530,7 @@ typedef struct CNA_AchievementInfo {
  * @return `CNA_RESULT_SUCCESS` or a documented argument/thread failure.
  *
  * CNAEXT: the canonical factory exists so a platform layer can publish an achievement catalog. It is
- * also how a C caller builds a collection to work with, since nothing here downloads one.
+ * also useful for explicit offline fixtures; service identities retrieve their title catalog.
  */
 CNA_C_API CNA_Result cna_achievement_create_ext(
     CNA_StringView key,
@@ -2665,16 +2674,22 @@ CNA_C_API CNA_Result cna_achievement_copy_how_to_earn(
  *
  * @param achievement Owned achievement handle.
  * @param out_bytes Receives the picture size in bytes.
- * @return `CNA_RESULT_NOT_SUPPORTED` on this runtime, or a documented argument/handle/thread
- *         failure.
- *
- * **No runtime this ABI builds on carries achievement pictures**: the canonical accessor is not
- * implemented and says so, and this route reports that rather than answering an empty picture. That
- * is a different answer from the gamer picture, which is *absent* rather than unimplemented.
+ * @return Success for configured service artwork, or a documented service/argument/handle failure.
  */
 CNA_C_API CNA_Result cna_achievement_get_picture_size(
     CNA_AchievementHandle achievement,
     uint64_t* out_bytes);
+
+/**
+ * @brief Copies the standard achievement picture into caller storage.
+ * @param achievement Owned achievement handle.
+ * @param destination Output bytes, or null with zero capacity.
+ * @param capacity Output capacity in bytes.
+ * @param out_bytes Required picture size, including on a buffer-too-small result.
+ * @return Success, buffer-too-small, or a documented argument/handle/service failure.
+ */
+CNA_C_API CNA_Result cna_achievement_copy_picture(CNA_AchievementHandle achievement,
+    uint8_t* destination, uint64_t capacity, uint64_t* out_bytes);
 
 /**
  * @brief Reports whether two achievements are equal.

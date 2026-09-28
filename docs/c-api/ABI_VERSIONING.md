@@ -2,7 +2,18 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.31.0** (`RRC-012`). It **retires three public renderer
+The current experimental ABI is **0.32.0** (`GS-005b`). It adds caller-buffer picture copy
+routes for achievements and gamer profiles, releases temporary stream ownership in both size
+routes, and makes the existing Guide/Dispatcher routes reflect configured service availability
+and real authentication. Unconfigured social/sign-in calls now refuse, duplicate initialization
+reports invalid-state, and initialization fabricates zero gamers. No structure layout or numeric
+identity changes. The minor increment records these corrected behavioral/error rules while 0.x
+is experimental. Service/account/protocol objects remain private. Online picture and pure-C client
+coverage are measured separately from historical API shape.
+
+### Previous ABI 0.31.0
+
+The ABI was **0.31.0** (`RRC-012`). It **retires three public renderer
 identities** -- `DIRECT2D` (`16`), `FREEDIRECT` (`21`) and `PORTABLEGL` (`46`) -- together with the
 three `CNA_GRAPHICS_RENDERER_*` constants that named them, and moves
 `CNA_GRAPHICS_RENDERER_MAXIMUM` from `46` (`PORTABLEGL`) to `44` (`SVG_DOM`, the highest surviving
@@ -24,7 +35,7 @@ reduction removes `engine_layer.h`, its pipeline, post-process, clustered-lighti
 probe and optional PBR-material routes, along with their handles, enums and value layouts.
 `graphics_ext.h` retains ASCII, CRT, colour-depth and DebugDraw routes. Core Effect, PBR,
 ShaderEffect, glTF, CNB/CNJ and content routes remain. The ABI baseline records the exact
-removed symbols and layouts; the library now exports 3,213 `cna_*` routes. Bindings must target
+removed symbols and layouts; the historical removal checkpoint is recorded in Git and its ABI baseline. Bindings must target
 the new header and version.
 
 ### Previous ABI 0.29.0
@@ -33,8 +44,7 @@ The ABI is `0.29.0`. It **removes the SpriteBatch 2D mesh route**: the function
 `cna_sprite_batch_draw_mesh_ext` and the versioned structure `CNA_SpriteMeshEXT` it took (64 bytes,
 8-byte aligned) are gone, together with the C++ surface behind them --
 `Microsoft::Xna::Framework::Graphics::SpriteBatch::DrawMeshEXT` and
-`CNA::Internal::Renderers::ISpriteBatchRenderer::DrawMeshEXT`. One route goes, so the library now
-exports 4,055 `cna_*` symbols, and the recorded struct layouts drop from 222 to 221.
+`CNA::Internal::Renderers::ISpriteBatchRenderer::DrawMeshEXT`. That historical checkpoint removed one route and reduced its measured struct count by one.
 
 Nothing else changes: no other route, constant, structure, field, error rule or ownership rule is
 touched, no renderer identity is renumbered, and no enum value, capability bit or dispatch member
@@ -455,7 +465,8 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-All four build configurations export the same 4,055 symbols. That is itself part of the contract:
+The current baseline records 3,215 exports; build configurations must export the same surface.
+That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose backend or layer is absent exists and refuses, rather than
 disappearing from the library. `CNA_CNAEXT` is the newest member of that list and the one with the

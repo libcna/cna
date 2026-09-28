@@ -16,7 +16,13 @@ class PropertyDictionary;
 class SignedInGamer;
 }
 
+namespace System::IO { class Stream; }
 namespace CNA::C::Detail {
+/** @brief Copies a bounded picture stream into caller storage.
+ * @param stream Optional readable stream. @param destination Output bytes. @param capacity Capacity.
+ * @param outBytes Required byte count. @return Native result. */
+CNA_Result CopyPictureStream(System::IO::Stream* stream,uint8_t* destination,uint64_t capacity,uint64_t* outBytes);
+
 
 // A network session cannot be created without at least one signed-in gamer, so the session adapter
 // borrows one through this entry point rather than learning the gamer-services resource layout.

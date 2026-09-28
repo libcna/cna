@@ -6,6 +6,8 @@
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerProfile.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GuideAlreadyVisibleException.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
@@ -96,7 +98,18 @@ int main(int argc,char** argv) {
             gamer->AwardAchievement("first");check(gamer->GetAchievements()[0].getIsEarnedProperty(),"persistent award");
         }
         std::unique_ptr<Gamer> lookup(Gamer::GetFromGamertag(gamer->getGamertagProperty()));check(lookup->getGamertagProperty()==gamer->getGamertagProperty(),"lookup");
-        std::unique_ptr<GamerProfile> profile(gamer->GetProfile());check(!profile->getIsDisposedProperty(),"profile snapshot");profile->Dispose();
+        std::unique_ptr<GamerProfile> profile(gamer->GetProfile());check(!profile->getIsDisposedProperty(),"profile snapshot");
+        if(real) {
+            auto picturedAchievement=achievements[0];
+            std::unique_ptr<System::IO::Stream> picture(picturedAchievement.GetPicture());
+            check(picture&&picture->getPositionProperty()==0&&!picture->getCanWriteProperty(),"achievement stream ownership/position");
+            Microsoft::Xna::Framework::Graphics::GraphicsDevice device;
+            auto texture=Microsoft::Xna::Framework::Graphics::Texture2D::FromStream(device,*picture);
+            check(texture.getWidthProperty()==2&&texture.getHeightProperty()==2,"achievement PNG texture decode");
+            std::unique_ptr<System::IO::Stream> again(picturedAchievement.GetPicture());check(again.get()!=picture.get()&&again->getPositionProperty()==0,"independent cached streams");
+            std::unique_ptr<System::IO::Stream> gamerPicture(profile->GetGamerPicture());check(gamerPicture&&gamerPicture->getLengthProperty()==again->getLengthProperty(),"profile picture retrieval");
+        }
+        profile->Dispose();
         if(!real) {
             std::unique_ptr<System::IAsyncResult> failure(gamer->BeginAwardAchievement("missing",{},{}));
             bool failed=false;try{gamer->EndAwardAchievement(failure.get());}catch(const GamerServicesNotAvailableException&){failed=true;}check(failed,"async exception propagation");
