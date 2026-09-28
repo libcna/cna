@@ -19,7 +19,8 @@ TEST(QualityOfServiceTest, DefaultValues) {
     EXPECT_EQ(System::TimeSpan::Zero, qos.getAverageRoundtripTimeProperty());
     EXPECT_EQ(0, qos.getBytesPerSecondDownstreamProperty());
     EXPECT_EQ(0, qos.getBytesPerSecondUpstreamProperty());
-    EXPECT_TRUE(qos.getIsAvailableProperty());
+    // Reference internal QualityOfService(): nothing measured, not available.
+    EXPECT_FALSE(qos.getIsAvailableProperty());
     EXPECT_EQ(System::TimeSpan::Zero, qos.getMinimumRoundtripTimeProperty());
 }
 
@@ -55,7 +56,7 @@ TEST(AvailableNetworkSessionTest, PropertiesFromCtor) {
     EXPECT_EQ("host-a", session.getHostGamertagProperty());
     EXPECT_EQ(1, session.getOpenPrivateGamerSlotsProperty());
     EXPECT_EQ(3, session.getOpenPublicGamerSlotsProperty());
-    EXPECT_TRUE(session.getQualityOfServiceProperty().getIsAvailableProperty());
+    EXPECT_FALSE(session.getQualityOfServiceProperty().getIsAvailableProperty());
     EXPECT_EQ(8, session.getSessionPropertiesProperty().getCountProperty());
 }
 

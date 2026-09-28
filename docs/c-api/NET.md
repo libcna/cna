@@ -24,9 +24,9 @@ composition. The C identities are therefore discrete too and must never be combi
 an immutable measurement snapshot. Round-trip times are 100-nanosecond ticks; `System::TimeSpan`
 never crosses the boundary.
 
-Both canonical factories are mapped. `cna_quality_of_service_init` reproduces the unmeasured one
-faithfully, including its quirk of reporting `is_available` as `CNA_TRUE` with every measurement
-zero. `cna_quality_of_service_init_measured` takes the single round-trip sample a discovery
+Both canonical factories are mapped. `cna_quality_of_service_init` reproduces the unmeasured one:
+`is_available` is `CNA_FALSE` and every measurement zero (XNA's `internal QualityOfService()`; the
+FNA-era port reported it available). `cna_quality_of_service_init_measured` takes the single round-trip sample a discovery
 exchange yields, which is why the average and the minimum are the same value and the throughput
 fields stay zero.
 
@@ -238,14 +238,11 @@ the sender comes back as a **borrowed gamer view** that keeps its session alive 
 roster view — the caller releases it. An empty queue is not a failure: the route succeeds and
 reports zero bytes.
 
-Two canonical behaviors are preserved rather than smoothed over:
-
-- `cna_local_network_gamer_receive_data_at` **consumes the packet before** it validates the offset,
-  so an out-of-range offset returns `CNA_RESULT_INVALID_ARGUMENT` *and* the packet is gone. The
-  offset form also fills the caller's buffer from the offset onwards, so the buffer must be large
-  enough for the offset plus the packet.
-- `cna_local_network_gamer_receive_data_into_packet_reader` always reports **zero** bytes received,
-  even when it consumed a packet, because the canonical overload never returns the length it read.
+The canonical checks come first, in XNA's order: the offset must lie inside the destination (a zero
+capacity is refused), and a packet that does not fit after it is refused with
+`CNA_RESULT_INVALID_ARGUMENT` and **stays queued**. `cna_local_network_gamer_receive_data_into_packet_reader`
+sizes the reader to the packet and reports its length. (The FNA-era port consumed the packet before
+checking and reported zero for the reader form.)
 
 ### Sending
 
@@ -264,5 +261,7 @@ carry an `_ext` suffix because the canonical operations they map are CNA extensi
 the same fixed `CNA_NetworkEventInfo` description the session pump uses, so no canonical event
 object crosses the ABI.
 
-`EnableSendVoice` and `SendPartyInvites` are declared no-ops in the canonical implementation. Their
-routes exist, validate their arguments and succeed; they deliberately do not pretend to do more.
+`EnableSendVoice` runs the canonical checks (a null or foreign remote gamer, either gamer having left)
+and otherwise succeeds: CNA carries no voice. `SendPartyInvites` always answers
+`CNA_RESULT_INVALID_STATE`, the canonical "alone in the party" refusal, because CNA has no party
+service.

@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
@@ -179,6 +182,32 @@ TEST(LocalNetworkGamerTest, ReusedPacketWriterRecipientSendDoesNotSendStaleTrail
               (std::vector<SharpRuntime::bytecs>{9}));
 }
 
+// Reference ReceiveData: the offset is checked before anything else, a packet that does not fit is
+// refused and stays queued, and both overloads return the packet size (the reader is sized to it).
+TEST(LocalNetworkGamerTest, ReceiveDataReturnsThePacketSizeAndRefusesWithoutDequeuing) {
+    LocalGamerFixture fixture;
+    std::vector<SharpRuntime::bytecs> empty;
+    NetworkGamer* sender = nullptr;
+    EXPECT_THROW(fixture.gamer->ReceiveData(empty, sender), System::ArgumentOutOfRangeException);
+    NetworkSession::NetworkEvent evt;
+    evt.Packet = {1, 2, 3, 4, 5, 6};
+    fixture.gamer->EnqueuePacket(evt);
+    fixture.gamer->EnqueuePacket(evt);
+    std::vector<SharpRuntime::bytecs> small(4);
+    EXPECT_THROW(fixture.gamer->ReceiveData(small, sender), System::ArgumentException);
+    EXPECT_THROW(fixture.gamer->ReceiveData(small, 4, sender), System::ArgumentOutOfRangeException);
+    ASSERT_TRUE(fixture.gamer->getIsDataAvailableProperty());
+    std::vector<SharpRuntime::bytecs> buffer(8, 0);
+    EXPECT_EQ(6, fixture.gamer->ReceiveData(buffer, 2, sender));
+    EXPECT_EQ((std::vector<SharpRuntime::bytecs>{0, 0, 1, 2, 3, 4, 5, 6}), buffer);
+    PacketReader reader;
+    EXPECT_EQ(6, fixture.gamer->ReceiveData(reader, sender));
+    EXPECT_EQ(6, reader.getLengthProperty());
+    EXPECT_EQ(1, reader.ReadByte());
+    EXPECT_EQ(0, fixture.gamer->ReceiveData(reader, sender));
+    EXPECT_EQ(0, reader.getLengthProperty());
+}
+
 TEST(LocalNetworkGamerTest, ReceiveDataIntoPacketReaderReturnsZero) {
     LocalGamerFixture fixture;
     PacketReader reader;
@@ -187,10 +216,17 @@ TEST(LocalNetworkGamerTest, ReceiveDataIntoPacketReaderReturnsZero) {
     EXPECT_EQ(fixture.gamer->ReceiveData(reader, sender), 0);
 }
 
-TEST(LocalNetworkGamerTest, EnableSendVoiceAndSendPartyInvitesAreNoOps) {
+// Reference EnableSendVoice checks (CNA carries no voice), and SendPartyInvites refusing a profile
+// alone in its party (CNA has no party service, so every profile is).
+TEST(LocalNetworkGamerTest, EnableSendVoiceAndSendPartyInvitesFollowTheReferenceChecks) {
     LocalGamerFixture fixture;
     fixture.gamer->EnableSendVoice(fixture.gamer, true);
-    fixture.gamer->SendPartyInvites();
+    EXPECT_THROW(fixture.gamer->EnableSendVoice(nullptr, true), System::ArgumentNullException);
+    NetworkGamer stranger = NetworkGamer::CreateInternal(nullptr);
+    EXPECT_THROW(fixture.gamer->EnableSendVoice(&stranger, true), System::ArgumentException);
+    stranger.SetHasLeftSession(true);
+    EXPECT_THROW(fixture.gamer->EnableSendVoice(&stranger, true), System::InvalidOperationException);
+    EXPECT_THROW(fixture.gamer->SendPartyInvites(), System::InvalidOperationException);
 }
 
 TEST(LocalNetworkGamerTest, ClearPacketQueueLeavesNoDataAvailable) {

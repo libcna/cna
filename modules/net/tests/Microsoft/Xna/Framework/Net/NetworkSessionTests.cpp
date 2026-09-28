@@ -5,6 +5,7 @@
 #include "CNA/Internal/Net/ENetBackend.hpp"
 #include "CNA/Internal/Net/ENetHostHandle.hpp"
 #include "CNA/Internal/Net/NetPacketCodec.hpp"
+#include "Microsoft/Xna/Framework/Net/GameStartedEventArgs.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
@@ -603,6 +604,29 @@ TEST(NetworkSessionTest, FailedCreateDoesNotPermanentlyStrandActiveAction) {
 // gamer (no replay, no queued event).
 // Reference NetworkSession.AddLocalGamer checks, in order: null, disposed gamer, disposed session,
 // gamer already in the session, Playing without join-in-progress, Ended, no open public slot.
+// Reference GameStarted add accessor: a handler added while Playing is told at once; in the lobby
+// it is not.
+TEST(NetworkSessionTest, GameStartedReplaysForAHandlerAddedWhilePlaying) {
+    SignedInGamer gamer = MakeSignedInGamer("PlayerTag");
+    std::unique_ptr<NetworkSession> session(NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}));
+    int lobbyCalls = 0;
+    const auto lobby = session->GameStarted.Add([&](System::Object*, const GameStartedEventArgs&) { ++lobbyCalls; });
+    EXPECT_EQ(0, lobbyCalls);
+    session->StartGame();
+    session->Update();
+    ASSERT_EQ(NetworkSessionState::Playing, session->getSessionStateProperty());
+    EXPECT_EQ(1, lobbyCalls);
+    int lateCalls = 0;
+    System::Object* sender = nullptr;
+    const auto late = session->GameStarted.Add([&](System::Object* from, const GameStartedEventArgs&) { ++lateCalls; sender = from; });
+    EXPECT_EQ(1, lateCalls);
+    EXPECT_EQ(session.get(), sender);
+    session->GameStarted.Remove(lobby);
+    session->GameStarted.Remove(late);
+    session->Dispose();
+}
+
 TEST(NetworkSessionTest, AddLocalGamerFollowsTheReferenceChecks) {
     SignedInGamer first = MakeSignedInGamer("FirstTag");
     Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({&first})));

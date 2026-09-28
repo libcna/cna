@@ -285,6 +285,15 @@ namespace Microsoft::Xna::Framework::Net
             }
         });
 
+        // Reference GameStarted add accessor: a handler added while Playing is told at once.
+        GameStarted.SetReplayHook([this](const System::EventHandler<GameStartedEventArgs>::HandlerType& handler)
+        {
+            if (sessionState_ == NetworkSessionState::Playing)
+            {
+                handler(this, GameStartedEventArgs());
+            }
+        });
+
         simulatedLatency_ = System::TimeSpan::Zero;
         simulatedPacketLoss_ = 0.0f;
         isDisposed_ = false;

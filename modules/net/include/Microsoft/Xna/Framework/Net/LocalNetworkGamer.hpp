@@ -48,50 +48,55 @@ namespace Microsoft::Xna::Framework::Net
         [[nodiscard]] bool getIsLocalProperty() const override;
 
         /**
-         * @brief Enables or disables sending voice data to a remote gamer.
-         *
-         * No-op, matching FNA's stub.
+         * @brief Enables or disables sending voice data to a remote gamer. CNA carries no voice, so
+         * after the checks there is nothing to switch.
          *
          * @param remoteGamer The remote gamer to configure.
          * @param enable Whether voice sending should be enabled.
+         * @throws System::InvalidOperationException if either gamer has left the session.
+         * @throws System::ArgumentNullException if remoteGamer is null.
+         * @throws System::ArgumentException if remoteGamer belongs to another session.
          */
         void EnableSendVoice(NetworkGamer* remoteGamer, bool enable);
 
         /**
-         * @brief Sends party invites to nearby gamers.
+         * @brief Sends game invitations to the gamer's party members.
          *
-         * No-op, matching FNA's stub.
+         * @throws System::InvalidOperationException if the gamer has left the session or is alone in
+         *         its party, which is always the case: CNA has no party service.
          */
         void SendPartyInvites();
 
         /**
          * @brief Receives the next queued packet into data, starting at offset 0.
          *
-         * @param data The buffer to receive into; filled up to its own size.
+         * @param data The buffer to receive into.
          * @param sender Receives the gamer that sent the packet.
-         * @return The number of bytes received, or 0 if no packet was available.
+         * @return The packet size, or 0 if no packet was available.
+         * @throws System::ArgumentOutOfRangeException if data is empty.
+         * @throws System::ArgumentException if the packet does not fit; it stays queued.
          */
         int ReceiveData(std::vector<SharpRuntime::bytecs>& data, NetworkGamer*& sender);
 
         /**
          * @brief Receives the next queued packet into data, starting at the given offset.
          *
-         * @param data The buffer to receive into; filled up to its own size.
+         * @param data The buffer to receive into.
          * @param offset The offset within data to start writing at.
          * @param sender Receives the gamer that sent the packet.
-         * @return The number of bytes received, or 0 if no packet was available.
+         * @return The packet size, or 0 if no packet was available.
+         * @throws System::ArgumentOutOfRangeException if offset is not inside data.
+         * @throws System::ArgumentException if the packet does not fit after offset; it stays queued.
          */
         int ReceiveData(std::vector<SharpRuntime::bytecs>& data, int offset, NetworkGamer*& sender);
 
         /**
-         * @brief Receives the next queued packet into a PacketReader.
-         *
-         * Always returns 0 — FNA's own implementation declares a length variable that is
-         * never updated before being returned; preserved as-is.
+         * @brief Receives the next queued packet into a PacketReader, which is sized to the packet
+         * and rewound (emptied when no packet was queued).
          *
          * @param data The PacketReader to receive into.
          * @param sender Receives the gamer that sent the packet.
-         * @return Always 0 when a packet was available; 0 when none was, too.
+         * @return The packet size, or 0 if no packet was available.
          */
         int ReceiveData(PacketReader& data, NetworkGamer*& sender);
 
@@ -175,6 +180,8 @@ namespace Microsoft::Xna::Framework::Net
         CNAEXT static LocalNetworkGamer CreateInternal(GamerServices::SignedInGamer* gamer, NetworkSession* session);
 
     private:
+        // The session gamer (current or previous) that sent packet, or nullptr.
+        NetworkGamer* SenderOf(const NetworkSession::NetworkEvent& packet) const;
         LocalNetworkGamer(GamerServices::SignedInGamer* gamer, NetworkSession* session);
 
         GamerServices::SignedInGamer* signedInGamer_;

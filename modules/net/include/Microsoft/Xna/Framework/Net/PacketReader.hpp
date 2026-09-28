@@ -140,5 +140,10 @@ namespace Microsoft::Xna::Framework::Net
          * @return The double read from the buffer.
          */
         double ReadDouble() override;
+
+    private:
+        friend class LocalNetworkGamer;
+        // Reference internal Resize: sets the packet length and rewinds.
+        CNAEXT void ResizeInternal(int size);
     };
 }

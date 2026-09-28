@@ -47,14 +47,9 @@ namespace Microsoft::Xna::Framework::Net
         [[nodiscard]] System::TimeSpan getMinimumRoundtripTimeProperty() const;
 
         /**
-         * @brief Creates a QualityOfService for CNA internal use, with all-zero/unmeasured fields.
-         *
-         * `IsAvailable` is still `true` even though nothing is actually measured - this matches
-         * FNA's own reference `internal QualityOfService()` constructor byte-for-byte (an
-         * acknowledged upstream stub, its own source carries a "TODO: Everything below" comment),
-         * not a CNA gap. Task 4.2: kept for callers with no real measurement to offer at all (e.g.
-         * a session listing not built from a real discovery reply); real production discovery
-         * replies use the measured overload below instead.
+         * @brief Creates an unmeasured QualityOfService for CNA internal use: all fields zero and
+         * `IsAvailable` false, as the reference `internal QualityOfService()` leaves them. Service
+         * listings, which CNA does not measure, use it.
          */
         CNAEXT static QualityOfService CreateInternal();
 

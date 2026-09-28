@@ -2557,3 +2557,17 @@ the C struct field documents local ticks. CnaGamerServicesTests 485 + 1 skip.
   reference `BottomCenter` (CNA draws no toasts, so it is stored only). C doc follows. Tests:
   `GuideTest.BeginShowKeyboardInputValidatesArgumentsLikeTheReference` and updated pending/position/
   trial tests; CnaGamerServicesTests 491 + 1 skip.
+- [x] GS-007m Net reference behaviour (audit OPEN 3, 16, 17's validation, QoS and SendPartyInvites
+  notes). `GameStarted`'s add accessor tells a handler added while Playing at once. `ReceiveData`:
+  the offset is checked first (an empty array is refused), a packet that does not fit is refused
+  and stays queued (it used to be consumed and then refused), and both overloads return the packet
+  size; the `PacketReader` overload sizes the reader to the packet (it returned 0 and never
+  truncated the reader). One divergence kept: with nothing queued the reference then reads through a
+  reader that has never held data and throws; CNA's reader has no separate capacity, so it returns 0.
+  A sender that already left is found among `PreviousGamers`. `EnableSendVoice` runs the reference
+  checks (CNA carries no voice); `SendPartyInvites` refuses a profile alone in its party, which with
+  no party service is every profile. The unmeasured `QualityOfService` (service listings) reports
+  `IsAvailable` false, as the reference's internal constructor leaves it. C docs, `NET.md`,
+  `NetSmoke` and the coverage rule follow. Tests: `NetworkSessionTest.GameStartedReplaysForAHandlerAddedWhilePlaying`,
+  `LocalNetworkGamerTest.ReceiveDataReturnsThePacketSizeAndRefusesWithoutDequeuing`, voice/party
+  checks, QoS defaults; CnaNetTests 481/481.

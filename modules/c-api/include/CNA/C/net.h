@@ -135,8 +135,8 @@ typedef CNA_Handle CNA_PacketReaderHandle;
  * @param out_value Caller-provided versioned structure to initialize.
  * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for an invalid structure.
  *
- * Availability is still reported as `CNA_TRUE` with all measurements zero, matching the canonical
- * unmeasured factory exactly.
+ * Availability is `CNA_FALSE` with all measurements zero, as the canonical unmeasured
+ * quality of service reports.
  */
 CNA_C_API CNA_Result cna_quality_of_service_init(CNA_QualityOfService* out_value);
 

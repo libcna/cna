@@ -76,9 +76,9 @@ static int validate_quality_of_service(void)
         INT64_C(0), INT64_C(0), INT32_C(0), INT32_C(0)
     };
 
-    /* The unmeasured factory still reports availability, matching the canonical stub exactly. */
+    /* The unmeasured description is not available, as the canonical unmeasured one reports. */
     if (cna_quality_of_service_init(&quality) != CNA_RESULT_SUCCESS ||
-        quality.is_available != CNA_TRUE || quality.average_roundtrip_ticks != INT64_C(0) ||
+        quality.is_available != CNA_FALSE || quality.average_roundtrip_ticks != INT64_C(0) ||
         quality.minimum_roundtrip_ticks != INT64_C(0) ||
         quality.bytes_per_second_downstream != INT32_C(0) ||
         quality.bytes_per_second_upstream != INT32_C(0)) {
@@ -1384,16 +1384,15 @@ static int validate_local_gamer_packets(const CNA_NetworkGamerHandle local)
         return 0;
     }
 
-    /* The canonical offset overload consumes the packet before it validates the offset. */
+    /* A packet that does not fit after the offset is refused and stays queued. */
     if (cna_local_network_gamer_enqueue_packet_ext(local, &event) != CNA_RESULT_SUCCESS ||
         cna_local_network_gamer_receive_data_at(
             local, buffer, UINT64_C(4), 3, &sender, &received) != CNA_RESULT_INVALID_ARGUMENT ||
         cna_local_network_gamer_get_is_data_available(local, &flag) != CNA_RESULT_SUCCESS ||
-        flag != CNA_FALSE) {
+        flag != CNA_TRUE) {
         return 0;
     }
-    if (cna_local_network_gamer_enqueue_packet_ext(local, &event) != CNA_RESULT_SUCCESS ||
-        cna_local_network_gamer_receive_data_at(
+    if (cna_local_network_gamer_receive_data_at(
             local, buffer, (uint64_t)sizeof(buffer), 2, &sender, &received) !=
             CNA_RESULT_SUCCESS ||
         received != UINT64_C(4) || memcmp(buffer + 2, payload, 4U) != 0) {
@@ -1404,12 +1403,12 @@ static int validate_local_gamer_packets(const CNA_NetworkGamerHandle local)
         return 0;
     }
 
-    /* The canonical packet-reader overload always reports zero, even with a packet available. */
+    /* The packet-reader overload reports the packet size, as the canonical one does. */
     if (cna_packet_reader_create(0, &reader) != CNA_RESULT_SUCCESS ||
         cna_local_network_gamer_enqueue_packet_ext(local, &event) != CNA_RESULT_SUCCESS ||
         cna_local_network_gamer_receive_data_into_packet_reader(
             local, reader, &sender, &received) != CNA_RESULT_SUCCESS ||
-        received != UINT64_C(0)) {
+        received != UINT64_C(4)) {
         (void)cna_packet_reader_destroy(reader);
         return 0;
     }
@@ -1495,8 +1494,8 @@ static int validate_local_gamers(
         strcmp(buffer, "Player") == 0 &&
         cna_signed_in_gamer_destroy(backing) == CNA_RESULT_SUCCESS &&
         cna_local_network_gamer_enable_send_voice(local, CNA_INVALID_HANDLE, CNA_TRUE) ==
-            CNA_RESULT_SUCCESS &&
-        cna_local_network_gamer_send_party_invites(local) == CNA_RESULT_SUCCESS &&
+            CNA_RESULT_INVALID_ARGUMENT &&
+        cna_local_network_gamer_send_party_invites(local) == CNA_RESULT_INVALID_STATE &&
         validate_local_gamer_packets(local) && validate_local_gamer_sends(local);
     if (!ok || cna_network_gamer_destroy(local) != CNA_RESULT_SUCCESS) {
         return 0;
