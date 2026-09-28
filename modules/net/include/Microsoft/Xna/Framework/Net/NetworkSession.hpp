@@ -980,6 +980,9 @@ namespace Microsoft::Xna::Framework::Net
         CNAEXT std::vector<std::unique_ptr<NetworkGamer>> ownedGamers_;
 
         void FinalizeServiceLeaderboards(bool isLeaving=false);
+        void BeginOnlineLeaderboards();
+        void AbandonServiceLeaderboards() noexcept;
+        std::shared_ptr<CNA::Internal::GamerServices::IGamerServicesBackend> LeaderboardService() const;
         void ReleaseSessionResources();
         std::string leaderboardGameplay_,leaderboardOwner_;
         bool leaderboardTransitionPending_=false;

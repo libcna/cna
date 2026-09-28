@@ -54,6 +54,8 @@ public:
     bool ended() const {return ended_;}
     /** @brief Gets whether this machine hosts the session. @return Host flag. */
     bool host() const {return host_;}
+    /** @brief Gets the backend owning this membership. @return Origin, or null after close. */
+    std::shared_ptr<GamerServices::IGamerServicesBackend> origin() const {return engine_?engine_->origin():nullptr;}
     /** @brief Gets the opaque directory session. @return Session identifier. */
     const std::string& session() const {return snapshot_.session;}
 private:

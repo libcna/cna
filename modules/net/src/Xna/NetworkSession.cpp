@@ -448,20 +448,8 @@ namespace Microsoft::Xna::Framework::Net
     void NetworkSession::ReleaseSessionResources()
     {
         if(isDisposed_)return;
-        if(!leaderboardGameplay_.empty()) {
-            // Finalization must not invoke user callbacks or throw from a C++ destructor.
-            // Capture only owned logical values so queued cleanup cannot reference this session.
-            try {
-                const auto service=CNA::Internal::GamerServices::backend();
-                const auto gameplay=leaderboardGameplay_,owner=leaderboardOwner_;
-                auto* executor=service.get();
-                // The backend joins its own executor before destruction. A queued task must not
-                // retain that backend and cause its destructor to run on the executor thread.
-                service->submit([executor,gameplay,owner]{try{executor->abortLeaderboardGame(gameplay,owner);}catch(...){}},[]{});
-            }catch(...){}
-        }
-        for(auto* gamer:localGamers_){gamer->leaderboardWriter_.EndServiceGameplay();if(gamer->getSignedInGamerProperty())gamer->getSignedInGamerProperty()->leaderboardWriter_.EndServiceGameplay();}
-        leaderboardGameplay_.clear();
+        // Finalization must not invoke user callbacks or throw from a C++ destructor.
+        AbandonServiceLeaderboards();
         for (LocalNetworkGamer* gamer : localGamers_)
         {
             gamer->ClearPacketQueue();
@@ -576,27 +564,45 @@ namespace Microsoft::Xna::Framework::Net
             }
             else // NetworkEventType::StateChange
             {
+                // The reference applies the new state before raising its event.
                 if (evt.State == NetworkSessionState::Playing)
                 {
+                    // Every machine of an online session opens its own local write epoch.
+                    if(online_ && leaderboardGameplay_.empty()) BeginOnlineLeaderboards();
                     if(!leaderboardGameplay_.empty()) {
                         for(auto* gamer:localGamers_){gamer->leaderboardWriter_.BeginServiceGameplay();gamer->getSignedInGamerProperty()->leaderboardWriter_.BeginServiceGameplay();}
                         leaderboardTransitionPending_=false;
                     }
+                    sessionState_ = evt.State;
+                    // The host publishes gameplay state only once its own transition has happened.
+                    if(online_ && online_->host()) online_->requestState(evt.State);
                     GameStarted.Raise(this, GameStartedEventArgs());
                 }
                 else if (evt.State == NetworkSessionState::Lobby)
                 {
                     if(!leaderboardGameplay_.empty()) {
-                        try{FinalizeServiceLeaderboards();}catch(...){leaderboardTransitionPending_=false;throw;}
+                        if(online_ && !online_->host()) {
+                            // A client cannot retry the host's EndGame; a failed final commit is abandoned.
+                            try{FinalizeServiceLeaderboards();}catch(...){AbandonServiceLeaderboards();}
+                        }
+                        else {
+                            try{FinalizeServiceLeaderboards();}catch(...){leaderboardTransitionPending_=false;throw;}
+                        }
                         leaderboardTransitionPending_=false;
                     }
+                    sessionState_ = evt.State;
+                    if(online_ && online_->host()) online_->requestState(evt.State);
                     GameEnded.Raise(this, GameEndedEventArgs());
                 }
                 else
                 {
+                    // Losing the session while playing still offers the local gamers' final writes.
+                    if(!leaderboardGameplay_.empty() && sessionState_==NetworkSessionState::Playing) {
+                        try{FinalizeServiceLeaderboards(true);}catch(...){AbandonServiceLeaderboards();}
+                    }
+                    sessionState_ = evt.State;
                     SessionEnded.Raise(this, NetworkSessionEndedEventArgs(evt.Reason));
                 }
-                sessionState_ = evt.State;
             }
         }
     }
@@ -677,7 +683,6 @@ namespace Microsoft::Xna::Framework::Net
         evt.Type = NetworkEventType::StateChange;
         evt.State = NetworkSessionState::Playing;
         SendNetworkEvent(std::move(evt));
-        if (online_) online_->requestState(NetworkSessionState::Playing);
 
         if (CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(sessionType_))
         {
@@ -699,12 +704,43 @@ namespace Microsoft::Xna::Framework::Net
         evt.Type = NetworkEventType::StateChange;
         evt.State = NetworkSessionState::Lobby;
         SendNetworkEvent(std::move(evt));
-        if (online_) online_->requestState(NetworkSessionState::Lobby);
 
         if (CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(sessionType_))
         {
             CNA::Internal::Net::ENetBackend::BroadcastStateChange(this, NetworkSessionState::Lobby);
         }
+    }
+
+    std::shared_ptr<CNA::Internal::GamerServices::IGamerServicesBackend> NetworkSession::LeaderboardService() const {
+        // An online session's epochs belong to the backend that owns its membership.
+        return online_ ? online_->origin() : CNA::Internal::GamerServices::backend();
+    }
+
+    void NetworkSession::BeginOnlineLeaderboards() {
+        auto service=LeaderboardService();
+        if(!service || !service->serviceEnabled()) return;
+        std::vector<std::string> users;for(auto* gamer:localGamers_)users.push_back(gamer->serviceUserId_);
+        if(users.empty()) return;
+        // Unavailable leaderboards leave the writers closed rather than failing the transition.
+        try {leaderboardGameplay_=service->beginLeaderboardGame(users);leaderboardOwner_=users.front();}
+        catch(...) {leaderboardGameplay_.clear();}
+    }
+
+    void NetworkSession::AbandonServiceLeaderboards() noexcept {
+        if(!leaderboardGameplay_.empty()) {
+            // Capture only owned logical values so queued cleanup cannot reference this session.
+            try {
+                const auto service=LeaderboardService();
+                if(!service) throw std::runtime_error("no leaderboard service");
+                const auto gameplay=leaderboardGameplay_,owner=leaderboardOwner_;
+                auto* executor=service.get();
+                // The backend joins its own executor before destruction. A queued task must not
+                // retain that backend and cause its destructor to run on the executor thread.
+                service->submit([executor,gameplay,owner]{try{executor->abortLeaderboardGame(gameplay,owner);}catch(...){}},[]{});
+            }catch(...){}
+        }
+        for(auto* gamer:localGamers_){gamer->leaderboardWriter_.EndServiceGameplay();if(gamer->getSignedInGamerProperty())gamer->getSignedInGamerProperty()->leaderboardWriter_.EndServiceGameplay();}
+        leaderboardGameplay_.clear();
     }
 
     void NetworkSession::FinalizeServiceLeaderboards(bool isLeaving) {
@@ -721,7 +757,9 @@ namespace Microsoft::Xna::Framework::Net
             }
         }
         std::vector<ServiceLeaderboardWrite> rows;for(auto& [key,row]:writes){(void)key;rows.push_back(std::move(row));}
-        CNA::Internal::GamerServices::backend()->commitLeaderboardGame(leaderboardGameplay_,leaderboardOwner_,rows);
+        const auto service=LeaderboardService();
+        if(!service) throw GamerServices::GamerServicesNotAvailableException("The leaderboard service is no longer available.");
+        service->commitLeaderboardGame(leaderboardGameplay_,leaderboardOwner_,rows);
         for(auto* gamer:localGamers_){gamer->leaderboardWriter_.EndServiceGameplay();gamer->getSignedInGamerProperty()->leaderboardWriter_.EndServiceGameplay();}
         leaderboardGameplay_.clear();
     }

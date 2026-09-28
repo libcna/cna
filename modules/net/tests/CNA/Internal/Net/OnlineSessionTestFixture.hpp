@@ -52,7 +52,8 @@ protected:
             Service::ServiceIdentity identity;identity.userId=id;identity.gamertag=tag;identity.allowOnlineSessions=true;
             identities.push_back(identity);
         }
-        service=Service::makeFakeBackend(std::move(identities));Service::setBackendForTesting(service);
+        Service::ServiceLeaderboardFixture board;board.key="BestScoreLifeTime";
+        service=Service::makeFakeBackend(std::move(identities),{},{board});Service::setBackendForTesting(service);
         Service::resetInvitationsForTesting();
         if(!GamerServicesDispatcher::getIsInitializedProperty())GamerServicesDispatcher::Initialize(provider_);
         for(int slot=0;slot<4;++slot)service->signIn(slot,std::array{"Alice","Bob","Charlie","Dana"}[slot],"fixture");
@@ -83,6 +84,10 @@ protected:
         return dependencies;
     }
     SignedInGamer* gamer(int slot){return (*Gamer::getSignedInGamersProperty())[slot];}
+    long long rating(const std::string& tag) {
+        const auto page=service->readLeaderboard("BestScoreLifeTime",0,0,10,"",std::vector<std::string>{tag});
+        return page.entries.empty()?-1:page.entries.front().rating;
+    }
     // A private realtime peer driven directly, so one process can host both sides of a session.
     void privatePeer(bool joining,const std::string& target={}) {
         OnlineSessionRequest request;

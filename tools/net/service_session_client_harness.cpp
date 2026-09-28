@@ -5,6 +5,11 @@
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/InviteAcceptedEventArgs.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/LeaderboardEntry.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/LeaderboardIdentity.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/LeaderboardReader.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/LeaderboardWriter.hpp"
+#include "Microsoft/Xna/Framework/Net/WriteLeaderboardsEventArgs.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
@@ -184,6 +189,13 @@ int main(int argc,char** argv) {
         std::cout<<"session-exchanged "<<received.size()<<"\n"<<std::flush;command();
 
         phase="state";
+        // Each machine writes only its own gamers; the final handler adds the column at EndGame.
+        const std::map<std::string,long long> scores{{"Alice",1000},{"Charlie",1100},{"Bob",1200},{"Dana",1300}};
+        const auto board=LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);int finals=0;
+        session->WriteUnarbitratedLeaderboard+=[&](auto*,const WriteLeaderboardsEventArgs& args) {
+            check(!args.getIsLeavingProperty()&&args.getGamerProperty()->getIsLocalProperty(),"final local write at EndGame");++finals;
+            args.getGamerProperty()->getLeaderboardWriterProperty().GetLeaderboard(board)->getColumnsProperty().SetValue("Rounds",3);
+        };
         if(host) {
             session->getSessionPropertiesProperty()[1]=11;
             if(type==NetworkSessionType::PlayerMatch)session->setAllowJoinInProgressProperty(true);
@@ -196,10 +208,23 @@ int main(int argc,char** argv) {
             return started==1&&session->getSessionStateProperty()==NetworkSessionState::Playing
             &&session->getSessionPropertiesProperty().getItem(1)==11
             &&session->getAllowJoinInProgressProperty()==(type==NetworkSessionType::PlayerMatch);});
+        for(auto* local:locals)local->getLeaderboardWriterProperty().GetLeaderboard(board)->setRatingProperty(scores.at(local->getGamertagProperty()));
         std::cout<<"session-playing\n"<<std::flush;command();
         if(host)session->EndGame();
         until([&]{return ended==1&&session->getSessionStateProperty()==NetworkSessionState::Lobby;});
+        check(finals==2,"final write handler for both local gamers");
         std::cout<<"session-lobby\n"<<std::flush;command();
+        // Both machines have committed: the service board holds all four gamers' results.
+        phase="leaderboard";{
+            const auto reader=LeaderboardReader::Read(board,0,10);const auto entries=reader.getEntriesProperty();
+            std::set<std::string> found;
+            for(int index=0;index<entries.getCountProperty();++index) {
+                const auto& entry=entries[index];const auto tag=entry.getGamerProperty()->getGamertagProperty();
+                check(scores.contains(tag)&&entry.getRatingProperty()==scores.at(tag),"committed rating");
+                check(entry.getColumnsProperty().GetValueInt32("Rounds")==3,"committed final-handler column");found.insert(tag);
+            }
+            check(found.size()==4,"all four gamers ranked");
+        }
 
         phase="departure";
         const bool leaveFirst=(type==NetworkSessionType::PlayerMatch)!=host;
