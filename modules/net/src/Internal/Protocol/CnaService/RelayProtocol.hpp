@@ -1,0 +1,53 @@
+// SPDX-License-Identifier: MIT
+#pragma once
+#include <array>
+#include <span>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace CnaService {
+/** @brief Version of the independent realtime relay envelope. */
+inline constexpr unsigned char RelayVersion=1;
+/** @brief Fixed magic/version/type/reserved/machine envelope size. */
+inline constexpr std::size_t RelayHeaderBytes=24;
+/** @brief Maximum encapsulated ENet UDP datagram; covers ENet's maximum MTU. */
+inline constexpr std::size_t MaxRelayDatagramBytes=4096;
+/** @brief Maximum complete binary relay message. */
+inline constexpr std::size_t MaxRelayFrameBytes=RelayHeaderBytes+MaxRelayDatagramBytes;
+/** @brief Maximum queued frames per connection. */
+inline constexpr std::size_t MaxRelayQueuedFrames=64;
+/** @brief Maximum queued bytes per connection. */
+inline constexpr std::size_t MaxRelayQueuedBytes=MaxRelayQueuedFrames*MaxRelayFrameBytes;
+/** @brief Machine identity as sixteen opaque service-assigned bytes. */
+using RelayMachineId=std::array<unsigned char,16>;
+/** @brief Deterministic parse refusal; never includes payload or credentials. */
+class RelayError : public std::runtime_error {
+public:
+    /** @brief Constructs a refusal. @param code Constant safe code. */
+    explicit RelayError(std::string code);
+    /** @brief Gets the safe failure code. @return Constant code. */
+    const std::string& code() const noexcept;
+private:
+    std::string code_;
+};
+/** @brief Validated frame view borrowing the caller-owned message buffer. */
+struct RelayFrameView {
+    /** @brief Destination on client sends; authenticated source on server sends. */
+    RelayMachineId machine{};
+    /** @brief Encapsulated datagram; remains valid only while the input buffer lives. */
+    std::span<const unsigned char> datagram;
+};
+/** @brief Parses one bounded complete binary relay message before any payload allocation.
+ * @param bytes Complete message. @return Validated borrowed view. */
+RelayFrameView parseRelayFrame(std::span<const unsigned char> bytes);
+/** @brief Encodes one bounded message. @param machine Authorized destination/source.
+ * @param datagram Encapsulated bytes. @return Complete binary message. */
+std::vector<unsigned char> encodeRelayFrame(const RelayMachineId& machine,std::span<const unsigned char> datagram);
+/** @brief Converts an opaque lowercase service machine ID. @param hex Thirty-two hex digits.
+ * @return Sixteen bytes; all-zero IDs are forbidden. */
+RelayMachineId relayMachineId(std::string_view hex);
+/** @brief Formats a valid nonzero machine ID. @param machine Opaque ID. @return Lowercase hex. */
+std::string relayMachineName(const RelayMachineId& machine);
+}

@@ -14,3 +14,6 @@ cna_link_sharp_runtime(CNA_Net PUBLIC Core.Base IO Collections.Core Runtime Thre
 # module-local; the conditions historically applied by cmake/Examples.cmake live
 # inside examples/CMakeLists.txt unchanged.
 add_subdirectory(examples)
+
+# Canonical CNA service relay envelope is private to the realtime implementation.
+target_include_directories(CNA_Net PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/Internal/Protocol)

@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "vectors": [
+    {
+      "name": "binary-datagram",
+      "hex": "434e52010100000000112233445566778899aabbccddeeff000102ff",
+      "error": "OK",
+      "machine": "00112233445566778899aabbccddeeff",
+      "payload": "000102ff"
+    },
+    {
+      "name": "truncated-0",
+      "hex": "",
+      "error": "RELAY_TRUNCATED"
+    },
+    {
+      "name": "truncated-1",
+      "hex": "43",
+      "error": "RELAY_TRUNCATED"
+    },
+    {
+      "name": "truncated-7",
+      "hex": "434e5201010000",
+      "error": "RELAY_TRUNCATED"
+    },
+    {
+      "name": "truncated-23",
+      "hex": "434e52010100000000112233445566778899aabbccddee",
+      "error": "RELAY_TRUNCATED"
+    },
+    {
+      "name": "RELAY_MAGIC-0",
+      "hex": "004e52010100000000112233445566778899aabbccddeeff000102ff",
+      "error": "RELAY_MAGIC"
+    },
+    {
+      "name": "RELAY_VERSION-3",
+      "hex": "434e52020100000000112233445566778899aabbccddeeff000102ff",
+      "error": "RELAY_VERSION"
+    },
+    {
+      "name": "RELAY_MESSAGE_TYPE-4",
+      "hex": "434e52010200000000112233445566778899aabbccddeeff000102ff",
+      "error": "RELAY_MESSAGE_TYPE"
+    },
+    {
+      "name": "RELAY_RESERVED-5",
+      "hex": "434e52010101000000112233445566778899aabbccddeeff000102ff",
+      "error": "RELAY_RESERVED"
+    },
+    {
+      "name": "RELAY_RESERVED-6",
+      "hex": "434e52010100010000112233445566778899aabbccddeeff000102ff",
+      "error": "RELAY_RESERVED"
+    },
+    {
+      "name": "RELAY_RESERVED-7",
+      "hex": "434e52010100000100112233445566778899aabbccddeeff000102ff",
+      "error": "RELAY_RESERVED"
+    },
+    {
+      "name": "empty-datagram",
+      "hex": "434e52010100000000112233445566778899aabbccddeeff",
+      "error": "RELAY_EMPTY_PAYLOAD"
+    },
+    {
+      "name": "zero-machine",
+      "hex": "434e52010100000000000000000000000000000000000000000102ff",
+      "error": "RELAY_MACHINE_ID"
+    }
+  ]
+}

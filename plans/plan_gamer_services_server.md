@@ -737,3 +737,66 @@ required. Additional review isolated secondary-auth failure from owner invalidat
 secondary-only admin revocation. One initial C API inventory gate was stale after adding an
 internal header; regenerated its source-derived scope report and final 13/13 gate passed.
 Latest committed next remains 8d56fa2fa; no samples-agent uncommitted state touched.
+
+### GS-008 relay implementation sequence (active)
+
+Exact tested GS-007d integration: CNA c273fb92601f0e8c46da91eb95e849a6f55b37ee; server
+ded9163bc48aed90a74f887c176224728709b245; sharp-runtime
+6c4a857de129cf29b5d43430bedf24157d594f12. All three clean before this next slice;
+committed next 8d56fa2fa integrated. No new sharp-runtime primitive is needed for the following
+CNA-specific transport routing; generic proxy change remains the only runtime modification.
+
+- [x] GS-008a1: canonical binary datagram codec/spec/golden vectors in server, exact CNA copies,
+  bounded zero-copy parse and deterministic malformed/mutation tests in both products.
+- [ ] GS-008a2: one-use 60s hashed relay tickets, title/session/machine/local-member authentication,
+  persistence migration and revocable connection grant validation. No data capability before usable.
+- [ ] GS-008b: Beast/OpenSSL secure WebSocket relay endpoint, single connection per machine,
+  per-connection strand/one writer/bounded queue, frame/rate/timeout limits and grant revocation.
+- [ ] GS-008c: CNA libcurl WSS connection and loopback UDP routes preserving ENet datagrams,
+  protocol/certificate validation and controlled Net updates. SystemLink keeps its direct path.
+- [ ] GS-008d: genuine ENet exchange under relay-only isolated routing/firewall conditions,
+  forged source/destination/malformed/rate/disconnect/revoke/server failure/reconnect corpus.
+- [ ] GS-007e: publish standard PlayerMatch/Ranked lifecycle and Guide/invited joins once directory
+  plus realtime transport succeeds; do not report membership-only success as multiplayer.
+
+Relay control/membership and game datagrams are separate protocols. WSS uses the existing
+HTTPS authority with a distinct /cna/relay/v1 upgrade endpoint; authentication credentials/tickets
+are carried only inside verified TLS, never URLs/logs. Datagrams address a service-authorized
+machine, not an arbitrary Internet endpoint; relay injects the authenticated source machine.
+ENet retains its reliability/fragmentation/handshake semantics; a private loopback UDP bridge
+provides per-peer routes. Direct Internet optimization is deferred; no IP/port-only NAT claim.
+Reliable WSS/TCP carries ENet unreliable packets too and may incur head-of-line latency; this
+is an explicit first relay tradeoff, not Xbox transport compatibility.
+
+Transport audit: installed libcurl 8.14.1/OpenSSL 3.5.7 advertises ws/wss. CNA currently links that
+shared libcurl. Its documented WSS path applies normal TLS CA/peer/hostname verification:
+[libcurl WebSocket API](https://curl.se/libcurl/c/libcurl-ws.html). Use connect-only recv/send
+with bounded frame accumulation/partial send handling, not hand-built WebSocket or cryptography.
+Raise optional relay's minimum libcurl API level only when its client lands and test actual ws/wss
+runtime capability. Server already depends on Beast/OpenSSL; Beast requires application-owned
+queues/strands and permits one read plus one write concurrently:
+[Beast stream notes](https://www.boost.org/doc/libs/latest/libs/beast/doc/html/beast/using_websocket/notes.html).
+Desktop secure transport is measured here; browser/Windows/console availability remains a
+separate platform validation item. Do not send credentials via sharp-runtime plain HTTP/WS.
+
+GS-008a1 checkpoint: canonical original MIT server codec/header/golden corpus and relay-v1.md,
+exact CNA copies under private Net implementation, extended drift gate. Header 24 bytes, payload
+1..4,096 (compile-time checked against local ENET_PROTOCOL_MAXIMUM_MTU), maximum frame 4,120;
+64 frames/263,680-byte queue ceilings defined for the next transport slice. Parser validates
+limits/magic/version/type/reserved/nonzero machine before exposing a borrowed datagram span.
+No passwords/tickets/objects/Internet endpoint fields in game datagrams. Server owns constants;
+client never maintains an independent numeric encoding.
+
+Server standalone codec 10,027 assertions including 10,000 deterministic mutations, clean
+-Werror build; service/directory/invite/codec unit gate 4/4 pass (7.52s). CNA new 3/3 golden/MTU/
+mutation tests plus complete Net corpus 328/328 pass (4.366s), private protocol drift/properties
+2/2 pass (0.23s). CWD-independent test fixture path pinned by CMake. No XNA/C API signature
+change. Logs server build/relay-protocol-{build,unit,final}.log and CNA
+cmake-build-debug/relay-protocol-{build,unit,net,gates}.log. The first fixture accidentally encoded
+a seventeen-byte ID and literal terminal escape; strict codec/JSON gates refused it, corrected
+canonical fixture to sixteen bytes and actual newline. Production codec did not require relaxation.
+
+No WebSocket endpoint, ticket or forwarding is implemented/advertised by this slice. Next
+GS-008a2 is one-use hashed relay ticket/grant authority, then GS-008b secure forwarding.
+Latest next remains 8d56fa2fa. Full TLS/CNA multi-process gate remains the measured GS-007d
+75.37s checkpoint, not rerun as evidence of unused standalone framing.
