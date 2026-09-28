@@ -518,7 +518,7 @@ namespace CNA::Internal::Renderers::DirectX9
 
         // Reset() invalidates the device's own render-state defaults (e.g. the viewport) --
         // restore what GraphicsDevice itself does not proactively re-push after a resize.
-        SetViewport(0, 0, width_, height_, 0.0f, 1.0f);
+        RestorePresentationViewportEXT();
         CacheDefaultDepthStencilSurfaceEXT();
         // Reset() always reverts the active render target to the (new) back buffer -- any
         // previously-bound custom render target is no longer genuinely active, and its own
@@ -526,6 +526,8 @@ namespace CNA::Internal::Renderers::DirectX9
         currentCustomRT_ = nullptr;
         currentCustomCubeRT_ = nullptr;
         activeDepthStencilFormatOrdinal_ = depthStencilFormatOrdinal_;
+        // GraphicsDevice caches object identity; the native Reset has discarded their values.
+        if (deviceEventCallback_) deviceEventCallback_(RendererDeviceEvent::StateInvalidated);
     }
 
     void DirectX9Renderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
@@ -614,7 +616,7 @@ namespace CNA::Internal::Renderers::DirectX9
         deviceLost_ = false;
         simulatedDeviceLoss_ = false;
         presentationDirty_ = false;
-        SetViewport(0, 0, width_, height_, 0.0f, 1.0f);
+        RestorePresentationViewportEXT();
         CacheDefaultDepthStencilSurfaceEXT();
         // Same reasoning as EnsureDeviceSize()'s identical line: Reset() always reverts to the back
         // buffer, and any previously-bound custom render target's D3DPOOL_DEFAULT resources were
@@ -664,10 +666,84 @@ namespace CNA::Internal::Renderers::DirectX9
         }
     }
 
+    void DirectX9Renderer::GetLogicalSizeEXT(int& width, int& height) const
+    {
+        const float density = surface_.GetDisplayScale() > 0.0f ? surface_.GetDisplayScale() : 1.0f;
+        const auto drawable = surface_.GetDrawableSize();
+        const int clientWidth = static_cast<int>(std::lround(drawable.width / density));
+        const int clientHeight = static_cast<int>(std::lround(drawable.height / density));
+        width = clientWidth > 0 ? clientWidth : width_;
+        height = clientHeight > 0 ? clientHeight : height_;
+        const auto mode = static_cast<CnaPresentationMode>(presentationMode_);
+        if (virtualHeight_ <= 0 || mode == CnaPresentationMode::NativeBackBuffer) return;
+        if (mode == CnaPresentationMode::FixedHeightDynamicWidth && height > 0)
+            width = static_cast<int>(static_cast<double>(width) * virtualHeight_ / height + 0.5);
+        else if (virtualWidth_ > 0)
+            width = virtualWidth_;
+        height = virtualHeight_;
+    }
+
     void DirectX9Renderer::GetViewportSize(int& width, int& height)
     {
-        width = width_;
-        height = height_;
+        GetLogicalSizeEXT(width, height);
+    }
+
+    void DirectX9Renderer::GetPresentedRectEXT(int& x, int& y, int& width, int& height) const
+    {
+        x = y = 0;
+        width = std::max(0, width_);
+        height = std::max(0, height_);
+        const auto mode = static_cast<CnaPresentationMode>(presentationMode_);
+        if (width <= 0 || height <= 0 || virtualWidth_ <= 0 || virtualHeight_ <= 0 ||
+            (mode != CnaPresentationMode::Letterbox && mode != CnaPresentationMode::Overscan))
+            return;
+        const double sx = static_cast<double>(width_) / virtualWidth_;
+        const double sy = static_cast<double>(height_) / virtualHeight_;
+        const double scale = mode == CnaPresentationMode::Overscan ? std::max(sx, sy) : std::min(sx, sy);
+        width = static_cast<int>(std::lround(virtualWidth_ * scale));
+        height = static_cast<int>(std::lround(virtualHeight_ * scale));
+        x = static_cast<int>(std::lround((width_ - virtualWidth_ * scale) * 0.5));
+        y = static_cast<int>(std::lround((height_ - virtualHeight_ * scale) * 0.5));
+    }
+
+    void DirectX9Renderer::GetDefaultViewportRect(int& x, int& y, int& width, int& height)
+    {
+        GetPresentedRectEXT(x, y, width, height);
+    }
+
+    void DirectX9Renderer::RestorePresentationViewportEXT()
+    {
+        int x, y, width, height;
+        GetPresentedRectEXT(x, y, width, height);
+        SetViewport(x, y, width, height, 0.0f, 1.0f);
+    }
+
+    bool DirectX9Renderer::TransformWindowToLogical(float windowX, float windowY,
+                                                   float& logX, float& logY) const
+    {
+        int x, y, width, height, logicalWidth, logicalHeight;
+        GetPresentedRectEXT(x, y, width, height);
+        GetLogicalSizeEXT(logicalWidth, logicalHeight);
+        const float density = surface_.GetDisplayScale();
+        if (density <= 0 || width <= 0 || height <= 0 || logicalWidth <= 0 || logicalHeight <= 0)
+            return false;
+        logX = (windowX * density - x) * logicalWidth / width;
+        logY = (windowY * density - y) * logicalHeight / height;
+        return true;
+    }
+
+    bool DirectX9Renderer::TransformLogicalToWindow(float logX, float logY,
+                                                   float& windowX, float& windowY) const
+    {
+        int x, y, width, height, logicalWidth, logicalHeight;
+        GetPresentedRectEXT(x, y, width, height);
+        GetLogicalSizeEXT(logicalWidth, logicalHeight);
+        const float density = surface_.GetDisplayScale();
+        if (density <= 0 || width <= 0 || height <= 0 || logicalWidth <= 0 || logicalHeight <= 0)
+            return false;
+        windowX = (x + logX * width / logicalWidth) / density;
+        windowY = (y + logY * height / logicalHeight) / density;
+        return true;
     }
 
     void DirectX9Renderer::SetVirtualResolution(int width, int height)
@@ -1573,14 +1649,29 @@ namespace CNA::Internal::Renderers::DirectX9
 
     void DirectX9Renderer::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)
     {
+        ComPtr<IDirect3DSurface9> target;
+        HRESULT hr = device_->GetRenderTarget(0, target.GetAddressOf());
+        if (FAILED(hr)) ThrowScopedFailureEXT("IDirect3DDevice9::GetRenderTarget", hr, "SetViewport");
+        D3DSURFACE_DESC desc{};
+        hr = target->GetDesc(&desc);
+        if (FAILED(hr)) ThrowScopedFailureEXT("IDirect3DSurface9::GetDesc", hr, "SetViewport");
+        // D3D9 rejects out-of-target viewports. Retain the requested rectangle so the sprite
+        // projection can preserve Overscan coordinates after clipping the native rectangle.
+        const int left = std::clamp(x, 0, static_cast<int>(desc.Width));
+        const int top = std::clamp(y, 0, static_cast<int>(desc.Height));
+        const int right = static_cast<int>(std::clamp<std::int64_t>(
+            static_cast<std::int64_t>(x) + w, left, desc.Width));
+        const int bottom = static_cast<int>(std::clamp<std::int64_t>(
+            static_cast<std::int64_t>(y) + h, top, desc.Height));
         D3DVIEWPORT9 vp{};
-        vp.X = static_cast<DWORD>(std::max(0, x));
-        vp.Y = static_cast<DWORD>(std::max(0, y));
-        vp.Width = static_cast<DWORD>(std::max(0, w));
-        vp.Height = static_cast<DWORD>(std::max(0, h));
+        vp.X = static_cast<DWORD>(left);
+        vp.Y = static_cast<DWORD>(top);
+        vp.Width = static_cast<DWORD>(right - left);
+        vp.Height = static_cast<DWORD>(bottom - top);
         vp.MinZ = minDepth;
         vp.MaxZ = maxDepth;
         SetViewportCheckedEXT(vp, kUnsafeViewport, "SetViewport");
+        spriteViewport_ = Rectangle(x, y, w, h);
         MarkStateKnownEXT(kUnsafeViewport);
     }
 

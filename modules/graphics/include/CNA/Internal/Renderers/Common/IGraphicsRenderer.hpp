@@ -4009,7 +4009,8 @@ namespace CNA::Internal::Renderers
      * and it is what actually fires GraphicsDevice::DeviceLost/DeviceResetting/DeviceReset for a
      * genuine device loss (as opposed to GraphicsDevice::Reset()'s own direct Raise() calls for an
      * app-initiated reset with new PresentationParameters -- a different, pre-existing path that
-     * this enum does not replace).
+     * this enum does not replace). StateInvalidated reports discarded native state without
+     * synthesizing another public device-lifecycle event.
      */
     enum class RendererDeviceEvent
     {
@@ -4021,7 +4022,9 @@ namespace CNA::Internal::Renderers
         Resetting,
         /// The device was successfully reset and resources recreated. Fires
         /// GraphicsDevice::DeviceReset.
-        Reset
+        Reset,
+        /** @brief Native presentation reset invalidated cached state without a device-loss event. */
+        StateInvalidated
     };
 
     /**

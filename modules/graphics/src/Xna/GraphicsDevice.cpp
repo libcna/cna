@@ -1084,6 +1084,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // A native reset restores device defaults while XNA retains the assigned state objects.
         blendStateDirty_ = true;
         depthStencilStateDirty_ = true;
+        rasterizerStateDirty_ = true;
         DeviceReset.Raise(this, System::EventArgs::Empty);
     }
 
@@ -4421,12 +4422,18 @@ namespace Microsoft::Xna::Framework::Graphics
                     deviceStatus_ = GraphicsDeviceStatus::Normal;
                     blendStateDirty_ = true;
                     depthStencilStateDirty_ = true;
+                    rasterizerStateDirty_ = true;
                     // CABI-15: a renderer really did lose and recreate its resources, so the
                     // default-pool ones lost their contents. This is the only place ContentLost is
                     // raised: a caller-initiated Reset on a renderer that never loses anything must
                     // not fire it, or the event becomes noise on unaffected renderer families.
                     NotifyContentLostResourcesEXT();
                     DeviceReset.Raise(this, System::EventArgs::Empty);
+                    break;
+                case CNA::Internal::Renderers::RendererDeviceEvent::StateInvalidated:
+                    blendStateDirty_ = true;
+                    depthStencilStateDirty_ = true;
+                    rasterizerStateDirty_ = true;
                     break;
             }
         };
@@ -4989,7 +4996,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::setRasterizerStateProperty(const RasterizerState& value)
     {
         ThrowIfDisposed();
-        if (value.state_ == rasterizerState_.state_)
+        if (value.state_ == rasterizerState_.state_ && !rasterizerStateDirty_)
             return;
         value.BindForUse(this);
         if (renderer_)
@@ -5006,6 +5013,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 value.getMultiSampleAntiAliasProperty());
         }
         rasterizerState_ = value;
+        rasterizerStateDirty_ = false;
     }
 
     Rectangle GraphicsDevice::getScissorRectangleProperty() const

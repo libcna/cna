@@ -44,6 +44,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     cna_register_renderer_test(NAME DirectX9_FrameRecovery COMMAND ${_directx9_frame_recovery_cmd}
         TIMEOUT 30 LABELS "DIRECTX9")
 
+    cna_directx9_test(cna_test_directx9_spritebatch_presentation
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_presentation_test.cpp)
+    cna_directx9_ctest_command(_directx9_presentation_cmd cna_test_directx9_spritebatch_presentation)
+    cna_register_renderer_test(NAME DirectX9_SpriteBatchPresentation
+        COMMAND ${_directx9_presentation_cmd} TIMEOUT 30 LABELS "DIRECTX9")
+
+    cna_directx9_test(cna_test_directx9_resize_state directx9_resize_state_test.cpp)
+    cna_directx9_ctest_command(_directx9_resize_state_cmd cna_test_directx9_resize_state)
+    cna_register_renderer_test(NAME DirectX9_ResizeStateAndMotion
+        COMMAND ${_directx9_resize_state_cmd} TIMEOUT 30 LABELS "DIRECTX9")
+
     # D9-20/D9-21/D9-22: pure-function checks for D3D9's own format/state/vertex-layout mapping
     # tables -- no device/window/GPU needed.
     cna_directx9_test(cna_test_directx9_common directx9_common_test.cpp)

@@ -65,6 +65,12 @@ namespace CNA::Internal::Renderers::DirectX9
         void Begin() override;
         void End() override;
         void SetTransformMatrix(const Matrix& m) override;
+        /**
+         * @brief Retains logical dimensions for the batch projection.
+         * @param width Logical viewport width.
+         * @param height Logical viewport height.
+         */
+        void SetViewportSizeEXT(int width, int height) override;
         void SetCustomEffect(Effect* effect) override;
         void SetSamplerFilter(int textureFilter) override;
         void SetSamplerAddressMode(int addressU, int addressV) override;
@@ -114,6 +120,7 @@ namespace CNA::Internal::Renderers::DirectX9
 
         bool begun_ = false;
         Matrix transform_ = Matrix::getIdentityProperty();
+        int projectionWidth_ = 0, projectionHeight_ = 0;
 
         /// D9-112: the custom Effect passed to SpriteBatch::Begin(effect), or nullptr for the
         /// stock SpriteEffect path. Not owned -- the caller (SpriteBatch/the game) owns its own

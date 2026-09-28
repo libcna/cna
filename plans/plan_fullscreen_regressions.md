@@ -3,6 +3,10 @@
 Status: **complete**, 2026-09-28. Starting CNA revision: `a62c40b09e86`.
 The owner explicitly authorized fixing these CNA defects after diagnosis in Mobile Eggbert.
 
+Follow-up [FULLSCREEN-002](plan_directx9_fullscreen_motion.md) covers ordinary successful
+DirectX9 resize resets and logical presentation during movement, which this initial task
+did not exercise. Its original loss/recovery probe remains passing.
+
 ## Scope and causes
 
 - Vulkan used a physical letterbox rectangle as the logical SpriteBatch projection divisor.

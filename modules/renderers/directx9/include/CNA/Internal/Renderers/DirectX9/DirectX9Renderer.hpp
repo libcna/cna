@@ -123,6 +123,34 @@ namespace CNA::Internal::Renderers::DirectX9
 
         // ---- IGraphicsRenderer: pure virtual, real (trivial bookkeeping; no device needed) ----
         void GetViewportSize(int& width, int& height) override;
+        /**
+         * @brief Returns the physical backbuffer presentation rectangle.
+         * @param x Receives the left edge.
+         * @param y Receives the top edge.
+         * @param width Receives the width.
+         * @param height Receives the height.
+         */
+        void GetDefaultViewportRect(int& x, int& y, int& width, int& height) override;
+        /**
+         * @brief Converts window coordinates through the presentation rectangle.
+         * @param windowX Horizontal client coordinate.
+         * @param windowY Vertical client coordinate.
+         * @param logX Receives the logical horizontal coordinate.
+         * @param logY Receives the logical vertical coordinate.
+         * @return True when both coordinate spaces have usable dimensions.
+         */
+        bool TransformWindowToLogical(float windowX, float windowY,
+                                      float& logX, float& logY) const override;
+        /**
+         * @brief Converts logical coordinates to window client coordinates.
+         * @param logX Logical horizontal coordinate.
+         * @param logY Logical vertical coordinate.
+         * @param windowX Receives the horizontal client coordinate.
+         * @param windowY Receives the vertical client coordinate.
+         * @return True when both coordinate spaces have usable dimensions.
+         */
+        bool TransformLogicalToWindow(float logX, float logY,
+                                      float& windowX, float& windowY) const override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
@@ -449,6 +477,11 @@ namespace CNA::Internal::Renderers::DirectX9
         void UnregisterDefaultPoolResourceEXT(ID3D9DefaultPoolResourceEXT* resource);
 
     private:
+        friend class D3D9SpriteBatchRenderer;
+        Rectangle spriteViewport_;
+        void GetLogicalSizeEXT(int& width, int& height) const;
+        void GetPresentedRectEXT(int& x, int& y, int& width, int& height) const;
+        void RestorePresentationViewportEXT();
 #if defined(CNA_DIRECTX9_COMPILED_EFFECTS)
         friend class D3D9CompiledEffect;
 #endif
