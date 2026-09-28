@@ -1933,3 +1933,47 @@ missing dependencies or public API stubs introduced in these two milestones. Kno
 boundary failures and HEADLESS skips remain documented in earlier checkpoints, not rerun/claimed
 fixed here. No genuine blocker prevents GS-007e2c3b; the private-slot XML ambiguity is a narrow
 edge requiring further behavioral evidence, not grounds to block ordinary public create/join.
+
+### GS-007e2c3b design (2026-09-28, new session; verified state before coding)
+
+Session start verification: CNA feature/gamer-services-server 3d5742e84 clean (next was
+fast-forwarded to the same commit by the owner, nothing to integrate); server d764f4d clean;
+sharp-runtime 007280bd clean. Instruction hashes unchanged from the GS-008c3c2 record.
+
+Reference evidence read for this slice (local managed Windows IL, decompiled NetworkSession.cs):
+BeginCreate refuses `privateGamerSlots < 0 || privateGamerSlots >= maxGamers` (line 447) — this
+settles the earlier private-slot XML ambiguity in favour of the server's reserved public slot, and
+CNA's current `> maxGamers` check is corrected for every session type (XNA wins over FNA/XML).
+EndCreateOrJoin constructs the session, runs one Update before returning (so events raised before
+the caller can subscribe are not re-raised after GamerJoined replay), and fails the End when the
+session already Ended or IsHost disagrees. Gamers on one machine share one NetworkMachine instance.
+StartGame/EndGame are host commands whose state change is observed at the next Update on every
+machine. MaxGamers/PrivateGamerSlots setters validate against occupied public/private slots.
+BeginJoin uses the local gamers of the Find that produced the AvailableNetworkSession.
+
+Adapter design:
+1. ServiceSessionPump gains host-only `publish(settings)` (latest desired settings, CAS update with
+   bounded CONFLICT re-read/retry inside one worker job) and `expedite()` (coalesced immediate read,
+   100 ms minimum spacing). ServiceENetSession forwards `publish`; after applying a host snapshot
+   whose state/settings changed it sends the existing StateChange/SessionProperties broadcasts as
+   pure hints; clients only preflight them and expedite an authenticated directory read. The
+   directory remains the sole authority for state/properties/capacity.
+2. NetworkSessionAction owns an OnlineSessionOperation outside its queued Storage; completion
+   captures only Storage, publishes IsCompleted/wait/callback once at Dispatcher.Update with
+   CompletedSynchronously=false. Begin freezes 1..4 published, online-authorized local identities.
+3. End takes the established engine and initial observations, constructs the standard session,
+   projects the initial roster without queued joins (GamerJoined replay covers it), assigns service
+   wire IDs, one host gamer, shared per-machine NetworkMachine views and private-slot flags, then
+   runs one Update like XNA and disposes on Ended/host mismatch. Errors map to
+   NetworkSessionJoinException (SessionFull/SessionNotFound/SessionNotJoinable) or NetworkException.
+4. OnlineSessionBinding (private, friend of NetworkSession) converts later observations at Update:
+   Joined → AddRemoteGamer, Left → RemoveGamer, Data → local packet queue with sender, client
+   Snapshot → state events/properties/capacity/JIP, Failed → SessionEnded (HostEndedSession,
+   ClientSignedOut or Disconnected). Host StartGame/EndGame/property/capacity/JIP changes publish
+   desired settings. Dispose closes the engine (ENet disconnect + membership leave) before gamers.
+5. Deterministic tests: public host + private engine client, and public client + private engine
+   host, over the explicit fake directory with a private process-wide fixture hook (never a public
+   API). Then a public-API-only two-process harness against the real TLS/WSS server (+ NAT).
+Out of this slice (recorded, not claimed): IsReady propagation (SystemLink also lacks it),
+NetworkMachine.RemoveFromSession (needs a server host-kick operation), online host migration,
+Ranked/PlayerMatch leaderboard epochs, invited joins/Guide.
