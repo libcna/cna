@@ -1,5 +1,12 @@
 # NEXT.md
 
+> **DX-271 MinGW consumer build (2026-09-28):** DirectX 11's missing SDK constant,
+> four DirectX 12 constexpr flag unions, and the shared shader-reflection UUID dependency
+> are repaired. Combined DX11/DX12 cna-template Release builds and links; both selections
+> render three frames and exit 0 on private Weston/Xwayland under Wine/DXVK or vkd3d-proton.
+> DX12 needs DXVK DXGI with native vkd3d-proton; the old prefix's builtin DXGI crashes.
+> Consumer smoke does not close the remaining renderer-parity or real-Windows gates.
+
 > **GS-008c3c1 service game packet admission (2026-09-28):** Authenticated machine
 > groups and completed handshake govern sender/target IDs, control direction and complete roster
 > changes before mutation/payload copy. Seventeen new cases and 20,000 mutations; Net 417/417,

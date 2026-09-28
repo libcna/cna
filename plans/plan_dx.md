@@ -3036,3 +3036,10 @@ reader will think of them too, and re-deriving each one costs more than reading 
   compiles; cross-check the interface's own optional/defaulted virtuals against what's actually
   implemented, the same way this gap was found (2026-07-13, comparing D3D11's real capability
   against EasyGL's).
+
+
+## MinGW consumer build follow-up — 2026-09-28
+
+| ID | Task | Status | Evidence |
+| --- | --- | --- | --- |
+| DX-271 | Restore the DirectX 11/12 MinGW consumer build after SDK constant, constexpr flag and shader-reflection UUID regressions | ✅ | DirectX 11 uses the shader-model-5 input-layout ceiling (32) without relying on the missing MinGW SDK macro. Four DirectX 12 constant flag unions use integer operands, retaining their constexpr values. The three D3DReflect call sites share the existing compiler-version-specific IID instead of requiring MinGW's absent ID3D11ShaderReflection UUID specialization. Release cna-template (`WIN32`, NULL audio, SDL/NET OFF, `DIRECTX11;DIRECTX12`) compiles and links with GCC 14 / mingw-w64 12. Both runtime selections render three frames and return from Game::Run with exit 0 on the private Weston/Xwayland GPU runner: Wine 10 + DXVK 2.6 for DX11, vkd3d-proton 3.1 + DXVK DXGI for DX12. The old DX12 prefix's builtin DXGI crashes with native vkd3d-proton; a temporary application-local DXVK DXGI DLL fixes the test setup without changing the prefix. Logs: `cna-template/build/windows-dx11-dx12-fixed-link-build.log`, `windows-directx11-fixed-smoke.log`, `windows-directx12-dxvk-dxgi-smoke.log`. This verifies the build regressions and consumer smoke, not full renderer parity or real-Windows qualification. |

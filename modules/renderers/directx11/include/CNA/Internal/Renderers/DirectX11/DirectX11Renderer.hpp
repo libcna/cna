@@ -359,7 +359,7 @@ namespace CNA::Internal::Renderers::DirectX11
          */
         [[nodiscard]] int GetMaxVertexInputAttributesEXT() const override
         {
-            return device_ != nullptr ? D3D11_IA_VERTEX_INPUT_STRUCTURE_ELEMENT_COUNT : 0;
+            return device_ != nullptr ? kMaxVertexInputAttributesEXT : 0;
         }
         /**
          * @brief Reports XNA's four-target limit within the native D3D11 MRT capacity.
@@ -768,6 +768,9 @@ namespace CNA::Internal::Renderers::DirectX11
 #endif
 
     private:
+        /// Shader-model-5 input-layout limit; some MinGW SDKs omit the named D3D11 constant.
+        static constexpr int kMaxVertexInputAttributesEXT = 32;
+
         void BindStorageInputsForEffectEXT(const D3D11EffectRenderer& effect);
         void ClearStorageInputsAfterEffectEXT(const D3D11EffectRenderer& effect);
         std::shared_ptr<void> lifetimeToken_ = std::make_shared<int>(0);

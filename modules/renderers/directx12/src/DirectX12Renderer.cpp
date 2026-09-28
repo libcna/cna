@@ -3114,7 +3114,8 @@ namespace CNA::Internal::Renderers::DirectX12
         D3D12_FEATURE_DATA_FORMAT_SUPPORT support{};
         support.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
         constexpr auto required = static_cast<D3D12_FORMAT_SUPPORT1>(
-            D3D12_FORMAT_SUPPORT1_TEXTURE3D | D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE);
+            static_cast<int>(D3D12_FORMAT_SUPPORT1_TEXTURE3D) |
+            static_cast<int>(D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE));
         return SUCCEEDED(device_->CheckFeatureSupport(
                    D3D12_FEATURE_FORMAT_SUPPORT, &support, sizeof(support))) &&
                (support.Support1 & required) == required;
