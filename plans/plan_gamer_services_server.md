@@ -2389,10 +2389,9 @@ the retained audit roots; nothing existing there is modified.
 - [ ] SAMPLE-075 NetworkStateManagement identity flow.
 - [ ] Minimal XNA-shaped achievements/leaderboards compatibility sample (no original sample exists).
 
-Open Net fidelity item found by SAMPLE-096: on a joining machine CNA's `AllGamers` holds the local
-gamer before the existing ones arrive, so `GamerJoined` (replayed at subscription) gives the joiner
-index 0; XNA inserts gamers by the session's internal index (host first) as the kernel reports them,
-so the sample's tanks start apart there. Cosmetic for these samples (positions are then synced).
+Net fidelity item found by SAMPLE-096, fixed as GS-007l (below): on a joining machine CNA's
+`AllGamers` held the local gamer before the existing ones, so `GamerJoined` (replayed at subscription)
+gave the joiner index 0 and SAMPLE-075's lobby listed the joiner above the host.
 
 Known-good cross-repo set: CNA 45c23451b (+ this plan commit), cna-samples feature/gamer-services-samples
 03d9bfe, server bbfe2d5, sharp-runtime 007280bd.
@@ -2429,3 +2428,18 @@ replay, no echo) and `OnlineNetworkSessionTest.LobbyReadinessCrossesTheServiceSe
 (XNA API over the service session, EndGame clear, host ResetReady). CnaNetTests 472/472,
 CnaGamerServicesTests 483 + 1 skip, C API gates pass (the three environment smokes
 ContentSmoke/AudioSmoke/AudioUnavailableSmoke fail as before).
+
+### GS-007l complete: canonical gamer order on every machine
+
+Reference `GamerCollection.Insert` binary-searches by the gamer's session index, so `AllGamers`,
+`LocalGamers`, `RemoteGamers` (and the `GamerJoined` replay that walks `AllGamers`) are in the same
+order everywhere, host first; the kernel may insert in the middle (every index at or above the new
+one is incremented). CNA's cross-machine `Id` plays that index: both transports assign it (online the
+directory ordinal + 1, lowest free; SystemLink the host's free-list), so `NetworkSession` keeps each
+collection sorted by `Id` (stable; nothing is re-sorted when already in order) after a remote gamer is
+added, after a joiner's welcome assigns its own ids, and after a SystemLink host first numbers its
+locals. Seen in SAMPLE-075 (the joiner's lobby now lists the host first) and SAMPLE-096 (tank start
+positions). Tests: `ENetBackendTest.ClientSendsClientHelloAndProcessesServerWelcome` and
+`OnlineNetworkSessionTest.PublicJoinUsesTheFindGroupAndFollowsDirectoryAuthority` assert host-first
+`AllGamers` and replay order. CnaNetTests 472/472, CnaGamerServicesTests 483 + 1 skip, C API gates
+unchanged (inventory current).

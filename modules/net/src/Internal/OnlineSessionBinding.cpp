@@ -102,6 +102,7 @@ void OnlineSessionBinding::project(const ServiceENetObservation& ready) {
         session_.remoteGamers_.Add(gamer);session_.allGamers_.Add(gamer);
         if(entry.IsHost)hostGamer=gamer;
     }
+    session_.OrderGamersInternal();
     if(!hostGamer||(host_!=hostGamer->getIsLocalProperty()))throw ServiceOperationError("INVALID_RESPONSE");
     session_.host_=hostGamer;session_.isHost_=host_;
     apply(snapshot_,true);

@@ -356,6 +356,15 @@ TEST(ENetBackendTest, ClientSendsClientHelloAndProcessesServerWelcome) {
     // the real Join()-based client path exercised by NetworkSessionTests.cpp's
     // JoinInvitedMakesLocalGamersReportIsHostFalse.
     EXPECT_TRUE(hostPlayer->getIsHostProperty());
+    // Reference GamerCollection order: by session index, the same on every machine, so the host
+    // that was there first precedes this machine's own gamer.
+    EXPECT_EQ(client.session->getAllGamersProperty()[0], hostPlayer);
+    EXPECT_EQ(client.session->getAllGamersProperty()[1], client.session->getLocalGamersProperty()[0]);
+    std::vector<std::string> replayed;
+    client.session->GamerJoined += [&replayed](System::Object*, const GamerJoinedEventArgs& args) {
+        replayed.push_back(args.getGamerProperty()->getGamertagProperty());
+    };
+    EXPECT_EQ(replayed, (std::vector<std::string>{"HostPlayer", "ClientPlayer"}));
 }
 
 // audit_net.md remediation (2026-07-18): replaces the old drop-counting test

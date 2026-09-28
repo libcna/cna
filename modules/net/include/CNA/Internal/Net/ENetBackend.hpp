@@ -295,5 +295,12 @@ namespace CNA::Internal::Net
          * @param value The reported ready state.
          */
         static void ApplyTransportGamerReady(NetworkGamer& gamer, bool value);
+
+        /**
+         * @brief Restores the canonical gamer order after the transport assigned ids.
+         *
+         * @param session The session whose gamers were renumbered.
+         */
+        static void OrderTransportGamers(NetworkSession* session);
     };
 }

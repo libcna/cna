@@ -227,6 +227,7 @@ namespace CNA::Internal::Net
                     AssignWireId(state, gamer);
                 }
             }
+            ENetBackend::OrderTransportGamers(session);
         }
 
         // Roster identity comes from the local signed-in account or the received remote identity.
@@ -589,6 +590,9 @@ namespace CNA::Internal::Net
                 );
                 state.AwaitingMigrationHostChangeEXT = false;
             }
+
+            // The host-assigned ids place this machine's gamers after everyone already here.
+            ENetBackend::OrderTransportGamers(session);
 
             // audit_net.md remediation (2026-07-18): GamerToWireId just gained entries for this
             // client's own locals and every already-existing roster gamer - either could complete
@@ -1196,6 +1200,11 @@ namespace CNA::Internal::Net
     void ENetBackend::ApplyTransportGamerReady(NetworkGamer& gamer, bool value)
     {
         NetworkSession::ApplyGamerReadyInternal(gamer, value);
+    }
+
+    void ENetBackend::OrderTransportGamers(NetworkSession* session)
+    {
+        session->OrderGamersInternal();
     }
 
     bool ENetBackend::RealNetworkingEnabled(NetworkSessionType sessionType)

@@ -674,6 +674,23 @@ namespace Microsoft::Xna::Framework::Net
         gamer.SetIsReadyInternal(value);
     }
 
+    void NetworkSession::OrderGamersInternal()
+    {
+        // Reference GamerCollection.Insert keeps every collection sorted by the gamer's session
+        // index, so the host comes first on every machine; CNA's cross-machine Id plays that role.
+        const auto order = [](auto& collection) {
+            std::vector gamers(collection.begin(), collection.end());
+            const auto byId = [](const auto* left, const auto* right) { return left->getIdProperty() < right->getIdProperty(); };
+            if (std::is_sorted(gamers.begin(), gamers.end(), byId)) return;
+            std::stable_sort(gamers.begin(), gamers.end(), byId);
+            collection.Clear();
+            for (auto* gamer : gamers) collection.Add(gamer);
+        };
+        order(allGamers_);
+        order(localGamers_);
+        order(remoteGamers_);
+    }
+
     void NetworkSession::ClearReadyInternal()
     {
         for (NetworkGamer* gamer : allGamers_)
@@ -869,6 +886,7 @@ namespace Microsoft::Xna::Framework::Net
         }
         remoteGamers_.Add(gamer);
         allGamers_.Add(gamer);
+        OrderGamersInternal();
 
         NetworkEvent evt;
         evt.Type = NetworkEventType::GamerJoin;

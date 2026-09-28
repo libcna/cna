@@ -838,6 +838,12 @@ namespace Microsoft::Xna::Framework::Net
         CNAEXT static void ApplyGamerReadyInternal(NetworkGamer& gamer, bool value);
 
         /**
+         * @brief Keeps AllGamers, LocalGamers and RemoteGamers in the session's canonical order:
+         * ascending Id, which is the same on every machine and puts the host's gamers first.
+         */
+        CNAEXT void OrderGamersInternal();
+
+        /**
          * @brief Replaces the session host with the identity established by the transport.
          *
          * Initial host discovery does not raise HostChanged; a host-migration replacement does.

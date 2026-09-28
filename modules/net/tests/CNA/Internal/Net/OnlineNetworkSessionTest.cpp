@@ -158,6 +158,9 @@ TEST_F(OnlineNetworkSessionTest, PublicJoinUsesTheFindGroupAndFollowsDirectoryAu
     session->GameEnded+=[&](auto*,const GameEndedEventArgs&){++ended;};
     session->SessionEnded+=[&](auto*,const NetworkSessionEndedEventArgs& args){reason=args.getEndReasonProperty();};
     EXPECT_EQ(4u,joined.size());for(int index=0;index<5;++index)tick();EXPECT_EQ(4u,joined.size());
+    // Reference GamerCollection order: session index on every machine, so the host's group first.
+    EXPECT_EQ((std::vector<std::string>{"Alice","Charlie","Bob","Dana"}),joined);
+    EXPECT_EQ(host,session->getAllGamersProperty()[0]);
 
     // A client is not the host: host-only setters refuse without changing authority.
     EXPECT_THROW(session->setMaxGamersProperty(8),System::InvalidOperationException);
