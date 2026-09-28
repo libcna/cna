@@ -13,8 +13,8 @@ namespace CNA::Internal::Renderers::DirectX12
     {
         constexpr D3D12_RESOURCE_STATES kShaderReadable =
             static_cast<D3D12_RESOURCE_STATES>(
-                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE |
-                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+                static_cast<int>(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE) |
+                static_cast<int>(D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
 
         [[nodiscard]] UINT AlignRow(UINT bytes)
         {

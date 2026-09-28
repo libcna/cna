@@ -1,5 +1,6 @@
 // plans/plan_dx.md Phase DX13 (DX-121).
 #include "CNA/Internal/Renderers/DirectX12/D3D12EffectRenderer.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DShaderReflectionIid.hpp"
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12RenderTargets.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12TextureCube.hpp"
@@ -30,7 +31,8 @@ namespace CNA::Internal::Renderers::DirectX12
         {
             ComPtr<ID3D11ShaderReflection> reflection;
             if (FAILED(D3DReflect(bytecode->GetBufferPointer(), bytecode->GetBufferSize(),
-                                  IID_PPV_ARGS(reflection.GetAddressOf()))))
+                                  D3DCommon::kShaderReflectionIid,
+                                  reinterpret_cast<void**>(reflection.GetAddressOf()))))
             {
                 error = "D3D12 ShaderEffect could not reflect raw storage inputs";
                 return false;

@@ -1853,3 +1853,35 @@ on next, branched from b1ea16a. It touches Windows D3D compile/IID handling, not
 After committing this coordinator, merge only that committed history into this dedicated branch,
 retain both AUDIT/NEXT notes, regenerate relevant inventory and rerun native Net/private gates.
 Do not modify the shared samples-agent worktree or copy uncommitted changes.
+
+### GS-001h complete: integrate committed DX-271 next advancement
+
+Merged only committed next d5cf852212fb2d3a6930dfb05d95ee96be5aaa24. NEXT.md had a top-note
+conflict; retain GS-007e2c3a/GS-008c3c2 and DX-271 notes. All service and SystemLink source remains
+unchanged by the integration. Windows D3D files are renderer-local; their consumer evidence belongs
+to DX-271, not this service task. Reuse HEADLESS build, max two jobs; regenerate inventory for
+one extra private D3D header and rerun native Net/C API/protocol checks before merge commit.
+
+GS-007e2c3a exact tested integration set:
+- CNA 90f8300c5150f1a744ab03ead71321e48e856128.
+- sharp-runtime 007280bd1cc789f851f7f454a5041c8ce2479e13 (unchanged).
+- server d764f4d0f378429f037d74619388518a457897d5.
+Net 443/443, private gates 5/5, real raw/owned native/NAT 4/4 as above.
+
+GS-001h validated: incremental HEADLESS affected build reports no work (renderer-local Windows
+changes do not rebuild native service code). Final native Net **443/443 in 17.649s** and private
+C API/header/export/canonical protocol **5/5 in 1.35s** pass. Inventory remains 472 public headers /
+8134 symbols; excludes 473 internal headers after the new D3D header. No public binding expansion
+or service drift. Logs cmake-build-debug/service-next-dx-{build,net,private,inventory}.log.
+No Window/Wine/DirectX behavior tests rerun by this task; DX-271's committed evidence is separate.
+
+- [x] GS-001h: integrate committed DX-271 next advancement, resolve only note conflict, refresh
+  exclusion inventory, preserve SystemLink/online regressions.
+
+First unfinished checklist remains GS-007e2c3b: standard online session result/projection. The
+private coordinator owns readiness and logical observations; public PlayerMatch/Ranked Create/Join
+still call the explicit lifecycle refusal in NetworkSession.cpp. Implement that adapter, matching
+complete initial GamerJoined replay, one primary host, multiple local accounts, shared machine
+views, retained authority, received packet queues and group leave/failure, before claiming any
+public online sample acceptance. Follow with standard invited joins/Guide/InviteAccepted, service
+StartGame/EndGame/Ranked leaderboard epochs, migration/reconnect and standard Avatar migration.

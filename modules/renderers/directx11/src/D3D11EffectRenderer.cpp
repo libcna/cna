@@ -1,5 +1,6 @@
 // plans/plan_dx.md Phase DIRECTX8 (DX-58).
 #include "CNA/Internal/Renderers/DirectX11/D3D11EffectRenderer.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DShaderReflectionIid.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11RenderTargets.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11Textures.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11Texture2DArray.hpp"
@@ -27,7 +28,7 @@ namespace CNA::Internal::Renderers::DirectX11
         {
             ComPtr<ID3D11ShaderReflection> shader;
             if (FAILED(D3DReflect(bytecode->GetBufferPointer(), bytecode->GetBufferSize(),
-                                  __uuidof(ID3D11ShaderReflection),
+                                  D3DCommon::kShaderReflectionIid,
                                   reinterpret_cast<void**>(shader.GetAddressOf()))) ||
                 !shader)
             {
