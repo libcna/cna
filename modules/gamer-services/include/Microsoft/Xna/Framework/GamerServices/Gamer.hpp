@@ -254,7 +254,10 @@ namespace Microsoft::Xna::Framework::GamerServices
              */
             [[nodiscard]] const std::any& getAsyncStateProperty() const override;
 
-            /** @brief Always false; this stub never completes synchronously. */
+            /**
+             * @brief Gets whether the operation completed inside its Begin call, which offline
+             * operations (the local store) always do.
+             */
             [[nodiscard]] bool getCompletedSynchronouslyProperty() const override;
 
             /** @brief Gets whether the asynchronous operation has completed. */
@@ -280,6 +283,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         private:
             std::any asyncState_;
             bool isCompleted_{false};
+            bool completedSynchronously_{false};
 
             // Mutable: IAsyncResult::getAsyncWaitHandleProperty() is const but returns a
             // non-const WaitHandle&, so the handle exposed through it must be mutable.

@@ -177,9 +177,15 @@ namespace Microsoft::Xna::Framework::GamerServices
     }
 
     const std::any& Gamer::GamerAction::getAsyncStateProperty() const  { return asyncState_; }
-    bool Gamer::GamerAction::getCompletedSynchronouslyProperty() const  { return false; }
+    bool Gamer::GamerAction::getCompletedSynchronouslyProperty() const  { return completedSynchronously_; }
     bool Gamer::GamerAction::getIsCompletedProperty() const             { return isCompleted_; }
-    void Gamer::GamerAction::setIsCompletedProperty(bool value)         { isCompleted_ = value; }
+    void Gamer::GamerAction::setIsCompletedProperty(bool value)
+    {
+        // Every GamerAction is completed by the Begin call that created it (the offline store has no
+        // deferred work), so completing it is completing it synchronously.
+        if (value && !isCompleted_) completedSynchronously_ = true;
+        isCompleted_ = value;
+    }
 
     System::Threading::WaitHandle& Gamer::GamerAction::getAsyncWaitHandleProperty() const
     {

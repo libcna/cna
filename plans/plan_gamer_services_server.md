@@ -2571,3 +2571,9 @@ the C struct field documents local ticks. CnaGamerServicesTests 485 + 1 skip.
   `NetSmoke` and the coverage rule follow. Tests: `NetworkSessionTest.GameStartedReplaysForAHandlerAddedWhilePlaying`,
   `LocalNetworkGamerTest.ReceiveDataReturnsThePacketSizeAndRefusesWithoutDequeuing`, voice/party
   checks, QoS defaults; CnaNetTests 481/481.
+- [x] GS-004o offline async results and `PropertyDictionary.CopyTo` (audit OPEN 6, 15). An offline
+  `BeginGetProfile`/`BeginAwardAchievement`/`BeginGetAchievements` completes inside Begin (the local
+  store has no deferred work) and now says so through `CompletedSynchronously` (it reported false).
+  `PropertyDictionary.CopyTo` copied nothing and threw `NotImplementedException`; it now copies every
+  pair from the index with the .NET collection checks. (`Add`/`Remove`/`Clear` stay working mutators,
+  the documented Task 8.1 choice; the reference's explicit interface members refuse them.)

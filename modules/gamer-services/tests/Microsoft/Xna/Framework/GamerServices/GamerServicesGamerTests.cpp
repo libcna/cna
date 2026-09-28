@@ -171,7 +171,8 @@ TEST(GamerTest, BeginEndGetProfile) {
     System::IAsyncResult* result = g.BeginGetProfile(System::AsyncCallback{}, std::any{});
     ASSERT_NE(nullptr, result);
     EXPECT_TRUE(result->getIsCompletedProperty());
-    EXPECT_FALSE(result->getCompletedSynchronouslyProperty());
+    // Offline, the profile is read inside Begin.
+    EXPECT_TRUE(result->getCompletedSynchronouslyProperty());
     GamerProfile* profile = g.EndGetProfile(result);
     ASSERT_NE(nullptr, profile);
     delete profile;

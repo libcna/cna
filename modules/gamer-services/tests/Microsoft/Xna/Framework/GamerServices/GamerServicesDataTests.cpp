@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 #include <algorithm>
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/NotImplementedException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -214,10 +215,20 @@ TEST(PropertyDictionaryTest, IsReadOnlyIsAlwaysTrue) {
     EXPECT_TRUE(dict.getIsReadOnlyProperty());
 }
 
-TEST(PropertyDictionaryTest, CopyToAlwaysThrows) {
+TEST(PropertyDictionaryTest, CopyToCopiesEveryPairFromTheIndex) {
     auto dict = PropertyDictionary::CreateInternal({});
-    std::vector<std::pair<std::string, std::any>> array;
-    EXPECT_THROW(dict.CopyTo(array, 0), System::NotImplementedException);
+    dict.SetValue("a", 1);
+    dict.SetValue("b", std::string("two"));
+    std::vector<std::pair<std::string, std::any>> array(3);
+    dict.CopyTo(array, 1);
+    EXPECT_TRUE(array[0].first.empty());
+    EXPECT_EQ("a", array[1].first);
+    EXPECT_EQ(1, std::any_cast<int>(array[1].second));
+    EXPECT_EQ("b", array[2].first);
+    EXPECT_EQ("two", std::any_cast<std::string>(array[2].second));
+    EXPECT_THROW(dict.CopyTo(array, 2), System::ArgumentException);
+    EXPECT_THROW(dict.CopyTo(array, -1), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(dict.CopyTo(array, 4), System::ArgumentOutOfRangeException);
 }
 
 // --- LeaderboardIdentity ---
