@@ -2030,3 +2030,37 @@ Open follow-ups created or confirmed by this slice (not claimed):
   (reference ObjectDisposedException); QualityOfService for service listings is not measured.
 Next: GS-007e3 invited joins/Guide invitation flow/InviteAccepted, then Ranked/PlayerMatch
 leaderboard lifecycle (GS-006d), reconnect/failure (GS-008d2), remaining Guide, avatars.
+
+### GS-007e3 complete: Guide invitations, InviteAccepted and JoinInvited
+
+- [x] Recipient inbox polling at the outer GamerServicesDispatcher.Update (5 s, 30 s backoff,
+  bounded 16 queued/1,024 remembered), one Guide prompt per pending invitation; Accept ->
+  service acceptance -> NetworkSession.InviteAccepted (reference pending-until-first-subscriber);
+  Decline dismisses; closing leaves it pending; receipt never accepts.
+- [x] JoinInvited (both overloads + async): Guide-accepted invitation only (reference NotInvited/
+  InviteeNotSignedIn -> InvalidOperationException), invitee first, consumed once, separate
+  JoinInvited End family. Works synchronously inside the InviteAccepted handler (SAMPLE-096 shape).
+- [x] Guide.ShowGameInvite(player, recipients): reference list validation, gamertag prompt when
+  empty, confirmation, send for the active online session; gamer card "Invite to game".
+  ShowGameInvite(sessionId) -> NotSupportedException (reference: Windows Phone only).
+- [x] Invitation state holds no backend ownership (identity/weak only).
+- [x] Deterministic 5 cases; public two-process E2E with invitations for both categories, localhost
+  and separate NAT namespaces.
+
+Validation: Net **459/459**; GamerServices **459 pass / 1 known HEADLESS skip**; fake **113**;
+private gates **13/13**; server full corpus **17/17, zero skips, 217.97s** (`build/invites-full.log`).
+C inventory 472 headers / 8,141 symbols (one reviewed not-applicable friendship rule CBIND-GS-007e3).
+
+Known-good integration set (GS-007e3):
+- CNA 4279fe3e4 (feature/gamer-services-server)
+- sharp-runtime 007280bd1cc789f851f7f454a5041c8ce2479e13 (unchanged)
+- cna-gamer-services-server bcad5ed (feature/gamer-services-server)
+
+Open from this slice (recorded, not claimed): Guide "Join session in progress" for a friend
+(push-mode InviteAccepted, needs friend-session presence from the server); party invites
+(LocalNetworkGamer.SendPartyInvites/ShowParty) — no CNA party concept yet; IsCurrentSession=true
+path is implemented but not exercised (the directory refuses inviting existing members);
+Guide.DelayNotifications is still a no-op (would defer the invitation prompt).
+Next: GS-006d online leaderboard lifecycle (per-machine unarbitrated epochs at Playing/Lobby,
+leave/dispose), then Ranked arbitration design, GS-008d2 relay reconnect, remaining Guide,
+avatars, samples, final audit.
