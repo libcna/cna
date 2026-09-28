@@ -22,6 +22,7 @@ public:
         if(observations_->status)return observations_->status();
         RelayTransportStatus result;result.state=RelayTransportState::Ready;return result;
     }
+    void reconnect(Service::ServiceRelayTicket) override {}
 private:
     ENetHostHandle host_;
     std::shared_ptr<Observations> observations_;

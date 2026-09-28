@@ -38,6 +38,10 @@ public:
     /** @brief Gets a stable loopback destination for an authorized machine.
      * @param machine Service machine identity. @return Port, or zero if absent. */
     std::uint16_t routePort(const std::string& machine) const;
+    /** @brief Replaces a failed secure connection with a fresh one-use ticket; route sockets and
+     * their ports are kept, so ENet peers addressed through them survive the outage.
+     * @param ticket New one-use authority for the same machine. */
+    void reconnect(GamerServices::ServiceRelayTicket ticket);
     /** @brief Copies safe worker observations at an update boundary. @return Status snapshot. */
     RelayTransportStatus status() const;
     /** @brief Cancels and joins without a detached callback or thread. */

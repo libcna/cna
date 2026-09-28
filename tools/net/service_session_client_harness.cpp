@@ -164,6 +164,24 @@ int main(int argc,char** argv) {
         for(auto* gamer:session->getAllGamersProperty())check(session->FindGamerById(gamer->getIdProperty())==gamer,"FindGamerById");
         std::cout<<"session-roster\n"<<std::flush;command();
 
+        // A reliable round trip proves both relay directions carry traffic before unreliable data
+        // is expected to arrive (an outage legitimately drops unreliable packets).
+        struct Early {LocalNetworkGamer* local;NetworkGamer* sender;std::vector<SharpRuntime::bytecs> bytes;};std::vector<Early> early;
+        phase="sync";{
+            const std::vector<SharpRuntime::bytecs> ping{'S','Y','N','C'},pong{'A','C','K'};
+            locals[0]->SendData(ping,SendDataOptions::Reliable,remotes[0]);bool acknowledged=false,answered=false;
+            until([&] {
+                for(auto* local:locals)while(local->getIsDataAvailableProperty()) {
+                    std::vector<SharpRuntime::bytecs> buffer(40000);NetworkGamer* sender=nullptr;
+                    buffer.resize(static_cast<std::size_t>(local->ReceiveData(buffer,sender)));
+                    if(buffer==ping){local->SendData(pong,SendDataOptions::Reliable,sender);answered=true;}
+                    else if(buffer==pong)acknowledged=true;
+                    // The peer may already be exchanging; its unordered packets can overtake the ACK.
+                    else early.push_back({local,sender,std::move(buffer)});
+                }
+                return acknowledged&&answered;
+            },30);
+        }
         phase="exchange";
         // Every local gamer sends one reliable packet to each remote gamer; the first also sends 32KiB
         // through PacketWriter and the second a small in-order unreliable packet.
@@ -173,8 +191,15 @@ int main(int argc,char** argv) {
             for(auto byte:big)writer.Write(static_cast<SharpRuntime::bytecs>(byte));
             locals[0]->SendData(writer,SendDataOptions::ReliableInOrder,remotes[0]);}
         locals[1]->SendData(payload(locals[1]->getGamertagProperty(),remotes[1]->getGamertagProperty(),9),SendDataOptions::InOrder,remotes[1]);
-        std::map<std::string,int> received;
+        std::map<std::string,int> received;std::optional<Clock::time_point> reliableDone;
+        for(auto& item:early) {
+            check(item.sender&&!item.sender->getIsLocalProperty()&&item.bytes==payload(item.sender->getGamertagProperty(),item.local->getGamertagProperty(),item.bytes.size()),"early exchange packet");
+            ++received[item.sender->getGamertagProperty()+">"+item.local->getGamertagProperty()+":"+std::to_string(item.bytes.size())];
+        }
         until([&] {
+            detail="received="+std::to_string(received.size())+" state="+std::to_string(static_cast<int>(session->getSessionStateProperty()))
+                +" gamers="+std::to_string(session->getAllGamersProperty().getCountProperty());
+            for(const auto& [key,count]:received)detail+=" "+key;
             for(auto* local:locals)while(local->getIsDataAvailableProperty()) {
                 std::vector<SharpRuntime::bytecs> buffer(40000);NetworkGamer* sender=nullptr;
                 const int length=local->ReceiveData(buffer,sender);buffer.resize(static_cast<std::size_t>(length));
@@ -183,7 +208,11 @@ int main(int argc,char** argv) {
                 check(buffer==expected,"unaltered payload with its true sender");
                 ++received[sender->getGamertagProperty()+">"+local->getGamertagProperty()+":"+std::to_string(buffer.size())];
             }
-            return received.size()==6;
+            // Five reliable packets must arrive; the unreliable one is best-effort (after an outage
+            // ENet's packet throttle legitimately drops unreliable sends for a while).
+            int reliable=0;for(const auto& [key,count]:received)if(!key.ends_with(":9"))++reliable;
+            if(reliable==5&&!reliableDone)reliableDone=Clock::now();
+            return received.size()==6||(reliableDone&&Clock::now()-*reliableDone>std::chrono::seconds(3));
         });
         for(const auto& [key,count]:received)check(count==1,"each packet delivered once");
         std::cout<<"session-exchanged "<<received.size()<<"\n"<<std::flush;command();

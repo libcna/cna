@@ -26,7 +26,7 @@ using Microsoft::Xna::Framework::Net::NetworkSession;
 using Microsoft::Xna::Framework::Net::NetworkSessionProperties;
 
 struct Provider final : System::IServiceProvider {void* GetService(const std::type_info&)const override{return nullptr;}};
-struct Portal {std::map<std::string,std::uint16_t> ports;};
+struct Portal {std::map<std::string,std::uint16_t> ports;RelayTransportState status=RelayTransportState::Ready;int reconnects=0;};
 // Deterministic stand-in for the verified relay: real loopback ENet, routes published through a portal.
 class Transport final : public IPreparedOnlineTransport {
 public:
@@ -36,7 +36,8 @@ public:
     ~Transport()override{portal_->ports.erase(machine_);}
     ENetHostHandle& host()override{return host_;}
     RelayTransport* relay()override{return nullptr;}
-    RelayTransportStatus status()const override{RelayTransportStatus value;value.state=RelayTransportState::Ready;return value;}
+    RelayTransportStatus status()const override{RelayTransportStatus value;value.state=portal_->status;return value;}
+    void reconnect(Service::ServiceRelayTicket ticket)override{EXPECT_EQ(machine_,ticket.machine);++portal_->reconnects;portal_->status=RelayTransportState::Ready;}
 private:
     ENetHostHandle host_;
     std::shared_ptr<Portal> portal_;

@@ -758,7 +758,7 @@ CNA-specific transport routing; generic proxy change remains the only runtime mo
 - [x] GS-008c: CNA libcurl WSS connection and loopback UDP routes preserving ENet datagrams,
   protocol/certificate validation and controlled Net updates. SystemLink keeps its direct path.
 - [x] GS-008d1: two actual ENet clients in separate rootless outbound NAT namespaces.
-- [ ] GS-008d2: client reconnect/server-restart and remaining authenticated fault corpus.
+- [x] GS-008d2: client reconnect/server-restart and remaining authenticated fault corpus (see GS-008d2 checkpoint).
 - [ ] GS-008d: genuine ENet exchange under relay-only isolated routing/firewall conditions,
   forged source/destination/malformed/rate/disconnect/revoke/server failure/reconnect corpus.
 - [x] GS-007e1: private authenticated roster/control gate and genuine spoof/refusal relay probes.
@@ -2092,3 +2092,25 @@ Validation: Net **465/465**; GamerServices **459 pass / 1 known skip**; fake **1
 assertions and the public two-process Ranked arbitration read-back. C inventory 8,145 symbols
 (reviewed not-applicable rules for Gamer's protected copy/move members).
 Server 57aeb0f; runtime 007280bd unchanged; CNA commit follows this entry.
+
+### GS-008d2 complete: relay/directory recovery for live online sessions
+
+- [x] RelayTransport::reconnect(ticket): a failed WSS worker is replaced with fresh one-use
+  authority while the loopback route sockets (and so ENet peer addresses) are kept.
+- [x] Engine recovery window 15 s: relay failure -> async ticket request on the origin executor
+  (no owning capture) -> reconnect, retried each second; transient directory failures
+  (SESSION_SERVICE_UNAVAILABLE, RATE_LIMITED) retried via the pump. Authority refusals
+  (NOT_AUTHORIZED, UNAUTHENTICATED, NOT_FOUND) end the session immediately, as does exceeding the
+  window. Relay ENet peers use 20 s/30 s timeouts so they outlast the window.
+- [x] Deterministic: reconnect inside the window keeps peers/data (no new welcome/join); an
+  unrecoverable relay fails exactly once after the window.
+- [x] Real: live public PlayerMatch and Ranked sessions survive a server restart (same port/DB),
+  localhost and separate NAT namespaces; owned-engine probes still observe revocation and final
+  server loss (now after the window).
+Finding recorded: after an outage ENet's packet throttle drops unreliable sends for a while; the
+acceptance harness treats that one packet as best-effort after a restart and strict otherwise.
+
+Validation: Net **466/466**; server **20/20, zero skips, 340.73s** (`build/recovery-full.log`).
+Known-good set: CNA (this commit), server (restart acceptance commit), runtime 007280bd.
+Open: reconnect across a *client* network change is the same path but only server restart is
+measured; host migration is still absent online (GS-007h).

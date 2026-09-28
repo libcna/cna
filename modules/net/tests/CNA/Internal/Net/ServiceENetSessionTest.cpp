@@ -14,7 +14,8 @@
 namespace {
 using namespace CNA::Internal::Net;
 namespace Service=CNA::Internal::GamerServices;
-struct Portal {std::map<std::string,std::uint16_t> ports;RelayTransportState status=RelayTransportState::Ready;int destroyed=0;};
+struct Portal {std::map<std::string,std::uint16_t> ports;RelayTransportState status=RelayTransportState::Ready;int destroyed=0,reconnects=0;
+    RelayTransportState afterReconnect=RelayTransportState::Ready;};
 class Transport final : public IPreparedOnlineTransport {
 public:
     Transport(std::shared_ptr<Portal> portal,std::string machine):host_(ENetHostHandle::CreateRelayHost()),portal_(std::move(portal)),machine_(std::move(machine)) {
@@ -24,6 +25,7 @@ public:
     ENetHostHandle& host()override{return host_;}
     RelayTransport* relay()override{return nullptr;}
     RelayTransportStatus status()const override{RelayTransportStatus value;value.state=portal_->status;return value;}
+    void reconnect(Service::ServiceRelayTicket ticket)override{EXPECT_EQ(machine_,ticket.machine);++portal_->reconnects;portal_->status=portal_->afterReconnect;}
 private:
     ENetHostHandle host_;
     std::shared_ptr<Portal> portal_;
@@ -62,8 +64,11 @@ struct Fixture {
         auto dependencies=preparationDependencies();
         OnlineSessionPreparation operation(backend,request,{},std::move(dependencies));pump();auto lease=operation.take();session=lease->snapshot().session;return lease;
     }
+    // Real time plus a test-controlled jump, so bounded recovery windows can be crossed quickly.
+    std::shared_ptr<std::chrono::steady_clock::duration> skew=std::make_shared<std::chrono::steady_clock::duration>();
     ServiceENetDependencies routes() {
         ServiceENetDependencies dependencies;dependencies.setRoutes=[](const auto&){};
+        dependencies.clock=[skew=skew]{return std::chrono::steady_clock::now()+*skew;};
         dependencies.routePort=[portal=portal](const auto& machine){auto found=portal->ports.find(machine);return found==portal->ports.end()?0:found->second;};return dependencies;
     }
     void pair() {
@@ -137,8 +142,17 @@ TEST(ServiceENetSessionTest, HostClosureProducesOneFailureAndStopsFurtherDeliver
     for(int index=0;index<5;++index)fixture.tick();EXPECT_EQ(1,Fixture::count(fixture.clientEvents,ServiceENetObservation::Type::Failed));
 }
 TEST(ServiceENetSessionTest, RelayFailureIsObservedOnceWithNoRawDiagnosticAndRetainedOriginReleases) {
-    Fixture fixture;fixture.pair();fixture.portal->status=RelayTransportState::Failed;fixture.tick();
+    Fixture fixture;fixture.pair();fixture.portal->afterReconnect=RelayTransportState::Failed;
+    fixture.portal->status=RelayTransportState::Failed;
+    // Recovery requests fresh authority and reconnects; only an outage outlasting the window ends it.
+    fixture.until([&]{return fixture.portal->reconnects>=2;});
+    EXPECT_EQ(0,Fixture::count(fixture.hostEvents,ServiceENetObservation::Type::Failed));EXPECT_TRUE(fixture.host->ready());
+    *fixture.skew+=std::chrono::seconds(16);fixture.tick();
     EXPECT_EQ(1,Fixture::count(fixture.hostEvents,ServiceENetObservation::Type::Failed));EXPECT_FALSE(fixture.host->ready());
+    for(int index=0;index<3;++index)fixture.tick();
+    EXPECT_EQ(1,Fixture::count(fixture.hostEvents,ServiceENetObservation::Type::Failed));
+    auto failed=std::find_if(fixture.hostEvents.begin(),fixture.hostEvents.end(),[](const auto& event){return event.type==ServiceENetObservation::Type::Failed;});
+    EXPECT_EQ("RELAY_TRANSPORT_UNAVAILABLE",failed->failure);
     std::weak_ptr<Service::IGamerServicesBackend> origin=fixture.backend;fixture.backend.reset();EXPECT_FALSE(origin.expired());
     fixture.host.reset();fixture.client.reset();EXPECT_TRUE(origin.expired());EXPECT_EQ(2,fixture.portal->destroyed);
 }
@@ -261,7 +275,9 @@ TEST(OnlineSessionOperationTest, RetainedOriginCompletesAfterGlobalBackendReplac
 }
 TEST(OnlineSessionOperationTest, FailureAfterReadinessBeforeConsumptionIsDeferredAndNotNotifiedAgain) {
     Fixture fixture;int callbacks=0;OnlineSessionOperation operation(fixture.backend,fixture.operationRequest(),{"Alice","Charlie"},[&]{++callbacks;},fixture.preparationDependencies(),fixture.routes());
-    operation.update();ASSERT_TRUE(operation.complete());fixture.portal->status=RelayTransportState::Failed;operation.update();EXPECT_EQ(1,callbacks);EXPECT_EQ(1,fixture.portal->destroyed);
+    operation.update();ASSERT_TRUE(operation.complete());fixture.portal->afterReconnect=RelayTransportState::Failed;
+    fixture.portal->status=RelayTransportState::Failed;operation.update();*fixture.skew+=std::chrono::seconds(16);operation.update();
+    EXPECT_EQ(1,callbacks);EXPECT_EQ(1,fixture.portal->destroyed);
     try{(void)operation.take();FAIL()<<"Expected lost authority";}catch(const Service::ServiceOperationError& error){EXPECT_EQ("RELAY_TRANSPORT_UNAVAILABLE",error.code);}
 }
 TEST(OnlineSessionOperationTest, CancellationIsIdempotentAndSuppressesPendingNotification) {
@@ -301,5 +317,19 @@ TEST(OnlineSessionOperationTest, UnconsumedResultRetainsBoundedDataWhilePreservi
     EXPECT_EQ(128,Fixture::count(result.observations,ServiceENetObservation::Type::Data));
     EXPECT_EQ(1,Fixture::count(result.observations,ServiceENetObservation::Type::Ready));
     EXPECT_EQ(1,Fixture::count(result.observations,ServiceENetObservation::Type::Joined));
+}
+#endif
+#ifndef __EMSCRIPTEN__
+TEST(ServiceENetSessionTest, ARelayOutageInsideTheWindowReconnectsWithFreshAuthorityAndKeepsPeers) {
+    Fixture fixture;fixture.pair();
+    fixture.portal->status=RelayTransportState::Failed;
+    fixture.until([&]{return fixture.portal->reconnects>=1;});
+    // Routes and ENet peers were kept: data flows again without a new welcome or group join.
+    fixture.host->send(1,3,{4,2},SendDataOptions::Reliable);
+    fixture.until([&]{return Fixture::count(fixture.clientEvents,ServiceENetObservation::Type::Data)==1;});
+    EXPECT_EQ(0,Fixture::count(fixture.hostEvents,ServiceENetObservation::Type::Failed));
+    EXPECT_EQ(0,Fixture::count(fixture.clientEvents,ServiceENetObservation::Type::Failed));
+    EXPECT_EQ(1,Fixture::count(fixture.clientEvents,ServiceENetObservation::Type::Ready));
+    EXPECT_EQ(1,Fixture::count(fixture.hostEvents,ServiceENetObservation::Type::Joined));
 }
 #endif

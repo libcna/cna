@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <map>
 #include <set>
+#include <mutex>
 #include <thread>
 
 namespace CNA::Internal::Net {
@@ -17,6 +18,12 @@ using Time=std::chrono::steady_clock::time_point;
 [[noreturn]] void invalid(){throw ServiceOperationError("INVALID_ARGUMENT");}
 struct PacketDelete {void operator()(ENetPacket* value)const{if(value)enet_packet_destroy(value);}};
 struct OutgoingBudget {std::size_t dataBytes=0,dataCount=0,controlBytes=0,controlCount=0;};
+// A relay or directory outage shorter than this is repaired without ending the session; ENet peers
+// on relay routes tolerate a slightly longer silence so they are not the first to give up.
+constexpr auto RecoveryWindow=std::chrono::seconds(15);
+constexpr enet_uint32 PeerTimeoutMinimum=20000,PeerTimeoutMaximum=30000;
+struct Recovery {std::mutex mutex;bool pending=false;std::optional<ServiceRelayTicket> ticket;std::string refused;};
+bool transient(const std::string& code){return code=="SESSION_SERVICE_UNAVAILABLE"||code=="RATE_LIMITED";}
 struct OutgoingAllocation {std::shared_ptr<OutgoingBudget> budget;std::size_t bytes;bool data;};
 void releasedPacket(ENetPacket* packet) {
     std::unique_ptr<OutgoingAllocation> value(static_cast<OutgoingAllocation*>(packet->userData));
@@ -45,6 +52,10 @@ struct ServiceENetSession::Impl {
     std::uint64_t rejected=0;
     bool host=false,ready=false,stopped=false,recoverRoster=false;
     Time deadline,nextHello;
+    std::string account;std::vector<std::string> users;
+    std::shared_ptr<Recovery> recovery=std::make_shared<Recovery>();
+    bool recovering=false,controlFailed=false;
+    Time recoveryDeadline,nextTicket,nextControlRetry;
 
     Impl(std::unique_ptr<PreparedOnlineSession> prepared,std::vector<std::string> names,ServiceENetDependencies providers)
         :lease(std::move(prepared)),locals(std::move(names)),dependencies(std::move(providers)) {
@@ -60,6 +71,8 @@ struct ServiceENetSession::Impl {
         if(enet_address_set_host_ip(&loopback,"127.0.0.1")!=0)throw ServiceOperationError("GAME_TRANSPORT_UNAVAILABLE");
         auto actor=std::find_if(current.members.begin(),current.members.end(),[&](const auto& row){return row.machine==current.machine&&row.gamertag==locals.front();});
         if(actor==current.members.end())invalid();control=std::make_unique<ServiceSessionPump>(lease->backend(),actor->userId,current,dependencies.clock);
+        account=actor->userId;
+        for(const auto& name:locals)for(const auto& row:current.members)if(row.machine==current.machine&&row.gamertag==name)users.push_back(row.userId);
         dependencies.setRoutes(roster->remoteMachines());host=current.machine==current.hostMachine;
         deadline=now()+std::chrono::seconds(10);nextHello=now();
         if(host){ready=true;ServiceENetObservation event;event.type=ServiceENetObservation::Type::Ready;event.ids=localIds;event.snapshot=current;emit(std::move(event));}
@@ -67,6 +80,7 @@ struct ServiceENetSession::Impl {
             const auto port=dependencies.routePort(current.hostMachine);if(!port)throw ServiceOperationError("GAME_TRANSPORT_UNAVAILABLE");
             upstream=transport().Connect("127.0.0.1",port,2);
             if(!upstream)throw ServiceOperationError("GAME_TRANSPORT_UNAVAILABLE");
+            enet_peer_timeout(upstream,0,PeerTimeoutMinimum,PeerTimeoutMaximum);
             peers.emplace(upstream,Peer{current.hostMachine,false,deadline});
         }
     }
@@ -76,6 +90,36 @@ struct ServiceENetSession::Impl {
             try {for(const auto& [peer,value]:peers)transport().Disconnect(peer,0);transport().Flush();}catch(...){}
             (void)lease->release();
         }
+    }
+    void beginRecovery() {
+        if(recovering)return;
+        recovering=true;recoveryDeadline=now()+RecoveryWindow;nextTicket=now();
+    }
+    // Reconnects a failed relay with fresh one-use authority; routes (and ENet peers) are kept.
+    void recoverRelay(const RelayTransportStatus& status) {
+        beginRecovery();
+        std::optional<ServiceRelayTicket> ticket;bool pending=false;std::string refused;
+        {std::lock_guard lock(recovery->mutex);ticket=std::move(recovery->ticket);recovery->ticket.reset();pending=recovery->pending;refused=recovery->refused;}
+        // Revoked or removed authority is final; only an unreachable service is retried.
+        if(!refused.empty()){fail(refused);return;}
+        if(ticket&&status.state==RelayTransportState::Failed) {
+            try{lease->transport().reconnect(std::move(*ticket));}catch(...){}
+            nextTicket=now()+std::chrono::seconds(1);return;
+        }
+        if(pending||status.state!=RelayTransportState::Failed||now()<nextTicket)return;
+        nextTicket=now()+std::chrono::seconds(1);
+        auto state=recovery;auto* executor=lease->backend().get();
+        {std::lock_guard lock(state->mutex);state->pending=true;}
+        try {
+            lease->backend()->submit([state,executor,account=account,users=users,session=current.session] {
+                std::optional<ServiceRelayTicket> issued;std::string refused;
+                try{issued=executor->sessionDirectory().issueRelayTicket(account,users,session);}
+                catch(const ServiceOperationError& error) {
+                    if(error.code=="NOT_AUTHORIZED"||error.code=="UNAUTHENTICATED"||error.code=="NOT_FOUND")refused=error.code;
+                }catch(...){}
+                std::lock_guard lock(state->mutex);state->pending=false;state->ticket=std::move(issued);state->refused=refused;
+            },{});
+        }catch(...){std::lock_guard lock(state->mutex);state->pending=false;}
     }
     void checkOwner()const{if(owner!=std::this_thread::get_id())throw System::InvalidOperationException("Service ENet requires its owner thread.");}
     Time now()const{return dependencies.clock();}
@@ -175,6 +219,7 @@ struct ServiceENetSession::Impl {
         for(const auto& bytes:messages)for(const auto& [peer,value]:peers)if(value.admitted)transmit(peer,bytes);
     }
     void connect(ENetPeer* peer) {
+        enet_peer_timeout(peer,0,PeerTimeoutMinimum,PeerTimeoutMaximum);
         const auto machine=source(peer->address);
         if(host&&machine.empty()&&peers.size()<static_cast<std::size_t>(CnaService::MaxSessionGamers-1)) {
             // A newly joined machine can connect before this host's next authoritative read names
@@ -259,10 +304,22 @@ struct ServiceENetSession::Impl {
         checkOwner();if(!stopped) {
             pumpRetainedCompletions(lease->backend());
             const auto status=lease->transport().status();
-            if(status.state!=RelayTransportState::Ready)fail("RELAY_TRANSPORT_UNAVAILABLE");
+            if(status.state!=RelayTransportState::Ready)recoverRelay(status);
             if(!stopped)if(auto observation=control->update()) {
-                if(!observation->failure.empty())fail(observation->failure);
-                else try{apply(std::move(*observation->snapshot));}catch(const ServiceOperationError&){fail("INVALID_RESPONSE");}
+                if(!observation->failure.empty()) {
+                    // Service outages are retried inside the recovery window; lost authority is final.
+                    if(transient(observation->failure)){beginRecovery();controlFailed=true;nextControlRetry=now()+std::chrono::seconds(1);}
+                    else fail(observation->failure);
+                }
+                else {controlFailed=false;try{apply(std::move(*observation->snapshot));}catch(const ServiceOperationError&){fail("INVALID_RESPONSE");}}
+            }
+            if(!stopped&&controlFailed&&now()>=nextControlRetry) {
+                try{control->retry();}catch(const System::InvalidOperationException&){}
+                nextControlRetry=now()+std::chrono::seconds(1);
+            }
+            if(!stopped&&recovering) {
+                if(!controlFailed&&lease->transport().status().state==RelayTransportState::Ready)recovering=false;
+                else if(now()>=recoveryDeadline)fail(controlFailed?"SESSION_SERVICE_UNAVAILABLE":"RELAY_TRANSPORT_UNAVAILABLE");
             }
             if(!stopped) {
                 ENetEvent event{};

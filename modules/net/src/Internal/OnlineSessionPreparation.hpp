@@ -17,6 +17,9 @@ public:
     virtual RelayTransport* relay()=0;
     /** @brief Observes transport readiness without publishing XNA events. @return Safe status. */
     virtual RelayTransportStatus status() const=0;
+    /** @brief Re-establishes a failed relay with fresh authority, keeping local routes.
+     * @param ticket New one-use authority for this machine. */
+    virtual void reconnect(GamerServices::ServiceRelayTicket ticket)=0;
 };
 /** @brief Creates bounded native loopback ENet and verified relay resources.
  * @param configuration Immutable deployment authority. @param ticket One-use bearer authority.
