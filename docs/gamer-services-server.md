@@ -58,3 +58,9 @@ clears that slot's persistent authority. Rotation uses server remaining lifetime
 offset. A lost successful refresh response or interrupted persistence may require fresh Guide
 sign-in because replaying an old refresh credential revokes its family. Reconnect and restart tests
 are service-control evidence; they do not prove Internet game-data transport or every Xbox event rule.
+
+
+The server now implements a persistent control-only PlayerMatch/Ranked directory with authenticated
+multi-local membership, property filtering and leased host revisions. The CNA public online
+NetworkSession path and Internet relay are still unfinished. Membership in this directory alone
+cannot establish Internet connectivity or provide Ranked arbitration.

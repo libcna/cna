@@ -1,9 +1,34 @@
 [
- {"input":"{\"v\":1,\"id\":\"one\",\"game\":\"sample\",\"op\":\"hello\",\"args\":{}}","error":"OK"},
- {"input":"{\"v\":2,\"id\":\"one\",\"game\":\"sample\",\"op\":\"hello\",\"args\":{}}","error":"UNSUPPORTED_VERSION"},
- {"input":"{\"v\":1,\"v\":1}","error":"MALFORMED_MESSAGE"},
- {"input":"{","error":"MALFORMED_MESSAGE"},
- {"input":"[]","error":"MALFORMED_MESSAGE"},
- {"input":"{\"v\":1,\"id\":\"../path\",\"game\":\"sample\",\"op\":\"hello\",\"args\":{}}","error":"INVALID_ARGUMENT"},
- {"input":"{\"v\":1,\"id\":\"one\",\"game\":\"sample\",\"op\":\"hello\",\"args\":{},\"secret\":0}","error":"MALFORMED_MESSAGE"}
+  {
+    "input": "{\"v\":1,\"id\":\"one\",\"game\":\"sample\",\"op\":\"hello\",\"args\":{}}",
+    "error": "OK"
+  },
+  {
+    "input": "{\"v\":2,\"id\":\"one\",\"game\":\"sample\",\"op\":\"hello\",\"args\":{}}",
+    "error": "UNSUPPORTED_VERSION"
+  },
+  {
+    "input": "{\"v\":1,\"v\":1}",
+    "error": "MALFORMED_MESSAGE"
+  },
+  {
+    "input": "{",
+    "error": "MALFORMED_MESSAGE"
+  },
+  {
+    "input": "[]",
+    "error": "MALFORMED_MESSAGE"
+  },
+  {
+    "input": "{\"v\":1,\"id\":\"../path\",\"game\":\"sample\",\"op\":\"hello\",\"args\":{}}",
+    "error": "INVALID_ARGUMENT"
+  },
+  {
+    "input": "{\"v\":1,\"id\":\"one\",\"game\":\"sample\",\"op\":\"hello\",\"args\":{},\"secret\":0}",
+    "error": "MALFORMED_MESSAGE"
+  },
+  {
+    "input": "{\"v\":1,\"id\":\"directory-shape\",\"game\":\"sample\",\"op\":\"sessions.create\",\"args\":{\"kind\":\"player\",\"maxGamers\":8,\"privateSlots\":1,\"properties\":[42,null,null,null,null,null,null,null],\"allowJoinInProgress\":false,\"participants\":[\"0000000000000000000000000000000000000000000000000000000000000000\"]}}",
+    "error": "OK"
+  }
 ]

@@ -56,6 +56,15 @@ void validateRequest(const Json& request) {
     if (!request.contains("args") || !request["args"].is_object()) throw Error("INVALID_ARGUMENT");
     if (request.contains("token")) (void)stringField(request,"token",128);
 }
+void validateSessionProperties(const Json& properties) {
+    if(!properties.is_array()||properties.size()!=SessionPropertyCount)throw Error("INVALID_ARGUMENT");
+    for(const auto& property:properties) {
+        if(property.is_null())continue;
+        if(!property.is_number_integer()||(property.is_number_unsigned()&&property.get<unsigned long long>()>2147483647ULL))throw Error("INVALID_ARGUMENT");
+        const auto number=property.get<long long>();
+        if(number<-2147483648LL||number>2147483647LL)throw Error("INVALID_ARGUMENT");
+    }
+}
 Json response(std::string_view id, std::string_view error, Json result) {
     return Json{{"v",ProtocolVersion},{"id",id},{"error",error},{"result",std::move(result)}};
 }

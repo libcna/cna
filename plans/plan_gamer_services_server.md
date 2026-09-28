@@ -441,7 +441,7 @@ recorded immediately after checkpoint commits. No sharp-runtime changes. CNA nex
 
 Implement a transport-independent persistent server session directory first: PlayerMatch/Ranked
 logical session type, title-scoped random identity, host ownership, 1..4 authenticated local users,
-capacity/private slots, full sparse 32-property array and null-wildcard search. Server validates all
+capacity/private slots, fixed sparse eight-property array and null-wildcard search. Server validates all
 participant credentials and online privileges before an atomic join; never trust user IDs supplied
 without authority. Host-controlled Lobby/Playing/Ended state, monotonic revision/CAS updates,
 join-in-progress policy, heartbeat TTL, stale-session pruning, bounded listings/membership/creation
@@ -457,3 +457,47 @@ migration tests; no invented Xbox wire compatibility.
 Known-good GS-004c set: CNA d57a41f541b7ff3c3b746a915ae522e6c83a3cb8;
 server 79c8b265f4c03aa2240b0b8581fc53dd549868fe;
 sharp-runtime fc033a0e8541a81498c4a496f56a0f59475c6e34. Checkpoint repositories clean.
+
+
+GS-007 audit correction: existing managed reference NetworkSessionProperties.cs at
+`/rv/data/development/github.com/libcna/xna4-decomp/reference/xna4/decompiled/windows/Microsoft.Xna.Framework.Net/Microsoft.Xna.Framework.Net/`
+uses eight fixed nullable signed integers, Count=8, out-of-range guards and unsupported structural
+Add/Remove/Clear. Current CNA inherits FNA's variable-list approximation, so public correction plus
+host/read-only mutation guards is GS-007b (not silently accepted as measured compatibility).
+Server uses eight fixed property slots. Microsoft reference XML confirms 2..31 max gamers, host-only
+property updates and null-wildcard Find filtering; see also
+[Microsoft NetworkSessionProperties](https://learn.microsoft.com/en-us/previous-versions/windows/xna/bb975815(v=xnagamestudio.40)).
+No managed/FNA source copied into MIT server; facts guide independent protocol implementation.
+
+
+### GS-007a directory checkpoint
+
+- [x] Independent schema-6 persistent PlayerMatch/Ranked control directory; secure authentication
+  of 1..4 locals, per-title membership, public/private capacity, fixed eight-property filtering,
+  host-only CAS updates, Lobby/Playing and join-in-progress policy, bounded queries/quotas/leases.
+- [x] Host expiry/leave closes membership; expired remote machine frees all its locals and bumps
+  revision. Restart preserves only live leases. No ENet identity/endpoint/ticket claims yet.
+- [x] Canonical header/parser/golden request copied byte-for-byte into CNA; explicit unsigned
+  overflow rejection before narrowing, regression tests for every slot/type/bound.
+- [x] 99 dedicated server assertions: four locals, authorization/title/privilege/isolation, atomic
+  rejected joins, sparse matching/capacity/private reservations, playing/host/CAS state, expired
+  remote/host/leave/restart, malformed types/fields. 5,215 existing protocol/service assertions pass.
+- [x] Real TLS directory workers in separate processes: Alice+Charlie host, Bob+Dana discover,
+  mismatch filter, join, grouped leave; both PlayerMatch and Ranked; server restart between host
+  creation and remote discovery. This is control evidence, not public XNA networking/relay evidence.
+
+Final server CTest **3/3 pass, 64.51s** (`build/directory-e2e.log`, TLS 58.16s, directory 2.52s).
+CNA affected targets build; GamerServices **397 run / 396 pass / 1 existing screen-saver skip**
+(`directory-gamers.log`); private native-C ABI/header/coverage/protocol/Net/boards **11/11 pass,
+15.46s** (`directory-c-api.log`). Existing SystemLink 316/316 was verified in GS-004c; no transport
+code changed here. Initial -Werror indentation and unsigned JSON comparison test failures corrected
+before final pass. No proprietary/Xbox/FNA implementation copied into the MIT server.
+
+GS-007 remains incomplete: CNA public Create/Find/Join integration, invitations/InviteAccepted,
+realtime relay/direct transport, host migration and Ranked arbitration are still open. Next concrete
+item GS-007b corrects fixed property semantics and host guards, followed by directory client/relay.
+Generic pre-write interception may be needed in sharp-runtime's ElementReference: current proxies
+cannot reject host/read-only writes before mutating. Keep it generic; no GamerServices logic there.
+Standing layout approval SA-3 (docs/StandingApprovals.md) covers private storage growth with layout
+pins, migration/rebuild note and full gate. Preserve all old constructor signatures/noexcept; any
+change will be on a dedicated branch and recorded with exact tests. No sharp-runtime changes yet.

@@ -11,6 +11,10 @@ using Json = nlohmann::json;
 inline constexpr int ProtocolVersion = 1;
 /** @brief Maximum encoded control request or response size in bytes. */
 inline constexpr std::size_t MaxMessageBytes = 65536;
+/** @brief Fixed nullable matchmaking property slots in protocol v1. */
+inline constexpr std::size_t SessionPropertyCount = 8;
+/** @brief Maximum session membership supported by protocol v1. */
+inline constexpr int MaxSessionGamers = 31;
 /** @brief A stable protocol failure without credential-bearing diagnostics. */
 class Error : public std::runtime_error {
 public:
@@ -31,6 +35,9 @@ bool identifier(std::string_view value);
 /** @brief Gets a bounded string field. @param value Source object. @param key Field name.
  * @param maximum Byte limit. @return Field value. */
 std::string stringField(const Json& value, std::string_view key, std::size_t maximum);
+/** @brief Validates the fixed nullable signed-32-bit property array.
+ * @param properties Property values. */
+void validateSessionProperties(const Json& properties);
 /** @brief Constructs a response. @param id Request ID. @param error Stable error code.
  * @param result Result data. @return Response envelope. */
 Json response(std::string_view id, std::string_view error, Json result = Json::object());
