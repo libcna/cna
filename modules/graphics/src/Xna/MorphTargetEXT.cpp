@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/MorphTargetEXT.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <stdexcept>
 
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -247,7 +250,38 @@ namespace Microsoft::Xna::Framework::Graphics
         const int numVertices = morph->Stride > 0
             ? static_cast<int>(morph->BaseVertexBytes.size()) / morph->Stride : 0;
         VertexBuffer* vb = part.getVertexBufferProperty();
-        vb->SetDataRaw(blended.data(), numVertices, morph->Stride);
+
+        // ModelMesh::Draw leaves this buffer bound, and a bound buffer refuses a plain SetData
+        // (XNA's rule, enforced since SOFTWARE-247), so the per-frame morph loop -- this call in
+        // Update, Model::Draw in Draw -- would throw from its second frame on. Unbind for the
+        // upload and restore the caller's bindings exactly. SetDataOptions::Discard is not an
+        // alternative: XNA offers it only on DynamicVertexBuffer.
+        GraphicsDevice* const device = vb->getGraphicsDeviceProperty();
+        std::vector<VertexBufferBinding> bindings;
+        if (device != nullptr)
+        {
+            bindings = device->GetVertexBuffers();
+            const bool bound = std::ranges::any_of(bindings, [vb](const VertexBufferBinding& b) {
+                return b.getVertexBufferProperty() == vb;
+            });
+            if (bound)
+                device->SetVertexBuffer(nullptr);
+            else
+                bindings.clear();
+        }
+
+        try
+        {
+            vb->SetDataRaw(blended.data(), numVertices, morph->Stride);
+        }
+        catch (...)
+        {
+            if (!bindings.empty())
+                device->SetVertexBuffers(bindings);
+            throw;
+        }
+        if (!bindings.empty())
+            device->SetVertexBuffers(bindings);
     }
 
     std::vector<float> EvaluateMorphWeightsEXT(const MorphWeightTrackEXT& track, double timeSeconds)

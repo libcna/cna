@@ -21,6 +21,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/MorphTargetEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
 #include "System/TimeSpan.hpp"
 
 using namespace Microsoft::Xna::Framework;
@@ -165,6 +166,48 @@ TEST(SetMorphWeightsEXTTest, ReuploadsTheVertexBufferAndUpdatesStoredWeights)
     SetMorphWeightsEXT(part, {1.0f, 0.0f});
     EXPECT_FLOAT_EQ(morph->Weights[0], 1.0f);
     EXPECT_FLOAT_EQ(morph->Weights[1], 0.0f);
+}
+
+// ModelMesh::Draw leaves the part's vertex buffer bound, and a bound buffer refuses a plain
+// SetData (SOFTWARE-247, XNA's own rule). The documented morph loop -- SetMorphWeightsEXT in
+// Update, Model::Draw in Draw -- therefore meets a bound buffer from its second frame on. The
+// re-upload must still land, and every binding the caller had must come back exactly as it was.
+TEST(SetMorphWeightsEXTTest, ReuploadsABufferLeftBoundByTheLastDraw)
+{
+    GraphicsDevice device;
+    if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+    VertexBuffer vb(device, 3);
+    const auto baseBytes = BuildBaseTriangleBytes();
+    vb.SetDataRaw(baseBytes.data(), 3, 32);
+    VertexBuffer instances(device, 3);
+    instances.SetDataRaw(baseBytes.data(), 3, 32);
+    IndexBuffer ib(device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+    const std::uint16_t indices[3] = {0, 1, 2};
+    ib.SetData(indices, 3);
+    ModelMeshPart part(&vb, &ib, 3, 1, 0, 0);
+
+    auto morph = std::make_unique<MorphTargetDataEXT>(BuildTwoTargetMorphData());
+    part.setTagProperty(morph.get());
+
+    device.SetVertexBuffers({VertexBufferBinding(&vb, 1, 0), VertexBufferBinding(&instances, 0, 1)});
+
+    ASSERT_NO_THROW(SetMorphWeightsEXT(part, {1.0f, 0.0f}));
+
+    std::vector<std::uint8_t> uploaded(32 * 3);
+    vb.GetDataRawEXT(0, uploaded.data(), 3, 32);
+    EXPECT_FLOAT_EQ(ReadPosition(uploaded, 0).Z, 1.0f);
+    EXPECT_FLOAT_EQ(ReadPosition(uploaded, 2).Z, 1.0f);
+
+    const std::vector<VertexBufferBinding> bindings = device.GetVertexBuffers();
+    ASSERT_EQ(bindings.size(), 2u);
+    EXPECT_EQ(bindings[0].getVertexBufferProperty(), &vb);
+    EXPECT_EQ(bindings[0].getVertexOffsetProperty(), 1);
+    EXPECT_EQ(bindings[0].getInstanceFrequencyProperty(), 0);
+    EXPECT_EQ(bindings[1].getVertexBufferProperty(), &instances);
+    EXPECT_EQ(bindings[1].getVertexOffsetProperty(), 0);
+    EXPECT_EQ(bindings[1].getInstanceFrequencyProperty(), 1);
+    EXPECT_EQ(device.GetVertexBuffer(), &vb);
 }
 
 TEST(SetMorphWeightsEXTTest, MissingTagThrows)

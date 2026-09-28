@@ -147,6 +147,10 @@ namespace Microsoft::Xna::Framework::Graphics
      * @brief Re-blends a mesh part's vertex buffer from its base pose and morph target deltas
      * using the given weights (via BlendMorphTargetsEXT), and re-uploads it.
      *
+     * Safe to call while the part's vertex buffer is bound to its GraphicsDevice, as
+     * ModelMesh::Draw leaves it: the buffer is unbound for the upload and the device's
+     * vertex-buffer bindings are restored unchanged afterward.
+     *
      * @param part The mesh part to re-blend; must have a MorphTargetDataEXT attached via its own Tag property.
      * @param weights New weight vector; must have exactly as many entries as the part has morph targets.
      */
