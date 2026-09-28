@@ -91,6 +91,15 @@ struct ServiceInvitationPage {
     /** @brief Pending or accepted live invitations. */
     std::vector<ServiceInvitation> invites;
 };
+/** @brief Ephemeral relay authority for an internal secure transport; never game-facing. */
+struct ServiceRelayTicket {
+    /** @brief One-use bearer secret; do not log or persist. */
+    std::string ticket;
+    /** @brief Bound session and machine. */
+    std::string session, machine;
+    /** @brief Server-issued Unix-second time and short expiration. */
+    long long issuedAt=0, expires=0;
+};
 /** @brief Private logical control boundary; callers retain the owning backend during use. */
 class IServiceSessionDirectory {
 public:
@@ -121,6 +130,11 @@ public:
     /** @brief Removes the owning machine's group. @param actor Machine owner. @param session ID.
      * @return Whether host departure closed the session. */
     virtual bool leave(const std::string& actor,const std::string& session)=0;
+    /** @brief Issues one-use secure relay authority for the exact authenticated local group.
+     * @param actor Machine owner. @param users Local identities. @param session ID.
+     * @return Ephemeral authority; issuance alone does not establish a data connection. */
+    virtual ServiceRelayTicket issueRelayTicket(const std::string& actor,const std::vector<std::string>& users,
+        const std::string& session)=0;
     /** @brief Sends an invitation. @param actor Member identity. @param session ID.
      * @param gamertag Recipient. @return Pending or duplicate accepted invitation. */
     virtual ServiceInvitation sendInvite(const std::string& actor,const std::string& session,const std::string& gamertag)=0;

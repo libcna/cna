@@ -748,7 +748,7 @@ CNA-specific transport routing; generic proxy change remains the only runtime mo
 
 - [x] GS-008a1: canonical binary datagram codec/spec/golden vectors in server, exact CNA copies,
   bounded zero-copy parse and deterministic malformed/mutation tests in both products.
-- [ ] GS-008a2: one-use 60s hashed relay tickets, title/session/machine/local-member authentication,
+- [x] GS-008a2: one-use 60s hashed relay tickets, title/session/machine/local-member authentication,
   persistence migration and revocable connection grant validation. No data capability before usable.
 - [ ] GS-008b: Beast/OpenSSL secure WebSocket relay endpoint, single connection per machine,
   per-connection strand/one writer/bounded queue, frame/rate/timeout limits and grant revocation.
@@ -800,3 +800,52 @@ No WebSocket endpoint, ticket or forwarding is implemented/advertised by this sl
 GS-008a2 is one-use hashed relay ticket/grant authority, then GS-008b secure forwarding.
 Latest next remains 8d56fa2fa. Full TLS/CNA multi-process gate remains the measured GS-007d
 75.37s checkpoint, not rerun as evidence of unused standalone framing.
+
+GS-008a1 exact tested set: CNA c90f0e39f45e7823623058a1063b364735a9214e, server
+c78de9481301c8566cbedc568fb9ae1cba780644, runtime 6c4a857de129cf29b5d43430bedf24157d594f12.
+GS-008a2 now active: short-lived one-use hashed tickets require exact authenticated local group
+and machine owner. Established grants bind all members' revocable refresh families so ordinary
+access rotation does not break them; no grant survives a revoked/expired family, membership/host
+lease expiry or title mismatch. Grant release and one-hour ceiling bound retained authority.
+Ticket schema migration/test coverage precedes the secure endpoint; advertise ticket issuance
+separately and never advertise working relay before forwarding exists.
+
+### GS-008a2 secure relay authority checkpoint
+
+Implemented schema 8 with hashed one-use 60s tickets, exact complete local-group/machine-owner
+checks, title/session isolation, bounded per-machine/title records and transactional redemption.
+Server-owned grants bind every member's revocable refresh family and expire within an hour;
+normal access rotation preserves authority, revoke/expiry/privilege loss/leave/host expiry refuses
+it. Exact disconnected-grant release does not mutate account/directory state. Unconsumed tickets
+survive restart until expiry, used bearer credentials cannot be replayed. No WebSocket endpoint
+or forwarding exists yet; only relay-tickets is advertised, not working relay.
+
+CNA adds typed ephemeral ticket retrieval and capability/response bounds. No game-facing token
+API, C binding or persistent ticket cache. The existing two-CNA control probe validates host and
+remote machine authority after multi-local refresh. Explicit fake generates fixture-only authority;
+it does not emulate cryptographic grants or connect to the online server.
+Canonical relay header now lives beside the existing control header in GamerServices' private
+protocol directory; Net privately includes that single canonical artifact. This removes a would-be
+GamerServices-to-Net dependency when ticket validation needs relay constants. Codec implementation
+stays in Net; no public API or behavioral redesign. Header/parser/golden drift remains enforced.
+
+Validation: server clean -Werror build, authority 60 assertions; full configured CTest 7/7 pass
+in 74.10s (unit 5,217; directory 99; invitations 153; relay framing 10,027; authority 60; TLS
+57.18s; actual two-CNA processes 6.53s/32 join+17 host checks per kind). Schema v1-to-8 upgrade
+and future-schema refusal still pass. CNA GamerServices 409 run/408 pass/one known HEADLESS
+screensaver skip (1.838s), Net 328/328 pass (4.376s), private C API/fake/protocol/ABI gates
+13/13 pass (11.87s). ABI 0.32/3,215 exports unchanged. Existing Net nodiscard test warnings,
+no new production warnings. Two initial new server indentation warnings were fixed before the
+clean build; no unresolved new failure.
+Logs: server build/relay-auth-{build,unit,final}.log, CNA
+cmake-build-debug/relay-auth-{build,gamers,net,gates}.log. Reuse the same three probe env vars
+and `ctest --test-dir build --output-on-failure`; authority alone `-R '^service_relay_authorization$'`.
+Opening SQLite migrates transactionally; back up before upgrading.
+
+Concurrent milestone inspection: next was externally advanced to c90f0e39f (our committed
+GS-008a1 checkpoint), also tracking origin/next. Canonical samples worktree status clean. This
+agent did not move next, push, or copy any uncommitted work. It is already an ancestor of this
+feature branch, so no merge is necessary. Runtime still 6c4a857de129cf29b5d43430bedf24157d594f12.
+The next task is GS-008b secure WSS forwarding, rate/queue/grant failure tests, followed by
+CNA ENet bridge and relay-only connectivity proof; all public online sessions/Guide invites/
+Ranked lifecycle/standard avatars/sample acceptance/final audit remain unfinished.

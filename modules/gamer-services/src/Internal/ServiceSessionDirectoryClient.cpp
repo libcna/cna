@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "ServiceSessionDirectoryClient.hpp"
+#include "Protocol/CnaService/RelayProtocol.hpp"
 #include <algorithm>
 #include <map>
 #include <set>
@@ -168,6 +169,21 @@ public:
     }
     bool leave(const std::string& actor,const std::string& session) override {
         actorGuard(actor);argument(opaque(session));return decode([&]{const auto value=request_("sessions.leave",{{"session",session}},actor,{});fields(value,{"ended"});return boolean(value,"ended");});
+    }
+    ServiceRelayTicket issueRelayTicket(const std::string& actor,const std::vector<std::string>& users,const std::string& session) override {
+        usersGuard(actor,users);argument(opaque(session));
+        return decode([&] {
+            const auto data=request_("sessions.relayTicket",{{"session",session}},actor,users);
+            fields(data,{"ticket","session","machine","expires","serverTime","relayVersion","maxDatagramBytes"});
+            ServiceRelayTicket result;result.ticket=text(data,"ticket",64);result.session=id(data,"session");result.machine=id(data,"machine");
+            if(result.ticket.size()!=64||result.ticket.find_first_not_of("0123456789abcdef")!=std::string::npos||result.session!=session)invalid();
+            result.issuedAt=number(data,"serverTime",0,253402300799LL);
+            result.expires=number(data,"expires",result.issuedAt+1,253402300799LL);
+            if(result.expires-result.issuedAt>CnaService::RelayTicketLifetimeSeconds)invalid();
+            (void)number(data,"relayVersion",CnaService::RelayVersion,CnaService::RelayVersion);
+            (void)number(data,"maxDatagramBytes",CnaService::MaxRelayDatagramBytes,CnaService::MaxRelayDatagramBytes);
+            return result;
+        });
     }
     ServiceInvitation sendInvite(const std::string& actor,const std::string& session,const std::string& gamertag) override {
         actorGuard(actor);argument(opaque(session)&&!gamertag.empty()&&gamertag.size()<=32);

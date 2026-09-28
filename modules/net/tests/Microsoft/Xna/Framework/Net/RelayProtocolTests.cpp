@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-#include "../../../../../src/Internal/Protocol/CnaService/RelayProtocol.hpp"
+#include "CnaService/RelayProtocol.hpp"
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
 #include <filesystem>

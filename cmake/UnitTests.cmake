@@ -515,6 +515,8 @@ if(CNA_BUILD_TESTS)
             cna_test_build_config
             ${_cna_test_group_dependencies})
         if(_cna_test_group STREQUAL "net")
+            target_include_directories(${_cna_test_object_target} PRIVATE
+                ${CMAKE_SOURCE_DIR}/modules/gamer-services/src/Internal/Protocol)
             target_compile_definitions(${_cna_test_object_target} PRIVATE
                 CNA_RELAY_PROTOCOL_VECTORS="${CMAKE_SOURCE_DIR}/modules/net/tests/fixtures/relay-protocol-v1.json")
         endif()

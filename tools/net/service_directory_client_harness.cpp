@@ -51,6 +51,8 @@ int main(int argc,char** argv) {
         std::cout<<"directory-signed\n"<<std::flush;advance();
         if(host) {
             phase="create";auto session=directory.create(users[0],users,category,settings);check(session.currentGamers==2,"host local group");
+            const auto authority=directory.issueRelayTicket(users[0],users,session.session);
+            check(authority.machine==session.machine&&authority.session==session.session&&authority.ticket.size()==64,"host relay authority");
             phase="send-invite";const auto invitation=directory.sendInvite(users[0],session.session,"Bob");
             check(invitation.invite==directory.sendInvite(users[0],session.session,"Bob").invite,"duplicate invite identity");
             rejected([&]{(void)directory.update(users[0],session.session,session.revision+1,settings);},"CONFLICT");
@@ -70,6 +72,8 @@ int main(int argc,char** argv) {
             check(page.sessions.size()==1&&page.sessions[0].session==session,"service filtering/correlation");
             auto mismatch=settings.properties;mismatch[0]=38;check(directory.find(users[0],category,2,mismatch,0,32).sessions.empty(),"filter mismatch");
             phase="ordinary-join";auto joined=directory.join(users[0],users,session);check(joined.currentGamers==4,"ordinary two-local join");
+            const auto authority=directory.issueRelayTicket(users[0],users,session);
+            check(authority.machine==joined.machine&&authority.session==session&&authority.ticket.size()==64,"remote relay authority");
             check(directory.get(users[1],session).machine==joined.machine,"secondary local membership read");
             rejected([&]{(void)directory.touch(users[1],session);},"NOT_AUTHORIZED");
             check(!directory.leave(users[0],session),"ordinary group leave");

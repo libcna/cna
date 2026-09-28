@@ -20,6 +20,14 @@ inline constexpr std::size_t MaxRelayFrameBytes=RelayHeaderBytes+MaxRelayDatagra
 inline constexpr std::size_t MaxRelayQueuedFrames=64;
 /** @brief Maximum queued bytes per connection. */
 inline constexpr std::size_t MaxRelayQueuedBytes=MaxRelayQueuedFrames*MaxRelayFrameBytes;
+/** @brief One-use connection ticket lifetime in seconds. */
+inline constexpr int RelayTicketLifetimeSeconds=60;
+/** @brief Maximum established grant lifetime; reconnect requires fresh authority. */
+inline constexpr int RelayGrantLifetimeSeconds=3600;
+/** @brief Maximum outstanding ticket/grant records per machine. */
+inline constexpr int MaxMachineRelayTickets=8;
+/** @brief Maximum ticket/grant records per title. */
+inline constexpr int MaxTitleRelayTickets=8192;
 /** @brief Machine identity as sixteen opaque service-assigned bytes. */
 using RelayMachineId=std::array<unsigned char,16>;
 /** @brief Deterministic parse refusal; never includes payload or credentials. */

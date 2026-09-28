@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "ServiceSessionDirectoryFake.hpp"
 #include "CnaService/Protocol.hpp"
+#include "Protocol/CnaService/RelayProtocol.hpp"
 #include <algorithm>
 #include <chrono>
 #include <iomanip>
@@ -89,6 +90,13 @@ public:
         authorize_(actor);prune();auto& session=lookup(id);const auto machine=ownedMachine(session,actor);
         if(machine==session.value.hostMachine){close(id);return true;}
         removeMachine(session,machine);return false;
+    }
+    ServiceRelayTicket issueRelayTicket(const std::string& actor,const std::vector<std::string>& users,const std::string& id) override {
+        prune();participants(actor,users);auto& session=lookup(id);const auto machine=ownedMachine(session,actor);
+        std::set<std::string> group;for(const auto& member:session.value.members)if(member.machine==machine)group.insert(member.userId);
+        require(group==std::set<std::string>(users.begin(),users.end()),"NOT_AUTHORIZED");
+        // Fixture authority is intentionally deterministic and cannot authenticate to a real relay.
+        return {std::string(32,'0')+nextId(),id,machine,now(),now()+CnaService::RelayTicketLifetimeSeconds};
     }
     ServiceInvitation sendInvite(const std::string& actor,const std::string& id,const std::string& tag) override {
         authorize_(actor);prune();auto& session=lookup(id);(void)memberMachine(session,actor);

@@ -16,4 +16,4 @@ cna_link_sharp_runtime(CNA_Net PUBLIC Core.Base IO Collections.Core Runtime Thre
 add_subdirectory(examples)
 
 # Canonical CNA service relay envelope is private to the realtime implementation.
-target_include_directories(CNA_Net PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/Internal/Protocol)
+target_include_directories(CNA_Net PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../gamer-services/src/Internal/Protocol)

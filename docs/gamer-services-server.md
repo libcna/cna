@@ -87,3 +87,10 @@ Multi-local requests collect current credentials under the transport lock and ca
 secondary players without signing out a valid machine owner. The real two-CNA-process TLS probe
 uses internal control APIs for this validation; it is not a standard-API gameplay acceptance sample
 and it proves neither relay nor Internet realtime connectivity.
+
+The private backend can now request one-use, short-lived relay authority for its owning machine
+and exact authenticated local group. Server grants bind all members' revocable login families;
+ordinary access refresh preserves authority, while revocation/leave/host expiry invalidates it.
+Tickets are ephemeral and never part of gameplay source, URLs, logs or persistent client files.
+The secure WSS forwarding endpoint and ENet bridge are the next tasks; ticket issuance alone
+does not establish an Internet data path or enable public PlayerMatch/Ranked sessions.

@@ -122,6 +122,30 @@ TEST(ServiceSessionDirectoryTest, HostUpdateAndLeaveValidateExpectedRevisionAndS
     auto error=makeSessionDirectoryClient([](const auto&,auto,const auto&,const auto&)->Json{throw ServiceOperationError("CONFLICT");});
     expectCode([&]{(void)error->get("alice-id",sessionId);},"CONFLICT");
 }
+TEST(ServiceSessionDirectoryTest, RelayTicketChecksExactGroupCorrelationSecretBoundsAndNegotiatedFrameLimits) {
+    Json response{{"ticket",std::string(64,'a')},{"session",sessionId},{"machine",machineId},
+        {"serverTime",1000},{"expires",1060},{"relayVersion",1},{"maxDatagramBytes",4096}};
+    auto client=makeSessionDirectoryClient([&](const auto& op,const auto& args,const auto& actor,const auto& users) {
+        EXPECT_EQ("sessions.relayTicket",op);EXPECT_EQ(sessionId,args["session"]);EXPECT_EQ("alice-id",actor);
+        EXPECT_EQ((std::vector<std::string>{"alice-id","charlie-id"}),users);EXPECT_FALSE(args.contains("participants"));return response;
+    });
+    const auto ticket=client->issueRelayTicket("alice-id",{"alice-id","charlie-id"},sessionId);
+    EXPECT_EQ(1060,ticket.expires);EXPECT_EQ(1000,ticket.issuedAt);EXPECT_EQ(machineId,ticket.machine);EXPECT_EQ(std::string(64,'a'),ticket.ticket);
+    const auto valid=response;
+    for(const auto& [key,value]:std::vector<std::pair<std::string,Json>>{
+        {"ticket",std::string(65,'a')},{"ticket",std::string(64,'x')},{"ticket",""},{"session",std::string(32,'f')},
+        {"machine","../path"},{"expires",1061},{"expires",1000},{"serverTime",-1},{"relayVersion",2},{"relayVersion",true},
+        {"maxDatagramBytes",4097},{"maxDatagramBytes",4096.0},{"serverTime",18446744073709551615ULL}}) {
+        response=valid;response[key]=value;
+        expectCode([&]{(void)client->issueRelayTicket("alice-id",{"alice-id","charlie-id"},sessionId);},"INVALID_RESPONSE");
+    }
+    expectCode([&]{(void)client->issueRelayTicket("alice-id",{"charlie-id"},sessionId);},"INVALID_ARGUMENT");
+    Fixture fixture;const auto host=fixture.directory->create("a",{"a","c"},ServiceSessionKind::PlayerMatch,{});
+    const auto fake=fixture.directory->issueRelayTicket("a",{"a","c"},host.session);
+    EXPECT_EQ(host.machine,fake.machine);EXPECT_EQ(fixture.time+60,fake.expires);EXPECT_EQ(64U,fake.ticket.size());
+    expectCode([&]{(void)fixture.directory->issueRelayTicket("a",{"a"},host.session);},"NOT_AUTHORIZED");
+    expectCode([&]{(void)fixture.directory->issueRelayTicket("c",{"a","c"},host.session);},"NOT_AUTHORIZED");
+}
 TEST(ServiceSessionDirectoryTest, FakeModelsBothKindsFourLocalsFilteringAndPrivateInvitationAtomicity) {
     for(const auto kind:{ServiceSessionKind::PlayerMatch,ServiceSessionKind::Ranked}) {
         Fixture f;auto& directory=*f.directory;ServiceSessionSettings settings;settings.maxGamers=4;settings.privateSlots=1;settings.properties[2]=17;
