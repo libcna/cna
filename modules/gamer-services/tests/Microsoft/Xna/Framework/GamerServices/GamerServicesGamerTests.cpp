@@ -4,6 +4,8 @@
 #include <filesystem>
 #include <fstream>
 
+#include "System/ArgumentNullException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -761,17 +763,22 @@ TEST(SignedInGamerTest, InheritsGamer) {
     EXPECT_NE(nullptr, dynamic_cast<Gamer*>(&gamer));
 }
 
-TEST(SignedInGamerTest, IsFriendAlwaysFalse) {
-    auto gamer = SignedInGamer::CreateInternal("tag1");
+// Reference SignedInGamer.IsFriend/GetFriends: disposed, then not signed in to an online account
+// (GamerPrivilegeException), then a null or disposed argument. Without a service there are no friends.
+TEST(SignedInGamerTest, IsFriendFollowsTheReferenceChecks) {
+    auto offline = SignedInGamer::CreateInternal("tag1");
     auto other = MakeGamer();
-    EXPECT_FALSE(gamer.IsFriend(&other));
-    EXPECT_FALSE(gamer.IsFriend(nullptr));
+    EXPECT_THROW((void)offline.IsFriend(&other), GamerPrivilegeException);
+    auto online = SignedInGamer::CreateInternal("tag2", true);
+    EXPECT_FALSE(online.IsFriend(&other));
+    EXPECT_THROW((void)online.IsFriend(nullptr), System::ArgumentNullException);
 }
 
-TEST(SignedInGamerTest, GetFriendsIsEmpty) {
-    auto gamer = SignedInGamer::CreateInternal("tag1");
-    auto friends = gamer.GetFriends();
-    EXPECT_EQ(0, friends.getCountProperty());
+TEST(SignedInGamerTest, GetFriendsFollowsTheReferenceChecks) {
+    auto offline = SignedInGamer::CreateInternal("tag1");
+    EXPECT_THROW((void)offline.GetFriends(), GamerPrivilegeException);
+    auto online = SignedInGamer::CreateInternal("tag2", true);
+    EXPECT_EQ(0, online.GetFriends().getCountProperty());
 }
 
 TEST(SignedInGamerTest, AwardAchievementDoesNotThrow) {

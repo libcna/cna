@@ -4,6 +4,11 @@
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/Audio/Microphone.hpp"
 #include "System/DateTime.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedInEventArgs.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
+#include "System/ObjectDisposedException.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/TimeZone.hpp"
 #include "../Internal/ServiceAsyncResult.hpp"
@@ -12,6 +17,18 @@ namespace Microsoft::Xna::Framework::GamerServices
 {
     System::EventHandler<SignedInEventArgs> SignedInGamer::SignedIn;
     System::EventHandler<SignedOutEventArgs> SignedInGamer::SignedOut;
+
+    namespace
+    {
+        // Reference SignedIn add accessor: a new handler is told about every gamer already signed in.
+        const bool signedInReplay = [] {
+            SignedInGamer::SignedIn.SetReplayHook([](const System::EventHandler<SignedInEventArgs>::HandlerType& handler) {
+                for (SignedInGamer* gamer : *Gamer::getSignedInGamersProperty())
+                    handler(nullptr, SignedInEventArgs(gamer));
+            });
+            return true;
+        }();
+    }
 
     SignedInGamer::SignedInGamer(
         const std::string& gamertag,
@@ -56,8 +73,12 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     bool SignedInGamer::IsFriend(Gamer* gamer) const
     {
+        // Reference SignedInGamer.IsFriend, in its validation order.
+        if (getIsDisposedProperty()) throw System::ObjectDisposedException("SignedInGamer");
+        if (!isSignedInToLive_) throw GamerPrivilegeException("The profile is not signed in to an online account.");
+        if (gamer == nullptr) throw System::ArgumentNullException("gamer");
+        if (gamer->getIsDisposedProperty()) throw System::ObjectDisposedException("gamer");
         if (!serviceUserId_.empty()) {
-            if (!gamer) throw System::ArgumentException("Gamer is null.", "gamer");
             for (const auto& entry : CNA::Internal::GamerServices::backend()->friends(serviceUserId_))
                 if (entry.accepted && entry.gamertag == gamer->getGamertagProperty()) return true;
         }
@@ -71,6 +92,8 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     FriendCollection SignedInGamer::GetFriends() const
     {
+        if (getIsDisposedProperty()) throw System::ObjectDisposedException("SignedInGamer");
+        if (!isSignedInToLive_) throw GamerPrivilegeException("The profile is not signed in to an online account.");
         if (!serviceUserId_.empty()) {
             std::vector<std::shared_ptr<FriendGamer>> owned;
             std::vector<FriendGamer*> friends;

@@ -12,6 +12,10 @@
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedInEventArgs.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedOutEventArgs.hpp"
+#include "System/ObjectDisposedException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/FriendCollection.hpp"
 #include "System/IServiceProvider.hpp"
 #include "System/InvalidOperationException.hpp"
 #include <chrono>
@@ -159,6 +163,35 @@ TEST_F(SystemGuideTest, NothingOpensWhileTheGuideIsVisible) {
     delete result;
     Service::openSystemGuide(static_cast<PlayerIndex>(7));
     EXPECT_FALSE(Guide::getIsVisibleProperty());
+}
+
+// Reference SignedInGamer: SignedIn's add accessor tells a new handler about every gamer already
+// signed in (sender null); signing out disposes the old gamer before SignedOut, leaving
+// IsSignedInToLive as it was.
+TEST_F(SystemGuideTest, SignedInReplaysOnSubscribeAndSigningOutDisposesTheGamer) {
+    auto fake = Fake();
+    fake->signIn(0, "Alice", "fixture");
+    ASSERT_TRUE(Settle([] { return Count() == 1; }));
+    std::vector<std::string> replayed;
+    const auto signedIn = SignedInGamer::SignedIn.Add([&](System::Object* sender, const SignedInEventArgs& e) {
+        EXPECT_EQ(nullptr, sender);
+        replayed.push_back(e.getGamerProperty()->getGamertagProperty());
+    });
+    EXPECT_EQ(std::vector<std::string>{"Alice"}, replayed);
+    SignedInGamer* alice = (*Gamer::getSignedInGamersProperty())[0];
+    bool disposedWhenSignedOut = false;
+    const auto signedOut = SignedInGamer::SignedOut.Add([&](System::Object*, const SignedOutEventArgs& e) {
+        disposedWhenSignedOut = e.getGamerProperty() == alice && e.getGamerProperty()->getIsDisposedProperty();
+    });
+    fake->signOut(0);
+    EXPECT_TRUE(Settle([] { return Count() == 0; }));
+    SignedInGamer::SignedIn.Remove(signedIn);
+    SignedInGamer::SignedOut.Remove(signedOut);
+    EXPECT_TRUE(disposedWhenSignedOut);
+    EXPECT_TRUE(alice->getIsDisposedProperty());
+    EXPECT_TRUE(alice->getIsSignedInToLiveProperty());
+    EXPECT_THROW((void)alice->BeginGetProfile({}, {}), System::ObjectDisposedException);
+    EXPECT_THROW((void)alice->GetFriends(), System::ObjectDisposedException);
 }
 
 TEST_F(SystemGuideTest, IsVisibleIsThePublicViewOfTheGuidePanes) {

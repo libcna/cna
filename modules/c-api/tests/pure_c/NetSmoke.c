@@ -7,12 +7,21 @@
 #include <stdint.h>
 #include <string.h>
 
+/* A signed-in gamer added to the roster session; it must outlive that session. */
+static CNA_SignedInGamerHandle added_local_gamer = CNA_INVALID_HANDLE;
+
 static CNA_StringView view(const char* const text)
 {
     CNA_StringView result;
     result.data = text;
     result.byte_length = (uint64_t)strlen(text);
     return result;
+}
+
+static CNA_Result create_added_local_gamer(void)
+{
+    return cna_signed_in_gamer_create_ext(view("Second"), CNA_FALSE, CNA_FALSE, CNA_PLAYER_INDEX_TWO,
+                                          &added_local_gamer);
 }
 
 static CNA_OptionalInt32 present(const int32_t value)
@@ -897,10 +906,13 @@ static int validate_session_rosters(const CNA_NetworkSessionHandle session)
             return 0;
         }
     }
-    /* Signed-in gamers have no C representation yet, so only the no-gamer form is accepted. */
-    if (cna_network_session_add_local_gamer(session, UINT64_C(1234)) !=
-            CNA_RESULT_NOT_SUPPORTED ||
-        cna_network_session_add_local_gamer(session, CNA_INVALID_HANDLE) != CNA_RESULT_SUCCESS) {
+    /* A signed-in gamer joins as a local gamer; the canonical null gamer and a stale handle are
+       refused. The added gamer's handle outlives the session (validate_sessions releases it). */
+    if (cna_network_session_add_local_gamer(session, UINT64_C(1234)) != CNA_RESULT_INVALID_HANDLE ||
+        cna_network_session_add_local_gamer(session, CNA_INVALID_HANDLE) != CNA_RESULT_INVALID_ARGUMENT ||
+        create_added_local_gamer() != CNA_RESULT_SUCCESS ||
+        cna_network_session_add_local_gamer(session, added_local_gamer) != CNA_RESULT_SUCCESS ||
+        cna_network_session_add_local_gamer(session, added_local_gamer) != CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
     if (cna_network_session_get_gamer_count(session, CNA_NETWORK_SESSION_ROSTER_LOCAL, &number) !=
@@ -1736,7 +1748,8 @@ static int validate_sessions(void)
     if (cna_network_session_destroy(session) != CNA_RESULT_SUCCESS ||
         cna_network_session_destroy(session) != CNA_RESULT_INVALID_HANDLE ||
         cna_network_session_get_instance_count_ext(&instances) != CNA_RESULT_SUCCESS ||
-        instances != 0) {
+        instances != 0 ||
+        cna_signed_in_gamer_destroy(added_local_gamer) != CNA_RESULT_SUCCESS) {
         return 0;
     }
 

@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerProfile.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
+#include "System/ObjectDisposedException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "../Internal/ServiceAsyncResult.hpp"
 
@@ -98,6 +99,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     System::IAsyncResult* Gamer::BeginGetProfile(System::AsyncCallback callback, std::any asyncState)
     {
+        if (isDisposed_) throw System::ObjectDisposedException("Gamer");
         if (CNA::Internal::GamerServices::backend()->serviceEnabled()) {
             auto service = CNA::Internal::GamerServices::backend();
             const auto tag = gamertag_;

@@ -93,7 +93,8 @@ void GamerServicesDispatcher::Update() {
             if(event.type==Type::Failed) { Guide::OnSignInResult(event.slot, false); continue; }
             if(event.type!=Type::SignedIn&&event.type!=Type::SignedOut)continue;
             if(auto* previous=slots[event.slot]) {
-                slots[event.slot]=nullptr;previous->isSignedInToLive_=false;publish();SignedInGamer::OnSignOut(previous);
+                // Reference HandlePlayerSignInChanged: the old gamer is disposed, then SignedOut is raised.
+                slots[event.slot]=nullptr;previous->isDisposed_=true;publish();SignedInGamer::OnSignOut(previous);
             }
             if(event.type==Type::SignedIn) {
                 auto gamer=std::unique_ptr<SignedInGamer>(new SignedInGamer(event.identity.gamertag,event.signedInToLive,false,static_cast<PlayerIndex>(event.slot)));

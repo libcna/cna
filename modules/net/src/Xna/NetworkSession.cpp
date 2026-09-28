@@ -614,6 +614,19 @@ namespace Microsoft::Xna::Framework::Net
     void NetworkSession::AddLocalGamer(SignedInGamer* gamer)
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
+        // Reference NetworkSession.AddLocalGamer, in its validation order.
+        if (gamer == nullptr) throw System::ArgumentNullException("gamer");
+        if (gamer->getIsDisposedProperty()) throw System::ObjectDisposedException("gamer");
+        if (isDisposed_) throw System::ObjectDisposedException("NetworkSession");
+        for (LocalNetworkGamer* local : localGamers_)
+            if (local->getSignedInGamerProperty() == gamer) throw System::ArgumentException("The gamer is already in the session.", "gamer");
+        if (sessionState_ == NetworkSessionState::Playing && !allowJoinInProgress_)
+            throw System::InvalidOperationException("The session does not allow joining a game in progress.");
+        if (sessionState_ == NetworkSessionState::Ended) throw System::InvalidOperationException("The session has ended.");
+        int fullPublicSlots = 0;
+        for (NetworkGamer* member : allGamers_) if (!member->getIsPrivateSlotProperty()) ++fullPublicSlots;
+        if (maxGamers_ - privateGamerSlots_ - fullPublicSlots <= 0)
+            throw System::InvalidOperationException("The session has no open public slot.");
         // The service directory admits one complete local group per machine; extending it is not implemented yet.
         if (online_)
             throw System::NotSupportedException("CNA online sessions do not yet add local gamers after creation or join.");

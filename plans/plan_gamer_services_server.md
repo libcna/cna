@@ -2534,3 +2534,16 @@ the C struct field documents local ticks. CnaGamerServicesTests 485 + 1 skip.
   directory fake/typed-client tests, server DirectoryTests (130 assertions), server f23f7c5 (full suite 23/23). Still open in GS-007j:
   online `AddLocalGamer`, and SystemLink clients do not learn the host's machine grouping (their
   remote gamers have no shared `Machine`).
+- [x] GS-004n signed-in gamer lifecycle and local-gamer validation (audit OPEN 1, 2, 4 and the
+  reference half of GS-007j's AddLocalGamer). Reference `HandlePlayerSignInChanged` disposes the old
+  gamer before `SignedOut`; CNA instead cleared `IsSignedInToLive`. It now disposes it and leaves the
+  flag. `SignedIn`'s add accessor replays every gamer already signed in (sender null), as XNA's does.
+  `IsFriend`/`GetFriends` follow the reference order: disposed, then not signed in to an online
+  account (`GamerPrivilegeException`), then a null (`ArgumentNullException`) or disposed argument.
+  `BeginGetProfile` refuses a disposed gamer. `AddLocalGamer` checks null, disposed gamer, disposed
+  session, already in the session, Playing without join-in-progress, Ended, and no open public slot.
+  C: `cna_network_session_add_local_gamer` now takes a real `CNA_SignedInGamerHandle` (it refused
+  every handle, "no C representation yet"); `CNA_INVALID_HANDLE` is the null refusal. Tests:
+  `SystemGuideTest.SignedInReplaysOnSubscribeAndSigningOutDisposesTheGamer`, `SignedInGamerTest`
+  friend checks, `NetworkSessionTest.AddLocalGamerFollowsTheReferenceChecks`, `NetSmoke`.
+  CnaGamerServicesTests 490 + 1 skip, CnaNetTests 479/479.

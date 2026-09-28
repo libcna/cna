@@ -1385,14 +1385,16 @@ CNA_Result cna_network_session_add_local_gamer(
     const CNA_Handle signedInGamer)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        // CNA_INVALID_HANDLE is the canonical null gamer, which AddLocalGamer refuses.
+        Microsoft::Xna::Framework::GamerServices::SignedInGamer* gamer = nullptr;
         if (signedInGamer != CNA_INVALID_HANDLE) {
-            return Fail(
-                CNA_RESULT_NOT_SUPPORTED,
-                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-                "Signed-in gamers have no C representation yet.");
+            if (const CNA_Result result = CNA::C::Detail::BorrowSignedInGamer(signedInGamer, &gamer);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
         }
-        return NetworkSessionCommand(sessionHandle, [](NetworkSession& session) {
-            session.AddLocalGamer(nullptr);
+        return NetworkSessionCommand(sessionHandle, [gamer](NetworkSession& session) {
+            session.AddLocalGamer(gamer);
         });
     });
 }

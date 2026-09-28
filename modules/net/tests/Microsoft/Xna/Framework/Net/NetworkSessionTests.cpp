@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
+#include <memory>
 #include "CNA/Internal/Net/ENetBackend.hpp"
 #include "CNA/Internal/Net/ENetHostHandle.hpp"
 #include "CNA/Internal/Net/NetPacketCodec.hpp"
@@ -600,6 +601,36 @@ TEST(NetworkSessionTest, FailedCreateDoesNotPermanentlyStrandActiveAction) {
 // enqueue at all — unlike AddRemoteGamer just below, which explicitly enqueues a GamerJoin event.
 // A handler already subscribed before AddLocalGamer ran never learned about the newly-added local
 // gamer (no replay, no queued event).
+// Reference NetworkSession.AddLocalGamer checks, in order: null, disposed gamer, disposed session,
+// gamer already in the session, Playing without join-in-progress, Ended, no open public slot.
+TEST(NetworkSessionTest, AddLocalGamerFollowsTheReferenceChecks) {
+    SignedInGamer first = MakeSignedInGamer("FirstTag");
+    Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({&first})));
+    struct RestoreGlobalGuard {
+        ~RestoreGlobalGuard() {
+            Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({})));
+        }
+    } restoreGuard;
+    std::unique_ptr<NetworkSession> session(NetworkSession::Create(NetworkSessionType::Local, 4, 2));
+    ASSERT_EQ(session->getLocalGamersProperty().getCountProperty(), 1);
+    EXPECT_THROW(session->AddLocalGamer(nullptr), System::ArgumentNullException);
+    EXPECT_THROW(session->AddLocalGamer(&first), System::ArgumentException);
+    SignedInGamer second = MakeSignedInGamer("SecondTag");
+    session->StartGame();
+    session->Update();
+    ASSERT_EQ(session->getSessionStateProperty(), NetworkSessionState::Playing);
+    session->setAllowJoinInProgressProperty(false);
+    EXPECT_THROW(session->AddLocalGamer(&second), System::InvalidOperationException);
+    session->EndGame();
+    session->Update();
+    session->AddLocalGamer(&second);
+    // Two gamers fill the two slots.
+    SignedInGamer third = MakeSignedInGamer("ThirdTag");
+    EXPECT_THROW(session->AddLocalGamer(&third), System::InvalidOperationException);
+    session->Dispose();
+    EXPECT_THROW(session->AddLocalGamer(&third), System::ObjectDisposedException);
+}
+
 TEST(NetworkSessionTest, AddLocalGamerRaisesGamerJoinedForAnAlreadySubscribedHandler) {
     // Task 2.15 fixed a latent double-free here (and in the two other tests using this same
     // pattern): Gamer::setSignedInGamersProperty(value) unconditionally deletes whatever

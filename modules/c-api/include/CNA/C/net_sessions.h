@@ -775,12 +775,11 @@ CNA_C_API CNA_Result cna_network_session_update(CNA_NetworkSessionHandle session
  * @brief Adds a local gamer to a session.
  *
  * @param session Owned session handle.
- * @param signed_in_gamer Signed-in gamer handle, or `CNA_INVALID_HANDLE` for none.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the local-gamer limit is reached,
- * or a documented handle/thread/native failure.
- *
- * Signed-in gamers are a gamer-services type with no C representation yet, so only
- * `CNA_INVALID_HANDLE` is accepted today; the parameter shape is already final.
+ * @param signed_in_gamer A `CNA_SignedInGamerHandle`.
+ * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_INVALID_ARGUMENT` for `CNA_INVALID_HANDLE` (the
+ * canonical null gamer) or a gamer already in the session; `CNA_RESULT_INVALID_STATE` for a
+ * signed-out gamer, a disposed or ended session, a game in progress that does not allow joining,
+ * no open public slot or the local-gamer limit; or a documented handle/thread/native failure.
  */
 CNA_C_API CNA_Result cna_network_session_add_local_gamer(
     CNA_NetworkSessionHandle session,
