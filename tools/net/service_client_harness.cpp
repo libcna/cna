@@ -72,6 +72,36 @@ void exerciseLocalLeaderboard(SignedInGamer* gamer,const std::vector<SignedInGam
     session->WriteUnarbitratedLeaderboard.Remove(writing);session->GameEnded.Remove(ending);
     session->Dispose();outside=false;try{signedEntry->setRatingProperty(700);}catch(const System::InvalidOperationException&){outside=true;}check(outside,"signed writer scope survives disposed session");
 }
+void exerciseLocalLeave(SignedInGamer* gamer,const std::vector<SignedInGamer*>& players) {
+    namespace Net=Microsoft::Xna::Framework::Net;
+    const auto id=LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
+    std::unique_ptr<Net::NetworkSession> session(Net::NetworkSession::Create(Net::NetworkSessionType::LocalWithLeaderboards,players,4,0,{}));
+    session->StartGame();session->Update();
+    int leaving=0;
+    session->WriteUnarbitratedLeaderboard += [&](auto*,const Net::WriteLeaderboardsEventArgs& args){
+        check(args.getIsLeavingProperty()&&!args.getGamerProperty()->getHasLeftSessionProperty(),"leave callback identity/state");++leaving;
+        if(args.getGamerProperty()==session->getLocalGamersProperty()[0])args.getGamerProperty()->getLeaderboardWriterProperty().GetLeaderboard(id)->setRatingProperty(850);
+    };
+    session->Dispose();check(session->getIsDisposedProperty()&&leaving==static_cast<int>(players.size()),"Dispose submits final local writes");
+    check(firstEntry(LeaderboardReader::Read(id,std::vector<Gamer*>{gamer},gamer,1)).getRatingProperty()==850,"early leaving score persisted");
+    session.reset(Net::NetworkSession::Create(Net::NetworkSessionType::LocalWithLeaderboards,players,4,0,{}));
+    session->StartGame();session->Update();leaving=0;int ended=0;
+    auto* departing=session->getLocalGamersProperty()[0];
+    session->WriteUnarbitratedLeaderboard += [&](auto*,const Net::WriteLeaderboardsEventArgs& args){check(args.getIsLeavingProperty(),"disconnect final write flag");++leaving;if(args.getGamerProperty()==departing)departing->getLeaderboardWriterProperty().GetLeaderboard(id)->setRatingProperty(900);};
+    session->SessionEnded += [&](auto*,const auto&){++ended;check(leaving==static_cast<int>(players.size()),"SessionEnded before leave writes");};
+    session->RemoveGamer(departing,Net::NetworkSessionEndReason::Disconnected);session->Update();
+    check(ended==1&&departing->getHasLeftSessionProperty(),"local disconnect ended session");session->Dispose();
+    check(firstEntry(LeaderboardReader::Read(id,std::vector<Gamer*>{gamer},gamer,1)).getRatingProperty()==900,"disconnect score persisted");
+    // Unpublished gameplay/destructor abandonment must release quotas without callbacks or scores.
+    for(int i=0;i<20;++i) {
+        auto* abandoned=Net::NetworkSession::Create(Net::NetworkSessionType::LocalWithLeaderboards,players,4,0,{});
+        abandoned->StartGame();delete abandoned;
+        bool drained=false;Service::backend()->submit([]{},[&]{drained=true;});
+        const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(12);
+        while(!drained){GamerServicesDispatcher::Update();if(std::chrono::steady_clock::now()>deadline)throw std::runtime_error("Abandon cleanup timeout");std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    }
+    check(firstEntry(LeaderboardReader::Read(id,std::vector<Gamer*>{gamer},gamer,1)).getRatingProperty()==900,"abandoned gameplay changed score");
+}
 int main(int argc,char** argv) {
     try {
         const bool real=argc>1&&std::string(argv[1])=="--real";
@@ -196,11 +226,11 @@ int main(int argc,char** argv) {
             reader.Dispose();bool disposed=false;try{(void)reader.getEntriesProperty();}catch(const System::ObjectDisposedException&){disposed=true;}check(disposed,"remote reader disposal");
             bool sizeInvalid=false;try{std::unique_ptr<System::IAsyncResult> bad(LeaderboardReader::BeginRead(id,0,0,{},{}));}catch(const System::ArgumentOutOfRangeException&){sizeInvalid=true;}check(sizeInvalid,"remote page size validation");
         }
-        if(!real) {std::vector<SignedInGamer*> locals;for(int i=0;i<4;++i)locals.push_back((*collection)[i]);exerciseLocalLeaderboard(gamer,locals);}
-        if(real&&std::string(argv[4])=="leaderboard-write")exerciseLocalLeaderboard(gamer,{gamer});
+        if(!real) {std::vector<SignedInGamer*> locals;for(int i=0;i<4;++i)locals.push_back((*collection)[i]);exerciseLocalLeaderboard(gamer,locals);exerciseLocalLeave(gamer,locals);}
+        if(real&&std::string(argv[4])=="leaderboard-write"){exerciseLocalLeaderboard(gamer,{gamer});exerciseLocalLeave(gamer,{gamer});}
         if(real&&std::string(argv[4])=="leaderboard-after") {
             auto after=LeaderboardReader::Read(LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime),0,2);
-            check(firstEntry(after).getGamerProperty()->getGamertagProperty()=="Alice"&&firstEntry(after).getRatingProperty()==650,"EndGame persistence across clients/server restart");
+            check(firstEntry(after).getGamerProperty()->getGamertagProperty()=="Alice"&&firstEntry(after).getRatingProperty()==900,"EndGame/leave persistence across clients/server restart");
         }
         profile->Dispose();
         if(!real) {

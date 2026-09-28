@@ -951,7 +951,8 @@ namespace Microsoft::Xna::Framework::Net
         // own doc comment for why not incrementally.
         CNAEXT std::vector<std::unique_ptr<NetworkGamer>> ownedGamers_;
 
-        void FinalizeServiceLeaderboards();
+        void FinalizeServiceLeaderboards(bool isLeaving=false);
+        void ReleaseSessionResources();
         std::string leaderboardGameplay_,leaderboardOwner_;
         bool leaderboardTransitionPending_=false;
 

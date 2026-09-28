@@ -322,3 +322,34 @@ The original license staging proposal was automatically rejected because it used
 against then-uncommitted gameplay changes. It did not execute; ordinary explicit-file staging at
 clean checkpoints completed licensing without loss of code. Both feature repos clean at this
 checkpoint. No server repository created or pushed; the existing product checkout is used.
+
+
+### GS-006c early-leave and cancellation checkpoint
+
+- [x] Standard explicit Dispose while Playing raises final local write callbacks with IsLeaving=true,
+  commits before releasing identity, and disables drafts. Local removal/disconnection does the
+  same before SessionEnded. Existing local-session termination policy is preserved.
+- [x] Negotiated leaderboard-epoch-abort cancels only an owner's uncommitted epoch; repeated/absent
+  abort is safe, committed rows cannot be erased. Quota is released with cascading membership.
+- [x] Unpublished games/destructor abandonment queue bounded best-effort cleanup with owned IDs.
+  Destructor never invokes game callbacks or propagates service failure; backend joins its executor
+  before destruction, and cleanup jobs do not retain the backend into self-destruction.
+- [x] Twenty successive unpublished games cancel without quota exhaustion or score mutation;
+  four-user final callbacks, explicit Dispose and disconnect final scores tested in the fake backend.
+  Real Alice/Bob processes verify final score 900 across server restart; native C remains healthy.
+
+Validation: fake **113 checks pass**; Net **316/316 pass**; GamerServices **387 pass, 1 existing
+HEADLESS skip out of 388**. Server **5,189 assertions pass** (including malformed abort ID,
+wrong owner, committed refusal, idempotence, restart and quota); real TLS C++/pure C suite **2/2
+pass, 19.89s**. Private C API Net/leaderboard/protocol **3/3 pass**; coverage --check current,
+ABI/export surface unchanged. Same reproducible commands as GS-006b; logs `leave-*` in persistent
+builds. next inspection remains 9473f5c89; no divergent committed changes to integrate.
+
+This implements only LocalWithLeaderboards early leave. Ranked/all-machine submission waits for
+GS-007, and ambiguous transport-failure EndGame retries still repeat callbacks (GS-006d audit).
+A failed explicit Dispose preserves the live session/drafts; subsequent retry is possible. C++
+destruction abandons without inventing scores, and unavailable-service cancellation expires under
+the 24-hour/16-epoch bound. Crash cleanup cannot be guaranteed on a failed Internet connection.
+Stream columns, TrueSkill and Xbox validation/order measurements stay unfinished. Next independent
+work is GS-004b rotating refresh credentials/user-level persistence and maintenance heartbeat,
+then GS-007 session directory; no original sample or standard-avatar acceptance is yet claimed.

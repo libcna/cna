@@ -160,6 +160,8 @@ public:
     /** @brief Begins a local gameplay write scope. @param users Authenticated local identities.
      * @return Opaque server-owned scope identifier. */
     virtual std::string beginLeaderboardGame(const std::vector<std::string>& users) = 0;
+    /** @brief Cancels an uncommitted gameplay scope. @param gameplay Scope. @param owner Host identity. */
+    virtual void abortLeaderboardGame(const std::string& gameplay,const std::string& owner) = 0;
     /** @brief Commits final rows atomically. @param gameplay Scope. @param owner Host identity.
      * @param rows Final writes. */
     virtual void commitLeaderboardGame(const std::string& gameplay,const std::string& owner,

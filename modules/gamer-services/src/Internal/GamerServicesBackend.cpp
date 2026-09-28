@@ -208,6 +208,9 @@ public:
         auto id=CnaService::stringField(result,"gameplay",32);
         if(id.size()!=32||id.find_first_not_of("0123456789abcdef")!=std::string::npos)throw Unavailable("Invalid leaderboard gameplay identifier.");return id;
     }
+    void abortLeaderboardGame(const std::string& gameplay,const std::string& owner) override {
+        (void)request("leaderboards.game.abort",{{"gameplay",gameplay}},tokenFor(owner));
+    }
     void commitLeaderboardGame(const std::string& gameplay,const std::string& owner,const std::vector<ServiceLeaderboardWrite>& rows) override {
         Json entries=Json::array();
         for(const auto& row:rows) {
@@ -346,6 +349,7 @@ private:
                 negotiated_=true;
             }
             if(op.starts_with("friends.")&&!capabilities_.contains("friend-requests"))throw Unavailable("CNA service friend-request capability missing.");
+            if(op=="leaderboards.game.abort"&&!capabilities_.contains("leaderboard-epoch-abort"))throw Unavailable("CNA service leaderboard abort capability missing.");
             if(op.starts_with("leaderboards.game.")&&!capabilities_.contains("local-leaderboard-commit"))throw Unavailable("CNA service local leaderboard commit capability missing.");
             if(op.starts_with("leaderboards.")&&!capabilities_.contains("leaderboard-reads"))throw Unavailable("CNA service leaderboard-read capability missing.");
             if(op=="assets.read"&&!capabilities_.contains("assets"))throw Unavailable("CNA service asset capability missing.");
@@ -434,6 +438,10 @@ public:
     std::string beginLeaderboardGame(const std::vector<std::string>& users) override {
         if(users.empty()||users.size()>4)throw Unavailable("Invalid fixture game membership.");
         for(const auto& user:users)require(user);const auto id="fixture-game-"+std::to_string(++gameSequence_);games_[id]=users;return id;
+    }
+    void abortLeaderboardGame(const std::string& gameplay,const std::string& owner) override {
+        require(owner);if(!games_.contains(gameplay))return;
+        if(games_.at(gameplay).front()!=owner)throw Unavailable("Invalid fixture game owner.");games_.erase(gameplay);
     }
     void commitLeaderboardGame(const std::string& gameplay,const std::string& owner,const std::vector<ServiceLeaderboardWrite>& rows) override {
         require(owner);if(!games_.contains(gameplay)||games_[gameplay].front()!=owner)throw Unavailable("Invalid fixture game scope.");

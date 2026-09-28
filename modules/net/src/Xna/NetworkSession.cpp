@@ -258,7 +258,7 @@ namespace Microsoft::Xna::Framework::Net
         // Standard IDisposable safety net: fall back to Dispose() here if it was never called.
         if (!isDisposed_)
         {
-            Dispose();
+            ReleaseSessionResources();
         }
         --instanceCount_; // Task 3.3
     }
@@ -340,6 +340,25 @@ namespace Microsoft::Xna::Framework::Net
             return;
         }
 
+        if(!leaderboardGameplay_.empty()&&sessionState_==NetworkSessionState::Playing)FinalizeServiceLeaderboards(true);
+        ReleaseSessionResources();
+    }
+
+    void NetworkSession::ReleaseSessionResources()
+    {
+        if(isDisposed_)return;
+        if(!leaderboardGameplay_.empty()) {
+            // Finalization must not invoke user callbacks or throw from a C++ destructor.
+            // Capture only owned logical values so queued cleanup cannot reference this session.
+            try {
+                const auto service=CNA::Internal::GamerServices::backend();
+                const auto gameplay=leaderboardGameplay_,owner=leaderboardOwner_;
+                auto* executor=service.get();
+                // The backend joins its own executor before destruction. A queued task must not
+                // retain that backend and cause its destructor to run on the executor thread.
+                service->submit([executor,gameplay,owner]{try{executor->abortLeaderboardGame(gameplay,owner);}catch(...){}},[]{});
+            }catch(...){}
+        }
         for(auto* gamer:localGamers_){gamer->leaderboardWriter_.EndServiceGameplay();if(gamer->getSignedInGamerProperty())gamer->getSignedInGamerProperty()->leaderboardWriter_.EndServiceGameplay();}
         leaderboardGameplay_.clear();
         for (LocalNetworkGamer* gamer : localGamers_)
@@ -569,11 +588,11 @@ namespace Microsoft::Xna::Framework::Net
         }
     }
 
-    void NetworkSession::FinalizeServiceLeaderboards() {
+    void NetworkSession::FinalizeServiceLeaderboards(bool isLeaving) {
         using CNA::Internal::GamerServices::ServiceLeaderboardWrite;
         std::map<std::tuple<std::string,std::string,int>,ServiceLeaderboardWrite> writes;
         for(auto* gamer:localGamers_) {
-            CNA::Internal::GamerServices::withRestrictedServiceCalls([&]{WriteUnarbitratedLeaderboard.Raise(this,WriteLeaderboardsEventArgs::CreateInternal(gamer,false));});
+            CNA::Internal::GamerServices::withRestrictedServiceCalls([&]{WriteUnarbitratedLeaderboard.Raise(this,WriteLeaderboardsEventArgs::CreateInternal(gamer,isLeaving));});
             for(auto* writer:{&gamer->leaderboardWriter_,&gamer->getSignedInGamerProperty()->leaderboardWriter_}) {
                 for(auto& row:writer->CollectServiceWrites()) {
                     auto key=std::make_tuple(row.userId,row.key,row.mode);const auto existing=writes.find(key);
@@ -649,6 +668,7 @@ namespace Microsoft::Xna::Framework::Net
             }
         }
 
+        if(isLocal&&!leaderboardGameplay_.empty()&&sessionState_==NetworkSessionState::Playing)FinalizeServiceLeaderboards(true);
         gamer->SetHasLeftSession(true);
         // Task 2.2: localGamers_ was never pruned here, unlike remoteGamers_/allGamers_ just
         // below - a removed local gamer kept appearing in getLocalGamersProperty() forever,
