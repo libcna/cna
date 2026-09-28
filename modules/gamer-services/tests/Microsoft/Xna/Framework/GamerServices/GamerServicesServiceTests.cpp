@@ -2,6 +2,8 @@
 #include "../../../../../../platform/tests/CNA/Platform/PlatformTestDecorator.hpp"
 #include "../../../../../src/Internal/GuideOverlay.hpp"
 #include "CNA/Platform/Input/IPlatformKeyboard.hpp"
+#include <memory>
+#include <tuple>
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.hpp"
 #include "System/ArgumentNullException.hpp"
@@ -112,6 +114,8 @@ TEST(GuideTest, IsTrialModeGetSet) {
 TEST(GuideTest, SimulateTrialModeGetSet) {
     Guide::setSimulateTrialModeProperty(true);
     EXPECT_TRUE(Guide::getSimulateTrialModeProperty());
+    // Reference: simulating trial mode forces IsTrialMode to report true.
+    EXPECT_TRUE(Guide::getIsTrialModeProperty());
     Guide::setSimulateTrialModeProperty(false);
     EXPECT_FALSE(Guide::getSimulateTrialModeProperty());
 }
@@ -129,10 +133,11 @@ TEST(GuideTest, IsVisibleFalseWithNothingPendingAndSetterIsNoOp) {
 }
 
 TEST(GuideTest, NotificationPositionDefaultAndSet) {
-    EXPECT_EQ(NotificationPosition::BottomRight, Guide::getNotificationPositionProperty());
+    // Reference default: BottomCenter.
+    EXPECT_EQ(NotificationPosition::BottomCenter, Guide::getNotificationPositionProperty());
     Guide::setNotificationPositionProperty(NotificationPosition::TopLeft);
     EXPECT_EQ(NotificationPosition::TopLeft, Guide::getNotificationPositionProperty());
-    Guide::setNotificationPositionProperty(NotificationPosition::BottomRight);
+    Guide::setNotificationPositionProperty(NotificationPosition::BottomCenter);
 }
 
 TEST(GuideTest, IsScreenSaverEnabledGetSet) {
@@ -351,14 +356,35 @@ TEST(GuideTest, BeginShowKeyboardInputThrowsWhileAnotherIsPending) {
     System::IAsyncResult* first = Guide::BeginShowKeyboardInput(
         PlayerIndex::One, "title", "description", "", System::AsyncCallback{}, std::any{}
     );
+    // Reference: the kernel refuses while the Guide is visible (GuideAlreadyVisibleException).
     EXPECT_THROW(
         Guide::BeginShowKeyboardInput(
             PlayerIndex::Two, "title2", "description2", "", System::AsyncCallback{}, std::any{}
         ),
-        System::InvalidOperationException
+        GuideAlreadyVisibleException
     );
     PressEnter();
     delete first;
+}
+
+// Reference BeginShowKeyboardInput: title, description and default text each under 256 UTF-16
+// units; a defined player.
+TEST(GuideTest, BeginShowKeyboardInputValidatesArgumentsLikeTheReference) {
+    KeyboardInputGuard guard;
+    const std::string tooLong(256, 'x');
+    for (const auto& [title, description, text] : std::vector<std::tuple<std::string, std::string, std::string>>{
+             {tooLong, "d", ""}, {"t", tooLong, ""}, {"t", "d", tooLong}}) {
+        EXPECT_THROW((void)Guide::BeginShowKeyboardInput(PlayerIndex::One, title, description, text, {}, {}),
+                     System::ArgumentException);
+    }
+    EXPECT_THROW((void)Guide::BeginShowKeyboardInput(static_cast<PlayerIndex>(4), "t", "d", "", {}, {}),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_FALSE(Guide::getHasPendingKeyboardInputEXTProperty());
+    std::unique_ptr<System::IAsyncResult> result(
+        Guide::BeginShowKeyboardInput(PlayerIndex::Three, "", "", std::string(255, 'y'), {}, {}));
+    EXPECT_TRUE(Guide::getHasPendingKeyboardInputEXTProperty());
+    PressEnter();
+    EXPECT_EQ(std::string(255, 'y'), Guide::EndShowKeyboardInput(result.get()));
 }
 
 // audit_net.md High finding: GuideAction stored its AsyncCallback but never invoked it. Confirms

@@ -48,7 +48,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         static void setIsScreenSaverEnabledProperty(bool value);
 
         /**
-         * @brief Gets whether the game is running in trial mode.
+         * @brief Gets whether the game is running in trial mode; true while SimulateTrialMode is set.
+         * CNA titles are fully licensed, so otherwise false.
          *
          * @return true if running in trial mode.
          */
@@ -80,7 +81,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         static void setIsVisibleProperty(bool value);
 
         /**
-         * @brief Gets the screen position used for gamer notification toasts.
+         * @brief Gets the screen position used for gamer notification toasts (default BottomCenter;
+         * CNA draws no toasts, so the value is stored only).
          *
          * @return The current NotificationPosition.
          */
@@ -128,8 +130,10 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @return An IAsyncResult that completes on Enter (or is canceled via Escape/
          *         SimulateKeyboardInputCancelEXT - check WasKeyboardInputCanceledEXT); caller
          *         owns it and must delete it after EndShowKeyboardInput.
-         * @throws System::InvalidOperationException if a keyboard input request is already
-         *         pending.
+         * @throws System::ArgumentException if the title, description or default text is 256
+         *         characters or longer.
+         * @throws System::ArgumentOutOfRangeException if the player is not a defined PlayerIndex.
+         * @throws GuideAlreadyVisibleException if the Guide is already visible.
          */
         [[nodiscard]] static System::IAsyncResult* BeginShowKeyboardInput(
             Microsoft::Xna::Framework::PlayerIndex player,
@@ -158,8 +162,10 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @return An IAsyncResult that completes on Enter (or is canceled via Escape/
          *         SimulateKeyboardInputCancelEXT - check WasKeyboardInputCanceledEXT); caller
          *         owns it and must delete it after EndShowKeyboardInput.
-         * @throws System::InvalidOperationException if a keyboard input request is already
-         *         pending.
+         * @throws System::ArgumentException if the title, description or default text is 256
+         *         characters or longer.
+         * @throws System::ArgumentOutOfRangeException if the player is not a defined PlayerIndex.
+         * @throws GuideAlreadyVisibleException if the Guide is already visible.
          */
         [[nodiscard]] static System::IAsyncResult* BeginShowKeyboardInput(
             Microsoft::Xna::Framework::PlayerIndex player,

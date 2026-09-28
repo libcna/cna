@@ -2547,3 +2547,13 @@ the C struct field documents local ticks. CnaGamerServicesTests 485 + 1 skip.
   `SystemGuideTest.SignedInReplaysOnSubscribeAndSigningOutDisposesTheGamer`, `SignedInGamerTest`
   friend checks, `NetworkSessionTest.AddLocalGamerFollowsTheReferenceChecks`, `NetSmoke`.
   CnaGamerServicesTests 490 + 1 skip, CnaNetTests 479/479.
+- [x] GS-005h Guide keyboard input, trial mode and notification position (audit OPEN 10-12).
+  `BeginShowKeyboardInput` follows the reference: title, description and default text each under 256
+  UTF-16 units (`ArgumentException`), a defined player (the Windows "One only" rule not taken), then
+  `GuideAlreadyVisibleException` while the Guide is visible (was `InvalidOperationException` only for
+  a pending keyboard). The Guide's own sign-in/compose/gamer-card/invite/recent-players panes open
+  through the internal `showGuideKeyboardInput`. `IsTrialMode` reports true while
+  `SimulateTrialMode` is set (it was stored and ignored); `NotificationPosition` defaults to the
+  reference `BottomCenter` (CNA draws no toasts, so it is stored only). C doc follows. Tests:
+  `GuideTest.BeginShowKeyboardInputValidatesArgumentsLikeTheReference` and updated pending/position/
+  trial tests; CnaGamerServicesTests 491 + 1 skip.

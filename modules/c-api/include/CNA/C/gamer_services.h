@@ -1890,8 +1890,9 @@ CNA_C_API CNA_Result cna_guide_set_simulate_trial_mode(CNA_Bool simulate);
  * @param use_password_mode Non-zero to mask the text as it is typed.
  * @param callback Callback invoked when the input completes or is cancelled; may be null.
  * @param context Caller context passed back to @p callback.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when an input is already pending, or a
- *         documented argument/thread failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a title, description or default
+ *         text of 256 or more UTF-16 units or an undefined player, `CNA_RESULT_INVALID_STATE` when
+ *         the Guide is already visible, or a documented argument/thread failure.
  *
  * **This one really is asynchronous**, unlike every other begin/end pair in this ABI: the input stays
  * pending until the user confirms or cancels it, and only then does @p callback run. Poll

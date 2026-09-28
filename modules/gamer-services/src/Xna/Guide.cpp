@@ -433,7 +433,7 @@ namespace Microsoft::Xna::Framework::GamerServices
                 if (listed++ < 8) known += (known.empty() ? "" : ", ") + profile.gamertag;
             }
             const auto player = "Profile for player " + std::to_string(signInSlot + 1);
-            (void)Guide::BeginShowKeyboardInput(static_cast<PlayerIndex>(signInSlot), "Sign in",
+            (void)CNA::Internal::GamerServices::showGuideKeyboardInput(static_cast<PlayerIndex>(signInSlot), "Sign in",
                 known.empty() ? player + ". Enter a name to create a profile." : player + ": " + known + ", or a new name.",
                 suggestion, [](System::IAsyncResult& input) {
                     std::unique_ptr<System::IAsyncResult> owned(&input);
@@ -460,13 +460,13 @@ namespace Microsoft::Xna::Framework::GamerServices
             while (signInSlot < signInPaneCount && occupied(signInSlot)) ++signInSlot;
             if (signInSlot >= signInPaneCount) { signInActive = false; SyncTouchInputSuppression(); return; }
             if (signInLocal) { StartLocalSignInPane(); return; }
-            (void)Guide::BeginShowKeyboardInput(static_cast<PlayerIndex>(signInSlot), "CNA Gamer Services sign-in",
+            (void)CNA::Internal::GamerServices::showGuideKeyboardInput(static_cast<PlayerIndex>(signInSlot), "CNA Gamer Services sign-in",
                 "Username for player " + std::to_string(signInSlot + 1), "", [](System::IAsyncResult& usernameResult) {
                     std::unique_ptr<System::IAsyncResult> owned(&usernameResult);
                     if (Guide::WasKeyboardInputCanceledEXT(&usernameResult)) { signInActive = false; SyncTouchInputSuppression(); return; }
                     signInUsername = Guide::EndShowKeyboardInput(&usernameResult);
                     if(signInUsername.empty()||signInUsername.size()>64){signInActive=false;signInUsername.clear();SyncTouchInputSuppression();return;}
-                    (void)Guide::BeginShowKeyboardInput(static_cast<PlayerIndex>(signInSlot), "CNA Gamer Services sign-in", "Password", "",
+                    (void)CNA::Internal::GamerServices::showGuideKeyboardInput(static_cast<PlayerIndex>(signInSlot), "CNA Gamer Services sign-in", "Password", "",
                         [](System::IAsyncResult& passwordResult) {
                             std::unique_ptr<System::IAsyncResult> passwordOwned(&passwordResult);
                             if (Guide::WasKeyboardInputCanceledEXT(&passwordResult)) { signInActive = false; SyncTouchInputSuppression(); return; }
@@ -482,7 +482,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     bool Guide::isTrialMode_ = false;
     bool Guide::simulateTrialMode_ = false;
-    NotificationPosition Guide::position_ = NotificationPosition::BottomRight;
+    NotificationPosition Guide::position_ = NotificationPosition::BottomCenter;
 
     bool Guide::getIsScreenSaverEnabledProperty()
     {
@@ -501,7 +501,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         }
     }
 
-    bool Guide::getIsTrialModeProperty()          { return isTrialMode_; }
+    // Reference: SimulateTrialMode forces IsTrialMode to report true.
+    bool Guide::getIsTrialModeProperty()          { return isTrialMode_ || simulateTrialMode_; }
     void Guide::setIsTrialModeProperty(bool value) { isTrialMode_ = value; }
 
     bool Guide::getIsVisibleProperty()
@@ -538,7 +539,35 @@ namespace Microsoft::Xna::Framework::GamerServices
     }
 
     System::IAsyncResult* Guide::BeginShowKeyboardInput(
-        Microsoft::Xna::Framework::PlayerIndex /*player*/,
+        Microsoft::Xna::Framework::PlayerIndex player,
+        const std::string& title,
+        const std::string& description,
+        const std::string& defaultText,
+        System::AsyncCallback callback,
+        std::any state,
+        bool usePasswordMode
+    ) {
+        // Reference BeginShowKeyboardInput: every text under 256 characters (UTF-16 units); the
+        // Windows-only "player must be One" rule is not taken. Then the kernel's refusal while the
+        // Guide is visible.
+        if (static_cast<int>(player) < 0 || static_cast<int>(player) > 3)
+            throw System::ArgumentOutOfRangeException("player");
+        if (DecodeUtf8ToUtf16(title).size() >= 256)
+            throw System::ArgumentException("The title must be shorter than 256 characters.", "title");
+        if (DecodeUtf8ToUtf16(description).size() >= 256)
+            throw System::ArgumentException("The description must be shorter than 256 characters.", "description");
+        if (DecodeUtf8ToUtf16(defaultText).size() >= 256)
+            throw System::ArgumentException("The default text must be shorter than 256 characters.", "defaultText");
+        if (CNA::Internal::GamerServices::guideIsVisible())
+            throw GuideAlreadyVisibleException();
+        return CNA::Internal::GamerServices::showGuideKeyboardInput(
+            player, title, description, defaultText, std::move(callback), std::move(state), usePasswordMode);
+    }
+
+    namespace
+    {
+    // The keyboard pane itself, shared by the validated public call and the Guide's own panes.
+    System::IAsyncResult* OpenKeyboardInputInternal(
         const std::string& title,
         const std::string& description,
         const std::string& defaultText,
@@ -594,6 +623,7 @@ namespace Microsoft::Xna::Framework::GamerServices
             }
         );
         return action;
+    }
     }
 
     std::string Guide::EndShowKeyboardInput(System::IAsyncResult* result)
@@ -1040,13 +1070,13 @@ namespace Microsoft::Xna::Framework::GamerServices
         }
         void Compose(PlayerIndex player,const std::string& user,const std::vector<std::string>& tags,const std::string& text) {
             std::string names;for(const auto& tag:tags)names+=(names.empty()?"":", ")+tag;
-            (void)Guide::BeginShowKeyboardInput(player,"Compose message",names.empty()?"Message":"To: "+names,text,
+            (void)CNA::Internal::GamerServices::showGuideKeyboardInput(player,"Compose message",names.empty()?"Message":"To: "+names,text,
                 [player,user,tags](System::IAsyncResult& input) {
                     std::unique_ptr<System::IAsyncResult> owned(&input);
                     if(Guide::WasKeyboardInputCanceledEXT(&input))return;
                     const auto body=Guide::EndShowKeyboardInput(&input);
                     if(!tags.empty()){SendMessage(player,user,tags,body);return;}
-                    (void)Guide::BeginShowKeyboardInput(player,"Compose message","Recipient gamertag","",[player,user,body](System::IAsyncResult& recipient) {
+                    (void)CNA::Internal::GamerServices::showGuideKeyboardInput(player,"Compose message","Recipient gamertag","",[player,user,body](System::IAsyncResult& recipient) {
                         std::unique_ptr<System::IAsyncResult> ownedRecipient(&recipient);
                         if(Guide::WasKeyboardInputCanceledEXT(&recipient))return;
                         const auto tag=Guide::EndShowKeyboardInput(&recipient);
@@ -1151,7 +1181,7 @@ namespace Microsoft::Xna::Framework::GamerServices
                     std::unique_ptr<System::IAsyncResult> owned(&result);const auto answer=Guide::EndShowMessageBox(&result);
                     if(answer&&*answer==1)FriendsPage(player,offset+8<count?offset+8:0);
                     else if(answer&&*answer==0) {
-                        (void)Guide::BeginShowKeyboardInput(player,"CNA Gamer Card","Gamertag","",[player](System::IAsyncResult& input){
+                        (void)CNA::Internal::GamerServices::showGuideKeyboardInput(player,"CNA Gamer Card","Gamertag","",[player](System::IAsyncResult& input){
                             std::unique_ptr<System::IAsyncResult> ownedInput(&input);
                             if(Guide::WasKeyboardInputCanceledEXT(&input))return;
                             const auto tag=Guide::EndShowKeyboardInput(&input);
@@ -1198,7 +1228,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         const auto user=Service::GamerAccess::userId(*actor);
         std::vector<std::string> tags;for(auto* gamer:recipients)tags.push_back(gamer->getGamertagProperty());
         if(!tags.empty()){ConfirmInvitations(player,user,tags);return;}
-        (void)BeginShowKeyboardInput(player,"Game invitation","Gamertag to invite","",[player,user](System::IAsyncResult& input) {
+        (void)CNA::Internal::GamerServices::showGuideKeyboardInput(player,"Game invitation","Gamertag to invite","",[player,user](System::IAsyncResult& input) {
             std::unique_ptr<System::IAsyncResult> owned(&input);
             if(Guide::WasKeyboardInputCanceledEXT(&input))return;
             const auto tag=Guide::EndShowKeyboardInput(&input);
@@ -1277,7 +1307,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"Recent players",text,{"Gamer card","Close"},0,MessageBoxIcon::None,[player](System::IAsyncResult& result) {
             std::unique_ptr<System::IAsyncResult> owned(&result);const auto answer=EndShowMessageBox(&result);
             if(!answer||*answer!=0)return;
-            (void)BeginShowKeyboardInput(player,"Recent players","Gamertag","",[player](System::IAsyncResult& input) {
+            (void)CNA::Internal::GamerServices::showGuideKeyboardInput(player,"Recent players","Gamertag","",[player](System::IAsyncResult& input) {
                 std::unique_ptr<System::IAsyncResult> ownedInput(&input);
                 if(WasKeyboardInputCanceledEXT(&input))return;
                 const auto tag=EndShowKeyboardInput(&input);
@@ -1327,6 +1357,11 @@ namespace Microsoft::Xna::Framework::GamerServices
 }
 
 namespace CNA::Internal::GamerServices {
+System::IAsyncResult* showGuideKeyboardInput(Microsoft::Xna::Framework::PlayerIndex,const std::string& title,const std::string& description,
+    const std::string& defaultText,System::AsyncCallback callback,std::any state,bool usePasswordMode) {
+    return Microsoft::Xna::Framework::GamerServices::OpenKeyboardInputInternal(
+        title,description,defaultText,std::move(callback),std::move(state),usePasswordMode);
+}
 bool guideIsVisible() {
     namespace Xna=Microsoft::Xna::Framework::GamerServices;
     return Xna::pendingMessageBox_!=nullptr||Xna::pendingKeyboardInput_!=nullptr||Xna::signInActive||Xna::socialPending;

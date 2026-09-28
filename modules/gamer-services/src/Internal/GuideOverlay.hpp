@@ -27,6 +27,14 @@ void pollSystemGuideButton();
  * (the reference's IsVisibleNoThrow). @return True while a message box, keyboard, sign-in or
  * social pane is visible. */
 bool guideIsVisible();
+/** @brief Opens the keyboard pane for the Guide's own screens, which the public argument and
+ * visibility rules (Guide::BeginShowKeyboardInput) do not bind.
+ * @param player Player the pane belongs to. @param title Title. @param description Prompt.
+ * @param defaultText Initial text. @param callback Completion callback. @param state Caller state.
+ * @param usePasswordMode Mask typed characters. @return Result the callback receives. */
+System::IAsyncResult* showGuideKeyboardInput(Microsoft::Xna::Framework::PlayerIndex player,const std::string& title,
+    const std::string& description,const std::string& defaultText,System::AsyncCallback callback,std::any state,
+    bool usePasswordMode=false);
 /** @brief Opens a message box for the Guide's own panes, which the public argument rules
  * (Guide::BeginShowMessageBox: one to three buttons, text under 256 characters) do not bind.
  * @param player Player the pane belongs to. @param title Title. @param text Body text.
