@@ -269,9 +269,9 @@ namespace CNA::Internal::Renderers::Software
 
     using namespace SoftwareTextureFormat;
 
-    // GDI-076: GDI's own 16,384-per-axis ceiling made a single square RGBA8 level as large as
-    // 1 GiB before this planner existed -- neither this constructor, GdiRenderer's
-    // CreateTexture forward, nor the direct-ImageData boundary rejected it, and a caller-supplied
+    // The 16,384-per-axis ceiling made a single square RGBA8 level as large as 1 GiB before this
+    // planner existed -- neither this constructor, a renderer's CreateTexture forward, nor the
+    // direct-ImageData boundary rejected it, and a caller-supplied
     // pixel buffer smaller than width*height*4 was copied verbatim rather than validated, an
     // out-of-bounds read waiting to happen the first time the rasterizer sampled past it.
     SoftwareTextureRenderer::SoftwareTextureRenderer(const ImageData& data)
@@ -395,7 +395,7 @@ namespace CNA::Internal::Renderers::Software
         if (levelW <= 0 || levelH <= 0) return;
         if (level == 0 && (levelW != width_ || levelH != height_)) return;
 
-        // GDI-076: this level's own bytes still participate in the same per-resource budget as
+        // This level's own bytes still participate in the same per-resource budget as
         // level 0 -- a caller-supplied levelW/levelH is trusted for shape (there is no length
         // parameter here to check against), but not for size.
         const SoftwareTextureAllocationRequest levelRequest{levelW, levelH, 1};

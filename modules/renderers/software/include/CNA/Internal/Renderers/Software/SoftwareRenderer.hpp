@@ -1732,7 +1732,7 @@ namespace CNA::Internal::Renderers::Software
         {
             return colorWriteMasks_[static_cast<std::size_t>(slot)];
         }
-        /// REMED-GFX-077/GDI-073: the current BlendState.MultiSampleMask. Bit 0 controls a
+        /// REMED-GFX-077: the current BlendState.MultiSampleMask. Bit 0 controls a
         /// single-sample surface; when the optional four-sample colour plane is active, bits 0..3
         /// independently gate its 2x2 coverage samples. 0xFFFFFFFF = all samples.
         [[nodiscard]] unsigned int GetMultiSampleMask() const { return multiSampleMask_; }
@@ -1817,25 +1817,6 @@ namespace CNA::Internal::Renderers::Software
             return samplerSlots_[static_cast<std::size_t>(slot)];
         }
 
-    protected:
-        /**
-         * @brief Reports a SpriteBatch quad's clipped inclusive candidate-pixel bounds.
-         *
-         * The Software SpriteBatch invokes this only after applying origin, rotation, its
-         * transform matrix, viewport origin, viewport clipping, and optional scissor clipping.
-         * Presentation renderers layered on this rasterizer can therefore track conservative
-         * display damage without maintaining a second copy of the quad geometry.
-         */
-        virtual void OnSpriteRasterBounds(int /*minX*/, int /*minY*/,
-                                          int /*maxX*/, int /*maxY*/) {}
-
-        /// The real backbuffer, independently of any currently bound render target. Presentation
-        /// renderers layered on this CPU rasterizer use it rather than accidentally displaying an
-        /// off-screen target that happens to be active when Present() is called.
-        [[nodiscard]] SoftwareFramebuffer& BackbufferFramebuffer() { return backbuffer_; }
-        [[nodiscard]] const SoftwareFramebuffer& BackbufferFramebuffer() const { return backbuffer_; }
-
-    public:
         /**
          * @brief Binds the platform presenter that Present() hands each finished frame to.
          *
@@ -1956,7 +1937,7 @@ namespace CNA::Internal::Renderers::Software
         /// REMED-GFX-077/SOFTWARE-120: raw XNA ColorWriteChannels for MRT slots 0..3 (bit0=R,
         /// bit1=G, bit2=B, bit3=A). Defaults to 15 (All), matching XNA's default BlendState.
         std::array<int, 4> colorWriteMasks_{15, 15, 15, 15};
-        /// REMED-GFX-077/GDI-073: current BlendState.MultiSampleMask. Single-sample surfaces use
+        /// REMED-GFX-077: current BlendState.MultiSampleMask. Single-sample surfaces use
         /// bit 0; the optional four-sample colour plane uses bits 0..3. Defaults to 0xFFFFFFFF (all
         /// samples), matching XNA's default (-1).
         unsigned int multiSampleMask_ = 0xFFFFFFFFu;
@@ -1988,8 +1969,7 @@ namespace CNA::Internal::Renderers::Software
         float depthBias_ = 0.0f;
         float slopeScaleDepthBias_ = 0.0f;
 
-        // 8-bit stencil state, captured by the GDI 2D masking path and stored here beside the
-        // shared CPU depth state. The Software renderer keeps its established default of disabled.
+        // 8-bit stencil state, stored here beside the CPU depth state. Disabled by default.
         bool stencilTestEnabled_ = false;
         int stencilCompareFunction_ = 0; // CompareFunction::Always
         int stencilPassOperation_ = 0; // StencilOperation::Keep

@@ -31,7 +31,7 @@ renderer count is not a goal.
 | RRC-013 | Repair the runtime-discipline gate's identity parser; remove stale current-state references left by RRC-012 | ✅ |
 | RRC-014 | Move the Software contracts only the GDI suite held into the Software suite | ✅ |
 | RRC-015 | Retire `GDI`, `HTML_DOM`, `SVG_DOM` and `OPENGL4`: remove their families and every integration that existed only for them | ✅ |
-| RRC-016 | Remove `CNA_SOFTWARE_2D_ONLY`, the reduced Software build that existed only for `GDI` | ⬜ |
+| RRC-016 | Remove `CNA_SOFTWARE_2D_ONLY`, the reduced Software build that existed only for `GDI` | ✅ |
 | RRC-017 | Remove the four renderers' documents, plans and handoffs; one retirement record | ⬜ |
 
 **2026-09-19 owner decision (`RRC-011`).** Retired renderer probes and the rejected Three.js
@@ -974,3 +974,32 @@ host process, host headers in two net harnesses, a missing `<algorithm>` in `Pat
 passes the job's own assertions: both JS selection exports, the `easygl` and `canvas` archives, three
 registered renderers. In headless Chrome the renderer benchmark ran to completion under each of the
 three, each selected at runtime.
+
+## RRC-016 — Remove `CNA_SOFTWARE_2D_ONLY`
+
+`GDI` was the only thing that ever compiled Software with `CNA_SOFTWARE_2D_ONLY`: its CMake defined
+the macro for the eight shared units, and `SoftwareRenderer2D.cpp` was a one-line wrapper that
+defined it and `#include`d `SoftwareRenderer.cpp`. With `GDI` gone the mode has no user (the only
+remaining textual mentions are this plan, the removal record and the historical
+`modularization/tools/gen_module_cmake.py`), so it is removed rather than left dormant:
+
+- `unifdef -UCNA_SOFTWARE_2D_ONLY` over `SoftwareRenderer.cpp` and `SoftwareRenderer2DState.cpp`
+  deletes only the 2D-only alternatives -- the `NotSupportedException` stubs for Texture3D,
+  TextureCube, RenderTargetCube, effects, vertex/index buffers and the 3D draw entry points, and
+  the no-environment-map fallbacks -- and keeps every line the full build compiled. One mixed
+  condition (`COMPILED_EFFECTS && !2D_ONLY`) is reduced by hand.
+- `SoftwareRenderer2D.cpp` and the glob exclusion that kept it out of the SOFTWARE archive are gone.
+- The hooks only `GDI` overrode are gone: the virtual `OnSpriteRasterBounds` with the per-sprite
+  damage-bounds computation that fed it, and the protected `BackbufferFramebuffer()` accessors.
+  Neither changes any Software output.
+- Comments that described `GDI` as a current consumer of Software are rewritten; dangling `GDI-0xx`
+  task tags in Software comments are dropped (their plan is deleted; Git has it).
+
+The full Software behaviour is unchanged: 23 lines added, 241 removed, all in the Software module.
+
+**Verified** in `cmake-build-software` on the private display: the full ctest corpus 10,616/10,624
+(the Guide test that hangs at the parent commit excluded), every Software test passing, the 8
+failures being the pre-existing ones classified in `RRC-015`; then, reconfigured with
+`CNA_SOFTWARE_COMPILED_EFFECTS=ON` (MojoShader from the shared `~/deps/FNA3D` pin), all 208
+Software-labelled, compiled-effect and Software gtest cases pass, including
+`Software_CompiledEffectRuntime`.
