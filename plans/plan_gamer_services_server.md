@@ -647,3 +647,38 @@ Logs `cmake-build-debug/next-integration-{build,game,net,gamers}.log`.
 Server GS-007c c1dcdda committed separately after 4/4 CTest pass in 65.71s; canonical protocol
 synchronization and client typed directory/invitation implementation follow immediately. No new
 public online NetworkSession/InviteAccepted/relay/avatar capability is claimed by this merge.
+
+### GS-007c invitation service and canonical protocol checkpoint
+
+- [x] Server schema 7: persistent recipient/title/session-bound invitations with explicit
+  accept/dismiss, 900s lifetime, bounded inbox/title/sender quota, and atomic private-first invited
+  joins for 1..4 independent local credentials. Duplicate operations preserve identity/timestamps;
+  used invitation replay only resumes the same active group, never resurrects a departed group.
+  Sender abuse counters survive directory close/recreate and admin reset.
+- [x] Administration `inspect-online <title>` and `reset-online <title>`; schema upgrades preserve
+  accounts, achievements and boards. Host lease expiration still closes sessions; no host migration.
+- [x] Canonical protocol header/parser/golden copies synchronized; drift/property/C ABI gates
+  10/10 passed. Affected client/protocol/C API harnesses build. Public C ABI unchanged.
+- [ ] GS-007d: typed private client directory/invitation boundary, strict response validation,
+  deterministic fake model and real two-CNA-process control tests (including four local credentials).
+- [ ] GS-007e/GS-008: authenticated realtime relay and public online NetworkSession integration;
+  Guide invite confirmation/InviteAccepted/BeginJoinInvited, lifecycle/event parity and Ranked writes.
+
+Server c1dcdda99401133ccf146530592a0fe81638b248: clean `-Werror` build, 4/4 CTest passed
+in 65.71s (unit 5,216 assertions; directory 99; invitation 153; verified-TLS multi-process
+restart suite). Both directory kinds exercise ordinary joins and explicit accepted private invites
+across restart, wrong recipients/titles, capacity atomicity, paging, quotas and admin reset.
+Logs server `build/invitations-{build,unit,tls,final}.log`; CNA
+`cmake-build-debug/invitation-protocol-{build,gates}.log`.
+
+Reproduce server: `CCACHE_DIR=/rv/cnaccache CCACHE_BASEDIR=/rv cmake --build build --parallel 2`,
+then set CNA_SERVICE_CLIENT_HARNESS and CNA_SERVICE_C_API_CLIENT to dedicated CNA build binaries
+(as existing TLS harness documentation) and `ctest --test-dir build --output-on-failure`.
+Opening the DB migrates transactionally; back up production DB before upgrade. Control protocol
+remains HTTPS POST /cna/v1 with negotiated session-directory/session-invitations capabilities.
+No server push/relay is implemented and no Internet multiplayer/public online XNA success is claimed.
+
+Known-good integration set at this checkpoint (CNA protocol-sync commit immediately following):
+CNA parent 744f51a5c388fcfbc18a34bea1fbe12517e99bcb;
+sharp-runtime 6c4a857de129cf29b5d43430bedf24157d594f12;
+server c1dcdda99401133ccf146530592a0fe81638b248.

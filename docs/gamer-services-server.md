@@ -72,3 +72,8 @@ require the current host and reject disposed owners; advertised snapshots reject
 symbols remain available and map structural refusal to CNA_RESULT_NOT_SUPPORTED. CNA range helpers
 expose only const iterators so writes cannot bypass ownership checks. Rebuild all consumers with
 sharp-runtime's GS-007b proxy layout (16->24 bytes on the measured 64-bit ABI).
+
+The invitation control service now persists recipient-bound pending/accepted invitations and
+atomically joins up to four authenticated local users through an explicitly accepted invite,
+using available private then public slots. Client Guide/InviteAccepted/public invited joins and
+Internet relay are still pending. Invitations are CNA service IDs, not Xbox LIVE tokens.

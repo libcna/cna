@@ -30,5 +30,9 @@
   {
     "input": "{\"v\":1,\"id\":\"directory-shape\",\"game\":\"sample\",\"op\":\"sessions.create\",\"args\":{\"kind\":\"player\",\"maxGamers\":8,\"privateSlots\":1,\"properties\":[42,null,null,null,null,null,null,null],\"allowJoinInProgress\":false,\"participants\":[\"0000000000000000000000000000000000000000000000000000000000000000\"]}}",
     "error": "OK"
+  },
+  {
+    "input": "{\"v\":1,\"id\":\"invite-shape\",\"game\":\"sample\",\"op\":\"sessions.joinInvited\",\"args\":{\"session\":\"00000000000000000000000000000000\",\"invite\":\"11111111111111111111111111111111\",\"participants\":[\"2222222222222222222222222222222222222222222222222222222222222222\"]}}",
+    "error": "OK"
   }
 ]

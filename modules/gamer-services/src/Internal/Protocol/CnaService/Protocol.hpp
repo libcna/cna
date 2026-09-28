@@ -15,6 +15,14 @@ inline constexpr std::size_t MaxMessageBytes = 65536;
 inline constexpr std::size_t SessionPropertyCount = 8;
 /** @brief Maximum session membership supported by protocol v1. */
 inline constexpr int MaxSessionGamers = 31;
+/** @brief Invitation lifetime in seconds, subject to a live host session lease. */
+inline constexpr int InviteLifetimeSeconds = 900;
+/** @brief Maximum live incoming invitations per account and title. */
+inline constexpr int MaxIncomingInvites = 64;
+/** @brief Maximum newly-created invitations per sender and title per hour. */
+inline constexpr int MaxHourlyInvites = 32;
+/** @brief Maximum retained invitation records per title. */
+inline constexpr int MaxTitleInvites = 16384;
 /** @brief A stable protocol failure without credential-bearing diagnostics. */
 class Error : public std::runtime_error {
 public:
