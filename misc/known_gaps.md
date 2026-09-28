@@ -51,33 +51,34 @@ is unavailable; no sample-side substitution is needed.
 
 ---
 
-## 4. Online matchmaking and invitations remain unfinished
+## 4. Online sessions and invitations are native-only
 
 **Found:** 2026-09-09, through SAMPLE-096 (Invites).
 **Partly closed the same day:** the divergence half — see below.
+**Native closed:** 2026-09-28/29 by the `plans/plan_gamer_services_server.md` mission.
 
-CNA implements real transport for exactly one `NetworkSessionType`. `ENetBackend::
-RealNetworkingEnabled` (`modules/net/src/Internal/ENetBackend.cpp`) is
+`PlayerMatch` and `Ranked` are service matchmaking types, where the service finds the peers.
+CNA now has one: an independent CNA account service (TLS control, a session directory, invitation
+delivery and an authenticated relay; not Xbox LIVE and not compatible with it). With it configured,
+`Create`/`Find`/`Join`, `InviteAccepted`/`JoinInvited`, session properties, lobby readiness and the
+Ranked leaderboard lifecycle work between separate processes (GS-007/GS-008). SAMPLE-096 (Invites)
+and SAMPLE-075 (NetworkStateManagement, LIVE route) are ported and accepted against it on cna-samples
+branch `feature/gamer-services-samples`; SAMPLE-100 (NetworkPrediction) was requalified against it.
 
-```cpp
-return sessionType == NetworkSessionType::SystemLink;
-```
+What remains:
 
-`Local` and `LocalWithLeaderboards` are offline session types in XNA too, so a single machine
-genuinely is the whole session and nothing is missing about them. `PlayerMatch` and `Ranked` are
-different: they are service matchmaking types, where the service finds the peers. The active
-`plans/plan_gamer_services_server.md` mission now implements the independent CNA server and TLS
-identity/achievements/friends/presence/pictures foundation. Session directory, invite delivery and
-relay are scoped GS-007/008 work still awaiting implementation; the old intentional refusal policy
-is superseded. This CNA service is not Xbox LIVE protocol/account compatible.
-The same absence covers invitations — nothing can raise `NetworkSession::InviteAccepted`,
-because nothing delivers an invitation.
+- **The browser.** An Emscripten build has no account transport or relay (the backend refuses with
+  "CNA browser account transport is not implemented"), so there `PlayerMatch`/`Ranked` refuse as
+  they did natively before. The owner's accepted scope is native plus a browser limitations page
+  (`docs/browser-network-readiness.md`), not browser multiplayer.
+- **Online host migration.** `AllowHostMigration` is stored but a departing online host ends the
+  session (`HostEndedSession`); SystemLink sessions migrate.
 
-### What was closed, and what remains
+### What was closed first
 
 The gap first recorded here was not the absence but the **silence about it**:
 
-| | `NetworkSession.Create(PlayerMatch, 4, 16)`, one local profile signed in, offline |
+| | `NetworkSession.Create(PlayerMatch, 4, 16)`, one local profile signed in, no service configured |
 |---|---|
 | Real XNA 4.0 | throws; the message names the signed-in-gamer and LIVE-profile requirement |
 | CNA before 2026-09-09 | succeeded, returning a session of type `PlayerMatch` with no port, no discovery and no peer that could ever arrive |
@@ -87,20 +88,10 @@ The XNA half is a capture, not a reading: SAMPLE-096's unchanged `Invites.exe` u
 XNA 4.0 install on an isolated offline Xvfb signs in `Player1`, reaches the A/B menu, and answers A
 with that error —
 `/rv/tmp/samples/SAMPLE-096-InvitesSample_4_0/evidence/original-windows-reach/02-after-local-sign-in.png`
-and `03-offline-player-match-create.png`.
+and `03-offline-player-match-create.png`. Without a configured service CNA still answers the same
+way, and through the C ABI these answer `CNA_RESULT_NOT_SUPPORTED`.
 
-`Create`, `Find` and `JoinInvited` (with their `Begin*` forms) now refuse; `EndJoinInvited` refuses
-every result, because no `Begin` can produce one and completing a foreign result as an invited join
-was a way around the refusal. Through the C ABI all of these answer `CNA_RESULT_NOT_SUPPORTED`,
-whose own documented meaning is already "the platform has no gamer services at all".
-
-**`Join(AvailableNetworkSession*)` deliberately still accepts a `PlayerMatch` entry.** Its input can
-no longer come from `Find`, so such an entry can only be constructed directly by a binding, and
+**`Join(AvailableNetworkSession*)` deliberately still accepts a synthetic `PlayerMatch` entry**
+constructed directly by a binding, and
 `NetworkSessionTest.JoinDoesNotActivateTransportForSyntheticPlayerMatchSession` exists to keep that
-path from waiting on a handshake that will never arrive (a real SAMPLE-091 bug). Refusing there
-would delete that regression guard without closing anything a game can reach.
-
-**Closing the rest** means the service itself: identity, friends/presence, matchmaking, invitation
-delivery and relay-capable Internet connectivity, for native and browser. The current authorized
-mission includes this scope. SAMPLE-096 remains blocked by the unfinished session/invite layer;
-its existing offline XNA evidence is retained, without treating Windows probes as full Xbox parity.
+path from waiting on a handshake that will never arrive (a real SAMPLE-091 bug).
