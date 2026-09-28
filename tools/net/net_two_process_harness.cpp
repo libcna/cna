@@ -25,6 +25,10 @@
 // cross-process discovery-port sharing this file's own host/client roles avoid.
 #include "CNA/Internal/Net/ENetBackend.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
+#include "Microsoft/Xna/Framework/Net/AvailableNetworkSession.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "Microsoft/Xna/Framework/Net/HostChangedEventArgs.hpp"
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkGamer.hpp"
@@ -146,11 +150,25 @@ namespace {
         }
 
         auto gamer = SignedInGamer::CreateInternal("ClientPlayer");
-        NetworkSession* session = NetworkSession::Create(
-            NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
-        );
-
-        ENetBackend::ConnectToHost(session, "127.0.0.1", port);
+        using Microsoft::Xna::Framework::GamerServices::Gamer;
+        using Microsoft::Xna::Framework::GamerServices::SignedInGamerCollection;
+        Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({&gamer})));
+        struct RestoreSignedIn {
+            ~RestoreSignedIn() { Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({}))); }
+        } restore;
+        // The parent supplies discovery metadata; client construction/handshake uses public Join.
+        auto available = AvailableNetworkSession::CreateInternal(1, "HostPlayer", 0, 7,
+            NetworkSessionProperties{}, QualityOfService::CreateInternal(), "127.0.0.1", port,
+            NetworkSessionType::SystemLink);
+        NetworkSession* session = NetworkSession::Join(&available);
+        auto& properties = session->getSessionPropertiesProperty();
+        bool rejected = false;
+        try { properties[0] = 7; } catch(const System::InvalidOperationException&) { rejected = true; }
+        if (session->getIsHostProperty() || !rejected || properties.getItem(0).has_value()) {
+            std::fprintf(stderr, "client: public Join did not enforce host-only property writes\n");
+            session->Dispose();
+            return 70;
+        }
 
         auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(timeoutSeconds);
 

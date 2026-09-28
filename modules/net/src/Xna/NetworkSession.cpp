@@ -153,6 +153,12 @@ namespace Microsoft::Xna::Framework::Net
         , sessionProperties_(std::move(properties))
         , sessionType_(type)
     {
+        sessionProperties_.setWriteGuard([this] {
+            if (isDisposed_) throw System::ObjectDisposedException("NetworkSession");
+            if (!getIsHostProperty()) throw System::InvalidOperationException("This NetworkSession is not the host");
+            if (CNA::Internal::GamerServices::serviceCallsRestricted())
+                throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
+        });
         std::vector<LocalNetworkGamer*> locals;
         if (!localGamers.has_value())
         {
@@ -624,7 +630,7 @@ namespace Microsoft::Xna::Framework::Net
 
     void NetworkSession::SetSessionPropertiesFromTransport(NetworkSessionProperties properties)
     {
-        sessionProperties_ = std::move(properties);
+        sessionProperties_.replaceFromTransport(properties);
     }
 
     void NetworkSession::AddRemoteGamer(NetworkGamer* gamer)

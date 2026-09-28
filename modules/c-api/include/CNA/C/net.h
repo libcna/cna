@@ -171,7 +171,7 @@ CNA_C_API CNA_Result cna_net_get_last_join_error(
     CNA_Bool* out_has_join_error);
 
 /**
- * @brief Creates an owned, empty session-property list.
+ * @brief Creates eight unspecified owned session-property slots.
  *
  * @param out_properties Receives an owned property-list handle on success.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/thread/native failure.
@@ -180,7 +180,7 @@ CNA_C_API CNA_Result cna_network_session_properties_create(
     CNA_NetworkSessionPropertiesHandle* out_properties);
 
 /**
- * @brief Gets the number of properties in a list.
+ * @brief Gets the fixed property count of eight.
  *
  * @param properties Owned property-list handle.
  * @param out_count Receives the element count.
@@ -194,11 +194,11 @@ CNA_C_API CNA_Result cna_network_session_properties_get_count(
  * @brief Gets whether a property list reports itself as read-only.
  *
  * @param properties Owned property-list handle.
- * @param out_is_read_only Receives the canonical answer, which is always `CNA_TRUE`.
+ * @param out_is_read_only Receives the canonical answer, which is always `CNA_FALSE`.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * The canonical list reports read-only while still accepting add, remove and clear; the C API
- * preserves that rather than hiding it.
+ * Structural mutation is unsupported. Advertised snapshots reject writes even though the
+ * XNA collection interface reports false.
  */
 CNA_C_API CNA_Result cna_network_session_properties_get_is_read_only(
     CNA_NetworkSessionPropertiesHandle properties,
@@ -226,8 +226,8 @@ CNA_C_API CNA_Result cna_network_session_properties_get_item(
  * @param value The optional property value to store.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
  *
- * An index beyond the end appends instead of extending the list, matching the canonical setter. A
- * negative index is refused.
+ * Only slots 0..7 are valid; invalid indices return `CNA_RESULT_INVALID_ARGUMENT`.
+ * Writes to an advertised snapshot return `CNA_RESULT_NOT_SUPPORTED`.
  */
 CNA_C_API CNA_Result cna_network_session_properties_set_item(
     CNA_NetworkSessionPropertiesHandle properties,
@@ -248,16 +248,14 @@ CNA_C_API CNA_Result cna_network_session_properties_index_of(
     int32_t* out_index);
 
 /**
- * @brief Inserts a property value at an index.
+ * @brief Rejects insertion into the fixed eight-slot collection.
  *
  * @param properties Owned property-list handle.
  * @param index Zero-based insertion index.
  * @param value The optional value to insert.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an out-of-range index, or a
- * documented handle/thread failure.
+ * @return `CNA_RESULT_NOT_SUPPORTED` or a documented handle/thread failure.
  *
- * The canonical list forwards this straight to its backing vector without a bounds check, so the
- * C route decides the range itself rather than passing an invalid position through.
+ * Structural mutation returns `CNA_RESULT_NOT_SUPPORTED`, including invalid indices.
  */
 CNA_C_API CNA_Result cna_network_session_properties_insert(
     CNA_NetworkSessionPropertiesHandle properties,
@@ -265,38 +263,36 @@ CNA_C_API CNA_Result cna_network_session_properties_insert(
     CNA_OptionalInt32 value);
 
 /**
- * @brief Removes the property at an index.
+ * @brief Rejects removal from the fixed eight-slot collection.
  *
  * @param properties Owned property-list handle.
  * @param index Zero-based index.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an out-of-range index, or a
- * documented handle/thread failure.
+ * @return `CNA_RESULT_NOT_SUPPORTED` or a documented handle/thread failure.
  *
- * The canonical list forwards this straight to its backing vector without a bounds check, so the
- * C route decides the range itself rather than passing an invalid position through.
+ * Structural mutation returns `CNA_RESULT_NOT_SUPPORTED`, including invalid indices.
  */
 CNA_C_API CNA_Result cna_network_session_properties_remove_at(
     CNA_NetworkSessionPropertiesHandle properties,
     int32_t index);
 
 /**
- * @brief Appends a property value.
+ * @brief Rejects appending to the fixed eight-slot collection.
  *
  * @param properties Owned property-list handle.
  * @param value The optional value to append.
- * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ * @return `CNA_RESULT_NOT_SUPPORTED` or a documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_network_session_properties_add(
     CNA_NetworkSessionPropertiesHandle properties,
     CNA_OptionalInt32 value);
 
 /**
- * @brief Removes the first occurrence of a property value.
+ * @brief Rejects removal from the fixed eight-slot collection.
  *
  * @param properties Owned property-list handle.
  * @param value The optional value to remove.
- * @param out_removed Receives `CNA_TRUE` when a value was removed.
- * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ * @param out_removed Required output; no value is written when removal is refused.
+ * @return `CNA_RESULT_NOT_SUPPORTED` or a documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_network_session_properties_remove(
     CNA_NetworkSessionPropertiesHandle properties,
@@ -317,10 +313,10 @@ CNA_C_API CNA_Result cna_network_session_properties_contains(
     CNA_Bool* out_contains);
 
 /**
- * @brief Removes every property from the list.
+ * @brief Rejects clearing the fixed eight-slot collection.
  *
  * @param properties Owned property-list handle.
- * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ * @return `CNA_RESULT_NOT_SUPPORTED` or a documented handle/thread failure.
  */
 CNA_C_API CNA_Result cna_network_session_properties_clear(
     CNA_NetworkSessionPropertiesHandle properties);

@@ -6777,8 +6777,8 @@
         "constructor",
         "method"
       ],
-      "mapping": "an owned `CNA_NetworkSessionPropertiesHandle` over the canonical list, with the optional element modeled as the fixed `CNA_OptionalInt32` POD, count/read-only queries, strict indexed read, appending setter, index-of, insert, remove-at, add, remove, contains, clear and a capacity-checked copy-to. `GetEnumerator` becomes an owned `CNA_NetworkSessionPropertyEnumeratorHandle` with advance, current, reset and release; it observes the live list, so the list refuses destruction while one is open. The canonical list forwards `Insert` and `RemoveAt` to its backing vector with no bounds check, so the C routes decide those ranges themselves rather than passing an invalid position through, and the canonical enumerator dereferences before its first advance, so the C route reports that as a state failure",
-      "tests": "`NetSmoke.c` count, read-only reporting, strict indexed reads including the out-of-range refusal, append-past-the-end setter behavior, index-of hit and miss, containment, insert and remove-at including both C-side range refusals, value removal hit and miss, clear, copy-to with a start offset plus its too-small and negative-index refusals, and a full enumerator walk with the before-first and past-last state refusals, reset, and the refusal to destroy a list an enumerator is still walking",
+      "mapping": "An owned `CNA_NetworkSessionPropertiesHandle` over eight fixed nullable signed-integer slots, represented by `CNA_OptionalInt32`. Count/read-only queries, indexed get/set, search and capacity-checked CopyTo preserve the reference contract. Structural Add/Insert/Remove/RemoveAt/Clear return NOT_SUPPORTED. An owned live enumerator observes all eight values and returns INVALID_STATE before/after its valid range; outstanding enumerators prevent owner destruction. Advertised copies preserve write refusal; replacing a live session collection checks host/disposal before mutation.",
+      "tests": "`NetSmoke.c` verifies eight initial nullable slots, all structural refusals, fixed indexed reads/writes and boundary refusals, integer limits, value search and containment, eight-value CopyTo with offset/space/overflow guards, live eight-value enumeration with before/after state/reset/lifetime checks, read-only advertised copies and host replacement.",
       "status": "implemented",
       "task": "CBIND-036C",
       "approved_symbols": [
@@ -6806,8 +6806,8 @@
       "kinds": [
         "operator"
       ],
-      "mapping": "`cna_network_session_properties_get_item`, which is the same strict bounds-checked read",
-      "tests": "`NetSmoke.c` count, read-only reporting, strict indexed reads including the out-of-range refusal, append-past-the-end setter behavior, index-of hit and miss, containment, insert and remove-at including both C-side range refusals, value removal hit and miss, clear, copy-to with a start offset plus its too-small and negative-index refusals, and a full enumerator walk with the before-first and past-last state refusals, reset, and the refusal to destroy a list an enumerator is still walking",
+      "mapping": "`cna_network_session_properties_get_item` and `_set_item` access fixed slots 0..7. Invalid indices refuse without growing storage. Advertised copies reject writes and replacing a live session collection requires its current host. The C++ permission-checked proxy is represented by explicit read/write routes, not exposed over the C ABI.",
+      "tests": "`NetSmoke.c` verifies eight initial nullable slots, all structural refusals, fixed indexed reads/writes and boundary refusals, integer limits, value search and containment, eight-value CopyTo with offset/space/overflow guards, live eight-value enumeration with before/after state/reset/lifetime checks, read-only advertised copies and host replacement.",
       "status": "implemented",
       "task": "CBIND-036C",
       "approved_symbols": [
@@ -6821,13 +6821,13 @@
       "kinds": [
         "operator"
       ],
-      "mapping": "`cna_network_session_properties_get_item` and `_set_item` express the strict read and the appending write separately, which is what the canonical header itself recommends. The proxy this operator returns has no C counterpart, so its documented quirk -- that a bare out-of-range *read* through it also appends, because the proxy must bind a slot before it knows whether the caller will read or write -- cannot be reproduced and is not simulated",
-      "tests": "`NetSmoke.c` count, read-only reporting, strict indexed reads including the out-of-range refusal, append-past-the-end setter behavior, index-of hit and miss, containment, insert and remove-at including both C-side range refusals, value removal hit and miss, clear, copy-to with a start offset plus its too-small and negative-index refusals, and a full enumerator walk with the before-first and past-last state refusals, reset, and the refusal to destroy a list an enumerator is still walking",
+      "mapping": "`cna_network_session_properties_get_item` and `_set_item` access fixed slots 0..7. Invalid indices refuse without growing storage. Advertised copies reject writes and replacing a live session collection requires its current host. The C++ permission-checked proxy is represented by explicit read/write routes, not exposed over the C ABI.",
+      "tests": "`NetSmoke.c` verifies eight initial nullable slots, all structural refusals, fixed indexed reads/writes and boundary refusals, integer limits, value search and containment, eight-value CopyTo with offset/space/overflow guards, live eight-value enumeration with before/after state/reset/lifetime checks, read-only advertised copies and host replacement.",
       "status": "partial",
       "task": "CBIND-036C",
       "limitation": {
         "kind": "no-c-counterpart",
-        "reports_through": "`cna_network_session_properties_get_item` is the strict read and `_set_item` the appending write, which is the split the canonical header itself recommends",
+        "reports_through": "`cna_network_session_properties_get_item` and `_set_item` access fixed slots 0..7; invalid indices refuse without growing the collection. Advertised copies reject writes; live replacements require the host",
         "approval": "approved by the project owner on 2026-08-16 (CBIND-044)"
       },
       "approved_symbols": [
@@ -6841,7 +6841,7 @@
         "method"
       ],
       "mapping": "No C mapping: range-for interop for C++ callers. C iteration is expressed as count plus indexed access, and as the owned enumerator handle that maps `GetEnumerator`",
-      "tests": "Doxygen declaration inventory; C iteration is covered by the count/index and enumerator tests in `NetSmoke.c`",
+      "tests": "`NetSmoke.c` verifies eight initial nullable slots, all structural refusals, fixed indexed reads/writes and boundary refusals, integer limits, value search and containment, eight-value CopyTo with offset/space/overflow guards, live eight-value enumeration with before/after state/reset/lifetime checks, read-only advertised copies and host replacement.",
       "status": "not-applicable",
       "task": "CBIND-036C",
       "approved_symbols": [

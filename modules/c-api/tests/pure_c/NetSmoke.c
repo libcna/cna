@@ -93,117 +93,54 @@ static int validate_quality_of_service(void)
 static int validate_properties_mutation(const CNA_NetworkSessionPropertiesHandle properties)
 {
     CNA_OptionalInt32 value = absent();
-    CNA_Bool flag = CNA_FALSE;
+    CNA_Bool flag = CNA_TRUE;
     int32_t count = -1;
     int32_t index = 0;
-
-    if (cna_network_session_properties_get_count(properties, &count) != CNA_RESULT_SUCCESS ||
-        count != 0 ||
-        cna_network_session_properties_get_is_read_only(properties, &flag) !=
-            CNA_RESULT_SUCCESS ||
-        flag != CNA_TRUE) {
+    if (cna_network_session_properties_get_count(properties, &count) != CNA_RESULT_SUCCESS || count != 8 ||
+        cna_network_session_properties_get_is_read_only(properties, &flag) != CNA_RESULT_SUCCESS || flag != CNA_FALSE) {
         return 0;
     }
-    if (cna_network_session_properties_add(properties, present(7)) != CNA_RESULT_SUCCESS ||
-        cna_network_session_properties_add(properties, absent()) != CNA_RESULT_SUCCESS ||
-        cna_network_session_properties_add(properties, present(9)) != CNA_RESULT_SUCCESS ||
-        cna_network_session_properties_get_count(properties, &count) != CNA_RESULT_SUCCESS ||
-        count != 3) {
-        return 0;
+    for (int32_t slot = 0; slot < 8; ++slot) {
+        if (cna_network_session_properties_get_item(properties, slot, &value) != CNA_RESULT_SUCCESS ||
+            !same_optional(value, absent())) return 0;
     }
-    if (cna_network_session_properties_get_item(properties, 0, &value) != CNA_RESULT_SUCCESS ||
-        !same_optional(value, present(7)) ||
-        cna_network_session_properties_get_item(properties, 1, &value) != CNA_RESULT_SUCCESS ||
-        !same_optional(value, absent()) ||
-        cna_network_session_properties_get_item(properties, 3, &value) !=
-            CNA_RESULT_INVALID_ARGUMENT) {
-        return 0;
-    }
-    if (cna_network_session_properties_index_of(properties, present(9), &index) !=
-            CNA_RESULT_SUCCESS ||
-        index != 2 ||
-        cna_network_session_properties_index_of(properties, present(42), &index) !=
-            CNA_RESULT_SUCCESS ||
-        index != -1) {
-        return 0;
-    }
-    if (cna_network_session_properties_contains(properties, absent(), &flag) !=
-            CNA_RESULT_SUCCESS ||
-        flag != CNA_TRUE ||
-        cna_network_session_properties_contains(properties, present(42), &flag) !=
-            CNA_RESULT_SUCCESS ||
-        flag != CNA_FALSE) {
-        return 0;
-    }
-    if (cna_network_session_properties_set_item(properties, 1, present(5)) !=
-            CNA_RESULT_SUCCESS ||
-        cna_network_session_properties_get_item(properties, 1, &value) != CNA_RESULT_SUCCESS ||
-        !same_optional(value, present(5))) {
-        return 0;
-    }
-    /* The canonical setter appends instead of extending when the index is past the end. */
-    if (cna_network_session_properties_set_item(properties, 99, present(1)) !=
-            CNA_RESULT_SUCCESS ||
-        cna_network_session_properties_get_count(properties, &count) != CNA_RESULT_SUCCESS ||
-        count != 4 ||
-        cna_network_session_properties_get_item(properties, 3, &value) != CNA_RESULT_SUCCESS ||
-        !same_optional(value, present(1))) {
-        return 0;
-    }
-    if (cna_network_session_properties_insert(properties, 0, present(3)) != CNA_RESULT_SUCCESS ||
-        cna_network_session_properties_get_item(properties, 0, &value) != CNA_RESULT_SUCCESS ||
-        !same_optional(value, present(3)) ||
-        cna_network_session_properties_insert(properties, 99, present(3)) !=
-            CNA_RESULT_INVALID_ARGUMENT) {
-        return 0;
-    }
-    if (cna_network_session_properties_remove_at(properties, 0) != CNA_RESULT_SUCCESS ||
-        cna_network_session_properties_remove_at(properties, 99) !=
-            CNA_RESULT_INVALID_ARGUMENT ||
-        cna_network_session_properties_get_count(properties, &count) != CNA_RESULT_SUCCESS ||
-        count != 4) {
-        return 0;
-    }
-    if (cna_network_session_properties_remove(properties, present(5), &flag) !=
-            CNA_RESULT_SUCCESS ||
-        flag != CNA_TRUE ||
-        cna_network_session_properties_remove(properties, present(999), &flag) !=
-            CNA_RESULT_SUCCESS ||
-        flag != CNA_FALSE ||
-        cna_network_session_properties_get_count(properties, &count) != CNA_RESULT_SUCCESS ||
-        count != 3) {
-        return 0;
-    }
-    return 1;
+    if (cna_network_session_properties_add(properties, present(7)) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_network_session_properties_insert(properties, 0, present(3)) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_network_session_properties_insert(properties, 99, present(3)) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_network_session_properties_remove_at(properties, 0) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_network_session_properties_remove_at(properties, -1) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_network_session_properties_remove(properties, present(999), &flag) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_network_session_properties_clear(properties) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_network_session_properties_get_item(properties, 8, &value) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_network_session_properties_get_item(properties, -1, &value) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_network_session_properties_set_item(properties, 8, present(1)) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_network_session_properties_set_item(properties, -1, present(1)) != CNA_RESULT_INVALID_ARGUMENT) return 0;
+    if (cna_network_session_properties_set_item(properties, 0, present(7)) != CNA_RESULT_SUCCESS ||
+        cna_network_session_properties_set_item(properties, 2, present(9)) != CNA_RESULT_SUCCESS ||
+        cna_network_session_properties_set_item(properties, 7, present(INT32_MIN)) != CNA_RESULT_SUCCESS ||
+        cna_network_session_properties_get_item(properties, 7, &value) != CNA_RESULT_SUCCESS ||
+        !same_optional(value, present(INT32_MIN))) return 0;
+    return cna_network_session_properties_index_of(properties, present(9), &index) == CNA_RESULT_SUCCESS && index == 2 &&
+        cna_network_session_properties_index_of(properties, present(42), &index) == CNA_RESULT_SUCCESS && index == -1 &&
+        cna_network_session_properties_contains(properties, absent(), &flag) == CNA_RESULT_SUCCESS && flag == CNA_TRUE &&
+        cna_network_session_properties_contains(properties, present(42), &flag) == CNA_RESULT_SUCCESS && flag == CNA_FALSE;
 }
 
 static int validate_properties_copy(const CNA_NetworkSessionPropertiesHandle properties)
 {
-    CNA_OptionalInt32 destination[8];
+    CNA_OptionalInt32 destination[10];
     uint64_t copied = UINT64_C(0);
-
     memset(destination, 0, sizeof(destination));
     if (cna_network_session_properties_copy_to(properties, destination, UINT64_C(0), 0, &copied) !=
-            CNA_RESULT_BUFFER_TOO_SMALL ||
-        copied != UINT64_C(3)) {
-        return 0;
-    }
-    if (cna_network_session_properties_copy_to(
-            properties,
-            destination,
-            (uint64_t)(sizeof(destination) / sizeof(destination[0])),
-            2,
-            &copied) != CNA_RESULT_SUCCESS ||
-        copied != UINT64_C(3) || !same_optional(destination[2], present(7)) ||
-        !same_optional(destination[3], present(9)) || !same_optional(destination[4], present(1))) {
-        return 0;
-    }
-    return cna_network_session_properties_copy_to(
-        properties,
-        destination,
-        (uint64_t)(sizeof(destination) / sizeof(destination[0])),
-        -1,
-        &copied) == CNA_RESULT_INVALID_ARGUMENT;
+        CNA_RESULT_BUFFER_TOO_SMALL || copied != UINT64_C(8)) return 0;
+    if (cna_network_session_properties_copy_to(properties, destination, UINT64_C(10), 2, &copied) != CNA_RESULT_SUCCESS ||
+        copied != UINT64_C(8) || !same_optional(destination[2], present(7)) ||
+        !same_optional(destination[3], absent()) || !same_optional(destination[4], present(9)) ||
+        !same_optional(destination[9], present(INT32_MIN))) return 0;
+    return cna_network_session_properties_copy_to(properties, destination, UINT64_C(10), -1, &copied) ==
+        CNA_RESULT_INVALID_ARGUMENT &&
+        cna_network_session_properties_copy_to(properties, destination, UINT64_C(10), INT32_MAX, &copied) ==
+        CNA_RESULT_BUFFER_TOO_SMALL;
 }
 
 static int validate_properties_enumeration(const CNA_NetworkSessionPropertiesHandle properties)
@@ -211,56 +148,25 @@ static int validate_properties_enumeration(const CNA_NetworkSessionPropertiesHan
     CNA_NetworkSessionPropertyEnumeratorHandle enumerator = CNA_INVALID_HANDLE;
     CNA_OptionalInt32 value = absent();
     CNA_Bool has_current = CNA_TRUE;
-
-    if (cna_network_session_properties_create_enumerator(properties, &enumerator) !=
-            CNA_RESULT_SUCCESS ||
-        enumerator == CNA_INVALID_HANDLE) {
-        return 0;
+    if (cna_network_session_properties_create_enumerator(properties, &enumerator) != CNA_RESULT_SUCCESS ||
+        enumerator == CNA_INVALID_HANDLE ||
+        cna_network_session_property_enumerator_get_current(enumerator, &value) != CNA_RESULT_INVALID_STATE) return 0;
+    for (int32_t slot = 0; slot < 8; ++slot) {
+        CNA_OptionalInt32 expected = slot == 0 ? present(7) : slot == 2 ? present(9) :
+            slot == 7 ? present(INT32_MIN) : absent();
+        if (cna_network_session_property_enumerator_move_next(enumerator, &has_current) != CNA_RESULT_SUCCESS ||
+            has_current != CNA_TRUE ||
+            cna_network_session_property_enumerator_get_current(enumerator, &value) != CNA_RESULT_SUCCESS ||
+            !same_optional(value, expected)) return 0;
     }
-    /* The canonical enumerator starts before the first element, so reading now is a state error
-       rather than an out-of-bounds dereference. */
-    if (cna_network_session_property_enumerator_get_current(enumerator, &value) !=
-        CNA_RESULT_INVALID_STATE) {
-        return 0;
-    }
-    if (cna_network_session_property_enumerator_move_next(enumerator, &has_current) !=
-            CNA_RESULT_SUCCESS ||
-        has_current != CNA_TRUE ||
-        cna_network_session_property_enumerator_get_current(enumerator, &value) !=
-            CNA_RESULT_SUCCESS ||
-        !same_optional(value, present(7))) {
-        return 0;
-    }
-    if (cna_network_session_property_enumerator_move_next(enumerator, &has_current) !=
-            CNA_RESULT_SUCCESS ||
-        has_current != CNA_TRUE ||
-        cna_network_session_property_enumerator_get_current(enumerator, &value) !=
-            CNA_RESULT_SUCCESS ||
-        !same_optional(value, present(9))) {
-        return 0;
-    }
-    if (cna_network_session_property_enumerator_move_next(enumerator, &has_current) !=
-            CNA_RESULT_SUCCESS ||
-        has_current != CNA_TRUE ||
-        cna_network_session_property_enumerator_move_next(enumerator, &has_current) !=
-            CNA_RESULT_SUCCESS ||
+    if (cna_network_session_property_enumerator_move_next(enumerator, &has_current) != CNA_RESULT_SUCCESS ||
         has_current != CNA_FALSE ||
-        cna_network_session_property_enumerator_get_current(enumerator, &value) !=
-            CNA_RESULT_INVALID_STATE) {
-        return 0;
-    }
-    if (cna_network_session_property_enumerator_reset(enumerator) != CNA_RESULT_SUCCESS ||
-        cna_network_session_property_enumerator_get_current(enumerator, &value) !=
-            CNA_RESULT_INVALID_STATE ||
-        cna_network_session_property_enumerator_move_next(enumerator, &has_current) !=
-            CNA_RESULT_SUCCESS ||
-        has_current != CNA_TRUE) {
-        return 0;
-    }
-    /* An enumerator observes the live list, so the list outlives it. */
-    if (cna_network_session_properties_destroy(properties) != CNA_RESULT_INVALID_STATE) {
-        return 0;
-    }
+        cna_network_session_property_enumerator_get_current(enumerator, &value) != CNA_RESULT_INVALID_STATE ||
+        cna_network_session_property_enumerator_reset(enumerator) != CNA_RESULT_SUCCESS ||
+        cna_network_session_property_enumerator_get_current(enumerator, &value) != CNA_RESULT_INVALID_STATE ||
+        cna_network_session_property_enumerator_move_next(enumerator, &has_current) != CNA_RESULT_SUCCESS ||
+        has_current != CNA_TRUE ||
+        cna_network_session_properties_destroy(properties) != CNA_RESULT_INVALID_STATE) return 0;
     return cna_network_session_property_enumerator_destroy(enumerator) == CNA_RESULT_SUCCESS &&
         cna_network_session_property_enumerator_destroy(enumerator) == CNA_RESULT_INVALID_HANDLE;
 }
@@ -280,9 +186,9 @@ static int validate_properties(void)
         (void)cna_network_session_properties_destroy(properties);
         return 0;
     }
-    if (cna_network_session_properties_clear(properties) != CNA_RESULT_SUCCESS ||
+    if (cna_network_session_properties_clear(properties) != CNA_RESULT_NOT_SUPPORTED ||
         cna_network_session_properties_get_count(properties, &count) != CNA_RESULT_SUCCESS ||
-        count != 0) {
+        count != 8) {
         (void)cna_network_session_properties_destroy(properties);
         return 0;
     }
@@ -734,12 +640,12 @@ static int validate_available_session_values(const CNA_AvailableNetworkSessionHa
     if (cna_available_network_session_copy_session_properties(session, &properties) !=
             CNA_RESULT_SUCCESS ||
         cna_network_session_properties_get_count(properties, &number) != CNA_RESULT_SUCCESS ||
-        number != 1 ||
+        number != 8 ||
         cna_network_session_properties_get_item(properties, 0, &value) != CNA_RESULT_SUCCESS ||
         !same_optional(value, present(77))) {
         return 0;
     }
-    return cna_network_session_properties_add(properties, present(1)) == CNA_RESULT_SUCCESS &&
+    return cna_network_session_properties_set_item(properties, 0, present(1)) == CNA_RESULT_NOT_SUPPORTED &&
         cna_network_session_properties_destroy(properties) == CNA_RESULT_SUCCESS;
 }
 
@@ -818,7 +724,7 @@ static int validate_available_sessions(void)
     int ok = 0;
 
     if (cna_network_session_properties_create(&properties) != CNA_RESULT_SUCCESS ||
-        cna_network_session_properties_add(properties, present(77)) != CNA_RESULT_SUCCESS) {
+        cna_network_session_properties_set_item(properties, 0, present(77)) != CNA_RESULT_SUCCESS) {
         return 0;
     }
 
@@ -936,8 +842,8 @@ static int validate_session_state(const CNA_NetworkSessionHandle session)
             CNA_RESULT_INVALID_HANDLE ||
         cna_network_session_copy_session_properties(session, &properties) != CNA_RESULT_SUCCESS ||
         cna_network_session_properties_get_count(properties, &number) != CNA_RESULT_SUCCESS ||
-        number != 0 ||
-        cna_network_session_properties_add(properties, present(23)) != CNA_RESULT_SUCCESS ||
+        number != 8 ||
+        cna_network_session_properties_set_item(properties, 0, present(23)) != CNA_RESULT_SUCCESS ||
         cna_network_session_replace_session_properties(session, properties) != CNA_RESULT_SUCCESS ||
         cna_network_session_properties_destroy(properties) != CNA_RESULT_SUCCESS) {
         return 0;
@@ -945,7 +851,7 @@ static int validate_session_state(const CNA_NetworkSessionHandle session)
     properties = CNA_INVALID_HANDLE;
     if (cna_network_session_copy_session_properties(session, &properties) != CNA_RESULT_SUCCESS ||
         cna_network_session_properties_get_count(properties, &number) != CNA_RESULT_SUCCESS ||
-        number != 1 ||
+        number != 8 ||
         cna_network_session_properties_get_item(properties, 0, &property) != CNA_RESULT_SUCCESS ||
         property.has_value != CNA_TRUE || property.value != 23) {
         return 0;
@@ -1381,7 +1287,7 @@ static int validate_secondary_sessions(const CNA_SignedInGamerHandle signed_in)
     int ok = 0;
 
     if (cna_network_session_properties_create(&properties) != CNA_RESULT_SUCCESS ||
-        cna_network_session_properties_add(properties, present(11)) != CNA_RESULT_SUCCESS) {
+        cna_network_session_properties_set_item(properties, 0, present(11)) != CNA_RESULT_SUCCESS) {
         return 0;
     }
     /* The properties overload takes its local gamers from the published collection. */
@@ -1397,7 +1303,7 @@ static int validate_secondary_sessions(const CNA_SignedInGamerHandle signed_in)
         number == 2 &&
         cna_network_session_copy_session_properties(session, &copied) == CNA_RESULT_SUCCESS &&
         cna_network_session_properties_get_count(copied, &number) == CNA_RESULT_SUCCESS &&
-        number == 1 &&
+        number == 8 &&
         cna_network_session_properties_destroy(copied) == CNA_RESULT_SUCCESS;
     if (!ok || cna_network_session_destroy(session) != CNA_RESULT_SUCCESS) {
         (void)cna_network_session_properties_destroy(properties);

@@ -50,9 +50,9 @@ TEST(NetPacketCodecTest, ServerWelcomeRoundtrip) {
     message.AssignedWireIds = {3, 4};
     // Task 4.6: RosterEntry's 3rd field (IsHost) - "host" is the real host, "guest" is not.
     message.ExistingRoster = {{1, "host", true}, {2, "guest", false}};
-    message.SessionProperties.Add(17);
-    message.SessionProperties.Add(std::nullopt);
-    message.SessionProperties.Add(-42);
+    message.SessionProperties.setItem(0, 17);
+    message.SessionProperties.setItem(1, std::nullopt);
+    message.SessionProperties.setItem(2, -42);
 
     auto bytes = NetPacketCodec::Encode(message);
     EXPECT_EQ(NetPacketCodec::PeekTag(bytes), MessageTag::ServerWelcome);
@@ -68,7 +68,7 @@ TEST(NetPacketCodecTest, ServerWelcomeRoundtrip) {
     EXPECT_EQ(decoded.ExistingRoster[1].WireId, 2);
     EXPECT_EQ(decoded.ExistingRoster[1].Gamertag, "guest");
     EXPECT_FALSE(decoded.ExistingRoster[1].IsHost);
-    ASSERT_EQ(decoded.SessionProperties.getCountProperty(), 3);
+    ASSERT_EQ(decoded.SessionProperties.getCountProperty(), 8);
     EXPECT_EQ(decoded.SessionProperties.getItem(0), 17);
     EXPECT_EQ(decoded.SessionProperties.getItem(1), std::nullopt);
     EXPECT_EQ(decoded.SessionProperties.getItem(2), -42);
@@ -140,16 +140,16 @@ TEST(NetPacketCodecTest, StateChangeBroadcastRoundtrip) {
 
 TEST(NetPacketCodecTest, SessionPropertiesBroadcastRoundtripPreservesSparseValues) {
     SessionPropertiesBroadcastMessage message;
-    message.SessionProperties.Add(std::numeric_limits<int>::min());
-    message.SessionProperties.Add(std::nullopt);
-    message.SessionProperties.Add(0);
-    message.SessionProperties.Add(std::numeric_limits<int>::max());
+    message.SessionProperties.setItem(0, std::numeric_limits<int>::min());
+    message.SessionProperties.setItem(1, std::nullopt);
+    message.SessionProperties.setItem(2, 0);
+    message.SessionProperties.setItem(3, std::numeric_limits<int>::max());
 
     auto bytes = NetPacketCodec::Encode(message);
     EXPECT_EQ(NetPacketCodec::PeekTag(bytes), MessageTag::SessionPropertiesBroadcast);
 
     auto decoded = NetPacketCodec::DecodeSessionPropertiesBroadcast(bytes);
-    ASSERT_EQ(decoded.SessionProperties.getCountProperty(), 4);
+    ASSERT_EQ(decoded.SessionProperties.getCountProperty(), 8);
     EXPECT_EQ(decoded.SessionProperties.getItem(0), std::numeric_limits<int>::min());
     EXPECT_EQ(decoded.SessionProperties.getItem(1), std::nullopt);
     EXPECT_EQ(decoded.SessionProperties.getItem(2), 0);
@@ -159,15 +159,26 @@ TEST(NetPacketCodecTest, SessionPropertiesBroadcastRoundtripPreservesSparseValue
 TEST(NetPacketCodecTest, SessionPropertiesBroadcastRoundtripPreservesEmptyCollection) {
     SessionPropertiesBroadcastMessage message;
     auto decoded = NetPacketCodec::DecodeSessionPropertiesBroadcast(NetPacketCodec::Encode(message));
-    EXPECT_EQ(decoded.SessionProperties.getCountProperty(), 0);
+    EXPECT_EQ(decoded.SessionProperties.getCountProperty(), 8);
 }
 
-TEST(NetPacketCodecTest, SessionPropertiesBroadcastEncodeRejectsMoreThan255Values) {
-    SessionPropertiesBroadcastMessage message;
-    for (int i = 0; i < 256; ++i) {
-        message.SessionProperties.Add(i);
-    }
-    EXPECT_THROW(NetPacketCodec::Encode(message), std::runtime_error);
+TEST(NetPacketCodecTest, SessionPropertiesBroadcastDecodeRejectsMoreThanEightValues) {
+    std::vector<SharpRuntime::bytecs> bytes{static_cast<SharpRuntime::bytecs>(MessageTag::SessionPropertiesBroadcast), 9};
+    EXPECT_THROW(NetPacketCodec::DecodeSessionPropertiesBroadcast(bytes), std::runtime_error);
+    bytes[1] = 255;
+    EXPECT_THROW(NetPacketCodec::DecodeSessionPropertiesBroadcast(bytes), std::runtime_error);
+}
+
+TEST(NetPacketCodecTest, LegacyShortPropertyFramesPadUnspecifiedSlots) {
+    PacketWriter writer;
+    writer.Write(static_cast<SharpRuntime::bytecs>(MessageTag::SessionPropertiesBroadcast));
+    writer.Write(static_cast<SharpRuntime::bytecs>(1));
+    writer.Write(true);
+    writer.Write(static_cast<int32_t>(42));
+    const auto decoded = NetPacketCodec::DecodeSessionPropertiesBroadcast(NetPacketCodec::ExtractBytes(writer));
+    EXPECT_EQ(decoded.SessionProperties.getCountProperty(), 8);
+    EXPECT_EQ(decoded.SessionProperties.getItem(0), 42);
+    for(int i=1;i<8;++i) EXPECT_EQ(decoded.SessionProperties.getItem(i), std::nullopt);
 }
 
 TEST(NetPacketCodecTest, AppDataRoundtrip) {
@@ -252,7 +263,7 @@ TEST(NetPacketCodecTest, DecodeStateChangeBroadcastThrowsOnTruncatedBuffer) {
 
 TEST(NetPacketCodecTest, DecodeSessionPropertiesBroadcastThrowsOnTruncatedBuffer) {
     SessionPropertiesBroadcastMessage message;
-    message.SessionProperties.Add(42);
+    message.SessionProperties.setItem(0, 42);
     auto bytes = NetPacketCodec::Encode(message);
     bytes.resize(1);
     EXPECT_THROW(

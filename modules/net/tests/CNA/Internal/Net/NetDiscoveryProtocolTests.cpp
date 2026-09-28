@@ -51,7 +51,7 @@ TEST(NetDiscoveryProtocolTest, AnnounceRoundtripWithNoProperties) {
     EXPECT_EQ(decoded.OpenPrivateSlots, 1);
     EXPECT_EQ(decoded.OpenPublicSlots, 5);
     EXPECT_EQ(decoded.HostGamertag, "hostplayer");
-    EXPECT_EQ(decoded.Properties.getCountProperty(), 0);
+    EXPECT_EQ(decoded.Properties.getCountProperty(), 8);
 }
 
 TEST(NetDiscoveryProtocolTest, AnnounceRoundtripWithSparseProperties) {
@@ -59,15 +59,15 @@ TEST(NetDiscoveryProtocolTest, AnnounceRoundtripWithSparseProperties) {
     message.ConnectPort = 999;
     message.HostGamertag = "sparse";
     // Sparse: only indices 0 and 3 have values; 1 and 2 stay nullopt.
-    message.Properties.Add(42);
-    message.Properties.Add(std::nullopt);
-    message.Properties.Add(std::nullopt);
-    message.Properties.Add(7);
+    message.Properties.setItem(0, 42);
+    message.Properties.setItem(1, std::nullopt);
+    message.Properties.setItem(2, std::nullopt);
+    message.Properties.setItem(3, 7);
 
     auto bytes = NetDiscoveryProtocol::Encode(message);
     auto decoded = NetDiscoveryProtocol::DecodeAnnounce(bytes);
 
-    ASSERT_EQ(decoded.Properties.getCountProperty(), 4);
+    ASSERT_EQ(decoded.Properties.getCountProperty(), 8);
     EXPECT_EQ(decoded.Properties.getItem(0), std::optional<int>(42));
     EXPECT_EQ(decoded.Properties.getItem(1), std::nullopt);
     EXPECT_EQ(decoded.Properties.getItem(2), std::nullopt);
@@ -81,7 +81,7 @@ namespace {
     // (LAN discovery is unauthenticated broadcast UDP). presentCount/index/value are written
     // exactly as WriteProperties would for a well-formed entry, except the index itself is
     // adversarial.
-    std::vector<SharpRuntime::bytecs> BuildAnnounceWithRawPropertyIndex(int32_t index, int32_t value) {
+    std::vector<SharpRuntime::bytecs> BuildAnnounceWithRawPropertyIndex(int32_t index, int32_t value, int32_t count = 1) {
         PacketWriter writer;
         writer.Write(static_cast<SharpRuntime::bytecs>(DiscoveryMessageTag::Announce));
         writer.Write(kDiscoveryProtocolVersion);
@@ -91,7 +91,7 @@ namespace {
         writer.Write(static_cast<int32_t>(0));  // OpenPrivateSlots
         writer.Write(static_cast<int32_t>(8));  // OpenPublicSlots
         writer.Write(std::string("malformed")); // HostGamertag
-        writer.Write(static_cast<int32_t>(1));  // presentCount
+        writer.Write(count);  // presentCount
         writer.Write(index);
         writer.Write(value);
         return NetPacketCodec::ExtractBytes(writer);
@@ -167,4 +167,28 @@ TEST(NetDiscoveryProtocolTest, DecodeAnnounceThrowsOnTruncatedBuffer) {
     auto bytes = NetDiscoveryProtocol::Encode(message);
     bytes.resize(1);
     EXPECT_THROW(NetDiscoveryProtocol::DecodeAnnounce(bytes), System::IO::EndOfStreamException);
+}
+
+TEST(NetDiscoveryProtocolTest, DecodeAnnounceRejectsNinthPropertySlot) {
+    EXPECT_THROW(NetDiscoveryProtocol::DecodeAnnounce(BuildAnnounceWithRawPropertyIndex(8, 1)), std::runtime_error);
+}
+
+TEST(NetDiscoveryProtocolTest, DecodeAnnounceRejectsInvalidCountBeforeReadingEntries) {
+    EXPECT_THROW(NetDiscoveryProtocol::DecodeAnnounce(BuildAnnounceWithRawPropertyIndex(0, 1, -1)), std::runtime_error);
+    EXPECT_THROW(NetDiscoveryProtocol::DecodeAnnounce(BuildAnnounceWithRawPropertyIndex(0, 1, 9)), std::runtime_error);
+    EXPECT_THROW(NetDiscoveryProtocol::DecodeAnnounce(BuildAnnounceWithRawPropertyIndex(0, 1, INT32_MAX)), std::runtime_error);
+}
+
+TEST(NetDiscoveryProtocolTest, DecodeAnnounceRejectsDuplicateSlot) {
+    auto bytes = BuildAnnounceWithRawPropertyIndex(0, 1, 2);
+    // Two identical little-endian index/value records cannot be emitted by the encoder.
+    bytes.insert(bytes.end(), {0,0,0,0,2,0,0,0});
+    EXPECT_THROW(NetDiscoveryProtocol::DecodeAnnounce(bytes), std::runtime_error);
+}
+
+TEST(NetDiscoveryProtocolTest, EveryPropertySlotRoundTripsIncludingNullableEnds) {
+    DiscoveryAnnounceMessage message;
+    for(int slot=0;slot<8;++slot) message.Properties.setItem(slot, slot==7 ? INT32_MIN : slot);
+    const auto decoded=NetDiscoveryProtocol::DecodeAnnounce(NetDiscoveryProtocol::Encode(message));
+    for(int slot=0;slot<8;++slot) EXPECT_EQ(decoded.Properties.getItem(slot), message.Properties.getItem(slot));
 }

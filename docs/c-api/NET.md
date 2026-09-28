@@ -32,33 +32,23 @@ fields stay zero.
 
 ## Session properties
 
-`CNA_NetworkSessionPropertiesHandle` owns the canonical list. Each element is a
-`CNA_OptionalInt32`, a fixed POD carrying presence and value, because the canonical element type is
-an optional integer.
+`CNA_NetworkSessionPropertiesHandle` owns eight fixed slots. Each value is a
+`CNA_OptionalInt32` carrying presence and signed value. Count is always eight; initial slots are
+unspecified. Get/set accept indices 0..7 and return `CNA_RESULT_INVALID_ARGUMENT` outside that range
+without mutation. Structural add/insert/remove/remove_at/clear return `CNA_RESULT_NOT_SUPPORTED`,
+including invalid structural indices, following the reference fixed collection contract.
 
-Two canonical behaviors are preserved rather than tidied up:
+The XNA collection interface reports IsReadOnly=false even for advertised snapshots. Copies returned
+from AvailableNetworkSession retain write refusal; setters return `CNA_RESULT_NOT_SUPPORTED`.
+Copies from a live NetworkSession are independent editable values; replacing the live collection
+checks that the session is not disposed and that the caller is the current host before any mutation.
+No protocol structures cross the C ABI and existing symbols remain available.
 
-- the list reports itself read-only while still accepting add, remove and clear; and
-- writing at an index past the end **appends** instead of extending the list to that index.
-
-Two are decided in the C layer, because the canonical implementation does not decide them at all:
-
-- `Insert` and `RemoveAt` forward straight to the backing vector with no bounds check, so an
-  out-of-range index there is undefined behavior. The C routes range-check first and return
-  `CNA_RESULT_INVALID_ARGUMENT`.
-- the canonical enumerator dereferences its backing storage before its first advance, so
-  `cna_network_session_property_enumerator_get_current` reports `CNA_RESULT_INVALID_STATE` before
-  the first advance and after the last one instead of reading out of bounds.
-
-The canonical non-const indexer returns a proxy whose documented quirk is that even a bare
-out-of-range *read* through it appends, because the proxy must bind a slot before it can know
-whether the caller will read or write. That proxy has no C counterpart; the C API exposes the
-strict read and the appending write as separate routes, which is what the canonical header itself
-recommends, and does not simulate the quirk.
-
-`cna_network_session_properties_create_enumerator` returns an owned enumerator that observes the
-live list. It must be destroyed before its list, and the list refuses destruction while one is
-open.
+CopyTo copies all eight values into existing capacity after its output index; insufficient space
+returns `CNA_RESULT_BUFFER_TOO_SMALL` with the required count, and no partial output. The owned
+enumerator observes the eight live values; reading before the first advance or after the last one
+returns `CNA_RESULT_INVALID_STATE`. Destroy it before its collection; the collection refuses
+destruction while an enumerator remains open. Writes cannot invalidate the fixed storage shape.
 
 ## Packet buffers
 

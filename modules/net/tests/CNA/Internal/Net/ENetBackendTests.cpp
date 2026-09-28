@@ -1822,7 +1822,7 @@ TEST(ENetBackendTest, HostWelcomeAndLaterBroadcastPreserveCurrentSessionProperti
         fakeClient, host.session, &peerFromClientSide, &welcome
     );
 
-    ASSERT_EQ(welcome.SessionProperties.getCountProperty(), 4);
+    ASSERT_EQ(welcome.SessionProperties.getCountProperty(), 8);
     EXPECT_EQ(welcome.SessionProperties.getItem(0), 1);
     EXPECT_EQ(welcome.SessionProperties.getItem(1), std::nullopt);
     EXPECT_EQ(welcome.SessionProperties.getItem(2), -7);
@@ -1851,7 +1851,7 @@ TEST(ENetBackendTest, HostWelcomeAndLaterBroadcastPreserveCurrentSessionProperti
     }
 
     ASSERT_TRUE(receivedBroadcast);
-    ASSERT_EQ(broadcast.SessionProperties.getCountProperty(), 4);
+    ASSERT_EQ(broadcast.SessionProperties.getCountProperty(), 8);
     EXPECT_EQ(broadcast.SessionProperties.getItem(0), 2);
     EXPECT_EQ(broadcast.SessionProperties.getItem(1), 6);
     EXPECT_EQ(broadcast.SessionProperties.getItem(2), std::numeric_limits<int>::min());
@@ -1864,6 +1864,8 @@ TEST(ENetBackendTest, ClientAppliesWelcomeAndLaterAuthoritativeSessionProperties
     ASSERT_GT(fakeHostPort, 0);
 
     SystemLinkSessionFixture client("ClientPlayer");
+    // This Create-based transport fixture adopts the local role of a real Join constructor.
+    client.session->getLocalGamersProperty()[0]->SetIsHost(false);
     ENetBackend::ConnectToHost(client.session, "127.0.0.1", fakeHostPort);
 
     ENetPeer* clientPeerFromHostSide = nullptr;
@@ -1889,9 +1891,9 @@ TEST(ENetBackendTest, ClientAppliesWelcomeAndLaterAuthoritativeSessionProperties
     ServerWelcomeMessage welcome;
     welcome.AssignedWireIds = {5};
     welcome.ExistingRoster = {{0, "HostPlayer", true}};
-    welcome.SessionProperties.Add(1);
-    welcome.SessionProperties.Add(std::nullopt);
-    welcome.SessionProperties.Add(3);
+    welcome.SessionProperties.setItem(0, 1);
+    welcome.SessionProperties.setItem(1, std::nullopt);
+    welcome.SessionProperties.setItem(2, 3);
     const auto welcomeBytes = NetPacketCodec::Encode(welcome);
     fakeHost.Send(
         clientPeerFromHostSide, 0, welcomeBytes.data(), welcomeBytes.size(), ENET_PACKET_FLAG_RELIABLE
@@ -1899,22 +1901,31 @@ TEST(ENetBackendTest, ClientAppliesWelcomeAndLaterAuthoritativeSessionProperties
     fakeHost.Flush();
 
     for (int i = 0;
-         i < 200 && client.session->getSessionPropertiesProperty().getCountProperty() != 3;
+         i < 200 && client.session->getSessionPropertiesProperty().getItem(0) != 1;
          ++i, PollYield()) {
         client.session->Update();
     }
     const NetworkSession& constClientAfterWelcome = *client.session;
     const auto& welcomed = constClientAfterWelcome.getSessionPropertiesProperty();
-    ASSERT_EQ(welcomed.getCountProperty(), 3);
+    ASSERT_EQ(welcomed.getCountProperty(), 8);
     EXPECT_EQ(welcomed.getItem(0), 1);
     EXPECT_EQ(welcomed.getItem(1), std::nullopt);
     EXPECT_EQ(welcomed.getItem(2), 3);
+    auto& mutableClientProperties = client.session->getSessionPropertiesProperty();
+    auto retained = mutableClientProperties[0];
+    EXPECT_FALSE(client.session->getIsHostProperty());
+    EXPECT_THROW(mutableClientProperties[0] = 1, System::InvalidOperationException);
+    EXPECT_THROW(mutableClientProperties.setItem(1, 9), System::InvalidOperationException);
+    EXPECT_THROW(retained = 8, System::InvalidOperationException);
+    EXPECT_THROW(mutableClientProperties = NetworkSessionProperties{}, System::InvalidOperationException);
+    EXPECT_EQ(mutableClientProperties.getItem(0), 1);
+    EXPECT_EQ(mutableClientProperties.getItem(1), std::nullopt);
 
     SessionPropertiesBroadcastMessage update;
-    update.SessionProperties.Add(2);
-    update.SessionProperties.Add(6);
-    update.SessionProperties.Add(std::numeric_limits<int>::max());
-    update.SessionProperties.Add(0);
+    update.SessionProperties.setItem(0, 2);
+    update.SessionProperties.setItem(1, 6);
+    update.SessionProperties.setItem(2, std::numeric_limits<int>::max());
+    update.SessionProperties.setItem(3, 0);
     const auto updateBytes = NetPacketCodec::Encode(update);
     fakeHost.Send(
         clientPeerFromHostSide, 0, updateBytes.data(), updateBytes.size(), ENET_PACKET_FLAG_RELIABLE
@@ -1922,13 +1933,13 @@ TEST(ENetBackendTest, ClientAppliesWelcomeAndLaterAuthoritativeSessionProperties
     fakeHost.Flush();
 
     for (int i = 0;
-         i < 200 && client.session->getSessionPropertiesProperty().getCountProperty() != 4;
+         i < 200 && client.session->getSessionPropertiesProperty().getItem(0) != 2;
          ++i, PollYield()) {
         client.session->Update();
     }
     const NetworkSession& constClientAfterUpdate = *client.session;
     const auto& updated = constClientAfterUpdate.getSessionPropertiesProperty();
-    ASSERT_EQ(updated.getCountProperty(), 4);
+    ASSERT_EQ(updated.getCountProperty(), 8);
     EXPECT_EQ(updated.getItem(0), 2);
     EXPECT_EQ(updated.getItem(1), 6);
     EXPECT_EQ(updated.getItem(2), std::numeric_limits<int>::max());
@@ -1956,7 +1967,7 @@ TEST(ENetBackendTest, HostRejectsForgedSessionPropertiesBroadcastFromClient) {
     ASSERT_TRUE(connected);
 
     SessionPropertiesBroadcastMessage forged;
-    forged.SessionProperties.Add(999);
+    forged.SessionProperties.setItem(0, 999);
     const auto bytes = NetPacketCodec::Encode(forged);
     fakeClient.Send(peerFromClientSide, 0, bytes.data(), bytes.size(), ENET_PACKET_FLAG_RELIABLE);
     fakeClient.Flush();
@@ -1971,7 +1982,7 @@ TEST(ENetBackendTest, HostRejectsForgedSessionPropertiesBroadcastFromClient) {
     }
     EXPECT_TRUE(disconnected);
     const NetworkSession& constHost = *host.session;
-    ASSERT_EQ(constHost.getSessionPropertiesProperty().getCountProperty(), 1);
+    ASSERT_EQ(constHost.getSessionPropertiesProperty().getCountProperty(), 8);
     EXPECT_EQ(constHost.getSessionPropertiesProperty().getItem(0), 7);
 }
 

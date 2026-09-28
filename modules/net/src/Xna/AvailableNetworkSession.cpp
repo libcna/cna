@@ -24,6 +24,7 @@ namespace Microsoft::Xna::Framework::Net
         , hostPort_(hostPort)
         , sessionType_(sessionType)
     {
+        sessionProperties_.makeReadOnly();
     }
 
     AvailableNetworkSession AvailableNetworkSession::CreateInternal(

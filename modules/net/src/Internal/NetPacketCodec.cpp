@@ -51,16 +51,11 @@ namespace CNA::Internal::Net
         {
             NetworkSessionProperties properties;
             const bytecs count = reader.ReadByte();
+            if (count > 8) throw std::runtime_error("NetPacketCodec: property count exceeds eight slots");
+            // Older valid SystemLink frames with fewer slots retain unspecified trailing values.
             for (bytecs i = 0; i < count; ++i)
             {
-                if (reader.ReadBoolean())
-                {
-                    properties.Add(reader.ReadInt32());
-                }
-                else
-                {
-                    properties.Add(std::nullopt);
-                }
+                if (reader.ReadBoolean()) properties.setItem(i, reader.ReadInt32());
             }
             return properties;
         }

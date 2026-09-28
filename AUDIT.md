@@ -1966,7 +1966,7 @@ code path in this namespace.
 | NetworkSessionEndReason (enum) | ✅ | Complete |
 | NetworkSessionJoinError (enum) | ✅ | Complete |
 | SendDataOptions (enum) | ✅ | Complete; FNA marks `[Flags]` but values are sequential (0-4), not real bit flags — ported plain, no bitwise operators added |
-| NetworkSessionProperties | ✅ | Full port; implements `System::Collections::Generic::IList<std::optional<int>>`. Preserves two FNA quirks faithfully: the indexer setter appends instead of extending when given an out-of-range index (FNA's own "TODO: Expand list to index size?"), and `IsReadOnly` always returns `true` despite `Add`/`Remove`/`Clear` being fully functional |
+| NetworkSessionProperties | ✅ | GS-007b: eight fixed nullable integers, slots 0..7, structural mutation unsupported, IsReadOnly false per managed reference. Host-only writes and advertised read-only snapshots enforced before mutation, including retained indexed proxies; transport updates preserve guards. Tests cover all slots, enumeration/copy/bounds and host/disposal permission. Xbox console event details remain unmeasured |
 | NetworkSession | ✅ | Full XNA property surface plus CNA's real SystemLink transport. `SessionProperties` exposes the mutable get-only XNA collection; the ENet host includes the current complete sparse collection in `ServerWelcome` and reliably publishes later changes during `Update()`. Clients accept replacements only from their authoritative host. |
 | QualityOfService | ✅ | Full port; all-defaults data class |
 | AvailableNetworkSession | ✅ | Full port; `operator==`/`operator!=` added (NOXNA — required by `ReadOnlyCollection<T>`, not present in FNA; compares only scalar fields, excludes non-equatable `QualityOfService`/`NetworkSessionProperties` members) |

@@ -586,14 +586,6 @@ CNA_Result cna_network_session_properties_insert(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (const CNA_Result result = CheckedListIndex(
-                index,
-                static_cast<int32_t>(properties->value->getCountProperty()),
-                true,
-                "The property insertion index is outside the list.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
         properties->value->Insert(static_cast<int>(index), ToNative(value));
         return CNA_RESULT_SUCCESS;
     });
@@ -606,14 +598,6 @@ CNA_Result cna_network_session_properties_remove_at(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<NetworkSessionPropertiesResource> properties;
         if (const CNA_Result result = GetProperties(propertiesHandle, &properties);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = CheckedListIndex(
-                index,
-                static_cast<int32_t>(properties->value->getCountProperty()),
-                false,
-                "The property removal index is outside the list.");
             result != CNA_RESULT_SUCCESS) {
             return result;
         }

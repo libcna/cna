@@ -501,3 +501,104 @@ cannot reject host/read-only writes before mutating. Keep it generic; no GamerSe
 Standing layout approval SA-3 (docs/StandingApprovals.md) covers private storage growth with layout
 pins, migration/rebuild note and full gate. Preserve all old constructor signatures/noexcept; any
 change will be on a dedicated branch and recorded with exact tests. No sharp-runtime changes yet.
+
+
+Known-good GS-007a source set: CNA 5c6edd9cb604c8a27a5cdfc01cb6db9ec82967c5 / server
+ ae5770e80873f410cac605b0007c7922bdb81e2b / sharp-runtime
+fc033a0e8541a81498c4a496f56a0f59475c6e34. Both service repositories clean at checkpoint.
+
+GS-007b design/started: sharp-runtime `/rv/data/development/github.com/libcna/sharp-runtime` on
+`feature/gamer-services-collections`, base fc033a0e, initially clean. Add only generic optional
+pre-write guard to ElementReference<T>, additive three-argument constructor preserving two-argument
+constructor and noexcept. It must guard every assignment/compound/inc/dec, leave value/version
+unchanged on refusal and allow reads. Proxy gains one private pointer (64-bit size 16->24, align 8);
+SA-3 applies with layout tests, migration/full-consumer-rebuild note and full component gate.
+No CNA account/protocol/host policy goes in runtime. CNA property collection will supply the guard.
+Use existing runtime build/, max two compile jobs, no pushes (mission instruction supersedes local
+standing push rule). Completed runtime source/tests/docs must be committed before CNA integration.
+
+GS-007b runtime completed: generic pre-write guard, six additive tests, legacy constructor/noexcept
+preserved and three-pointer layout pin. Full clean build and complete component gate **18,104/18,104,
+41 executables, zero skips/failures** using isolated unchanged original SOAP fixture. Two optional
+SOAP skips were environmental; five stale XML test strings reproduced on original header and fixed
+in separate c5cb8138 prerequisite. Guard commit 6c4a857d (feature/gamer-services-collections); no push.
+Runtime has two unchanged module-boundary checker failures (Xml.Serialization/Core.Base dependency,
+ServiceModel/Net.Http visibility); neither introduced by this primitive. Details and reproducible
+commands in runtime docs/Migration-CNA-GS-007b.md. CNA fixed-property integration now started.
+
+
+GS-007c design (independent server work while full CNA layout rebuild runs): persistent control
+invitations bound to title, live directory session, sender membership and authenticated recipient.
+CNA-owned opaque 128-bit IDs are not standalone bearer credentials. Separate send/list/get/accept/
+dismiss and sessions.joinInvited operations; receiving is not accepting and acceptance does not
+reserve capacity. An accepted invite admits authenticated 1..4 local participants, private slots
+first, then public, atomically; replay succeeds only for the same already-joined machine/group.
+No fabricated InviteAccepted constants or unsolicited receipt event. Guide/client Update delivery
+is a subsequent integration item, not evidence provided by these server operations.
+
+Schema 7, FK cascade on session close, 15-minute invite TTL while host lease remains live, retained
+bounded records for one-day anti-abuse accounting. Limits: 64 live incoming per recipient/title,
+32 newly-created invitations per sender/title/hour, 16,384 retained records per title. Strict fields,
+opaque lowercase hex IDs, authenticated/title-isolated access, duplicate pending send idempotence,
+stale/consumed/closed/cross-user rejection. No arbitrary caller paths or query text.
+Server supports both directory kinds as CNA control policy; Xbox Ranked invitation/arbitration
+rules remain unmeasured and must be checked before exposing public XNA flows. Any active member
+may invite an account (no invented friends-only restriction). Logical control remains independent
+from ENet data/relay. Canonical protocol/capability/golden copies and restart/two-worker TLS tests
+will be updated; neither invitation UI nor Internet game transport is claimed complete.
+
+Concurrent next audit: committed next advanced to 8d56fa2fa (c6d9d49de +8d56fa2fa SAMPLE-100 overlay
+focus and LocalNetworkGamer identity fixes). These affect our Guide/Net path. Integrate committed
+history at the clean GS-007b checkpoint, preserve the samples agent's plan notes, rerun affected
+corpus. No uncommitted sample files incorporated.
+
+Acceptance source inspection expanded in plans/gamer_services_acceptance_sources.md: original
+SAMPLE-096 event handler confirms Guide acceptance precedes InviteAccepted and immediate JoinInvited;
+SAMPLE-087 standard random-description/30-preset renderer logic is available, without extracting
+proprietary Avatar assets. SAMPLE-075 identity flow exists. No achievement/leaderboard source matched
+in the currently extracted sample corpus, so a minimal XNA-shaped compatibility sample is needed.
+These are queued source evidence, not newly unblocked samples; no samples-agent files modified.
+
+GS-007b implementation detail: five remaining structural NotSupportedException throws in
+NetworkSessionProperties (Add/Insert/Remove/RemoveAt/Clear) are intentional fixed-array behavior,
+proved by the existing managed reference; they are not service-unavailable stubs. IsReadOnly=false
+also matches that reference, including read-only advertised snapshots. Owner check validates
+index first, then disposed owner/current host before mutation; transport replacement preserves
+the guard. C ABI structural symbols remain and map refusal to NOT_SUPPORTED; fixed copy/enumeration
+and advertised-copy tests replace obsolete appending behavior. Docs/c-api/NET, LIMITATIONS and
+FEATURE_MATRIX now describe the corrected behavior. Full rebuild currently ongoing; two unrelated
+pre-existing content-pipeline test nodiscard warnings are recorded, not changed by this task.
+
+
+### GS-007b native/runtime checkpoint complete
+
+- [x] Fixed eight nullable property values, reference structural exceptions, index/copy/enumerator
+  semantics, meaningful current-host/disposed guards and immutable advertised values.
+- [x] Generic indexed proxy pre-write guard completed independently in sharp-runtime; no CNA policy
+  there. Runtime full clean gate 18,104/18,104, no skipped/failed tests.
+- [x] Bounded SystemLink parsing rejects >8 slots, invalid sparse counts and duplicate indices;
+  accepts old <=8-slot frames with null padding. Existing ENet transport retained.
+- [x] Public Join now exercised in the actual two-process ENet client harness, including host-only
+  write rejection and real payload exchange. Existing migration/disconnect corpus passes.
+- [x] C API structural refusal, fixed CopyTo/enumeration and immutable advertised copies synchronized;
+  coverage/limitation source mappings corrected and generated reports refreshed.
+
+Validation: focused consumers CnaNetTests, CnaGamerServicesTests, native-C Net/service clients,
+service/protocol/two-process/dispatcher harnesses build. Native Net **324/324 pass, 4.325s**; GamerServices
+**397 run /396 pass /1 existing screen-saver skip**; fake **113 checks pass**. Private C ABI/header/
+coverage/Net/boards **10/10 pass, 12.44s** (protocol drift deferred until in-progress GS-007c canonical
+copies are synchronized). Runtime source 6c4a857de129cf29b5d43430bedf24157d594f12.
+Logs: cmake-build-debug/properties-{focused-build,net-final,gamers,fake,c-api-final}.log.
+
+Full-all CNA build was intentionally interrupted at ~500 unrelated object targets; focused affected
+consumers were then completed. Do not describe the whole all-target configuration as built. The
+full-all attempt showed two pre-existing content-pipeline nodiscard warnings; focused Net rebuild
+showed 32 pre-existing ignored-nodiscard warnings in exception test cases (no changed production
+source warnings). Initial new fixture failure used Create's host flag while expecting Join's client
+role; corrected fixture and added genuine public Join coverage. C smoke conversion briefly changed
+an unrelated machine-count expectation; reverted after the gate caught it. Generated mapping/report
+staleness corrected at the source. Final relevant gates above pass; no new failure remains.
+
+GS-007c server invitation code/unit tests pass, final TLS/admin-reset gate currently in progress.
+This does not yet connect Guide/InviteAccepted/public PlayerMatch or Ranked, and does not implement
+Internet relay. Next committed-next integration target remains 8d56fa2fa after this native checkpoint.

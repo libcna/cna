@@ -52,7 +52,7 @@ TEST(AvailableNetworkSessionTest, PropertiesFromCtor) {
     EXPECT_EQ(1, session.getOpenPrivateGamerSlotsProperty());
     EXPECT_EQ(3, session.getOpenPublicGamerSlotsProperty());
     EXPECT_TRUE(session.getQualityOfServiceProperty().getIsAvailableProperty());
-    EXPECT_EQ(0, session.getSessionPropertiesProperty().getCountProperty());
+    EXPECT_EQ(8, session.getSessionPropertiesProperty().getCountProperty());
 }
 
 TEST(AvailableNetworkSessionTest, EqualityAndInequality) {
@@ -97,10 +97,10 @@ TEST(AvailableNetworkSessionTest, EqualityConsidersConnectAddressAndPort) {
 // two fields don't affect the comparison either way.
 TEST(AvailableNetworkSessionTest, EqualityExcludesQualityOfServiceAndSessionProperties) {
     NetworkSessionProperties propsA;
-    propsA.Add(1);
+    propsA.setItem(0, 1);
     NetworkSessionProperties propsB;
-    propsB.Add(2);
-    propsB.Add(3);
+    propsB.setItem(0, 2);
+    propsB.setItem(1, 3);
 
     auto qosA = QualityOfService::CreateInternal();
     auto qosB = QualityOfService::CreateInternal(System::TimeSpan::FromMilliseconds(500.0));

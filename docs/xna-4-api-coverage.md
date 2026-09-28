@@ -1030,3 +1030,9 @@ too, and item 1's BLOCKED-task count dropped from 7 to 6 (447 resolved). Current
    tests plus `Texture2D`/`Texture3D` partial-region/NPOT tests.
 5. ~~Add compile-compatibility stubs for `Gamer` / `SignedInGamer` / `GamerCollection` if target games need them.~~ — **DONE** (`feature/net`): all three are real, implemented classes, not stubs — see §9.
 6. Audit `GraphicsDevice` public methods against FNA for any missing overloads or validation differences.
+
+GS-007b measured collection correction: NetworkSessionProperties has eight nullable signed-int
+slots; structural operations reject with NotSupportedException, indices outside 0..7 reject with
+ArgumentOutOfRangeException, and the reference IsReadOnly answer is false. Live-session host/disposal
+and advertised-snapshot writes are checked before mutation. This API/permission correction is
+separate from the still-unfinished public online matchmaking, invitations and Internet relay.

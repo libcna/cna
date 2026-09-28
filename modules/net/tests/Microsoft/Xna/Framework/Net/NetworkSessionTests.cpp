@@ -73,11 +73,35 @@ TEST(NetworkSessionTest, SessionPropertiesGetterExposesMutableXnaIndexerCollecti
 
     const NetworkSession& constSession = *session;
     const NetworkSessionProperties& observed = constSession.getSessionPropertiesProperty();
-    ASSERT_EQ(observed.getCountProperty(), 3);
+    ASSERT_EQ(observed.getCountProperty(), 8);
     EXPECT_EQ(observed.getItem(0), 7);
     EXPECT_EQ(observed.getItem(1), std::nullopt);
     EXPECT_EQ(observed.getItem(2), -9);
+    auto retained = mutableProperties[0];
+    session->Dispose();
+    EXPECT_THROW(mutableProperties[0] = 4, System::ObjectDisposedException);
+    EXPECT_THROW(mutableProperties.setItem(1, 4), System::ObjectDisposedException);
+    EXPECT_THROW(retained = 4, System::ObjectDisposedException);
+    EXPECT_THROW(mutableProperties = NetworkSessionProperties{}, System::ObjectDisposedException);
+    EXPECT_EQ(mutableProperties.getItem(0), 7);
+}
 
+TEST(NetworkSessionTest, RetainedPropertyProxyChecksCurrentHostRoleBeforeEachWrite) {
+    auto gamer = MakeSignedInGamer();
+    NetworkSession* session = NetworkSession::Create(NetworkSessionType::Local,
+        std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{});
+    auto& properties = session->getSessionPropertiesProperty();
+    auto retained = properties[7];
+    retained = 12;
+    auto* local = session->getLocalGamersProperty()[0];
+    local->SetIsHost(false);
+    EXPECT_FALSE(session->getIsHostProperty());
+    EXPECT_THROW(retained = 12, System::InvalidOperationException);
+    EXPECT_THROW(properties.setItem(7, 13), System::InvalidOperationException);
+    EXPECT_EQ(properties.getItem(7), 12);
+    local->SetIsHost(true);
+    retained = 13;
+    EXPECT_EQ(properties.getItem(7), 13);
     session->Dispose();
 }
 
@@ -974,6 +998,9 @@ TEST(NetworkSessionTest, JoinActivatesRealNetworkingForTheCorrectSessionType) {
     EXPECT_FALSE(host->getIsLocalProperty());
     EXPECT_TRUE(host->getIsHostProperty());
     EXPECT_EQ(host->getGamertagProperty(), "FakeHost");
+    EXPECT_FALSE(joined->getIsHostProperty());
+    EXPECT_THROW(joined->getSessionPropertiesProperty()[0] = 7, System::InvalidOperationException);
+    EXPECT_FALSE(joined->getSessionPropertiesProperty().getItem(0).has_value());
 
     const std::vector<SharpRuntime::bytecs> payload{1, 2, 3, 4};
     joined->getLocalGamersProperty()[0]->SendData(payload, SendDataOptions::Reliable, host);

@@ -9,6 +9,10 @@
 > PlayerMatch/Ranked/invites/relay, standard avatars and acceptance samples remain active. See
 > [living plan](plans/plan_gamer_services_server.md) for reproducible commands/results and gaps.
 
+> GS-007b corrects NetworkSessionProperties to the reference eight-slot contract and enforces
+> host/read-only mutation checks; generic sharp-runtime proxy guard has passed its complete
+> 18,104-test gate. CNA integration validation is in progress in the living plan.
+
 
 ## SAMPLE-090 FontTextureProcessor gap record corrected (2026-09-27)
 

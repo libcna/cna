@@ -2206,3 +2206,10 @@ and not by moving the regression thresholds.
 - Keep demo-only helpers (Phase 8's F1 overlay helper) in `examples/`, not CNA's public API.
 - Make avatar asset generation (Phase 7) deterministic and reviewable.
 - Clear English in docs, comments, plan files, and demo help text.
+
+
+GS-007b override (plans/plan_gamer_services_server.md): the old variable-list/append-index behavior
+is superseded by the managed XNA fixed eight-slot reference. Public index writes remain standard
+XNA source; structural Add/Remove/Clear are unsupported. Host authority is checked for every write
+before mutation, and transport-owned updates bypass that check privately while preserving it.
+This corrects API behavior without redesigning the ENet SystemLink transport.

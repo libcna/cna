@@ -64,3 +64,11 @@ The server now implements a persistent control-only PlayerMatch/Ranked directory
 multi-local membership, property filtering and leased host revisions. The CNA public online
 NetworkSession path and Internet relay are still unfinished. Membership in this directory alone
 cannot establish Internet connectivity or provide Ranked arbitration.
+
+NetworkSessionProperties follows the fixed XNA eight-slot shape: Count=8, nullable signed integers
+at indices 0..7. Add/Insert/Remove/RemoveAt/Clear throw NotSupportedException; use the ordinary indexer
+for configuration. IsReadOnly reports false as the managed reference does. Live-session writes
+require the current host and reject disposed owners; advertised snapshots reject writes. C API
+symbols remain available and map structural refusal to CNA_RESULT_NOT_SUPPORTED. CNA range helpers
+expose only const iterators so writes cannot bypass ownership checks. Rebuild all consumers with
+sharp-runtime's GS-007b proxy layout (16->24 bytes on the measured 64-bit ABI).
