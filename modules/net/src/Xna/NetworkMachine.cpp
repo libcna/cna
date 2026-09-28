@@ -20,6 +20,16 @@ namespace Microsoft::Xna::Framework::Net
         return gamers_;
     }
 
+    void NetworkMachine::AddGamerInternal(NetworkGamer* gamer)
+    {
+        gamers_.Add(gamer);
+    }
+
+    void NetworkMachine::RemoveGamerInternal(NetworkGamer* gamer)
+    {
+        gamers_.Remove(gamer);
+    }
+
     void NetworkMachine::RemoveFromSession()
     {
         throw System::NotImplementedException();

@@ -1602,11 +1602,13 @@ static int validate_session_discovery(const CNA_SignedInGamerHandle signed_in)
     if (cna_available_network_session_create_ext(&info, 0, &available) != CNA_RESULT_SUCCESS) {
         return 0;
     }
-    /* Descriptive C API metadata cannot manufacture authenticated online membership. */
-    if (cna_network_session_join(available, &session) != CNA_RESULT_NOT_SUPPORTED ||
+    /* Descriptive C API metadata cannot manufacture authenticated online membership: a listing
+       no authenticated search produced has no live search, which the reference BeginJoin reports
+       as ObjectDisposedException (INVALID_STATE here). */
+    if (cna_network_session_join(available, &session) != CNA_RESULT_INVALID_STATE ||
         session != CNA_INVALID_HANDLE ||
         cna_network_session_join_async(available, on_async_completed, &completions, &session) !=
-            CNA_RESULT_NOT_SUPPORTED ||
+            CNA_RESULT_INVALID_STATE ||
         session != CNA_INVALID_HANDLE || completions != 3 ||
         cna_available_network_session_destroy(available) != CNA_RESULT_SUCCESS) {
         return 0;

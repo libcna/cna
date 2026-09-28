@@ -42,6 +42,8 @@ namespace CNA::Internal::GamerServices {class IGamerServicesBackend;}
 namespace CNA::Internal::Net
 {
     class ENetBackend;
+    class OnlineSessionBinding;
+    class OnlineSessionOperation;
 }
 
 namespace Microsoft::Xna::Framework::Net
@@ -716,7 +718,8 @@ namespace Microsoft::Xna::Framework::Net
          * @brief Completes an asynchronous session search.
          *
          * @param result The IAsyncResult returned by BeginFind.
-         * @return The available sessions found (always empty; matches FNA's stub).
+         * @return The available sessions found: SystemLink LAN discovery, or the CNA service
+         *         directory for PlayerMatch/Ranked (each listing remembers the searching gamers).
          */
         [[nodiscard]] static AvailableNetworkSessionCollection EndFind(System::IAsyncResult* result);
 
@@ -748,7 +751,8 @@ namespace Microsoft::Xna::Framework::Net
          * @brief Completes an asynchronous join.
          *
          * On CNA's native SystemLink transport, completes the ClientHello/ServerWelcome handshake
-         * before returning the joined session.
+         * before returning the joined session. PlayerMatch/Ranked joins complete only after the
+         * service membership, secure relay and authenticated host welcome are established.
          *
          * @param result The IAsyncResult returned by BeginJoin.
          * @return The joined NetworkSession.
@@ -809,6 +813,7 @@ namespace Microsoft::Xna::Framework::Net
 
     private:
         friend class CNA::Internal::Net::ENetBackend;
+        friend class CNA::Internal::Net::OnlineSessionBinding;
 
         /**
          * @brief Replaces the session host with the identity established by the transport.
@@ -909,7 +914,13 @@ namespace Microsoft::Xna::Framework::Net
             const NetworkSessionType SessionType;
 
         private:
+            friend class NetworkSession;
             std::any asyncState_;
+            // Online Create/Join: owned outside the queued Storage so completion cannot retain it.
+            std::unique_ptr<CNA::Internal::Net::OnlineSessionOperation> online_;
+            // Frozen published local gamers and their service identities, in session order.
+            std::vector<GamerServices::SignedInGamer*> onlineGamers_;
+            std::vector<std::string> onlineUsers_;
             struct Storage;
             std::shared_ptr<Storage> storage_;
             std::shared_ptr<CNA::Internal::GamerServices::IGamerServicesBackend> executor_;
@@ -973,9 +984,13 @@ namespace Microsoft::Xna::Framework::Net
         std::string leaderboardGameplay_,leaderboardOwner_;
         bool leaderboardTransitionPending_=false;
 
-        static std::pair<std::string,int> ServiceSearchActor(
+        static std::vector<GamerServices::SignedInGamer*> ServiceLocalGamers(
             int maxLocalGamers, const std::optional<std::vector<GamerServices::SignedInGamer*>>& gamers);
         static System::IAsyncResult* QueueServiceSearch();
+        static System::IAsyncResult* QueueOnlineSession(const AvailableNetworkSession* target);
+        static NetworkSession* CompleteOnlineSession(NetworkSessionAction* action);
+        // Authenticated PlayerMatch/Ranked projection; absent for Local/SystemLink sessions.
+        std::unique_ptr<CNA::Internal::Net::OnlineSessionBinding> online_;
         static NetworkSessionAction* activeAction_;
         static NetworkSession* activeSession_;
 

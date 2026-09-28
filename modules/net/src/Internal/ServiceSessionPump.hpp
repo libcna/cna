@@ -12,6 +12,8 @@ struct ServiceSessionObservation {
     std::string failure;
     /** @brief Whether this successful request renewed the machine lease. */
     bool renewed=false;
+    /** @brief Whether this snapshot is the result of a host settings publication. */
+    bool published=false;
 };
 /** @brief Bounded asynchronous directory read/lease pump with owner-thread publication.
  * The owner drives Update plus GamerServicesDispatcher.Update; queued work contains logical
@@ -36,6 +38,13 @@ public:
     std::optional<ServiceSessionObservation> update();
     /** @brief Retries the same origin with an immediate lease renewal after failure. */
     void retry();
+    /** @brief Queues host-owned settings; the latest desire replaces any unsent one.
+     * A stale revision is re-read and retried a bounded number of times in the same worker job.
+     * @param settings Complete desired host settings. */
+    void publish(GamerServices::ServiceSessionSettings settings);
+    /** @brief Schedules an authoritative read as soon as the current request completes,
+     * spaced at least 100 ms from the previous request. */
+    void expedite();
     /** @brief Cancels scheduling and suppresses queued/active publication. */
     void cancel() noexcept;
 private:
@@ -45,8 +54,9 @@ private:
     std::string owner_;
     GamerServices::ServiceSessionSnapshot initial_;
     std::function<Time()> clock_;
-    Time nextRead_,nextRenew_;
-    bool busy_=false,stopped_=false,canceled_=false;
+    Time nextRead_,nextRenew_,lastRequest_;
+    std::optional<GamerServices::ServiceSessionSettings> desired_,sending_;
+    bool busy_=false,stopped_=false,canceled_=false,again_=false;
     int revision_=0;
 };
 }

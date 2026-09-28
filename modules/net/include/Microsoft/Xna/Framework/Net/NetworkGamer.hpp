@@ -5,6 +5,7 @@
 #include "Microsoft/Xna/Framework/Net/NetworkMachine.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "System/TimeSpan.hpp"
+#include <memory>
 #include <string>
 
 namespace Microsoft::Xna::Framework::Net
@@ -158,6 +159,30 @@ namespace Microsoft::Xna::Framework::Net
         void setMachineProperty(NetworkMachine value);
 
         /**
+         * @brief Places this gamer on a machine shared with the other gamers of that machine.
+         *
+         * Gamers on one physical machine share one NetworkMachine instance, so its Gamers
+         * collection lists all of them and their Machine references compare equal.
+         *
+         * @param machine The shared machine; must not be null.
+         */
+        CNAEXT void SetSharedMachine(std::shared_ptr<NetworkMachine> machine);
+
+        /**
+         * @brief Gets the shared machine instance so its session can maintain the gamer list.
+         *
+         * @return The machine this gamer plays on.
+         */
+        CNAEXT [[nodiscard]] std::shared_ptr<NetworkMachine> GetSharedMachine() const;
+
+        /**
+         * @brief Records whether this gamer occupies a private (invitation) slot.
+         *
+         * @param value The authoritative slot kind.
+         */
+        CNAEXT void SetIsPrivateSlot(bool value);
+
+        /**
          * @brief Gets the measured round-trip time to this gamer.
          *
          * @return The round-trip time.
@@ -210,7 +235,7 @@ namespace Microsoft::Xna::Framework::Net
         bool isPrivateSlot_{false};
         bool isReady_{false};
         bool isTalking_{false};
-        NetworkMachine machine_;
+        std::shared_ptr<NetworkMachine> machine_;
         System::TimeSpan roundtripTime_;
         NetworkSession* session_;
     };

@@ -91,3 +91,44 @@ TEST(ServiceSessionPumpTest, BusyRetryAndQueueSaturationFailDeterministically) {
     for(int batch=0;batch<4;++batch)f.drain();pump->retry();(void)pump->update();f.drain();
     auto recovered=pump->update();ASSERT_TRUE(recovered&&recovered->snapshot);EXPECT_TRUE(recovered->renewed);
 }
+TEST(ServiceSessionPumpTest, HostPublicationRetriesAStaleRevisionAndRenewsTheLease) {
+    Fixture f;auto pump=f.make();(void)pump->update();f.drain();ASSERT_TRUE(pump->update());
+    // A remote machine joins after the pump's last read, advancing the revision it will send.
+    const auto joined=f.backend->sessionDirectory().join("c",{"c"},f.initial.session);
+    Service::ServiceSessionSettings settings;settings.maxGamers=6;settings.properties[1]=9;
+    settings.state=Service::ServiceSessionState::Playing;pump->publish(settings);
+    // Publication respects the 100 ms spacing from the previous request.
+    EXPECT_FALSE(pump->update());EXPECT_TRUE(f.backend->pump().empty());
+    f.now+=std::chrono::milliseconds(100);EXPECT_FALSE(pump->update());f.drain();auto published=pump->update();
+    ASSERT_TRUE(published&&published->snapshot);EXPECT_TRUE(published->failure.empty());
+    EXPECT_TRUE(published->published);EXPECT_TRUE(published->renewed);
+    EXPECT_GT(published->snapshot->revision,joined.revision);EXPECT_EQ(9,published->snapshot->properties[1]);
+    EXPECT_EQ(Service::ServiceSessionState::Playing,published->snapshot->state);
+    // Nothing further is published until a new desire or the ordinary poll interval.
+    EXPECT_FALSE(pump->update());EXPECT_TRUE(f.backend->pump().empty());
+}
+TEST(ServiceSessionPumpTest, LatestDesireWinsAndANewerDesireSurvivesAnInFlightPublication) {
+    Fixture f;auto pump=f.make();(void)pump->update();f.drain();ASSERT_TRUE(pump->update());
+    Service::ServiceSessionSettings first;first.maxGamers=6;first.properties[0]=1;
+    auto second=first;second.properties[0]=2;auto third=first;third.properties[0]=3;
+    pump->publish(first);pump->publish(second);f.now+=std::chrono::milliseconds(100);EXPECT_FALSE(pump->update());
+    pump->publish(third);f.drain();auto observed=pump->update();
+    ASSERT_TRUE(observed&&observed->snapshot);EXPECT_EQ(2,observed->snapshot->properties[0]);
+    // The third desire is scheduled after the 100 ms request spacing, not dropped.
+    EXPECT_TRUE(f.backend->pump().empty());f.now+=std::chrono::milliseconds(100);EXPECT_FALSE(pump->update());
+    f.drain();observed=pump->update();ASSERT_TRUE(observed&&observed->snapshot);
+    EXPECT_EQ(3,observed->snapshot->properties[0]);EXPECT_TRUE(observed->published);
+}
+TEST(ServiceSessionPumpTest, ExpeditedReadsAreCoalescedAndSpacedButNeverRequirePolling) {
+    Fixture f;auto pump=f.make();(void)pump->update();
+    pump->expedite();pump->expedite();f.drain();ASSERT_TRUE(pump->update());
+    // The hint arrived while busy: one immediate follow-up read after the spacing, not a second poll.
+    EXPECT_TRUE(f.backend->pump().empty());f.now+=std::chrono::milliseconds(100);(void)pump->update();
+    auto events=f.backend->pump();EXPECT_EQ(1U,events.size());for(auto& event:events)if(event.completion)event.completion();
+    ASSERT_TRUE(pump->update());pump->expedite();pump->expedite();f.now+=std::chrono::milliseconds(100);
+    (void)pump->update();EXPECT_EQ(1U,f.backend->pump().size());
+}
+TEST(ServiceSessionPumpTest, ACanceledPumpRefusesPublicationAndAStoppedPumpIgnoresHints) {
+    Fixture f;auto pump=f.make();pump->cancel();
+    EXPECT_THROW(pump->publish({}),System::InvalidOperationException);EXPECT_NO_THROW(pump->expedite());
+}

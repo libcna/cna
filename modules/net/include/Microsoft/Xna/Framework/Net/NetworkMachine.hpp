@@ -30,6 +30,20 @@ namespace Microsoft::Xna::Framework::Net
         /** @brief Creates a NetworkMachine for CNA internal use. */
         CNAEXT static NetworkMachine CreateInternal();
 
+        /**
+         * @brief Records a gamer playing on this machine; used by the session that projects it.
+         *
+         * @param gamer Non-owning gamer pointer, retained by its session.
+         */
+        CNAEXT void AddGamerInternal(NetworkGamer* gamer);
+
+        /**
+         * @brief Forgets a gamer that left this machine's session.
+         *
+         * @param gamer Gamer previously added with AddGamerInternal.
+         */
+        CNAEXT void RemoveGamerInternal(NetworkGamer* gamer);
+
     private:
         NetworkMachine();
 

@@ -1037,10 +1037,13 @@ TEST(NetworkSessionTest, JoinActivatesRealNetworkingForTheCorrectSessionType) {
 // synthetic PlayerMatch entry is descriptive only: CNA has no PlayerMatch transport, so Join must
 // not interpret that address as a SystemLink endpoint and wait for a ServerWelcome that can never
 // arrive. The SAMPLE-091 handshake wait originally missed this session-type gate.
+// A listing that no authenticated search produced has no live search parent; the reference
+// BeginJoin reports that as ObjectDisposedException before any service or transport work.
 TEST(NetworkSessionTest, SyntheticPlayerMatchListingCannotBypassServiceMembership) {
     auto available=AvailableNetworkSession::CreateInternal(1,"SyntheticHost",0,8,{},
         QualityOfService::CreateInternal(),"127.0.0.1",27015,NetworkSessionType::PlayerMatch);
-    EXPECT_THROW((void)NetworkSession::Join(&available), GamerServicesNotAvailableException);
+    EXPECT_THROW((void)NetworkSession::Join(&available), System::ObjectDisposedException);
+    EXPECT_EQ(0,NetworkSession::GetActiveActionInstanceCountForTesting());
 }
 
 // --- Static JoinInvited/BeginJoinInvited/EndJoinInvited family ---

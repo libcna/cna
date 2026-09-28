@@ -12,7 +12,7 @@ or renamed module stops this gate rather than inheriting a default. Paths whose 
 are `Internal` or `Detail` in any capitalization are excluded as implementation detail.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **472 headers**, **8134 symbols**, **7054 implemented**, **15 partial**, **634 planned**, **431 not applicable**. Explicitly excluded headers: **473**.
+Snapshot: **472 headers**, **8140 symbols**, **7054 implemented**, **15 partial**, **640 planned**, **431 not applicable**. Explicitly excluded headers: **473**.
 
 ## Out of runtime C API scope
 
@@ -44,7 +44,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `cb0d5827ac958d53f06b5ad03cbf53be98cca466d2142ab0d26c0d0ef6dc4245`.
+Full inventory SHA-256: `c760aa8019c45e5773921e85554e173c2a2f229bd467b8c7684951a2899042e3`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:
@@ -74,7 +74,7 @@ owner, hashes the complete matrix, and compares this summary. The CTest
 | `input` | 51 | 894 | 836 | 0 | 30 | 28 |
 | `math` | 24 | 954 | 926 | 0 | 27 | 1 |
 | `media` | 24 | 338 | 285 | 0 | 1 | 52 |
-| `net` | 23 | 274 | 251 | 1 | 6 | 16 |
+| `net` | 23 | 280 | 251 | 1 | 12 | 16 |
 | `runtime` | 23 | 321 | 225 | 4 | 19 | 73 |
 | `storage` | 3 | 44 | 42 | 0 | 2 | 0 |
 

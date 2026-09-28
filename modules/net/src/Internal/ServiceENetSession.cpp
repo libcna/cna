@@ -150,23 +150,64 @@ struct ServiceENetSession::Impl {
         }
         std::vector<unsigned char> departed;for(const auto& [id,row]:remoteGamers)if(changed.contains(machineFor(id)))departed.push_back(id);
         remove(departed,host);
-        const bool revised=value.revision!=current.revision;current=std::move(value);roster=std::move(next);
+        const bool revised=value.revision!=current.revision;
+        const bool stateChanged=value.state!=current.state;
+        const bool settingsChanged=value.properties!=current.properties||value.maxGamers!=current.maxGamers
+            ||value.privateSlots!=current.privateSlots||value.allowJoinInProgress!=current.allowJoinInProgress;
+        current=std::move(value);roster=std::move(next);
         policy=std::make_unique<ServiceGamePacketPolicy>(current);dependencies.setRoutes(roster->remoteMachines());
+        if(host)identify();
         if(revised){ServiceENetObservation event;event.type=ServiceENetObservation::Type::Snapshot;event.snapshot=current;emit(std::move(event));
             if(!host&&ready){recoverRoster=true;nextHello=now();}}
+        if(host)hint(stateChanged,settingsChanged);
+    }
+    // Admitted clients treat these broadcasts only as a prompt to reread directory authority.
+    void hint(bool state,bool settings) {
+        std::vector<std::vector<unsigned char>> messages;
+        if(state)messages.push_back(NetPacketCodec::Encode(StateChangeBroadcastMessage{current.state==ServiceSessionState::Playing
+            ?NetworkSessionState::Playing:NetworkSessionState::Lobby}));
+        if(settings) {
+            SessionPropertiesBroadcastMessage message;
+            for(std::size_t index=0;index<current.properties.size();++index)
+                message.SessionProperties.setItem(static_cast<int>(index),current.properties[index]);
+            messages.push_back(NetPacketCodec::Encode(message));
+        }
+        for(const auto& bytes:messages)for(const auto& [peer,value]:peers)if(value.admitted)transmit(peer,bytes);
     }
     void connect(ENetPeer* peer) {
         const auto machine=source(peer->address);
+        if(host&&machine.empty()&&peers.size()<static_cast<std::size_t>(CnaService::MaxSessionGamers-1)) {
+            // A newly joined machine can connect before this host's next authoritative read names
+            // its route. Keep it unidentified (no hello is accepted) under the admission deadline.
+            peers.try_emplace(peer,Peer{{},false,now()+std::chrono::seconds(10)});control->expedite();return;
+        }
         if(machine.empty()||(!host&&(peer!=upstream||machine!=current.hostMachine))){++rejected;transport().Disconnect(peer,0);return;}
         if(host) {
             for(const auto& [other,value]:peers)if(other!=peer&&value.machine==machine){++rejected;transport().Disconnect(peer,0);return;}
             peers.try_emplace(peer,Peer{machine,false,now()+std::chrono::seconds(10)});
         }else hello();
     }
+    void identify() {
+        for(auto it=peers.begin();it!=peers.end();) {
+            if(!it->second.machine.empty()){++it;continue;}
+            const auto machine=source(it->first->address);
+            const bool duplicate=!machine.empty()&&std::any_of(peers.begin(),peers.end(),[&](const auto& other){return other.second.machine==machine;});
+            if(duplicate){++rejected;transport().Disconnect(it->first,0);it=peers.erase(it);continue;}
+            it->second.machine=machine;++it;
+        }
+    }
     void receive(ENetPeer* peer,ENetPacket* packet,unsigned char channel) {
-        auto found=peers.find(peer);if(found==peers.end()||source(peer->address)!=found->second.machine){++rejected;return;}
+        auto found=peers.find(peer);
+        if(found==peers.end()||found->second.machine.empty()||source(peer->address)!=found->second.machine){++rejected;return;}
         const std::span<const unsigned char> bytes(packet->data,packet->dataLength);
         if(bytes.empty()){++rejected;return;}
+        if(!host&&(bytes[0]==static_cast<unsigned char>(MessageTag::StateChangeBroadcast)
+            ||bytes[0]==static_cast<unsigned char>(MessageTag::SessionPropertiesBroadcast))) {
+            // The directory stays authoritative: a bounded, well-formed host hint only expedites a read.
+            try{(void)validateServiceControlPacket(bytes);}catch(const CnaService::Error&){++rejected;return;}
+            if(channel!=0||found->second.machine!=current.hostMachine||!ready){++rejected;return;}
+            control->expedite();return;
+        }
         try {
             if(bytes[0]==static_cast<unsigned char>(MessageTag::AppData)) {
                 auto message=policy->application(found->second.machine,bytes,channel,ready,admitted());
@@ -259,6 +300,10 @@ struct ServiceENetSession::Impl {
         transport().Flush();
     }
 };
+void ServiceENetSession::publish(const ServiceSessionSettings& settings) {
+    impl_->checkOwner();if(!impl_->host)throw ServiceOperationError("NOT_AUTHORIZED");
+    if(!impl_->stopped)impl_->control->publish(settings);
+}
 ServiceENetSession::ServiceENetSession(std::unique_ptr<PreparedOnlineSession> value,std::vector<std::string> names,ServiceENetDependencies dependencies)
     :impl_(std::make_unique<Impl>(std::move(value),std::move(names),std::move(dependencies))) {}
 ServiceENetSession::~ServiceENetSession()=default;

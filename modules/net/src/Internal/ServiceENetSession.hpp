@@ -60,6 +60,9 @@ public:
      * @param sender Local source. @param target Known connected target. @param payload Game bytes.
      * @param options Delivery semantics. */
     void send(unsigned char sender,unsigned char target,const std::vector<unsigned char>& payload,SendDataOptions options);
+    /** @brief Publishes host-owned directory settings; clients observe them through authority.
+     * @param settings Complete desired state, capacity, join-in-progress and properties. */
+    void publish(const GamerServices::ServiceSessionSettings& settings);
     /** @brief Gets whether host resources/client welcome are established. @return Ready flag. */
     bool ready() const;
     /** @brief Gets current authenticated metadata. @return Owner-thread snapshot. */

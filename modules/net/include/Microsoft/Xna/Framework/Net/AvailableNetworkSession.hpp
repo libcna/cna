@@ -8,7 +8,10 @@
 #include <string>
 #include <memory>
 
+#include <vector>
+
 namespace CNA::Internal::GamerServices {struct ServiceSessionSnapshot;}
+namespace Microsoft::Xna::Framework::GamerServices {class SignedInGamer;}
 
 namespace Microsoft::Xna::Framework::Net
 {
@@ -130,6 +133,8 @@ namespace Microsoft::Xna::Framework::Net
     private:
         friend class NetworkSession;
         std::shared_ptr<const CNA::Internal::GamerServices::ServiceSessionSnapshot> serviceSnapshot_;
+        // The local gamers whose search produced this listing; a join uses exactly this group.
+        std::shared_ptr<const std::vector<GamerServices::SignedInGamer*>> serviceLocals_;
         AvailableNetworkSession(
             int numGamers,
             const std::string& host,

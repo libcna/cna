@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Net/NetworkGamer.hpp"
+#include "System/ArgumentNullException.hpp"
 #include <utility>
 
 namespace Microsoft::Xna::Framework::Net
 {
     NetworkGamer::NetworkGamer(NetworkSession* session, const std::string& gamertag)
         : Gamer(gamertag, gamertag)
-        , machine_(NetworkMachine::CreateInternal())
+        , machine_(std::make_shared<NetworkMachine>(NetworkMachine::CreateInternal()))
         , session_(session)
     {
     }
@@ -31,8 +32,15 @@ namespace Microsoft::Xna::Framework::Net
     void NetworkGamer::setIsReadyProperty(bool value)         { isReady_ = value; }
     bool NetworkGamer::getIsTalkingProperty() const           { return isTalking_; }
 
-    const NetworkMachine& NetworkGamer::getMachineProperty() const { return machine_; }
-    void NetworkGamer::setMachineProperty(NetworkMachine value)    { machine_ = std::move(value); }
+    const NetworkMachine& NetworkGamer::getMachineProperty() const { return *machine_; }
+    void NetworkGamer::setMachineProperty(NetworkMachine value)    { machine_ = std::make_shared<NetworkMachine>(std::move(value)); }
+    void NetworkGamer::SetSharedMachine(std::shared_ptr<NetworkMachine> machine)
+    {
+        if (!machine) throw System::ArgumentNullException("machine");
+        machine_ = std::move(machine);
+    }
+    std::shared_ptr<NetworkMachine> NetworkGamer::GetSharedMachine() const { return machine_; }
+    void NetworkGamer::SetIsPrivateSlot(bool value) { isPrivateSlot_ = value; }
 
     System::TimeSpan NetworkGamer::getRoundtripTimeProperty() const { return roundtripTime_; }
     void NetworkGamer::SetRoundtripTime(System::TimeSpan value) { roundtripTime_ = value; }
