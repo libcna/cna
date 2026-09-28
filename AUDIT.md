@@ -1,5 +1,12 @@
 # CNA XNA 4.0 API Audit
 
+> **SAMPLE-100 acceptance repair (2026-09-28):** Game.IsActive now respects real modal Guide
+> visibility through the optional internal overlay, and LocalNetworkGamer preserves its actual
+> SignedInGamer's Gamertag/DisplayName. All 170 focused runtime/Guide/network tests and genuine
+> two-account native sample peers pass. No public XNA/C-ABI surface or class-completion status
+> changed. Browser auth/directory/relay and offline/guest accounts remain unfinished; see NEXT.md
+> and the Gamer Services living plan.
+
 > **GS-003/006 partial service (2026-09-28):** Dedicated `feature/gamer-services-server`
 > worktree provides verified-TLS accounts, four slots, Dispatcher event pumping, standard Guide
 > sign-in/social screens, persistent achievements, mutual friends/presence and hash-verified

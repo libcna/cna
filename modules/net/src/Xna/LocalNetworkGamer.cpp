@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
@@ -27,10 +28,14 @@ namespace Microsoft::Xna::Framework::Net
     }
 
     LocalNetworkGamer::LocalNetworkGamer(GamerServices::SignedInGamer* gamer, NetworkSession* session)
-        : NetworkGamer(session,gamer?gamer->getGamertagProperty():std::string{})
+        : NetworkGamer(session, gamer != nullptr ? gamer->getGamertagProperty() : std::string{})
         , signedInGamer_(gamer)
     {
-        if(gamer){serviceUserId_=gamer->serviceUserId_;displayName_=gamer->getDisplayNameProperty();}
+        if (gamer != nullptr)
+        {
+            serviceUserId_ = gamer->serviceUserId_;
+            displayName_ = gamer->getDisplayNameProperty();
+        }
     }
 
     LocalNetworkGamer LocalNetworkGamer::CreateInternal(GamerServices::SignedInGamer* gamer, NetworkSession* session)

@@ -602,3 +602,48 @@ staleness corrected at the source. Final relevant gates above pass; no new failu
 GS-007c server invitation code/unit tests pass, final TLS/admin-reset gate currently in progress.
 This does not yet connect Guide/InviteAccepted/public PlayerMatch or Ranked, and does not implement
 Internet relay. Next committed-next integration target remains 8d56fa2fa after this native checkpoint.
+## SAMPLE-100 native acceptance repairs — 2026-09-28
+
+The current account backend exposed two pre-existing owning-layer defects in the unchanged
+NetworkPrediction sample. Game.IsActive remained true while the real Guide sign-in overlay was
+visible, so the original IsActive guard called ShowSignIn again and threw GuideAlreadyVisibleException.
+The internal IGameOverlay now reports modal visibility; Game's getter combines it with retained
+window focus, and the real Guide overlay supplies Guide.IsVisible. Drawing-only overlays remain
+nonmodal. This follows the XNA Guide activity contract documented by the framework's author:
+[Shawn Hargreaves, trial mode and Guide activity](https://shawnhargreaves.com/blog/trial-mode-in-xna-game-studio-3-0.html).
+FNA's desktop Guide is a no-op and therefore supplies no equivalent real overlay.
+
+LocalNetworkGamer also initialized its inherited Gamer identity to “Stub Gamer” despite holding a
+real SignedInGamer. It now copies that profile's Gamertag and DisplayName; the existing wire roster
+already carried the actual tag. The old local-join event assertion was corrected to expect the
+provided profile instead of locking in the placeholder. Internal null-handle test fixtures retain
+existing behavior; actual sample accounts are not fabricated.
+
+The Debug CnaTests target builds. All 170 selected GameTest, GuideTest, LocalNetworkGamerTest,
+NetworkGamerTest, NetPacketCodecTest and NetworkSessionTest cases pass through the private GPU
+runner. New regressions cover modal activity/window-focus restoration and both identity fields.
+The initial 169/170 run failed only the obsolete “Stub Gamer” assertion. Fresh Release OPENGLES3
+sample processes sign in through genuine Guide username/password input against a separate
+verified-TLS service fixture with two persisted accounts, create/find/join and exchange tank state
+and all host options; both exit cleanly. Four separated-tank gameplay crops match exactly. No
+sample/runtime bypass, public XNA signature change, C ABI addition or sharp-runtime edit was made.
+Original Wine reaches the menu but cannot create its GFWL network session; original LAN behavior
+is not claimed as measured. The owner's accepted scope is native plus a browser limitations page,
+not browser multiplayer completion. Evidence is in sibling cna-samples SAMPLE-100 artifact
+`evidence/requal-20260928/`; all GS parent tasks and browser directory/relay/auth gaps stay open.
+
+### GS-007b committed-next integration checkpoint
+
+Merged only committed `next` 8d56fa2fa6cbd40b2b99a4178f0510fce45d1043 into the dedicated
+feature branch after c611878d538632d252650fb5d6eb2525c940256c. Kept service user IDs and
+real signed-in display names when resolving LocalNetworkGamer; kept both agents' plan evidence.
+The null internal fixture still has an empty name; normal service accounts are never fabricated.
+No samples-agent uncommitted state copied. New generic modal/nonmodal Game overlay behavior
+is retained. Affected Runtime/Net/GamerServices targets build; 325/325 Net tests pass (4.508s),
+GamerServices 397 run/396 pass/one existing HEADLESS screensaver skip (1.960s), and 12/12 GameTest
+cases pass on private Weston/Xwayland (159ms). Existing ignored-nodiscard test warnings remain.
+Logs `cmake-build-debug/next-integration-{build,game,net,gamers}.log`.
+
+Server GS-007c c1dcdda committed separately after 4/4 CTest pass in 65.71s; canonical protocol
+synchronization and client typed directory/invitation implementation follow immediately. No new
+public online NetworkSession/InviteAccepted/relay/avatar capability is claimed by this merge.

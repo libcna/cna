@@ -8,5 +8,9 @@ public:
     virtual ~IGameOverlay() = default;
     /** @brief Draws currently visible system UI. */
     virtual void draw() = 0;
+    /** @brief Reports whether system UI currently owns application focus.
+     * @return True while a modal system screen is visible; false for a drawing-only overlay.
+     */
+    [[nodiscard]] virtual bool isModalVisible() const { return false; }
 };
 }

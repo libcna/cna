@@ -198,3 +198,14 @@ TEST(LocalNetworkGamerTest, ClearPacketQueueLeavesNoDataAvailable) {
     fixture.gamer->ClearPacketQueue();
     EXPECT_FALSE(fixture.gamer->getIsDataAvailableProperty());
 }
+
+
+TEST(LocalNetworkGamerTest, PreservesSignedInProfileGamertagAndDisplayName) {
+    auto profile = SignedInGamer::CreateInternal("RealHost");
+    profile.setDisplayNameProperty("Host display name");
+    auto gamer = LocalNetworkGamer::CreateInternal(&profile, nullptr);
+    EXPECT_EQ(gamer.getSignedInGamerProperty(), &profile);
+    EXPECT_EQ(gamer.getGamertagProperty(), "RealHost");
+    EXPECT_EQ(gamer.getDisplayNameProperty(), "Host display name");
+    EXPECT_EQ(gamer.ToString(), "Host display name");
+}

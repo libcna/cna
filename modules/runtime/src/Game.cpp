@@ -434,7 +434,10 @@ namespace Microsoft::Xna::Framework
 
     bool Game::getIsActiveProperty() const
     {
-        return IsActive_;
+        // XNA Guide screens own focus even when rendered inside the game's native window.
+        // FNA's desktop Guide is a no-op; CNA's real system overlay must also participate.
+        const auto* overlay = Services_.GetService<CNA::Internal::Runtime::IGameOverlay>();
+        return IsActive_ && (overlay == nullptr || !overlay->isModalVisible());
     }
 
     void Game::setIsActiveProperty(bool value)

@@ -32,6 +32,7 @@ namespace CNA::Internal
     class GameTestPeer
     {
     public:
+        static void SetWindowActive(Microsoft::Xna::Framework::Game& game, bool active) { game.setIsActiveProperty(active); }
         static bool IsSuspended(const Microsoft::Xna::Framework::Game& game) { return game.isSuspended_; }
         static void PollEvents(Microsoft::Xna::Framework::Game& game) { game.PollEvents(); }
     };
@@ -481,7 +482,39 @@ TEST(GameTest, SystemOverlayRunsAfterGameDrawBeforePresentation)
     private:
         std::vector<std::string>& sequence_;
     } game(order);
+    CNA::Internal::GameTestPeer::SetWindowActive(game, true);
     game.getServicesProperty().AddService<CNA::Internal::Runtime::IGameOverlay>(&overlay);
+    EXPECT_TRUE(game.getIsActiveProperty()); // A drawing-only overlay does not take game focus.
     game.RunOneFrame();
     EXPECT_EQ(order, (std::vector<std::string>{"game", "overlay", "present"}));
+}
+
+
+TEST(GameTest, ModalSystemOverlayOwnsActivityWithoutOverwritingWindowFocus)
+{
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
+        GTEST_SKIP() << "The selected platform cannot create a test window.";
+    class Overlay final : public CNA::Internal::Runtime::IGameOverlay {
+    public:
+        bool visible = false;
+        void draw() override {}
+        [[nodiscard]] bool isModalVisible() const override { return visible; }
+    } overlay;
+    Game game;
+    CNA::Internal::GameTestPeer::SetWindowActive(game, true);
+    EXPECT_TRUE(game.getIsActiveProperty());
+    game.getServicesProperty().AddService<CNA::Internal::Runtime::IGameOverlay>(&overlay);
+    EXPECT_TRUE(game.getIsActiveProperty());
+    overlay.visible = true;
+    EXPECT_FALSE(game.getIsActiveProperty());
+    overlay.visible = false;
+    EXPECT_TRUE(game.getIsActiveProperty());
+    overlay.visible = true;
+    CNA::Internal::GameTestPeer::SetWindowActive(game, false);
+    EXPECT_FALSE(game.getIsActiveProperty());
+    overlay.visible = false;
+    EXPECT_FALSE(game.getIsActiveProperty());
+    CNA::Internal::GameTestPeer::SetWindowActive(game, true);
+    EXPECT_TRUE(game.getIsActiveProperty());
+    game.getServicesProperty().RemoveService<CNA::Internal::Runtime::IGameOverlay>();
 }
