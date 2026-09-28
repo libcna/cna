@@ -973,3 +973,32 @@ advanced to 31a560af9 (INPUT-EMU-001); inspect/integrate committed history at th
 GS-008c1 integration: merged committed next 31a560af9 (INPUT-EMU-001) after parser commit
 a543dc45b. Only conflicts were concurrent top-of-file AUDIT/NEXT notices; retained both reports.
 No samples working-tree file was copied. Rebuild and Net regression follow before GS-008c2.
+
+GS-008c2 active implementation: private libcurl CONNECT_ONLY WSS provider and one owned cancellable
+worker bridge now compile. Authority derives only from validated deployment URL; certificate,
+hostname, TLS >=1.2, redirects/proxy refusal and runtime TLS/ws/wss support are enforced. Net's
+libcurl minimum becomes 7.86 (WebSocket APIs); no sharp-runtime business logic or primitive added.
+Stable loopback sockets for <=30 authorized remote machines preserve ENet peer identity; only the
+known local ENet source endpoint may send. Client queue <=64 frames including partial active send,
+rolling 1s send budget reserves eight control messages; fair round-robin bounded UDP drain,
+unknown incoming source drop, obsolete unstarted route frames drop, atomic route replacement and
+controlled Ready/Failed/Stopped snapshots. Saturation is observable UDP loss, handled by ENet,
+rather than an unbounded queue. Five-second hello/partial message/send deadlines; no detached work.
+Four new unit cases and an independent MIT server-owned test provision four accounts/two titles,
+standard Guide authentication in two CNA processes, verified libcurl WSS and actual ENet channels,
+including 32KiB reliable fragmentation, unreliable data, wrong source/oversize local UDP refusal,
+secondary revoke and server loss. Public online NetworkSession remains refused until its integration.
+Final matching validation/commit follows. Next isolation dependency was unpacked into /tmp only:
+Debian slirp4netns 1.2.1-1.1, libslirp 4.8.0-1+deb13u1 (no host package/network changes).
+An ephemeral rootless NAT namespace reaches the configured host-side test TCP listener through
+10.0.2.2 and has a distinct network namespace inode; this is provisioning evidence, not CNA/ENet
+isolated multiplayer. Upstream manual: https://github.com/rootless-containers/slirp4netns/blob/master/slirp4netns.1.md.
+The externally executed GPL-2.0-or-later test helper is not linked, copied into or distributed with
+MIT server code. Next: two separately NATed real CNA clients, reconnect/failure corpus, standard
+online session/invites integration and avatar migration. Parent GS-008c/d/e still open.
+
+GS-008c1 integration follow-up: private C API gate initially 11/13; generated inventory/limitations
+were stale after next INPUT-EMU-001's four new device/window CNAEXT declarations and one platform
+header. Regenerated summaries (8,134 symbols, Net/GamerServices counts unchanged, no C exports),
+with no new input bindings. Final private gate passes 13/13; this is committed separately from
+relay implementation. Existing ABI remains 0.32/3,215 exports. No unexplained failure retained.

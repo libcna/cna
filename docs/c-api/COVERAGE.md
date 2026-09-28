@@ -12,7 +12,7 @@ or renamed module stops this gate rather than inheriting a default. Paths whose 
 are `Internal` or `Detail` in any capitalization are excluded as implementation detail.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **472 headers**, **8130 symbols**, **7054 implemented**, **15 partial**, **630 planned**, **431 not applicable**. Explicitly excluded headers: **469**.
+Snapshot: **472 headers**, **8134 symbols**, **7054 implemented**, **15 partial**, **634 planned**, **431 not applicable**. Explicitly excluded headers: **470**.
 
 ## Out of runtime C API scope
 
@@ -27,7 +27,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/diagnostics` | 2 | the optional profiler interface has no C ABI routes |
 | `modules/inspector` | 3 | the optional inspector agent and protocol have no C ABI routes |
 | `modules/phone` | 9 | CBIND-117, owner decision 2026-09-18: `Microsoft::Phone::{Shell,Notification}` is the Windows Phone 7 application-lifecycle and push-notification API, not XNA 4.0. Nothing in the repository links `cna_phone`, and no plan row promises it C parity |
-| `modules/platform` | 27 | CBIND-047, owner decision 2026-08-16: the platform abstraction is the substrate the C ABI is built on, not a surface it exposes. Its public headers are its internal contract -- the renderers and the runtime are its consumers, not applications -- and IPlatform deals in C++ interfaces, unique_ptr ownership and virtual dispatch that have no C form |
+| `modules/platform` | 28 | CBIND-047, owner decision 2026-08-16: the platform abstraction is the substrate the C ABI is built on, not a surface it exposes. Its public headers are its internal contract -- the renderers and the runtime are its consumers, not applications -- and IPlatform deals in C++ interfaces, unique_ptr ownership and virtual dispatch that have no C form |
 | `modules/renderers/**` | 153 | renderer implementations are hidden behind `IGraphicsRenderer` by project policy; a C caller selects a renderer by identity (`CNA_GraphicsRendererType`) and never names an implementation |
 | `modules/audio` internal/detail paths | 9 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/content` internal/detail paths | 43 | implementation detail: a path segment is `Internal` or `Detail` |
@@ -44,7 +44,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `9bace9b89b01cd2b9a755671da72cadce2365cc68d54eae477f6d4e09014ce32`.
+Full inventory SHA-256: `edfd2549e08ac44a045e0f19711630b5b75a15625278aef9914774f6242164b8`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:
@@ -66,7 +66,7 @@ owner, hashes the complete matrix, and compares this summary. The CTest
 | `audio` | 22 | 320 | 217 | 0 | 10 | 93 |
 | `content` | 41 | 802 | 561 | 10 | 207 | 24 |
 | `core` | 15 | 140 | 134 | 0 | 0 | 6 |
-| `devices` | 20 | 215 | 187 | 0 | 0 | 28 |
+| `devices` | 20 | 217 | 187 | 0 | 2 | 28 |
 | `devices-ext` | 17 | 84 | 79 | 0 | 0 | 5 |
 | `gamer-services` | 55 | 698 | 637 | 0 | 21 | 40 |
 | `graphics` | 143 | 2938 | 2606 | 0 | 269 | 63 |
@@ -75,7 +75,7 @@ owner, hashes the complete matrix, and compares this summary. The CTest
 | `math` | 24 | 954 | 926 | 0 | 27 | 1 |
 | `media` | 24 | 338 | 285 | 0 | 1 | 52 |
 | `net` | 23 | 274 | 251 | 1 | 6 | 16 |
-| `runtime` | 23 | 319 | 225 | 4 | 17 | 73 |
+| `runtime` | 23 | 321 | 225 | 4 | 19 | 73 |
 | `storage` | 3 | 44 | 42 | 0 | 2 | 0 |
 
 ## Status definitions
