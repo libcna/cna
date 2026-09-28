@@ -3953,9 +3953,9 @@ typedef struct CNA_AvatarAppearanceEXT {
 /**
  * @brief What an avatar description reports.
  *
- * **Two fields are constant on this runtime**: the height is always zero and the body type is always
- * female, because the canonical description format carries neither and the implementation says so
- * rather than guessing. Only validity and the bytes themselves vary.
+ * A CNA avatar description carries its body type and its height in meters (feet to top of head).
+ * Bytes from another source keep the validity rule (first byte non-zero) but report height zero and
+ * the female body type, because the runtime cannot read them.
  */
 typedef struct CNA_AvatarDescriptionInfo {
     /** @brief Size of this caller-provided structure in bytes. */

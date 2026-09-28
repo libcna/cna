@@ -301,9 +301,10 @@ letting one reach the renderer.
 
 A **description** is exactly `CNA_AVATAR_DESCRIPTION_BYTE_COUNT` bytes and any other length is
 refused, which is what the canonical constructor does; whether it is *valid* is a separate question
-its first byte answers. Two of its fields are constant here: the **height is always zero** and the
-**body type always female**, because the canonical format carries neither — asking for a male body
-still reports female. The binding says so rather than implying the fields mean something.
+its first byte answers. A random description is a real CNA avatar (see `docs/avatars.md`): it
+reports its body type and its height in meters, and a requested body type is the one it carries.
+Bytes the runtime cannot read keep that validity rule but report height zero and the female body
+type.
 
 An **animation** built from a preset carries the whole skeleton but **no timeline**: its length is
 zero until a real clip is loaded, so advancing it moves nothing. The canonical animation *interface*

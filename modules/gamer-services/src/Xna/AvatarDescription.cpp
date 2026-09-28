@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp"
+#include "CNA/Internal/GamerServices/AvatarDescriptionCodec.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "System/Threading/EventWaitHandle.hpp"
+#include <mutex>
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
@@ -71,7 +73,9 @@ namespace Microsoft::Xna::Framework::GamerServices
     {
         if (!height_.has_value())
         {
-            height_ = 0.0f;
+            // A buffer that is not a CNA avatar keeps the reference default of 0.
+            const auto descriptor = CNA::Internal::GamerServices::Avatars::decode(description_);
+            height_ = descriptor ? static_cast<float>(descriptor->heightMillimeters) / 1000.0f : 0.0f;
         }
         return *height_;
     }
@@ -80,16 +84,15 @@ namespace Microsoft::Xna::Framework::GamerServices
     {
         if (!bodyType_.has_value())
         {
-            bodyType_ = AvatarBodyType::Female;
+            const auto descriptor = CNA::Internal::GamerServices::Avatars::decode(description_);
+            bodyType_ = descriptor && descriptor->bodyType == 1 ? AvatarBodyType::Male : AvatarBodyType::Female;
         }
         return *bodyType_;
     }
 
     AvatarDescription AvatarDescription::CreateRandom()
     {
-        // Despite the name, the real XNA implementation never actually randomizes anything -
-        // always an all-zero (invalid) description. Preserved exactly, not "fixed."
-        return AvatarDescription(std::vector<SharpRuntime::bytecs>(DescriptionSize, 0), false);
+        return CreateRandom(std::optional<int>{});
     }
 
     AvatarDescription AvatarDescription::CreateRandom(AvatarBodyType bodyType)
@@ -99,8 +102,21 @@ namespace Microsoft::Xna::Framework::GamerServices
         {
             throw System::ArgumentOutOfRangeException("bodyType");
         }
-        // bodyType is validated but, matching the real XNA implementation, never actually used.
-        return AvatarDescription(std::vector<SharpRuntime::bytecs>(DescriptionSize, 0), false);
+        return CreateRandom(std::optional<int>{value});
+    }
+
+    AvatarDescription AvatarDescription::CreateRandom(std::optional<int> bodyType)
+    {
+        namespace Avatars = CNA::Internal::GamerServices::Avatars;
+        static std::mutex lock;
+        static std::mt19937 random{std::random_device{}()};
+        Avatars::AvatarDescriptor descriptor;
+        {
+            std::lock_guard guard(lock);
+            descriptor = Avatars::randomDescriptor(
+                bodyType ? std::optional<std::uint8_t>(static_cast<std::uint8_t>(*bodyType)) : std::nullopt, random);
+        }
+        return AvatarDescription(Avatars::encode(descriptor), false);
     }
 
     System::IAsyncResult* AvatarDescription::BeginGetFromGamer(

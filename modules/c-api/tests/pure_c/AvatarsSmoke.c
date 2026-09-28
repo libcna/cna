@@ -66,11 +66,10 @@ static int validate_description(const CNA_SignedInGamerHandle gamer)
         cna_avatar_description_create_random(0) != CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
-    /* A description is always exactly one size; its height and body type are constant on this
-       runtime, because the canonical format carries neither. */
+    /* A random description is a valid CNA avatar of one exact size with a measured height. */
     ok = cna_avatar_description_get_info(random, &info) == CNA_RESULT_SUCCESS &&
         info.description_byte_count == CNA_AVATAR_DESCRIPTION_BYTE_COUNT &&
-        info.body_type == CNA_AVATAR_BODY_TYPE_FEMALE && info.height == 0.0F;
+        info.is_valid == CNA_TRUE && info.height >= 1.45F && info.height <= 2.05F;
 
     ok = ok && cna_avatar_description_copy_description(random, bytes, sizeof(bytes), &size) ==
                    CNA_RESULT_SUCCESS &&
@@ -78,11 +77,11 @@ static int validate_description(const CNA_SignedInGamerHandle gamer)
     ok = ok && cna_avatar_description_copy_description(random, bytes, UINT64_C(1), &size) ==
                    CNA_RESULT_BUFFER_TOO_SMALL;
 
-    /* Asking for a male body still reports female, because the format carries no body type at all. */
+    /* The requested body type is the one the description carries. */
     ok = ok && cna_avatar_description_create_random_for_body_type(CNA_AVATAR_BODY_TYPE_MALE,
                                                                  &male) == CNA_RESULT_SUCCESS &&
         cna_avatar_description_get_info(male, &info) == CNA_RESULT_SUCCESS &&
-        info.body_type == CNA_AVATAR_BODY_TYPE_FEMALE;
+        info.body_type == CNA_AVATAR_BODY_TYPE_MALE && info.is_valid == CNA_TRUE;
     ok = ok && cna_avatar_description_create_random_for_body_type(UINT32_C(9999), &empty) ==
                    CNA_RESULT_INVALID_ARGUMENT;
 

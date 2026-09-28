@@ -53,31 +53,74 @@ TEST(AvatarDescriptionTest, DescriptionReturnsDefensiveCopy) {
     EXPECT_EQ(description.getDescriptionProperty()[0], 7);
 }
 
-TEST(AvatarDescriptionTest, HeightLazilyDefaultsToZero) {
+TEST(AvatarDescriptionTest, HeightOfANonCnaBufferIsZero) {
     std::vector<SharpRuntime::bytecs> data(kDescriptionSize, 0);
-    AvatarDescription description(data);
-    EXPECT_FLOAT_EQ(description.getHeightProperty(), 0.0f);
+    EXPECT_FLOAT_EQ(AvatarDescription(data).getHeightProperty(), 0.0f);
+    // Nonzero first byte satisfies IsValid but is still not a CNA avatar.
+    data[0] = 1;
+    AvatarDescription foreign(data);
+    EXPECT_TRUE(foreign.getIsValidProperty());
+    EXPECT_FLOAT_EQ(foreign.getHeightProperty(), 0.0f);
 }
 
-TEST(AvatarDescriptionTest, BodyTypeLazilyDefaultsToFemale) {
+TEST(AvatarDescriptionTest, BodyTypeOfANonCnaBufferIsFemale) {
     std::vector<SharpRuntime::bytecs> data(kDescriptionSize, 0);
-    AvatarDescription description(data);
-    EXPECT_EQ(description.getBodyTypeProperty(), AvatarBodyType::Female);
+    EXPECT_EQ(AvatarDescription(data).getBodyTypeProperty(), AvatarBodyType::Female);
+    data[0] = 1;
+    data[4] = 1;
+    EXPECT_EQ(AvatarDescription(data).getBodyTypeProperty(), AvatarBodyType::Female);
 }
 
-TEST(AvatarDescriptionTest, CreateRandomReturnsInvalidDescription) {
-    // Despite the name, the real XNA implementation never actually randomizes anything - it
-    // always returns an all-zero (invalid) description. Preserved exactly, not "fixed."
-    AvatarDescription description = AvatarDescription::CreateRandom();
-    EXPECT_FALSE(description.getIsValidProperty());
-    EXPECT_EQ(description.getDescriptionProperty().size(), static_cast<size_t>(kDescriptionSize));
+TEST(AvatarDescriptionTest, CreateRandomReturnsAValidMeasuredAvatar) {
+    bool sawFemale = false;
+    bool sawMale = false;
+    for (int attempt = 0; attempt < 64; ++attempt) {
+        AvatarDescription description = AvatarDescription::CreateRandom();
+        ASSERT_TRUE(description.getIsValidProperty());
+        ASSERT_EQ(description.getDescriptionProperty().size(), static_cast<size_t>(kDescriptionSize));
+        EXPECT_GE(description.getHeightProperty(), 1.45f);
+        EXPECT_LE(description.getHeightProperty(), 2.05f);
+        (description.getBodyTypeProperty() == AvatarBodyType::Male ? sawMale : sawFemale) = true;
+    }
+    EXPECT_TRUE(sawFemale && sawMale);
 }
 
-TEST(AvatarDescriptionTest, CreateRandomWithBodyTypeReturnsInvalidDescription) {
-    AvatarDescription female = AvatarDescription::CreateRandom(AvatarBodyType::Female);
-    AvatarDescription male = AvatarDescription::CreateRandom(AvatarBodyType::Male);
-    EXPECT_FALSE(female.getIsValidProperty());
-    EXPECT_FALSE(male.getIsValidProperty());
+TEST(AvatarDescriptionTest, CreateRandomWithBodyTypeHonoursTheBodyType) {
+    for (int attempt = 0; attempt < 16; ++attempt) {
+        AvatarDescription female = AvatarDescription::CreateRandom(AvatarBodyType::Female);
+        AvatarDescription male = AvatarDescription::CreateRandom(AvatarBodyType::Male);
+        EXPECT_TRUE(female.getIsValidProperty());
+        EXPECT_TRUE(male.getIsValidProperty());
+        EXPECT_EQ(female.getBodyTypeProperty(), AvatarBodyType::Female);
+        EXPECT_EQ(male.getBodyTypeProperty(), AvatarBodyType::Male);
+    }
+}
+
+TEST(AvatarDescriptionTest, CreateRandomProducesDifferentAvatars) {
+    auto first = AvatarDescription::CreateRandom().getDescriptionProperty();
+    bool differs = false;
+    for (int attempt = 0; attempt < 8 && !differs; ++attempt) {
+        differs = AvatarDescription::CreateRandom().getDescriptionProperty() != first;
+    }
+    EXPECT_TRUE(differs);
+}
+
+TEST(AvatarDescriptionTest, RoundTripThroughTheDescriptionBufferKeepsTheAvatar) {
+    AvatarDescription original = AvatarDescription::CreateRandom(AvatarBodyType::Male);
+    AvatarDescription copy(original.getDescriptionProperty());
+    EXPECT_EQ(copy.getDescriptionProperty(), original.getDescriptionProperty());
+    EXPECT_TRUE(copy.getIsValidProperty());
+    EXPECT_FLOAT_EQ(copy.getHeightProperty(), original.getHeightProperty());
+    EXPECT_EQ(copy.getBodyTypeProperty(), AvatarBodyType::Male);
+}
+
+TEST(AvatarDescriptionTest, DamagedDescriptionKeepsTheReferenceDefaults) {
+    auto bytes = AvatarDescription::CreateRandom(AvatarBodyType::Male).getDescriptionProperty();
+    bytes[5] ^= 0x10;
+    AvatarDescription damaged(bytes);
+    EXPECT_TRUE(damaged.getIsValidProperty());
+    EXPECT_FLOAT_EQ(damaged.getHeightProperty(), 0.0f);
+    EXPECT_EQ(damaged.getBodyTypeProperty(), AvatarBodyType::Female);
 }
 
 TEST(AvatarDescriptionTest, CreateRandomWithInvalidBodyTypeThrows) {

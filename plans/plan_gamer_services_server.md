@@ -2135,3 +2135,42 @@ privilege (GamerPrivilegeException); ShowGameInvite(sessionId) is Windows-Phone-
 Validation: GamerServices 465 pass / 1 known skip (7 new pane cases); Net 466/466; fake 113;
 private gates 13/13; server 21/21 (354.87s). Messages/reviews are verified by server unit tests
 and the deterministic Guide panes; not yet exercised by a two-process E2E.
+
+### GS-009 design (2026-09-28): standard XNA avatars on original CNA assets
+
+Reference facts (Windows IL + spec XML): 71 bones with the parent table already in
+AvatarRenderer.cpp; BindPose, AvatarAnimation.BoneTransforms and Draw's bones are local
+transforms relative to the parent; every Draw bone must be decomposable (else
+InvalidOperationException); Draw during loading shows the standard loading effect when the
+constructor asked for it; IsValid is `Length == 1021 && description[0] != 0`; Height is in
+meters, feet to top of head; a signed-in gamer's description is cached per player index and
+Changed fires (and the cache entry drops) when that avatar changes; the renderer obtains the
+device through `GamerServicesDispatcher`'s IGraphicsDeviceService.
+
+Decisions:
+- Encoding (CNA v1): byte 0 = format version (1, keeps the IL IsValid rule), bytes 1-3 "CNA",
+  body type, height in mm, build (weight), catalog version, RGB colors (skin, hair, eyes, top,
+  bottom, shoes, accessory), catalog item ids (hair, top, bottom, shoes, glasses, hat), zeroed
+  reserved bytes, CRC-32 over bytes 0..1016 in 1017..1020. A foreign or damaged buffer keeps the
+  IL IsValid answer, but reads as Height 0 / Female and renders Unavailable.
+- Rig: one canonical CNA 71-slot rig per body type in exactly the XNA parent topology, Y up,
+  facing +Z, feet at y = 0, meters, identity bind rotations (bind pose = local translations).
+  No reduced internal skeleton exists, so no private mapping is needed.
+- Draw uses each supplied bone's rotation and scale; translations come from the avatar's own
+  bind pose (the root keeps the supplied translation), so preset animations authored once fit
+  every height and build.
+- Assets: original, procedural GLB files generated deterministically by
+  tools/avatar_builder (pure Python, no Blender or third-party input): per-body-type bodies,
+  face-feature atlas (13 eyes, 4 eyebrows, 13 mouths), hair/top/bottom/shoes/glasses/hat items,
+  and one animation GLB holding the 30 presets (CUBICSPLINE rotations, expression keys in
+  animation extras). A manifest lists every item by id, body type, SHA-256 and size.
+- Distribution: the v1 base catalog is embedded in the library (offline CreateRandom works);
+  the service stores user -> description, serves its catalog manifest and asset blobs by
+  SHA-256; the client caches downloaded blobs by hash in the user cache directory, verifies the
+  hash on every read, and substitutes the embedded default for an item it cannot resolve.
+- Renderer: an invalid description is Unavailable; a valid one starts Loading, resolves and
+  assembles CPU data on a worker, becomes Ready (bind pose available), uploads GPU resources on
+  the owner thread at the first Draw, and renders with SkinnedEffect lit by exactly
+  LightDirection/LightColor/AmbientLightColor, plus face-feature decals selected by the
+  expression.
+- EXT retirement happens only after demos/tests run through the standard API.
