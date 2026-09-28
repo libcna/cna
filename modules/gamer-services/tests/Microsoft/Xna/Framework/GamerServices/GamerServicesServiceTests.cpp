@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: MS-PL
+#include "../../../../../../platform/tests/CNA/Platform/PlatformTestDecorator.hpp"
+#include "CNA/Platform/Input/IPlatformKeyboard.hpp"
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.hpp"
 #include "System/ArgumentNullException.hpp"
@@ -869,6 +871,70 @@ TEST(GuideTest, RenderPendingMessageBoxIsNoOpWhenNothingPending) {
     spriteBatch.Begin();
     EXPECT_NO_THROW(Guide::RenderPendingMessageBoxEXT(device, spriteBatch, *font, whitePixel));
     spriteBatch.End();
+}
+
+namespace {
+    // Serves a keyboard whose held keys the test sets; everything else is the real platform.
+    class CannedKeyboard final : public CNA::Platform::IPlatformKeyboard {
+    public:
+        CNA::Platform::KeyboardSnapshot snapshot;
+        void Update() override {}
+        [[nodiscard]] const CNA::Platform::KeyboardSnapshot& GetSnapshot() const override { return snapshot; }
+        [[nodiscard]] bool HasKeyboard() const override { return true; }
+    };
+    class CannedKeyboardPlatform final : public CNA::Platform::Testing::PlatformTestDecorator {
+    public:
+        CannedKeyboard keyboard;
+        [[nodiscard]] CNA::Platform::IPlatformKeyboard* GetKeyboard() override { return &keyboard; }
+    };
+}
+
+// A keyboard answers a message box the way the console Guide is answered: the key that is already
+// down when the box opens does nothing, arrows move the focus, Enter chooses, Escape cancels.
+TEST(GuideTest, MessageBoxesAnswerToTheKeyboard) {
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    using CNA::Platform::KeyCode;
+
+    MessageBoxGuard guard;
+    CannedKeyboardPlatform platform;
+    CNA::Platform::Testing::ScopedCurrentPlatform scope(platform);
+    GraphicsDevice device;
+    SpriteBatch spriteBatch(device);
+    auto font = MakeSimpleTestFont(device);
+    Texture2D whitePixel = MakeWhitePixelTexture(device);
+    auto frame = [&](std::vector<KeyCode> keys) {
+        platform.keyboard.snapshot.pressedKeys = std::move(keys);
+        spriteBatch.Begin();
+        Guide::RenderPendingMessageBoxEXT(device, spriteBatch, *font, whitePixel);
+        spriteBatch.End();
+    };
+
+    System::IAsyncResult* result = Guide::BeginShowMessageBox(
+        "title", "text", std::vector<std::string>{"A", "B", "C"}, 0, MessageBoxIcon::None, System::AsyncCallback{}, std::any{});
+    frame({KeyCode::Enter});
+    EXPECT_FALSE(result->getIsCompletedProperty());
+    frame({});
+    frame({KeyCode::Right});
+    frame({KeyCode::Right});
+    EXPECT_EQ(1, Guide::GetPendingMessageBoxFocusButtonForTestingEXT());
+    frame({});
+    frame({KeyCode::Left});
+    frame({});
+    frame({KeyCode::Left});
+    EXPECT_EQ(2, Guide::GetPendingMessageBoxFocusButtonForTestingEXT());
+    frame({KeyCode::Enter});
+    ASSERT_TRUE(result->getIsCompletedProperty());
+    EXPECT_EQ(std::optional<int>(2), Guide::EndShowMessageBox(result));
+    delete result;
+
+    result = Guide::BeginShowMessageBox(
+        "title", "text", std::vector<std::string>{"OK"}, 0, MessageBoxIcon::None, System::AsyncCallback{}, std::any{});
+    frame({});
+    frame({KeyCode::Escape});
+    ASSERT_TRUE(result->getIsCompletedProperty());
+    EXPECT_EQ(std::nullopt, Guide::EndShowMessageBox(result));
+    delete result;
 }
 
 // Task 3.1 checklist: "focusButton parameter is honored as the initial default selection."

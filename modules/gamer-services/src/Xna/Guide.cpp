@@ -38,6 +38,10 @@
 #include "../Internal/ServiceAsyncResult.hpp"
 #include "System/Threading/EventWaitHandle.hpp"
 #include <algorithm>
+#include <functional>
+#include <cstdlib>
+#include <array>
+#include "Microsoft/Xna/Framework/Input/GamePad.hpp"
 #include <cctype>
 
 namespace Microsoft::Xna::Framework::GamerServices
@@ -109,7 +113,8 @@ namespace Microsoft::Xna::Framework::GamerServices
             const std::string Title;
             const std::string Text;
             const std::vector<std::string> Buttons;
-            const int FocusButton;
+            // Moves with keyboard and gamepad navigation.
+            int FocusButton;
             const MessageBoxIcon Icon;
             std::optional<int> SelectedButton;
 
@@ -117,6 +122,12 @@ namespace Microsoft::Xna::Framework::GamerServices
             // a button selects on the down-edge of the left mouse button, not every frame it's
             // held, so this must persist across calls for as long as this box is pending.
             bool WasLeftMouseDown = false;
+            // Keyboard/gamepad navigation edges. They start as held so the press that opened the
+            // box (Enter confirming a previous prompt, A choosing a menu item) cannot answer it.
+            bool WasPreviousDown = true;
+            bool WasNextDown = true;
+            bool WasSelectDown = true;
+            bool WasCancelDown = true;
         };
 
         // At most one message box is pending at a time (matches this platform's single-active-
@@ -142,7 +153,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         // callback that immediately calls BeginShowMessageBox again (or EndShowMessageBox on this
         // same result) must see consistent, already-updated state, matching the same reentrancy
         // fix applied to NetworkSession's Begin*/audit_net.md High finding.
-        void CompletePendingMessageBox(int buttonIndex)
+        void CompletePendingMessageBox(std::optional<int> buttonIndex)
         {
             GuideMessageBoxAction* action = pendingMessageBox_;
             action->SelectedButton = buttonIndex;
@@ -832,10 +843,24 @@ namespace Microsoft::Xna::Framework::GamerServices
         const Vector2 titleSize = font.MeasureString(pendingMessageBox_->Title.empty() ? " " : pendingMessageBox_->Title);
         const Vector2 textSize = font.MeasureString(pendingMessageBox_->Text.empty() ? " " : pendingMessageBox_->Text);
 
+        // Button widths come first: the box must be wide enough for the whole button row.
+        std::vector<Rectangle> buttonRects;
+        buttonRects.reserve(pendingMessageBox_->Buttons.size());
+        float totalButtonsWidth = 0.0f;
+        std::vector<float> buttonWidths;
+        buttonWidths.reserve(pendingMessageBox_->Buttons.size());
+        for (const std::string& label : pendingMessageBox_->Buttons)
+        {
+            const float w = font.MeasureString(label.empty() ? " " : label).X + 2.0f * buttonPaddingX;
+            buttonWidths.push_back(w);
+            totalButtonsWidth += w;
+        }
+        totalButtonsWidth += buttonGap * static_cast<float>(pendingMessageBox_->Buttons.size() - 1);
+
         // Not implemented: real word-wrap for long body text - this is a minimal, single-line
         // overlay (matching this task's own "minimal" scope); a body string wider than the box
         // simply overflows past its edges rather than wrapping.
-        const float contentWidth = std::max(titleSize.X, textSize.X);
+        const float contentWidth = std::max({titleSize.X, textSize.X, totalButtonsWidth});
         const float boxWidth = std::min(viewportWidth - 2.0f * padding, std::max(360.0f, contentWidth + 2.0f * padding));
         const float boxHeight = padding * 2.0f + titleSize.Y + spacing + textSize.Y
                                  + spacing + buttonHeight;
@@ -853,19 +878,6 @@ namespace Microsoft::Xna::Framework::GamerServices
                                 Vector2(boxX + padding, boxY + padding + titleSize.Y + spacing), textColor);
 
         // Lay out button rectangles left-to-right, centered as a group within the box.
-        std::vector<Rectangle> buttonRects;
-        buttonRects.reserve(pendingMessageBox_->Buttons.size());
-        float totalButtonsWidth = 0.0f;
-        std::vector<float> buttonWidths;
-        buttonWidths.reserve(pendingMessageBox_->Buttons.size());
-        for (const std::string& label : pendingMessageBox_->Buttons)
-        {
-            const float w = font.MeasureString(label.empty() ? " " : label).X + 2.0f * buttonPaddingX;
-            buttonWidths.push_back(w);
-            totalButtonsWidth += w;
-        }
-        totalButtonsWidth += buttonGap * static_cast<float>(pendingMessageBox_->Buttons.size() - 1);
-
         float buttonX = boxX + (boxWidth - totalButtonsWidth) * 0.5f;
         const float buttonY = boxY + boxHeight - padding - buttonHeight;
         for (std::size_t i = 0; i < pendingMessageBox_->Buttons.size(); ++i)
@@ -904,6 +916,44 @@ namespace Microsoft::Xna::Framework::GamerServices
                     return;
                 }
             }
+        }
+        // Keyboard and gamepad answer the box too, as the console Guide is answered: arrows,
+        // Tab, the D-pad or the left stick move the focus, Enter/Space/A choose, Escape/B/Back
+        // cancel (EndShowMessageBox then returns no button).
+        const Input::KeyboardState keys = Input::Keyboard::GetState();
+        bool previous = keys.IsKeyDown(Input::Keys::Left) || keys.IsKeyDown(Input::Keys::Up);
+        bool next = keys.IsKeyDown(Input::Keys::Right) || keys.IsKeyDown(Input::Keys::Down) || keys.IsKeyDown(Input::Keys::Tab);
+        bool select = keys.IsKeyDown(Input::Keys::Enter) || keys.IsKeyDown(Input::Keys::Space);
+        bool cancel = keys.IsKeyDown(Input::Keys::Escape);
+        for (int index = 0; index < 4; ++index)
+        {
+            const Input::GamePadState pad = Input::GamePad::GetState(static_cast<PlayerIndex>(index));
+            const Vector2 stick = pad.getThumbSticksProperty().getLeftProperty();
+            previous = previous || pad.IsButtonDown(Input::Buttons::DPadLeft) || pad.IsButtonDown(Input::Buttons::DPadUp) ||
+                       stick.X < -0.5f || stick.Y > 0.5f;
+            next = next || pad.IsButtonDown(Input::Buttons::DPadRight) || pad.IsButtonDown(Input::Buttons::DPadDown) ||
+                   stick.X > 0.5f || stick.Y < -0.5f;
+            select = select || pad.IsButtonDown(Input::Buttons::A);
+            cancel = cancel || pad.IsButtonDown(Input::Buttons::B) || pad.IsButtonDown(Input::Buttons::Back);
+        }
+        auto edge = [](bool down, bool& was) { const bool pressed = down && !was; was = down; return pressed; };
+        const int count = static_cast<int>(pendingMessageBox_->Buttons.size());
+        if (edge(previous, pendingMessageBox_->WasPreviousDown))
+        {
+            pendingMessageBox_->FocusButton = (pendingMessageBox_->FocusButton + count - 1) % count;
+        }
+        if (edge(next, pendingMessageBox_->WasNextDown))
+        {
+            pendingMessageBox_->FocusButton = (pendingMessageBox_->FocusButton + 1) % count;
+        }
+        if (edge(select, pendingMessageBox_->WasSelectDown))
+        {
+            CompletePendingMessageBox(pendingMessageBox_->FocusButton);
+            return;
+        }
+        if (edge(cancel, pendingMessageBox_->WasCancelDown))
+        {
+            CompletePendingMessageBox(std::nullopt);
         }
     }
 
@@ -1269,5 +1319,71 @@ namespace Microsoft::Xna::Framework::GamerServices
 namespace CNA::Internal::GamerServices {
 std::string guideSignInStatus() {
     return Microsoft::Xna::Framework::GamerServices::Guide::getIsVisibleProperty() ? "CNA Gamer Services: signing in..." : "";
+}
+
+namespace {
+void systemGuideAction(Microsoft::Xna::Framework::PlayerIndex player,const std::function<void()>& action) {
+    using namespace Microsoft::Xna::Framework::GamerServices;
+    try {action();}
+    catch(const std::exception& error) {
+        (void)Guide::BeginShowMessageBox(player,"Guide",error.what(),{"OK"},0,MessageBoxIcon::Error,[](System::IAsyncResult& result) {
+            std::unique_ptr<System::IAsyncResult> owned(&result);(void)Guide::EndShowMessageBox(&result);
+        },{});
+    }
+}
+}
+
+void openSystemGuide(Microsoft::Xna::Framework::PlayerIndex player) {
+    using namespace Microsoft::Xna::Framework::GamerServices;
+    using Microsoft::Xna::Framework::PlayerIndex;
+    const int index=static_cast<int>(player);
+    if(index<0||index>3||!GamerServicesDispatcher::getIsInitializedProperty()||Guide::getIsVisibleProperty())return;
+    SignedInGamer* gamer=nullptr;
+    for(auto* candidate:*Gamer::getSignedInGamersProperty())if(candidate->getPlayerIndexProperty()==player)gamer=candidate;
+    auto close=[](System::IAsyncResult& result){std::unique_ptr<System::IAsyncResult> owned(&result);return Guide::EndShowMessageBox(&result);};
+    if(!gamer) {
+        // Sign-in panes cover this player's slot: 1, 2 or 4 of them.
+        const int panes=index==0?1:index==1?2:4;
+        (void)Guide::BeginShowMessageBox(player,"Guide","No profile is signed in for player "+std::to_string(index+1)+".",
+            {"Sign in","Close"},0,MessageBoxIcon::None,[player,panes,close](System::IAsyncResult& result) {
+                if(close(result)==0)systemGuideAction(player,[panes]{Guide::ShowSignIn(panes,false);});
+            },{});
+        return;
+    }
+    if(!gamer->getIsSignedInToLiveProperty()) {
+        (void)Guide::BeginShowMessageBox(player,"Guide","Signed in to the local profile "+gamer->getGamertagProperty()+
+            ". Online features need a CNA account service.",{"Sign out","Close"},1,MessageBoxIcon::None,[player,index,close](System::IAsyncResult& result) {
+                if(close(result)==0)systemGuideAction(player,[index]{backend()->signOut(index);});
+            },{});
+        return;
+    }
+    (void)Guide::BeginShowMessageBox(player,"Guide","Signed in as "+gamer->getGamertagProperty()+".",
+        {"Friends","Invite to game","Messages","Sign out"},0,MessageBoxIcon::None,[player,index,close](System::IAsyncResult& result) {
+            const auto choice=close(result);
+            if(!choice)return;
+            switch(*choice) {
+            case 0:systemGuideAction(player,[player]{Guide::ShowFriends(player);});break;
+            case 1:systemGuideAction(player,[player]{Guide::ShowGameInvite(player,std::vector<Gamer*>{});});break;
+            case 2:systemGuideAction(player,[player]{Guide::ShowMessages(player);});break;
+            default:systemGuideAction(player,[index]{backend()->signOut(index);});break;
+            }
+        },{});
+}
+
+void pollSystemGuideButton() {
+    using namespace Microsoft::Xna::Framework::Input;
+    using Microsoft::Xna::Framework::PlayerIndex;
+    static const bool disabled=[]{const auto* value=std::getenv("CNA_GAMER_SERVICES_GUIDE_BUTTON");return value&&std::string(value)=="0";}();
+    static std::array<bool,5> previous{};
+    if(disabled)return;
+    // Home opens the Guide from a keyboard, as in Games for Windows LIVE; the Guide button from a pad.
+    const bool home=Keyboard::GetState().IsKeyDown(Keys::Home);
+    if(home&&!previous[4])openSystemGuide(PlayerIndex::One);
+    previous[4]=home;
+    for(int index=0;index<4;++index) {
+        const bool pressed=GamePad::GetState(static_cast<PlayerIndex>(index)).IsButtonDown(Buttons::BigButton);
+        if(pressed&&!previous[index])openSystemGuide(static_cast<PlayerIndex>(index));
+        previous[index]=pressed;
+    }
 }
 }

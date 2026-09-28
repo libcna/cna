@@ -28,6 +28,16 @@ appear, raising `SignedIn`, at the first `Dispatcher.Update`, as XNA reports pro
 in at startup. Local profiles are never sent to a service. With an endpoint configured, sign-in uses
 accounts only.
 
+**System Guide.** In a game that draws (a `GamerServicesComponent` with a graphics device service),
+the Home key, as in Games for Windows LIVE, or a controller's Guide button opens the Guide for that
+player without any call from the game: sign in when nobody is signed in there; Friends, Invite to
+game, Messages and Sign out for an account; Sign out for a local profile. This is how a player
+sends an invitation from a game such as the XNA Invites sample, which never calls
+`Guide.ShowGameInvite` itself. Guide message boxes answer to the keyboard (arrows/Tab move, Enter or
+Space chooses, Escape cancels) and to controllers (D-pad or left stick, A, B/Back) as well as the
+mouse. `CNA_GAMER_SERVICES_GUIDE_BUTTON=0` disables the Home/Guide-button shortcut for a game that
+needs the Home key.
+
 Server canonical protocol and administration commands live in sibling `cna-gamer-services-server/README.md` and `protocol/v1.md`. Desktop client depends on libcurl with TLS support and nlohmann/json. Browser/other secure platform transport integration remains unverified.
 
 Measured service features include four local authenticated players, standard Guide sign-in, profiles/

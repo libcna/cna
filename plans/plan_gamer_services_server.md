@@ -2343,3 +2343,25 @@ without a signed-in gamer prints the guidance and exits 1.
 Not changed: test runs read the user's profile store like they read the user's service settings;
 a developer who marks profiles `autoSignIn` should point `CNA_GAMER_SERVICES_PROFILES_DIR`
 elsewhere for test runs. Guest sign-in remains unimplemented.
+
+### GS-005d complete: system Guide (Home / Guide button) and keyboard/controller message boxes
+
+Found while porting SAMPLE-096 Invites: the unchanged game never calls `Guide.ShowGameInvite`; on
+Xbox (Guide button) and Games for Windows LIVE (Home) the player opens the system Guide to invite.
+CNA had no such entry point, and Guide message boxes accepted only mouse clicks, so keyboard and
+controller players could not answer the invitation prompt at all.
+
+- [x] `openSystemGuide(player)` / `pollSystemGuideButton()` (outer `Dispatcher.Update`, only when the
+  Guide draws in a game): nobody signed in -> Sign in (1, 2 or 4 panes covering the player);
+  account -> Friends / Invite to game / Messages / Sign out; local profile -> Sign out. Failures
+  (e.g. no online session to invite to) show as a Guide message. `CNA_GAMER_SERVICES_GUIDE_BUTTON=0`
+  disables the shortcut.
+- [x] Message boxes: arrows/Tab, D-pad or left stick move the focus; Enter/Space/A choose;
+  Escape/B/Back cancel (no button). Navigation edges start as held, so the key that opened a box
+  cannot answer it. The box widens to fit its button row (four buttons overflowed).
+- [x] `docs/c-api/COVERAGE.md` hash refreshed: GS-004l added a tracked internal header, which the
+  inventory counts only once committed (the gate therefore passed before that commit).
+
+Validation: GamerServices **483 pass / 1 known skip** (SystemGuideTests 5; keyboard message-box
+navigation through a canned platform keyboard); Net 466/466; C API gates pass (three environment
+smokes as before). SAMPLE-096 acceptance below exercises the real Home key and message boxes.

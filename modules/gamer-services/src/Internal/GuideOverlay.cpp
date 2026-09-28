@@ -50,6 +50,7 @@ Overlay overlay;
 namespace {
 Microsoft::Xna::Framework::Graphics::GraphicsDevice* testingDevice=nullptr;
 }
+bool guideOverlayAttached() {return overlay.graphics!=nullptr;}
 Microsoft::Xna::Framework::Graphics::GraphicsDevice& dispatcherGraphicsDevice() {
     if(testingDevice)return *testingDevice;
     if(!Microsoft::Xna::Framework::GamerServices::GamerServicesDispatcher::getIsInitializedProperty())
