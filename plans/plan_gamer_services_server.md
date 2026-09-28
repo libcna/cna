@@ -250,3 +250,33 @@ Server 5,136 assertions; final genuine TLS C++/pure C clients and persistence su
 Server committed a13e20d. Next committed next still b2fd47a45; shared samples worktree untouched.
 Next GS-006b: authenticated LocalWithLeaderboards game epochs, transient writer scope, final write
 callback before Lobby and atomic/idempotent server commit. Ranked arbitration follows GS-007.
+
+## SAMPLE-100 native acceptance repairs — 2026-09-28
+
+The current account backend exposed two pre-existing owning-layer defects in the unchanged
+NetworkPrediction sample. Game.IsActive remained true while the real Guide sign-in overlay was
+visible, so the original IsActive guard called ShowSignIn again and threw GuideAlreadyVisibleException.
+The internal IGameOverlay now reports modal visibility; Game's getter combines it with retained
+window focus, and the real Guide overlay supplies Guide.IsVisible. Drawing-only overlays remain
+nonmodal. This follows the XNA Guide activity contract documented by the framework's author:
+[Shawn Hargreaves, trial mode and Guide activity](https://shawnhargreaves.com/blog/trial-mode-in-xna-game-studio-3-0.html).
+FNA's desktop Guide is a no-op and therefore supplies no equivalent real overlay.
+
+LocalNetworkGamer also initialized its inherited Gamer identity to “Stub Gamer” despite holding a
+real SignedInGamer. It now copies that profile's Gamertag and DisplayName; the existing wire roster
+already carried the actual tag. The old local-join event assertion was corrected to expect the
+provided profile instead of locking in the placeholder. Internal null-handle test fixtures retain
+existing behavior; actual sample accounts are not fabricated.
+
+The Debug CnaTests target builds. All 170 selected GameTest, GuideTest, LocalNetworkGamerTest,
+NetworkGamerTest, NetPacketCodecTest and NetworkSessionTest cases pass through the private GPU
+runner. New regressions cover modal activity/window-focus restoration and both identity fields.
+The initial 169/170 run failed only the obsolete “Stub Gamer” assertion. Fresh Release OPENGLES3
+sample processes sign in through genuine Guide username/password input against a separate
+verified-TLS service fixture with two persisted accounts, create/find/join and exchange tank state
+and all host options; both exit cleanly. Four separated-tank gameplay crops match exactly. No
+sample/runtime bypass, public XNA signature change, C ABI addition or sharp-runtime edit was made.
+Original Wine reaches the menu but cannot create its GFWL network session; original LAN behavior
+is not claimed as measured. The owner's accepted scope is native plus a browser limitations page,
+not browser multiplayer completion. Evidence is in sibling cna-samples SAMPLE-100 artifact
+`evidence/requal-20260928/`; all GS parent tasks and browser directory/relay/auth gaps stay open.

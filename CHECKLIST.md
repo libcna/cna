@@ -201,6 +201,16 @@ surface (`plans/plan_runtimerenderer.md`):
 | Audio: `WaveBank::GetSoundEffect` returns `nullptr` for XMA/XMA2- and WMA-encoded entries (`XwbFormat::XMA`/`XwbFormat::WMA`), logging the bank name and a human-readable format name to stderr instead of decoding | Both are proprietary codecs with no decode path anywhere in this stack -- SDL3 (CNA's only renderer) does not decode either format natively, unlike PCM/IEEE float/MS-ADPCM/IMA-ADPCM, which its own WAV loader handles (`WavWrapper.hpp`). A real, permanent capability gap, not a bug -- diagnostic quality was the only fixable part (`plans/plan_audio.md` AUD-11-010/011, 2026-07-17 deep audit). Separately confirmed (AUD-11-009): IMA-ADPCM is not a distinct WaveBank mini-format tag at all (only PCM/XMA/ADPCM/WMA exist, `FACT.h`'s `FACT_WAVEBANKMINIFORMAT_TAG_*`) -- `ADPCM` at the WaveBank level always means MS-ADPCM; IMA-ADPCM only matters for the separate XNB `SoundEffectReader` path |
 
 
+### Real Guide activity versus FNA's desktop stub — SAMPLE-100
+
+CNA's real Guide makes `Game.IsActive` false while its modal system overlay is visible, preserving
+native window focus for restoration after dismissal. FNA's desktop Guide is a no-op, so that
+additional condition is absent there. This reproduces XNA's real Guide activity contract rather
+than its stubbed desktop reimplementation; see
+[the XNA author's description](https://shawnhargreaves.com/blog/trial-mode-in-xna-game-studio-3-0.html)
+and `NEXT.md`'s 2026-09-28 acceptance repair. The optional internal overlay method adds no public
+XNA or C ABI declaration. Drawing-only overlays continue to report no modal screen.
+
 ### glTF 2.0 import — intentional divergences (`GLTF-457`)
 
 Two different kinds, kept apart because they answer different questions. **From the glTF

@@ -17,6 +17,7 @@ using Guide = Microsoft::Xna::Framework::GamerServices::Guide;
 class Overlay final : public CNA::Internal::Runtime::IGameOverlay {
 public:
     XnaGraphics::IGraphicsDeviceService* graphics=nullptr;
+    [[nodiscard]] bool isModalVisible() const override { return Guide::getIsVisibleProperty(); }
     void reset() { batch_.reset(); font_.reset(); white_.reset(); device_=nullptr; }
     void draw() override {
         if(!Guide::getIsVisibleProperty()||!graphics)return;

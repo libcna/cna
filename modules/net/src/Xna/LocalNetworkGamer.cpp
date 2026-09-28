@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/IO/MemoryStream.hpp"
 #include <algorithm>
@@ -24,9 +25,12 @@ namespace Microsoft::Xna::Framework::Net
     }
 
     LocalNetworkGamer::LocalNetworkGamer(GamerServices::SignedInGamer* gamer, NetworkSession* session)
-        : NetworkGamer(session)
+        : NetworkGamer(session, gamer != nullptr ? gamer->getGamertagProperty() : "Stub Gamer")
         , signedInGamer_(gamer)
     {
+        // A network participant keeps the signed-in profile's public identity, just as the
+        // transport already does for the remote roster. Null remains an internal test fixture.
+        if (gamer != nullptr) setDisplayNameProperty(gamer->getDisplayNameProperty());
     }
 
     LocalNetworkGamer LocalNetworkGamer::CreateInternal(GamerServices::SignedInGamer* gamer, NetworkSession* session)
