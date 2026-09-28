@@ -1,5 +1,11 @@
 # NEXT.md
 
+> **GS-007e2c2a backend authority (2026-09-28):** Relay endpoint/title/trust is copied
+> from the originating backend; later overrides/replacement cannot redirect its authority.
+> Four new cases, GamerServices 430 pass / 1 known HEADLESS skip, native/NAT relay 2/2,
+> focused private gates 3/3 and regenerated C API inventory 1/1 pass. Public create/join
+> preparation remains unfinished; integrate the newly advanced committed next first.
+
 > **GS-007e2c1 relay ENet boundary (2026-09-28):** A separate native loopback-only host
 > and allocation preflight constrain untrusted ENet fragments before UDP injection. Seven new
 > cases/10,000 mutations, Net 370/370 and final matching native/NAT relay 2/2 pass; private

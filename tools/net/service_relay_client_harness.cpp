@@ -6,6 +6,7 @@
 #include "CNA/Internal/Net/ENetLibrary.hpp"
 #include "CNA/Internal/Net/ENetHostHandle.hpp"
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
+#include "CNA/Internal/GamerServices/BackendConfiguration.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
@@ -174,7 +175,7 @@ int main(int argc,char** argv) {
             check(static_cast<bool>(std::getline(std::cin,remote)),"directory remote machine");session=directory.get(users[0],session.session);
         }else remote=session.hostMachine;
         check(std::count_if(session.members.begin(),session.members.end(),[&](const auto& member){return member.machine==remote;})==2,"authoritative two-user remote roster");
-        phase="relay-connect";Transport::RelayTransport bridge(configuration,directory.issueRelayTicket(users[0],users,session.session),native.host->address.port,{remote});
+        phase="relay-connect";Transport::RelayTransport bridge(Service::configurationForBackend(*backend),directory.issueRelayTicket(users[0],users,session.session),native.host->address.port,{remote});
         until([&]{const auto state=bridge.status().state;check(state!=Transport::RelayTransportState::Failed,"relay connect failure");return state==Transport::RelayTransportState::Ready;});
         const auto port=bridge.routePort(remote);bridge.setRoutes({remote});check(bridge.routePort(remote)==port,"stable route port");
         phase="udp-guards";

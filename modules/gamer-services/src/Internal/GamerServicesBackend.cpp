@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
+#include "CNA/Internal/GamerServices/BackendConfiguration.hpp"
 #include "CNA/GamerServices/Configuration.hpp"
 #include "CnaService/Protocol.hpp"
 #include "CredentialStore.hpp"
@@ -111,6 +112,7 @@ public:
     }
     ~OnlineBackend() override {stop();}
     bool serviceEnabled() const override {return !config_.endpoint.empty();}
+    const CNA::GamerServices::Configuration& configuration() const {return config_;}
     IServiceSessionDirectory& sessionDirectory() override {return *directory_;}
     void signIn(int slot,std::string username,std::string password) override {
         slotGuard(slot);
@@ -642,6 +644,11 @@ void withRestrictedServiceCalls(const std::function<void()>& callback) {
 std::shared_ptr<IGamerServicesBackend> backend() {
     if(serviceCallsRestricted())throw System::InvalidOperationException("Other GamerServices calls are forbidden inside a final leaderboard write handler.");
     std::lock_guard lock(registryMutex);if(!current)current=std::make_shared<OnlineBackend>(CNA::GamerServices::resolveConfiguration());return current;
+}
+CNA::GamerServices::Configuration configurationForBackend(const IGamerServicesBackend& origin) {
+    const auto* online=dynamic_cast<const OnlineBackend*>(&origin);
+    if(!online||!online->serviceEnabled())throw Unavailable("This Gamer Services backend has no configured relay authority.");
+    return online->configuration();
 }
 void setBackendForTesting(std::shared_ptr<IGamerServicesBackend> value) {std::lock_guard lock(registryMutex);current=std::move(value);}
 std::shared_ptr<IGamerServicesBackend> makeFakeBackend(std::vector<ServiceIdentity> people,std::vector<ServiceAchievement> catalog,std::vector<ServiceLeaderboardFixture> boards) {

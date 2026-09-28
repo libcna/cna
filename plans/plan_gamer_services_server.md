@@ -765,6 +765,7 @@ CNA-specific transport routing; generic proxy change remains the only runtime mo
 - [x] GS-007e2a: exact null/family guards for public Net End operations.
 - [x] GS-007e2b: caller-owned metadata/End-once and standard pending service Find.
 - [x] GS-007e2c1: private loopback ENet host and relay-only preallocation packet/fragment limits.
+- [x] GS-007e2c2a: immutable originating backend authority; fake/unconfigured relay refusal.
 - [ ] GS-007e2c2: immutable backend deployment authority and owned online preparation/rollback.
 - [ ] GS-007e2c3: consume prepared transport in standard public create/join and E2E.
 - [ ] GS-007e2c: owned online create/join preparation, including cleanup on abandonment/failure.
@@ -1319,3 +1320,29 @@ cna_service_relay_client_harness and cna_c_api_net_smoke with the standard -j2/c
 run Net headless; run server service_cna_relay and service_cna_relay_nat with the harness and
 external NAT helper variables recorded in GS-008d1. Native/NAT probes are private transport
 acceptance, not yet standard public online NetworkSession samples. Server/runtime unchanged.
+
+### GS-007e2c1 known-good integration set
+
+- CNA cea4218551fc853535040e5a899ad4859fe39278.
+- sharp-runtime 6c4a857de129cf29b5d43430bedf24157d594f12.
+- cna-gamer-services-server 0cd1d08984210a120e7b0b7cb238f6f438f4d8af.
+
+### GS-007e2c2a completed: originating backend deployment authority
+
+Add a CNA-internal configuration copy from the actual originating online backend, not a
+new environment/title/override resolution. A ready action/reader may retain an older title
+context while configuration/global backend changes; relay ticket and TLS endpoint/trust must
+come from that same context. Fake/unconfigured providers explicitly have no relay authority.
+The native probe now derives its authenticated relay authority from the signed-in backend;
+unauthenticated TLS-refusal probes still use their explicit deployment fixture. Four unit
+cases cover replacement, detached copy mutation, later override, fake/offline refusal and
+explicit numeric-loopback development choice. No XNA/C ABI or sharp-runtime addition.
+Validation: **431 GamerServices run / 430 pass / 1 known HEADLESS skip, 5.056s**, including
+**4/4** authority cases; actual native plus separate-NAT relay **2/2, 22.09s** (10.14s/11.95s);
+focused private header/export/protocol gates **3/3, 0.92s**; regenerated inventory gate
+**1/1, 11.00s**. Build succeeded with two jobs. Inventory remains 472 public headers / 8,134
+symbols; one new internal header is excluded (471 total excluded). No native C ABI change.
+Logs: CNA service-backend-authority-{build,gamer,private,coverage}.log and server
+build/service-backend-authority-relay.log. Owned preparation/cancellation/rollback remains GS-007e2c2.
+Latest committed next advanced to 092fc7f919475857fe04df247c9e13b177f0598f at this milestone; inspect
+and integrate after this verified clean commit, then rerun relevant regression gates.

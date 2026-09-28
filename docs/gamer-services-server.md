@@ -175,3 +175,9 @@ ENet MTU support). These are CNA resource policies, not measured Xbox packet-siz
 The server continues forwarding opaque datagrams; the control and CNR v1 protocols are unchanged.
 Malformed remote fragments are refused in both native and separate-NAT E2E while valid ENet
 exchange succeeds. Direct SystemLink retains its existing host and transport behavior.
+
+Authenticated relay connections use the endpoint, title and trust configuration captured by their
+originating online backend. Later environment or programmatic changes cannot redirect that
+backend's credentials/tickets. Fake and unconfigured backends cannot silently acquire a network
+authority. This is an internal deployment boundary; XNA gameplay and the C API gain no transport
+configuration methods.
