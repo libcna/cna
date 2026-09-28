@@ -452,3 +452,8 @@ be established before GamerJoined/usable NetworkSession. GS-008 relay remains re
 reliability; no direct IP/port Internet success claim. Document server-only capability until CNA
 integration, invites, relay and XNA lifecycle are actually tested. Extend canonical protocol and
 migration tests; no invented Xbox wire compatibility.
+
+
+Known-good GS-004c set: CNA d57a41f541b7ff3c3b746a915ae522e6c83a3cb8;
+server 79c8b265f4c03aa2240b0b8581fc53dd549868fe;
+sharp-runtime fc033a0e8541a81498c4a496f56a0f59475c6e34. Checkpoint repositories clean.
