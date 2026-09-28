@@ -13,6 +13,14 @@
 > 9/9 (259 WSS checks), CNA Net 328/328 and protocol/C API gates 13/13. CNA WSS/ENet bridge, public online sessions and isolated
 > Internet multiplayer evidence remain unfinished. No XNA or C ABI surface change.
 
+> **INPUT-EMU-001 keyboard device emulation (2026-09-28):** Two independent, off-by-default
+> CNAEXT opt-ins are complete: process-wide Accelerometer keyboard tilt and per-window keyboard
+> orientation. Sensor availability/events/throttling/lifetime and orientation locking/backbuffer
+> reset use their ordinary APIs. Runtime 43/43, sensors 91 passed + 4 hardware-only skips, input
+> 83/83 pass through the private runner. Real OPENGLES3/WEBGL2 102 interaction and a separate
+> Browser sensor client pass; 102 selects original scenario #4 at the owner's request. No new
+> XNA signature, native C ABI or Sharp Runtime change. See `plans/plan_keyboard_device_emulation.md`.
+
 
 > **GS-007d private session control (2026-09-28):** Typed online directory/invitation backend,
 > strict roster/response validation and explicit deterministic fake are implemented. Two genuine

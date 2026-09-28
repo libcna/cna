@@ -163,6 +163,17 @@ namespace Microsoft::Devices::Sensors
          */
         static bool getIsSupportedProperty();
 
+        /** @brief Gets the process-wide, off-by-default keyboard accelerometer mode.
+         * @return True when keyboard emulation is enabled. */
+        CNAEXT static bool getKeyboardEmulationEnabledEXT();
+        /**
+         * @brief Enables arrow-key tilt emulation, including IsSupported on desktop/browser.
+         * @param enabled True to replace the primary accelerometer with keyboard readings.
+         * @throws System::InvalidOperationException If any accelerometer is started; stop first.
+         * Readings/events use the normal sensor API and TimeBetweenUpdates, driven by Game's pump.
+         */
+        CNAEXT static void setKeyboardEmulationEnabledEXT(bool enabled);
+
         /**
          * @brief Gets the current state of the accelerometer.
          *

@@ -94,6 +94,8 @@ namespace Microsoft::Xna::Framework
         }
 
         registerServices();
+        game_->getWindowProperty().keyboardOrientationChanged_ = [this]
+        { onKeyboardOrientationChanged(); };
 
         // Deliberately NOT calling ApplyChanges() here (cna-template/missing.md): Game's own
         // device already exists with sane defaults at this point (CNA's Game always pre-owns its
@@ -249,7 +251,7 @@ namespace Microsoft::Xna::Framework
 
         if (game_ != nullptr)
         {
-            if (supportsOrientations_)
+            if (supportsOrientations())
             {
                 game_->getWindowProperty().SetSupportedOrientations(supportedOrientations_);
             }
@@ -322,7 +324,7 @@ namespace Microsoft::Xna::Framework
         {
             auto& pp = gdi.getPresentationParametersProperty();
 
-            if (supportsOrientations_)
+            if (supportsOrientations())
             {
                 game_->getWindowProperty().SetSupportedOrientations(supportedOrientations_);
             }
@@ -420,6 +422,7 @@ namespace Microsoft::Xna::Framework
             return;
         }
 
+        if (game_ != nullptr) game_->getWindowProperty().keyboardOrientationChanged_ = {};
         unregisterServices();
 
         frameContextLease_.reset();
@@ -564,6 +567,15 @@ namespace Microsoft::Xna::Framework
     void GraphicsDeviceManager::INTERNAL_CreateGraphicsDeviceInformation(GraphicsDeviceInformation& gdi)
     {
         auto& pp = gdi.getPresentationParametersProperty();
+        if (game_ != nullptr)
+        {
+            auto& window = game_->getWindowProperty();
+            if (window.keyboardOrientationEnabled_)
+                pp.setDisplayOrientationProperty(window.selectKeyboardOrientation(
+                    supportedOrientations_, preferredBackBufferWidth_, preferredBackBufferHeight_));
+            else if (window.keyboardOrientationResetPending_)
+                pp.setDisplayOrientationProperty(DisplayOrientation::Default);
+        }
 
         if (useResizedBackBuffer_)
         {
@@ -573,7 +585,7 @@ namespace Microsoft::Xna::Framework
         }
         else
         {
-            if (!supportsOrientations_)
+            if (!supportsOrientations())
             {
                 pp.setBackBufferWidthProperty(preferredBackBufferWidth_);
                 pp.setBackBufferHeightProperty(preferredBackBufferHeight_);
@@ -617,6 +629,26 @@ namespace Microsoft::Xna::Framework
 
         PreparingDeviceSettingsEventArgs args(gdi);
         OnPreparingDeviceSettings(this, args);
+    }
+
+    bool GraphicsDeviceManager::supportsOrientations() const
+    {
+        return supportsOrientations_ || (game_ != nullptr &&
+            game_->getWindowProperty().keyboardOrientationEnabled_);
+    }
+
+    void GraphicsDeviceManager::onKeyboardOrientationChanged()
+    {
+        if (disposed_) return;
+        auto& window = game_->getWindowProperty();
+        if (window.keyboardOrientationEnabled_ && deviceEventsSubscribed_ &&
+            window.selectKeyboardOrientation(supportedOrientations_, preferredBackBufferWidth_,
+                preferredBackBufferHeight_) == window.getCurrentOrientationProperty() &&
+            graphicsDevice_->getPresentationParametersProperty().getDisplayOrientationProperty() ==
+                window.getCurrentOrientationProperty()) return;
+        markPreferencesChanged();
+        // Constructor opt-ins must not create/reset the device before Game initializes it.
+        if (deviceEventsSubscribed_) ApplyChanges();
     }
 
     void GraphicsDeviceManager::markPreferencesChanged()
@@ -688,5 +720,16 @@ namespace Microsoft::Xna::Framework
         graphicsDevice_->Reset(pp, *gdi.getAdapterProperty());
 
         graphicsDevice_->UpdateViewportFromWindow();
+        if (game_ != nullptr)
+        {
+            auto& window = game_->getWindowProperty();
+            if (window.keyboardOrientationEnabled_)
+                window.setCurrentOrientationProperty(pp.getDisplayOrientationProperty());
+            else if (window.keyboardOrientationResetPending_)
+            {
+                window.keyboardOrientationResetPending_ = false;
+                window.updateFromPlatform();
+            }
+        }
     }
 }

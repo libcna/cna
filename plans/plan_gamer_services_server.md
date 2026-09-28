@@ -969,3 +969,7 @@ Logs: `cmake-build-debug/relay-client-parser-{build,net-tests}.log`. Server cba4
 Next is GS-008c2 verified libcurl WSS worker and bounded per-machine loopback UDP routes, tested with
 actual ENet in separate CNA processes before online NetworkSession is enabled. Concurrent next has
 advanced to 31a560af9 (INPUT-EMU-001); inspect/integrate committed history at this milestone.
+
+GS-008c1 integration: merged committed next 31a560af9 (INPUT-EMU-001) after parser commit
+a543dc45b. Only conflicts were concurrent top-of-file AUDIT/NEXT notices; retained both reports.
+No samples working-tree file was copied. Rebuild and Net regression follow before GS-008c2.

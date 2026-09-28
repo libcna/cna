@@ -136,6 +136,12 @@ surface (`plans/plan_runtimerenderer.md`):
 
 ## Known acceptable C++ deviations from FNA/XNA
 
+Owner-requested keyboard device emulation (INPUT-EMU-001) is an explicit off-by-default CNAEXT
+addition: `Accelerometer::{get,set}KeyboardEmulationEnabledEXT` and
+`GameWindow::{get,set}KeyboardOrientationEmulationEnabledEXT`. It is independent of physical
+sensor support and follows normal sensor/device lifecycles. See
+`docs/keyboard-device-emulation.md` and `plans/plan_keyboard_device_emulation.md`.
+
 | Deviation | Reason |
 |---|---|
 | `DirectionalLight` defaults to `Direction = Vector3::Down`, `DiffuseColor = Vector3::One`, `SpecularColor = Vector3::Zero`, and disabled, rather than FNA's zero-initialized vector backing fields | The shipped Microsoft XNA 4.0 reference assembly explicitly assigns these values in `DirectionalLight`'s constructor. The difference is observable when a sample enables a newly constructed light without setting its diffuse color, as `BounceSample_4_0` does (`SAMPLE-016`). |

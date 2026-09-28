@@ -5,6 +5,7 @@
 #include "CNA/Platform/IPlatform.hpp"
 #include "CNA/Platform/Input/IPlatformSensors.hpp"
 #include "CNA/Platform/PlatformException.hpp"
+#include "CNA/Platform/Input/KeyboardAccelerometer.hpp"
 #include "Microsoft/Devices/Sensors/Detail/NativeDiagnostic.hpp"
 
 #include <algorithm>
@@ -60,11 +61,13 @@ namespace Microsoft::Devices::Sensors::Detail
         static bool ProbeIsSupported(const CNA::Platform::SensorKind kind)
         {
             CNA::Platform::IPlatform& platform = CNA::Platform::GetCurrentPlatform();
-            CNA::Platform::IPlatformSensors* sensors = platform.GetSensors();
+            CNA::Platform::IPlatformSensors* sensors = CNA::Platform::KeyboardAccelerometer::Resolve(platform, kind);
             if (sensors == nullptr)
             {
                 return false;
             }
+            if (kind == CNA::Platform::SensorKind::Accelerometer &&
+                CNA::Platform::KeyboardAccelerometer::IsEnabled()) return sensors->IsAvailable(kind);
             try
             {
                 platform.AcquireSubsystem(CNA::Platform::PlatformSubsystem::Sensor);
@@ -100,7 +103,7 @@ namespace Microsoft::Devices::Sensors::Detail
             {
                 return true;
             }
-            CNA::Platform::IPlatformSensors* sensors = platform.GetSensors();
+            CNA::Platform::IPlatformSensors* sensors = CNA::Platform::KeyboardAccelerometer::Resolve(platform, kind);
             if (sensors == nullptr)
             {
                 lastEventWatchError_ = "selected platform has no sensor service";

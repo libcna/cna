@@ -4,6 +4,8 @@
 
 #include "CNA/Platform/IPlatformWindow.hpp"
 #include "CNA/Platform/PlatformEvent.hpp"
+#include "CNA/Platform/Input/IPlatformKeyboard.hpp"
+#include <algorithm>
 
 #include <utility>
 
@@ -108,6 +110,58 @@ namespace Microsoft::Xna::Framework
     DisplayOrientation GameWindow::getCurrentOrientationProperty() const
     {
         return currentOrientation_;
+    }
+
+    bool GameWindow::getKeyboardOrientationEmulationEnabledEXT() const
+    { return keyboardOrientationEnabled_; }
+
+    void GameWindow::setKeyboardOrientationEmulationEnabledEXT(bool enabled)
+    {
+        if (keyboardOrientationEnabled_ == enabled) return;
+        keyboardOrientationEnabled_ = enabled;
+        keyboardOrientationResetPending_ = !enabled;
+        requestedKeyboardOrientation_ = DisplayOrientation::Default;
+        previousOrientationKeys_ = 0;
+        if (keyboardOrientationChanged_) keyboardOrientationChanged_();
+    }
+
+    DisplayOrientation GameWindow::selectKeyboardOrientation(
+        DisplayOrientation supported, int preferredWidth, int preferredHeight) const
+    {
+        if (supported == DisplayOrientation::Default)
+            supported = preferredWidth < preferredHeight ? DisplayOrientation::Portrait
+                : DisplayOrientation::LandscapeLeft | DisplayOrientation::LandscapeRight;
+        if (hasFlag(supported, requestedKeyboardOrientation_)) return requestedKeyboardOrientation_;
+        if (hasFlag(supported, currentOrientation_)) return currentOrientation_;
+        const auto preferred = preferredWidth < preferredHeight ? DisplayOrientation::Portrait
+                                                               : DisplayOrientation::LandscapeLeft;
+        if (hasFlag(supported, preferred)) return preferred;
+        for (auto orientation : {DisplayOrientation::Portrait, DisplayOrientation::LandscapeLeft,
+                                 DisplayOrientation::LandscapeRight})
+            if (hasFlag(supported, orientation)) return orientation;
+        return DisplayOrientation::Default;
+    }
+
+    void GameWindow::updateKeyboardOrientation(const CNA::Platform::KeyboardSnapshot& keyboard, bool focused)
+    {
+        if (!keyboardOrientationEnabled_) return;
+        unsigned keys = 0;
+        if (focused)
+            for (auto key : keyboard.pressedKeys)
+            {
+                if (key == CNA::Platform::KeyCode::Up) keys |= 1;
+                if (key == CNA::Platform::KeyCode::Left) keys |= 2;
+                if (key == CNA::Platform::KeyCode::Right) keys |= 4;
+            }
+        const auto previous = previousOrientationKeys_;
+        previousOrientationKeys_ = keys;
+        // Ignore ambiguous simultaneous requests and key repeats. Orientation persists on release.
+        if (keys == 0 || keys == previous || (keys & (keys - 1)) != 0) return;
+        const auto requested = keys == 1 ? DisplayOrientation::Portrait
+            : keys == 2 ? DisplayOrientation::LandscapeLeft : DisplayOrientation::LandscapeRight;
+        if (requestedKeyboardOrientation_ == requested) return;
+        requestedKeyboardOrientation_ = requested;
+        if (keyboardOrientationChanged_) keyboardOrientationChanged_();
     }
 
     SharpRuntime::IntPtr GameWindow::getHandleProperty() const
@@ -270,7 +324,7 @@ namespace Microsoft::Xna::Framework
             window_->SetSupportedOrientations(toPlatformOrientations(orientations));
         }
 
-        if (!orientationIsSupported(currentOrientation_))
+        if (!keyboardOrientationEnabled_ && !orientationIsSupported(currentOrientation_))
         {
             if (orientationIsSupported(DisplayOrientation::Portrait))
             {
@@ -368,7 +422,7 @@ namespace Microsoft::Xna::Framework
         }
 
         const DisplayOrientation newOrientation = orientationFromBounds(orientationBounds);
-        if (orientationIsSupported(newOrientation))
+        if (!keyboardOrientationEnabled_ && orientationIsSupported(newOrientation))
         {
             currentOrientation_ = newOrientation;
         }

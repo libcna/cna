@@ -4,8 +4,10 @@
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/IPlatform.hpp"
 #include "CNA/Platform/PlatformException.hpp"
+#include "CNA/Platform/Input/KeyboardAccelerometer.hpp"
 
 #include <limits>
+#include <algorithm>
 
 namespace CNA::Input
 {
@@ -107,6 +109,15 @@ namespace CNA::Input
                          Microsoft::Xna::Framework::Vector3& out)
         {
             CNA::Platform::IPlatform& platform = CNA::Platform::GetCurrentPlatform();
+            if (kind == CNA::Platform::SensorKind::Accelerometer &&
+                CNA::Platform::KeyboardAccelerometer::IsEnabled())
+            {
+                auto session = CNA::Platform::KeyboardAccelerometer::GetSensors().OpenSensor(kind, {});
+                CNA::Platform::SensorReading reading;
+                if (!session || !session->TryGetReading(reading)) return false;
+                out = Microsoft::Xna::Framework::Vector3(reading.x, reading.y, reading.z);
+                return true;
+            }
             CNA::Platform::IPlatformSensors* sensors = platform.GetSensors();
             if (sensors == nullptr)
             {
@@ -149,19 +160,23 @@ namespace CNA::Input
     std::vector<SensorInfoEXT> Sensors::GetSensorsEXT()
     {
         CNA::Platform::IPlatform& platform = CNA::Platform::GetCurrentPlatform();
+        std::vector<CNA::Platform::SensorInfo> available;
         CNA::Platform::IPlatformSensors* sensors = platform.GetSensors();
-        if (sensors == nullptr)
+        if (sensors != nullptr)
         {
-            return {};
+            ScopedSensorSubsystem subsystem(platform);
+            if (subsystem.IsAcquired()) available = sensors->GetSensors();
         }
-        ScopedSensorSubsystem subsystem(platform);
-        if (!subsystem.IsAcquired())
+        if (CNA::Platform::KeyboardAccelerometer::IsEnabled())
         {
-            return {};
+            // Emulation replaces the primary kind; retain all other real sensors.
+            available.erase(std::remove_if(available.begin(), available.end(), [](const auto& sensor)
+            { return sensor.kind == CNA::Platform::SensorKind::Accelerometer; }), available.end());
+            const auto emulated = CNA::Platform::KeyboardAccelerometer::GetSensors().GetSensors();
+            available.insert(available.end(), emulated.begin(), emulated.end());
         }
-
         std::vector<SensorInfoEXT> result;
-        for (const CNA::Platform::SensorInfo& sensor : sensors->GetSensors())
+        for (const CNA::Platform::SensorInfo& sensor : available)
         {
             if (sensor.id <= std::numeric_limits<std::uint32_t>::max())
             {
