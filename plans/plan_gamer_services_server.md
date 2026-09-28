@@ -1566,3 +1566,32 @@ unchanged; Emscripten explicitly refuses account/relay transport, creates no fak
 uses owner-pumped unavailable work and copies host JSON headers without leaking host libc include
 roots into the cross build. Browser service functionality is not newly implemented. Integrate only
 this committed history after the current pump checkpoint; never copy samples-agent local changes.
+
+### GS-008c3a known-good committed integration set
+
+- CNA a1a811a7296c861697faf57c550309005fb7033f.
+- sharp-runtime 6c4a857de129cf29b5d43430bedf24157d594f12.
+- cna-gamer-services-server 0b6f2fc17fe184da65dd54f0568ef6fbdd50b8d9.
+
+### GS-001g completed: integrate committed browser portability
+
+Merging committed next 92d23c84d only into the dedicated feature worktree. Conflicts are confined
+to concurrent AUDIT/NEXT status insertions; retain both samples and service evidence. Native
+TLS/account/relay implementation is unchanged by the portability guards. The new preparation
+resource fixture explicitly requires native loopback ENet: exclude those eighteen native-only
+cases under __EMSCRIPTEN__, whose loopback host correctly refuses construction. Existing
+browser-only unsupported-transport diagnostics remain the samples agent's five cases. This
+agent revalidated native service/runtime/net and matching server E2E; no new browser service
+or real original Xbox-host sample acceptance is claimed. No samples worktree changes are copied.
+
+Validation: affected runtime/service/net/native harness/C API targets build successfully. Private
+native GamerServices **434 run / 433 pass / one known HEADLESS screensaver skip, 2.241s**;
+Net **398/398, 14.737s**; Runtime **192 run / 190 pass / two known HEADLESS skips, 2.447s**.
+The matching full server corpus is **11/11, 187.55s**, with all native C/C++ harnesses and the
+rootless isolated-NAT relay case configured (no skip substituted for those E2E cases). Logs:
+cmake-build-debug/service-next-browser-{build,gamer,net,runtime,private}.log and server
+build/service-next-browser-e2e.log. Sharp-runtime remains 6c4a857de129cf29b5d43430bedf24157d594f12;
+server remains 0b6f2fc17fe184da65dd54f0568ef6fbdd50b8d9. Current next integrated here is
+92d23c84d12725c97872e3eaf249f789ff7579b6. Public online lifecycle is still unfinished.
+
+Private C API/header/export/protocol gates for GS-001g: **5/5, 5.19s**.

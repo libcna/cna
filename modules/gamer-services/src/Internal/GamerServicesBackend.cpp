@@ -10,7 +10,9 @@
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
+#ifndef __EMSCRIPTEN__
 #include <curl/curl.h>
+#endif
 #include <condition_variable>
 #include <deque>
 #include <map>
@@ -31,6 +33,12 @@ using CnaService::Json;
 namespace {
 using Unavailable=Microsoft::Xna::Framework::GamerServices::GamerServicesNotAvailableException;
 using ServiceError=ServiceOperationError;
+// A single-threaded browser pumps queued failures at the ordinary Update boundary.
+#ifdef __EMSCRIPTEN__
+constexpr bool backgroundServiceWork = false;
+#else
+constexpr bool backgroundServiceWork = true;
+#endif
 long long unixTime(){return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();}
 void slotGuard(int slot) {if(slot<0||slot>3)throw System::ArgumentOutOfRangeException("slot");}
 ServiceIdentity identity(const Json& j) {
@@ -100,7 +108,7 @@ private:
 };
 class OnlineBackend final : public QueuedBackend {
 public:
-    explicit OnlineBackend(CNA::GamerServices::Configuration config):QueuedBackend(true),config_(std::move(config)),credentials_(config_) {
+    explicit OnlineBackend(CNA::GamerServices::Configuration config):QueuedBackend(backgroundServiceWork),config_(std::move(config)),credentials_(config_) {
         directory_=makeSessionDirectoryClient([this](const std::string& op,Json args,const std::string& actor,const std::vector<std::string>& users) {
             return request(op,std::move(args),tokenFor(actor),users);
         });
@@ -353,6 +361,10 @@ private:
         try{text.append(data,bytes);}catch(...){return 0;}return bytes;
     }
     Json exchange(const std::string& op,Json args,const std::string& token) {
+#ifdef __EMSCRIPTEN__
+        (void)op; (void)args; (void)token;
+        throw Unavailable("CNA browser account transport is not implemented.");
+#else
         static std::once_flag initialized;
         std::call_once(initialized,[]{if(curl_global_init(CURL_GLOBAL_DEFAULT)!=CURLE_OK)throw Unavailable("Secure transport initialization failed.");});
         if(!(curl_version_info(CURLVERSION_NOW)->features&CURL_VERSION_SSL))throw Unavailable("libcurl has no TLS support.");
@@ -386,6 +398,7 @@ private:
         const auto error=CnaService::stringField(response,"error",64);
         if(error!="OK")throw ServiceError(error);
         return response["result"];
+#endif
     }
     Json request(const std::string& op,Json args,const std::string& token,const std::vector<std::string>& participants={}) {
         std::lock_guard lock(transportMutex_);

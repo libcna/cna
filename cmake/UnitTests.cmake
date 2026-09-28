@@ -424,7 +424,11 @@ if(CNA_BUILD_TESTS)
     # The phone service adapts Game's lifecycle events, so its tests construct a Game.
     set(CNA_TEST_GROUP_DEPENDENCY_phone cna_phone cna_runtime)
     set(CNA_TEST_GROUP_DEPENDENCY_media cna_media)
-    set(CNA_TEST_GROUP_DEPENDENCY_net CNA_Net nlohmann_json::nlohmann_json)
+    if(EMSCRIPTEN)
+        set(CNA_TEST_GROUP_DEPENDENCY_net CNA_Net CNA_JsonHeaders)
+    else()
+        set(CNA_TEST_GROUP_DEPENDENCY_net CNA_Net nlohmann_json::nlohmann_json)
+    endif()
     # cna_input as well as cna_platform: Sdl3KeyCodeRoundTripTests holds the platform's key
     # mapping to the input module's own, so the focused target does not link without it.
     set(CNA_TEST_GROUP_DEPENDENCY_platform cna_platform cna_input)
@@ -516,9 +520,9 @@ if(CNA_BUILD_TESTS)
             ${_cna_test_group_dependencies})
         if(_cna_test_group STREQUAL "net")
             target_include_directories(${_cna_test_object_target} PRIVATE
-                ${CMAKE_SOURCE_DIR}/modules/gamer-services/src/Internal/Protocol)
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/gamer-services/src/Internal/Protocol)
             target_compile_definitions(${_cna_test_object_target} PRIVATE
-                CNA_RELAY_PROTOCOL_VECTORS="${CMAKE_SOURCE_DIR}/modules/net/tests/fixtures/relay-protocol-v1.json")
+                CNA_RELAY_PROTOCOL_VECTORS="${CMAKE_CURRENT_SOURCE_DIR}/modules/net/tests/fixtures/relay-protocol-v1.json")
         endif()
         if(CNA_ENABLE_PCH AND _cna_test_group STREQUAL "content")
             # COMP-003 deliberately pilots only stable standard-library and GoogleTest headers.

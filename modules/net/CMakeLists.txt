@@ -19,9 +19,11 @@ add_subdirectory(examples)
 target_include_directories(CNA_Net PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../gamer-services/src/Internal/Protocol)
 
 # Private welcome decoding uses the same bounded JSON parser as the service control backend.
-find_package(nlohmann_json 3.11 REQUIRED)
-target_link_libraries(CNA_Net PRIVATE nlohmann_json::nlohmann_json)
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/HeaderOnlyJson.cmake")
+cna_link_json_headers(CNA_Net)
 
 # Mature secure WebSocket primitives are transport-only; XNA/control policy stays in CNA.
-find_package(CURL 7.86 REQUIRED)
-target_link_libraries(CNA_Net PRIVATE CURL::libcurl)
+if(NOT EMSCRIPTEN)
+    find_package(CURL 7.86 REQUIRED)
+    target_link_libraries(CNA_Net PRIVATE CURL::libcurl)
+endif()

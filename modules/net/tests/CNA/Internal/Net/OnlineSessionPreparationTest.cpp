@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#ifndef __EMSCRIPTEN__
 #include <gtest/gtest.h>
 #include "../../../../src/Internal/OnlineSessionPreparation.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
@@ -181,3 +182,5 @@ TEST(OnlineSessionPreparationTest, ThrowingOwnerCallbackDoesNotLosePreparedOwner
     auto events=f.backend->pump();ASSERT_EQ(1U,events.size());EXPECT_THROW(events[0].completion(),std::runtime_error);
     EXPECT_TRUE(pending.complete());auto lease=pending.take();EXPECT_TRUE(lease->release());EXPECT_EQ(0U,f.listings());
 }
+
+#endif
