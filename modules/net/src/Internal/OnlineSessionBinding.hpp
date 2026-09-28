@@ -58,6 +58,8 @@ public:
     std::shared_ptr<GamerServices::IGamerServicesBackend> origin() const {return engine_?engine_->origin():nullptr;}
     /** @brief Gets the opaque directory session. @return Session identifier. */
     const std::string& session() const {return snapshot_.session;}
+    /** @brief Gets the latest directory revision this machine observed. @return Revision. */
+    int revision() const {return snapshot_.revision;}
 private:
     using NetworkGamer=Microsoft::Xna::Framework::Net::NetworkGamer;
     void project(const ServiceENetObservation& ready);

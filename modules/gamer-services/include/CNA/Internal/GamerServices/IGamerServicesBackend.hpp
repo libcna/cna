@@ -89,6 +89,8 @@ struct ServiceLeaderboardFixture {
     int mode=0;
     /** @brief Sort direction. */
     bool ascending=false;
+    /** @brief Whether rows are written only through Ranked arbitration. */
+    bool arbitrated=false;
     /** @brief Supplied test data. */
     std::vector<ServiceLeaderboardEntry> entries;
 };
@@ -104,6 +106,13 @@ struct ServiceLeaderboardWrite {
     std::map<std::string,ServiceLeaderboardColumn> columns;
     /** @brief Compares final rows. @param other Other row. @return Equality. */
     bool operator==(const ServiceLeaderboardWrite& other) const = default;
+};
+/** @brief Ranked round a machine's arbitrated rows belong to. */
+struct ServiceArbitration {
+    /** @brief Directory session. */
+    std::string session;
+    /** @brief A directory revision observed while playing the round. */
+    int revision=0;
 };
 /** @brief Work completion applied at the dispatcher's controlled update boundary. */
 struct BackendEvent {
@@ -169,7 +178,7 @@ public:
     /** @brief Commits final rows atomically. @param gameplay Scope. @param owner Host identity.
      * @param rows Final writes. */
     virtual void commitLeaderboardGame(const std::string& gameplay,const std::string& owner,
-        const std::vector<ServiceLeaderboardWrite>& rows) = 0;
+        const std::vector<ServiceLeaderboardWrite>& rows,const std::optional<ServiceArbitration>& arbitration={}) = 0;
 };
 /** @brief Gets lazily configured backend. @return Shared backend lifetime. */
 std::shared_ptr<IGamerServicesBackend> backend();

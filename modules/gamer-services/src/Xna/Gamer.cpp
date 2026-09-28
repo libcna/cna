@@ -22,6 +22,40 @@ namespace Microsoft::Xna::Framework::GamerServices
     {
     }
 
+    Gamer::Gamer(const Gamer& other)
+        : serviceUserId_(other.serviceUserId_), displayName_(other.displayName_), gamertag_(other.gamertag_)
+        , isDisposed_(other.isDisposed_), tag_(other.tag_), leaderboardWriter_(this)
+    {
+    }
+
+    Gamer::Gamer(Gamer&& other) noexcept
+        : serviceUserId_(std::move(other.serviceUserId_)), displayName_(std::move(other.displayName_))
+        , gamertag_(std::move(other.gamertag_)), isDisposed_(other.isDisposed_), tag_(std::move(other.tag_))
+        , leaderboardWriter_(this)
+    {
+    }
+
+    Gamer& Gamer::operator=(const Gamer& other)
+    {
+        if (this != &other)
+        {
+            serviceUserId_ = other.serviceUserId_; displayName_ = other.displayName_; gamertag_ = other.gamertag_;
+            isDisposed_ = other.isDisposed_; tag_ = other.tag_; leaderboardWriter_ = LeaderboardWriter(this);
+        }
+        return *this;
+    }
+
+    Gamer& Gamer::operator=(Gamer&& other) noexcept
+    {
+        if (this != &other)
+        {
+            serviceUserId_ = std::move(other.serviceUserId_); displayName_ = std::move(other.displayName_);
+            gamertag_ = std::move(other.gamertag_); isDisposed_ = other.isDisposed_; tag_ = std::move(other.tag_);
+            leaderboardWriter_ = LeaderboardWriter(this);
+        }
+        return *this;
+    }
+
     const std::string& Gamer::getDisplayNameProperty() const  { return displayName_; }
     void Gamer::setDisplayNameProperty(const std::string& v)  { displayName_ = v; }
     const std::string& Gamer::getGamertagProperty() const     { return gamertag_; }

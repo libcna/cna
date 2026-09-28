@@ -88,3 +88,79 @@ TEST_F(OnlineLeaderboardTest, LosingTheHostWhilePlayingOffersLeavingWritesBefore
     EXPECT_EQ(NetworkSessionState::Ended,session->getSessionStateProperty());
 }
 #endif
+#ifndef __EMSCRIPTEN__
+namespace {
+LeaderboardIdentity kills(){LeaderboardIdentity identity;identity.setKeyProperty("Kills");identity.setGameModeProperty(0);return identity;}
+void writeKills(Microsoft::Xna::Framework::Net::NetworkGamer* gamer,long long value) {
+    gamer->getLeaderboardWriterProperty().GetLeaderboard(kills())->setRatingProperty(value);
+}
+// The other machine's Ranked report, as its own CNA client would commit it.
+void report(Service::IGamerServicesBackend& service,const std::string& session,int revision,
+    const std::vector<std::pair<std::string,long long>>& rows) {
+    const auto gameplay=service.beginLeaderboardGame({"b","d"});std::vector<Service::ServiceLeaderboardWrite> writes;
+    for(const auto& [user,value]:rows){Service::ServiceLeaderboardWrite row;row.userId=user;row.key="Kills";row.rating=value;writes.push_back(row);}
+    service.commitLeaderboardGame(gameplay,"b",writes,Service::ServiceArbitration{session,revision});
+}
+}
+
+TEST_F(OnlineLeaderboardTest, RankedMachinesReportArbitratedAndTrueSkillForEveryGamerAndAgreementCommits) {
+    kind=Service::ServiceSessionKind::Ranked;
+    session=NetworkSession::Create(NetworkSessionType::Ranked,std::vector<SignedInGamer*>{gamer(0),gamer(2)},6,0,{});
+    privatePeer(true,sessionId("b"));until([&]{return peer->ready()&&session->getAllGamersProperty().getCountProperty()==4;});
+    std::vector<std::string> arbitrated,trueSkill,unarbitrated;
+    session->WriteArbitratedLeaderboard+=[&](auto*,const WriteLeaderboardsEventArgs& args){arbitrated.push_back(args.getGamerProperty()->getGamertagProperty());};
+    session->WriteTrueSkill+=[&](auto*,const WriteLeaderboardsEventArgs& args){trueSkill.push_back(args.getGamerProperty()->getGamertagProperty());};
+    session->WriteUnarbitratedLeaderboard+=[&](auto*,const WriteLeaderboardsEventArgs& args){unarbitrated.push_back(args.getGamerProperty()->getGamertagProperty());};
+    session->StartGame();session->Update();
+    until([&]{return peer->snapshot().state==Service::ServiceSessionState::Playing;});
+    const auto playing=peer->snapshot().revision;
+    // Every machine writes arbitrated statistics for every gamer, remote ones included.
+    const auto& all=session->getAllGamersProperty();
+    std::map<std::string,long long> values{{"Alice",4},{"Charlie",2},{"Bob",7},{"Dana",8}};
+    for(auto* gamer:all)writeKills(gamer,values.at(gamer->getGamertagProperty()));
+    session->EndGame();session->Update();
+    EXPECT_EQ((std::vector<std::string>{"Alice","Charlie"}),unarbitrated);
+    EXPECT_EQ(4u,arbitrated.size());EXPECT_EQ(4u,trueSkill.size());
+    // Nothing is committed until the other machine reports; its disagreement on Dana discards her row.
+    EXPECT_EQ(-1,rating("Alice","Kills"));
+    report(*service,peer->snapshot().session,playing,{{"a",4},{"c",2},{"b",7},{"d",9}});
+    EXPECT_EQ(4,rating("Alice","Kills"));EXPECT_EQ(2,rating("Charlie","Kills"));EXPECT_EQ(7,rating("Bob","Kills"));
+    EXPECT_EQ(-1,rating("Dana","Kills"));
+}
+
+TEST_F(OnlineLeaderboardTest, RankedDepartureRaisesLeavingEventsAndTheDepartedGamerStaysInTheReport) {
+    kind=Service::ServiceSessionKind::Ranked;
+    session=NetworkSession::Create(NetworkSessionType::Ranked,std::vector<SignedInGamer*>{gamer(0),gamer(2)},6,0,{});
+    privatePeer(true,sessionId("b"));until([&]{return peer->ready()&&session->getAllGamersProperty().getCountProperty()==4;});
+    std::vector<std::pair<std::string,bool>> leaving;
+    session->WriteArbitratedLeaderboard+=[&](auto*,const WriteLeaderboardsEventArgs& args) {
+        leaving.emplace_back(args.getGamerProperty()->getGamertagProperty(),args.getIsLeavingProperty());
+        if(args.getIsLeavingProperty())writeKills(args.getGamerProperty(),0);
+    };
+    session->StartGame();session->Update();
+    until([&]{return peer->snapshot().state==Service::ServiceSessionState::Playing;});
+    const auto id=peer->snapshot().session;const auto playing=peer->snapshot().revision;
+    for(auto* gamer:session->getLocalGamersProperty())writeKills(gamer,5);
+    // The departing machine commits its own final report before leaving.
+    report(*service,id,playing,{{"b",0},{"d",0}});
+    peer.reset();until([&]{return session->getRemoteGamersProperty().getCountProperty()==0;});
+    ASSERT_EQ(2u,leaving.size());EXPECT_TRUE(leaving[0].second&&leaving[1].second);
+    leaving.clear();session->EndGame();session->Update();
+    EXPECT_EQ(2u,leaving.size());
+    EXPECT_EQ(5,rating("Alice","Kills"));EXPECT_EQ(0,rating("Bob","Kills"));EXPECT_EQ(0,rating("Dana","Kills"));
+}
+
+TEST_F(OnlineLeaderboardTest, OutsideRankedOnlyTheHostReportsTrueSkillAndRemoteRowsAreNotSubmitted) {
+    session=NetworkSession::Create(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(0),gamer(2)},6,0,{});
+    privatePeer(true,sessionId("b"));until([&]{return peer->ready()&&session->getAllGamersProperty().getCountProperty()==4;});
+    int arbitratedEvents=0;std::vector<std::string> trueSkill;
+    session->WriteArbitratedLeaderboard+=[&](auto*,const WriteLeaderboardsEventArgs&){++arbitratedEvents;};
+    session->WriteTrueSkill+=[&](auto*,const WriteLeaderboardsEventArgs& args) {
+        trueSkill.push_back(args.getGamerProperty()->getGamertagProperty());
+        args.getGamerProperty()->getLeaderboardWriterProperty().GetLeaderboard(board())->setRatingProperty(77);
+    };
+    session->StartGame();session->Update();session->EndGame();session->Update();
+    EXPECT_EQ(0,arbitratedEvents);EXPECT_EQ(4u,trueSkill.size());
+    EXPECT_EQ(77,rating("Alice"));EXPECT_EQ(77,rating("Charlie"));EXPECT_EQ(-1,rating("Bob"));
+}
+#endif

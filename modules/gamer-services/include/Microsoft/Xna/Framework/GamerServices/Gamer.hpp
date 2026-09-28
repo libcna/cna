@@ -188,6 +188,36 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     protected:
         /**
+         * @brief Copies a gamer's identity; the copy gets its own empty leaderboard writer.
+         *
+         * @param other Gamer to copy.
+         */
+        Gamer(const Gamer& other);
+
+        /**
+         * @brief Moves a gamer's identity; the new object gets its own empty leaderboard writer.
+         *
+         * @param other Gamer to move from.
+         */
+        Gamer(Gamer&& other) noexcept;
+
+        /**
+         * @brief Copies a gamer's identity, rebinding a fresh leaderboard writer to this object.
+         *
+         * @param other Gamer to copy.
+         * @return This gamer.
+         */
+        Gamer& operator=(const Gamer& other);
+
+        /**
+         * @brief Moves a gamer's identity, rebinding a fresh leaderboard writer to this object.
+         *
+         * @param other Gamer to move from.
+         * @return This gamer.
+         */
+        Gamer& operator=(Gamer&& other) noexcept;
+
+        /**
          * @brief Constructs a Gamer with the given gamertag and display name.
          *
          * Task 10.1: matches FNA's own `DisplayName = displayName ?? gamertag` exactly - the
@@ -267,15 +297,9 @@ namespace Microsoft::Xna::Framework::GamerServices
         std::string gamertag_;
         bool isDisposed_{false};
         std::any tag_;
-        // Task 4.3 (plans/plan_net.md Phase 4): LeaderboardWriter captures `this` at construction time
-        // (see Gamer.cpp's constructor) and neither Gamer nor LeaderboardWriter declares a custom
-        // copy/move constructor, so that captured pointer is copied verbatim - not re-pointed - by
-        // any copy or move of a constructed Gamer/SignedInGamer, including an ordinary
-        // std::vector<SignedInGamer>::push_back(prvalue). Once a Gamer-derived object's
-        // LeaderboardWriter may be used, that object's address must never change again; prefer
-        // heap allocation (see cna_demo_leaderboard_viewer's own syntheticGamers_ for the pattern
-        // that keeps a batch of them at stable addresses) over by-value containers that can move
-        // or reallocate their elements.
+        // LeaderboardWriter records its owning gamer. Copying or moving a Gamer therefore gives the
+        // new object a fresh, empty writer bound to itself (see the copy/move members below)
+        // instead of a copy that still points at the source object.
         LeaderboardWriter leaderboardWriter_;
 
     private:

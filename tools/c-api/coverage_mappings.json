@@ -12781,16 +12781,18 @@
         "constructor",
         "field"
       ],
-      "mapping": "no C form. A protected member is mappable only when this ABI supplies a derived class to hang it on, and it supplies none for `Gamer`: the canonical constructor is how a *subclass* names itself, and the five protected fields are the storage behind public properties that are already mapped",
+      "mapping": "no C form. A protected member is mappable only when this ABI supplies a derived class to hang it on, and it supplies none for `Gamer`: the canonical constructor is how a *subclass* names itself, the protected copy/move constructors only let a subclass copy rebind its own leaderboard writer, and the five protected fields are the storage behind public properties that are already mapped",
       "tests": "not applicable; there is no C-derived gamer to observe them from",
       "status": "not-applicable",
       "task": "CBIND-037G4",
       "approved_symbols": [
+        "CPP-045F040B75C7",
         "CPP-0B387A7469B0",
         "CPP-1BF07AC88FF6",
         "CPP-48CC4601EE21",
         "CPP-4F2E06B77B41",
         "CPP-57726FFBDC17",
+        "CPP-A5E6D75F54E2",
         "CPP-B250875F7083"
       ]
     },
@@ -16795,6 +16797,21 @@
       "task": "CBIND-GS-007e3",
       "approved_symbols": [
         "CPP-7800937A6436"
+      ]
+    },
+    {
+      "id": "gamer-protected-copy-assignment",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::Gamer::operator=$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "no C form. Gamer's protected copy/move assignment exists only so a subclass assignment gives the target a fresh leaderboard writer bound to itself; C holds gamers by handle and never assigns gamer values.",
+      "tests": "not applicable; C has no gamer value assignment. The rebinding is covered by the online leaderboard tests that construct remote gamers.",
+      "status": "not-applicable",
+      "task": "CBIND-GS-006e",
+      "approved_symbols": [
+        "CPP-18F50ACE778B",
+        "CPP-66C87887F64D"
       ]
     }
   ]

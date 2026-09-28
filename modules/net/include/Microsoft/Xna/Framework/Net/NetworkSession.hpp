@@ -985,6 +985,10 @@ namespace Microsoft::Xna::Framework::Net
         std::shared_ptr<CNA::Internal::GamerServices::IGamerServicesBackend> LeaderboardService() const;
         void ReleaseSessionResources();
         std::string leaderboardGameplay_,leaderboardOwner_;
+        // Remote gamers who left during the current Ranked round; their reports still count.
+        std::vector<NetworkGamer*> roundDeparted_;
+        void OpenLeaderboardWriters();
+        void CloseLeaderboardWriters();
         bool leaderboardTransitionPending_=false;
 
         static std::vector<GamerServices::SignedInGamer*> ServiceLocalGamers(

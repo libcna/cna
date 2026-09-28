@@ -13,6 +13,9 @@ class GamerAccess {
 public:
     /** @brief Gets the authenticated service account. @param gamer Gamer. @return Account ID, empty offline. */
     static const std::string& userId(const Microsoft::Xna::Framework::GamerServices::Gamer& gamer){return gamer.serviceUserId_;}
+    /** @brief Binds a remote session gamer to its authenticated service account.
+     * @param gamer Gamer. @param userId Account ID from directory authority. */
+    static void setUserId(Microsoft::Xna::Framework::GamerServices::Gamer& gamer,std::string userId){gamer.serviceUserId_=std::move(userId);}
 };
 /** @brief The online session this process currently belongs to, registered by Net for Guide invitations. */
 struct ActiveOnlineSession {

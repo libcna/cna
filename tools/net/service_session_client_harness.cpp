@@ -196,6 +196,14 @@ int main(int argc,char** argv) {
             check(!args.getIsLeavingProperty()&&args.getGamerProperty()->getIsLocalProperty(),"final local write at EndGame");++finals;
             args.getGamerProperty()->getLeaderboardWriterProperty().GetLeaderboard(board)->getColumnsProperty().SetValue("Rounds",3);
         };
+        // Ranked: every machine reports the arbitrated board for every gamer; the service keeps rows
+        // both machines agree on.
+        LeaderboardIdentity kills;kills.setKeyProperty("Kills");kills.setGameModeProperty(0);int arbitrated=0,skill=0;
+        session->WriteArbitratedLeaderboard+=[&](auto*,const WriteLeaderboardsEventArgs& args) {
+            ++arbitrated;auto* gamer=args.getGamerProperty();
+            gamer->getLeaderboardWriterProperty().GetLeaderboard(kills)->setRatingProperty(scores.at(gamer->getGamertagProperty())/100);
+        };
+        session->WriteTrueSkill+=[&](auto*,const WriteLeaderboardsEventArgs&){++skill;};
         if(host) {
             session->getSessionPropertiesProperty()[1]=11;
             if(type==NetworkSessionType::PlayerMatch)session->setAllowJoinInProgressProperty(true);
@@ -213,6 +221,8 @@ int main(int argc,char** argv) {
         if(host)session->EndGame();
         until([&]{return ended==1&&session->getSessionStateProperty()==NetworkSessionState::Lobby;});
         check(finals==2,"final write handler for both local gamers");
+        check(arbitrated==(type==NetworkSessionType::Ranked?4:0),"arbitrated reports for every gamer only in Ranked");
+        check(skill==(type==NetworkSessionType::Ranked?4:(host?4:0)),"TrueSkill from every Ranked machine, else the host");
         std::cout<<"session-lobby\n"<<std::flush;command();
         // Both machines have committed: the service board holds all four gamers' results.
         phase="leaderboard";{
@@ -224,6 +234,13 @@ int main(int argc,char** argv) {
                 check(entry.getColumnsProperty().GetValueInt32("Rounds")==3,"committed final-handler column");found.insert(tag);
             }
             check(found.size()==4,"all four gamers ranked");
+            if(type==NetworkSessionType::Ranked) {
+                // Resolved once both machines reported: every row agreed.
+                const auto arbitratedReader=LeaderboardReader::Read(kills,0,10);const auto rows=arbitratedReader.getEntriesProperty();
+                check(rows.getCountProperty()==4,"arbitrated rows for all four gamers");
+                for(int index=0;index<rows.getCountProperty();++index)
+                    check(rows[index].getRatingProperty()==scores.at(rows[index].getGamerProperty()->getGamertagProperty())/100,"arbitrated value");
+            }
         }
 
         phase="departure";

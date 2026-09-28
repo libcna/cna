@@ -2064,3 +2064,31 @@ Guide.DelayNotifications is still a no-op (would defer the invitation prompt).
 Next: GS-006d online leaderboard lifecycle (per-machine unarbitrated epochs at Playing/Lobby,
 leave/dispose), then Ranked arbitration design, GS-008d2 relay reconnect, remaining Guide,
 avatars, samples, final audit.
+
+### GS-006d/GS-006e complete: online leaderboard lifecycle and Ranked arbitration
+
+Evidence: Microsoft Learn LeaderboardWriter/WriteTrueSkill pages (licensed XDK titles only;
+Indie titles got NotSupportedException): writes flush at host EndGame; nonarbitrated rows are
+written by their own machine; Ranked machines write arbitrated statistics and TrueSkill for all
+gamers, otherwise only the host reports TrueSkill; leaving Ranked players get "bad statistics".
+- [x] GS-006d: per-machine local epochs opened at Playing on every online machine, committed at
+  Lobby after WriteUnarbitratedLeaderboard; host publishes Playing/Lobby only after its own
+  transition (failed EndGame stays retryable); client commit failure abandons; leave/Dispose/
+  session loss offer IsLeaving writes. State is applied before GameStarted/GameEnded/SessionEnded
+  (reference ProcessStateChanged order).
+- [x] GS-006e: server schema 10 arbitration rounds; commit arbitration context; strict majority of
+  the machines that reported each row; ranked-arbitration capability. Client: Ranked raises
+  WriteArbitratedLeaderboard + WriteTrueSkill for every gamer on every machine, remote departure
+  during Ranked play raises IsLeaving events and the departed gamer stays in the report, a leaving
+  machine reports only its own gamers; outside Ranked only the host raises WriteTrueSkill and rows
+  about remote gamers are not submitted (no storage authority).
+- [x] Fix: remote gamers now carry their service identity (their writers used the offline store).
+- [x] Fix: Gamer copy/move (now protected) bind a fresh LeaderboardWriter to the new object; a moved
+  gamer's writer used to point at the destroyed temporary (make_unique(CreateInternal) exposed it).
+- [ ] CNA computes no TrueSkill (skill boards are ordinary arbitrated boards) — documented gap.
+
+Validation: Net **465/465**; GamerServices **459 pass / 1 known skip**; fake **113**; private gates
+**13/13**; server **18/18, zero skips, 213.91s** (`build/ranked-full.log`) incl. 43 arbitration
+assertions and the public two-process Ranked arbitration read-back. C inventory 8,145 symbols
+(reviewed not-applicable rules for Gamer's protected copy/move members).
+Server 57aeb0f; runtime 007280bd unchanged; CNA commit follows this entry.

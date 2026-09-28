@@ -276,7 +276,9 @@ public:
     void abortLeaderboardGame(const std::string& gameplay,const std::string& owner) override {
         (void)request("leaderboards.game.abort",{{"gameplay",gameplay}},tokenFor(owner));
     }
-    void commitLeaderboardGame(const std::string& gameplay,const std::string& owner,const std::vector<ServiceLeaderboardWrite>& rows) override {
+    void commitLeaderboardGame(const std::string& gameplay,const std::string& owner,const std::vector<ServiceLeaderboardWrite>& rows,
+        const std::optional<ServiceArbitration>& arbitration) override {
+        if(arbitration&&!capabilities_.contains("ranked-arbitration"))throw Unavailable("CNA service ranked arbitration capability missing.");
         Json entries=Json::array();
         for(const auto& row:rows) {
             Json columns=Json::object();for(const auto& [name,column]:row.columns) {
@@ -284,7 +286,9 @@ public:
             }
             entries.push_back(Json{{"userId",row.userId},{"key",row.key},{"mode",row.mode},{"rating",row.rating},{"columns",columns}});
         }
-        (void)request("leaderboards.game.commit",{{"gameplay",gameplay},{"entries",entries}},tokenFor(owner));
+        Json args{{"gameplay",gameplay},{"entries",entries}};
+        if(arbitration)args["arbitration"]={{"session",arbitration->session},{"revision",arbitration->revision}};
+        (void)request("leaderboards.game.commit",args,tokenFor(owner));
     }
     std::vector<unsigned char> asset(const std::string& hash) override {
         if(hash.size()!=64||hash.find_first_not_of("0123456789abcdef")!=std::string::npos)throw Unavailable("Invalid service asset identifier.");
@@ -615,25 +619,60 @@ public:
         require(owner);if(!games_.contains(gameplay))return;
         if(games_.at(gameplay).front()!=owner)throw Unavailable("Invalid fixture game owner.");games_.erase(gameplay);
     }
-    void commitLeaderboardGame(const std::string& gameplay,const std::string& owner,const std::vector<ServiceLeaderboardWrite>& rows) override {
+    void commitLeaderboardGame(const std::string& gameplay,const std::string& owner,const std::vector<ServiceLeaderboardWrite>& rows,
+        const std::optional<ServiceArbitration>& arbitration) override {
         require(owner);if(!games_.contains(gameplay)||games_[gameplay].front()!=owner)throw Unavailable("Invalid fixture game scope.");
+        // Deterministic model of the server's Ranked policy: one report per machine, strict majority.
+        // The server fixes a round's roster when play starts; the fixture fixes it at the first report.
+        std::optional<ServiceSessionSnapshot> round;
+        if(arbitration) {
+            ServiceSessionSnapshot current;
+            try{current=directory_->get(owner,arbitration->session);}catch(const ServiceOperationError&){throw ServiceOperationError("NOT_FOUND");}
+            if(current.kind!=ServiceSessionKind::Ranked)throw ServiceOperationError("NOT_FOUND");
+            auto& roster=rounds_.try_emplace(arbitration->session,current).first->second;
+            round=roster;round->machine=current.machine;
+        }
+        std::vector<ServiceLeaderboardWrite> direct,reported;
         for(const auto& row:rows) {
-            if(std::find(games_[gameplay].begin(),games_[gameplay].end(),row.userId)==games_[gameplay].end())throw Unavailable("Nonmember fixture write.");
             const auto board=std::find_if(boards_.begin(),boards_.end(),[&](const auto& value){return value.key==row.key&&value.mode==row.mode;});
             if(board==boards_.end())throw Unavailable("Fixture board not found.");
+            if(board->arbitrated) {
+                const bool member=round&&std::any_of(round->members.begin(),round->members.end(),[&](const auto& value){return value.userId==row.userId;});
+                if(!member)throw ServiceOperationError("NOT_AUTHORIZED");
+                reported.push_back(row);continue;
+            }
+            if(std::find(games_[gameplay].begin(),games_[gameplay].end(),row.userId)==games_[gameplay].end())throw ServiceOperationError("NOT_AUTHORIZED");
+            direct.push_back(row);
         }
-        for(const auto& row:rows) {
-            auto& board=*std::find_if(boards_.begin(),boards_.end(),[&](const auto& value){return value.key==row.key&&value.mode==row.mode;});
-            auto entry=std::find_if(board.entries.begin(),board.entries.end(),[&](const auto& value){return value.userId==row.userId;});
-            if(entry==board.entries.end()){ServiceLeaderboardEntry value;value.userId=row.userId;value.gamertag=profileById(row.userId).gamertag;board.entries.push_back(value);entry=std::prev(board.entries.end());}
-            else if(board.ascending?row.rating>=entry->rating:row.rating<=entry->rating)continue;
-            entry->rating=row.rating;entry->columns=row.columns;
+        for(const auto& row:direct)apply(row);
+        if(round) {
+            auto& reports=arbitration_[arbitration->session];reports[round->machine]=reported;
+            std::set<std::string> machines;for(const auto& member:round->members)machines.insert(member.machine);
+            if(reports.size()>=machines.size()) {
+                std::map<std::tuple<std::string,std::string,int>,std::vector<ServiceLeaderboardWrite>> votes;
+                for(const auto& [machine,report]:reports)for(const auto& row:report)votes[{row.userId,row.key,row.mode}].push_back(row);
+                for(const auto& [identity,candidates]:votes)for(const auto& candidate:candidates) {
+                    const auto agreeing=std::count(candidates.begin(),candidates.end(),candidate);
+                    // Strict majority among the machines that reported this row, as the server does.
+                    if(agreeing*2>static_cast<long>(candidates.size())){apply(candidate);break;}
+                }
+                arbitration_.erase(arbitration->session);rounds_.erase(arbitration->session);
+            }
         }
         games_.erase(gameplay);
     }
     std::vector<unsigned char> asset(const std::string&) override {throw Unavailable("Fake fixture has no assets.");}
 private:
     ServiceIdentity profileById(const std::string& id) {for(const auto& person:identities_)if(person.userId==id)return person;throw Unavailable("Unknown fixture gamer.");}
+    void apply(const ServiceLeaderboardWrite& row) {
+        auto& board=*std::find_if(boards_.begin(),boards_.end(),[&](const auto& value){return value.key==row.key&&value.mode==row.mode;});
+        auto entry=std::find_if(board.entries.begin(),board.entries.end(),[&](const auto& value){return value.userId==row.userId;});
+        if(entry==board.entries.end()){ServiceLeaderboardEntry value;value.userId=row.userId;value.gamertag=profileById(row.userId).gamertag;board.entries.push_back(value);entry=std::prev(board.entries.end());}
+        else if(board.ascending?row.rating>=entry->rating:row.rating<=entry->rating)return;
+        entry->rating=row.rating;entry->columns=row.columns;
+    }
+    std::map<std::string,std::map<std::string,std::vector<ServiceLeaderboardWrite>>> arbitration_;
+    std::map<std::string,ServiceSessionSnapshot> rounds_;
     std::map<std::string,std::vector<std::string>> games_;
     int gameSequence_=0;
     std::unique_ptr<IServiceSessionDirectory> directory_;

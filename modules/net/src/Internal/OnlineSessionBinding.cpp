@@ -114,9 +114,11 @@ NetworkGamer* OnlineSessionBinding::addRemote(const RosterEntry& entry) {
     const auto* row=member(snapshot_,entry.WireId);
     if(!row||row->machine==snapshot_.machine||row->gamertag!=entry.Gamertag||gamers_.contains(entry.WireId))
         throw ServiceOperationError("INVALID_RESPONSE");
-    auto owned=std::make_unique<NetworkGamer>(NetworkGamer::CreateInternal(&session_,entry.Gamertag));
+    std::unique_ptr<NetworkGamer> owned(new NetworkGamer(NetworkGamer::CreateInternal(&session_,entry.Gamertag)));
     auto* gamer=owned.get();remote_.push_back(std::move(owned));
     gamer->SetId(entry.WireId);gamer->SetIsHost(entry.IsHost);gamer->SetIsPrivateSlot(row->privateSlot);
+    // Service identity makes its leaderboard writer a service writer instead of the offline store.
+    GamerAccess::setUserId(*gamer,row->userId);
     auto shared=machine(row->machine);gamer->SetSharedMachine(shared);shared->AddGamerInternal(gamer);
     gamers_[entry.WireId]=gamer;return gamer;
 }

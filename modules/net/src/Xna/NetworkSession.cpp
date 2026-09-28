@@ -570,7 +570,7 @@ namespace Microsoft::Xna::Framework::Net
                     // Every machine of an online session opens its own local write epoch.
                     if(online_ && leaderboardGameplay_.empty()) BeginOnlineLeaderboards();
                     if(!leaderboardGameplay_.empty()) {
-                        for(auto* gamer:localGamers_){gamer->leaderboardWriter_.BeginServiceGameplay();gamer->getSignedInGamerProperty()->leaderboardWriter_.BeginServiceGameplay();}
+                        OpenLeaderboardWriters();
                         leaderboardTransitionPending_=false;
                     }
                     sessionState_ = evt.State;
@@ -739,28 +739,62 @@ namespace Microsoft::Xna::Framework::Net
                 service->submit([executor,gameplay,owner]{try{executor->abortLeaderboardGame(gameplay,owner);}catch(...){}},[]{});
             }catch(...){}
         }
-        for(auto* gamer:localGamers_){gamer->leaderboardWriter_.EndServiceGameplay();if(gamer->getSignedInGamerProperty())gamer->getSignedInGamerProperty()->leaderboardWriter_.EndServiceGameplay();}
+        CloseLeaderboardWriters();
         leaderboardGameplay_.clear();
+    }
+
+    void NetworkSession::OpenLeaderboardWriters() {
+        for(auto* gamer:localGamers_){gamer->leaderboardWriter_.BeginServiceGameplay();gamer->getSignedInGamerProperty()->leaderboardWriter_.BeginServiceGameplay();}
+        // Ranked machines write arbitrated statistics and TrueSkill for every gamer; elsewhere the
+        // host reports TrueSkill for every gamer (LeaderboardWriter documentation).
+        if(online_ && (sessionType_==NetworkSessionType::Ranked || getIsHostProperty()))
+            for(auto* gamer:remoteGamers_)gamer->leaderboardWriter_.BeginServiceGameplay();
+        roundDeparted_.clear();
+    }
+
+    void NetworkSession::CloseLeaderboardWriters() {
+        for(auto* gamer:localGamers_){gamer->leaderboardWriter_.EndServiceGameplay();if(gamer->getSignedInGamerProperty())gamer->getSignedInGamerProperty()->leaderboardWriter_.EndServiceGameplay();}
+        for(auto* gamer:remoteGamers_)gamer->leaderboardWriter_.EndServiceGameplay();
+        for(auto* gamer:roundDeparted_)gamer->leaderboardWriter_.EndServiceGameplay();
+        roundDeparted_.clear();
     }
 
     void NetworkSession::FinalizeServiceLeaderboards(bool isLeaving) {
         using CNA::Internal::GamerServices::ServiceLeaderboardWrite;
+        const bool ranked=online_ && sessionType_==NetworkSessionType::Ranked;
+        const bool trueSkill=ranked || getIsHostProperty();
+        // A leaving machine reports only its own gamers, so its partial view cannot break the
+        // agreement of the machines that finish the round.
+        std::vector<NetworkGamer*> everyone;
+        for(auto* gamer:localGamers_)everyone.push_back(gamer);
+        if(!isLeaving)for(auto* gamer:remoteGamers_)everyone.push_back(gamer);
+        CNA::Internal::GamerServices::withRestrictedServiceCalls([&] {
+            for(auto* gamer:localGamers_)WriteUnarbitratedLeaderboard.Raise(this,WriteLeaderboardsEventArgs::CreateInternal(gamer,isLeaving));
+            if(ranked)for(auto* gamer:everyone)WriteArbitratedLeaderboard.Raise(this,WriteLeaderboardsEventArgs::CreateInternal(gamer,isLeaving&&gamer->getIsLocalProperty()));
+            if(trueSkill)for(auto* gamer:everyone)WriteTrueSkill.Raise(this,WriteLeaderboardsEventArgs::CreateInternal(gamer,isLeaving&&gamer->getIsLocalProperty()));
+        });
         std::map<std::tuple<std::string,std::string,int>,ServiceLeaderboardWrite> writes;
-        for(auto* gamer:localGamers_) {
-            CNA::Internal::GamerServices::withRestrictedServiceCalls([&]{WriteUnarbitratedLeaderboard.Raise(this,WriteLeaderboardsEventArgs::CreateInternal(gamer,isLeaving));});
-            for(auto* writer:{&gamer->leaderboardWriter_,&gamer->getSignedInGamerProperty()->leaderboardWriter_}) {
-                for(auto& row:writer->CollectServiceWrites()) {
-                    auto key=std::make_tuple(row.userId,row.key,row.mode);const auto existing=writes.find(key);
-                    if(existing!=writes.end()&&existing->second!=row)throw System::InvalidOperationException("Conflicting leaderboard writes for the same gamer.");
-                    writes[key]=std::move(row);
-                }
+        auto collect=[&](GamerServices::LeaderboardWriter& writer) {
+            for(auto& row:writer.CollectServiceWrites()) {
+                auto key=std::make_tuple(row.userId,row.key,row.mode);const auto existing=writes.find(key);
+                if(existing!=writes.end()&&existing->second!=row)throw System::InvalidOperationException("Conflicting leaderboard writes for the same gamer.");
+                writes[key]=std::move(row);
             }
+        };
+        for(auto* gamer:localGamers_){collect(gamer->leaderboardWriter_);collect(gamer->getSignedInGamerProperty()->leaderboardWriter_);}
+        // Only Ranked arbitration can carry rows about other machines' gamers; a non-Ranked host's
+        // TrueSkill rows for remote gamers have no storage authority and are not submitted.
+        if(ranked && !isLeaving) {
+            for(auto* gamer:remoteGamers_)collect(gamer->leaderboardWriter_);
+            for(auto* gamer:roundDeparted_)collect(gamer->leaderboardWriter_);
         }
         std::vector<ServiceLeaderboardWrite> rows;for(auto& [key,row]:writes){(void)key;rows.push_back(std::move(row));}
+        std::optional<CNA::Internal::GamerServices::ServiceArbitration> arbitration;
+        if(ranked)arbitration=CNA::Internal::GamerServices::ServiceArbitration{online_->session(),online_->revision()};
         const auto service=LeaderboardService();
         if(!service) throw GamerServices::GamerServicesNotAvailableException("The leaderboard service is no longer available.");
-        service->commitLeaderboardGame(leaderboardGameplay_,leaderboardOwner_,rows);
-        for(auto* gamer:localGamers_){gamer->leaderboardWriter_.EndServiceGameplay();gamer->getSignedInGamerProperty()->leaderboardWriter_.EndServiceGameplay();}
+        service->commitLeaderboardGame(leaderboardGameplay_,leaderboardOwner_,rows,arbitration);
+        CloseLeaderboardWriters();
         leaderboardGameplay_.clear();
     }
 
@@ -826,6 +860,15 @@ namespace Microsoft::Xna::Framework::Net
         }
 
         if(isLocal&&!leaderboardGameplay_.empty()&&sessionState_==NetworkSessionState::Playing)FinalizeServiceLeaderboards(true);
+        if(!isLocal&&online_&&sessionType_==NetworkSessionType::Ranked&&!leaderboardGameplay_.empty()&&sessionState_==NetworkSessionState::Playing) {
+            // The remaining machines write the departing gamer's (bad) statistics while it is
+            // still a round member; they are submitted with this machine's final report.
+            CNA::Internal::GamerServices::withRestrictedServiceCalls([&] {
+                WriteArbitratedLeaderboard.Raise(this,WriteLeaderboardsEventArgs::CreateInternal(gamer,true));
+                WriteTrueSkill.Raise(this,WriteLeaderboardsEventArgs::CreateInternal(gamer,true));
+            });
+            roundDeparted_.push_back(gamer);
+        }
         gamer->SetHasLeftSession(true);
         gamer->GetSharedMachine()->RemoveGamerInternal(gamer);
         // Task 2.2: localGamers_ was never pruned here, unlike remoteGamers_/allGamers_ just
