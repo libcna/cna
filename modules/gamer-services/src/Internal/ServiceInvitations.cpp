@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
+#include "GuideOverlay.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
@@ -58,7 +59,7 @@ void accept(Pending pending) {
         auto& now=state();if(now.origin!=origin)return;now.accepting=false;
         auto* gamer=published(pending.user);
         if(!*result||!gamer) {
-            if(gamer)(void)Guide::BeginShowMessageBox(gamer->getPlayerIndexProperty(),"Game invitation",
+            if(gamer)(void)showGuideMessageBox(gamer->getPlayerIndexProperty(),"Game invitation",
                 "The invitation is no longer available.",{"OK"},0,MessageBoxIcon::None,[](System::IAsyncResult& value) {
                     std::unique_ptr<System::IAsyncResult> owned(&value);(void)Guide::EndShowMessageBox(&value);
                 },{});
@@ -78,7 +79,7 @@ void prompt() {
         +category(pending.invitation.kind)+" game.\nAccepting leaves any game you are playing.";
     current.prompting=true;
     try {
-        (void)Guide::BeginShowMessageBox(gamer->getPlayerIndexProperty(),"Game invitation",text,{"Accept","Decline"},0,
+        (void)showGuideMessageBox(gamer->getPlayerIndexProperty(),"Game invitation",text,{"Accept","Decline"},0,
             MessageBoxIcon::None,[pending](System::IAsyncResult& value) {
                 std::unique_ptr<System::IAsyncResult> owned(&value);const auto answer=Guide::EndShowMessageBox(&value);
                 auto& now=state();now.prompting=false;

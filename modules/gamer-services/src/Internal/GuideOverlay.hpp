@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
+#include "System/AsyncCallback.hpp"
+#include "System/IAsyncResult.hpp"
 #include "System/IServiceProvider.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/MessageBoxIcon.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
+#include <any>
 #include <string>
+#include <vector>
 namespace CNA::Internal::GamerServices {
 /** @brief Installs automatic system Guide presentation in a standard Game service container.
  * @param provider Dispatcher service provider. */
@@ -18,4 +23,13 @@ void openSystemGuide(Microsoft::Xna::Framework::PlayerIndex player);
 /** @brief Opens the system Guide on a new Home key or Guide-button press
  * (`CNA_GAMER_SERVICES_GUIDE_BUTTON=0` disables it). */
 void pollSystemGuideButton();
+/** @brief Opens a message box for the Guide's own panes, which the public argument rules
+ * (Guide::BeginShowMessageBox: one to three buttons, text under 256 characters) do not bind.
+ * @param player Player the pane belongs to. @param title Title. @param text Body text.
+ * @param buttons At least one caption. @param focusButton Initially focused button.
+ * @param icon Icon. @param callback Completion callback. @param state Caller state.
+ * @return Result the callback receives. */
+System::IAsyncResult* showGuideMessageBox(Microsoft::Xna::Framework::PlayerIndex player,const std::string& title,const std::string& text,
+    const std::vector<std::string>& buttons,int focusButton,Microsoft::Xna::Framework::GamerServices::MessageBoxIcon icon,
+    System::AsyncCallback callback,std::any state);
 }

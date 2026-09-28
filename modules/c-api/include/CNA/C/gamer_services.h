@@ -2075,18 +2075,19 @@ CNA_C_API CNA_Result cna_guide_reset_pending_keyboard_input_ext(void);
  * @param title Title text, borrowed for the duration of the call.
  * @param text Body text, borrowed for the duration of the call.
  * @param buttons Array of @p button_count button captions, borrowed for the duration of the call.
- * @param button_count Number of buttons; must be at least one.
+ * @param button_count Number of buttons, one to three.
  * @param focus_button Index of the button that starts focused.
  * @param icon One of the `CNA_MESSAGE_BOX_ICON_*` identities.
  * @param callback Callback invoked when a button is chosen; may be null.
  * @param context Caller context passed back to @p callback.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an empty button list or an
- *         undefined icon, `CNA_RESULT_INVALID_STATE` when a message box is already pending, or a
- *         documented argument/thread failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an empty or 256-character (or
+ *         longer, in UTF-16 units) title, text or button caption, a button count outside one to
+ *         three, a focus button outside them, or an undefined player or icon,
+ *         `CNA_RESULT_INVALID_STATE` when the Guide is already visible, or a documented
+ *         argument/thread failure.
  *
  * Asynchronous in the same real sense the keyboard input is: it stays pending until a button is
- * chosen. The canonical API has a second overload without the player; both reach the same
- * implementation, which ignores the player entirely.
+ * chosen. The canonical API has a second overload without the player, which is player one.
  */
 CNA_C_API CNA_Result cna_guide_begin_show_message_box(
     CNA_PlayerIndex player,

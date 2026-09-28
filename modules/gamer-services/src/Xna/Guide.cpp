@@ -227,6 +227,26 @@ namespace Microsoft::Xna::Framework::GamerServices
             return result;
         }
 
+        // Reference Guide.ValidateShowMessageBoxArgs. Lengths count UTF-16 code units, as .NET's
+        // string.Length does. The Windows-only rule that the player be PlayerIndex.One is not taken:
+        // the Xbox 360 Guide shows a box for any player.
+        void ValidateShowMessageBoxArgs(PlayerIndex player, const std::string& title, const std::string& text,
+                                        const std::vector<std::string>& buttons, int focusButton)
+        {
+            if (static_cast<int>(player) < 0 || static_cast<int>(player) > 3)
+                throw System::ArgumentOutOfRangeException("player");
+            const auto invalid = [](const std::string& value) { return value.empty() || DecodeUtf8ToUtf16(value).size() >= 256; };
+            if (invalid(title))
+                throw System::ArgumentException("The title must be non-empty and shorter than 256 characters.", "title");
+            if (invalid(text))
+                throw System::ArgumentException("The text must be non-empty and shorter than 256 characters.", "text");
+            if (buttons.empty() || buttons.size() > 3 || std::any_of(buttons.begin(), buttons.end(), invalid))
+                throw System::ArgumentException(
+                    "There must be one to three buttons, each non-empty and shorter than 256 characters.", "buttons");
+            if (focusButton < 0 || focusButton >= static_cast<int>(buttons.size()))
+                throw System::ArgumentOutOfRangeException("focusButton");
+        }
+
         // Inverse of DecodeUtf8ToUtf16 above - reassembles a well-formed surrogate pair into one
         // 4-byte UTF-8 sequence rather than encoding each half independently.
         std::string EncodeUtf16ToUtf8(const std::u16string& text)
@@ -400,7 +420,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         }
         void EndLocalSignIn(const std::string& message) {
             signInActive = false; SyncTouchInputSuppression();
-            (void)Guide::BeginShowMessageBox(static_cast<PlayerIndex>(signInSlot), "Sign in", message, {"OK"}, 0, MessageBoxIcon::Error,
+            (void)CNA::Internal::GamerServices::showGuideMessageBox(static_cast<PlayerIndex>(signInSlot), "Sign in", message, {"OK"}, 0, MessageBoxIcon::Error,
                 [](System::IAsyncResult& result) { std::unique_ptr<System::IAsyncResult> owned(&result); (void)Guide::EndShowMessageBox(&result); }, {});
         }
         // Without a service, a pane signs in a local offline profile, creating it on first use.
@@ -749,29 +769,12 @@ namespace Microsoft::Xna::Framework::GamerServices
         System::AsyncCallback callback,
         std::any state
     ) {
-        // No FNA reference behavior exists for this validation (FNA's own BeginShowMessageBox is
-        // a permanent NotSupportedException stub, "FIXME: Surely they don't want us doing this");
-        // this is a CNA-original, conservative default for a real implementation - an empty
-        // button list has no button to ever select.
-        if (buttons.empty())
-        {
-            throw System::ArgumentException("buttons must contain at least one entry.", "buttons");
-        }
-        if (pendingMessageBox_ != nullptr)
-        {
-            throw System::InvalidOperationException("A message box is already pending.");
-        }
-
-        auto* action = new GuideMessageBoxAction(
-            std::move(state), std::move(callback), title, text, buttons, focusButton, icon
-        );
-        pendingMessageBox_ = action;
-        SyncTouchInputSuppression();
-        return action;
+        // Reference: the overload without a player shows the box for player one.
+        return BeginShowMessageBox(PlayerIndex::One, title, text, buttons, focusButton, icon, std::move(callback), std::move(state));
     }
 
     System::IAsyncResult* Guide::BeginShowMessageBox(
-        Microsoft::Xna::Framework::PlayerIndex /*player*/,
+        Microsoft::Xna::Framework::PlayerIndex player,
         const std::string& title,
         const std::string& text,
         const std::vector<std::string>& buttons,
@@ -780,7 +783,11 @@ namespace Microsoft::Xna::Framework::GamerServices
         System::AsyncCallback callback,
         std::any state
     ) {
-        return BeginShowMessageBox(title, text, buttons, focusButton, icon, std::move(callback), std::move(state));
+        ValidateShowMessageBoxArgs(player, title, text, buttons, focusButton);
+        if (getIsVisibleProperty())
+            throw GuideAlreadyVisibleException();
+        return CNA::Internal::GamerServices::showGuideMessageBox(
+            player, title, text, buttons, focusButton, icon, std::move(callback), std::move(state));
     }
 
     std::optional<int> Guide::EndShowMessageBox(System::IAsyncResult* result)
@@ -1003,7 +1010,7 @@ namespace Microsoft::Xna::Framework::GamerServices
             throw GamerServicesNotAvailableException("The requested player is not signed in.");
         }
         void SocialMessage(PlayerIndex player,const std::string& title,const std::string& text) {
-            (void)Guide::BeginShowMessageBox(player,title,text,{"OK"},0,MessageBoxIcon::None,[](System::IAsyncResult& result){
+            (void)CNA::Internal::GamerServices::showGuideMessageBox(player,title,text,{"OK"},0,MessageBoxIcon::None,[](System::IAsyncResult& result){
                 std::unique_ptr<System::IAsyncResult> owned(&result);(void)Guide::EndShowMessageBox(&result);
             },{});
         }
@@ -1051,7 +1058,7 @@ namespace Microsoft::Xna::Framework::GamerServices
             }
             const auto message=page.messages.front();
             if(!message.read)try{Service::backend()->updateMessage(user,message.id,false);}catch(...){}
-            (void)Guide::BeginShowMessageBox(player,"Messages ("+std::to_string(index+1)+"/"+std::to_string(page.total)+")",
+            (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"Messages ("+std::to_string(index+1)+"/"+std::to_string(page.total)+")",
                 "From "+message.sender+":\n"+message.text,{"Next","Reply","Delete","Close"},0,MessageBoxIcon::None,
                 [player,user,index,message](System::IAsyncResult& result) {
                     std::unique_ptr<System::IAsyncResult> owned(&result);const auto answer=Guide::EndShowMessageBox(&result);
@@ -1090,7 +1097,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         }
         void ConfirmInvitations(PlayerIndex player,const std::string& user,const std::vector<std::string>& tags) {
             std::string names;for(const auto& tag:tags)names+=(names.empty()?"":", ")+tag;
-            (void)Guide::BeginShowMessageBox(player,"Game invitation","Invite "+names+" to join your game?",{"Send invitation","Cancel"},0,
+            (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"Game invitation","Invite "+names+" to join your game?",{"Send invitation","Cancel"},0,
                 MessageBoxIcon::None,[player,user,tags](System::IAsyncResult& result) {
                     std::unique_ptr<System::IAsyncResult> owned(&result);const auto answer=Guide::EndShowMessageBox(&result);
                     if(answer&&*answer==0)SendInvitations(player,user,tags);
@@ -1113,7 +1120,7 @@ namespace Microsoft::Xna::Framework::GamerServices
             if(!self)buttons.push_back(label);
             if(invite)buttons.push_back("Invite to game");
             buttons.push_back("Friends");buttons.push_back("Close");
-            (void)Guide::BeginShowMessageBox(player,person.gamertag,text,buttons,0,MessageBoxIcon::None,
+            (void)CNA::Internal::GamerServices::showGuideMessageBox(player,person.gamertag,text,buttons,0,MessageBoxIcon::None,
                 [player,tag=person.gamertag,action,self,invite,user](System::IAsyncResult& result){
                     std::unique_ptr<System::IAsyncResult> owned(&result);const auto answer=Guide::EndShowMessageBox(&result);
                     if(!answer)return;
@@ -1136,7 +1143,7 @@ namespace Microsoft::Xna::Framework::GamerServices
                 if(!entry->getPresenceProperty().empty())text+=" - "+entry->getPresenceProperty();text+="\n";
             }
             if(text.empty())text="No friends or pending requests.";
-            (void)Guide::BeginShowMessageBox(player,"CNA Friends",text,{"Find gamer","More","Close"},0,MessageBoxIcon::None,
+            (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"CNA Friends",text,{"Find gamer","More","Close"},0,MessageBoxIcon::None,
                 [player,offset,count](System::IAsyncResult& result){
                     std::unique_ptr<System::IAsyncResult> owned(&result);const auto answer=Guide::EndShowMessageBox(&result);
                     if(answer&&*answer==1)FriendsPage(player,offset+8<count?offset+8:0);
@@ -1165,7 +1172,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
         (void)SocialActor(player);
         const auto tag=gamer->getGamertagProperty();
-        (void)BeginShowMessageBox(player,"Friend request","Send a friendship request to "+tag+"?",{"Send request","Cancel"},0,MessageBoxIcon::None,
+        (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"Friend request","Send a friendship request to "+tag+"?",{"Send request","Cancel"},0,MessageBoxIcon::None,
             [player,tag](System::IAsyncResult& result){std::unique_ptr<System::IAsyncResult> owned(&result);const auto answer=EndShowMessageBox(&result);if(answer&&*answer==0)ChangeFriend(player,tag,"add");},{});
     }
     void Guide::ShowFriends(PlayerIndex player) {
@@ -1248,7 +1255,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         ValidateGamer(gamer);
         if(getIsVisibleProperty())throw GuideAlreadyVisibleException();
         auto* actor=SocialActor(player);const auto user=Service::GamerAccess::userId(*actor);const auto tag=gamer->getGamertagProperty();
-        (void)BeginShowMessageBox(player,"Player review","How was playing with "+tag+"?\nAvoided players' games are not offered to you.",
+        (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"Player review","How was playing with "+tag+"?\nAvoided players' games are not offered to you.",
             {"Prefer","Avoid","Clear review","Cancel"},0,MessageBoxIcon::None,[player,user,tag](System::IAsyncResult& result) {
                 std::unique_ptr<System::IAsyncResult> owned(&result);const auto answer=EndShowMessageBox(&result);
                 if(!answer||*answer==3)return;
@@ -1264,7 +1271,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         std::string text;int shown=0;
         for(const auto& tag:Service::recentPlayers()){if(shown++==8)break;text+=tag+"\n";}
         if(text.empty())text="You have not played with anyone yet.";
-        (void)BeginShowMessageBox(player,"Recent players",text,{"Gamer card","Close"},0,MessageBoxIcon::None,[player](System::IAsyncResult& result) {
+        (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"Recent players",text,{"Gamer card","Close"},0,MessageBoxIcon::None,[player](System::IAsyncResult& result) {
             std::unique_ptr<System::IAsyncResult> owned(&result);const auto answer=EndShowMessageBox(&result);
             if(!answer||*answer!=0)return;
             (void)BeginShowKeyboardInput(player,"Recent players","Gamertag","",[player](System::IAsyncResult& input) {
@@ -1294,7 +1301,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         if (success) { ++signInSlot; StartSignInPane(); }
         else {
             signInActive = false;
-            (void)BeginShowMessageBox(static_cast<PlayerIndex>(slot), "CNA Gamer Services", "Sign-in failed. Check the account and service connection.",
+            (void)CNA::Internal::GamerServices::showGuideMessageBox(static_cast<PlayerIndex>(slot), "CNA Gamer Services", "Sign-in failed. Check the account and service connection.",
                 {"OK"}, 0, MessageBoxIcon::Error, [](System::IAsyncResult& result) {
                     std::unique_ptr<System::IAsyncResult> owned(&result); (void)Guide::EndShowMessageBox(&result);
                 }, {});
@@ -1317,6 +1324,17 @@ namespace Microsoft::Xna::Framework::GamerServices
 }
 
 namespace CNA::Internal::GamerServices {
+System::IAsyncResult* showGuideMessageBox(Microsoft::Xna::Framework::PlayerIndex,const std::string& title,const std::string& text,
+    const std::vector<std::string>& buttons,int focusButton,Microsoft::Xna::Framework::GamerServices::MessageBoxIcon icon,
+    System::AsyncCallback callback,std::any state) {
+    namespace Xna=Microsoft::Xna::Framework::GamerServices;
+    if(buttons.empty())throw System::ArgumentException("buttons must contain at least one entry.","buttons");
+    if(Xna::pendingMessageBox_!=nullptr)throw System::InvalidOperationException("A message box is already pending.");
+    auto* action=new Xna::GuideMessageBoxAction(std::move(state),std::move(callback),title,text,buttons,focusButton,icon);
+    Xna::pendingMessageBox_=action;
+    Xna::SyncTouchInputSuppression();
+    return action;
+}
 std::string guideSignInStatus() {
     return Microsoft::Xna::Framework::GamerServices::Guide::getIsVisibleProperty() ? "CNA Gamer Services: signing in..." : "";
 }
@@ -1326,7 +1344,7 @@ void systemGuideAction(Microsoft::Xna::Framework::PlayerIndex player,const std::
     using namespace Microsoft::Xna::Framework::GamerServices;
     try {action();}
     catch(const std::exception& error) {
-        (void)Guide::BeginShowMessageBox(player,"Guide",error.what(),{"OK"},0,MessageBoxIcon::Error,[](System::IAsyncResult& result) {
+        (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"Guide",error.what(),{"OK"},0,MessageBoxIcon::Error,[](System::IAsyncResult& result) {
             std::unique_ptr<System::IAsyncResult> owned(&result);(void)Guide::EndShowMessageBox(&result);
         },{});
     }
@@ -1344,20 +1362,20 @@ void openSystemGuide(Microsoft::Xna::Framework::PlayerIndex player) {
     if(!gamer) {
         // Sign-in panes cover this player's slot: 1, 2 or 4 of them.
         const int panes=index==0?1:index==1?2:4;
-        (void)Guide::BeginShowMessageBox(player,"Guide","No profile is signed in for player "+std::to_string(index+1)+".",
+        (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"Guide","No profile is signed in for player "+std::to_string(index+1)+".",
             {"Sign in","Close"},0,MessageBoxIcon::None,[player,panes,close](System::IAsyncResult& result) {
                 if(close(result)==0)systemGuideAction(player,[panes]{Guide::ShowSignIn(panes,false);});
             },{});
         return;
     }
     if(!gamer->getIsSignedInToLiveProperty()) {
-        (void)Guide::BeginShowMessageBox(player,"Guide","Signed in to the local profile "+gamer->getGamertagProperty()+
+        (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"Guide","Signed in to the local profile "+gamer->getGamertagProperty()+
             ". Online features need a CNA account service.",{"Sign out","Close"},1,MessageBoxIcon::None,[player,index,close](System::IAsyncResult& result) {
                 if(close(result)==0)systemGuideAction(player,[index]{backend()->signOut(index);});
             },{});
         return;
     }
-    (void)Guide::BeginShowMessageBox(player,"Guide","Signed in as "+gamer->getGamertagProperty()+".",
+    (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"Guide","Signed in as "+gamer->getGamertagProperty()+".",
         {"Friends","Invite to game","Messages","Sign out"},0,MessageBoxIcon::None,[player,index,close](System::IAsyncResult& result) {
             const auto choice=close(result);
             if(!choice)return;

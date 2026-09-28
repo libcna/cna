@@ -2484,3 +2484,16 @@ presents as local, which is what a player reads. The service path now converts w
 `ToLocalTime(TimeZone::CurrentTimeZone())` (kind `Local`); gamer-services links the sharp-runtime
 `TimeZone` component. Test: `ServiceReadLifetimeTest.EarnedDateTimeIsTheServiceTimeInLocalTime`;
 the C struct field documents local ticks. CnaGamerServicesTests 485 + 1 skip.
+
+### Priority 10: final GamerServices/Net behavioral audit (in progress)
+
+- [x] GS-005f `Guide.BeginShowMessageBox` argument rules. Reference `ValidateShowMessageBoxArgs`:
+  title and text non-empty and under 256 characters (UTF-16 units), one to three buttons each
+  non-empty and under 256, focus within them (`ArgumentException`/`ArgumentOutOfRangeException`),
+  then the kernel's refusal while the Guide is visible (`GuideAlreadyVisibleException`, previously
+  `InvalidOperationException`); the overload without a player is player one. The Windows-only
+  "player must be One" rule is not taken (Xbox shows a box for any player). The Guide's own panes
+  (four-entry menus, long friend/message lists) go through the internal
+  `CNA::Internal::GamerServices::showGuideMessageBox`, which the public rules do not bind. C header
+  documents the same results. Test `GuideTest.BeginShowMessageBoxValidatesArgumentsLikeTheReference`;
+  CnaGamerServicesTests 486 + 1 skip, C API gates unchanged.

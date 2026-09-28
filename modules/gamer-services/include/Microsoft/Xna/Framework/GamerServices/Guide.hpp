@@ -302,15 +302,18 @@ namespace Microsoft::Xna::Framework::GamerServices
          *
          * @param title       The message box title.
          * @param text        The message box body text.
-         * @param buttons     The button labels to display; must contain at least one entry.
+         * @param buttons     One to three button labels, each non-empty and shorter than 256 characters.
          * @param focusButton The index of the initially focused button.
          * @param icon        The icon to display.
          * @param callback    Invoked when the operation completes.
          * @param state       User-defined state passed through to the callback.
          * @return An IAsyncResult that completes once a button is selected; caller owns it and
          *         must delete it after EndShowMessageBox.
-         * @throws System::ArgumentException if buttons is empty.
-         * @throws System::InvalidOperationException if another message box is already pending.
+         * @throws System::ArgumentException if the title or text is empty or 256 characters or
+         *         longer, or the buttons are not one to three valid labels.
+         * @throws System::ArgumentOutOfRangeException if focusButton is not one of the buttons, or
+         *         the player is not a defined PlayerIndex.
+         * @throws GuideAlreadyVisibleException if the Guide is already visible.
          */
         [[nodiscard]] static System::IAsyncResult* BeginShowMessageBox(
             const std::string& title,
@@ -331,15 +334,18 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @param player      The player the message box is shown to.
          * @param title       The message box title.
          * @param text        The message box body text.
-         * @param buttons     The button labels to display; must contain at least one entry.
+         * @param buttons     One to three button labels, each non-empty and shorter than 256 characters.
          * @param focusButton The index of the initially focused button.
          * @param icon        The icon to display.
          * @param callback    Invoked when the operation completes.
          * @param state       User-defined state passed through to the callback.
          * @return An IAsyncResult that completes once a button is selected; caller owns it and
          *         must delete it after EndShowMessageBox.
-         * @throws System::ArgumentException if buttons is empty.
-         * @throws System::InvalidOperationException if another message box is already pending.
+         * @throws System::ArgumentException if the title or text is empty or 256 characters or
+         *         longer, or the buttons are not one to three valid labels.
+         * @throws System::ArgumentOutOfRangeException if focusButton is not one of the buttons, or
+         *         the player is not a defined PlayerIndex.
+         * @throws GuideAlreadyVisibleException if the Guide is already visible.
          */
         [[nodiscard]] static System::IAsyncResult* BeginShowMessageBox(
             Microsoft::Xna::Framework::PlayerIndex player,

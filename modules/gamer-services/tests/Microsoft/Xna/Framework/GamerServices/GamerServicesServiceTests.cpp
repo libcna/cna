@@ -17,6 +17,7 @@
 
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GuideAlreadyVisibleException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
@@ -703,15 +704,45 @@ TEST(GuideTest, BeginShowMessageBoxThrowsWhileAnotherIsPending) {
         "title", "text", std::vector<std::string>{"OK"}, 0, MessageBoxIcon::None,
         System::AsyncCallback{}, std::any{}
     );
+    // Reference: the kernel refuses while the Guide is visible, raised as GuideAlreadyVisibleException.
     EXPECT_THROW(
         Guide::BeginShowMessageBox(
             "title2", "text2", std::vector<std::string>{"OK"}, 0, MessageBoxIcon::None,
             System::AsyncCallback{}, std::any{}
         ),
-        System::InvalidOperationException
+        GuideAlreadyVisibleException
     );
     Guide::SimulateMessageBoxClickEXT(0);
     delete first;
+}
+
+// Reference Guide.ValidateShowMessageBoxArgs: title and text non-empty and under 256 UTF-16 units,
+// one to three buttons each non-empty and under 256, focus within them.
+TEST(GuideTest, BeginShowMessageBoxValidatesArgumentsLikeTheReference) {
+    MessageBoxGuard guard;
+    const auto show = [](const std::string& title, const std::string& text, std::vector<std::string> buttons, int focus,
+                         PlayerIndex player = PlayerIndex::One) {
+        return std::unique_ptr<System::IAsyncResult>(Guide::BeginShowMessageBox(
+            player, title, text, std::move(buttons), focus, MessageBoxIcon::None, System::AsyncCallback{}, std::any{}));
+    };
+    const std::string longest(255, 'x'), tooLong(256, 'x');
+    EXPECT_THROW((void)show("", "text", {"OK"}, 0), System::ArgumentException);
+    EXPECT_THROW((void)show(tooLong, "text", {"OK"}, 0), System::ArgumentException);
+    EXPECT_THROW((void)show("title", "", {"OK"}, 0), System::ArgumentException);
+    EXPECT_THROW((void)show("title", tooLong, {"OK"}, 0), System::ArgumentException);
+    EXPECT_THROW((void)show("title", "text", {"A", "B", "C", "D"}, 0), System::ArgumentException);
+    EXPECT_THROW((void)show("title", "text", {"OK", ""}, 0), System::ArgumentException);
+    EXPECT_THROW((void)show("title", "text", {"OK", tooLong}, 0), System::ArgumentException);
+    EXPECT_THROW((void)show("title", "text", {"OK", "Cancel"}, 2), System::ArgumentOutOfRangeException);
+    EXPECT_THROW((void)show("title", "text", {"OK"}, -1), System::ArgumentOutOfRangeException);
+    EXPECT_THROW((void)show("title", "text", {"OK"}, 0, static_cast<PlayerIndex>(4)), System::ArgumentOutOfRangeException);
+    EXPECT_FALSE(Guide::getHasPendingMessageBoxEXTProperty());
+    // 255 UTF-16 units in 256 UTF-8 bytes: a two-byte character counts once, as in .NET.
+    const std::string accented = std::string(254, 'x') + "\xC3\xA9";
+    auto result = show(longest, accented, {"A", "B", "C"}, 2, PlayerIndex::Four);
+    EXPECT_TRUE(Guide::getHasPendingMessageBoxEXTProperty());
+    Guide::SimulateMessageBoxClickEXT(2);
+    EXPECT_EQ(2, Guide::EndShowMessageBox(result.get()));
 }
 
 TEST(GuideTest, EndShowMessageBoxThrowsIfCalledTooEarly) {
