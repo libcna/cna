@@ -158,6 +158,14 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   feet never sink more than 12 mm, no hand passes within 5 cm of the spine, no joint moves faster
   than 12 cm per 1/60 s. Residual (dev metric): a planted foot drifts at most 1-3 cm over a whole
   clip when a preset authored for one body plays on the other.
+- **Materials (GSP-E1).** Audit: the reader consumes position, normal, texcoord 0, joints, weights,
+  a base-colour factor, an embedded PNG and CNA extras; the renderer is SkinnedEffect with exactly
+  LightDirection/LightColor/AmbientLightColor and a faint specular. Everything v2 needs for
+  material feel is cheap and inside that: texture multipliers (skin warmth, strands, fabrics with
+  seams) plus one new optional extra, `cnaSpecular`, scaling the one light's highlight per material
+  (eyes 2.5-3, lips 1.6, hair 2.2, leather 2, glasses frames 2.5, cloth 0.25-0.5). Older readers
+  ignore it; v1 has none (scale 1, unchanged). No shader, lighting-API or state change; the
+  renderer still restores blend/depth/rasterizer/sampler state after Draw.
 - **Server import validation (GSP-G1).** An independent MIT validator (server `AvatarAssets.cpp`,
   on nlohmann/json, no code from CNA) enforces the same contract as the CNA reader, plus
   catalog-level rules a client would otherwise hit at render time (items fitted to their body's
@@ -176,7 +184,7 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
 | GSP-B2 | Server catalog-version semantics verified and tested | done |
 | GSP-C* | Catalog v2: body, head/face, expression atlas, facial individuality decision | first pass done (C1); art iteration continues |
 | GSP-D* | Catalog v2 wardrobe and hair | first pass done (C1) |
-| GSP-E* | Materials and renderer polish, per-renderer check | todo |
+| GSP-E* | Materials and renderer polish, per-renderer check | E1 done; renderer coverage in progress |
 | GSP-F* | Animation polish and key-pose/loop tests | done (F1) |
 | GSP-G1 | Server avatar GLB/manifest validation, malformed fixtures | done (server 7a8a629) |
 | GSP-H1 | Avatar cache audit, bounded cleanup, first/warm load measurement | todo |

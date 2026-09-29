@@ -6,6 +6,11 @@ from .glb import GlbBuilder
 
 FEATURE_TINTS = {"eyeLeft": ("none", "eyes"), "eyeRight": ("none", "eyes"), "eyebrowLeft": ("hair",),
                  "eyebrowRight": ("hair",), "mouth": ("none",)}
+# Highlight scale per material family: wet eyes and lips, hair and leather sheen, matte cloth.
+SPECULAR = {"eyeLeft": (2.5, 3.0), "eyeRight": (2.5, 3.0), "eyebrowLeft": (0.4,), "eyebrowRight": (0.4,), "mouth": (1.6,)}
+CLOTH_SPECULAR = {"knit": 0.35, "rib": 0.35, "cable": 0.3, "fleece": 0.25, "denim": 0.45, "canvas": 0.5, "pleat": 0.4,
+                  "leather": 2.0, "plain": 1.0, "strands": 2.0}
+HAIR_SPECULAR = 2.2
 
 
 def body_glb(body_type):
@@ -20,7 +25,7 @@ def body_glb(body_type):
     parts = [(skin, skin_material), (head, builder.add_material("head", "skin", texture=head_tex)), (details, skin_material)]
     for feature, mesh in face.build_decals(body_type).items():
         for layer, tint in enumerate(FEATURE_TINTS[feature]):
-            parts.append((mesh, builder.add_material("%s%d" % (feature, layer), tint,
+            parts.append((mesh, builder.add_material("%s%d" % (feature, layer), tint, specular=SPECULAR[feature][layer],
                                                      extras={"cnaFeature": feature, "cnaLayer": layer})))
     builder.add_skinned_mesh("body", parts, skin_index)
     return builder.build()
@@ -67,9 +72,11 @@ def item_glb(body_type, item_id, slot, name, under_hat=False):
         if under_hat:
             locks, scalp = hair.under_hat(body_type, locks), hair.under_hat(body_type, scalp)
         if scalp.positions:
-            parts.append((scalp, builder.add_material(name + "_scalp", "hair", texture=builder.add_image("scalp", textures.hair_cap()))))
+            parts.append((scalp, builder.add_material(name + "_scalp", "hair", specular=HAIR_SPECULAR,
+                                                      texture=builder.add_image("scalp", textures.hair_cap()))))
         if locks.positions:
-            parts.append((locks, builder.add_material(name, "hair", texture=builder.add_image("strands", textures.hair_clump()))))
+            parts.append((locks, builder.add_material(name, "hair", specular=HAIR_SPECULAR,
+                                                      texture=builder.add_image("strands", textures.hair_clump()))))
     else:
         built = {"top": garments.top, "bottom": garments.bottom, "shoes": garments.shoes, "glasses": accessories.glasses,
                  "hat": accessories.hat, "facialHair": accessories.facial_hair}[slot](body_type, name)
@@ -77,7 +84,9 @@ def item_glb(body_type, item_id, slot, name, under_hat=False):
         for index, (mesh, tint, kind, colour) in enumerate(built):
             if kind not in images:
                 images[kind] = builder.add_image(kind, textures.hair_clump() if kind == "strands" else textures.cloth(kind))
-            parts.append((mesh, builder.add_material("%s_%d" % (name, index), tint, color=colour, texture=images[kind])))
+            specular = 2.5 if slot == "glasses" else CLOTH_SPECULAR.get(kind, 1.0)
+            parts.append((mesh, builder.add_material("%s_%d" % (name, index), tint, color=colour, texture=images[kind],
+                                                     specular=specular)))
     builder.add_skinned_mesh(name, parts, skin_index)
     return builder.build()
 

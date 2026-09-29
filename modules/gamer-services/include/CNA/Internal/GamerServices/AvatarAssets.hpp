@@ -200,6 +200,8 @@ struct AvatarPrimitive {
     std::string feature;
     /** @brief Decal layer (0 white/lines, 1 iris). */
     int layer=0;
+    /** @brief Scale of the renderer's specular highlight (material extra cnaSpecular, default 1). */
+    float specular=1.0f;
     /** @brief PNG of the base color texture, if any. */
     std::vector<std::uint8_t> texturePng;
 };
@@ -289,6 +291,8 @@ struct AvatarModelPart {
     AvatarFeature feature=AvatarFeature::None;
     /** @brief Decal layer (eyes: 0 white/lines, 1 iris). */
     int layer=0;
+    /** @brief Scale of the specular highlight. */
+    float specular=1.0f;
 };
 
 /** @brief An avatar assembled from a description, ready for upload. */

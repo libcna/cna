@@ -115,6 +115,7 @@ def read_avatar_glb(data):
                 "tint": extras.get("cnaTint", "none"),
                 "feature": extras.get("cnaFeature"),
                 "layer": extras.get("cnaLayer", 0),
+                "specular": extras.get("cnaSpecular", 1.0),
                 "texture": texture,
             })
     return {"bind": bind, "primitives": primitives, "gltf": gltf, "blob": blob}
@@ -426,7 +427,7 @@ class Lighting:
         self.color = np.array(color, dtype=np.float64)
         self.ambient = np.array(ambient, dtype=np.float64)
 
-    def shade(self, rgba, diffuse, normal, position, eye):
+    def shade(self, rgba, diffuse, normal, position, eye, specular=1.0):
         """SkinnedEffect with one directional light: texture * diffuse * (ambient + N.L) + specular."""
         n = normal / np.maximum(np.linalg.norm(normal, axis=1, keepdims=True), 1e-9)
         dot_l = n @ -self.direction
@@ -435,7 +436,7 @@ class Lighting:
         e /= np.maximum(np.linalg.norm(e, axis=1, keepdims=True), 1e-9)
         h = e - self.direction
         h /= np.maximum(np.linalg.norm(h, axis=1, keepdims=True), 1e-9)
-        spec = np.power(np.maximum(np.einsum("ij,ij->i", n, h), 0.0)[:, None] * lit, 24.0) * self.color * 0.12
+        spec = np.power(np.maximum(np.einsum("ij,ij->i", n, h), 0.0)[:, None] * lit, 24.0) * self.color * 0.12 * specular
         light = self.ambient + self.color * np.maximum(dot_l, 0.0)[:, None]
         rgb = rgba[:, :3] * diffuse * light + spec * rgba[:, 3:4]
         return np.concatenate([rgb, rgba[:, 3:4]], axis=1)
@@ -516,7 +517,7 @@ def _shade(model, index, posed, tri, bary, lighting, camera, texture):
         rgba = sample(image, uv)
     else:
         rgba = np.ones((len(tri), 4))
-    return lighting.shade(rgba, part["color"], normal, position, camera.eye)
+    return lighting.shade(rgba, part["color"], normal, position, camera.eye, part.get("specular", 1.0))
 
 
 def yaw_matrix(degrees):

@@ -76,11 +76,14 @@ class GlbBuilder:
         self.gltf.setdefault("textures", []).append({"sampler": 0, "source": len(self.gltf["images"]) - 1})
         return len(self.gltf["textures"]) - 1
 
-    def add_material(self, name, tint, color=(1.0, 1.0, 1.0), texture=None, extras=None):
+    def add_material(self, name, tint, color=(1.0, 1.0, 1.0), texture=None, extras=None, specular=None):
+        """specular scales the renderer's highlight for this material (cnaSpecular; 1 when absent)."""
         pbr = {"baseColorFactor": [color[0], color[1], color[2], 1.0], "metallicFactor": 0.0, "roughnessFactor": 0.9}
         if texture is not None:
             pbr["baseColorTexture"] = {"index": texture}
         material = {"name": name, "pbrMetallicRoughness": pbr, "extras": dict({"cnaTint": tint}, **(extras or {}))}
+        if specular is not None and specular != 1.0:
+            material["extras"]["cnaSpecular"] = specular
         self.gltf.setdefault("materials", []).append(material)
         if extras and "cnaFeature" in extras:
             # Face decals are textured at runtime with the expression's atlas tile.

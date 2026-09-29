@@ -266,6 +266,7 @@ std::shared_ptr<const AvatarModel> buildAvatarModel(const AvatarDescriptor& desc
             part.color=primitive.color*tintColor(descriptor,primitive.tint);
             part.feature=featureOf(primitive.feature);
             part.layer=primitive.layer;
+            part.specular=primitive.specular;
             if(!primitive.texturePng.empty()) {
                 model->images.push_back(decodePng(primitive.texturePng));
                 part.image=static_cast<int>(model->images.size())-1;

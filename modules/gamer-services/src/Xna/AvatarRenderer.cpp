@@ -392,7 +392,6 @@ namespace Microsoft::Xna::Framework::GamerServices
         effect.getDirectionalLight2Property().setEnabledProperty(false);
         effect.setAmbientLightColorProperty(ambientLightColor_);
         effect.setEmissiveColorProperty(Vector3::Zero);
-        effect.setSpecularColorProperty(Vector3(1.0f, 1.0f, 1.0f));
         effect.setSpecularPowerProperty(24.0f);
         effect.setAlphaProperty(1.0f);
 
@@ -439,6 +438,8 @@ namespace Microsoft::Xna::Framework::GamerServices
                 }
             }
             effect.setDiffuseColorProperty(part.color);
+            // Materials scale the one light's faint highlight: hair and leather shine a little, cloth barely.
+            effect.setSpecularColorProperty(Vector3(part.specular, part.specular, part.specular));
             effect.setTextureProperty(texture);
             effect.Apply();
             const auto& gpu = resources_->parts[index];
