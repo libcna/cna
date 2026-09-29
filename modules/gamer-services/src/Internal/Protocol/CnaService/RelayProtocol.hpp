@@ -36,8 +36,8 @@ inline constexpr std::size_t MaxRelayHelloBytes=1024;
 inline constexpr std::size_t MaxRelayMessagesPerSecond=512;
 /** @brief Maximum received binary bytes per one-second window. */
 inline constexpr std::size_t MaxRelayBytesPerSecond=1048576;
-/** @brief Maximum relay connections; reserves capacity for control requests. */
-inline constexpr std::size_t MaxRelayConnections=96;
+/** @brief Maximum authenticated relay connections, counted apart from control requests. */
+inline constexpr std::size_t MaxRelayConnections=1024;
 /** @brief Authentication deadline after WebSocket upgrade. */
 inline constexpr int RelayAuthenticationSeconds=5;
 /** @brief Maximum periodic grant revocation detection delay. */
