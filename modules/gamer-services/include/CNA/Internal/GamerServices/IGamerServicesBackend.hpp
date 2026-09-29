@@ -36,6 +36,10 @@ struct ServiceIdentity {
     std::vector<unsigned char> avatar;
     /** @brief The account's game defaults as a JSON object (a local profile's form), empty for none. */
     std::string gameDefaults;
+    /** @brief GamerZone the member chose (0 Unknown .. 4 Underground, the enum's order). */
+    int gamerZone = 0;
+    /** @brief Stars (0..5) from other players' reviews; empty when nobody has reviewed the member. */
+    std::optional<float> reputation;
 };
 /** @brief Title-scoped catalog entry and user-earned state. */
 struct ServiceAchievement {
@@ -225,6 +229,9 @@ public:
     /** @brief Sets the account-wide status friends see. @param userId Actor.
      * @param status "online", "away" or "busy". */
     virtual void setPresenceStatus(const std::string& userId,const std::string& status) = 0;
+    /** @brief Sets the member's GamerZone. @param userId Actor. @param zone "recreation", "pro",
+     * "family", "underground", or "unknown" to clear it. */
+    virtual void setGamerZone(const std::string& userId,const std::string& zone) = 0;
     /** @brief Reads accounts' avatar descriptions. @param userIds 1..16 service identities.
      * @return Description bytes per identity, in order; empty when the account has no avatar. */
     virtual std::vector<std::vector<unsigned char>> avatars(const std::vector<std::string>& userIds) = 0;

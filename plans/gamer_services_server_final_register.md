@@ -33,7 +33,7 @@ Each is documented where it is declared (C++ and C) and in `docs/xna-4-api-cover
 | `LocalNetworkGamer.SendPartyInvites`, `Guide.ShowParty`/`ShowPartySessions` | refuses (party of one) / explanatory pane | No party service. |
 | `Guide.ShowMarketplace` | explanatory pane after XNA's privilege checks | No store; titles are fully licensed. |
 | `Guide.IsTrialMode` | true only while `SimulateTrialMode` is set | No licensing service (GS-011b removed the public setter XNA keeps internal). |
-| `GamerProfile.GamerZone`/`Reputation` | `Unknown` / 0 | CNA keeps neither; reviews do not rate gamers (GS-004p). |
+| `GamerProfile.GamerZone`/`Reputation` of local profiles and unreviewed accounts | `Unknown` / 0 | XNA's unset values; nothing is invented. An account's chosen zone and review-based stars are reported (GSP-M1). |
 | `QualityOfService.BytesPerSecondUpstream`; service search results' QoS | 0 / `IsAvailable` false | SystemLink measures the round trip and a downstream estimate from the host's probe train (GSP-L6); a host answers discovery at frame boundaries and cannot time arrivals, and a service listing has no path to its host before a join. |
 | `GamerServicesDispatcher.InstallingTitleUpdate` | never raised | CNA installs no title updates. |
 | `WriteTrueSkill` | raised; no skill is computed | Skill boards are ordinary arbitrated boards (GS-006e). |

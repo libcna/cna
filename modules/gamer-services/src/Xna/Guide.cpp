@@ -1473,7 +1473,7 @@ void openSystemGuide(Microsoft::Xna::Framework::PlayerIndex player) {
     }
     const auto user=CNA::Internal::GamerServices::GamerAccess::userId(*gamer);
     (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"Guide","Signed in as "+gamer->getGamertagProperty()+".",
-        {"Friends","Invite to game","Messages","Online status","Sign out"},0,MessageBoxIcon::None,[player,index,user,close](System::IAsyncResult& result) {
+        {"Friends","Invite to game","Messages","Online status","Gamer zone","Sign out"},0,MessageBoxIcon::None,[player,index,user,close](System::IAsyncResult& result) {
             const auto choice=close(result);
             if(!choice)return;
             switch(*choice) {
@@ -1490,6 +1490,18 @@ void openSystemGuide(Microsoft::Xna::Framework::PlayerIndex player) {
                         const std::string name=names[std::clamp(*picked,0,2)];
                         SocialCall(player,[user,name](auto& executor){executor.setPresenceStatus(user,name);},
                             "The online status could not be changed.");
+                    },{});
+                break;
+            case 4:
+                // XNA GamerProfile.GamerZone: the style of social gaming this member prefers.
+                (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"Gamer zone","Choose the style of play you prefer.",
+                    {"Recreation","Pro","Family","Underground"},0,MessageBoxIcon::None,[player,user,close](System::IAsyncResult& zone) {
+                        const auto picked=close(zone);
+                        if(!picked)return;
+                        static const char* const names[]={"recreation","pro","family","underground"};
+                        const std::string name=names[std::clamp(*picked,0,3)];
+                        SocialCall(player,[user,name](auto& executor){executor.setGamerZone(user,name);},
+                            "The gamer zone could not be changed.");
                     },{});
                 break;
             default:systemGuideAction(player,[index]{backend()->signOut(index);});break;

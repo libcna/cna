@@ -218,7 +218,7 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
 | GSP-K1 | Online host migration | done |
 | GSP-K2 | Online `AddLocalGamer` | done |
 | GSP-L1..L6 | Account GameDefaults, away/busy, toasts, Stream columns, guests, QoS bandwidth | done (L6: downstream only) |
-| GSP-M1 | GamerZone / Reputation | todo |
+| GSP-M1 | GamerZone / Reputation | done |
 | GSP-O1 | Server concurrency benchmark and production audit | todo |
 | GSP-P1 | Documentation truth pass | todo |
 | GSP-Q1 | Final acceptance and register | todo |
@@ -337,6 +337,12 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   worth the risk to the SystemLink corpus now. Old CNA builds drop the new tag (unknown tags were
   already discarded). The qos_probe demo's stale "client RTT not tracked" text is corrected (client
   RTT has been tracked since `ApplyClientRoundtrips`). Tests: 2 new discovery tests; Net 504/504.
+- GSP-M1 (GamerZone, Reputation). Xbox documentation: GamerZone is "the style of social gaming
+  preferred by this member" (a member's choice), Reputation "a number of stars ranging 0 to 5". The
+  service keeps the chosen zone (schema 18, `profile.setGamerZone`, capability `gamer-zone`; the
+  system Guide's Gamer zone) and derives stars from the reviews CNA already stores: 5 x prefer /
+  (prefer + avoid), in quarters, sent only when the member has been reviewed. Nothing invented: no
+  reviews, no rating (0). Tests: server social (+9), `SystemGuideTest.GamerZoneIsChosenInTheGuideAndReputationComesFromReviews`.
 - Visual evidence lives outside the repositories, as the sample evidence does:
   `/rv/tmp/avatar-polish/evidence/{before,after}/`.
 - BEFORE (catalog v1, 2026-09-29): `evidence/before/{jobs.json, preview/, opengl33/,

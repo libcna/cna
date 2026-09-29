@@ -48,8 +48,11 @@ not, with its text, score and picture; `AwardAchievement` refuses keys the catal
 (`GamerServicesNotAvailableException`, as the service does) and keeps an achievement's first earned
 date; a local profile's `GamerScore`/`TotalAchievements` total what the catalog says was earned. A
 malformed catalog is refused with an `InvalidOperationException` naming the file and the problem.
-Without one, offline achievements are the earned keys alone, with no text or score. Profiles report
-`GamerZone.Unknown` and a reputation of 0 on every path: CNA keeps neither.
+Without one, offline achievements are the earned keys alone, with no text or score. An account's
+profile reports the `GamerZone` its member chose in the system Guide (Gamer zone) and a `Reputation`
+of 0-5 stars, in quarters, from the share of other players whose review would play with the member
+again (`prefer` against `avoid`); a member nobody has reviewed, and every local profile, reports
+`GamerZone.Unknown` and 0, XNA's unset values -- no rating is invented (GSP-M1).
 
 **System Guide.** In a game that draws (a `GamerServicesComponent` with a graphics device service),
 the Home key, as in Games for Windows LIVE, or a controller's Guide button opens the Guide for that

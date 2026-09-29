@@ -54,7 +54,20 @@ ServiceIdentity identity(const Json& j) {
         if(!j["titlesPlayed"].is_number_integer()||j["titlesPlayed"]<0||j["titlesPlayed"]>2147483647)throw CnaService::Error("INVALID_RESPONSE");
         value.titlesPlayed=j["titlesPlayed"].get<int>();
     }
-    value.allowOnlineSessions=j["allowOnlineSessions"].get<bool>();return value;
+    value.allowOnlineSessions=j["allowOnlineSessions"].get<bool>();
+    // Servers older than these leave them out.
+    if(j.contains("gamerZone")) {
+        static const char* const zones[]={"unknown","recreation","pro","family","underground"};
+        const auto zone=CnaService::stringField(j,"gamerZone",16);
+        const auto found=std::find(std::begin(zones),std::end(zones),zone);
+        if(found==std::end(zones))throw CnaService::Error("INVALID_RESPONSE");
+        value.gamerZone=static_cast<int>(found-std::begin(zones));
+    }
+    if(j.contains("reputation")) {
+        if(!j["reputation"].is_number()||j["reputation"].get<double>()<0.0||j["reputation"].get<double>()>5.0)throw CnaService::Error("INVALID_RESPONSE");
+        value.reputation=j["reputation"].get<float>();
+    }
+    return value;
 }
 class QueuedBackend : public IGamerServicesBackend {
 public:
@@ -260,6 +273,10 @@ public:
     }
     void setPresence(const std::string& user,int mode,const std::string& text) override {
         (void)request("presence.set",{{"mode",mode},{"text",text}},tokenFor(user));
+    }
+    void setGamerZone(const std::string& user,const std::string& zone) override {
+        if(!capabilities_.contains("gamer-zone"))throw Unavailable("CNA service gamer-zone capability missing.");
+        (void)request("profile.setGamerZone",{{"gamerZone",zone}},tokenFor(user));
     }
     void setPresenceStatus(const std::string& user,const std::string& status) override {
         if(!capabilities_.contains("presence-status"))throw Unavailable("CNA service presence-status capability missing.");
@@ -704,6 +721,13 @@ public:
     void setPresenceStatus(const std::string& user,const std::string& status) override {
         require(user);if(status!="online"&&status!="away"&&status!="busy")throw ServiceOperationError("INVALID_ARGUMENT");
         status_[user]=status;
+    }
+    void setGamerZone(const std::string& user,const std::string& zone) override {
+        require(user);
+        static const char* const zones[]={"unknown","recreation","pro","family","underground"};
+        const auto found=std::find(std::begin(zones),std::end(zones),zone);
+        if(found==std::end(zones))throw ServiceOperationError("INVALID_ARGUMENT");
+        for(auto& person:identities_)if(person.userId==user)person.gamerZone=static_cast<int>(found-std::begin(zones));
     }
     void sendMessage(const std::string& user,const std::vector<std::string>& tags,const std::string& text) override {
         require(user);if(tags.empty()||tags.size()>100||text.size()>256)throw ServiceOperationError("INVALID_ARGUMENT");

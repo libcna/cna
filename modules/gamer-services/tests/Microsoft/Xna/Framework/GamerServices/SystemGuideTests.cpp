@@ -11,6 +11,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/GameDefaults.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerPrivileges.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerProfile.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
@@ -260,6 +261,40 @@ TEST_F(SystemGuideTest, AGuestSignsItselfOutFromTheGuide) {
     Guide::SimulateMessageBoxClickEXT(0);
     ASSERT_TRUE(Settle([] { return Count() == 1; }));
     EXPECT_EQ("Alice", (*Gamer::getSignedInGamersProperty())[0]->getGamertagProperty());
+}
+
+// XNA GamerProfile: GamerZone is the member's own choice (the Guide's Gamer zone), Reputation the
+// stars other players' reviews give; nobody reviewed means XNA's unset 0.
+TEST_F(SystemGuideTest, GamerZoneIsChosenInTheGuideAndReputationComesFromReviews) {
+    Service::ServiceIdentity alice, bob;
+    alice.userId = "a";
+    alice.gamertag = "Alice";
+    bob.userId = "b";
+    bob.gamertag = "Bob";
+    bob.reputation = 3.75f;
+    auto fake = Service::makeFakeBackend({alice, bob});
+    Service::setBackendForTesting(fake);
+    fake->signIn(0, "Alice", "fixture");
+    ASSERT_TRUE(Settle([] { return Count() == 1; }));
+    auto profileOf = [&](Gamer* gamer) {
+        std::unique_ptr<GamerProfile> profile;
+        std::unique_ptr<System::IAsyncResult> result(gamer->BeginGetProfile({}, {}));
+        Settle([&] { return result->getIsCompletedProperty(); });
+        profile.reset(gamer->EndGetProfile(result.get()));
+        return profile;
+    };
+    auto* self = (*Gamer::getSignedInGamersProperty())[0];
+    auto mine = profileOf(self);
+    EXPECT_EQ(GamerZone::Unknown, mine->getGamerZoneProperty());
+    EXPECT_FLOAT_EQ(0.0f, mine->getReputationProperty());
+    Service::openSystemGuide(PlayerIndex::One);
+    Guide::SimulateMessageBoxClickEXT(4);
+    ASSERT_TRUE(Guide::getHasPendingMessageBoxEXTProperty());
+    Guide::SimulateMessageBoxClickEXT(2);
+    Settle([] { return !Guide::getIsVisibleProperty(); });
+    EXPECT_TRUE(Settle([&] { return profileOf(self)->getGamerZoneProperty() == GamerZone::Family; }));
+    std::unique_ptr<Gamer> other(Gamer::GetFromGamertag("Bob"));
+    EXPECT_FLOAT_EQ(3.75f, profileOf(other.get())->getReputationProperty());
 }
 
 TEST_F(SystemGuideTest, NothingOpensWhileTheGuideIsVisible) {
