@@ -2,6 +2,7 @@
 #include "../../../../../../platform/tests/CNA/Platform/PlatformTestDecorator.hpp"
 #include "../../../../../src/Internal/GuideOverlay.hpp"
 #include "CNA/Platform/Input/IPlatformKeyboard.hpp"
+#include <functional>
 #include <memory>
 #include <tuple>
 #include <gtest/gtest.h>
@@ -772,6 +773,84 @@ TEST(GuideTest, BeginShowMessageBoxValidatesArgumentsLikeTheReference) {
     EXPECT_TRUE(Guide::getHasPendingMessageBoxEXTProperty());
     Guide::SimulateMessageBoxClickEXT(2);
     EXPECT_EQ(2, Guide::EndShowMessageBox(result.get()));
+}
+
+namespace {
+    // Stands in for the game's modal frames: counts them and answers the Guide on a chosen frame.
+    struct ScriptedModalFrames final : CNA::Internal::Runtime::IModalFrames {
+        int frames = 0;
+        int answerOn = 3;
+        std::function<void()> answer;
+        bool runModalFrame() override {
+            if (++frames == answerOn) answer();
+            return true;
+        }
+    };
+    struct ModalFramesGuard {
+        explicit ModalFramesGuard(CNA::Internal::Runtime::IModalFrames* frames) {
+            CNA::Internal::GamerServices::setGuideModalFramesForTesting(frames);
+        }
+        ~ModalFramesGuard() { CNA::Internal::GamerServices::setGuideModalFramesForTesting(nullptr); }
+    };
+    std::unique_ptr<System::IAsyncResult> ShowTwoButtonBox() {
+        return std::unique_ptr<System::IAsyncResult>(Guide::BeginShowMessageBox(PlayerIndex::One, "title", "text",
+            {"OK", "Cancel"}, 0, MessageBoxIcon::None, System::AsyncCallback{}, std::any{}));
+    }
+}
+
+// Reference XOverlappedAsyncResult.PrepareForEndFunction: a null result, one from another Begin, and
+// a second End are refused, in that order.
+TEST(GuideTest, EndFollowsTheReferenceChecks) {
+    MessageBoxGuard boxes;
+    KeyboardInputGuard keyboards;
+    EXPECT_THROW((void)Guide::EndShowMessageBox(nullptr), System::ArgumentNullException);
+    EXPECT_THROW((void)Guide::EndShowKeyboardInput(nullptr), System::ArgumentNullException);
+    auto box = ShowTwoButtonBox();
+    EXPECT_THROW((void)Guide::EndShowKeyboardInput(box.get()), System::ArgumentException);
+    Guide::SimulateMessageBoxClickEXT(1);
+    EXPECT_EQ(1, Guide::EndShowMessageBox(box.get()));
+    EXPECT_THROW((void)Guide::EndShowMessageBox(box.get()), System::InvalidOperationException);
+
+    std::unique_ptr<System::IAsyncResult> input(Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "title", "description", "", System::AsyncCallback{}, std::any{}));
+    EXPECT_THROW((void)Guide::EndShowMessageBox(input.get()), System::ArgumentException);
+    TypeUtf16(u"Hi");
+    PressEnter();
+    EXPECT_EQ("Hi", Guide::EndShowKeyboardInput(input.get()));
+    EXPECT_THROW((void)Guide::EndShowKeyboardInput(input.get()), System::InvalidOperationException);
+}
+
+// Reference End waits for the user's answer. CNA's Guide is drawn by the game, so the wait runs the
+// game's modal frames until the answer arrives: EndShowMessageBox(BeginShowMessageBox(...)) works
+// as a single call, as it does on the console.
+TEST(GuideTest, EndWaitsForTheAnswerWhileTheGamesModalFramesRun) {
+    MessageBoxGuard boxes;
+    KeyboardInputGuard keyboards;
+    ScriptedModalFrames frames;
+    ModalFramesGuard installed(&frames);
+    frames.answer = [] { Guide::SimulateMessageBoxClickEXT(1); };
+    EXPECT_EQ(1, Guide::EndShowMessageBox(ShowTwoButtonBox().get()));
+    EXPECT_EQ(3, frames.frames);
+
+    frames.frames = 0;
+    frames.answerOn = 2;
+    frames.answer = [] { TypeUtf16(u"Typed"); PressEnter(); };
+    std::unique_ptr<System::IAsyncResult> input(Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "title", "description", "", System::AsyncCallback{}, std::any{}));
+    EXPECT_EQ("Typed", Guide::EndShowKeyboardInput(input.get()));
+    EXPECT_EQ(2, frames.frames);
+}
+
+// With no running game nothing could answer the Guide, so End refuses rather than hang, and stays
+// callable for when the answer comes.
+TEST(GuideTest, EndWithoutARunningGameRefusesAndCanBeCalledAgainOnceAnswered) {
+    MessageBoxGuard boxes;
+    ModalFramesGuard none(nullptr);
+    auto box = ShowTwoButtonBox();
+    if (CNA::Internal::GamerServices::guideModalFrames() != nullptr) GTEST_SKIP() << "a game is alive in this process";
+    EXPECT_THROW((void)Guide::EndShowMessageBox(box.get()), System::InvalidOperationException);
+    Guide::SimulateMessageBoxClickEXT(0);
+    EXPECT_EQ(0, Guide::EndShowMessageBox(box.get()));
 }
 
 TEST(GuideTest, EndShowMessageBoxThrowsIfCalledTooEarly) {

@@ -1915,8 +1915,13 @@ CNA_C_API CNA_Result cna_guide_begin_show_keyboard_input(
  * @brief Reports the byte length of the text the completed keyboard input produced.
  *
  * @param out_bytes Receives the length in bytes, with no terminator counted.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when no input has been started or it has
- *         not completed yet, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when no input has been started or it is
+ *         unconfirmed and no running game can present the Guide, or `CNA_RESULT_INVALID_ARGUMENT`
+ *         for a null output.
+ *
+ * Unconfirmed input is waited for, as the canonical End waits: the running game keeps presenting the
+ * Guide and reading input, without its own update and draw, until the user confirms or cancels. The
+ * text can be read again until the next input is started.
  */
 CNA_C_API CNA_Result cna_guide_end_show_keyboard_input_size(uint64_t* out_bytes);
 
@@ -1928,8 +1933,9 @@ CNA_C_API CNA_Result cna_guide_end_show_keyboard_input_size(uint64_t* out_bytes)
  * @param capacity Destination capacity in bytes.
  * @param out_bytes Receives the length in bytes whether or not the copy succeeded.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with nothing written,
- *         `CNA_RESULT_INVALID_STATE` when no completed input is available, or a documented argument
- *         failure.
+ *         `CNA_RESULT_INVALID_STATE` when no input has been started or it is unconfirmed and no
+ *         running game can present the Guide, or a documented argument failure. Waits as
+ *         `cna_guide_end_show_keyboard_input_size` does.
  */
 CNA_C_API CNA_Result cna_guide_end_show_keyboard_input(
     char* destination,
@@ -2109,7 +2115,12 @@ CNA_C_API CNA_Result cna_guide_begin_show_message_box(
  * @param out_button_index Receives the chosen button index when @p out_has_choice is non-zero, and
  *        is left exactly as the caller set it otherwise.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when no message box has been started or
- *         it has not been answered yet, or a documented argument failure.
+ *         it is unanswered and no running game can present the Guide, or a documented argument
+ *         failure.
+ *
+ * An unanswered box is waited for, as the canonical End waits: the running game keeps presenting the
+ * Guide and reading input, without its own update and draw, until the user answers. The answer can be
+ * read again until the next box is started.
  *
  * The canonical answer is optional, so availability is separate from the answer here too: a message
  * box that completed without a choice is an ordinary success with the flag clear.

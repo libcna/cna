@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 #include "System/AsyncCallback.hpp"
+#include "CNA/Internal/Runtime/IModalFrames.hpp"
 #include "System/IAsyncResult.hpp"
 #include "System/IServiceProvider.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/MessageBoxIcon.hpp"
@@ -27,6 +28,11 @@ void pollSystemGuideButton();
  * (the reference's IsVisibleNoThrow). @return True while a message box, keyboard, sign-in or
  * social pane is visible. */
 bool guideIsVisible();
+/** @brief Gets the frames a Guide End call runs while it waits for an answer: the live game's,
+ * unless a test installed its own. @return The frames, or null without a game. */
+CNA::Internal::Runtime::IModalFrames* guideModalFrames();
+/** @brief Replaces the live game's modal frames for tests. @param frames Frames, or null to restore. */
+void setGuideModalFramesForTesting(CNA::Internal::Runtime::IModalFrames* frames);
 /** @brief Opens the keyboard pane for the Guide's own screens, which the public argument and
  * visibility rules (Guide::BeginShowKeyboardInput) do not bind.
  * @param player Player the pane belongs to. @param title Title. @param description Prompt.

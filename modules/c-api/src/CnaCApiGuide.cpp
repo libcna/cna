@@ -23,6 +23,7 @@
 
 #include <cstring>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -76,6 +77,32 @@ std::unique_ptr<System::IAsyncResult>& PendingMessageBox()
 {
     static std::unique_ptr<System::IAsyncResult> pending;
     return pending;
+}
+
+// Guide End runs once per result, as the reference allows, while the C calls read an answer as often
+// as they like; the first End's answer is kept until the result is replaced or reset.
+std::optional<std::string>& EndedKeyboardInput()
+{
+    static std::optional<std::string> text;
+    return text;
+}
+
+std::optional<std::optional<int>>& EndedMessageBox()
+{
+    static std::optional<std::optional<int>> choice;
+    return choice;
+}
+
+const std::string& KeyboardInputAnswer()
+{
+    if (!EndedKeyboardInput()) EndedKeyboardInput() = Guide::EndShowKeyboardInput(PendingKeyboardInput().get());
+    return *EndedKeyboardInput();
+}
+
+std::optional<int> MessageBoxAnswer()
+{
+    if (!EndedMessageBox()) EndedMessageBox() = Guide::EndShowMessageBox(PendingMessageBox().get());
+    return *EndedMessageBox();
 }
 
 class GuideRegistrationBase {
@@ -434,6 +461,7 @@ CNA_Result cna_guide_begin_show_keyboard_input(
             std::any{},
             usePasswordMode == CNA_TRUE);
         PendingKeyboardInput().reset(action);
+        EndedKeyboardInput().reset();
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -447,7 +475,7 @@ CNA_Result cna_guide_end_show_keyboard_input_size(uint64_t* const outBytes)
         if (PendingKeyboardInput() == nullptr) {
             return InvalidState("No keyboard input has been started.");
         }
-        *outBytes = Guide::EndShowKeyboardInput(PendingKeyboardInput().get()).size();
+        *outBytes = KeyboardInputAnswer().size();
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -462,7 +490,7 @@ CNA_Result cna_guide_end_show_keyboard_input(
             return InvalidState("No keyboard input has been started.");
         }
         return CopyGuideText(
-            Guide::EndShowKeyboardInput(PendingKeyboardInput().get()),
+            KeyboardInputAnswer(),
             destination,
             capacity,
             outBytes);
@@ -611,6 +639,7 @@ CNA_Result cna_guide_reset_pending_keyboard_input_ext(void)
         // The operation is gone as far as the canonical guide is concerned, so the C layer drops its
         // own hold too rather than leaving an answer nobody can complete.
         PendingKeyboardInput().reset();
+        EndedKeyboardInput().reset();
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -673,6 +702,7 @@ CNA_Result cna_guide_begin_show_message_box(
             std::move(nativeCallback),
             std::any{});
         PendingMessageBox().reset(action);
+        EndedMessageBox().reset();
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -689,7 +719,7 @@ CNA_Result cna_guide_end_show_message_box(
         if (PendingMessageBox() == nullptr) {
             return InvalidState("No message box has been started.");
         }
-        const std::optional<int> selected = Guide::EndShowMessageBox(PendingMessageBox().get());
+        const std::optional<int> selected = MessageBoxAnswer();
         if (!selected.has_value()) {
             return CNA_RESULT_SUCCESS;
         }
@@ -764,6 +794,7 @@ CNA_Result cna_guide_reset_pending_message_box_ext(void)
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         Guide::ResetPendingMessageBoxForTestingEXT();
         PendingMessageBox().reset();
+        EndedMessageBox().reset();
         return CNA_RESULT_SUCCESS;
     });
 }

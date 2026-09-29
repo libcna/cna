@@ -12,7 +12,7 @@ or renamed module stops this gate rather than inheriting a default. Paths whose 
 are `Internal` or `Detail` in any capitalization are excluded as implementation detail.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **469 headers**, **8126 symbols**, **7035 implemented**, **15 partial**, **640 planned**, **436 not applicable**. Explicitly excluded headers: **479**.
+Snapshot: **469 headers**, **8126 symbols**, **7035 implemented**, **15 partial**, **640 planned**, **436 not applicable**. Explicitly excluded headers: **480**.
 
 ## Out of runtime C API scope
 
@@ -40,11 +40,11 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/input` internal/detail paths | 4 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/media` internal/detail paths | 12 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/net` internal/detail paths | 6 | implementation detail: a path segment is `Internal` or `Detail` |
-| `modules/runtime` internal/detail paths | 1 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/runtime` internal/detail paths | 2 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `4d516e6b4aeab1bf0686c32a7ab641758ed83335802eaeea8779efdfda95b935`.
+Full inventory SHA-256: `6bb45b019d300852f8e489e476cb238a1a155c58410eb3d826d9124718f9d727`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:

@@ -60,6 +60,9 @@ Microsoft::Xna::Framework::Graphics::GraphicsDevice& dispatcherGraphicsDevice() 
     return *device;
 }
 void setDispatcherGraphicsDeviceForTesting(Microsoft::Xna::Framework::Graphics::GraphicsDevice* device){testingDevice=device;}
+namespace {CNA::Internal::Runtime::IModalFrames* testingFrames=nullptr;}
+CNA::Internal::Runtime::IModalFrames* guideModalFrames(){return testingFrames?testingFrames:CNA::Internal::Runtime::activeModalFrames();}
+void setGuideModalFramesForTesting(CNA::Internal::Runtime::IModalFrames* frames){testingFrames=frames;}
 void installGuideOverlay(System::IServiceProvider& provider) {
     auto* container=dynamic_cast<Microsoft::Xna::Framework::GameServiceContainer*>(&provider);
     overlay.graphics=static_cast<Microsoft::Xna::Framework::Graphics::IGraphicsDeviceService*>(provider.GetService(typeid(Microsoft::Xna::Framework::Graphics::IGraphicsDeviceService)));

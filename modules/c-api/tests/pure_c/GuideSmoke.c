@@ -225,6 +225,12 @@ static int validate_message_box(void)
         flag != CNA_FALSE) {
         return 0;
     }
+    /* The canonical End runs once per box; the answer stays readable here. */
+    button = -1;
+    if (cna_guide_end_show_message_box(&has_choice, &button) != CNA_RESULT_SUCCESS ||
+        has_choice != CNA_TRUE || button != 1) {
+        return 0;
+    }
 
     /* Discarding never runs the callback either. */
     completions = 0;

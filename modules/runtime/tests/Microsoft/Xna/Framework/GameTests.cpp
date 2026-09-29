@@ -18,6 +18,7 @@
 #include "CNA/Platform/PlatformTestDecorator.hpp"
 #include "RuntimePlatformTestSupport.hpp"
 #include "CNA/Internal/Runtime/IGameOverlay.hpp"
+#include "CNA/Internal/Runtime/IModalFrames.hpp"
 
 #include <atomic>
 #include <memory>
@@ -489,6 +490,57 @@ TEST(GameTest, SystemOverlayRunsAfterGameDrawBeforePresentation)
     EXPECT_EQ(order, (std::vector<std::string>{"game", "overlay", "present"}));
 }
 
+// System UI waiting on the player (Guide.EndShowMessageBox before an answer) runs the game's modal
+// frames: input and the overlay are presented, the game's own Update and Draw are not. None run
+// before the game has started or once it is exiting.
+TEST(GameTest, ModalFramesPresentTheOverlayWithoutTheGamesUpdateOrDraw)
+{
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
+        GTEST_SKIP() << "The selected platform cannot create a test window.";
+    std::vector<std::string> order;
+    class Overlay final : public CNA::Internal::Runtime::IGameOverlay {
+    public:
+        explicit Overlay(std::vector<std::string>& sequence) : sequence_(sequence) {}
+        void draw() override { sequence_.push_back("overlay"); }
+    private:
+        std::vector<std::string>& sequence_;
+    } overlay(order);
+    class ModalGame final : public Game {
+    public:
+        explicit ModalGame(std::vector<std::string>& sequence) : sequence_(sequence) {}
+    protected:
+        void Update(GameTime&) override { sequence_.push_back("update"); }
+        void Draw(const GameTime&) override { sequence_.push_back("game"); }
+        void EndDraw() override { sequence_.push_back("present"); Game::EndDraw(); }
+    private:
+        std::vector<std::string>& sequence_;
+    } game(order);
+    game.getServicesProperty().AddService<CNA::Internal::Runtime::IGameOverlay>(&overlay);
+    auto* frames = game.getServicesProperty().GetService<CNA::Internal::Runtime::IModalFrames>();
+    ASSERT_NE(frames, nullptr);
+    EXPECT_EQ(frames, CNA::Internal::Runtime::activeModalFrames());
+    EXPECT_FALSE(frames->runModalFrame()) << "no frame before the game has started";
+
+    game.RunOneFrame();
+    order.clear();
+    EXPECT_TRUE(frames->runModalFrame());
+    EXPECT_TRUE(frames->runModalFrame());
+    EXPECT_EQ(order, (std::vector<std::string>{"overlay", "present", "overlay", "present"}));
+
+    game.Exit();
+    EXPECT_FALSE(frames->runModalFrame());
+}
+
+TEST(GameTest, ModalFramesBelongToTheLiveGameOnly)
+{
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
+        GTEST_SKIP() << "The selected platform cannot create a test window.";
+    {
+        Game game;
+        EXPECT_NE(CNA::Internal::Runtime::activeModalFrames(), nullptr);
+    }
+    EXPECT_EQ(CNA::Internal::Runtime::activeModalFrames(), nullptr);
+}
 
 TEST(GameTest, ModalSystemOverlayOwnsActivityWithoutOverwritingWindowFocus)
 {

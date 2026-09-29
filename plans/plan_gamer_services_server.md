@@ -2642,3 +2642,21 @@ the C struct field documents local ticks. CnaGamerServicesTests 485 + 1 skip.
   `RoundTripsCoverEveryRemoteGamerAndARelayedOneAddsTheHosts` (three-machine engine),
   `OnlineNetworkSessionTest.TrafficAndRoundTripsReachTheSession`, and validator preflight/round-trip
   cases. CnaNetTests 495/495, CApi_NetSmoke, protocol drift check clean.
+- [x] GS-005i `Guide.EndShowMessageBox`/`EndShowKeyboardInput` wait for the answer (audit OPEN 13).
+  Reference `XOverlappedAsyncResult.PrepareForEndFunction`: null `ArgumentNullException`, another
+  Begin's result `ArgumentException`, a second End `InvalidOperationException`, then
+  `AsyncWaitHandle.WaitOne()`. CNA refused an unanswered result with `InvalidOperationException`
+  and let End run any number of times. On the console the Guide runs while the game thread waits;
+  CNA draws it inside the game, so waiting there would deadlock. The wait instead runs the game's
+  modal frames. A new internal runtime service, `CNA::Internal::Runtime::IModalFrames` (provided by
+  every `Game`; `activeModalFrames()` names the live one), polls platform events and presents the
+  system overlay over a cleared screen, without the game's `Update` or `Draw`, until the answer
+  arrives. With no running game (none alive, not started, exiting, or the browser, which delivers
+  input only between frames) End refuses with `InvalidOperationException` and stays callable. The
+  results' wait handles are now signalled on completion. The C layer keeps the first End's answer,
+  so its size/copy and repeated reads still work. C and C++ docs updated. Tests:
+  `GuideTest.EndFollowsTheReferenceChecks`, `EndWaitsForTheAnswerWhileTheGamesModalFramesRun`,
+  `EndWithoutARunningGameRefusesAndCanBeCalledAgainOnceAnswered`,
+  `GameTest.ModalFramesPresentTheOverlayWithoutTheGamesUpdateOrDraw`,
+  `ModalFramesBelongToTheLiveGameOnly`, GuideSmoke re-read. CnaGamerServicesTests 494 + 1 skip,
+  CnaRuntimeTests 192, Guide/Gamers/Net C smokes.

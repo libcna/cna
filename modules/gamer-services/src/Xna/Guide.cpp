@@ -35,6 +35,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "../Internal/GuideOverlay.hpp"
+#include "CNA/Internal/Runtime/IModalFrames.hpp"
 #include "../Internal/ServiceAsyncResult.hpp"
 #include "System/Threading/EventWaitHandle.hpp"
 #include <algorithm>
@@ -64,7 +65,11 @@ namespace Microsoft::Xna::Framework::GamerServices
             [[nodiscard]] const std::any& getAsyncStateProperty() const override { return asyncState_; }
             [[nodiscard]] bool getCompletedSynchronouslyProperty() const override { return false; }
             [[nodiscard]] bool getIsCompletedProperty() const override { return isCompleted_; }
-            void setIsCompletedProperty(bool value) { isCompleted_ = value; }
+            void setIsCompletedProperty(bool value)
+            {
+                isCompleted_ = value;
+                if (value) asyncWaitHandle_.Set();
+            }
 
             [[nodiscard]] System::Threading::WaitHandle& getAsyncWaitHandleProperty() const override
             {
@@ -72,6 +77,8 @@ namespace Microsoft::Xna::Framework::GamerServices
             }
 
             const System::AsyncCallback Callback;
+            // Reference XOverlappedAsyncResult.endHasBeenCalled.
+            bool EndCalled{false};
 
         private:
             std::any asyncState_;
@@ -381,6 +388,27 @@ namespace Microsoft::Xna::Framework::GamerServices
         // or the operation is canceled, not whenever the game later gets around to calling End*.
         // `canceled` clears the buffer (matching a real on-screen keyboard's own cancel-discards-
         // the-edit semantics) and marks the action so WasKeyboardInputCanceledEXT can report it.
+        // Reference XOverlappedAsyncResult.PrepareForEndFunction: End may be called once, and waits
+        // for the answer. CNA draws the Guide inside the game, so the wait runs the game's modal
+        // frames (input and the Guide over a cleared screen, the game's Update and Draw frozen), as
+        // a console keeps its Guide running while the game thread waits. Without a running game to
+        // present it nothing could answer, so the wait refuses instead of hanging.
+        void PrepareForEnd(GuideAction& action, const char* operation)
+        {
+            if (action.EndCalled) throw System::InvalidOperationException(std::string(operation) + " was already called for this result.");
+            action.EndCalled = true;
+            while (!action.getIsCompletedProperty())
+            {
+                auto* frames = CNA::Internal::GamerServices::guideModalFrames();
+                if (frames == nullptr || !frames->runModalFrame())
+                {
+                    action.EndCalled = false;
+                    throw System::InvalidOperationException(std::string(operation) +
+                        " cannot wait for the answer: no running game is presenting the Guide.");
+                }
+            }
+        }
+
         void CompletePendingKeyboardInput(bool canceled)
         {
             GuideKeyboardInputAction* action = pendingKeyboardInput_;
@@ -628,18 +656,13 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     std::string Guide::EndShowKeyboardInput(System::IAsyncResult* result)
     {
+        if (result == nullptr) throw System::ArgumentNullException("result");
         auto* action = dynamic_cast<GuideKeyboardInputAction*>(result);
         if (action == nullptr)
         {
             throw System::ArgumentException("result was not returned by a call to BeginShowKeyboardInput.", "result");
         }
-        if (!action->getIsCompletedProperty())
-        {
-            throw System::InvalidOperationException(
-                "The keyboard input has not been confirmed yet - it completes when the user "
-                "presses Enter (or via a test's simulated TextInputEXT::INTERNAL_OnTextInput(u'\\r'))."
-            );
-        }
+        PrepareForEnd(*action, "EndShowKeyboardInput");
         return EncodeUtf16ToUtf8(action->Buffer);
     }
 
@@ -825,18 +848,13 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     std::optional<int> Guide::EndShowMessageBox(System::IAsyncResult* result)
     {
+        if (result == nullptr) throw System::ArgumentNullException("result");
         auto* action = dynamic_cast<GuideMessageBoxAction*>(result);
         if (action == nullptr)
         {
             throw System::ArgumentException("result was not returned by a call to BeginShowMessageBox.", "result");
         }
-        if (!action->getIsCompletedProperty())
-        {
-            throw System::InvalidOperationException(
-                "The message box has not been answered yet - render it via RenderPendingMessageBoxEXT "
-                "(or resolve it via SimulateMessageBoxClickEXT) before calling EndShowMessageBox."
-            );
-        }
+        PrepareForEnd(*action, "EndShowMessageBox");
         return action->SelectedButton;
     }
 

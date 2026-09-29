@@ -443,6 +443,10 @@ namespace Microsoft::Xna::Framework
         std::unordered_map<IUpdateable*, System::EventHandler<System::EventArgs>::Token> updateOrderChangedTokens_;
         std::unordered_map<IDrawable*, System::EventHandler<System::EventArgs>::Token> drawOrderChangedTokens_;
 
+        // The CNA::Internal::Runtime::IModalFrames service this game provides to system UI.
+        class ModalFrames;
+        std::unique_ptr<ModalFrames> modalFrames_;
+
         // FNA: internal set — only Game itself may change the active state.
         void setIsActiveProperty(bool value);
 

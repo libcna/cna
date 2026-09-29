@@ -178,7 +178,9 @@ namespace Microsoft::Xna::Framework::GamerServices
         );
 
         /**
-         * @brief Completes an asynchronous BeginShowKeyboardInput request.
+         * @brief Completes an asynchronous BeginShowKeyboardInput request, waiting for the user to
+         * confirm or cancel. While it waits, the running game keeps presenting the Guide and reading
+         * input, but its own Update and Draw do not run.
          *
          * @param result The result returned by BeginShowKeyboardInput.
          * @return The text the user actually typed (or defaultText, if Enter was pressed
@@ -187,9 +189,10 @@ namespace Microsoft::Xna::Framework::GamerServices
          *         with nothing typed," since both otherwise return the same empty string (real
          *         XNA's own documented behavior returns null on cancel, which this C++ port's
          *         non-nullable std::string return type cannot represent directly).
+         * @throws System::ArgumentNullException if result is null.
          * @throws System::ArgumentException if result was not returned by BeginShowKeyboardInput.
-         * @throws System::InvalidOperationException if the operation has not completed yet (the
-         *         user has not pressed Enter or canceled).
+         * @throws System::InvalidOperationException if End was already called for this result, or
+         *         the input is unconfirmed and no running game can present the Guide.
          */
         [[nodiscard]] static std::string EndShowKeyboardInput(System::IAsyncResult* result);
 
@@ -361,14 +364,17 @@ namespace Microsoft::Xna::Framework::GamerServices
         );
 
         /**
-         * @brief Completes an asynchronous BeginShowMessageBox request.
+         * @brief Completes an asynchronous BeginShowMessageBox request, waiting for the answer. While
+         * it waits, the running game keeps presenting the Guide and reading input, but its own
+         * Update and Draw do not run.
          *
          * @param result The result returned by BeginShowMessageBox.
-         * @return The zero-based index of the selected button, or empty if the box was
-         *         dismissed without a selection (never happens in this implementation - always
-         *         has a value).
+         * @return The zero-based index of the selected button, or empty if the box was cancelled
+         *         (Escape, B or Back).
+         * @throws System::ArgumentNullException if result is null.
          * @throws System::ArgumentException if result was not returned by BeginShowMessageBox.
-         * @throws System::InvalidOperationException if the operation has not completed yet.
+         * @throws System::InvalidOperationException if End was already called for this result, or
+         *         the box is unanswered and no running game can present the Guide.
          */
         [[nodiscard]] static std::optional<int> EndShowMessageBox(System::IAsyncResult* result);
 
