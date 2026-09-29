@@ -21,6 +21,7 @@
 #include "System/IServiceProvider.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include <algorithm>
 #include <chrono>
 #include <array>
 #include <cstdlib>
@@ -40,6 +41,17 @@ bool uiItems(const std::string& screen,std::size_t minimum) {
     return true;
 }
 // Waits for a Guide screen whose item shows a label.
+// The action index of a card action once it is offered, or -1 (the first label is the gamertag).
+int uiAction(const std::string& screen,const std::string& label) {
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(12);
+    for(;;) {
+        const auto labels=Ui::labelsForTesting();
+        const auto found=std::find(labels.begin(),labels.end(),label);
+        if(Ui::currentScreenForTesting()==screen&&found!=labels.end()&&found!=labels.begin())return static_cast<int>(found-labels.begin())-1;
+        if(std::chrono::steady_clock::now()>deadline)return -1;
+        GamerServicesDispatcher::Update();std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+}
 bool uiLabel(const std::string& screen,std::size_t index,const std::string& label) {
     const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(12);
     for(;;) {
@@ -316,7 +328,7 @@ int main(int argc,char** argv) {
             Ui::closeAll();
             Guide::ShowGamerCard(Microsoft::Xna::Framework::PlayerIndex::Two,gamer);
             check(uiLabel("gamerCard",1,"Accept friend request"),"incoming request on the card");Ui::clickForTesting(0);
-            check(uiLabel("gamerCard",1,"Remove friend"),"card after accepting");
+            check(uiAction("gamerCard","Remove friend")>=0,"card after accepting");
             check(gamer->IsFriend(other)&&other->IsFriend(gamer),"mutual accepted friendship");
             Ui::closeAll();
             other->getPresenceProperty().setPresenceModeProperty(GamerPresenceMode::Level);
@@ -330,7 +342,7 @@ int main(int argc,char** argv) {
             check(Ui::currentScreenForTesting()=="gamerCard","missing profile card");settle();check(Ui::labelsForTesting().empty(),"missing profile error UI");
             Ui::closeAll();
             Guide::ShowGamerCard(Microsoft::Xna::Framework::PlayerIndex::One,other);
-            check(uiLabel("gamerCard",1,"Remove friend"),"remove offered");Ui::clickForTesting(0);
+            const int remove=uiAction("gamerCard","Remove friend");check(remove>=0,"remove offered");Ui::clickForTesting(remove);
             check(uiLabel("gamerCard",1,"Send friend request"),"card after removal");
             check(!gamer->IsFriend(other)&&other->GetFriends().getCountProperty()==0,"mutual friend removal");Ui::closeAll();
         }

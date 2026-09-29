@@ -137,7 +137,9 @@ TEST_F(GuideUiTest, TheGamerCardAcceptsAFriendRequestAndReflectsIt) {
     ASSERT_TRUE(Labels(2));
     EXPECT_EQ((std::vector<std::string>{"Dave", "Accept friend request", "Send message", "Review player"}), Ui::labelsForTesting());
     Ui::sendForTesting(Ui::Command::Accept);
-    ASSERT_TRUE(Settle([] { return Ui::labelsForTesting().size() > 1 && Ui::labelsForTesting()[1] == "Remove friend"; }));
+    // A friend's card offers what friends do first; removing the friend is its last action.
+    ASSERT_TRUE(Settle([] { return Ui::labelsForTesting().size() > 1 && Ui::labelsForTesting().back() == "Remove friend"; }));
+    EXPECT_EQ("Invite to party", Ui::labelsForTesting()[1]);
     EXPECT_TRUE((*Gamer::getSignedInGamersProperty())[0]->IsFriend(dave.get()));
     // The card is still up, and the action was announced.
     EXPECT_EQ("gamerCard", Ui::currentScreenForTesting());

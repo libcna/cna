@@ -474,9 +474,12 @@ void drawRail(Ui& ui,const Box& rail,Category current,float alpha)
     ui.style.rounded(ui.batch,Box{face.x-ui.px(3),face.y-ui.px(3),face.w+ui.px(6),face.h+ui.px(6)},ui.px(16),Palette::accent());
     portrait(ui,who.avatar,face);
     const float tx=face.right()+ui.px(14);
-    ui.style.text(ui.batch,Font::Heading,ui.style.fit(Font::Heading,who.gamertag.empty()?"Not signed in":who.gamertag,rail.right()-tx-ui.px(12)),
-        Xna::Vector2(tx,face.y+ui.px(2)),Palette::text());
-    if(!who.gamertag.empty()) {
+    if(who.gamertag.empty()) {
+        ui.style.text(ui.batch,Font::BodyBold,"Not signed in",Xna::Vector2(tx,face.y+ui.px(8)),Palette::text());
+        ui.style.text(ui.batch,Font::Caption,"Select Sign in",Xna::Vector2(tx,face.y+ui.px(36)),Palette::muted());
+    } else {
+        ui.style.text(ui.batch,Font::Heading,ui.style.fit(Font::Heading,who.gamertag,rail.right()-tx-ui.px(12)),
+            Xna::Vector2(tx,face.y+ui.px(2)),Palette::text());
         const float iy=face.y+ui.px(40);
         if(who.online) {
             ui.style.icon(ui.batch,Icon::Trophy,Box{tx,iy,ui.px(18),ui.px(18)},Palette::gold());

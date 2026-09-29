@@ -169,7 +169,7 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
 | GSX-U6 | Achievements and leaderboards presentation | done |
 | GSX-U7 | Party and title-content panes in the same system; catalog updates as one product | done |
 | GSX-U8 | Transitions, reduced motion, original system sounds (if an appropriate audio path exists) | done |
-| GSX-U9 | Semantic UI tests; BEFORE/AFTER sheets and an ordered interaction sequence | |
+| GSX-U9 | Semantic UI tests; BEFORE/AFTER sheets and an ordered interaction sequence | done |
 | GSX-E* | Remaining register gaps, one decision each | |
 | GSX-P1 | Documentation and register | |
 | GSX-Q1 | Final acceptance | |
@@ -328,3 +328,18 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
   `CNA_GAMER_SERVICES_SOUNDS=0` turns them off, and without an audio device the Guide is silent.
   Test: `GuideUiTest.SystemSoundsPlayOrStaySilentWithoutFailing`; the 24-step review runs with
   them. UNV: how they sound was not listened to here (no audio output on this host).
+- GSX-U9 (tests and review). Semantic tests drive every system surface through the Guide's own
+  input (`sendForTesting`/`clickForTesting`/labels/focus), and `GuideInputTest` drives the Guide's
+  real frame from a canned keyboard and a canned controller behind the platform (the key held when
+  the Guide opens does nothing; Down/Enter, E/LB between categories, Escape/B closing).
+  `cna_guide_review OUTDIR --sequence` is one player's session in order, never reset between
+  captures: Home signed out, the sign-in picker, account name and masked password typed, the
+  sign-in toast, Home, the avatar editor, trying and keeping a hairstyle, the save question, the
+  saved toast back on Home, Friends, Bob's card, a party invitation sent, Bob's game invitation
+  arriving, accepted. Inspected on the private display (OPENGL33); it showed two defects, fixed:
+  the rail's "Not signed in" was truncated (now a two-line prompt), and a friend's card opened
+  focused on "Remove friend" (a friend's actions now come first and removing is last).
+  BEFORE/AFTER: the 19 original review captures against the current ones, side by side.
+  Evidence: `/rv/tmp/xbox-fidelity/ui/sequence/`, `seq-sheet-{1..4}.png`,
+  `before-after-{1..4}.png`, `after6/`. GS Guide groups 47/47, Net invitations 6/6, fake-backend
+  harness and `service_tls_e2e` pass.

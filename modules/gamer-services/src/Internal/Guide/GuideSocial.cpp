@@ -318,15 +318,17 @@ public:
     std::vector<std::pair<Icon,std::string>> items() const {
         std::vector<std::pair<Icon,std::string>> out;
         if(!loaded_||self_)return out;
-        if(friendship_&&friendship_->accepted)out.push_back({Icon::Cross,"Remove friend"});
-        else if(friendship_&&friendship_->requestReceived)out.push_back({Icon::PersonAdd,"Accept friend request"});
-        else if(friendship_&&friendship_->requestSent)out.push_back({Icon::Cross,"Cancel friend request"});
-        else out.push_back({Icon::PersonAdd,"Send friend request"});
-        if(friendship_&&friendship_->accepted&&friendship_->joinable)out.insert(out.begin(),{Icon::Controller,"Join game"});
+        // What a friend is for comes first; removing one is never what the card opens on.
+        const bool friends=friendship_&&friendship_->accepted;
+        if(friends&&friendship_->joinable)out.push_back({Icon::Controller,"Join game"});
+        if(!friends&&friendship_&&friendship_->requestReceived)out.push_back({Icon::PersonAdd,"Accept friend request"});
+        else if(!friends&&friendship_&&friendship_->requestSent)out.push_back({Icon::Cross,"Cancel friend request"});
+        else if(!friends)out.push_back({Icon::PersonAdd,"Send friend request"});
         if(activeOnlineSession())out.push_back({Icon::Invite,"Invite to game"});
-        if(friendship_&&friendship_->accepted&&!inMyParty())out.push_back({Icon::Party,"Invite to party"});
+        if(friends&&!inMyParty())out.push_back({Icon::Party,"Invite to party"});
         out.push_back({Icon::Message,"Send message"});
         out.push_back({Icon::StarOutline,"Review player"});
+        if(friends)out.push_back({Icon::Cross,"Remove friend"});
         return out;
     }
     void input(InputContext& ui) override {

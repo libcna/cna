@@ -6,6 +6,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/InviteAcceptedEventArgs.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include <algorithm>
 
 namespace {
 using namespace OnlineSessionTesting;
@@ -119,11 +120,13 @@ TEST_F(OnlineInvitationTest, ShowGameInviteAndTheGamerCardInviteToTheActiveOnlin
     // Bob is signed in here too: his invitation prompt appears; closing it leaves it pending.
     prompted();Ui::clickForTesting(1);
     until([&]{return stateOf("b",sent.invite)==Service::ServiceInvitationState::Dismissed;});
-    // Gamer card for Dana offers "Invite to game" after the friendship action while in a session.
+    // Gamer card for Dana offers "Invite to game" while in a session.
     Guide::ShowGamerCard(PlayerIndex::One,gamer(3));ASSERT_EQ("gamerCard",Ui::currentScreenForTesting());
     until([&]{return Ui::labelsForTesting().size()>2;});
-    EXPECT_EQ("Invite to game",Ui::labelsForTesting().at(2));
-    Ui::clickForTesting(1);
+    const auto labels=Ui::labelsForTesting();
+    const auto invite=std::find(labels.begin(),labels.end(),"Invite to game");
+    ASSERT_NE(labels.end(),invite);
+    Ui::clickForTesting(static_cast<int>(invite-labels.begin())-1);
     until([&]{return service->sessionDirectory().listInvites("d",0,32).invites.size()==1;});
     // The card stays up (a notification confirms the invitation); Back closes the Guide.
     Ui::sendForTesting(Ui::Command::Back);

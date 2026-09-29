@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MS-PL
-// cna_guide_review OUTDIR
+// cna_guide_review OUTDIR [--sequence]
 //
 // Deterministic captures of CNA's system UI for review: a fixed scene stands in for a game, a fake
 // CNA service supplies accounts, friends, presence, messages, achievements and an invitation, and
 // each Guide surface is opened through the standard XNA Guide API (or, for the system Guide and
 // notifications, as the system opens them) and captured with the game still behind it, into
-// OUTDIR/<nn-name>.png. Run it on a private display (tools/platform/run_gpu_tests_private.sh
-// --exec), never on the desktop.
+// OUTDIR/<nn-name>.png. With --sequence it is instead one player's session in order, driven as a
+// player drives it and never reset between captures: signing in from the Guide, editing and saving
+// the avatar, a friend's card, a party invitation, a game invitation received and accepted. Run it
+// on a private display (tools/platform/run_gpu_tests_private.sh --exec), never on the desktop.
 
 #include "CNA/Internal/GamerServices/AvatarAssets.hpp"
 #include "CNA/Internal/GamerServices/AvatarDescriptionCodec.hpp"
@@ -28,6 +30,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -103,6 +106,31 @@ namespace
         return Avatars::sha256Hex(std::span<const std::uint8_t>(picture.data(), picture.size()));
     }
 
+    // What a player does in the Guide, through its semantic input.
+    namespace Ui = CNA::Internal::GamerServices::GuideUi;
+    void Type(const std::string& text)
+    {
+        for (const char c : text)
+            Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextInput(static_cast<Microsoft::Xna::Framework::Input::charcs>(c));
+    }
+    void Send(Ui::Command command, int times = 1)
+    {
+        for (int i = 0; i < times; ++i)
+            Ui::sendForTesting(command);
+    }
+    // Chooses the row whose label starts with text; offset for screens whose first label is a title.
+    void Choose(const std::string& text, int offset = 0)
+    {
+        const auto labels = Ui::labelsForTesting();
+        const auto found = std::find_if(labels.begin(), labels.end(), [&](const std::string& label) { return label.starts_with(text); });
+        if (found == labels.end())
+        {
+            std::printf("no \"%s\" on %s\n", text.c_str(), Ui::currentScreenForTesting().c_str());
+            return;
+        }
+        Ui::clickForTesting(static_cast<int>(found - labels.begin()) - offset);
+    }
+
     class GuideReviewGame : public Game
     {
         GraphicsDeviceManager graphics_{this};
@@ -115,6 +143,7 @@ namespace
         std::unique_ptr<SpriteBatch> batch_;
         std::unique_ptr<Texture2D> white_;
         std::chrono::steady_clock::duration clockOffset_{};
+        bool sequence_ = false;
 
         SignedInGamer* Player(int index) { return (*Gamer::getSignedInGamersProperty())[static_cast<PlayerIndex>(index)]; }
 
@@ -187,8 +216,81 @@ namespace
             Service::setBackendForTesting(service_);
         }
 
+        // Alice has just signed in: give her friends, presence, mail and the met players.
+        void Populate()
+        {
+            for (const char* tag : {"Bob", "Carol", "Dave", "Erin", "Frank"})
+            {
+                service_->changeFriend("a1", tag, "add");
+            }
+            Service::setFakeRemotePresence(*service_, "b2", true, "Racing on Canyon Loop", "online");
+            Service::setFakeRemotePresence(*service_, "c3", true, "In the menus", "away");
+            Service::setFakeRemotePresence(*service_, "d4", true, "", "busy");
+            for (const char* id : {"b2", "c3", "d4"})
+            {
+                service_->changeFriend(id, "Alice", "accept");
+            }
+            Service::setFakeRemotePresence(*service_, "d4", false);
+            service_->sendMessage("b2", {"Alice"}, "Nice run earlier! Rematch tonight?");
+            service_->sendMessage("c3", {"Alice"}, "Check out the new track.");
+            (void)service_->award("a1", "first");
+            (void)service_->award("a1", "combo");
+            Service::rememberRecentPlayer("Dave");
+            Service::rememberRecentPlayer("Frank");
+        }
+
+        void BobInvitesAlice()
+        {
+            Service::ServiceSessionSettings settings;
+            settings.maxGamers = 8;
+            const auto session = service_->sessionDirectory().create("b2", {"b2"}, Service::ServiceSessionKind::PlayerMatch, settings);
+            (void)service_->sessionDirectory().sendInvite("b2", session.session, "Alice");
+            Service::pollInvitationsNowForTesting();
+        }
+
+        std::vector<Step> Sequence()
+        {
+            return {
+                {"s01-home-signed-out", [] { Service::openSystemGuide(PlayerIndex::One); }, 30},
+                {"s02-sign-in", [] { Choose("Sign in"); }, 30},
+                {"s03-account-name", [] {
+                     Choose("Sign in with a CNA account");
+                     Type("Alice");
+                 }, 30},
+                {"s04-password", [] {
+                     Type("\r");
+                     Type("fixture");
+                 }, 30},
+                {"s05-signed-in", [] { Type("\r"); }, 40},
+                {"s06-home", [this] {
+                     Populate();
+                     Service::openSystemGuide(PlayerIndex::One);
+                 }, 60},
+                {"s07-avatar-editor", [] { Choose("Edit avatar"); }, 90},
+                {"s08-hair-trying", [] {
+                     Send(Ui::Command::Down, 5);
+                     Send(Ui::Command::Accept);
+                     Send(Ui::Command::Right);
+                 }, 60},
+                {"s09-hair-kept", [] { Send(Ui::Command::Accept); }, 40},
+                {"s10-save-question", [] { Send(Ui::Command::Back, 2); }, 30},
+                {"s11-saved", [] { Choose("Save"); }, 40},
+                {"s12-friends", [] {
+                     Ui::closeAll();
+                     Guide::ShowFriends(PlayerIndex::One);
+                 }, 40},
+                {"s13-gamer-card", [] { Choose("Bob"); }, 60},
+                {"s14-party-invitation-sent", [] { Choose("Invite to party", 1); }, 40},
+                {"s15-invitation-received", [this] {
+                     Ui::closeAll();
+                     BobInvitesAlice();
+                 }, 60},
+                {"s16-invitation-accepted", [] { Ui::clickForTesting(0); }, 40},
+            };
+        }
+
     public:
-        explicit GuideReviewGame(std::string out) : out_(std::move(out))
+        GuideReviewGame(std::string out, bool sequence) : out_(std::move(out)), sequence_(sequence)
         {
             graphics_.setPreferredBackBufferWidthProperty(Width);
             graphics_.setPreferredBackBufferHeightProperty(Height);
@@ -200,7 +302,10 @@ namespace
             steps_ = {
                 {"01-sign-in", [] { Guide::ShowSignIn(1, false); }},
                 {"02-signed-in-toast", [signIn] { signIn("Alice", 0); }, 30},
-                {"03-system-guide", [] { Service::openSystemGuide(PlayerIndex::One); }},
+                {"03-system-guide", [this] {
+                     Populate();
+                     Service::openSystemGuide(PlayerIndex::One);
+                 }},
                 {"04-friends", [] { Guide::ShowFriends(PlayerIndex::One); }},
                 {"05-gamer-card", [this] {
                      std::unique_ptr<Gamer> bob(Gamer::GetFromGamertag("Bob"));
@@ -215,13 +320,7 @@ namespace
                      Guide::ShowPlayerReview(PlayerIndex::One, dave.get());
                  }},
                 {"11-game-invite", [] { Guide::ShowGameInvite(PlayerIndex::One, std::vector<Gamer*>{}); }},
-                {"12-invitation-received", [this] {
-                     Service::ServiceSessionSettings settings;
-                     settings.maxGamers = 8;
-                     const auto session = service_->sessionDirectory().create("b2", {"b2"}, Service::ServiceSessionKind::PlayerMatch, settings);
-                     (void)service_->sessionDirectory().sendInvite("b2", session.session, "Alice");
-                     Service::pollInvitationsNowForTesting();
-                 }, 40},
+                {"12-invitation-received", [this] { BobInvitesAlice(); }, 40},
                 {"13-party", [] { Guide::ShowParty(PlayerIndex::One); }},
                 {"14-marketplace", [] { Guide::ShowMarketplace(PlayerIndex::One); }},
                 {"15-message-box", [] {
@@ -255,6 +354,8 @@ namespace
                      Service::GuideUi::clickForTesting(static_cast<int>(edit - labels.begin()));
                  }},
             };
+            if (sequence_)
+                steps_ = Sequence();
         }
 
     protected:
@@ -274,28 +375,6 @@ namespace
             }
             if (!opened_)
             {
-                if (step_ == 2)
-                {
-                    // Alice signed in during the previous step: give her friends, presence, mail and the met players.
-                    for (const char* tag : {"Bob", "Carol", "Dave", "Erin", "Frank"})
-                    {
-                        service_->changeFriend("a1", tag, "add");
-                    }
-                    Service::setFakeRemotePresence(*service_, "b2", true, "Racing on Canyon Loop", "online");
-                    Service::setFakeRemotePresence(*service_, "c3", true, "In the menus", "away");
-                    Service::setFakeRemotePresence(*service_, "d4", true, "", "busy");
-                    for (const char* id : {"b2", "c3", "d4"})
-                    {
-                        service_->changeFriend(id, "Alice", "accept");
-                    }
-                    Service::setFakeRemotePresence(*service_, "d4", false);
-                    service_->sendMessage("b2", {"Alice"}, "Nice run earlier! Rematch tonight?");
-                    service_->sendMessage("c3", {"Alice"}, "Check out the new track.");
-                    (void)service_->award("a1", "first");
-                    (void)service_->award("a1", "combo");
-                    Service::rememberRecentPlayer("Dave");
-                    Service::rememberRecentPlayer("Frank");
-                }
                 try
                 {
                     steps_[step_].open();
@@ -349,7 +428,8 @@ namespace
                 }
                 CNA::Internal::Graphics::ImageLoader::SavePng(rgba.data(), Width, Height, out_ + "/" + steps_[step_].name + ".png");
                 std::printf("captured %s\n", steps_[step_].name.c_str());
-                Close();
+                if (!sequence_)
+                    Close();
                 ++step_;
                 frame_ = 0;
                 opened_ = false;
@@ -361,13 +441,14 @@ namespace
 
 int main(int argc, char** argv)
 {
-    if (argc != 2)
+    const bool sequence = argc == 3 && std::string(argv[2]) == "--sequence";
+    if (argc != 2 && !sequence)
     {
-        std::fprintf(stderr, "usage: cna_guide_review OUTDIR\n");
+        std::fprintf(stderr, "usage: cna_guide_review OUTDIR [--sequence]\n");
         return 2;
     }
     std::filesystem::create_directories(argv[1]);
-    GuideReviewGame game(argv[1]);
+    GuideReviewGame game(argv[1], sequence);
     game.Run();
     return 0;
 }
