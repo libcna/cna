@@ -118,6 +118,35 @@ Research at e46db9822 / server 4ba7f95 (read-only; file:line in the task rows wh
 | Recent keys | **XNA**: key string only; no window in IL, XML or any document found | no window | retain (evidence insufficient) |
 | TrueSkill | **XNA**: games observe only `LeaderboardEntry.Rating` of a board they read; no document ties skill to matchmaking; Windows IL refuses the handlers | `WriteTrueSkill` raised, arbitrated boards, no skill computed | decide in GSX-E4 |
 
+## System UI inventory (GSX-U0, BEFORE at 065464fec)
+
+Captures: `/rv/tmp/xbox-fidelity/ui/before/` (`cna_guide_review`, 19 screens over a stand-in game,
+OPENGL33, private display; `sheet-before.png`) and `/rv/tmp/xbox-fidelity/ui/before-editor/`
+(`cna_avatar_editor --capture`, 7 steps). Every Guide surface below is drawn by two renderers,
+`Guide::RenderPendingMessageBoxEXT` and `RenderPendingKeyboardInputEXT`: a white box with the 5x7
+dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avatar anywhere.
+
+| Screen | Purpose | Current layout / controls | Avatar | Navigation | Weaknesses | Xbox 360 analogue | CNA treatment |
+|---|---|---|---|---|---|---|---|
+| Sign-in (`ShowSignIn`) | choose a profile for a player | keyboard box "Username for player 1", then password box | none | type text, Enter/Esc | looks like an HTTP form; no slots, no profiles to pick | profile picker over four controller slots | four player slots, profile cards with portraits, online/local/guest state, masked password step |
+| System Guide (Home key) | hub | message box, six buttons in one row | none | Left/Right, Enter | a row of buttons; no identity | the Guide blade with the gamer's picture | identity header (portrait, gamertag, score, status) and a category rail |
+| Friends (`ShowFriends`) | who is online, doing what | text lines "Bob - online - Racing..." + Find/More/Close | none | buttons only; no row focus | cannot select a friend; eight per page | friend list with pictures, status and presence | friend rows with portrait, status dot, presence, joinable/invite marks; A opens the card |
+| Gamer card (`ShowGamerCard`) | another player's identity | four text lines + buttons | none | buttons | a property dump; no zone/reputation/presence shown | gamer card with avatar, rep stars, zone, score | large animated avatar, stats, stars, zone, presence, relationship, actions |
+| Messages (`ShowMessages`) | inbox | one message per box, Next/Reply/Delete/Close | none | buttons | no list; cannot see what is unread | inbox list | inbox rows (sender portrait, unread mark, excerpt), message view |
+| Compose | write a message | keyboard box | none | typing | no recipient chips | message composer | composer card with recipients and text field |
+| Achievements (`ShowAchievementsEXT`) | this title's achievements | "[x] First Steps" lines | none | OK | no pictures, score or dates | achievement list with tiles, score, unlocked state | tiles with picture (service) or CNA trophy, score, earned date, totals |
+| Players (`ShowPlayers`) | recently met | name lines | none | buttons | no list focus | recent players | rows with portraits, leading to the card |
+| Player review | prefer/avoid | four buttons | none | buttons | no subject shown | player review | card with the subject and two clear choices |
+| Game invite (`ShowGameInvite`) | invite friends | refuses without a session (correct), no pane | none | none | nothing explains the refusal to the player (the API throws, as XNA) | friend picker | friend picker with checks when a session exists |
+| Invitation received | accept a friend's invitation | message box "Bob invited Alice..." Accept/Decline | none | buttons | not an event; no sender identity; no "view profile" | toast then invitation card | toast with portrait, invitation card: sender, title, session, Accept/Decline/View profile |
+| Party (`ShowParty`) | party | explanatory box | none | OK | no party exists | party blade | party screen (after the party service) |
+| Marketplace (`ShowMarketplace`) | store | "no marketplace ... fully licensed" | none | OK | wrong while SimulateTrialMode (see gaps) | marketplace | CNA title content: installed, updates, avatar catalogs; trial purchase emulation |
+| Message box (public API) | game's question | white box | none | buttons, mouse | tiny text, no icon | system dialog | dialog card with icon, wrapped text, focused buttons |
+| Keyboard (public API) | game's text entry | white box | none | typing | no on-screen keyboard for a pad | virtual keyboard | text field card, on-screen keyboard for the pad |
+| Notifications | events | dark box, green bar, one line, 2x pixel font | none | none | no icon, no portrait, no transition | toast with icon | toast with icon or portrait, slide/fade, at NotificationPosition |
+| Leaderboards | scores | no system surface (games draw their own through `LeaderboardReader`; `demo_leaderboard_viewer`) | none | - | - | per-game boards | a Guide page for this title's boards (CNA system feature, not an XNA API) |
+| Avatar editor (`cna_avatar_editor`) | customize the avatar | left property panel (Body/Features/Style pages, value rows, numeric sliders), preview right | preview only | Up/Down/Left/Right, Q/E pages | a developer tool: numbers, internal item names, no item previews, fixed camera per page, toast over the hints | avatar editor: categories, item carousel with renders, contextual camera | large live preview, category rail, rendered item cards, contextual camera, human face controls, transactional save |
+
 ## Tasks
 
 | Id | Task | Status |
@@ -131,7 +160,7 @@ Research at e46db9822 / server 4ba7f95 (read-only; file:line in the task rows wh
 | GSX-B1 | Freeze catalog v2; generator writes v3 | |
 | GSX-B2..B9 | Catalog v3 art: head/face, atlas, body, hands, clothing, hair/facial hair, materials, animation | |
 | GSX-B10 | BEFORE/AFTER review with identical cameras, inspected | |
-| GSX-U0 | System UI audit: every Guide pane, editor and demo; deterministic BEFORE screenshots; visual inventory | |
+| GSX-U0 | System UI audit: every Guide pane, editor and demo; deterministic BEFORE screenshots; visual inventory | done |
 | GSX-U1 | One CNA system visual language (panel, title, tabs, focus, buttons, identity, presence, toast, dialog, loading, error) shared by Guide and editor | |
 | GSX-U2 | Console-style avatar editor: large live preview, categories, rendered item cards, contextual camera, human face controls, coherent randomize, transactional save/cancel | |
 | GSX-U3 | Sign-in as profile selection over four player slots | |

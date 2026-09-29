@@ -337,6 +337,12 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         if(TARGET SDL3::SDL3main)
             target_link_libraries(cna_avatar_review PRIVATE SDL3::SDL3main)
         endif()
+        # GSX-U0: deterministic captures of every system UI surface over a stand-in game.
+        add_executable(cna_guide_review guide_review/GuideReview.cpp)
+        target_link_libraries(cna_guide_review PRIVATE CNA CNA_GamerServices SHARP_RUNTIME)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_guide_review PRIVATE SDL3::SDL3main)
+        endif()
         # GSP-I1: the CNA avatar editor, a program of its own so no game needs customization code.
         add_executable(cna_avatar_editor avatar_editor/AvatarEditor.cpp)
         target_link_libraries(cna_avatar_editor PRIVATE CNA CNA_GamerServices SHARP_RUNTIME)

@@ -793,7 +793,7 @@ public:
             if(!sent&&!received)continue;
             ServiceFriend value;value.gamertag=target.gamertag;value.accepted=sent&&received;
             value.requestSent=sent&&!received;value.requestReceived=received&&!sent;
-            value.online=value.accepted&&std::find(slots_.begin(),slots_.end(),target.userId)!=slots_.end();
+            value.online=value.accepted&&(std::find(slots_.begin(),slots_.end(),target.userId)!=slots_.end()||remoteOnline_.contains(target.userId));
             value.presence=value.online?presence_[target.userId]:"";
             value.away=value.online&&status_[target.userId]=="away";value.busy=value.online&&status_[target.userId]=="busy";
             result.push_back(std::move(value));
@@ -979,6 +979,10 @@ public:
     FakeAvatarTraffic traffic() const {std::lock_guard guard(avatarLock_);return traffic_;}
     void setFileSuccesses(int successes) {std::lock_guard guard(avatarLock_);fileSuccesses_=successes;}
     void setPolicy(AvatarCatalogPolicy policy) {std::lock_guard guard(avatarLock_);policy_=policy;}
+    void setRemotePresence(const std::string& user,bool online,const std::string& presence,const std::string& status) {
+        if(online)remoteOnline_.insert(user);else remoteOnline_.erase(user);
+        presence_[user]=presence;status_[user]=status;
+    }
 private:
     ServiceIdentity profileById(const std::string& id) {for(const auto& person:identities_)if(person.userId==id)return person;throw Unavailable("Unknown fixture gamer.");}
     void apply(const ServiceLeaderboardWrite& row) {
@@ -1004,7 +1008,8 @@ private:
     std::map<std::string,std::vector<std::string>> games_;
     int gameSequence_=0;
     std::unique_ptr<IServiceSessionDirectory> directory_;
-    void require(const std::string& user) {if(user.empty()||std::find(slots_.begin(),slots_.end(),user)==slots_.end())throw Unavailable("Gamer signed out.");}
+    // Signed in here, or (setFakeRemotePresence) online elsewhere.
+    void require(const std::string& user) {if(user.empty()||(std::find(slots_.begin(),slots_.end(),user)==slots_.end()&&!remoteOnline_.contains(user)))throw Unavailable("Gamer signed out.");}
     std::vector<ServiceIdentity> identities_;
     std::vector<ServiceAchievement> catalog_;
     std::vector<ServiceLeaderboardFixture> boards_;
@@ -1012,6 +1017,7 @@ private:
     std::map<std::string,std::map<std::string,long long>> earned_;
     std::set<std::pair<std::string,std::string>> edges_;
     std::map<std::string,std::string> presence_,status_;
+    std::set<std::string> remoteOnline_;
 };
 thread_local int serviceRestrictionDepth=0;
 std::mutex registryMutex;
@@ -1055,6 +1061,11 @@ void setFakeCatalogFileFailures(IGamerServicesBackend& fake,int successes) {
     auto* backend=dynamic_cast<FakeBackend*>(&fake);
     if(!backend)throw System::InvalidOperationException("Not a fake Gamer Services backend.");
     backend->setFileSuccesses(successes);
+}
+void setFakeRemotePresence(IGamerServicesBackend& fake,const std::string& userId,bool online,const std::string& presence,const std::string& status) {
+    auto* backend=dynamic_cast<FakeBackend*>(&fake);
+    if(!backend)throw System::InvalidOperationException("Not a fake Gamer Services backend.");
+    backend->setRemotePresence(userId,online,presence,status);
 }
 void setFakeAvatarCatalogPolicy(IGamerServicesBackend& fake,AvatarCatalogPolicy policy) {
     auto* backend=dynamic_cast<FakeBackend*>(&fake);

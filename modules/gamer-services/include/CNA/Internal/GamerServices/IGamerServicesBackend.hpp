@@ -331,6 +331,11 @@ FakeAvatarTraffic fakeAvatarTraffic(IGamerServicesBackend& fake);
 /** @brief Makes a fake backend's file downloads fail: after this many more succeed (0 = the file
  * endpoint is off), or never (-1). @param fake Backend. @param successes Downloads still allowed. */
 void setFakeCatalogFileFailures(IGamerServicesBackend& fake,int successes);
+/** @brief Makes an account of a fake backend online (as if signed in elsewhere, so it may also act:
+ * befriend, message, award) with a presence and status, or offline. @param fake Backend. @param userId Account. @param online Online.
+ * @param presence Rich presence text. @param status "online", "away" or "busy". */
+void setFakeRemotePresence(IGamerServicesBackend& fake,const std::string& userId,bool online,const std::string& presence={},
+    const std::string& status="online");
 /** @brief Sets a fake backend's catalog update policy. @param fake Backend. @param policy Policy. */
 void setFakeAvatarCatalogPolicy(IGamerServicesBackend& fake,AvatarCatalogPolicy policy);
 /** @brief Creates deterministic fake with explicitly supplied identities and catalog.
