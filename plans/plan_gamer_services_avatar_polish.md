@@ -217,7 +217,7 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
 | GSP-J1 | `AvatarDescription.Changed` | done |
 | GSP-K1 | Online host migration | done |
 | GSP-K2 | Online `AddLocalGamer` | done |
-| GSP-L1..L6 | Account GameDefaults, away/busy, toasts, Stream columns, guests, QoS bandwidth | L2, L3 done; others todo |
+| GSP-L1..L6 | Account GameDefaults, away/busy, toasts, Stream columns, guests, QoS bandwidth | L1, L2, L3 done; others todo |
 | GSP-M1 | GamerZone / Reputation | todo |
 | GSP-O1 | Server concurrency benchmark and production audit | todo |
 | GSP-P1 | Documentation truth pass | todo |
@@ -303,6 +303,13 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   `GuideNotificationTest` (nine positions, timing, burst, sign-in/award/sign-out); the avatar
   editor's captures draw the overlay, and `/rv/tmp/avatar-polish/editor/capture/01-body.png`
   shows "Editor signed in" at bottom center.
+- GSP-L1 (account GameDefaults). The service keeps the local-profile `gameDefaults` object per
+  account (schema 17, `profile.gameDefaults`/`profile.setGameDefaults`, capability
+  `game-defaults`, strict keys and values, admin `game-defaults`); CNA reads it during sign-in and
+  resume (under the transport lock, so through `exchange`: a first version deadlocked the live
+  e2e) and applies it exactly as a local profile's. No in-game editor: XNA has none either (the
+  console dashboard set them). Tests: server unit (+10), `SystemGuideTest.AnAccountCarriesItsServiceGameDefaults`,
+  live transport e2e (Alice's stored defaults after a real sign-in).
 - Visual evidence lives outside the repositories, as the sample evidence does:
   `/rv/tmp/avatar-polish/evidence/{before,after}/`.
 - BEFORE (catalog v1, 2026-09-29): `evidence/before/{jobs.json, preview/, opengl33/,

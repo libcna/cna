@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace CNA::Internal::GamerServices {
@@ -40,6 +41,14 @@ struct LocalProfile {
      * store never loses what a player wrote. */
     std::string gameDefaultsJson;
 };
+
+/**
+ * @brief Reads game defaults in the profile store's `gameDefaults` form (also what a CNA service
+ * keeps for an account).
+ * @param json A JSON object; a missing, invalid or malformed field keeps its default.
+ * @return The defaults.
+ */
+LocalGameDefaults parseGameDefaultsJson(std::string_view json);
 
 /** @brief Most profiles a store keeps. */
 inline constexpr std::size_t MaxLocalProfiles = 32;

@@ -142,16 +142,17 @@ public:
                 auto person=identity(result.at("identity"));issuedToken=CnaService::stringField(result,"token",128);
                 if(issuedToken.size()!=64)throw CnaService::Error("INVALID_RESPONSE");
                 std::lock_guard transport(transportMutex_);
-                std::string previous;
+                std::string previous,signedInToken;
                 {std::lock_guard lock(slotMutex_);
                  for(int i=0;i<4;++i)if(i!=slot&&slots_[i].identity.userId==person.userId)throw CnaService::Error("ALREADY_SIGNED_IN");
                  if(slots_[slot].generation!=generation)throw CnaService::Error("STALE_AUTHENTICATION");
                  previous=slots_[slot].token;
-                 auto replacement=decodeCredentials(result);replacement.generation=generation;slots_[slot]=std::move(replacement);}
+                 auto replacement=decodeCredentials(result);replacement.generation=generation;signedInToken=replacement.token;slots_[slot]=std::move(replacement);}
                 persist(slot);
                 {std::lock_guard lock(slotMutex_);slots_[slot].busy=false;}
                 issuedToken.clear();
                 if(!previous.empty()){try{(void)exchange("auth.logout",Json::object(),previous);}catch(...){}}
+                readGameDefaults(person,signedInToken);
                 event.type=BackendEvent::Type::SignedIn;event.identity=std::move(person);
             }catch(const std::exception&){
                 if(issuedToken.size()==64){try{(void)request("auth.logout",Json::object(),issuedToken);}catch(...){}}
@@ -596,7 +597,19 @@ private:
             if(duplicate){invalidateSlot(slot,generation);throw ServiceError("UNAUTHENTICATED");}return;
         }
         persist(slot);
-        if(previous.identity.userId.empty()){BackendEvent event;event.type=BackendEvent::Type::SignedIn;event.slot=slot;event.identity=std::move(renewed.identity);ready(std::move(event));}
+        if(previous.identity.userId.empty()) {
+            readGameDefaults(renewed.identity,renewed.token);
+            BackendEvent event;event.type=BackendEvent::Type::SignedIn;event.slot=slot;event.identity=std::move(renewed.identity);ready(std::move(event));
+        }
+    }
+    // The signed-in account's game defaults; a service without them, or a failed read, leaves none.
+    // Callers hold transportMutex_ (sign-in and renewal), hence exchange rather than request.
+    void readGameDefaults(ServiceIdentity& person,const std::string& token) {
+        if(!capabilities_.contains("game-defaults"))return;
+        try {
+            const auto result=exchange("profile.gameDefaults",Json::object(),token);
+            if(result.contains("gameDefaults")&&result["gameDefaults"].is_object()){auto text=result["gameDefaults"].dump();if(text.size()<=4096)person.gameDefaults=std::move(text);}
+        }catch(...){}
     }
     static std::string prefix() {
         std::random_device source;std::string value;constexpr char hex[]="0123456789abcdef";

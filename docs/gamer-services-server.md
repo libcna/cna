@@ -31,7 +31,11 @@ accounts only. An entry may also carry `"gameDefaults"`, the profile's `GameDefa
 `racingCameraAngle` (`Back`/`Front`/`Inside`), `primaryColor`/`secondaryColor` (`#rrggbb`) and the
 booleans `autoAim`, `autoCenter`, `moveWithRightThumbStick`, `invertYAxis`, `manualTransmission`,
 `accelerateWithButtons`, `brakeWithButtons`. A missing or unreadable field keeps XNA's unset value,
-and the object is kept as written when the store is rewritten. Accounts have no game defaults.
+and the object is kept as written when the store is rewritten. An account keeps the same object on
+its service (`profile.gameDefaults` / `profile.setGameDefaults`, capability `game-defaults`; the
+service accepts only these keys and values), set by the player's tools or by administration
+(`cna-gamer-services-admin <db> game-defaults <user>` with the object on stdin); CNA reads it at
+sign-in into `SignedInGamer.GameDefaults` (GSP-L1).
 
 **Offline achievement catalog.** A title can ship `GamerServices/Achievements.json` in its title
 directory: a JSON array of the objects the service administration tool takes (`key`, `name`,

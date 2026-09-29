@@ -35,7 +35,6 @@ Each is documented where it is declared (C++ and C) and in `docs/xna-4-api-cover
 | `Guide.IsTrialMode` | true only while `SimulateTrialMode` is set | No licensing service (GS-011b removed the public setter XNA keeps internal). |
 | `GamerProfile.GamerZone`/`Reputation` | `Unknown` / 0 | CNA keeps neither; reviews do not rate gamers (GS-004p). |
 | `QualityOfService` bandwidth | 0 | Only the discovery round trip is measured; service search results are unmeasured (`IsAvailable` false). |
-| `GameDefaults` for accounts | XNA's unset values | Accounts carry no game defaults; local profiles do (GS-004r). |
 | `GamerServicesDispatcher.InstallingTitleUpdate` | never raised | CNA installs no title updates. |
 | `WriteTrueSkill` | raised; no skill is computed | Skill boards are ordinary arbitrated boards (GS-006e). |
 | Leaderboard `Stream` columns | not stored | No stream storage on the service. |

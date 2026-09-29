@@ -34,6 +34,8 @@ struct ServiceIdentity {
     bool allowOnlineSessions = false;
     /** @brief Fixture-only avatar description (1021 bytes), empty for none. */
     std::vector<unsigned char> avatar;
+    /** @brief The account's game defaults as a JSON object (a local profile's form), empty for none. */
+    std::string gameDefaults;
 };
 /** @brief Title-scoped catalog entry and user-earned state. */
 struct ServiceAchievement {

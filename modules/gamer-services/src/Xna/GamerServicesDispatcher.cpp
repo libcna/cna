@@ -115,10 +115,12 @@ void GamerServicesDispatcher::Update() {
                 // A local profile has no service: no online sessions and no purchases.
                 gamer->privileges_.allowOnlineSessions_=event.signedInToLive&&event.identity.allowOnlineSessions;
                 if(!event.signedInToLive)gamer->privileges_.allowPurchaseContent_=false;
-                // A local profile carries its own preferred game settings.
-                if(!event.signedInToLive)
+                // A local profile carries its own preferred game settings; an account's come from the service.
+                if(!event.signedInToLive) {
                     if(const auto profile=CNA::Internal::GamerServices::findLocalProfile(event.identity.gamertag))
                         ApplyLocalGameDefaults(gamer->gameDefaults_,profile->gameDefaults);
+                } else if(!event.identity.gameDefaults.empty())
+                    ApplyLocalGameDefaults(gamer->gameDefaults_,CNA::Internal::GamerServices::parseGameDefaultsJson(event.identity.gameDefaults));
                 auto* pointer=gamer.get();ownedGamers.push_back(std::move(gamer));slots[event.slot]=pointer;publish();SignedInGamer::OnSignIn(pointer);Guide::OnSignInResult(event.slot, true);
             }
         }catch(...){if(!firstError)firstError=std::current_exception();}

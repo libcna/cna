@@ -164,6 +164,11 @@ int main(int argc,char** argv) {
         check(!Guide::getIsVisibleProperty(),"Guide sign-in completed");
         check(collection==Gamer::getSignedInGamersProperty(),"collection lifetime changed");check(signedIn==localCount,"sign-in count");
         auto* gamer=(*collection)[0];
+        // GSP-L1: an account's GameDefaults come from the service (the driver stores Alice's).
+        if(real&&localCount==1&&std::string(argv[2])=="alice") {
+            const auto& defaults=gamer->getGameDefaultsProperty();
+            check(defaults.getGameDifficultyProperty()==GameDifficulty::Hard&&defaults.getInvertYAxisProperty(),"account game defaults");
+        }
         if(!real)for(int i=0;i<4;++i)check((*collection)[i]->getPlayerIndexProperty()==static_cast<Microsoft::Xna::Framework::PlayerIndex>(i),"local slot mapping");
         bool callback=false;
         std::unique_ptr<System::IAsyncResult> result(gamer->BeginGetAchievements([&](System::IAsyncResult& action){callback=true;check(action.getIsCompletedProperty(),"callback completion");check(!action.getCompletedSynchronouslyProperty(),"queued work synchronous flag");},42));

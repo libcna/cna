@@ -8,6 +8,7 @@
 #include "CNA/Internal/GamerServices/LocalProfiles.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GameDefaults.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
@@ -191,6 +192,25 @@ TEST_F(SystemGuideTest, OnlineStatusIsWhatFriendsSeeAsAwayOrBusy) {
     fake->signOut(0);
     ASSERT_TRUE(Settle([] { return Count() == 1; }));
     EXPECT_EQ(bobSees(), std::pair(false, false));
+}
+
+// An account's GameDefaults are the ones its service keeps, in a local profile's form.
+TEST_F(SystemGuideTest, AnAccountCarriesItsServiceGameDefaults) {
+    Service::ServiceIdentity alice;
+    alice.userId = "a";
+    alice.gamertag = "Alice";
+    alice.gameDefaults = R"({"gameDifficulty":"Easy","invertYAxis":true,"secondaryColor":"#0080ff","racingCameraAngle":"Front"})";
+    auto fake = Service::makeFakeBackend({alice});
+    Service::setBackendForTesting(fake);
+    fake->signIn(0, "Alice", "fixture");
+    ASSERT_TRUE(Settle([] { return Count() == 1; }));
+    const auto& defaults = (*Gamer::getSignedInGamersProperty())[0]->getGameDefaultsProperty();
+    EXPECT_EQ(GameDifficulty::Easy, defaults.getGameDifficultyProperty());
+    EXPECT_TRUE(defaults.getInvertYAxisProperty());
+    ASSERT_TRUE(defaults.getSecondaryColorProperty().has_value());
+    EXPECT_EQ(Microsoft::Xna::Framework::Color(0, 128, 255), *defaults.getSecondaryColorProperty());
+    EXPECT_EQ(RacingCameraAngle::Front, defaults.getRacingCameraAngleProperty());
+    EXPECT_EQ(ControllerSensitivity::Low, defaults.getControllerSensitivityProperty());
 }
 
 TEST_F(SystemGuideTest, NothingOpensWhileTheGuideIsVisible) {

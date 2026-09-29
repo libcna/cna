@@ -89,6 +89,14 @@ LocalGameDefaults parseGameDefaults(const CnaService::Json& value) {
     return defaults;
 }
 
+}
+
+LocalGameDefaults parseGameDefaultsJson(std::string_view json) {
+    const auto value=CnaService::Json::parse(json,nullptr,false);
+    return value.is_object()?parseGameDefaults(value):LocalGameDefaults{};
+}
+
+namespace {
 // The whole store, or nullopt when a file exists that is not a store this version can read.
 std::optional<std::vector<LocalProfile>> readStore(const std::filesystem::path& path) {
     std::error_code error;
