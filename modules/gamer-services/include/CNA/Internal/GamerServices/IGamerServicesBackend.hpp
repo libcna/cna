@@ -75,6 +75,8 @@ struct ServiceAchievement {
 };
 /** @brief Snapshot of a subscribed friend's service state. */
 struct ServiceFriend {
+    /** @brief Service identity (empty from a service that does not say). */
+    std::string userId;
     /** @brief Public gamertag. */
     std::string gamertag;
     /** @brief Recent authenticated activity. */
@@ -311,7 +313,7 @@ void setBackendForTesting(std::shared_ptr<IGamerServicesBackend> value);
  * @param newRevision A new stored avatar (true), or other bytes for the same one, as a projection
  * served to this client would be (false). */
 void setFakeAvatar(IGamerServicesBackend& fake,const std::string& userId,std::vector<unsigned char> description,bool newRevision=true);
-/** @brief Makes a fake backend's avatar reads fail as an unreachable service would. @param fake Backend.
+/** @brief Makes a fake backend's avatar and friend reads fail as an unreachable service would. @param fake Backend.
  * @param failing Whether reads fail. */
 void setFakeAvatarsUnreachable(IGamerServicesBackend& fake,bool failing);
 /** @brief Gives a fake backend an avatar catalog to serve. @param fake Backend from makeFakeBackend.

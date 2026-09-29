@@ -3,6 +3,7 @@
 // so IsInitializedDefaultsFalse still runs first.
 #include <gtest/gtest.h>
 #include "../../../../../src/Internal/GuideOverlay.hpp"
+#include "../../../../../src/Internal/Guide/GuideUi.hpp"
 #include "CNA/GamerServices/Configuration.hpp"
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
 #include "CNA/Internal/GamerServices/LocalProfiles.hpp"
@@ -31,6 +32,7 @@
 #include <unistd.h>
 
 namespace Service = CNA::Internal::GamerServices;
+namespace Ui = CNA::Internal::GamerServices::GuideUi;
 using namespace Microsoft::Xna::Framework::GamerServices;
 using Microsoft::Xna::Framework::PlayerIndex;
 
@@ -53,6 +55,17 @@ bool Settle(Condition condition) {
     return true;
 }
 int Count() { return Gamer::getSignedInGamersProperty()->getCountProperty(); }
+// Chooses the item of the top Guide screen whose label starts with a text.
+bool Choose(const std::string& label) {
+    const auto labels = Ui::labelsForTesting();
+    for (std::size_t index = 0; index < labels.size(); ++index) {
+        if (labels[index].starts_with(label)) {
+            Ui::clickForTesting(static_cast<int>(index));
+            return true;
+        }
+    }
+    return false;
+}
 
 class SystemGuideTest : public ::testing::Test {
 protected:
@@ -66,6 +79,7 @@ protected:
         if (!GamerServicesDispatcher::getIsInitializedProperty()) GamerServicesDispatcher::Initialize(provider_);
     }
     void TearDown() override {
+        Ui::closeAll();
         Guide::ResetPendingMessageBoxForTestingEXT();
         Guide::ResetPendingKeyboardInputForTestingEXT();
         for (auto* gamer : *Gamer::getSignedInGamersProperty())
@@ -100,9 +114,10 @@ protected:
 TEST_F(SystemGuideTest, WithNobodySignedInItOffersSignIn) {
     Offline();
     Service::openSystemGuide(PlayerIndex::One);
-    ASSERT_TRUE(Guide::getHasPendingMessageBoxEXTProperty());
-    EXPECT_EQ(0, Guide::GetPendingMessageBoxFocusButtonForTestingEXT());
-    Guide::SimulateMessageBoxClickEXT(0);
+    ASSERT_EQ("home", Ui::currentScreenForTesting());
+    EXPECT_EQ(std::vector<std::string>{"Sign in"}, Ui::labelsForTesting());
+    EXPECT_EQ(0, Ui::focusForTesting());
+    Ui::sendForTesting(Ui::Command::Accept);
     ASSERT_TRUE(Guide::getHasPendingKeyboardInputEXTProperty());
     EXPECT_EQ("Sign in", Guide::GetPendingKeyboardInputTitleForTestingEXT());
     Type("Robin");
@@ -113,7 +128,7 @@ TEST_F(SystemGuideTest, WithNobodySignedInItOffersSignIn) {
 TEST_F(SystemGuideTest, APlayersButtonSignsInThatPlayersSlot) {
     Offline();
     Service::openSystemGuide(PlayerIndex::Two);
-    Guide::SimulateMessageBoxClickEXT(0);
+    ASSERT_TRUE(Choose("Sign in"));
     // Two panes: the first empty slot is player one's, then player two's.
     Type("Robin");
     ASSERT_TRUE(Settle([] { return Count() == 1 && Guide::getHasPendingKeyboardInputEXTProperty(); }));
@@ -129,9 +144,10 @@ TEST_F(SystemGuideTest, ALocalProfileCanSignOutFromTheGuide) {
     int signedOut = 0;
     const auto token = SignedInGamer::SignedOut.Add([&](System::Object*, const SignedOutEventArgs&) { ++signedOut; });
     Service::openSystemGuide(PlayerIndex::One);
-    ASSERT_TRUE(Guide::getHasPendingMessageBoxEXTProperty());
-    EXPECT_EQ(1, Guide::GetPendingMessageBoxFocusButtonForTestingEXT());
-    Guide::SimulateMessageBoxClickEXT(0);
+    // An offline profile: what works offline, and signing out.
+    EXPECT_EQ((std::vector<std::string>{"Achievements", "Sign out"}), Ui::labelsForTesting());
+    ASSERT_TRUE(Choose("Sign out"));
+    EXPECT_FALSE(Ui::visible());
     EXPECT_TRUE(Settle([] { return Count() == 0; }));
     SignedInGamer::SignedOut.Remove(token);
     EXPECT_EQ(1, signedOut);
@@ -142,19 +158,20 @@ TEST_F(SystemGuideTest, AServicePlayerReachesFriendsAndInvitations) {
     fake->signIn(0, "Alice", "fixture");
     ASSERT_TRUE(Settle([] { return Count() == 1; }));
     Service::openSystemGuide(PlayerIndex::One);
-    ASSERT_TRUE(Guide::getHasPendingMessageBoxEXTProperty());
-    Guide::SimulateMessageBoxClickEXT(0);
-    // The friends pane is the Guide's own next screen.
+    ASSERT_EQ("home", Ui::currentScreenForTesting());
+    ASSERT_TRUE(Choose("Friends"));
+    EXPECT_EQ("friends", Ui::currentScreenForTesting());
     EXPECT_TRUE(Guide::getIsVisibleProperty());
-    Guide::ResetPendingMessageBoxForTestingEXT();
-    Guide::ResetPendingKeyboardInputForTestingEXT();
-    Settle([] { return !Guide::getIsVisibleProperty(); });
-
-    // Without an online session there is nothing to invite to; the Guide says so.
-    Service::openSystemGuide(PlayerIndex::One);
-    Guide::SimulateMessageBoxClickEXT(1);
-    EXPECT_TRUE(Guide::getHasPendingMessageBoxEXTProperty());
-    Guide::SimulateMessageBoxClickEXT(0);
+    // The rail's next category replaces the screen; Back from the root closes the Guide.
+    Ui::sendForTesting(Ui::Command::Next);
+    EXPECT_EQ("party", Ui::currentScreenForTesting());
+    Ui::sendForTesting(Ui::Command::Previous);
+    Ui::sendForTesting(Ui::Command::Previous);
+    EXPECT_EQ("home", Ui::currentScreenForTesting());
+    Ui::sendForTesting(Ui::Command::Back);
+    EXPECT_FALSE(Guide::getIsVisibleProperty());
+    // Without an online session there is nothing to invite to (XNA's InvalidOperationException).
+    EXPECT_THROW(Guide::ShowGameInvite(PlayerIndex::One, std::vector<Gamer*>{}), System::InvalidOperationException);
     EXPECT_FALSE(Guide::getIsVisibleProperty());
 }
 
@@ -177,21 +194,18 @@ TEST_F(SystemGuideTest, OnlineStatusIsWhatFriendsSeeAsAwayOrBusy) {
     };
     EXPECT_EQ(bobSees(), std::pair(false, false));
 
-    for (const auto& [button, expected] : {std::pair{1, std::pair{true, false}}, std::pair{2, std::pair{false, true}},
-                                           std::pair{0, std::pair{false, false}}}) {
-        Service::openSystemGuide(PlayerIndex::One);
-        ASSERT_TRUE(Guide::getHasPendingMessageBoxEXTProperty());
-        Guide::SimulateMessageBoxClickEXT(3);
-        ASSERT_TRUE(Guide::getHasPendingMessageBoxEXTProperty());
-        Guide::SimulateMessageBoxClickEXT(button);
-        EXPECT_TRUE(Settle([&] { return bobSees() == expected; })) << button;
-        Settle([] { return !Guide::getIsVisibleProperty(); });
+    Service::openSystemGuide(PlayerIndex::One);
+    ASSERT_TRUE(Choose("Online status"));
+    ASSERT_EQ("settings", Ui::currentScreenForTesting());
+    // Online status steps Online, Away, Busy and round again.
+    for (const auto& expected : {std::pair{true, false}, std::pair{false, true}, std::pair{false, false}}) {
+        Ui::sendForTesting(Ui::Command::Right);
+        EXPECT_TRUE(Settle([&] { return bobSees() == expected; }));
     }
     // A friend who signs out is simply offline, whatever the status.
-    Service::openSystemGuide(PlayerIndex::One);
-    Guide::SimulateMessageBoxClickEXT(3);
-    Guide::SimulateMessageBoxClickEXT(1);
+    Ui::sendForTesting(Ui::Command::Right);
     ASSERT_TRUE(Settle([&] { return bobSees().first; }));
+    Ui::closeAll();
     fake->signOut(0);
     ASSERT_TRUE(Settle([] { return Count() == 1; }));
     EXPECT_EQ(bobSees(), std::pair(false, false));
@@ -257,8 +271,8 @@ TEST_F(SystemGuideTest, AGuestSignsItselfOutFromTheGuide) {
     fake->signInGuest(1, "Alice (1)", 0);
     ASSERT_TRUE(Settle([] { return Count() == 2; }));
     Service::openSystemGuide(PlayerIndex::Two);
-    ASSERT_TRUE(Guide::getHasPendingMessageBoxEXTProperty());
-    Guide::SimulateMessageBoxClickEXT(0);
+    EXPECT_EQ(std::vector<std::string>{"Sign out"}, Ui::labelsForTesting());
+    ASSERT_TRUE(Choose("Sign out"));
     ASSERT_TRUE(Settle([] { return Count() == 1; }));
     EXPECT_EQ("Alice", (*Gamer::getSignedInGamersProperty())[0]->getGamertagProperty());
 }
@@ -288,10 +302,12 @@ TEST_F(SystemGuideTest, GamerZoneIsChosenInTheGuideAndReputationComesFromReviews
     EXPECT_EQ(GamerZone::Unknown, mine->getGamerZoneProperty());
     EXPECT_FLOAT_EQ(0.0f, mine->getReputationProperty());
     Service::openSystemGuide(PlayerIndex::One);
-    Guide::SimulateMessageBoxClickEXT(4);
-    ASSERT_TRUE(Guide::getHasPendingMessageBoxEXTProperty());
-    Guide::SimulateMessageBoxClickEXT(2);
-    Settle([] { return !Guide::getIsVisibleProperty(); });
+    ASSERT_TRUE(Choose("Online status"));
+    // The gamer zone row steps Recreation, Pro, Family.
+    Ui::sendForTesting(Ui::Command::Down);
+    EXPECT_EQ(1, Ui::focusForTesting());
+    for (int step = 0; step < 3; ++step) Ui::sendForTesting(Ui::Command::Right);
+    Ui::closeAll();
     EXPECT_TRUE(Settle([&] { return profileOf(self)->getGamerZoneProperty() == GamerZone::Family; }));
     std::unique_ptr<Gamer> other(Gamer::GetFromGamertag("Bob"));
     EXPECT_FLOAT_EQ(3.75f, profileOf(other.get())->getReputationProperty());

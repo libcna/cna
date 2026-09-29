@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Standard-API acceptance client: every GamerServices/Net operation below is the public XNA surface.
 // Only keyboard entry into the Guide sign-in overlay is simulated, through the CNA text-input hook.
+#include "../../modules/gamer-services/src/Internal/Guide/GuideUi.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
@@ -34,6 +35,7 @@
 
 using namespace Microsoft::Xna::Framework::GamerServices;
 using namespace Microsoft::Xna::Framework::Net;
+namespace Ui=CNA::Internal::GamerServices::GuideUi;
 namespace {
 using Clock=std::chrono::steady_clock;
 int checks=0;const char* phase="initial";std::string detail;
@@ -69,9 +71,6 @@ std::string line() {
     }
 }
 void command(){check(line()=="continue","parent boundary");}
-bool messageBoxPending() {
-    try{(void)Guide::GetPendingMessageBoxFocusButtonForTestingEXT();return true;}catch(const std::exception&){return false;}
-}
 // Payload identifies its sender and recipient so each receiver can verify the reported sender.
 std::vector<SharpRuntime::bytecs> payload(const std::string& from,const std::string& to,std::size_t size) {
     std::vector<SharpRuntime::bytecs> result(size);const auto label=from+">"+to;
@@ -120,8 +119,11 @@ int main(int argc,char** argv) {
             if(invited) {
                 // Standard Guide invitation: no recipients means the Guide asks for a gamertag.
                 phase="invite";Guide::ShowGameInvite(Microsoft::Xna::Framework::PlayerIndex::One,std::vector<Gamer*>{});
-                until([]{return Guide::getIsVisibleProperty();});enter("Bob");
-                until(messageBoxPending);Guide::SimulateMessageBoxClickEXT(0);
+                until([]{return Ui::currentScreenForTesting()=="invite";});
+                // X adds a gamertag, Y sends.
+                Ui::sendForTesting(Ui::Command::X);until([]{return Guide::getHasPendingKeyboardInputEXTProperty();});enter("Bob");
+                until([]{return !Ui::labelsForTesting().empty()&&Ui::labelsForTesting().back()=="[x] Bob";});
+                Ui::sendForTesting(Ui::Command::Y);
                 until([]{return !Guide::getIsVisibleProperty();});
                 std::cout<<"invite-sent\n"<<std::flush;
             }
@@ -132,7 +134,7 @@ int main(int argc,char** argv) {
                 ++raised;check(args.getGamerProperty()==gamers[0]&&!args.getIsCurrentSessionProperty(),"invitee and foreign session");
                 session=NetworkSession::JoinInvited(2);
             };
-            until(messageBoxPending,30);Guide::SimulateMessageBoxClickEXT(0);
+            until([]{return Ui::currentScreenForTesting()=="invitation";},30);Ui::clickForTesting(0);
             until([&]{return session!=nullptr;});check(raised==1,"InviteAccepted once");
             check(!session->getIsHostProperty()&&session->getAllGamersProperty().getCountProperty()==4,"invited join complete roster");
             check(session->getLocalGamersProperty()[0]->getGamertagProperty()=="Bob","invitee joins first");

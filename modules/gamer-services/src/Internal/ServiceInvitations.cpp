@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
+#include "Guide/GuideScreen.hpp"
 #include "GuideOverlay.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
@@ -59,10 +60,7 @@ void accept(Pending pending) {
         auto& now=state();if(now.origin!=origin)return;now.accepting=false;
         auto* gamer=published(pending.user);
         if(!*result||!gamer) {
-            if(gamer)(void)showGuideMessageBox(gamer->getPlayerIndexProperty(),"Game invitation",
-                "The invitation is no longer available.",{"OK"},0,MessageBoxIcon::None,[](System::IAsyncResult& value) {
-                    std::unique_ptr<System::IAsyncResult> owned(&value);(void)Guide::EndShowMessageBox(&value);
-                },{});
+            if(gamer)GuideUi::inform(gamer->getPlayerIndexProperty(),"Game invitation","The invitation is no longer available.");
             return;
         }
         now.accepted=AcceptedInvitation{**result,pending.user,gamer,weak};
@@ -75,23 +73,21 @@ void prompt() {
     if(current.queue.empty())return;
     auto pending=std::move(current.queue.front());current.queue.pop_front();
     auto* gamer=published(pending.user);
-    const auto text=pending.invitation.senderGamertag+" invited "+gamer->getGamertagProperty()+" to join a "
-        +category(pending.invitation.kind)+" game.\nAccepting leaves any game you are playing.";
+    const auto player=gamer->getPlayerIndexProperty();
+    const auto detail="A "+category(pending.invitation.kind)+" game. Accepting leaves any game you are playing.";
     current.prompting=true;
     try {
-        (void)showGuideMessageBox(gamer->getPlayerIndexProperty(),"Game invitation",text,{"Accept","Decline"},0,
-            MessageBoxIcon::None,[pending](System::IAsyncResult& value) {
-                std::unique_ptr<System::IAsyncResult> owned(&value);const auto answer=Guide::EndShowMessageBox(&value);
-                auto& now=state();now.prompting=false;
-                auto service=backend();
-                if(now.origin!=service.get())return;
-                if(answer&&*answer==0){accept(pending);return;}
-                if(answer&&*answer==1) {
-                    auto* executor=service.get();
-                    service->submit([executor,pending]{try{(void)executor->sessionDirectory().dismissInvite(pending.user,pending.invitation.invite);}catch(...){}},[]{});
-                }
-                // Closing the prompt leaves the invitation pending in the service inbox.
-            },{});
+        // A system event: a notification, then the invitation card; closing it without an answer
+        // leaves the invitation pending in the service inbox.
+        GuideUi::notify({GuideUi::Notification::Kind::Invitation,pending.invitation.senderGamertag+" invited you",category(pending.invitation.kind),{}});
+        GuideUi::open(GuideUi::invitationScreen(player,pending.invitation.senderGamertag,pending.invitation.senderId,detail,[pending](std::optional<bool> yes) {
+            auto& now=state();now.prompting=false;
+            auto service=backend();
+            if(now.origin!=service.get()||!yes)return;
+            if(*yes){accept(pending);return;}
+            auto* executor=service.get();
+            service->submit([executor,pending]{try{(void)executor->sessionDirectory().dismissInvite(pending.user,pending.invitation.invite);}catch(...){}},[]{});
+        }),player);
     }catch(...) {current.prompting=false;current.queue.push_front(std::move(pending));}
 }
 void poll() {

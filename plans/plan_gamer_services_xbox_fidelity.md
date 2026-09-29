@@ -161,11 +161,11 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
 | GSX-B2..B9 | Catalog v3 art: head/face, atlas, body, hands, clothing, hair/facial hair, materials, animation | |
 | GSX-B10 | BEFORE/AFTER review with identical cameras, inspected | |
 | GSX-U0 | System UI audit: every Guide pane, editor and demo; deterministic BEFORE screenshots; visual inventory | done |
-| GSX-U1 | One CNA system visual language (panel, title, tabs, focus, buttons, identity, presence, toast, dialog, loading, error) shared by Guide and editor | |
+| GSX-U1 | One CNA system visual language (panel, title, tabs, focus, buttons, identity, presence, toast, dialog, loading, error) shared by Guide and editor | done (Guide); editor in U2 |
 | GSX-U2 | Console-style avatar editor: large live preview, categories, rendered item cards, contextual camera, human face controls, coherent randomize, transactional save/cancel | |
 | GSX-U3 | Sign-in as profile selection over four player slots | |
-| GSX-U4 | Gamer Card with avatar, presence, zone, reputation, relationship and actions | |
-| GSX-U5 | Friends, invitations (send/receive as system events), notifications | |
+| GSX-U4 | Gamer Card with avatar, presence, zone, reputation, relationship and actions | done |
+| GSX-U5 | Friends, invitations (send/receive as system events), notifications | done |
 | GSX-U6 | Achievements and leaderboards presentation | |
 | GSX-U7 | Party and title-content panes in the same system; catalog updates as one product | |
 | GSX-U8 | Transitions, reduced motion, original system sounds (if an appropriate audio path exists) | |
@@ -197,3 +197,27 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
   catalog as a pack (Debug, loopback: 852 ms including whole-catalog validation), the second run
   lists it before any request and reuses it (38 ms), a client with updates off receives the
   projection onto catalog 2 and draws it with nothing substituted. GS 561 + 1 skip, Net 504/504.
+- GSX-U1/U4/U5 (the CNA system UI). `modules/gamer-services/src/Internal/Guide/`: an original
+  typeface and icon family (`GuideStrokes`: monoline skeletons, round caps, rasterized by distance at
+  each size, so no font or icon file), the palette and primitives (`GuideStyle`: premultiplied
+  colours, nine-slice rounded panels and soft shadows, pad and key glyphs), avatar views
+  (`GuidePortraits`: the standard `AvatarRenderer` into render targets, head or full-body framing
+  from the avatar's own bind pose, idle-animated where live), the screen stack (`GuideScreens`:
+  input from keyboard, pad and mouse with priming and key repeat; dim over the game; a shell with an
+  identity rail, category rail switched by LB/RB, header and hints; dialogs; transitions that honour
+  `CNA_GAMER_SERVICES_REDUCED_MOTION=1`; the game's message box and keyboard, with an on-screen
+  keyboard for a pad; toasts with icon or portrait at `NotificationPosition`), and the screens
+  (`GuideSocial`: home, friends, gamer card, messages and message, achievements, recent players,
+  review, invite with add-by-gamertag, settings, party, game content, received invitation). Every
+  screen reads the service asynchronously (`load`), shows loading, empty, offline-profile and error
+  states, and never blocks the game thread. `Guide.Show*` open the matching screen after XNA's own
+  checks; invitations arrive as a notification plus an invitation card answered once
+  (Accept/Decline/Later, the card closing counts as Later); structured notifications behind the
+  unchanged `postGuideNotification` text. The public EXT renderers delegate to the new dialogs.
+  Tests: 9 `GuideUiTest` (order, focus, rail, card actions, own card, unreachable service, find
+  gamer, unread count, invitation answered once); social, system Guide, invitation and harness
+  flows migrated from message-box clicks to the semantic API (`GuideUi::*ForTesting`). Found on the
+  way: tests creating and destroying devices reuse addresses (resources now follow
+  `GraphicsDevice.Disposing`), and static teardown after the device (the UI state is never
+  destroyed). Evidence: `/rv/tmp/xbox-fidelity/ui/after1/`. GS 570 + 1 skip, Net 504/504,
+  Runtime 192 + 2, server corpus 28/28 with every CNA harness.

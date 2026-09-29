@@ -35,6 +35,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "../Internal/GuideOverlay.hpp"
+#include "../Internal/Guide/GuideSystem.hpp"
 #include "CNA/Internal/Runtime/IModalFrames.hpp"
 #include "../Internal/ServiceAsyncResult.hpp"
 #include "System/Threading/EventWaitHandle.hpp"
@@ -431,8 +432,6 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     namespace {
         bool signInActive = false;
-        bool socialPending = false;
-        std::unique_ptr<System::IAsyncResult> socialAction;
         int signInPaneCount = 0;
         int signInSlot = 0;
         bool signInLocal = false;
@@ -623,6 +622,36 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     namespace
     {
+    // One character of keyboard input, from a real key (TextInputEXT) or the Guide's on-screen
+    // keyboard. Enter commits, Backspace deletes, other control characters are ignored.
+    void HandleKeyboardCharacter(Input::charcs c)
+    {
+        if (pendingKeyboardInput_ == nullptr)
+        {
+            return;
+        }
+        // Enter/Return - FNA/CNA's SDL bridge synthesizes this as char code 13 on KEY_DOWN (SDL
+        // doesn't deliver a real TEXT_INPUT event for it) - the most faithful analog to a real
+        // Xbox 360 on-screen keyboard's "confirm" action.
+        if (c == u'\r' || c == u'\n')
+        {
+            CompletePendingKeyboardInput(/*canceled=*/false);
+            return;
+        }
+        if (c == u'\b')
+        {
+            RemoveLastCodeUnit(pendingKeyboardInput_->Buffer);
+            return;
+        }
+        // Home, End, Tab, Ctrl+V and Delete: no cursor or clipboard in this append-only field.
+        if (c == 0x02 || c == 0x03 || c == 0x09 || c == 0x16 || c == 0x7F)
+        {
+            return;
+        }
+        if (!signInActive || pendingKeyboardInput_->Buffer.size() < 256)
+            pendingKeyboardInput_->Buffer.push_back(c);
+    }
+
     // The keyboard pane itself, shared by the validated public call and the Guide's own panes.
     System::IAsyncResult* OpenKeyboardInputInternal(
         const std::string& title,
@@ -646,39 +675,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         SyncTouchInputSuppression();
 
         action->SubscriptionToken = Microsoft::Xna::Framework::Input::TextInputEXT::TextInput.Add(
-            [](Input::charcs c)
-            {
-                if (pendingKeyboardInput_ == nullptr)
-                {
-                    return;
-                }
-                // Enter/Return - FNA/CNA's SDL bridge synthesizes this as char code 13 on
-                // KEY_DOWN (SDL doesn't deliver a real TEXT_INPUT event for it) - the most
-                // faithful analog to a real Xbox 360 on-screen keyboard's "confirm" action.
-                if (c == u'\r' || c == u'\n')
-                {
-                    CompletePendingKeyboardInput(/*canceled=*/false);
-                    return;
-                }
-                // Backspace - synthesized the same way (char code 8). Needed for genuinely usable
-                // real capture (fixing a typo before confirming); everything else the SDL bridge
-                // can synthesize this way (Home=2, End=3, Tab=9, Delete=127, Ctrl+V paste=22) is
-                // deliberately not handled - cursor repositioning/clipboard paste are out of scope
-                // for this minimal, append/backspace-at-end capture model, and appending their
-                // raw control-character codes as literal text would be worse than ignoring them.
-                if (c == u'\b')
-                {
-                    RemoveLastCodeUnit(pendingKeyboardInput_->Buffer);
-                    return;
-                }
-                if (c == 0x02 || c == 0x03 || c == 0x09 || c == 0x16 || c == 0x7F)
-                {
-                    return;
-                }
-                if (!signInActive || pendingKeyboardInput_->Buffer.size() < 256)
-                    pendingKeyboardInput_->Buffer.push_back(c);
-            }
-        );
+            [](Input::charcs c) { HandleKeyboardCharacter(c); });
         return action;
     }
     }
@@ -740,89 +737,13 @@ namespace Microsoft::Xna::Framework::GamerServices
     void Guide::RenderPendingKeyboardInputEXT(
         Graphics::GraphicsDevice& device,
         Graphics::SpriteBatch& spriteBatch,
-        Graphics::SpriteFont& font,
-        Graphics::Texture2D& whitePixel
+        Graphics::SpriteFont&,
+        Graphics::Texture2D&
     ) {
-        if (pendingKeyboardInput_ == nullptr)
+        // Drawn and answered as the CNA system dialog, in the caller's begun batch.
+        if (pendingKeyboardInput_ != nullptr)
         {
-            return;
-        }
-
-        // Visual language matches the message box overlay (decision 5d): translucent white
-        // rectangle, black text.
-        const Color boxColor(255, 255, 255, 220);
-        const Color textColor(0, 0, 0, 255);
-        const Color hintColor(90, 90, 90, 255);
-
-        const auto& viewport = device.getViewportProperty();
-        const float viewportWidth = static_cast<float>(viewport.getWidthProperty());
-        const float viewportHeight = static_cast<float>(viewport.getHeightProperty());
-
-        const float padding = 16.0f;
-        const float spacing = 8.0f;
-
-        // usePasswordMode masks the on-screen display only - one '*' per typed UTF-16 code unit
-        // (a coarse but standard on-screen-keyboard convention; doesn't attempt to collapse a
-        // surrogate pair into a single mask character). EndShowKeyboardInput's own returned text
-        // is always the real typed characters, matching real XNA - only the on-screen rendering
-        // differs between the two overloads. See ComputeDisplayText's own comment - this is the
-        // same decision GetPendingKeyboardInputDisplayTextForTestingEXT exposes for testing.
-        std::string displayText = ComputeDisplayText(pendingKeyboardInput_);
-        if (displayText.empty())
-        {
-            displayText = " ";
-        }
-
-        const std::string title = pendingKeyboardInput_->Title.empty() ? std::string(" ") : pendingKeyboardInput_->Title;
-        const std::string description =
-            pendingKeyboardInput_->Description.empty() ? std::string(" ") : pendingKeyboardInput_->Description;
-        constexpr const char* hint = "Enter: confirm    Esc: cancel";
-
-        const Vector2 titleSize = font.MeasureString(title);
-        const Vector2 descriptionSize = font.MeasureString(description);
-        const Vector2 textSize = font.MeasureString(displayText);
-        const Vector2 hintSize = font.MeasureString(hint);
-
-        // Not implemented: real word-wrap for long title/description/typed text - same minimal,
-        // single-line-per-field scope as RenderPendingMessageBoxEXT.
-        const float contentWidth = std::max(std::max(titleSize.X, descriptionSize.X), std::max(textSize.X, hintSize.X));
-        const float boxWidth = std::min(viewportWidth - 2.0f * padding, std::max(360.0f, contentWidth + 2.0f * padding));
-        const float boxHeight = padding * 2.0f + titleSize.Y + spacing + descriptionSize.Y + spacing
-                                 + textSize.Y + spacing + hintSize.Y;
-
-        const float boxX = (viewportWidth - boxWidth) * 0.5f;
-        const float boxY = (viewportHeight - boxHeight) * 0.5f;
-
-        spriteBatch.Draw(whitePixel,
-                          Rectangle(static_cast<int>(boxX), static_cast<int>(boxY),
-                                    static_cast<int>(boxWidth), static_cast<int>(boxHeight)),
-                          std::nullopt, boxColor);
-
-        float y = boxY + padding;
-        spriteBatch.DrawString(font, title, Vector2(boxX + padding, y), textColor);
-        y += titleSize.Y + spacing;
-        spriteBatch.DrawString(font, description, Vector2(boxX + padding, y), textColor);
-        y += descriptionSize.Y + spacing;
-        spriteBatch.DrawString(font, displayText, Vector2(boxX + padding, y), textColor);
-        y += textSize.Y + spacing;
-        spriteBatch.DrawString(font, hint, Vector2(boxX + padding, y), hintColor);
-
-        // Real Escape-key handling: cancel on the down-edge (not held/every frame), matching
-        // RenderPendingMessageBoxEXT's own real-mouse-click edge detection (Input::Mouse there,
-        // Input::Keyboard here). Escape is not part of TextInputEXT's own FNA-faithful control-
-        // character synthesis table (Home/End/Backspace/Tab/Enter/Delete/Ctrl+V only, a byte-exact
-        // port of FNA's own FNAPlatform.cs list) - adding it there would be a shared, FNA-fidelity
-        // -sensitive change affecting every TextInputEXT consumer project-wide, not just this
-        // Guide-local cancel feature, so this polls real keyboard state directly instead, exactly
-        // like the message box already does for its own click detection.
-        const Input::KeyboardState kb = Input::Keyboard::GetState();
-        const bool escapeDown = kb.IsKeyDown(Input::Keys::Escape);
-        const bool escapeEdge = escapeDown && !pendingKeyboardInput_->WasEscapeDown;
-        pendingKeyboardInput_->WasEscapeDown = escapeDown;
-
-        if (escapeEdge)
-        {
-            CompletePendingKeyboardInput(/*canceled=*/true);
+            CNA::Internal::GamerServices::GuideUi::drawGameDialogs(device, spriteBatch);
         }
     }
 
@@ -895,8 +816,8 @@ namespace Microsoft::Xna::Framework::GamerServices
     void Guide::RenderPendingMessageBoxEXT(
         Graphics::GraphicsDevice& device,
         Graphics::SpriteBatch& spriteBatch,
-        Graphics::SpriteFont& font,
-        Graphics::Texture2D& whitePixel
+        Graphics::SpriteFont&,
+        Graphics::Texture2D&
     ) {
         if (suppressTouchUntilMouseRelease_ &&
             Input::Mouse::GetState().getLeftButtonProperty() != Input::ButtonState::Pressed)
@@ -904,143 +825,9 @@ namespace Microsoft::Xna::Framework::GamerServices
             suppressTouchUntilMouseRelease_ = false;
             SyncTouchInputSuppression();
         }
-
-        if (pendingMessageBox_ == nullptr)
+        if (pendingMessageBox_ != nullptr)
         {
-            return;
-        }
-
-        // Visual language matches the F1 help overlay (decision 5d): translucent white
-        // rectangle, black text.
-        const Color boxColor(255, 255, 255, 220);
-        const Color textColor(0, 0, 0, 255);
-        const Color buttonColor(210, 210, 210, 255);
-        const Color buttonFocusColor(160, 200, 255, 255);
-
-        const auto& viewport = device.getViewportProperty();
-        const float viewportWidth = static_cast<float>(viewport.getWidthProperty());
-        const float viewportHeight = static_cast<float>(viewport.getHeightProperty());
-
-        const float padding = 16.0f;
-        const float spacing = 12.0f;
-        const float buttonPaddingX = 14.0f;
-        const float buttonHeight = 32.0f;
-        const float buttonGap = 12.0f;
-
-        const Vector2 titleSize = font.MeasureString(pendingMessageBox_->Title.empty() ? " " : pendingMessageBox_->Title);
-        const Vector2 textSize = font.MeasureString(pendingMessageBox_->Text.empty() ? " " : pendingMessageBox_->Text);
-
-        // Button widths come first: the box must be wide enough for the whole button row.
-        std::vector<Rectangle> buttonRects;
-        buttonRects.reserve(pendingMessageBox_->Buttons.size());
-        float totalButtonsWidth = 0.0f;
-        std::vector<float> buttonWidths;
-        buttonWidths.reserve(pendingMessageBox_->Buttons.size());
-        for (const std::string& label : pendingMessageBox_->Buttons)
-        {
-            const float w = font.MeasureString(label.empty() ? " " : label).X + 2.0f * buttonPaddingX;
-            buttonWidths.push_back(w);
-            totalButtonsWidth += w;
-        }
-        totalButtonsWidth += buttonGap * static_cast<float>(pendingMessageBox_->Buttons.size() - 1);
-
-        // Not implemented: real word-wrap for long body text - this is a minimal, single-line
-        // overlay (matching this task's own "minimal" scope); a body string wider than the box
-        // simply overflows past its edges rather than wrapping.
-        const float contentWidth = std::max({titleSize.X, textSize.X, totalButtonsWidth});
-        const float boxWidth = std::min(viewportWidth - 2.0f * padding, std::max(360.0f, contentWidth + 2.0f * padding));
-        const float boxHeight = padding * 2.0f + titleSize.Y + spacing + textSize.Y
-                                 + spacing + buttonHeight;
-
-        const float boxX = (viewportWidth - boxWidth) * 0.5f;
-        const float boxY = (viewportHeight - boxHeight) * 0.5f;
-
-        spriteBatch.Draw(whitePixel,
-                          Rectangle(static_cast<int>(boxX), static_cast<int>(boxY),
-                                    static_cast<int>(boxWidth), static_cast<int>(boxHeight)),
-                          std::nullopt, boxColor);
-
-        spriteBatch.DrawString(font, pendingMessageBox_->Title, Vector2(boxX + padding, boxY + padding), textColor);
-        spriteBatch.DrawString(font, pendingMessageBox_->Text,
-                                Vector2(boxX + padding, boxY + padding + titleSize.Y + spacing), textColor);
-
-        // Lay out button rectangles left-to-right, centered as a group within the box.
-        float buttonX = boxX + (boxWidth - totalButtonsWidth) * 0.5f;
-        const float buttonY = boxY + boxHeight - padding - buttonHeight;
-        for (std::size_t i = 0; i < pendingMessageBox_->Buttons.size(); ++i)
-        {
-            const Rectangle rect(static_cast<int>(buttonX), static_cast<int>(buttonY),
-                                  static_cast<int>(buttonWidths[i]), static_cast<int>(buttonHeight));
-            buttonRects.push_back(rect);
-
-            const bool isFocused = static_cast<int>(i) == pendingMessageBox_->FocusButton;
-            spriteBatch.Draw(whitePixel, rect, std::nullopt, isFocused ? buttonFocusColor : buttonColor);
-            const Vector2 labelSize = font.MeasureString(pendingMessageBox_->Buttons[i]);
-            const Vector2 labelPos(
-                buttonX + (buttonWidths[i] - labelSize.X) * 0.5f,
-                buttonY + (buttonHeight - labelSize.Y) * 0.5f
-            );
-            spriteBatch.DrawString(font, pendingMessageBox_->Buttons[i], labelPos, textColor);
-
-            buttonX += buttonWidths[i] + buttonGap;
-        }
-
-        // Real mouse-click handling: select on the down-edge of the left button (not held/every
-        // frame), matching ordinary UI button semantics.
-        const Input::MouseState mouse = Input::Mouse::GetState();
-        const bool leftDown = mouse.getLeftButtonProperty() == Input::ButtonState::Pressed;
-        const bool clickEdge = leftDown && !pendingMessageBox_->WasLeftMouseDown;
-        pendingMessageBox_->WasLeftMouseDown = leftDown;
-
-        if (clickEdge)
-        {
-            for (std::size_t i = 0; i < buttonRects.size(); ++i)
-            {
-                if (buttonRects[i].Contains(mouse.getXProperty(), mouse.getYProperty()))
-                {
-                    suppressTouchUntilMouseRelease_ = true;
-                    CompletePendingMessageBox(static_cast<int>(i));
-                    return;
-                }
-            }
-        }
-        // Keyboard and gamepad answer the box too, as the console Guide is answered: arrows,
-        // Tab, the D-pad or the left stick move the focus, Enter/Space/A choose, Escape/B/Back
-        // cancel (EndShowMessageBox then returns no button).
-        const Input::KeyboardState keys = Input::Keyboard::GetState();
-        bool previous = keys.IsKeyDown(Input::Keys::Left) || keys.IsKeyDown(Input::Keys::Up);
-        bool next = keys.IsKeyDown(Input::Keys::Right) || keys.IsKeyDown(Input::Keys::Down) || keys.IsKeyDown(Input::Keys::Tab);
-        bool select = keys.IsKeyDown(Input::Keys::Enter) || keys.IsKeyDown(Input::Keys::Space);
-        bool cancel = keys.IsKeyDown(Input::Keys::Escape);
-        for (int index = 0; index < 4; ++index)
-        {
-            const Input::GamePadState pad = Input::GamePad::GetState(static_cast<PlayerIndex>(index));
-            const Vector2 stick = pad.getThumbSticksProperty().getLeftProperty();
-            previous = previous || pad.IsButtonDown(Input::Buttons::DPadLeft) || pad.IsButtonDown(Input::Buttons::DPadUp) ||
-                       stick.X < -0.5f || stick.Y > 0.5f;
-            next = next || pad.IsButtonDown(Input::Buttons::DPadRight) || pad.IsButtonDown(Input::Buttons::DPadDown) ||
-                   stick.X > 0.5f || stick.Y < -0.5f;
-            select = select || pad.IsButtonDown(Input::Buttons::A);
-            cancel = cancel || pad.IsButtonDown(Input::Buttons::B) || pad.IsButtonDown(Input::Buttons::Back);
-        }
-        auto edge = [](bool down, bool& was) { const bool pressed = down && !was; was = down; return pressed; };
-        const int count = static_cast<int>(pendingMessageBox_->Buttons.size());
-        if (edge(previous, pendingMessageBox_->WasPreviousDown))
-        {
-            pendingMessageBox_->FocusButton = (pendingMessageBox_->FocusButton + count - 1) % count;
-        }
-        if (edge(next, pendingMessageBox_->WasNextDown))
-        {
-            pendingMessageBox_->FocusButton = (pendingMessageBox_->FocusButton + 1) % count;
-        }
-        if (edge(select, pendingMessageBox_->WasSelectDown))
-        {
-            CompletePendingMessageBox(pendingMessageBox_->FocusButton);
-            return;
-        }
-        if (edge(cancel, pendingMessageBox_->WasCancelDown))
-        {
-            CompletePendingMessageBox(std::nullopt);
+            CNA::Internal::GamerServices::GuideUi::drawGameDialogs(device, spriteBatch);
         }
     }
 
@@ -1131,112 +918,6 @@ namespace Microsoft::Xna::Framework::GamerServices
                     },{});
                 },{});
         }
-        void Inbox(PlayerIndex player,const std::string& user,int index) {
-            const auto page=Service::backend()->messages(user,index,1);
-            if(page.messages.empty()) {
-                SocialMessage(player,"Messages",index==0?"You have no messages.":"No more messages.");return;
-            }
-            const auto message=page.messages.front();
-            if(!message.read)try{Service::backend()->updateMessage(user,message.id,false);}catch(...){}
-            (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"Messages ("+std::to_string(index+1)+"/"+std::to_string(page.total)+")",
-                "From "+message.sender+":\n"+message.text,{"Next","Reply","Delete","Close"},0,MessageBoxIcon::None,
-                [player,user,index,message](System::IAsyncResult& result) {
-                    std::unique_ptr<System::IAsyncResult> owned(&result);const auto answer=Guide::EndShowMessageBox(&result);
-                    if(!answer||*answer==3)return;
-                    try {
-                        if(*answer==0)Inbox(player,user,index+1);
-                        else if(*answer==1)Compose(player,user,{message.sender},"");
-                        else {Service::backend()->updateMessage(user,message.id,true);Inbox(player,user,index);}
-                    }catch(...){SocialMessage(player,"Messages","The messages could not be read.");}
-                },{});
-        }
-        void Information(PlayerIndex player,const std::string& title,const std::string& text) {
-            (void)SocialActor(player);SocialMessage(player,title,text);
-        }
-        void ChangeFriend(PlayerIndex player,const std::string& target,const std::string& action) {
-            if(socialPending)throw System::InvalidOperationException("A social operation is already pending.");
-            auto service=Service::backend();const auto user=service->profile(SocialActor(player)->getGamertagProperty()).userId;
-            socialPending=true;
-            try {
-                socialAction.reset(Service::ServiceAsyncResult::begin("guide.friend",nullptr,[user,target,action](auto& executor)->std::any{
-                    executor.changeFriend(user,target,action);return {};
-                },[player](System::IAsyncResult& result){
-                    auto owned=std::move(socialAction);socialPending=false;
-                    try{(void)Service::ServiceAsyncResult::end(&result,"guide.friend",nullptr);Guide::ShowFriends(player);}
-                    catch(...){SocialMessage(player,"CNA Gamer Services","The friendship change could not be completed.");}
-                },{},std::move(service)));
-            }catch(...){socialPending=false;throw;}
-        }
-        void SendInvitations(PlayerIndex player,const std::string& user,const std::vector<std::string>& tags) {
-            try {
-                Service::sendInvitations(user,tags,[player,count=tags.size()](int failures) {
-                    if(failures)SocialMessage(player,"Game invitation",failures==static_cast<int>(count)
-                        ?"The invitation could not be sent.":"Some invitations could not be sent.");
-                });
-            }catch(...){SocialMessage(player,"Game invitation","There is no online game to invite gamers to.");}
-        }
-        void ConfirmInvitations(PlayerIndex player,const std::string& user,const std::vector<std::string>& tags) {
-            std::string names;for(const auto& tag:tags)names+=(names.empty()?"":", ")+tag;
-            (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"Game invitation","Invite "+names+" to join your game?",{"Send invitation","Cancel"},0,
-                MessageBoxIcon::None,[player,user,tags](System::IAsyncResult& result) {
-                    std::unique_ptr<System::IAsyncResult> owned(&result);const auto answer=Guide::EndShowMessageBox(&result);
-                    if(answer&&*answer==0)SendInvitations(player,user,tags);
-                },{});
-        }
-        void ProfileCard(PlayerIndex player,const std::string& tag) {
-            auto* actor=SocialActor(player);auto service=Service::backend();const auto person=service->profile(tag);
-            const auto user=service->profile(actor->getGamertagProperty()).userId;
-            std::string action="add",label="Request friendship";
-            for(const auto& entry:service->friends(user))if(entry.gamertag==person.gamertag) {
-                if(entry.accepted){action="remove";label="Remove friend";}
-                else if(entry.requestReceived){action="accept";label="Accept request";}
-                else if(entry.requestSent){action="remove";label="Cancel request";}
-            }
-            const auto text=person.displayName+"\n"+person.motto+"\nGamer score: "+std::to_string(person.gamerScore)+
-                "    Achievements: "+std::to_string(person.totalAchievements)+"\nRegion: "+person.region;
-            const bool self=person.userId==user;
-            const bool invite=!self&&Service::activeOnlineSession().has_value();
-            std::vector<std::string> buttons;
-            if(!self)buttons.push_back(label);
-            if(invite)buttons.push_back("Invite to game");
-            buttons.push_back("Friends");buttons.push_back("Close");
-            (void)CNA::Internal::GamerServices::showGuideMessageBox(player,person.gamertag,text,buttons,0,MessageBoxIcon::None,
-                [player,tag=person.gamertag,action,self,invite,user](System::IAsyncResult& result){
-                    std::unique_ptr<System::IAsyncResult> owned(&result);const auto answer=Guide::EndShowMessageBox(&result);
-                    if(!answer)return;
-                    int index=*answer;
-                    if(!self&&index==0){ChangeFriend(player,tag,action);return;}
-                    if(!self)--index;
-                    if(invite&&index==0){SendInvitations(player,user,{tag});return;}
-                    if(invite)--index;
-                    if(index==0)Guide::ShowFriends(player);
-                },{});
-        }
-        void FriendsPage(PlayerIndex player,std::size_t offset) {
-            auto* actor=SocialActor(player);const auto friends=actor->GetFriends();std::string text;
-            const auto count=static_cast<std::size_t>(friends.getCountProperty());
-            for(std::size_t i=offset;i<std::min(offset+8,count);++i) {
-                auto* entry=friends[static_cast<int>(i)];text+=entry->getGamertagProperty();
-                if(entry->getFriendRequestReceivedFromProperty())text+=" - incoming request";
-                else if(entry->getFriendRequestSentToProperty())text+=" - sent request";
-                else text+=entry->getIsOnlineProperty()?" - online":" - offline";
-                if(!entry->getPresenceProperty().empty())text+=" - "+entry->getPresenceProperty();text+="\n";
-            }
-            if(text.empty())text="No friends or pending requests.";
-            (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"CNA Friends",text,{"Find gamer","More","Close"},0,MessageBoxIcon::None,
-                [player,offset,count](System::IAsyncResult& result){
-                    std::unique_ptr<System::IAsyncResult> owned(&result);const auto answer=Guide::EndShowMessageBox(&result);
-                    if(answer&&*answer==1)FriendsPage(player,offset+8<count?offset+8:0);
-                    else if(answer&&*answer==0) {
-                        (void)CNA::Internal::GamerServices::showGuideKeyboardInput(player,"CNA Gamer Card","Gamertag","",[player](System::IAsyncResult& input){
-                            std::unique_ptr<System::IAsyncResult> ownedInput(&input);
-                            if(Guide::WasKeyboardInputCanceledEXT(&input))return;
-                            const auto tag=Guide::EndShowKeyboardInput(&input);
-                            try{ProfileCard(player,tag);}catch(...){SocialMessage(player,"CNA Gamer Card","The gamer could not be found.");}
-                        },{});
-                    }
-                },{});
-        }
     }
     void Guide::ShowComposeMessage(PlayerIndex player,const std::string& text,const std::vector<Gamer*>& recipients) {
         // Reference: text shorter than 256 characters, then the recipient list, then the Guide.
@@ -1251,13 +932,13 @@ namespace Microsoft::Xna::Framework::GamerServices
         ValidateGamer(gamer);
         if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException();
         (void)SocialActor(player);
-        const auto tag=gamer->getGamertagProperty();
-        (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"Friend request","Send a friendship request to "+tag+"?",{"Send request","Cancel"},0,MessageBoxIcon::None,
-            [player,tag](System::IAsyncResult& result){std::unique_ptr<System::IAsyncResult> owned(&result);const auto answer=EndShowMessageBox(&result);if(answer&&*answer==0)ChangeFriend(player,tag,"add");},{});
+        // The gamer card leads with the friend request.
+        CNA::Internal::GamerServices::GuideUi::open(CNA::Internal::GamerServices::GuideUi::gamerCardScreen(player,gamer->getGamertagProperty()),player);
     }
     void Guide::ShowFriends(PlayerIndex player) {
         if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException();
-        FriendsPage(player,0);
+        (void)SocialActor(player);
+        CNA::Internal::GamerServices::GuideUi::open(CNA::Internal::GamerServices::GuideUi::friendsScreen(player),player);
     }
 
     void Guide::ShowGameInvite(PlayerIndex player,const std::vector<Gamer*>& recipients) {
@@ -1272,15 +953,9 @@ namespace Microsoft::Xna::Framework::GamerServices
         auto* actor=SocialActor(player);
         if(!Service::activeOnlineSession())
             throw System::InvalidOperationException("There is no online network session to invite gamers to.");
-        const auto user=Service::GamerAccess::userId(*actor);
+        (void)actor;
         std::vector<std::string> tags;for(auto* gamer:recipients)tags.push_back(gamer->getGamertagProperty());
-        if(!tags.empty()){ConfirmInvitations(player,user,tags);return;}
-        (void)CNA::Internal::GamerServices::showGuideKeyboardInput(player,"Game invitation","Gamertag to invite","",[player,user](System::IAsyncResult& input) {
-            std::unique_ptr<System::IAsyncResult> owned(&input);
-            if(Guide::WasKeyboardInputCanceledEXT(&input))return;
-            const auto tag=Guide::EndShowKeyboardInput(&input);
-            if(!tag.empty())ConfirmInvitations(player,user,{tag});
-        },{});
+        CNA::Internal::GamerServices::GuideUi::open(CNA::Internal::GamerServices::GuideUi::inviteScreen(player,std::move(tags)),player);
     }
 
     void Guide::ShowGameInvite(const std::string& /*sessionId*/)
@@ -1293,7 +968,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         ValidateGamer(gamer);
         if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException();
         (void)SocialActor(player);
-        ProfileCard(player,gamer->getGamertagProperty());
+        CNA::Internal::GamerServices::GuideUi::open(CNA::Internal::GamerServices::GuideUi::gamerCardScreen(player,gamer->getGamertagProperty()),player);
     }
 
     void Guide::ShowMarketplace(PlayerIndex player)
@@ -1304,63 +979,43 @@ namespace Microsoft::Xna::Framework::GamerServices
         if(!gamer||!gamer->getIsSignedInToLiveProperty())throw GamerPrivilegeException("The profile is not signed in.");
         if(!gamer->getPrivilegesProperty().getAllowPurchaseContentProperty())throw GamerPrivilegeException("The profile may not purchase content.");
         if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException();
-        // CNA runs no store or payment service; titles are fully licensed (IsTrialMode stays false).
-        Information(player,"Marketplace","CNA Gamer Services has no marketplace. This title is fully licensed; there is nothing to purchase.");
+        CNA::Internal::GamerServices::GuideUi::open(CNA::Internal::GamerServices::GuideUi::contentScreen(player),player);
     }
 
     void Guide::ShowMessages(PlayerIndex player)
     {
         if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException();
-        auto* actor=SocialActor(player);
-        try{Inbox(player,Service::GamerAccess::userId(*actor),0);}
-        catch(const GuideAlreadyVisibleException&){throw;}
-        catch(...){SocialMessage(player,"Messages","The messages could not be read.");}
+        (void)SocialActor(player);
+        CNA::Internal::GamerServices::GuideUi::open(CNA::Internal::GamerServices::GuideUi::messagesScreen(player),player);
     }
 
     void Guide::ShowParty(PlayerIndex player)
     {
         if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException();
-        // There is no cross-title voice/party service in CNA; the Guide says so instead of doing nothing.
-        Information(player,"Party","CNA Gamer Services has no party service. Use game invitations to play with friends.");
+        (void)SocialActor(player);
+        CNA::Internal::GamerServices::GuideUi::open(CNA::Internal::GamerServices::GuideUi::partyScreen(player),player);
     }
 
     void Guide::ShowPartySessions(PlayerIndex player)
     {
         if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException();
-        Information(player,"Party sessions","CNA Gamer Services has no party service, so there are no party sessions to join.");
+        (void)SocialActor(player);
+        CNA::Internal::GamerServices::GuideUi::open(CNA::Internal::GamerServices::GuideUi::partyScreen(player),player);
     }
 
     void Guide::ShowPlayerReview(PlayerIndex player, Gamer* gamer)
     {
         ValidateGamer(gamer);
         if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException();
-        auto* actor=SocialActor(player);const auto user=Service::GamerAccess::userId(*actor);const auto tag=gamer->getGamertagProperty();
-        (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"Player review","How was playing with "+tag+"?\nAvoided players' games are not offered to you.",
-            {"Prefer","Avoid","Clear review","Cancel"},0,MessageBoxIcon::None,[player,user,tag](System::IAsyncResult& result) {
-                std::unique_ptr<System::IAsyncResult> owned(&result);const auto answer=EndShowMessageBox(&result);
-                if(!answer||*answer==3)return;
-                const std::string rating=*answer==0?"prefer":*answer==1?"avoid":"clear";
-                SocialCall(player,[user,tag,rating](auto& executor){executor.reviewPlayer(user,tag,rating);},"The review could not be recorded.");
-            },{});
+        (void)SocialActor(player);
+        CNA::Internal::GamerServices::GuideUi::open(CNA::Internal::GamerServices::GuideUi::reviewScreen(player,gamer->getGamertagProperty()),player);
     }
 
     void Guide::ShowPlayers(PlayerIndex player)
     {
         if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException();
         (void)SocialActor(player);
-        std::string text;int shown=0;
-        for(const auto& tag:Service::recentPlayers()){if(shown++==8)break;text+=tag+"\n";}
-        if(text.empty())text="You have not played with anyone yet.";
-        (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"Recent players",text,{"Gamer card","Close"},0,MessageBoxIcon::None,[player](System::IAsyncResult& result) {
-            std::unique_ptr<System::IAsyncResult> owned(&result);const auto answer=EndShowMessageBox(&result);
-            if(!answer||*answer!=0)return;
-            (void)CNA::Internal::GamerServices::showGuideKeyboardInput(player,"Recent players","Gamertag","",[player](System::IAsyncResult& input) {
-                std::unique_ptr<System::IAsyncResult> ownedInput(&input);
-                if(WasKeyboardInputCanceledEXT(&input))return;
-                const auto tag=EndShowKeyboardInput(&input);
-                try{ProfileCard(player,tag);}catch(...){SocialMessage(player,"Recent players","The gamer could not be found.");}
-            },{});
-        },{});
+        CNA::Internal::GamerServices::GuideUi::open(CNA::Internal::GamerServices::GuideUi::playersScreen(player),player);
     }
 
     void Guide::ShowSignIn(int paneCount, bool onlineOnly) {
@@ -1392,14 +1047,8 @@ namespace Microsoft::Xna::Framework::GamerServices
     void Guide::ShowAchievementsEXT(PlayerIndex player)
     {
         if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException();
-        auto* actor=SocialActor(player);std::string text;int earned=0,shown=0;
-        const auto achievements=Service::backend()->achievements(Service::GamerAccess::userId(*actor));
-        for(const auto& achievement:achievements) {
-            if(achievement.earnedTicks)++earned;
-            if(shown++<10)text+=(achievement.earnedTicks?"[x] ":"[ ] ")+achievement.name+"\n";
-        }
-        if(achievements.empty())text="This title has no achievements.";
-        SocialMessage(player,"Achievements ("+std::to_string(earned)+"/"+std::to_string(achievements.size())+")",text);
+        (void)SocialActor(player);
+        CNA::Internal::GamerServices::GuideUi::open(CNA::Internal::GamerServices::GuideUi::achievementsScreen(player),player);
     }
 }
 
@@ -1411,7 +1060,7 @@ System::IAsyncResult* showGuideKeyboardInput(Microsoft::Xna::Framework::PlayerIn
 }
 bool guideIsVisible() {
     namespace Xna=Microsoft::Xna::Framework::GamerServices;
-    return Xna::pendingMessageBox_!=nullptr||Xna::pendingKeyboardInput_!=nullptr||Xna::signInActive||Xna::socialPending;
+    return Xna::pendingMessageBox_!=nullptr||Xna::pendingKeyboardInput_!=nullptr||Xna::signInActive||GuideUi::visible();
 }
 System::IAsyncResult* showGuideMessageBox(Microsoft::Xna::Framework::PlayerIndex,const std::string& title,const std::string& text,
     const std::vector<std::string>& buttons,int focusButton,Microsoft::Xna::Framework::GamerServices::MessageBoxIcon icon,
@@ -1442,71 +1091,9 @@ void systemGuideAction(Microsoft::Xna::Framework::PlayerIndex player,const std::
 
 void openSystemGuide(Microsoft::Xna::Framework::PlayerIndex player) {
     using namespace Microsoft::Xna::Framework::GamerServices;
-    using Microsoft::Xna::Framework::PlayerIndex;
     const int index=static_cast<int>(player);
     if(index<0||index>3||!GamerServicesDispatcher::getIsInitializedProperty()||guideIsVisible())return;
-    SignedInGamer* gamer=nullptr;
-    for(auto* candidate:*Gamer::getSignedInGamersProperty())if(candidate->getPlayerIndexProperty()==player)gamer=candidate;
-    auto close=[](System::IAsyncResult& result){std::unique_ptr<System::IAsyncResult> owned(&result);return Guide::EndShowMessageBox(&result);};
-    if(!gamer) {
-        // Sign-in panes cover this player's slot: 1, 2 or 4 of them.
-        const int panes=index==0?1:index==1?2:4;
-        (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"Guide","No profile is signed in for player "+std::to_string(index+1)+".",
-            {"Sign in","Close"},0,MessageBoxIcon::None,[player,panes,close](System::IAsyncResult& result) {
-                if(close(result)==0)systemGuideAction(player,[panes]{Guide::ShowSignIn(panes,false);});
-            },{});
-        return;
-    }
-    if(!gamer->getIsSignedInToLiveProperty()) {
-        (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"Guide","Signed in to the local profile "+gamer->getGamertagProperty()+
-            ". Online features need a CNA account service.",{"Sign out","Close"},1,MessageBoxIcon::None,[player,index,close](System::IAsyncResult& result) {
-                if(close(result)==0)systemGuideAction(player,[index]{backend()->signOut(index);});
-            },{});
-        return;
-    }
-    if(gamer->getIsGuestProperty()) {
-        (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"Guide","Playing as "+gamer->getGamertagProperty()+", a guest.",
-            {"Sign out","Close"},1,MessageBoxIcon::None,[player,index,close](System::IAsyncResult& result) {
-                if(close(result)==0)systemGuideAction(player,[index]{backend()->signOutGuest(index);});
-            },{});
-        return;
-    }
-    const auto user=CNA::Internal::GamerServices::GamerAccess::userId(*gamer);
-    (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"Guide","Signed in as "+gamer->getGamertagProperty()+".",
-        {"Friends","Invite to game","Messages","Online status","Gamer zone","Sign out"},0,MessageBoxIcon::None,[player,index,user,close](System::IAsyncResult& result) {
-            const auto choice=close(result);
-            if(!choice)return;
-            switch(*choice) {
-            case 0:systemGuideAction(player,[player]{Guide::ShowFriends(player);});break;
-            case 1:systemGuideAction(player,[player]{Guide::ShowGameInvite(player,std::vector<Gamer*>{});});break;
-            case 2:systemGuideAction(player,[player]{Guide::ShowMessages(player);});break;
-            case 3:
-                // What friends see as FriendGamer.IsAway/IsBusy: only ever what the player chose.
-                (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"Online status","Choose how your friends see you.",
-                    {"Online","Away","Busy"},0,MessageBoxIcon::None,[player,user,close](System::IAsyncResult& status) {
-                        const auto picked=close(status);
-                        if(!picked)return;
-                        static const char* const names[]={"online","away","busy"};
-                        const std::string name=names[std::clamp(*picked,0,2)];
-                        SocialCall(player,[user,name](auto& executor){executor.setPresenceStatus(user,name);},
-                            "The online status could not be changed.");
-                    },{});
-                break;
-            case 4:
-                // XNA GamerProfile.GamerZone: the style of social gaming this member prefers.
-                (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"Gamer zone","Choose the style of play you prefer.",
-                    {"Recreation","Pro","Family","Underground"},0,MessageBoxIcon::None,[player,user,close](System::IAsyncResult& zone) {
-                        const auto picked=close(zone);
-                        if(!picked)return;
-                        static const char* const names[]={"recreation","pro","family","underground"};
-                        const std::string name=names[std::clamp(*picked,0,3)];
-                        SocialCall(player,[user,name](auto& executor){executor.setGamerZone(user,name);},
-                            "The gamer zone could not be changed.");
-                    },{});
-                break;
-            default:systemGuideAction(player,[index]{backend()->signOut(index);});break;
-            }
-        },{});
+    GuideUi::open(GuideUi::homeScreen(player),player);
 }
 
 void pollSystemGuideButton() {
@@ -1523,6 +1110,46 @@ void pollSystemGuideButton() {
         const bool pressed=GamePad::GetState(static_cast<PlayerIndex>(index)).IsButtonDown(Buttons::BigButton);
         if(pressed&&!previous[index])openSystemGuide(static_cast<PlayerIndex>(index));
         previous[index]=pressed;
+    }
+}
+}
+
+namespace CNA::Internal::GamerServices::GuideUi {
+std::optional<MessageBoxView> pendingMessageBox() {
+    namespace Xna=Microsoft::Xna::Framework::GamerServices;
+    const auto* box=Xna::pendingMessageBox_;
+    if(!box)return std::nullopt;
+    return MessageBoxView{box->Title,box->Text,box->Buttons,box->FocusButton,box->Icon};
+}
+void focusMessageBox(int button) {
+    namespace Xna=Microsoft::Xna::Framework::GamerServices;
+    if(Xna::pendingMessageBox_&&button>=0&&button<static_cast<int>(Xna::pendingMessageBox_->Buttons.size()))Xna::pendingMessageBox_->FocusButton=button;
+}
+void answerMessageBox(std::optional<int> button) {
+    namespace Xna=Microsoft::Xna::Framework::GamerServices;
+    if(!Xna::pendingMessageBox_)return;
+    // A click answers on the press; its release must not reach whatever the box was covering.
+    if(Microsoft::Xna::Framework::Input::Mouse::GetState().getLeftButtonProperty()==Microsoft::Xna::Framework::Input::ButtonState::Pressed)
+        Xna::suppressTouchUntilMouseRelease_=true;
+    Xna::CompletePendingMessageBox(button);
+}
+std::optional<KeyboardView> pendingKeyboard() {
+    namespace Xna=Microsoft::Xna::Framework::GamerServices;
+    const auto* keys=Xna::pendingKeyboardInput_;
+    if(!keys)return std::nullopt;
+    return KeyboardView{keys->Title,keys->Description,Xna::ComputeDisplayText(keys)};
+}
+void typeKeyboard(char16_t character){Microsoft::Xna::Framework::GamerServices::HandleKeyboardCharacter(character);}
+void cancelKeyboard() {
+    namespace Xna=Microsoft::Xna::Framework::GamerServices;
+    if(Xna::pendingKeyboardInput_)Xna::CompletePendingKeyboardInput(/*canceled=*/true);
+}
+void releaseTouchSuppression() {
+    namespace Xna=Microsoft::Xna::Framework::GamerServices;
+    if(Xna::suppressTouchUntilMouseRelease_&&
+       Microsoft::Xna::Framework::Input::Mouse::GetState().getLeftButtonProperty()!=Microsoft::Xna::Framework::Input::ButtonState::Pressed) {
+        Xna::suppressTouchUntilMouseRelease_=false;
+        Xna::SyncTouchInputSuppression();
     }
 }
 }

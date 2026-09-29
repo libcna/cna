@@ -14,6 +14,7 @@
 #include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include "../../src/Internal/GuideOverlay.hpp"
+#include "../../src/Internal/Guide/GuideUi.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -28,6 +29,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
@@ -72,6 +74,7 @@ namespace
         bool opened_ = false;
         std::unique_ptr<SpriteBatch> batch_;
         std::unique_ptr<Texture2D> white_;
+        std::chrono::steady_clock::duration clockOffset_{};
 
         SignedInGamer* Player(int index) { return (*Gamer::getSignedInGamersProperty())[static_cast<PlayerIndex>(index)]; }
 
@@ -79,6 +82,10 @@ namespace
         {
             Guide::ResetPendingMessageBoxForTestingEXT();
             Guide::ResetPendingKeyboardInputForTestingEXT();
+            Service::GuideUi::closeAll();
+            // Each capture starts with no notification showing.
+            clockOffset_ += std::chrono::seconds(30);
+            (void)Service::guideNotifications();
         }
 
         void Seed()
@@ -127,6 +134,7 @@ namespace
             graphics_.setPreferredBackBufferHeightProperty(Height);
             graphics_.setGraphicsProfileProperty(GraphicsProfile::HiDef);
             Seed();
+            Service::setGuideNotificationClockForTesting([this] { return std::chrono::steady_clock::now() + clockOffset_; });
             getComponentsProperty().Add(new GamerServicesComponent(*this));
             auto signIn = [this](const char* tag, int slot) { service_->signIn(slot, tag, "fixture"); };
             steps_ = {

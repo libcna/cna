@@ -254,6 +254,7 @@ public:
         std::vector<ServiceFriend> values;for(const auto& e:entries) {
             if(!e.at("online").is_boolean())throw Unavailable("Invalid friend response.");
             ServiceFriend friendState;friendState.gamertag=CnaService::stringField(e,"gamertag",32);friendState.online=e["online"].get<bool>();
+            if(e.contains("userId"))friendState.userId=CnaService::stringField(e,"userId",64);
             for(const auto* key:{"accepted","requestSent","requestReceived"})if(!e.at(key).is_boolean())throw Unavailable("Invalid friend response.");
             friendState.accepted=e["accepted"].get<bool>();friendState.requestSent=e["requestSent"].get<bool>();friendState.requestReceived=e["requestReceived"].get<bool>();
             // A server older than these flags leaves them out; one that sends them sends booleans.
@@ -787,11 +788,12 @@ public:
         throw Unavailable("Achievement not found.");
     }
     std::vector<ServiceFriend> friends(const std::string& user) override {
+        {std::lock_guard guard(avatarLock_);if(avatarsUnreachable_)throw Unavailable("Fake fixture is unreachable.");}
         require(user);std::vector<ServiceFriend> result;
         for(const auto& target:identities_)if(target.userId!=user) {
             const bool sent=edges_.contains({user,target.userId}),received=edges_.contains({target.userId,user});
             if(!sent&&!received)continue;
-            ServiceFriend value;value.gamertag=target.gamertag;value.accepted=sent&&received;
+            ServiceFriend value;value.userId=target.userId;value.gamertag=target.gamertag;value.accepted=sent&&received;
             value.requestSent=sent&&!received;value.requestReceived=received&&!sent;
             value.online=value.accepted&&(std::find(slots_.begin(),slots_.end(),target.userId)!=slots_.end()||remoteOnline_.contains(target.userId));
             value.presence=value.online?presence_[target.userId]:"";

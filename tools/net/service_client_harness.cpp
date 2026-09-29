@@ -11,6 +11,7 @@
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
+#include "../../modules/gamer-services/src/Internal/Guide/GuideUi.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GuideAlreadyVisibleException.hpp"
@@ -26,6 +27,29 @@
 #include <thread>
 using namespace Microsoft::Xna::Framework::GamerServices;
 namespace Service=CNA::Internal::GamerServices;
+namespace Ui=CNA::Internal::GamerServices::GuideUi;
+namespace {
+// Waits for a Guide screen with at least this many items (its service reads are asynchronous).
+bool uiItems(const std::string& screen,std::size_t minimum) {
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(12);
+    while(Ui::currentScreenForTesting()!=screen||Ui::labelsForTesting().size()<minimum) {
+        if(std::chrono::steady_clock::now()>deadline)return false;
+        GamerServicesDispatcher::Update();std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return true;
+}
+// Waits for a Guide screen whose item shows a label.
+bool uiLabel(const std::string& screen,std::size_t index,const std::string& label) {
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(12);
+    for(;;) {
+        const auto labels=Ui::labelsForTesting();
+        if(Ui::currentScreenForTesting()==screen&&labels.size()>index&&labels[index]==label)return true;
+        if(std::chrono::steady_clock::now()>deadline)return false;
+        GamerServicesDispatcher::Update();std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+}
+void settle(){for(int i=0;i<100;++i){GamerServicesDispatcher::Update();std::this_thread::sleep_for(std::chrono::milliseconds(2));}}
+}
 int checks=0;
 void check(bool condition,const char* reason){++checks;if(!condition)throw std::runtime_error(reason);}
 LeaderboardEntry firstEntry(const LeaderboardReader& reader) {const auto entries=reader.getEntriesProperty();return entries[0];}
@@ -276,37 +300,48 @@ int main(int argc,char** argv) {
         }
         if(!real) {
             auto* other=(*collection)[1];
+            // The friend request is the gamer card's first action.
             Guide::ShowFriendRequest(Microsoft::Xna::Framework::PlayerIndex::One,other);
-            check(Guide::getHasPendingMessageBoxEXTProperty(),"friend confirmation UI");Guide::SimulateMessageBoxClickEXT(0);
-            check(Guide::getIsVisibleProperty()&&!Guide::getHasPendingMessageBoxEXTProperty(),"pending social request");
-            GamerServicesDispatcher::Update();check(Guide::getHasPendingMessageBoxEXTProperty(),"friends UI after request");
+            check(uiLabel("gamerCard",1,"Send friend request"),"friend request UI");
+            Ui::clickForTesting(0);check(Guide::getIsVisibleProperty(),"pending social request");
+            check(uiLabel("gamerCard",1,"Cancel friend request"),"card after request");
             check(!gamer->IsFriend(other)&&gamer->GetFriends()[0]->getFriendRequestSentToProperty(),"pending not accepted");
             check(other->GetFriends()[0]->getFriendRequestReceivedFromProperty(),"incoming friend request");
-            Guide::SimulateMessageBoxClickEXT(2);
-            Guide::ShowGamerCard(Microsoft::Xna::Framework::PlayerIndex::Two,gamer);Guide::SimulateMessageBoxClickEXT(0);
-            GamerServicesDispatcher::Update();check(gamer->IsFriend(other)&&other->IsFriend(gamer),"mutual accepted friendship");
-            Guide::SimulateMessageBoxClickEXT(2);
+            Ui::closeAll();
+            Guide::ShowGamerCard(Microsoft::Xna::Framework::PlayerIndex::Two,gamer);
+            check(uiLabel("gamerCard",1,"Accept friend request"),"incoming request on the card");Ui::clickForTesting(0);
+            check(uiLabel("gamerCard",1,"Remove friend"),"card after accepting");
+            check(gamer->IsFriend(other)&&other->IsFriend(gamer),"mutual accepted friendship");
+            Ui::closeAll();
             other->getPresenceProperty().setPresenceModeProperty(GamerPresenceMode::Level);
             other->getPresenceProperty().setPresenceValueProperty(12);
             check(gamer->GetFriends()[0]->getPresenceProperty().empty(),"presence changed before Update");
             GamerServicesDispatcher::Update();check(gamer->GetFriends()[0]->getPresenceProperty()=="Level 12","presence mode ordinal/value");
             auto snapshot=gamer->GetFriends();snapshot.Dispose();check(snapshot.getIsDisposedProperty(),"owned friend snapshot disposal");
-            Guide::ShowFriends(Microsoft::Xna::Framework::PlayerIndex::One);Guide::SimulateMessageBoxClickEXT(0);
-            enterText("missing");check(Guide::getHasPendingMessageBoxEXTProperty(),"missing profile error UI");Guide::SimulateMessageBoxClickEXT(0);
-            Guide::ShowGamerCard(Microsoft::Xna::Framework::PlayerIndex::One,other);Guide::SimulateMessageBoxClickEXT(0);
-            GamerServicesDispatcher::Update();check(!gamer->IsFriend(other)&&other->GetFriends().getCountProperty()==0,"mutual friend removal");Guide::SimulateMessageBoxClickEXT(2);
+            // Y finds a gamer by gamertag; an unknown one gets the card's "not found".
+            Guide::ShowFriends(Microsoft::Xna::Framework::PlayerIndex::One);check(uiItems("friends",1),"friends list");
+            Ui::sendForTesting(Ui::Command::Y);enterText("missing");
+            check(Ui::currentScreenForTesting()=="gamerCard","missing profile card");settle();check(Ui::labelsForTesting().empty(),"missing profile error UI");
+            Ui::closeAll();
+            Guide::ShowGamerCard(Microsoft::Xna::Framework::PlayerIndex::One,other);
+            check(uiLabel("gamerCard",1,"Remove friend"),"remove offered");Ui::clickForTesting(0);
+            check(uiLabel("gamerCard",1,"Send friend request"),"card after removal");
+            check(!gamer->IsFriend(other)&&other->GetFriends().getCountProperty()==0,"mutual friend removal");Ui::closeAll();
         }
         if(real&&(std::string(argv[4])=="request"||std::string(argv[4])=="presence-wait")) {
             std::unique_ptr<Gamer> target(Gamer::GetFromGamertag(std::string(argv[4])=="request"?"Bob":"Alice"));
             if(std::string(argv[4])=="request")Guide::ShowFriendRequest(Microsoft::Xna::Framework::PlayerIndex::One,target.get());
             else Guide::ShowGamerCard(Microsoft::Xna::Framework::PlayerIndex::One,target.get());
-            Guide::SimulateMessageBoxClickEXT(0);
+            check(uiItems("gamerCard",2),"real gamer card");
+            const auto before=Ui::labelsForTesting()[1];
+            Ui::clickForTesting(0);
+            // The card reads the friendship again once the service answered.
             const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(12);
-            while(!Guide::getHasPendingMessageBoxEXTProperty()) {
+            while(Ui::labelsForTesting().size()<2||Ui::labelsForTesting()[1]==before) {
                 GamerServicesDispatcher::Update();if(std::chrono::steady_clock::now()>deadline)throw std::runtime_error("social completion timeout");
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
-            Guide::SimulateMessageBoxClickEXT(2);
+            Ui::closeAll();
             if(std::string(argv[4])=="presence-wait") {
                 check(gamer->IsFriend(target.get()),"real mutual friendship");
                 gamer->getPresenceProperty().setPresenceModeProperty(GamerPresenceMode::Level);gamer->getPresenceProperty().setPresenceValueProperty(12);
@@ -325,7 +360,8 @@ int main(int argc,char** argv) {
             check(friends[0]->getIsPlayingProperty()&&!friends[0]->getIsJoinableProperty()&&!friends[0]->getInviteReceivedFromProperty()
                 &&!friends[0]->getInviteSentToProperty()&&!friends[0]->getIsAwayProperty(),"real friend state flags");
             check(friends[0]->getIsBusyProperty(),"real friend chose busy");
-            Guide::ShowFriends(Microsoft::Xna::Framework::PlayerIndex::One);Guide::SimulateMessageBoxClickEXT(2);
+            Guide::ShowFriends(Microsoft::Xna::Framework::PlayerIndex::One);check(uiItems("friends",1),"real friends list");
+            check(Ui::labelsForTesting()[0].starts_with("Bob - Busy"),"the list shows the chosen status");Ui::sendForTesting(Ui::Command::Back);
         }
         if(real&&std::string(argv[4])=="revoke-wait") {
             std::cout<<"READY_REVOKE"<<std::endl;std::string command;std::getline(std::cin,command);

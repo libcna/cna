@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "../Internal/GuideOverlay.hpp"
+#include "../Internal/Guide/GuideUi.hpp"
 #include "CNA/Internal/GamerServices/LocalGamerServicesStore.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/Audio/Microphone.hpp"
@@ -126,7 +127,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         if (isGuest_) throw GamerPrivilegeException("A guest cannot earn achievements.");
         if (!serviceUserId_.empty()) {
             const auto name = CNA::Internal::GamerServices::backend()->award(serviceUserId_, achievementKey);
-            if (!name.empty()) CNA::Internal::GamerServices::postGuideNotification("Achievement unlocked: " + name);
+            if (!name.empty()) CNA::Internal::GamerServices::GuideUi::notify({CNA::Internal::GamerServices::GuideUi::Notification::Kind::Achievement, "Achievement unlocked", name, {}});
             return;
         }
         // Offline, a title that ships an achievement catalog awards only what it defines, as the
@@ -142,7 +143,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         std::string name = achievementKey;
         if (catalog)
             for (const auto& entry : *catalog) if (entry.Key == achievementKey && !entry.Name.empty()) name = entry.Name;
-        CNA::Internal::GamerServices::postGuideNotification("Achievement unlocked: " + name);
+        CNA::Internal::GamerServices::GuideUi::notify({CNA::Internal::GamerServices::GuideUi::Notification::Kind::Achievement, "Achievement unlocked", name, {}});
     }
 
     System::IAsyncResult* SignedInGamer::BeginAwardAchievement(
@@ -155,7 +156,7 @@ namespace Microsoft::Xna::Framework::GamerServices
             return CNA::Internal::GamerServices::ServiceAsyncResult::begin("award", this,
                 [user, achievementKey](auto& executor) -> std::any {
                     const auto name = executor.award(user, achievementKey);
-                    if (!name.empty()) CNA::Internal::GamerServices::postGuideNotification("Achievement unlocked: " + name);
+                    if (!name.empty()) CNA::Internal::GamerServices::GuideUi::notify({CNA::Internal::GamerServices::GuideUi::Notification::Kind::Achievement, "Achievement unlocked", name, {}});
                     return {};
                 }, std::move(callback), std::move(state),std::move(service));
         }
@@ -285,7 +286,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void SignedInGamer::OnSignIn(SignedInGamer* gamer)
     {
-        CNA::Internal::GamerServices::postGuideNotification(gamer->getGamertagProperty() + " signed in");
+        CNA::Internal::GamerServices::GuideUi::notify({CNA::Internal::GamerServices::GuideUi::Notification::Kind::SignIn, gamer->getGamertagProperty() + " signed in", {}, {}});
         if (!SignedIn.Empty())
         {
             SignedIn.Raise(nullptr, SignedInEventArgs(gamer));
@@ -294,7 +295,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void SignedInGamer::OnSignOut(SignedInGamer* gamer)
     {
-        CNA::Internal::GamerServices::postGuideNotification(gamer->getGamertagProperty() + " signed out");
+        CNA::Internal::GamerServices::GuideUi::notify({CNA::Internal::GamerServices::GuideUi::Notification::Kind::SignOut, gamer->getGamertagProperty() + " signed out", {}, {}});
         if (!SignedOut.Empty())
         {
             SignedOut.Raise(nullptr, SignedOutEventArgs(gamer));

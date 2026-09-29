@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "GuideOverlay.hpp"
+#include "Guide/GuideSystem.hpp"
 #include "CNA/Internal/GamerServices/DispatcherGraphics.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "System/InvalidOperationException.hpp"
@@ -24,7 +25,7 @@ using Clock = std::chrono::steady_clock;
 
 // Guide notifications: one on screen at a time, each for GuideNotificationDuration from when it
 // first shows; a bounded queue behind it.
-struct Toast {std::string text;std::optional<Clock::time_point> shown;};
+struct Toast {GuideUi::Notification notification;std::optional<Clock::time_point> shown;};
 std::mutex toastLock;
 std::deque<Toast> toasts;
 std::function<Clock::time_point()> toastClock;
@@ -39,47 +40,12 @@ class Overlay final : public CNA::Internal::Runtime::IGameOverlay {
 public:
     XnaGraphics::IGraphicsDeviceService* graphics=nullptr;
     [[nodiscard]] bool isModalVisible() const override { return guideIsVisible(); }
-    void reset() { batch_.reset(); font_.reset(); white_.reset(); device_=nullptr; }
+    void reset() { GuideUi::releaseDeviceResources(); }
     void draw() override {
         if(!graphics)return;
-        std::optional<std::string> toast;
-        {std::lock_guard guard(toastLock);advanceToasts();if(!toasts.empty())toast=toasts.front().text;}
-        if(!guideIsVisible()&&!toast)return;
-        auto* device=graphics->getGraphicsDeviceProperty();if(!device)return;
-        if(device!=device_) {
-            batch_=std::make_unique<XnaGraphics::SpriteBatch>(*device);
-            font_=CNA::Internal::Graphics::makeSystemFont(*device);
-            white_=std::make_unique<XnaGraphics::Texture2D>(XnaGraphics::Texture2D::CreateFromPixels(*device,1,1,std::vector<SharpRuntime::bytecs>{255,255,255,255}));device_=device;
-        }
-        batch_->Begin();
-        if(guideIsVisible()) {
-            Guide::RenderPendingKeyboardInputEXT(*device,*batch_,*font_,*white_);
-            Guide::RenderPendingMessageBoxEXT(*device,*batch_,*font_,*white_);
-            const auto status=guideSignInStatus();
-            if(!status.empty()&&!Guide::getHasPendingKeyboardInputEXTProperty()&&!Guide::getHasPendingMessageBoxEXTProperty()) {
-                batch_->DrawString(*font_,status,Vector2{32,32},Color::White);
-            }
-        }
-        if(toast)drawToast(*device,*toast);
-        batch_->End();
+        auto* device=graphics->getGraphicsDeviceProperty();
+        if(device)GuideUi::draw(*device);
     }
-    // A toast above everything, where the game asked (Guide.NotificationPosition).
-    void drawToast(XnaGraphics::GraphicsDevice& device,const std::string& text) {
-        constexpr float scale=2.0f;constexpr int padding=14,accent=6;
-        const auto size=font_->MeasureString(text)*scale;
-        const int width=static_cast<int>(size.X)+padding*2+accent,height=static_cast<int>(size.Y)+padding*2;
-        const auto viewport=device.getViewportProperty();
-        const auto origin=guideNotificationOrigin(Guide::getNotificationPositionProperty(),viewport.getWidthProperty(),viewport.getHeightProperty(),width,height);
-        batch_->Draw(*white_,Rectangle(origin.X,origin.Y,width,height),Color(20,24,32,225));
-        batch_->Draw(*white_,Rectangle(origin.X,origin.Y,accent,height),Color(110,190,90));
-        batch_->DrawString(*font_,text,Vector2(static_cast<float>(origin.X+accent+padding),static_cast<float>(origin.Y+padding)),
-            Color::White,0.0f,Vector2::Zero,scale,XnaGraphics::SpriteEffects::None,0.0f);
-    }
-private:
-    XnaGraphics::GraphicsDevice* device_=nullptr;
-    std::unique_ptr<XnaGraphics::SpriteBatch> batch_;
-    std::unique_ptr<XnaGraphics::SpriteFont> font_;
-    std::unique_ptr<XnaGraphics::Texture2D> white_;
 };
 Overlay overlay;
 }
@@ -88,15 +54,28 @@ Microsoft::Xna::Framework::Graphics::GraphicsDevice* testingDevice=nullptr;
 }
 bool guideOverlayAttached() {return overlay.graphics!=nullptr;}
 void postGuideNotification(std::string text) {
-    if(text.empty())return;
-    std::lock_guard guard(toastLock);
-    // A burst (four gamers signing in) keeps its latest eight.
-    if(toasts.size()>=8)toasts.erase(toasts.begin()+(toasts.front().shown?1:0));
-    toasts.push_back({std::move(text),std::nullopt});
+    GuideUi::notify({GuideUi::Notification::Kind::Info,std::move(text),{},{}});
 }
 std::vector<std::string> guideNotifications() {
     std::lock_guard guard(toastLock);advanceToasts();
-    std::vector<std::string> result;for(const auto& toast:toasts)result.push_back(toast.text);return result;
+    std::vector<std::string> result;
+    for(const auto& toast:toasts)
+        result.push_back(toast.notification.title+(toast.notification.text.empty()?"":": "+toast.notification.text));
+    return result;
+}
+namespace GuideUi {
+void notify(Notification notification) {
+    if(notification.title.empty())return;
+    std::lock_guard guard(toastLock);
+    // A burst (four gamers signing in) keeps its latest eight.
+    if(toasts.size()>=8)toasts.erase(toasts.begin()+(toasts.front().shown?1:0));
+    toasts.push_back({std::move(notification),std::nullopt});
+}
+std::optional<GuideToast> currentGuideToast() {
+    std::lock_guard guard(toastLock);advanceToasts();
+    if(toasts.empty())return std::nullopt;
+    return GuideToast{toasts.front().notification,std::chrono::duration<double>(toastNow()-*toasts.front().shown).count()};
+}
 }
 Microsoft::Xna::Framework::Point guideNotificationOrigin(Microsoft::Xna::Framework::GamerServices::NotificationPosition position,
     int screenWidth,int screenHeight,int width,int height) {
