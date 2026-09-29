@@ -140,7 +140,7 @@ def build_clips():
         tap = 0.03 if k in (4, 6, 8) else 0.0
         p = stance("male", root=(shift, -0.01 * shift / 0.035, 0.0), lean=-3.0 * shift / 0.035,
                    tilt=2.5 * shift / 0.035, breath=math.sin(2 * math.pi * k / 7))
-        clip.key(t, finish(p, lift={"Right": (0.0, tap, 0.02)}, forward={"Right": (-8.0 * tap / 0.03, 0, 0)}))
+        clip.key(t, finish(p, lift={"Right": (0.0, tap * 0.4, 0.0)}, forward={"Right": (-12.0 * tap / 0.03, 0, 0)}))
     clip.face(0.0).blinks([1.0, 5.5])
 
     # --- Stand6: hands at the front of the thighs, rocking on the heels -------------------------
@@ -208,7 +208,12 @@ def build_clips():
     crouch.arm("Left", shoulder=(20.0, 0.0, -5.0), elbow=(-30.0, 0.0, 0.0)).arm("Right", shoulder=(20.0, 0.0, -5.0),
                                                                               elbow=(-30.0, 0.0, 0.0))
     clip.key(0.45, finish(crouch))
-    for t, height in ((0.75, 0.09), (1.05, 0.0), (1.4, 0.07), (1.7, 0.0)):
+    # The arms sweep up through the front as the body rises, rather than snapping overhead.
+    sweep = stance("male", root=(0.0, -0.03, 0.0), bend=2.0, nod=-6.0, relaxed=False)
+    sweep.arm("Left", shoulder=(-40.0, 0.0, 70.0), elbow=(-20.0, 0.0, 0.0)).arm("Right", shoulder=(-40.0, 0.0, 70.0),
+                                                                              elbow=(-20.0, 0.0, 0.0))
+    clip.key(0.66, finish(sweep))
+    for t, height in ((0.88, 0.09), (1.16, 0.0), (1.5, 0.07), (1.8, 0.0)):
         p = stance("male", root=(0.0, height, 0.0), bend=-6.0, nod=-12.0, relaxed=False)
         p.arm("Left", shoulder=(0.0, 0.0, 145.0), elbow=(0.0, 0.0, 10.0)).arm("Right", shoulder=(0.0, 0.0, 145.0),
                                                                             elbow=(0.0, 0.0, 10.0))
@@ -221,7 +226,7 @@ def build_clips():
     clip.key(2.3, finish(p))
     clip.key(3.4, finish(stance("male")))
     clip.face(0.0, mouth="Happy").face(0.4, mouth="PhoneticO", eyes="Shocked", brows="Raised").face(
-        0.75, mouth="Laughing", eyes="Laughing", brows="Raised").face(2.6, mouth="Happy", eyes="Happy")
+        0.85, mouth="Laughing", eyes="Laughing", brows="Raised").face(2.6, mouth="Happy", eyes="Happy")
 
     # --- female idles -----------------------------------------------------------------------------
     clip = c("FemaleIdleCheckNails", 6.0, body="female")
@@ -248,14 +253,17 @@ def build_clips():
     clip.face(0.0).blinks([2.0, 4.4])
 
     clip = c("FemaleIdleFixShoe", 6.5, body="female")
+    step = {"Right": (0.0, 0.0, 0.10)}
     clip.key(0.0, finish(stance("female")))
-    for t in (1.3, 2.4, 3.6, 4.6):
-        p = stance("female", bend=38.0, nod=10.0, relaxed=True)
-        p.arm("Left", shoulder=(-10.0, 0.0, 25.0), elbow=(-10.0, 0.0, 0.0))
-        foot = add(p.bind[rig.INDEX["AnkleRight"]], (0.0, 0.28, -0.12))
-        p.reach("Right", add(foot, (0.0, 0.03 + (0.015 if t in (2.4, 4.6) else 0.0), 0.03)), pole=(-0.5, -0.2, 1.0))
-        p.fingers("Right", 0.4)
-        clip.key(t, finish(p, lift={"Right": (0.0, 0.28, -0.12)}, forward={"Right": (35.0, 0.0, 0.0)}))
+    clip.key(0.8, finish(stance("female", nod=8.0), lift={"Right": (0.0, 0.05, 0.05)}))
+    for t, tug in ((1.5, 0.0), (2.4, 0.012), (3.4, 0.0), (4.4, 0.012)):
+        p = stance("female", root=(0.0, -0.11, -0.03), bend=40.0, nod=12.0, relaxed=True)
+        p.arm("Left", shoulder=(-6.0, 0.0, 18.0), elbow=(-25.0, 0.0, 0.0))
+        shoe = add(p.bind[rig.INDEX["AnkleRight"]], (0.0, 0.07 + tug, 0.16))
+        p.reach("Right", shoe, pole=(-0.6, -0.2, 1.0))
+        p.fingers("Right", 0.5)
+        clip.key(t, finish(p, lift=step))
+    clip.key(5.4, finish(stance("female", nod=6.0), lift={"Right": (0.0, 0.04, 0.05)}))
     clip.key(6.5, finish(stance("female")))
     clip.face(0.0).face(1.0, eyes="LookDown").face(5.4)
 
@@ -268,7 +276,7 @@ def build_clips():
         for side, sign in rig.SIDES:
             p.reach(side, p.point("BackLower", (sign * 0.18, 0.0, 0.03)), pole=(sign * 1.0, 0.1, -0.6))
             p.fingers(side, 0.9)
-        clip.key(t, finish(p, lift={"Right": (0.0, stomp, 0.03)}))
+        clip.key(t, finish(p, lift={"Right": (0.0, stomp, 0.0)}))
     clip.key(4.0, finish(stance("female")))
     clip.face(0.0, mouth="Angry", eyes="Angry", brows="Angry").face(3.6)
 
@@ -276,7 +284,7 @@ def build_clips():
     clip.key(0.0, finish(stance("female")))
     for t, scratch in ((0.8, 0.0), (1.2, 0.02), (1.6, 0.0), (2.0, 0.02), (2.4, 0.0), (2.9, 0.0)):
         p = stance("female", tilt=12.0, turn=-6.0, relaxed=True)
-        p.reach("Right", p.face((-0.16, 0.06 + scratch, -0.2)), pole=(-1.0, 0.3, -0.2))
+        p.reach("Right", p.beside_head("Right", 0.07 + scratch, -0.03, 0.07), pole=(-1.0, 0.3, -0.2))
         p.fingers("Right", 0.35)
         clip.key(t, finish(p))
     clip.key(4.0, finish(stance("female")))
@@ -288,7 +296,7 @@ def build_clips():
         up = 1.0 if n % 2 else 0.0
         p = stance("female", bend=8.0 + 4.0 * up, nod=-8.0 + 6.0 * up, relaxed=True)
         p.shrug("Left", 6.0 * up).shrug("Right", 6.0 * up)
-        p.reach("Right", p.face((-0.02, -0.08, -0.05)), pole=(-1.0, -0.6, -0.2))
+        p.reach("Right", p.face(-0.02, -0.15, 0.07), pole=(-1.0, -0.6, -0.2))
         p.fingers("Right", 0.2)
         clip.key(t, finish(p))
     clip.key(4.0, finish(stance("female")))
@@ -300,8 +308,8 @@ def build_clips():
         sob = 1.0 if n % 2 else 0.0
         p = stance("female", bend=12.0, nod=20.0 + 4.0 * sob, relaxed=False)
         p.shrug("Left", 5.0 * sob).shrug("Right", 5.0 * sob)
-        p.reach("Left", p.face((0.05, 0.0, -0.09)), pole=(1.0, -1.0, 0.0))
-        p.reach("Right", p.face((-0.05, 0.0, -0.09)), pole=(-1.0, -1.0, 0.0))
+        p.reach("Left", p.face(0.06, -0.10, 0.08), pole=(1.0, -1.0, 0.0), hand=(-70.0, 0.0, 160.0))
+        p.reach("Right", p.face(-0.06, -0.10, 0.08), pole=(-1.0, -1.0, 0.0), hand=(-70.0, 0.0, 160.0))
         p.fingers("Left", 0.3).fingers("Right", 0.3)
         clip.key(t, finish(p))
     clip.key(5.0, finish(stance("female")))
@@ -311,8 +319,8 @@ def build_clips():
     clip.key(0.0, finish(stance("female")))
     for t, back in ((0.35, 0.04), (1.0, 0.05), (2.2, 0.05)):
         p = stance("female", root=(0.0, 0.0, -back), bend=-8.0, nod=-6.0, relaxed=False)
-        p.reach("Left", p.face((0.1, -0.06, -0.12)), pole=(1.0, -1.0, 0.0))
-        p.reach("Right", p.face((-0.1, -0.06, -0.12)), pole=(-1.0, -1.0, 0.0))
+        p.reach("Left", p.face(0.11, -0.15, 0.05), pole=(1.0, -1.0, 0.0), hand=(-80.0, 0.0, 170.0))
+        p.reach("Right", p.face(-0.11, -0.15, 0.05), pole=(-1.0, -1.0, 0.0), hand=(-80.0, 0.0, 170.0))
         p.fingers("Left", 0.1, spread=1.0).fingers("Right", 0.1, spread=1.0)
         clip.key(t, finish(p))
     clip.key(3.5, finish(stance("female")))
@@ -322,7 +330,7 @@ def build_clips():
     clip.key(0.0, finish(stance("female")))
     for t, open_ in ((1.0, 0.5), (1.8, 1.0), (2.8, 1.0), (3.6, 0.3)):
         p = stance("female", bend=-6.0 * open_, nod=-12.0 * open_, relaxed=True)
-        p.reach("Right", p.face((-0.01, -0.09, -0.06)), pole=(-1.0, -0.6, -0.2))
+        p.reach("Right", p.face(-0.01, -0.15, 0.07), pole=(-1.0, -0.6, -0.2))
         p.fingers("Right", 0.1)
         p.arm("Left", shoulder=(0.0, 0.0, 30.0 * open_), elbow=(-20.0 * open_, 0.0, 0.0))
         clip.key(t, finish(p))
@@ -409,7 +417,7 @@ def build_clips():
         sob = 1.0 if n % 2 else 0.0
         p = stance("male", bend=10.0, nod=22.0 + 3.0 * sob, relaxed=True)
         p.shrug("Left", 4.0 * sob).shrug("Right", 4.0 * sob)
-        p.reach("Right", p.face((0.0, 0.03, -0.08)), pole=(-1.0, -0.4, 0.2))
+        p.reach("Right", p.face(0.0, -0.08, 0.09), pole=(-1.0, -0.4, 0.2), hand=(-70.0, 0.0, 170.0))
         p.fingers("Right", 0.3)
         clip.key(t, finish(p))
     clip.key(5.0, finish(stance("male")))
@@ -430,7 +438,7 @@ def build_clips():
     clip.key(0.0, finish(stance("male")))
     for t, open_ in ((1.0, 0.5), (1.8, 1.0), (2.8, 1.0), (3.6, 0.3)):
         p = stance("male", bend=-8.0 * open_, nod=-14.0 * open_, relaxed=True)
-        p.reach("Right", p.face((0.0, -0.1, -0.07)), pole=(-1.0, -0.6, -0.2))
+        p.reach("Right", p.face(0.0, -0.15, 0.07), pole=(-1.0, -0.6, -0.2))
         p.fingers("Right", 0.8)
         p.arm("Left", shoulder=(0.0, 0.0, 40.0 * open_), elbow=(-25.0 * open_, 0.0, 0.0))
         clip.key(t, finish(p))

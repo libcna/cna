@@ -38,8 +38,8 @@
  "assets": [
   {
    "name": "animations.glb",
-   "sha256": "6001568e5abd1c3a2308c0ff8408c5579ef693bbcab7d048fd71b4059438c710",
-   "size": 631004
+   "sha256": "1f3f587ef32b2b56abec513c639a11ffbf162cc2da462303473660d9011bdb09",
+   "size": 710848
   },
   {
    "name": "body.female.glb",

@@ -104,32 +104,121 @@ def _tangents(times, values, loop):
     return out
 
 
+def _hermite(times, triples, t):
+    """The runtime's cubic spline (AvatarClips.cpp) at time t."""
+    value = lambda k: triples[k][1]
+    if len(times) == 1 or t <= times[0]:
+        return value(0)
+    if t >= times[-1]:
+        return value(len(times) - 1)
+    k = max(i for i in range(len(times) - 1) if times[i] <= t)
+    td = times[k + 1] - times[k]
+    s = (t - times[k]) / td
+    s2, s3 = s * s, s * s * s
+    v0, b0, a1, v1 = value(k), triples[k][2], triples[k + 1][0], value(k + 1)
+    return tuple(v0[i] * (2 * s3 - 3 * s2 + 1) + b0[i] * td * (s3 - 2 * s2 + s) + v1[i] * (-2 * s3 + 3 * s2) +
+                 a1[i] * td * (s3 - s2) for i in range(len(v0)))
+
+
+def _channels(times, keys, loop):
+    """Cubic-spline channels for every animated slot of a list of poses at `times`."""
+    channels = []
+    for slot in range(rig.BONE_COUNT):
+        values = [pose.local[slot] for pose in keys]
+        if all(max(abs(v[0]), abs(v[1]), abs(v[2])) < 1e-6 for v in values):
+            continue
+        assert slot not in rig.HELPERS, "helper slots are never animated"
+        continuous = [values[0]]
+        for v in values[1:]:
+            previous = continuous[-1]
+            continuous.append(tuple(-c for c in v) if sum(a * b for a, b in zip(v, previous)) < 0 else v)
+        if all(max(abs(a - b) for a, b in zip(v, continuous[0])) < 1e-6 for v in continuous):
+            channels.append((slot, "rotation", [((0.0,) * 4, continuous[0], (0.0,) * 4)], None))
+            continue
+        tangents = _tangents(times, continuous, loop)
+        channels.append((slot, "rotation", [(t, v, t) for v, t in zip(continuous, tangents)], None))
+    roots = [pose.root for pose in keys]
+    if any(max(abs(c) for c in r) > 1e-7 for r in roots):
+        tangents = _tangents(times, roots, loop)
+        channels.append((0, "translation", [(t, v, t) for v, t in zip(roots, tangents)], None))
+    return channels
+
+
+LEGS = [rig.INDEX[n + side] for side in ("Left", "Right") for n in ("Hip", "Knee", "Ankle")]
+
+
+def _feet_between(keys, times, t):
+    """Foot targets at t: each key's lift/forward offsets eased between neighbouring keys."""
+    k = max(i for i in range(len(times)) if times[i] <= t + 1e-9)
+    if k == len(times) - 1:
+        return keys[k].feet
+    s = (t - times[k]) / (times[k + 1] - times[k])
+    s = s * s * (3.0 - 2.0 * s)
+    out = []
+    for part in range(2):
+        a, b = keys[k].feet[part] or {}, keys[k + 1].feet[part] or {}
+        merged = {}
+        for side in set(a) | set(b):
+            va, vb = a.get(side, (0.0, 0.0, 0.0)), b.get(side, (0.0, 0.0, 0.0))
+            merged[side] = tuple(x + (y - x) * s for x, y in zip(va, vb))
+        out.append(merged or None)
+    return tuple(out)
+
+
+def _refine_feet(clip, times, keys, channels, step=1.0 / 12.0, tolerance=0.004):
+    """Keys are IK-solved only where they were authored; in between, interpolated rotations can let
+    a planted foot slide or sink. Where it would move more than `tolerance`, the legs are solved
+    again at `step` and their channels replaced by the denser keys."""
+    from .posing import Pose
+    by_slot = {(slot, path): (tr, tt) for slot, path, tr, tt in channels}
+    dense = sorted(set([round(i * step, 6) for i in range(int(clip.duration / step) + 1)] + list(times)))
+    if dense[-1] < clip.duration - 1e-9:
+        dense.append(clip.duration)
+    worst = 0.0
+    solved = []
+    for t in dense:
+        pose = Pose(clip.body)
+        for (slot, path), (triples, _) in by_slot.items():
+            value = _hermite(times if len(triples) > 1 else [0.0], triples, t)
+            if path == "rotation":
+                n = math.sqrt(sum(c * c for c in value))
+                pose.local[slot] = tuple(c / n for c in value)
+            else:
+                pose.root = value
+        lift, forward = _feet_between(keys, times, t)
+        _, pos = pose.world()
+        for side, sign in rig.SIDES:
+            target = pose.bind[rig.INDEX["Ankle" + side]]
+            if lift and side in lift:
+                target = tuple(a + b for a, b in zip(target, lift[side]))
+            worst = max(worst, math.sqrt(sum((a - b) ** 2 for a, b in zip(pos[rig.INDEX["Ankle" + side]], target))))
+        pose.plant_feet(lift, forward)
+        solved.append(pose)
+    if worst <= tolerance:
+        return channels
+    kept = [c for c in channels if c[0] not in LEGS or c[1] != "rotation"]
+    for slot in LEGS:
+        values = [pose.local[slot] for pose in solved]
+        continuous = [values[0]]
+        for v in values[1:]:
+            continuous.append(tuple(-c for c in v) if sum(a * b for a, b in zip(v, continuous[-1])) < 0 else v)
+        tangents = _tangents(dense, continuous, clip.loop)
+        kept.append((slot, "rotation", [(tg, v, tg) for v, tg in zip(continuous, tangents)], dense))
+    return kept
+
+
+import math  # noqa: E402
+
+
 def animations_glb():
     clips = animations.build_clips()
     builder = GlbBuilder({"cna": {"asset": "animations", "rig": "cna-avatar-71", "presets": animations.PRESETS}})
     builder.add_rig("male")
     for index, clip in enumerate(clips):
         times = [t for t, _ in clip.keys]
+        keys = [pose for _, pose in clip.keys]
         assert times[0] == 0.0 and abs(times[-1] - clip.duration) < 1e-9 and times == sorted(times)
-        channels = []
-        for slot in range(rig.BONE_COUNT):
-            values = [pose.local[slot] for _, pose in clip.keys]
-            if all(max(abs(v[0]), abs(v[1]), abs(v[2])) < 1e-6 for v in values):
-                continue
-            assert slot not in rig.HELPERS, "helper slots are never animated"
-            continuous = [values[0]]
-            for v in values[1:]:
-                previous = continuous[-1]
-                continuous.append(tuple(-c for c in v) if sum(a * b for a, b in zip(v, previous)) < 0 else v)
-            if all(max(abs(a - b) for a, b in zip(v, continuous[0])) < 1e-6 for v in continuous):
-                channels.append((slot, "rotation", [((0.0,) * 4, continuous[0], (0.0,) * 4)]))
-                continue
-            tangents = _tangents(times, continuous, clip.loop)
-            channels.append((slot, "rotation", [(t, v, t) for v, t in zip(continuous, tangents)]))
-        roots = [pose.root for _, pose in clip.keys]
-        if any(max(abs(c) for c in r) > 1e-7 for r in roots):
-            tangents = _tangents(times, roots, clip.loop)
-            channels.append((0, "translation", [(t, v, t) for v, t in zip(roots, tangents)]))
+        channels = _refine_feet(clip, times, keys, _channels(times, keys, clip.loop))
         extras = {"cnaPreset": index, "cnaLoop": clip.loop,
                   "cnaExpressions": [[round(e[0], 4)] + list(e[1:]) for e in sorted(clip.expressions)]}
         builder.add_animation(clip.name, times, channels, extras)

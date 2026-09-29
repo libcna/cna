@@ -114,11 +114,11 @@ class GlbBuilder:
         self.gltf["scenes"][0]["nodes"].append(len(self.gltf["nodes"]) - 1)
 
     def add_animation(self, name, times, channels, extras):
-        """channels: list of (joint slot, path, values as (in, value, out) triples at `times`)."""
+        """channels: list of (joint slot, path, (in, value, out) triples, key times or None for `times`)."""
         animation = {"name": name, "channels": [], "samplers": [], "extras": extras}
         time_accessor = self.accessor([quantize(t, 1e-4) for t in times], "SCALAR", FLOAT, 1, bounds=True)
         still_accessor = None
-        for slot, path, triples in channels:
+        for slot, path, triples, own_times in channels:
             if len(triples) == 1:
                 # A constant channel is one key.
                 if still_accessor is None:
@@ -138,7 +138,10 @@ class GlbBuilder:
                 flat.extend(triple)
             kind = "VEC4" if path == "rotation" else "VEC3"
             size = 4 if path == "rotation" else 3
-            sampler = {"input": time_accessor,
+            # A channel may carry its own, denser key times (legs solved again between keys).
+            input_accessor = time_accessor if own_times is None else \
+                self.accessor([quantize(t, 1e-4) for t in own_times], "SCALAR", FLOAT, 1, bounds=True)
+            sampler = {"input": input_accessor,
                        "output": self.accessor([tuple(quantize(c, 1e-6) for c in v) for v in flat], kind, FLOAT, size),
                        "interpolation": "CUBICSPLINE"}
             animation["samplers"].append(sampler)

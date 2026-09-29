@@ -145,6 +145,19 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   build sends `formats: [1, 2]`. Descriptions exchanged directly between games (bytes over a
   NetworkSession) cannot be negotiated: an older build reads a format 2 description as XNA's
   "results are undefined" case (IsValid by byte 0, renderer Unavailable).
+- **Animation pass (GSP-F1).** Measured every preset on both bodies (dev script sampling the
+  runtime's own curves at 30 Hz): Celebrate sank both feet 2.3 cm between keys, FemaleIdleFixShoe
+  floated on one leg and slid the planted foot, FemaleAngry's stomp and Stand5's tap slid the foot,
+  and four face-touch presets put hands inside the larger v2 head. Fixes at the source: poses keep
+  their foot targets and the writer re-solves the legs every 1/12 s wherever interpolation would
+  move a planted foot more than 4 mm, replacing only those clips' leg channels with denser keys
+  (glTF samplers may have their own key times; the reader already allowed it); face touches aim at
+  the v2 face surface (`Pose.face`, `beside_head`); FixShoe is a grounded crouch to a shoe a step
+  forward; the idle arms are no longer mirror images; Celebrate's arms sweep up through the front.
+  Tests over the shipped presets through the public API: looping Stand presets join with no jump,
+  feet never sink more than 12 mm, no hand passes within 5 cm of the spine, no joint moves faster
+  than 12 cm per 1/60 s. Residual (dev metric): a planted foot drifts at most 1-3 cm over a whole
+  clip when a preset authored for one body plays on the other.
 - **Server import validation (GSP-G1).** An independent MIT validator (server `AvatarAssets.cpp`,
   on nlohmann/json, no code from CNA) enforces the same contract as the CNA reader, plus
   catalog-level rules a client would otherwise hit at render time (items fitted to their body's
@@ -164,7 +177,7 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
 | GSP-C* | Catalog v2: body, head/face, expression atlas, facial individuality decision | first pass done (C1); art iteration continues |
 | GSP-D* | Catalog v2 wardrobe and hair | first pass done (C1) |
 | GSP-E* | Materials and renderer polish, per-renderer check | todo |
-| GSP-F* | Animation polish and key-pose/loop tests | todo |
+| GSP-F* | Animation polish and key-pose/loop tests | done (F1) |
 | GSP-G1 | Server avatar GLB/manifest validation, malformed fixtures | done (server 7a8a629) |
 | GSP-H1 | Avatar cache audit, bounded cleanup, first/warm load measurement | todo |
 | GSP-I1 | CNA-owned avatar customization (system level) | todo |
