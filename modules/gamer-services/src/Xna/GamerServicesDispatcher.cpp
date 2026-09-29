@@ -78,6 +78,8 @@ void GamerServicesDispatcher::Update() {
         return;
     }
     struct Guard {Guard(){updating=true;}~Guard(){updating=false;}} guard;
+    // XNA IL: every Update reads the Guide state, trial mode included, before sign-in changes.
+    Guide::isTrialMode_=Guide::simulateTrialMode_;
     auto service=CNA::Internal::GamerServices::backend();
     for(auto* gamer:slots)if(gamer&&!gamer->serviceUserId_.empty()&&gamer->presence_.changed_&&!gamer->presence_.pending_) {
         auto& presence=gamer->presence_;const auto revision=presence.revision_;auto text=presence.presence_;

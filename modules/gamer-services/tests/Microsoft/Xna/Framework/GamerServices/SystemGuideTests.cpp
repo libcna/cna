@@ -386,3 +386,54 @@ TEST(GuideVisibilityTest, IsVisibleRequiresInitializedGamerServices) {
     EXPECT_EQ(0, WEXITSTATUS(status));
 }
 #endif
+
+TEST_F(SystemGuideTest, TrialModeIsLatchedAtEachUpdateAndClosesOnlineSessions) {
+    auto fake = Fake();
+    fake->signIn(0, "Alice", "fixture");
+    ASSERT_TRUE(Settle([] { return Count() == 1; }));
+    auto* alice = (*Gamer::getSignedInGamersProperty())[0];
+    ASSERT_FALSE(Guide::getIsTrialModeProperty());
+    ASSERT_TRUE(alice->getPrivilegesProperty().getAllowOnlineSessionsProperty());
+    // The request takes effect at the next update, as XNA reads the Guide state there.
+    Guide::setSimulateTrialModeProperty(true);
+    EXPECT_FALSE(Guide::getIsTrialModeProperty());
+    GamerServicesDispatcher::Update();
+    EXPECT_TRUE(Guide::getIsTrialModeProperty());
+    EXPECT_FALSE(alice->getPrivilegesProperty().getAllowOnlineSessionsProperty());
+    Guide::setSimulateTrialModeProperty(false);
+    EXPECT_TRUE(Guide::getIsTrialModeProperty());
+    GamerServicesDispatcher::Update();
+    EXPECT_FALSE(Guide::getIsTrialModeProperty());
+    EXPECT_TRUE(alice->getPrivilegesProperty().getAllowOnlineSessionsProperty());
+}
+
+TEST_F(SystemGuideTest, TheMarketplaceOffersATestPurchaseToASimulatedTrial) {
+    auto fake = Fake();
+    fake->signIn(0, "Alice", "fixture");
+    ASSERT_TRUE(Settle([] { return Count() == 1; }));
+    Guide::ShowMarketplace(PlayerIndex::One);
+    ASSERT_EQ("content", Ui::currentScreenForTesting());
+    EXPECT_EQ("Full version", Ui::labelsForTesting().front());
+    EXPECT_EQ("CNA avatars", Ui::labelsForTesting().back());
+    Ui::closeAll();
+
+    Guide::setSimulateTrialModeProperty(true);
+    GamerServicesDispatcher::Update();
+    Guide::ShowMarketplace(PlayerIndex::One);
+    ASSERT_EQ("testPurchase", Ui::currentScreenForTesting());
+    EXPECT_EQ((std::vector<std::string>{"Yes", "No"}), Ui::labelsForTesting());
+    // No leaves the trial as it is.
+    Ui::clickForTesting(1);
+    ASSERT_EQ("content", Ui::currentScreenForTesting());
+    EXPECT_EQ("Trial version", Ui::labelsForTesting().front());
+    EXPECT_TRUE(Guide::getSimulateTrialModeProperty());
+    // Buying (the trial row) and Yes: the purchase shows at the next update.
+    Ui::clickForTesting(0);
+    ASSERT_EQ("testPurchase", Ui::currentScreenForTesting());
+    Ui::clickForTesting(0);
+    EXPECT_FALSE(Guide::getSimulateTrialModeProperty());
+    EXPECT_TRUE(Guide::getIsTrialModeProperty());
+    GamerServicesDispatcher::Update();
+    EXPECT_FALSE(Guide::getIsTrialModeProperty());
+    EXPECT_EQ("Full version", Ui::labelsForTesting().front());
+}

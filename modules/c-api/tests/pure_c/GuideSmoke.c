@@ -33,11 +33,11 @@ static int validate_settings(void)
         cna_guide_get_is_screen_saver_enabled(0) != CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
-    /* Trial mode follows the simulation only: CNA titles are fully licensed. */
-    if (cna_guide_set_simulate_trial_mode(CNA_TRUE) != CNA_RESULT_SUCCESS ||
-        cna_guide_get_is_trial_mode(&flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE ||
+    /* Trial mode is latched at each gamer-services update and is true before the first (XNA);
+       this smoke never initializes gamer services, so a simulation request alone changes nothing. */
+    if (cna_guide_get_is_trial_mode(&flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE ||
         cna_guide_set_simulate_trial_mode(CNA_FALSE) != CNA_RESULT_SUCCESS ||
-        cna_guide_get_is_trial_mode(&flag) != CNA_RESULT_SUCCESS || flag != CNA_FALSE) {
+        cna_guide_get_is_trial_mode(&flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE) {
         return 0;
     }
     /* The canonical getter refuses before gamer services are initialized. */

@@ -35,6 +35,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "../Internal/GuideOverlay.hpp"
+#include "../Internal/Guide/GuideScreen.hpp"
 #include "../Internal/Guide/GuideSystem.hpp"
 #include "CNA/Internal/Runtime/IModalFrames.hpp"
 #include "../Internal/ServiceAsyncResult.hpp"
@@ -516,6 +517,7 @@ namespace Microsoft::Xna::Framework::GamerServices
     }
 
     bool Guide::simulateTrialMode_ = false;
+    bool Guide::isTrialMode_ = true;
     NotificationPosition Guide::position_ = NotificationPosition::BottomCenter;
 
     bool Guide::getIsScreenSaverEnabledProperty()
@@ -535,9 +537,9 @@ namespace Microsoft::Xna::Framework::GamerServices
         }
     }
 
-    // Reference: SimulateTrialMode forces IsTrialMode to report true.
-    // CNA titles are fully licensed; only simulating trial mode makes a trial.
-    bool Guide::getIsTrialModeProperty()          { return simulateTrialMode_; }
+    // XNA IL: Guide.isTrialMode starts true and GamerServicesDispatcher.Update latches it from the
+    // kernel's GuideState (fed SimulateTrialMode); the setter is internal.
+    bool Guide::getIsTrialModeProperty()          { return isTrialMode_; }
 
     bool Guide::getIsVisibleProperty()
     {
@@ -728,6 +730,12 @@ namespace Microsoft::Xna::Framework::GamerServices
     {
         if (pendingKeyboardInput_ == nullptr)
         {
+            // Escape on the sign-in screen, before any name is typed, ends the sign-in.
+            if (CNA::Internal::GamerServices::GuideUi::currentScreenForTesting() == "signIn")
+            {
+                CNA::Internal::GamerServices::GuideUi::sendForTesting(CNA::Internal::GamerServices::GuideUi::Command::Back);
+                return;
+            }
             throw System::InvalidOperationException("No keyboard input is currently pending.");
         }
         CompletePendingKeyboardInput(/*canceled=*/true);
@@ -957,6 +965,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         if(!gamer->getPrivilegesProperty().getAllowPurchaseContentProperty())throw GamerPrivilegeException("The profile may not purchase content.");
         if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException();
         CNA::Internal::GamerServices::GuideUi::open(CNA::Internal::GamerServices::GuideUi::contentScreen(player),player);
+        // A game simulating trial mode gets XNA's purchase emulation straight away.
+        if(simulateTrialMode_)CNA::Internal::GamerServices::GuideUi::push(CNA::Internal::GamerServices::GuideUi::testPurchaseScreen(player));
     }
 
     void Guide::ShowMessages(PlayerIndex player)

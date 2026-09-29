@@ -64,6 +64,8 @@ std::shared_ptr<Screen> inviteScreen(Microsoft::Xna::Framework::PlayerIndex play
 std::shared_ptr<Screen> settingsScreen(Microsoft::Xna::Framework::PlayerIndex player);
 /** @brief The party. @param player Player. @return Screen. */
 std::shared_ptr<Screen> partyScreen(Microsoft::Xna::Framework::PlayerIndex player);
+/** @brief The purchase emulation of a game simulating trial mode. @param player Player. @return Screen. */
+std::shared_ptr<Screen> testPurchaseScreen(Microsoft::Xna::Framework::PlayerIndex player);
 /** @brief This title's content, updates and avatar catalogs. @param player Player. @return Screen. */
 std::shared_ptr<Screen> contentScreen(Microsoft::Xna::Framework::PlayerIndex player);
 /** @brief What happens when the avatar editor closes. */

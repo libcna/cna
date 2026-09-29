@@ -48,8 +48,10 @@ namespace Microsoft::Xna::Framework::GamerServices
         static void setIsScreenSaverEnabledProperty(bool value);
 
         /**
-         * @brief Gets whether the game is running in trial mode; true while SimulateTrialMode is set.
-         * CNA titles are fully licensed, so otherwise false.
+         * @brief Gets whether the game is running in trial mode. As in XNA it is true until gamer
+         * services first update, and each GamerServicesDispatcher.Update then latches it from the
+         * platform's license state: CNA titles are fully licensed, so it follows SimulateTrialMode
+         * as it was at that update (a simulated purchase shows as it turning false later, with no event).
          *
          * @return true if running in trial mode.
          */
@@ -258,11 +260,12 @@ namespace Microsoft::Xna::Framework::GamerServices
 
         /**
          * @brief CNAEXT/EXT: cancels the currently pending keyboard input as if the user pressed
-         * Escape, without requiring real keyboard input. Intended for headless demos/tests that
-         * cannot drive a real window's keyboard input - mirrors SimulateMessageBoxClickEXT's own
-         * established pattern for the message box overlay.
+         * Escape, without requiring real keyboard input; with no keyboard input pending, Escape on
+         * the sign-in screen ends the sign-in. Intended for headless demos/tests that cannot drive
+         * a real window's keyboard input - mirrors SimulateMessageBoxClickEXT's own established
+         * pattern for the message box overlay.
          *
-         * @throws System::InvalidOperationException if no keyboard input is currently pending.
+         * @throws System::InvalidOperationException if neither keyboard input nor sign-in is pending.
          */
         CNAEXT static void SimulateKeyboardInputCancelEXT();
 
@@ -610,6 +613,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         friend class GamerServicesDispatcher;
         static void OnSignInResult(int slot, bool success);
         static bool simulateTrialMode_;
+        static bool isTrialMode_;
         static NotificationPosition position_;
     };
 }

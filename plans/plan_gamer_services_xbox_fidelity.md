@@ -260,3 +260,19 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
   Tests: 3 `GuideLeaderboardTest`, rail order, server `service_unit` (board list, modes, title
   isolation, token). Evidence: `/rv/tmp/xbox-fidelity/ui/after3/` (24 screens incl.
   20-achievement-detail, 21-23 leaderboards, 24 Home -> Edit avatar). GS 586 + 1 skip, Net 504.
+- GSX-E1 (trial and marketplace, **XNA**). `Guide.IsTrialMode` starts true and every
+  `GamerServicesDispatcher.Update` latches it from `SimulateTrialMode` before sign-in changes (IL:
+  `isTrialMode = true`, `Guide.IsTrialMode = (guideState & IsTrialMode) != 0` in Update);
+  `GamerPrivileges.AllowOnlineSessions` is false in trial (IL). `ShowMarketplace` keeps XNA's
+  checks and opens Game content; a game simulating trial mode gets the "Test Purchase" emulation
+  (XNA's own resource strings, CNA wording for the store sentence): Yes turns `SimulateTrialMode`
+  off and `IsTrialMode` follows at the next update, No leaves the trial. The C ABI documents the
+  latch; `cna_guide_simulate_keyboard_input_cancel_ext` also ends the sign-in picker (Escape),
+  which the U3 picker had broken for `CApi_GuideSmoke`. C API coverage, limitations and release
+  gate summaries regenerated (stale since GSX-A added two `Configuration` fields, planned under
+  CBIND-127).
+- GSX-U7 (content). Game content shows the game's license (full, or trial with a test purchase)
+  and the avatar catalogs as one product: the catalogs of this release, the updates installed
+  since, and the update setting with its size bound. Tests: `SystemGuideTest` trial latch and
+  marketplace, updated trial/privilege tests. CApi 105/110 (content and audio smokes fail in this
+  HEADLESS/NULL-audio tree, unrelated to GamerServices). GS 587 + 1 skip, Net 504.
