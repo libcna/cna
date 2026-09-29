@@ -343,3 +343,24 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
   Evidence: `/rv/tmp/xbox-fidelity/ui/sequence/`, `seq-sheet-{1..4}.png`,
   `before-after-{1..4}.png`, `after6/`. GS Guide groups 47/47, Net invitations 6/6, fake-backend
   harness and `service_tls_e2e` pass.
+- GSX-E3 (QoS upstream, **XNA** + **POL**). XNA's `QualityOfService.BytesPerSecondUpstream` ("an
+  estimate of the available bandwidth" from this machine to the host) is now measured for SystemLink
+  results. A hosting machine runs a small responder thread on its own UDP socket; after its announce
+  and downstream train the host sends an `UpstreamInvite` (discovery tag 0x04) naming the responder's
+  port, the searcher sends eight padded probes back to back (0x05), the responder timestamps them on
+  arrival and returns the rate (0x06) within the 150 ms search. A train that loses its tail is
+  measured from what arrived after 250 ms; at most 64 trains are tracked; probes naming another
+  session are ignored. Older CNA builds ignore the new tags, so no protocol version change. The
+  value reaches `QualityOfService` through a private friend (no new public member). Service search
+  results remain unmeasured (**NO**: no path to the host before a join). Tests: both directions from
+  a real search, codec round trip and refusal, a partial train from a raw socket; Net discovery and
+  SystemLink groups 62/62. C API inventory unchanged (the friendship row recorded not applicable).
+- GSX-E (server capacity re-run). Release server at `4bc685c`, 64 players, 15 s windows, machine
+  busier than the earlier run (load average about 4.3): steady 1,312 req/s p50 44 ms p99 73 ms;
+  sign-in storm 1,024 req/s; 160 idle connections 1,127 req/s; 200,000 request IDs 1,507 req/s;
+  descriptors exhausted, still serving; no errors. The pre-pass server `4ba7f95` measured 1,329 and
+  992 req/s steady in the same minutes: the difference from the earlier 1,602 is load. The Release
+  build of the server's tests had stopped on a fixture reading four bytes past a literal (fixed,
+  server `49c260a`). Evidence `/rv/tmp/xbox-fidelity/bench/`. Decisions kept, with their evidence in
+  the register: partner tokens refused as XNA for Windows does; `WriteTrueSkill` raised with no skill
+  computed; Recent leaderboard keys without a window.

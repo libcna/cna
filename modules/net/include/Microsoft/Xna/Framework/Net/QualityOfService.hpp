@@ -3,13 +3,16 @@
 #include "CNA/CNAHelper.hpp"
 #include "System/TimeSpan.hpp"
 
+namespace CNA::Internal::Net { class ENetDiscoveryService; }
+
 namespace Microsoft::Xna::Framework::Net
 {
     /**
      * @brief Describes measured network quality between the local machine and the host of a
-     * found session. A SystemLink search measures the round trip of the host's discovery reply;
-     * a service (PlayerMatch/Ranked) search result is not measured; for a SystemLink result the
-     * downstream bandwidth is estimated from the host's probe train and upstream is not measured.
+     * found session. A SystemLink search measures the round trip of the host's discovery reply
+     * and estimates both bandwidths (downstream from the host's probe train, upstream from this
+     * machine's train as the host's responder timed it); a service (PlayerMatch/Ranked) search
+     * result is not measured.
      */
     class QualityOfService final
     {
@@ -74,8 +77,7 @@ namespace Microsoft::Xna::Framework::Net
 
         /**
          * @brief GSP-L6: creates a SystemLink measurement with a downstream bandwidth estimate
-         * (the host's probe train, timed on arrival); upstream stays zero, as a host answers
-         * discovery at frame boundaries and cannot time what arrives.
+         * (the host's probe train, timed on arrival). Discovery adds the upstream estimate itself.
          *
          * @param roundtripTime The measured round-trip time.
          * @param bytesPerSecondDownstream Estimated bytes per second from the host.
@@ -84,6 +86,8 @@ namespace Microsoft::Xna::Framework::Net
         CNAEXT static QualityOfService CreateInternal(System::TimeSpan roundtripTime, int bytesPerSecondDownstream);
 
     private:
+        // Sets the upstream estimate a SystemLink search measured (XNA's setter is internal).
+        friend class CNA::Internal::Net::ENetDiscoveryService;
         QualityOfService();
         explicit QualityOfService(System::TimeSpan roundtripTime);
 

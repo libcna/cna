@@ -34,7 +34,7 @@ Each is documented where it is declared (C++ and C) and in `docs/xna-4-api-cover
 | `Guide.ShowMarketplace` | explanatory pane after XNA's privilege checks | No store; titles are fully licensed. |
 | `Guide.IsTrialMode` | true only while `SimulateTrialMode` is set | No licensing service (GS-011b removed the public setter XNA keeps internal). |
 | `GamerProfile.GamerZone`/`Reputation` of local profiles and unreviewed accounts | `Unknown` / 0 | XNA's unset values; nothing is invented. An account's chosen zone and review-based stars are reported (GSP-M1). |
-| `QualityOfService.BytesPerSecondUpstream`; service search results' QoS | 0 / `IsAvailable` false | SystemLink measures the round trip and a downstream estimate from the host's probe train (GSP-L6); a host answers discovery at frame boundaries and cannot time arrivals, and a service listing has no path to its host before a join. |
+| Service search results' `QualityOfService` | `IsAvailable` false | A service listing has no path to its host before a join. SystemLink results measure the round trip and both bandwidths: downstream from the host's probe train (GSP-L6), upstream from the searcher's train timed by the host's responder thread (GSX-E). |
 | `GamerServicesDispatcher.InstallingTitleUpdate` | never raised | CNA installs no title updates. |
 | `WriteTrueSkill` | raised; no skill is computed | Skill boards are ordinary arbitrated boards (GS-006e). |
 | `LeaderboardKey.BestScoreRecent`/`BestTimeRecent` | no time window: every row is kept, as for the lifetime keys | The XNA documentation says only "best recent scores/times"; neither it nor the IL gives a window, and the service would have to invent one. |

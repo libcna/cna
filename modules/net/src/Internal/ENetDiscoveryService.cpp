@@ -11,9 +11,12 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <enet/enet.h>
+#include <memory>
 #include <stdexcept>
+#include <thread>
 
 namespace CNA::Internal::Net
 {
@@ -41,6 +44,8 @@ namespace CNA::Internal::Net
             double RoundtripMs = 0.0;
             int FirstIndex = -1, LastIndex = -1;
             std::chrono::steady_clock::time_point FirstArrival, LastArrival;
+            // What the host's responder measured of this machine's train to it.
+            int UpstreamBytesPerSecond = 0;
         };
 
         // Set only for the duration of FindSessions(); PollOnce()/HandleReceived() append any
@@ -61,13 +66,144 @@ namespace CNA::Internal::Net
         }
 
         // Bytes per second of a train: the probes after the first over the time they took to arrive.
-        int DownstreamEstimate(const Found& found)
+        void SendTo(ENetSocket sock, const ENetAddress& address, const std::vector<SharpRuntime::bytecs>& bytes);
+
+        int TrainRate(int firstIndex, int lastIndex, std::chrono::steady_clock::time_point first, std::chrono::steady_clock::time_point last)
         {
-            if (found.FirstIndex < 0 || found.LastIndex <= found.FirstIndex) return 0;
-            const double seconds = std::max(1e-6, std::chrono::duration<double>(found.LastArrival - found.FirstArrival).count());
-            const double rate = static_cast<double>(found.LastIndex - found.FirstIndex) * static_cast<double>(kQosProbeBytes) / seconds;
+            if (firstIndex < 0 || lastIndex <= firstIndex) return 0;
+            const double seconds = std::max(1e-6, std::chrono::duration<double>(last - first).count());
+            const double rate = static_cast<double>(lastIndex - firstIndex) * static_cast<double>(kQosProbeBytes) / seconds;
             return static_cast<int>(std::min(rate, 2147483647.0));
         }
+
+        int DownstreamEstimate(const Found& found)
+        {
+            return TrainRate(found.FirstIndex, found.LastIndex, found.FirstArrival, found.LastArrival);
+        }
+
+        // A hosting machine's upstream responder: its own socket and thread, so a querier's train is
+        // timed as it arrives, not when the game next polls discovery at a frame boundary.
+        class UpstreamResponder
+        {
+        public:
+            explicit UpstreamResponder(uint16_t connectPort) : connectPort_(connectPort)
+            {
+                ENetLibrary::EnsureInitialized();
+                socket_ = enet_socket_create(ENET_SOCKET_TYPE_DATAGRAM);
+                if (socket_ == ENET_SOCKET_NULL) return;
+                ENetAddress address{};
+                address.host = ENET_HOST_ANY;
+                address.port = 0;
+                if (enet_socket_bind(socket_, &address) != 0 || enet_socket_get_address(socket_, &address) != 0)
+                {
+                    enet_socket_destroy(socket_);
+                    socket_ = ENET_SOCKET_NULL;
+                    return;
+                }
+                port_ = address.port;
+                thread_ = std::thread([this] { Run(); });
+            }
+            ~UpstreamResponder()
+            {
+                stop_ = true;
+                if (thread_.joinable()) thread_.join();
+                if (socket_ != ENET_SOCKET_NULL) enet_socket_destroy(socket_);
+            }
+            UpstreamResponder(const UpstreamResponder&) = delete;
+            UpstreamResponder& operator=(const UpstreamResponder&) = delete;
+            /** Port queriers send their trains to; 0 when the responder could not start. */
+            uint16_t Port() const { return port_; }
+
+        private:
+            struct Train
+            {
+                ENetAddress From{};
+                int FirstIndex = -1, LastIndex = -1, Count = 0;
+                std::chrono::steady_clock::time_point First, Last, Started;
+            };
+            static constexpr std::size_t MaxTrains = 64;
+            static constexpr auto TrainWindow = std::chrono::milliseconds(250);
+
+            void Report(const Train& train)
+            {
+                DiscoveryUpstreamReportMessage report;
+                report.ConnectPort = connectPort_;
+                report.BytesPerSecond = TrainRate(train.FirstIndex, train.LastIndex, train.First, train.Last);
+                SendTo(socket_, train.From, NetDiscoveryProtocol::Encode(report));
+            }
+
+            void Run()
+            {
+                std::vector<Train> trains;
+                while (!stop_)
+                {
+                    enet_uint32 condition = ENET_SOCKET_WAIT_RECEIVE;
+                    if (enet_socket_wait(socket_, &condition, 20) == 0 && (condition & ENET_SOCKET_WAIT_RECEIVE))
+                    {
+                        ENetAddress from{};
+                        std::array<SharpRuntime::bytecs, 1500> buffer{};
+                        ENetBuffer enetBuffer{};
+                        enetBuffer.data = buffer.data();
+                        enetBuffer.dataLength = buffer.size();
+                        const int received = enet_socket_receive(socket_, &from, &enetBuffer, 1);
+                        const auto at = std::chrono::steady_clock::now();
+                        if (received == static_cast<int>(kQosProbeBytes) && buffer[0] == static_cast<SharpRuntime::bytecs>(DiscoveryMessageTag::UpstreamProbe))
+                        {
+                            try
+                            {
+                                const auto probe = NetDiscoveryProtocol::DecodeQosProbe(std::vector<SharpRuntime::bytecs>(buffer.begin(), buffer.begin() + received));
+                                if (probe.ConnectPort == connectPort_) Record(trains, from, probe, at);
+                            }
+                            catch (const std::exception&)
+                            {
+                                // A malformed datagram off the LAN: dropped.
+                            }
+                        }
+                    }
+                    // A train that lost its tail is measured from what arrived.
+                    const auto now = std::chrono::steady_clock::now();
+                    for (auto train = trains.begin(); train != trains.end();)
+                    {
+                        if (now - train->Started < TrainWindow) { ++train; continue; }
+                        Report(*train);
+                        train = trains.erase(train);
+                    }
+                }
+            }
+
+            void Record(std::vector<Train>& trains, const ENetAddress& from, const DiscoveryQosProbeMessage& probe, std::chrono::steady_clock::time_point at)
+            {
+                auto train = std::find_if(trains.begin(), trains.end(),
+                    [&](const Train& known) { return known.From.host == from.host && known.From.port == from.port; });
+                if (train == trains.end())
+                {
+                    if (trains.size() >= MaxTrains) return;
+                    Train fresh;
+                    fresh.From = from;
+                    fresh.Count = probe.Count;
+                    fresh.FirstIndex = fresh.LastIndex = probe.Index;
+                    fresh.First = fresh.Last = fresh.Started = at;
+                    trains.push_back(fresh);
+                    return;
+                }
+                if (probe.Index <= train->LastIndex) return;
+                train->LastIndex = probe.Index;
+                train->Last = at;
+                if (probe.Index + 1 == train->Count)
+                {
+                    Report(*train);
+                    trains.erase(train);
+                }
+            }
+
+            uint16_t connectPort_ = 0, port_ = 0;
+            ENetSocket socket_ = ENET_SOCKET_NULL;
+            std::atomic<bool> stop_{false};
+            std::thread thread_;
+        };
+        std::unique_ptr<UpstreamResponder> responder_;
+        // Hosts this search already sent an upstream train to (a duplicated query brings two invitations).
+        std::vector<uint16_t> upstreamTrains_;
 
         // Task 4.2: when currentResults_ is set (a search is in progress), the wall-clock moment
         // FindSessions() sent its Query - used to measure a real round-trip time for each Announce
@@ -206,6 +342,14 @@ namespace CNA::Internal::Net
                 probe.Index = index;
                 SendTo(sock, queryingAddress, NetDiscoveryProtocol::Encode(probe));
             }
+            // And the other direction: the querier times nothing it sends, so the responder does.
+            if (responder_ && responder_->Port() != 0)
+            {
+                DiscoveryUpstreamInviteMessage invite;
+                invite.ConnectPort = announce.ConnectPort;
+                invite.ResponderPort = responder_->Port();
+                SendTo(sock, queryingAddress, NetDiscoveryProtocol::Encode(invite));
+            }
         }
 
         void HandleReceived(ENetSocket sock, const ENetAddress& fromAddress, const std::vector<SharpRuntime::bytecs>& data)
@@ -269,6 +413,34 @@ namespace CNA::Internal::Net
                                     }
                                 currentResults_->push_back(std::move(found));
                             }
+                        }
+                        break;
+                    case DiscoveryMessageTag::UpstreamInvite:
+                        if (currentResults_ != nullptr)
+                        {
+                            const auto invite = NetDiscoveryProtocol::DecodeUpstreamInvite(data);
+                            if (std::find(upstreamTrains_.begin(), upstreamTrains_.end(), invite.ConnectPort) != upstreamTrains_.end()
+                                || upstreamTrains_.size() >= 64)
+                                break;
+                            upstreamTrains_.push_back(invite.ConnectPort);
+                            ENetAddress responder = fromAddress;
+                            responder.port = invite.ResponderPort;
+                            DiscoveryQosProbeMessage probe;
+                            probe.ConnectPort = invite.ConnectPort;
+                            for (uint8_t index = 0; index < kQosProbeCount; ++index)
+                            {
+                                probe.Index = index;
+                                SendTo(sock, responder, NetDiscoveryProtocol::EncodeUpstreamProbe(probe));
+                            }
+                        }
+                        break;
+                    case DiscoveryMessageTag::UpstreamReport:
+                        if (currentResults_ != nullptr)
+                        {
+                            const auto report = NetDiscoveryProtocol::DecodeUpstreamReport(data);
+                            auto found = std::find_if(currentResults_->begin(), currentResults_->end(),
+                                [&](const Found& existing) { return existing.Announce.ConnectPort == report.ConnectPort; });
+                            if (found != currentResults_->end()) found->UpstreamBytesPerSecond = report.BytesPerSecond;
                         }
                         break;
                     case DiscoveryMessageTag::QosProbe:
@@ -348,6 +520,7 @@ namespace CNA::Internal::Net
         EnsureSocket();
         registeredHost_ = session;
         registeredHostPort_ = connectPort;
+        responder_ = std::make_unique<UpstreamResponder>(connectPort);
     }
 
     void ENetDiscoveryService::UnregisterHost(NetworkSession* session)
@@ -356,6 +529,7 @@ namespace CNA::Internal::Net
         {
             registeredHost_ = nullptr;
             registeredHostPort_ = 0;
+            responder_.reset();
         }
     }
 
@@ -386,6 +560,13 @@ namespace CNA::Internal::Net
         return matching;
     }
 
+    QualityOfService ENetDiscoveryService::Measured(double roundtripMs, int downstream, int upstream)
+    {
+        auto measured = QualityOfService::CreateInternal(System::TimeSpan::FromMilliseconds(roundtripMs), downstream);
+        measured.bytesPerSecondUpstream_ = upstream;
+        return measured;
+    }
+
     std::vector<AvailableNetworkSession> ENetDiscoveryService::FindSessions(NetworkSessionType sessionTypeFilter)
     {
         if (sessionTypeFilter != NetworkSessionType::SystemLink)
@@ -414,6 +595,7 @@ namespace CNA::Internal::Net
         std::vector<Found> found;
         std::vector<std::pair<uint16_t, std::chrono::steady_clock::time_point>> early;
         CurrentResultsGuard resultsGuard(&found, &early);
+        upstreamTrains_.clear();
 
         auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(kSearchWindowMs);
         while (true)
@@ -437,7 +619,7 @@ namespace CNA::Internal::Net
                 announce.OpenPrivateSlots,
                 announce.OpenPublicSlots,
                 announce.Properties,
-                QualityOfService::CreateInternal(System::TimeSpan::FromMilliseconds(host.RoundtripMs), DownstreamEstimate(host)),
+                Measured(host.RoundtripMs, DownstreamEstimate(host), host.UpstreamBytesPerSecond),
                 host.Address,
                 announce.ConnectPort,
                 // Every listing found here is SystemLink: FindSessions returns early for any other type.

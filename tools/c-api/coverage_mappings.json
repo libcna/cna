@@ -9599,6 +9599,20 @@
       ]
     },
     {
+      "id": "quality-of-service-friend-discovery",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::QualityOfService::ENetDiscoveryService$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: this is a friendship declaration that lets SystemLink discovery record the upstream bandwidth its search measured, not a callable public member",
+      "tests": "Doxygen declaration inventory; no callable native operation exists",
+      "status": "not-applicable",
+      "task": "GSX-E",
+      "approved_symbols": [
+        "CPP-6F0550570B2A"
+      ]
+    },
+    {
       "id": "song-collection",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Media::SongCollection(::(SongCollection|operator\\[\\]|getCountProperty|getIsDisposedProperty|Dispose|GetTypeName))?$",
       "kinds": [

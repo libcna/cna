@@ -111,8 +111,9 @@ TEST(ENetDiscoveryServiceTest, FindSessionsDiscoversRegisteredHost) {
 }
 
 // GSP-L6: the host follows its announce with a train of padded probes; the searcher times their
-// arrivals for a downstream estimate. Upstream stays zero: the host answers at frame boundaries.
-TEST(ENetDiscoveryServiceTest, FindSessionsEstimatesTheHostsDownstreamBandwidth) {
+// arrivals for a downstream estimate. GSX-E: the host also invites a train the other way, timed by
+// its responder thread as it arrives, and reports the upstream estimate back within the search.
+TEST(ENetDiscoveryServiceTest, FindSessionsEstimatesBothDirectionsOfTheHostsPath) {
 #ifndef __EMSCRIPTEN__
     SystemLinkSessionFixture host("HostPlayer");
     const auto found = ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink);
@@ -120,8 +121,35 @@ TEST(ENetDiscoveryServiceTest, FindSessionsEstimatesTheHostsDownstreamBandwidth)
     const auto& qos = found[0].getQualityOfServiceProperty();
     EXPECT_TRUE(qos.getIsAvailableProperty());
     EXPECT_GT(qos.getBytesPerSecondDownstreamProperty(), 0);
-    EXPECT_EQ(qos.getBytesPerSecondUpstreamProperty(), 0);
+    EXPECT_GT(qos.getBytesPerSecondUpstreamProperty(), 0);
 #endif
+}
+
+TEST(ENetDiscoveryServiceTest, UpstreamInvitationsAndReportsRoundTripAndRefuseNegativeRates) {
+    DiscoveryUpstreamInviteMessage invite;
+    invite.ConnectPort = 0xBEEF;
+    invite.ResponderPort = 4321;
+    const auto inviteBytes = NetDiscoveryProtocol::Encode(invite);
+    EXPECT_EQ(NetDiscoveryProtocol::PeekTag(inviteBytes), DiscoveryMessageTag::UpstreamInvite);
+    const auto decodedInvite = NetDiscoveryProtocol::DecodeUpstreamInvite(inviteBytes);
+    EXPECT_EQ(decodedInvite.ConnectPort, 0xBEEF);
+    EXPECT_EQ(decodedInvite.ResponderPort, 4321);
+
+    DiscoveryUpstreamReportMessage report;
+    report.ConnectPort = 0xBEEF;
+    report.BytesPerSecond = 125000;
+    auto reportBytes = NetDiscoveryProtocol::Encode(report);
+    EXPECT_EQ(NetDiscoveryProtocol::PeekTag(reportBytes), DiscoveryMessageTag::UpstreamReport);
+    EXPECT_EQ(NetDiscoveryProtocol::DecodeUpstreamReport(reportBytes).BytesPerSecond, 125000);
+    report.BytesPerSecond = -1;
+    EXPECT_THROW((void)NetDiscoveryProtocol::DecodeUpstreamReport(NetDiscoveryProtocol::Encode(report)), std::runtime_error);
+
+    DiscoveryQosProbeMessage probe;
+    probe.Index = 2;
+    const auto probeBytes = NetDiscoveryProtocol::EncodeUpstreamProbe(probe);
+    ASSERT_EQ(probeBytes.size(), kQosProbeBytes);
+    EXPECT_EQ(NetDiscoveryProtocol::PeekTag(probeBytes), DiscoveryMessageTag::UpstreamProbe);
+    EXPECT_EQ(NetDiscoveryProtocol::DecodeQosProbe(probeBytes).Index, 2);
 }
 
 TEST(ENetDiscoveryServiceTest, QosProbesAreFixedSizeAndValidated) {
@@ -358,3 +386,62 @@ TEST(ENetDiscoveryServiceTest, MatchingKeepsSessionsWithTheSearchedPropertiesAnd
     EXPECT_EQ(3u, ENetDiscoveryService::Matching({make("a", 3, 2), make("b", 3, 1), make("c", 1, 2)}, 1,
         NetworkSessionProperties{}).size());
 }
+
+#if !defined(__EMSCRIPTEN__) && !defined(_WIN32)
+// GSX-E: a train that loses its tail is still measured from what arrived, once the responder's
+// window has passed; the report goes back to whichever address sent the train.
+TEST(ENetDiscoveryServiceTest, APartialUpstreamTrainIsMeasuredFromWhatArrived) {
+    SystemLinkSessionFixture host("HostPlayer");
+    const int sock = socket(AF_INET, SOCK_DGRAM, 0);
+    ASSERT_GE(sock, 0);
+    sockaddr_in local{};
+    local.sin_family = AF_INET;
+    ASSERT_EQ(inet_pton(AF_INET, "127.0.0.1", &local.sin_addr), 1);
+    ASSERT_EQ(bind(sock, reinterpret_cast<const sockaddr*>(&local), sizeof(local)), 0);
+    auto sendTo = [&](uint16_t port, const std::vector<SharpRuntime::bytecs>& bytes) {
+        sockaddr_in to = local;
+        to.sin_port = htons(port);
+        (void)sendto(sock, bytes.data(), bytes.size(), 0, reinterpret_cast<const sockaddr*>(&to), sizeof(to));
+    };
+    auto receive = [&](DiscoveryMessageTag wanted) -> std::vector<SharpRuntime::bytecs> {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        while (std::chrono::steady_clock::now() < deadline) {
+            ENetDiscoveryService::Poll();
+            fd_set readable;
+            FD_ZERO(&readable);
+            FD_SET(sock, &readable);
+            timeval wait{0, 10000};
+            if (select(sock + 1, &readable, nullptr, nullptr, &wait) <= 0) continue;
+            std::array<SharpRuntime::bytecs, 1500> buffer{};
+            const auto received = recv(sock, buffer.data(), buffer.size(), 0);
+            if (received > 0 && buffer[0] == static_cast<SharpRuntime::bytecs>(wanted))
+                return {buffer.begin(), buffer.begin() + received};
+        }
+        return {};
+    };
+    DiscoveryQueryMessage query;
+    sendTo(kTestDiscoveryPort, NetDiscoveryProtocol::Encode(query));
+    const auto inviteBytes = receive(DiscoveryMessageTag::UpstreamInvite);
+    ASSERT_FALSE(inviteBytes.empty());
+    const auto invite = NetDiscoveryProtocol::DecodeUpstreamInvite(inviteBytes);
+    EXPECT_EQ(invite.ConnectPort, ENetBackend::GetBoundPort(host.session));
+    // Three probes of eight; a probe naming another session is ignored.
+    DiscoveryQosProbeMessage stranger;
+    stranger.ConnectPort = static_cast<uint16_t>(invite.ConnectPort + 1);
+    sendTo(invite.ResponderPort, NetDiscoveryProtocol::EncodeUpstreamProbe(stranger));
+    DiscoveryQosProbeMessage probe;
+    probe.ConnectPort = invite.ConnectPort;
+    for (uint8_t index = 0; index < 3; ++index) {
+        probe.Index = index;
+        sendTo(invite.ResponderPort, NetDiscoveryProtocol::EncodeUpstreamProbe(probe));
+    }
+    const auto reportBytes = receive(DiscoveryMessageTag::UpstreamReport);
+    ASSERT_FALSE(reportBytes.empty());
+    const auto report = NetDiscoveryProtocol::DecodeUpstreamReport(reportBytes);
+    EXPECT_EQ(report.ConnectPort, invite.ConnectPort);
+    EXPECT_GT(report.BytesPerSecond, 0);
+    // Only one report per train.
+    EXPECT_TRUE(receive(DiscoveryMessageTag::UpstreamReport).empty());
+    close(sock);
+}
+#endif

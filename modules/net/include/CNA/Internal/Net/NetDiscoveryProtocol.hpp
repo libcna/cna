@@ -32,6 +32,12 @@ namespace CNA::Internal::Net
         Announce = 0x02,
         /** @brief One of a train a host sends right after its Announce, for bandwidth (GSP-L6). */
         QosProbe = 0x03,
+        /** @brief Sent by a host after its Announce: where the querier sends its upstream train. */
+        UpstreamInvite = 0x04,
+        /** @brief One of the querier's train to the host's responder (a QosProbe body). */
+        UpstreamProbe = 0x05,
+        /** @brief The responder's measurement of that train, back to the querier. */
+        UpstreamReport = 0x06,
     };
 
     /** @brief Size of every QoS probe datagram, padding included. */
@@ -49,6 +55,26 @@ namespace CNA::Internal::Net
         uint8_t Index{0};
         /** @brief Probes in the train. */
         uint8_t Count{kQosProbeCount};
+    };
+
+    /** @brief A host's invitation to measure the querier's path to it. */
+    struct DiscoveryUpstreamInviteMessage
+    {
+        uint8_t ProtocolVersion{kDiscoveryProtocolVersion};
+        /** @brief The host's session (its Announce's ConnectPort). */
+        uint16_t ConnectPort{0};
+        /** @brief The UDP port of the host's upstream responder. */
+        uint16_t ResponderPort{0};
+    };
+
+    /** @brief What the host's responder measured of the querier's train. */
+    struct DiscoveryUpstreamReportMessage
+    {
+        uint8_t ProtocolVersion{kDiscoveryProtocolVersion};
+        /** @brief The host's session. */
+        uint16_t ConnectPort{0};
+        /** @brief Bytes per second from the querier to the host, 0 when unmeasured. */
+        int32_t BytesPerSecond{0};
     };
 
     /** @brief Broadcast (and sent to localhost as a fallback) by a client searching for LAN sessions. */
@@ -86,6 +112,13 @@ namespace CNA::Internal::Net
         /** @brief Encodes a probe padded to exactly kQosProbeBytes. */
         static std::vector<SharpRuntime::bytecs> Encode(const DiscoveryQosProbeMessage& message);
 
+        /** @brief Encodes an upstream invitation. */
+        static std::vector<SharpRuntime::bytecs> Encode(const DiscoveryUpstreamInviteMessage& message);
+        /** @brief Encodes an upstream report. */
+        static std::vector<SharpRuntime::bytecs> Encode(const DiscoveryUpstreamReportMessage& message);
+        /** @brief Encodes one probe of a querier's upstream train, padded to exactly kQosProbeBytes. */
+        static std::vector<SharpRuntime::bytecs> EncodeUpstreamProbe(const DiscoveryQosProbeMessage& message);
+
         /** @brief Reads the leading DiscoveryMessageTag byte without needing a full decode. */
         static DiscoveryMessageTag PeekTag(const std::vector<SharpRuntime::bytecs>& data);
 
@@ -93,5 +126,9 @@ namespace CNA::Internal::Net
         static DiscoveryAnnounceMessage DecodeAnnounce(const std::vector<SharpRuntime::bytecs>& data);
         /** @brief Decodes a probe; anything but a kQosProbeBytes datagram is refused. */
         static DiscoveryQosProbeMessage DecodeQosProbe(const std::vector<SharpRuntime::bytecs>& data);
+        /** @brief Decodes an upstream invitation. */
+        static DiscoveryUpstreamInviteMessage DecodeUpstreamInvite(const std::vector<SharpRuntime::bytecs>& data);
+        /** @brief Decodes an upstream report; a negative rate is refused. */
+        static DiscoveryUpstreamReportMessage DecodeUpstreamReport(const std::vector<SharpRuntime::bytecs>& data);
     };
 }
