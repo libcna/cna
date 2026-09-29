@@ -191,15 +191,16 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Begins an asynchronous request to read a page of a leaderboard.
          *
-         * Completes synchronously (a local disk read - see the Read() overload's own doc comment
-         * for the real sort/matching behavior).
+         * With a configured service the read is queued and completes during a later
+         * GamerServicesDispatcher.Update, where the callback runs; without one, the offline local
+         * store is read and the result is complete on return. See Read() for the page contents.
          *
          * @param leaderboardId The leaderboard to read.
          * @param pageStart     The index of the first entry to read.
          * @param pageSize      The number of entries per page.
          * @param callback      Invoked when the operation completes.
          * @param asyncState    User-defined state passed through to the callback.
-         * @return An IAsyncResult already marked complete; pass to EndRead.
+         * @return The caller-owned IAsyncResult to pass to EndRead.
          */
         [[nodiscard]] static System::IAsyncResult* BeginRead(
             const LeaderboardIdentity& leaderboardId,
@@ -212,15 +213,15 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Begins an asynchronous request to read a page of a leaderboard centered on a gamer.
          *
-         * Completes synchronously - see the pivotGamer Read() overload's own doc comment for the
-         * real centering behavior.
+         * Queued and completed during GamerServicesDispatcher.Update with a configured service;
+         * complete on return offline. See the pivotGamer Read() overload for the centering.
          *
          * @param leaderboardId The leaderboard to read.
          * @param pivotGamer    The gamer around which the page is centered.
          * @param pageSize      The number of entries per page.
          * @param callback      Invoked when the operation completes.
          * @param asyncState    User-defined state passed through to the callback.
-         * @return An IAsyncResult already marked complete; pass to EndRead.
+         * @return The caller-owned IAsyncResult to pass to EndRead.
          */
         [[nodiscard]] static System::IAsyncResult* BeginRead(
             const LeaderboardIdentity& leaderboardId,
@@ -233,8 +234,9 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Begins an asynchronous request to read a page of a leaderboard restricted to a set of gamers.
          *
-         * Completes synchronously - see the gamers-restricted Read() overload's own doc comment
-         * for the real restriction/centering behavior.
+         * Queued and completed during GamerServicesDispatcher.Update with a configured service;
+         * complete on return offline. See the gamers-restricted Read() overload for the
+         * restriction and centering.
          *
          * @param leaderboardId The leaderboard to read.
          * @param gamers        The gamers to restrict the leaderboard to.
@@ -242,7 +244,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @param pageSize      The number of entries per page.
          * @param callback      Invoked when the operation completes.
          * @param asyncState    User-defined state passed through to the callback.
-         * @return An IAsyncResult already marked complete; pass to EndRead.
+         * @return The caller-owned IAsyncResult to pass to EndRead.
          */
         [[nodiscard]] static System::IAsyncResult* BeginRead(
             const LeaderboardIdentity& leaderboardId,

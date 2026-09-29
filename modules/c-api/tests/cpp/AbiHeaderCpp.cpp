@@ -246,9 +246,6 @@ static_assert(sizeof(CNA_AudioEmitter) == 60U && offsetof(CNA_AudioEmitter, dopp
 static_assert(sizeof(CNA_AvatarExpression) == 28U &&
                  offsetof(CNA_AvatarExpression, mouth) == 8U,
             "CNA_AvatarExpression layout must remain stable");
-static_assert(sizeof(CNA_AvatarAppearanceEXT) == 28U &&
-                 offsetof(CNA_AvatarAppearanceEXT, skin_color) == 8U,
-            "CNA_AvatarAppearanceEXT layout must remain stable");
 static_assert(sizeof(CNA_AvatarDescriptionInfo) == 32U &&
                  offsetof(CNA_AvatarDescriptionInfo, body_type) == 8U &&
                  offsetof(CNA_AvatarDescriptionInfo, description_byte_count) == 16U &&

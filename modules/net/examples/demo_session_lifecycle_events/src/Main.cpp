@@ -1,5 +1,6 @@
 #include <cstdio>
 
+#include "common/SignInEXT.hpp"
 #include "System/IServiceProvider.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
@@ -61,7 +62,13 @@ int main()
 
     NullServiceProvider services;
     Microsoft::Xna::Framework::GamerServices::GamerServicesDispatcher::Initialize(services);
-    SignedInGamer* localGamer = (*Microsoft::Xna::Framework::GamerServices::Gamer::getSignedInGamersProperty())[0];
+    // A console program cannot show the Guide: it runs as a gamer signed in automatically.
+    SignedInGamer* localGamer = CNAExamplesEXT::WaitForSignedInGamerEXT();
+    if (localGamer == nullptr)
+    {
+        std::printf("[Lifecycle] %s\n", CNAExamplesEXT::kNoSignedInGamerEXT);
+        return 1;
+    }
 
     NetworkSession* session = NetworkSession::Create(NetworkSessionType::Local, 1, 8);
     session->GameStarted += [](System::Object*, const GameStartedEventArgs&) {

@@ -7,12 +7,21 @@
 #include <stdint.h>
 #include <string.h>
 
+/* A signed-in gamer added to the roster session; it must outlive that session. */
+static CNA_SignedInGamerHandle added_local_gamer = CNA_INVALID_HANDLE;
+
 static CNA_StringView view(const char* const text)
 {
     CNA_StringView result;
     result.data = text;
     result.byte_length = (uint64_t)strlen(text);
     return result;
+}
+
+static CNA_Result create_added_local_gamer(void)
+{
+    return cna_signed_in_gamer_create_ext(view("Second"), CNA_FALSE, CNA_FALSE, CNA_PLAYER_INDEX_TWO,
+                                          &added_local_gamer);
 }
 
 static CNA_OptionalInt32 present(const int32_t value)
@@ -67,9 +76,9 @@ static int validate_quality_of_service(void)
         INT64_C(0), INT64_C(0), INT32_C(0), INT32_C(0)
     };
 
-    /* The unmeasured factory still reports availability, matching the canonical stub exactly. */
+    /* The unmeasured description is not available, as the canonical unmeasured one reports. */
     if (cna_quality_of_service_init(&quality) != CNA_RESULT_SUCCESS ||
-        quality.is_available != CNA_TRUE || quality.average_roundtrip_ticks != INT64_C(0) ||
+        quality.is_available != CNA_FALSE || quality.average_roundtrip_ticks != INT64_C(0) ||
         quality.minimum_roundtrip_ticks != INT64_C(0) ||
         quality.bytes_per_second_downstream != INT32_C(0) ||
         quality.bytes_per_second_upstream != INT32_C(0)) {
@@ -430,8 +439,9 @@ static int validate_gamer_mutation(const CNA_NetworkGamerHandle gamer)
         cna_network_gamer_get_is_host(gamer, &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE) {
         return 0;
     }
-    if (cna_network_gamer_set_is_ready(gamer, CNA_TRUE) != CNA_RESULT_SUCCESS ||
-        cna_network_gamer_get_is_ready(gamer, &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE) {
+    /* Readiness belongs to a local gamer in a lobby; a detached gamer is refused and keeps it. */
+    if (cna_network_gamer_set_is_ready(gamer, CNA_TRUE) != CNA_RESULT_INVALID_STATE ||
+        cna_network_gamer_get_is_ready(gamer, &flag) != CNA_RESULT_SUCCESS || flag != CNA_FALSE) {
         return 0;
     }
     return cna_network_gamer_set_roundtrip_ticks_ext(gamer, INT64_C(5000)) ==
@@ -460,8 +470,8 @@ static int validate_machine(const CNA_NetworkGamerHandle gamer)
         cna_network_machine_get_gamer(machine, -1, &view) != CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
-    /* The canonical removal is a declared placeholder that always throws. */
-    if (cna_network_machine_remove_from_session(machine) != CNA_RESULT_NOT_SUPPORTED) {
+    /* The canonical removal refuses a machine with no gamers (ObjectDisposedException). */
+    if (cna_network_machine_remove_from_session(machine) != CNA_RESULT_INVALID_STATE) {
         return 0;
     }
     if (cna_network_gamer_set_machine(gamer, machine) != CNA_RESULT_SUCCESS ||
@@ -896,10 +906,13 @@ static int validate_session_rosters(const CNA_NetworkSessionHandle session)
             return 0;
         }
     }
-    /* Signed-in gamers have no C representation yet, so only the no-gamer form is accepted. */
-    if (cna_network_session_add_local_gamer(session, UINT64_C(1234)) !=
-            CNA_RESULT_NOT_SUPPORTED ||
-        cna_network_session_add_local_gamer(session, CNA_INVALID_HANDLE) != CNA_RESULT_SUCCESS) {
+    /* A signed-in gamer joins as a local gamer; the canonical null gamer and a stale handle are
+       refused. The added gamer's handle outlives the session (validate_sessions releases it). */
+    if (cna_network_session_add_local_gamer(session, UINT64_C(1234)) != CNA_RESULT_INVALID_HANDLE ||
+        cna_network_session_add_local_gamer(session, CNA_INVALID_HANDLE) != CNA_RESULT_INVALID_ARGUMENT ||
+        create_added_local_gamer() != CNA_RESULT_SUCCESS ||
+        cna_network_session_add_local_gamer(session, added_local_gamer) != CNA_RESULT_SUCCESS ||
+        cna_network_session_add_local_gamer(session, added_local_gamer) != CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
     if (cna_network_session_get_gamer_count(session, CNA_NETWORK_SESSION_ROSTER_LOCAL, &number) !=
@@ -1371,16 +1384,15 @@ static int validate_local_gamer_packets(const CNA_NetworkGamerHandle local)
         return 0;
     }
 
-    /* The canonical offset overload consumes the packet before it validates the offset. */
+    /* A packet that does not fit after the offset is refused and stays queued. */
     if (cna_local_network_gamer_enqueue_packet_ext(local, &event) != CNA_RESULT_SUCCESS ||
         cna_local_network_gamer_receive_data_at(
             local, buffer, UINT64_C(4), 3, &sender, &received) != CNA_RESULT_INVALID_ARGUMENT ||
         cna_local_network_gamer_get_is_data_available(local, &flag) != CNA_RESULT_SUCCESS ||
-        flag != CNA_FALSE) {
+        flag != CNA_TRUE) {
         return 0;
     }
-    if (cna_local_network_gamer_enqueue_packet_ext(local, &event) != CNA_RESULT_SUCCESS ||
-        cna_local_network_gamer_receive_data_at(
+    if (cna_local_network_gamer_receive_data_at(
             local, buffer, (uint64_t)sizeof(buffer), 2, &sender, &received) !=
             CNA_RESULT_SUCCESS ||
         received != UINT64_C(4) || memcmp(buffer + 2, payload, 4U) != 0) {
@@ -1391,12 +1403,12 @@ static int validate_local_gamer_packets(const CNA_NetworkGamerHandle local)
         return 0;
     }
 
-    /* The canonical packet-reader overload always reports zero, even with a packet available. */
+    /* The packet-reader overload reports the packet size, as the canonical one does. */
     if (cna_packet_reader_create(0, &reader) != CNA_RESULT_SUCCESS ||
         cna_local_network_gamer_enqueue_packet_ext(local, &event) != CNA_RESULT_SUCCESS ||
         cna_local_network_gamer_receive_data_into_packet_reader(
             local, reader, &sender, &received) != CNA_RESULT_SUCCESS ||
-        received != UINT64_C(0)) {
+        received != UINT64_C(4)) {
         (void)cna_packet_reader_destroy(reader);
         return 0;
     }
@@ -1482,8 +1494,8 @@ static int validate_local_gamers(
         strcmp(buffer, "Player") == 0 &&
         cna_signed_in_gamer_destroy(backing) == CNA_RESULT_SUCCESS &&
         cna_local_network_gamer_enable_send_voice(local, CNA_INVALID_HANDLE, CNA_TRUE) ==
-            CNA_RESULT_SUCCESS &&
-        cna_local_network_gamer_send_party_invites(local) == CNA_RESULT_SUCCESS &&
+            CNA_RESULT_INVALID_ARGUMENT &&
+        cna_local_network_gamer_send_party_invites(local) == CNA_RESULT_INVALID_STATE &&
         validate_local_gamer_packets(local) && validate_local_gamer_sends(local);
     if (!ok || cna_network_gamer_destroy(local) != CNA_RESULT_SUCCESS) {
         return 0;
@@ -1735,7 +1747,8 @@ static int validate_sessions(void)
     if (cna_network_session_destroy(session) != CNA_RESULT_SUCCESS ||
         cna_network_session_destroy(session) != CNA_RESULT_INVALID_HANDLE ||
         cna_network_session_get_instance_count_ext(&instances) != CNA_RESULT_SUCCESS ||
-        instances != 0) {
+        instances != 0 ||
+        cna_signed_in_gamer_destroy(added_local_gamer) != CNA_RESULT_SUCCESS) {
         return 0;
     }
 

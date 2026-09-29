@@ -46,6 +46,7 @@ struct RelayTransport::Impl {
     CnaService::RelayMachineId local{};
     ENetAddress endpoint{};
     RelayTransportStatus observation;
+    CNA::GamerServices::Configuration configuration;
     std::jthread worker;
     void setRoutes(const std::vector<std::string>& machines) {
         const auto desired=routes(machines,local);
@@ -137,8 +138,21 @@ RelayTransport::RelayTransport(const CNA::GamerServices::Configuration& configur
     if(localPort==0)throw CnaService::RelayError("RELAY_LOCAL_PORT_INVALID");
     ENetLibrary::EnsureInitialized();
     if(enet_address_set_host_ip(&impl_->endpoint,"127.0.0.1")!=0)throw CnaService::RelayError("RELAY_SOCKET_UNAVAILABLE");
-    impl_->endpoint.port=localPort;impl_->setRoutes(machines);
+    impl_->endpoint.port=localPort;impl_->setRoutes(machines);impl_->configuration=configuration;
     impl_->worker=std::jthread([implementation=impl_.get(),configuration,ticket=std::move(ticket)](std::stop_token stop)mutable {
+        implementation->run(configuration,std::move(ticket),stop);
+    });
+}
+void RelayTransport::reconnect(GamerServices::ServiceRelayTicket ticket) {
+    if(CnaService::relayMachineId(ticket.machine)!=impl_->local)throw CnaService::RelayError("RELAY_ROUTE_INVALID");
+    {
+        std::lock_guard lock(impl_->mutex);
+        if(impl_->observation.state!=RelayTransportState::Failed)throw CnaService::RelayError("RELAY_NOT_FAILED");
+    }
+    // The failed worker has already left its loop; joining it never blocks on network I/O.
+    if(impl_->worker.joinable())impl_->worker.join();
+    {std::lock_guard lock(impl_->mutex);impl_->observation.state=RelayTransportState::Connecting;impl_->observation.error.clear();}
+    impl_->worker=std::jthread([implementation=impl_.get(),configuration=impl_->configuration,ticket=std::move(ticket)](std::stop_token stop)mutable {
         implementation->run(configuration,std::move(ticket),stop);
     });
 }

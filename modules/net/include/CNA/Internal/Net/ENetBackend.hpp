@@ -16,10 +16,12 @@ namespace Microsoft::Xna::Framework::Net
 {
     class NetworkSession;
     class NetworkGamer;
+    class LocalNetworkGamer;
 }
 
 namespace CNA::Internal::Net
 {
+    using Microsoft::Xna::Framework::Net::LocalNetworkGamer;
     using Microsoft::Xna::Framework::Net::NetworkGamer;
     using Microsoft::Xna::Framework::Net::NetworkSession;
     using Microsoft::Xna::Framework::Net::NetworkSessionProperties;
@@ -279,5 +281,58 @@ namespace CNA::Internal::Net
          * @param newState The new session state.
          */
         static void BroadcastStateChange(NetworkSession* session, NetworkSessionState newState);
+
+        /**
+         * @brief Sends gamers' lobby ready state: a client to the host, the host to every client.
+         *
+         * @param session The session.
+         * @param gamers Gamers whose ready state changed (gamers without a wire id are skipped).
+         */
+        static void PublishGamerReady(NetworkSession* session, const std::vector<NetworkGamer*>& gamers);
+
+        /**
+         * @brief Applies a ready state the transport received for one gamer.
+         *
+         * @param gamer The gamer the report names.
+         * @param value The reported ready state.
+         */
+        static void ApplyTransportGamerReady(NetworkGamer& gamer, bool value);
+
+        /**
+         * @brief Restores the canonical gamer order after the transport assigned ids.
+         *
+         * @param session The session whose gamers were renumbered.
+         */
+        static void OrderTransportGamers(NetworkSession* session);
+
+        /**
+         * @brief Applies the host's session settings a SystemLink client received.
+         *
+         * @param session The client session.
+         * @param maxGamers The host's MaxGamers.
+         * @param privateGamerSlots The host's PrivateGamerSlots.
+         * @param allowJoinInProgress The host's AllowJoinInProgress.
+         * @param allowHostMigration The host's AllowHostMigration.
+         */
+        static void ApplyTransportSettings(NetworkSession* session, int maxGamers, int privateGamerSlots,
+            bool allowJoinInProgress, bool allowHostMigration);
+
+        /**
+         * @brief Tells the session's other machines about a local gamer added with AddLocalGamer: the
+         * host numbers it and announces it, a client asks the host to.
+         *
+         * @param session The session.
+         * @param local The new local gamer.
+         */
+        static void AnnounceLocalGamer(NetworkSession* session, LocalNetworkGamer* local);
+
+        /**
+         * @brief Removes the client machine that owns @p gamer from a hosted session: its gamers
+         * leave for everyone else, and its session ends with RemovedByHost.
+         *
+         * @param session The hosted session.
+         * @param gamer Any gamer of the machine to remove.
+         */
+        static void RemoveMachine(NetworkSession* session, NetworkGamer* gamer);
     };
 }

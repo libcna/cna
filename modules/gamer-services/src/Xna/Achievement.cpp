@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/Achievement.hpp"
+#include "Microsoft/Xna/Framework/TitleContainer.hpp"
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
-#include "System/NotImplementedException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include "System/IO/MemoryStream.hpp"
 
@@ -51,10 +51,11 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     System::IO::Stream* Achievement::GetPicture()
     {
-        if(pictureHash_.empty()) {
-            if(serviceBacked_)throw GamerServicesNotAvailableException("No achievement picture is configured.");
-            throw System::NotImplementedException();
+        if(!picturePath_.empty()) {
+            try{return Microsoft::Xna::Framework::TitleContainer::OpenStream(picturePath_).release();}
+            catch(const std::runtime_error&){throw GamerServicesNotAvailableException("The achievement picture could not be read.");}
         }
+        if(pictureHash_.empty())throw GamerServicesNotAvailableException("No achievement picture is configured.");
         const auto bytes=CNA::Internal::GamerServices::backend()->asset(pictureHash_);
         return new System::IO::MemoryStream(bytes.data(),static_cast<SharpRuntime::intcs>(bytes.size()),false);
     }

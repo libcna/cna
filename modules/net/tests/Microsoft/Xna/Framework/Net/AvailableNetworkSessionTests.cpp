@@ -3,8 +3,12 @@
 
 #include "Microsoft/Xna/Framework/Net/AvailableNetworkSession.hpp"
 #include "Microsoft/Xna/Framework/Net/AvailableNetworkSessionCollection.hpp"
+#include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionProperties.hpp"
 #include "Microsoft/Xna/Framework/Net/QualityOfService.hpp"
+#include "System/ObjectDisposedException.hpp"
+
+#include <any>
 
 using namespace Microsoft::Xna::Framework::Net;
 
@@ -15,7 +19,8 @@ TEST(QualityOfServiceTest, DefaultValues) {
     EXPECT_EQ(System::TimeSpan::Zero, qos.getAverageRoundtripTimeProperty());
     EXPECT_EQ(0, qos.getBytesPerSecondDownstreamProperty());
     EXPECT_EQ(0, qos.getBytesPerSecondUpstreamProperty());
-    EXPECT_TRUE(qos.getIsAvailableProperty());
+    // Reference internal QualityOfService(): nothing measured, not available.
+    EXPECT_FALSE(qos.getIsAvailableProperty());
     EXPECT_EQ(System::TimeSpan::Zero, qos.getMinimumRoundtripTimeProperty());
 }
 
@@ -51,7 +56,7 @@ TEST(AvailableNetworkSessionTest, PropertiesFromCtor) {
     EXPECT_EQ("host-a", session.getHostGamertagProperty());
     EXPECT_EQ(1, session.getOpenPrivateGamerSlotsProperty());
     EXPECT_EQ(3, session.getOpenPublicGamerSlotsProperty());
-    EXPECT_TRUE(session.getQualityOfServiceProperty().getIsAvailableProperty());
+    EXPECT_FALSE(session.getQualityOfServiceProperty().getIsAvailableProperty());
     EXPECT_EQ(8, session.getSessionPropertiesProperty().getCountProperty());
 }
 
@@ -192,4 +197,18 @@ TEST(AvailableNetworkSessionCollectionTest, RangeFor) {
     int count = 0;
     for (const auto& s : col) { (void)s; ++count; }
     EXPECT_EQ(2, count);
+}
+
+// Reference NetworkSession.BeginJoin: a listing whose collection was disposed throws
+// ObjectDisposedException, and so does a copy of it; a listing of a live collection does not.
+TEST(AvailableNetworkSessionCollectionTest, DisposingTheCollectionMakesItsListingsUnjoinable) {
+    std::vector<AvailableNetworkSession> sessions;
+    sessions.push_back(MakeSession(1, "hostA"));
+    auto col = AvailableNetworkSessionCollection::CreateInternal(sessions);
+    const AvailableNetworkSessionCollection& constCol = col;
+    const AvailableNetworkSession copy = constCol[0];
+    col.Dispose();
+    EXPECT_THROW((void)NetworkSession::BeginJoin(&constCol[0], System::AsyncCallback{}, std::any{}), System::ObjectDisposedException);
+    EXPECT_THROW((void)NetworkSession::BeginJoin(&copy, System::AsyncCallback{}, std::any{}), System::ObjectDisposedException);
+    EXPECT_THROW((void)NetworkSession::Join(&copy), System::ObjectDisposedException);
 }

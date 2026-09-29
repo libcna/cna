@@ -1,11 +1,32 @@
 // SPDX-License-Identifier: MS-PL
 
+#if !defined(_WIN32)
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include <CNA/C/cna.h>
 
 #include "CnaTestReport.h"
 
 #include <math.h>
 #include <string.h>
+
+#if defined(_WIN32)
+#include <windows.h>
+static void pause_briefly(void)
+{
+    Sleep(5);
+}
+#else
+#include <time.h>
+static void pause_briefly(void)
+{
+    struct timespec delay;
+    delay.tv_sec = 0;
+    delay.tv_nsec = 5000000L;
+    nanosleep(&delay, 0);
+}
+#endif
 
 static CNA_StringView view(const char* const text)
 {
@@ -25,7 +46,6 @@ static void on_complete(void* const context)
 static int validate_values(void)
 {
     CNA_AvatarExpression expression;
-    CNA_AvatarAppearanceEXT appearance;
 
     if (cna_avatar_expression_init(&expression) != CNA_RESULT_SUCCESS ||
         cna_avatar_expression_init(0) != CNA_RESULT_INVALID_ARGUMENT) {
@@ -39,13 +59,7 @@ static int validate_values(void)
         expression.right_eyebrow != CNA_AVATAR_EYEBROW_NEUTRAL) {
         return 0;
     }
-    if (cna_avatar_appearance_init_ext(&appearance) != CNA_RESULT_SUCCESS ||
-        cna_avatar_appearance_init_ext(0) != CNA_RESULT_INVALID_ARGUMENT) {
-        return 0;
-    }
-    /* The default colors are opaque, which is what makes them usable without further setup. */
-    return appearance.skin_color.a == UINT8_C(255) && appearance.hair_color.a == UINT8_C(255) &&
-        appearance.shoes_color.a == UINT8_C(255);
+    return 1;
 }
 
 static int validate_description(const CNA_SignedInGamerHandle gamer)
@@ -66,11 +80,10 @@ static int validate_description(const CNA_SignedInGamerHandle gamer)
         cna_avatar_description_create_random(0) != CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
-    /* A description is always exactly one size; its height and body type are constant on this
-       runtime, because the canonical format carries neither. */
+    /* A random description is a valid CNA avatar of one exact size with a measured height. */
     ok = cna_avatar_description_get_info(random, &info) == CNA_RESULT_SUCCESS &&
         info.description_byte_count == CNA_AVATAR_DESCRIPTION_BYTE_COUNT &&
-        info.body_type == CNA_AVATAR_BODY_TYPE_FEMALE && info.height == 0.0F;
+        info.is_valid == CNA_TRUE && info.height >= 1.45F && info.height <= 2.05F;
 
     ok = ok && cna_avatar_description_copy_description(random, bytes, sizeof(bytes), &size) ==
                    CNA_RESULT_SUCCESS &&
@@ -78,11 +91,11 @@ static int validate_description(const CNA_SignedInGamerHandle gamer)
     ok = ok && cna_avatar_description_copy_description(random, bytes, UINT64_C(1), &size) ==
                    CNA_RESULT_BUFFER_TOO_SMALL;
 
-    /* Asking for a male body still reports female, because the format carries no body type at all. */
+    /* The requested body type is the one the description carries. */
     ok = ok && cna_avatar_description_create_random_for_body_type(CNA_AVATAR_BODY_TYPE_MALE,
                                                                  &male) == CNA_RESULT_SUCCESS &&
         cna_avatar_description_get_info(male, &info) == CNA_RESULT_SUCCESS &&
-        info.body_type == CNA_AVATAR_BODY_TYPE_FEMALE;
+        info.body_type == CNA_AVATAR_BODY_TYPE_MALE && info.is_valid == CNA_TRUE;
     ok = ok && cna_avatar_description_create_random_for_body_type(UINT32_C(9999), &empty) ==
                    CNA_RESULT_INVALID_ARGUMENT;
 
@@ -131,8 +144,6 @@ static int validate_animation(void)
                                     {0U, 0U, 0U}, INT64_C(0), INT64_C(0)};
     CNA_AvatarExpression expression;
     CNA_Matrix transform;
-    uint64_t size = UINT64_C(0);
-    char text[64];
     int ok;
 
     if (cna_avatar_animation_create(CNA_AVATAR_ANIMATION_PRESET_WAVE, &animation) !=
@@ -142,12 +153,11 @@ static int validate_animation(void)
         rejected != CNA_INVALID_HANDLE) {
         return 0;
     }
-    /* A preset carries the whole skeleton but **no timeline**: its length is zero until a real clip
-       is loaded, which is why advancing it below moves nothing. */
+    /* A preset is a real clip on the whole skeleton: it has a length and starts at zero. */
     ok = cna_avatar_animation_get_info(animation, &info) == CNA_RESULT_SUCCESS &&
         info.is_disposed == CNA_FALSE &&
         info.bone_transform_count == CNA_AVATAR_RENDERER_BONE_COUNT &&
-        info.length_ticks == INT64_C(0) && info.current_position_ticks == INT64_C(0);
+        info.length_ticks > INT64_C(20000000) && info.current_position_ticks == INT64_C(0);
 
     ok = ok && cna_avatar_animation_get_bone_transform_at(animation, 0, &transform) ==
                    CNA_RESULT_SUCCESS &&
@@ -161,11 +171,11 @@ static int validate_animation(void)
         cna_avatar_animation_get_expression(animation, &expression) == CNA_RESULT_SUCCESS &&
         expression.mouth <= CNA_AVATAR_MOUTH_MAXIMUM;
 
-    /* Advancing a zero-length animation is accepted and leaves the position where it was. */
+    /* Advancing moves the position, and setting it back returns to the start. */
     ok = ok && cna_avatar_animation_update(animation, INT64_C(100000), CNA_TRUE) ==
                    CNA_RESULT_SUCCESS &&
         cna_avatar_animation_get_info(animation, &info) == CNA_RESULT_SUCCESS &&
-        info.current_position_ticks == INT64_C(0);
+        info.current_position_ticks == INT64_C(100000);
     ok = ok && cna_avatar_animation_set_current_position(animation, INT64_C(0)) ==
                    CNA_RESULT_SUCCESS &&
         cna_avatar_animation_get_info(animation, &info) == CNA_RESULT_SUCCESS &&
@@ -173,27 +183,47 @@ static int validate_animation(void)
     ok = ok && cna_avatar_animation_update(animation, INT64_C(1), UINT8_C(9)) ==
                    CNA_RESULT_INVALID_ARGUMENT;
 
-    /* A preset's clip name is the identity's own spelling, and it can be replaced. */
-    ok = ok && cna_avatar_animation_get_real_clip_name_size_ext(animation, &size) ==
-                   CNA_RESULT_SUCCESS &&
-        size <= sizeof(text);
-    if (ok) {
-        const CNA_Result copied =
-            cna_avatar_animation_copy_real_clip_name_ext(animation, text, sizeof(text), &size);
-        ok = copied == CNA_RESULT_SUCCESS && size == UINT64_C(4) &&
-            memcmp(text, "Wave", (size_t)4) == 0;
-    }
-    ok = ok && cna_avatar_animation_set_real_clip_name_ext(animation, view("CustomWave")) ==
-                   CNA_RESULT_SUCCESS;
-    if (ok) {
-        const CNA_Result copied =
-            cna_avatar_animation_copy_real_clip_name_ext(animation, text, sizeof(text), &size);
-        ok = copied == CNA_RESULT_SUCCESS && size == UINT64_C(10) &&
-            memcmp(text, "CustomWave", (size_t)10) == 0;
-    }
-
     ok = (cna_avatar_animation_destroy(animation) == CNA_RESULT_SUCCESS) && ok;
     return ok && cna_avatar_animation_destroy(animation) == CNA_RESULT_INVALID_HANDLE;
+}
+
+/* A description with an avatar loads in the background, becomes ready and exposes its bind pose;
+   drawing it needs the graphics device of initialized gamer services, which this test has not got. */
+static int validate_ready_renderer(void)
+{
+    CNA_AvatarDescriptionHandle description = CNA_INVALID_HANDLE;
+    CNA_AvatarRendererHandle renderer = CNA_INVALID_HANDLE;
+    CNA_AvatarRendererInfo info = {sizeof(CNA_AvatarRendererInfo), UINT32_C(1), UINT32_C(0),
+                                   UINT8_C(0), {0U, 0U, 0U}};
+    CNA_AvatarAnimationHandle animation = CNA_INVALID_HANDLE;
+    CNA_Matrix root;
+    CNA_Matrix head;
+    int attempts;
+    int ok;
+
+    if (cna_avatar_description_create_random(&description) != CNA_RESULT_SUCCESS ||
+        cna_avatar_renderer_create(description, CNA_FALSE, &renderer) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    ok = cna_avatar_description_destroy(description) == CNA_RESULT_SUCCESS;
+    for (attempts = 0; ok && attempts < 4000; ++attempts) {
+        ok = cna_avatar_renderer_get_info(renderer, &info) == CNA_RESULT_SUCCESS;
+        if (info.state != CNA_AVATAR_RENDERER_STATE_LOADING) {
+            break;
+        }
+        pause_briefly();
+    }
+    ok = ok && info.state == CNA_AVATAR_RENDERER_STATE_READY &&
+        cna_avatar_renderer_get_bind_pose_at(renderer, 0, &root) == CNA_RESULT_SUCCESS &&
+        cna_avatar_renderer_get_bind_pose_at(renderer, 19, &head) == CNA_RESULT_SUCCESS &&
+        root.m42 == 0.0F && head.m42 > 0.01F;
+    ok = ok && cna_avatar_animation_create(CNA_AVATAR_ANIMATION_PRESET_WAVE, &animation) ==
+                   CNA_RESULT_SUCCESS &&
+        cna_avatar_renderer_draw_animation(renderer, animation) == CNA_RESULT_INVALID_STATE;
+    if (animation != CNA_INVALID_HANDLE) {
+        ok = (cna_avatar_animation_destroy(animation) == CNA_RESULT_SUCCESS) && ok;
+    }
+    return (cna_avatar_renderer_destroy(renderer) == CNA_RESULT_SUCCESS) && ok;
 }
 
 static int validate_renderer(void)
@@ -202,9 +232,8 @@ static int validate_renderer(void)
     CNA_AvatarRendererHandle renderer = CNA_INVALID_HANDLE;
     CNA_AvatarAnimationHandle animation = CNA_INVALID_HANDLE;
     CNA_AvatarRendererInfo info = {sizeof(CNA_AvatarRendererInfo), UINT32_C(1), UINT32_C(0),
-                                   UINT8_C(0), UINT8_C(0), {0U, 0U}};
+                                   UINT8_C(0), {0U, 0U, 0U}};
     CNA_AvatarExpression expression;
-    CNA_AvatarAppearanceEXT appearance;
     CNA_Matrix world;
     CNA_Matrix view_matrix;
     CNA_Matrix projection;
@@ -216,7 +245,11 @@ static int validate_renderer(void)
     int32_t index;
     int ok;
 
-    if (cna_avatar_description_create_random(&description) != CNA_RESULT_SUCCESS ||
+    static uint8_t none[CNA_AVATAR_DESCRIPTION_BYTE_COUNT];
+
+    /* A description without an avatar gives a renderer with nothing to draw. */
+    if (cna_avatar_description_create(none, CNA_AVATAR_DESCRIPTION_BYTE_COUNT, &description) !=
+            CNA_RESULT_SUCCESS ||
         cna_avatar_renderer_create(description, CNA_FALSE, &renderer) != CNA_RESULT_SUCCESS ||
         renderer == CNA_INVALID_HANDLE) {
         return 0;
@@ -224,8 +257,7 @@ static int validate_renderer(void)
     /* The renderer keeps the description alive, so releasing the caller's handle is safe. */
     ok = cna_avatar_description_destroy(description) == CNA_RESULT_SUCCESS;
     ok = ok && cna_avatar_renderer_get_info(renderer, &info) == CNA_RESULT_SUCCESS &&
-        info.is_disposed == CNA_FALSE && info.state <= CNA_AVATAR_RENDERER_STATE_MAXIMUM &&
-        info.is_real_rendering_enabled == CNA_FALSE;
+        info.is_disposed == CNA_FALSE && info.state == CNA_AVATAR_RENDERER_STATE_UNAVAILABLE;
 
     ok = ok && cna_avatar_renderer_get_transforms(renderer, &world, &view_matrix, &projection) ==
                    CNA_RESULT_SUCCESS;
@@ -251,8 +283,7 @@ static int validate_renderer(void)
     for (index = 0; ok && index < CNA_AVATAR_RENDERER_BONE_COUNT; ++index) {
         ok = cna_avatar_renderer_get_parent_bone_at(renderer, index, &parent) ==
              CNA_RESULT_SUCCESS;
-        /* Start every bone from identity: the bind pose is not readable while the avatar's assets
-           are unavailable, which is what this runtime always reports. */
+        /* Start every bone from identity: an unavailable avatar has no bind pose to start from. */
         memset(&bones[index], 0, sizeof(bones[index]));
         bones[index].m11 = 1.0F;
         bones[index].m22 = 1.0F;
@@ -264,8 +295,8 @@ static int validate_renderer(void)
     /* The first bone is the root, so it has no parent. */
     ok = ok && cna_avatar_renderer_get_parent_bone_at(renderer, 0, &parent) == CNA_RESULT_SUCCESS &&
         parent < 0;
-    /* The bind pose needs assets this runtime has not got, so it refuses with a state failure --
-       which is a different answer from an index outside the skeleton. */
+    /* Without an avatar there is no bind pose, a state failure -- which is a different answer
+       from an index outside the skeleton. */
     ok = ok && info.state == CNA_AVATAR_RENDERER_STATE_UNAVAILABLE &&
         cna_avatar_renderer_get_bind_pose_at(renderer, 0, &world) == CNA_RESULT_INVALID_STATE;
 
@@ -289,19 +320,6 @@ static int validate_renderer(void)
         cna_avatar_renderer_draw_animation(renderer, animation) == CNA_RESULT_SUCCESS &&
         cna_avatar_renderer_draw_animation(renderer, CNA_INVALID_HANDLE) ==
             CNA_RESULT_INVALID_HANDLE;
-
-    ok = ok && cna_avatar_appearance_init_ext(&appearance) == CNA_RESULT_SUCCESS &&
-        cna_avatar_renderer_set_appearance_ext(renderer, &appearance) == CNA_RESULT_SUCCESS &&
-        cna_avatar_renderer_set_appearance_ext(renderer, 0) == CNA_RESULT_INVALID_ARGUMENT;
-
-    /* Real rendering needs a device and a model; refusing an invalid one is the boundary this
-       container can exercise. */
-    ok = ok && cna_avatar_renderer_enable_real_rendering_ext(renderer, CNA_INVALID_HANDLE,
-                                                             CNA_INVALID_HANDLE) ==
-                   CNA_RESULT_INVALID_HANDLE;
-    /* Drawing the real model without one is a state failure rather than a silent no-op. */
-    ok = ok && cna_avatar_renderer_draw_real_ext(renderer, view("Wave"), INT64_C(0), CNA_FALSE) ==
-                   CNA_RESULT_INVALID_STATE;
 
     if (animation != CNA_INVALID_HANDLE) {
         ok = (cna_avatar_animation_destroy(animation) == CNA_RESULT_SUCCESS) && ok;
@@ -333,6 +351,9 @@ int main(void)
     }
     if (status == 0 && !validate_renderer()) {
         status = CNA_TEST_FAIL(5);
+    }
+    if (status == 0 && !validate_ready_renderer()) {
+        status = CNA_TEST_FAIL(9);
     }
     /* The change notification is an instance event, so the subscription names one description;
        an invalid handle and a null callback are both refused. */

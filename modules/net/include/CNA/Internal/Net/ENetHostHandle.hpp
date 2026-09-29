@@ -86,6 +86,20 @@ namespace CNA::Internal::Net
         [[nodiscard]] bool IsValid() const { return host_ != nullptr; }
 
         /**
+         * @brief Gets the bytes this host has put on the wire, ENet's protocol overhead included.
+         *
+         * @return The cumulative total, which wraps at 2^32; 0 for an invalid handle.
+         */
+        [[nodiscard]] uint32_t getTotalSentDataProperty() const;
+
+        /**
+         * @brief Gets the bytes this host has taken off the wire, ENet's protocol overhead included.
+         *
+         * @return The cumulative total, which wraps at 2^32; 0 for an invalid handle.
+         */
+        [[nodiscard]] uint32_t getTotalReceivedDataProperty() const;
+
+        /**
          * @brief Begins connecting to a remote host.
          *
          * @param address Dotted IPv4 address or resolvable hostname to connect to.

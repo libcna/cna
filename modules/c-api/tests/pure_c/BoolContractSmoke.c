@@ -119,13 +119,6 @@ int main(void)
                (unsigned)result);
         ++accepted;
     }
-    result = cna_avatar_renderer_draw_real_ext(0, empty_view, 0, UINT8_C(9));
-    if (result != CNA_RESULT_INVALID_ARGUMENT &&
-        result != CNA_RESULT_NOT_SUPPORTED) {
-        printf("accepted a non-canonical CNA_Bool (%u): cna_avatar_renderer_draw_real_ext\n",
-               (unsigned)result);
-        ++accepted;
-    }
     result = cna_basic_effect_set_prefer_per_pixel_lighting(0, UINT8_C(9));
     if (result != CNA_RESULT_INVALID_ARGUMENT &&
         result != CNA_RESULT_NOT_SUPPORTED) {
@@ -389,20 +382,6 @@ int main(void)
     if (result != CNA_RESULT_INVALID_ARGUMENT &&
         result != CNA_RESULT_NOT_SUPPORTED) {
         printf("accepted a non-canonical CNA_Bool (%u): cna_guide_set_is_screen_saver_enabled\n",
-               (unsigned)result);
-        ++accepted;
-    }
-    result = cna_guide_set_is_trial_mode(UINT8_C(9));
-    if (result != CNA_RESULT_INVALID_ARGUMENT &&
-        result != CNA_RESULT_NOT_SUPPORTED) {
-        printf("accepted a non-canonical CNA_Bool (%u): cna_guide_set_is_trial_mode\n",
-               (unsigned)result);
-        ++accepted;
-    }
-    result = cna_guide_set_is_visible(UINT8_C(9));
-    if (result != CNA_RESULT_INVALID_ARGUMENT &&
-        result != CNA_RESULT_NOT_SUPPORTED) {
-        printf("accepted a non-canonical CNA_Bool (%u): cna_guide_set_is_visible\n",
                (unsigned)result);
         ++accepted;
     }
@@ -764,6 +743,6 @@ int main(void)
         ++accepted;
     }
 
-    printf("%d of 100 routes accepted a CNA_Bool of 9\n", accepted);
+    printf("%d of 97 routes accepted a CNA_Bool of 9\n", accepted);
     return accepted == 0 ? 0 : 1;
 }

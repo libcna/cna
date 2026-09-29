@@ -264,6 +264,146 @@ namespace CNA::Internal::Net
         return message;
     }
 
+    // --- GamerReadyBroadcast ---
+
+    std::vector<bytecs> NetPacketCodec::Encode(const GamerReadyMessage& message)
+    {
+        PacketWriter writer;
+        writer.Write(static_cast<bytecs>(MessageTag::GamerReadyBroadcast));
+        writer.Write(EncodeCount(message.Entries.size(), "GamerReadyMessage.Entries"));
+        for (const auto& entry : message.Entries)
+        {
+            writer.Write(static_cast<bytecs>(entry.WireId));
+            writer.Write(entry.IsReady);
+        }
+        return ExtractBytes(writer);
+    }
+
+    GamerReadyMessage NetPacketCodec::DecodeGamerReady(const std::vector<bytecs>& data)
+    {
+        PacketReader reader;
+        FillReader(reader, data);
+        (void) reader.ReadByte(); // skip the tag byte (already inspected by the caller via PeekTag)
+
+        GamerReadyMessage message;
+        const bytecs count = reader.ReadByte();
+        message.Entries.reserve(count);
+        for (bytecs i = 0; i < count; ++i)
+        {
+            GamerReadyEntry entry;
+            entry.WireId = reader.ReadByte();
+            entry.IsReady = reader.ReadBoolean();
+            message.Entries.push_back(entry);
+        }
+        return message;
+    }
+
+    // --- SessionSettingsBroadcast / MachineRosterBroadcast (SystemLink) ---
+
+    std::vector<bytecs> NetPacketCodec::Encode(const SessionSettingsMessage& message)
+    {
+        PacketWriter writer;
+        writer.Write(static_cast<bytecs>(MessageTag::SessionSettingsBroadcast));
+        writer.Write(static_cast<bytecs>(message.MaxGamers));
+        writer.Write(static_cast<bytecs>(message.PrivateGamerSlots));
+        writer.Write(message.AllowJoinInProgress);
+        writer.Write(message.AllowHostMigration);
+        return ExtractBytes(writer);
+    }
+
+    SessionSettingsMessage NetPacketCodec::DecodeSessionSettings(const std::vector<bytecs>& data)
+    {
+        PacketReader reader;
+        FillReader(reader, data);
+        (void) reader.ReadByte();
+        SessionSettingsMessage message;
+        message.MaxGamers = reader.ReadByte();
+        message.PrivateGamerSlots = reader.ReadByte();
+        message.AllowJoinInProgress = reader.ReadBoolean();
+        message.AllowHostMigration = reader.ReadBoolean();
+        return message;
+    }
+
+    std::vector<bytecs> NetPacketCodec::Encode(const MachineRosterMessage& message)
+    {
+        PacketWriter writer;
+        writer.Write(static_cast<bytecs>(MessageTag::MachineRosterBroadcast));
+        writer.Write(EncodeCount(message.Entries.size(), "MachineRosterMessage.Entries"));
+        for (const auto& entry : message.Entries)
+        {
+            writer.Write(static_cast<bytecs>(entry.WireId));
+            writer.Write(static_cast<bytecs>(entry.MachineId));
+        }
+        return ExtractBytes(writer);
+    }
+
+    MachineRosterMessage NetPacketCodec::DecodeMachineRoster(const std::vector<bytecs>& data)
+    {
+        PacketReader reader;
+        FillReader(reader, data);
+        (void) reader.ReadByte();
+        MachineRosterMessage message;
+        const bytecs count = reader.ReadByte();
+        message.Entries.reserve(count);
+        for (bytecs i = 0; i < count; ++i)
+        {
+            MachineRosterEntry entry;
+            entry.WireId = reader.ReadByte();
+            entry.MachineId = reader.ReadByte();
+            message.Entries.push_back(entry);
+        }
+        return message;
+    }
+
+    std::vector<bytecs> NetPacketCodec::Encode(const AddLocalGamerMessage& message)
+    {
+        PacketWriter writer;
+        writer.Write(static_cast<bytecs>(MessageTag::AddLocalGamerRequest));
+        writer.Write(message.Gamertag);
+        return ExtractBytes(writer);
+    }
+
+    AddLocalGamerMessage NetPacketCodec::DecodeAddLocalGamer(const std::vector<bytecs>& data)
+    {
+        PacketReader reader;
+        FillReader(reader, data);
+        (void) reader.ReadByte();
+        AddLocalGamerMessage message;
+        message.Gamertag = reader.ReadString();
+        return message;
+    }
+
+    std::vector<bytecs> NetPacketCodec::Encode(const NetworkStatsMessage& message)
+    {
+        PacketWriter writer;
+        writer.Write(static_cast<bytecs>(MessageTag::NetworkStatsBroadcast));
+        writer.Write(EncodeCount(message.Entries.size(), "NetworkStatsMessage.Entries"));
+        for (const auto& entry : message.Entries)
+        {
+            writer.Write(static_cast<bytecs>(entry.WireId));
+            writer.Write(static_cast<SharpRuntime::ushortcs>(entry.Milliseconds));
+        }
+        return ExtractBytes(writer);
+    }
+
+    NetworkStatsMessage NetPacketCodec::DecodeNetworkStats(const std::vector<bytecs>& data)
+    {
+        PacketReader reader;
+        FillReader(reader, data);
+        (void) reader.ReadByte();
+        NetworkStatsMessage message;
+        const bytecs count = reader.ReadByte();
+        message.Entries.reserve(count);
+        for (bytecs i = 0; i < count; ++i)
+        {
+            RoundtripEntry entry;
+            entry.WireId = reader.ReadByte();
+            entry.Milliseconds = reader.ReadUInt16();
+            message.Entries.push_back(entry);
+        }
+        return message;
+    }
+
     // --- SessionPropertiesBroadcast ---
 
     std::vector<bytecs> NetPacketCodec::Encode(const SessionPropertiesBroadcastMessage& message)

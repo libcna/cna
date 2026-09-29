@@ -3,6 +3,7 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "CNA/Platform/Input/KeyboardAccelerometer.hpp"
 #include "CNA/Internal/Runtime/IGameOverlay.hpp"
+#include "CNA/Internal/Runtime/IModalFrames.hpp"
 
 #include "CNA/Internal/Input/PlatformInputBridge.hpp"
 #include "CNA/Internal/Xnb/XnbBuiltInReaders.hpp"
@@ -281,6 +282,47 @@ namespace Microsoft::Xna::Framework
         return typeName;
     }
 
+    // While game code waits on system UI, input keeps flowing and the overlay keeps presenting over
+    // a cleared screen; the game's own Update and Draw stay frozen, as they do on a console while its
+    // system screens are up.
+    namespace
+    {
+        CNA::Internal::Runtime::IModalFrames* activeModalFrames_ = nullptr;
+    }
+
+    class Game::ModalFrames final : public CNA::Internal::Runtime::IModalFrames
+    {
+    public:
+        explicit ModalFrames(Game& game) : game_(game) { activeModalFrames_ = this; }
+        ~ModalFrames() override
+        {
+            if (activeModalFrames_ == this) activeModalFrames_ = nullptr;
+        }
+
+        bool runModalFrame() override
+        {
+#if defined(__EMSCRIPTEN__)
+            // The browser delivers input only once a frame returns control to it.
+            return false;
+#else
+            if (game_.isDisposed_ || !game_.hasInitialized_ || !game_.RunApplication) return false;
+            game_.PollEvents();
+            if (!game_.RunApplication) return false;
+            if (game_.BeginDraw())
+            {
+                game_.getGraphicsDeviceProperty().Clear(Color::Black);
+                if (auto* overlay = game_.Services_.GetService<CNA::Internal::Runtime::IGameOverlay>()) overlay->draw();
+                game_.EndDraw();
+            }
+            game_.platform_->Delay(16);
+            return true;
+#endif
+        }
+
+    private:
+        Game& game_;
+    };
+
     Game::Game()
         : Game(CNA::Platform::PlatformFactory::Create())
     {
@@ -342,6 +384,8 @@ namespace Microsoft::Xna::Framework
             GraphicsDevice_.GetPlatformWindowInternal(),
             GraphicsDevice_.GetWindowHandleInternal());
         Content_.setGraphicsDevice(GraphicsDevice_);
+        modalFrames_ = std::make_unique<ModalFrames>(*this);
+        Services_.AddService<CNA::Internal::Runtime::IModalFrames>(modalFrames_.get());
 
         // A real Game instance is the framework startup boundary. Keep ContentManager neutral for
         // isolated use, but make every XNA game ready to load built-in XNB types before
@@ -1527,4 +1571,12 @@ namespace Microsoft::Xna::Framework
         }
     }
 
+}
+
+namespace CNA::Internal::Runtime
+{
+    IModalFrames* activeModalFrames()
+    {
+        return Microsoft::Xna::Framework::activeModalFrames_;
+    }
 }

@@ -7,6 +7,8 @@
 #include "System/IServiceProvider.hpp"
 #include <cstddef>
 
+namespace CNA::Internal::GamerServices { struct LocalGameDefaults; }
+
 namespace Microsoft::Xna::Framework::GamerServices
 {
     /**
@@ -39,7 +41,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          */
         static void setWindowHandleProperty(SharpRuntime::IntPtr value);
 
-        /** @brief Raised when a title update is being installed. Never raised in this platform's implementation. */
+        /** @brief Raised when a title update is being installed. CNA installs no title updates, so it is never raised. */
         static System::EventHandler<System::EventArgs> InstallingTitleUpdate;
 
         /**
@@ -68,6 +70,9 @@ namespace Microsoft::Xna::Framework::GamerServices
         CNAEXT [[nodiscard]] static std::size_t GetFreedGamerCountForTesting();
 
     private:
+        // Copies a local profile's stored game settings into a signed-in gamer's GameDefaults.
+        static void ApplyLocalGameDefaults(class GameDefaults& target, const CNA::Internal::GamerServices::LocalGameDefaults& source);
+
         static bool isInitialized_;
         static SharpRuntime::IntPtr windowHandle_;
         static std::size_t freedGamerCount_;

@@ -1,283 +1,199 @@
 #include "AvatarDemo.hpp"
 
-#include "Microsoft/Xna/Framework/GamerServices/AvatarBodyTypeNamesEXT.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/AvatarExpression.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerServicesComponent.hpp"
+#include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
 #include "common/ScreenshotEXT.hpp"
 #include "common/SimpleFontEXT.hpp"
+#include "common/AvatarPresetNamesEXT.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <string_view>
 
 using namespace Microsoft::Xna::Framework;
+using namespace Microsoft::Xna::Framework::GamerServices;
 using namespace Microsoft::Xna::Framework::Graphics;
-using Microsoft::Xna::Framework::GamerServices::AvatarAppearanceEXT;
-using Microsoft::Xna::Framework::GamerServices::AvatarBodyType;
-using Microsoft::Xna::Framework::GamerServices::AvatarBodyTypeToContentNameEXT;
-using Microsoft::Xna::Framework::GamerServices::AvatarRenderer;
 using Microsoft::Xna::Framework::Input::Keyboard;
+using Microsoft::Xna::Framework::Input::Keys;
 
 namespace
 {
     constexpr float kPi = 3.14159265358979323846f;
-    constexpr float kPiOver4 = kPi * 0.25f;
-    constexpr float kCameraDistance = 3.0f;
-    constexpr float kCameraHeight = 1.0f;
-    constexpr float kTargetHeight = 0.9f; // roughly chest height on our ~1.7m-tall avatar
 
-    // Post-plans/plan_net.md remediation (2026-07-18): now uses the shared, real-bitmap-font
-    // CNAExamplesEXT::MakeSimpleFontEXT() (examples/common/SimpleFontEXT.hpp) instead of a
-    // per-demo uniform-rectangle "block font" - the old per-file copy was confirmed unreadable
-    // (every character rendered as an identical rectangle) by an independent audit.
+    const auto& kPresets = CNAExamplesEXT::kAvatarPresets;
 
-    // Task 8.2 (plans/plan_net.md Phase 8): decision 5a's own default text block, verbatim - kept as
-    // one line per array entry rather than embedded '\n's, since MakeSimpleFont's synthetic glyph
-    // table above only maps printable ASCII 32-126 (no newline glyph to fall back on).
     constexpr const char* kHelpLines[] = {
-        "CNA Avatar Demo Help",
+        "CNA Avatar Demo (standard XNA avatar API)",
         "",
-        "F1: Show/hide this help",
-        "Esc: Quit",
-        "Space: Next animation",
-        "Left/Right: Rotate camera",
+        "Space: next animation preset",
+        "R: new random avatar",
+        "G: switch body type",
+        "E: cycle an expression override",
+        "Left/Right: rotate camera",
+        "F1: show/hide help, Esc: quit",
         "",
-        "Command line:",
-        "--gender male|female",
-        "--wardrobe-hair Cap|Ponytail",
-        "",
-        "This demo uses CNA real avatar rendering extensions.",
-        "XNA-compatible AvatarRenderer.Draw remains a no-op on Windows-like platforms.",
+        "--gender male|female  --clip <preset>",
+        "--smoke N  --yaw <deg>  --screenshot <png>",
     };
+
+    bool Pressed(bool down, bool& wasDown)
+    {
+        const bool pressed = down && !wasDown;
+        wasDown = down;
+        return pressed;
+    }
 }
 
-AvatarDemo::AvatarDemo(AvatarBodyType bodyType, std::string wardrobeHairStyle)
+AvatarDemo::AvatarDemo(AvatarBodyType bodyType)
     : bodyType_(bodyType)
-    , wardrobeHairStyle_(std::move(wardrobeHairStyle))
-    , clipNames_{"Stand0", "Stand1", "Stand2", "Stand3", "Stand4", "Stand5", "Stand6", "Stand7",
-                 "Wave", "Clap", "Celebrate"}
 {
-    // Task 11.23b/11.23c: gendered presets are baked only into their own gender's
-    // content (Female* for Female, Male* for Male) — appending them here keeps a
-    // single clipNames_ list in sync with whichever body actually got loaded, instead
-    // of hardcoding a fixed list that would throw on the wrong gender.
-    if (bodyType_ == AvatarBodyType::Female)
-    {
-        for (const char* name : {"FemaleIdleCheckNails", "FemaleIdleLookAround", "FemaleIdleShiftWeight",
-                                  "FemaleIdleFixShoe", "FemaleAngry", "FemaleConfused", "FemaleLaugh",
-                                  "FemaleCry", "FemaleShocked", "FemaleYawn"})
-        {
-            clipNames_.emplace_back(name);
-        }
-    }
-    else
-    {
-        for (const char* name : {"MaleIdleLookAround", "MaleIdleStretch", "MaleIdleShiftWeight",
-                                  "MaleIdleCheckHand", "MaleAngry", "MaleConfused", "MaleLaugh",
-                                  "MaleCry", "MaleSurprised", "MaleYawn"})
-        {
-            clipNames_.emplace_back(name);
-        }
-    }
-
-    static constexpr int FPS = 60;
-    Game::setTargetElapsedTimeProperty(System::TimeSpan::FromTicks(static_cast<long>(500000L * 20 / FPS)));
+    // HiDef lets the --screenshot option read the back buffer.
+    graphics_.setGraphicsProfileProperty(GraphicsProfile::HiDef);
+    getComponentsProperty().Add(new GamerServicesComponent(*this));
+    setTargetElapsedTimeProperty(System::TimeSpan::FromTicks(166667));
 }
 
 AvatarDemo::~AvatarDemo() = default;
 
-void AvatarDemo::Initialize()
+void AvatarDemo::SetInitialPresetEXT(const std::string& name)
 {
-    Game::Initialize();
+    for (std::size_t index = 0; index < kPresets.size(); ++index)
+    {
+        if (name == kPresets[index].name)
+        {
+            presetIndex_ = index;
+        }
+    }
+}
 
-    auto& device = getGraphicsDeviceProperty();
-    device.SetDepthTestEnabled(true);
+void AvatarDemo::NewAvatar()
+{
+    // A new description gets a new renderer, which shows the loading effect until it is ready.
+    description_ = std::make_unique<AvatarDescription>(AvatarDescription::CreateRandom(bodyType_));
+    renderer_ = std::make_unique<AvatarRenderer>(description_.get(), true);
+    renderer_->setLightDirectionProperty(Vector3(-0.4f, -0.5f, -0.75f));
+    renderer_->setLightColorProperty(Vector3(0.75f, 0.72f, 0.68f));
+    renderer_->setAmbientLightColorProperty(Vector3(0.38f, 0.40f, 0.45f));
+}
+
+void AvatarDemo::StartPreset(std::size_t index)
+{
+    presetIndex_ = index % kPresets.size();
+    animation_ = std::make_unique<AvatarAnimation>(kPresets[presetIndex_].value);
 }
 
 void AvatarDemo::LoadContent()
 {
-    // AvatarBodyTypeToContentNameEXT (Task 11.12) maps bodyType_ to
-    // "avatar/male/avatar" or "avatar/female/avatar", resolving to
-    // Content/avatar/<gender>/avatar.skinnedmodel.json — real content produced
-    // by tools/avatar_builder/generate_avatar.py + convert_avatar.py (Tasks
-    // 11.1-11.10), not a synthetic fixture. ContentManager's default
-    // RootDirectory ("Content") already matches where CMake copies this demo's
-    // own Content/ directory next to the built executable.
-    auto& content = getContentProperty();
-    model_ = content.Load<std::shared_ptr<SkinnedModelEXT>>(AvatarBodyTypeToContentNameEXT(bodyType_));
-
-    // Task 11.22: --wardrobe-hair <Style> proves SkinnedModelEXT::AttachPartEXT (Task
-    // 11.21) end-to-end at runtime, not just that it compiles: load a standalone
-    // wardrobe piece (Content/wardrobe/hair_<Style>/, converted independently via
-    // generate_wardrobe.py + convert_avatar.py, Task 11.14) and swap it in for the
-    // avatar's baked-in hair. AttachPartEXT (Task 11.4) now has its own replace-by-name
-    // semantics, so it removes the old "CNAAvatarHair" part (freeing its GPU resources,
-    // Task 11.5) before attaching the new one -- no manual workaround needed here anymore.
-    if (!wardrobeHairStyle_.empty())
-    {
-        auto wardrobePiece = content.Load<std::shared_ptr<SkinnedModelEXT>>(
-            "wardrobe/hair_" + wardrobeHairStyle_ + "/avatar");
-        model_->AttachPartEXT(std::move(*wardrobePiece));
-    }
-
     auto& device = getGraphicsDeviceProperty();
-    renderer_ = std::make_unique<AvatarRenderer>(nullptr);
-    renderer_->EnableRealRenderingEXT(device, model_);
-
-    // Exercise SetAppearanceEXT explicitly (rather than relying on its
-    // NavajoWhite/SaddleBrown defaults) so a visible tint change is part of
-    // this proof, not just the untinted default.
-    AvatarAppearanceEXT appearance;
-    appearance.setSkinColorProperty(Color(210, 170, 130, 255));
-    appearance.setHairColorProperty(Color(40, 25, 15, 255));
-    renderer_->SetAppearanceEXT(appearance);
-
-    // AvatarRenderer's LightColor/LightDirection/AmbientLightColor default to
-    // black (matching the real, never-drawing XNA implementation's untouched
-    // value-type defaults) — a real caller must configure these before
-    // DrawRealEXT does anything visible, same as
-    // examples/avatar_real_render_integration_test.cpp.
-    // audit_net.md remediation (2026-07-18, fourth round): back at its original 0.35. The third
-    // round had raised this to 0.5 to fight the avatar's near-black regions, but that was
-    // compensating for a real shader bug, not a lighting-setup problem: EasyGL's skinned shaders
-    // multiplied EmissiveColor (which carries the pre-folded ambient term) by DiffuseColor a
-    // second time, so ambient landed as ambient*diffuse^2 and dark materials were crushed. With
-    // that fixed (see EnsureSkinnedProgram's own comment), 0.35 measures strictly better than 0.5
-    // on every region this project's own scripts/avatar_visual_regression_check.py tracks - so the
-    // compensation hack is removed rather than left to double up with the real fix.
-    renderer_->setAmbientLightColorProperty(Vector3(0.35f, 0.35f, 0.35f));
-    renderer_->setLightColorProperty(Vector3(1.0f, 1.0f, 1.0f));
-    renderer_->setLightDirectionProperty(Vector3(-0.4f, -0.6f, -0.7f));
-
-    // Task 8.1/8.3 (plans/plan_net.md Phase 8): F1 help overlay's own SpriteBatch/white-pixel/font -
-    // must not crash if this fails, so LoadContent()'s own real device/content are reused here
-    // (already known-good, since model_ loaded successfully above) rather than anything that
-    // could plausibly fail independently.
     spriteBatch_ = std::make_unique<SpriteBatch>(device);
-    const std::vector<uint8_t> px = {255, 255, 255, 255};
-    whitePixel_ = std::make_unique<Texture2D>(Texture2D::CreateFromPixels(device, 1, 1, px));
+    whitePixel_ = std::make_unique<Texture2D>(Texture2D::CreateFromPixels(device, 1, 1, {255, 255, 255, 255}));
     font_ = CNAExamplesEXT::MakeSimpleFontEXT(device);
-
-    getWindowProperty().setTitleProperty(
-        (bodyType_ == AvatarBodyType::Female ? "CNA Avatar Demo [female] - " : "CNA Avatar Demo [male] - ")
-        + clipNames_[currentClipIndex_] + "  (F1: help, Space: next anim, Left/Right: rotate, Esc: quit)");
+    NewAvatar();
+    StartPreset(presetIndex_);
 }
 
 void AvatarDemo::Update(GameTime& gameTime)
 {
     Game::Update(gameTime);
-
-    const auto kb = Keyboard::GetState();
-    if (kb.IsKeyDown(Keys::Escape)) { Exit(); return; }
-
-    const float dt = static_cast<float>(
-        gameTime.getElapsedGameTimeProperty().getTotalSecondsProperty());
-
-    if (!fixedCameraYawEXT_)
+    const auto keys = Keyboard::GetState();
+    if (keys.IsKeyDown(Keys::Escape))
     {
-        const float rotSpeed = 1.6f * dt;
-        if (kb.IsKeyDown(Keys::Left))  cameraYaw_ -= rotSpeed;
-        if (kb.IsKeyDown(Keys::Right)) cameraYaw_ += rotSpeed;
+        Exit();
+        return;
     }
-
-    const bool spaceDown = kb.IsKeyDown(Keys::Space);
-    if (spaceDown && !spaceWasDown_) {
-        currentClipIndex_ = (currentClipIndex_ + 1) % clipNames_.size();
-        clipPositionSeconds_ = 0.0;
-        getWindowProperty().setTitleProperty(
-            (bodyType_ == AvatarBodyType::Female ? "CNA Avatar Demo [female] - " : "CNA Avatar Demo [male] - ")
-            + clipNames_[currentClipIndex_] + "  (Space: next anim, Left/Right: rotate, Esc: quit)");
-    }
-    spaceWasDown_ = spaceDown;
-
-    // Task 8.2 (plans/plan_net.md Phase 8): F1 toggles overlay visibility - edge-triggered, matching
-    // the Space-key clip-cycling pattern just above.
-    const bool f1Down = kb.IsKeyDown(Keys::F1);
-    if (f1Down && !f1WasDownEXT_)
+    const float dt = static_cast<float>(gameTime.getElapsedGameTimeProperty().getTotalSecondsProperty());
+    if (!fixedCameraYaw_)
     {
-        showHelpEXT_ = !showHelpEXT_;
+        if (keys.IsKeyDown(Keys::Left)) cameraYaw_ -= 1.6f * dt;
+        if (keys.IsKeyDown(Keys::Right)) cameraYaw_ += 1.6f * dt;
     }
-    f1WasDownEXT_ = f1Down;
-
-    clipPositionSeconds_ += static_cast<double>(dt);
-
-    // Task 7.1 (plans/plan_net.md Phase 7): matches every other smoke-testable demo's own convention -
-    // guarded by > 0, not >= 0, so Exit() (which doesn't halt Update()/Draw() immediately) can't
-    // keep re-triggering this every subsequent frame.
-    if (smokeFramesLeft_ > 0)
+    if (Pressed(keys.IsKeyDown(Keys::Space), spaceWasDown_)) StartPreset(presetIndex_ + 1);
+    if (Pressed(keys.IsKeyDown(Keys::R), rWasDown_)) NewAvatar();
+    if (Pressed(keys.IsKeyDown(Keys::G), gWasDown_))
     {
-        if (--smokeFramesLeft_ == 0)
-        {
-            Exit();
-        }
+        bodyType_ = bodyType_ == AvatarBodyType::Male ? AvatarBodyType::Female : AvatarBodyType::Male;
+        NewAvatar();
+    }
+    if (Pressed(keys.IsKeyDown(Keys::E), eWasDown_)) expressionOverride_ = expressionOverride_ >= 13 ? -1 : expressionOverride_ + 1;
+    if (Pressed(keys.IsKeyDown(Keys::F1), f1WasDown_)) showHelp_ = !showHelp_;
+
+    animation_->Update(gameTime.getElapsedGameTimeProperty(), true);
+
+    const std::string state = renderer_->getStateProperty() == AvatarRendererState::Ready ? "" : " (loading)";
+    getWindowProperty().setTitleProperty(std::string("CNA Avatar Demo - ") + kPresets[presetIndex_].name + " - " +
+        (description_->getBodyTypeProperty() == AvatarBodyType::Male ? "male " : "female ") +
+        std::to_string(description_->getHeightProperty()).substr(0, 4) + " m" + state + "  (F1: help)");
+
+    if (smokeFramesLeft_ > 0 && --smokeFramesLeft_ == 0)
+    {
+        Exit();
     }
 }
 
-void AvatarDemo::Draw(const GameTime&)
+void AvatarDemo::Draw(const GameTime& gameTime)
 {
     auto& device = getGraphicsDeviceProperty();
-    device.Clear(Color::CornflowerBlue);
-    device.SetDepthTestEnabled(true);
-
-    const auto& vp = device.getViewportProperty();
-    const float aspect =
-        (vp.getHeightProperty() > 0)
-            ? static_cast<float>(vp.getWidthProperty()) / static_cast<float>(vp.getHeightProperty())
-            : 1.0f;
-
-    const Vector3 target(0.0f, kTargetHeight, 0.0f);
-    const Vector3 eye(kCameraDistance * std::sin(cameraYaw_), kCameraHeight,
-                       kCameraDistance * std::cos(cameraYaw_));
-
+    device.Clear(Color(92, 128, 176, 255));
+    const auto& viewport = device.getViewportProperty();
+    const float aspect = viewport.getHeightProperty() > 0
+        ? static_cast<float>(viewport.getWidthProperty()) / static_cast<float>(viewport.getHeightProperty())
+        : 1.0f;
+    const float height = std::max(description_->getHeightProperty(), 1.4f);
+    const Vector3 target(0.0f, height * 0.52f, 0.0f);
+    const Vector3 eye(3.0f * std::sin(cameraYaw_), height * 0.6f, 3.0f * std::cos(cameraYaw_));
     renderer_->setWorldProperty(Matrix::getIdentityProperty());
     renderer_->setViewProperty(Matrix::CreateLookAt(eye, target, Vector3::Up));
-    renderer_->setProjectionProperty(
-        Matrix::CreatePerspectiveFieldOfView(kPiOver4, aspect, 0.1f, 100.0f));
+    renderer_->setProjectionProperty(Matrix::CreatePerspectiveFieldOfView(kPi / 4.0f, aspect, 0.1f, 100.0f));
 
-    renderer_->DrawRealEXT(clipNames_[currentClipIndex_], System::TimeSpan::FromSeconds(clipPositionSeconds_), /*loop=*/true);
-
-    // Task 8.2 (plans/plan_net.md Phase 8): 3D scene drawn first (above), then the 2D help overlay on
-    // top - decision 5d: translucent white rectangle behind black text.
-    if (showHelpEXT_)
+    if (expressionOverride_ < 0)
     {
-        constexpr int kLineCount = static_cast<int>(sizeof(kHelpLines) / sizeof(kHelpLines[0]));
-        // The real 5x7 bitmap font (CNAExamplesEXT::MakeSimpleFontEXT) is drawn at 2x scale -
-        // legible at native size, but small enough at 1x to be hard to read comfortably at
-        // typical window resolutions.
-        constexpr float kTextScale = 1.5f;
-        constexpr float kLineHeight = 13.0f;
-        constexpr float kPadding = 12.0f;
-        // Measure via the actual SpriteFont (at 1x, then scaled) rather than a hand-rolled
-        // char-count * advance guess - SpriteFont::spacing_/kerning already account for the
-        // real per-glyph advance, so a naive strlen()*N estimate would silently undercount and
-        // the longest line would overflow the panel's right edge.
-        float longestLineWidth = 0.0f;
+        renderer_->Draw(animation_.get());
+    }
+    else
+    {
+        // Bones from the animation, face from the override: AvatarRenderer.Draw(bones, expression).
+        AvatarExpression expression;
+        expression.setLeftEyeProperty(static_cast<AvatarEye>(expressionOverride_));
+        expression.setRightEyeProperty(static_cast<AvatarEye>(expressionOverride_));
+        expression.setMouthProperty(static_cast<AvatarMouth>(expressionOverride_));
+        expression.setLeftEyebrowProperty(static_cast<AvatarEyebrow>(expressionOverride_ % 5));
+        expression.setRightEyebrowProperty(static_cast<AvatarEyebrow>(expressionOverride_ % 5));
+        const auto bones = animation_->getBoneTransformsProperty();
+        renderer_->Draw(std::vector<Matrix>(bones.begin(), bones.end()), expression);
+    }
+
+    if (showHelp_)
+    {
+        constexpr float kScale = 1.5f;
+        constexpr float kLine = 13.0f;
+        constexpr float kPad = 12.0f;
+        float widest = 0.0f;
         for (const char* line : kHelpLines)
         {
-            longestLineWidth = std::max(longestLineWidth, font_->MeasureString(line).X * kTextScale);
+            widest = std::max(widest, font_->MeasureString(line).X * kScale);
         }
-        const Rectangle panel(8, 8, static_cast<int>(longestLineWidth + kPadding * 2.0f),
-                               static_cast<int>(kLineCount * kLineHeight + kPadding * 2.0f));
-
+        const int lines = static_cast<int>(std::size(kHelpLines));
+        const Rectangle panel(8, 8, static_cast<int>(widest + kPad * 2), static_cast<int>(lines * kLine + kPad * 2));
         spriteBatch_->Begin();
         spriteBatch_->Draw(*whitePixel_, panel, Color(255, 255, 255, 210));
-        float y = panel.Y + kPadding;
+        float y = panel.Y + kPad;
         for (const char* line : kHelpLines)
         {
-            spriteBatch_->DrawString(*font_, line, Vector2(panel.X + kPadding, y), Color(0, 0, 0, 255),
-                                      0.0f, Vector2::Zero, kTextScale, SpriteEffects::None, 0.0f);
-            y += kLineHeight;
+            spriteBatch_->DrawString(*font_, line, Vector2(panel.X + kPad, y), Color(0, 0, 0, 255), 0.0f, Vector2::Zero, kScale,
+                                     SpriteEffects::None, 0.0f);
+            y += kLine;
         }
         spriteBatch_->End();
     }
 
-    // Task 7.1 (plans/plan_net.md Phase 7): captured after DrawRealEXT so the just-rendered frame is
-    // what ends up in the backbuffer read below. Fires on smokeFramesLeft_ == 1, not 0 - Exit()
-    // (called by Update() once the countdown reaches 0) sets Game's own suppressDraw_ flag, which
-    // skips this Draw() call entirely on that final frame, so capturing at 0 would never run at
-    // all. At 1, Exit() hasn't been called yet this frame, so Draw() still runs normally.
-    if (smokeFramesLeft_ == 1 && !screenshotPathEXT_.empty())
+    if (smokeFramesLeft_ == 1 && !screenshotPath_.empty())
     {
-        SaveBackBufferScreenshotEXT(device, screenshotPathEXT_);
-        screenshotPathEXT_.clear(); // guards against a duplicate save if Draw() runs once more
+        SaveBackBufferScreenshotEXT(device, screenshotPath_);
+        screenshotPath_.clear();
     }
+    Game::Draw(gameTime);
 }
 
 GetTypeNameCPP(AvatarDemo, "AvatarDemo")

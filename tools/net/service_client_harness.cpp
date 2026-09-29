@@ -128,7 +128,7 @@ int main(int argc,char** argv) {
         auto* collection=Gamer::getSignedInGamersProperty();check(collection->getCountProperty()==0,"Initialize fabricated gamers");
         int signedIn=0,signedOut=0;
         auto in=SignedInGamer::SignedIn.Add([&](auto*,const SignedInEventArgs& e){++signedIn;check(e.getGamerProperty()->getIsSignedInToLiveProperty(),"identity before event");std::unique_ptr<GamerProfile> nested(e.getGamerProperty()->GetProfile());check(!nested->getIsDisposedProperty(),"sync read inside event");});
-        auto out=SignedInGamer::SignedOut.Add([&](auto*,const SignedOutEventArgs& e){++signedOut;check(!e.getGamerProperty()->getIsSignedInToLiveProperty(),"signout state before event");});
+        auto out=SignedInGamer::SignedOut.Add([&](auto*,const SignedOutEventArgs& e){++signedOut;check(e.getGamerProperty()->getIsDisposedProperty(),"signed-out gamer disposed before event");});
         std::string password;
         if(real){check(argc==5,"real arguments");std::getline(std::cin,password);}
         if(real&&(action=="resume"||action=="resume-four")) {
@@ -313,6 +313,8 @@ int main(int argc,char** argv) {
             std::unique_ptr<Gamer> other(Gamer::GetFromGamertag("Bob"));check(gamer->IsFriend(other.get()),"real accepted friend");
             auto friends=gamer->GetFriends();check(friends.getCountProperty()==1&&friends[0]->getIsOnlineProperty(),"real online friend");
             check(friends[0]->getPresenceProperty()=="Level 12","real rich presence/value");
+            check(friends[0]->getIsPlayingProperty()&&!friends[0]->getIsJoinableProperty()&&!friends[0]->getInviteReceivedFromProperty()
+                &&!friends[0]->getInviteSentToProperty()&&!friends[0]->getIsAwayProperty(),"real friend state flags");
             Guide::ShowFriends(Microsoft::Xna::Framework::PlayerIndex::One);Guide::SimulateMessageBoxClickEXT(2);
         }
         if(real&&std::string(argv[4])=="revoke-wait") {
@@ -329,6 +331,8 @@ int main(int argc,char** argv) {
             std::string command;std::cout<<"maintenance-ready"<<std::endl;check(static_cast<bool>(std::getline(std::cin,command)),"expiry command");
             std::unique_ptr<GamerProfile> renewed(gamer->GetProfile());GamerServicesDispatcher::Update();
             check(signedIn==1&&signedOut==0&&renewed->getGamerScoreProperty()==10,"refresh changed gamer lifetime/events");
+            check(renewed->getTitlesPlayedProperty()==1&&renewed->getGamerZoneProperty()==GamerZone::Unknown
+                &&renewed->getReputationProperty()==0.0f,"profile titles/zone/reputation");
             std::cout<<"maintenance-refreshed"<<std::endl;check(static_cast<bool>(std::getline(std::cin,command)),"heartbeat command");
             const auto until=std::chrono::steady_clock::now()+std::chrono::seconds(33);
             while(std::chrono::steady_clock::now()<until){GamerServicesDispatcher::Update();std::this_thread::sleep_for(std::chrono::milliseconds(2));}
@@ -340,8 +344,9 @@ int main(int argc,char** argv) {
             std::unique_ptr<GamerProfile> reconnected(gamer->GetProfile());GamerServicesDispatcher::Update();
             check(reconnected->getGamerScoreProperty()==10&&signedIn==1&&signedOut==0,"reconnect lost identity or persistence");
         }
-        auto* retired=gamer;Service::backend()->signOut(0);check(retired->getIsSignedInToLiveProperty(),"signout before pump");waitFor(localCount-1);
-        check(signedOut==1&&!retired->getIsSignedInToLiveProperty(),"retired identity/event lifetime");
+        auto* retired=gamer;Service::backend()->signOut(0);check(!retired->getIsDisposedProperty(),"signout before pump");waitFor(localCount-1);
+        // XNA disposes a signed-out gamer and leaves IsSignedInToLive as it was.
+        check(signedOut==1&&retired->getIsDisposedProperty()&&retired->getIsSignedInToLiveProperty(),"retired identity/event lifetime");
         if(!real) {
             Guide::ShowSignIn(1,true);Guide::SimulateKeyboardInputCancelEXT();
             check(!Guide::getIsVisibleProperty()&&collection->getCountProperty()==3,"Guide username cancellation");

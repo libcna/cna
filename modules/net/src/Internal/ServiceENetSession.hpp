@@ -3,7 +3,9 @@
 #include "OnlineSessionPreparation.hpp"
 #include "CNA/Internal/Net/NetPacketCodec.hpp"
 #include <chrono>
+#include <map>
 #include <optional>
+#include <utility>
 
 namespace CNA::Internal::Net {
 /** @brief Owned logical realtime observation for conversion at the XNA owner's update boundary. */
@@ -15,6 +17,7 @@ struct ServiceENetObservation {
         /** @brief An admitted remote group disconnected or lost authority. */ Left,
         /** @brief An admitted game packet targets this local group. */ Data,
         /** @brief Authenticated directory metadata changed. */ Snapshot,
+        /** @brief Gamers' lobby ready state changed. */ Readiness,
         /** @brief Authority or transport became unavailable. */ Failed
     };
     /** @brief Observation category. */
@@ -27,6 +30,8 @@ struct ServiceENetObservation {
     std::optional<AppDataMessage> data;
     /** @brief Owned directory metadata. */
     std::optional<GamerServices::ServiceSessionSnapshot> snapshot;
+    /** @brief Lobby ready states for a Readiness observation. */
+    std::vector<GamerReadyEntry> readiness;
     /** @brief Fixed safe failure code, never raw network text. */
     std::string failure;
 };
@@ -60,6 +65,14 @@ public:
      * @param sender Local source. @param target Known connected target. @param payload Game bytes.
      * @param options Delivery semantics. */
     void send(unsigned char sender,unsigned char target,const std::vector<unsigned char>& payload,SendDataOptions options);
+    /** @brief Sends local gamers' lobby ready state (a client to the host, the host to every
+     * client); the host also reports any gamer, as ResetReady does.
+     * @param entries Changed ready states. */
+    void publishReady(const std::vector<GamerReadyEntry>& entries);
+    /** @brief Host only: removes another machine from the session (XNA NetworkMachine.RemoveFromSession).
+     * The directory removes it; the host then disconnects it with DisconnectRemovedByHost.
+     * @param machine The machine to remove. */
+    void removeMachine(const std::string& machine);
     /** @brief Publishes host-owned directory settings; clients observe them through authority.
      * @param settings Complete desired state, capacity, join-in-progress and properties. */
     void publish(const GamerServices::ServiceSessionSettings& settings);
@@ -67,8 +80,17 @@ public:
     bool ready() const;
     /** @brief Gets current authenticated metadata. @return Owner-thread snapshot. */
     const GamerServices::ServiceSessionSnapshot& snapshot() const;
+    /** @brief Gets the backend that owns this membership. @return Retained origin. */
+    const std::shared_ptr<GamerServices::IGamerServicesBackend>& origin() const;
     /** @brief Gets rejected source/control/application packet count. @return Cumulative drops. */
     std::uint64_t rejected() const;
+    /** @brief Gets the round trip to each remote gamer: the direct peer's on the host; on a client the
+     * round trip to the host, plus the host's reported round trip for a gamer on another client.
+     * @return Milliseconds by gamer ID; empty before a client is connected. */
+    std::map<unsigned char,std::uint32_t> roundTrips() const;
+    /** @brief Gets this session's ENet wire totals, protocol overhead included.
+     * @return Cumulative bytes sent and received, each wrapping at 2^32. */
+    std::pair<std::uint32_t,std::uint32_t> traffic() const;
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;

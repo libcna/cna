@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 8448,
+  "encoded": 8960,
   "major": 0,
-  "minor": 33,
+  "minor": 35,
   "patch": 0,
-  "runtime": 8448
+  "runtime": 8960
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -1067,21 +1067,13 @@
   "cna_available_network_session_get_quality_of_service",
   "cna_available_network_session_get_session_type_ext",
   "cna_available_network_session_not_equals",
-  "cna_avatar_animation_copy_real_clip_name_ext",
   "cna_avatar_animation_create",
   "cna_avatar_animation_destroy",
   "cna_avatar_animation_get_bone_transform_at",
   "cna_avatar_animation_get_expression",
   "cna_avatar_animation_get_info",
-  "cna_avatar_animation_get_real_clip_name_size_ext",
-  "cna_avatar_animation_preset_copy_clip_name_ext",
-  "cna_avatar_animation_preset_get_clip_name_size_ext",
   "cna_avatar_animation_set_current_position",
-  "cna_avatar_animation_set_real_clip_name_ext",
   "cna_avatar_animation_update",
-  "cna_avatar_appearance_init_ext",
-  "cna_avatar_body_type_copy_content_name_ext",
-  "cna_avatar_body_type_get_content_name_size_ext",
   "cna_avatar_description_copy_description",
   "cna_avatar_description_create",
   "cna_avatar_description_create_random",
@@ -1095,14 +1087,11 @@
   "cna_avatar_renderer_destroy",
   "cna_avatar_renderer_draw_animation",
   "cna_avatar_renderer_draw_bones",
-  "cna_avatar_renderer_draw_real_ext",
-  "cna_avatar_renderer_enable_real_rendering_ext",
   "cna_avatar_renderer_get_bind_pose_at",
   "cna_avatar_renderer_get_info",
   "cna_avatar_renderer_get_lighting",
   "cna_avatar_renderer_get_parent_bone_at",
   "cna_avatar_renderer_get_transforms",
-  "cna_avatar_renderer_set_appearance_ext",
   "cna_avatar_renderer_set_lighting",
   "cna_avatar_renderer_set_transforms",
   "cna_basic_effect_create",
@@ -2356,8 +2345,6 @@
   "cna_guide_reset_pending_keyboard_input_ext",
   "cna_guide_reset_pending_message_box_ext",
   "cna_guide_set_is_screen_saver_enabled",
-  "cna_guide_set_is_trial_mode",
-  "cna_guide_set_is_visible",
   "cna_guide_set_notification_position",
   "cna_guide_set_simulate_trial_mode",
   "cna_guide_show_achievements_ext",
@@ -4072,9 +4059,9 @@
   "cna_write_leaderboards_event_info_init"
  ],
  "integers": {
-  "CNA_ABI_VERSION": 8448,
+  "CNA_ABI_VERSION": 8960,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 33,
+  "CNA_ABI_VERSION_MINOR": 35,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,
@@ -7059,40 +7046,6 @@
    },
    "size": 32
   },
-  "CNA_AvatarAppearanceEXT": {
-   "align": 4,
-   "fields": {
-    "hair_color": [
-     12,
-     4
-    ],
-    "pants_color": [
-     20,
-     4
-    ],
-    "shirt_color": [
-     16,
-     4
-    ],
-    "shoes_color": [
-     24,
-     4
-    ],
-    "skin_color": [
-     8,
-     4
-    ],
-    "struct_size": [
-     0,
-     4
-    ],
-    "struct_version": [
-     4,
-     4
-    ]
-   },
-   "size": 28
-  },
   "CNA_AvatarDescriptionInfo": {
    "align": 8,
    "fields": {
@@ -7168,13 +7121,9 @@
      12,
      1
     ],
-    "is_real_rendering_enabled": [
-     13,
-     1
-    ],
     "reserved": [
-     14,
-     2
+     13,
+     3
     ],
     "state": [
      8,

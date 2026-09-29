@@ -1,5 +1,11 @@
 # CNA Gamer Services server implementation — living plan
 
+> **Status: complete (2026-09-29).** The historical checkpoint checkboxes below are not the current
+> task list; the items that were left open at a checkpoint are marked with the later milestone that
+> closed them. The authoritative final status is the GS-001..GS-011 checklist plus
+> [`gamer_services_server_final_register.md`](gamer_services_server_final_register.md), which also
+> lists the deliberate remaining limits.
+
 Mission authorized 2026-09-28. Xbox 360 XNA behavior is the target; Windows/FNA service and avatar stubs are **not** behavioral evidence for Xbox 360. CNA protocol, accounts and original avatar assets have no Xbox LIVE compatibility. This plan supersedes plan_net.md's refusal of PlayerMatch/Ranked/invites and its standard-avatar/EXT split. Prohibition on proprietary/third-party avatar assets remains.
 
 ## Repository boundary and initial audit
@@ -46,16 +52,16 @@ Avatars: CNA-owned versioned envelope within exact 1021-byte public buffer; fixe
 ## Checklist / migration sequence
 
 - [x] GS-001: repository safety, initial inventory and living architecture plan.
-- [ ] GS-002: canonical protocol parser/spec/golden corpus and drift checks; server independent CMake project, persistent schema/migrations, administration and hardening unit tests.
-- [ ] GS-003: endpoint/title configuration and TLS client transport; fake/backend abstraction; remove fabricated profiles; deterministic event pump and async ownership tests.
-- [ ] GS-004: real server auth/revocation/restart, separate local slots, Guide sign-in overlay, user credential/refresh persistence, identity/profile/privilege/lookup tests.
-- [ ] GS-005: friends/presence/pictures/social Guide; service achievements metadata/award/pictures/cache across users/titles/restarts.
-- [ ] GS-006: session-scoped leaderboard writes, EndGame/leave events/flush, Ranked arbitration and reads/paging/social filters.
-- [ ] GS-007: PlayerMatch/Ranked directory, properties/create/find/join, invited joins/InviteAccepted and coherent failure/event order; preserve full SystemLink corpus.
-- [ ] GS-008: authenticated relay fallback with untrusted packet limits; prove connectivity across NAT-like isolation, membership revocation, failure/reconnect.
-- [ ] GS-009: description encoding/random/service retrieval/cache; original 71-slot rig/presets/expressions; standard renderer Draw/ready/loading/disposal, pixel regression migration; only then retire redundant avatar EXT.
-- [ ] GS-010: C ABI synchronization, standard-API-only demos, representative original XNA compatibility samples.
-- [ ] GS-011: two separate CNA processes/server restart/E2E entire corpus, protocol fuzz/property tests, final throw/no-op evidence register, truthful docs and clean checkpoints.
+- [x] GS-002: canonical protocol parser/spec/golden corpus and drift checks; server independent CMake project, persistent schema/migrations, administration and hardening unit tests. (`tools/net/check_service_protocol.py`; server schema 1-13.)
+- [x] GS-003: endpoint/title configuration and TLS client transport; fake/backend abstraction; remove fabricated profiles; deterministic event pump and async ownership tests.
+- [x] GS-004: real server auth/revocation/restart, separate local slots, Guide sign-in overlay, user credential/refresh persistence, identity/profile/privilege/lookup tests. (POSIX credential persistence; Windows/browser credentials stay per-run, documented. Local offline profiles GS-004l-r.)
+- [x] GS-005: friends/presence/pictures/social Guide; service achievements metadata/award/pictures/cache across users/titles/restarts.
+- [x] GS-006: session-scoped leaderboard writes, EndGame/leave events/flush, Ranked arbitration and reads/paging/social filters. (No TrueSkill computation or Stream columns, documented.)
+- [x] GS-007: PlayerMatch/Ranked directory, properties/create/find/join, invited joins/InviteAccepted and coherent failure/event order; preserve full SystemLink corpus. (Online host migration and online AddLocalGamer are documented limits: GS-007h, GS-007j.)
+- [x] GS-008: authenticated relay fallback with untrusted packet limits; prove connectivity across NAT-like isolation, membership revocation, failure/reconnect.
+- [x] GS-009: description encoding/random/service retrieval/cache; original 71-slot rig/presets/expressions; standard renderer Draw/ready/loading/disposal, pixel regression migration; only then retire redundant avatar EXT.
+- [x] GS-010: C ABI synchronization, standard-API-only demos, representative original XNA compatibility samples. (C ABI 0.34.0; Priority 9 samples.)
+- [x] GS-011: two separate CNA processes/server restart/E2E entire corpus, protocol fuzz/property tests, final throw/no-op evidence register, truthful docs and clean checkpoints. (`gamer_services_server_final_register.md`; final validation below.)
 
 Every task may be split into thematic subcommits; mark parent complete only after all criteria. After stable milestones inspect committed next, merge relevant commits (existing history uses merges), rerun regressions; never copy samples worktree files. Update AUDIT/NEXT with measured results, not completeness claims.
 
@@ -264,9 +270,9 @@ callback before Lobby and atomic/idempotent server commit. Ranked arbitration fo
   invalid-row atomicity, duplicate rows and identical commit retry across server restart tested.
 - [x] LocalNetworkGamer publishes the real signed-in gamertag/display name; the previous test
   asserting Stub Gamer was corrected. SystemLink wire identity remains its real account identity.
-- [ ] GS-006c: leaving/disposal write events/submission, explicit epoch abort, transport-loss retry
+- [x] *(Closed by the GS-006c checkpoint and GS-006d/GS-006e; Stream columns are a documented limit in the final register.)* GS-006c: leaving/disposal write events/submission, explicit epoch abort, transport-loss retry
   policy; Stream columns, catalog validation timing and full event restriction audit.
-- [ ] Ranked/all-machine arbitration and TrueSkill require GS-007 session directory integration.
+- [x] *(Closed by GS-006e for arbitration; TrueSkill computation is a documented limit in the final register.)* Ranked/all-machine arbitration and TrueSkill require GS-007 session directory integration.
 
 CNA fake harness **99 checks pass**, including four local signed-in gamers; Net **316/316 pass**
 (including real ENet two-process data/host migration); GamerServices **388 run, 387 pass, 1 existing
@@ -659,9 +665,9 @@ public online NetworkSession/InviteAccepted/relay/avatar capability is claimed b
   accounts, achievements and boards. Host lease expiration still closes sessions; no host migration.
 - [x] Canonical protocol header/parser/golden copies synchronized; drift/property/C ABI gates
   10/10 passed. Affected client/protocol/C API harnesses build. Public C ABI unchanged.
-- [ ] GS-007d: typed private client directory/invitation boundary, strict response validation,
+- [x] *(Closed by the GS-007d checkpoint.)* GS-007d: typed private client directory/invitation boundary, strict response validation,
   deterministic fake model and real two-CNA-process control tests (including four local credentials).
-- [ ] GS-007e/GS-008: authenticated realtime relay and public online NetworkSession integration;
+- [x] *(Closed by GS-008a-d and GS-007e1-e3.)* GS-007e/GS-008: authenticated realtime relay and public online NetworkSession integration;
   Guide invite confirmation/InviteAccepted/BeginJoinInvited, lifecycle/event parity and Ranked writes.
 
 Server c1dcdda99401133ccf146530592a0fe81638b248: clean `-Werror` build, 4/4 CTest passed
@@ -704,7 +710,7 @@ server c1dcdda99401133ccf146530592a0fe81638b248.
   join/leave/retry/filtering, expired owner+secondary/secondary-only credentials, revoked secondary
   at Update and multi-local leaderboard scope recovery. Private control probe is NOT an original
   XNA online NetworkSession gameplay sample or Internet-connectivity proof.
-- [ ] Next GS-008a: canonical bounded realtime relay framing/tickets; GS-008b secure relay and
+- [x] *(Closed by GS-008a1/a2, GS-008b and GS-007e.)* Next GS-008a: canonical bounded realtime relay framing/tickets; GS-008b secure relay and
   loopback ENet bridge, then public online NetworkSession/Guide invitation integration (GS-007e).
 
 Validation: clean affected native/C API build, zero new warnings. 11/11 new deterministic tests
@@ -758,8 +764,8 @@ CNA-specific transport routing; generic proxy change remains the only runtime mo
 - [x] GS-008c: CNA libcurl WSS connection and loopback UDP routes preserving ENet datagrams,
   protocol/certificate validation and controlled Net updates. SystemLink keeps its direct path.
 - [x] GS-008d1: two actual ENet clients in separate rootless outbound NAT namespaces.
-- [ ] GS-008d2: client reconnect/server-restart and remaining authenticated fault corpus.
-- [ ] GS-008d: genuine ENet exchange under relay-only isolated routing/firewall conditions,
+- [x] GS-008d2: client reconnect/server-restart and remaining authenticated fault corpus (see GS-008d2 checkpoint).
+- [x] *(Closed by GS-008d1 and GS-008d2.)* GS-008d: genuine ENet exchange under relay-only isolated routing/firewall conditions,
   forged source/destination/malformed/rate/disconnect/revoke/server failure/reconnect corpus.
 - [x] GS-007e1: private authenticated roster/control gate and genuine spoof/refusal relay probes.
 - [x] GS-007e2a: exact null/family guards for public Net End operations.
@@ -770,7 +776,7 @@ CNA-specific transport routing; generic proxy change remains the only runtime mo
 - [x] GS-007e2c3: consume prepared transport in standard public create/join and E2E.
 - [x] GS-007e2c: owned online create/join preparation, including cleanup on abandonment/failure.
 - [x] GS-007e2: public async operation ownership/preparation and online lifecycle wiring.
-- [ ] GS-007e: publish standard PlayerMatch/Ranked lifecycle and Guide/invited joins once directory
+- [x] *(Closed by GS-007e2c3b and GS-007e3.)* GS-007e: publish standard PlayerMatch/Ranked lifecycle and Guide/invited joins once directory
   plus realtime transport succeeds; do not report membership-only success as multiplayer.
 
 Relay control/membership and game datagrams are separate protocols. WSS uses the existing
@@ -1402,7 +1408,7 @@ invited refusal, untouched invitation/membership, migration and restart. Canonic
 doc updated; envelope/CNR v1/header/golden encodings unchanged. Validation below.
 
 - [x] GS-007f1a: server persistence/client/fake Ranked lobby-only admission, tests and integration.
-- [ ] GS-007f1b: public AllowJoinInProgress validation/event propagation after public Ranked
+- [x] *(Closed by GS-007e2c3b: Ranked `AllowJoinInProgress` refuses, test `RankedCreateRefusesJoinInProgressAndPrivateSlotsFollowReferenceBounds`.)* GS-007f1b: public AllowJoinInProgress validation/event propagation after public Ranked
   construction is enabled; host/dispose/unchanged-value order needs focused standard API tests.
 Public online construction is still refused, so do not invent a public test factory solely to
 instantiate an otherwise unreachable Ranked session. Existing public setter/migration guard
@@ -2021,12 +2027,744 @@ it is gone, re-unpack Debian slirp4netns 1.2.1-1.1 / libslirp 4.8.0-1+deb13u1 th
 Open follow-ups created or confirmed by this slice (not claimed):
 - GS-007h: online host migration (server ends the directory on host leave; AllowHostMigration
   is stored but inert online).
-- GS-007i: IsReady / per-gamer state propagation (SystemLink lacks it too) and reference
-  IsEveryoneReady (all gamers, non-empty).
+- GS-007i (done, see "GS-007i complete" below): IsReady / per-gamer state propagation (SystemLink
+  lacks it too) and reference IsEveryoneReady (all gamers, non-empty).
 - GS-007j: NetworkMachine.RemoveFromSession (reference validation order known; needs a server
   host-kick operation) and reference AddLocalGamer validation; online AddLocalGamer currently
   refuses NotSupportedException (directory admits one complete group per machine).
-- GS-007k: AvailableNetworkSessionCollection.Dispose should make its listings unjoinable
-  (reference ObjectDisposedException); QualityOfService for service listings is not measured.
+- GS-007k (done, see Priority 10): AvailableNetworkSessionCollection.Dispose should make its
+  listings unjoinable (reference ObjectDisposedException); QualityOfService for service listings is
+  not measured.
 Next: GS-007e3 invited joins/Guide invitation flow/InviteAccepted, then Ranked/PlayerMatch
 leaderboard lifecycle (GS-006d), reconnect/failure (GS-008d2), remaining Guide, avatars.
+
+### GS-007e3 complete: Guide invitations, InviteAccepted and JoinInvited
+
+- [x] Recipient inbox polling at the outer GamerServicesDispatcher.Update (5 s, 30 s backoff,
+  bounded 16 queued/1,024 remembered), one Guide prompt per pending invitation; Accept ->
+  service acceptance -> NetworkSession.InviteAccepted (reference pending-until-first-subscriber);
+  Decline dismisses; closing leaves it pending; receipt never accepts.
+- [x] JoinInvited (both overloads + async): Guide-accepted invitation only (reference NotInvited/
+  InviteeNotSignedIn -> InvalidOperationException), invitee first, consumed once, separate
+  JoinInvited End family. Works synchronously inside the InviteAccepted handler (SAMPLE-096 shape).
+- [x] Guide.ShowGameInvite(player, recipients): reference list validation, gamertag prompt when
+  empty, confirmation, send for the active online session; gamer card "Invite to game".
+  ShowGameInvite(sessionId) -> NotSupportedException (reference: Windows Phone only).
+- [x] Invitation state holds no backend ownership (identity/weak only).
+- [x] Deterministic 5 cases; public two-process E2E with invitations for both categories, localhost
+  and separate NAT namespaces.
+
+Validation: Net **459/459**; GamerServices **459 pass / 1 known HEADLESS skip**; fake **113**;
+private gates **13/13**; server full corpus **17/17, zero skips, 217.97s** (`build/invites-full.log`).
+C inventory 472 headers / 8,141 symbols (one reviewed not-applicable friendship rule CBIND-GS-007e3).
+
+Known-good integration set (GS-007e3):
+- CNA 4279fe3e4 (feature/gamer-services-server)
+- sharp-runtime 007280bd1cc789f851f7f454a5041c8ce2479e13 (unchanged)
+- cna-gamer-services-server bcad5ed (feature/gamer-services-server)
+
+Open from this slice (recorded, not claimed): Guide "Join session in progress" for a friend
+(push-mode InviteAccepted, needs friend-session presence from the server); party invites
+(LocalNetworkGamer.SendPartyInvites/ShowParty) — no CNA party concept yet; IsCurrentSession=true
+path is implemented but not exercised (the directory refuses inviting existing members);
+Guide.DelayNotifications is still a no-op (would defer the invitation prompt).
+Next: GS-006d online leaderboard lifecycle (per-machine unarbitrated epochs at Playing/Lobby,
+leave/dispose), then Ranked arbitration design, GS-008d2 relay reconnect, remaining Guide,
+avatars, samples, final audit.
+
+### GS-006d/GS-006e complete: online leaderboard lifecycle and Ranked arbitration
+
+Evidence: Microsoft Learn LeaderboardWriter/WriteTrueSkill pages (licensed XDK titles only;
+Indie titles got NotSupportedException): writes flush at host EndGame; nonarbitrated rows are
+written by their own machine; Ranked machines write arbitrated statistics and TrueSkill for all
+gamers, otherwise only the host reports TrueSkill; leaving Ranked players get "bad statistics".
+- [x] GS-006d: per-machine local epochs opened at Playing on every online machine, committed at
+  Lobby after WriteUnarbitratedLeaderboard; host publishes Playing/Lobby only after its own
+  transition (failed EndGame stays retryable); client commit failure abandons; leave/Dispose/
+  session loss offer IsLeaving writes. State is applied before GameStarted/GameEnded/SessionEnded
+  (reference ProcessStateChanged order).
+- [x] GS-006e: server schema 10 arbitration rounds; commit arbitration context; strict majority of
+  the machines that reported each row; ranked-arbitration capability. Client: Ranked raises
+  WriteArbitratedLeaderboard + WriteTrueSkill for every gamer on every machine, remote departure
+  during Ranked play raises IsLeaving events and the departed gamer stays in the report, a leaving
+  machine reports only its own gamers; outside Ranked only the host raises WriteTrueSkill and rows
+  about remote gamers are not submitted (no storage authority).
+- [x] Fix: remote gamers now carry their service identity (their writers used the offline store).
+- [x] Fix: Gamer copy/move (now protected) bind a fresh LeaderboardWriter to the new object; a moved
+  gamer's writer used to point at the destroyed temporary (make_unique(CreateInternal) exposed it).
+- [x] *(Documented limit, listed in the final register.)* CNA computes no TrueSkill (skill boards are ordinary arbitrated boards) — documented gap.
+
+Validation: Net **465/465**; GamerServices **459 pass / 1 known skip**; fake **113**; private gates
+**13/13**; server **18/18, zero skips, 213.91s** (`build/ranked-full.log`) incl. 43 arbitration
+assertions and the public two-process Ranked arbitration read-back. C inventory 8,145 symbols
+(reviewed not-applicable rules for Gamer's protected copy/move members).
+Server 57aeb0f; runtime 007280bd unchanged; CNA commit follows this entry.
+
+### GS-008d2 complete: relay/directory recovery for live online sessions
+
+- [x] RelayTransport::reconnect(ticket): a failed WSS worker is replaced with fresh one-use
+  authority while the loopback route sockets (and so ENet peer addresses) are kept.
+- [x] Engine recovery window 15 s: relay failure -> async ticket request on the origin executor
+  (no owning capture) -> reconnect, retried each second; transient directory failures
+  (SESSION_SERVICE_UNAVAILABLE, RATE_LIMITED) retried via the pump. Authority refusals
+  (NOT_AUTHORIZED, UNAUTHENTICATED, NOT_FOUND) end the session immediately, as does exceeding the
+  window. Relay ENet peers use 20 s/30 s timeouts so they outlast the window.
+- [x] Deterministic: reconnect inside the window keeps peers/data (no new welcome/join); an
+  unrecoverable relay fails exactly once after the window.
+- [x] Real: live public PlayerMatch and Ranked sessions survive a server restart (same port/DB),
+  localhost and separate NAT namespaces; owned-engine probes still observe revocation and final
+  server loss (now after the window).
+Finding recorded: after an outage ENet's packet throttle drops unreliable sends for a while; the
+acceptance harness treats that one packet as best-effort after a restart and strict otherwise.
+
+Validation: Net **466/466**; server **20/20, zero skips, 340.73s** (`build/recovery-full.log`).
+Known-good set: CNA (this commit), server (restart acceptance commit), runtime 007280bd.
+Open: reconnect across a *client* network change is the same path but only server restart is
+measured; host migration is still absent online (GS-007h).
+
+### GS-005c complete: remaining Guide panes (reference validation, service-backed where possible)
+
+Reference (managed Guide.cs): ShowComposeMessage text <256 chars then Gamer.ValidateGamerList
+(<=100, no null/disposed); ExecuteKernelCall panes throw ArgumentNullException/ObjectDisposed for
+the gamer before service work; ShowMarketplace requires a signed-in LIVE profile with the purchase
+privilege (GamerPrivilegeException); ShowGameInvite(sessionId) is Windows-Phone-only; the Windows
+`player != One` check is a Windows restriction (Xbox 1..4), so CNA keeps 0..3.
+- [x] Server schema 11: account messages (bounded inbox, sender rate) and prefer/avoid reviews;
+  avoided hosts are not offered by sessions.find (31 assertions).
+- [x] ShowComposeMessage (keyboard compose, gamertag prompt when no recipients), ShowMessages
+  (inbox: next/reply/delete, marks read), ShowPlayerReview (prefer/avoid/clear), ShowPlayers
+  (recently met online players -> gamer card), ShowAchievementsEXT (earned list),
+  DelayNotifications (defers invitation prompts, <=120 s, active delay kept).
+- [x] ShowMarketplace/ShowParty/ShowPartySessions open an explanatory Guide pane: CNA has no
+  store/payment or party service (titles are fully licensed; IsTrialMode stays false).
+  LocalNetworkGamer.SendPartyInvites remains a documented no-op for the same reason.
+- [x] Null gamer for ShowFriendRequest/ShowGamerCard/ShowPlayerReview -> ArgumentNullException.
+Validation: GamerServices 465 pass / 1 known skip (7 new pane cases); Net 466/466; fake 113;
+private gates 13/13; server 21/21 (354.87s). Messages/reviews are verified by server unit tests
+and the deterministic Guide panes; not yet exercised by a two-process E2E.
+
+### GS-009 design (2026-09-28): standard XNA avatars on original CNA assets
+
+Reference facts (Windows IL + spec XML): 71 bones with the parent table already in
+AvatarRenderer.cpp; BindPose, AvatarAnimation.BoneTransforms and Draw's bones are local
+transforms relative to the parent; every Draw bone must be decomposable (else
+InvalidOperationException); Draw during loading shows the standard loading effect when the
+constructor asked for it; IsValid is `Length == 1021 && description[0] != 0`; Height is in
+meters, feet to top of head; a signed-in gamer's description is cached per player index and
+Changed fires (and the cache entry drops) when that avatar changes; the renderer obtains the
+device through `GamerServicesDispatcher`'s IGraphicsDeviceService.
+
+Decisions:
+- Encoding (CNA v1): byte 0 = format version (1, keeps the IL IsValid rule), bytes 1-3 "CNA",
+  body type, height in mm, build (weight), catalog version, RGB colors (skin, hair, eyes, top,
+  bottom, shoes, accessory), catalog item ids (hair, top, bottom, shoes, glasses, hat), zeroed
+  reserved bytes, CRC-32 over bytes 0..1016 in 1017..1020. A foreign or damaged buffer keeps the
+  IL IsValid answer, but reads as Height 0 / Female and renders Unavailable.
+- Rig: one canonical CNA 71-slot rig per body type in exactly the XNA parent topology, Y up,
+  facing +Z, feet at y = 0, meters, identity bind rotations (bind pose = local translations).
+  No reduced internal skeleton exists, so no private mapping is needed.
+- Draw uses each supplied bone's rotation and scale; translations come from the avatar's own
+  bind pose (the root keeps the supplied translation), so preset animations authored once fit
+  every height and build.
+- Assets: original, procedural GLB files generated deterministically by
+  tools/avatar_builder (pure Python, no Blender or third-party input): per-body-type bodies,
+  face-feature atlas (13 eyes, 4 eyebrows, 13 mouths), hair/top/bottom/shoes/glasses/hat items,
+  and one animation GLB holding the 30 presets (CUBICSPLINE rotations, expression keys in
+  animation extras). A manifest lists every item by id, body type, SHA-256 and size.
+- Distribution: the v1 base catalog is embedded in the library (offline CreateRandom works);
+  the service stores user -> description, serves its catalog manifest and asset blobs by
+  SHA-256; the client caches downloaded blobs by hash in the user cache directory, verifies the
+  hash on every read, and substitutes the embedded default for an item it cannot resolve.
+- Renderer: an invalid description is Unavailable; a valid one starts Loading, resolves and
+  assembles CPU data on a worker, becomes Ready (bind pose available), uploads GPU resources on
+  the owner thread at the first Draw, and renders with SkinnedEffect lit by exactly
+  LightDirection/LightColor/AmbientLightColor, plus face-feature decals selected by the
+  expression.
+- EXT retirement happens only after demos/tests run through the standard API.
+
+### GS-009a..d complete: encoding, original 71-slot catalog, standard AvatarAnimation/AvatarRenderer
+
+- [x] GS-009a (3ff1b02c1): CNA v1 description encoding, real CreateRandom, Height/BodyType decode.
+- [x] GS-009b: `tools/avatar_builder/generate_avatar_catalog.py` (+ `cna_avatar/` package) generates
+  the original catalog deterministically: canonical 71-slot rig in XNA topology with identity
+  bind rotations; toy-like bodies with jointed fingers, face-feature decals and a cheek texture;
+  18 wardrobe items fitted to both bodies; a 1024x320 expression atlas (14 eyes with iris layers,
+  5 eyebrows, 14 mouths); 31 presets authored with FK/two-bone IK key poses as CUBICSPLINE
+  curves with expression keys. 41 files, 2.68 MB (0.8 MB compressed), embedded by
+  `cmake/EmbedBinaryFiles.cmake` (CMake-only generator, ~20 s compile, 360 MB peak).
+- [x] GS-009c: strict GLB reader (cgltf, embedded buffers only, exact rig/topology, bounded
+  vertices/indices/images/keys), manifest parser, SHA-256-verified embedded resolution; standard
+  AvatarAnimation with real lengths, 71 local transforms, keyed expressions and the reference
+  Update wrap/clamp/overflow rules (modulo of ticks, position==Length kept).
+- [x] GS-009d: AvatarRenderer Loading->Ready on one shared loader thread (model cache per
+  description), BindPose scaled to height, Draw with rotation/scale from the supplied bones and
+  the avatar's own bind offsets, decomposability check, expression decals, exact
+  LightDirection/LightColor/Ambient lighting, animated loading silhouette, device from the
+  dispatcher's IGraphicsDeviceService (XNA AvatarHelpers rule), state save/restore, dispose while
+  loading. `CNA_EASYGL_ROOT` added so a nested worktree can build GL renderers.
+- EXT bridge: the Avatar EXT demos/tests pass an explicit no-avatar description (null is now the
+  reference ArgumentNullException); retirement is GS-009f.
+
+Validation: GamerServices **489 pass / 1 known HEADLESS skip** (avatar suites 132); Net
+**466/466**; EasyGL private runner `EasyGL_AvatarRenderer_*` **4/4** incl. new
+`EasyGL_AvatarRenderer_Standard` (standard API only: loading effect, colors, expression-only face
+change, Wave arm, background untouched); private gates **15/15** (13 recorded + CApi_AvatarsSmoke
++ GamerServices_AvatarCatalogUpToDate). Build trees: `cmake-build-debug` (HEADLESS),
+`cmake-build-opengl33` (OPENGL33, system SDL3, `-DCNA_EASYGL_ROOT=<libcna>/easy-gl
+-DCNA_SHARP_RUNTIME_ROOT=<libcna>/sharp-runtime -DCNA_ENABLE_DRACO=OFF`). Observed, not caused
+here: `tools/platform/sdl_classify.py --check` fails on `SDL_TOUCH_MOUSEID` introduced by
+committed c74569ae5 (SAMPLE-046).
+Known limits: `AvatarDescription.Changed` is still never raised (value-type C++ mapping; see
+GS-009e); the Blender pipeline/EXT content remains until GS-009f.
+
+### GS-009e complete: service-backed avatar descriptions and catalog distribution
+
+- [x] Server schema 12 (`avatars`, `avatar_catalogs`, `avatar_catalog_items`,
+  `avatar_catalog_assets`), capability `avatars`: `avatars.get` (1..16 ids, hex or null),
+  `avatars.set` (own avatar; v1 layout/CRC/reserved/ranges and catalog items/slots validated;
+  2 s spacing), `avatars.catalog` (newest or requested manifest). Catalog files live in the
+  immutable asset store and `assets.read` authorizes them for every title. Admin:
+  `avatar-catalog <dir>` (strict manifest, per-file hash/size/type, versions immutable, items
+  never disappear or change slot) and `avatar <user> random [female|male] | set | clear`.
+- [x] Client: `IGamerServicesBackend::avatars/avatarCatalog` (online with strict response
+  validation; fake fixture avatars + `setFakeAvatarCatalog`). `BeginGetFromGamer` reads a
+  service-identity gamer's avatar through the executor (Update-boundary completion);
+  otherwise the synchronous all-zero path. Unreachable service -> invalid description.
+- [x] Newer catalogs: the loader thread asks the service for the manifest (cached per process)
+  and resolves each file by hash: embedded when the library has the same name+SHA-256, else the
+  backend's verified disk cache/`assets.read`, re-verified against the manifest; unresolvable
+  items substitute the slot default. Face atlases cached per atlas hash.
+
+Validation: GamerServices **496 pass / 1 known skip** (ServiceAvatarTests 7, named Service* so
+`IsInitializedDefaultsFalse` keeps running first); server `service_avatars` **66 assertions**;
+real E2E `service_cna_avatars`: Guide sign-in, own/lookup/absent descriptions, catalog v2 hat
+fetched by hash + cached (only that file), renderer Ready with 0 substitutions, twice (first/
+cached); server full corpus **23/23, zero skips, 340.19s** (`build/avatars-full.log`) with every
+CNA probe and the NAT helper.
+Known gap: `AvatarDescription.Changed` is not raised (documented in docs/avatars.md).
+
+### GS-009f complete: demos on the standard API, Avatar EXT retired
+
+- [x] Demos rewritten on the standard API only (`GraphicsDeviceManager` + `GamerServicesComponent`,
+  `AvatarDescription::CreateRandom`, `AvatarAnimation`, `AvatarRenderer`, HiDef so `--screenshot`
+  can read the back buffer): `demo_avatar` (presets, new avatar, body type, expression override,
+  orbit), `demo_avatar_animation_gallery` (8 avatars, 31 presets paged),
+  `demo_avatar_dual_compare` (female/male same preset), `demo_avatar_bone_state_boundary`
+  (Unavailable/Loading/Ready/BindPose/ParentBones printed, then custom bone transforms), and
+  `demo_net_avatar_sync` (description bytes sent ReliableInOrder, then position/yaw/preset).
+  `demo_avatar_appearance_tint_studio`, `demo_avatar_wardrobe_hotswap`,
+  `demo_avatar_multi_attach_stress` and the EXT content directory are removed (nothing in them
+  is expressible through XNA). Demo link order fixed to `PRIVATE CNA CNA_GamerServices`
+  (static module archives ahead of libcna.so duplicated the runtime and the GL loader; the
+  untouched `cna_demo_gamer_roster_hud` aborted the same way before).
+- [x] Avatar EXT surface removed: `AvatarAppearanceEXT`, preset/body-type name helpers,
+  `AvatarRenderer::EnableRealRenderingEXT`/`DrawRealEXT`/`SetAppearanceEXT`/`PartTintEXT`,
+  `AvatarAnimation::Set/GetRealClipNameEXT`, their tests and the three EXT GPU tests.
+  Generic `SkinnedModelEXT` stays: its attach/remove test moved to
+  `modules/graphics/examples/skinned_model_attach_part_integration_test.cpp`
+  (`EasyGL_SkinnedModel_AttachPart`, `Vulkan_SkinnedModel_AttachPart`, OpenGL4 corpus);
+  `Vulkan_AvatarRenderer_Standard` and the OpenGL4 corpus entry reuse
+  `avatar_standard_render_test.cpp`.
+- [x] C API 0.33.0: eleven avatar EXT routes and `CNA_AvatarAppearanceEXT` removed (3,204
+  exports), `CNA_AvatarRendererInfo` keeps its size with `is_disposed` + reserved bytes; abi
+  baseline, bool contract, compatibility matrix, coverage (rules re-approved), limitations,
+  release gate, ABI_VERSIONING and GAMER_SERVICES regenerated/updated. `GuideSmoke` expectations
+  corrected to GS-005c behavior (panes needing a service player are NOT_SUPPORTED without one,
+  marketplace INVALID_STATE).
+- [x] Docs/tools: `docs/avatar-real-rendering-ext.md` removed; generic `docs/skinned-model-ext.md`
+  added; `docs/avatar-demos.md` rewritten; coverage/model-pipeline/README references updated;
+  THIRD_PARTY_NOTICES' MakeHuman/Mixamo section replaced by the original-catalog statement;
+  Blender pipeline scripts removed from `tools/avatar_builder/` (README now documents only the
+  catalog generator); `tools/avatar_asset_pipeline/` kept as a generic glTF -> SkinnedModelEXT
+  converter without MakeHuman/Mixamo instructions.
+
+Validation: GamerServices **463 pass / 1 known skip**; Net **466/466**
+(`ENetDiscoveryServiceTest.*` and one host-promotion test fail only when ctest runs them
+concurrently with other discovery users on UDP 61190; 9/9 serially); C API 110 ctests with
+three environment failures that predate this work (`CApi_AudioSmoke`/`AudioUnavailableSmoke`
+expect the NULL audio platform, `CApi_ContentSmoke` the content corpus); all C API gates pass;
+EasyGL private runner `EasyGL_AvatarRenderer_Standard` + `EasyGL_SkinnedModel_AttachPart` 2/2;
+new `cmake-build-vulkan` (only these targets built, 89% ccache hits) `Vulkan_AvatarRenderer_Standard`
++ `Vulkan_SkinnedModel_AttachPart` 2/2 on the private runner; OpenGL4 parity corpus regenerated;
+the four standard demos ran `--smoke` with screenshots inspected.
+Open: `demo_net_avatar_sync` aborts without a signed-in gamer because GS-004 removed fabricated
+profiles and no offline local profile exists yet -> GS-004l (offline local profiles).
+The stale avatar-EXT comments in `VertexPositionNormalTextureSkinned.hpp`, `SkinnedModelEXT.hpp`
+(widely included) and `ContentManager.cpp` were fixed together with GS-001i so one rebuild covered
+both.
+
+### GS-001i complete: integrate committed next (FULLSCREEN-001/002)
+
+Merged committed `next` 9bbba48d8 (the GS-007e2c3b commits were already on this branch; new:
+FULLSCREEN-001/002 renderer presentation/recovery fixes). Those commits change
+`GraphicsDevice.hpp` without refreshing the C API coverage inventory, so `CApiCoverageMatrix`
+failed after the merge; `docs/c-api/COVERAGE.md` is regenerated here (hash only, 8,126 symbols
+unchanged). Post-merge debug rebuild (95% ccache misses from the changed renderer headers):
+GamerServices 463/1 skip, Net 466/466, SkinnedModel/skinned-vertex/AnimationPlayer/containment
+94/94, C API gates pass (the three environment smoke failures above remain).
+Known-good set: CNA feature/gamer-services-server (this checkpoint), server bbfe2d5,
+sharp-runtime 007280bd.
+
+### GS-004l complete: offline local profiles (SystemLink without a service)
+
+GS-004 removed the fabricated Stub gamers, which left every SystemLink demo (and any offline XNA
+game) without a signed-in gamer. Reference facts (Windows IL, `GamerServicesDispatcher.Update` /
+`SignedInGamer.HandlePlayerSignInChanged`): gamers signed in before the game starts become
+`SignedInGamers` entries, raising `SignedIn`, at the first `Update`; a local profile is a gamer with
+`IsSignedInToLive` false.
+
+- [x] `LocalProfiles` store (`CNA_GAMER_SERVICES_PROFILES_DIR`, else XDG data / `~/.local/share`,
+  else `%LOCALAPPDATA%`): version-1 JSON, at most 32 profiles, 256 KiB bound, names 1-15 ASCII
+  letters/digits/single spaces starting with a letter, unique ignoring case; each profile keeps a
+  random CNA v1 avatar. Atomic writes, a `flock` between processes (the directory is created
+  before the lock -- the concurrency test found the first writers racing without it), an
+  unreadable store is never overwritten, malformed entries are skipped, a lost avatar is replaced.
+- [x] `IGamerServicesBackend::signInLocal` + `BackendEvent::signedInToLive`; the dispatcher builds
+  local gamers with `IsSignedInToLive` false, no online-session or purchase privilege, and skips
+  presence publication for gamers without a service identity.
+- [x] `Guide.ShowSignIn(n, false)` without a service: per pane a keyboard prompt listing stored
+  profiles (first unused suggested), creating new ones; invalid or already-signed-in names end
+  with a message; cancel stops. `ShowSignIn(n, true)` without a service throws
+  GamerServicesNotAvailableException. With a service configured, accounts only (unchanged).
+- [x] Automatic sign-in at `Dispatcher.Initialize` without a service: `CNA_GAMER_SERVICES_AUTO_SIGN_IN`
+  (up to four names, created when missing; invalid/duplicate/fifth -> INVALID_CONFIGURATION) or
+  stored `"autoSignIn": true` profiles, delivered at the first Update.
+- [x] `AvatarDescription.BeginGetFromGamer` for a signed-in local profile returns its stored
+  avatar synchronously.
+- [x] SystemLink demos follow the XNA pattern: `GamerServicesComponent` + `GraphicsDeviceManager`
+  (so the Guide prompt draws), `Guide.ShowSignIn` from Update while nobody is signed in, session
+  started once a gamer exists; console demos wait for automatic sign-in and explain otherwise.
+  `demo_net_avatar_sync` shows each profile's own avatar; its last smoke frame now waits for the
+  screenshot Draw (fixed-timestep catch-up skipped it). C API `cna_guide_show_sign_in` docs and
+  `GuideSmoke` updated (local sign-in opens and cancels; online-only NOT_SUPPORTED).
+
+Validation: GamerServices **477 pass / 1 known skip** (LocalProfileTests 14: store rules, reuse,
+unreadable store, malformed entries, env/flag auto sign-in, six concurrent processes, Guide create/
+offer/second pane/invalid/duplicate/cancel/online-only, profile avatar, and startup sign-in in a
+re-executed fresh process); Net **466/466**; C API ctests pass except the three pre-existing
+environment smokes. Private runner, OPENGL33: all seven networking demos with
+`CNA_GAMER_SERVICES_AUTO_SIGN_IN` exit 0 -- avatar sync (haveRemote=true both sides, screenshots
+inspected: both profile avatars in both processes, persisted across runs), client/server arena,
+simulated conditions, roster HUD, session browser, QoS probe pair, session lifecycle; the QoS probe
+without a signed-in gamer prints the guidance and exits 1.
+Not changed: test runs read the user's profile store like they read the user's service settings;
+a developer who marks profiles `autoSignIn` should point `CNA_GAMER_SERVICES_PROFILES_DIR`
+elsewhere for test runs. Guest sign-in remains unimplemented.
+
+### GS-005d complete: system Guide (Home / Guide button) and keyboard/controller message boxes
+
+Found while porting SAMPLE-096 Invites: the unchanged game never calls `Guide.ShowGameInvite`; on
+Xbox (Guide button) and Games for Windows LIVE (Home) the player opens the system Guide to invite.
+CNA had no such entry point, and Guide message boxes accepted only mouse clicks, so keyboard and
+controller players could not answer the invitation prompt at all.
+
+- [x] `openSystemGuide(player)` / `pollSystemGuideButton()` (outer `Dispatcher.Update`, only when the
+  Guide draws in a game): nobody signed in -> Sign in (1, 2 or 4 panes covering the player);
+  account -> Friends / Invite to game / Messages / Sign out; local profile -> Sign out. Failures
+  (e.g. no online session to invite to) show as a Guide message. `CNA_GAMER_SERVICES_GUIDE_BUTTON=0`
+  disables the shortcut.
+- [x] Message boxes: arrows/Tab, D-pad or left stick move the focus; Enter/Space/A choose;
+  Escape/B/Back cancel (no button). Navigation edges start as held, so the key that opened a box
+  cannot answer it. The box widens to fit its button row (four buttons overflowed).
+- [x] `docs/c-api/COVERAGE.md` hash refreshed: GS-004l added a tracked internal header, which the
+  inventory counts only once committed (the gate therefore passed before that commit).
+
+Validation: GamerServices **483 pass / 1 known skip** (SystemGuideTests 5; keyboard message-box
+navigation through a canned platform keyboard); Net 466/466; C API gates pass (three environment
+smokes as before). SAMPLE-096 acceptance below exercises the real Home key and message boxes.
+
+### Priority 9: formerly blocked XNA samples (complete)
+
+Ports live on cna-samples branch `feature/gamer-services-samples` (worktree
+`/rv/data/development/github.com/libcna/cna-samples-gamer-services`, from committed `develop`
+053ab42; not merged), built in its persistent `cmake-build-release` (OPENGLES3, Release, pointed at
+this CNA worktree through `CNA_SAMPLES_CNA_ROOT`). Acceptance scripts/evidence go in new files under
+the retained audit roots; nothing existing there is modified.
+
+- [x] SAMPLE-096 Invites (cna-samples 3fb4799): the PeerToPeer port plus the upstream differences
+  (PlayerMatch, `InviteAccepted` -> `JoinInvited`). `scripts/capture-cna-invites-gs.py`: own
+  verified-TLS service, two accounts, two Release processes on private Xvfb displays; Guide sign-in
+  via the unchanged `ShowSignIn(4, false)`, PlayerMatch create, Home -> "Invite to game" -> gamertag
+  -> send, guest Guide invitation -> Accept -> sample handler `JoinInvited`, both tanks and labels on
+  both screens, guest driving reaches the host, both exit 0 (`evidence/gs-invites-20260928/`). The
+  port found GS-005d (no system Guide; mouse-only message boxes).
+- [x] SAMPLE-087 AvatarShadows (cna-samples 03d9bfe): four source units line by line; content built
+  for Windows/HiDef from the unchanged sources with the official pipeline
+  (`scripts/build-windows-hidef-content.sh`; upstream is Xbox 360-only). 16 random standard-API
+  avatars with `CreateShadow` shadows via the compiled `GroundEffect.fx` and a `DepthFormat.None`
+  target (`evidence/gs-avatarshadows-20260928/`).
+- [x] SAMPLE-075 NetworkStateManagement (cna-samples 844b717): all 26 compile units, the official
+  Windows/Reach XNBs. `scripts/probe-cna-ngsm-single.sh` (Single Player through the loading worker)
+  and `scripts/capture-cna-ngsm-gs.py --mode systemlink|live` (evidence `evidence/gs-ngsm-20260928/`):
+  Guide sign-in (local profile / account), create/find/join, both ready -> host lobby starts ->
+  gameplay with two players -> host "Return to Lobby" (nobody ready) -> guest leaves, host told;
+  LIVE adds the system-Guide invitation accepted through the sample's `InviteAccepted` ->
+  `BeginJoinInvited`; both processes exit 0 in every mode. The port found GS-007i (readiness) and
+  GS-007l (gamer order); Invites was rerun after GS-007l (`evidence/gs-invites-20260929-order/`).
+- [x] Minimal XNA-shaped achievements/leaderboards compatibility sample (cna-samples 378483b,
+  `samples/AchievementsLeaderboards/`): no original exists, so a C# reference in the collection's
+  style (`reference/`) compiled with warnings as errors against the shipped XNA 4.0 Windows
+  assemblies (`/rv/tmp/samples/GS-AchievementsLeaderboards/scripts/build-reference.sh`), and its
+  line-by-line C++ port. `scripts/capture-cna-achievements-leaderboards.py` (evidence
+  `evidence/gs-achievements-leaderboards-20260929/`): own TLS service, three achievements with
+  original PNG pictures (one secret), a BestScoreLifeTime board with an int32 column and nine seeded
+  rows, two accounts; three sequential processes: Guide sign-in, PlayerMatch rounds written in
+  `WriteUnarbitratedLeaderboard`, awards, pictures, best-row aggregation, page two via
+  `BeginPageDown`/`BeginPageUp`, persistence into a new process; all exit 0. Found GS-004m and GS-005e.
+
+Net fidelity item found by SAMPLE-096, fixed as GS-007l (below): on a joining machine CNA's
+`AllGamers` held the local gamer before the existing ones, so `GamerJoined` (replayed at subscription)
+gave the joiner index 0 and SAMPLE-075's lobby listed the joiner above the host.
+
+Known-good cross-repo set: CNA 45c17d1d8 (+ this plan commit), cna-samples feature/gamer-services-samples
+378483b, server bbfe2d5, sharp-runtime 007280bd. (Previous: CNA 0a078200d / cna-samples 844b717;
+CNA 45c23451b / cna-samples 03d9bfe.)
+
+### GS-007i complete: lobby readiness on every transport
+
+Found by the SAMPLE-075 port: its lobby starts the game when `IsEveryoneReady`, and "Return to Lobby"
+went straight back into gameplay because readiness never crossed machines and never cleared.
+Reference (IL): the `IsReady` setter refuses a gamer that has left, a remote gamer, and a session
+outside `Lobby` (InvalidOperationException), and an unchanged value sends nothing; `IsEveryoneReady`
+is false for an empty session and otherwise asks every gamer; `ResetReady` is host-only in `Lobby`;
+every gamer's readiness is cleared when the game ends.
+
+- Wire: `GamerReadyBroadcast` (0x08) carries 1..31 (id, ready) pairs; bounded by
+  `validateServiceControlPacket`.
+- SystemLink: a client reports its own gamers to the host; the host accepts only the reporting peer's
+  own ids, applies and relays; clients accept reports only from the host; a joining machine receives
+  the ready gamers after its welcome.
+- Online: the same rules through `ServiceGamePacketPolicy` (a host accepts only the source machine's
+  gamers, a client only the host); the engine replays readiness after every welcome, including a
+  client's re-hello after a directory revision, so a report dropped while that client's directory view
+  lagged behind a new gamer still converges. The recipient's own gamers are never echoed back, so a
+  change in flight is not undone. The XNA binding applies reports only in its own `Lobby` state; the
+  engine does not gate on the directory's state (a host reaches `Lobby` at `EndGame` before the
+  directory records it).
+- The transport's setter is private (`NetworkSession::ApplyGamerReadyInternal`, reached through
+  `ENetBackend`/`OnlineSessionBinding`); no public C++ symbol was added. C API:
+  `cna_network_gamer_set_is_ready` documents `CNA_RESULT_INVALID_STATE`; `NetSmoke` asserts it for a
+  detached gamer.
+
+Tests: session/gamer reference checks, three ENet tests (host<->client, late joiner, client authority),
+`ServiceENetSessionTest.LobbyReadinessIsRelayedOwnedAndReplayedToALateJoiner` (three machines, NOT_AUTHORIZED,
+replay, no echo) and `OnlineNetworkSessionTest.LobbyReadinessCrossesTheServiceSessionAndClearsWhenTheGameEnds`
+(XNA API over the service session, EndGame clear, host ResetReady). CnaNetTests 472/472,
+CnaGamerServicesTests 483 + 1 skip, C API gates pass (the three environment smokes
+ContentSmoke/AudioSmoke/AudioUnavailableSmoke fail as before).
+
+### GS-007l complete: canonical gamer order on every machine
+
+Reference `GamerCollection.Insert` binary-searches by the gamer's session index, so `AllGamers`,
+`LocalGamers`, `RemoteGamers` (and the `GamerJoined` replay that walks `AllGamers`) are in the same
+order everywhere, host first; the kernel may insert in the middle (every index at or above the new
+one is incremented). CNA's cross-machine `Id` plays that index: both transports assign it (online the
+directory ordinal + 1, lowest free; SystemLink the host's free-list), so `NetworkSession` keeps each
+collection sorted by `Id` (stable; nothing is re-sorted when already in order) after a remote gamer is
+added, after a joiner's welcome assigns its own ids, and after a SystemLink host first numbers its
+locals. Seen in SAMPLE-075 (the joiner's lobby now lists the host first) and SAMPLE-096 (tank start
+positions). Tests: `ENetBackendTest.ClientSendsClientHelloAndProcessesServerWelcome` and
+`OnlineNetworkSessionTest.PublicJoinUsesTheFindGroupAndFollowsDirectoryAuthority` assert host-first
+`AllGamers` and replay order. CnaNetTests 472/472, CnaGamerServicesTests 483 + 1 skip, C API gates
+unchanged (inventory current).
+
+### GS-004m complete: `SignedInGamers[PlayerIndex]` finds the player
+
+Found while porting the achievements/leaderboards sample (`Gamer.SignedInGamers[PlayerIndex.One]`).
+XNA IL `SignedInGamerCollection.get_Item(PlayerIndex)` walks the collection and returns the gamer
+whose `PlayerIndex` matches, else null; CNA indexed by the enum's ordinal (the FNA-era port), so
+with only player two signed in, `[PlayerIndex.One]` named player two. Fixed at the one operator, which
+`cna_gamer_get_signed_in_gamer_at_player_index` also uses; the C header/doc text that described the
+positional lookup as canonical was corrected, and the divergence has its row in
+`plans/plan_bindings_upstream.md`. The dispatcher already publishes gamers in slot order. Tests:
+`SignedInGamerCollectionTest.PlayerIndexOperatorFindsThePlayerNotThePosition`, `GamersSmoke` step 10-12
+rewritten. CnaGamerServicesTests 484 + 1 skip; C API gates unchanged apart from the three environment
+smokes.
+
+### GS-005e complete: `Achievement.EarnedDateTime` is local time
+
+Seen in the achievements/leaderboards sample: an achievement earned at 00:40 local time showed the
+previous day. The service records UTC ticks and CNA wrapped them as an unspecified-kind `DateTime`;
+the offline store records `DateTime.Now`. Windows XNA throws for this pro-feature property, so the IL
+does not settle the zone; the Xbox achievement time is a UTC `FILETIME` that .NET's `FromFileTime`
+presents as local, which is what a player reads. The service path now converts with
+`ToLocalTime(TimeZone::CurrentTimeZone())` (kind `Local`); gamer-services links the sharp-runtime
+`TimeZone` component. Test: `ServiceReadLifetimeTest.EarnedDateTimeIsTheServiceTimeInLocalTime`;
+the C struct field documents local ticks. CnaGamerServicesTests 485 + 1 skip.
+
+### Priority 10: final GamerServices/Net behavioral audit (in progress)
+
+- [x] GS-005f `Guide.BeginShowMessageBox` argument rules. Reference `ValidateShowMessageBoxArgs`:
+  title and text non-empty and under 256 characters (UTF-16 units), one to three buttons each
+  non-empty and under 256, focus within them (`ArgumentException`/`ArgumentOutOfRangeException`),
+  then the kernel's refusal while the Guide is visible (`GuideAlreadyVisibleException`, previously
+  `InvalidOperationException`); the overload without a player is player one. The Windows-only
+  "player must be One" rule is not taken (Xbox shows a box for any player). The Guide's own panes
+  (four-entry menus, long friend/message lists) go through the internal
+  `CNA::Internal::GamerServices::showGuideMessageBox`, which the public rules do not bind. C header
+  documents the same results. Test `GuideTest.BeginShowMessageBoxValidatesArgumentsLikeTheReference`;
+  CnaGamerServicesTests 486 + 1 skip, C API gates unchanged.
+- [x] GS-007k disposed search results cannot be joined. Reference `BeginJoin` throws
+  `ObjectDisposedException` when the listing's parent collection is disposed; CNA's `Dispose` only
+  set a flag. Each listing now shares its collection's disposal token (copies included), and
+  `Join`/`BeginJoin` check it right after the null check. Listings a binding constructs directly have
+  no collection and stay joinable (a CNA extension the C API and SystemLink tests use; XNA has no
+  public constructor). Test `AvailableNetworkSessionCollectionTest.DisposingTheCollectionMakesItsListingsUnjoinable`;
+  CnaNetTests 473/473.
+- [x] GS-005g `Guide.IsVisible` getter. Reference: it throws `InvalidOperationException` before
+  gamer services are initialized, and is true while any Guide screen is up. CNA answered false
+  instead of throwing. The public getter now checks initialization; the Guide's own checks (message
+  box/pane refusals, touch suppression, the overlay's modal flag, invitation prompts) use the
+  internal `guideIsVisible()` (the reference's `IsVisibleNoThrow`), so a message box still opens
+  without initialized gamer services where it did before. Tests that relied on another test having
+  initialized the dispatcher were made self-contained; `SystemGuideTest.IsVisibleIsThePublicViewOfTheGuidePanes`
+  and the fresh-process `GuideVisibilityTest.IsVisibleRequiresInitializedGamerServices`;
+  `cna_guide_get_is_visible` reports `CNA_RESULT_INVALID_STATE` before initialization (GuideSmoke).
+  CnaGamerServicesTests 488 + 1 skip. The reference setter is internal; CNA's public no-op setter
+  is left for the ABI removal batch.
+- [x] GS-007j (first half) `NetworkMachine.RemoveFromSession`, which threw `NotImplementedException`
+  (the final audit's OPEN list). Reference checks in order: no gamers -> `ObjectDisposedException`,
+  gamer left / local machine / caller not host -> `InvalidOperationException`; the method is `const`
+  so `gamer->getMachineProperty().RemoveFromSession()` compiles. SystemLink: the host removes the
+  peer's gamers at once (GamerLeave to the others) and disconnects it with ENet data
+  `DisconnectRemovedByHost`; that client ends with `RemovedByHost` and does not attempt migration.
+  The host now groups each connecting peer's gamers into one `NetworkMachine` (they had none).
+  Online: server `sessions.remove` (capability `session-removal`, schema 13 `directory_removals`),
+  host-only, never its own machine; removed users get `REMOVED_BY_HOST` from get/touch/leave and
+  relay-ticket issuance. The session pump queues removals (a machine that already left is read
+  over); the host disconnects a machine it removed with the same ENet code, so the removed client
+  ends with `RemovedByHost` whichever it hears first. C: `cna_network_machine_remove_from_session`
+  documented and `NetSmoke` updated; coverage rule re-approved for the `const` signature.
+  Tests: `NetworkMachineTest.RemoveFromSessionFollowsTheReferenceChecks`, two ENet tests, the
+  engine test `TheHostRemovesAMachineWhichFailsWithRemovedByHost`, two XNA-level online tests,
+  directory fake/typed-client tests, server DirectoryTests (130 assertions), server f23f7c5 (full suite 23/23). Still open in GS-007j:
+  online `AddLocalGamer`, and SystemLink clients do not learn the host's machine grouping (their
+  remote gamers have no shared `Machine`).
+- [x] GS-004n signed-in gamer lifecycle and local-gamer validation (audit OPEN 1, 2, 4 and the
+  reference half of GS-007j's AddLocalGamer). Reference `HandlePlayerSignInChanged` disposes the old
+  gamer before `SignedOut`; CNA instead cleared `IsSignedInToLive`. It now disposes it and leaves the
+  flag. `SignedIn`'s add accessor replays every gamer already signed in (sender null), as XNA's does.
+  `IsFriend`/`GetFriends` follow the reference order: disposed, then not signed in to an online
+  account (`GamerPrivilegeException`), then a null (`ArgumentNullException`) or disposed argument.
+  `BeginGetProfile` refuses a disposed gamer. `AddLocalGamer` checks null, disposed gamer, disposed
+  session, already in the session, Playing without join-in-progress, Ended, and no open public slot.
+  C: `cna_network_session_add_local_gamer` now takes a real `CNA_SignedInGamerHandle` (it refused
+  every handle, "no C representation yet"); `CNA_INVALID_HANDLE` is the null refusal. Tests:
+  `SystemGuideTest.SignedInReplaysOnSubscribeAndSigningOutDisposesTheGamer`, `SignedInGamerTest`
+  friend checks, `NetworkSessionTest.AddLocalGamerFollowsTheReferenceChecks`, `NetSmoke`.
+  CnaGamerServicesTests 490 + 1 skip, CnaNetTests 479/479.
+- [x] GS-005h Guide keyboard input, trial mode and notification position (audit OPEN 10-12).
+  `BeginShowKeyboardInput` follows the reference: title, description and default text each under 256
+  UTF-16 units (`ArgumentException`), a defined player (the Windows "One only" rule not taken), then
+  `GuideAlreadyVisibleException` while the Guide is visible (was `InvalidOperationException` only for
+  a pending keyboard). The Guide's own sign-in/compose/gamer-card/invite/recent-players panes open
+  through the internal `showGuideKeyboardInput`. `IsTrialMode` reports true while
+  `SimulateTrialMode` is set (it was stored and ignored); `NotificationPosition` defaults to the
+  reference `BottomCenter` (CNA draws no toasts, so it is stored only). C doc follows. Tests:
+  `GuideTest.BeginShowKeyboardInputValidatesArgumentsLikeTheReference` and updated pending/position/
+  trial tests; CnaGamerServicesTests 491 + 1 skip.
+- [x] GS-007m Net reference behaviour (audit OPEN 3, 16, 17's validation, QoS and SendPartyInvites
+  notes). `GameStarted`'s add accessor tells a handler added while Playing at once. `ReceiveData`:
+  the offset is checked first (an empty array is refused), a packet that does not fit is refused
+  and stays queued (it used to be consumed and then refused), and both overloads return the packet
+  size; the `PacketReader` overload sizes the reader to the packet (it returned 0 and never
+  truncated the reader). One divergence kept: with nothing queued the reference then reads through a
+  reader that has never held data and throws; CNA's reader has no separate capacity, so it returns 0.
+  A sender that already left is found among `PreviousGamers`. `EnableSendVoice` runs the reference
+  checks (CNA carries no voice); `SendPartyInvites` refuses a profile alone in its party, which with
+  no party service is every profile. The unmeasured `QualityOfService` (service listings) reports
+  `IsAvailable` false, as the reference's internal constructor leaves it. C docs, `NET.md`,
+  `NetSmoke` and the coverage rule follow. Tests: `NetworkSessionTest.GameStartedReplaysForAHandlerAddedWhilePlaying`,
+  `LocalNetworkGamerTest.ReceiveDataReturnsThePacketSizeAndRefusesWithoutDequeuing`, voice/party
+  checks, QoS defaults; CnaNetTests 481/481.
+- [x] GS-004o offline async results and `PropertyDictionary.CopyTo` (audit OPEN 6, 15). An offline
+  `BeginGetProfile`/`BeginAwardAchievement`/`BeginGetAchievements` completes inside Begin (the local
+  store has no deferred work) and now says so through `CompletedSynchronously` (it reported false).
+  `PropertyDictionary.CopyTo` copied nothing and threw `NotImplementedException`; it now copies every
+  pair from the index with the .NET collection checks. (`Add`/`Remove`/`Clear` stay working mutators,
+  the documented Task 8.1 choice; the reference's explicit interface members refuse them.)
+- [x] GS-007n SystemLink session settings, machine grouping and Find filters (audit OPEN 20, 21 and
+  the grouping gap GS-007j left). A joiner reported MaxGamers 31, PrivateGamerSlots 4 and its own
+  AllowJoinInProgress/AllowHostMigration; its remote gamers had no shared `Machine`. Two SystemLink-only
+  control messages (`SessionSettingsBroadcast` 0x09, `MachineRosterBroadcast` 0x0A; the online path
+  takes both from the directory and its validator refuses them): the host sends its settings with
+  each welcome and republishes settings and its wire-id -> machine map whenever they change; clients
+  apply them (remote gamers regroup into shared machines). `AllowHostMigration`/`AllowJoinInProgress`
+  are host-only on SystemLink too (reference `SendAllowCommand`), which is what makes a host's
+  migration choice reach its clients: the two-process migration harness now sets it on the host, and
+  the roster demo moved the call from its client to its host. `Find` keeps only sessions whose
+  non-null search properties match and whose public slots fit the searchers
+  (`ENetDiscoveryService::Matching`). Tests: `HostSendsItsSettingsAndMachineGroupingAndRepublishesChanges`,
+  `AClientReportsTheHostsSettingsAndMachines`, `MatchingKeepsSessionsWithTheSearchedPropertiesAndRoom`,
+  two-process migration; CnaNetTests 484/484. Open: SystemLink `AddLocalGamer` after a client joined
+  is not announced to the other machines (wire ids are assigned only during a ClientHello).
+- [x] GS-007o SystemLink `AddLocalGamer` after the session has other machines (the gap GS-007n left
+  open). Before, a gamer added mid-session got only a local placeholder id; the other machines never
+  heard of it, and its sends waited until an unrelated ClientHello happened to number it. Now a
+  host numbers its added gamer at once and broadcasts the join; later joiners find it in their
+  welcome. A client sends `AddLocalGamerRequest` (0x0B, SystemLink only; the online validator
+  refuses it) once welcomed, including for a gamer added while it was still joining. The host
+  admits the gamer onto the requesting peer's machine and broadcasts the join to every peer; the
+  requester binds the returned id to its own gamer by gamertag rather than adding a remote copy.
+  Sends made before then stay held and are delivered in order. A migration clears outstanding
+  requests, because the next hello names every local gamer. Tests:
+  `HostLocalGamerAddedMidSessionIsAnnouncedAndSendsAtOnce`,
+  `ClientLocalGamerIsNumberedByTheHostAndItsEarlierSendsArriveInOrder`,
+  `ClientLocalGamerAddedWhileJoiningIsRequestedOnceWelcomed`,
+  `HostAdmitsAClientsAddedGamerOntoThatClientsMachine`, and the two-process
+  `ClientAddLocalGamerJoinsTheClientsMachineAcrossRealProcesses` (15 repeats clean). Three older
+  tests that relied on the gap (queue-until-a-second-hello, its ordering twin and the
+  host-disconnect purge) became unreachable and were replaced; the host-side purge stays as
+  defensive code. CnaNetTests 486/486, CApi_NetSmoke, protocol drift check clean. Online
+  `AddLocalGamer` is still refused (the directory admits one local group per machine).
+- [x] GS-007p Explicit local-gamer lists and the Find -> Join local limit (XNA over FNA; row in
+  `plans/plan_bindings_upstream.md`). The explicit-list `Create`/`JoinInvited` constructor sized the
+  local-gamer limit to the list, so a session created for one gamer refused `AddLocalGamer`; a gamer
+  listed twice joined twice. `BeginCreate`/`BeginFind`/`BeginJoinInvited` with a list skipped
+  reference `GetLocalGamers`. A SystemLink `Join` always allowed 4 local gamers, and ignored the list
+  a `Find` was given. Now explicit lists are checked first (null entry or empty list
+  `ArgumentException`; disposed gamer `ObjectDisposedException`, offline only, because an online
+  request dereferences a gamer only after finding it among the signed-in gamers). Such sessions have
+  the reference limit of 4 and fold duplicates. A SystemLink listing carries its search's limit, or
+  its list, into `Join`. Tests: `AddLocalGamerThrowsAtMaxLimit` (rewritten to the limit of 4),
+  `ExplicitLocalGamerListsAreCheckedFirst`, and two-process
+  `JoinKeepsTheLocalGamerLimitOfTheFindAcrossRealProcesses` /
+  `JoinUsesTheGamersTheFindWasGivenAcrossRealProcesses` over real LAN discovery; the client joins
+  the listing on its host's port, because other SystemLink hosts on the machine answer discovery
+  too (10 repeats clean). CnaNetTests 489/489, CApi_NetSmoke.
+- [x] GS-007q `NetworkSession.BytesPerSecondSent`/`Received` and `NetworkGamer.RoundtripTime` (audit
+  OPEN 18, 19). XNA fills all three from the kernel's periodic network stats at Update
+  (`ProcessUpdateNetworkStats`). CNA reported 0 for both rates on every session type. Round trips
+  were measured only on a SystemLink host and never online. Now both transports feed a
+  `TrafficRate` from their ENet host's wire totals (`totalSentData`/`totalReceivedData`, protocol
+  overhead included; unsigned deltas survive the 2^32 wrap) and publish per-second rates. Both are
+  stars, so a gamer's round trip is the direct peer's where there is one: on the host, each
+  client's; on a client, the host's. For a gamer on another client, relayed through the host, the
+  host's own round trip is added: the host sends `NetworkStatsBroadcast` (0x0C) about once a second
+  (SystemLink control channel; online, validated by `validateServiceControlPacket` and accepted only
+  from the host machine once welcomed). Local gamers stay at zero. Tests:
+  `TrafficRateTest` (2), `HostMeasuresTrafficAndPublishesItsRoundTripsToClientGamers`,
+  `ClientAddsTheHostsRoundTripForAGamerOnAnotherClient`,
+  `RoundTripsCoverEveryRemoteGamerAndARelayedOneAddsTheHosts` (three-machine engine),
+  `OnlineNetworkSessionTest.TrafficAndRoundTripsReachTheSession`, and validator preflight/round-trip
+  cases. CnaNetTests 495/495, CApi_NetSmoke, protocol drift check clean.
+- [x] GS-005i `Guide.EndShowMessageBox`/`EndShowKeyboardInput` wait for the answer (audit OPEN 13).
+  Reference `XOverlappedAsyncResult.PrepareForEndFunction`: null `ArgumentNullException`, another
+  Begin's result `ArgumentException`, a second End `InvalidOperationException`, then
+  `AsyncWaitHandle.WaitOne()`. CNA refused an unanswered result with `InvalidOperationException`
+  and let End run any number of times. On the console the Guide runs while the game thread waits;
+  CNA draws it inside the game, so waiting there would deadlock. The wait instead runs the game's
+  modal frames. A new internal runtime service, `CNA::Internal::Runtime::IModalFrames` (provided by
+  every `Game`; `activeModalFrames()` names the live one), polls platform events and presents the
+  system overlay over a cleared screen, without the game's `Update` or `Draw`, until the answer
+  arrives. With no running game (none alive, not started, exiting, or the browser, which delivers
+  input only between frames) End refuses with `InvalidOperationException` and stays callable. The
+  results' wait handles are now signalled on completion. The C layer keeps the first End's answer,
+  so its size/copy and repeated reads still work. C and C++ docs updated. Tests:
+  `GuideTest.EndFollowsTheReferenceChecks`, `EndWaitsForTheAnswerWhileTheGamesModalFramesRun`,
+  `EndWithoutARunningGameRefusesAndCanBeCalledAgainOnceAnswered`,
+  `GameTest.ModalFramesPresentTheOverlayWithoutTheGamesUpdateOrDraw`,
+  `ModalFramesBelongToTheLiveGameOnly`, GuideSmoke re-read. CnaGamerServicesTests 494 + 1 skip,
+  CnaRuntimeTests 192, Guide/Gamers/Net C smokes.
+- [x] GS-004p Offline achievement catalog and honest profile fields (audit OPEN 5, 7). Offline
+  achievements were only the earned keys (empty text, score 0). `Achievement.GetPicture` threw
+  `NotImplementedException` offline, against its documented `GamerServicesNotAvailableException`.
+  A profile reported FNA's invented `GamerZone.Pro`, reputation 5 and one title played on every
+  path, and an offline profile totalled nothing it had earned. Now:
+  - A title may ship `GamerServices/Achievements.json`: the service admin tool's catalog objects,
+    with `picture` a title-relative PNG path (validated: keys, lengths, score 0..1000, unique keys,
+    no path escaping, at most 1024 entries and 1 MiB). Offline `GetAchievements` lists every
+    defined achievement with its earned state, text, score and picture. `AwardAchievement` refuses
+    undefined keys (`GamerServicesNotAvailableException`, as online) and keeps the first earned
+    date. A malformed catalog is refused with `InvalidOperationException` naming the file.
+  - `GetPicture` without a picture throws `GamerServicesNotAvailableException` everywhere.
+  - Profiles report `GamerZone.Unknown` and reputation 0 (CNA keeps neither). An offline
+    profile totals this title's earned achievements (scores from the catalog), and titles played
+    is 1 once it has earned one.
+  - Server e575adc adds `titlesPlayed` (titles with presence, an earned achievement or a
+    leaderboard row), which the client reads when present.
+  - C/C++ docs and `docs/gamer-services-server.md` describe the catalog. The client harness now
+    checks the refreshed profile's titles/zone/reputation, and its sign-out checks follow GS-004n
+    (the signed-out gamer is disposed; `IsSignedInToLive` is left as it was). The TLS e2e had
+    failed on the stale expectation.
+
+  Tests: `AnOfflineCatalogListsEveryDefinedAchievementWithItsEarnedState`,
+  `AMalformedOfflineCatalogIsRefusedNamingTheFile`,
+  `AnOfflineProfileWithoutACatalogCountsEarnedAchievements`, and the updated defaults and picture
+  tests. CnaGamerServicesTests 497 + 1 skip; Guide/GamerProperties/Leaderboards/Achievements/Gamers
+  and GamerIdentities C smokes pass. Server suite with the CNA harnesses: 22/23, with
+  `service_cna_avatars` skipped because its harness variables were not set.
+- [x] GS-004q `FriendGamer` state from the service (audit OPEN 9). XNA derives every flag from one
+  `FriendState`. CNA passed `online` as `IsPlaying` (correct: an account is online only from a game)
+  but never set `IsJoinable` or the four invitation flags, and nothing documented that away, busy
+  and voice have no source. Server ce8ff32 adds, for an accepted friend in the
+  calling title: `joinable` (online in a live player-match session that admits joiners now with a
+  public slot free), `inviteReceivedFrom`/`inviteSentTo` (unexpired pending invitations either
+  way) and `inviteAccepted`/`inviteRejected` (the friend's answer to the caller's unexpired
+  invitation). The client reads them when present, older servers leaving them out. `IsAway`,
+  `IsBusy` and `HasVoice` are documented as always false (C and C++). Tests: server
+  `service_invitations` (pending both ways, full session not joinable, open lobby joinable,
+  closed lobby not, accepted invitation); the TLS e2e's real friends flow checks the parsed flags.
+  CnaGamerServicesTests 497 + 1 skip, Gamers/GamerProperties C smokes.
+- [x] GS-004r Local profiles carry their `GameDefaults` (audit OPEN 8). XNA reads a gamer's
+  preferred settings from the profile. CNA's are XNA's unset values (each enumeration's first
+  member, as XNA's ordinals confirm; no colors; false), and no profile could say otherwise. A local
+  profile's store entry may now hold `"gameDefaults"` with the XNA property names (enumerations by
+  member name, colors `#rrggbb`, booleans). The dispatcher applies it at local sign-in
+  (`findLocalProfile`, a private dispatcher helper; `GameDefaults` befriends the dispatcher). A
+  missing or unreadable field keeps its unset value, and the object is kept exactly as written
+  when the store is rewritten. Accounts have no game defaults (documented). Test
+  `LocalSignInTest.ALocalProfileCarriesItsStoredGameDefaults`; CnaGamerServicesTests 498 + 1 skip,
+  Gamers/GamerProperties C smokes.
+- [x] GS-011a Documentation pass over the audited stubs. Public headers described behaviour from
+  before this project. The Guide's social/marketplace/party panes were called "No-op", its keyboard
+  and message box "mouse-only" and needing the game to render them, and `IsFriend` "always false".
+  `GetFromGamertag` was "not supported", and `WriteArbitratedLeaderboard`/`WriteTrueSkill`/
+  `InviteAccepted` were "never raised". `GamerJoined` "cannot replay on subscribe", XNA's
+  `HasLeftSession` was "permanently false", `QualityOfService` bandwidth undocumented, the C
+  presence-string extension "a no-op".
+  - Each now states what CNA does and what it throws: the panes and their `SocialActor`
+    refusals, the automatic overlay and keyboard/controller answers, the lookup's service
+    requirement, the Ranked/PlayerMatch leaderboard events, Guide-driven `InviteAccepted` with
+    pending delivery, `GamerJoined`'s replay, measured discovery round trips with no bandwidth.
+  - `docs/gamer-services-server.md` gains a current-state summary (implemented and not
+    implemented) and marks its slice history as superseded; each "remain unfinished" claim that
+    later slices completed is corrected in place.
+  - `docs/xna-4-api-coverage.md` rows for achievements, friends, profiles, the Guide panes and
+    End waits are current.
+  - No code changes; C API inventory hash regenerated. CnaGamerServicesTests 498 + 1 skip,
+    CnaNetTests 495, Guide/Net/Gamers C smokes.
+- [x] GS-011b C ABI 0.34.0: the two Guide setters XNA keeps internal are gone. XNA's
+  `Guide.IsVisible` and `Guide.IsTrialMode` have `internal set`. CNA exposed both publicly and in C
+  (`cna_guide_set_is_visible`, `cna_guide_set_is_trial_mode`). The first was a no-op, and the second
+  let a title flip its own licence state. `Guide::getIsTrialModeProperty` now follows
+  `SimulateTrialMode` alone (CNA titles are fully licensed). The Guide tests, GuideSmoke,
+  BoolContractSmoke and the console Guide demo use the public surface. ABI minor 34:
+  `ABI_VERSIONING.md` release notes, export counts 3,204 -> 3,202 (CONSUMING, LIMITATIONS source,
+  RELEASE_GATE), baseline regenerated and `--check` clean against the built library, and the XNA
+  member report's two symbols edited. The report tool's local rerun differs wholesale from the
+  committed closure for environmental reasons, so it was not committed. CnaGamerServicesTests 498
+  + 1 skip. `ctest -R '^CApi_'` 94/98, the four failures being the three standing environment
+  smokes and `CApi_InstalledConsumer`, which passes once the static archive is rebuilt; the demo
+  object compiles in cmake-build-opengl33.
+
+### GS-011 complete: final validation and register
+
+`gamer_services_server_final_register.md` records every deliberate refusal, constant and
+never-raised member left in GamerServices/Net (XNA behaviour, CNA limits, host-language limits),
+what the GS-001 inventory items became, and the evidence. `misc/known_gaps.md` entry 4 now names
+the online AddLocalGamer limit next to online host migration and points at the register. Validation
+(details in the register): server corpus 23/23 with every CNA harness and NAT, zero skips, 340.7 s;
+CnaNetTests 495, CnaGamerServicesTests 498 + 1 skip, CnaRuntimeTests 192; C API gates; all four
+sample acceptances rerun into new `*-20260929-final` evidence directories (the NGSM and AvatarShadows
+scripts gained an evidence-directory option, and the AvatarShadows default capture times were fixed);
+the SystemLink demo pairs exit 0.
+
+Known-good cross-repo set: CNA (this commit), cna-samples feature/gamer-services-samples 378483b,
+server ce8ff32, sharp-runtime 007280bd. (Previous: CNA 45c17d1d8 / cna-samples 378483b / server
+bbfe2d5.)
+
+Open, documented limits (not claimed): online host migration (GS-007h) and online AddLocalGamer
+(GS-007j); voice; TrueSkill computation; party, marketplace and partner-token services; away/busy
+status; guest sign-in; Windows/browser credential persistence; browser multiplayer (owner scope:
+limitations page); public Internet deployment acceptance.

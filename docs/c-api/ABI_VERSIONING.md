@@ -2,7 +2,39 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.33.0** (`RRC-015`). It **retires four public renderer
+The current experimental ABI is **0.35.0**: `next` at 0.33.0 (`RRC-015`) merged into
+`feature/gamer-services-server`, whose own line had reached 0.34.0 (`GS-009f`, `GS-011b`). The two
+lines had each used 0.33.0 for a different change, so the merged ABI takes a number neither used. It
+holds all three changes described below and exports 3,202 routes; nothing else changes. A binding
+built against either earlier 0.33.0 or against 0.34.0 must rebuild against these headers.
+
+### 0.34.0 on `feature/gamer-services-server`
+
+The ABI was **0.34.0** (`GS-011b`) on this line. It removed the two Guide setters that XNA
+keeps internal: `cna_guide_set_is_visible` (a no-op, since the Guide is visible exactly while one of
+its screens is up) and `cna_guide_set_is_trial_mode` (CNA titles are fully licensed, so trial mode
+follows `cna_guide_set_simulate_trial_mode` alone). Two fewer exports (3,202); no structure,
+constant or other route changes. A binding that calls either route no longer links.
+
+### 0.33.0 on `feature/gamer-services-server`
+
+The ABI was **0.33.0** (`GS-009f`) on this line. The standard avatar types now behave as
+real avatars (`docs/avatars.md`): a random description reports its body type and height, a preset
+animation has a length and moving bones, and a renderer loads (`LOADING` -> `READY`), reads its
+bind pose once ready and draws through initialized gamer services. The Avatar real-rendering
+extension that stood in for them is **removed**: `cna_avatar_appearance_init_ext` and the
+`CNA_AvatarAppearanceEXT` value, `cna_avatar_renderer_enable_real_rendering_ext`,
+`cna_avatar_renderer_set_appearance_ext`, `cna_avatar_renderer_draw_real_ext`, the three
+`cna_avatar_animation_*_real_clip_name_ext` routes and the four preset clip-name / body-type
+content-name routes (eleven fewer exports and one structure). In
+`CNA_AvatarRendererInfo` the `is_real_rendering_enabled` byte becomes part of `reserved[3]`, so the
+structure keeps its size and every other offset. A binding that names a removed route or field no
+longer compiles; that incompatible change takes this minor increment, these notes and an updated
+baseline under the `0.x` rule below.
+
+### 0.33.0 on `next`
+
+The ABI was **0.33.0** (`RRC-015`) on `next`. It **retired four public renderer
 identities** -- `HTML_DOM` (`18`), `OPENGL4` (`33`), `GDI` (`40`) and `SVG_DOM` (`44`) -- together
 with the four `CNA_GRAPHICS_RENDERER_*` constants that named them, and moves
 `CNA_GRAPHICS_RENDERER_MAXIMUM` from `44` (`SVG_DOM`) to `43` (`FNA3D`, the highest surviving
@@ -479,7 +511,7 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-The current baseline records 3,215 exports; build configurations must export the same surface.
+The current baseline records 3,202 exports; build configurations must export the same surface.
 That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose backend or layer is absent exists and refuses, rather than

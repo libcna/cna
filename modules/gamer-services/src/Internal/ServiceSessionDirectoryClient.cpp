@@ -169,6 +169,14 @@ public:
             value.state!=settings.state||value.maxGamers!=settings.maxGamers||value.privateSlots!=settings.privateSlots||
             value.properties!=settings.properties||value.allowJoinInProgress!=settings.allowJoinInProgress)invalid();return value;
     }
+    ServiceSessionSnapshot remove(const std::string& actor,const std::string& session,const std::string& machine) override {
+        actorGuard(actor);argument(opaque(session)&&opaque(machine));
+        auto value=decode([&]{return snapshot(request_("sessions.remove",{{"session",session},{"machine",machine}},actor,{}),true);});
+        memberGuard(value,actor);
+        if(value.session!=session||value.hostId!=actor||value.hostMachine!=value.machine||machine==value.machine)invalid();
+        for(const auto& row:value.members)if(row.machine==machine)invalid();
+        return value;
+    }
     bool leave(const std::string& actor,const std::string& session) override {
         actorGuard(actor);argument(opaque(session));return decode([&]{const auto value=request_("sessions.leave",{{"session",session}},actor,{});fields(value,{"ended"});return boolean(value,"ended");});
     }

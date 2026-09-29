@@ -1200,30 +1200,21 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_RenderTarget2D_DepthFormatFidelity COMMAND cna_test_vulkan_rendertarget_depthformat_fidelity
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # Task 13.6: the same 3 avatar-rendering GPU integration tests already registered for
-        # EasyGL above, reusing the exact same renderer-agnostic source files (public
-        # GraphicsDevice/SkinnedModelEXT/AvatarRenderer API only) - Vulkan's own dedicated
-        # GetOrCreatePipelineSkinned3D pipeline (Task 11.10) had never been run against real (or
-        # even synthetic) avatar content before now.
+        # GS-009: the renderer-neutral avatar and SkinnedModelEXT tests also registered for EasyGL
+        # (public GraphicsDevice/SkinnedEffect/AvatarRenderer API only), drawn through Vulkan's
+        # skinned pipeline.
         if(CNA_ENABLE_NET)
-            cna_vulkan_test(cna_test_vulkan_avatar_real_render
-                            ${CMAKE_SOURCE_DIR}/modules/gamer-services/examples/avatar_real_render_integration_test.cpp)
-            target_link_libraries(cna_test_vulkan_avatar_real_render PRIVATE CNA_GamerServices)
-            cna_register_renderer_test(NAME Vulkan_AvatarRenderer_RealRender COMMAND cna_test_vulkan_avatar_real_render
-                TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-            cna_vulkan_test(cna_test_vulkan_avatar_attach_part
-                            ${CMAKE_SOURCE_DIR}/modules/gamer-services/examples/avatar_attach_part_integration_test.cpp)
-            target_link_libraries(cna_test_vulkan_avatar_attach_part PRIVATE CNA_GamerServices)
-            cna_register_renderer_test(NAME Vulkan_AvatarRenderer_AttachPart COMMAND cna_test_vulkan_avatar_attach_part
-                TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-            cna_vulkan_test(cna_test_vulkan_avatar_tint_routing
-                            ${CMAKE_SOURCE_DIR}/modules/gamer-services/examples/avatar_tint_routing_integration_test.cpp)
-            target_link_libraries(cna_test_vulkan_avatar_tint_routing PRIVATE CNA_GamerServices)
-            cna_register_renderer_test(NAME Vulkan_AvatarRenderer_TintRouting COMMAND cna_test_vulkan_avatar_tint_routing
-                TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+            cna_vulkan_test(cna_test_vulkan_avatar_standard_render
+                            ${CMAKE_SOURCE_DIR}/modules/gamer-services/examples/avatar_standard_render_test.cpp)
+            target_link_libraries(cna_test_vulkan_avatar_standard_render PRIVATE CNA_GamerServices)
+            cna_register_renderer_test(NAME Vulkan_AvatarRenderer_Standard COMMAND cna_test_vulkan_avatar_standard_render
+                TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         endif()
+
+        cna_vulkan_test(cna_test_vulkan_skinned_model_attach_part
+                        ${CMAKE_SOURCE_DIR}/modules/graphics/examples/skinned_model_attach_part_integration_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SkinnedModel_AttachPart COMMAND cna_test_vulkan_skinned_model_attach_part
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 842 (Phase 73 Vulkan gap closure): verify MRT with mixed formats is rejected or
         # handled per XNA constraints on Vulkan -- reuse of Task 774's renderer-agnostic test (pure

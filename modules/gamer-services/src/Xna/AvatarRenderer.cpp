@@ -1,49 +1,266 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/AvatarRenderer.hpp"
+#include "CNA/Internal/GamerServices/AvatarAssets.hpp"
+#include "CNA/Internal/GamerServices/DispatcherGraphics.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
-#include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
-#include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include <chrono>
+#include <cmath>
+#include <map>
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
     namespace
     {
-        // Parent bone index for each of the 71 avatar skeleton bones (-1 = root/no parent).
-        // Exact values decoded from the real XNA reference assembly; not derived or guessed.
-        const std::vector<int> kParentBoneIds = {
-            -1, 0, 0, 0, 0, 1, 2, 2, 3, 3, 1, 6, 5, 6, 5, 8, 5, 8, 5, 14, 12, 11, 16, 15, 14, 20, 20, 20, 22, 22, 22,
-            25, 25, 25, 28, 28, 28, 33, 33, 33, 33, 33, 33, 33, 36, 36, 36, 36, 36, 36, 36, 37, 38, 39, 40, 43, 44,
-            45, 46, 47, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60
+        namespace Avatars = CNA::Internal::GamerServices::Avatars;
+        namespace Graphics = Microsoft::Xna::Framework::Graphics;
+        using Microsoft::Xna::Framework::Matrix;
+        using Microsoft::Xna::Framework::Quaternion;
+        using Microsoft::Xna::Framework::Vector3;
+
+        struct GpuPart
+        {
+            std::unique_ptr<Graphics::VertexBuffer> vertices;
+            std::unique_ptr<Graphics::IndexBuffer> indices;
+            int vertexCount = 0;
+            int primitiveCount = 0;
         };
+
+        // The standard loading effect: a softly glowing silhouette that breathes while loading.
+        std::vector<Graphics::VertexPositionColor> LoadingSilhouette(float height, std::vector<std::uint16_t>& indices)
+        {
+            std::vector<Graphics::VertexPositionColor> vertices;
+            auto ellipsoid = [&](Vector3 centre, Vector3 radii) {
+                const auto base = static_cast<std::uint16_t>(vertices.size());
+                constexpr int Rings = 10, Segments = 16;
+                for (int r = 0; r <= Rings; ++r)
+                {
+                    const float theta = 3.14159265f * static_cast<float>(r) / Rings;
+                    for (int c = 0; c < Segments; ++c)
+                    {
+                        const float phi = 6.2831853f * static_cast<float>(c) / Segments;
+                        const Vector3 p(centre.X + radii.X * std::sin(theta) * std::sin(phi), centre.Y + radii.Y * std::cos(theta),
+                                        centre.Z + radii.Z * std::sin(theta) * std::cos(phi));
+                        vertices.emplace_back(p, Microsoft::Xna::Framework::Color::White);
+                    }
+                }
+                for (int r = 0; r < Rings; ++r)
+                {
+                    for (int c = 0; c < Segments; ++c)
+                    {
+                        const auto a = static_cast<std::uint16_t>(base + r * Segments + c);
+                        const auto b = static_cast<std::uint16_t>(base + r * Segments + (c + 1) % Segments);
+                        const auto d = static_cast<std::uint16_t>(a + Segments);
+                        const auto e = static_cast<std::uint16_t>(b + Segments);
+                        indices.insert(indices.end(), {a, e, d, a, b, e});
+                    }
+                }
+            };
+            ellipsoid(Vector3(0, height * 0.9f, 0), Vector3(0.13f, height * 0.1f, 0.13f));
+            ellipsoid(Vector3(0, height * 0.43f, 0), Vector3(0.2f, height * 0.42f, 0.14f));
+            return vertices;
+        }
     }
 
-    // The real XNA implementation never reads either constructor's arguments - every instance
-    // ends up with identical, permanently AvatarRendererState::Unavailable state. Preserved
-    // exactly, not "fixed."
-    AvatarRenderer::AvatarRenderer(AvatarDescription* /*avatarDescription*/)
-        : AvatarRenderer(nullptr, true)
+    struct AvatarRenderer::Resources
+    {
+        std::shared_ptr<Avatars::AvatarLoad> load;
+        std::shared_ptr<const Avatars::AvatarModel> model;
+        float height = 1.7f;
+
+        Graphics::GraphicsDevice* device = nullptr;
+        std::unique_ptr<Graphics::SkinnedEffect> effect;
+        std::vector<GpuPart> parts;
+        std::vector<std::unique_ptr<Graphics::Texture2D>> images;
+        std::map<int, std::unique_ptr<Graphics::Texture2D>> tiles;
+        std::unique_ptr<Graphics::Texture2D> white;
+        std::unique_ptr<Graphics::BasicEffect> loadingEffect;
+        std::unique_ptr<Graphics::VertexBuffer> loadingVertices;
+        std::unique_ptr<Graphics::IndexBuffer> loadingIndices;
+        int loadingVertexCount = 0;
+        int loadingPrimitiveCount = 0;
+
+        void Release()
+        {
+            effect.reset();
+            parts.clear();
+            images.clear();
+            tiles.clear();
+            white.reset();
+            loadingEffect.reset();
+            loadingVertices.reset();
+            loadingIndices.reset();
+            device = nullptr;
+        }
+
+        // Resources belong to one device; a different device (or a recreated one) rebuilds them.
+        Graphics::GraphicsDevice& Bind()
+        {
+            auto& current = CNA::Internal::GamerServices::dispatcherGraphicsDevice();
+            if (&current != device)
+            {
+                Release();
+                device = &current;
+            }
+            return current;
+        }
+
+        Graphics::Texture2D* Tile(int index)
+        {
+            auto found = tiles.find(index);
+            if (found != tiles.end())
+            {
+                return found->second.get();
+            }
+            const auto& image = (*model->faceTiles)[static_cast<std::size_t>(index)];
+            auto texture = std::make_unique<Graphics::Texture2D>(Graphics::Texture2D::CreateFromPixels(*device, image.width, image.height, image.rgba));
+            return tiles.emplace(index, std::move(texture)).first->second.get();
+        }
+
+        void Upload()
+        {
+            if (effect)
+            {
+                return;
+            }
+            effect = std::make_unique<Graphics::SkinnedEffect>(*device);
+            white = std::make_unique<Graphics::Texture2D>(Graphics::Texture2D::CreateFromPixels(*device, 1, 1, {255, 255, 255, 255}));
+            for (const auto& image : model->images)
+            {
+                images.push_back(std::make_unique<Graphics::Texture2D>(
+                    Graphics::Texture2D::CreateFromPixels(*device, image.width, image.height, image.rgba)));
+            }
+            for (const auto& part : model->parts)
+            {
+                std::vector<Graphics::VertexPositionNormalTextureSkinned> vertices;
+                vertices.reserve(part.vertices.size());
+                for (const auto& v : part.vertices)
+                {
+                    vertices.emplace_back(v.position, v.normal, v.uv, v.weights, v.joints);
+                }
+                GpuPart gpu;
+                gpu.vertexCount = static_cast<int>(vertices.size());
+                gpu.primitiveCount = static_cast<int>(part.indices.size() / 3);
+                gpu.vertices = std::make_unique<Graphics::VertexBuffer>(*device, gpu.vertexCount);
+                gpu.vertices->SetData(vertices.data(), gpu.vertexCount);
+                gpu.indices = std::make_unique<Graphics::IndexBuffer>(*device, static_cast<int>(part.indices.size()));
+                gpu.indices->SetData(part.indices.data(), static_cast<int>(part.indices.size()));
+                parts.push_back(std::move(gpu));
+            }
+        }
+    };
+
+    namespace
+    {
+        // Restores whatever the game had set once the avatar is drawn.
+        struct DeviceStateScope
+        {
+            explicit DeviceStateScope(Graphics::GraphicsDevice& device)
+                : device(device)
+                , blend(device.getBlendStateProperty())
+                , depth(device.getDepthStencilStateProperty())
+                , rasterizer(device.getRasterizerStateProperty())
+                , sampler(device.getSamplerStatesProperty()[0])
+            {
+            }
+            ~DeviceStateScope()
+            {
+                device.setBlendStateProperty(blend);
+                device.setDepthStencilStateProperty(depth);
+                device.setRasterizerStateProperty(rasterizer);
+                device.getSamplerStatesProperty()[0] = sampler;
+            }
+            Graphics::GraphicsDevice& device;
+            Graphics::BlendState blend;
+            Graphics::DepthStencilState depth;
+            Graphics::RasterizerState rasterizer;
+            Graphics::SamplerState sampler;
+        };
+
+        template <typename TEnum>
+        int StateIndex(TEnum value, int count)
+        {
+            const int index = static_cast<int>(value);
+            return index >= 0 && index < count ? index : 0;
+        }
+    }
+
+    AvatarRenderer::AvatarRenderer(AvatarDescription* avatarDescription)
+        : AvatarRenderer(avatarDescription, true)
     {
     }
 
-    AvatarRenderer::AvatarRenderer(AvatarDescription* /*avatarDescription*/, bool /*useLoadingEffect*/)
-        : world_(Microsoft::Xna::Framework::Matrix::getIdentityProperty())
+    AvatarRenderer::AvatarRenderer(AvatarDescription* avatarDescription, bool useLoadingEffect)
+        : resources_(std::make_unique<Resources>())
+        , useLoadingEffect_(useLoadingEffect)
+        , world_(Microsoft::Xna::Framework::Matrix::getIdentityProperty())
         , view_(Microsoft::Xna::Framework::Matrix::getIdentityProperty())
         , projection_(Microsoft::Xna::Framework::Matrix::getIdentityProperty())
-        , parentBoneIds_(kParentBoneIds)
-        , bindPoseArray_(BoneCount)
+        , parentBoneIds_(Avatars::parentBones().begin(), Avatars::parentBones().end())
     {
+        if (avatarDescription == nullptr)
+        {
+            throw System::ArgumentNullException("avatarDescription");
+        }
+        if (!avatarDescription->getIsValidProperty())
+        {
+            return;
+        }
+        const auto bytes = avatarDescription->getDescriptionProperty();
+        const auto descriptor = Avatars::decode(bytes);
+        if (!descriptor)
+        {
+            return;
+        }
+        resources_->height = static_cast<float>(descriptor->heightMillimeters) / 1000.0f;
+        resources_->load = Avatars::loadAvatarAsync(*descriptor);
+        state_ = AvatarRendererState::Loading;
     }
 
     AvatarRenderer::~AvatarRenderer() = default;
+
+    void AvatarRenderer::Poll() const
+    {
+        if (state_ != AvatarRendererState::Loading || !resources_->load)
+        {
+            return;
+        }
+        std::lock_guard guard(resources_->load->lock);
+        if (!resources_->load->done)
+        {
+            return;
+        }
+        resources_->model = resources_->load->model;
+        resources_->load.reset();
+        if (!resources_->model)
+        {
+            state_ = AvatarRendererState::Unavailable;
+            return;
+        }
+        bindPoseArray_.clear();
+        for (const auto& translation : resources_->model->bindTranslations)
+        {
+            bindPoseArray_.push_back(Matrix::CreateTranslation(translation.X, translation.Y, translation.Z));
+        }
+        state_ = AvatarRendererState::Ready;
+    }
 
     Microsoft::Xna::Framework::Matrix AvatarRenderer::getWorldProperty() const { return world_; }
     void AvatarRenderer::setWorldProperty(Microsoft::Xna::Framework::Matrix value) { world_ = value; }
@@ -66,12 +283,10 @@ namespace Microsoft::Xna::Framework::GamerServices
         {
             throw System::ObjectDisposedException("AvatarRenderer");
         }
-        // Checks the raw state field directly, not getStateProperty() (which always forces
-        // itself to Unavailable) - matching the real implementation exactly. Since nothing
-        // anywhere ever sets state_ to Ready, this throws in every practical case.
+        Poll();
         if (state_ != AvatarRendererState::Ready)
         {
-            throw System::InvalidOperationException("The avatar's bind pose is not available.");
+            throw System::InvalidOperationException("The avatar's bind pose is not available until the avatar is ready.");
         }
         return System::Collections::ObjectModel::ReadOnlyCollection<Microsoft::Xna::Framework::Matrix>(bindPoseArray_);
     }
@@ -82,9 +297,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         {
             throw System::ObjectDisposedException("AvatarRenderer");
         }
-        // Forces itself to Unavailable on every single read, matching the real implementation
-        // exactly (see the class remarks) - not a one-time initial value.
-        state_ = AvatarRendererState::Unavailable;
+        Poll();
         return state_;
     }
 
@@ -101,10 +314,6 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void AvatarRenderer::Draw(IAvatarAnimation* animation)
     {
-        // Task 1.5: every sibling method on this class throws consistently on invalid input
-        // (ObjectDisposedException for a disposed instance) - a null animation used to
-        // unconditionally dereference here instead, undefined behavior rather than a catchable
-        // exception.
         if (animation == nullptr)
         {
             throw System::ArgumentNullException("animation");
@@ -114,7 +323,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         Draw(bones, animation->getExpressionProperty());
     }
 
-    void AvatarRenderer::Draw(const std::vector<Microsoft::Xna::Framework::Matrix>& bones, AvatarExpression /*expression*/)
+    void AvatarRenderer::Draw(const std::vector<Microsoft::Xna::Framework::Matrix>& bones, AvatarExpression expression)
     {
         if (isDisposed_)
         {
@@ -124,115 +333,155 @@ namespace Microsoft::Xna::Framework::GamerServices
         {
             throw System::ArgumentException("bones must contain exactly 71 entries.", "bones");
         }
-        // Genuinely a no-op once validated, matching the real implementation.
+        Poll();
+        if (state_ == AvatarRendererState::Loading)
+        {
+            if (useLoadingEffect_)
+            {
+                DrawLoadingEffect();
+            }
+            return;
+        }
+        if (state_ == AvatarRendererState::Ready)
+        {
+            DrawAvatar(bones, expression);
+        }
     }
 
-    void AvatarRenderer::EnableRealRenderingEXT(Graphics::GraphicsDevice& device,
-                                                 std::shared_ptr<Graphics::SkinnedModelEXT> model)
+    void AvatarRenderer::DrawAvatar(const std::vector<Microsoft::Xna::Framework::Matrix>& bones, AvatarExpression expression)
     {
-        // Task 11.6: unlike DrawRealEXT/Draw/getStateProperty/getBindPoseProperty (which all
-        // throw ObjectDisposedException), this used to silently succeed after Dispose() - even
-        // re-populating realDevice_/realModel_/realEffect_, effectively "undisposing" the object.
-        if (isDisposed_)
+        const auto& model = *resources_->model;
+        std::array<Matrix, BoneCount> world;
+        std::vector<Matrix> skin(BoneCount);
+        for (int bone = 0; bone < BoneCount; ++bone)
         {
-            throw System::ObjectDisposedException("AvatarRenderer");
+            Vector3 scale;
+            Vector3 translation;
+            Quaternion rotation;
+            if (!bones[bone].Decompose(scale, rotation, translation))
+            {
+                throw System::InvalidOperationException("Every avatar bone transform must be decomposable.");
+            }
+            if (bone != 0)
+            {
+                translation = model.bindTranslations[bone];
+            }
+            const Matrix local = Matrix::CreateScale(scale) * Matrix::CreateFromQuaternion(rotation) *
+                Matrix::CreateTranslation(translation.X, translation.Y, translation.Z);
+            const int parent = parentBoneIds_[bone];
+            world[bone] = parent < 0 ? local : local * world[parent];
+            const auto& bind = model.bindPositions[bone];
+            skin[bone] = Matrix::CreateTranslation(-bind.X, -bind.Y, -bind.Z) * world[bone];
         }
-        // Task 1.6: without this, a null/empty model silently succeeded here and only surfaced
-        // later, inside DrawRealEXT, as InvalidOperationException("real rendering is disabled") -
-        // a poor and misleading contract, since that exception says nothing about the null model
-        // actually passed to this call. Reject it at the call site instead, matching the
-        // ArgumentNullException convention used elsewhere in this codebase.
-        if (model == nullptr)
+
+        auto& device = resources_->Bind();
+        resources_->Upload();
+        auto& effect = *resources_->effect;
+        effect.setWorldProperty(world_);
+        effect.setViewProperty(view_);
+        effect.setProjectionProperty(projection_);
+        effect.SetBoneTransforms(skin);
+        effect.setWeightsPerVertexProperty(4);
+        effect.setPreferPerPixelLightingProperty(true);
+        // Exactly the renderer's one directional light plus ambient, with a faint sheen from the key light.
+        effect.getDirectionalLight0Property().setEnabledProperty(true);
+        effect.getDirectionalLight0Property().setDirectionProperty(lightDirection_);
+        effect.getDirectionalLight0Property().setDiffuseColorProperty(lightColor_);
+        effect.getDirectionalLight0Property().setSpecularColorProperty(lightColor_ * 0.12f);
+        effect.getDirectionalLight1Property().setEnabledProperty(false);
+        effect.getDirectionalLight2Property().setEnabledProperty(false);
+        effect.setAmbientLightColorProperty(ambientLightColor_);
+        effect.setEmissiveColorProperty(Vector3::Zero);
+        effect.setSpecularColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+        effect.setSpecularPowerProperty(24.0f);
+        effect.setAlphaProperty(1.0f);
+
+        const auto& face = model.face;
+        const int mouth = StateIndex(expression.getMouthProperty(), 14);
+        const std::array<int, 2> eyes{StateIndex(expression.getLeftEyeProperty(), 14), StateIndex(expression.getRightEyeProperty(), 14)};
+        const std::array<int, 2> brows{StateIndex(expression.getLeftEyebrowProperty(), 5),
+                                       StateIndex(expression.getRightEyebrowProperty(), 5)};
+
+        DeviceStateScope scope(device);
+        device.setRasterizerStateProperty(Graphics::RasterizerState::CullCounterClockwise);
+        device.getSamplerStatesProperty()[0] = Graphics::SamplerState::LinearClamp;
+        bool decals = false;
+        for (std::size_t index = 0; index < model.parts.size(); ++index)
         {
-            throw System::ArgumentNullException("model");
+            const auto& part = model.parts[index];
+            Graphics::Texture2D* texture = resources_->white.get();
+            if (part.feature == Avatars::AvatarFeature::None)
+            {
+                if (part.image >= 0)
+                {
+                    texture = resources_->images[static_cast<std::size_t>(part.image)].get();
+                }
+                device.setBlendStateProperty(Graphics::BlendState::Opaque);
+                device.setDepthStencilStateProperty(Graphics::DepthStencilState::Default);
+            }
+            else
+            {
+                int tile = 0;
+                switch (part.feature)
+                {
+                case Avatars::AvatarFeature::EyeLeft: tile = face.eyes[eyes[0]][0][part.layer]; break;
+                case Avatars::AvatarFeature::EyeRight: tile = face.eyes[eyes[1]][1][part.layer]; break;
+                case Avatars::AvatarFeature::EyebrowLeft: tile = face.eyebrows[brows[0]][0]; break;
+                case Avatars::AvatarFeature::EyebrowRight: tile = face.eyebrows[brows[1]][1]; break;
+                default: tile = face.mouths[mouth]; break;
+                }
+                texture = resources_->Tile(tile);
+                if (!decals)
+                {
+                    device.setBlendStateProperty(Graphics::BlendState::AlphaBlend);
+                    device.setDepthStencilStateProperty(Graphics::DepthStencilState::DepthRead);
+                    decals = true;
+                }
+            }
+            effect.setDiffuseColorProperty(part.color);
+            effect.setTextureProperty(texture);
+            effect.Apply();
+            const auto& gpu = resources_->parts[index];
+            device.SetVertexBuffer(gpu.vertices.get());
+            device.SetIndexBuffer(gpu.indices.get());
+            device.DrawIndexedPrimitives(Graphics::PrimitiveType::TriangleList, 0, 0, gpu.vertexCount, 0, gpu.primitiveCount);
         }
-        realDevice_ = &device;
-        realModel_ = std::move(model);
-        realEffect_ = std::make_unique<Graphics::SkinnedEffect>(device);
     }
 
-    bool AvatarRenderer::IsRealRenderingEnabledEXT() const
+    void AvatarRenderer::DrawLoadingEffect()
     {
-        return realModel_ != nullptr;
-    }
-
-    void AvatarRenderer::SetAppearanceEXT(const AvatarAppearanceEXT& appearance)
-    {
-        // Task 11.6: same consistency fix as EnableRealRenderingEXT above.
-        if (isDisposed_)
+        auto& device = resources_->Bind();
+        auto& r = *resources_;
+        if (!r.loadingEffect)
         {
-            throw System::ObjectDisposedException("AvatarRenderer");
+            std::vector<std::uint16_t> indices;
+            const auto vertices = LoadingSilhouette(r.height, indices);
+            r.loadingEffect = std::make_unique<Graphics::BasicEffect>(device);
+            r.loadingVertexCount = static_cast<int>(vertices.size());
+            r.loadingPrimitiveCount = static_cast<int>(indices.size() / 3);
+            r.loadingVertices = std::make_unique<Graphics::VertexBuffer>(device, r.loadingVertexCount);
+            r.loadingVertices->SetData(vertices.data(), r.loadingVertexCount);
+            r.loadingIndices = std::make_unique<Graphics::IndexBuffer>(device, static_cast<int>(indices.size()));
+            r.loadingIndices->SetData(indices.data(), static_cast<int>(indices.size()));
         }
-        appearance_ = appearance;
-    }
-
-    Microsoft::Xna::Framework::Color AvatarRenderer::PartTintEXT(const std::string& partName) const
-    {
-        if (partName.find("Hair") != std::string::npos) { return appearance_.getHairColorProperty(); }
-        if (partName.find("Shirt") != std::string::npos) { return appearance_.getShirtColorProperty(); }
-        if (partName.find("Pants") != std::string::npos) { return appearance_.getPantsColorProperty(); }
-        if (partName.find("Shoes") != std::string::npos) { return appearance_.getShoesColorProperty(); }
-        return appearance_.getSkinColorProperty();
-    }
-
-    void AvatarRenderer::DrawRealEXT(const std::string& animationClipName,
-                                      System::TimeSpan position, bool loop)
-    {
-        if (isDisposed_)
-        {
-            throw System::ObjectDisposedException("AvatarRenderer");
-        }
-        if (!IsRealRenderingEnabledEXT())
-        {
-            throw System::InvalidOperationException(
-                "Real rendering has not been enabled; call EnableRealRenderingEXT first.");
-        }
-
-        std::vector<Microsoft::Xna::Framework::Matrix> boneTransforms;
-        realModel_->ComputeBoneTransformsEXT(animationClipName, position, loop, boneTransforms);
-
-        realEffect_->setWorldProperty(world_);
-        realEffect_->setViewProperty(view_);
-        realEffect_->setProjectionProperty(projection_);
-        realEffect_->SetBoneTransforms(boneTransforms);
-        // REMED-GFX-008: XNA's AvatarRenderer exposes exactly ONE directional light
-        // (LightDirection/LightColor) plus AmbientLightColor -- not the three-light BasicEffect rig.
-        // Configure DirectionalLight0 as that single key light and DISABLE DirectionalLight1/2 so the
-        // two exposed properties genuinely control avatar lighting. Previously this called
-        // EnableDefaultLighting() (which turns on all three lights + XNA's dim default ambient) and
-        // overrode only Light0, leaving XNA's generic fill/back lights 1 & 2 leaking into every
-        // avatar -- an infidelity that was only invisible in tests because those extra lights happen
-        // to back-face the front-facing test quads. Ambient is set last (no EnableDefaultLighting to
-        // clobber it). Specular is left off: the avatar model exposes only a diffuse key light +
-        // ambient, and emissive is unused, so both are zeroed to keep the lit result a clean
-        // (ambient + keyLight*N.L) * tint under the FNA-correct SkinnedEffect lighting model.
-        realEffect_->getDirectionalLight0Property().setEnabledProperty(true);
-        realEffect_->getDirectionalLight0Property().setDirectionProperty(lightDirection_);
-        realEffect_->getDirectionalLight0Property().setDiffuseColorProperty(lightColor_);
-        realEffect_->getDirectionalLight0Property().setSpecularColorProperty(
-            Microsoft::Xna::Framework::Vector3::Zero);
-        realEffect_->getDirectionalLight1Property().setEnabledProperty(false);
-        realEffect_->getDirectionalLight2Property().setEnabledProperty(false);
-        realEffect_->setSpecularColorProperty(Microsoft::Xna::Framework::Vector3::Zero);
-        realEffect_->setEmissiveColorProperty(Microsoft::Xna::Framework::Vector3::Zero);
-        realEffect_->setAmbientLightColorProperty(ambientLightColor_);
-
-        for (const auto& part : realModel_->Parts)
-        {
-            realEffect_->setDiffuseColorProperty(PartTintEXT(part.Name).ToVector3());
-            realEffect_->setTextureProperty(part.Texture);
-            realEffect_->Apply();
-
-            realDevice_->SetVertexBuffer(part.Part->getVertexBufferProperty());
-            realDevice_->SetIndexBuffer(part.Part->getIndexBufferProperty());
-            realDevice_->DrawIndexedPrimitives(
-                Graphics::PrimitiveType::TriangleList,
-                part.Part->getVertexOffsetProperty(),
-                0,
-                part.Part->getNumVerticesProperty(),
-                part.Part->getStartIndexProperty(),
-                part.Part->getPrimitiveCountProperty());
-        }
+        const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        const float pulse = 0.5f + 0.5f * static_cast<float>(std::sin(seconds * 3.0));
+        auto& effect = *r.loadingEffect;
+        effect.setWorldProperty(Matrix::CreateScale(1.0f + 0.03f * pulse) * world_);
+        effect.setViewProperty(view_);
+        effect.setProjectionProperty(projection_);
+        effect.setLightingEnabledProperty(false);
+        effect.setVertexColorEnabledProperty(true);
+        effect.setDiffuseColorProperty(Vector3(0.45f, 0.7f, 1.0f));
+        effect.setAlphaProperty(0.25f + 0.35f * pulse);
+        DeviceStateScope scope(device);
+        device.setBlendStateProperty(Graphics::BlendState::AlphaBlend);
+        device.setDepthStencilStateProperty(Graphics::DepthStencilState::DepthRead);
+        device.setRasterizerStateProperty(Graphics::RasterizerState::CullCounterClockwise);
+        effect.Apply();
+        device.SetVertexBuffer(r.loadingVertices.get());
+        device.SetIndexBuffer(r.loadingIndices.get());
+        device.DrawIndexedPrimitives(Graphics::PrimitiveType::TriangleList, 0, 0, r.loadingVertexCount, 0, r.loadingPrimitiveCount);
     }
 
     void AvatarRenderer::Dispose()
@@ -242,9 +491,14 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void AvatarRenderer::Dispose(bool /*disposing*/)
     {
+        if (isDisposed_)
+        {
+            return;
+        }
         isDisposed_ = true;
-        realEffect_.reset();
-        realModel_.reset();
-        realDevice_ = nullptr;
+        // A load still running on the loader thread finishes into its own shared state.
+        resources_->Release();
+        resources_->load.reset();
+        resources_->model.reset();
     }
 }

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
@@ -15,9 +16,14 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     SignedInGamer* SignedInGamerCollection::operator[](Microsoft::Xna::Framework::PlayerIndex index) const
     {
-        int id = static_cast<int>(index);
-        if (id >= static_cast<int>(collection_.size()))
-            return nullptr;
-        return collection_[static_cast<std::size_t>(id)];
+        // XNA IL (SignedInGamerCollection.get_Item(PlayerIndex)) returns the gamer whose
+        // PlayerIndex matches, or null; the FNA-era port indexed the collection by the ordinal,
+        // which named the wrong gamer whenever a lower player was not signed in.
+        for (SignedInGamer* gamer : collection_)
+        {
+            if (gamer->getPlayerIndexProperty() == index)
+                return gamer;
+        }
+        return nullptr;
     }
 }

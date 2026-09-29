@@ -98,10 +98,9 @@ adding real test coverage for the JSON loader are natural next steps but out of 
 `SkinnedModelEXT` (`.skeleton.bin`/`.clip.bin`, loaded via `SkinnedModelTypeReader`) is a
 **deliberately separate**, `CNAEXT`, GPU-vertex-skinned mesh+skeleton+animation container — not
 built on `Model`/`ModelBone`/`ModelMesh` at all, since those encode XNA's *rigid* per-mesh
-parent-bone-transform hierarchy (a wrong fit for per-vertex GPU skinning). It exists to support the
-Avatar real-rendering extension (`AvatarRenderer::EnableRealRenderingEXT`) and has its own binary
-format, its own content-pipeline reader, and its own extensive test coverage
-(`ContentManagerSkinnedModelTests.cpp`) — see `docs/avatar-real-rendering-ext.md` for full detail.
+parent-bone-transform hierarchy (a wrong fit for per-vertex GPU skinning). It is for games that
+bring their own skinned characters and has its own binary format, its own content-pipeline reader,
+and its own test coverage (`ContentManagerSkinnedModelTests.cpp`) — see `docs/skinned-model-ext.md`.
 Everything in this document is about the **plain, XNA-shaped** `Model`/`ModelTypeReader` path only.
 
 ## Summary
@@ -117,4 +116,4 @@ Everything in this document is about the **plain, XNA-shaped** `Model`/`ModelTyp
 | Resource sharing/dedup across meshes | ❌ Not implemented (always allocates fresh per mesh) — low severity |
 | `existingInstance` hot-reload | ❌ Not implemented — acceptable, FNA's own use of this is pipeline-tooling-only |
 | Test coverage of the JSON model loader itself | ❌ None — zero tests or examples exercise `ModelTypeReader` |
-| Skinned/animated content (Avatar) | ✅ Separate system, fully covered — see `docs/avatar-real-rendering-ext.md` |
+| Skinned/animated content (`SkinnedModelEXT`) | ✅ Separate system, covered — see `docs/skinned-model-ext.md` |

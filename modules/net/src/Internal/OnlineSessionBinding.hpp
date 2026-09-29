@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 #include "OnlineSessionOperation.hpp"
+#include "TrafficRate.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkMachine.hpp"
 #include <map>
@@ -45,6 +46,12 @@ public:
      * @param options Delivery semantics. */
     void send(Microsoft::Xna::Framework::Net::NetworkGamer* sender,Microsoft::Xna::Framework::Net::NetworkGamer* target,
         const std::vector<SharpRuntime::bytecs>& payload,SendDataOptions options);
+    /** @brief Sends gamers' lobby ready state to the other machines.
+     * @param gamers Gamers whose ready state changed. */
+    void publishReady(const std::vector<Microsoft::Xna::Framework::Net::NetworkGamer*>& gamers);
+    /** @brief Host: removes the machine that owns @p gamer from the session.
+     * @param gamer Any gamer of that machine. */
+    void removeMachine(Microsoft::Xna::Framework::Net::NetworkGamer* gamer);
     /** @brief Records the host's requested gameplay state for directory publication.
      * @param state Lobby or Playing. */
     void requestState(NetworkSessionState state);
@@ -54,6 +61,12 @@ public:
     bool ended() const {return ended_;}
     /** @brief Gets whether this machine hosts the session. @return Host flag. */
     bool host() const {return host_;}
+    /** @brief Gets the backend owning this membership. @return Origin, or null after close. */
+    std::shared_ptr<GamerServices::IGamerServicesBackend> origin() const {return engine_?engine_->origin():nullptr;}
+    /** @brief Gets the opaque directory session. @return Session identifier. */
+    const std::string& session() const {return snapshot_.session;}
+    /** @brief Gets the latest directory revision this machine observed. @return Revision. */
+    int revision() const {return snapshot_.revision;}
 private:
     using NetworkGamer=Microsoft::Xna::Framework::Net::NetworkGamer;
     void project(const ServiceENetObservation& ready);
@@ -68,6 +81,7 @@ private:
     std::vector<std::string> users_;
     std::vector<std::unique_ptr<NetworkGamer>> remote_;
     std::map<unsigned char,NetworkGamer*> gamers_;
+    TrafficRate traffic_;
     std::map<std::string,std::shared_ptr<Microsoft::Xna::Framework::Net::NetworkMachine>> machines_;
     GamerServices::ServiceSessionSnapshot snapshot_;
     std::optional<GamerServices::ServiceSessionSettings> requested_;

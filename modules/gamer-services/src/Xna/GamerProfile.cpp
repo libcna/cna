@@ -6,12 +6,13 @@
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
+    // CNA keeps no gamer zone or reputation, so a profile reports none rather than invent one.
     GamerProfile::GamerProfile()
         : gamerScore_(0)
-        , gamerZone_(GamerZone::Pro)
+        , gamerZone_(GamerZone::Unknown)
         , region_(System::Globalization::RegionInfo::getCurrentRegionProperty())
-        , reputation_(5.0f)
-        , titlesPlayed_(1)
+        , reputation_(0.0f)
+        , titlesPlayed_(0)
         , totalAchievements_(0)
         , isDisposed_(false)
     {

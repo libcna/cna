@@ -508,11 +508,13 @@ CNA_C_API CNA_Result cna_network_session_get_allow_host_migration(
     CNA_Bool* out_value);
 
 /**
- * @brief Sets whether a session allows host migration.
+ * @brief Sets whether a session allows host migration; only the host of a networked session may
+ * change it, and every machine then reports the host's value.
  *
  * @param session Owned session handle.
  * @param value The new value.
- * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when a changed value is set on a disposed
+ * session or by a machine that is not the host, or a documented handle/thread/native failure.
  */
 CNA_C_API CNA_Result cna_network_session_set_allow_host_migration(
     CNA_NetworkSessionHandle session,
@@ -530,11 +532,14 @@ CNA_C_API CNA_Result cna_network_session_get_allow_join_in_progress(
     CNA_Bool* out_value);
 
 /**
- * @brief Sets whether a session allows joining in progress.
+ * @brief Sets whether a session allows joining in progress; only the host of a networked session
+ * may change it, and every machine then reports the host's value.
  *
  * @param session Owned session handle.
  * @param value The new value.
- * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` for a Ranked session,
+ * `CNA_RESULT_INVALID_STATE` when a changed value is set on a disposed session or by a machine that
+ * is not the host, or a documented handle/thread/native failure.
  */
 CNA_C_API CNA_Result cna_network_session_set_allow_join_in_progress(
     CNA_NetworkSessionHandle session,
@@ -775,12 +780,11 @@ CNA_C_API CNA_Result cna_network_session_update(CNA_NetworkSessionHandle session
  * @brief Adds a local gamer to a session.
  *
  * @param session Owned session handle.
- * @param signed_in_gamer Signed-in gamer handle, or `CNA_INVALID_HANDLE` for none.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the local-gamer limit is reached,
- * or a documented handle/thread/native failure.
- *
- * Signed-in gamers are a gamer-services type with no C representation yet, so only
- * `CNA_INVALID_HANDLE` is accepted today; the parameter shape is already final.
+ * @param signed_in_gamer A `CNA_SignedInGamerHandle`.
+ * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_INVALID_ARGUMENT` for `CNA_INVALID_HANDLE` (the
+ * canonical null gamer) or a gamer already in the session; `CNA_RESULT_INVALID_STATE` for a
+ * signed-out gamer, a disposed or ended session, a game in progress that does not allow joining,
+ * no open public slot or the local-gamer limit; or a documented handle/thread/native failure.
  */
 CNA_C_API CNA_Result cna_network_session_add_local_gamer(
     CNA_NetworkSessionHandle session,
@@ -1222,11 +1226,12 @@ CNA_C_API CNA_Result cna_local_network_gamer_get_signed_in_gamer(
  * @param gamer Gamer handle naming a local gamer.
  * @param remote_gamer Remote gamer handle, or `CNA_INVALID_HANDLE`.
  * @param enable `CNA_TRUE` to enable voice sending.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when the handle does not name a local
- * gamer, or a documented thread failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for `CNA_INVALID_HANDLE` or a gamer of
+ * another session, `CNA_RESULT_INVALID_STATE` when either gamer has left the session,
+ * `CNA_RESULT_INVALID_HANDLE` when the handle does not name a local gamer, or a documented thread
+ * failure.
  *
- * The canonical operation is a declared no-op, and this route reports that faithfully by
- * succeeding without changing anything.
+ * The canonical checks run; CNA carries no voice, so there is nothing further to switch.
  */
 CNA_C_API CNA_Result cna_local_network_gamer_enable_send_voice(
     CNA_NetworkGamerHandle gamer,
@@ -1237,10 +1242,12 @@ CNA_C_API CNA_Result cna_local_network_gamer_enable_send_voice(
  * @brief Sends party invites to nearby gamers.
  *
  * @param gamer Gamer handle naming a local gamer.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when the handle does not name a local
- * gamer, or a documented thread failure.
+ * @return `CNA_RESULT_INVALID_STATE` when the gamer has left the session or is alone in its party,
+ * `CNA_RESULT_INVALID_HANDLE` when the handle does not name a local gamer, or a documented thread
+ * failure.
  *
- * The canonical operation is a declared no-op.
+ * CNA has no party service, so every profile is alone in its party and the canonical refusal
+ * always applies.
  */
 CNA_C_API CNA_Result cna_local_network_gamer_send_party_invites(CNA_NetworkGamerHandle gamer);
 
@@ -1255,8 +1262,9 @@ CNA_C_API CNA_Result cna_local_network_gamer_send_party_invites(CNA_NetworkGamer
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when the handle does not name a local
  * gamer, or a documented argument/thread/native failure.
  *
- * The canonical operation fills the destination up to its own length, so the capacity given here
- * is the length the canonical call sees. Release the sender handle when done.
+ * The capacity is the array length the canonical call sees: zero is refused
+ * (`CNA_RESULT_INVALID_ARGUMENT`), and so is a packet longer than it, which then stays queued.
+ * Release the sender handle when done.
  */
 CNA_C_API CNA_Result cna_local_network_gamer_receive_data(
     CNA_NetworkGamerHandle gamer,
@@ -1274,12 +1282,11 @@ CNA_C_API CNA_Result cna_local_network_gamer_receive_data(
  * @param offset Offset within the destination to begin writing at.
  * @param out_sender Receives a borrowed gamer handle for the sender, or `CNA_INVALID_HANDLE`.
  * @param out_received Receives the number of bytes received, or zero when no packet was queued.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the canonical bounds check
- * rejects the offset, `CNA_RESULT_INVALID_HANDLE` when the handle does not name a local gamer, or
- * a documented thread/native failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an offset outside the destination
+ * or a packet that does not fit after it, `CNA_RESULT_INVALID_HANDLE` when the handle does not name
+ * a local gamer, or a documented thread/native failure.
  *
- * The canonical implementation consumes the packet before it validates the offset, so a rejected
- * offset still discards the packet.
+ * As in the canonical call, the offset is checked first and a refused packet stays queued.
  */
 CNA_C_API CNA_Result cna_local_network_gamer_receive_data_at(
     CNA_NetworkGamerHandle gamer,
@@ -1299,8 +1306,8 @@ CNA_C_API CNA_Result cna_local_network_gamer_receive_data_at(
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when the handle does not name a local
  * gamer, or a documented argument/thread/native failure.
  *
- * The canonical implementation always reports zero bytes for this overload, whether or not a
- * packet was available; the C route preserves that rather than substituting a plausible count.
+ * The reader is sized to the packet (emptied when none was queued) and the packet size is
+ * reported, as the canonical overload does.
  */
 CNA_C_API CNA_Result cna_local_network_gamer_receive_data_into_packet_reader(
     CNA_NetworkGamerHandle gamer,

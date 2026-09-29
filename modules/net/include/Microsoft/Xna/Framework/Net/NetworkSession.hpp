@@ -209,16 +209,18 @@ namespace Microsoft::Xna::Framework::Net
         void setAllowJoinInProgressProperty(bool value);
 
         /**
-         * @brief Gets the measured inbound bandwidth in bytes per second.
+         * @brief Gets the bytes per second this machine received for the session, transport
+         * overhead included, measured over each second of Update calls.
          *
-         * @return The received bandwidth.
+         * @return The received bandwidth; 0 until a second has been measured.
          */
         [[nodiscard]] int getBytesPerSecondReceivedProperty() const;
 
         /**
-         * @brief Gets the measured outbound bandwidth in bytes per second.
+         * @brief Gets the bytes per second this machine sent for the session, transport overhead
+         * included, measured over each second of Update calls.
          *
-         * @return The sent bandwidth.
+         * @return The sent bandwidth; 0 until a second has been measured.
          */
         [[nodiscard]] int getBytesPerSecondSentProperty() const;
 
@@ -360,20 +362,8 @@ namespace Microsoft::Xna::Framework::Net
         /** @brief Raised when a hosted game ends. */
         System::EventHandler<GameEndedEventArgs> GameEnded;
         /**
-         * @brief Raised when a gamer joins the session.
-         *
-         * The initial local gamer(s) established by `Create()`/`Join()`/`JoinInvited()` are
-         * queued internally at construction time, not raised into this event directly (a caller
-         * cannot possibly have subscribed yet at that point - the session pointer doesn't exist
-         * until the static factory method returns). Real XNA's `GamerJoined` is documented to
-         * replay itself immediately upon `+=` subscription for every gamer already in the session
-         * - `System::EventHandler<T>` (sharp-runtime) has no such "replay on subscribe" hook, so
-         * this port cannot reproduce that automatically (see `plans/plan_net.md`'s Task 12.3 for the
-         * full investigation). **Call `Update()` once, immediately after subscribing, to receive
-         * the initial join event(s) for this session's own local gamers** - this is the
-         * intentional, permanent, correct pattern (not a temporary workaround) given the above
-         * constraint; see `../cna-samples/samples/ClientServerSample`'s `HookSessionEvents()`
-         * call site for a real, working example.
+         * @brief Raised when a gamer joins the session. As in XNA, a handler is told at once, as it
+         * is added, of every gamer already in the session; later joins arrive at Update.
          */
         System::EventHandler<GamerJoinedEventArgs> GamerJoined;
         /** @brief Raised when a gamer leaves the session. */
@@ -382,19 +372,25 @@ namespace Microsoft::Xna::Framework::Net
         System::EventHandler<HostChangedEventArgs> HostChanged;
         /** @brief Raised when the session ends. */
         System::EventHandler<NetworkSessionEndedEventArgs> SessionEnded;
-        /** @brief Declared for API parity; never raised (leaderboards/TrueSkill unimplemented upstream). */
+        /**
+         * @brief Raised once per gamer in a Ranked CNA online session when its game ends or a gamer
+         * leaves, for the arbitrated leaderboard writes; the service commits the rows a strict
+         * majority of the reporting machines agree on.
+         */
         System::EventHandler<WriteLeaderboardsEventArgs> WriteArbitratedLeaderboard;
         /** @brief Requests final local statistics before service gameplay returns to the lobby. */
         System::EventHandler<WriteLeaderboardsEventArgs> WriteUnarbitratedLeaderboard;
-        /** @brief Declared for API parity; never raised (leaderboards/TrueSkill unimplemented upstream). */
+        /**
+         * @brief Raised once per gamer with the arbitrated writes, in a Ranked CNA online session and
+         * on a PlayerMatch host. CNA computes no TrueSkill: skill boards are ordinary arbitrated
+         * boards these handlers write.
+         */
         System::EventHandler<WriteLeaderboardsEventArgs> WriteTrueSkill;
 
         /**
-         * @brief Raised when the user accepts a game invitation.
-         *
-         * Declared for API parity and never raised here: CNA has no invitation service to
-         * deliver one. `JoinInvited` refuses for the same reason, so a handler subscribed to
-         * this event is unreachable rather than merely idle.
+         * @brief Raised at Update when a player accepts a game invitation in the Guide; the handler
+         * then joins with JoinInvited. As in XNA, an acceptance that arrives with no handler is
+         * delivered to the first one added.
          */
         static System::EventHandler<GamerServices::InviteAcceptedEventArgs> InviteAccepted;
 
@@ -468,9 +464,19 @@ namespace Microsoft::Xna::Framework::Net
         void Update();
 
         /**
-         * @brief Adds a local gamer to the session.
+         * @brief Adds a local gamer to the session, on this machine. Every other machine in the
+         * session sees the gamer join. On a SystemLink client the host numbers the gamer, so its
+         * `Id` changes once the host answers; anything it sends before then is held until it does.
          *
          * @param gamer The signed-in gamer to add.
+         * @throws System::ArgumentNullException if gamer is null.
+         * @throws System::ObjectDisposedException if gamer or the session is disposed.
+         * @throws System::ArgumentException if gamer is already in the session.
+         * @throws System::InvalidOperationException if the session has ended, is playing and does
+         *         not allow joining a game in progress, has no open public slot, or already has its
+         *         maximum number of local gamers.
+         * @throws System::NotSupportedException for a PlayerMatch or Ranked session: CNA online
+         *         sessions do not yet add local gamers after creation or join.
          */
         void AddLocalGamer(GamerServices::SignedInGamer* gamer);
 
@@ -730,6 +736,7 @@ namespace Microsoft::Xna::Framework::Net
          *
          * @param availableSession The session to join.
          * @return The joined NetworkSession.
+         * @throws System::ObjectDisposedException if the collection the listing came from was disposed.
          */
         [[nodiscard]] static NetworkSession* Join(const AvailableNetworkSession* availableSession);
 
@@ -740,6 +747,7 @@ namespace Microsoft::Xna::Framework::Net
          * @param callback The callback to invoke on completion.
          * @param asyncState A user-defined state object.
          * @return A caller-owned IAsyncResult; retain it through End, then release it.
+         * @throws System::ObjectDisposedException if the collection the listing came from was disposed.
          */
         [[nodiscard]] static System::IAsyncResult* BeginJoin(
             const AvailableNetworkSession* availableSession,
@@ -814,6 +822,59 @@ namespace Microsoft::Xna::Framework::Net
     private:
         friend class CNA::Internal::Net::ENetBackend;
         friend class CNA::Internal::Net::OnlineSessionBinding;
+        friend class NetworkGamer;
+        friend class NetworkMachine;
+
+        /**
+         * @brief Removes the remote machine that owns @p gamer (NetworkMachine.RemoveFromSession,
+         * after its checks).
+         *
+         * @param gamer Any gamer of the machine to remove.
+         */
+        CNAEXT void RemoveMachineInternal(NetworkGamer* gamer);
+
+        /**
+         * @brief Takes the host's session settings, which a client reports as its own.
+         *
+         * @param maxGamers MaxGamers. @param privateGamerSlots PrivateGamerSlots.
+         * @param allowJoinInProgress AllowJoinInProgress. @param allowHostMigration AllowHostMigration.
+         */
+        CNAEXT void SetSettingsFromTransport(int maxGamers, int privateGamerSlots, bool allowJoinInProgress,
+            bool allowHostMigration);
+
+        /**
+         * @brief Takes the transport's measured traffic for BytesPerSecondSent/Received.
+         *
+         * @param sent Bytes per second sent. @param received Bytes per second received.
+         */
+        CNAEXT void SetTrafficFromTransport(int sent, int received);
+
+        /**
+         * @brief Sends the ready state of gamers to the other machines of the session: a client
+         * reports its own gamers to the host, the host reports to every client.
+         *
+         * @param gamers Gamers whose ready state changed.
+         */
+        CNAEXT void PublishGamerReady(const std::vector<NetworkGamer*>& gamers);
+
+        /**
+         * @brief Clears every gamer's ready state; each machine does this when a game ends.
+         */
+        CNAEXT void ClearReadyInternal();
+
+        /**
+         * @brief Applies a ready state the session transport reported for one gamer.
+         *
+         * @param gamer The gamer the report names.
+         * @param value The reported ready state.
+         */
+        CNAEXT static void ApplyGamerReadyInternal(NetworkGamer& gamer, bool value);
+
+        /**
+         * @brief Keeps AllGamers, LocalGamers and RemoteGamers in the session's canonical order:
+         * ascending Id, which is the same on every machine and puts the host's gamers first.
+         */
+        CNAEXT void OrderGamersInternal();
 
         /**
          * @brief Replaces the session host with the identity established by the transport.
@@ -832,7 +893,7 @@ namespace Microsoft::Xna::Framework::Net
          */
         CNAEXT void SetSessionPropertiesFromTransport(NetworkSessionProperties properties);
 
-        enum class NetworkSessionOperation { Create, Find, Join };
+        enum class NetworkSessionOperation { Create, Find, Join, JoinInvited };
 
         /**
          * @brief Internal IAsyncResult implementation backing NetworkSession's Begin/End pairs.
@@ -980,15 +1041,30 @@ namespace Microsoft::Xna::Framework::Net
         CNAEXT std::vector<std::unique_ptr<NetworkGamer>> ownedGamers_;
 
         void FinalizeServiceLeaderboards(bool isLeaving=false);
+        void BeginOnlineLeaderboards();
+        void AbandonServiceLeaderboards() noexcept;
+        std::shared_ptr<CNA::Internal::GamerServices::IGamerServicesBackend> LeaderboardService() const;
         void ReleaseSessionResources();
         std::string leaderboardGameplay_,leaderboardOwner_;
+        // Remote gamers who left during the current Ranked round; their reports still count.
+        std::vector<NetworkGamer*> roundDeparted_;
+        void OpenLeaderboardWriters();
+        void CloseLeaderboardWriters();
         bool leaderboardTransitionPending_=false;
 
         static std::vector<GamerServices::SignedInGamer*> ServiceLocalGamers(
             int maxLocalGamers, const std::optional<std::vector<GamerServices::SignedInGamer*>>& gamers);
         static System::IAsyncResult* QueueServiceSearch();
-        static System::IAsyncResult* QueueOnlineSession(const AvailableNetworkSession* target);
+        static System::IAsyncResult* QueueOnlineSession(const std::string& session, const std::string& invite);
         static NetworkSession* CompleteOnlineSession(NetworkSessionAction* action);
+        static System::IAsyncResult* QueueInvitedSession(
+            int maxLocalGamers, std::optional<std::vector<GamerServices::SignedInGamer*>> localGamers,
+            System::AsyncCallback callback, std::any asyncState);
+        // Guide acceptance sink: raises InviteAccepted, or keeps it until the first subscription.
+        static bool InstallInviteSink();
+        static void DeliverInviteAccepted(GamerServices::SignedInGamer* gamer, const std::string& session);
+        static std::optional<GamerServices::InviteAcceptedEventArgs> pendingInviteAccepted_;
+        static bool inviteSinkInstalled_;
         // Authenticated PlayerMatch/Ranked projection; absent for Local/SystemLink sessions.
         std::unique_ptr<CNA::Internal::Net::OnlineSessionBinding> online_;
         static NetworkSessionAction* activeAction_;

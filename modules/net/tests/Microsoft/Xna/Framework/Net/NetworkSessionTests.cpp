@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
+#include <memory>
 #include "CNA/Internal/Net/ENetBackend.hpp"
 #include "CNA/Internal/Net/ENetHostHandle.hpp"
 #include "CNA/Internal/Net/NetPacketCodec.hpp"
+#include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
+#include "Microsoft/Xna/Framework/Net/GameStartedEventArgs.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
@@ -341,6 +344,31 @@ TEST(NetworkSessionTest, IsEveryoneReadyReflectsLocalGamers) {
     session->Dispose();
 }
 
+TEST(NetworkSessionTest, IsReadyIsSetOnlyInTheLobbyAndClearsWhenTheGameEnds) {
+    auto gamer = MakeSignedInGamer();
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
+    );
+    auto* local = session->getLocalGamersProperty()[0];
+
+    local->setIsReadyProperty(true);
+    session->StartGame();
+    session->Update();
+    ASSERT_EQ(session->getSessionStateProperty(), NetworkSessionState::Playing);
+    EXPECT_TRUE(local->getIsReadyProperty());
+    EXPECT_THROW(local->setIsReadyProperty(false), System::InvalidOperationException);
+    EXPECT_THROW(session->ResetReady(), System::InvalidOperationException);
+
+    // Every machine starts the next lobby with nobody ready.
+    session->EndGame();
+    session->Update();
+    ASSERT_EQ(session->getSessionStateProperty(), NetworkSessionState::Lobby);
+    EXPECT_FALSE(local->getIsReadyProperty());
+    EXPECT_FALSE(session->getIsEveryoneReadyProperty());
+
+    session->Dispose();
+}
+
 TEST(NetworkSessionTest, ResetReadySetsAllGamersNotReady) {
     auto gamer = MakeSignedInGamer();
     NetworkSession* session = NetworkSession::Create(
@@ -429,18 +457,55 @@ TEST(NetworkSessionTest, EndGameWhileNotPlayingThrows) {
     session->Dispose();
 }
 
+// Reference Create with an explicit list uses a local-gamer limit of 4, whatever the list's length,
+// and a gamer listed twice joins once.
 TEST(NetworkSessionTest, AddLocalGamerThrowsAtMaxLimit) {
     auto gamer = MakeSignedInGamer();
     auto second = MakeSignedInGamer("tag2");
+    auto third = MakeSignedInGamer("tag3");
+    auto fourth = MakeSignedInGamer("tag4");
+    auto fifth = MakeSignedInGamer("tag5");
     NetworkSession* session = NetworkSession::Create(
-        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer, &gamer}, 8, 0, NetworkSessionProperties{}
     );
+    ASSERT_EQ(session->getLocalGamersProperty().getCountProperty(), 1);
 
-    // maxLocalGamers_ tracks the count passed to the explicit-list constructor overload (1
-    // here), so the very next AddLocalGamer call is already at the limit.
-    EXPECT_THROW(session->AddLocalGamer(&second), System::InvalidOperationException);
+    session->AddLocalGamer(&second);
+    session->AddLocalGamer(&third);
+    session->AddLocalGamer(&fourth);
+    EXPECT_EQ(session->getLocalGamersProperty().getCountProperty(), 4);
+    EXPECT_THROW(session->AddLocalGamer(&fifth), System::InvalidOperationException);
 
     session->Dispose();
+}
+
+// Reference GetLocalGamers runs before every other check of an explicit-list Create, Find or
+// JoinInvited: a null entry or an empty list is an ArgumentException, a disposed gamer an
+// ObjectDisposedException. (Online requests look a gamer up among the signed-in gamers before
+// touching it, so a signed-out one is refused there as not signed in.)
+TEST(NetworkSessionTest, ExplicitLocalGamerListsAreCheckedFirst) {
+    SignedInGamer* none = nullptr;
+    // maxGamers 1 and a Local Find are invalid too; the list is reported instead.
+    EXPECT_THROW(NetworkSession::BeginCreate(NetworkSessionType::Local, std::vector<SignedInGamer*>{}, 1, 0,
+                     NetworkSessionProperties{}, System::AsyncCallback{}, std::any{}), System::ArgumentException);
+    EXPECT_THROW(NetworkSession::BeginCreate(NetworkSessionType::Local, std::vector<SignedInGamer*>{none}, 1, 0,
+                     NetworkSessionProperties{}, System::AsyncCallback{}, std::any{}), System::ArgumentException);
+    try {
+        (void)NetworkSession::BeginFind(NetworkSessionType::Local, std::vector<SignedInGamer*>{}, NetworkSessionProperties{},
+            System::AsyncCallback{}, std::any{});
+        ADD_FAILURE() << "an empty list was accepted";
+    } catch (const System::ArgumentException& e) {
+        EXPECT_EQ(e.getParamNameProperty(), "localGamers");
+    }
+    EXPECT_THROW(NetworkSession::BeginJoinInvited(std::vector<SignedInGamer*>{}, System::AsyncCallback{}, std::any{}),
+                 System::ArgumentException);
+
+    SignedInGamer disposed = MakeSignedInGamer("Disposed");
+    CNA::Internal::GamerServices::GamerAccess::dispose(disposed);
+    EXPECT_THROW(NetworkSession::BeginCreate(NetworkSessionType::Local, std::vector<SignedInGamer*>{&disposed}, 1, 0,
+                     NetworkSessionProperties{}, System::AsyncCallback{}, std::any{}), System::ObjectDisposedException);
+    EXPECT_THROW(NetworkSession::BeginFind(NetworkSessionType::Local, std::vector<SignedInGamer*>{&disposed},
+                     NetworkSessionProperties{}, System::AsyncCallback{}, std::any{}), System::ObjectDisposedException);
 }
 
 TEST(NetworkSessionTest, FindGamerByIdMatchesSoleLocalGamer) {
@@ -523,10 +588,8 @@ TEST(NetworkSessionTest, AJoinedSessionMakesLocalGamersReportIsHostFalse) {
     delete session;
 }
 
-// NOTE: the explicit-local-gamers Create()/JoinInvited() overloads always set maxLocalGamers_ to
-// the passed list's size (zero spare capacity — see AddLocalGamerThrowsAtMaxLimit's own comment
-// above), and the maxLocalGamers-only overload falls back to the global Gamer::SignedInGamers,
-// which defaults to empty in this test binary. An empty list makes the constructor's
+// NOTE: the maxLocalGamers-only overload falls back to the global Gamer::SignedInGamers, which
+// defaults to empty in this test binary. An empty list makes the constructor's
 // `host_ = localGamers_[0]` throw - Task 6.1 fixed EndCreate so that no longer permanently
 // corrupts activeAction_ (see FailedCreateDoesNotPermanentlyStrandActiveAction just below, which
 // now exercises this throw directly instead of avoiding it). Every other test in this file still
@@ -575,6 +638,59 @@ TEST(NetworkSessionTest, FailedCreateDoesNotPermanentlyStrandActiveAction) {
 // enqueue at all — unlike AddRemoteGamer just below, which explicitly enqueues a GamerJoin event.
 // A handler already subscribed before AddLocalGamer ran never learned about the newly-added local
 // gamer (no replay, no queued event).
+// Reference NetworkSession.AddLocalGamer checks, in order: null, disposed gamer, disposed session,
+// gamer already in the session, Playing without join-in-progress, Ended, no open public slot.
+// Reference GameStarted add accessor: a handler added while Playing is told at once; in the lobby
+// it is not.
+TEST(NetworkSessionTest, GameStartedReplaysForAHandlerAddedWhilePlaying) {
+    SignedInGamer gamer = MakeSignedInGamer("PlayerTag");
+    std::unique_ptr<NetworkSession> session(NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}));
+    int lobbyCalls = 0;
+    const auto lobby = session->GameStarted.Add([&](System::Object*, const GameStartedEventArgs&) { ++lobbyCalls; });
+    EXPECT_EQ(0, lobbyCalls);
+    session->StartGame();
+    session->Update();
+    ASSERT_EQ(NetworkSessionState::Playing, session->getSessionStateProperty());
+    EXPECT_EQ(1, lobbyCalls);
+    int lateCalls = 0;
+    System::Object* sender = nullptr;
+    const auto late = session->GameStarted.Add([&](System::Object* from, const GameStartedEventArgs&) { ++lateCalls; sender = from; });
+    EXPECT_EQ(1, lateCalls);
+    EXPECT_EQ(session.get(), sender);
+    session->GameStarted.Remove(lobby);
+    session->GameStarted.Remove(late);
+    session->Dispose();
+}
+
+TEST(NetworkSessionTest, AddLocalGamerFollowsTheReferenceChecks) {
+    SignedInGamer first = MakeSignedInGamer("FirstTag");
+    Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({&first})));
+    struct RestoreGlobalGuard {
+        ~RestoreGlobalGuard() {
+            Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({})));
+        }
+    } restoreGuard;
+    std::unique_ptr<NetworkSession> session(NetworkSession::Create(NetworkSessionType::Local, 4, 2));
+    ASSERT_EQ(session->getLocalGamersProperty().getCountProperty(), 1);
+    EXPECT_THROW(session->AddLocalGamer(nullptr), System::ArgumentNullException);
+    EXPECT_THROW(session->AddLocalGamer(&first), System::ArgumentException);
+    SignedInGamer second = MakeSignedInGamer("SecondTag");
+    session->StartGame();
+    session->Update();
+    ASSERT_EQ(session->getSessionStateProperty(), NetworkSessionState::Playing);
+    session->setAllowJoinInProgressProperty(false);
+    EXPECT_THROW(session->AddLocalGamer(&second), System::InvalidOperationException);
+    session->EndGame();
+    session->Update();
+    session->AddLocalGamer(&second);
+    // Two gamers fill the two slots.
+    SignedInGamer third = MakeSignedInGamer("ThirdTag");
+    EXPECT_THROW(session->AddLocalGamer(&third), System::InvalidOperationException);
+    session->Dispose();
+    EXPECT_THROW(session->AddLocalGamer(&third), System::ObjectDisposedException);
+}
+
 TEST(NetworkSessionTest, AddLocalGamerRaisesGamerJoinedForAnAlreadySubscribedHandler) {
     // Task 2.15 fixed a latent double-free here (and in the two other tests using this same
     // pattern): Gamer::setSignedInGamersProperty(value) unconditionally deletes whatever
@@ -1055,13 +1171,12 @@ TEST(NetworkSessionTest, BeginJoinInvitedValidatesMaxLocalGamers) {
     );
 }
 
-// Both JoinInvited overloads refuse: nothing raises NetworkSession::InviteAccepted, which is the
-// only place XNA's contract calls JoinInvited from, so no invitation can ever be pending. This
-// overload used to succeed and return a PlayerMatch session built out of nothing -- no invitation
-// token, no host address, no transport -- which is the behaviour SAMPLE-096 measured against the
-// real XNA runtime (see misc/known_gaps.md). The per-type sweep lives in
-// NetworkSessionTypePolicyTests.cpp; these two cases pin the argument-validation ordering and the
-// EndJoinInvited half that no Begin can now feed.
+// Without a configured CNA service no Guide invitation can have been accepted, so both
+// JoinInvited overloads refuse before doing anything. This overload used to succeed and return a
+// PlayerMatch session built out of nothing -- no invitation, no host, no transport -- which is not
+// what SAMPLE-096 observed. The accepted-invitation path (Guide acceptance -> InviteAccepted ->
+// JoinInvited) is covered by OnlineInvitationTest and the real two-process service E2E; these two
+// cases pin the unconfigured refusal and that EndJoinInvited refuses another family's result.
 TEST(NetworkSessionTest, JoinInvitedWithExplicitLocalGamersRefuses) {
     auto gamer = MakeSignedInGamer();
     EXPECT_THROW(
@@ -1071,9 +1186,9 @@ TEST(NetworkSessionTest, JoinInvitedWithExplicitLocalGamersRefuses) {
 }
 
 TEST(NetworkSessionTest, EndJoinInvitedRefusesAnyResultBecauseNoBeginCanProduceOne) {
-    // A BeginCreate result compares equal to activeAction_, so before the refusal this was a way
-    // around it: EndJoinInvited hardcoded a PlayerMatch session regardless of which Begin* had
-    // produced the action.
+    // A BeginCreate result compares equal to activeAction_, so this was once a way around the
+    // refusal: EndJoinInvited hardcoded a PlayerMatch session regardless of the producing Begin*.
+    // The operation-family guard now refuses any result that BeginJoinInvited did not produce.
     auto gamer = MakeSignedInGamer();
     System::IAsyncResult* createResult = NetworkSession::BeginCreate(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0,
@@ -1091,10 +1206,9 @@ TEST(NetworkSessionTest, EndJoinInvitedRefusesAnyResultBecauseNoBeginCanProduceO
 }
 
 TEST(NetworkSessionTest, EndJoinInvitedWithMismatchedResultThrows) {
-    // BeginJoinInvited now refuses, so there is no matching result to contrast the mismatched one
-    // against; EndJoinInvited refuses every result for that reason. The positive half of this
-    // pair lives in EndJoinInvitedRefusesAnyResultBecauseNoBeginCanProduceOne, which proves a
-    // real pending action survives the refusal.
+    // A pointer no Begin* produced is refused without being dereferenced. The accepted-invitation
+    // half lives in OnlineInvitationTest; EndJoinInvitedRefusesAnyResultBecauseNoBeginCanProduceOne
+    // proves a real pending action of another family survives the refusal.
     auto* bogus = reinterpret_cast<System::IAsyncResult*>(0x1);
     EXPECT_THROW((void)NetworkSession::EndJoinInvited(bogus), System::ArgumentException);
 }

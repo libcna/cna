@@ -119,4 +119,10 @@ namespace Microsoft::Xna::Framework::Net
         // No-op override kept for API-surface parity; does not alter BinaryReader::ReadDouble()'s behavior.
         return BinaryReader::ReadDouble();
     }
+
+    void PacketReader::ResizeInternal(int size)
+    {
+        PacketReaderStream::stream_.SetLength(size);
+        PacketReaderStream::stream_.setPositionProperty(0);
+    }
 }

@@ -521,6 +521,10 @@ if(CNA_BUILD_TESTS)
             target_compile_definitions(${_cna_test_object_target} PRIVATE
                 CNA_RELAY_PROTOCOL_VECTORS="${CMAKE_CURRENT_SOURCE_DIR}/modules/net/tests/fixtures/relay-protocol-v1.json")
         endif()
+        if(_cna_test_group STREQUAL "gamer_services")
+            target_compile_definitions(${_cna_test_object_target} PRIVATE
+                CNA_GAMER_SERVICES_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/modules/gamer-services/tests/fixtures")
+        endif()
         if(CNA_ENABLE_PCH AND _cna_test_group STREQUAL "content")
             # COMP-003 deliberately pilots only stable standard-library and GoogleTest headers.
             # CNA public headers stay textual so editing the framework API does not rebuild a

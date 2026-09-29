@@ -29,10 +29,9 @@ namespace Microsoft::Xna::Framework::GamerServices
      * in its own separate registry, never through this view. Established precedent:
      * `NetworkSession::ownedGamers_` (owns locally-created `NetworkGamer`s),
      * `ENetBackend::SessionState::OwnedRemoteGamers` (owns remotely-created `NetworkGamer`s),
-     * and `GamerServicesDispatcher::Initialize()`'s explicit free-before-replace loop (owns the 4
-     * stub `SignedInGamer`s it creates). Any future real (non-stub) population of a
-     * `GamerCollection<T>`-derived view (e.g. a real `FriendCollection` population from a live
-     * friends-list service) must establish its own analogous ownership registry at the point of
+     * the gamer services dispatcher (owns the `SignedInGamer`s it signs in), and a `FriendCollection`
+     * snapshot (owns the `FriendGamer`s it was built with). Any other population of a
+     * `GamerCollection<T>`-derived view must establish its own ownership registry at the point of
      * creation — never make this view itself free anything.
      *
      * Task 10.5: this type has no virtual members and is **not** designed to be used

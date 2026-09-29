@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
@@ -47,14 +49,24 @@ namespace Microsoft::Xna::Framework::Net
     GamerServices::SignedInGamer* LocalNetworkGamer::getSignedInGamerProperty() const { return signedInGamer_; }
     bool LocalNetworkGamer::getIsLocalProperty() const { return true; }
 
-    void LocalNetworkGamer::EnableSendVoice(NetworkGamer* /*remoteGamer*/, bool /*enable*/)
+    void LocalNetworkGamer::EnableSendVoice(NetworkGamer* remoteGamer, bool /*enable*/)
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
+        // Reference EnableSendVoice checks; CNA carries no voice, so there is nothing to switch.
+        if (getHasLeftSessionProperty()) throw System::InvalidOperationException("The gamer has left the session.");
+        if (remoteGamer == nullptr) throw System::ArgumentNullException("remoteGamer");
+        if (remoteGamer->getHasLeftSessionProperty()) throw System::InvalidOperationException("The remote gamer has left the session.");
+        if (remoteGamer->getSessionProperty() != getSessionProperty())
+            throw System::ArgumentException("The gamer is not in this session.", "remoteGamer");
     }
 
     void LocalNetworkGamer::SendPartyInvites()
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
+        // Reference SendPartyInvites; CNA has no party service, so every profile is alone in its party.
+        if (getHasLeftSessionProperty()) throw System::InvalidOperationException("The gamer has left the session.");
+        if (signedInGamer_ == nullptr || signedInGamer_->getPartySizeProperty() < 2)
+            throw System::InvalidOperationException("There is nobody else in the party to invite.");
     }
 
     int LocalNetworkGamer::ReceiveData(std::vector<SharpRuntime::bytecs>& data, NetworkGamer*& sender)
@@ -66,80 +78,64 @@ namespace Microsoft::Xna::Framework::Net
     int LocalNetworkGamer::ReceiveData(std::vector<SharpRuntime::bytecs>& data, int offset, NetworkGamer*& sender)
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
+        // Reference ReceiveData(byte[], int, out NetworkGamer): the offset is checked first, and a
+        // packet that does not fit is refused without being taken off the queue.
+        if (offset < 0 || offset >= static_cast<int>(data.size()))
+        {
+            throw System::ArgumentOutOfRangeException("offset");
+        }
         sender = nullptr;
         if (!getIsDataAvailableProperty())
         {
             return 0;
         }
-
+        const int size = static_cast<int>(packetQueue_.front().Packet.size());
+        if (offset + size > static_cast<int>(data.size()))
+        {
+            throw System::ArgumentException("The array is too small for the packet.", "data");
+        }
         NetworkSession::NetworkEvent packet = std::move(packetQueue_.front());
         packetQueue_.pop();
-        int len = std::min(static_cast<int>(packet.Packet.size()), static_cast<int>(data.size()));
-        // Task 2.8: FNA's own Array.Copy(packet.Packet, 0, data, offset, len) validates offset+len
-        // against data.Length and throws ArgumentException on overflow (len itself is computed
-        // the same offset-oblivious way in FNA, so it can legitimately exceed data.size() - offset
-        // for a non-zero offset) - preserved here instead of std::copy's undefined behavior for an
-        // out-of-bounds destination range. The packet is still consumed from the queue either way,
-        // matching FNA's Dequeue()-before-Array.Copy ordering.
-        if (offset < 0 || offset + len > static_cast<int>(data.size()))
-        {
-            throw System::ArgumentException("offset");
-        }
-        std::copy(packet.Packet.begin(), packet.Packet.begin() + len, data.begin() + offset);
-
-        for (NetworkGamer* gamer : getSessionProperty()->getAllGamersProperty())
-        {
-            // Task 6.2: FIXME upstream ("This is a bad equality check!" in FNA's own source) -
-            // pointer identity is a weak equality check for "same gamer", preserved as-is rather
-            // than "fixed" to a value-based comparison FNA itself doesn't have. Re-evaluated after
-            // Task 3.1 gave NetworkSession/ENetBackend real ownership of every gamer they create
-            // (previously nothing was ever freed, so no address could be coincidentally reused):
-            // still safe, because neither ever frees a gamer individually - only in bulk, at
-            // whole-session Dispose()/TeardownSession - and every NetworkEvent that could carry a
-            // stale Gamer* lives inside a per-gamer packetQueue_ (or NetworkSession's own event
-            // queue), which is destroyed together with that same session's gamers at that same
-            // Dispose() call. No stale pointer from a torn-down session can outlive the objects
-            // it would need to be compared against.
-            if (gamer == packet.Gamer)
-            {
-                sender = gamer;
-                return len;
-            }
-        }
-
-        return len;
+        std::copy(packet.Packet.begin(), packet.Packet.end(), data.begin() + offset);
+        sender = SenderOf(packet);
+        return size;
     }
 
     int LocalNetworkGamer::ReceiveData(PacketReader& data, NetworkGamer*& sender)
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
+        // Reference: the reader is resized to the next packet (emptied when there is none) and the
+        // packet size is returned. (The reference then reads through the reader's buffer, which
+        // throws for a reader that has never held data; CNA's reader has no separate capacity.)
         sender = nullptr;
         if (!getIsDataAvailableProperty())
         {
+            data.ResizeInternal(0);
             return 0;
         }
-
-        // FNA declares `uint len = 0` here and never updates it before returning it — the
-        // written data is real, but the reported length is always 0. Preserved as-is.
-        uint32_t len = 0;
         NetworkSession::NetworkEvent packet = std::move(packetQueue_.front());
         packetQueue_.pop();
+        const int size = static_cast<int>(packet.Packet.size());
+        data.ResizeInternal(size);
+        data.getBaseStreamProperty()->Write(packet.Packet.data(), 0, size);
         data.setPositionProperty(0);
-        data.getBaseStreamProperty()->Write(packet.Packet.data(), 0, static_cast<int>(packet.Packet.size()));
-        data.setPositionProperty(0);
+        sender = SenderOf(packet);
+        return size;
+    }
 
+    NetworkGamer* LocalNetworkGamer::SenderOf(const NetworkSession::NetworkEvent& packet) const
+    {
+        // Pointer identity against the session's gamers; a sender that has left the session is
+        // still the sender (reference incomingPacket.Sender), found among the previous gamers.
         for (NetworkGamer* gamer : getSessionProperty()->getAllGamersProperty())
         {
-            // Task 6.2: same pointer-identity FIXME and same re-evaluated-safe reasoning as the
-            // other ReceiveData overload above.
-            if (gamer == packet.Gamer)
-            {
-                sender = gamer;
-                return static_cast<int>(len);
-            }
+            if (gamer == packet.Gamer) return gamer;
         }
-
-        return static_cast<int>(len);
+        for (NetworkGamer* gamer : getSessionProperty()->getPreviousGamersProperty())
+        {
+            if (gamer == packet.Gamer) return gamer;
+        }
+        return nullptr;
     }
 
     void LocalNetworkGamer::SendData(const std::vector<SharpRuntime::bytecs>& data, SendDataOptions options)

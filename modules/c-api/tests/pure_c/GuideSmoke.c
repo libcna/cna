@@ -33,15 +33,15 @@ static int validate_settings(void)
         cna_guide_get_is_screen_saver_enabled(0) != CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
-    if (cna_guide_set_is_trial_mode(CNA_TRUE) != CNA_RESULT_SUCCESS ||
+    /* Trial mode follows the simulation only: CNA titles are fully licensed. */
+    if (cna_guide_set_simulate_trial_mode(CNA_TRUE) != CNA_RESULT_SUCCESS ||
         cna_guide_get_is_trial_mode(&flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE ||
-        cna_guide_set_is_trial_mode(CNA_FALSE) != CNA_RESULT_SUCCESS ||
+        cna_guide_set_simulate_trial_mode(CNA_FALSE) != CNA_RESULT_SUCCESS ||
         cna_guide_get_is_trial_mode(&flag) != CNA_RESULT_SUCCESS || flag != CNA_FALSE) {
         return 0;
     }
-    if (cna_guide_set_is_visible(CNA_TRUE) != CNA_RESULT_SUCCESS ||
-        cna_guide_get_is_visible(&flag) != CNA_RESULT_SUCCESS ||
-        cna_guide_set_is_visible(CNA_FALSE) != CNA_RESULT_SUCCESS) {
+    /* The canonical getter refuses before gamer services are initialized. */
+    if (cna_guide_get_is_visible(&flag) != CNA_RESULT_INVALID_STATE) {
         return 0;
     }
     if (cna_guide_set_notification_position(CNA_NOTIFICATION_POSITION_BOTTOM_RIGHT) !=
@@ -224,6 +224,12 @@ static int validate_message_box(void)
         flag != CNA_FALSE) {
         return 0;
     }
+    /* The canonical End runs once per box; the answer stays readable here. */
+    button = -1;
+    if (cna_guide_end_show_message_box(&has_choice, &button) != CNA_RESULT_SUCCESS ||
+        has_choice != CNA_TRUE || button != 1) {
+        return 0;
+    }
 
     /* Discarding never runs the callback either. */
     completions = 0;
@@ -240,15 +246,19 @@ static int validate_message_box(void)
 
 /* Every guide screen is a no-op here, so what a caller can observe is that it is accepted and that
    a bad identity is still refused at the boundary. */
+/* Without a configured CNA account service (this container's case) every screen that belongs to
+   a signed-in service player -- the social screens and the marketplace, party and achievement
+   information panes -- refuses: as unavailable, or for the marketplace as a profile without the
+   purchase privilege. The session overload of the game invite is Windows Phone only. */
 static int validate_screens(const CNA_SignedInGamerHandle gamer)
 {
     const CNA_GamerHandle recipients[1] = {gamer};
 
     if (cna_guide_delay_notifications(INT64_C(1000000)) != CNA_RESULT_SUCCESS ||
         cna_guide_show_compose_message(CNA_PLAYER_INDEX_ONE, view("Hi"), recipients,
-                                       UINT64_C(1)) != CNA_RESULT_SUCCESS ||
+                                       UINT64_C(1)) != CNA_RESULT_NOT_SUPPORTED ||
         cna_guide_show_compose_message(CNA_PLAYER_INDEX_ONE, view("Hi"), 0, UINT64_C(0)) !=
-            CNA_RESULT_SUCCESS ||
+            CNA_RESULT_NOT_SUPPORTED ||
         cna_guide_show_compose_message(CNA_PLAYER_INDEX_ONE, view("Hi"), 0, UINT64_C(1)) !=
             CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
@@ -256,22 +266,24 @@ static int validate_screens(const CNA_SignedInGamerHandle gamer)
     if (cna_guide_show_friend_request(CNA_PLAYER_INDEX_ONE, gamer) != CNA_RESULT_NOT_SUPPORTED ||
         cna_guide_show_friends(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_NOT_SUPPORTED ||
         cna_guide_show_game_invite(CNA_PLAYER_INDEX_ONE, recipients, UINT64_C(1)) !=
-            CNA_RESULT_SUCCESS ||
-        cna_guide_show_game_invite_for_session(view("session")) != CNA_RESULT_SUCCESS ||
+            CNA_RESULT_NOT_SUPPORTED ||
+        cna_guide_show_game_invite_for_session(view("session")) != CNA_RESULT_NOT_SUPPORTED ||
         cna_guide_show_gamer_card(CNA_PLAYER_INDEX_ONE, gamer) != CNA_RESULT_NOT_SUPPORTED) {
         return 0;
     }
-    if (cna_guide_show_marketplace(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_SUCCESS ||
-        cna_guide_show_messages(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_SUCCESS ||
-        cna_guide_show_party(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_SUCCESS ||
-        cna_guide_show_party_sessions(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_SUCCESS ||
-        cna_guide_show_player_review(CNA_PLAYER_INDEX_ONE, gamer) != CNA_RESULT_SUCCESS ||
-        cna_guide_show_players(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_SUCCESS ||
-        cna_guide_show_sign_in(2, CNA_FALSE) != CNA_RESULT_NOT_SUPPORTED ||
-        cna_guide_show_achievements_ext(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_SUCCESS) {
+    if (cna_guide_show_marketplace(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_INVALID_STATE ||
+        cna_guide_show_messages(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_guide_show_player_review(CNA_PLAYER_INDEX_ONE, gamer) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_guide_show_players(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_guide_show_sign_in(2, CNA_TRUE) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_guide_show_achievements_ext(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_NOT_SUPPORTED) {
         return 0;
     }
-    /* An undefined player index is refused even though nothing would have used it. */
+    if (cna_guide_show_party(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_guide_show_party_sessions(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_NOT_SUPPORTED) {
+        return 0;
+    }
+    /* An undefined player index is refused before anything else is looked at. */
     return cna_guide_show_friends(UINT32_C(99)) == CNA_RESULT_INVALID_ARGUMENT &&
         cna_guide_show_marketplace(UINT32_C(99)) == CNA_RESULT_INVALID_ARGUMENT &&
         cna_guide_show_gamer_card(CNA_PLAYER_INDEX_ONE, CNA_INVALID_HANDLE) ==
@@ -311,6 +323,16 @@ static int validate_dispatcher(const CNA_Handle game)
         cna_gamer_services_dispatcher_update_async(&flag) != CNA_RESULT_SUCCESS ||
         cna_gamer_services_dispatcher_update_async(0) != CNA_RESULT_INVALID_ARGUMENT ||
         cna_gamer_services_dispatcher_get_freed_gamer_count_ext(&freed) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    /* Initialized without a service, the sign-in screen signs in local offline profiles, which an
+       online-only sign-in excludes; canceling closes it. */
+    CNA_Bool visible = CNA_FALSE;
+    if (cna_guide_show_sign_in(1, CNA_TRUE) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_guide_show_sign_in(1, CNA_FALSE) != CNA_RESULT_SUCCESS ||
+        cna_guide_get_is_visible(&visible) != CNA_RESULT_SUCCESS || visible != CNA_TRUE ||
+        cna_guide_simulate_keyboard_input_cancel_ext() != CNA_RESULT_SUCCESS ||
+        cna_guide_get_is_visible(&visible) != CNA_RESULT_SUCCESS || visible != CNA_FALSE) {
         return 0;
     }
     if (cna_gamer_services_dispatcher_subscribe_installing_title_update_ext(

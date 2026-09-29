@@ -321,12 +321,13 @@ namespace Microsoft::Xna::Framework::GamerServices
         [[nodiscard]] bool getIsReadOnlyProperty() const;
 
         /**
-         * @brief Always throws, matching FNA's own unimplemented
-         * `ICollection<KeyValuePair<string,object>>.CopyTo` stub.
+         * @brief Copies every key/value pair into @p array from @p arrayIndex on
+         * (`ICollection<KeyValuePair<string,object>>.CopyTo`).
          *
-         * @param array Unused.
-         * @param arrayIndex Unused.
-         * @throws System::NotImplementedException always.
+         * @param array The destination; it keeps its size.
+         * @param arrayIndex The first element to write.
+         * @throws System::ArgumentOutOfRangeException if arrayIndex is negative or past the end.
+         * @throws System::ArgumentException if the pairs do not fit after arrayIndex.
          */
         void CopyTo(std::vector<std::pair<std::string, std::any>>& array, int arrayIndex) const;
 

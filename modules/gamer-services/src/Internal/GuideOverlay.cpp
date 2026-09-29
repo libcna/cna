@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "GuideOverlay.hpp"
+#include "CNA/Internal/GamerServices/DispatcherGraphics.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "CNA/Internal/Runtime/IGameOverlay.hpp"
 #include "CNA/Internal/Graphics/SystemFont.hpp"
 #include "Microsoft/Xna/Framework/GameServiceContainer.hpp"
@@ -17,10 +20,10 @@ using Guide = Microsoft::Xna::Framework::GamerServices::Guide;
 class Overlay final : public CNA::Internal::Runtime::IGameOverlay {
 public:
     XnaGraphics::IGraphicsDeviceService* graphics=nullptr;
-    [[nodiscard]] bool isModalVisible() const override { return Guide::getIsVisibleProperty(); }
+    [[nodiscard]] bool isModalVisible() const override { return guideIsVisible(); }
     void reset() { batch_.reset(); font_.reset(); white_.reset(); device_=nullptr; }
     void draw() override {
-        if(!Guide::getIsVisibleProperty()||!graphics)return;
+        if(!guideIsVisible()||!graphics)return;
         auto* device=graphics->getGraphicsDeviceProperty();if(!device)return;
         if(device!=device_) {
             batch_=std::make_unique<XnaGraphics::SpriteBatch>(*device);
@@ -44,6 +47,22 @@ private:
 };
 Overlay overlay;
 }
+namespace {
+Microsoft::Xna::Framework::Graphics::GraphicsDevice* testingDevice=nullptr;
+}
+bool guideOverlayAttached() {return overlay.graphics!=nullptr;}
+Microsoft::Xna::Framework::Graphics::GraphicsDevice& dispatcherGraphicsDevice() {
+    if(testingDevice)return *testingDevice;
+    if(!Microsoft::Xna::Framework::GamerServices::GamerServicesDispatcher::getIsInitializedProperty())
+        throw System::InvalidOperationException("GamerServicesDispatcher.Initialize must be called before using gamer services graphics.");
+    auto* device=overlay.graphics?overlay.graphics->getGraphicsDeviceProperty():nullptr;
+    if(!device)throw System::InvalidOperationException("No graphics device is available to gamer services.");
+    return *device;
+}
+void setDispatcherGraphicsDeviceForTesting(Microsoft::Xna::Framework::Graphics::GraphicsDevice* device){testingDevice=device;}
+namespace {CNA::Internal::Runtime::IModalFrames* testingFrames=nullptr;}
+CNA::Internal::Runtime::IModalFrames* guideModalFrames(){return testingFrames?testingFrames:CNA::Internal::Runtime::activeModalFrames();}
+void setGuideModalFramesForTesting(CNA::Internal::Runtime::IModalFrames* frames){testingFrames=frames;}
 void installGuideOverlay(System::IServiceProvider& provider) {
     auto* container=dynamic_cast<Microsoft::Xna::Framework::GameServiceContainer*>(&provider);
     overlay.graphics=static_cast<Microsoft::Xna::Framework::Graphics::IGraphicsDeviceService*>(provider.GetService(typeid(Microsoft::Xna::Framework::Graphics::IGraphicsDeviceService)));

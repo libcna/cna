@@ -116,9 +116,8 @@ namespace
 
     void MenuTrialMode()
     {
-        const bool before = Guide::getIsTrialModeProperty();
-        Guide::setIsTrialModeProperty(!before);
-        std::printf("  IsTrialMode: %s -> %s\n", before ? "true" : "false",
+        // IsTrialMode has no public setter (XNA's is internal); it follows SimulateTrialMode.
+        std::printf("  IsTrialMode: %s (CNA titles are fully licensed; SimulateTrialMode makes a trial)\n",
                     Guide::getIsTrialModeProperty() ? "true" : "false");
     }
 

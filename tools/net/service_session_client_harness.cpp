@@ -4,6 +4,12 @@
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/InviteAcceptedEventArgs.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/LeaderboardEntry.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/LeaderboardIdentity.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/LeaderboardReader.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/LeaderboardWriter.hpp"
+#include "Microsoft/Xna/Framework/Net/WriteLeaderboardsEventArgs.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
@@ -62,6 +68,9 @@ std::string line() {
     }
 }
 void command(){check(line()=="continue","parent boundary");}
+bool messageBoxPending() {
+    try{(void)Guide::GetPendingMessageBoxFocusButtonForTestingEXT();return true;}catch(const std::exception&){return false;}
+}
 // Payload identifies its sender and recipient so each receiver can verify the reported sender.
 std::vector<SharpRuntime::bytecs> payload(const std::string& from,const std::string& to,std::size_t size) {
     std::vector<SharpRuntime::bytecs> result(size);const auto label=from+">"+to;
@@ -72,7 +81,8 @@ std::vector<SharpRuntime::bytecs> payload(const std::string& from,const std::str
 }
 int main(int argc,char** argv) {
     try {
-        check(argc==3,"arguments");const std::string role=argv[1],kind=argv[2];
+        check(argc==3||(argc==4&&std::string(argv[3])=="invite"),"arguments");const std::string role=argv[1],kind=argv[2];
+        const bool invited=argc==4;
         check(role=="host"||role=="join","role");check(kind=="player"||kind=="ranked","kind");
         const bool host=role=="host";const auto type=kind=="player"?NetworkSessionType::PlayerMatch:NetworkSessionType::Ranked;
         const std::array<std::string,2> accounts=host?std::array<std::string,2>{"alice","charlie"}:std::array<std::string,2>{"bob","dana"};
@@ -99,6 +109,27 @@ int main(int argc,char** argv) {
                 check(refused&&!session->getAllowJoinInProgressProperty(),"Ranked refuses join-in-progress");
             }
             std::cout<<"session-created\n"<<std::flush;
+            if(invited) {
+                // Standard Guide invitation: no recipients means the Guide asks for a gamertag.
+                phase="invite";Guide::ShowGameInvite(Microsoft::Xna::Framework::PlayerIndex::One,std::vector<Gamer*>{});
+                until([]{return Guide::getIsVisibleProperty();});enter("Bob");
+                until(messageBoxPending);Guide::SimulateMessageBoxClickEXT(0);
+                until([]{return !Guide::getIsVisibleProperty();});
+                std::cout<<"invite-sent\n"<<std::flush;
+            }
+        }else if(invited) {
+            // SAMPLE-096 shape: accept in the Guide, then JoinInvited synchronously from InviteAccepted.
+            phase="invited-join";int raised=0;
+            NetworkSession::InviteAccepted+=[&](auto*,const InviteAcceptedEventArgs& args) {
+                ++raised;check(args.getGamerProperty()==gamers[0]&&!args.getIsCurrentSessionProperty(),"invitee and foreign session");
+                session=NetworkSession::JoinInvited(2);
+            };
+            until(messageBoxPending,30);Guide::SimulateMessageBoxClickEXT(0);
+            until([&]{return session!=nullptr;});check(raised==1,"InviteAccepted once");
+            check(!session->getIsHostProperty()&&session->getAllGamersProperty().getCountProperty()==4,"invited join complete roster");
+            check(session->getLocalGamersProperty()[0]->getGamertagProperty()=="Bob","invitee joins first");
+            check(session->getHostProperty()&&session->getHostProperty()->getGamertagProperty()=="Alice","invited remote host");
+            std::cout<<"session-joined\n"<<std::flush;
         }else {
             phase="find";auto mismatched=properties;mismatched[7]=74;
             check(NetworkSession::Find(type,gamers,mismatched).getCountProperty()==0,"property filter excludes the session");
@@ -133,6 +164,24 @@ int main(int argc,char** argv) {
         for(auto* gamer:session->getAllGamersProperty())check(session->FindGamerById(gamer->getIdProperty())==gamer,"FindGamerById");
         std::cout<<"session-roster\n"<<std::flush;command();
 
+        // A reliable round trip proves both relay directions carry traffic before unreliable data
+        // is expected to arrive (an outage legitimately drops unreliable packets).
+        struct Early {LocalNetworkGamer* local;NetworkGamer* sender;std::vector<SharpRuntime::bytecs> bytes;};std::vector<Early> early;
+        phase="sync";{
+            const std::vector<SharpRuntime::bytecs> ping{'S','Y','N','C'},pong{'A','C','K'};
+            locals[0]->SendData(ping,SendDataOptions::Reliable,remotes[0]);bool acknowledged=false,answered=false;
+            until([&] {
+                for(auto* local:locals)while(local->getIsDataAvailableProperty()) {
+                    std::vector<SharpRuntime::bytecs> buffer(40000);NetworkGamer* sender=nullptr;
+                    buffer.resize(static_cast<std::size_t>(local->ReceiveData(buffer,sender)));
+                    if(buffer==ping){local->SendData(pong,SendDataOptions::Reliable,sender);answered=true;}
+                    else if(buffer==pong)acknowledged=true;
+                    // The peer may already be exchanging; its unordered packets can overtake the ACK.
+                    else early.push_back({local,sender,std::move(buffer)});
+                }
+                return acknowledged&&answered;
+            },30);
+        }
         phase="exchange";
         // Every local gamer sends one reliable packet to each remote gamer; the first also sends 32KiB
         // through PacketWriter and the second a small in-order unreliable packet.
@@ -142,8 +191,15 @@ int main(int argc,char** argv) {
             for(auto byte:big)writer.Write(static_cast<SharpRuntime::bytecs>(byte));
             locals[0]->SendData(writer,SendDataOptions::ReliableInOrder,remotes[0]);}
         locals[1]->SendData(payload(locals[1]->getGamertagProperty(),remotes[1]->getGamertagProperty(),9),SendDataOptions::InOrder,remotes[1]);
-        std::map<std::string,int> received;
+        std::map<std::string,int> received;std::optional<Clock::time_point> reliableDone;
+        for(auto& item:early) {
+            check(item.sender&&!item.sender->getIsLocalProperty()&&item.bytes==payload(item.sender->getGamertagProperty(),item.local->getGamertagProperty(),item.bytes.size()),"early exchange packet");
+            ++received[item.sender->getGamertagProperty()+">"+item.local->getGamertagProperty()+":"+std::to_string(item.bytes.size())];
+        }
         until([&] {
+            detail="received="+std::to_string(received.size())+" state="+std::to_string(static_cast<int>(session->getSessionStateProperty()))
+                +" gamers="+std::to_string(session->getAllGamersProperty().getCountProperty());
+            for(const auto& [key,count]:received)detail+=" "+key;
             for(auto* local:locals)while(local->getIsDataAvailableProperty()) {
                 std::vector<SharpRuntime::bytecs> buffer(40000);NetworkGamer* sender=nullptr;
                 const int length=local->ReceiveData(buffer,sender);buffer.resize(static_cast<std::size_t>(length));
@@ -152,12 +208,31 @@ int main(int argc,char** argv) {
                 check(buffer==expected,"unaltered payload with its true sender");
                 ++received[sender->getGamertagProperty()+">"+local->getGamertagProperty()+":"+std::to_string(buffer.size())];
             }
-            return received.size()==6;
+            // Five reliable packets must arrive; the unreliable one is best-effort (after an outage
+            // ENet's packet throttle legitimately drops unreliable sends for a while).
+            int reliable=0;for(const auto& [key,count]:received)if(!key.ends_with(":9"))++reliable;
+            if(reliable==5&&!reliableDone)reliableDone=Clock::now();
+            return received.size()==6||(reliableDone&&Clock::now()-*reliableDone>std::chrono::seconds(3));
         });
         for(const auto& [key,count]:received)check(count==1,"each packet delivered once");
         std::cout<<"session-exchanged "<<received.size()<<"\n"<<std::flush;command();
 
         phase="state";
+        // Each machine writes only its own gamers; the final handler adds the column at EndGame.
+        const std::map<std::string,long long> scores{{"Alice",1000},{"Charlie",1100},{"Bob",1200},{"Dana",1300}};
+        const auto board=LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);int finals=0;
+        session->WriteUnarbitratedLeaderboard+=[&](auto*,const WriteLeaderboardsEventArgs& args) {
+            check(!args.getIsLeavingProperty()&&args.getGamerProperty()->getIsLocalProperty(),"final local write at EndGame");++finals;
+            args.getGamerProperty()->getLeaderboardWriterProperty().GetLeaderboard(board)->getColumnsProperty().SetValue("Rounds",3);
+        };
+        // Ranked: every machine reports the arbitrated board for every gamer; the service keeps rows
+        // both machines agree on.
+        LeaderboardIdentity kills;kills.setKeyProperty("Kills");kills.setGameModeProperty(0);int arbitrated=0,skill=0;
+        session->WriteArbitratedLeaderboard+=[&](auto*,const WriteLeaderboardsEventArgs& args) {
+            ++arbitrated;auto* gamer=args.getGamerProperty();
+            gamer->getLeaderboardWriterProperty().GetLeaderboard(kills)->setRatingProperty(scores.at(gamer->getGamertagProperty())/100);
+        };
+        session->WriteTrueSkill+=[&](auto*,const WriteLeaderboardsEventArgs&){++skill;};
         if(host) {
             session->getSessionPropertiesProperty()[1]=11;
             if(type==NetworkSessionType::PlayerMatch)session->setAllowJoinInProgressProperty(true);
@@ -170,10 +245,32 @@ int main(int argc,char** argv) {
             return started==1&&session->getSessionStateProperty()==NetworkSessionState::Playing
             &&session->getSessionPropertiesProperty().getItem(1)==11
             &&session->getAllowJoinInProgressProperty()==(type==NetworkSessionType::PlayerMatch);});
+        for(auto* local:locals)local->getLeaderboardWriterProperty().GetLeaderboard(board)->setRatingProperty(scores.at(local->getGamertagProperty()));
         std::cout<<"session-playing\n"<<std::flush;command();
         if(host)session->EndGame();
         until([&]{return ended==1&&session->getSessionStateProperty()==NetworkSessionState::Lobby;});
+        check(finals==2,"final write handler for both local gamers");
+        check(arbitrated==(type==NetworkSessionType::Ranked?4:0),"arbitrated reports for every gamer only in Ranked");
+        check(skill==(type==NetworkSessionType::Ranked?4:(host?4:0)),"TrueSkill from every Ranked machine, else the host");
         std::cout<<"session-lobby\n"<<std::flush;command();
+        // Both machines have committed: the service board holds all four gamers' results.
+        phase="leaderboard";{
+            const auto reader=LeaderboardReader::Read(board,0,10);const auto entries=reader.getEntriesProperty();
+            std::set<std::string> found;
+            for(int index=0;index<entries.getCountProperty();++index) {
+                const auto& entry=entries[index];const auto tag=entry.getGamerProperty()->getGamertagProperty();
+                check(scores.contains(tag)&&entry.getRatingProperty()==scores.at(tag),"committed rating");
+                check(entry.getColumnsProperty().GetValueInt32("Rounds")==3,"committed final-handler column");found.insert(tag);
+            }
+            check(found.size()==4,"all four gamers ranked");
+            if(type==NetworkSessionType::Ranked) {
+                // Resolved once both machines reported: every row agreed.
+                const auto arbitratedReader=LeaderboardReader::Read(kills,0,10);const auto rows=arbitratedReader.getEntriesProperty();
+                check(rows.getCountProperty()==4,"arbitrated rows for all four gamers");
+                for(int index=0;index<rows.getCountProperty();++index)
+                    check(rows[index].getRatingProperty()==scores.at(rows[index].getGamerProperty()->getGamertagProperty())/100,"arbitrated value");
+            }
+        }
 
         phase="departure";
         const bool leaveFirst=(type==NetworkSessionType::PlayerMatch)!=host;

@@ -132,9 +132,15 @@ namespace Microsoft::Xna::Framework::Net
 
     private:
         friend class NetworkSession;
+        friend class AvailableNetworkSessionCollection;
+        // Set when the collection this listing came from is disposed (shared by every copy).
+        std::shared_ptr<const bool> collectionDisposed_;
         std::shared_ptr<const CNA::Internal::GamerServices::ServiceSessionSnapshot> serviceSnapshot_;
-        // The local gamers whose search produced this listing; a join uses exactly this group.
+        // The local gamers whose search produced this listing; a join uses exactly this group. Every
+        // online search sets it; a SystemLink search sets it only when given an explicit list.
         std::shared_ptr<const std::vector<GamerServices::SignedInGamer*>> serviceLocals_;
+        // The local-gamer limit of the search that found this listing, which a join keeps.
+        int joinMaxLocalGamers_{4};
         AvailableNetworkSession(
             int numGamers,
             const std::string& host,

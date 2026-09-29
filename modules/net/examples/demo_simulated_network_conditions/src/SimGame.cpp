@@ -1,4 +1,6 @@
 #include "SimGame.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerServicesComponent.hpp"
+#include "common/SignInEXT.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -57,17 +59,12 @@ namespace
         return std::make_unique<SpriteFont>(atlas, bounds, cropping, chars, 16, 1.0f, kerning,
                                              static_cast<SharpRuntime::charcs>(' '));
     }
-
-    class NullServiceProvider : public System::IServiceProvider
-    {
-    public:
-        [[nodiscard]] void* GetService(const std::type_info& /*type*/) const override { return nullptr; }
-    };
 }
 
 SimGame::SimGame(bool isHost)
     : isHost_(isHost)
 {
+    getComponentsProperty().Add(new Microsoft::Xna::Framework::GamerServices::GamerServicesComponent(*this));
     localPaddlePos_.X = isHost ? kLeftPaddleX : kRightPaddleX;
     remotePaddlePos_.X = isHost ? kRightPaddleX : kLeftPaddleX;
 }
@@ -84,9 +81,11 @@ SimGame::~SimGame()
 void SimGame::Initialize()
 {
     Game::Initialize();
+}
 
-    NullServiceProvider services;
-    Microsoft::Xna::Framework::GamerServices::GamerServicesDispatcher::Initialize(services);
+// Runs once a gamer is signed in: SystemLink sessions are created and joined by signed-in gamers.
+void SimGame::StartSession()
+{
     localGamer_ = (*Microsoft::Xna::Framework::GamerServices::Gamer::getSignedInGamersProperty())[0];
 
     if (isHost_)
@@ -169,6 +168,21 @@ void SimGame::UpdateBallPhysics(float dt)
 
 void SimGame::Update(GameTime& gameTime)
 {
+    Game::Update(gameTime);
+    if (!sessionStarted_)
+    {
+        if (CNAExamplesEXT::SignedInGamerOrShowSignInEXT() == nullptr)
+        {
+            if (smokeFramesLeft_ > 0 && --smokeFramesLeft_ == 0)
+            {
+                std::printf("[SimNet] %s\n", CNAExamplesEXT::kNoSignedInGamerEXT);
+                Exit();
+            }
+            return;
+        }
+        sessionStarted_ = true;
+        StartSession();
+    }
     if (session_ == nullptr)
     {
         return;

@@ -16,11 +16,10 @@ namespace Microsoft::Xna::Framework::GamerServices
     /**
      * @brief Describes the physical characteristics of an avatar.
      *
-     * The real XNA implementation's random-generation methods (CreateRandom(),
-     * CreateRandom(AvatarBodyType), EndGetFromGamer()) never actually produce randomized or
-     * populated data — every one of them returns an all-zero, 1021-byte description whose
-     * IsValid property is false. That surprising but verified behavior is preserved here
-     * exactly, not "fixed."
+     * The 1021-byte buffer is opaque to games. CNA stores its own versioned avatar encoding in
+     * it (body type, height, build, colors and wardrobe catalog items, protected by a checksum);
+     * it does not read or produce Xbox LIVE avatar data. A buffer from another source keeps the
+     * reference IsValid rule but reads as height 0 / Female and renders as unavailable.
      */
     class AvatarDescription
     {
@@ -48,44 +47,31 @@ namespace Microsoft::Xna::Framework::GamerServices
         [[nodiscard]] std::vector<SharpRuntime::bytecs> getDescriptionProperty() const;
 
         /**
-         * @brief Gets the height of the avatar, in meters.
+         * @brief Gets the height of the avatar, from the feet to the top of the head.
          *
-         * Lazily initializes to 0 on first access if never explicitly set, matching the real
-         * XNA implementation.
-         *
-         * @return The avatar's height.
+         * @return Height in meters; 0 when the buffer is not a CNA avatar description.
          */
         [[nodiscard]] SharpRuntime::Single getHeightProperty() const;
 
         /**
-         * @brief Gets the body type of the avatar.
+         * @brief Gets the body type of the avatar based on the description data.
          *
-         * Lazily initializes to AvatarBodyType::Female on first access if never explicitly set,
-         * matching the real XNA implementation.
-         *
-         * @return The avatar's body type.
+         * @return The avatar's body type; Female when the buffer is not a CNA avatar description.
          */
         [[nodiscard]] AvatarBodyType getBodyTypeProperty() const;
 
         /**
-         * @brief Creates an AvatarDescription with an all-zero, invalid description.
+         * @brief Creates an avatar of random body type, features and clothing.
          *
-         * Despite the name, the real XNA implementation does not actually randomize anything —
-         * it always returns an all-zero (invalid) description. Preserved exactly.
-         *
-         * @return A new, invalid AvatarDescription.
+         * @return A new, valid AvatarDescription drawn from the built-in avatar catalog.
          */
         [[nodiscard]] static AvatarDescription CreateRandom();
 
         /**
-         * @brief Creates an AvatarDescription with an all-zero, invalid description.
+         * @brief Creates an avatar of the specified body type with random features and clothing.
          *
-         * Despite the name, the real XNA implementation does not actually randomize anything,
-         * and the @p bodyType argument is not read at all — it always returns an all-zero
-         * (invalid) description. Preserved exactly.
-         *
-         * @param bodyType The requested body type (not read).
-         * @return A new, invalid AvatarDescription.
+         * @param bodyType Body type of the randomly-created avatar.
+         * @return A new, valid AvatarDescription of that body type.
          * @throws System::ArgumentOutOfRangeException if bodyType is not a valid AvatarBodyType value.
          */
         [[nodiscard]] static AvatarDescription CreateRandom(AvatarBodyType bodyType);
@@ -93,8 +79,9 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Begins retrieving the avatar description for the specified gamer.
          *
-         * Invokes @p callback synchronously before returning, matching the real XNA
-         * implementation (a fully synchronous fake-async operation).
+         * A gamer with a CNA service identity (signed in, or met in an online session) has its
+         * description read from the service; the operation completes during
+         * GamerServicesDispatcher.Update. Any other gamer completes at once, synchronously.
          *
          * @param gamer The gamer to retrieve the avatar description for.
          * @param callback The method to call when the operation completes.
@@ -113,11 +100,9 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @brief Ends a pending request to retrieve an avatar description started with
          * BeginGetFromGamer.
          *
-         * Always returns an all-zero, invalid AvatarDescription, matching the real XNA
-         * implementation.
-         *
          * @param result The IAsyncResult returned by BeginGetFromGamer.
-         * @return An all-zero, invalid AvatarDescription.
+         * @return The gamer's avatar description; an invalid (all-zero) one when the gamer has no
+         * avatar, has no service identity, or the service cannot be reached.
          * @throws System::ArgumentException if result was not returned by BeginGetFromGamer.
          */
         [[nodiscard]] static AvatarDescription EndGetFromGamer(System::IAsyncResult* result);
@@ -137,6 +122,8 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     private:
         AvatarDescription(std::vector<SharpRuntime::bytecs> data, bool makeCopy);
+
+        static AvatarDescription CreateRandom(std::optional<int> bodyType);
 
         /** @brief The exact byte length every AvatarDescription's raw data must have. */
         static constexpr int DescriptionSize = 1021;

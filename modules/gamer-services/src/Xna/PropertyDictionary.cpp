@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/PropertyDictionary.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/ArgumentException.hpp"
-#include "System/NotImplementedException.hpp"
 #include "System/NotSupportedException.hpp"
 #include <any>
 #include <string>
@@ -277,8 +277,15 @@ namespace Microsoft::Xna::Framework::GamerServices
         return true;
     }
 
-    void PropertyDictionary::CopyTo(std::vector<std::pair<std::string, std::any>>& /*array*/, int /*arrayIndex*/) const
+    void PropertyDictionary::CopyTo(std::vector<std::pair<std::string, std::any>>& array, int arrayIndex) const
     {
-        throw System::NotImplementedException();
+        // ICollection<KeyValuePair<string,object>>.CopyTo: every pair, from arrayIndex on.
+        if (arrayIndex < 0 || arrayIndex > static_cast<int>(array.size()))
+            throw System::ArgumentOutOfRangeException("arrayIndex");
+        if (array.size() - static_cast<std::size_t>(arrayIndex) < dictionary_.size())
+            throw System::ArgumentException("The array is too small for the dictionary.", "array");
+        std::size_t index = static_cast<std::size_t>(arrayIndex);
+        for (const auto& [key, value] : dictionary_)
+            array[index++] = {key, value};
     }
 }

@@ -6,6 +6,8 @@
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
 #include "CNA/Internal/GamerServices/ServiceUpdateSubscription.hpp"
+#include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
+#include "CNA/Internal/GamerServices/LocalProfiles.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
 #include "../Internal/GuideOverlay.hpp"
@@ -36,8 +38,27 @@ void GamerServicesDispatcher::setWindowHandleProperty(SharpRuntime::IntPtr value
 void GamerServicesDispatcher::Initialize(System::IServiceProvider& serviceProvider) {
     // Xbox-target documentation rejects duplicate initialization; no synthetic FNA profiles.
     if(isInitialized_)throw System::InvalidOperationException("Gamer services are already initialized.");
-    (void)CNA::Internal::GamerServices::backend();
-    CNA::Internal::GamerServices::installGuideOverlay(serviceProvider);publish();isInitialized_=true;
+    auto service=CNA::Internal::GamerServices::backend();
+    // Without a service, profiles configured to sign in automatically are already signed in when
+    // the game starts; like XNA, they appear (and raise SignedIn) at the first Update.
+    std::vector<CNA::Internal::GamerServices::LocalProfile> automatic;
+    if(!service->serviceEnabled())automatic=CNA::Internal::GamerServices::autoSignInLocalProfiles();
+    CNA::Internal::GamerServices::installGuideOverlay(serviceProvider);publish();
+    for(std::size_t slot=0;slot<automatic.size();++slot)service->signInLocal(static_cast<int>(slot),automatic[slot].gamertag);
+    isInitialized_=true;
+}
+void GamerServicesDispatcher::ApplyLocalGameDefaults(GameDefaults& target, const CNA::Internal::GamerServices::LocalGameDefaults& source) {
+    target.gameDifficulty_=static_cast<GameDifficulty>(source.gameDifficulty);
+    target.controllerSensitivity_=static_cast<ControllerSensitivity>(source.controllerSensitivity);
+    const auto color=[](const auto& rgb)->std::optional<Color> {
+        if(!rgb)return std::nullopt;
+        return Color(static_cast<int>((*rgb)[0]),static_cast<int>((*rgb)[1]),static_cast<int>((*rgb)[2]));
+    };
+    target.primaryColor_=color(source.primaryColor);target.secondaryColor_=color(source.secondaryColor);
+    target.autoAim_=source.autoAim;target.autoCenter_=source.autoCenter;target.moveWithRightThumbStick_=source.moveWithRightThumbStick;
+    target.invertYAxis_=source.invertYAxis;target.manualTransmission_=source.manualTransmission;
+    target.racingCameraAngle_=static_cast<RacingCameraAngle>(source.racingCameraAngle);
+    target.accelerateWithButtons_=source.accelerateWithButtons;target.brakeWithButtons_=source.brakeWithButtons;
 }
 void GamerServicesDispatcher::Update() {
     if(!isInitialized_)return;
@@ -58,7 +79,7 @@ void GamerServicesDispatcher::Update() {
     }
     struct Guard {Guard(){updating=true;}~Guard(){updating=false;}} guard;
     auto service=CNA::Internal::GamerServices::backend();
-    for(auto* gamer:slots)if(gamer&&gamer->presence_.changed_&&!gamer->presence_.pending_) {
+    for(auto* gamer:slots)if(gamer&&!gamer->serviceUserId_.empty()&&gamer->presence_.changed_&&!gamer->presence_.pending_) {
         auto& presence=gamer->presence_;const auto revision=presence.revision_;auto text=presence.presence_;
         if(const auto parameter=text.find("{0}");parameter!=std::string::npos)text.replace(parameter,3,std::to_string(presence.presenceValue_));
         const auto user=gamer->serviceUserId_;const auto mode=static_cast<int>(presence.presenceMode_);
@@ -85,18 +106,33 @@ void GamerServicesDispatcher::Update() {
             if(event.type==Type::Failed) { Guide::OnSignInResult(event.slot, false); continue; }
             if(event.type!=Type::SignedIn&&event.type!=Type::SignedOut)continue;
             if(auto* previous=slots[event.slot]) {
-                slots[event.slot]=nullptr;previous->isSignedInToLive_=false;publish();SignedInGamer::OnSignOut(previous);
+                // Reference HandlePlayerSignInChanged: the old gamer is disposed, then SignedOut is raised.
+                slots[event.slot]=nullptr;previous->isDisposed_=true;publish();SignedInGamer::OnSignOut(previous);
             }
             if(event.type==Type::SignedIn) {
-                auto gamer=std::unique_ptr<SignedInGamer>(new SignedInGamer(event.identity.gamertag,true,false,static_cast<PlayerIndex>(event.slot)));
+                auto gamer=std::unique_ptr<SignedInGamer>(new SignedInGamer(event.identity.gamertag,event.signedInToLive,false,static_cast<PlayerIndex>(event.slot)));
                 gamer->serviceUserId_=event.identity.userId;gamer->displayName_=event.identity.displayName;
-                gamer->privileges_.allowOnlineSessions_=event.identity.allowOnlineSessions;
+                // A local profile has no service: no online sessions and no purchases.
+                gamer->privileges_.allowOnlineSessions_=event.signedInToLive&&event.identity.allowOnlineSessions;
+                if(!event.signedInToLive)gamer->privileges_.allowPurchaseContent_=false;
+                // A local profile carries its own preferred game settings.
+                if(!event.signedInToLive)
+                    if(const auto profile=CNA::Internal::GamerServices::findLocalProfile(event.identity.gamertag))
+                        ApplyLocalGameDefaults(gamer->gameDefaults_,profile->gameDefaults);
                 auto* pointer=gamer.get();ownedGamers.push_back(std::move(gamer));slots[event.slot]=pointer;publish();SignedInGamer::OnSignIn(pointer);Guide::OnSignInResult(event.slot, true);
             }
         }catch(...){if(!firstError)firstError=std::current_exception();}
     }
     try {CNA::Internal::GamerServices::dispatchServiceUpdates();}
     catch(...) {if(!firstError)firstError=std::current_exception();}
+    // Invitation prompts and InviteAccepted belong to the outer update, never a nested End pump.
+    try {CNA::Internal::GamerServices::pumpInvitations();}
+    catch(...) {if(!firstError)firstError=std::current_exception();}
+    // The Guide button belongs to games that draw the Guide.
+    if(CNA::Internal::GamerServices::guideOverlayAttached()) {
+        try {CNA::Internal::GamerServices::pollSystemGuideButton();}
+        catch(...) {if(!firstError)firstError=std::current_exception();}
+    }
     if(firstError)std::rethrow_exception(firstError);
 }
 bool GamerServicesDispatcher::UpdateAsync(){if(isInitialized_)Update();return isInitialized_;}

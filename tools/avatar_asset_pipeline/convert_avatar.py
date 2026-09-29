@@ -1,26 +1,16 @@
 #!/usr/bin/env python3
-"""Converts a MakeHuman body export + Mixamo animation clips into CNA's
-.skinnedmodel.json / .skeleton.bin / .clip.bin content format for the
-AvatarRenderer real-rendering extension (see docs/avatar-real-rendering-ext.md).
+"""Converts a skinned glTF 2.0 binary (.glb) into CNA's .skinnedmodel.json / .skeleton.bin /
+.clip.bin content format, loaded by ContentManager as Graphics::SkinnedModelEXT.
 
-This is an offline, one-time asset-preparation tool — it is not part of the C++ build and is
-never run by CNA itself at runtime.
+This is an offline asset-preparation tool; it is not part of the C++ build and is never run by
+CNA itself at runtime. See README.md.
 
-Pipeline (see README.md for the manual steps this depends on):
-  1. Export a MakeHuman body with the built-in "Mixamo" skeleton preset to FBX.
-  2. Download the Mixamo animation clips listed in README.md's substitution table, each as FBX,
-     retargeted onto a MakeHuman-compatible skeleton.
-  3. Convert every FBX to glTF2 with the assimp CLI (normalizes FBX-exporter differences):
-       assimp export body.fbx body.glb -f gltf2
-       assimp export Wave.fbx Wave.glb -f gltf2
-  4. Run this script:
-       python3 convert_avatar.py --body body.glb --out content/avatar/male \\
-           --clip Wave.glb Wave --clip Clap.glb Clap ...
+  python3 convert_avatar.py --body character.glb --out content/character --embedded-clips
+  python3 convert_avatar.py --body character.glb --out content/character \\
+      --clip walk.glb Walk --clip jump.glb Jump
 
-Requires: pygltflib (pip install pygltflib) and Pillow (pip install Pillow, Task 11.19's
-placeholder texture output). Does NOT require assimp's Python bindings — glTF2 parsing is
-done directly via pygltflib, which has better animation/skin support than assimp's own
-Python wrapper.
+Requires: pygltflib (pip install pygltflib) and Pillow (pip install Pillow) for the neutral
+per-part texture. glTF parsing is done directly via pygltflib.
 """
 
 import argparse
@@ -145,14 +135,8 @@ def write_clip_bin(path, duration_seconds, tracks):
 def _write_placeholder_texture(out_dir, part_name, size=4):
     """Writes a tiny neutral-white RGBA PNG for `part_name` and returns its Path.
 
-    Task 11.19: before this, ContentManager could already load a per-part texture (see
-    ContentManager.cpp's "texture" JSON field handling) but nothing ever emitted one, so
-    AvatarRenderer.PartTintEXT's per-part tint (Task 11.17) was the only color signal
-    that ever reached the GPU. This texture is intentionally neutral (white), not a
-    painted per-material color: AvatarAppearanceEXT remains the sole color-customization
-    authority (texture * tint == tint, no double-application of color). Painted surface
-    detail is future work (see plans/plan_net.md Task 11.25), not this task — this task makes
-    the texture *pipeline* itself real, end-to-end.
+    The texture is intentionally white so a per-part tint applied at draw time is the only color
+    signal (texture * tint == tint).
     """
     tex_path = out_dir / f"{part_name}.png"
     Image.new("RGBA", (size, size), (255, 255, 255, 255)).save(tex_path)
@@ -160,7 +144,7 @@ def _write_placeholder_texture(out_dir, part_name, size=4):
 
 
 def convert_body(body_path, out_dir):
-    """Converts the base MakeHuman body glTF into a .skinnedmodel.json + .skeleton.bin +
+    """Converts the skinned body glTF into a .skinnedmodel.json + .skeleton.bin +
     per-part vertex/index binary blobs. Returns bone_names (list, index = bone index) for
     reuse by convert_clip, so animation tracks can be retargeted by joint *name* onto the
     same bone indices this function assigned.
@@ -177,8 +161,6 @@ def convert_body(body_path, out_dir):
     # differs from skin.joints' own declared order. inverseBindMatrices and every vertex's
     # JOINTS_0 indices are given in that *original* skin.joints order, though — remap both
     # to the new order, or bones end up skinned by the wrong bind pose/vertex entirely.
-    # A second real bug found the same way as the bind_pose_local transpose above: caught
-    # by actually rendering real content (Task 11.11), not by static review.
     joint_index_remap = [node_to_bone[node_idx] for node_idx in skin.joints]
 
     inverse_bind = read_accessor(gltf, blob, skin.inverseBindMatrices)
@@ -187,13 +169,8 @@ def convert_body(body_path, out_dir):
     # (v'=v*(A^T)) are byte-for-byte IDENTICAL — transposing the matrix and swapping
     # major order are inverse operations that cancel out. So this is a straight copy,
     # NOT a transpose.
-    # Confirmed empirically (Task 11.11): an earlier version of this code DID transpose
-    # here, which corrupted every bind-pose-local matrix, moving translation from row 4
-    # (M41/M42/M43, where CNA's Matrix/BinReaderEXT::ReadMatrix expects it) into
-    # column 4 — rendering a real avatar as a huge, nonsensical close-up instead of a
-    # recognizable standing figure. A forced-identity-bones diagnostic render (bypassing
-    # this code path entirely) proved the camera/mesh/shader path was already correct,
-    # isolating the bug to exactly this matrix convention question.
+    # Transposing here would move the translation out of row 4 (M41/M42/M43, where
+    # BinReaderEXT::ReadMatrix expects it).
     # Reordered via joint_index_remap for the same reason as above (topological reorder).
     inverse_bind_global = [None] * bone_count
     for original_idx, m in enumerate(inverse_bind):
@@ -255,10 +232,7 @@ def _tracks_from_animation(gltf, blob, anim, bone_names, clip_label):
     """Builds (duration, tracks) for one glTF animation, retargeted by joint *name* onto
     the base skeleton's bone indices (bone_names, produced by convert_body) — matching by
     name rather than index, since an animation's own node indices have no relationship to
-    the base skeleton's node indices; only the joint *names* are expected to match
-    (guaranteed either by MakeHuman's "Mixamo" rig preset per README.md, or by
-    tools/avatar_builder/generate_skeleton.py's own bone names for CNA's own procedural
-    pipeline, whose clips are embedded in the body file itself — see convert_embedded_clip).
+    the base skeleton's node indices; only the joint *names* are expected to match.
     """
     name_to_bone_idx = {name: i for i, name in enumerate(bone_names)}
 
@@ -313,7 +287,7 @@ def _write_clip(out_dir, clip_name, duration, tracks):
 
 
 def convert_clip(clip_path, clip_name, bone_names, out_dir):
-    """Converts one standalone Mixamo animation glTF (its own file, one animation) into a
+    """Converts one standalone animation glTF (its own file, one animation) into a
     .clip.bin. See _tracks_from_animation for the retargeting-by-name approach."""
     gltf, blob = load_gltf(clip_path)
     if not gltf.animations:
@@ -326,10 +300,8 @@ def convert_clip(clip_path, clip_name, bone_names, out_dir):
 def convert_embedded_clip(gltf, blob, anim, bone_names, out_dir):
     """Converts one animation that's already embedded in an already-loaded glTF (as
     opposed to convert_clip's standalone-file case) into a .clip.bin, using the
-    animation's own `name` as the clip name. This is CNA's own
-    tools/avatar_builder/generate_avatar.py output's shape: body + skeleton + every clip
-    bundled in one .glb, unlike the MakeHuman/Mixamo workflow's separate body-file-plus-
-    per-clip-file layout convert_clip was originally written for."""
+    animation's own `name` as the clip name (body, skeleton and every clip bundled in one
+    .glb)."""
     duration, tracks = _tracks_from_animation(gltf, blob, anim, bone_names, anim.name)
     return _write_clip(out_dir, anim.name, duration, tracks)
 
@@ -403,18 +375,14 @@ def _write_json(path, data):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--body", required=True,
-                         help="Base body .glb — a MakeHuman export, or CNA's own "
-                              "tools/avatar_builder/generate_avatar.py output")
+                         help="Skinned body .glb (mesh, skin and optionally animations)")
     parser.add_argument("--out", required=True, help="Output content directory")
     parser.add_argument("--clip", nargs=2, action="append", default=[],
                          metavar=("GLB", "PRESET_NAME"),
-                         help="Mixamo animation .glb + AvatarAnimationPreset name, repeatable")
+                         help="Animation .glb using the body's joint names + clip name, repeatable")
     parser.add_argument("--embedded-clips", action="store_true",
-                         help="Also convert every animation already embedded in --body "
-                              "itself, named to match its own AvatarAnimationPreset name "
-                              "(e.g. CNA's own generate_avatar.py output, which bundles "
-                              "body+skeleton+clips in one .glb instead of the MakeHuman/"
-                              "Mixamo workflow's separate per-clip files --clip expects)")
+                         help="Also convert every animation embedded in --body, each "
+                              "named after its own glTF animation name")
     args = parser.parse_args()
 
     bone_names = convert_body(args.body, args.out)
@@ -429,7 +397,7 @@ def main():
         for anim in gltf.animations:
             if not anim.name:
                 sys.exit(f"{args.body}: an embedded animation has no name — "
-                         f"can't derive an AvatarAnimationPreset name for it")
+                         f"can't derive a clip name for it")
             clip_file = convert_embedded_clip(gltf, blob, anim, bone_names, args.out)
             clip_entries.append({"name": anim.name, "clip": f"clips/{clip_file}"})
 

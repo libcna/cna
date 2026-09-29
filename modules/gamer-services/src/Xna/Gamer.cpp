@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
+#include "CNA/Internal/GamerServices/LocalGamerServicesStore.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerProfile.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
+#include "System/ObjectDisposedException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "../Internal/ServiceAsyncResult.hpp"
 
@@ -20,6 +23,40 @@ namespace Microsoft::Xna::Framework::GamerServices
         // dereferences it before Gamer itself is fully constructed).
         , leaderboardWriter_(this)
     {
+    }
+
+    Gamer::Gamer(const Gamer& other)
+        : serviceUserId_(other.serviceUserId_), displayName_(other.displayName_), gamertag_(other.gamertag_)
+        , isDisposed_(other.isDisposed_), tag_(other.tag_), leaderboardWriter_(this)
+    {
+    }
+
+    Gamer::Gamer(Gamer&& other) noexcept
+        : serviceUserId_(std::move(other.serviceUserId_)), displayName_(std::move(other.displayName_))
+        , gamertag_(std::move(other.gamertag_)), isDisposed_(other.isDisposed_), tag_(std::move(other.tag_))
+        , leaderboardWriter_(this)
+    {
+    }
+
+    Gamer& Gamer::operator=(const Gamer& other)
+    {
+        if (this != &other)
+        {
+            serviceUserId_ = other.serviceUserId_; displayName_ = other.displayName_; gamertag_ = other.gamertag_;
+            isDisposed_ = other.isDisposed_; tag_ = other.tag_; leaderboardWriter_ = LeaderboardWriter(this);
+        }
+        return *this;
+    }
+
+    Gamer& Gamer::operator=(Gamer&& other) noexcept
+    {
+        if (this != &other)
+        {
+            serviceUserId_ = std::move(other.serviceUserId_); displayName_ = std::move(other.displayName_);
+            gamertag_ = std::move(other.gamertag_); isDisposed_ = other.isDisposed_; tag_ = std::move(other.tag_);
+            leaderboardWriter_ = LeaderboardWriter(this);
+        }
+        return *this;
     }
 
     const std::string& Gamer::getDisplayNameProperty() const  { return displayName_; }
@@ -64,6 +101,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     System::IAsyncResult* Gamer::BeginGetProfile(System::AsyncCallback callback, std::any asyncState)
     {
+        if (isDisposed_) throw System::ObjectDisposedException("Gamer");
         if (CNA::Internal::GamerServices::backend()->serviceEnabled()) {
             auto service = CNA::Internal::GamerServices::backend();
             const auto tag = gamertag_;
@@ -89,10 +127,26 @@ namespace Microsoft::Xna::Framework::GamerServices
             auto profile = std::make_unique<GamerProfile>(GamerProfile::CreateInternal());
             profile->pictureHash_=person.picture;profile->motto_ = person.motto; profile->gamerScore_ = person.gamerScore;
             profile->totalAchievements_ = person.totalAchievements;
+            profile->titlesPlayed_ = person.titlesPlayed;
             profile->region_ = System::Globalization::RegionInfo(person.region);
             return profile.release();
         }
-        return new GamerProfile(GamerProfile::CreateInternal());
+        auto profile = std::make_unique<GamerProfile>(GamerProfile::CreateInternal());
+        // An offline profile's totals come from this title's local store; a remote gamer's progress
+        // is not on this machine.
+        if (dynamic_cast<SignedInGamer*>(this) != nullptr)
+        {
+            const auto earned = CNA::Internal::GamerServices::LoadEarnedAchievementsEXT(gamertag_);
+            const auto& catalog = CNA::Internal::GamerServices::LoadOfflineAchievementCatalogEXT();
+            for (const auto& record : earned)
+            {
+                if (!catalog) { ++profile->totalAchievements_; continue; }
+                for (const auto& definition : *catalog)
+                    if (definition.Key == record.Key) { ++profile->totalAchievements_; profile->gamerScore_ += definition.Score; }
+            }
+            profile->titlesPlayed_ = earned.empty() ? 0 : 1;
+        }
+        return profile.release();
     }
 
     Gamer* Gamer::GetFromGamertag(const std::string& gamertag) {
@@ -141,9 +195,15 @@ namespace Microsoft::Xna::Framework::GamerServices
     }
 
     const std::any& Gamer::GamerAction::getAsyncStateProperty() const  { return asyncState_; }
-    bool Gamer::GamerAction::getCompletedSynchronouslyProperty() const  { return false; }
+    bool Gamer::GamerAction::getCompletedSynchronouslyProperty() const  { return completedSynchronously_; }
     bool Gamer::GamerAction::getIsCompletedProperty() const             { return isCompleted_; }
-    void Gamer::GamerAction::setIsCompletedProperty(bool value)         { isCompleted_ = value; }
+    void Gamer::GamerAction::setIsCompletedProperty(bool value)
+    {
+        // Every GamerAction is completed by the Begin call that created it (the offline store has no
+        // deferred work), so completing it is completing it synchronously.
+        if (value && !isCompleted_) completedSynchronously_ = true;
+        isCompleted_ = value;
+    }
 
     System::Threading::WaitHandle& Gamer::GamerAction::getAsyncWaitHandleProperty() const
     {

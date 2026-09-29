@@ -7,8 +7,8 @@
 > have real-server tests. Online leaderboard reads and LocalWithLeaderboards final writes use the server.
 > Typed directory/invitation control and private verified-WSS/ENet relay are implemented/tested;
 > standard PlayerMatch/Ranked Find now has pending Begin/End and real-server restart/title tests;
-> public create/join/invited lifecycle and public Internet acceptance remain unfinished,
-> and standard Avatar rendering still needs migration from EXT. These are active work, not
+> public create/join/invited lifecycle and public Internet acceptance remain unfinished.
+> The standard Avatar API renders original CNA avatars without extension calls. These are active work, not
 > intentional exclusions. API symbol presence and historical percentages are not evidence of
 > behavioral completeness. The CNA server/accounts/protocol are not Xbox LIVE compatible.
 
@@ -285,7 +285,7 @@ none are trivial engineering either.
 | `Microsoft::Xna::Framework::Audio` | ✅ | ✅ | Implemented (see §4 for the small remaining accepted-deviation list) |
 | `Microsoft::Xna::Framework::Content` | ✅ | ✅ | Partial (see §3) |
 | `Microsoft::Xna::Framework::Design` | ✅ | ✅ | Complete opt-in tooling module; all 13 public XNA types (see §6 and `framework-design.md`) |
-| `Microsoft::Xna::Framework::GamerServices` | ❌ (not in FNA) | ✅ | Implemented — real Achievements, Avatar (full real-rendering extension, see `docs/avatar-real-rendering-ext.md`), Friends, Presence, Leaderboards, Privileges, Profile, SignedInGamer, Guide (see §3/§4) |
+| `Microsoft::Xna::Framework::GamerServices` | ❌ (not in FNA) | ✅ | Implemented — real Achievements, Avatar (standard API on original CNA avatars, see `docs/avatars.md`), Friends, Presence, Leaderboards, Privileges, Profile, SignedInGamer, Guide (see §3/§4) |
 | `Microsoft::Xna::Framework::Graphics` | ✅ | ✅ | Implemented / Stub |
 | `Microsoft::Xna::Framework::Graphics::PackedVector` | ✅ | ✅ | Implemented |
 | `Microsoft::Xna::Framework::Input` | ✅ | ✅ | Implemented |
@@ -341,8 +341,8 @@ audits behind them:
 | `FriendGamer` | Represents a friend in the gamer's friend list; implemented, same population gap as `FriendCollection` above. |
 
 Also present and implemented, beyond this table's original scope: `Achievement`/`AchievementCollection`,
-the full `Avatar*` real-rendering extension (`AvatarRenderer`, `AvatarAppearanceEXT`, `AvatarBone`,
-`AvatarAnimation*`, wardrobe attach/detach — see `docs/avatar-real-rendering-ext.md`), `GamerProfile`,
+the standard `Avatar*` API (`AvatarDescription`, `AvatarRenderer`, `AvatarAnimation`, `AvatarBone`,
+`AvatarExpression` — real descriptions, 71-bone animations and rendering, see `docs/avatars.md`), `GamerProfile`,
 `GamerZone`, `LeaderboardReader`/`LeaderboardWriter`/`LeaderboardEntry`/`LeaderboardIdentity`/
 `LeaderboardKey`/`LeaderboardOutcome` (local-fake-persisted, Phase 4), `PropertyDictionary`,
 `GamerServicesDispatcher`, and the full `*EventArgs`/exception family
@@ -676,8 +676,8 @@ both but never throws either from its own Audio source either), not a gap.
 
 The standard API shape exists, but Xbox behavior remains partially implemented. Service identity,
 Guide sign-in, profile/lookup and achievement metadata/awards now have real TLS integration tests.
-Social/pictures, leaderboard lifecycle, standard Avatar rendering and the remaining Guide flows
-are active work. See §9 for measured behavior and the living plan for test evidence.
+Social/pictures, leaderboard lifecycle and the remaining Guide flows are active work; the
+standard Avatar API is implemented (`docs/avatars.md`). See §9 for measured behavior and the living plan for test evidence.
 - **Status:** Partial service implementation; historical symbol coverage is not completeness.
 
 ---
@@ -727,12 +727,11 @@ games even though it's outside FNA's own PC-only scope. All three now have real,
 implementations:
 
 - **GamerServices** — see §2/§3/§4 above for the current per-class implementation status.
-- **Avatar API** — the real-rendering extension is documented in full in
-  `docs/avatar-real-rendering-ext.md`; `AvatarRenderer`, `AvatarAppearanceEXT`, wardrobe attach/
-  detach, and skeletal animation are implemented and exercised by the 8 `demo_avatar_*` examples.
-  (FNA's own faithful-XNA-surface `AvatarRenderer` — `State`/`ParentBones`/`BindPose` — is
-  preserved separately and remains `Unavailable`/throws exactly as real XNA does off-Xbox; see
-  `demo_avatar_bone_state_boundary` for a live comparison of both paths.)
+- **Avatar API** — `AvatarDescription` (CNA's versioned 1021-byte encoding, `CreateRandom`,
+  service-backed `BeginGetFromGamer`), `AvatarAnimation` (31 original 71-bone presets with keyed
+  expressions) and `AvatarRenderer` (`Loading`/`Ready`/`Unavailable`, XNA's bind pose and parent
+  table, lit skinned drawing) work through the standard API alone, on original CNA assets; see
+  `docs/avatars.md` and the `demo_avatar_*` examples (`docs/avatar-demos.md`).
 - **Net** — `Microsoft.Xna.Framework.Net` (`NetworkSession`, `PacketReader`/`Writer`,
   `NetworkGamer`, etc.) is real, ENet-backed transport, not a stub. `NetworkSessionType::SystemLink`
   (LAN-style local play, including real host migration and simulated latency/packet-loss testing
@@ -879,9 +878,9 @@ maturity levels.
 | `TextInputEXT` / `Mouse`+`GamePad` EXT / `Keyboard` scancode EXT | ~95 % behavior | FNA extensions, all implemented and FNA-faithful (`feature/input` Phases I1, I3–I5, I9): `TextInputEXT` is `char16_t`/UTF-16 with Unicode/IME tests; relative mouse, `ClickedEXT`, rumble, `GetGUIDEXT` (format fixed, task 816), gyro/accel. Untested slice is hardware/IME-gated. |
 | `MouseCursor` (MonoGame-inspired, `CNAEXT`) | ~100 % of exposed surface | 12 stock cursors, `FromTexture2D`, `IDisposable` singleton-safe dispose; no XNA/FNA equivalent. |
 | `Input::Touch` | ~98 % behavior | Gesture pipeline (Tap…PinchComplete) byte-faithful FNA port, wired end-to-end and tested with a deterministic clock (`feature/input` Phase I2, I9). Documented deviations only: event-driven vs. poll-based `GetState()`. `MaximumTouchCount` reports 4 and `GetState()` caps at `MAX_TOUCHES` (8), both matching FNA (DEC-09/DEC-10). |
-| `GamerServices` | Not quantified | API shape exists; partial service behavior measured separately in §9. |
+| `GamerServices` | Not quantified | Service-backed identity, Guide, friends/presence, achievements, leaderboards and standard avatars, plus offline local profiles; measured per feature in §9. |
 | `Audio (XACT)` — AudioEngine/SoundBank/WaveBank/Cue | ~97 % | Real `.xgs`/`.xsb`/`.xwb` parser + SDL3_mixer playback; category/lifecycle/3D/instance-limit+fade (both category- and cue-level)/continuous RPC volume+pitch all real, including the built-in `AttackTime`/`ReleaseTime` envelope variables (`P10-RPC-002/003/004`); gaps are documented accepted deviations (no HRTF/elevation, no DSP-preset RPC destination), not missing implementation |
-| `Framework.Net` (NetworkSession, etc.) | ~80 % | **Updated (`feature/net`):** real ENet-backed transport, not excluded. `SystemLink` (LAN-style local play, host migration, simulated latency/packet-loss) is fully implemented; online Find uses the CNA service, while PlayerMatch/Ranked create/join and invites await authenticated lifecycle integration. See §9 for the per-feature breakdown. |
+| `Framework.Net` (NetworkSession, etc.) | ~80 % | **Updated (`feature/net`):** real ENet-backed transport, not excluded. `SystemLink` (LAN-style local play, host migration, simulated latency/packet-loss) is fully implemented; PlayerMatch/Ranked create/find/join, invitations and leaderboards run against the CNA account service (native only; no online host migration). See §9 for the per-feature breakdown. |
 | **Overall (EasyGL renderer, 2D+3D game)** | Historical estimate superseded | This old blended behavior estimate was never derived from a reproducible checklist and predates the current XNB implementation. Use the Microsoft XML audit above for runtime type existence and the renderer/content reports for their respective behavior. |
 
 ---
@@ -898,29 +897,31 @@ Full Xbox validation order, lifetime and asynchronous compatibility are still be
 | Feature | Status | Notes |
 |---|---|---|
 | `SignedInGamer` / `Gamer` / collections | Service foundation | No fabricated profiles. Four separate service identities; controlled Update events and owned Begin/End completions. Collection/lifetime edge cases remain under audit. |
-| Achievements | Service-backed metadata/awards | Configured online identities use persistent server catalog and earned state. Two users/titles, duplicate awards and restart tested. Hash-verified picture retrieval and cache tested through C++ and pure C clients. Explicit legacy factory/offline objects still use local storage. |
-| Leaderboards | Service reads and local EndGame commits | Server-provisioned typed catalog, offset/centered/restricted reads and remote paging work. LocalWithLeaderboards drafts are writable only while Playing and flush atomically after final write handlers at EndGame. Restart/idempotence and four local identities tested. Early local leave/Dispose submits final rows; unpublished or destructor-abandoned games use bounded cancellation. Ranked arbitration, Stream columns and TrueSkill remain unfinished. Explicit local fixtures are offline behavior. |
+| Achievements | Service-backed metadata/awards | Configured online identities use persistent server catalog and earned state. Two users/titles, duplicate awards and restart tested. Hash-verified picture retrieval and cache tested through C++ and pure C clients. Offline, a title's `GamerServices/Achievements.json` catalog gives the same list, text, scores and pictures, and awards only defined keys (GS-004p); without one, offline achievements are the earned keys alone. |
+| Leaderboards | Service-backed (GS-006) | Server-provisioned typed catalog, offset/centered/restricted reads and remote paging. Writes open when a session starts playing and commit at EndGame (host) or leave/Dispose (`IsLeaving`) after the `WriteUnarbitratedLeaderboard`/`WriteArbitratedLeaderboard`/`WriteTrueSkill` handlers; Ranked rows are arbitrated by strict majority of the reporting machines (GS-006e). Accepted end to end by the achievements/leaderboards compatibility sample. CNA computes no TrueSkill (skill boards are ordinary arbitrated boards); Stream columns are not stored. Explicit local fixtures are offline behavior. |
 | Presence | Service-backed at Update | Correct enum/value text and revision-coalesced publication tested across real clients. Update heartbeat, refresh and bounded maintenance backoff are tested; full push/privacy semantics remain unfinished. |
-| Friends | Service mutual workflow | Persistent request/accept/removal, pending flags, accepted-only online/presence, owned GetFriends snapshots and IsFriend. General privacy/block/voice/invite semantics remain unfinished. |
-| Privileges/profile | Partial service data | Server online-session permission, public names/motto/region/score/earned count. Profile PNG streams and native C picture copying work; other privilege fields require service metadata. |
-| Guide sign-in | Service flow | Standard ShowSignIn uses masked keyboard and failure message overlay; four slots and cancellation tested. Automatic Game draw hook added. POSIX private credential resume, four accounts, expiry/revocation and service reconnect are tested. Offline/guest and platform keychains remain unfinished. |
+| Friends | Service mutual workflow | Persistent request/accept/removal, pending flags, accepted-only online/presence, owned GetFriends snapshots and IsFriend; `IsJoinable` and the four invitation flags from the service's sessions and invitations (GS-004q). There is no away/busy status, voice or privacy/block setting, so those flags stay false. |
+| Privileges/profile | Partial service data | Server online-session permission, public names/motto/region/score/earned count/titles played. Profile PNG streams and native C picture copying work. Profiles report `GamerZone.Unknown` and reputation 0 (CNA keeps neither); an offline profile totals this title's earned achievements (GS-004p). A local profile's `GameDefaults` come from its store entry (GS-004r); accounts report XNA's unset values. Other privilege fields require service metadata. |
+| Guide sign-in | Service flow | Standard ShowSignIn uses masked keyboard and failure message overlay; four slots and cancellation tested. Automatic Game draw hook added. POSIX private credential resume, four accounts, expiry/revocation and service reconnect are tested. Without a service, ShowSignIn signs in stored or new local offline profiles (not LIVE, own avatar), and configured profiles sign in at startup (GS-004l). Guest sign-in and platform keychains remain unfinished. |
 | Guide friends/gamer card/request | Service UI | Standard APIs present profiles, page friends/find gamer and confirm/manage friendship changes. Exact Xbox validation order remains unmeasured. |
-| Guide commerce/party/messages/review/invites | Unfinished | Requires Xbox contract evidence and corresponding CNA service/UI behavior. |
-| Guide keyboard/message box | Functional | Existing text-input/message overlays reused by automatic system overlay. |
-| Avatar standard API | Unfinished migration | Working original CNA GLB/EXT rendering preserved; standard AvatarRenderer still unavailable. 71-slot public rig, description encoding/service assets and standard Draw migration remain GS-009. |
+| Guide messages/review/players/invites | Service UI (GS-005c/d) | `ShowComposeMessage`, `ShowMessages`, `ShowPlayerReview`, `ShowPlayers`, invitations (send from the system Guide, accept/decline prompts, `DelayNotifications`) with reference argument validation. |
+| Guide marketplace/party | Explanatory pane | `ShowMarketplace`/`ShowParty`/`ShowPartySessions` open a pane saying CNA has no store/payment or party service; `IsTrialMode` is false unless `SimulateTrialMode` is set; `SendPartyInvites` refuses (no party service, so never a party of two). |
+| Guide keyboard/message box | Functional | Existing text-input/message overlays reused by automatic system overlay; message boxes answer to keyboard, controller and mouse. `EndShowMessageBox`/`EndShowKeyboardInput` wait for the answer while the game's modal frames keep the Guide running (GS-005i). The system Guide (Home key / Guide button) offers sign-in, friends, invitations, messages and sign-out without game calls (GS-005d). |
+| Avatar standard API | Implemented (GS-009) | CNA v1 1021-byte descriptions, valid `CreateRandom`, service-backed `BeginGetFromGamer`, 71-slot rig, 31 original presets with expressions, `Loading`/`Ready`/`Unavailable`, lit skinned Draw and loading effect; newer catalogs resolved by hash from the service with a verified cache. The former Avatar EXT surface is removed. `AvatarDescription.Changed` is never raised (descriptions are values). |
 | Dispatcher/Component | Event pump foundation | Initialize rejects duplicate initialization and starts with zero accounts. Backend completions/events applied at Update. Full reconnect/push/update-thread contract audit remains. |
 
 ### Net
 
 | Feature | Status | Notes |
 |---|---|---|
-| `NetworkSession` create/find/join (`NetworkSessionType::SystemLink`) | Implemented | Real ENet-backed transport and discovery, not a stub. |
-| `NetworkSession` host migration | Implemented | Phase 5 — deterministic lowest-wire-id promotion, LAN rediscovery, bounded retry for cross-process discovery-port delivery. |
+| `NetworkSession` create/find/join (`NetworkSessionType::SystemLink`) | Implemented | Real ENet-backed transport and discovery, not a stub. The host's settings, machine grouping and lobby readiness reach every machine (GS-007i/n); gamers added mid-session with `AddLocalGamer` join their own machine on every peer (GS-007o); `NetworkMachine.RemoveFromSession` removes a machine (GS-007j). |
+| `NetworkSession` host migration | SystemLink only | Phase 5 — deterministic lowest-wire-id promotion, LAN rediscovery, bounded retry for cross-process discovery-port delivery. Online (PlayerMatch/Ranked) sessions end when the host leaves (`HostEndedSession`) whatever `AllowHostMigration` says. |
 | `SimulatedLatency` / `SimulatedPacketLoss` | Implemented | Phase 6 — a real receive-side delayed-delivery queue / probabilistic drop on real ENet traffic, deterministic under test (injectable clock/seeded RNG); scoped to AppData delivered to local gamers, not session-management/relay traffic. |
 | `LocalNetworkGamer.SendData`/`ReceiveData`, `PacketReader`/`PacketWriter` | Implemented | Real serialization over the real transport. |
+| `NetworkSession.BytesPerSecondSent`/`Received`, `NetworkGamer.RoundtripTime` | Implemented (GS-007q) | Rates from the transport's wire totals, protocol overhead included, over each second. Round trips come from ENet. A gamer on another client machine is reached through the host, so its round trip adds the host's reported one. SystemLink and online sessions alike. |
 | `NetworkSession.Dispose()` / lifecycle | Implemented | Phases 2, 12-14 — several confirmed real bugs (double-dispose use-after-free, async callbacks never invoked, enumerator null-deref after Dispose) found and fixed. |
-| `NetworkSessionType::PlayerMatch` / `Ranked` | Service Find; create/join unfinished (GS-007) | Standard pending BeginFind/EndFind validates signed-in users, sparse filters, category/local capacity/title scope and bounded paging. Real-server restart/refresh and callback/metadata/End-once are tested. Secure relay is private; create/join/Net Update lifecycle and Ranked arbitration remain unfinished. |
-| Session invites | Private control; public flows unfinished (GS-007) | Recipient-bound invites persist and private invited membership is tested. Guide acceptance/InviteAccepted/JoinInvited still need public lifecycle integration. Private WSS/ENet relay works under separate rootless NATs; public Internet acceptance remains unfinished. |
+| `NetworkSessionType::PlayerMatch` / `Ranked` | Service-backed (GS-007/008) | Standard Create/Find/Join and their Begin/End forms against the CNA session directory; realtime traffic over ENet through an authenticated relay with untrusted-packet limits, recovery inside a bounded window, properties, lobby readiness (GS-007i), canonical gamer order (GS-007l), Ranked rules. Accepted by SAMPLE-096 and SAMPLE-075 (LIVE route) between separate processes. `NetworkMachine.RemoveFromSession` removes a machine through the directory (GS-007j). Native only; online `AddLocalGamer` after create or join is refused. |
+| Session invites | Service-backed (GS-007e3) | System-Guide invitations, Guide accept, `InviteAccepted` and `JoinInvited`/`BeginJoinInvited`; accepted by SAMPLE-096 and SAMPLE-075. Push-mode "Join Session In Progress" is not implemented. |
 
 ---
 
@@ -950,7 +951,7 @@ Full Xbox validation order, lifetime and asynchronous compatibility are still be
 
 7. **GamerServices / Net** — In progress: service authentication/identity/achievements foundation
    and existing ENet SystemLink work. Social, leaderboard lifecycle, online sessions/invites/relay,
-   standard avatars and acceptance samples remain incomplete; see §9 and the living plan.
+   acceptance samples remain incomplete; see §9 and the living plan.
 
 ---
 

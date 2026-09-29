@@ -563,75 +563,6 @@ typedef uint32_t CNA_AvatarBone;
 /** @brief Highest defined `CNA_AvatarBone` identity. */
 #define CNA_AVATAR_BONE_MAXIMUM CNA_AVATAR_BONE_FINGER_THUMB_3_RIGHT
 
-/**
- * @brief Reports the byte length of the clip name an animation preset maps to.
- *
- * @param preset One of the `CNA_AVATAR_ANIMATION_PRESET_*` identities.
- * @param out_bytes Receives the length in bytes, with no terminator counted.
- * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity or a null
- *         output.
- *
- * CNAEXT: the clip name is how the avatar extension finds the matching animation inside a loaded
- * skinned model. This is a pure value operation — no gamer, no handle, no thread affinity.
- */
-CNA_C_API CNA_Result cna_avatar_animation_preset_get_clip_name_size_ext(
-    CNA_AvatarAnimationPreset preset,
-    uint64_t* out_bytes);
-
-/**
- * @brief Copies the clip name an animation preset maps to.
- *
- * @param preset One of the `CNA_AVATAR_ANIMATION_PRESET_*` identities.
- * @param destination Buffer receiving UTF-8 bytes with no terminator; may be null when
- *        @p capacity is zero.
- * @param capacity Destination capacity in bytes.
- * @param out_bytes Receives the length in bytes whether or not the copy succeeded.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with nothing written, or
- *         `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity or an invalid output.
- *
- * CNAEXT: the name is the identity's own canonical spelling.
- */
-CNA_C_API CNA_Result cna_avatar_animation_preset_copy_clip_name_ext(
-    CNA_AvatarAnimationPreset preset,
-    char* destination,
-    uint64_t capacity,
-    uint64_t* out_bytes);
-
-/**
- * @brief Reports the byte length of the content asset name a body type maps to.
- *
- * @param body_type One of the `CNA_AVATAR_BODY_TYPE_*` identities.
- * @param out_bytes Receives the length in bytes, with no terminator counted.
- * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity or a null
- *         output.
- *
- * CNAEXT: an avatar description never carries real body-type data in this runtime, so the body type
- * is whatever the caller already knows and this is how it becomes a loadable asset name. A pure value
- * operation — no gamer, no handle, no thread affinity.
- */
-CNA_C_API CNA_Result cna_avatar_body_type_get_content_name_size_ext(
-    CNA_AvatarBodyType body_type,
-    uint64_t* out_bytes);
-
-/**
- * @brief Copies the content asset name a body type maps to.
- *
- * @param body_type One of the `CNA_AVATAR_BODY_TYPE_*` identities.
- * @param destination Buffer receiving UTF-8 bytes with no terminator; may be null when
- *        @p capacity is zero.
- * @param capacity Destination capacity in bytes.
- * @param out_bytes Receives the length in bytes whether or not the copy succeeded.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with nothing written, or
- *         `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity or an invalid output.
- *
- * CNAEXT: the name is a content path, not the identity's spelling.
- */
-CNA_C_API CNA_Result cna_avatar_body_type_copy_content_name_ext(
-    CNA_AvatarBodyType body_type,
-    char* destination,
-    uint64_t capacity,
-    uint64_t* out_bytes);
-
 /** @brief Owned handle for a signed-in gamer. */
 typedef CNA_Handle CNA_SignedInGamerHandle;
 
@@ -839,16 +770,19 @@ typedef struct CNA_GamerProfileInfo {
     /** @brief The gamer's accumulated score. */
     int32_t gamer_score;
 
-    /** @brief One of the `CNA_GAMER_ZONE_*` identities. */
+    /** @brief One of the `CNA_GAMER_ZONE_*` identities; always `CNA_GAMER_ZONE_UNKNOWN`, as CNA has
+     * no gamer zones. */
     CNA_GamerZone gamer_zone;
 
-    /** @brief How many titles this gamer has played. */
+    /** @brief How many titles this gamer has played: on the CNA service, those with the gamer's
+     * presence, an earned achievement or a leaderboard row; offline, this title once the gamer has
+     * earned an achievement in it. */
     int32_t titles_played;
 
     /** @brief How many achievements this gamer has earned in total. */
     int32_t total_achievements;
 
-    /** @brief The gamer's reputation. */
+    /** @brief The gamer's reputation in stars, 0 to 5; always 0, as CNA keeps no reputation. */
     float reputation;
 
     /** @brief Non-zero once the profile has been disposed. */
@@ -877,34 +811,37 @@ typedef struct CNA_FriendGamerInfo {
     /** @brief Non-zero when the local gamer has sent this friend a friend request. */
     CNA_Bool friend_request_sent_to;
 
-    /** @brief Non-zero when this friend has voice hardware. */
+    /** @brief Non-zero when this friend has voice hardware; always zero, as CNA carries no voice. */
     CNA_Bool has_voice;
 
-    /** @brief Non-zero when this friend accepted a game invitation. */
+    /** @brief Non-zero when this friend accepted the local gamer's game invitation (this title's
+     * unexpired invitations). */
     CNA_Bool invite_accepted;
 
-    /** @brief Non-zero when this friend has sent a game invitation. */
+    /** @brief Non-zero when this friend has a pending game invitation to the local gamer. */
     CNA_Bool invite_received_from;
 
-    /** @brief Non-zero when this friend declined a game invitation. */
+    /** @brief Non-zero when this friend declined the local gamer's game invitation (this title's
+     * unexpired invitations). */
     CNA_Bool invite_rejected;
 
-    /** @brief Non-zero when a game invitation has been sent to this friend. */
+    /** @brief Non-zero when the local gamer has a pending game invitation to this friend. */
     CNA_Bool invite_sent_to;
 
-    /** @brief Non-zero when this friend is away. */
+    /** @brief Non-zero when this friend is away; always zero, as CNA accounts have no away status. */
     CNA_Bool is_away;
 
-    /** @brief Non-zero when this friend is busy. */
+    /** @brief Non-zero when this friend is busy; always zero, as CNA accounts have no busy status. */
     CNA_Bool is_busy;
 
-    /** @brief Non-zero when this friend's session can be joined. */
+    /** @brief Non-zero when this friend is online in this title's player-match session that admits
+     * joiners now and has a public slot free. */
     CNA_Bool is_joinable;
 
     /** @brief Non-zero when this friend is online. */
     CNA_Bool is_online;
 
-    /** @brief Non-zero when this friend is playing. */
+    /** @brief Non-zero when this friend is playing; a CNA account is online only from a game. */
     CNA_Bool is_playing;
 
     /** @brief Reserved; must be zero. */
@@ -1205,23 +1142,6 @@ CNA_C_API CNA_Result cna_gamer_begin_get_partner_token(
     uint64_t* out_bytes);
 
 /**
- * @brief Reads the signed-in gamer at a player index.
- *
- * @param player_index One of the `CNA_PLAYER_INDEX_*` identities.
- * @param out_has_gamer Receives non-zero when a gamer is signed in at that index.
- * @param out_gamer Receives a borrowed gamer handle when @p out_has_gamer is non-zero, and is left
- *        exactly as the caller set it otherwise.
- * @return `CNA_RESULT_SUCCESS` or a documented argument/thread failure.
- *
- * Availability is separate from the answer: no gamer at that index is an ordinary success with the
- * flag clear, not a failure.
- *
- * **The lookup is positional.** The canonical indexer reads the signed-in collection at that index
- * rather than searching for the gamer whose own player index matches, so a single signed-in gamer
- * answers at `CNA_PLAYER_INDEX_ONE` whatever player index it was created with. That is the canonical
- * behavior, reported rather than corrected.
- */
-/**
  * @brief Gets the signed-in gamer at a position in the process-wide collection.
  *
  * @param index Zero-based position, which is **not** a player index.
@@ -1265,6 +1185,20 @@ CNA_C_API CNA_Result cna_gamer_signed_in_contains(
     CNA_SignedInGamerHandle gamer,
     CNA_Bool* out_contains);
 
+/**
+ * @brief Reads the signed-in gamer at a player index.
+ *
+ * @param player_index One of the `CNA_PLAYER_INDEX_*` identities.
+ * @param out_has_gamer Receives non-zero when a gamer is signed in at that index.
+ * @param out_gamer Receives a borrowed gamer handle when @p out_has_gamer is non-zero, and is left
+ *        exactly as the caller set it otherwise.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/thread failure.
+ *
+ * Availability is separate from the answer: no gamer at that index is an ordinary success with the
+ * flag clear, not a failure. The lookup finds the gamer whose own player index matches, so with only
+ * player two signed in, player one has no gamer and player two answers although it is the
+ * collection's first element (@ref cna_gamer_get_signed_in_gamer_at is the positional route).
+ */
 CNA_C_API CNA_Result cna_gamer_get_signed_in_gamer_at_player_index(
     CNA_PlayerIndex player_index,
     CNA_Bool* out_has_gamer,
@@ -1357,8 +1291,8 @@ CNA_C_API CNA_Result cna_signed_in_gamer_set_presence(
  * @param mode Mode text, borrowed for the duration of the call.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * CNAEXT, and **currently a no-op**: the canonical extension accepts the text and stores nothing.
- * The route exists so the surface is complete and so the behavior is recorded rather than guessed.
+ * CNAEXT: the text is the presence friends see, in place of a mode's text, and is published to the
+ * CNA account service at the next Dispatcher update.
  */
 CNA_C_API CNA_Result cna_signed_in_gamer_set_presence_mode_string_ext(
     CNA_SignedInGamerHandle gamer,
@@ -1888,7 +1822,8 @@ CNA_C_API CNA_Result cna_guide_get_is_screen_saver_enabled(CNA_Bool* out_is_enab
 CNA_C_API CNA_Result cna_guide_set_is_screen_saver_enabled(CNA_Bool is_enabled);
 
 /**
- * @brief Reports whether the title is running in trial mode.
+ * @brief Reports whether the title is running in trial mode: only while trial mode is simulated
+ * (`cna_guide_set_simulate_trial_mode`), since CNA titles are fully licensed.
  *
  * @param out_is_trial_mode Receives non-zero in trial mode.
  * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
@@ -1896,28 +1831,13 @@ CNA_C_API CNA_Result cna_guide_set_is_screen_saver_enabled(CNA_Bool is_enabled);
 CNA_C_API CNA_Result cna_guide_get_is_trial_mode(CNA_Bool* out_is_trial_mode);
 
 /**
- * @brief Sets whether the title is running in trial mode.
- *
- * @param is_trial_mode Non-zero for trial mode.
- * @return `CNA_RESULT_SUCCESS` or a documented argument failure.
- */
-CNA_C_API CNA_Result cna_guide_set_is_trial_mode(CNA_Bool is_trial_mode);
-
-/**
  * @brief Reports whether a guide screen is currently up.
  *
  * @param out_is_visible Receives non-zero when the guide is visible.
- * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output, or
+ *         `CNA_RESULT_INVALID_STATE` before gamer services are initialized.
  */
 CNA_C_API CNA_Result cna_guide_get_is_visible(CNA_Bool* out_is_visible);
-
-/**
- * @brief Shows or hides the guide.
- *
- * @param is_visible Non-zero to show it.
- * @return `CNA_RESULT_SUCCESS` or a documented argument failure.
- */
-CNA_C_API CNA_Result cna_guide_set_is_visible(CNA_Bool is_visible);
 
 /**
  * @brief Reads where the guide draws its notifications.
@@ -1961,8 +1881,9 @@ CNA_C_API CNA_Result cna_guide_set_simulate_trial_mode(CNA_Bool simulate);
  * @param use_password_mode Non-zero to mask the text as it is typed.
  * @param callback Callback invoked when the input completes or is cancelled; may be null.
  * @param context Caller context passed back to @p callback.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when an input is already pending, or a
- *         documented argument/thread failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a title, description or default
+ *         text of 256 or more UTF-16 units or an undefined player, `CNA_RESULT_INVALID_STATE` when
+ *         the Guide is already visible, or a documented argument/thread failure.
  *
  * **This one really is asynchronous**, unlike every other begin/end pair in this ABI: the input stays
  * pending until the user confirms or cancels it, and only then does @p callback run. Poll
@@ -1985,8 +1906,13 @@ CNA_C_API CNA_Result cna_guide_begin_show_keyboard_input(
  * @brief Reports the byte length of the text the completed keyboard input produced.
  *
  * @param out_bytes Receives the length in bytes, with no terminator counted.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when no input has been started or it has
- *         not completed yet, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when no input has been started or it is
+ *         unconfirmed and no running game can present the Guide, or `CNA_RESULT_INVALID_ARGUMENT`
+ *         for a null output.
+ *
+ * Unconfirmed input is waited for, as the canonical End waits: the running game keeps presenting the
+ * Guide and reading input, without its own update and draw, until the user confirms or cancels. The
+ * text can be read again until the next input is started.
  */
 CNA_C_API CNA_Result cna_guide_end_show_keyboard_input_size(uint64_t* out_bytes);
 
@@ -1998,8 +1924,9 @@ CNA_C_API CNA_Result cna_guide_end_show_keyboard_input_size(uint64_t* out_bytes)
  * @param capacity Destination capacity in bytes.
  * @param out_bytes Receives the length in bytes whether or not the copy succeeded.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with nothing written,
- *         `CNA_RESULT_INVALID_STATE` when no completed input is available, or a documented argument
- *         failure.
+ *         `CNA_RESULT_INVALID_STATE` when no input has been started or it is unconfirmed and no
+ *         running game can present the Guide, or a documented argument failure. Waits as
+ *         `cna_guide_end_show_keyboard_input_size` does.
  */
 CNA_C_API CNA_Result cna_guide_end_show_keyboard_input(
     char* destination,
@@ -2147,18 +2074,19 @@ CNA_C_API CNA_Result cna_guide_reset_pending_keyboard_input_ext(void);
  * @param title Title text, borrowed for the duration of the call.
  * @param text Body text, borrowed for the duration of the call.
  * @param buttons Array of @p button_count button captions, borrowed for the duration of the call.
- * @param button_count Number of buttons; must be at least one.
+ * @param button_count Number of buttons, one to three.
  * @param focus_button Index of the button that starts focused.
  * @param icon One of the `CNA_MESSAGE_BOX_ICON_*` identities.
  * @param callback Callback invoked when a button is chosen; may be null.
  * @param context Caller context passed back to @p callback.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an empty button list or an
- *         undefined icon, `CNA_RESULT_INVALID_STATE` when a message box is already pending, or a
- *         documented argument/thread failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an empty or 256-character (or
+ *         longer, in UTF-16 units) title, text or button caption, a button count outside one to
+ *         three, a focus button outside them, or an undefined player or icon,
+ *         `CNA_RESULT_INVALID_STATE` when the Guide is already visible, or a documented
+ *         argument/thread failure.
  *
  * Asynchronous in the same real sense the keyboard input is: it stays pending until a button is
- * chosen. The canonical API has a second overload without the player; both reach the same
- * implementation, which ignores the player entirely.
+ * chosen. The canonical API has a second overload without the player, which is player one.
  */
 CNA_C_API CNA_Result cna_guide_begin_show_message_box(
     CNA_PlayerIndex player,
@@ -2178,7 +2106,12 @@ CNA_C_API CNA_Result cna_guide_begin_show_message_box(
  * @param out_button_index Receives the chosen button index when @p out_has_choice is non-zero, and
  *        is left exactly as the caller set it otherwise.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when no message box has been started or
- *         it has not been answered yet, or a documented argument failure.
+ *         it is unanswered and no running game can present the Guide, or a documented argument
+ *         failure.
+ *
+ * An unanswered box is waited for, as the canonical End waits: the running game keeps presenting the
+ * Guide and reading input, without its own update and draw, until the user answers. The answer can be
+ * read again until the next box is started.
  *
  * The canonical answer is optional, so availability is separate from the answer here too: a message
  * box that completed without a choice is an ordinary success with the flag clear.
@@ -2250,8 +2183,8 @@ CNA_C_API CNA_Result cna_guide_reset_pending_message_box_ext(void);
  * @param delay_ticks Delay in 100-nanosecond ticks.
  * @return `CNA_RESULT_SUCCESS`.
  *
- * **A no-op on this runtime**, like every guide screen below: there is no notification system to
- * delay. The route exists because the canonical API does.
+ * Defers the Guide's own notifications (game invitations) for at most 120 seconds; an active
+ * delay is kept rather than shortened.
  */
 CNA_C_API CNA_Result cna_guide_delay_notifications(int64_t delay_ticks);
 
@@ -2263,12 +2196,15 @@ CNA_C_API CNA_Result cna_guide_delay_notifications(int64_t delay_ticks);
  * @param recipients Array of @p recipient_count gamer handles, borrowed for the duration of the
  *        call; may be null when @p recipient_count is zero.
  * @param recipient_count Number of recipients.
- * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without a signed-in service player,
+ *         `CNA_RESULT_INVALID_STATE` while another Guide screen is open, or a documented
+ *         argument/handle/thread failure.
  *
- * **A no-op on this runtime.** Every `cna_guide_show_*` route below is: this runtime has no guide
- * UI for any of these screens, so they accept their arguments, validate them and do nothing. Only
- * the keyboard input and the message box are real, and those two are real because this ABI draws
- * them.
+ * Every `cna_guide_show_*` screen below is a CNA Guide overlay drawn by the game's gamer-services
+ * component and backed by the configured CNA account service (docs/gamer-services-server.md). A
+ * screen belongs to a signed-in service player: without one (for example with no service
+ * configured) it refuses with `CNA_RESULT_NOT_SUPPORTED`, and while another Guide screen is open it
+ * refuses with `CNA_RESULT_INVALID_STATE`.
  */
 CNA_C_API CNA_Result cna_guide_show_compose_message(
     CNA_PlayerIndex player,
@@ -2277,30 +2213,36 @@ CNA_C_API CNA_Result cna_guide_show_compose_message(
     uint64_t recipient_count);
 
 /**
- * @brief Opens the friend-request screen. A no-op on this runtime.
+ * @brief Opens the friend-request screen.
  *
  * @param player One of the `CNA_PLAYER_INDEX_*` identities.
  * @param gamer Gamer handle the request is for.
- * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without a signed-in service player,
+ *         `CNA_RESULT_INVALID_STATE` while another Guide screen is open, or a documented
+ *         argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_guide_show_friend_request(CNA_PlayerIndex player, CNA_GamerHandle gamer);
 
 /**
- * @brief Opens the friends screen. A no-op on this runtime.
+ * @brief Opens the friends screen.
  *
  * @param player One of the `CNA_PLAYER_INDEX_*` identities.
- * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without a signed-in service player,
+ *         `CNA_RESULT_INVALID_STATE` while another Guide screen is open, or
+ *         `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
  */
 CNA_C_API CNA_Result cna_guide_show_friends(CNA_PlayerIndex player);
 
 /**
- * @brief Opens the game-invite screen for a set of recipients. A no-op on this runtime.
+ * @brief Opens the game-invite screen for a set of recipients.
  *
  * @param player One of the `CNA_PLAYER_INDEX_*` identities.
  * @param recipients Array of @p recipient_count gamer handles, borrowed for the duration of the
  *        call; may be null when @p recipient_count is zero.
  * @param recipient_count Number of recipients.
- * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without a signed-in service player,
+ *         `CNA_RESULT_INVALID_STATE` while another Guide screen is open, or a documented
+ *         argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_guide_show_game_invite(
     CNA_PlayerIndex player,
@@ -2308,85 +2250,109 @@ CNA_C_API CNA_Result cna_guide_show_game_invite(
     uint64_t recipient_count);
 
 /**
- * @brief Opens the game-invite screen for a session. A no-op on this runtime.
+ * @brief Opens the game-invite screen for a session.
  *
  * @param session_id Session identifier, borrowed for the duration of the call.
- * @return `CNA_RESULT_SUCCESS` or a documented argument failure.
+ * @return `CNA_RESULT_NOT_SUPPORTED`: the canonical overload is Windows Phone only.
  */
 CNA_C_API CNA_Result cna_guide_show_game_invite_for_session(CNA_StringView session_id);
 
 /**
- * @brief Opens a gamer card. A no-op on this runtime.
+ * @brief Opens a gamer card.
  *
  * @param player One of the `CNA_PLAYER_INDEX_*` identities.
  * @param gamer Gamer handle whose card to show.
- * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without a signed-in service player,
+ *         `CNA_RESULT_INVALID_STATE` while another Guide screen is open, or a documented
+ *         argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_guide_show_gamer_card(CNA_PlayerIndex player, CNA_GamerHandle gamer);
 
 /**
- * @brief Opens the marketplace. A no-op on this runtime.
+ * @brief Opens the marketplace.
  *
  * @param player One of the `CNA_PLAYER_INDEX_*` identities.
- * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
+ * @return `CNA_RESULT_SUCCESS` (an information pane: CNA has no store and titles are fully
+ *         licensed), `CNA_RESULT_INVALID_STATE` for a player not signed in or without the purchase
+ *         privilege, or while another Guide screen is open, or `CNA_RESULT_INVALID_ARGUMENT` for an
+ *         undefined identity.
  */
 CNA_C_API CNA_Result cna_guide_show_marketplace(CNA_PlayerIndex player);
 
 /**
- * @brief Opens the messages screen. A no-op on this runtime.
+ * @brief Opens the messages screen.
  *
  * @param player One of the `CNA_PLAYER_INDEX_*` identities.
- * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without a signed-in service player,
+ *         `CNA_RESULT_INVALID_STATE` while another Guide screen is open, or
+ *         `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
  */
 CNA_C_API CNA_Result cna_guide_show_messages(CNA_PlayerIndex player);
 
 /**
- * @brief Opens the party screen. A no-op on this runtime.
+ * @brief Opens the party screen.
  *
  * @param player One of the `CNA_PLAYER_INDEX_*` identities.
- * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without a signed-in service player,
+ *         `CNA_RESULT_INVALID_STATE` while another Guide screen is open, or
+ *         `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
  */
 CNA_C_API CNA_Result cna_guide_show_party(CNA_PlayerIndex player);
 
 /**
- * @brief Opens the party-sessions screen. A no-op on this runtime.
+ * @brief Opens the party-sessions screen.
  *
  * @param player One of the `CNA_PLAYER_INDEX_*` identities.
- * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without a signed-in service player,
+ *         `CNA_RESULT_INVALID_STATE` while another Guide screen is open, or
+ *         `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
  */
 CNA_C_API CNA_Result cna_guide_show_party_sessions(CNA_PlayerIndex player);
 
 /**
- * @brief Opens the player-review screen. A no-op on this runtime.
+ * @brief Opens the player-review screen.
  *
  * @param player One of the `CNA_PLAYER_INDEX_*` identities.
  * @param gamer Gamer handle to review.
- * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without a signed-in service player,
+ *         `CNA_RESULT_INVALID_STATE` while another Guide screen is open, or a documented
+ *         argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_guide_show_player_review(CNA_PlayerIndex player, CNA_GamerHandle gamer);
 
 /**
- * @brief Opens the players screen. A no-op on this runtime.
+ * @brief Opens the players screen.
  *
  * @param player One of the `CNA_PLAYER_INDEX_*` identities.
- * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without a signed-in service player,
+ *         `CNA_RESULT_INVALID_STATE` while another Guide screen is open, or
+ *         `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
  */
 CNA_C_API CNA_Result cna_guide_show_players(CNA_PlayerIndex player);
 
 /**
- * @brief Opens the sign-in screen. A no-op on this runtime.
+ * @brief Opens the sign-in screen.
+ *
+ * With a configured CNA account service each pane signs in an account. Without one each pane
+ * signs in a local offline profile, created on first use (not signed in to LIVE, no online
+ * sessions); see docs/gamer-services-server.md.
  *
  * @param pane_count How many sign-in panes to show.
  * @param online_only Non-zero to require an online sign-in.
- * @return `CNA_RESULT_SUCCESS` or a documented argument failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when gamer services are not initialized
+ *         or `online_only` is set without a configured CNA account service,
+ *         `CNA_RESULT_INVALID_STATE` while another Guide screen is open, or a documented argument
+ *         failure.
  */
 CNA_C_API CNA_Result cna_guide_show_sign_in(int32_t pane_count, CNA_Bool online_only);
 
 /**
- * @brief Opens the achievements screen. A no-op on this runtime.
+ * @brief Opens the achievements screen.
  *
  * @param player One of the `CNA_PLAYER_INDEX_*` identities.
- * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without a signed-in service player,
+ *         `CNA_RESULT_INVALID_STATE` while another Guide screen is open, or
+ *         `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
  *
  * CNAEXT: the canonical guide has no achievements screen of its own.
  */
@@ -2513,7 +2479,7 @@ typedef struct CNA_AchievementInfo {
     /** @brief Reserved; must be zero. */
     uint8_t reserved;
 
-    /** @brief When the achievement was earned, in 100-nanosecond ticks. */
+    /** @brief When the achievement was earned, in 100-nanosecond ticks of local time. */
     int64_t earned_date_time_ticks;
 } CNA_AchievementInfo;
 
@@ -2674,7 +2640,8 @@ CNA_C_API CNA_Result cna_achievement_copy_how_to_earn(
  *
  * @param achievement Owned achievement handle.
  * @param out_bytes Receives the picture size in bytes.
- * @return Success for configured service artwork, or a documented service/argument/handle failure.
+ * @return Success for configured artwork (the service catalog's, or offline the PNG the title's
+ * achievement catalog names), or a documented service/argument/handle failure when there is none.
  */
 CNA_C_API CNA_Result cna_achievement_get_picture_size(
     CNA_AchievementHandle achievement,
@@ -3922,40 +3889,11 @@ typedef struct CNA_AvatarExpression {
 } CNA_AvatarExpression;
 
 /**
- * @brief The colors an avatar is drawn in.
- *
- * CNAEXT: the canonical avatar description carries no colors this runtime can read, so an appearance
- * is what a game supplies instead.
- */
-typedef struct CNA_AvatarAppearanceEXT {
-    /** @brief Size of this caller-provided structure in bytes. */
-    uint32_t struct_size;
-
-    /** @brief Version of this caller-provided structure. */
-    uint32_t struct_version;
-
-    /** @brief Skin color. */
-    CNA_Color skin_color;
-
-    /** @brief Hair color. */
-    CNA_Color hair_color;
-
-    /** @brief Shirt color. */
-    CNA_Color shirt_color;
-
-    /** @brief Trouser color. */
-    CNA_Color pants_color;
-
-    /** @brief Shoe color. */
-    CNA_Color shoes_color;
-} CNA_AvatarAppearanceEXT;
-
-/**
  * @brief What an avatar description reports.
  *
- * **Two fields are constant on this runtime**: the height is always zero and the body type is always
- * female, because the canonical description format carries neither and the implementation says so
- * rather than guessing. Only validity and the bytes themselves vary.
+ * A CNA avatar description carries its body type and its height in meters (feet to top of head).
+ * Bytes from another source keep the validity rule (first byte non-zero) but report height zero and
+ * the female body type, because the runtime cannot read them.
  */
 typedef struct CNA_AvatarDescriptionInfo {
     /** @brief Size of this caller-provided structure in bytes. */
@@ -4025,11 +3963,8 @@ typedef struct CNA_AvatarRendererInfo {
     /** @brief Non-zero once the renderer has been disposed. */
     CNA_Bool is_disposed;
 
-    /** @brief Non-zero when real rendering has been enabled. */
-    CNA_Bool is_real_rendering_enabled;
-
-    /** @brief Reserved; must be zero. */
-    uint8_t reserved[2];
+    /** @brief Reserved; must be zero (was the retired real-rendering flag before ABI 0.33). */
+    uint8_t reserved[3];
 } CNA_AvatarRendererInfo;
 
 /**
@@ -4039,16 +3974,6 @@ typedef struct CNA_AvatarRendererInfo {
  * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
  */
 CNA_C_API CNA_Result cna_avatar_expression_init(CNA_AvatarExpression* out_expression);
-
-/**
- * @brief Initializes an appearance to the canonical default.
- *
- * @param out_appearance Receives the default colors.
- * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
- *
- * CNAEXT.
- */
-CNA_C_API CNA_Result cna_avatar_appearance_init_ext(CNA_AvatarAppearanceEXT* out_appearance);
 
 /**
  * @brief Creates an avatar description from its bytes.
@@ -4248,47 +4173,6 @@ CNA_C_API CNA_Result cna_avatar_animation_get_bone_transform_at(
     CNA_Matrix* out_transform);
 
 /**
- * @brief Reports the byte length of an animation's real clip name.
- *
- * @param animation Owned animation handle.
- * @param out_bytes Receives the length in bytes, with no terminator counted.
- * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
- *
- * CNAEXT: the clip name is what the real-rendering path looks up inside a loaded skinned model.
- */
-CNA_C_API CNA_Result cna_avatar_animation_get_real_clip_name_size_ext(
-    CNA_AvatarAnimationHandle animation,
-    uint64_t* out_bytes);
-
-/**
- * @brief Copies an animation's real clip name.
- *
- * @param animation Owned animation handle.
- * @param destination Buffer receiving UTF-8 bytes with no terminator; may be null when
- *        @p capacity is zero.
- * @param capacity Destination capacity in bytes.
- * @param out_bytes Receives the length in bytes whether or not the copy succeeded.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with nothing written, or a documented
- *         argument/handle/thread failure.
- */
-CNA_C_API CNA_Result cna_avatar_animation_copy_real_clip_name_ext(
-    CNA_AvatarAnimationHandle animation,
-    char* destination,
-    uint64_t capacity,
-    uint64_t* out_bytes);
-
-/**
- * @brief Sets an animation's real clip name.
- *
- * @param animation Owned animation handle.
- * @param clip_name Clip name, copied during the call.
- * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
- */
-CNA_C_API CNA_Result cna_avatar_animation_set_real_clip_name_ext(
-    CNA_AvatarAnimationHandle animation,
-    CNA_StringView clip_name);
-
-/**
  * @brief Creates an avatar renderer for a description.
  *
  * @param description Owned description handle the renderer draws.
@@ -4450,53 +4334,6 @@ CNA_C_API CNA_Result cna_avatar_renderer_draw_bones(
     const CNA_Matrix* bones,
     uint64_t bone_count,
     const CNA_AvatarExpression* expression);
-
-/**
- * @brief Enables drawing a real skinned model rather than the placeholder.
- *
- * @param renderer Owned renderer handle.
- * @param device Graphics device handle.
- * @param model Skinned model handle to draw.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` for a disposed renderer, or a documented
- *         argument/handle/thread failure.
- *
- * CNAEXT: no avatar asset service exists here, so a game supplies its own model.
- */
-CNA_C_API CNA_Result cna_avatar_renderer_enable_real_rendering_ext(
-    CNA_AvatarRendererHandle renderer,
-    CNA_Handle device,
-    CNA_Handle model);
-
-/**
- * @brief Sets the colors a real-rendered avatar is drawn in.
- *
- * @param renderer Owned renderer handle.
- * @param appearance The colors to use.
- * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
- *
- * CNAEXT.
- */
-CNA_C_API CNA_Result cna_avatar_renderer_set_appearance_ext(
-    CNA_AvatarRendererHandle renderer,
-    const CNA_AvatarAppearanceEXT* appearance);
-
-/**
- * @brief Draws the real skinned model at a point in a named clip.
- *
- * @param renderer Owned renderer handle.
- * @param animation_clip_name Clip to draw, borrowed for the duration of the call.
- * @param position_ticks Position within the clip, in 100-nanosecond ticks.
- * @param loop Non-zero to wrap around at the end of the clip.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` for a disposed renderer or one with no
- *         real model, or a documented argument/handle/thread failure.
- *
- * CNAEXT.
- */
-CNA_C_API CNA_Result cna_avatar_renderer_draw_real_ext(
-    CNA_AvatarRendererHandle renderer,
-    CNA_StringView animation_clip_name,
-    int64_t position_ticks,
-    CNA_Bool loop);
 
 #ifdef __cplusplus
 }

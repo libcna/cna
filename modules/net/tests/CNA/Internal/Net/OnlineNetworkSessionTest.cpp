@@ -1,29 +1,15 @@
 // SPDX-License-Identifier: MS-PL
 #ifndef __EMSCRIPTEN__
-#include <gtest/gtest.h>
-#include "../../../../src/Internal/OnlineSessionBinding.hpp"
-#include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
-#include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
-#include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
-#include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
-#include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
-#include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
-#include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
-#include "Microsoft/Xna/Framework/Net/NetworkGamer.hpp"
+#include "OnlineSessionTestFixture.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionJoinException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
-#include "System/IServiceProvider.hpp"
-#include <algorithm>
-#include <array>
-#include <map>
-#include <thread>
+#include <optional>
 
 namespace {
-using namespace CNA::Internal::Net;
-namespace Service=CNA::Internal::GamerServices;
-using namespace Microsoft::Xna::Framework::GamerServices;
+using namespace OnlineSessionTesting;
 using Microsoft::Xna::Framework::Net::AvailableNetworkSessionCollection;
 using Microsoft::Xna::Framework::Net::GameEndedEventArgs;
 using Microsoft::Xna::Framework::Net::GameStartedEventArgs;
@@ -31,109 +17,12 @@ using Microsoft::Xna::Framework::Net::GamerJoinedEventArgs;
 using Microsoft::Xna::Framework::Net::GamerLeftEventArgs;
 using Microsoft::Xna::Framework::Net::LocalNetworkGamer;
 using Microsoft::Xna::Framework::Net::NetworkGamer;
-using Microsoft::Xna::Framework::Net::NetworkSession;
 using Microsoft::Xna::Framework::Net::NetworkSessionEndedEventArgs;
 using Microsoft::Xna::Framework::Net::NetworkSessionEndReason;
 using Microsoft::Xna::Framework::Net::NetworkSessionJoinError;
 using Microsoft::Xna::Framework::Net::NetworkSessionJoinException;
-using Microsoft::Xna::Framework::Net::NetworkSessionProperties;
 using Microsoft::Xna::Framework::Net::NetworkSessionType;
-
-struct Provider final : System::IServiceProvider {void* GetService(const std::type_info&)const override{return nullptr;}};
-struct Portal {std::map<std::string,std::uint16_t> ports;};
-// Deterministic stand-in for the verified relay: real loopback ENet, routes published through a portal.
-class Transport final : public IPreparedOnlineTransport {
-public:
-    Transport(std::shared_ptr<Portal> portal,std::string machine):host_(ENetHostHandle::CreateRelayHost()),portal_(std::move(portal)),machine_(std::move(machine)) {
-        portal_->ports[machine_]=host_.getBoundPortProperty();
-    }
-    ~Transport()override{portal_->ports.erase(machine_);}
-    ENetHostHandle& host()override{return host_;}
-    RelayTransport* relay()override{return nullptr;}
-    RelayTransportStatus status()const override{RelayTransportStatus value;value.state=RelayTransportState::Ready;return value;}
-private:
-    ENetHostHandle host_;
-    std::shared_ptr<Portal> portal_;
-    std::string machine_;
-};
-
-class OnlineNetworkSessionTest : public ::testing::Test {
-protected:
-    void SetUp() override {
-        previous_=Service::backend();
-        std::vector<Service::ServiceIdentity> identities;
-        for(auto [id,tag]:{std::pair{"a","Alice"},{"b","Bob"},{"c","Charlie"},{"d","Dana"}}) {
-            Service::ServiceIdentity identity;identity.userId=id;identity.gamertag=tag;identity.allowOnlineSessions=true;
-            identities.push_back(identity);
-        }
-        service=Service::makeFakeBackend(std::move(identities));Service::setBackendForTesting(service);
-        if(!GamerServicesDispatcher::getIsInitializedProperty())GamerServicesDispatcher::Initialize(provider_);
-        for(int slot=0;slot<4;++slot)service->signIn(slot,std::array{"Alice","Bob","Charlie","Dana"}[slot],"fixture");
-        GamerServicesDispatcher::Update();
-        ASSERT_EQ(4,Gamer::getSignedInGamersProperty()->getCountProperty());
-        OnlineSessionFixture fixture;
-        fixture.preparation=[this]{return preparation();};
-        fixture.realtime=[this]{return routes();};
-        setOnlineSessionFixtureForTesting(std::move(fixture));
-    }
-    void TearDown() override {
-        peer.reset();
-        if(session){if(!session->getIsDisposedProperty())session->Dispose();delete session;session=nullptr;}
-        setOnlineSessionFixtureForTesting({});
-        for(int slot=0;slot<4;++slot)service->signOut(slot);
-        GamerServicesDispatcher::Update();Service::setBackendForTesting(previous_);
-    }
-    OnlinePreparationDependencies preparation() {
-        OnlinePreparationDependencies dependencies;
-        dependencies.configuration=[](const auto&){CNA::GamerServices::Configuration value;value.endpoint="https://fixture.invalid/cna/v1";value.gameId="one";return value;};
-        dependencies.transport=[portal=portal](const auto&,auto ticket,const auto&){return std::make_unique<Transport>(portal,ticket.machine);};
-        return dependencies;
-    }
-    ServiceENetDependencies routes() {
-        ServiceENetDependencies dependencies;dependencies.setRoutes=[](const auto&){};
-        dependencies.routePort=[portal=portal](const auto& machine){auto found=portal->ports.find(machine);return found==portal->ports.end()?0:found->second;};
-        return dependencies;
-    }
-    SignedInGamer* gamer(int slot){return (*Gamer::getSignedInGamersProperty())[slot];}
-    // A private realtime peer driven directly, so one process can host both sides of a session.
-    void privatePeer(bool joining,const std::string& target={}) {
-        OnlineSessionRequest request;
-        request.operation=joining?OnlineSessionRequest::Operation::Join:OnlineSessionRequest::Operation::Create;
-        request.users=joining?std::vector<std::string>{"b","d"}:std::vector<std::string>{"a","c"};request.owner=request.users.front();
-        request.kind=kind;request.settings.maxGamers=6;request.settings.properties[2]=5;request.session=target;
-        OnlineSessionPreparation preparing(service,request,{},preparation());
-        until([&]{return preparing.complete();});
-        peer=std::make_unique<ServiceENetSession>(preparing.take(),joining?std::vector<std::string>{"Bob","Dana"}
-            :std::vector<std::string>{"Alice","Charlie"},routes());
-    }
-    std::string sessionId(const std::string& actor,int locals=2) {
-        auto page=service->sessionDirectory().find(actor,kind,locals,{},0,32);
-        return page.sessions.empty()?std::string{}:page.sessions.front().session;
-    }
-    template<class Work>void until(Work done,int line=__builtin_LINE()) {
-        const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(10);
-        while(!done()) {
-            if(std::chrono::steady_clock::now()>=deadline)throw std::runtime_error("fixture deadline at line "+std::to_string(line));
-            tick();std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-    }
-    void tick() {
-        GamerServicesDispatcher::Update();
-        if(session&&!session->getIsDisposedProperty())session->Update();
-        if(peer)for(auto& event:peer->update())observed.push_back(std::move(event));
-    }
-    int count(ServiceENetObservation::Type type) const {
-        return static_cast<int>(std::count_if(observed.begin(),observed.end(),[&](const auto& value){return value.type==type;}));
-    }
-    NetworkSessionProperties properties() {NetworkSessionProperties value;value.setItem(2,5);return value;}
-    Provider provider_;
-    std::shared_ptr<Service::IGamerServicesBackend> previous_,service;
-    std::shared_ptr<Portal> portal=std::make_shared<Portal>();
-    std::unique_ptr<ServiceENetSession> peer;
-    std::vector<ServiceENetObservation> observed;
-    NetworkSession* session=nullptr;
-    Service::ServiceSessionKind kind=Service::ServiceSessionKind::PlayerMatch;
-};
+using OnlineNetworkSessionTest=OnlineSessionTest;
 }
 
 TEST_F(OnlineNetworkSessionTest, PublicCreateCompletesAtUpdateAndProjectsTheLocalGroup) {
@@ -210,6 +99,85 @@ TEST_F(OnlineNetworkSessionTest, HostProjectsRemoteGroupsDataStateAndDepartureAt
     EXPECT_THROW((void)service->sessionDirectory().get("a",id),Service::ServiceOperationError);
 }
 
+TEST_F(OnlineNetworkSessionTest, LobbyReadinessCrossesTheServiceSessionAndClearsWhenTheGameEnds) {
+    session=NetworkSession::Create(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(0),gamer(2)},6,0,properties());
+    int started=0,ended=0;
+    session->GameStarted+=[&](auto*,const GameStartedEventArgs&){++started;};
+    session->GameEnded+=[&](auto*,const GameEndedEventArgs&){++ended;};
+    privatePeer(true,sessionId("b"));
+    until([&]{return peer->ready()&&session->getAllGamersProperty().getCountProperty()==4;});
+    const auto reported=[&](unsigned char id){
+        std::optional<bool> value;
+        for(const auto& event:observed)if(event.type==ServiceENetObservation::Type::Readiness)
+            for(const auto& entry:event.readiness)if(entry.WireId==id)value=entry.IsReady;
+        return value;
+    };
+    auto* alice=session->getLocalGamersProperty()[0];auto* charlie=session->getLocalGamersProperty()[1];
+    auto* bob=session->getRemoteGamersProperty()[0];auto* dana=session->getRemoteGamersProperty()[1];
+    EXPECT_THROW(bob->setIsReadyProperty(true),System::InvalidOperationException);
+    alice->setIsReadyProperty(true);charlie->setIsReadyProperty(true);
+    until([&]{return reported(1)==true&&reported(2)==true;});
+    peer->publishReady({{3,true}});
+    until([&]{return bob->getIsReadyProperty();});
+    EXPECT_FALSE(dana->getIsReadyProperty());EXPECT_FALSE(session->getIsEveryoneReadyProperty());
+    peer->publishReady({{4,true}});
+    until([&]{return session->getIsEveryoneReadyProperty();});
+
+    session->StartGame();until([&]{return started==1;});
+    EXPECT_THROW(alice->setIsReadyProperty(false),System::InvalidOperationException);
+    session->EndGame();until([&]{return ended==1;});
+    for(auto* gamer:std::array<NetworkGamer*,4>{alice,charlie,bob,dana})EXPECT_FALSE(gamer->getIsReadyProperty());
+    EXPECT_FALSE(session->getIsEveryoneReadyProperty());
+    // The host may clear anyone's readiness; the report reaches the other machine.
+    until([&]{return peer->snapshot().state==Service::ServiceSessionState::Lobby;});
+    peer->publishReady({{3,true}});until([&]{return bob->getIsReadyProperty();});
+    session->ResetReady();EXPECT_FALSE(bob->getIsReadyProperty());
+    until([&]{return reported(3)==false;});
+}
+
+// Reference NetworkMachine.RemoveFromSession over the service: CNA's host removes a peer, and a
+// peer host removes CNA's session.
+TEST_F(OnlineNetworkSessionTest, TheHostRemovesAMachineWhoseGamersLeave) {
+    session=NetworkSession::Create(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(0),gamer(2)},6,0,properties());
+    std::vector<std::string> left;
+    session->GamerLeft+=[&](auto*,const GamerLeftEventArgs& args){left.push_back(args.getGamerProperty()->getGamertagProperty());};
+    privatePeer(true,sessionId("b"));
+    until([&]{return peer->ready()&&session->getAllGamersProperty().getCountProperty()==4;});
+    EXPECT_THROW(session->getLocalGamersProperty()[0]->getMachineProperty().RemoveFromSession(),System::InvalidOperationException);
+    session->getRemoteGamersProperty()[0]->getMachineProperty().RemoveFromSession();
+    until([&]{return left.size()==2&&count(ServiceENetObservation::Type::Failed)==1;});
+    EXPECT_EQ((std::vector<std::string>{"Bob","Dana"}),left);
+    auto failed=std::find_if(observed.begin(),observed.end(),[](const auto& value){return value.type==ServiceENetObservation::Type::Failed;});
+    EXPECT_EQ("REMOVED_BY_HOST",failed->failure);
+}
+
+// An online session reports its traffic and each remote gamer's round trip, as a SystemLink one does.
+TEST_F(OnlineNetworkSessionTest, TrafficAndRoundTripsReachTheSession) {
+    session=NetworkSession::Create(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(0),gamer(2)},6,0,properties());
+    privatePeer(true,sessionId("b"));
+    until([&]{return peer->ready()&&session->getAllGamersProperty().getCountProperty()==4;});
+    until([&]{return session->getBytesPerSecondSentProperty()>0&&session->getBytesPerSecondReceivedProperty()>0;});
+    for(NetworkGamer* remote:session->getRemoteGamersProperty())
+        until([&]{return remote->getRoundtripTimeProperty()>System::TimeSpan::Zero;});
+    EXPECT_EQ(System::TimeSpan::Zero,session->getLocalGamersProperty()[0]->getRoundtripTimeProperty());
+}
+TEST_F(OnlineNetworkSessionTest, AMachineTheHostRemovesEndsWithRemovedByHost) {
+    privatePeer(false);
+    auto found=NetworkSession::Find(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(1),gamer(3)},{});
+    ASSERT_EQ(1,found.getCountProperty());
+    // The peer host must keep running while CNA joins, so the join is asynchronous here.
+    std::unique_ptr<System::IAsyncResult> result(NetworkSession::BeginJoin(&std::as_const(found)[0],{},{}));
+    until([&]{return result->getIsCompletedProperty();});
+    session=NetworkSession::EndJoin(result.get());
+    std::optional<NetworkSessionEndReason> reason;
+    session->SessionEnded+=[&](auto*,const NetworkSessionEndedEventArgs& args){reason=args.getEndReasonProperty();};
+    until([&]{return peer->snapshot().currentGamers==4;});
+    std::string joined;for(const auto& row:peer->snapshot().members)if(row.machine!=peer->snapshot().machine)joined=row.machine;
+    peer->removeMachine(joined);
+    until([&]{return reason.has_value();});
+    EXPECT_EQ(NetworkSessionEndReason::RemovedByHost,*reason);
+}
+
 TEST_F(OnlineNetworkSessionTest, PublicJoinUsesTheFindGroupAndFollowsDirectoryAuthority) {
     privatePeer(false);
     auto found=NetworkSession::Find(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(1),gamer(3)},{});
@@ -233,6 +201,9 @@ TEST_F(OnlineNetworkSessionTest, PublicJoinUsesTheFindGroupAndFollowsDirectoryAu
     session->GameEnded+=[&](auto*,const GameEndedEventArgs&){++ended;};
     session->SessionEnded+=[&](auto*,const NetworkSessionEndedEventArgs& args){reason=args.getEndReasonProperty();};
     EXPECT_EQ(4u,joined.size());for(int index=0;index<5;++index)tick();EXPECT_EQ(4u,joined.size());
+    // Reference GamerCollection order: session index on every machine, so the host's group first.
+    EXPECT_EQ((std::vector<std::string>{"Alice","Charlie","Bob","Dana"}),joined);
+    EXPECT_EQ(host,session->getAllGamersProperty()[0]);
 
     // A client is not the host: host-only setters refuse without changing authority.
     EXPECT_THROW(session->setMaxGamersProperty(8),System::InvalidOperationException);

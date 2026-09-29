@@ -1560,7 +1560,7 @@ namespace Microsoft::Xna::Framework::Content
                 // boneCount/trackCount/keyCount inconsistent with the file's actual byte length)
                 // previously caused a real out-of-bounds heap read (undefined behavior) here
                 // instead of a clean, catchable error - this is the most serious memory-safety
-                // finding in the whole Avatar content-loading path.
+                // finding in the whole SkinnedModelEXT content-loading path.
                 if (Pos + sizeof(T) > Data.size())
                 {
                     throw ContentLoadException(
@@ -5863,9 +5863,8 @@ namespace Microsoft::Xna::Framework::Content
 
         // ---------------------------------------------------------------------------
         // .skinnedmodel.json descriptor reader
-        // CNAEXT — loads a GPU-skinned mesh + skeleton + animation clips for the real-rendering
-        // Avatar extension (see AvatarRenderer::EnableRealRenderingEXT). Not part of the XNA
-        // 4.0 content pipeline.
+        // CNAEXT — loads a GPU-skinned mesh + skeleton + animation clips as SkinnedModelEXT
+        // (docs/skinned-model-ext.md). Not part of the XNA 4.0 content pipeline.
         // ---------------------------------------------------------------------------
 
         class SkinnedModelTypeReader

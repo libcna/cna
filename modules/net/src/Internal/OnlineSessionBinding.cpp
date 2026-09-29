@@ -8,6 +8,7 @@
 #include "Microsoft/Xna/Framework/Net/NetworkSessionJoinException.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
 #include <algorithm>
 #include <mutex>
 
@@ -101,19 +102,25 @@ void OnlineSessionBinding::project(const ServiceENetObservation& ready) {
         session_.remoteGamers_.Add(gamer);session_.allGamers_.Add(gamer);
         if(entry.IsHost)hostGamer=gamer;
     }
+    session_.OrderGamersInternal();
     if(!hostGamer||(host_!=hostGamer->getIsLocalProperty()))throw ServiceOperationError("INVALID_RESPONSE");
     session_.host_=hostGamer;session_.isHost_=host_;
     apply(snapshot_,true);
     desiredState_=observedState_=snapshot_.state;
     if(host_)requested_=desired();
+    // Guide invitations target the session this process currently belongs to.
+    setActiveOnlineSession(ActiveOnlineSession{snapshot_.session,snapshot_.kind,users_,engine_->origin()});
 }
 NetworkGamer* OnlineSessionBinding::addRemote(const RosterEntry& entry) {
     const auto* row=member(snapshot_,entry.WireId);
     if(!row||row->machine==snapshot_.machine||row->gamertag!=entry.Gamertag||gamers_.contains(entry.WireId))
         throw ServiceOperationError("INVALID_RESPONSE");
-    auto owned=std::make_unique<NetworkGamer>(NetworkGamer::CreateInternal(&session_,entry.Gamertag));
+    std::unique_ptr<NetworkGamer> owned(new NetworkGamer(NetworkGamer::CreateInternal(&session_,entry.Gamertag)));
     auto* gamer=owned.get();remote_.push_back(std::move(owned));
     gamer->SetId(entry.WireId);gamer->SetIsHost(entry.IsHost);gamer->SetIsPrivateSlot(row->privateSlot);
+    // Service identity makes its leaderboard writer a service writer instead of the offline store.
+    GamerAccess::setUserId(*gamer,row->userId);
+    rememberRecentPlayer(entry.Gamertag);
     auto shared=machine(row->machine);gamer->SetSharedMachine(shared);shared->AddGamerInternal(gamer);
     gamers_[entry.WireId]=gamer;return gamer;
 }
@@ -164,6 +171,13 @@ void OnlineSessionBinding::convert(ServiceENetObservation observation) {
         case Type::Snapshot:
             if(observation.snapshot)apply(*observation.snapshot,false);
             break;
+        case Type::Readiness:
+            if(session_.sessionState_!=NetworkSessionState::Lobby)break;
+            for(const auto& entry:observation.readiness) {
+                auto found=gamers_.find(entry.WireId);
+                if(found!=gamers_.end())NetworkSession::ApplyGamerReadyInternal(*found->second,entry.IsReady);
+            }
+            break;
         case Type::Failed:
             end(observation.failure);
             break;
@@ -176,6 +190,7 @@ void OnlineSessionBinding::end(const std::string& failure) {
     auto reason=NetworkSessionEndReason::Disconnected;
     if(failure=="HOST_ENDED_SESSION"||failure=="NOT_FOUND")reason=NetworkSessionEndReason::HostEndedSession;
     else if(failure=="UNAUTHENTICATED"||failure=="NOT_AUTHORIZED")reason=NetworkSessionEndReason::ClientSignedOut;
+    else if(failure=="REMOVED_BY_HOST")reason=NetworkSessionEndReason::RemovedByHost;
     NetworkSession::NetworkEvent event;event.Type=NetworkSession::NetworkEventType::StateChange;
     event.State=NetworkSessionState::Ended;event.Reason=reason;session_.SendNetworkEvent(std::move(event));
 }
@@ -197,6 +212,15 @@ void OnlineSessionBinding::pump() {
         observations=engine_->update();
     }catch(const ServiceOperationError& error){end(error.code);return;}
     for(auto& observation:observations){convert(std::move(observation));if(ended_)break;}
+    if(ended_)return;
+    const auto [sent,received]=engine_->traffic();
+    if(traffic_.sample(std::chrono::steady_clock::now(),sent,received))
+        session_.SetTrafficFromTransport(traffic_.sentPerSecond(),traffic_.receivedPerSecond());
+    for(const auto& [id,milliseconds]:engine_->roundTrips()) {
+        auto found=gamers_.find(id);
+        if(found!=gamers_.end()&&!found->second->getIsLocalProperty())
+            found->second->SetRoundtripTime(System::TimeSpan::FromMilliseconds(static_cast<double>(milliseconds)));
+    }
 }
 void OnlineSessionBinding::send(NetworkGamer* sender,NetworkGamer* target,const std::vector<SharpRuntime::bytecs>& payload,SendDataOptions options) {
     if(ended_||!engine_)return;
@@ -210,8 +234,28 @@ void OnlineSessionBinding::send(NetworkGamer* sender,NetworkGamer* target,const 
         // Any other refusal races a transport failure that the next observation reports as SessionEnded.
     }
 }
+void OnlineSessionBinding::publishReady(const std::vector<NetworkGamer*>& gamers) {
+    if(ended_||!engine_)return;
+    std::vector<GamerReadyEntry> entries;
+    for(auto* gamer:gamers) {
+        auto found=gamers_.find(gamer->getIdProperty());
+        if(found!=gamers_.end()&&found->second==gamer)entries.push_back(GamerReadyEntry{gamer->getIdProperty(),gamer->getIsReadyProperty()});
+    }
+    // A transport failure is reported as SessionEnded by the next observation.
+    try{engine_->publishReady(entries);}catch(const ServiceOperationError&){}
+}
+void OnlineSessionBinding::removeMachine(NetworkGamer* gamer) {
+    if(ended_||!engine_)return;
+    const auto* row=member(snapshot_,gamer->getIdProperty());
+    if(!row||row->machine==snapshot_.machine)return;
+    // A refusal races a transport failure that the next observation reports as SessionEnded.
+    try{engine_->removeMachine(row->machine);}catch(const ServiceOperationError&){}
+}
 void OnlineSessionBinding::requestState(NetworkSessionState state) {
     desiredState_=state==NetworkSessionState::Playing?ServiceSessionState::Playing:ServiceSessionState::Lobby;
 }
-void OnlineSessionBinding::close() noexcept {engine_.reset();}
+void OnlineSessionBinding::close() noexcept {
+    if(const auto& active=activeOnlineSession();active&&active->session==snapshot_.session)setActiveOnlineSession(std::nullopt);
+    engine_.reset();
+}
 }

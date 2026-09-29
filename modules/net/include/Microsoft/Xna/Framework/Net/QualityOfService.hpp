@@ -6,7 +6,9 @@
 namespace Microsoft::Xna::Framework::Net
 {
     /**
-     * @brief Describes measured network quality between the local machine and a remote gamer.
+     * @brief Describes measured network quality between the local machine and the host of a
+     * found session. A SystemLink search measures the round trip of the host's discovery reply;
+     * a service (PlayerMatch/Ranked) search result is not measured, and CNA measures no bandwidth.
      */
     class QualityOfService final
     {
@@ -21,21 +23,21 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets the measured downstream bandwidth in bytes per second.
          *
-         * @return The downstream bandwidth.
+         * @return 0: CNA does not measure bandwidth.
          */
         [[nodiscard]] int getBytesPerSecondDownstreamProperty() const;
 
         /**
          * @brief Gets the measured upstream bandwidth in bytes per second.
          *
-         * @return The upstream bandwidth.
+         * @return 0: CNA does not measure bandwidth.
          */
         [[nodiscard]] int getBytesPerSecondUpstreamProperty() const;
 
         /**
          * @brief Gets whether quality-of-service data is available.
          *
-         * @return true if available.
+         * @return true for a SystemLink search result, whose round trip was measured.
          */
         [[nodiscard]] bool getIsAvailableProperty() const;
 
@@ -47,14 +49,9 @@ namespace Microsoft::Xna::Framework::Net
         [[nodiscard]] System::TimeSpan getMinimumRoundtripTimeProperty() const;
 
         /**
-         * @brief Creates a QualityOfService for CNA internal use, with all-zero/unmeasured fields.
-         *
-         * `IsAvailable` is still `true` even though nothing is actually measured - this matches
-         * FNA's own reference `internal QualityOfService()` constructor byte-for-byte (an
-         * acknowledged upstream stub, its own source carries a "TODO: Everything below" comment),
-         * not a CNA gap. Task 4.2: kept for callers with no real measurement to offer at all (e.g.
-         * a session listing not built from a real discovery reply); real production discovery
-         * replies use the measured overload below instead.
+         * @brief Creates an unmeasured QualityOfService for CNA internal use: all fields zero and
+         * `IsAvailable` false, as the reference `internal QualityOfService()` leaves them. Service
+         * listings, which CNA does not measure, use it.
          */
         CNAEXT static QualityOfService CreateInternal();
 

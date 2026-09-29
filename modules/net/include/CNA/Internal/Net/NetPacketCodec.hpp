@@ -15,6 +15,9 @@
 
 namespace CNA::Internal::Net
 {
+    /** @brief ENet disconnect data a host sends to a machine it removes (XNA NetworkMachine.RemoveFromSession). */
+    inline constexpr std::uint32_t DisconnectRemovedByHost = 0x524D5648u;
+
     using Microsoft::Xna::Framework::Net::NetworkSessionState;
     using Microsoft::Xna::Framework::Net::NetworkSessionProperties;
     using Microsoft::Xna::Framework::Net::PacketReader;
@@ -33,6 +36,15 @@ namespace CNA::Internal::Net
         // 0x05 is reserved for a future HostChangeBroadcast (host migration); not implemented.
         StateChangeBroadcast = 0x06,
         SessionPropertiesBroadcast = 0x07,
+        GamerReadyBroadcast = 0x08,
+        // SystemLink only: the host's session settings and machine grouping. The online path takes
+        // both from the session directory and refuses these tags.
+        SessionSettingsBroadcast = 0x09,
+        MachineRosterBroadcast = 0x0A,
+        // SystemLink only: a client asks the host to admit a local gamer it added (AddLocalGamer).
+        AddLocalGamerRequest = 0x0B,
+        // The host's round-trip time to each gamer on a client machine, for the gamers' RoundtripTime.
+        NetworkStatsBroadcast = 0x0C,
         AppData = 0x10,
     };
 
@@ -92,6 +104,55 @@ namespace CNA::Internal::Net
         NetworkSessionProperties SessionProperties;
     };
 
+    /** @brief One gamer's lobby readiness. */
+    struct GamerReadyEntry
+    {
+        uint8_t WireId{0};
+        bool IsReady{false};
+    };
+    /**
+     * @brief Lobby readiness of gamers: a client reports its own gamers to the host, and the host
+     * reports every gamer's changes (and a snapshot to a machine that just joined) to the others.
+     */
+    struct GamerReadyMessage
+    {
+        std::vector<GamerReadyEntry> Entries;
+    };
+    /** @brief The host's session settings, which every machine reports (SystemLink). */
+    struct SessionSettingsMessage
+    {
+        uint8_t MaxGamers{0};
+        uint8_t PrivateGamerSlots{0};
+        bool AllowJoinInProgress{false};
+        bool AllowHostMigration{false};
+    };
+    /** @brief One gamer's machine, numbered by the host (its own machine is 0). */
+    struct MachineRosterEntry
+    {
+        uint8_t WireId{0};
+        uint8_t MachineId{0};
+    };
+    /** @brief Every gamer's machine as the host groups them (SystemLink). */
+    struct MachineRosterMessage
+    {
+        std::vector<MachineRosterEntry> Entries;
+    };
+    /** @brief A client's request that the host admit a local gamer it added (SystemLink). */
+    struct AddLocalGamerMessage
+    {
+        std::string Gamertag;
+    };
+    /** @brief The host's measured round trip to one gamer, in milliseconds. */
+    struct RoundtripEntry
+    {
+        uint8_t WireId{0};
+        uint16_t Milliseconds{0};
+    };
+    /** @brief The host's round trips to the gamers on client machines, sent about once a second. */
+    struct NetworkStatsMessage
+    {
+        std::vector<RoundtripEntry> Entries;
+    };
     /** @brief Carries application SendData/ReceiveData payloads between peers, relayed by the host. */
     struct AppDataMessage
     {
@@ -125,6 +186,35 @@ namespace CNA::Internal::Net
          * @return Connected-channel packet bytes.
          */
         static std::vector<SharpRuntime::bytecs> Encode(const SessionPropertiesBroadcastMessage& message);
+        /**
+         * @brief Encodes gamer readiness entries.
+         *
+         * @param message The entries to encode (at most 255).
+         * @return Connected-channel packet bytes.
+         */
+        static std::vector<SharpRuntime::bytecs> Encode(const GamerReadyMessage& message);
+        /**
+         * @brief Encodes the host's session settings.
+         *
+         * @param message The settings.
+         * @return Connected-channel packet bytes.
+         */
+        static std::vector<SharpRuntime::bytecs> Encode(const SessionSettingsMessage& message);
+        /**
+         * @brief Encodes the host's machine grouping.
+         *
+         * @param message The entries (at most 255).
+         * @return Connected-channel packet bytes.
+         */
+        static std::vector<SharpRuntime::bytecs> Encode(const MachineRosterMessage& message);
+        /**
+         * @brief Encodes a client's request to admit a local gamer.
+         *
+         * @param message The request.
+         * @return Connected-channel packet bytes.
+         */
+        static std::vector<SharpRuntime::bytecs> Encode(const AddLocalGamerMessage& message);
+        static std::vector<SharpRuntime::bytecs> Encode(const NetworkStatsMessage& message);
         static std::vector<SharpRuntime::bytecs> Encode(const AppDataMessage& message);
 
         /** @brief Reads the leading MessageTag byte without needing a full decode. */
@@ -144,6 +234,35 @@ namespace CNA::Internal::Net
         static SessionPropertiesBroadcastMessage DecodeSessionPropertiesBroadcast(
             const std::vector<SharpRuntime::bytecs>& data
         );
+        /**
+         * @brief Decodes gamer readiness entries.
+         *
+         * @param data Connected-channel packet bytes.
+         * @return The decoded entries.
+         */
+        static GamerReadyMessage DecodeGamerReady(const std::vector<SharpRuntime::bytecs>& data);
+        /**
+         * @brief Decodes the host's session settings.
+         *
+         * @param data Connected-channel packet bytes.
+         * @return The decoded settings.
+         */
+        static SessionSettingsMessage DecodeSessionSettings(const std::vector<SharpRuntime::bytecs>& data);
+        /**
+         * @brief Decodes the host's machine grouping.
+         *
+         * @param data Connected-channel packet bytes.
+         * @return The decoded entries.
+         */
+        static MachineRosterMessage DecodeMachineRoster(const std::vector<SharpRuntime::bytecs>& data);
+        /**
+         * @brief Decodes a client's request to admit a local gamer.
+         *
+         * @param data Connected-channel packet bytes.
+         * @return The decoded request.
+         */
+        static AddLocalGamerMessage DecodeAddLocalGamer(const std::vector<SharpRuntime::bytecs>& data);
+        static NetworkStatsMessage DecodeNetworkStats(const std::vector<SharpRuntime::bytecs>& data);
         static AppDataMessage DecodeAppData(const std::vector<SharpRuntime::bytecs>& data);
 
         /**

@@ -3,7 +3,9 @@
 
 #include "Microsoft/Xna/Framework/Net/NetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkMachine.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/NotImplementedException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 using namespace Microsoft::Xna::Framework::Net;
 
@@ -14,9 +16,20 @@ TEST(NetworkMachineTest, DefaultGamersCollectionIsEmpty) {
     EXPECT_EQ(m.getGamersProperty().getCountProperty(), 0);
 }
 
-TEST(NetworkMachineTest, RemoveFromSessionThrows) {
-    NetworkMachine m = NetworkMachine::CreateInternal();
-    EXPECT_THROW(m.RemoveFromSession(), System::NotImplementedException);
+// Reference NetworkMachine.RemoveFromSession checks, in order: no gamers, gamer left, local
+// machine, not the host (the transports are covered by the ENet and service session tests).
+TEST(NetworkMachineTest, RemoveFromSessionFollowsTheReferenceChecks) {
+    const NetworkMachine empty = NetworkMachine::CreateInternal();
+    EXPECT_THROW(empty.RemoveFromSession(), System::ObjectDisposedException);
+    NetworkGamer left = NetworkGamer::CreateInternal(nullptr);
+    left.SetHasLeftSession(true);
+    NetworkMachine leftMachine = NetworkMachine::CreateInternal();
+    leftMachine.AddGamerInternal(&left);
+    EXPECT_THROW(leftMachine.RemoveFromSession(), System::InvalidOperationException);
+    NetworkGamer remote = NetworkGamer::CreateInternal(nullptr);
+    NetworkMachine remoteMachine = NetworkMachine::CreateInternal();
+    remoteMachine.AddGamerInternal(&remote);
+    EXPECT_THROW(remoteMachine.RemoveFromSession(), System::InvalidOperationException);
 }
 
 // --- NetworkGamer ---
@@ -62,9 +75,18 @@ TEST(NetworkGamerTest, SetIsHostUpdatesProperty) {
     EXPECT_FALSE(g.getIsHostProperty());
 }
 
-TEST(NetworkGamerTest, SetIsReadyProperty) {
+namespace Microsoft::Xna::Framework::Net {
+struct NetworkGamerReadyTestAccess {
+    static void Apply(NetworkGamer& gamer, bool value) { gamer.SetIsReadyInternal(value); }
+};
+}
+
+TEST(NetworkGamerTest, SetIsReadyPropertyRefusesAGamerThatIsNotLocal) {
+    // Reference NetworkGamer.IsReady setter: only local gamers of a session in the Lobby state.
     NetworkGamer g = NetworkGamer::CreateInternal(nullptr);
-    g.setIsReadyProperty(true);
+    EXPECT_THROW(g.setIsReadyProperty(true), System::InvalidOperationException);
+    EXPECT_FALSE(g.getIsReadyProperty());
+    NetworkGamerReadyTestAccess::Apply(g, true);
     EXPECT_TRUE(g.getIsReadyProperty());
 }
 

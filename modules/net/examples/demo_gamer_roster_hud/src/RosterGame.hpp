@@ -3,6 +3,7 @@
 #include <memory>
 
 #include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
@@ -17,14 +18,9 @@
 // Task 15.6: cna_demo_gamer_roster_hud. Real two-process NetworkSession over real ENet. Exercises
 // the full gamer-roster event surface - GamerJoined, GamerLeft, HostChanged, SessionEnded - and
 // renders a live-updating panel listing every NetworkGamer in AllGamers with its IsHost/IsLocal/
-// IsReady/IsTalking flags. Documents one remaining real, current gap rather than hiding it:
-// IsReady is local-only storage never synced to remote gamers over the wire (toggling it locally
-// changes only this process's own view of that one gamer). HostChanged used to never fire (Task
-// 2.6 confirmed real host migration was unimplemented, matching FNA's own reference, so the host
-// disconnecting always ended the session outright instead of electing a new host) - Task 5.1-5.4
-// (plans/plan_net.md Phase 5) implemented it for real; the client role now opts in via
-// setAllowHostMigrationProperty(true) (see RosterGame::Initialize()), so killing the host process
-// mid-session now really does elect a new host and fire this event, instead of ending the session.
+// IsReady/IsTalking flags. Lobby readiness crosses machines (GS-007i). The host allows host
+// migration (see StartSession), and every client learns that from the host, so killing the host
+// process mid-session elects a new host and fires HostChanged instead of ending the session.
 class RosterGame : public Microsoft::Xna::Framework::Game
 {
 public:
@@ -40,6 +36,10 @@ public:
     void SetSmokeFrames(int n) { smokeFramesLeft_ = n; }
 
 private:
+    void StartSession();
+    // The Guide's sign-in prompt draws through the game's graphics device service.
+    Microsoft::Xna::Framework::GraphicsDeviceManager graphics_{this};
+    bool sessionStarted_ = false;
     void OnGamerJoined(System::Object* sender, const Microsoft::Xna::Framework::Net::GamerJoinedEventArgs& e);
     void OnGamerLeft(System::Object* sender, const Microsoft::Xna::Framework::Net::GamerLeftEventArgs& e);
     void OnHostChanged(System::Object* sender, const Microsoft::Xna::Framework::Net::HostChangedEventArgs& e);

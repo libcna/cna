@@ -3,6 +3,7 @@
 #include "ServiceRoster.hpp"
 #include "CnaService/Protocol.hpp"
 #include "System/InvalidOperationException.hpp"
+#include <algorithm>
 #include <mutex>
 #include <set>
 
@@ -26,7 +27,7 @@ bool sameSettings(const ServiceSessionSettings& left,const ServiceSessionSetting
 constexpr auto RequestSpacing=std::chrono::milliseconds(100);
 std::string safeFailure(const std::string& code) {
     for(const char* allowed:{"NOT_FOUND","NOT_AUTHORIZED","UNAUTHENTICATED","INVALID_RESPONSE","INVALID_STATE",
-        "CONFLICT","NOT_SUPPORTED","LIMIT_EXCEEDED","RATE_LIMITED"})if(code==allowed)return allowed;
+        "CONFLICT","NOT_SUPPORTED","LIMIT_EXCEEDED","RATE_LIMITED","REMOVED_BY_HOST"})if(code==allowed)return allowed;
     return "SESSION_SERVICE_UNAVAILABLE";
 }
 }
@@ -57,19 +58,22 @@ std::optional<ServiceSessionObservation> ServiceSessionPump::update() {
             revision_=result->snapshot->revision;if(result->renewed)nextRenew_=clock_()+std::chrono::seconds(30);
             // A newer desire queued while this one was in flight must still be published.
             if(result->published&&desired_&&sending_&&sameSettings(*desired_,*sending_))desired_.reset();
+            if(removing_)std::erase(removals_,*removing_);
         }
-        sending_.reset();
+        sending_.reset();removing_.reset();
         if(again_){again_=false;nextRead_=std::min(nextRead_,lastRequest_+RequestSpacing);}
     }
     const auto now=clock_();
     if(stopped_||busy_)return result;
     const bool publishing=desired_.has_value()&&now>=lastRequest_+RequestSpacing;
-    if(!publishing&&now<nextRead_)return result;
-    const bool renew=!publishing&&now>=nextRenew_;auto state=state_;auto* executor=backend_.get();busy_=true;
+    const bool removing=!publishing&&!removals_.empty()&&now>=lastRequest_+RequestSpacing;
+    if(!publishing&&!removing&&now<nextRead_)return result;
+    const bool renew=!publishing&&!removing&&now>=nextRenew_;auto state=state_;auto* executor=backend_.get();busy_=true;
     lastRequest_=now;nextRead_=now+std::chrono::seconds(1);
     if(publishing)sending_=desired_;
+    if(removing)removing_=removals_.front();
     try {
-        backend_->submit([state,executor,owner=owner_,initial=initial_,revision=revision_,renew,settings=sending_] {
+        backend_->submit([state,executor,owner=owner_,initial=initial_,revision=revision_,renew,settings=sending_,machine=removing_] {
             {std::lock_guard lock(state->mutex);if(state->canceled)return;}
             ServiceSessionObservation observation;
             try {
@@ -83,6 +87,13 @@ std::optional<ServiceSessionObservation> ServiceSessionPump::update() {
                             if(error.code!="CONFLICT"||attempt==2)throw;
                             expected=executor->sessionDirectory().get(owner,initial.session).revision;
                         }
+                    }
+                }else if(machine) {
+                    // A machine that already left needs no removal; the read reports the departure.
+                    try{value=executor->sessionDirectory().remove(owner,initial.session,*machine);}
+                    catch(const ServiceOperationError& error) {
+                        if(error.code!="NOT_FOUND")throw;
+                        value=executor->sessionDirectory().get(owner,initial.session);
                     }
                 }else value=renew?executor->sessionDirectory().touch(owner,initial.session)
                     :executor->sessionDirectory().get(owner,initial.session);
@@ -106,6 +117,10 @@ void ServiceSessionPump::retry() {
 void ServiceSessionPump::publish(ServiceSessionSettings settings) {
     if(canceled_)throw System::InvalidOperationException("Session observation was canceled.");
     desired_=std::move(settings);
+}
+void ServiceSessionPump::remove(std::string machine) {
+    if(canceled_)throw System::InvalidOperationException("Session observation was canceled.");
+    if(std::find(removals_.begin(),removals_.end(),machine)==removals_.end())removals_.push_back(std::move(machine));
 }
 void ServiceSessionPump::expedite() {
     if(canceled_||stopped_)return;

@@ -1,4 +1,6 @@
 #include "ArenaGame.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerServicesComponent.hpp"
+#include "common/SignInEXT.hpp"
 
 #include <chrono>
 #include <cstdio>
@@ -58,19 +60,12 @@ namespace
         };
         return kPalette[static_cast<std::size_t>(index) % (sizeof(kPalette) / sizeof(kPalette[0]))];
     }
-
-    // GamerServicesDispatcher::Initialize() never dereferences its serviceProvider argument
-    // (mirrors tools/net/gamerservices_dispatcher_harness.cpp's own NullServiceProvider).
-    class NullServiceProvider : public System::IServiceProvider
-    {
-    public:
-        [[nodiscard]] void* GetService(const std::type_info& /*type*/) const override { return nullptr; }
-    };
 }
 
 ArenaGame::ArenaGame(bool isHost)
     : isHost_(isHost)
 {
+    getComponentsProperty().Add(new Microsoft::Xna::Framework::GamerServices::GamerServicesComponent(*this));
 }
 
 ArenaGame::~ArenaGame()
@@ -85,13 +80,11 @@ ArenaGame::~ArenaGame()
 void ArenaGame::Initialize()
 {
     Game::Initialize();
+}
 
-    // NetworkSession::Join() has no overload accepting an explicit gamer list (matches real XNA:
-    // only Create() does) - it always draws from the global Gamer::SignedInGamers, exactly like
-    // a real game with a GamerServicesComponent registered. GamerServicesDispatcher::Initialize()
-    // is that population step.
-    NullServiceProvider services;
-    Microsoft::Xna::Framework::GamerServices::GamerServicesDispatcher::Initialize(services);
+// Runs once a gamer is signed in: SystemLink sessions are created and joined by signed-in gamers.
+void ArenaGame::StartSession()
+{
     localGamer_ = (*Microsoft::Xna::Framework::GamerServices::Gamer::getSignedInGamersProperty())[0];
 
     if (isHost_)
@@ -167,6 +160,21 @@ void ArenaGame::OnSessionEnded(System::Object* /*sender*/, const NetworkSessionE
 
 void ArenaGame::Update(GameTime& gameTime)
 {
+    Game::Update(gameTime);
+    if (!sessionStarted_)
+    {
+        if (CNAExamplesEXT::SignedInGamerOrShowSignInEXT() == nullptr)
+        {
+            if (smokeFramesLeft_ > 0 && --smokeFramesLeft_ == 0)
+            {
+                std::printf("[Arena] %s\n", CNAExamplesEXT::kNoSignedInGamerEXT);
+                Exit();
+            }
+            return;
+        }
+        sessionStarted_ = true;
+        StartSession();
+    }
     if (session_ == nullptr)
     {
         return;
@@ -237,8 +245,11 @@ void ArenaGame::Draw(const GameTime& /*gameTime*/)
 
     const Rectangle localRect(static_cast<int>(localPosition_.X), static_cast<int>(localPosition_.Y), 32, 32);
     spriteBatch_->Draw(*whitePixel_, localRect, ColorForPlayerIndex(0));
-    spriteBatch_->DrawString(*font_, localGamer_->getGamertagProperty(),
-                              Vector2(localPosition_.X, localPosition_.Y - 16.0f), Color(255, 255, 255, 255));
+    if (localGamer_ != nullptr)
+    {
+        spriteBatch_->DrawString(*font_, localGamer_->getGamertagProperty(),
+                                  Vector2(localPosition_.X, localPosition_.Y - 16.0f), Color(255, 255, 255, 255));
+    }
 
     int index = 1;
     for (const auto& [gamer, pos] : remotePositions_)

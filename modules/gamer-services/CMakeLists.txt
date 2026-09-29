@@ -6,7 +6,7 @@ target_include_directories(CNA_GamerServices PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/
 # The public dependency is the runtime layer (Guide/SignedInGamer use Game, graphics,
 # input, audio through it) plus Storage (device selector flows).
 target_link_libraries(CNA_GamerServices PUBLIC cna_runtime cna_storage)
-cna_link_sharp_runtime(CNA_GamerServices PUBLIC Core.Base IO Collections.Core Globalization Runtime Threading Security.Cryptography)
+cna_link_sharp_runtime(CNA_GamerServices PUBLIC Core.Base IO Collections.Core Globalization Runtime Threading Security.Cryptography TimeZone)
 
 # Module-owned examples (module-examples campaign): demo/example registration is
 # module-local; the conditions historically applied by cmake/Examples.cmake live
@@ -18,6 +18,22 @@ if(NOT EMSCRIPTEN)
     find_package(CURL 7.85 REQUIRED)
     target_link_libraries(CNA_GamerServices PRIVATE CURL::libcurl)
 endif()
+# GS-009: the original base avatar catalog (tools/avatar_builder/generate_avatar_catalog.py) is
+# compiled in, so standard avatars render offline and without any service.
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/EmbedBinaryFiles.cmake")
+file(GLOB CNA_AVATAR_CATALOG_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/avatars/v1/*")
+cna_embed_binary_files(CNA_GamerServices CNA::Internal::GamerServices::Avatars embeddedCatalogFiles
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/EmbeddedAvatarCatalog.cpp" FILES ${CNA_AVATAR_CATALOG_FILES})
+# The checked-in catalog must be exactly what the generator produces (tools/avatar_builder).
+if(CNA_BUILD_TESTS)
+    find_package(Python3 QUIET COMPONENTS Interpreter)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME GamerServices_AvatarCatalogUpToDate
+            COMMAND "${Python3_EXECUTABLE}" "${CNA_SOURCE_DIR}/tools/avatar_builder/generate_avatar_catalog.py" --check)
+    endif()
+endif()
+# The avatar asset reader parses GLB with the cgltf implementation compiled into cna_content.
+target_include_directories(CNA_GamerServices PRIVATE ${CNA_SOURCE_DIR}/third_party/cgltf)
 include("${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/HeaderOnlyJson.cmake")
 cna_link_json_headers(CNA_GamerServices)
 target_include_directories(CNA_GamerServices PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/Internal/Protocol)

@@ -173,11 +173,12 @@ CNA_C_API CNA_Result cna_network_gamer_get_is_ready(
     CNA_Bool* out_value);
 
 /**
- * @brief Sets whether a gamer is ready.
+ * @brief Sets whether a local gamer is ready, publishing the change to the other machines.
  *
  * @param gamer Owned gamer handle.
  * @param value The new ready state.
- * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the gamer has left its session, is
+ * not local, or its session is not in the lobby, or a documented handle/thread failure.
  */
 CNA_C_API CNA_Result cna_network_gamer_set_is_ready(
     CNA_NetworkGamerHandle gamer,
@@ -302,13 +303,13 @@ CNA_C_API CNA_Result cna_network_machine_get_gamer(
     CNA_NetworkGamerHandle* out_gamer);
 
 /**
- * @brief Removes a machine's gamers from the network session.
+ * @brief Removes a remote machine from the session the local machine hosts: its gamers leave for
+ * everyone else and its own session ends with `CNA_NETWORK_SESSION_END_REASON_REMOVED_BY_HOST`.
  *
  * @param machine Owned machine handle.
- * @return `CNA_RESULT_NOT_SUPPORTED`, or a documented handle/thread failure.
- *
- * The canonical operation is a declared placeholder that always throws, and the C route reports
- * that faithfully rather than pretending it succeeded.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the machine has no gamers, has left
+ *         the session or is the local machine, or this machine is not the host, or a documented
+ *         handle/thread failure.
  */
 CNA_C_API CNA_Result cna_network_machine_remove_from_session(CNA_NetworkMachineHandle machine);
 

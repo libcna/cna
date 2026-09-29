@@ -10,6 +10,7 @@
 #include <string>
 
 namespace Microsoft::Xna::Framework::Net { class NetworkSession; class LocalNetworkGamer; }
+namespace CNA::Internal::GamerServices { class GamerAccess; }
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
@@ -126,20 +127,26 @@ namespace Microsoft::Xna::Framework::GamerServices
         [[nodiscard]] GamerProfile* EndGetProfile(System::IAsyncResult* result);
 
         /**
-         * @brief Not supported in this platform's implementation.
+         * @brief Looks up a gamer by gamertag on the CNA account service.
          *
          * @param gamertag The gamertag to look up.
-         * @return Never returns.
+         * @return A heap-allocated Gamer; the caller owns it.
+         * @throws System::NotSupportedException without a CNA account service (offline profiles
+         *         have no directory to search).
+         * @throws System::ArgumentException if gamertag is empty or longer than 32 bytes.
+         * @throws GamerServicesNotAvailableException if the service cannot find or return the gamer.
          */
         [[nodiscard]] static Gamer* GetFromGamertag(const std::string& gamertag);
 
         /**
-         * @brief Not supported in this platform's implementation.
+         * @brief Begins looking up a gamer by gamertag on the CNA account service.
          *
          * @param gamertag   The gamertag to look up.
          * @param callback   Invoked when the operation completes.
          * @param asyncState User-defined state passed through to the callback.
-         * @return Never returns.
+         * @return A caller-owned IAsyncResult to pass to EndGetFromGamertag.
+         * @throws System::NotSupportedException without a CNA account service.
+         * @throws System::ArgumentException if gamertag is empty or longer than 32 bytes.
          */
         [[nodiscard]] static System::IAsyncResult* BeginGetFromGamertag(
             const std::string& gamertag,
@@ -148,10 +155,12 @@ namespace Microsoft::Xna::Framework::GamerServices
         );
 
         /**
-         * @brief Not supported in this platform's implementation.
+         * @brief Completes a gamer lookup.
          *
          * @param result The result returned by BeginGetFromGamertag.
-         * @return Never returns.
+         * @return A heap-allocated Gamer; the caller owns it.
+         * @throws System::NotSupportedException without a CNA account service.
+         * @throws GamerServicesNotAvailableException if the service could not find or return the gamer.
          */
         [[nodiscard]] static Gamer* EndGetFromGamertag(System::IAsyncResult* result);
 
@@ -186,6 +195,36 @@ namespace Microsoft::Xna::Framework::GamerServices
         [[nodiscard]] static std::string EndGetPartnerToken(System::IAsyncResult* result);
 
     protected:
+        /**
+         * @brief Copies a gamer's identity; the copy gets its own empty leaderboard writer.
+         *
+         * @param other Gamer to copy.
+         */
+        Gamer(const Gamer& other);
+
+        /**
+         * @brief Moves a gamer's identity; the new object gets its own empty leaderboard writer.
+         *
+         * @param other Gamer to move from.
+         */
+        Gamer(Gamer&& other) noexcept;
+
+        /**
+         * @brief Copies a gamer's identity, rebinding a fresh leaderboard writer to this object.
+         *
+         * @param other Gamer to copy.
+         * @return This gamer.
+         */
+        Gamer& operator=(const Gamer& other);
+
+        /**
+         * @brief Moves a gamer's identity, rebinding a fresh leaderboard writer to this object.
+         *
+         * @param other Gamer to move from.
+         * @return This gamer.
+         */
+        Gamer& operator=(Gamer&& other) noexcept;
+
         /**
          * @brief Constructs a Gamer with the given gamertag and display name.
          *
@@ -223,7 +262,10 @@ namespace Microsoft::Xna::Framework::GamerServices
              */
             [[nodiscard]] const std::any& getAsyncStateProperty() const override;
 
-            /** @brief Always false; this stub never completes synchronously. */
+            /**
+             * @brief Gets whether the operation completed inside its Begin call, which offline
+             * operations (the local store) always do.
+             */
             [[nodiscard]] bool getCompletedSynchronouslyProperty() const override;
 
             /** @brief Gets whether the asynchronous operation has completed. */
@@ -249,6 +291,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         private:
             std::any asyncState_;
             bool isCompleted_{false};
+            bool completedSynchronously_{false};
 
             // Mutable: IAsyncResult::getAsyncWaitHandleProperty() is const but returns a
             // non-const WaitHandle&, so the handle exposed through it must be mutable.
@@ -256,6 +299,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         };
 
         friend class GamerServicesDispatcher;
+        friend class CNA::Internal::GamerServices::GamerAccess;
         friend class LeaderboardReader;
         friend class LeaderboardWriter;
         friend class Microsoft::Xna::Framework::Net::NetworkSession;
@@ -265,15 +309,9 @@ namespace Microsoft::Xna::Framework::GamerServices
         std::string gamertag_;
         bool isDisposed_{false};
         std::any tag_;
-        // Task 4.3 (plans/plan_net.md Phase 4): LeaderboardWriter captures `this` at construction time
-        // (see Gamer.cpp's constructor) and neither Gamer nor LeaderboardWriter declares a custom
-        // copy/move constructor, so that captured pointer is copied verbatim - not re-pointed - by
-        // any copy or move of a constructed Gamer/SignedInGamer, including an ordinary
-        // std::vector<SignedInGamer>::push_back(prvalue). Once a Gamer-derived object's
-        // LeaderboardWriter may be used, that object's address must never change again; prefer
-        // heap allocation (see cna_demo_leaderboard_viewer's own syntheticGamers_ for the pattern
-        // that keeps a batch of them at stable addresses) over by-value containers that can move
-        // or reallocate their elements.
+        // LeaderboardWriter records its owning gamer. Copying or moving a Gamer therefore gives the
+        // new object a fresh, empty writer bound to itself (see the copy/move members below)
+        // instead of a copy that still points at the source object.
         LeaderboardWriter leaderboardWriter_;
 
     private:

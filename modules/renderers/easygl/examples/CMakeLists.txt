@@ -488,31 +488,21 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_SkinnedEffect_BoneDeformation COMMAND cna_test_skinned_integration
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # Task 10.14: AvatarRenderer::EnableRealRenderingEXT/DrawRealEXT real GPU-skinned
-        # rendering (Phase 10 — Avatar real-rendering CNAEXT/EXT extension). Needs
-        # CNA_GamerServices (AvatarRenderer lives there), so it's only built when networking
-        # (and thus GamerServices) is enabled.
+        # GS-009: the standard XNA avatar API renders original CNA avatars. Needs CNA_GamerServices,
+        # so it is only built when networking (and thus GamerServices) is enabled.
         if(CNA_ENABLE_NET)
-            cna_easygl_test(cna_test_avatar_real_render
-                            ${CMAKE_SOURCE_DIR}/modules/gamer-services/examples/avatar_real_render_integration_test.cpp)
-            target_link_libraries(cna_test_avatar_real_render PRIVATE CNA_GamerServices)
-            cna_register_renderer_test(NAME EasyGL_AvatarRenderer_RealRender COMMAND cna_test_avatar_real_render
-                TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-            # Task 11.21: SkinnedModelEXT::AttachPartEXT runtime wardrobe-attach real render.
-            cna_easygl_test(cna_test_avatar_attach_part
-                            ${CMAKE_SOURCE_DIR}/modules/gamer-services/examples/avatar_attach_part_integration_test.cpp)
-            target_link_libraries(cna_test_avatar_attach_part PRIVATE CNA_GamerServices)
-            cna_register_renderer_test(NAME EasyGL_AvatarRenderer_AttachPart COMMAND cna_test_avatar_attach_part
-                TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-            # Task 11.24: AvatarRenderer::PartTintEXT per-part tint routing regression test.
-            cna_easygl_test(cna_test_avatar_tint_routing
-                            ${CMAKE_SOURCE_DIR}/modules/gamer-services/examples/avatar_tint_routing_integration_test.cpp)
-            target_link_libraries(cna_test_avatar_tint_routing PRIVATE CNA_GamerServices)
-            cna_register_renderer_test(NAME EasyGL_AvatarRenderer_TintRouting COMMAND cna_test_avatar_tint_routing
-                TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+            cna_easygl_test(cna_test_avatar_standard_render
+                            ${CMAKE_SOURCE_DIR}/modules/gamer-services/examples/avatar_standard_render_test.cpp)
+            target_link_libraries(cna_test_avatar_standard_render PRIVATE CNA_GamerServices)
+            cna_register_renderer_test(NAME EasyGL_AvatarRenderer_Standard COMMAND cna_test_avatar_standard_render
+                TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         endif()
+
+        # Task 11.21: SkinnedModelEXT::AttachPartEXT runtime part attach, drawn through SkinnedEffect.
+        cna_easygl_test(cna_test_skinned_model_attach_part
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/skinned_model_attach_part_integration_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_SkinnedModel_AttachPart COMMAND cna_test_skinned_model_attach_part
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 125: DXT1 texture loaded via FromStream, rendered, pixel readback
         cna_easygl_test(cna_test_dxt1_texture

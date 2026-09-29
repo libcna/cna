@@ -7,6 +7,8 @@ namespace Microsoft::Xna::Framework::Net
         : averageRoundtripTime_(System::TimeSpan::Zero)
         , minimumRoundtripTime_(System::TimeSpan::Zero)
     {
+        // Reference internal QualityOfService(): nothing measured, so not available.
+        isAvailable_ = false;
     }
 
     QualityOfService::QualityOfService(System::TimeSpan roundtripTime)

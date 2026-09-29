@@ -99,10 +99,14 @@ namespace Microsoft::Xna::Framework::GamerServices
         [[nodiscard]] const GamerPrivileges& getPrivilegesProperty() const;
 
         /**
-         * @brief Determines whether the specified gamer is a friend of this gamer.
+         * @brief Determines whether the specified gamer is an accepted friend of this gamer on the
+         * CNA account service.
          *
          * @param gamer The gamer to check.
-         * @return Always false in this platform's implementation.
+         * @return true for a mutual, accepted friendship.
+         * @throws System::ObjectDisposedException if this gamer or gamer is disposed.
+         * @throws GamerPrivilegeException if this gamer is not signed in to an online account.
+         * @throws System::ArgumentNullException if gamer is null.
          */
         [[nodiscard]] bool IsFriend(Gamer* gamer) const;
 

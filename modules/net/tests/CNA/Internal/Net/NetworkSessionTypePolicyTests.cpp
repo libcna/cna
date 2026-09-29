@@ -215,8 +215,9 @@ TEST(NetworkSessionTypePolicyTest, ARefusedTypeLeavesNoPendingActionBehind) {
     EXPECT_EQ(fixture.session->getSessionTypeProperty(), NetworkSessionType::Local);
 }
 
-// XNA's contract calls JoinInvited from an InviteAccepted handler. Nothing raises that event here,
-// so no invitation can be pending; the old behaviour built a PlayerMatch session out of nothing.
+// XNA's contract calls JoinInvited from an InviteAccepted handler, which only a Guide acceptance
+// through the configured CNA service raises; with no service here nothing can be pending, and the
+// old behaviour built a PlayerMatch session out of nothing.
 TEST(NetworkSessionTypePolicyTest, JoinInvitedRefusesBecauseNoInvitationCanBePending) {
     SignedInGamer gamer = SignedInGamer::CreateInternal("Player");
     EXPECT_THROW(

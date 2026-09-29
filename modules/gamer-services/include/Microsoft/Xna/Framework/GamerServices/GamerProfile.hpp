@@ -16,7 +16,8 @@ namespace Microsoft::Xna::Framework::GamerServices
     {
     public:
         /**
-         * @brief Gets the gamer's overall gamerscore.
+         * @brief Gets the gamer's overall gamerscore: the scores of every achievement earned, across
+         * titles on the CNA service, or in this title's catalog offline.
          *
          * @return The gamerscore value.
          */
@@ -25,7 +26,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Gets the gaming zone the gamer has selected.
          *
-         * @return The GamerZone value.
+         * @return GamerZone::Unknown: CNA has no gamer zones.
          */
         [[nodiscard]] GamerZone getGamerZoneProperty() const;
 
@@ -44,21 +45,24 @@ namespace Microsoft::Xna::Framework::GamerServices
         [[nodiscard]] const System::Globalization::RegionInfo& getRegionProperty() const;
 
         /**
-         * @brief Gets the gamer's reputation score.
+         * @brief Gets the gamer's reputation, as a number of stars ranging 0 to 5.
          *
-         * @return The reputation value.
+         * @return 0: CNA keeps no reputation (player reviews do not rate gamers).
          */
         [[nodiscard]] float getReputationProperty() const;
 
         /**
-         * @brief Gets the number of titles the gamer has played.
+         * @brief Gets the number of titles the gamer has played: on the CNA service, those with the
+         * gamer's presence, an earned achievement or a leaderboard row; offline, this title once the
+         * gamer has earned an achievement in it.
          *
          * @return The titles-played count.
          */
         [[nodiscard]] int getTitlesPlayedProperty() const;
 
         /**
-         * @brief Gets the total number of achievements earned by the gamer.
+         * @brief Gets the total number of achievements earned by the gamer, counted as the
+         * gamerscore is.
          *
          * @return The total achievements count.
          */

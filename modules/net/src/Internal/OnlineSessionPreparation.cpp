@@ -20,6 +20,7 @@ public:
     ENetHostHandle& host() override {return host_;}
     RelayTransport* relay() override {return &relay_;}
     RelayTransportStatus status() const override {return relay_.status();}
+    void reconnect(ServiceRelayTicket ticket) override {relay_.reconnect(std::move(ticket));}
 private:
     ENetHostHandle host_;
     RelayTransport relay_;

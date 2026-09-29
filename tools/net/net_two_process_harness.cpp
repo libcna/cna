@@ -28,6 +28,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/Net/AvailableNetworkSession.hpp"
+#include "Microsoft/Xna/Framework/Net/AvailableNetworkSessionCollection.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "Microsoft/Xna/Framework/Net/HostChangedEventArgs.hpp"
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
@@ -218,6 +219,206 @@ namespace {
         return 0;
     }
 
+    // Join after a SystemLink Find keeps the search's local gamers: reference Join inherits the
+    // search's local-gamer limit, and a search given a list joins exactly that group. Two gamers are
+    // signed in; --find=limit searches with a limit of one, --find=list with only the second gamer.
+    // Either way exactly one local gamer joins, then exchanges the usual payload with a host role.
+    int RunFindJoinClient(uint16_t port, const std::string& mode, int timeoutSeconds) {
+        if (port == 0) {
+            std::fprintf(stderr, "find-join-client: --port is required and must be nonzero\n");
+            return 64;
+        }
+        auto first = SignedInGamer::CreateInternal("ClientPlayer");
+        auto second = SignedInGamer::CreateInternal("ClientPlayer2", false, false, Microsoft::Xna::Framework::PlayerIndex::Two);
+        using Microsoft::Xna::Framework::GamerServices::Gamer;
+        using Microsoft::Xna::Framework::GamerServices::SignedInGamerCollection;
+        Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({&first, &second})));
+        struct RestoreSignedIn {
+            ~RestoreSignedIn() { Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({}))); }
+        } restore;
+
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(timeoutSeconds);
+        NetworkSession* session = nullptr;
+        while (session == nullptr) {
+            if (std::chrono::steady_clock::now() >= deadline) {
+                std::fprintf(stderr, "find-join-client: timed out finding the host\n");
+                return 1;
+            }
+            AvailableNetworkSessionCollection found = mode == "list"
+                ? NetworkSession::Find(NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&second}, NetworkSessionProperties{})
+                : NetworkSession::Find(NetworkSessionType::SystemLink, 1, NetworkSessionProperties{});
+            // Discovery also reaches any other SystemLink host on this machine; join the one started
+            // for this test.
+            for (int i = 0; i < found.getCountProperty() && session == nullptr; ++i) {
+                AvailableNetworkSession listing = found.getItem(i);
+                if (listing.GetConnectPort() == port) session = NetworkSession::Join(&listing);
+            }
+        }
+
+        SignedInGamer* expected = mode == "list" ? &second : &first;
+        const auto& locals = session->getLocalGamersProperty();
+        if (locals.getCountProperty() != 1 || locals[0]->getSignedInGamerProperty() != expected) {
+            std::fprintf(stderr, "find-join-client: joined with %d local gamers, not just %s\n",
+                         locals.getCountProperty(), expected->getGamertagProperty().c_str());
+            session->Dispose();
+            return 3;
+        }
+        if (!PumpUntil(session, deadline, [&] { return session->getAllGamersProperty().getCountProperty() >= 2; })) {
+            std::fprintf(stderr, "find-join-client: timed out waiting to join host\n");
+            session->Dispose();
+            return 1;
+        }
+        NetworkGamer* remote = FindRemoteGamer(session);
+        LocalNetworkGamer* localGamer = locals[0];
+        std::vector<SharpRuntime::bytecs> payload(kMagicPayload, kMagicPayload + sizeof(kMagicPayload));
+        localGamer->SendData(payload, SendDataOptions::Reliable, remote);
+        std::vector<SharpRuntime::bytecs> received(sizeof(kMagicPayload));
+        NetworkGamer* sender = nullptr;
+        if (!PumpUntil(session, deadline, [&] {
+                if (!localGamer->getIsDataAvailableProperty()) return false;
+                localGamer->ReceiveData(received, sender);
+                return true;
+            })) {
+            std::fprintf(stderr, "find-join-client: timed out waiting for host's echo\n");
+            session->Dispose();
+            return 1;
+        }
+        session->Dispose();
+        if (received != payload) {
+            std::fprintf(stderr, "find-join-client: echoed payload did not match what was sent\n");
+            return 2;
+        }
+        return 0;
+    }
+
+    // A client adds a second local gamer after joining (split-screen co-op joining mid-session).
+    // The host must place it on that client's machine, receive its send from it, and reach it with
+    // a reply addressed to it.
+    int RunAddedGamerHost(int timeoutSeconds) {
+        auto gamer = SignedInGamer::CreateInternal("HostPlayer");
+        NetworkSession* session = NetworkSession::Create(
+            NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
+        );
+        uint16_t port = ENetBackend::GetBoundPort(session);
+        if (port == 0) {
+            std::fprintf(stderr, "added-gamer-host: never bound a real ENet port\n");
+            session->Dispose();
+            return 2;
+        }
+        std::printf("PORT=%u\n", static_cast<unsigned>(port));
+        std::fflush(stdout);
+
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(timeoutSeconds);
+        if (!PumpUntil(session, deadline, [&] { return session->getAllGamersProperty().getCountProperty() >= 3; })) {
+            std::fprintf(stderr, "added-gamer-host: timed out waiting for the client's added gamer\n");
+            session->Dispose();
+            return 1;
+        }
+
+        LocalNetworkGamer* localGamer = session->getLocalGamersProperty()[0];
+        NetworkGamer* first = nullptr;
+        NetworkGamer* added = nullptr;
+        for (NetworkGamer* g : session->getAllGamersProperty()) {
+            if (g->getGamertagProperty() == "ClientPlayer") first = g;
+            if (g->getGamertagProperty() == "ClientPlayer2") added = g;
+        }
+        if (first == nullptr || added == nullptr || added->getIsLocalProperty() ||
+            &added->getMachineProperty() != &first->getMachineProperty() ||
+            &added->getMachineProperty() == &localGamer->getMachineProperty()) {
+            std::fprintf(stderr, "added-gamer-host: the added gamer is not on the client's machine\n");
+            session->Dispose();
+            return 2;
+        }
+
+        std::vector<SharpRuntime::bytecs> received(sizeof(kMagicPayload));
+        NetworkGamer* sender = nullptr;
+        int length = 0;
+        if (!PumpUntil(session, deadline, [&] {
+                if (!localGamer->getIsDataAvailableProperty()) return false;
+                length = localGamer->ReceiveData(received, sender);
+                return true;
+            })) {
+            std::fprintf(stderr, "added-gamer-host: timed out waiting for the added gamer's payload\n");
+            session->Dispose();
+            return 1;
+        }
+        if (sender != added || length != static_cast<int>(sizeof(kMagicPayload))) {
+            std::fprintf(stderr, "added-gamer-host: the payload did not come from the added gamer\n");
+            session->Dispose();
+            return 2;
+        }
+
+        localGamer->SendData(received, SendDataOptions::Reliable, added);
+        auto flushDeadline = std::chrono::steady_clock::now() + kSendFlushWindow;
+        while (std::chrono::steady_clock::now() < flushDeadline) {
+            session->Update();
+            std::this_thread::sleep_for(kPollInterval);
+        }
+        session->Dispose();
+        return 0;
+    }
+
+    int RunAddedGamerClient(uint16_t port, int timeoutSeconds) {
+        if (port == 0) {
+            std::fprintf(stderr, "added-gamer-client: --port is required and must be nonzero\n");
+            return 64;
+        }
+        auto gamer = SignedInGamer::CreateInternal("ClientPlayer");
+        auto second = SignedInGamer::CreateInternal("ClientPlayer2");
+        using Microsoft::Xna::Framework::GamerServices::Gamer;
+        using Microsoft::Xna::Framework::GamerServices::SignedInGamerCollection;
+        Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({&gamer})));
+        struct RestoreSignedIn {
+            ~RestoreSignedIn() { Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({}))); }
+        } restore;
+        auto available = AvailableNetworkSession::CreateInternal(1, "HostPlayer", 0, 7,
+            NetworkSessionProperties{}, QualityOfService::CreateInternal(), "127.0.0.1", port,
+            NetworkSessionType::SystemLink);
+        NetworkSession* session = NetworkSession::Join(&available);
+
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(timeoutSeconds);
+        if (!PumpUntil(session, deadline, [&] { return session->getAllGamersProperty().getCountProperty() >= 2; })) {
+            std::fprintf(stderr, "added-gamer-client: timed out waiting to join host\n");
+            session->Dispose();
+            return 1;
+        }
+        NetworkGamer* host = FindRemoteGamer(session);
+
+        session->AddLocalGamer(&second);
+        LocalNetworkGamer* added = nullptr;
+        for (LocalNetworkGamer* local : session->getLocalGamersProperty()) {
+            if (local->getSignedInGamerProperty() == &second) added = local;
+        }
+        if (host == nullptr || added == nullptr) {
+            std::fprintf(stderr, "added-gamer-client: AddLocalGamer did not add the gamer\n");
+            session->Dispose();
+            return 2;
+        }
+
+        // Sent at once: the transport holds it until the host has numbered the gamer.
+        std::vector<SharpRuntime::bytecs> payload(kMagicPayload, kMagicPayload + sizeof(kMagicPayload));
+        added->SendData(payload, SendDataOptions::Reliable, host);
+
+        std::vector<SharpRuntime::bytecs> received(sizeof(kMagicPayload));
+        NetworkGamer* sender = nullptr;
+        if (!PumpUntil(session, deadline, [&] {
+                if (!added->getIsDataAvailableProperty()) return false;
+                added->ReceiveData(received, sender);
+                return true;
+            })) {
+            std::fprintf(stderr, "added-gamer-client: timed out waiting for the host's reply to the added gamer\n");
+            session->Dispose();
+            return 1;
+        }
+        const bool ok = sender == host && received == payload;
+        session->Dispose();
+        if (!ok) {
+            std::fprintf(stderr, "added-gamer-client: the reply did not match what was sent\n");
+            return 2;
+        }
+        return 0;
+    }
+
     // Task 5.5 (plans/plan_net.md Phase 5): the host role for a genuine 3-process host migration test.
     // Waits for both migration-survivor roles below to join (3 total gamers: this host + 2
     // survivors), then Dispose()s - a graceful Dispose() sends real ENet DISCONNECT notifications
@@ -229,6 +430,8 @@ namespace {
         NetworkSession* session = NetworkSession::Create(
             NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
         );
+        // As in XNA, the host allows migration and every machine learns it from the host.
+        session->setAllowHostMigrationProperty(true);
 
         uint16_t port = ENetBackend::GetBoundPort(session);
         if (port == 0) {
@@ -530,6 +733,7 @@ int main(int argc, char** argv) {
     uint16_t port = 0;
     int timeoutSeconds = 8;
     std::string gamertag;
+    std::string findMode = "limit";
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -541,6 +745,8 @@ int main(int argc, char** argv) {
             timeoutSeconds = std::stoi(arg.substr(10));
         } else if (arg.rfind("--gamertag=", 0) == 0) {
             gamertag = arg.substr(11);
+        } else if (arg.rfind("--find=", 0) == 0) {
+            findMode = arg.substr(7);
         }
     }
 
@@ -550,6 +756,15 @@ int main(int argc, char** argv) {
         }
         if (role == "client") {
             return RunClient(port, timeoutSeconds);
+        }
+        if (role == "find-join-client") {
+            return RunFindJoinClient(port, findMode, timeoutSeconds);
+        }
+        if (role == "added-gamer-host") {
+            return RunAddedGamerHost(timeoutSeconds);
+        }
+        if (role == "added-gamer-client") {
+            return RunAddedGamerClient(port, timeoutSeconds);
         }
         if (role == "start-hosting-partial-failure") {
             return RunStartHostingPartialFailure();
@@ -565,8 +780,9 @@ int main(int argc, char** argv) {
             return RunMigrationSurvivor(port, gamertag, timeoutSeconds);
         }
         std::fprintf(stderr,
-                      "Usage: %s --role=host|client|start-hosting-partial-failure|migration-host|migration-survivor "
-                      "[--port=<n>] [--gamertag=<name>] [--timeout=<seconds>]\n",
+                      "Usage: %s --role=host|client|find-join-client|added-gamer-host|added-gamer-client|"
+                      "start-hosting-partial-failure|migration-host|migration-survivor "
+                      "[--port=<n>] [--gamertag=<name>] [--find=limit|list] [--timeout=<seconds>]\n",
                       argv[0]);
         return 64;
     } catch (const std::exception& ex) {

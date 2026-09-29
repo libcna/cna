@@ -88,5 +88,17 @@ namespace CNA::Internal::Net
          * @return The discovered sessions, each carrying its real connect address/port.
          */
         static std::vector<AvailableNetworkSession> FindSessions(NetworkSessionType sessionTypeFilter);
+
+        /**
+         * @brief Keeps the discovered sessions a reference Find would return: every search
+         * property that has a value matches, and the public slots have room for the searchers.
+         *
+         * @param found Discovered sessions.
+         * @param localGamers Number of local gamers searching.
+         * @param search The search properties (unset entries match anything).
+         * @return The matching sessions, in discovery order.
+         */
+        static std::vector<AvailableNetworkSession> Matching(std::vector<AvailableNetworkSession> found, int localGamers,
+            const Microsoft::Xna::Framework::Net::NetworkSessionProperties& search);
     };
 }

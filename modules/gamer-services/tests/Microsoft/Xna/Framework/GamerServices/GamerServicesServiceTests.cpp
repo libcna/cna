@@ -1,5 +1,13 @@
 // SPDX-License-Identifier: MS-PL
+#include "../../../../../../platform/tests/CNA/Platform/PlatformTestDecorator.hpp"
+#include "../../../../../src/Internal/GuideOverlay.hpp"
+#include "CNA/Platform/Input/IPlatformKeyboard.hpp"
+#include <functional>
+#include <memory>
+#include <tuple>
 #include <gtest/gtest.h>
+#include "Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.hpp"
+#include "System/ArgumentNullException.hpp"
 #include <any>
 
 #include "CNA/Platform/CurrentPlatform.hpp"
@@ -13,6 +21,7 @@
 
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GuideAlreadyVisibleException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
@@ -96,35 +105,35 @@ TEST(GamerServicesDispatcherTest, UpdateAsyncReturnsIsInitialized) {
 
 // --- Guide ---
 
-TEST(GuideTest, IsTrialModeGetSet) {
-    Guide::setIsTrialModeProperty(true);
-    EXPECT_TRUE(Guide::getIsTrialModeProperty());
-    Guide::setIsTrialModeProperty(false);
+// XNA's IsTrialMode setter is internal (the platform's licensing sets it); CNA titles are fully
+// licensed, so only SimulateTrialMode makes a trial.
+TEST(GuideTest, IsTrialModeIsFalseUnlessSimulated) {
+    Guide::setSimulateTrialModeProperty(false);
     EXPECT_FALSE(Guide::getIsTrialModeProperty());
 }
 
 TEST(GuideTest, SimulateTrialModeGetSet) {
     Guide::setSimulateTrialModeProperty(true);
     EXPECT_TRUE(Guide::getSimulateTrialModeProperty());
+    // Reference: simulating trial mode forces IsTrialMode to report true.
+    EXPECT_TRUE(Guide::getIsTrialModeProperty());
     Guide::setSimulateTrialModeProperty(false);
     EXPECT_FALSE(Guide::getSimulateTrialModeProperty());
 }
 
-// Post-plans/plan_net.md remediation (2026-07-18): IsVisible now reflects real pending
-// message-box/keyboard-input state (decision 1a - real observable behavior over a PC no-op stub,
-// now that both overlays are genuinely real). With nothing pending, it still reads false, and the
-// setter is still a no-op - only the "always" part of the old test name/assumption was wrong.
-TEST(GuideTest, IsVisibleFalseWithNothingPendingAndSetterIsNoOp) {
-    EXPECT_FALSE(Guide::getIsVisibleProperty());
-    Guide::setIsVisibleProperty(true);
-    EXPECT_FALSE(Guide::getIsVisibleProperty());
+// IsVisible reflects the Guide's panes (XNA's setter is internal). The public getter needs
+// initialized gamer services, which this suite never initializes; the pane state behind it is read
+// directly (SystemGuideTests covers the public property).
+TEST(GuideTest, IsVisibleFalseWithNothingPending) {
+    EXPECT_FALSE(CNA::Internal::GamerServices::guideIsVisible());
 }
 
 TEST(GuideTest, NotificationPositionDefaultAndSet) {
-    EXPECT_EQ(NotificationPosition::BottomRight, Guide::getNotificationPositionProperty());
+    // Reference default: BottomCenter.
+    EXPECT_EQ(NotificationPosition::BottomCenter, Guide::getNotificationPositionProperty());
     Guide::setNotificationPositionProperty(NotificationPosition::TopLeft);
     EXPECT_EQ(NotificationPosition::TopLeft, Guide::getNotificationPositionProperty());
-    Guide::setNotificationPositionProperty(NotificationPosition::BottomRight);
+    Guide::setNotificationPositionProperty(NotificationPosition::BottomCenter);
 }
 
 TEST(GuideTest, IsScreenSaverEnabledGetSet) {
@@ -343,14 +352,35 @@ TEST(GuideTest, BeginShowKeyboardInputThrowsWhileAnotherIsPending) {
     System::IAsyncResult* first = Guide::BeginShowKeyboardInput(
         PlayerIndex::One, "title", "description", "", System::AsyncCallback{}, std::any{}
     );
+    // Reference: the kernel refuses while the Guide is visible (GuideAlreadyVisibleException).
     EXPECT_THROW(
         Guide::BeginShowKeyboardInput(
             PlayerIndex::Two, "title2", "description2", "", System::AsyncCallback{}, std::any{}
         ),
-        System::InvalidOperationException
+        GuideAlreadyVisibleException
     );
     PressEnter();
     delete first;
+}
+
+// Reference BeginShowKeyboardInput: title, description and default text each under 256 UTF-16
+// units; a defined player.
+TEST(GuideTest, BeginShowKeyboardInputValidatesArgumentsLikeTheReference) {
+    KeyboardInputGuard guard;
+    const std::string tooLong(256, 'x');
+    for (const auto& [title, description, text] : std::vector<std::tuple<std::string, std::string, std::string>>{
+             {tooLong, "d", ""}, {"t", tooLong, ""}, {"t", "d", tooLong}}) {
+        EXPECT_THROW((void)Guide::BeginShowKeyboardInput(PlayerIndex::One, title, description, text, {}, {}),
+                     System::ArgumentException);
+    }
+    EXPECT_THROW((void)Guide::BeginShowKeyboardInput(static_cast<PlayerIndex>(4), "t", "d", "", {}, {}),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_FALSE(Guide::getHasPendingKeyboardInputEXTProperty());
+    std::unique_ptr<System::IAsyncResult> result(
+        Guide::BeginShowKeyboardInput(PlayerIndex::Three, "", "", std::string(255, 'y'), {}, {}));
+    EXPECT_TRUE(Guide::getHasPendingKeyboardInputEXTProperty());
+    PressEnter();
+    EXPECT_EQ(std::string(255, 'y'), Guide::EndShowKeyboardInput(result.get()));
 }
 
 // audit_net.md High finding: GuideAction stored its AsyncCallback but never invoked it. Confirms
@@ -438,13 +468,13 @@ TEST(GuideTest, AVisibleKeyboardPromptWithholdsTouchInputFromTheGame) {
 
 TEST(GuideTest, IsVisibleReflectsPendingKeyboardInput) {
     KeyboardInputGuard guard;
-    EXPECT_FALSE(Guide::getIsVisibleProperty());
+    EXPECT_FALSE(CNA::Internal::GamerServices::guideIsVisible());
     System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
         PlayerIndex::One, "title", "description", "", System::AsyncCallback{}, std::any{}
     );
-    EXPECT_TRUE(Guide::getIsVisibleProperty());
+    EXPECT_TRUE(CNA::Internal::GamerServices::guideIsVisible());
     PressEnter();
-    EXPECT_FALSE(Guide::getIsVisibleProperty());
+    EXPECT_FALSE(CNA::Internal::GamerServices::guideIsVisible());
     delete result;
 }
 
@@ -699,15 +729,123 @@ TEST(GuideTest, BeginShowMessageBoxThrowsWhileAnotherIsPending) {
         "title", "text", std::vector<std::string>{"OK"}, 0, MessageBoxIcon::None,
         System::AsyncCallback{}, std::any{}
     );
+    // Reference: the kernel refuses while the Guide is visible, raised as GuideAlreadyVisibleException.
     EXPECT_THROW(
         Guide::BeginShowMessageBox(
             "title2", "text2", std::vector<std::string>{"OK"}, 0, MessageBoxIcon::None,
             System::AsyncCallback{}, std::any{}
         ),
-        System::InvalidOperationException
+        GuideAlreadyVisibleException
     );
     Guide::SimulateMessageBoxClickEXT(0);
     delete first;
+}
+
+// Reference Guide.ValidateShowMessageBoxArgs: title and text non-empty and under 256 UTF-16 units,
+// one to three buttons each non-empty and under 256, focus within them.
+TEST(GuideTest, BeginShowMessageBoxValidatesArgumentsLikeTheReference) {
+    MessageBoxGuard guard;
+    const auto show = [](const std::string& title, const std::string& text, std::vector<std::string> buttons, int focus,
+                         PlayerIndex player = PlayerIndex::One) {
+        return std::unique_ptr<System::IAsyncResult>(Guide::BeginShowMessageBox(
+            player, title, text, std::move(buttons), focus, MessageBoxIcon::None, System::AsyncCallback{}, std::any{}));
+    };
+    const std::string longest(255, 'x'), tooLong(256, 'x');
+    EXPECT_THROW((void)show("", "text", {"OK"}, 0), System::ArgumentException);
+    EXPECT_THROW((void)show(tooLong, "text", {"OK"}, 0), System::ArgumentException);
+    EXPECT_THROW((void)show("title", "", {"OK"}, 0), System::ArgumentException);
+    EXPECT_THROW((void)show("title", tooLong, {"OK"}, 0), System::ArgumentException);
+    EXPECT_THROW((void)show("title", "text", {"A", "B", "C", "D"}, 0), System::ArgumentException);
+    EXPECT_THROW((void)show("title", "text", {"OK", ""}, 0), System::ArgumentException);
+    EXPECT_THROW((void)show("title", "text", {"OK", tooLong}, 0), System::ArgumentException);
+    EXPECT_THROW((void)show("title", "text", {"OK", "Cancel"}, 2), System::ArgumentOutOfRangeException);
+    EXPECT_THROW((void)show("title", "text", {"OK"}, -1), System::ArgumentOutOfRangeException);
+    EXPECT_THROW((void)show("title", "text", {"OK"}, 0, static_cast<PlayerIndex>(4)), System::ArgumentOutOfRangeException);
+    EXPECT_FALSE(Guide::getHasPendingMessageBoxEXTProperty());
+    // 255 UTF-16 units in 256 UTF-8 bytes: a two-byte character counts once, as in .NET.
+    const std::string accented = std::string(254, 'x') + "\xC3\xA9";
+    auto result = show(longest, accented, {"A", "B", "C"}, 2, PlayerIndex::Four);
+    EXPECT_TRUE(Guide::getHasPendingMessageBoxEXTProperty());
+    Guide::SimulateMessageBoxClickEXT(2);
+    EXPECT_EQ(2, Guide::EndShowMessageBox(result.get()));
+}
+
+namespace {
+    // Stands in for the game's modal frames: counts them and answers the Guide on a chosen frame.
+    struct ScriptedModalFrames final : CNA::Internal::Runtime::IModalFrames {
+        int frames = 0;
+        int answerOn = 3;
+        std::function<void()> answer;
+        bool runModalFrame() override {
+            if (++frames == answerOn) answer();
+            return true;
+        }
+    };
+    struct ModalFramesGuard {
+        explicit ModalFramesGuard(CNA::Internal::Runtime::IModalFrames* frames) {
+            CNA::Internal::GamerServices::setGuideModalFramesForTesting(frames);
+        }
+        ~ModalFramesGuard() { CNA::Internal::GamerServices::setGuideModalFramesForTesting(nullptr); }
+    };
+    std::unique_ptr<System::IAsyncResult> ShowTwoButtonBox() {
+        return std::unique_ptr<System::IAsyncResult>(Guide::BeginShowMessageBox(PlayerIndex::One, "title", "text",
+            {"OK", "Cancel"}, 0, MessageBoxIcon::None, System::AsyncCallback{}, std::any{}));
+    }
+}
+
+// Reference XOverlappedAsyncResult.PrepareForEndFunction: a null result, one from another Begin, and
+// a second End are refused, in that order.
+TEST(GuideTest, EndFollowsTheReferenceChecks) {
+    MessageBoxGuard boxes;
+    KeyboardInputGuard keyboards;
+    EXPECT_THROW((void)Guide::EndShowMessageBox(nullptr), System::ArgumentNullException);
+    EXPECT_THROW((void)Guide::EndShowKeyboardInput(nullptr), System::ArgumentNullException);
+    auto box = ShowTwoButtonBox();
+    EXPECT_THROW((void)Guide::EndShowKeyboardInput(box.get()), System::ArgumentException);
+    Guide::SimulateMessageBoxClickEXT(1);
+    EXPECT_EQ(1, Guide::EndShowMessageBox(box.get()));
+    EXPECT_THROW((void)Guide::EndShowMessageBox(box.get()), System::InvalidOperationException);
+
+    std::unique_ptr<System::IAsyncResult> input(Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "title", "description", "", System::AsyncCallback{}, std::any{}));
+    EXPECT_THROW((void)Guide::EndShowMessageBox(input.get()), System::ArgumentException);
+    TypeUtf16(u"Hi");
+    PressEnter();
+    EXPECT_EQ("Hi", Guide::EndShowKeyboardInput(input.get()));
+    EXPECT_THROW((void)Guide::EndShowKeyboardInput(input.get()), System::InvalidOperationException);
+}
+
+// Reference End waits for the user's answer. CNA's Guide is drawn by the game, so the wait runs the
+// game's modal frames until the answer arrives: EndShowMessageBox(BeginShowMessageBox(...)) works
+// as a single call, as it does on the console.
+TEST(GuideTest, EndWaitsForTheAnswerWhileTheGamesModalFramesRun) {
+    MessageBoxGuard boxes;
+    KeyboardInputGuard keyboards;
+    ScriptedModalFrames frames;
+    ModalFramesGuard installed(&frames);
+    frames.answer = [] { Guide::SimulateMessageBoxClickEXT(1); };
+    EXPECT_EQ(1, Guide::EndShowMessageBox(ShowTwoButtonBox().get()));
+    EXPECT_EQ(3, frames.frames);
+
+    frames.frames = 0;
+    frames.answerOn = 2;
+    frames.answer = [] { TypeUtf16(u"Typed"); PressEnter(); };
+    std::unique_ptr<System::IAsyncResult> input(Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "title", "description", "", System::AsyncCallback{}, std::any{}));
+    EXPECT_EQ("Typed", Guide::EndShowKeyboardInput(input.get()));
+    EXPECT_EQ(2, frames.frames);
+}
+
+// With no running game nothing could answer the Guide, so End refuses rather than hang, and stays
+// callable for when the answer comes.
+TEST(GuideTest, EndWithoutARunningGameRefusesAndCanBeCalledAgainOnceAnswered) {
+    MessageBoxGuard boxes;
+    ModalFramesGuard none(nullptr);
+    auto box = ShowTwoButtonBox();
+    if (CNA::Internal::GamerServices::guideModalFrames() != nullptr) GTEST_SKIP() << "a game is alive in this process";
+    EXPECT_THROW((void)Guide::EndShowMessageBox(box.get()), System::InvalidOperationException);
+    Guide::SimulateMessageBoxClickEXT(0);
+    EXPECT_EQ(0, Guide::EndShowMessageBox(box.get()));
 }
 
 TEST(GuideTest, EndShowMessageBoxThrowsIfCalledTooEarly) {
@@ -869,6 +1007,70 @@ TEST(GuideTest, RenderPendingMessageBoxIsNoOpWhenNothingPending) {
     spriteBatch.End();
 }
 
+namespace {
+    // Serves a keyboard whose held keys the test sets; everything else is the real platform.
+    class CannedKeyboard final : public CNA::Platform::IPlatformKeyboard {
+    public:
+        CNA::Platform::KeyboardSnapshot snapshot;
+        void Update() override {}
+        [[nodiscard]] const CNA::Platform::KeyboardSnapshot& GetSnapshot() const override { return snapshot; }
+        [[nodiscard]] bool HasKeyboard() const override { return true; }
+    };
+    class CannedKeyboardPlatform final : public CNA::Platform::Testing::PlatformTestDecorator {
+    public:
+        CannedKeyboard keyboard;
+        [[nodiscard]] CNA::Platform::IPlatformKeyboard* GetKeyboard() override { return &keyboard; }
+    };
+}
+
+// A keyboard answers a message box the way the console Guide is answered: the key that is already
+// down when the box opens does nothing, arrows move the focus, Enter chooses, Escape cancels.
+TEST(GuideTest, MessageBoxesAnswerToTheKeyboard) {
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    using CNA::Platform::KeyCode;
+
+    MessageBoxGuard guard;
+    CannedKeyboardPlatform platform;
+    CNA::Platform::Testing::ScopedCurrentPlatform scope(platform);
+    GraphicsDevice device;
+    SpriteBatch spriteBatch(device);
+    auto font = MakeSimpleTestFont(device);
+    Texture2D whitePixel = MakeWhitePixelTexture(device);
+    auto frame = [&](std::vector<KeyCode> keys) {
+        platform.keyboard.snapshot.pressedKeys = std::move(keys);
+        spriteBatch.Begin();
+        Guide::RenderPendingMessageBoxEXT(device, spriteBatch, *font, whitePixel);
+        spriteBatch.End();
+    };
+
+    System::IAsyncResult* result = Guide::BeginShowMessageBox(
+        "title", "text", std::vector<std::string>{"A", "B", "C"}, 0, MessageBoxIcon::None, System::AsyncCallback{}, std::any{});
+    frame({KeyCode::Enter});
+    EXPECT_FALSE(result->getIsCompletedProperty());
+    frame({});
+    frame({KeyCode::Right});
+    frame({KeyCode::Right});
+    EXPECT_EQ(1, Guide::GetPendingMessageBoxFocusButtonForTestingEXT());
+    frame({});
+    frame({KeyCode::Left});
+    frame({});
+    frame({KeyCode::Left});
+    EXPECT_EQ(2, Guide::GetPendingMessageBoxFocusButtonForTestingEXT());
+    frame({KeyCode::Enter});
+    ASSERT_TRUE(result->getIsCompletedProperty());
+    EXPECT_EQ(std::optional<int>(2), Guide::EndShowMessageBox(result));
+    delete result;
+
+    result = Guide::BeginShowMessageBox(
+        "title", "text", std::vector<std::string>{"OK"}, 0, MessageBoxIcon::None, System::AsyncCallback{}, std::any{});
+    frame({});
+    frame({KeyCode::Escape});
+    ASSERT_TRUE(result->getIsCompletedProperty());
+    EXPECT_EQ(std::nullopt, Guide::EndShowMessageBox(result));
+    delete result;
+}
+
 // Task 3.1 checklist: "focusButton parameter is honored as the initial default selection."
 // GetPendingMessageBoxFocusButtonForTestingEXT confirms it round-trips correctly without
 // requiring pixel readback of the rendered highlight.
@@ -928,19 +1130,26 @@ TEST(GuideTest, DelayNotificationsDoesNotThrow) {
     EXPECT_NO_THROW(Guide::DelayNotifications(System::TimeSpan::FromSeconds(1)));
 }
 
-TEST(GuideTest, ShowMethodsDoNotThrow) {
-    EXPECT_NO_THROW(Guide::ShowComposeMessage(PlayerIndex::One, "hi", {}));
-    EXPECT_THROW(Guide::ShowFriendRequest(PlayerIndex::One, nullptr), GamerServicesNotAvailableException);
+// Without a configured service, argument validation still runs first (reference order) and every
+// service-backed pane refuses rather than silently doing nothing.
+TEST(GuideTest, ShowMethodsValidateThenRequireTheService) {
+    EXPECT_THROW(Guide::ShowComposeMessage(PlayerIndex::One, std::string(256, 'a'), {}), System::ArgumentException);
+    EXPECT_THROW(Guide::ShowComposeMessage(PlayerIndex::One, "hi", {nullptr}), System::ArgumentException);
+    EXPECT_THROW(Guide::ShowComposeMessage(PlayerIndex::One, "hi", {}), GamerServicesNotAvailableException);
+    EXPECT_THROW(Guide::ShowFriendRequest(PlayerIndex::One, nullptr), System::ArgumentNullException);
     EXPECT_THROW(Guide::ShowFriends(PlayerIndex::One), GamerServicesNotAvailableException);
-    EXPECT_NO_THROW(Guide::ShowGameInvite(PlayerIndex::One, std::vector<Gamer*>{}));
-    EXPECT_NO_THROW(Guide::ShowGameInvite(std::string("session-id")));
-    EXPECT_THROW(Guide::ShowGamerCard(PlayerIndex::One, nullptr), GamerServicesNotAvailableException);
-    EXPECT_NO_THROW(Guide::ShowMarketplace(PlayerIndex::One));
-    EXPECT_NO_THROW(Guide::ShowMessages(PlayerIndex::One));
-    EXPECT_NO_THROW(Guide::ShowParty(PlayerIndex::One));
-    EXPECT_NO_THROW(Guide::ShowPartySessions(PlayerIndex::One));
-    EXPECT_NO_THROW(Guide::ShowPlayerReview(PlayerIndex::One, nullptr));
-    EXPECT_NO_THROW(Guide::ShowPlayers(PlayerIndex::One));
+    // Invitations need the configured service; the session-ID overload is Windows Phone only.
+    EXPECT_THROW(Guide::ShowGameInvite(PlayerIndex::One, std::vector<Gamer*>{}), GamerServicesNotAvailableException);
+    EXPECT_THROW(Guide::ShowGameInvite(PlayerIndex::One, std::vector<Gamer*>{nullptr}), System::ArgumentException);
+    EXPECT_THROW(Guide::ShowGameInvite(std::string("session-id")), System::NotSupportedException);
+    EXPECT_THROW(Guide::ShowGamerCard(PlayerIndex::One, nullptr), System::ArgumentNullException);
+    EXPECT_THROW(Guide::ShowMarketplace(PlayerIndex::One), GamerPrivilegeException);
+    EXPECT_THROW(Guide::ShowMessages(PlayerIndex::One), GamerServicesNotAvailableException);
+    EXPECT_THROW(Guide::ShowParty(PlayerIndex::One), GamerServicesNotAvailableException);
+    EXPECT_THROW(Guide::ShowPartySessions(PlayerIndex::One), GamerServicesNotAvailableException);
+    EXPECT_THROW(Guide::ShowPlayerReview(PlayerIndex::One, nullptr), System::ArgumentNullException);
+    EXPECT_THROW(Guide::ShowPlayers(PlayerIndex::One), GamerServicesNotAvailableException);
     EXPECT_THROW(Guide::ShowSignIn(1, false), GamerServicesNotAvailableException);
-    EXPECT_NO_THROW(Guide::ShowAchievementsEXT(PlayerIndex::One));
+    EXPECT_THROW(Guide::ShowAchievementsEXT(PlayerIndex::One), GamerServicesNotAvailableException);
+    EXPECT_FALSE(CNA::Internal::GamerServices::guideIsVisible());
 }

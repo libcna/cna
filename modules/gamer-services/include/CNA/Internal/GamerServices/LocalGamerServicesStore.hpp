@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -91,6 +92,41 @@ namespace CNA::Internal::GamerServices
      * @param earnedTicks The moment it was earned, as System::DateTime ticks.
      */
     void SaveEarnedAchievementEXT(const std::string& gamertag, const std::string& key, long long earnedTicks);
+
+    /** @brief One achievement a title defines for offline play, in the service catalog's format. */
+    struct OfflineAchievementDefinition
+    {
+        /** @brief Unique key: letters, digits, '_', '-' or '.', at most 64 bytes. */
+        std::string Key;
+        /** @brief Display name, at most 128 bytes. */
+        std::string Name;
+        /** @brief Description, at most 1024 bytes. */
+        std::string Description;
+        /** @brief How to earn it, at most 1024 bytes. */
+        std::string HowToEarn;
+        /** @brief Title-relative PNG path of its picture, or empty. */
+        std::string Picture;
+        /** @brief Gamerscore, 0..1000. */
+        int Score{0};
+        /** @brief Whether it is listed before it is earned. */
+        bool DisplayBeforeEarned{true};
+    };
+
+    /** @brief Title-relative path of the offline achievement catalog. */
+    inline constexpr const char* OfflineAchievementCatalogPath = "GamerServices/Achievements.json";
+
+    /**
+     * @brief Reads the title's offline achievement catalog: a JSON array of the objects the service
+     * administration tool takes (`key`, `name`, `description`, `howToEarn`, `score`, `display`), with
+     * `picture` a title-relative PNG path instead of a content hash. Read once per process.
+     *
+     * @return The definitions in file order, or empty when the title ships no catalog.
+     * @throws System::InvalidOperationException naming the file and the problem when it is malformed.
+     */
+    const std::optional<std::vector<OfflineAchievementDefinition>>& LoadOfflineAchievementCatalogEXT();
+
+    /** @brief Test-only: forgets the catalog read so the next call reads the title's file again. */
+    void ResetOfflineAchievementCatalogForTestingEXT();
 
     // --- Leaderboards: one JSON file per (leaderboard key, game mode) ---
 

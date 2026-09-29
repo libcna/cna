@@ -26,14 +26,8 @@ namespace Microsoft::Xna::Framework::Net
         [[nodiscard]] bool getHasLeftSessionProperty() const;
 
         /**
-         * @brief Marks whether this gamer has left the session.
-         *
-         * FNA's setter for this is `private` (`{ get; private set; }`), not `internal` -
-         * FNA's own NetworkSession never actually calls it after construction, so real XNA's
-         * HasLeftSession is permanently false in practice (an unimplemented FNA stub, like several
-         * other NetworkSession-adjacent members). Restored here, as a CNAEXT extension, so this
-         * port's NetworkSession::RemoveGamer() (a sibling class, not a subclass, so it couldn't
-         * reach a real `private` setter either way) can make this property actually functional.
+         * @brief Marks whether this gamer has left the session. NetworkSession sets it when the
+         * gamer leaves, as XNA does; FNA never sets it.
          *
          * @param value The new value.
          */
@@ -131,9 +125,11 @@ namespace Microsoft::Xna::Framework::Net
         [[nodiscard]] bool getIsReadyProperty() const;
 
         /**
-         * @brief Sets whether this gamer is ready.
+         * @brief Sets whether this gamer is ready; every machine in the session sees the change.
          *
          * @param value The new ready state.
+         * @throws System::InvalidOperationException if the gamer has left the session, is not
+         *         local, or the session is not in the Lobby state.
          */
         void setIsReadyProperty(bool value);
 
@@ -183,9 +179,11 @@ namespace Microsoft::Xna::Framework::Net
         CNAEXT void SetIsPrivateSlot(bool value);
 
         /**
-         * @brief Gets the measured round-trip time to this gamer.
+         * @brief Gets the measured round-trip time to this gamer, refreshed at each session Update.
+         * Traffic to a gamer on another client machine goes through the host, so it is the round
+         * trip to the host plus the host's own, which the host reports about once a second.
          *
-         * @return The round-trip time.
+         * @return The round-trip time; zero for a local gamer or before any measurement.
          */
         [[nodiscard]] System::TimeSpan getRoundtripTimeProperty() const;
 
@@ -226,6 +224,18 @@ namespace Microsoft::Xna::Framework::Net
         explicit NetworkGamer(NetworkSession* session, const std::string& gamertag = "Stub Gamer");
 
     private:
+        friend class NetworkSession;
+        CNAEXT friend struct NetworkGamerReadyTestAccess;
+
+        /**
+         * @brief Applies a ready state reported by the session transport (through
+         * NetworkSession::ApplyGamerReadyInternal), or a session-wide reset, without the local-gamer
+         * checks and without publishing it again.
+         *
+         * @param value The ready state.
+         */
+        CNAEXT void SetIsReadyInternal(bool value);
+
         bool hasLeftSession_{false};
         bool hasVoice_{false};
         SharpRuntime::bytecs id_{0};

@@ -320,12 +320,8 @@ TEST(SignedInGamerCollectionTest, PlayerIndexOutOfBounds) {
     EXPECT_EQ(nullptr, col[PlayerIndex::Four]);
 }
 
-// Task 9.9: the case above only ever covers the empty collection (returns nullptr for any
-// index). Confirmed against FNA's own real indexer (`return collection[(int)index];`, bounds-
-// checked only against Count) that operator[](PlayerIndex) indexes the underlying collection
-// directly by the enum's ordinal position - it is not a lookup by each gamer's own PlayerIndex
-// property - so this only produces intuitive results when gamers happen to be stored in
-// PlayerIndex order, exactly as GamerServicesDispatcher::Initialize() does.
+// XNA IL (SignedInGamerCollection.get_Item(PlayerIndex)) looks the gamer up by its own
+// PlayerIndex and returns null when that player is not signed in.
 TEST(SignedInGamerCollectionTest, PlayerIndexOperatorOnPopulatedCollection) {
     auto gamerOne   = SignedInGamer::CreateInternal("a", true, false, PlayerIndex::One);
     auto gamerTwo   = SignedInGamer::CreateInternal("b", true, false, PlayerIndex::Two);
@@ -343,6 +339,18 @@ TEST(SignedInGamerCollectionTest, PlayerIndexOperatorOnPopulatedCollection) {
     int count = 0;
     for (const auto& gamer : col) { (void) gamer; ++count; }
     EXPECT_EQ(3, count);
+}
+
+TEST(SignedInGamerCollectionTest, PlayerIndexOperatorFindsThePlayerNotThePosition) {
+    auto gamerTwo  = SignedInGamer::CreateInternal("b", true, false, PlayerIndex::Two);
+    auto gamerFour = SignedInGamer::CreateInternal("d", true, false, PlayerIndex::Four);
+    auto col = SignedInGamerCollection::CreateInternal({&gamerTwo, &gamerFour});
+
+    EXPECT_EQ(nullptr,    col[PlayerIndex::One]);
+    EXPECT_EQ(&gamerTwo,  col[PlayerIndex::Two]);
+    EXPECT_EQ(nullptr,    col[PlayerIndex::Three]);
+    EXPECT_EQ(&gamerFour, col[PlayerIndex::Four]);
+    EXPECT_EQ(&gamerTwo,  col[0]);
 }
 
 // Task 8.3: GamerCollection<T>'s new IndexOf/Contains/CopyTo, matching FNA's real

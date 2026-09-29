@@ -28,8 +28,12 @@ struct ServiceIdentity {
     int gamerScore = 0;
     /** @brief Number of earned achievements. */
     int totalAchievements = 0;
+    /** @brief Titles in which the account has presence, an earned achievement or a leaderboard row. */
+    int titlesPlayed = 0;
     /** @brief Account online-session permission. */
     bool allowOnlineSessions = false;
+    /** @brief Fixture-only avatar description (1021 bytes), empty for none. */
+    std::vector<unsigned char> avatar;
 };
 /** @brief Title-scoped catalog entry and user-earned state. */
 struct ServiceAchievement {
@@ -52,6 +56,11 @@ struct ServiceFriend {
     bool online = false;
     /** @brief Mutual friendship, or pending request flags. */
     bool accepted = false, requestSent = false, requestReceived = false;
+    /** @brief In this title's live session that admits joiners now with a public slot free. */
+    bool joinable = false;
+    /** @brief This title's unexpired invitations between the two: pending either way, and the
+     * friend's answer to the caller's. */
+    bool inviteReceivedFrom = false, inviteSentTo = false, inviteAccepted = false, inviteRejected = false;
     /** @brief Friend's current title-scoped rich presence. */
     std::string presence;
 };
@@ -89,6 +98,8 @@ struct ServiceLeaderboardFixture {
     int mode=0;
     /** @brief Sort direction. */
     bool ascending=false;
+    /** @brief Whether rows are written only through Ranked arbitration. */
+    bool arbitrated=false;
     /** @brief Supplied test data. */
     std::vector<ServiceLeaderboardEntry> entries;
 };
@@ -105,6 +116,31 @@ struct ServiceLeaderboardWrite {
     /** @brief Compares final rows. @param other Other row. @return Equality. */
     bool operator==(const ServiceLeaderboardWrite& other) const = default;
 };
+/** @brief One account message in a recipient's inbox. */
+struct ServiceMessage {
+    /** @brief Opaque message identifier and the sender's gamertag. */
+    std::string id, sender;
+    /** @brief Message text, at most 256 UTF-8 bytes. */
+    std::string text;
+    /** @brief Unix-second creation time. */
+    long long created=0;
+    /** @brief Whether the recipient has read it. */
+    bool read=false;
+};
+/** @brief Bounded inbox page, newest first. */
+struct ServiceMessagePage {
+    /** @brief Page start, total stored and unread counts. */
+    int start=0, total=0, unread=0;
+    /** @brief Messages on this page. */
+    std::vector<ServiceMessage> messages;
+};
+/** @brief Ranked round a machine's arbitrated rows belong to. */
+struct ServiceArbitration {
+    /** @brief Directory session. */
+    std::string session;
+    /** @brief A directory revision observed while playing the round. */
+    int revision=0;
+};
 /** @brief Work completion applied at the dispatcher's controlled update boundary. */
 struct BackendEvent {
     /** @brief Event category. */
@@ -113,6 +149,8 @@ struct BackendEvent {
     Type type = Type::Failed;
     /** @brief Local player slot, zero through three. */
     int slot = 0;
+    /** @brief Whether a SignedIn identity is a service account (false for a local offline profile). */
+    bool signedInToLive = true;
     /** @brief Identity snapshot. */
     ServiceIdentity identity;
     /** @brief Safe diagnostic code, never credentials. */
@@ -133,6 +171,9 @@ public:
     /** @brief Queues authentication. @param slot Local slot. @param username Account login.
      * @param password Secret, never logged. */
     virtual void signIn(int slot,std::string username,std::string password) = 0;
+    /** @brief Signs a local offline profile into a slot at the next pump; no service is involved.
+     * @param slot Local slot. @param gamertag Validated local profile name. */
+    virtual void signInLocal(int slot,const std::string& gamertag) = 0;
     /** @brief Queues revocation. @param slot Local slot. */
     virtual void signOut(int slot) = 0;
     /** @brief Takes bounded ready events. @return Ordered events. */
@@ -151,8 +192,26 @@ public:
     /** @brief Changes an account friendship. @param userId Actor. @param gamertag Target.
      * @param action Request, accept, or remove. */
     virtual void changeFriend(const std::string& userId,const std::string& gamertag,const std::string& action) = 0;
+    /** @brief Sends an account message. @param userId Sender. @param gamertags 1..100 recipients.
+     * @param text Message text. */
+    virtual void sendMessage(const std::string& userId,const std::vector<std::string>& gamertags,const std::string& text) = 0;
+    /** @brief Reads an inbox page. @param userId Recipient. @param start Offset. @param limit Page size.
+     * @return Newest-first page. */
+    virtual ServiceMessagePage messages(const std::string& userId,int start,int limit) = 0;
+    /** @brief Marks read or deletes one of the recipient's messages. @param userId Recipient.
+     * @param message Message ID. @param remove Delete instead of marking read. */
+    virtual void updateMessage(const std::string& userId,const std::string& message,bool remove) = 0;
+    /** @brief Records prefer/avoid feedback, or clears it. @param userId Reviewer.
+     * @param gamertag Subject. @param rating "prefer", "avoid" or "clear". */
+    virtual void reviewPlayer(const std::string& userId,const std::string& gamertag,const std::string& rating) = 0;
     /** @brief Publishes rich presence. @param userId Actor. @param mode Stable mode. @param text Display text. */
     virtual void setPresence(const std::string& userId,int mode,const std::string& text) = 0;
+    /** @brief Reads accounts' avatar descriptions. @param userIds 1..16 service identities.
+     * @return Description bytes per identity, in order; empty when the account has no avatar. */
+    virtual std::vector<std::vector<unsigned char>> avatars(const std::vector<std::string>& userIds) = 0;
+    /** @brief Reads an imported avatar catalog manifest. @param version Catalog version, 0 for the newest.
+     * @return catalog.json text. */
+    virtual std::string avatarCatalog(int version) = 0;
     /** @brief Retrieves immutable asset bytes, with verified local cache where configured.
      * @param hash SHA-256 identifier. @return Resource bytes. */
     virtual std::vector<unsigned char> asset(const std::string& hash) = 0;
@@ -169,7 +228,7 @@ public:
     /** @brief Commits final rows atomically. @param gameplay Scope. @param owner Host identity.
      * @param rows Final writes. */
     virtual void commitLeaderboardGame(const std::string& gameplay,const std::string& owner,
-        const std::vector<ServiceLeaderboardWrite>& rows) = 0;
+        const std::vector<ServiceLeaderboardWrite>& rows,const std::optional<ServiceArbitration>& arbitration={}) = 0;
 };
 /** @brief Gets lazily configured backend. @return Shared backend lifetime. */
 std::shared_ptr<IGamerServicesBackend> backend();
@@ -188,6 +247,9 @@ bool serviceCallsRestricted();
 void withRestrictedServiceCalls(const std::function<void()>& callback);
 /** @brief Injects an explicit test backend. @param value Backend or null to reset configuration. */
 void setBackendForTesting(std::shared_ptr<IGamerServicesBackend> value);
+/** @brief Gives a fake backend an avatar catalog to serve. @param fake Backend from makeFakeBackend.
+ * @param manifest catalog.json text. @param assets File bytes by SHA-256. */
+void setFakeAvatarCatalog(IGamerServicesBackend& fake,std::string manifest,std::map<std::string,std::vector<unsigned char>> assets);
 /** @brief Creates deterministic fake with explicitly supplied identities and catalog.
  * @param identities Accounts. @param catalog Title catalog. @param boards Explicit test boards.
  * @return Fake backend. */

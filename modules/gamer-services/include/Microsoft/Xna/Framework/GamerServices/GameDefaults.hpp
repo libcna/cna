@@ -10,7 +10,10 @@
 namespace Microsoft::Xna::Framework::GamerServices
 {
     /**
-     * @brief Stores the default game preferences for a signed-in gamer.
+     * @brief Stores the default game preferences for a signed-in gamer. A local profile takes them
+     * from the `gameDefaults` object of its store entry; a CNA account, which has no such
+     * settings, reports what XNA reports for a profile that never set them (each enumeration's
+     * first member, no colors, false).
      */
     class GameDefaults
     {
@@ -103,6 +106,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         CNAEXT static GameDefaults CreateInternal();
 
     private:
+        friend class GamerServicesDispatcher;
         GameDefaults();
 
         // Task 7.3: FNA's own internal GameDefaults() constructor body is empty ("FIXME: This is

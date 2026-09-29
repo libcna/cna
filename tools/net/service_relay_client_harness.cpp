@@ -265,12 +265,13 @@ int main(int argc,char** argv) {
                 check(engine.ready(),"secondary revocation preserves established host");
                 std::cout<<"relay-still-open\n"<<std::flush;command();
             }
+            // Server loss is final only after the bounded recovery window (GS-008d2).
             bool failed=false;until([&] {
                 for(const auto& event:engine.update())if(event.type==Transport::ServiceENetObservation::Type::Failed) {
                     check(!failed&&!event.failure.empty(),"owned safe failure once");failed=true;
                 }
                 return failed;
-            },15);
+            },30);
             check(!engine.ready(),"owned failure closes session readiness");
             check(engine.update().empty(),"owned failure does not repeat");
             std::cout<<"relay-done "<<checks<<" checks\n"<<std::flush;return 0;
