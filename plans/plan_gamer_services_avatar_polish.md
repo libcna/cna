@@ -215,7 +215,7 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
 | GSP-H1 | Avatar cache audit, bounded cleanup, first/warm load measurement | done |
 | GSP-I1 | CNA-owned avatar customization (system level) | done |
 | GSP-J1 | `AvatarDescription.Changed` | done |
-| GSP-K1 | Online host migration | todo |
+| GSP-K1 | Online host migration | done |
 | GSP-K2 | Online `AddLocalGamer` | todo |
 | GSP-L1..L6 | Account GameDefaults, away/busy, toasts, Stream columns, guests, QoS bandwidth | L2 done; others todo |
 | GSP-M1 | GamerZone / Reputation | todo |
@@ -275,6 +275,18 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   per title and account, invalid values), CNA `SystemGuideTest.OnlineStatusIsWhatFriendsSeeAsAwayOrBusy`,
   and the live transport e2e (a real Busy friend). While here the server's "future schema" unit
   check was repaired (broken since migration 014) by one `SchemaVersion` constant.
+- GSP-K1 (online host migration). XNA's IL only applies a HostChanged the native layer decided
+  (old host flag cleared, `IsHost` recomputed, event at Update) and puts no Ranked restriction on
+  AllowHostMigration; the choice of new host is the service's. Server schema 16: optional
+  `allowHostMigration` on create/update (capability `host-migration`), in member snapshots only
+  while set; host leave or lapsed host lease hands over to the lowest remaining ordinal; a closed
+  relay cuts a machine's lease to 20 s (reconnect restores it), so a dead host is detected in about
+  20 s. Client: the engine keeps a session whose host vanished for up to 30 s, follows the new host
+  (becoming host, or reconnecting upstream), IDs unchanged; the binding raises HostChanged after
+  the old host's GamerLeft. Tests: 3 new `OnlineNetworkSessionTest`, server directory (+16
+  assertions) and relay authorization, new e2e `service_cna_session_migration` (8.8 s) and
+  `service_cna_session_host_crash` (NAT namespaces, host SIGKILLed, 47 s), all other session e2e
+  pass; Net 498/498, GS 543 + 1 skip.
 - Visual evidence lives outside the repositories, as the sample evidence does:
   `/rv/tmp/avatar-polish/evidence/{before,after}/`.
 - BEFORE (catalog v1, 2026-09-29): `evidence/before/{jobs.json, preview/, opengl33/,

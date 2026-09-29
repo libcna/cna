@@ -73,6 +73,7 @@ private:
     void convert(ServiceENetObservation observation);
     NetworkGamer* addRemote(const RosterEntry& entry);
     void apply(const GamerServices::ServiceSessionSnapshot& snapshot,bool initial);
+    void changeHost(const GamerServices::ServiceSessionSnapshot& snapshot);
     void end(const std::string& failure);
     std::shared_ptr<Microsoft::Xna::Framework::Net::NetworkMachine> machine(const std::string& id);
     GamerServices::ServiceSessionSettings desired() const;

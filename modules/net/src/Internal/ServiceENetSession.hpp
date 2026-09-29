@@ -18,6 +18,7 @@ struct ServiceENetObservation {
         /** @brief An admitted game packet targets this local group. */ Data,
         /** @brief Authenticated directory metadata changed. */ Snapshot,
         /** @brief Gamers' lobby ready state changed. */ Readiness,
+        /** @brief The directory handed the host role to another machine (snapshot names it). */ HostChanged,
         /** @brief Authority or transport became unavailable. */ Failed
     };
     /** @brief Observation category. */

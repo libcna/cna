@@ -21,6 +21,9 @@ struct OutgoingBudget {std::size_t dataBytes=0,dataCount=0,controlBytes=0,contro
 // A relay or directory outage shorter than this is repaired without ending the session; ENet peers
 // on relay routes tolerate a slightly longer silence so they are not the first to give up.
 constexpr auto RecoveryWindow=std::chrono::seconds(15);
+// How long a session whose host vanished waits for the directory to name a new one: past the
+// service's 20-second relay grace for a crashed host, plus a read.
+constexpr auto MigrationWindow=std::chrono::seconds(30);
 constexpr enet_uint32 PeerTimeoutMinimum=20000,PeerTimeoutMaximum=30000;
 struct Recovery {std::mutex mutex;bool pending=false;std::optional<ServiceRelayTicket> ticket;std::string refused;};
 bool transient(const std::string& code){return code=="SESSION_SERVICE_UNAVAILABLE"||code=="RATE_LIMITED";}
@@ -64,6 +67,9 @@ struct ServiceENetSession::Impl {
     std::shared_ptr<Recovery> recovery=std::make_shared<Recovery>();
     bool recovering=false,controlFailed=false;
     Time recoveryDeadline,nextTicket,nextControlRetry;
+    // Client whose host vanished in a session allowing migration, until the directory names a new one.
+    bool migrating=false;
+    Time migrationDeadline;
 
     Impl(std::unique_ptr<PreparedOnlineSession> prepared,std::vector<std::string> names,ServiceENetDependencies providers)
         :lease(std::move(prepared)),locals(std::move(names)),dependencies(std::move(providers)) {
@@ -195,21 +201,53 @@ struct ServiceENetSession::Impl {
         ServiceENetObservation event;event.type=ServiceENetObservation::Type::Left;event.ids=leave.WireIds;emit(std::move(event));
         if(broadcast){const auto bytes=NetPacketCodec::Encode(leave);for(const auto& [peer,value]:peers)if(value.admitted)transmit(peer,bytes);}
     }
+    // The directory's host migration: only in a session that allows it, and only once the old host's
+    // machine is gone; every other gamer keeps its ID.
+    bool handoverIn(const ServiceSessionSnapshot& value)const {
+        if(value.hostMachine==current.hostMachine) {
+            if(value.hostId!=current.hostId)throw ServiceOperationError("INVALID_RESPONSE");
+            return false;
+        }
+        if(!current.allowHostMigration&&!value.allowHostMigration)throw ServiceOperationError("INVALID_RESPONSE");
+        for(const auto& row:value.members)if(row.machine==current.hostMachine)throw ServiceOperationError("INVALID_RESPONSE");
+        return true;
+    }
+    void awaitHost() {
+        migrating=true;migrationDeadline=now()+MigrationWindow;hostRoundtrips.clear();control->expedite();
+    }
+    // Becomes the host, or reconnects to the new one; the roster and IDs carry over unchanged.
+    void takeOver() {
+        migrating=false;hostRoundtrips.clear();
+        if(upstream){transport().Disconnect(upstream,0);peers.erase(upstream);upstream=nullptr;}
+        host=current.machine==current.hostMachine;
+        if(host){identify();nextStats=now();}
+        else {
+            const auto port=dependencies.routePort(current.hostMachine);
+            if(port)upstream=transport().Connect("127.0.0.1",port,2);
+            if(!upstream){fail("GAME_TRANSPORT_UNAVAILABLE");return;}
+            enet_peer_timeout(upstream,0,PeerTimeoutMinimum,PeerTimeoutMaximum);
+            peers.emplace(upstream,Peer{current.hostMachine,false,now()+std::chrono::seconds(10)});
+            recoverRoster=true;nextHello=now();
+        }
+        ServiceENetObservation event;event.type=ServiceENetObservation::Type::HostChanged;event.snapshot=current;emit(std::move(event));
+    }
     void apply(ServiceSessionSnapshot value) {
         auto next=std::make_unique<ServiceRoster>(value);
-        if(value.hostId!=current.hostId||value.hostMachine!=current.hostMachine||next->idsFor(value.machine,locals)!=localIds)
-            throw ServiceOperationError("INVALID_RESPONSE");
+        const bool handover=handoverIn(value);
+        if(next->idsFor(value.machine,locals)!=localIds)throw ServiceOperationError("INVALID_RESPONSE");
         std::set<std::string> changed;
         for(const auto& row:current.members)if(row.machine!=current.machine) {
             auto replacement=std::find_if(value.members.begin(),value.members.end(),[&](const auto& other){return other.userId==row.userId
                 &&other.gamertag==row.gamertag&&other.machine==row.machine&&other.ordinal==row.ordinal;});
             if(replacement==value.members.end())changed.insert(row.machine);
         }
-        if(!host&&changed.contains(current.hostMachine)){fail("HOST_ENDED_SESSION");return;}
+        if(!host&&!handover&&changed.contains(current.hostMachine)){fail("HOST_ENDED_SESSION");return;}
         for(auto it=peers.begin();it!=peers.end();) {
             if(changed.contains(it->second.machine)) {
                 // A machine this host removed is told so; one that left needs no reason.
-                transport().Disconnect(it->first,removing.erase(it->second.machine)?DisconnectRemovedByHost:0);it=peers.erase(it);
+                transport().Disconnect(it->first,removing.erase(it->second.machine)?DisconnectRemovedByHost:0);
+                if(it->first==upstream)upstream=nullptr;
+                it=peers.erase(it);
             }else ++it;
         }
         std::vector<unsigned char> departed;for(const auto& [id,row]:remoteGamers)if(changed.contains(machineFor(id)))departed.push_back(id);
@@ -224,6 +262,7 @@ struct ServiceENetSession::Impl {
         if(host)identify();
         if(revised){ServiceENetObservation event;event.type=ServiceENetObservation::Type::Snapshot;event.snapshot=current;emit(std::move(event));
             if(!host&&ready){recoverRoster=true;nextHello=now();}}
+        if(handover){takeOver();if(stopped)return;}
         if(host)hint(stateChanged,settingsChanged);
     }
     // Admitted clients treat these broadcasts only as a prompt to reread directory authority.
@@ -338,7 +377,13 @@ struct ServiceENetSession::Impl {
     void disconnect(ENetPeer* peer,std::uint32_t data) {
         auto found=peers.find(peer);if(found==peers.end())return;
         const auto machine=found->second.machine;peers.erase(found);
-        if(peer==upstream){upstream=nullptr;fail(data==DisconnectRemovedByHost?"REMOVED_BY_HOST":"HOST_ENDED_SESSION");return;}
+        if(peer==upstream) {
+            upstream=nullptr;
+            if(data==DisconnectRemovedByHost){fail("REMOVED_BY_HOST");return;}
+            // With migration allowed the directory, not this disconnect, decides whether the session ends.
+            if(current.allowHostMigration){awaitHost();return;}
+            fail("HOST_ENDED_SESSION");return;
+        }
         std::vector<unsigned char> departed;
         for(const auto& [id,row]:remoteGamers)if(machineFor(id)==machine)departed.push_back(id);
         remove(departed,host);
@@ -390,6 +435,7 @@ struct ServiceENetSession::Impl {
                 try{control->retry();}catch(const System::InvalidOperationException&){}
                 nextControlRetry=now()+std::chrono::seconds(1);
             }
+            if(!stopped&&migrating&&now()>=migrationDeadline)fail("HOST_ENDED_SESSION");
             if(!stopped&&recovering) {
                 if(!controlFailed&&lease->transport().status().state==RelayTransportState::Ready)recovering=false;
                 else if(now()>=recoveryDeadline)fail(controlFailed?"SESSION_SERVICE_UNAVAILABLE":"RELAY_TRANSPORT_UNAVAILABLE");
@@ -404,7 +450,7 @@ struct ServiceENetSession::Impl {
                     else if(event.type==ENET_EVENT_TYPE_DISCONNECT)disconnect(event.peer,event.data);
                     if(stopped)break;
                 }
-                if(!stopped&&!host&&(!ready||recoverRoster)&&now()>=nextHello)hello();
+                if(!stopped&&!host&&upstream&&(!ready||recoverRoster)&&now()>=nextHello)hello();
                 if(!stopped&&!ready&&now()>=deadline)fail("JOIN_TIMED_OUT");
                 if(!stopped&&host&&now()>=nextStats)publishStats();
                 if(!stopped){for(auto& [peer,value]:peers)if(!value.admitted&&now()>=value.deadline)transport().Disconnect(peer,0);transport().Flush();}

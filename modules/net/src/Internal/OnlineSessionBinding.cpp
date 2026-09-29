@@ -29,7 +29,8 @@ NetworkSessionState publicState(ServiceSessionState state) {
 }
 bool sameSettings(const ServiceSessionSettings& left,const ServiceSessionSettings& right) {
     return left.maxGamers==right.maxGamers&&left.privateSlots==right.privateSlots&&left.state==right.state
-        &&left.allowJoinInProgress==right.allowJoinInProgress&&left.properties==right.properties;
+        &&left.allowJoinInProgress==right.allowJoinInProgress&&left.allowHostMigration==right.allowHostMigration
+        &&left.properties==right.properties;
 }
 const ServiceSessionMember* member(const ServiceSessionSnapshot& snapshot,unsigned char id) {
     for(const auto& row:snapshot.members)if(row.ordinal+1==id)return &row;
@@ -130,7 +131,7 @@ void OnlineSessionBinding::apply(const ServiceSessionSnapshot& value,bool initia
     // The host authors these settings; an older snapshot must not revert newer local values.
     if(host_&&!initial)return;
     session_.maxGamers_=value.maxGamers;session_.privateGamerSlots_=value.privateSlots;
-    session_.allowJoinInProgress_=value.allowJoinInProgress;
+    session_.allowJoinInProgress_=value.allowJoinInProgress;session_.allowHostMigration_=value.allowHostMigration;
     Microsoft::Xna::Framework::Net::NetworkSessionProperties properties;
     for(std::size_t index=0;index<value.properties.size();++index)properties.setItem(static_cast<int>(index),value.properties[index]);
     session_.SetSessionPropertiesFromTransport(std::move(properties));
@@ -178,12 +179,33 @@ void OnlineSessionBinding::convert(ServiceENetObservation observation) {
                 if(found!=gamers_.end())NetworkSession::ApplyGamerReadyInternal(*found->second,entry.IsReady);
             }
             break;
+        case Type::HostChanged:
+            if(observation.snapshot)changeHost(*observation.snapshot);
+            break;
         case Type::Failed:
             end(observation.failure);
             break;
         case Type::Ready:
             break;
     }
+}
+void OnlineSessionBinding::changeHost(const ServiceSessionSnapshot& value) {
+    // The old host's gamers have already left (their Left observation came first); the account
+    // owning the new host machine is the host gamer, as a session's creator was.
+    snapshot_=value;host_=snapshot_.machine==snapshot_.hostMachine;
+    NetworkGamer* hostGamer=nullptr;
+    for(const auto& [id,gamer]:gamers_) {
+        const auto* row=member(snapshot_,id);
+        const bool isHost=row&&row->userId==snapshot_.hostId&&row->machine==snapshot_.hostMachine;
+        gamer->SetIsHost(isHost);
+        if(isHost)hostGamer=gamer;
+    }
+    if(!hostGamer||hostGamer->getIsLocalProperty()!=host_){end("INVALID_RESPONSE");return;}
+    session_.isHost_=host_;
+    // A new host publishes from here on, starting from what the directory holds.
+    if(host_){desiredState_=observedState_=snapshot_.state;requested_=desired();}
+    NetworkSession::NetworkEvent event;event.Type=NetworkSession::NetworkEventType::HostChange;event.Gamer=hostGamer;
+    session_.SendNetworkEvent(std::move(event));
 }
 void OnlineSessionBinding::end(const std::string& failure) {
     if(ended_)return;ended_=true;
@@ -196,7 +218,7 @@ void OnlineSessionBinding::end(const std::string& failure) {
 }
 ServiceSessionSettings OnlineSessionBinding::desired() const {
     ServiceSessionSettings value;value.maxGamers=session_.maxGamers_;value.privateSlots=session_.privateGamerSlots_;
-    value.state=desiredState_;value.allowJoinInProgress=session_.allowJoinInProgress_;
+    value.state=desiredState_;value.allowJoinInProgress=session_.allowJoinInProgress_;value.allowHostMigration=session_.allowHostMigration_;
     for(std::size_t index=0;index<value.properties.size();++index)
         value.properties[index]=session_.sessionProperties_.getItem(static_cast<int>(index));
     return value;

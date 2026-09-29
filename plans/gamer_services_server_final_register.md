@@ -30,7 +30,6 @@ Each is documented where it is declared (C++ and C) and in `docs/xna-4-api-cover
 | `Gamer.GetPartnerToken`/`BeginGetPartnerToken`/`EndGetPartnerToken` | `NotSupportedException` | Partner tokens authenticate to Xbox LIVE partner web services; the CNA service is not LIVE and issues none. XNA for Windows refuses the same way. |
 | `Gamer.GetFromGamertag` family without a service | `NotSupportedException` | Offline profiles have no directory to search. With a service it is a real lookup (GS-004). |
 | `NetworkSession.AddLocalGamer` on PlayerMatch/Ranked | `NotSupportedException` | The service admits one complete local group per machine at create/join. SystemLink supports it (GS-007o). |
-| `NetworkSession.AllowHostMigration` on PlayerMatch/Ranked | session ends with `HostEndedSession` when the host leaves | Online host migration is not implemented (GS-007h); SystemLink migrates. |
 | `LocalNetworkGamer.EnableSendVoice`, `FriendGamer.HasVoice`, `SignedInGamer` voice paths | argument checks only; `HasVoice` false | CNA carries no voice. |
 | `LocalNetworkGamer.SendPartyInvites`, `Guide.ShowParty`/`ShowPartySessions` | refuses (party of one) / explanatory pane | No party service. |
 | `Guide.ShowMarketplace` | explanatory pane after XNA's privilege checks | No store; titles are fully licensed. |

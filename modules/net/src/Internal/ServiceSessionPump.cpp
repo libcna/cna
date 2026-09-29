@@ -22,7 +22,8 @@ void validate(const ServiceSessionSnapshot& value,const ServiceSessionSnapshot& 
 }
 bool sameSettings(const ServiceSessionSettings& left,const ServiceSessionSettings& right) {
     return left.maxGamers==right.maxGamers&&left.privateSlots==right.privateSlots&&left.state==right.state
-        &&left.allowJoinInProgress==right.allowJoinInProgress&&left.properties==right.properties;
+        &&left.allowJoinInProgress==right.allowJoinInProgress&&left.allowHostMigration==right.allowHostMigration
+        &&left.properties==right.properties;
 }
 constexpr auto RequestSpacing=std::chrono::milliseconds(100);
 std::string safeFailure(const std::string& code) {

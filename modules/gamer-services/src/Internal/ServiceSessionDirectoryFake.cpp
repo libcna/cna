@@ -43,7 +43,8 @@ public:
             bool match=true;for(std::size_t i=0;i<filters.size();++i)if(filters[i]&&value.properties[i]!=filters[i])match=false;
             if(!match||skipped++<start)continue;
             if(page.sessions.size()==static_cast<std::size_t>(limit)){page.more=true;break;}
-            auto advertisement=value;advertisement.members.clear();advertisement.machine.clear();page.sessions.push_back(std::move(advertisement));
+            auto advertisement=value;advertisement.members.clear();advertisement.machine.clear();advertisement.allowHostMigration=false;
+            page.sessions.push_back(std::move(advertisement));
         }return page;
     }
     ServiceSessionSnapshot join(const std::string& actor,const std::vector<std::string>& users,
@@ -90,7 +91,7 @@ public:
     }
     bool leave(const std::string& actor,const std::string& id) override {
         authorize_(actor);prune();auto& session=lookup(id);const auto machine=ownedMachine(session,actor);
-        if(machine==session.value.hostMachine){close(id);return true;}
+        if(machine==session.value.hostMachine&&!(session.value.allowHostMigration&&migrate(session,machine))){close(id);return true;}
         removeMachine(session,machine);return false;
     }
     ServiceSessionSnapshot remove(const std::string& actor,const std::string& id,const std::string& machine) override {
@@ -163,7 +164,17 @@ private:
     }
     static void apply(ServiceSessionSnapshot& value,const ServiceSessionSettings& settings) {
         value.maxGamers=settings.maxGamers;value.privateSlots=settings.privateSlots;value.state=settings.state;
-        value.allowJoinInProgress=settings.allowJoinInProgress;value.properties=settings.properties;
+        value.allowJoinInProgress=settings.allowJoinInProgress;value.allowHostMigration=settings.allowHostMigration;
+        value.properties=settings.properties;
+    }
+    // As the service: the machine holding the lowest remaining ordinal hosts, its owner the host account.
+    bool migrate(Session& session,const std::string& departing) {
+        const ServiceSessionMember* next=nullptr;
+        for(const auto& row:session.value.members)
+            if(row.machine!=departing&&session.leases.at(row.machine)>now()&&(!next||row.ordinal<next->ordinal))next=&row;
+        if(!next)return false;
+        session.value.hostMachine=next->machine;session.value.hostId=session.owners.at(next->machine);
+        session.value.hostGamertag=tag_(session.value.hostId);++session.value.revision;return true;
     }
     static void recount(ServiceSessionSnapshot& value) {
         value.currentGamers=static_cast<int>(value.members.size());int privateCount=0;for(const auto& row:value.members)if(row.privateSlot)++privateCount;
@@ -186,6 +197,8 @@ private:
     void prune() {
         std::vector<std::string> closed;
         for(auto& [id,session]:sessions_) {
+            if(session.value.allowHostMigration&&session.value.revision<2147483646&&session.leases.at(session.value.hostMachine)<=now())
+                (void)migrate(session,session.value.hostMachine);
             if(session.leases.at(session.value.hostMachine)<=now()||session.value.revision>=2147483647){closed.push_back(id);continue;}
             std::vector<std::string> expired;for(const auto& [machine,deadline]:session.leases)if(deadline<=now())expired.push_back(machine);
             for(const auto& machine:expired)removeMachine(session,machine,false);

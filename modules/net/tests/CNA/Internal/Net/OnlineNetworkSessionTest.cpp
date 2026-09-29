@@ -287,4 +287,114 @@ TEST_F(OnlineNetworkSessionTest, CallbackMayEndTheCreateAndTheSessionIsImmediate
     EXPECT_THROW((void)NetworkSession::EndCreate(result.get()),System::InvalidOperationException);
     session->Update();EXPECT_TRUE(session->getIsHostProperty());
 }
+
+namespace {
+using Microsoft::Xna::Framework::Net::HostChangedEventArgs;
+// One more private machine for three-machine sessions: its own engine over the fixture's routes.
+struct Machine {
+    std::unique_ptr<ServiceENetSession> engine;
+    std::vector<ServiceENetObservation> observed;
+};
+}
+
+TEST_F(OnlineNetworkSessionTest, AHostLeavingWithMigrationAllowedHandsTheSessionToTheJoiner) {
+    privatePeer(false);
+    Service::ServiceSessionSettings settings;settings.maxGamers=6;settings.properties[2]=5;settings.allowHostMigration=true;
+    peer->publish(settings);
+    until([&]{const auto id=sessionId("b");return !id.empty()&&service->sessionDirectory().get("a",id).allowHostMigration;});
+    auto found=NetworkSession::Find(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(1),gamer(3)},{});
+    ASSERT_EQ(1,found.getCountProperty());
+    std::unique_ptr<System::IAsyncResult> joining(NetworkSession::BeginJoin(&std::as_const(found)[0],{},{}));
+    until([&]{return joining->getIsCompletedProperty();});
+    session=NetworkSession::EndJoin(joining.get());
+    ASSERT_NE(nullptr,session);EXPECT_FALSE(session->getIsHostProperty());
+    // The host's value reaches every machine, as XNA's SessionInfo does.
+    EXPECT_TRUE(session->getAllowHostMigrationProperty());
+    auto* oldHost=session->getHostProperty();ASSERT_NE(nullptr,oldHost);EXPECT_EQ("Alice",oldHost->getGamertagProperty());
+    std::vector<std::string> left;std::optional<std::pair<NetworkGamer*,NetworkGamer*>> changed;int ended=0;
+    session->GamerLeft+=[&](auto*,const GamerLeftEventArgs& args){left.push_back(args.getGamerProperty()->getGamertagProperty());};
+    session->HostChanged+=[&](auto*,const HostChangedEventArgs& args) {
+        // The old host's gamers have left before the host changes.
+        EXPECT_EQ(2u,left.size());changed=std::pair{args.getOldHostProperty(),args.getNewHostProperty()};
+    };
+    session->SessionEnded+=[&](auto*,const NetworkSessionEndedEventArgs&){++ended;};
+
+    peer.reset();
+    until([&]{return changed.has_value();});
+    EXPECT_EQ(oldHost,changed->first);
+    const auto& locals=session->getLocalGamersProperty();
+    EXPECT_EQ(locals[0],changed->second);EXPECT_EQ(locals[0],session->getHostProperty());
+    EXPECT_TRUE(session->getIsHostProperty());EXPECT_TRUE(locals[0]->getIsHostProperty());EXPECT_FALSE(locals[1]->getIsHostProperty());
+    EXPECT_EQ((std::vector<std::string>{"Alice","Charlie"}),left);
+    EXPECT_EQ(2,session->getAllGamersProperty().getCountProperty());
+    // IDs are the directory's ordinals, so the survivors keep theirs.
+    EXPECT_EQ(3,locals[0]->getIdProperty());EXPECT_EQ(4,locals[1]->getIdProperty());
+    for(int index=0;index<20;++index)tick();
+    EXPECT_EQ(0,ended);
+    // The new host holds the host's authority: its settings reach the directory.
+    session->setMaxGamersProperty(8);
+    const auto id=service->sessionDirectory().find("a",kind,1,{},0,32).sessions.front().session;
+    until([&]{return service->sessionDirectory().get("b",id).maxGamers==8;});
+    const auto directory=service->sessionDirectory().find("a",kind,1,{},0,32);
+    ASSERT_EQ(1u,directory.sessions.size());EXPECT_EQ("b",directory.sessions.front().hostId);
+}
+
+TEST_F(OnlineNetworkSessionTest, WithoutMigrationTheHostLeavingStillEndsTheSession) {
+    privatePeer(false);
+    auto found=NetworkSession::Find(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(1),gamer(3)},{});
+    ASSERT_EQ(1,found.getCountProperty());
+    std::unique_ptr<System::IAsyncResult> joining(NetworkSession::BeginJoin(&std::as_const(found)[0],{},{}));
+    until([&]{return joining->getIsCompletedProperty();});
+    session=NetworkSession::EndJoin(joining.get());
+    EXPECT_FALSE(session->getAllowHostMigrationProperty());
+    std::optional<NetworkSessionEndReason> reason;int changes=0;
+    session->SessionEnded+=[&](auto*,const NetworkSessionEndedEventArgs& args){reason=args.getEndReasonProperty();};
+    session->HostChanged+=[&](auto*,const HostChangedEventArgs&){++changes;};
+    peer.reset();
+    until([&]{return reason.has_value();});
+    EXPECT_EQ(NetworkSessionEndReason::HostEndedSession,*reason);EXPECT_EQ(0,changes);
+}
+
+TEST_F(OnlineNetworkSessionTest, AClientFollowsTheDirectoryToANewRemoteHost) {
+    // Three machines: Alice hosts, Bob joins second, then this process's Charlie and Dana.
+    auto machine=[&](OnlineSessionRequest::Operation operation,std::vector<std::string> users,std::vector<std::string> names,const std::string& target) {
+        OnlineSessionRequest request;request.operation=operation;request.users=users;request.owner=users.front();
+        request.kind=kind;request.settings.maxGamers=6;request.settings.allowHostMigration=true;request.session=target;
+        OnlineSessionPreparation preparing(service,request,{},preparation());
+        until([&]{return preparing.complete();});
+        return std::make_unique<ServiceENetSession>(preparing.take(),names,routes());
+    };
+    Machine alice,bob;
+    alice.engine=machine(OnlineSessionRequest::Operation::Create,{"a"},{"Alice"},{});
+    const auto id=sessionId("b",1);ASSERT_FALSE(id.empty());
+    bob.engine=machine(OnlineSessionRequest::Operation::Join,{"b"},{"Bob"},id);
+    auto pump=[&]{for(auto* each:{&alice,&bob})if(each->engine)for(auto& event:each->engine->update())each->observed.push_back(std::move(event));};
+    until([&]{pump();return bob.engine->ready();});
+    auto found=NetworkSession::Find(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(2),gamer(3)},{});
+    ASSERT_EQ(1,found.getCountProperty());
+    std::unique_ptr<System::IAsyncResult> joining(NetworkSession::BeginJoin(&std::as_const(found)[0],{},{}));
+    until([&]{pump();return joining->getIsCompletedProperty();});
+    session=NetworkSession::EndJoin(joining.get());
+    until([&]{pump();return session->getAllGamersProperty().getCountProperty()==4;});
+    EXPECT_TRUE(session->getAllowHostMigrationProperty());
+    EXPECT_EQ("Alice",session->getHostProperty()->getGamertagProperty());
+    std::optional<std::pair<std::string,std::string>> changed;
+    session->HostChanged+=[&](auto*,const HostChangedEventArgs& args) {
+        changed=std::pair{args.getOldHostProperty()->getGamertagProperty(),args.getNewHostProperty()->getGamertagProperty()};
+    };
+    alice.engine.reset();
+    until([&]{pump();return changed.has_value();});
+    EXPECT_EQ((std::pair<std::string,std::string>{"Alice","Bob"}),*changed);
+    auto* host=session->getHostProperty();
+    EXPECT_EQ("Bob",host->getGamertagProperty());EXPECT_FALSE(host->getIsLocalProperty());EXPECT_TRUE(host->getIsHostProperty());
+    EXPECT_FALSE(session->getIsHostProperty());
+    EXPECT_EQ(3,session->getAllGamersProperty().getCountProperty());
+    // Data still flows both ways through the new host.
+    auto* charlie=session->getLocalGamersProperty()[0];
+    charlie->SendData(std::vector<SharpRuntime::bytecs>{7},Microsoft::Xna::Framework::Net::SendDataOptions::Reliable,host);
+    until([&]{pump();session->Update();return std::any_of(bob.observed.begin(),bob.observed.end(),[](const auto& value){return value.data.has_value();});});
+    EXPECT_TRUE(std::any_of(bob.observed.begin(),bob.observed.end(),[](const auto& value){return value.type==ServiceENetObservation::Type::HostChanged;}));
+    bob.engine->send(host->getIdProperty(),charlie->getIdProperty(),{9},Microsoft::Xna::Framework::Net::SendDataOptions::Reliable);
+    until([&]{pump();return charlie->getIsDataAvailableProperty();});
+}
 #endif

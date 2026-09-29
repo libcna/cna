@@ -62,8 +62,10 @@ invitation state, rich presence, messages, player reviews, leaderboards (LocalWi
 PlayerMatch and Ranked with majority arbitration), standard avatars, and PlayerMatch/Ranked
 NetworkSession Create/Find/Join/JoinInvited with Guide invitations, lobby readiness, machine removal,
 traffic and round-trip statistics, over the authenticated relay (native only; browsers use the
-limitations page). Not implemented: online host migration (an online session ends when its host
-leaves), adding local gamers to an online session after create or join, voice, TrueSkill
+limitations page). Online sessions honor `AllowHostMigration`: when the host leaves or its process
+dies, the service hands the session to the machine with the lowest remaining gamer ID and every
+machine raises `HostChanged` (see "Host migration" below). Not implemented: adding local gamers to
+an online session after create or join, voice, TrueSkill
 computation, and party and marketplace services. Friends see the online status (online, away,
 busy) a player chooses in the Guide (`FriendGamer.IsAway`/`IsBusy`). Rich presence is sent during
 Dispatcher.Update; friend online state reflects authenticated activity within 90 seconds; Update
@@ -260,7 +262,7 @@ unknown/partial leave or end claims cannot replace authority reconciliation. Gen
 reject both a forged existing sender ID and an unknown target, while fragmented and unreliable
 application exchange still passes. The service host remains trusted to relay game payloads; this
 is membership validation, not malicious-host anti-cheat. Public Create/Join, lifecycle conversion
-and relay recovery followed; online host migration is not implemented. SystemLink keeps its existing codec and transport behavior.
+and relay recovery followed; online host migration followed later (GSP-K1). SystemLink keeps its existing codec and transport behavior.
 
 The private owned `ServiceENetSession` now consumes prepared membership and TLS/WSS/native ENet
 resources. Hosts become ready after transport preparation; joining clients become ready only after
@@ -293,3 +295,22 @@ before consumption becomes a deferred error. Callback exceptions preserve the re
 nested progress, take/destruction inside a callback and abandoned joins are covered. Thirteen
 new coordinator cases pass; the real owned probes now use this coordinator through Dispatcher.Update.
 This is the private asynchronous lifetime boundary the public NetworkSession adapter uses.
+
+## Host migration (GSP-K1)
+
+`NetworkSession.AllowHostMigration` works for PlayerMatch and Ranked sessions as XNA describes it:
+only the host sets it, and every machine reads the host's value. The service decides: when the host
+machine leaves (`Dispose`/leave) or stops (its relay connection closes and it does not reconnect
+within 20 seconds, the relay-recovery grace), the machine holding the lowest remaining gamer ID
+becomes the host and that machine's first gamer the host gamer. On every machine the old host's
+gamers leave (`GamerLeft`), then `HostChanged` is raised with the departed host as `OldHost`;
+the new host takes over settings, `StartGame`/`EndGame`, readiness relaying and machine removal.
+Gamer IDs, the roster and session properties carry over unchanged. A client whose host vanished
+waits up to 30 seconds for the service's decision; if the session is gone, or migration is off, it
+ends with `HostEndedSession` as before. Ranked arbitration rounds record members and machines, so
+a handover does not disturb them; the old host's missing report resolves by the round's timeout.
+Services without the `host-migration` capability never receive the setting, and their sessions end
+with their host. Evidence: `OnlineNetworkSessionTest` (a joiner becoming host, a client following
+the directory to a new remote host, the unchanged no-migration path), server directory and relay
+tests, and `service_cna_session_migration` / `service_cna_session_host_crash` (two processes over
+the TLS/WSS relay; the crash case kills the host process in its own NAT namespace).

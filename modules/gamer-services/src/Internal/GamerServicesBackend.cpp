@@ -121,7 +121,7 @@ public:
     explicit OnlineBackend(CNA::GamerServices::Configuration config):QueuedBackend(backgroundServiceWork),config_(std::move(config)),credentials_(config_) {
         directory_=makeSessionDirectoryClient([this](const std::string& op,Json args,const std::string& actor,const std::vector<std::string>& users) {
             return request(op,std::move(args),tokenFor(actor),users);
-        });
+        },[this](const std::string& name){return capabilities_.contains(name);});
         std::set<std::string> seen;
         for(int slot=0;slot<4;++slot)if(const auto stored=credentials_.load(slot)) {
             if(!seen.insert(stored->refreshToken).second||stored->expires<=unixTime()){credentials_.remove(slot);continue;}

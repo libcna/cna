@@ -44,6 +44,9 @@ struct ServiceSessionSnapshot {
     int revision=1;
     /** @brief Whether a playing session permits joins. */
     bool allowJoinInProgress=false;
+    /** @brief Whether the service hands the session to another machine when its host leaves
+     * (member snapshots only; false in advertisements). */
+    bool allowHostMigration=false;
     /** @brief Search metadata. */
     ServiceSessionProperties properties{};
     /** @brief Roster for authenticated membership reads; absent from advertisements. */
@@ -57,6 +60,8 @@ struct ServiceSessionSettings {
     ServiceSessionState state=ServiceSessionState::Lobby;
     /** @brief Join-in-progress policy. */
     bool allowJoinInProgress=false;
+    /** @brief Host migration policy (sent only to a service with the host-migration capability). */
+    bool allowHostMigration=false;
     /** @brief Fixed metadata. */
     ServiceSessionProperties properties{};
 };
