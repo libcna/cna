@@ -220,9 +220,9 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
 | GSP-L1..L6 | Account GameDefaults, away/busy, toasts, Stream columns, guests, QoS bandwidth | done (L6: downstream only) |
 | GSP-M1 | GamerZone / Reputation | done |
 | GSP-O1 | Server concurrency benchmark (`tests/service_benchmark.py`, smoke in CTest) | done |
-| GSP-O2..O8 | Production audit fixes: worker pools and scrypt outside the lock, accept survives EMFILE (O2); durability classes and request-ID rules (O3); sign-in pool (O4); per-address admission, 1024 relays (O5); keep-alive and CNA connection reuse (O6); oldest-family sign-out (O7); statistics line (O8) | done |
+| GSP-O2..O8 | Production audit fixes: worker pools and scrypt outside the lock, accept survives EMFILE (O2); durability classes and request-ID rules (O3); sign-in pool (O4); per-address admission, 1024 relays (O5); keep-alive and CNA connection reuse (O6); oldest-family sign-out (O7); statistics line (O8); 5 s keep-alive idle so NAT-shared addresses keep their connection share (O9) | done |
 | GSP-P1 | Documentation truth pass | done (server README/protocols, CNA docs, register, demos) |
-| GSP-Q1 | Final acceptance and register | todo |
+| GSP-Q1 | Final acceptance and register | done |
 
 ## Evidence log
 
@@ -365,7 +365,11 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   cold, 89 -> 81 ms cached on loopback. Retained (README audit table): one process and SQLite
   writer, many-address floods need a firewall/proxy, in-memory account budget, certificate reload
   by restart, polling. Tests: server unit +3 (repeated read/heartbeat IDs, account budget, family
-  eviction), `service_benchmark_smoke`; full corpus 28/28 with the CNA harnesses.
+  eviction), `service_benchmark_smoke`; full corpus 28/28 with the CNA harnesses. O9 (server
+  4ba7f95): the 15 s keep-alive idle window let a client hold its connection half of its 30 s
+  heartbeat period, so more than about 64 active players behind one NAT address would meet the
+  per-address admission; 5 s keeps bursts on one connection. Per-address limits NAT users share
+  (control connections, ten sign-ins a minute) are recorded as retained.
 - GSP-P1 (documentation). Server README rewritten from dated checkpoint notes to the current state
   (capabilities, not provided, build/administration/operations, capacity, audit, tests);
   `protocol/v1.md` and `relay-v1.md` lose stale "pending/unfinished" claims (host migration,
@@ -374,6 +378,16 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   Stream), `docs/xna-4-api-coverage.md` (header, §3/§4/§5/§9/§10/§11: online AddLocalGamer was
   still listed as refused), the final register (Recent-window gap, service limits); demo scope
   comments below.
+- GSP-P1 demos. Eleven GamerServices/Net demos audited (a subagent, reviewed): besides stale
+  stub-era comments, the GamerServices game demos never let GamerServicesDispatcher.Update run
+  and had no graphics device service, so nobody signed in and four of them (and the dispatcher
+  watchdog) crashed; fixed in 7e613498c, all run to exit 0.
+- GSP-Q1 (final acceptance). Results in the register's Evidence section: server corpus 28/28 (no
+  skips), GS 551 + 1 skip, Net 504, Runtime 192 + 2 skips, C API 95/98 (standing smokes), ABI and
+  drift clean, the four sample acceptances (`*-20260929-polish`), the 255-job v2 review and the
+  demos. `next` is one commit ahead (2c70eaf0f, BL-18: CNAEXT placement on `using` lines, only
+  visible under CNA_STRICT_XNA_API); it touches none of this branch's files, and merging it here
+  would rebuild three trees for no acceptance value, so it is left for the merge into `next`.
 - Visual evidence lives outside the repositories, as the sample evidence does:
   `/rv/tmp/avatar-polish/evidence/{before,after}/`.
 - BEFORE (catalog v1, 2026-09-29): `evidence/before/{jobs.json, preview/, opengl33/,
