@@ -177,6 +177,14 @@ Access access(Xna::PlayerIndex player);
 bool explainAccess(Ui& ui,const Box& area,Access value);
 /** @brief A player's service identity, or empty. @param player Player. @return User id. */
 std::string userOf(Xna::PlayerIndex player);
+/** @brief The CNA system sounds. */
+enum class Sound : std::uint8_t { Move, Accept, Back, Open, Notify, Error };
+/** @brief Plays a system sound, quietly; nothing without an audio device or with
+ * CNA_GAMER_SERVICES_SOUNDS=0. Only real frames play them (tests drive screens silently).
+ * @param sound Sound. */
+void play(Sound sound);
+/** @brief Releases the sounds. */
+void releaseSounds();
 /** @brief Whether motion is reduced (CNA_GAMER_SERVICES_REDUCED_MOTION=1): transitions finish at once. @return Reduced. */
 bool reducedMotion();
 /** @brief 0..1 over a duration, eased out; 1 at once with reduced motion. @param elapsed Seconds.

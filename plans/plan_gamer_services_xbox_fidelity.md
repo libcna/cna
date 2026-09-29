@@ -168,7 +168,7 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
 | GSX-U5 | Friends, invitations (send/receive as system events), notifications | done |
 | GSX-U6 | Achievements and leaderboards presentation | done |
 | GSX-U7 | Party and title-content panes in the same system; catalog updates as one product | done |
-| GSX-U8 | Transitions, reduced motion, original system sounds (if an appropriate audio path exists) | |
+| GSX-U8 | Transitions, reduced motion, original system sounds (if an appropriate audio path exists) | done |
 | GSX-U9 | Semantic UI tests; BEFORE/AFTER sheets and an ordered interaction sequence | |
 | GSX-E* | Remaining register gaps, one decision each | |
 | GSX-P1 | Documentation and register | |
@@ -319,3 +319,12 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
   session after XNA's checks. Tests: server social unit (party lifecycle, leadership, friends only,
   join requests stay out of inboxes and friend states), 5 `GuidePartyTest`, the TLS e2e drives a
   party through the Guide against the real service. GS 594 + 1 skip, Net 504.
+- GSX-U8 (motion and sound, **ART**). Transitions stay short and restrained (shell 0.18 s, content
+  slide 0.16 s, dialogs, toast slide and fade, the full-screen editor fading in from black, the
+  editor camera easing between views); `CNA_GAMER_SERVICES_REDUCED_MOTION=1` finishes every one at
+  once and stops idle gestures. Original system sounds, synthesized in-process (no sound files) and
+  played quietly through the standard `SoundEffect`: open, move, accept, back, notification bell,
+  error knock; only frames a player drives play them (semantic tests stay silent),
+  `CNA_GAMER_SERVICES_SOUNDS=0` turns them off, and without an audio device the Guide is silent.
+  Test: `GuideUiTest.SystemSoundsPlayOrStaySilentWithoutFailing`; the 24-step review runs with
+  them. UNV: how they sound was not listened to here (no audio output on this host).

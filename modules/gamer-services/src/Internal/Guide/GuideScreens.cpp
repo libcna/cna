@@ -152,6 +152,8 @@ struct GuideState {
     std::unique_ptr<Xna::Graphics::SpriteBatch> batch;
     Xna::Graphics::GraphicsDevice* device=nullptr;
     std::string shownTop;  // what was on top last frame (a new top primes the input)
+    bool wasShowing=false;  // a screen or dialog was up last frame (opening plays a sound)
+    std::string lastToast;  // the notification on screen last frame (a new one chimes)
     // Identity shown on the rail, per player.
     std::array<Identity,4> identities;
 };
@@ -360,10 +362,12 @@ namespace {
 class InfoScreen final : public Screen {
 public:
     InfoScreen(std::string title,std::string text,Icon icon):title_(std::move(title)),text_(std::move(text)),icon_(icon){}
+    bool sounded_=false;
     std::string name() const override {return "info";}
     std::string title() const override {return title_;}
     void input(InputContext& ui) override {if(ui.input(Command::Accept)||ui.input(Command::Back)||ui.input.click)pop(this);}
     void draw(Ui& ui,const Box& area) override {
+        if(!sounded_){sounded_=true;if(icon_==Icon::Error||icon_==Icon::Warning)play(Sound::Error);}
         const float s=ui.px(44);
         ui.style.icon(ui.batch,icon_,Box{area.x,area.y,s,s},icon_==Icon::Error||icon_==Icon::Warning?Palette::error():Palette::accent());
         float y=area.y;
@@ -804,13 +808,26 @@ void draw(Xna::Graphics::GraphicsDevice& device)
     releaseTouchSuppression();
     const auto toast=currentGuideToast();
     const bool dialogs=pendingMessageBox()||pendingKeyboard();
-    if(s.stack.empty()&&!toast&&!dialogs)return;
+    if(s.stack.empty()&&!toast&&!dialogs){s.wasShowing=false;s.lastToast.clear();return;}
     const auto viewport=device.getViewportProperty();
     const int width=viewport.getWidthProperty(),height=viewport.getHeightProperty();
     (void)styleFor(device,width,height);
     const double now=seconds();
     primeOnNewTop();
     Ui ui(*s.style,*s.batch,s.portraits,InputContext{s.input.poll(now),now-s.openedAt,now-s.topChangedAt,s.player});
+    // The system sounds of a frame a player drives: opening, moving, choosing, going back, a notification.
+    const bool showing=!s.stack.empty()||dialogs;
+    if(showing&&!s.wasShowing)play(Sound::Open);
+    else if(showing) {
+        if(ui.input(Command::Back))play(Sound::Back);
+        else if(ui.input(Command::Accept)||ui.input.click)play(Sound::Accept);
+        else if(ui.input(Command::Up)||ui.input(Command::Down)||ui.input(Command::Left)||ui.input(Command::Right)||
+                ui.input(Command::Previous)||ui.input(Command::Next))play(Sound::Move);
+    }
+    s.wasShowing=showing;
+    const std::string toastKey=toast?toast->notification.title+"\n"+toast->notification.text:std::string();
+    if(toast&&toastKey!=s.lastToast&&toast->age<0.5)play(Sound::Notify);
+    s.lastToast=toastKey;
     // Input goes to whatever is on top: the game's dialog, else the top screen.
     if(!dialogs&&!s.stack.empty()) {
         auto top=s.stack.back();

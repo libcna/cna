@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 #include "../../../../../src/Internal/GuideOverlay.hpp"
 #include "../../../../../src/Internal/Guide/GuideSystem.hpp"
+#include "../../../../../src/Internal/Guide/GuideScreen.hpp"
 #include "../../../../../src/Internal/Guide/GuideUi.hpp"
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
 #include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
@@ -208,4 +209,11 @@ TEST_F(GuideUiTest, AnInvitationClosedWithoutAnAnswerStaysPendingAndIsAnsweredOn
     EXPECT_FALSE(Guide::getIsVisibleProperty());
     EXPECT_EQ(1, answers);
     EXPECT_FALSE(last.has_value());
+}
+
+TEST_F(GuideUiTest, SystemSoundsPlayOrStaySilentWithoutFailing) {
+    // Synthesized in-process; without an audio device the Guide simply stays silent.
+    for (auto sound : {Ui::Sound::Move, Ui::Sound::Accept, Ui::Sound::Back, Ui::Sound::Open, Ui::Sound::Notify, Ui::Sound::Error})
+        EXPECT_NO_THROW(Ui::play(sound));
+    EXPECT_NO_THROW(Ui::releaseSounds());
 }
