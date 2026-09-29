@@ -86,6 +86,7 @@ std::optional<T> onServiceExecutor(std::function<T(IGamerServicesBackend&)> work
     }
 }
 template std::optional<std::string> onServiceExecutor(std::function<std::string(IGamerServicesBackend&)>);
+template std::optional<std::vector<unsigned char>> onServiceExecutor(std::function<std::vector<unsigned char>(IGamerServicesBackend&)>);
 
 const std::array<int,BoneCount>& parentBones(){return Parents;}
 std::string_view boneName(int slot){return slot>=0&&slot<BoneCount?Names[slot]:std::string_view{};}
@@ -322,26 +323,39 @@ std::string sha256Hex(std::span<const std::uint8_t> bytes)
     return text;
 }
 
+std::optional<std::span<const std::uint8_t>> embeddedFileByContent(const CatalogAsset& asset)
+{
+    // Each compiled-in file is hashed at most once per process.
+    for(const auto& file:embeddedCatalogFiles()) {
+        if(file.size!=asset.size)continue;
+        std::lock_guard guard(verifiedLock);
+        auto hash=embeddedHashes.find(file.data);
+        if(hash==embeddedHashes.end())hash=embeddedHashes.emplace(file.data,sha256Hex(file.bytes())).first;
+        if(hash->second==asset.sha256)return file.bytes();
+    }
+    return std::nullopt;
+}
+
+int maximumFaceTile(const FaceLayout& layout)
+{
+    int highest=0;
+    for(const auto& state:layout.eyes)for(const auto& side:state)highest=std::max({highest,side[0],side[1]});
+    for(const auto& state:layout.eyebrows)highest=std::max({highest,state[0],state[1]});
+    for(auto mouth:layout.mouths)highest=std::max(highest,mouth);
+    return highest;
+}
+
 std::optional<AssetBytes> resolveAsset(const CatalogManifest& manifest,std::string_view name)
 {
     auto listed=manifest.assets.find(name);
     if(listed==manifest.assets.end())return std::nullopt;
-    const auto& expected=listed->second;
     // Compiled-in contents are found by size and hash, never by name: two catalog versions may
-    // hold different files under one name. Each file is hashed at most once per process.
-    for(const auto& file:embeddedCatalogFiles()) {
-        if(file.size!=expected.size)continue;
-        std::lock_guard guard(verifiedLock);
-        auto hash=embeddedHashes.find(file.data);
-        if(hash==embeddedHashes.end())hash=embeddedHashes.emplace(file.data,sha256Hex(file.bytes())).first;
-        if(hash->second==expected.sha256)return AssetBytes{nullptr,file.bytes()};
-    }
-    // Not compiled in (a newer catalog): the service's immutable, hash-addressed copy, which the
-    // backend caches on disk and verifies; checked again here against this manifest.
-    auto bytes=onServiceExecutor<std::vector<unsigned char>>([hash=expected.sha256](IGamerServicesBackend& service) {
-        return service.asset(hash);
-    });
-    if(!bytes||bytes->size()!=expected.size||sha256Hex(*bytes)!=expected.sha256)return std::nullopt;
+    // hold different files under one name.
+    if(auto embedded=embeddedFileByContent(listed->second))return AssetBytes{nullptr,*embedded};
+    // Otherwise the installed pack of exactly this version, verified again on every read. Assets
+    // are never downloaded here: a missing catalog is installed as a whole (catalogManifest).
+    auto bytes=installedCatalogFile(manifest.version,listed->second);
+    if(!bytes)return std::nullopt;
     auto owned=std::make_shared<const std::vector<std::uint8_t>>(std::move(*bytes));
     return AssetBytes{owned,std::span<const std::uint8_t>(*owned)};
 }

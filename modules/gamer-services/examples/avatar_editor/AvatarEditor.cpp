@@ -189,7 +189,7 @@ namespace
                         auto avatars = executor->avatars({userId});
                         auto catalog = executor->avatarCatalog(0);
                         std::lock_guard guard(pending->lock);
-                        pending->avatar = avatars.empty() ? std::vector<unsigned char>{} : std::move(avatars.front());
+                        pending->avatar = avatars.empty() ? std::vector<unsigned char>{} : std::move(avatars.front().description);
                         pending->catalogJson = std::move(catalog);
                     }
                     catch (const std::exception& error)

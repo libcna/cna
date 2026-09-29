@@ -3,6 +3,7 @@
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <condition_variable>
 #include <deque>
@@ -12,10 +13,7 @@
 #include <thread>
 
 namespace CNA::Internal::GamerServices::Avatars {
-namespace {
-using Microsoft::Xna::Framework::Vector3;
-
-AvatarImage decodePng(std::span<const std::uint8_t> png)
+AvatarImage decodeAvatarImage(std::span<const std::uint8_t> png)
 {
     const auto image=CNA::Internal::Graphics::ImageLoader::LoadFromMemory(png.data(),png.size());
     if(image.width<=0||image.height<=0||image.width>2048||image.height>2048||
@@ -29,6 +27,9 @@ AvatarImage decodePng(std::span<const std::uint8_t> png)
     return out;
 }
 
+namespace {
+using Microsoft::Xna::Framework::Vector3;
+
 // Namespace scope (not function statics): they must outlive the loader thread at exit.
 std::mutex faceLock;
 std::map<std::string,std::shared_ptr<const std::vector<AvatarImage>>,std::less<>> cachedTiles;
@@ -41,9 +42,10 @@ std::shared_ptr<const std::vector<AvatarImage>> faceTiles(const CatalogManifest&
     if(auto found=cachedTiles.find(hash);found!=cachedTiles.end())return found->second;
     const auto bytes=resolveAsset(manifest,manifest.faceAsset);
     if(!bytes)throw std::runtime_error("avatar face atlas is unavailable");
-    const auto atlas=decodePng(bytes->view);
+    const auto atlas=decodeAvatarImage(bytes->view);
     const int size=manifest.face.tileSize;
-    if(atlas.width!=manifest.face.columns*size||atlas.height%size)throw std::runtime_error("avatar face atlas size");
+    if(atlas.width!=manifest.face.columns*size||atlas.height%size||maximumFaceTile(manifest.face)>=manifest.face.columns*(atlas.height/size))
+        throw std::runtime_error("avatar face atlas size");
     auto tiles=std::make_shared<std::vector<AvatarImage>>();
     for(int ty=0;ty<atlas.height/size;++ty)
         for(int tx=0;tx<manifest.face.columns;++tx) {
@@ -148,27 +150,58 @@ void applyBuild(std::vector<AvatarVertex>& vertices,const std::array<Vector3,Bon
 }
 
 namespace {
+// A version whose pack could not be installed is not asked for again for a minute, so a crowd of
+// renderers of one unavailable avatar does not become a crowd of requests.
 std::mutex catalogLock;
-std::map<std::uint16_t,std::shared_ptr<const CatalogManifest>> serviceCatalogs;
+std::map<std::uint16_t,std::chrono::steady_clock::time_point> failedUpdates;
+constexpr auto UpdateRetryDelay=std::chrono::seconds(60);
 }
 
 std::shared_ptr<const CatalogManifest> catalogManifest(std::uint16_t version)
 {
+    // Layer A: the catalogs of this release, then the packs installed before.
     if(auto embedded=embeddedManifest(version))return embedded;
+    if(auto installed=installedManifest(version))return installed;
+    // Layer B: install exactly this version as one pack from the service, if this client accepts it.
     {
         std::lock_guard guard(catalogLock);
-        if(auto found=serviceCatalogs.find(version);found!=serviceCatalogs.end())return found->second;
+        if(auto failed=failedUpdates.find(version);failed!=failedUpdates.end()&&std::chrono::steady_clock::now()<failed->second)
+            return nullptr;
     }
-    const auto text=onServiceExecutor<std::string>([version](IGamerServicesBackend& service){return service.avatarCatalog(version);});
-    if(!text)return nullptr;
-    try {
-        auto manifest=std::make_shared<const CatalogManifest>(parseManifest(*text));
-        if(manifest->version!=version)return nullptr;
-        std::lock_guard guard(catalogLock);
-        return serviceCatalogs.emplace(version,std::move(manifest)).first->second;
-    } catch(const std::runtime_error&) {
-        return nullptr;
+    auto service=[&]()->std::shared_ptr<IGamerServicesBackend>{try{return backend();}catch(...){return nullptr;}}();
+    if(!service||!service->serviceEnabled())return nullptr;
+    const auto policy=service->avatarCatalogPolicy();
+    if(!policy.updates||installedCatalogRoot().empty())return nullptr;
+    auto outcome=CatalogInstall::Failed;
+    if(const auto text=onServiceExecutor<std::string>([version](IGamerServicesBackend& s){return s.avatarCatalogPack(version);})) {
+        try {
+            auto download=[](const std::string& hash,std::size_t size) {
+                auto bytes=onServiceExecutor<std::vector<unsigned char>>([&](IGamerServicesBackend& s){return s.catalogFile(hash,size);});
+                if(!bytes)throw std::runtime_error("avatar catalog file could not be downloaded");
+                return std::move(*bytes);
+            };
+            auto pack=parseCatalogPack(*text);
+            // Refused before anything is downloaded: a pack this client could not read or keep.
+            if(pack.version==version&&pack.totalBytes<=policy.maximumBytes&&pack.reader<=CatalogReaderLevel) {
+                const auto manifest=download(pack.manifestSha256,pack.manifestSize);
+                attachCatalogManifest(pack,std::string(manifest.begin(),manifest.end()));
+                outcome=installCatalogPack(pack,policy.maximumBytes,[&](const CatalogAsset& asset){return download(asset.sha256,asset.size);});
+            }
+        } catch(const std::runtime_error&) {
+            outcome=CatalogInstall::Failed;
+        }
     }
+    if(outcome==CatalogInstall::Installed||outcome==CatalogInstall::AlreadyInstalled)
+        if(auto installed=installedManifest(version))return installed;
+    std::lock_guard guard(catalogLock);
+    failedUpdates[version]=std::chrono::steady_clock::now()+UpdateRetryDelay;
+    return nullptr;
+}
+
+void forgetCatalogUpdateFailures()
+{
+    std::lock_guard guard(catalogLock);
+    failedUpdates.clear();
 }
 
 std::shared_ptr<const AvatarModel> buildAvatarModel(const AvatarDescriptor& descriptor)
@@ -268,7 +301,7 @@ std::shared_ptr<const AvatarModel> buildAvatarModel(const AvatarDescriptor& desc
             part.layer=primitive.layer;
             part.specular=primitive.specular;
             if(!primitive.texturePng.empty()) {
-                model->images.push_back(decodePng(primitive.texturePng));
+                model->images.push_back(decodeAvatarImage(primitive.texturePng));
                 part.image=static_cast<int>(model->images.size())-1;
             }
             (part.feature==AvatarFeature::None?model->parts:decals).push_back(std::move(part));

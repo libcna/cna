@@ -102,8 +102,10 @@ transport ceiling. Hashes do not make malformed image/model content valid.
 Avatars (`avatars` capability, server schema 12): the service stores one CNA-encoded description
 per account and imports CNA's avatar catalogs (`cna-gamer-services-admin <db> avatar-catalog
 <CNA>/modules/gamer-services/assets/avatars/v1`, then `v2`). `AvatarDescription.BeginGetFromGamer` reads a
-gamer's description; the renderer downloads only the files of a newer catalog that the library
-does not embed, through the same verified hash cache. See `docs/avatars.md`.
+gamer's description (negotiated: the stored avatar, or a projection onto a catalog this client has)
+and nothing else; the catalogs of this release draw it locally. A catalog the release lacks is
+installed whole as a validated pack through the binary file route and kept outside the asset
+cache (`avatar-catalog-packs`, `files`). See `docs/avatars.md`.
 
 
 Online leaderboard reads use server-provisioned title/key/game-mode definitions, sort direction and

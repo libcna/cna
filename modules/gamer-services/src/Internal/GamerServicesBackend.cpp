@@ -376,30 +376,45 @@ public:
         if(arbitration)args["arbitration"]={{"session",arbitration->session},{"revision",arbitration->revision}};
         (void)request("leaderboards.game.commit",args,tokenFor(owner));
     }
-    std::vector<std::vector<unsigned char>> avatars(const std::vector<std::string>& ids) override {
+    std::vector<ServiceAvatarRecord> avatars(const std::vector<std::string>& ids) override {
         if(!capabilities_.contains("avatars"))throw Unavailable("CNA service avatars capability missing.");
         if(ids.empty()||ids.size()>16)throw Unavailable("Invalid avatar request.");
-        // This build reads description formats 1 and 2 (a service gives older readers a format 1 copy).
-        const auto result=request("avatars.get",{{"userIds",ids},{"formats",Json::array({1,2})}},tokenFor({}));
+        // What this client can draw: the description formats it reads, the catalogs it has, and
+        // whether (and how large) it installs the one a description names. The service answers
+        // with the stored avatar when that is drawable here, else with a marked projection.
+        Json args{{"userIds",ids},{"formats",Json::array({1,2})}};
+        if(capabilities_.contains("avatar-catalog-packs")) {
+            Json catalogs=Json::array();
+            for(auto version:Avatars::availableCatalogVersions())catalogs.push_back(version);
+            const auto policy=avatarCatalogPolicy();
+            args["catalogs"]=std::move(catalogs);
+            args["catalogUpdates"]=policy.updates&&!Avatars::installedCatalogRoot().empty();
+            args["maxCatalogBytes"]=policy.maximumBytes;
+            args["reader"]=Avatars::CatalogReaderLevel;
+        }
+        const auto result=request("avatars.get",args,tokenFor({}));
         const auto& entries=result.at("avatars");
         if(!entries.is_array()||entries.size()!=ids.size())throw Unavailable("Invalid avatar response.");
-        std::vector<std::vector<unsigned char>> out;
+        std::vector<ServiceAvatarRecord> out;
         for(std::size_t index=0;index<ids.size();++index) {
             const auto& entry=entries[index];
             if(!entry.is_object()||!entry.contains("userId")||entry["userId"]!=ids[index]||!entry.contains("description"))
                 throw Unavailable("Invalid avatar response.");
+            ServiceAvatarRecord record;
+            if(entry.contains("revision")&&entry["revision"].is_number_integer())record.revision=entry["revision"].get<long long>();
+            record.projected=entry.contains("projected")&&entry["projected"].is_boolean()&&entry["projected"].get<bool>();
             const auto& text=entry["description"];
-            if(text.is_null()){out.emplace_back();continue;}
+            if(text.is_null()){out.push_back(std::move(record));continue;}
             if(!text.is_string()||text.get_ref<const std::string&>().size()!=2042)throw Unavailable("Invalid avatar response.");
-            std::vector<unsigned char> bytes;bytes.reserve(1021);
             const auto& hex=text.get_ref<const std::string&>();
             auto nibble=[](char c)->int{return c>='0'&&c<='9'?c-'0':c>='a'&&c<='f'?c-'a'+10:-1;};
+            record.description.reserve(1021);
             for(std::size_t i=0;i<hex.size();i+=2) {
                 const int high=nibble(hex[i]),low=nibble(hex[i+1]);
                 if(high<0||low<0)throw Unavailable("Invalid avatar response.");
-                bytes.push_back(static_cast<unsigned char>(high<<4|low));
+                record.description.push_back(static_cast<unsigned char>(high<<4|low));
             }
-            out.push_back(std::move(bytes));
+            out.push_back(std::move(record));
         }
         return out;
     }
@@ -446,6 +461,28 @@ public:
         // A full or unwritable cache still returns the asset.
         cache.write(hash,bytes);
         return bytes;
+    }
+    std::string avatarCatalogPack(int version) override {
+        if(version<1||version>65535)throw Unavailable("Invalid avatar catalog version.");
+        return request("avatars.catalogPack",{{"version",version}},tokenFor({})).dump();
+    }
+    std::vector<unsigned char> catalogFile(const std::string& hash,std::size_t size) override {
+        if(hash.size()!=64||hash.find_first_not_of("0123456789abcdef")!=std::string::npos||size==0||size>(16u<<20))
+            throw Unavailable("Invalid catalog file.");
+        const auto token=tokenFor({});
+        std::vector<unsigned char> bytes;
+        {
+            std::lock_guard lock(transportMutex_);
+            try {negotiateLocked();} catch(const Unavailable&) {throw;} catch(...) {throw Unavailable("CNA service negotiation failed.");}
+            if(!capabilities_.contains("files"))throw Unavailable("CNA service file capability missing.");
+            bytes=download("/files/"+hash,size,latestToken(token));
+        }
+        if(bytes.size()!=size||Avatars::sha256Hex(std::span<const std::uint8_t>(bytes.data(),bytes.size()))!=hash)
+            throw Unavailable("Corrupt catalog file.");
+        return bytes;
+    }
+    AvatarCatalogPolicy avatarCatalogPolicy() const override {
+        return AvatarCatalogPolicy{config_.avatarCatalogUpdates,config_.maxAvatarCatalogBytes};
     }
 private:
     struct Slot {
@@ -508,6 +545,50 @@ private:
         return response["result"];
 #endif
     }
+    struct DownloadTarget {std::vector<unsigned char>* bytes;std::size_t limit;};
+    static std::size_t receive(char* data,std::size_t size,std::size_t count,void* context) noexcept {
+        auto& target=*static_cast<DownloadTarget*>(context);
+        if(size&&count>target.limit/size)return 0;
+        const auto bytes=size*count;if(bytes>target.limit-target.bytes->size())return 0;
+        try{target.bytes->insert(target.bytes->end(),data,data+bytes);}catch(...){return 0;}return bytes;
+    }
+    // A binary GET of one immutable file (the service's /files route), on the shared connection.
+    std::vector<unsigned char> download(const std::string& path,std::size_t size,const std::string& token) {
+#ifdef __EMSCRIPTEN__
+        (void)path; (void)size; (void)token;
+        throw Unavailable("CNA browser file transport is not implemented.");
+#else
+        if(!curl_)curl_.reset(curl_easy_init());
+        if(!curl_)throw Unavailable("Service transport unavailable.");
+        CURL* curl=curl_.get();
+        std::vector<unsigned char> bytes;bytes.reserve(size);
+        DownloadTarget target{&bytes,size};
+        const auto url=config_.endpoint+path;
+        curl_easy_setopt(curl,CURLOPT_URL,url.c_str());
+        curl_easy_setopt(curl,CURLOPT_PROTOCOLS_STR,config_.insecureLoopback?"https,http":"https");
+        curl_easy_setopt(curl,CURLOPT_FOLLOWLOCATION,0L);curl_easy_setopt(curl,CURLOPT_PROXY,"");
+        curl_easy_setopt(curl,CURLOPT_SSL_VERIFYPEER,1L);curl_easy_setopt(curl,CURLOPT_SSL_VERIFYHOST,2L);
+        curl_easy_setopt(curl,CURLOPT_SSLVERSION,CURL_SSLVERSION_TLSv1_2);
+        if(!config_.caBundle.empty())curl_easy_setopt(curl,CURLOPT_CAINFO,config_.caBundle.c_str());
+        curl_easy_setopt(curl,CURLOPT_NOSIGNAL,1L);curl_easy_setopt(curl,CURLOPT_CONNECTTIMEOUT_MS,3000L);
+        curl_easy_setopt(curl,CURLOPT_TIMEOUT_MS,60000L);
+        curl_easy_setopt(curl,CURLOPT_HTTPGET,1L);
+        curl_easy_setopt(curl,CURLOPT_WRITEFUNCTION,&OnlineBackend::receive);curl_easy_setopt(curl,CURLOPT_WRITEDATA,&target);
+        const auto authorization="Authorization: Bearer "+token, game="X-CNA-Game: "+config_.gameId;
+        curl_slist* headers=curl_slist_append(nullptr,authorization.c_str());
+        std::unique_ptr<curl_slist,decltype(&curl_slist_free_all)> owned(headers,curl_slist_free_all);
+        if(!headers||!(headers=curl_slist_append(headers,game.c_str())))throw Unavailable("Service transport unavailable.");
+        owned.release();owned.reset(headers);
+        curl_easy_setopt(curl,CURLOPT_HTTPHEADER,headers);
+        const auto result=curl_easy_perform(curl);
+        curl_easy_setopt(curl,CURLOPT_HTTPHEADER,nullptr);
+        if(result!=CURLE_OK)throw Unavailable("CNA service connection failed.");
+        long status=0;curl_easy_getinfo(curl,CURLINFO_RESPONSE_CODE,&status);
+        if(status==429)throw ServiceError("RATE_LIMITED");
+        if(status!=200)throw Unavailable("CNA service file unavailable.");
+        return bytes;
+#endif
+    }
     Json request(const std::string& op,Json args,const std::string& token,const std::vector<std::string>& participants={}) {
         std::lock_guard lock(transportMutex_);
         try {
@@ -520,6 +601,7 @@ private:
             if(op.starts_with("leaderboards.game.")&&!capabilities_.contains("local-leaderboard-commit"))throw Unavailable("CNA service local leaderboard commit capability missing.");
             if(op.starts_with("leaderboards.")&&!capabilities_.contains("leaderboard-reads"))throw Unavailable("CNA service leaderboard-read capability missing.");
             if(op=="assets.read"&&!capabilities_.contains("assets"))throw Unavailable("CNA service asset capability missing.");
+            if(op=="avatars.catalogPack"&&!capabilities_.contains("avatar-catalog-packs"))throw Unavailable("CNA service catalog pack capability missing.");
             if(op=="presence.set"&&!capabilities_.contains("presence"))throw Unavailable("CNA service presence capability missing.");
             if(op.starts_with("sessions.")&&!capabilities_.contains("session-directory"))throw Unavailable("CNA service directory capability missing.");
             if(op=="sessions.relayTicket"&&!capabilities_.contains("relay-tickets"))throw Unavailable("CNA service relay-ticket capability missing.");
@@ -666,6 +748,7 @@ private:
 class FakeBackend final : public QueuedBackend {
 public:
     FakeBackend(std::vector<ServiceIdentity> identities,std::vector<ServiceAchievement> catalog,std::vector<ServiceLeaderboardFixture> boards):QueuedBackend(false),identities_(std::move(identities)),catalog_(std::move(catalog)),boards_(std::move(boards)) {
+        for(const auto& person:identities_)if(!person.avatar.empty())revisions_[person.userId]=1;
         directory_=makeFakeSessionDirectory([this](const std::string& user){require(user);if(!profileById(user).allowOnlineSessions)throw ServiceError("NOT_AUTHORIZED");},
             [this](const std::string& user){return profileById(user).gamertag;},
             [this](const std::string& tag){const auto person=profile(tag);if(!person.allowOnlineSessions)throw ServiceError("NOT_AUTHORIZED");return person.userId;});
@@ -827,39 +910,75 @@ public:
         }
         games_.erase(gameplay);
     }
-    std::vector<std::vector<unsigned char>> avatars(const std::vector<std::string>& ids) override {
+    std::vector<ServiceAvatarRecord> avatars(const std::vector<std::string>& ids) override {
         std::lock_guard guard(avatarLock_);
         if(avatarsUnreachable_)throw Unavailable("Fake fixture is unreachable.");
-        std::vector<std::vector<unsigned char>> out;
+        ++traffic_.avatarReads;
+        std::vector<ServiceAvatarRecord> out;
         for(const auto& id:ids) {
             auto person=std::find_if(identities_.begin(),identities_.end(),[&](const auto& value){return value.userId==id;});
-            out.push_back(person==identities_.end()?std::vector<unsigned char>{}:person->avatar);
+            ServiceAvatarRecord record;
+            if(person!=identities_.end()&&!person->avatar.empty()) {
+                record.description=person->avatar;
+                record.revision=revisions_[id];
+            }
+            out.push_back(std::move(record));
         }
         return out;
     }
     long long setAvatar(const std::string& userId,const std::vector<unsigned char>& description) override {
         std::lock_guard guard(avatarLock_);
         if(avatarsUnreachable_)throw Unavailable("Fake fixture is unreachable.");
-        for(auto& person:identities_)if(person.userId==userId){person.avatar=description;return ++avatarRevision_;}
+        for(auto& person:identities_)if(person.userId==userId){person.avatar=description;return ++revisions_[userId];}
         throw ServiceError("NOT_FOUND");
     }
-    void replaceAvatar(const std::string& userId,std::vector<unsigned char> description) {
+    void replaceAvatar(const std::string& userId,std::vector<unsigned char> description,bool newRevision) {
         std::lock_guard guard(avatarLock_);
-        for(auto& person:identities_)if(person.userId==userId)person.avatar=std::move(description);
+        for(auto& person:identities_)if(person.userId==userId){person.avatar=std::move(description);if(newRevision)++revisions_[userId];}
     }
     void setAvatarsUnreachable(bool failing){std::lock_guard guard(avatarLock_);avatarsUnreachable_=failing;}
     std::string avatarCatalog(int) override {
+        std::lock_guard guard(avatarLock_);
         if(avatarCatalog_.empty())throw Unavailable("Fake fixture has no avatar catalog.");
         return avatarCatalog_;
     }
     std::vector<unsigned char> asset(const std::string& hash) override {
+        return catalogFile(hash,0);
+    }
+    std::string avatarCatalogPack(int version) override {
+        std::lock_guard guard(avatarLock_);
+        ++traffic_.packReads;
+        if(avatarCatalog_.empty())throw Unavailable("Fake fixture has no avatar catalog.");
+        // The descriptor the service derives from an imported catalog.
+        const auto manifest=Json::parse(avatarCatalog_,nullptr,false);
+        if(manifest.is_discarded()||!manifest.is_object()||manifest.value("catalogVersion",0)!=version)throw ServiceError("NOT_FOUND");
+        unsigned long long total=0;
+        for(const auto& asset:manifest.at("assets"))total+=asset.value("size",0ull);
+        return Json{{"version",version},{"packFormat",1},{"reader",1},{"descriptionFormats",Json::array({1,2})},
+                    {"manifestSha256",manifestHash()},{"manifestSize",avatarCatalog_.size()},{"totalBytes",total}}.dump();
+    }
+    std::vector<unsigned char> catalogFile(const std::string& hash,std::size_t) override {
+        std::lock_guard guard(avatarLock_);
+        if(fileSuccesses_==0)throw Unavailable("Fake fixture's file endpoint is off.");
+        if(fileSuccesses_>0)--fileSuccesses_;
+        ++traffic_.fileDownloads;
+        // The manifest is a file too, found by its hash like every other.
+        if(!avatarCatalog_.empty()&&hash==manifestHash())return {avatarCatalog_.begin(),avatarCatalog_.end()};
         auto found=avatarAssets_.find(hash);
         if(found==avatarAssets_.end())throw Unavailable("Fake fixture has no such asset.");
         return found->second;
     }
+    std::string manifestHash() const {
+        return Avatars::sha256Hex(std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(avatarCatalog_.data()),avatarCatalog_.size()));
+    }
+    AvatarCatalogPolicy avatarCatalogPolicy() const override {std::lock_guard guard(avatarLock_);return policy_;}
     void setAvatarCatalog(std::string manifest,std::map<std::string,std::vector<unsigned char>> assets) {
+        std::lock_guard guard(avatarLock_);
         avatarCatalog_=std::move(manifest);avatarAssets_=std::move(assets);
     }
+    FakeAvatarTraffic traffic() const {std::lock_guard guard(avatarLock_);return traffic_;}
+    void setFileSuccesses(int successes) {std::lock_guard guard(avatarLock_);fileSuccesses_=successes;}
+    void setPolicy(AvatarCatalogPolicy policy) {std::lock_guard guard(avatarLock_);policy_=policy;}
 private:
     ServiceIdentity profileById(const std::string& id) {for(const auto& person:identities_)if(person.userId==id)return person;throw Unavailable("Unknown fixture gamer.");}
     void apply(const ServiceLeaderboardWrite& row) {
@@ -870,9 +989,12 @@ private:
         entry->rating=row.rating;entry->columns=row.columns;
     }
     std::string avatarCatalog_;
-    std::mutex avatarLock_;
+    mutable std::mutex avatarLock_;
     bool avatarsUnreachable_=false;
-    long long avatarRevision_=0;
+    std::map<std::string,long long> revisions_;
+    FakeAvatarTraffic traffic_;
+    int fileSuccesses_=-1;
+    AvatarCatalogPolicy policy_;
     std::map<std::string,std::vector<unsigned char>> avatarAssets_;
     std::map<std::string,std::vector<ServiceMessage>> inbox_;
     std::map<std::pair<std::string,std::string>,std::string> reviews_;
@@ -909,10 +1031,10 @@ CNA::GamerServices::Configuration configurationForBackend(const IGamerServicesBa
     return online->configuration();
 }
 void setBackendForTesting(std::shared_ptr<IGamerServicesBackend> value) {std::lock_guard lock(registryMutex);current=std::move(value);}
-void setFakeAvatar(IGamerServicesBackend& fake,const std::string& userId,std::vector<unsigned char> description) {
+void setFakeAvatar(IGamerServicesBackend& fake,const std::string& userId,std::vector<unsigned char> description,bool newRevision) {
     auto* backend=dynamic_cast<FakeBackend*>(&fake);
     if(!backend)throw System::InvalidOperationException("Not a fake Gamer Services backend.");
-    backend->replaceAvatar(userId,std::move(description));
+    backend->replaceAvatar(userId,std::move(description),newRevision);
 }
 void setFakeAvatarsUnreachable(IGamerServicesBackend& fake,bool failing) {
     auto* backend=dynamic_cast<FakeBackend*>(&fake);
@@ -923,6 +1045,21 @@ void setFakeAvatarCatalog(IGamerServicesBackend& fake,std::string manifest,std::
     auto* backend=dynamic_cast<FakeBackend*>(&fake);
     if(!backend)throw System::InvalidOperationException("Not a fake Gamer Services backend.");
     backend->setAvatarCatalog(std::move(manifest),std::move(assets));
+}
+FakeAvatarTraffic fakeAvatarTraffic(IGamerServicesBackend& fake) {
+    auto* backend=dynamic_cast<FakeBackend*>(&fake);
+    if(!backend)throw System::InvalidOperationException("Not a fake Gamer Services backend.");
+    return backend->traffic();
+}
+void setFakeCatalogFileFailures(IGamerServicesBackend& fake,int successes) {
+    auto* backend=dynamic_cast<FakeBackend*>(&fake);
+    if(!backend)throw System::InvalidOperationException("Not a fake Gamer Services backend.");
+    backend->setFileSuccesses(successes);
+}
+void setFakeAvatarCatalogPolicy(IGamerServicesBackend& fake,AvatarCatalogPolicy policy) {
+    auto* backend=dynamic_cast<FakeBackend*>(&fake);
+    if(!backend)throw System::InvalidOperationException("Not a fake Gamer Services backend.");
+    backend->setPolicy(policy);
 }
 std::shared_ptr<IGamerServicesBackend> makeFakeBackend(std::vector<ServiceIdentity> people,std::vector<ServiceAchievement> catalog,std::vector<ServiceLeaderboardFixture> boards) {
     return std::make_shared<FakeBackend>(std::move(people),std::move(catalog),std::move(boards));

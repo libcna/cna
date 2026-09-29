@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
+#include <cstdint>
 #include <array>
 #include <functional>
 #include <memory>
@@ -40,6 +41,24 @@ struct ServiceIdentity {
     int gamerZone = 0;
     /** @brief Stars (0..5) from other players' reviews; empty when nobody has reviewed the member. */
     std::optional<float> reputation;
+};
+/** @brief One account's avatar as the service returns it to this client. */
+struct ServiceAvatarRecord {
+    /** @brief 1021-byte description; empty when the account has no avatar. */
+    std::vector<unsigned char> description;
+    /** @brief The stored avatar's revision (0 = none, or a service that does not say); a
+     * projection has its source's revision. */
+    long long revision=0;
+    /** @brief The service derived it from the stored avatar for this client (a catalog or
+     * format the client cannot draw); the stored avatar is unchanged. */
+    bool projected=false;
+};
+/** @brief How this client acquires avatar catalogs it does not have. */
+struct AvatarCatalogPolicy {
+    /** @brief Installs catalog packs from the service. */
+    bool updates=true;
+    /** @brief Largest pack installed. */
+    std::uint64_t maximumBytes=std::uint64_t{64}<<20;
 };
 /** @brief Title-scoped catalog entry and user-earned state. */
 struct ServiceAchievement {
@@ -232,9 +251,11 @@ public:
     /** @brief Sets the member's GamerZone. @param userId Actor. @param zone "recreation", "pro",
      * "family", "underground", or "unknown" to clear it. */
     virtual void setGamerZone(const std::string& userId,const std::string& zone) = 0;
-    /** @brief Reads accounts' avatar descriptions. @param userIds 1..16 service identities.
-     * @return Description bytes per identity, in order; empty when the account has no avatar. */
-    virtual std::vector<std::vector<unsigned char>> avatars(const std::vector<std::string>& userIds) = 0;
+    /** @brief Reads accounts' avatars, negotiated for this client (description formats, catalogs
+     * it has, whether it accepts catalog updates): the service answers with the stored description
+     * when this client can draw it, else a marked projection. @param userIds 1..16 service identities.
+     * @return One record per identity, in order. */
+    virtual std::vector<ServiceAvatarRecord> avatars(const std::vector<std::string>& userIds) = 0;
     /** @brief Stores a signed-in account's own avatar (the CNA avatar editor's save).
      * @param userId Signed-in account. @param description Valid 1021-byte CNA description.
      * @return The avatar's new revision. */
@@ -245,6 +266,14 @@ public:
     /** @brief Retrieves immutable asset bytes, with verified local cache where configured.
      * @param hash SHA-256 identifier. @return Resource bytes. */
     virtual std::vector<unsigned char> asset(const std::string& hash) = 0;
+    /** @brief Reads the pack descriptor of one imported catalog version (avatars.catalogPack).
+     * @param version Catalog version. @return Descriptor JSON text. */
+    virtual std::string avatarCatalogPack(int version) = 0;
+    /** @brief Downloads one immutable file of an imported catalog by content, uncached (the pack
+     * installer keeps it). @param hash SHA-256. @param size Expected size. @return Bytes. */
+    virtual std::vector<unsigned char> catalogFile(const std::string& hash,std::size_t size) = 0;
+    /** @brief Whether this client installs catalog updates, and how large. @return Policy. */
+    virtual AvatarCatalogPolicy avatarCatalogPolicy() const = 0;
     /** @brief Reads a remote page. @param key Board key. @param mode Game mode.
      * @param start Page start. @param size Page size. @param pivot Optional centered gamer.
      * @param gamers Optional restricted names. @return Ranked page. */
@@ -278,14 +307,32 @@ void withRestrictedServiceCalls(const std::function<void()>& callback);
 /** @brief Injects an explicit test backend. @param value Backend or null to reset configuration. */
 void setBackendForTesting(std::shared_ptr<IGamerServicesBackend> value);
 /** @brief Replaces an account's avatar on a fake backend. @param fake Backend from makeFakeBackend.
- * @param userId Account. @param description Bytes (empty = no avatar). */
-void setFakeAvatar(IGamerServicesBackend& fake,const std::string& userId,std::vector<unsigned char> description);
+ * @param userId Account. @param description Bytes (empty = no avatar).
+ * @param newRevision A new stored avatar (true), or other bytes for the same one, as a projection
+ * served to this client would be (false). */
+void setFakeAvatar(IGamerServicesBackend& fake,const std::string& userId,std::vector<unsigned char> description,bool newRevision=true);
 /** @brief Makes a fake backend's avatar reads fail as an unreachable service would. @param fake Backend.
  * @param failing Whether reads fail. */
 void setFakeAvatarsUnreachable(IGamerServicesBackend& fake,bool failing);
 /** @brief Gives a fake backend an avatar catalog to serve. @param fake Backend from makeFakeBackend.
  * @param manifest catalog.json text. @param assets File bytes by SHA-256. */
 void setFakeAvatarCatalog(IGamerServicesBackend& fake,std::string manifest,std::map<std::string,std::vector<unsigned char>> assets);
+/** @brief Avatar traffic a fake backend has served. */
+struct FakeAvatarTraffic {
+    /** @brief avatars.get reads. */
+    int avatarReads=0;
+    /** @brief Pack descriptor reads. */
+    int packReads=0;
+    /** @brief Catalog files and assets downloaded. */
+    int fileDownloads=0;
+};
+/** @brief Reads a fake backend's avatar traffic. @param fake Backend. @return Counters. */
+FakeAvatarTraffic fakeAvatarTraffic(IGamerServicesBackend& fake);
+/** @brief Makes a fake backend's file downloads fail: after this many more succeed (0 = the file
+ * endpoint is off), or never (-1). @param fake Backend. @param successes Downloads still allowed. */
+void setFakeCatalogFileFailures(IGamerServicesBackend& fake,int successes);
+/** @brief Sets a fake backend's catalog update policy. @param fake Backend. @param policy Policy. */
+void setFakeAvatarCatalogPolicy(IGamerServicesBackend& fake,AvatarCatalogPolicy policy);
 /** @brief Creates deterministic fake with explicitly supplied identities and catalog.
  * @param identities Accounts. @param catalog Title catalog. @param boards Explicit test boards.
  * @return Fake backend. */

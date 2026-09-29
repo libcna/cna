@@ -273,7 +273,7 @@ TEST(AvatarEditorTest, TheFakeServiceStoresASavedAvatar) {
     const auto bytes=storedAvatar(newest(),41);
     const std::vector<unsigned char> description(bytes.begin(),bytes.end());
     EXPECT_EQ(fake->setAvatar("alice-id",description),1);
-    EXPECT_EQ(fake->avatars({"alice-id"}).front(),description);
+    EXPECT_EQ(fake->avatars({"alice-id"}).front().description,description);
     EXPECT_EQ(fake->setAvatar("alice-id",description),2);
     EXPECT_ANY_THROW(fake->setAvatar("nobody",description));
     Service::setFakeAvatarsUnreachable(*fake,true);

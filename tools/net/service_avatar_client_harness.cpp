@@ -5,6 +5,9 @@
 // become Ready with that item downloaded by hash (the driver checks the verified disk cache).
 // GSP-I1: it then saves an edit the way the CNA avatar editor does (the editor model against the
 // service's newest catalog, avatars.set) and reads the stored avatar back.
+// GSX-A: the hat's catalog is installed as one validated pack (the driver checks the installed
+// pack and that the later run reuses it); with --view-only (a client declining catalog updates) it
+// reads the service's projection and stops before the editor.
 // Reads alice's password from stdin; prints avatar-* lines for the driver.
 #include "CNA/Internal/GamerServices/AvatarAssets.hpp"
 #include "CNA/Internal/GamerServices/AvatarDescriptionCodec.hpp"
@@ -70,8 +73,12 @@ std::string summary(const AvatarDescription& description) {
         " catalog="+std::to_string(decoded?decoded->catalogVersion:0);
 }
 }
-int main() {
+int main(int argc,char** argv) {
     try {
+        const bool viewOnly=argc>1&&std::string(argv[1])=="--view-only";
+        std::string available;
+        for(auto version:Avatars::availableCatalogVersions())available+=(available.empty()?"":",")+std::to_string(version);
+        std::cout<<"avatar-catalogs available="<<available<<"\n"<<std::flush;
         Provider provider;GamerServicesDispatcher::Initialize(provider);auto* signedIn=Gamer::getSignedInGamersProperty();
         Guide::ShowSignIn(1,true);
         std::string password;std::getline(std::cin,password);enter("alice");enter(password);
@@ -112,7 +119,8 @@ int main() {
         const auto load=Avatars::loadAvatarAsync(*Avatars::decode(description.getDescriptionProperty()));
         std::lock_guard guard(load->lock);
         check(load->done&&load->model,"assembled model");
-        std::cout<<"avatar-ready substituted="<<load->model->substitutedItems.size()<<"\n"<<std::flush;
+        std::cout<<"avatar-ready substituted="<<load->model->substitutedItems.size()<<" unavailable="<<load->model->catalogUnavailable<<"\n"<<std::flush;
+        if(viewOnly)return 0;
 
         // The editor: the service's newest catalog, one row changed, saved with avatars.set.
         using Backend=CNA::Internal::GamerServices::IGamerServicesBackend;
@@ -139,8 +147,8 @@ int main() {
                 std::this_thread::sleep_for(std::chrono::milliseconds(2100));
             }
         }
-        const auto readBack=onExecutor<std::vector<std::vector<unsigned char>>>([&](Backend& s){return s.avatars({userId});});
-        check(readBack.size()==1&&std::vector<std::uint8_t>(readBack[0].begin(),readBack[0].end())==edited,"the service stores the edit");
+        const auto readBack=onExecutor<std::vector<CNA::Internal::GamerServices::ServiceAvatarRecord>>([&](Backend& s){return s.avatars({userId});});
+        check(readBack.size()==1&&std::vector<std::uint8_t>(readBack[0].description.begin(),readBack[0].description.end())==edited,"the service stores the edit");
         std::cout<<"avatar-edit saved="<<(revision>0)<<" format="<<static_cast<int>(edited[0])<<"\n"<<std::flush;
         return 0;
     } catch(const std::exception& error) {

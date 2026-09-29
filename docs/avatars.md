@@ -138,7 +138,7 @@ third-party content). Every catalog version lives in its own directory,
 frozen data (the generator that wrote it is in Git history), and the generator now writes v2.
 
 A description is drawn from exactly the catalog version it names — the compiled-in manifest of
-that version, else the service's — never from another. Files are found by size and SHA-256, so two
+that version, else an installed pack of it (below) — never from another. Files are found by size and SHA-256, so two
 versions may use one file name for different contents and identical contents are shared. If the
 named catalog cannot be obtained at all, the newest compiled-in body is drawn with every item
 replaced by its slot default (its ids are not read against another version). Preset animations
@@ -174,17 +174,44 @@ and compares it byte for byte; `AvatarCatalogTest.CatalogV1IsFrozen` and
 `V1DescriptionsAssembleExactlyAsReleased` pin v1. `tools/avatar_builder/avatar_review.py` renders
 review sheets through the real renderer (`cna_avatar_review`) and a CPU preview.
 
-### Newer catalogs from the service
+### Catalogs a release does not have: catalog packs
 
-A description names the catalog version its items come from. For a version that is not compiled
-in, the renderer's loader asks the service for that catalog's manifest (`avatars.catalog`)
-and resolves each file by content hash: a file the library already has (same SHA-256) is used from
-it; any other is downloaded from the service's immutable asset
-store (`assets.read`), verified against the manifest hash and size, and cached on disk by hash
-(`CNA_GAMER_SERVICES_CACHE_DIR`, else `$XDG_CACHE_HOME/cna/gamer-services/assets`), where every
-later read is verified again. Only item files travel; bones and geometry are never streamed
-during play.
+The avatar model is the console's: the service owns each account's *description* (1,021 bytes and a
+revision); the avatar *catalogs* are client content. A description on a catalog of this release
+renders offline, and `BeginGetFromGamer` + `AvatarRenderer` transfer nothing but the description.
 
-An item that cannot be resolved (no service, an unknown id, a missing or corrupt file) is replaced
-by the first item of its slot (optional accessories are omitted), so the avatar still renders; a
-body that cannot be resolved makes the renderer `Unavailable`.
+When a description names a catalog this build does not compile in, the renderer's loader installs
+that exact catalog as one pack, if the configuration allows it (`avatarCatalogUpdates`, default on;
+`CNA_AVATAR_CATALOG_UPDATES=0` turns it off; `maxAvatarCatalogBytes`, default 64 MiB):
+
+1. `avatars.catalogPack` describes it: version, pack format, contract level (`reader`), description
+   formats, the manifest's SHA-256 and size, and the total size. A pack this client cannot read or
+   is not allowed to keep is refused before anything is downloaded.
+2. The manifest and each file the client lacks are downloaded by hash from the service's file
+   route; files this build compiles in (or another installed pack holds) are copied, not
+   downloaded. Every file is verified into a staging directory.
+3. The whole catalog is validated as the renderer will use it: every model against the 71-bone
+   contract and bounds, every texture decoded, every item fitted to its body, the face atlas
+   against its layout, all 31 animation presets.
+4. One rename activates it. An interrupted install leaves only staging, which a retry reuses after
+   verifying each file again; an invalid pack is discarded; nothing half-installed is ever read.
+
+Installed packs are kept, not cached: `CNA_GAMER_SERVICES_CATALOGS_DIR`, else
+`$XDG_DATA_HOME/cna/avatar-catalogs` (`%LOCALAPPDATA%\cna\avatar-catalogs` on Windows), one
+self-contained `v<N>/` per version. Catalog versions are CNA-wide identities: the pack installed
+first is that version, and a different catalog offered under the same number is refused. A version
+that failed to install is not asked for again for a minute.
+
+The service negotiates what each client receives (`avatars.get` states the formats it reads, the
+catalogs it has, whether and how large it installs packs). A client that can draw the stored avatar,
+or will install its catalog, receives it; otherwise the service sends a projection onto the newest
+catalog the client has, marked as such, and leaves the stored avatar unchanged. Games see an
+ordinary description either way, and `AvatarDescription.Changed` follows the stored avatar's
+revision, so installing a catalog or receiving a projection is never a change.
+
+The fallback order for a description is: (1) its catalog is installed; (2) its pack is installed
+now; (3) the service's projection (when it came from the service); (4) the deterministic default
+avatar -- the newest installed body with the description's body type, height, build and colours,
+every item its slot default (its ids are never read against another catalog); (5) `Unavailable`
+only when not even a body can be drawn. Descriptions exchanged directly between games (bytes over a
+`NetworkSession`) take (1), (2) and (4).

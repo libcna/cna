@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
+#include <cstdint>
 #include <string>
 #include <optional>
 namespace CNA::GamerServices {
@@ -13,6 +14,11 @@ struct Configuration {
     std::string caBundle;
     /** @brief Explicitly permits unencrypted numeric loopback development connections only. */
     bool insecureLoopback = false;
+    /** @brief Installs an avatar catalog this release lacks, as one validated pack, when an avatar
+     * names it; off, such avatars are drawn from the service's projection or the default avatar. */
+    bool avatarCatalogUpdates = true;
+    /** @brief Largest avatar catalog pack installed, in bytes. */
+    std::uint64_t maxAvatarCatalogBytes = std::uint64_t{64} << 20;
 };
 /** @brief Overrides deployment configuration before dispatcher initialization.
  * @param configuration Complete override; nullopt removes it. */

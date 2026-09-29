@@ -22,13 +22,22 @@ void read(Configuration& config,const std::filesystem::path& path,bool required)
     const auto j=CnaService::parse(bytes);
     if(!j.is_object())throw CnaService::Error("INVALID_CONFIGURATION");
     for(auto it=j.begin();it!=j.end();++it)
-        if(it.key()!="endpoint"&&it.key()!="gameId"&&it.key()!="caBundle"&&it.key()!="insecureLoopback")throw CnaService::Error("INVALID_CONFIGURATION");
+        if(it.key()!="endpoint"&&it.key()!="gameId"&&it.key()!="caBundle"&&it.key()!="insecureLoopback"&&
+           it.key()!="avatarCatalogUpdates"&&it.key()!="maxAvatarCatalogBytes")throw CnaService::Error("INVALID_CONFIGURATION");
     if(j.contains("endpoint"))config.endpoint=CnaService::stringField(j,"endpoint",2048);
     if(j.contains("gameId"))config.gameId=CnaService::stringField(j,"gameId",64);
     if(j.contains("caBundle"))config.caBundle=CnaService::stringField(j,"caBundle",4096);
     if(j.contains("insecureLoopback")) {
         if(!j["insecureLoopback"].is_boolean())throw CnaService::Error("INVALID_CONFIGURATION");
         config.insecureLoopback=j["insecureLoopback"].get<bool>();
+    }
+    if(j.contains("avatarCatalogUpdates")) {
+        if(!j["avatarCatalogUpdates"].is_boolean())throw CnaService::Error("INVALID_CONFIGURATION");
+        config.avatarCatalogUpdates=j["avatarCatalogUpdates"].get<bool>();
+    }
+    if(j.contains("maxAvatarCatalogBytes")) {
+        if(!j["maxAvatarCatalogBytes"].is_number_unsigned())throw CnaService::Error("INVALID_CONFIGURATION");
+        config.maxAvatarCatalogBytes=j["maxAvatarCatalogBytes"].get<std::uint64_t>();
     }
 }
 #ifndef __EMSCRIPTEN__
@@ -73,6 +82,8 @@ Configuration resolveConfiguration() {
     }
     const auto insecure=env("CNA_GAMER_SERVICES_INSECURE_LOOPBACK");
     if(!insecure.empty()) {if(insecure!="0"&&insecure!="1")throw CnaService::Error("INVALID_CONFIGURATION");config.insecureLoopback=insecure=="1";}
+    const auto updates=env("CNA_AVATAR_CATALOG_UPDATES");
+    if(!updates.empty()) {if(updates!="0"&&updates!="1")throw CnaService::Error("INVALID_CONFIGURATION");config.avatarCatalogUpdates=updates=="1";}
     validateConfiguration(config);return config;
 }
 }

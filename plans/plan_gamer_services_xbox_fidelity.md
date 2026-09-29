@@ -1,0 +1,170 @@
+# GamerServices / Avatar Xbox-fidelity pass (living plan)
+
+Task ids `GSX-*`. Continues `plan_gamer_services_avatar_polish.md` (GSP-*, closed) and
+`plan_gamer_services_server.md` (GS-*, closed). This file is the authoritative plan for this pass
+and is updated as work lands.
+
+## Evidence classes
+
+Every statement below is one of:
+
+| Mark | Meaning |
+|---|---|
+| **XNA** | XNA/Xbox-observable behaviour, confirmed from the XNA 4.0 IL (`xna4-decomp`) or its XML documentation |
+| **POL** | CNA backend policy: XNA exposes the outcome but not how it is decided, so CNA chose |
+| **ART** | Visual approximation / art direction (original CNA work, Xbox 360-era look as a reference only) |
+| **DONE** | Implemented and tested |
+| **PART** | Partially implemented; the boundary is stated |
+| **NO** | Intentionally unsupported, with the reason |
+| **UNV** | Impossible to verify here (no hardware, no public reference) |
+| **STALE** | Documentation that no longer matches the code |
+
+## Verified starting point (2026-09-29, read from the repositories)
+
+| Repository | Branch | Commit |
+|---|---|---|
+| CNA (worktree `cnawork/cna-gamer-services`) | `feature/gamer-services-server` | e46db9822 (29 GSP commits after e8ecc7197, which is in `next`) |
+| CNA `next` | | 2c70eaf0f (BL-18, CNAEXT placement on `using` lines; touches no file of this branch) |
+| cna-gamer-services-server | `feature/gamer-services-server` | 4ba7f95 |
+| cna-samples (worktree `cna-samples-gamer-services`) | `feature/gamer-services-samples` | 378483b |
+| sharp-runtime | `feature/gamer-services-collections` | 88f6b11f (GSP-J1 `EventHandler::Share`; the prompt's 007280bd is its parent) |
+
+Baseline rerun at e46db9822, `cmake-build-debug` (HEADLESS), one process per gtest case
+(`/rv/tmp/xbox-fidelity/baseline/`): see the evidence log.
+
+## The avatar ownership model (decision GSX-A)
+
+**POL.** XNA says only that `AvatarDescription.BeginGetFromGamer` returns the gamer's 1,021-byte
+description and that `AvatarRenderer` draws it; how the console stores assets is not observable.
+On the Xbox 360 the avatar *assets* were system content on the console (updated by system
+updates), and the network carried only the description. CNA now follows that shape:
+
+```text
+CNA service account --> AvatarDescription (1,021 bytes: format, catalog version, ...) + revision
+                                     |
+CNA client (runtime) --> installed canonical CNA avatar catalogs --> AvatarRenderer
+                         (compiled into the release; plus exact catalog packs installed by update)
+```
+
+- **Layer A, installed catalogs.** The catalogs of a CNA release are compiled into it. A
+  description naming one of them renders offline, and `BeginGetFromGamer` + `AvatarRenderer`
+  transfer nothing but the description.
+- **Layer B, catalog update.** A description naming a catalog the client does not have is served
+  by installing that exact catalog as one immutable pack: the service describes it (version,
+  manifest SHA-256, pack format, reader level, description formats, total size), the client
+  downloads the files it lacks by content hash into a staging directory, verifies every hash,
+  validates the whole catalog with the same reader the renderer uses, and activates it with one
+  atomic rename. An interrupted or invalid pack is never visible; installed packs are kept (not a
+  cache) and are never downloaded again.
+- **Negotiation.** `avatars.get` states the formats the client reads, the catalogs it has,
+  whether it accepts updates and how large. The service returns the canonical description when
+  the client can render it (locally, or after an update it accepts); otherwise an explicitly
+  marked projection onto a catalog the client has. The stored avatar is never changed for a
+  client.
+- **Fallback order.** (1) exact catalog installed; (2) exact catalog pack installed now; (3) the
+  service's projection; (4) the deterministic CNA default avatar (newest installed body, the
+  description's body type, height, build and colours, every item its slot default); (5)
+  `Unavailable` only when not even a body can be drawn. A description is never read against
+  another catalog's ids.
+
+## Audit
+
+### Avatars (at e46db9822)
+
+| Finding | Class | Evidence / plan |
+|---|---|---|
+| `BeginGetFromGamer` transfers only the description (`avatars.get`); the renderer's loader resolves assets | DONE (already) | `AvatarDescription.cpp`, `GamerServicesBackend.cpp::avatars`; GSX-A1 adds the proof tests |
+| A compiled-in catalog resolves with no network use | DONE, untested | `AvatarCatalog.cpp::resolveAsset` checks compiled-in files first; GSX-A1 tests it with the asset endpoint disabled |
+| A catalog that is not compiled in: manifest (`avatars.catalog`) plus each item file fetched separately (`assets.read`, 12 KB hex chunks) into a 256 MiB LRU cache | replaced | per-item streaming, not a coherent catalog; evictable; ~1,200 round trips for a 14 MB catalog; GSX-A2/A3 replace it with packs |
+| `avatars.get` negotiates only description formats (1, 2) | PART | GSX-A3/A4 add catalogs, updates, size, reader |
+| Server stores one description + revision per account; catalog files once per content hash | DONE (already) | `avatars`, `assets`, `avatar_catalog_assets` tables; GSX-A5 adds the determinism test |
+| Catalog v1 frozen (pinned by test) | DONE | `AvatarCatalogTest.CatalogV1IsFrozen` |
+| Catalog v2: stored accounts, server golden fixtures and the GSP evidence name it; GSP evidence log says "frozen from then on" (the pass ended) | frozen now | GSX-B1 pins it; new art goes to catalog v3 |
+| v2 look: slim teen proportions, small mitten hands, stringy hair locks with dark gaps, very large round irises, flat line mouth, button nose, subtle face controls, stiff small-motion idles | ART gap | `/rv/tmp/avatar-polish/review-final/sheets/`; GSX-B* |
+
+### Documentation defects inherited from GSP
+
+| Statement | Class | Fix |
+|---|---|---|
+| Polish plan task rows "GSP-C* first pass done; art iteration continues", "GSP-D* first pass done", "GSP-E* renderer coverage in progress" | STALE | GSX-P1: rows state the final outcome, checkpoints marked historical, AFTER summary added |
+| Register "Guests in PlayerMatch/Ranked … refused": correct, but "guests" elsewhere must never read as "fully implemented" | exact matrix needed | GSX-P1 (matrix below) |
+| Reputation "derived from reviews" | must say POL | 5 x prefer / (prefer + avoid) in quarters is a CNA formula, not Xbox LIVE's |
+| Host migration "lowest remaining ordinal" | must say POL | XNA shows only the migration and `HostChanged` |
+
+Guest matrix at e46db9822 (`GamerServicesDispatcher.cpp:118-124`, `Guide.cpp:439-525`):
+
+| Session type | Guest may create / join / be added |
+|---|---|
+| Local, LocalWithLeaderboards | yes |
+| SystemLink | yes |
+| PlayerMatch, Ranked | no: `allowOnlineSessions` is false for a guest (the service authenticates each participant) |
+
+### Register rows (`gamer_services_server_final_register.md`) to re-audit
+
+Research at e46db9822 / server 4ba7f95 (read-only; file:line in the task rows when each is done):
+
+| Gap | XNA evidence | Current CNA | Feasibility |
+|---|---|---|---|
+| Voice | **XNA**: `NetworkGamer.HasVoice`/`IsTalking`/`IsMutedByLocalUser` are native state flags; `EnableSendVoice(remote, enable)` is a per-pair kernel command, "by default voice is enabled for all gamers"; routing is automatic (no sample API); `AllowCommunication` suppresses it; Windows IL cannot show whether the Windows proxy carried audio (UNV) | flags always false, `EnableSendVoice` checks arguments only | feasible: real capture on SDL3/ALSA (`Microphone.cpp`), Opus 1.5.2 on the system (not vendored for Windows/Emscripten), a free message tag and an unreliable ENet channel on both transports; online relay is TCP (jitter) |
+| Browser multiplayer | **XNA**: none (Xbox/Windows only) | Emscripten refuses the service endpoint and the relay | framing is browser-ready; needs server CORS/OPTIONS, a fetch control transport, an ENet datagram shim over `emscripten/websocket.h`, asynchronous relay hello, yielding End waits; emsdk (`~/emsdk`), headless Chrome 152 and Firefox 140 exist here |
+| Push | **XNA**: not observable (the console had a live connection) | polling: heartbeat 30 s, invitations 5 s, directory 1 s, avatar check 10 s | needs a new account-scoped WSS event channel; the relay is session-scoped |
+| Single server process | n/a | no lock; two processes can share one database; `RelayHub` routes only its own channels | ownership guard feasible now; horizontal scale needs shared relay routing |
+| Rate limits | n/a | per-address/connection/account/title/relay limits exist; no asset download limit; all per process | add asset download budget and per-address connection rate |
+| QoS upstream | **XNA** XML: "estimate of the available bandwidth" | 0: the host reads discovery once per frame and there is no client-to-host train | needs a responder thread with receive timestamps and a report message |
+| Parties | **XNA**: `SignedInGamer.PartySize` (setter internal; 0 without parties; only native `PartyMembersChanged` moves it), `ShowParty`/`ShowPartySessions` (PlayerIndex.One only on Windows; `ShowPartySessions` "shows the Friends screen instead" without a party), `SendPartyInvites` throws "at least two party members" when `PartySize < 2` (IL; the XML's "no effect" is wrong) | `partySize_` starts at **1** and its setter is public (C API uses it); panes explanatory; `SendPartyInvites` refuses | a service party makes `PartySize`, both panes and `SendPartyInvites` real |
+| Marketplace / trial | **XNA**: one `ShowMarketplace(PlayerIndex)`; `IsTrialMode` starts true and is latched from `SimulateTrialMode` at each `Update` (a purchase shows as it turning false later, no event); `AllowOnlineSessions` false in trial; Framework resources carry a "Test Purchase" emulation prompt | `IsTrialMode` answers `SimulateTrialMode` at once; `AllowOnlineSessions` ignores trial; marketplace pane says "fully licensed" even while simulating trial | fix the three divergences; a CNA title-content pane |
+| Partner tokens | **XNA**: static `GetPartnerToken(audienceUri)` family; Windows IL throws `NotSupportedException` ("only available for Xbox LIVE Registered Developers"); Windows Phone only | throws the same | decide in GSX-E5 |
+| Title updates | **XNA**: `InstallingTitleUpdate` raised when the GFWL proxy starts an installer, then every call throws `GamerServicesNotAvailableException`; `GamerServicesComponent` exits the game on it; `GameUpdateRequiredException` from any proxy call when LIVE refuses the version | event never raised; component does not subscribe `Exit`; exception never thrown | map a service "this title version is no longer accepted" answer to `GameUpdateRequiredException`; component exits on the event |
+| Recent keys | **XNA**: key string only; no window in IL, XML or any document found | no window | retain (evidence insufficient) |
+| TrueSkill | **XNA**: games observe only `LeaderboardEntry.Rating` of a board they read; no document ties skill to matchmaking; Windows IL refuses the handlers | `WriteTrueSkill` raised, arbitrated boards, no skill computed | decide in GSX-E4 |
+
+## Tasks
+
+| Id | Task | Status |
+|---|---|---|
+| GSX-000 | Verify state, baseline, audit, this plan | done |
+| GSX-A1 | Local-first proof: warm installation renders with the asset endpoint off, zero avatar downloads | done |
+| GSX-A2 | Client installed-catalog store and catalog-pack update (stage, verify, validate, atomic activate, dedupe, retry) | done |
+| GSX-A3 | Server: pack descriptor, binary content-addressed file route, reader level, negotiation and projection | done |
+| GSX-A4 | Client negotiation and fallback order; old-client behaviour | done |
+| GSX-A5 | Identity vs assets: determinism across clients | done |
+| GSX-B1 | Freeze catalog v2; generator writes v3 | |
+| GSX-B2..B9 | Catalog v3 art: head/face, atlas, body, hands, clothing, hair/facial hair, materials, animation | |
+| GSX-B10 | BEFORE/AFTER review with identical cameras, inspected | |
+| GSX-U0 | System UI audit: every Guide pane, editor and demo; deterministic BEFORE screenshots; visual inventory | |
+| GSX-U1 | One CNA system visual language (panel, title, tabs, focus, buttons, identity, presence, toast, dialog, loading, error) shared by Guide and editor | |
+| GSX-U2 | Console-style avatar editor: large live preview, categories, rendered item cards, contextual camera, human face controls, coherent randomize, transactional save/cancel | |
+| GSX-U3 | Sign-in as profile selection over four player slots | |
+| GSX-U4 | Gamer Card with avatar, presence, zone, reputation, relationship and actions | |
+| GSX-U5 | Friends, invitations (send/receive as system events), notifications | |
+| GSX-U6 | Achievements and leaderboards presentation | |
+| GSX-U7 | Party and title-content panes in the same system; catalog updates as one product | |
+| GSX-U8 | Transitions, reduced motion, original system sounds (if an appropriate audio path exists) | |
+| GSX-U9 | Semantic UI tests; BEFORE/AFTER sheets and an ordered interaction sequence | |
+| GSX-E* | Remaining register gaps, one decision each | |
+| GSX-P1 | Documentation and register | |
+| GSX-Q1 | Final acceptance | |
+
+## Evidence log
+
+- Baseline at e46db9822 (`/rv/tmp/xbox-fidelity/baseline/`): CnaGamerServicesTests 551 + 1 known
+  skip, CnaNetTests 504/504, CnaRuntimeTests 192 + 2 environment skips -- the reported numbers hold.
+- GSX-A (catalog ownership). Client: `AvatarCatalogStore.cpp` (installed packs; `catalogManifest`
+  = compiled in, installed, pack install, else null; `resolveAsset` never downloads);
+  `avatars()` returns records (description, revision, projected) and sends `catalogs`,
+  `catalogUpdates`, `maxCatalogBytes`, `reader`; `catalogFile` is a binary GET on the persistent
+  connection; `Changed` compares revisions when both sides have one (bytes otherwise, as for local
+  profiles); configuration `avatarCatalogUpdates`/`maxAvatarCatalogBytes`,
+  `CNA_AVATAR_CATALOG_UPDATES`, store `CNA_GAMER_SERVICES_CATALOGS_DIR`. Server: capabilities
+  `avatar-catalog-packs` and `files`, `avatars.catalogPack`, `GET /cna/v1/files/<sha256>` (title
+  assets, pictures, catalog files and manifests by the hash of their stored text; 1 GiB per account,
+  title and hour), `avatars.get` negotiation and `projectAvatarDescription`; manifests may state
+  `reader` (import accepts 1). No schema change: pack facts derive from the stored manifest, cached
+  per immutable version. Tests: 10 new GS cases (endpoint off, install once, interrupted + resume,
+  malformed manifest, bad hash, unreadable model, wrong skeleton, animations without every preset,
+  oversized, declining client, two clients same digest, revision-based `Changed`) plus a
+  configuration case; server `avatar_tests` 94 assertions (+ pack descriptor, file authorization,
+  negotiation, projection); `service_cna_avatars` e2e rewritten: first run installs the newer
+  catalog as a pack (Debug, loopback: 852 ms including whole-catalog validation), the second run
+  lists it before any request and reuses it (38 ms), a client with updates off receives the
+  projection onto catalog 2 and draws it with nothing substituted. GS 561 + 1 skip, Net 504/504.

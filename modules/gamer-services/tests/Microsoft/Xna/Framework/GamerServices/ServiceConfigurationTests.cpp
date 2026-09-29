@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 #include "CNA/GamerServices/Configuration.hpp"
+#include <cstdlib>
+#include <string>
 using namespace CNA::GamerServices;
 TEST(ServiceConfigurationTest, AbsentEndpointIsValidOfflineConfiguration) {
     EXPECT_NO_THROW(validateConfiguration({}));
@@ -26,4 +28,17 @@ TEST(ServiceConfigurationTest, ProgrammaticOverrideIsCompleteAndReversible) {
     EXPECT_EQ(resolveConfiguration().gameId,"title");
     EXPECT_EQ(resolveConfiguration().endpoint,"https://service.example/cna/v1");
     setConfigurationOverride(std::nullopt);
+}
+TEST(ServiceConfigurationTest, AvatarCatalogUpdatesAreOnByDefaultAndCanBeTurnedOff) {
+    const Configuration defaults;
+    EXPECT_TRUE(defaults.avatarCatalogUpdates);
+    EXPECT_EQ(defaults.maxAvatarCatalogBytes, std::uint64_t{64} << 20);
+    const auto* previous = std::getenv("CNA_AVATAR_CATALOG_UPDATES");
+    const std::string saved = previous ? previous : "";
+    setenv("CNA_AVATAR_CATALOG_UPDATES", "0", 1);
+    EXPECT_FALSE(resolveConfiguration().avatarCatalogUpdates);
+    setenv("CNA_AVATAR_CATALOG_UPDATES", "maybe", 1);
+    EXPECT_THROW((void)resolveConfiguration(), std::runtime_error);
+    if (previous) setenv("CNA_AVATAR_CATALOG_UPDATES", saved.c_str(), 1);
+    else unsetenv("CNA_AVATAR_CATALOG_UPDATES");
 }
