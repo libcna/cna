@@ -73,6 +73,12 @@ What remains:
   (`docs/browser-network-readiness.md`), not browser multiplayer.
 - **Online host migration.** `AllowHostMigration` is stored but a departing online host ends the
   session (`HostEndedSession`); SystemLink sessions migrate.
+- **Adding a local gamer to an online session.** `AddLocalGamer` refuses on PlayerMatch/Ranked (the
+  service admits a machine's local group at create/join); SystemLink sessions announce it to every
+  machine.
+
+`plans/gamer_services_server_final_register.md` lists every other deliberate refusal or constant
+(voice, party, marketplace, partner tokens, away/busy, gamer zone and reputation, TrueSkill).
 
 ### What was closed first
 

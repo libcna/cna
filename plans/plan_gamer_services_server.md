@@ -46,16 +46,16 @@ Avatars: CNA-owned versioned envelope within exact 1021-byte public buffer; fixe
 ## Checklist / migration sequence
 
 - [x] GS-001: repository safety, initial inventory and living architecture plan.
-- [ ] GS-002: canonical protocol parser/spec/golden corpus and drift checks; server independent CMake project, persistent schema/migrations, administration and hardening unit tests.
-- [ ] GS-003: endpoint/title configuration and TLS client transport; fake/backend abstraction; remove fabricated profiles; deterministic event pump and async ownership tests.
-- [ ] GS-004: real server auth/revocation/restart, separate local slots, Guide sign-in overlay, user credential/refresh persistence, identity/profile/privilege/lookup tests.
-- [ ] GS-005: friends/presence/pictures/social Guide; service achievements metadata/award/pictures/cache across users/titles/restarts.
-- [ ] GS-006: session-scoped leaderboard writes, EndGame/leave events/flush, Ranked arbitration and reads/paging/social filters.
-- [ ] GS-007: PlayerMatch/Ranked directory, properties/create/find/join, invited joins/InviteAccepted and coherent failure/event order; preserve full SystemLink corpus.
-- [ ] GS-008: authenticated relay fallback with untrusted packet limits; prove connectivity across NAT-like isolation, membership revocation, failure/reconnect.
-- [ ] GS-009: description encoding/random/service retrieval/cache; original 71-slot rig/presets/expressions; standard renderer Draw/ready/loading/disposal, pixel regression migration; only then retire redundant avatar EXT.
-- [ ] GS-010: C ABI synchronization, standard-API-only demos, representative original XNA compatibility samples.
-- [ ] GS-011: two separate CNA processes/server restart/E2E entire corpus, protocol fuzz/property tests, final throw/no-op evidence register, truthful docs and clean checkpoints.
+- [x] GS-002: canonical protocol parser/spec/golden corpus and drift checks; server independent CMake project, persistent schema/migrations, administration and hardening unit tests. (`tools/net/check_service_protocol.py`; server schema 1-13.)
+- [x] GS-003: endpoint/title configuration and TLS client transport; fake/backend abstraction; remove fabricated profiles; deterministic event pump and async ownership tests.
+- [x] GS-004: real server auth/revocation/restart, separate local slots, Guide sign-in overlay, user credential/refresh persistence, identity/profile/privilege/lookup tests. (POSIX credential persistence; Windows/browser credentials stay per-run, documented. Local offline profiles GS-004l-r.)
+- [x] GS-005: friends/presence/pictures/social Guide; service achievements metadata/award/pictures/cache across users/titles/restarts.
+- [x] GS-006: session-scoped leaderboard writes, EndGame/leave events/flush, Ranked arbitration and reads/paging/social filters. (No TrueSkill computation or Stream columns, documented.)
+- [x] GS-007: PlayerMatch/Ranked directory, properties/create/find/join, invited joins/InviteAccepted and coherent failure/event order; preserve full SystemLink corpus. (Online host migration and online AddLocalGamer are documented limits: GS-007h, GS-007j.)
+- [x] GS-008: authenticated relay fallback with untrusted packet limits; prove connectivity across NAT-like isolation, membership revocation, failure/reconnect.
+- [x] GS-009: description encoding/random/service retrieval/cache; original 71-slot rig/presets/expressions; standard renderer Draw/ready/loading/disposal, pixel regression migration; only then retire redundant avatar EXT.
+- [x] GS-010: C ABI synchronization, standard-API-only demos, representative original XNA compatibility samples. (C ABI 0.34.0; Priority 9 samples.)
+- [x] GS-011: two separate CNA processes/server restart/E2E entire corpus, protocol fuzz/property tests, final throw/no-op evidence register, truthful docs and clean checkpoints. (`gamer_services_server_final_register.md`; final validation below.)
 
 Every task may be split into thematic subcommits; mark parent complete only after all criteria. After stable milestones inspect committed next, merge relevant commits (existing history uses merges), rerun regressions; never copy samples worktree files. Update AUDIT/NEXT with measured results, not completeness claims.
 
@@ -2741,3 +2741,24 @@ the C struct field documents local ticks. CnaGamerServicesTests 485 + 1 skip.
   + 1 skip. `ctest -R '^CApi_'` 94/98, the four failures being the three standing environment
   smokes and `CApi_InstalledConsumer`, which passes once the static archive is rebuilt; the demo
   object compiles in cmake-build-opengl33.
+
+### GS-011 complete: final validation and register
+
+`gamer_services_server_final_register.md` records every deliberate refusal, constant and
+never-raised member left in GamerServices/Net (XNA behaviour, CNA limits, host-language limits),
+what the GS-001 inventory items became, and the evidence. `misc/known_gaps.md` entry 4 now names
+the online AddLocalGamer limit next to online host migration and points at the register. Validation
+(details in the register): server corpus 23/23 with every CNA harness and NAT, zero skips, 340.7 s;
+CnaNetTests 495, CnaGamerServicesTests 498 + 1 skip, CnaRuntimeTests 192; C API gates; all four
+sample acceptances rerun into new `*-20260929-final` evidence directories (the NGSM and AvatarShadows
+scripts gained an evidence-directory option, and the AvatarShadows default capture times were fixed);
+the SystemLink demo pairs exit 0.
+
+Known-good cross-repo set: CNA (this commit), cna-samples feature/gamer-services-samples 378483b,
+server ce8ff32, sharp-runtime 007280bd. (Previous: CNA 45c17d1d8 / cna-samples 378483b / server
+bbfe2d5.)
+
+Open, documented limits (not claimed): online host migration (GS-007h) and online AddLocalGamer
+(GS-007j); voice; TrueSkill computation; party, marketplace and partner-token services; away/busy
+status; guest sign-in; Windows/browser credential persistence; browser multiplayer (owner scope:
+limitations page); public Internet deployment acceptance.
