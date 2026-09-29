@@ -2700,3 +2700,13 @@ the C struct field documents local ticks. CnaGamerServicesTests 485 + 1 skip.
   `service_invitations` (pending both ways, full session not joinable, open lobby joinable,
   closed lobby not, accepted invitation); the TLS e2e's real friends flow checks the parsed flags.
   CnaGamerServicesTests 497 + 1 skip, Gamers/GamerProperties C smokes.
+- [x] GS-004r Local profiles carry their `GameDefaults` (audit OPEN 8). XNA reads a gamer's
+  preferred settings from the profile. CNA's are XNA's unset values (each enumeration's first
+  member, as XNA's ordinals confirm; no colors; false), and no profile could say otherwise. A local
+  profile's store entry may now hold `"gameDefaults"` with the XNA property names (enumerations by
+  member name, colors `#rrggbb`, booleans). The dispatcher applies it at local sign-in
+  (`findLocalProfile`, a private dispatcher helper; `GameDefaults` befriends the dispatcher). A
+  missing or unreadable field keeps its unset value, and the object is kept exactly as written
+  when the store is rewritten. Accounts have no game defaults (documented). Test
+  `LocalSignInTest.ALocalProfileCarriesItsStoredGameDefaults`; CnaGamerServicesTests 498 + 1 skip,
+  Gamers/GamerProperties C smokes.

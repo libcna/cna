@@ -26,7 +26,12 @@ processes, and a store that cannot be read is never overwritten. Profiles whose 
 created when missing; for unattended runs and CI), are signed in when gamer services start and
 appear, raising `SignedIn`, at the first `Dispatcher.Update`, as XNA reports profiles already signed
 in at startup. Local profiles are never sent to a service. With an endpoint configured, sign-in uses
-accounts only.
+accounts only. An entry may also carry `"gameDefaults"`, the profile's `GameDefaults`:
+`gameDifficulty` (`Easy`/`Normal`/`Hard`), `controllerSensitivity` (`Low`/`Medium`/`High`),
+`racingCameraAngle` (`Back`/`Front`/`Inside`), `primaryColor`/`secondaryColor` (`#rrggbb`) and the
+booleans `autoAim`, `autoCenter`, `moveWithRightThumbStick`, `invertYAxis`, `manualTransmission`,
+`accelerateWithButtons`, `brakeWithButtons`. A missing or unreadable field keeps XNA's unset value,
+and the object is kept as written when the store is rewritten. Accounts have no game defaults.
 
 **Offline achievement catalog.** A title can ship `GamerServices/Achievements.json` in its title
 directory: a JSON array of the objects the service administration tool takes (`key`, `name`,

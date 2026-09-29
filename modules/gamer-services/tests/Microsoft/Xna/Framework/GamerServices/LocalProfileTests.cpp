@@ -9,6 +9,8 @@
 #include "../../../../../src/Internal/Protocol/CnaService/Protocol.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GameDefaults.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerPrivileges.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
@@ -344,6 +346,35 @@ TEST_F(LocalSignInTest, ALocalProfilesAvatarIsItsStoredDescription) {
     ASSERT_TRUE(description.getIsValidProperty());
     const auto& bytes = description.getDescriptionProperty();
     EXPECT_TRUE(std::equal(bytes.begin(), bytes.end(), profile.avatar.begin(), profile.avatar.end()));
+}
+
+// A local profile carries its preferred game settings (XNA GameDefaults) in its store entry. What a
+// player wrote survives the store being rewritten; a field that cannot be read keeps its default.
+TEST_F(LocalSignInTest, ALocalProfileCarriesItsStoredGameDefaults) {
+    environment_.Write(R"({"version":1,"profiles":[{"gamertag":"Robin","autoSignIn":false,"gameDefaults":{)"
+                       R"("gameDifficulty":"Hard","controllerSensitivity":"High","primaryColor":"#ff8000",)"
+                       R"("secondaryColor":"not a color","invertYAxis":true,"autoAim":"yes","racingCameraAngle":"Inside",)"
+                       R"("brakeWithButtons":true,"customNote":"kept"}}]})");
+    (void)Service::openLocalProfile("Sam");
+    const auto stored = environment_.Read();
+    EXPECT_NE(std::string::npos, stored.find("customNote")) << stored;
+    EXPECT_NE(std::string::npos, stored.find("#ff8000")) << stored;
+
+    Guide::ShowSignIn(1, false);
+    Enter();
+    ASSERT_TRUE(Settle([] { return Count() == 1; }));
+    ASSERT_EQ("Robin", Player(0)->getGamertagProperty());
+    const auto& defaults = Player(0)->getGameDefaultsProperty();
+    EXPECT_EQ(GameDifficulty::Hard, defaults.getGameDifficultyProperty());
+    EXPECT_EQ(ControllerSensitivity::High, defaults.getControllerSensitivityProperty());
+    ASSERT_TRUE(defaults.getPrimaryColorProperty().has_value());
+    EXPECT_EQ(Microsoft::Xna::Framework::Color(255, 128, 0), *defaults.getPrimaryColorProperty());
+    EXPECT_FALSE(defaults.getSecondaryColorProperty().has_value());
+    EXPECT_TRUE(defaults.getInvertYAxisProperty());
+    EXPECT_FALSE(defaults.getAutoAimProperty());
+    EXPECT_EQ(RacingCameraAngle::Inside, defaults.getRacingCameraAngleProperty());
+    EXPECT_TRUE(defaults.getBrakeWithButtonsProperty());
+    EXPECT_FALSE(defaults.getManualTransmissionProperty());
 }
 
 // Dispatcher initialization happens once per process, so the test runs itself again, alone, in a

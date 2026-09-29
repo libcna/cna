@@ -47,6 +47,19 @@ void GamerServicesDispatcher::Initialize(System::IServiceProvider& serviceProvid
     for(std::size_t slot=0;slot<automatic.size();++slot)service->signInLocal(static_cast<int>(slot),automatic[slot].gamertag);
     isInitialized_=true;
 }
+void GamerServicesDispatcher::ApplyLocalGameDefaults(GameDefaults& target, const CNA::Internal::GamerServices::LocalGameDefaults& source) {
+    target.gameDifficulty_=static_cast<GameDifficulty>(source.gameDifficulty);
+    target.controllerSensitivity_=static_cast<ControllerSensitivity>(source.controllerSensitivity);
+    const auto color=[](const auto& rgb)->std::optional<Color> {
+        if(!rgb)return std::nullopt;
+        return Color(static_cast<int>((*rgb)[0]),static_cast<int>((*rgb)[1]),static_cast<int>((*rgb)[2]));
+    };
+    target.primaryColor_=color(source.primaryColor);target.secondaryColor_=color(source.secondaryColor);
+    target.autoAim_=source.autoAim;target.autoCenter_=source.autoCenter;target.moveWithRightThumbStick_=source.moveWithRightThumbStick;
+    target.invertYAxis_=source.invertYAxis;target.manualTransmission_=source.manualTransmission;
+    target.racingCameraAngle_=static_cast<RacingCameraAngle>(source.racingCameraAngle);
+    target.accelerateWithButtons_=source.accelerateWithButtons;target.brakeWithButtons_=source.brakeWithButtons;
+}
 void GamerServicesDispatcher::Update() {
     if(!isInitialized_)return;
     // End inside a service callback must progress work without publishing nested identity events.
@@ -102,6 +115,10 @@ void GamerServicesDispatcher::Update() {
                 // A local profile has no service: no online sessions and no purchases.
                 gamer->privileges_.allowOnlineSessions_=event.signedInToLive&&event.identity.allowOnlineSessions;
                 if(!event.signedInToLive)gamer->privileges_.allowPurchaseContent_=false;
+                // A local profile carries its own preferred game settings.
+                if(!event.signedInToLive)
+                    if(const auto profile=CNA::Internal::GamerServices::findLocalProfile(event.identity.gamertag))
+                        ApplyLocalGameDefaults(gamer->gameDefaults_,profile->gameDefaults);
                 auto* pointer=gamer.get();ownedGamers.push_back(std::move(gamer));slots[event.slot]=pointer;publish();SignedInGamer::OnSignIn(pointer);Guide::OnSignInResult(event.slot, true);
             }
         }catch(...){if(!firstError)firstError=std::current_exception();}

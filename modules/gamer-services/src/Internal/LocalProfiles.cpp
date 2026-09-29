@@ -59,6 +59,36 @@ std::vector<unsigned char> randomAvatar() {
     return Avatars::encode(Avatars::randomDescriptor(std::nullopt,random));
 }
 
+// Each readable field of a stored gameDefaults object; anything else keeps its default.
+LocalGameDefaults parseGameDefaults(const CnaService::Json& value) {
+    LocalGameDefaults defaults;
+    const auto choice=[&](const char* key,std::initializer_list<const char*> names,int& target) {
+        if(!value.contains(key)||!value[key].is_string())return;
+        int index=0;
+        for(const auto* name:names){if(value[key].get<std::string>()==name){target=index;return;}++index;}
+    };
+    choice("gameDifficulty",{"Easy","Normal","Hard"},defaults.gameDifficulty);
+    choice("controllerSensitivity",{"Low","Medium","High"},defaults.controllerSensitivity);
+    choice("racingCameraAngle",{"Back","Front","Inside"},defaults.racingCameraAngle);
+    for(auto [key,target]:{std::pair{"autoAim",&defaults.autoAim},std::pair{"autoCenter",&defaults.autoCenter},
+        std::pair{"moveWithRightThumbStick",&defaults.moveWithRightThumbStick},std::pair{"invertYAxis",&defaults.invertYAxis},
+        std::pair{"manualTransmission",&defaults.manualTransmission},std::pair{"accelerateWithButtons",&defaults.accelerateWithButtons},
+        std::pair{"brakeWithButtons",&defaults.brakeWithButtons}})
+        if(value.contains(key)&&value[key].is_boolean())*target=value[key].get<bool>();
+    // Colors are "#rrggbb".
+    const auto color=[&](const char* key,std::optional<std::array<unsigned char,3>>& target) {
+        if(!value.contains(key)||!value[key].is_string())return;
+        const auto text=value[key].get<std::string>();
+        if(text.size()!=7||text[0]!='#'||text.find_first_not_of("0123456789abcdefABCDEF",1)!=std::string::npos)return;
+        std::array<unsigned char,3> rgb{};
+        for(std::size_t i=0;i<3;++i)rgb[i]=static_cast<unsigned char>(std::stoul(text.substr(1+2*i,2),nullptr,16));
+        target=rgb;
+    };
+    color("primaryColor",defaults.primaryColor);
+    color("secondaryColor",defaults.secondaryColor);
+    return defaults;
+}
+
 // The whole store, or nullopt when a file exists that is not a store this version can read.
 std::optional<std::vector<LocalProfile>> readStore(const std::filesystem::path& path) {
     std::error_code error;
@@ -80,6 +110,10 @@ std::optional<std::vector<LocalProfile>> readStore(const std::filesystem::path& 
         if(std::any_of(profiles.begin(),profiles.end(),[&](const auto& p){return folded(p.gamertag)==folded(profile.gamertag);}))continue;
         if(entry.contains("autoSignIn")&&entry["autoSignIn"].is_boolean())profile.autoSignIn=entry["autoSignIn"].get<bool>();
         if(entry.contains("avatar")&&entry["avatar"].is_string())profile.avatar=avatarFromHex(entry["avatar"].get<std::string>());
+        if(entry.contains("gameDefaults")&&entry["gameDefaults"].is_object()) {
+            profile.gameDefaults=parseGameDefaults(entry["gameDefaults"]);
+            profile.gameDefaultsJson=entry["gameDefaults"].dump();
+        }
         profiles.push_back(std::move(profile));
     }
     return profiles;
@@ -90,6 +124,7 @@ bool writeStore(const std::filesystem::path& path,const std::vector<LocalProfile
     for(const auto& profile:profiles) {
         CnaService::Json entry{{"gamertag",profile.gamertag},{"autoSignIn",profile.autoSignIn}};
         if(!profile.avatar.empty())entry["avatar"]=hex(profile.avatar);
+        if(!profile.gameDefaultsJson.empty())entry["gameDefaults"]=CnaService::Json::parse(profile.gameDefaultsJson);
         entries.push_back(std::move(entry));
     }
     const auto bytes=CnaService::Json{{"version",1},{"profiles",std::move(entries)}}.dump(1)+"\n";
@@ -226,6 +261,14 @@ std::vector<LocalProfile> autoSignInLocalProfiles() {
     }
     for(const auto& name:requested)result.push_back(openLocalProfile(name));
     return result;
+}
+
+std::optional<LocalProfile> findLocalProfile(const std::string& gamertag) {
+    for(const auto& profile:loadLocalProfiles())if(folded(profile.gamertag)==folded(gamertag))return profile;
+    // A profile created this run in a store that could not be written.
+    std::lock_guard guard(storeMutex);
+    for(const auto& profile:opened)if(folded(profile.gamertag)==folded(gamertag))return profile;
+    return std::nullopt;
 }
 
 std::vector<unsigned char> localProfileAvatar(const std::string& gamertag) {
