@@ -108,7 +108,8 @@ feet on y = 0, the avatar's left on +X. Joints XNA leaves unnamed are helpers na
 never skinned or animated. The reader refuses anything outside that contract: external URIs,
 other rigs, non-identity bind rotations, out-of-range indices or weights, and oversized data. A
 `GamerServices_AvatarCatalogUpToDate` test regenerates the catalog and compares it byte for byte;
-`tools/avatar_builder/preview_avatar.py` renders previews for development.
+`tools/avatar_builder/avatar_review.py` renders review sheets through the real renderer
+(`cna_avatar_review`) and a CPU preview.
 
 ### Newer catalogs from the service
 

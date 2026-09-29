@@ -327,6 +327,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
             cna_copy_sdl_runtime(cna_demo_avatar_bone_state_boundary)
         endif()
     endif()
+
+    # GSP-A2: cna_avatar_review renders tools/avatar_builder/avatar_review.py job lists through the
+    # standard avatar API, for deterministic before/after review sheets.
+    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+        add_executable(cna_avatar_review avatar_review/AvatarReview.cpp)
+        target_link_libraries(cna_avatar_review PRIVATE CNA CNA_GamerServices SHARP_RUNTIME)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_avatar_review PRIVATE SDL3::SDL3main)
+        endif()
+    endif()
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot

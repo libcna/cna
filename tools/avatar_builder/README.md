@@ -35,16 +35,23 @@ CNA service (`docs/gamer-services-server.md`), not into v1.
 `generate_avatar_catalog.py` itself writes the files and `catalog.json`, which lists every file
 with its size and SHA-256.
 
-## Previews
+## Review
 
-`preview_avatar.py` renders a GLB set to a PNG on the CPU (needs Pillow), optionally posed at a
-time in one of the animations:
+`avatar_review.py` renders one deterministic job list two ways, so art changes are judged on the
+real renderer and iterated quickly on the CPU:
 
 ```
-A=modules/gamer-services/assets/avatars/v1
-python3 tools/avatar_builder/preview_avatar.py out.png $A/body.male.glb $A/top_tshirt.male.glb \
-    --pose $A/animations.glb Wave 1.2
+A=modules/gamer-services/assets/avatars; R=/rv/tmp/avatar-polish/review
+python3 tools/avatar_builder/avatar_review.py jobs --catalogs $A --version 1 --out $R/jobs.json
+python3 tools/avatar_builder/avatar_review.py preview $R/jobs.json $R/preview --catalogs $A   # numpy + Pillow
+tools/platform/run_gpu_tests_private.sh --exec $PWD/cmake-build-opengl33/cna_avatar_review $R/jobs.json $R/gpu
+python3 tools/avatar_builder/avatar_review.py sheets $R/jobs.json $R/gpu $R/sheets
 ```
 
-It is a development aid; the runtime contract, including everything the C++ reader refuses, is
-in `docs/avatars.md`.
+The jobs cover a female and a male avatar from the front, three-quarter, profile and back with
+head, hand and feet close-ups; 24 seeded random avatars; four key frames of every preset; and every
+eye, eyebrow and mouth state plus independent left/right combinations. `cna_avatar_review`
+(`modules/gamer-services/examples/avatar_review/`) draws them through the standard XNA avatar API
+only. The CPU preview (`cna_avatar/preview.py`) assembles descriptions, samples animations,
+textures and the expression atlas, and lights pixels the way the runtime does; it is a
+development aid and the renderer captures are the reference.
