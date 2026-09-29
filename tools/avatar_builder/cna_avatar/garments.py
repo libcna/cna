@@ -57,7 +57,7 @@ def neck_rib(body_type, inflate, radius, drop=0.0, depth=0.0, width=1.0):
     return tube(loop, [radius] * len(loop), 8, body.torso_weights(body_type), closed=True)
 
 
-def sleeve(body_type, side, inflate, end, cuff=0.0, flare=0.0, start=-0.06):
+def sleeve(body_type, side, inflate, end, cuff=0.0, flare=0.0, start=0.02):
     m = body.arm(body_type, side, inflate=inflate * 0.8, t_range=(start, end), flare=flare)
     if cuff:
         m.append(_limb_ring(body_type, side, "arm", end, inflate + flare, cuff))
@@ -158,18 +158,40 @@ def top(body_type, style):
                              [0.0035] * 3, 6, tw, round_end=True))
         parts.append((main, "top", "fleece", (1.0, 1.0, 1.0)))
     elif style == "top_tank":
-        main.append(shell(body_type, 0.017, (1, 8), lower=0.03, flare=0.028))
+        # The body up to the chest, then a scooped neckline and armholes, with flat straps.
+        sections = body.torso_sections(body_type, 0.017)
+        c, rx, rz, n = sections[1]
+        rows = [(add(c, (0.0, -0.03, 0.0)), rx + 0.028, rz + 0.028, n)] + sections[2:8]
+        main.append(body.section_loft(rows, 40, tw))
         main.append(_hem(body_type, 0.017, 0.028, 0.03, 0.005))
-        c8, rx8, rz8, _ = body.torso_sections(body_type, 0.012)[8]
+        c8, rx8, rz8, n8 = sections[8]
+        c7 = sections[7][0]
+        rim = []
+        for k in range(40):
+            a = 2.0 * PI * k / 40
+            sa, ca = math.sin(a), math.cos(a)
+            x = rx8 * 0.97 * math.copysign(abs(sa) ** (2.0 / n8), sa)
+            z = c8[2] + rz8 * math.copysign(abs(ca) ** (2.0 / n8), ca)
+            # Deeper at the front than at the back, highest where the straps meet it.
+            scoop = 0.050 * max(ca, 0.0) ** 2 + 0.028 * max(-ca, 0.0) ** 2
+            rim.append((x, c8[1] - scoop, z))
+        top_row = [(p[0], p[1], p[2]) for p in rim]
+        main.append(Mesh().grid([body.superellipse_ring(c7, sections[7][1], sections[7][2], sections[7][3], 40), top_row],
+                                lambda p, v, u: tw(p), uv_seam=True))
+        main.append(tube(rim, [0.005] * len(rim), 6, tw, closed=True))
         collar_y = rig.PROPORTIONS[body_type]["collar"][1]
         for side, sign in rig.SIDES:
-            x = sign * rx8 * 0.52
-            front = front_point(body_type, 8, 0.012, x)
-            back = (front[0], front[1], c8[2] - (front[2] - c8[2]))
-            path = [front, (x * 0.95, collar_y + 0.012, front[2] * 0.55), (x * 0.92, collar_y + 0.030, c8[2] * 0.5),
-                    (x * 0.95, collar_y + 0.012, back[2] * 0.55), back]
-            main.append(tube(path, [0.013, 0.012, 0.011, 0.012, 0.013], 8, tw))
-        main.append(_scoop(body_type, 8, 0.013))
+            x = sign * rx8 * 0.50
+            # The straps start on the neckline rim itself, front and back.
+            front = min((p for p in rim if p[2] > c8[2]), key=lambda p: abs(p[0] - x))
+            back = min((p for p in rim if p[2] < c8[2]), key=lambda p: abs(p[0] - x))
+            front, back = add(front, (0.0, 0.004, -0.002)), add(back, (0.0, 0.004, 0.002))
+            path = [front, (x * 0.96, collar_y + 0.014, rz8 * 0.55), (x * 0.94, collar_y + 0.030, c8[2]),
+                    (x * 0.96, collar_y + 0.014, -rz8 * 0.55), back]
+            strap = tube(path, [0.010] * 5, 8, tw)
+            # Flatten the strap onto the shoulder.
+            strap.positions = [(p[0], p[1] - 0.004 * max(0.0, p[1] - collar_y) / 0.03, p[2]) for p in strap.positions]
+            main.append(strap)
         parts.append((main, "top", "knit", (1.0, 1.0, 1.0)))
     elif style == "top_shirt":
         main.append(shell(body_type, 0.019, (1, 10), lower=0.045, flare=0.032))

@@ -24,7 +24,7 @@ JAW = {"male": 0.20, "female": 0.24}
 # Feature anchors in head-local metres (male scale): eye centres, brows, nose, mouth, ears.
 EYE = (0.054, -0.004)           # |x|, y on the face surface
 BROW = (0.056, 0.056)
-MOUTH_Y = -0.080
+MOUTH_Y = -0.082
 NOSE_ROOT_Y, NOSE_TIP_Y = -0.006, -0.028
 EAR = (-0.012, -0.014)          # y, z of the ear centre; x is on the side surface
 

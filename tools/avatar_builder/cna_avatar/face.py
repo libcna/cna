@@ -389,7 +389,7 @@ FEATURES = {
     # name: (x centre, y centre, width, height) in head-local metres on the face (male scale)
     "eyeLeft": (0.054, -0.004, 0.076, 0.084), "eyeRight": (-0.054, -0.004, 0.076, 0.084),
     "eyebrowLeft": (0.056, 0.056, 0.080, 0.044), "eyebrowRight": (-0.056, 0.056, 0.080, 0.044),
-    "mouth": (0.0, -0.080, 0.100, 0.062),
+    "mouth": (0.0, -0.082, 0.118, 0.072),
 }
 LIFT = 0.0012
 

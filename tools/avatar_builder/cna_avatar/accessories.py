@@ -253,23 +253,23 @@ def facial_hair(body_type, style):
             # The cheek line runs from the sideburn in front of the ear (high) to beside the
             # mouth (low); nothing wraps behind the ears.
             cheek_y = 0.004 - 0.066 * smoothstep(0.010, 0.080, z)
-            under = smoothstep(cheek_y + 0.004, cheek_y - 0.010, y) * smoothstep(-0.040, -0.020, z)
+            under = smoothstep(cheek_y + 0.012, cheek_y - 0.022, y) * smoothstep(-0.050, -0.018, z)
             if full:
-                chin = smoothstep(my - 0.030, my - 0.042, y) if ax < 0.038 else 1.0
+                chin = smoothstep(my - 0.024, my - 0.046, y) if ax < 0.040 else 1.0
                 return under * chin
-            edge = smoothstep(-0.105, -0.118, y) + smoothstep(0.035, 0.015, z)
+            edge = smoothstep(-0.100, -0.122, y) + smoothstep(0.040, 0.010, z)
             return under * min(1.0, edge)
         thick = (0.012 if full else 0.006) * s
         grid = []
-        for r in range(15):
-            theta = PI * (0.48 + 0.40 * r / 14)
+        for r in range(27):
+            theta = PI * (0.48 + 0.40 * r / 26)
             row = []
-            for k in range(41):
-                phi = -0.64 * PI + 1.28 * PI * k / 40
+            for k in range(65):
+                phi = -0.64 * PI + 1.28 * PI * k / 64
                 local = head.local_point(body_type, theta, phi)
                 inside = region(local[0] / s, local[1] / s, local[2] / s)
                 # Outside the region the shell dives under the skin, so its edge grows out of it.
-                row.append(head.point(body_type, theta, phi, thick * inside - 0.003 * s * (1.0 - inside)))
+                row.append(head.point(body_type, theta, phi, thick * inside - 0.004 * s * (1.0 - inside)))
             grid.append(row)
         shell = Mesh()
         shell.patch_origin = c

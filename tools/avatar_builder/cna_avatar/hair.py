@@ -234,7 +234,7 @@ def build(body, style):
     if style == "hair_bob":
         line = hairline(0.28 * PI, 0.39 * PI, 0.51 * PI, 0.74 * PI)
         ends = hairline(0.38 * PI, 0.60 * PI, 0.80 * PI, 0.82 * PI)
-        locks = flow_locks(body, 20, 4, ends, 0.016 * s, 0.036 * s, 0.013 * s, 3, forward=0.0, start=(0.03, 0.26))
+        locks = flow_locks(body, 20, 4, ends, 0.016 * s, 0.046 * s, 0.013 * s, 3, forward=0.0, start=(0.03, 0.26))
         return locks, cap(body, line, 0.012 * s)
     if style == "hair_ponytail":
         line = hairline(0.30 * PI, 0.39 * PI, 0.50 * PI, 0.72 * PI)
@@ -264,10 +264,10 @@ def build(body, style):
     if style == "hair_long":
         line = hairline(0.28 * PI, 0.39 * PI, 0.51 * PI, 0.74 * PI)
         ends = hairline(0.36 * PI, 0.52 * PI, 0.60 * PI, 0.62 * PI)
-        locks = flow_locks(body, 14, 2, ends, 0.014 * s, 0.032 * s, 0.011 * s, 5, start=(0.03, 0.14))
-        locks.append(hanging(body, (0.10 * PI, 0.62 * PI), -0.40, 0.016 * s, 0.034 * s, 0.013 * s, 6, 6, 0.34 * PI))
-        locks.append(hanging(body, (0.10 * PI, -0.62 * PI), -0.40, 0.016 * s, 0.034 * s, 0.013 * s, 7, 6, 0.34 * PI))
-        locks.append(hanging(body, (0.12 * PI, PI), -0.46, 0.018 * s, 0.040 * s, 0.014 * s, 8, 9, 0.40 * PI))
+        locks = flow_locks(body, 14, 2, ends, 0.014 * s, 0.040 * s, 0.011 * s, 5, start=(0.03, 0.14))
+        locks.append(hanging(body, (0.10 * PI, 0.62 * PI), -0.40, 0.016 * s, 0.046 * s, 0.013 * s, 6, 8, 0.34 * PI))
+        locks.append(hanging(body, (0.10 * PI, -0.62 * PI), -0.40, 0.016 * s, 0.046 * s, 0.013 * s, 7, 8, 0.34 * PI))
+        locks.append(hanging(body, (0.12 * PI, PI), -0.46, 0.018 * s, 0.052 * s, 0.014 * s, 8, 12, 0.40 * PI))
         return locks, cap(body, line, 0.012 * s)
     if style == "hair_curly":
         line = hairline(0.28 * PI, 0.39 * PI, 0.51 * PI, 0.74 * PI)
