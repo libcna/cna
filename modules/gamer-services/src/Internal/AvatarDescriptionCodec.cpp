@@ -6,11 +6,14 @@
 
 namespace CNA::Internal::GamerServices::Avatars {
 namespace {
-// v1 layout. Everything after the item ids up to the checksum is reserved and must be zero, so a
-// later format can use it only by changing byte 0.
+// Format 1 layout; format 2 keeps it byte for byte and adds the facial-hair id and the face-shape
+// block after the item ids. Everything after that up to the checksum is reserved and must be zero,
+// so a later format can use it only by changing byte 0.
 constexpr std::size_t MagicOffset=1, BodyOffset=4, HeightOffset=5, BuildOffset=7, CatalogOffset=8;
 constexpr std::size_t ColorOffset=10, ItemOffset=ColorOffset+AvatarColorSlotCount*3;
 constexpr std::size_t ReservedOffset=ItemOffset+AvatarItemSlotCount*2, ChecksumOffset=DescriptionSize-4;
+constexpr std::size_t FacialHairOffset=ReservedOffset, FaceOffset=FacialHairOffset+2;
+constexpr std::size_t FaceReservedOffset=FaceOffset+FaceParameterCount;
 constexpr std::array<std::uint8_t,3> Magic{'C','N','A'};
 
 bool optionalSlot(AvatarItemSlot slot){return slot==AvatarItemSlot::Glasses||slot==AvatarItemSlot::Hat;}
@@ -36,6 +39,11 @@ std::uint32_t crc32(std::span<const std::uint8_t> bytes)
     return ~crc;
 }
 
+bool AvatarDescriptor::usesFaceFormat() const
+{
+    return facialHair!=0||std::ranges::any_of(face,[](std::uint8_t value){return value!=NeutralFaceParameter;});
+}
+
 bool isEncodable(const AvatarDescriptor& descriptor)
 {
     if(descriptor.bodyType>1||descriptor.catalogVersion==0)return false;
@@ -51,14 +59,15 @@ bool isEncodable(const AvatarDescriptor& descriptor)
         const auto* item=manifest->item(id);
         if(!item||item->slot!=static_cast<AvatarItemSlot>(slot))return false;
     }
-    return true;
+    return descriptor.facialHair==0||manifest->featureItem(descriptor.facialHair)!=nullptr;
 }
 
 std::vector<std::uint8_t> encode(const AvatarDescriptor& descriptor)
 {
     if(!isEncodable(descriptor))throw std::invalid_argument("avatar descriptor outside the CNA encoding");
     std::vector<std::uint8_t> bytes(DescriptionSize,0);
-    bytes[0]=FormatVersion;
+    const bool face=descriptor.usesFaceFormat();
+    bytes[0]=face?FaceFormatVersion:FormatVersion;
     std::ranges::copy(Magic,bytes.begin()+MagicOffset);
     bytes[BodyOffset]=descriptor.bodyType;
     write16(bytes,HeightOffset,descriptor.heightMillimeters);
@@ -69,6 +78,10 @@ std::vector<std::uint8_t> encode(const AvatarDescriptor& descriptor)
         bytes[ColorOffset+index*3]=color.r;bytes[ColorOffset+index*3+1]=color.g;bytes[ColorOffset+index*3+2]=color.b;
     }
     for(std::size_t index=0;index<AvatarItemSlotCount;++index)write16(bytes,ItemOffset+index*2,descriptor.items[index]);
+    if(face) {
+        write16(bytes,FacialHairOffset,descriptor.facialHair);
+        std::ranges::copy(descriptor.face,bytes.begin()+FaceOffset);
+    }
     const auto crc=crc32(std::span(bytes).first(ChecksumOffset));
     for(int shift=0;shift<4;++shift)bytes[ChecksumOffset+shift]=static_cast<std::uint8_t>(crc>>(shift*8));
     return bytes;
@@ -76,12 +89,14 @@ std::vector<std::uint8_t> encode(const AvatarDescriptor& descriptor)
 
 std::optional<AvatarDescriptor> decode(std::span<const std::uint8_t> bytes)
 {
-    if(bytes.size()!=static_cast<std::size_t>(DescriptionSize)||bytes[0]!=FormatVersion)return std::nullopt;
+    if(bytes.size()!=static_cast<std::size_t>(DescriptionSize)||(bytes[0]!=FormatVersion&&bytes[0]!=FaceFormatVersion))return std::nullopt;
+    const bool face=bytes[0]==FaceFormatVersion;
     if(!std::equal(Magic.begin(),Magic.end(),bytes.begin()+MagicOffset))return std::nullopt;
     std::uint32_t stored=0;
     for(int shift=0;shift<4;++shift)stored|=static_cast<std::uint32_t>(bytes[ChecksumOffset+shift])<<(shift*8);
     if(stored!=crc32(bytes.first(ChecksumOffset)))return std::nullopt;
-    if(std::any_of(bytes.begin()+ReservedOffset,bytes.begin()+ChecksumOffset,[](auto byte){return byte!=0;}))return std::nullopt;
+    if(std::any_of(bytes.begin()+(face?FaceReservedOffset:ReservedOffset),bytes.begin()+ChecksumOffset,[](auto byte){return byte!=0;}))
+        return std::nullopt;
     AvatarDescriptor descriptor;
     descriptor.bodyType=bytes[BodyOffset];
     descriptor.heightMillimeters=read16(bytes,HeightOffset);
@@ -90,6 +105,12 @@ std::optional<AvatarDescriptor> decode(std::span<const std::uint8_t> bytes)
     for(std::size_t index=0;index<AvatarColorSlotCount;++index)
         descriptor.colors[index]={bytes[ColorOffset+index*3],bytes[ColorOffset+index*3+1],bytes[ColorOffset+index*3+2]};
     for(std::size_t index=0;index<AvatarItemSlotCount;++index)descriptor.items[index]=read16(bytes,ItemOffset+index*2);
+    if(face) {
+        descriptor.facialHair=read16(bytes,FacialHairOffset);
+        std::copy_n(bytes.begin()+FaceOffset,FaceParameterCount,descriptor.face.begin());
+        // A format 2 buffer always has something format 1 cannot say.
+        if(!descriptor.usesFaceFormat())return std::nullopt;
+    }
     if(!isEncodable(descriptor))return std::nullopt;
     return descriptor;
 }
@@ -130,6 +151,21 @@ AvatarDescriptor randomDescriptor(std::optional<std::uint8_t> bodyType,std::mt19
     std::bernoulli_distribution sometimes(0.3);
     descriptor.items[static_cast<std::size_t>(AvatarItemSlot::Glasses)]=sometimes(random)?itemFor(AvatarItemSlot::Glasses):0;
     descriptor.items[static_cast<std::size_t>(AvatarItemSlot::Hat)]=sometimes(random)?itemFor(AvatarItemSlot::Hat):0;
+    // A catalog with face controls gets an individual face: each byte drawn around neutral.
+    if(!catalog.faceControls[descriptor.bodyType].empty()) {
+        std::uniform_real_distribution<double> unit(0.0,1.0);
+        for(auto& value:descriptor.face)
+            value=static_cast<std::uint8_t>(std::clamp(128+static_cast<int>(std::lround((unit(random)+unit(random)-1.0)*120.0)),0,255));
+    }
+    std::vector<std::uint16_t> facial;
+    std::vector<double> weights;
+    for(const auto& item:catalog.featureItems)
+        if(item.randomWeight[descriptor.bodyType]>0) {
+            facial.push_back(item.id);
+            weights.push_back(item.randomWeight[descriptor.bodyType]);
+        }
+    if(!facial.empty()&&std::bernoulli_distribution(0.35)(random))
+        descriptor.facialHair=facial[std::discrete_distribution<std::size_t>(weights.begin(),weights.end())(random)];
     return descriptor;
 }
 }

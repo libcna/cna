@@ -12,25 +12,33 @@ python3 tools/avatar_builder/generate_avatar_catalog.py --check   # verify (also
 python3 tools/avatar_builder/generate_avatar_catalog.py --out DIR # write elsewhere
 ```
 
-The default output is `modules/gamer-services/assets/avatars/v1/`, which the build embeds into
-the gamer-services library (`cmake/EmbedBinaryFiles.cmake`). A catalog file must never change once
-a description can name it: new or changed items go into a new catalog version, distributed by the
-CNA service (`docs/gamer-services-server.md`), not into v1.
+It writes catalog v2 to `modules/gamer-services/assets/avatars/v2/`; every `v<N>/` directory there
+is embedded into the gamer-services library (`cmake/EmbedBinaryFiles.cmake`). A catalog must never
+change once descriptions can name it: catalog v1 is frozen (its generator is in Git history,
+commit 6ca06d069), and changed or new items go into a new version, distributed by the CNA service
+(`docs/gamer-services-server.md`) to builds that do not embed it.
 
 ## Modules
 
 | Module | Contents |
 |---|---|
 | `cna_avatar/rig.py` | The canonical rig: XNA's 71 slots and parent table, joint names, bind positions per body type, identity bind rotations. |
-| `cna_avatar/mesh.py` | Mesh primitives (ellipsoids, tapered capsules, lofts, tubes, boxes) with analytic skin weights. |
-| `cna_avatar/body.py` | The two bodies and the face-decal patches. |
-| `cna_avatar/wardrobe.py` | Every item a description can name, fitted to both bodies. |
-| `cna_avatar/face.py` | The expression atlas: every eye (with a separate iris layer), eyebrow and mouth state. |
+| `cna_avatar/mesh.py` | Parametric grids (ellipsoids, capsules, lofts, tubes) with analytic skin weights. |
+| `cna_avatar/head.py` | The parametric head surface, nose, ears, feature anchors and conforming decal patches. |
+| `cna_avatar/body.py` | The two bodies: superellipse torso, single-loft arms and legs, sculpted hands. |
+| `cna_avatar/face.py` | The expression atlas (anti-aliased signed-distance shapes) and the decal placement. |
+| `cna_avatar/facecontrols.py` | What each face-shape byte of a format 2 description does. |
+| `cna_avatar/hair.py` | Scalp caps, locks, the ten styles and their under-hat variants. |
+| `cna_avatar/garments.py` | Tops, bottoms and shoes as offset lofts over the body. |
+| `cna_avatar/accessories.py` | Glasses, hats and facial hair. |
+| `cna_avatar/textures.py` | Procedural texture multipliers (skin, hair, fabrics). |
 | `cna_avatar/posing.py` | Forward kinematics, two-bone IK (hands reach targets, feet stay planted) and finger curl. |
 | `cna_avatar/animations.py` | The 31 `AvatarAnimationPreset` clips as key poses with keyed expressions. |
-| `cna_avatar/catalog.py` | Assembles the body, item and animation GLBs. |
+| `cna_avatar/catalog.py` | The item table and GLB assembly. |
 | `cna_avatar/glb.py`, `png.py` | The glTF 2.0 binary writer (cubic-spline animation, CNA material extras) and a PNG encoder. |
 | `cna_avatar/glbread.py` | A small GLB reader for the preview. |
+| `cna_avatar/description.py` | CNA descriptions (formats 1 and 2) in Python, for the review tools. |
+| `cna_avatar/preview.py` | The texture-aware CPU preview. |
 
 `generate_avatar_catalog.py` itself writes the files and `catalog.json`, which lists every file
 with its size and SHA-256.

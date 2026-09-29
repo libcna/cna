@@ -77,6 +77,51 @@ AvatarFeature featureOf(const std::string& name)
     return found==features.end()?AvatarFeature::None:found->second;
 }
 
+// A format 2 description's face shape (catalog faceControls): every deformer's displacement is
+// taken from the undeformed position, summed, and applied in proportion to the Head weight.
+void applyFaceControls(std::vector<AvatarVertex>& vertices,const std::vector<FaceControl>& controls,
+    const std::array<std::uint8_t,FaceParameterCount>& face,bool faceScope)
+{
+    static const int head=boneIndex("Head");
+    for(auto& vertex:vertices) {
+        float weight=0.0f;
+        const std::array<float,4> weights{vertex.weights.X,vertex.weights.Y,vertex.weights.Z,vertex.weights.W};
+        for(int k=0;k<4;++k)
+            if(vertex.joints[k]==head)weight+=weights[k];
+        if(weight<=0.0f)continue;
+        Vector3 displacement=Vector3::Zero;
+        for(const auto& control:controls) {
+            const float t=std::clamp((static_cast<float>(face[static_cast<std::size_t>(control.parameter)])-128.0f)/127.0f,-1.0f,1.0f);
+            if(t==0.0f||(!control.wholeHead&&!faceScope))continue;
+            for(const auto& deformer:control.deformers) {
+                const Vector3 q=vertex.position-deformer.centre;
+                const Vector3 n(q.X/deformer.radii.X,q.Y/deformer.radii.Y,q.Z/deformer.radii.Z);
+                const float x=std::clamp((n.Length()-deformer.inner)/(1.0f-deformer.inner),0.0f,1.0f);
+                const float w=1.0f-x*x*(3.0f-2.0f*x);
+                if(w<=0.0f)continue;
+                switch(deformer.kind) {
+                case FaceDeformer::Kind::Scale:
+                    displacement+=Vector3(q.X*(std::pow(deformer.amount.X,t)-1.0f),q.Y*(std::pow(deformer.amount.Y,t)-1.0f),
+                                          q.Z*(std::pow(deformer.amount.Z,t)-1.0f))*w;
+                    break;
+                case FaceDeformer::Kind::Move:
+                    displacement+=deformer.amount*(t*w);
+                    break;
+                case FaceDeformer::Kind::Rotate: {
+                    const float angle=deformer.degrees*t*3.14159265f/180.0f;
+                    const Vector3& axis=deformer.amount;
+                    const Vector3 rotated=q*std::cos(angle)+Vector3::Cross(axis,q)*std::sin(angle)+
+                        axis*(Vector3::Dot(q,axis)*(1.0f-std::cos(angle)));
+                    displacement+=(rotated-q)*w;
+                    break;
+                }
+                }
+            }
+        }
+        vertex.position+=displacement*weight;
+    }
+}
+
 // Bones whose flesh thickens with the build, and the joint their thickness is measured from.
 struct BuildAxis {int bone; int toward;};
 constexpr BuildAxis BuildAxes[]={{1,5},{5,14},{2,6},{3,8},{6,11},{8,15},{12,20},{16,22},{20,25},{22,28},{25,33},{28,36}};
@@ -141,14 +186,21 @@ std::shared_ptr<const AvatarModel> buildAvatarModel(const AvatarDescriptor& desc
     const auto bodyBytes=resolveAsset(manifest,manifest.bodies[body]);
     if(!bodyBytes)throw std::runtime_error("avatar body asset is unavailable");
     auto bodyGlb=parseAvatarGlb(bodyBytes->view);
+    // (asset, part of the face: the body and facial hair take every face control, other items
+    // only the whole-head ones)
     std::vector<std::pair<AvatarGlb,bool>> assets;
     assets.emplace_back(std::move(bodyGlb),true);
+    const auto* hat=descriptor.items[static_cast<std::size_t>(AvatarItemSlot::Hat)]&&!model->catalogUnavailable
+        ?manifest.item(descriptor.items[static_cast<std::size_t>(AvatarItemSlot::Hat)]):nullptr;
+    const bool underHat=hat&&hat->slot==AvatarItemSlot::Hat&&hat->coversHair;
     for(std::size_t slot=0;slot<AvatarItemSlotCount;++slot) {
         const auto id=descriptor.items[slot];
         const auto* item=id&&!model->catalogUnavailable?manifest.item(id):nullptr;
         std::optional<AvatarGlb> glb;
         if(item&&item->slot==static_cast<AvatarItemSlot>(slot)) {
-            if(auto bytes=resolveAsset(manifest,item->assets[body])) {
+            // Hair under a hat that covers it is the style's hat variant, when the catalog has one.
+            const auto& files=underHat&&!item->hatAssets[body].empty()?item->hatAssets:item->assets;
+            if(auto bytes=resolveAsset(manifest,files[body])) {
                 try {glb=parseAvatarGlb(bytes->view);} catch(const std::runtime_error&) {}
             }
         }
@@ -165,6 +217,22 @@ std::shared_ptr<const AvatarModel> buildAvatarModel(const AvatarDescriptor& desc
                 if(Vector3::Distance(glb->bindTranslations[bone],assets.front().first.bindTranslations[bone])>1e-3f)
                     throw std::runtime_error("avatar item is not fitted to this body");
             assets.emplace_back(std::move(*glb),false);
+        }
+    }
+    if(descriptor.facialHair) {
+        const auto* feature=model->catalogUnavailable?nullptr:manifest.featureItem(descriptor.facialHair);
+        std::optional<AvatarGlb> glb;
+        if(feature)
+            if(auto bytes=resolveAsset(manifest,feature->assets[body])) {
+                try {glb=parseAvatarGlb(bytes->view);} catch(const std::runtime_error&) {}
+            }
+        if(glb) {
+            for(int bone=0;bone<BoneCount;++bone)
+                if(Vector3::Distance(glb->bindTranslations[bone],assets.front().first.bindTranslations[bone])>1e-3f)
+                    throw std::runtime_error("avatar item is not fitted to this body");
+            assets.emplace_back(std::move(*glb),true);
+        } else {
+            model->substitutedItems.push_back(descriptor.facialHair);
         }
     }
     const float authored=manifest.authoredHeightMillimeters[body]/1000.0f;
@@ -184,10 +252,13 @@ std::shared_ptr<const AvatarModel> buildAvatarModel(const AvatarDescriptor& desc
     }
     const float build=1.0f+(static_cast<float>(descriptor.build)-128.0f)/127.0f*0.18f;
     std::vector<AvatarModelPart> decals;
-    for(auto& [glb,isBody]:assets) {
+    const auto& controls=manifest.faceControls[body];
+    const bool shaped=descriptor.usesFaceFormat()&&!controls.empty();
+    for(auto& [glb,faceScope]:assets) {
         for(auto& primitive:glb.primitives) {
             AvatarModelPart part;
             part.vertices=std::move(primitive.vertices);
+            if(shaped)applyFaceControls(part.vertices,controls,descriptor.face,faceScope);
             applyBuild(part.vertices,authoredPositions,build);
             for(auto& vertex:part.vertices)vertex.position*=scale;
             part.indices=std::move(primitive.indices);

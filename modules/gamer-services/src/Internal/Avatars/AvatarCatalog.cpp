@@ -5,6 +5,7 @@
 #include <future>
 #include "System/Security/Cryptography/SHA256.hpp"
 #include <algorithm>
+#include <cmath>
 #include <mutex>
 #include <nlohmann/json.hpp>
 #include <set>
@@ -100,6 +101,12 @@ const CatalogItem* CatalogManifest::item(std::uint16_t id) const
     return found==items.end()?nullptr:&*found;
 }
 
+const CatalogItem* CatalogManifest::featureItem(std::uint16_t id) const
+{
+    auto found=std::ranges::find(featureItems,id,&CatalogItem::id);
+    return found==featureItems.end()?nullptr:&*found;
+}
+
 namespace {
 CatalogManifest parseManifestJson(std::string_view text);
 }
@@ -114,6 +121,65 @@ CatalogManifest parseManifest(std::string_view text)
 }
 
 namespace {
+Microsoft::Xna::Framework::Vector3 vector3(const nlohmann::json& value,float bound)
+{
+    if(!value.is_array()||value.size()!=3)malformed("face control vector");
+    std::array<float,3> v{};
+    for(int k=0;k<3;++k) {
+        v[k]=value[k].get<float>();
+        if(!std::isfinite(v[k])||std::fabs(v[k])>bound)malformed("face control value");
+    }
+    return {v[0],v[1],v[2]};
+}
+
+void readFaceControls(const nlohmann::json& json,CatalogManifest& manifest)
+{
+    // Bounded so that a hostile catalog can neither tear a head apart nor cost real time.
+    constexpr std::size_t MaximumControls=32, MaximumDeformers=8;
+    if(!json.is_object())malformed("face controls");
+    for(int body=0;body<2;++body) {
+        const auto& list=json.at(body==0?"female":"male");
+        if(!list.is_array()||list.size()>MaximumControls)malformed("face control list");
+        for(const auto& entry:list) {
+            FaceControl control;
+            control.parameter=entry.at("parameter").get<int>();
+            if(control.parameter<0||control.parameter>=static_cast<int>(FaceParameterCount))malformed("face control parameter");
+            const auto scope=entry.at("scope").get<std::string>();
+            if(scope!="face"&&scope!="head")malformed("face control scope");
+            control.wholeHead=scope=="head";
+            const auto& ops=entry.at("ops");
+            if(!ops.is_array()||ops.size()>MaximumDeformers)malformed("face control ops");
+            for(const auto& op:ops) {
+                FaceDeformer deformer;
+                deformer.centre=vector3(op.at("centre"),5.0f);
+                deformer.radii=vector3(op.at("radii"),1.0f);
+                if(deformer.radii.X<1e-3f||deformer.radii.Y<1e-3f||deformer.radii.Z<1e-3f)malformed("face control radii");
+                deformer.inner=op.at("inner").get<float>();
+                if(!(deformer.inner>=0.0f&&deformer.inner<1.0f))malformed("face control inner");
+                if(op.contains("scale")) {
+                    deformer.kind=FaceDeformer::Kind::Scale;
+                    deformer.amount=vector3(op["scale"],2.0f);
+                    if(deformer.amount.X<0.5f||deformer.amount.Y<0.5f||deformer.amount.Z<0.5f)malformed("face control scale");
+                } else if(op.contains("move")) {
+                    deformer.kind=FaceDeformer::Kind::Move;
+                    deformer.amount=vector3(op["move"],0.1f);
+                } else if(op.contains("rotate")) {
+                    deformer.kind=FaceDeformer::Kind::Rotate;
+                    deformer.amount=vector3(op["rotate"],1.0f);
+                    if(deformer.amount.Length()<1e-3f)malformed("face control axis");
+                    deformer.amount.Normalize();
+                    deformer.degrees=op.at("degrees").get<float>();
+                    if(!(std::fabs(deformer.degrees)<=45.0f))malformed("face control angle");
+                } else {
+                    malformed("face control op");
+                }
+                control.deformers.push_back(deformer);
+            }
+            manifest.faceControls[body].push_back(std::move(control));
+        }
+    }
+}
+
 CatalogManifest parseManifestJson(std::string_view text)
 {
     const auto json=nlohmann::json::parse(text,nullptr,false);
@@ -144,14 +210,20 @@ CatalogManifest parseManifestJson(std::string_view text)
         manifest.authoredHeightMillimeters[body]=static_cast<std::uint16_t>(height);
     }
     std::set<std::uint16_t> ids;
-    for(const auto& item:json.at("items")) {
+    auto readItem=[&](const nlohmann::json& item,bool feature) {
         CatalogItem entry;
         const int id=item.at("id").get<int>();
         if(id<1||id>0xffff||!ids.insert(static_cast<std::uint16_t>(id)).second)malformed("item id");
         entry.id=static_cast<std::uint16_t>(id);
-        auto slot=std::ranges::find(SlotNames,item.at("slot").get<std::string>());
-        if(slot==SlotNames.end())malformed("item slot");
-        entry.slot=static_cast<AvatarItemSlot>(slot-SlotNames.begin());
+        const auto slotName=item.at("slot").get<std::string>();
+        if(feature) {
+            if(slotName!="facialHair")malformed("feature item slot");
+            entry.slot=AvatarItemSlot::FacialHair;
+        } else {
+            auto slot=std::ranges::find(SlotNames,slotName);
+            if(slot==SlotNames.end())malformed("item slot");
+            entry.slot=static_cast<AvatarItemSlot>(slot-SlotNames.begin());
+        }
         entry.name=item.at("name").get<std::string>();
         entry.assets={listed(item.at("assets").at("female")),listed(item.at("assets").at("male"))};
         if(item.contains("random")) {
@@ -161,8 +233,22 @@ CatalogManifest parseManifestJson(std::string_view text)
                 entry.randomWeight[body]=weight;
             }
         }
-        manifest.items.push_back(std::move(entry));
+        if(item.contains("hatAssets")) {
+            if(entry.slot!=AvatarItemSlot::Hair)malformed("hat assets on a non-hair item");
+            entry.hatAssets={listed(item["hatAssets"].at("female")),listed(item["hatAssets"].at("male"))};
+        }
+        if(item.contains("coversHair")) {
+            if(entry.slot!=AvatarItemSlot::Hat)malformed("coversHair on a non-hat item");
+            entry.coversHair=item["coversHair"].get<bool>();
+        }
+        return entry;
+    };
+    for(const auto& item:json.at("items"))manifest.items.push_back(readItem(item,false));
+    if(json.contains("featureItems")) {
+        if(!json["featureItems"].is_array()||json["featureItems"].size()>256)malformed("feature items");
+        for(const auto& item:json["featureItems"])manifest.featureItems.push_back(readItem(item,true));
     }
+    if(json.contains("faceControls"))readFaceControls(json["faceControls"],manifest);
     const auto& face=json.at("face");
     manifest.faceAsset=listed(face.at("asset"));
     const auto& layout=face.at("layout");

@@ -272,3 +272,102 @@ TEST(AvatarCatalogTest, AnAssembledAvatarUsesItsDescription) {
     ASSERT_EQ(substituted->substitutedItems.size(), 1u);
     EXPECT_EQ(substituted->substitutedItems[0], 999);
 }
+
+namespace {
+Avatars::AvatarDescriptor catalog2(std::uint8_t body, std::array<std::uint16_t, 6> items)
+{
+    Avatars::AvatarDescriptor descriptor;
+    descriptor.catalogVersion = 2;
+    descriptor.bodyType = body;
+    descriptor.heightMillimeters = body ? 1800 : 1680;
+    descriptor.items = items;
+    return descriptor;
+}
+
+std::size_t vertices(const Avatars::AvatarModel& model)
+{
+    std::size_t count = 0;
+    for (const auto& part : model.parts) {
+        count += part.vertices.size();
+    }
+    return count;
+}
+}
+
+TEST(AvatarCatalogTest, CatalogV2DescribesFeaturesFaceControlsAndHatHair) {
+    const auto v2 = Avatars::embeddedManifest(2);
+    ASSERT_NE(v2, nullptr);
+    EXPECT_GE(v2->items.size(), 35u);
+    EXPECT_GE(v2->featureItems.size(), 4u);
+    for (const auto& feature : v2->featureItems) {
+        EXPECT_EQ(feature.slot, Avatars::AvatarItemSlot::FacialHair);
+        EXPECT_EQ(feature.randomWeight[0], 0.0f) << feature.name;
+    }
+    for (int body = 0; body < 2; ++body) {
+        ASSERT_EQ(v2->faceControls[body].size(), Avatars::FaceParameterCount);
+        for (std::size_t index = 0; index < Avatars::FaceParameterCount; ++index) {
+            EXPECT_EQ(v2->faceControls[body][index].parameter, static_cast<int>(index));
+            EXPECT_FALSE(v2->faceControls[body][index].deformers.empty());
+        }
+    }
+    int covering = 0;
+    for (const auto& item : v2->items) {
+        EXPECT_EQ(!item.hatAssets[0].empty(), item.slot == Avatars::AvatarItemSlot::Hair) << item.name;
+        covering += item.coversHair;
+    }
+    EXPECT_GE(covering, 3);
+    // v1 has none of it.
+    const auto v1 = Avatars::embeddedManifest(1);
+    EXPECT_TRUE(v1->featureItems.empty());
+    EXPECT_TRUE(v1->faceControls[0].empty() && v1->faceControls[1].empty());
+}
+
+TEST(AvatarCatalogTest, FacialHairAndFaceShapeChangeOnlyTheHead) {
+    const auto plain = Avatars::buildAvatarModel(catalog2(1, {1, 20, 40, 60, 0, 0}));
+    auto bearded = catalog2(1, {1, 20, 40, 60, 0, 0});
+    bearded.facialHair = 122;
+    const auto withBeard = Avatars::buildAvatarModel(bearded);
+    EXPECT_TRUE(withBeard->substitutedItems.empty());
+    EXPECT_EQ(withBeard->parts.size(), plain->parts.size() + 1);
+    auto wide = catalog2(1, {1, 20, 40, 60, 0, 0});
+    wide.face[0] = 255;  // head width
+    wide.face[5] = 255;  // eye size
+    const auto shaped = Avatars::buildAvatarModel(wide);
+    ASSERT_EQ(shaped->parts.size(), plain->parts.size());
+    const int head = Avatars::boneIndex("Head");
+    int moved = 0, movedOffHead = 0;
+    for (std::size_t p = 0; p < plain->parts.size(); ++p) {
+        ASSERT_EQ(shaped->parts[p].vertices.size(), plain->parts[p].vertices.size());
+        for (std::size_t v = 0; v < plain->parts[p].vertices.size(); ++v) {
+            const auto& a = plain->parts[p].vertices[v];
+            const auto& b = shaped->parts[p].vertices[v];
+            if (Microsoft::Xna::Framework::Vector3::Distance(a.position, b.position) > 1e-5f) {
+                ++moved;
+                movedOffHead += a.joints[0] != head && a.joints[1] != head && a.joints[2] != head && a.joints[3] != head;
+            }
+        }
+    }
+    EXPECT_GT(moved, 1000);
+    EXPECT_EQ(movedOffHead, 0);
+    // A neutral face is exactly the unshaped avatar.
+    auto neutral = catalog2(1, {1, 20, 40, 60, 0, 0});
+    EXPECT_EQ(ModelDigest(*Avatars::buildAvatarModel(neutral)), ModelDigest(*plain));
+}
+
+TEST(AvatarCatalogTest, HairUnderACoveringHatUsesItsHatVariant) {
+    const auto v2 = Avatars::embeddedManifest(2);
+    std::uint16_t covering = 0, open = 0;
+    for (const auto& item : v2->items) {
+        if (item.slot == Avatars::AvatarItemSlot::Hat) {
+            (item.coversHair ? covering : open) = item.id;
+        }
+    }
+    ASSERT_NE(covering, 0);
+    ASSERT_NE(open, 0);
+    const auto bare = Avatars::buildAvatarModel(catalog2(0, {3, 20, 40, 60, 0, 0}));
+    const auto capped = Avatars::buildAvatarModel(catalog2(0, {3, 20, 40, 60, 0, covering}));
+    const auto banded = Avatars::buildAvatarModel(catalog2(0, {3, 20, 40, 60, 0, open}));
+    // The covered style drops what the hat hides; a headband keeps the whole style.
+    EXPECT_LT(vertices(*capped), vertices(*banded));
+    EXPECT_GT(vertices(*banded), vertices(*bare));
+}

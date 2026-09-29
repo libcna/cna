@@ -57,6 +57,38 @@ struct CatalogItem {
     std::array<std::string,2> assets;
     /** @brief Relative chance CreateRandom picks it, per body type (0 = never). */
     std::array<float,2> randomWeight{1.0f,1.0f};
+    /** @brief Hair: the style's assets for wearing under a hat that covers hair (empty = none). */
+    std::array<std::string,2> hatAssets;
+    /** @brief Hat: it covers the hair, which then uses its hatAssets. */
+    bool coversHair=false;
+};
+
+/** @brief One deformer of a face-shape control (the catalog's faceControls). */
+struct FaceDeformer {
+    /** @brief What it does. */
+    enum class Kind : std::uint8_t { Scale, Move, Rotate };
+    /** @brief Scale about the centre, move, or rotate about an axis through the centre. */
+    Kind kind=Kind::Scale;
+    /** @brief Centre, authored model space. */
+    Microsoft::Xna::Framework::Vector3 centre;
+    /** @brief Ellipsoid radii: weight 1 within `inner` of them, fading to 0 at their surface. */
+    Microsoft::Xna::Framework::Vector3 radii;
+    /** @brief Fraction of the radii with full weight. */
+    float inner=0.0f;
+    /** @brief Scale factors at +1, a move at +1, or a rotation axis. */
+    Microsoft::Xna::Framework::Vector3 amount;
+    /** @brief Rotation at +1, degrees. */
+    float degrees=0.0f;
+};
+
+/** @brief The deformers one face-shape byte drives. */
+struct FaceControl {
+    /** @brief Index into AvatarDescriptor::face. */
+    int parameter=0;
+    /** @brief Deforms hair, hats and glasses too, not only the face. */
+    bool wholeHead=false;
+    /** @brief Deformers. */
+    std::vector<FaceDeformer> deformers;
 };
 
 /** @brief Atlas tile indices of every expression state. */
@@ -83,6 +115,10 @@ struct CatalogManifest {
     std::array<std::uint16_t,2> authoredHeightMillimeters{};
     /** @brief Wardrobe items. */
     std::vector<CatalogItem> items;
+    /** @brief Feature items (facial hair) a format 2 description can name. */
+    std::vector<CatalogItem> featureItems;
+    /** @brief Face-shape controls per body type (female, male); empty when the catalog has none. */
+    std::array<std::vector<FaceControl>,2> faceControls;
     /** @brief Face feature atlas asset. */
     std::string faceAsset;
     /** @brief Atlas layout. */
@@ -93,6 +129,8 @@ struct CatalogManifest {
     std::map<std::string,CatalogAsset,std::less<>> assets;
     /** @brief Finds an item. @param id Item id. @return Item or null. */
     const CatalogItem* item(std::uint16_t id) const;
+    /** @brief Finds a feature item. @param id Item id. @return Item or null. */
+    const CatalogItem* featureItem(std::uint16_t id) const;
 };
 
 /** @brief Parses and validates a manifest; every name, size and hash is checked. @param json Text.

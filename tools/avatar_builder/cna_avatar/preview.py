@@ -148,6 +148,41 @@ def apply_build(positions, joints, weights, authored, factor):
     return out
 
 
+def _smoothstep(e0, e1, x):
+    t = np.clip((x - e0) / (e1 - e0), 0.0, 1.0)
+    return t * t * (3.0 - 2.0 * t)
+
+
+def face_deform(positions, joints, weights, controls, face, face_scope):
+    """AvatarModel.cpp's face-shape controls (see facecontrols.py) on Head-weighted vertices."""
+    head_w = (weights * (joints == rig.INDEX["Head"])).sum(axis=1)
+    mask = head_w > 0.0
+    if not mask.any() or not controls:
+        return positions
+    p = positions[mask]
+    disp = np.zeros_like(p)
+    for control in controls:
+        t = float(np.clip((face[control["parameter"]] - 128) / 127.0, -1.0, 1.0))
+        if t == 0.0 or (control["scope"] == "face" and not face_scope):
+            continue
+        for op in control["ops"]:
+            q = p - np.array(op["centre"])
+            d = np.sqrt((((q / np.array(op["radii"])) ** 2).sum(axis=1)))
+            w = (1.0 - _smoothstep(op["inner"], 1.0, d))[:, None]
+            if "scale" in op:
+                disp += w * q * (np.array(op["scale"]) ** t - 1.0)
+            elif "move" in op:
+                disp += w * t * np.array(op["move"])
+            else:
+                axis = np.array(op["rotate"]) / np.linalg.norm(op["rotate"])
+                angle = math.radians(op["degrees"] * t)
+                rq = q * math.cos(angle) + np.cross(axis, q) * math.sin(angle) + np.outer(q @ axis, axis) * (1.0 - math.cos(angle))
+                disp += w * (rq - q)
+    out = positions.copy()
+    out[mask] = p + head_w[mask][:, None] * disp
+    return out
+
+
 def assemble(catalogs, description_bytes):
     """The avatar a description renders as, or None when it is not a readable CNA avatar."""
     d = decode(description_bytes)
@@ -160,18 +195,27 @@ def assemble(catalogs, description_bytes):
     body = "male" if d.body_type == 1 else "female"
     body_glb = catalogs.glb(version, manifest["bodies"][body]["asset"])
     items = {item["id"]: item for item in manifest["items"]}
+    features = {item["id"]: item for item in manifest.get("featureItems", [])}
     assets = [(body_glb, True)]
     substituted = []
+    hat = items.get(d.items["hat"])
+    under_hat = bool(hat and hat.get("coversHair"))
     for slot in SLOTS:
         item_id = d.items[slot]
         item = items.get(item_id)
         if item_id and item and item["slot"] == slot:
-            assets.append((catalogs.glb(version, item["assets"][body]), False))
+            files = item.get("hatAssets") if slot == "hair" and under_hat and "hatAssets" in item else item["assets"]
+            assets.append((catalogs.glb(version, files[body]), False))
         elif item_id:
             substituted.append(item_id)
             fallback = next((i for i in manifest["items"] if i["slot"] == slot), None)
             if slot not in ("glasses", "hat") and fallback:
                 assets.append((catalogs.glb(version, fallback["assets"][body]), False))
+    feature = features.get(d.facial_hair)
+    if d.facial_hair and feature:
+        assets.append((catalogs.glb(version, feature["assets"][body]), True))
+    elif d.facial_hair:
+        substituted.append(d.facial_hair)
     authored_height = manifest["bodies"][body]["authoredHeightMillimeters"] / 1000.0
     scale = (d.height_mm / 1000.0) / authored_height
     bind = body_glb["bind"]
@@ -179,9 +223,11 @@ def assemble(catalogs, description_bytes):
     factor = 1.0 + (d.build - 128.0) / 127.0 * 0.18
     colors = {name: np.array(d.colors[name]) / 255.0 for name in TINTS}
     opaque, decals = [], []
-    for glb, _ in assets:
+    controls = manifest.get("faceControls", {}).get(body, []) if d.format == 2 else []
+    for glb, face_scope in assets:
         for prim in glb["primitives"]:
-            positions = apply_build(prim["positions"], prim["joints"], prim["weights"], authored, factor) * scale
+            positions = face_deform(prim["positions"], prim["joints"], prim["weights"], controls, d.face, face_scope)
+            positions = apply_build(positions, prim["joints"], prim["weights"], authored, factor) * scale
             tint = colors.get(prim["tint"], np.ones(3))
             part = dict(prim, positions=positions, color=prim["color"] * tint)
             (decals if prim["feature"] else opaque).append(part)

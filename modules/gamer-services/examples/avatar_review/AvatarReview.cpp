@@ -22,6 +22,7 @@
 #include <nlohmann/json.hpp>
 
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <map>
 #include <memory>
@@ -214,6 +215,7 @@ int main(int argc, char** argv)
         std::fprintf(stderr, "cna_avatar_review: %s is not a review job list\n", argv[1]);
         return 2;
     }
+    std::filesystem::create_directories(argv[2]);
     AvatarReviewGame game(jobs, argv[2]);
     game.getGraphicsDeviceProperty().SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     game.Run();

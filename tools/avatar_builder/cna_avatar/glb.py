@@ -6,7 +6,7 @@ import struct
 from . import rig
 from .mathutil import quantize
 
-FLOAT, UBYTE, USHORT, UINT = 5126, 5121, 5123, 5125
+FLOAT, UBYTE, SHORT, USHORT, UINT = 5126, 5121, 5122, 5123, 5125
 
 
 class GlbBuilder:
@@ -17,21 +17,25 @@ class GlbBuilder:
         self.blob = bytearray()
         self.textured_materials = set()
 
-    def _view(self, data, target=None):
+    def _view(self, data, target=None, stride=None):
         while len(self.blob) % 4:
             self.blob.append(0)
         view = {"buffer": 0, "byteOffset": len(self.blob), "byteLength": len(data)}
         if target:
             view["target"] = target
+        if stride:
+            view["byteStride"] = stride
         self.blob += data
         self.gltf["bufferViews"].append(view)
         return len(self.gltf["bufferViews"]) - 1
 
-    def accessor(self, values, kind, component, count_per=1, normalized=False, target=None, bounds=False):
-        fmt = {FLOAT: "<f", UBYTE: "<B", USHORT: "<H", UINT: "<I"}[component]
-        flat = [c for v in values for c in (v if isinstance(v, (tuple, list)) else (v,))]
-        data = b"".join(struct.pack(fmt, c) for c in flat)
-        accessor = {"bufferView": self._view(data, target), "componentType": component, "count": len(values),
+    def accessor(self, values, kind, component, count_per=1, normalized=False, target=None, bounds=False, pad=0):
+        """pad: bytes of padding after each element (keeps vertex elements 4-byte aligned)."""
+        fmt = {FLOAT: "<f", UBYTE: "<B", SHORT: "<h", USHORT: "<H", UINT: "<I"}[component]
+        rows = [v if isinstance(v, (tuple, list)) else (v,) for v in values]
+        data = b"".join(b"".join(struct.pack(fmt, c) for c in r) + b"\0" * pad for r in rows)
+        stride = len(data) // len(rows) if pad else None
+        accessor = {"bufferView": self._view(data, target, stride), "componentType": component, "count": len(values),
                     "type": kind}
         if normalized:
             accessor["normalized"] = True
@@ -92,15 +96,16 @@ class GlbBuilder:
             attributes = {
                 "POSITION": self.accessor([tuple(quantize(c) for c in p) for p in mesh.positions], "VEC3", FLOAT, 3,
                                           target=34962, bounds=True),
-                "NORMAL": self.accessor([tuple(quantize(c, 1e-4) for c in n) for n in mesh.normals], "VEC3", FLOAT,
-                                        target=34962),
+                # Normalized 16-bit normals, padded to 8 bytes per element.
+                "NORMAL": self.accessor([tuple(max(-32767, min(32767, int(round(c * 32767.0)))) for c in n)
+                                         for n in mesh.normals], "VEC3", SHORT, normalized=True, target=34962, pad=2),
                 "JOINTS_0": self.accessor([j for j, _ in mesh.skin], "VEC4", UBYTE, target=34962),
                 "WEIGHTS_0": self.accessor([w for _, w in mesh.skin], "VEC4", UBYTE, normalized=True, target=34962),
             }
             # Only textured parts carry texture coordinates; the rest are flat tinted materials.
             if textured or material in self.textured_materials:
-                attributes["TEXCOORD_0"] = self.accessor([tuple(quantize(c, 1e-4) for c in uv) for uv in mesh.uvs],
-                                                         "VEC2", FLOAT, target=34962)
+                attributes["TEXCOORD_0"] = self.accessor([tuple(max(0, min(65535, int(round(c * 65535.0)))) for c in uv)
+                                                          for uv in mesh.uvs], "VEC2", USHORT, normalized=True, target=34962)
             index_type = USHORT if len(mesh.positions) < 65536 else UINT
             indices = self.accessor(mesh.indices, "SCALAR", index_type, target=34963)
             primitives.append({"attributes": attributes, "indices": indices, "material": material, "mode": 4})

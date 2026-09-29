@@ -11,8 +11,15 @@
 namespace CNA::Internal::GamerServices::Avatars {
 /** @brief Exact public AvatarDescription buffer length. */
 inline constexpr int DescriptionSize = 1021;
-/** @brief CNA encoding version stored in byte 0; nonzero, so the XNA IsValid rule holds. */
+/** @brief CNA encoding stored in byte 0 for descriptions that use only format 1's fields;
+ * nonzero, so the XNA IsValid rule holds. */
 inline constexpr std::uint8_t FormatVersion = 1;
+/** @brief CNA encoding stored in byte 0 for descriptions with facial hair or a shaped face. */
+inline constexpr std::uint8_t FaceFormatVersion = 2;
+/** @brief Face-shape bytes a format 2 description carries (catalog faceControls give their meaning). */
+inline constexpr std::size_t FaceParameterCount = 16;
+/** @brief The face-shape byte that leaves a face as authored. */
+inline constexpr std::uint8_t NeutralFaceParameter = 128;
 /** @brief The first catalog version, compiled into every build for good. */
 inline constexpr std::uint16_t BaseCatalogVersion = 1;
 /** @brief Shortest encodable avatar, feet to top of head. */
@@ -20,8 +27,9 @@ inline constexpr std::uint16_t MinimumHeightMillimeters = 1450;
 /** @brief Tallest encodable avatar, feet to top of head. */
 inline constexpr std::uint16_t MaximumHeightMillimeters = 2050;
 
-/** @brief Wardrobe slots a description selects one catalog item for. */
-enum class AvatarItemSlot : std::uint8_t { Hair, Top, Bottom, Shoes, Glasses, Hat };
+/** @brief Wardrobe slots a description selects one catalog item for; FacialHair is the slot of a
+ * catalog's feature items (format 2), not one of the six wardrobe slots. */
+enum class AvatarItemSlot : std::uint8_t { Hair, Top, Bottom, Shoes, Glasses, Hat, FacialHair };
 /** @brief Number of wardrobe slots. */
 inline constexpr std::size_t AvatarItemSlotCount = 6;
 
@@ -56,6 +64,16 @@ struct AvatarDescriptor {
     std::array<AvatarColor,AvatarColorSlotCount> colors{};
     /** @brief Catalog item id per AvatarItemSlot; 0 means none (only Glasses and Hat may be none). */
     std::array<std::uint16_t,AvatarItemSlotCount> items{};
+    /** @brief Facial-hair feature item id of the catalog, 0 for none (format 2). */
+    std::uint16_t facialHair=0;
+    /** @brief Face-shape parameters, NeutralFaceParameter for the authored face (format 2). */
+    std::array<std::uint8_t,FaceParameterCount> face=[] {
+        std::array<std::uint8_t,FaceParameterCount> neutral{};
+        neutral.fill(NeutralFaceParameter);
+        return neutral;
+    }();
+    /** @brief Whether anything needs format 2 (facial hair or a shaped face). @return True for format 2. */
+    [[nodiscard]] bool usesFaceFormat() const;
     /** @brief Field equality. @param other Descriptor. @return Equal. */
     bool operator==(const AvatarDescriptor& other) const=default;
 };
@@ -68,8 +86,8 @@ std::uint32_t crc32(std::span<const std::uint8_t> bytes);
  * @param descriptor Candidate. @return True when encodable. */
 bool isEncodable(const AvatarDescriptor& descriptor);
 
-/** @brief Encodes a descriptor into a public 1021-byte description.
- * @param descriptor Logical avatar; must satisfy isEncodable. @return Buffer.
+/** @brief Encodes a descriptor into a public 1021-byte description: format 1 when it uses only
+ * format 1's fields, else format 2. @param descriptor Logical avatar; must satisfy isEncodable. @return Buffer.
  * @throws std::invalid_argument for an unencodable descriptor. */
 std::vector<std::uint8_t> encode(const AvatarDescriptor& descriptor);
 

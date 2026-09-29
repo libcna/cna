@@ -63,16 +63,25 @@ def hero(manifest, body_type, version):
 
 def seeded(manifest, seed, version):
     r = random.Random(seed)
-    slots = items_by_slot(manifest)
     body = r.randrange(2)
-    authored = manifest["bodies"]["male" if body else "female"]["authoredHeightMillimeters"]
-    items = {slot: r.choice(slots[slot]) for slot in ("hair", "top", "bottom", "shoes")}
-    items["glasses"] = r.choice(slots["glasses"]) if r.random() < 0.3 else 0
-    items["hat"] = r.choice(slots["hat"]) if r.random() < 0.3 else 0
+    name = "male" if body else "female"
+    authored = manifest["bodies"][name]["authoredHeightMillimeters"]
+
+    def pick(slot, pool="items"):
+        entries = [i for i in manifest.get(pool, []) if i["slot"] == slot and i.get("random", {}).get(name, 1.0) > 0]
+        return r.choices([i["id"] for i in entries], [i.get("random", {}).get(name, 1.0) for i in entries])[0]
+    items = {slot: pick(slot) for slot in ("hair", "top", "bottom", "shoes")}
+    items["glasses"] = pick("glasses") if r.random() < 0.3 else 0
+    items["hat"] = pick("hat") if r.random() < 0.3 else 0
     colors = {"skin": r.choice(SKIN), "hair": r.choice(HAIR), "eyes": r.choice(EYES)}
     for slot in ("top", "bottom", "shoes", "accessory"):
         colors[slot] = r.choice(CLOTH)
-    return Descriptor(body, r.randint(authored - 110, authored + 110), r.randint(72, 184), version, colors, items)
+    facial, face = 0, None
+    if "faceControls" in manifest:
+        face = [max(0, min(255, 128 + int(round((r.random() + r.random() - 1.0) * 120)))) for _ in range(16)]
+        if body and r.random() < 0.35:
+            facial = pick("facialHair", "featureItems")
+    return Descriptor(body, r.randint(authored - 110, authored + 110), r.randint(72, 184), version, colors, items, facial, face)
 
 
 def posed_joint(catalogs, library, description, animation, time, name, yaw=0.0):
@@ -84,6 +93,12 @@ def posed_joint(catalogs, library, description, animation, time, name, yaw=0.0):
 
 
 PRESETS = []
+
+
+def head_height(catalogs, library, description):
+    """Height to frame the face at: between the Head joint and the top of the head."""
+    joint, height = posed_joint(catalogs, library, description, "Stand0", 0.0, "Head")
+    return joint[1] + 0.52 * (height - joint[1])
 
 
 def job(name, sheet, description, eye, target, fov, yaw=0.0, animation="Stand0", time=0.0, expression=None, label=None):
@@ -110,8 +125,8 @@ def build_jobs(catalogs, version):
         eye, target, fov = full_body(h)
         for view, yaw in (("front", 0.0), ("three-quarter", -35.0), ("profile", -90.0), ("back", 180.0)):
             jobs.append(job("views-%s-%s" % (body, view), "views", d, eye, target, fov, yaw, label="%s %s" % (body, view)))
-        head = h * 0.905
-        jobs.append(job("views-%s-head" % body, "views", d, (0.12, head + 0.02, 0.62), (0.0, head - 0.01, 0.0), 0.5,
+        head = head_height(catalogs, library, data)
+        jobs.append(job("views-%s-head" % body, "views", d, (0.16, head + 0.03, 0.84), (0.0, head - 0.01, 0.0), 0.5,
                         label="%s head" % body))
         wrist, _ = posed_joint(catalogs, library, data, "Stand0", 0.0, "WristRight")
         tip, _ = posed_joint(catalogs, library, data, "Stand0", 0.0, "FingerMiddle3Right")
@@ -126,6 +141,22 @@ def build_jobs(catalogs, version):
         d = seeded(manifest, seed, version)
         eye, target, fov = full_body(1.9)
         jobs.append(job("diverse-%02d" % seed, "diverse", d, eye, target, fov, -20.0, label="seed %d" % seed))
+    if "faceControls" in manifest:
+        d = heroes[1]
+        head = head_height(catalogs, library, d.encode())
+        close = ((0.0, head + 0.01, 0.80), (0.0, head - 0.02, 0.0), 0.5)
+        names = [c["name"] for c in manifest["faceControls"]["male"]]
+        for index, name in enumerate(names):
+            for value in (0, 255):
+                face = [128] * 16
+                face[index] = value
+                v = Descriptor(d.body_type, d.height_mm, d.build, version, d.colors, d.items, 0, face)
+                jobs.append(job("faces-%02d-%d" % (index, value), "faces", v, *close, yaw=-15.0, label="%s %s" % (name, "-" if value == 0 else "+")))
+        for seed in range(16):
+            v = seeded(manifest, 100 + seed, version)
+            h = head_height(catalogs, library, v.encode())
+            jobs.append(job("faces-random-%02d" % seed, "faces", v, (0.0, h + 0.01, 0.80), (0.0, h - 0.02, 0.0), 0.5, yaw=-15.0,
+                            label="random face %d" % seed))
     presets = manifest["animations"]["presets"]
     for index, preset in enumerate(presets):
         d = heroes[0 if preset.startswith("Female") else 1] if preset.startswith(("Female", "Male")) else heroes[index % 2]
@@ -136,9 +167,8 @@ def build_jobs(catalogs, version):
             jobs.append(job("animations-%02d-%d" % (index, k), "animations", d, eye, target, fov, -20.0, preset,
                             duration * fraction, label="%s %.2fs" % (preset, duration * fraction)))
     d = heroes[1]
-    h = d.height_mm / 1000.0
-    head = h * 0.905
-    close = ((0.0, head + 0.01, 0.55), (0.0, head - 0.015, 0.0), 0.42)
+    head = head_height(catalogs, library, d.encode())
+    close = ((0.0, head + 0.01, 0.72), (0.0, head - 0.02, 0.0), 0.42)
     for state, name in enumerate(preview.MOUTHS):
         jobs.append(job("expressions-mouth-%02d" % state, "expressions", d, *close, expression=[state, 0, 0, 0, 0],
                         label="mouth %s" % name))
@@ -186,7 +216,7 @@ def cmd_sheets(args):
     from PIL import Image, ImageDraw
     data = json.loads(args.jobs.read_text())
     args.out.mkdir(parents=True, exist_ok=True)
-    columns = {"views": 7, "diverse": 8, "animations": 8, "expressions": 8}
+    columns = {"views": 7, "diverse": 8, "animations": 8, "expressions": 8, "faces": 8}
     cell = args.cell
     sheets = {}
     for j in data["jobs"]:

@@ -4,6 +4,8 @@
 #include "CNA/Internal/GamerServices/AvatarAssets.hpp"
 #include "CNA/Internal/GamerServices/AvatarDescriptionCodec.hpp"
 
+#include <algorithm>
+#include <random>
 #include <set>
 #include <stdexcept>
 
@@ -132,4 +134,97 @@ TEST(AvatarDescriptionCodecTest, RandomDescriptorsAreAlwaysEncodable) {
     EXPECT_EQ(Avatars::randomDescriptor(std::nullopt, random).catalogVersion, Avatars::newestEmbeddedManifest().version);
     EXPECT_EQ(Avatars::randomDescriptor(std::uint8_t{0}, random).bodyType, 0);
     EXPECT_EQ(Avatars::randomDescriptor(std::uint8_t{1}, random).bodyType, 1);
+}
+
+namespace {
+std::vector<std::uint8_t> withChecksum(std::vector<std::uint8_t> bytes)
+{
+    const auto crc = Avatars::crc32(std::span(bytes).first(Avatars::DescriptionSize - 4));
+    for (int shift = 0; shift < 4; ++shift) {
+        bytes[Avatars::DescriptionSize - 4 + shift] = static_cast<std::uint8_t>(crc >> (shift * 8));
+    }
+    return bytes;
+}
+
+Avatars::AvatarDescriptor shaped()
+{
+    auto descriptor = sample();
+    descriptor.catalogVersion = 2;
+    descriptor.facialHair = 122;
+    for (std::size_t index = 0; index < Avatars::FaceParameterCount; ++index) {
+        descriptor.face[index] = static_cast<std::uint8_t>(index * 16 + 3);
+    }
+    return descriptor;
+}
+}
+
+TEST(AvatarDescriptionCodecTest, AShapedFaceOrFacialHairIsFormat2AndRoundTrips) {
+    const auto descriptor = shaped();
+    ASSERT_TRUE(descriptor.usesFaceFormat());
+    const auto bytes = Avatars::encode(descriptor);
+    EXPECT_EQ(bytes[0], Avatars::FaceFormatVersion);
+    // Format 2 keeps format 1's bytes 1-42 exactly.
+    auto plain = descriptor;
+    plain.facialHair = 0;
+    plain.face.fill(Avatars::NeutralFaceParameter);
+    const auto v1 = Avatars::encode(plain);
+    EXPECT_EQ(v1[0], Avatars::FormatVersion);
+    EXPECT_TRUE(std::equal(bytes.begin() + 1, bytes.begin() + 43, v1.begin() + 1));
+    EXPECT_EQ(bytes[43] | bytes[44] << 8, 122);
+    EXPECT_EQ(bytes[45], 3);
+    EXPECT_EQ(bytes[60], 15 * 16 + 3);
+    const auto decoded = Avatars::decode(bytes);
+    ASSERT_TRUE(decoded.has_value());
+    EXPECT_EQ(*decoded, descriptor);
+    EXPECT_EQ(Avatars::encode(*decoded), bytes);
+    // Only the face, or only facial hair, is still format 2.
+    auto faceOnly = plain;
+    faceOnly.face[7] = 200;
+    EXPECT_EQ(Avatars::encode(faceOnly)[0], Avatars::FaceFormatVersion);
+    auto beardOnly = plain;
+    beardOnly.facialHair = 120;
+    EXPECT_EQ(Avatars::encode(beardOnly)[0], Avatars::FaceFormatVersion);
+}
+
+TEST(AvatarDescriptionCodecTest, Format2RefusesWhatItCannotMean) {
+    const auto good = Avatars::encode(shaped());
+    auto reserved = good;
+    reserved[61] = 1;
+    EXPECT_FALSE(Avatars::decode(withChecksum(reserved)).has_value());
+    // A format 2 buffer that says nothing format 1 cannot is not how CNA writes one.
+    auto neutral = good;
+    std::fill(neutral.begin() + 43, neutral.begin() + 61, 0);
+    std::fill(neutral.begin() + 45, neutral.begin() + 61, Avatars::NeutralFaceParameter);
+    EXPECT_FALSE(Avatars::decode(withChecksum(neutral)).has_value());
+    // Facial hair must be a feature item of the catalog the description names...
+    auto unknown = shaped();
+    unknown.facialHair = 40;
+    EXPECT_FALSE(Avatars::isEncodable(unknown));
+    auto v1Beard = shaped();
+    v1Beard.catalogVersion = 1;
+    EXPECT_FALSE(Avatars::isEncodable(v1Beard));
+    // ...unless that catalog is not compiled in, when the service and resolver check it.
+    auto newer = shaped();
+    newer.catalogVersion = static_cast<std::uint16_t>(Avatars::newestEmbeddedManifest().version + 1);
+    newer.facialHair = 4000;
+    EXPECT_TRUE(Avatars::decode(Avatars::encode(newer)).has_value());
+    // A format this build does not know is not decoded.
+    auto future = good;
+    future[0] = 3;
+    EXPECT_FALSE(Avatars::decode(withChecksum(future)).has_value());
+}
+
+TEST(AvatarDescriptionCodecTest, RandomAvatarsHaveIndividualFaces) {
+    std::mt19937 random(99);
+    int shapedCount = 0, bearded = 0, femaleBeards = 0;
+    for (int index = 0; index < 300; ++index) {
+        const auto descriptor = Avatars::randomDescriptor(std::nullopt, random);
+        shapedCount += std::ranges::any_of(descriptor.face, [](auto value) { return value != Avatars::NeutralFaceParameter; });
+        bearded += descriptor.bodyType == 1 && descriptor.facialHair != 0;
+        femaleBeards += descriptor.bodyType == 0 && descriptor.facialHair != 0;
+        ASSERT_EQ(Avatars::decode(Avatars::encode(descriptor)), descriptor);
+    }
+    EXPECT_GT(shapedCount, 290);
+    EXPECT_GT(bearded, 20);
+    EXPECT_EQ(femaleBeards, 0);
 }

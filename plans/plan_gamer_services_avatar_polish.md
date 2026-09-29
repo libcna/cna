@@ -109,6 +109,36 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   (`AvatarCatalogTest.CatalogV1IsFrozen`, `V1DescriptionsAssembleExactlyAsReleased`), taken while v1
   was the only catalog. The server already kept versions immutable and items growing (GSP-B2 adds
   per-version item checks and exact v1 service after v2).
+- **Catalog v2 art (GSP-C/D/E).** The generator (`tools/avatar_builder`) now writes catalog v2; v1 is
+  frozen data (its generator is in Git history, 6ca06d069). Pure Python, no numpy, byte-reproducible.
+  Head: one parametric surface (an ellipsoid with a jaw taper, flattened face plane, cheek/brow/chin
+  bumps and soft sockets), separate button nose and rimmed ears; an ellipsoid-union head was tried
+  first and dropped (creases, gaunt lower face). Face atlas: 128 px tiles drawn as anti-aliased
+  signed-distance shapes (shaded whites, gradient irises with highlight holes, lids, lashes, smile
+  squint; lips translucent so any skin tone shows through). Body: arms and legs are single lofts
+  through the elbow/knee (no capsule seams), superellipse torso, sculpted palm/knuckles/fingers.
+  Hair: a scalp cap inside a hairline plus flattened tapering locks that follow the head or hang
+  (10 styles). Clothing: offset lofts over the body's sections and weights with rolled hems, necklines,
+  collars, a hood, pockets, cuffs, waistbands; shoes are a sole plus a dome upper, with shafts
+  (boots over trousers, high-tops under them) and socks. Textures are small procedural multipliers
+  (skin warmth, strands, knit/rib/cable/fleece/denim/canvas/leather with side seams).
+  Wire format stays inside the v1 reader contract (same attributes, embedded PNGs), except that
+  normals and UVs are normalized 16-bit (cgltf unpacks them for every reader), so existing CNA builds
+  can render v2 items fetched from a service.
+- **Hats over hair.** Each hair item has `hatAssets`: the style with everything a covering hat
+  (`coversHair`) hides dropped and the rest flattened under one shared hat envelope
+  (head + 19 mm, down to a common line); every covering hat is built outside that envelope.
+  Readers that ignore these keys draw the full hair under the hat (a documented degradation).
+- **Format 2 descriptions (decided).** v1 descriptions can vary only body, height, build, colours and
+  six item slots; every face is identical, which is far from the individuality of the era's avatars.
+  Format 2 (byte 0 = 2) keeps v1's bytes 1-42 exactly, adds a facial-hair item id (43-44, from the
+  catalog's `featureItems`) and sixteen face-shape bytes (45-60, 128 = neutral: head width/height,
+  jaw width, chin, cheeks, eye size/spacing/height/tilt, brow height, nose size/width/height, mouth
+  width/height, ear size), reserved zero to 1016, CRC-32 at 1017. The parameters are opaque data: the
+  catalog's `faceControls` turn them into smooth local deformers (scale/move/rotate with an
+  ellipsoidal falloff) on Head-weighted vertices, scoped to the face (body head, decals, facial hair)
+  or the whole head (also hair, hats, glasses). A description that uses none of them is still
+  encoded as format 1. Public XNA API unchanged (`DescriptionSize` 1021, byte 0 non-zero).
 
 ## Tasks
 
@@ -120,8 +150,8 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
 | GSP-A3 | BEFORE evidence of catalog v1 | done |
 | GSP-B1 | Exact embedded catalog registry (version -> manifest -> content hash); v1 frozen | done |
 | GSP-B2 | Server catalog-version semantics verified and tested | done |
-| GSP-C* | Catalog v2: body, head/face, expression atlas, facial individuality decision | todo |
-| GSP-D* | Catalog v2 wardrobe and hair | todo |
+| GSP-C* | Catalog v2: body, head/face, expression atlas, facial individuality decision | first pass done (C1); art iteration continues |
+| GSP-D* | Catalog v2 wardrobe and hair | first pass done (C1) |
 | GSP-E* | Materials and renderer polish, per-renderer check | todo |
 | GSP-F* | Animation polish and key-pose/loop tests | todo |
 | GSP-G1 | Server avatar GLB/manifest validation, malformed fixtures | todo |
@@ -138,6 +168,12 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
 
 ## Evidence log
 
+- GSP-C1 (catalog v2 + format 2): 111 files, 12.46 MB (v1: 41 files, 2.68 MB); embedding v1+v2 is a
+  75 MB generated source that compiles in 9.7 s at 1.44 GB peak. Generator 26 s, `--check` clean.
+  GS 508 + 1 skip per process (118 avatar tests, 6 new); the three v1 model digests pinned before
+  v2 existed still match with v2 embedded. OPENGL33 `cna_avatar_review`: 255 jobs, 0 failures
+  (`/rv/tmp/avatar-polish/review-v2c/`). v2 may still change until this pass ends; it is frozen from
+  then on.
 - Visual evidence lives outside the repositories, as the sample evidence does:
   `/rv/tmp/avatar-polish/evidence/{before,after}/`.
 - BEFORE (catalog v1, 2026-09-29): `evidence/before/{jobs.json, preview/, opengl33/,
