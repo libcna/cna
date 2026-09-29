@@ -45,7 +45,7 @@ struct InputFrame {
 };
 
 /** @brief The rail's categories; None for screens drawn as dialogs. */
-enum class Category : std::uint8_t { Home, Friends, Party, Messages, Achievements, Players, Content, Settings, None };
+enum class Category : std::uint8_t { Home, Friends, Party, Messages, Achievements, Leaderboards, Players, Content, Settings, None };
 
 /** @brief A footer hint: a command and what it does. */
 using Hint=std::pair<Command,std::string>;
@@ -167,6 +167,16 @@ void load(const std::shared_ptr<S>& owner,std::type_identity_t<std::function<T(I
     });
 }
 
+/** @brief What a player may use of the service: service screens need a signed-in account, and
+ * a local profile, a guest or nobody gets an honest explanation instead. */
+enum class Access : std::uint8_t { Account, LocalProfile, Guest, Nobody, NoService };
+/** @brief A player's access. @param player Player. @return Access. */
+Access access(Xna::PlayerIndex player);
+/** @brief Draws the explanation for anything but Account. @param ui Context. @param area Area.
+ * @param value Access. @return Whether it drew one (the screen draws nothing else). */
+bool explainAccess(Ui& ui,const Box& area,Access value);
+/** @brief A player's service identity, or empty. @param player Player. @return User id. */
+std::string userOf(Xna::PlayerIndex player);
 /** @brief Whether motion is reduced (CNA_GAMER_SERVICES_REDUCED_MOTION=1): transitions finish at once. @return Reduced. */
 bool reducedMotion();
 /** @brief 0..1 over a duration, eased out; 1 at once with reduced motion. @param elapsed Seconds.

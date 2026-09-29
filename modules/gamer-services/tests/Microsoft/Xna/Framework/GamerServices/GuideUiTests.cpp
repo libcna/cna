@@ -114,7 +114,7 @@ TEST_F(GuideUiTest, TheFocusMovesAndStopsAtTheEndsAndAcceptOpensTheGamerCard) {
 
 TEST_F(GuideUiTest, TheRailSwitchesCategoriesAndWrapsAround) {
     Service::openSystemGuide(PlayerIndex::One);
-    const std::vector<std::string> order{"home", "friends", "party", "messages", "achievements", "players", "content", "settings"};
+    const std::vector<std::string> order{"home", "friends", "party", "messages", "achievements", "leaderboards", "players", "content", "settings"};
     for (std::size_t step = 1; step <= order.size(); ++step) {
         Ui::sendForTesting(Ui::Command::Next);
         EXPECT_EQ(order[step % order.size()], Ui::currentScreenForTesting());

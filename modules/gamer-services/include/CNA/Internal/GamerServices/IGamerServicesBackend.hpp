@@ -121,6 +121,19 @@ struct ServiceLeaderboardPage {
     /** @brief Entries on this page. */
     std::vector<ServiceLeaderboardEntry> entries;
 };
+/** @brief A leaderboard the title has provisioned, as a system leaderboard page lists it. */
+struct ServiceLeaderboardInfo {
+    /** @brief Board key. */
+    std::string key;
+    /** @brief Game mode. */
+    int mode=0;
+    /** @brief Lower ratings rank first. */
+    bool ascending=false;
+    /** @brief Written only through Ranked arbitration. */
+    bool arbitrated=false;
+    /** @brief Rows on the board. */
+    long long entries=0;
+};
 /** @brief Explicit deterministic test board; never installed in normal service mode. */
 struct ServiceLeaderboardFixture {
     /** @brief Board identity. */
@@ -281,6 +294,9 @@ public:
      * @param gamers Optional restricted names. @return Ranked page. */
     virtual ServiceLeaderboardPage readLeaderboard(const std::string& key,int mode,int start,int size,
         const std::string& pivot,const std::optional<std::vector<std::string>>& gamers) = 0;
+    /** @brief The title's provisioned leaderboards (leaderboards.list), for the Guide's leaderboard
+     * page; a game reads its own boards by identity. @return Boards in key and mode order. */
+    virtual std::vector<ServiceLeaderboardInfo> leaderboards() = 0;
     /** @brief Begins a local gameplay write scope. @param users Authenticated local identities.
      * @return Opaque server-owned scope identifier. */
     virtual std::string beginLeaderboardGame(const std::vector<std::string>& users) = 0;

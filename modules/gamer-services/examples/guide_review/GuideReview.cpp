@@ -29,6 +29,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -61,7 +62,46 @@ namespace
         std::string name;
         std::function<void()> open;
         int frames = 20;
+        // Something done a few frames in, once what was opened has loaded (a choice in it).
+        std::function<void()> then = {};
     };
+
+    // An achievement picture for the review: a gold medal on a ribbon, drawn here.
+    std::vector<unsigned char> Picture()
+    {
+        constexpr int Size = 128;
+        std::vector<std::uint8_t> rgba(Size * Size * 4, 0);
+        for (int y = 0; y < Size; ++y)
+            for (int x = 0; x < Size; ++x)
+            {
+                auto* p = &rgba[static_cast<std::size_t>(y * Size + x) * 4];
+                const float dx = x + 0.5f - 64.0f, dy = y + 0.5f - 76.0f, d = std::sqrt(dx * dx + dy * dy);
+                const bool ribbon = y < 50 && std::abs(x + 0.5f - 64.0f) < 22.0f - y * 0.2f;
+                if (d < 42.0f)
+                {
+                    const float light = 1.0f - (dx + dy) / 120.0f;
+                    const bool rim = d > 34.0f;
+                    p[0] = static_cast<std::uint8_t>(std::min(255.0f, (rim ? 200.0f : 236.0f) * light));
+                    p[1] = static_cast<std::uint8_t>(std::min(255.0f, (rim ? 140.0f : 176.0f) * light));
+                    p[2] = static_cast<std::uint8_t>(std::min(255.0f, (rim ? 40.0f : 64.0f) * light));
+                    p[3] = 255;
+                }
+                else if (ribbon)
+                {
+                    p[0] = 64;
+                    p[1] = 112;
+                    p[2] = 200;
+                    p[3] = 255;
+                }
+            }
+        const auto png = CNA::Internal::Graphics::ImageLoader::EncodePng(rgba.data(), Size, Size, Size, Size);
+        return {png.begin(), png.end()};
+    }
+    std::string PictureHash()
+    {
+        const auto picture = Picture();
+        return Avatars::sha256Hex(std::span<const std::uint8_t>(picture.data(), picture.size()));
+    }
 
     class GuideReviewGame : public Game
     {
@@ -123,7 +163,27 @@ namespace
                 achievement.score = score;
                 achievements.push_back(achievement);
             }
-            service_ = Service::makeFakeBackend(people, achievements);
+            achievements[0].picture = PictureHash();
+            Service::ServiceLeaderboardFixture best;
+            best.key = "BestScore";
+            Service::ServiceLeaderboardFixture laps;
+            laps.key = "FastestLap";
+            laps.mode = 1;
+            laps.ascending = true;
+            for (const auto& person : people)
+            {
+                best.entries.push_back({person.userId, person.gamertag, 900 + static_cast<long long>(person.gamerScore) * 7, 0, {}});
+                laps.entries.push_back({person.userId, person.gamertag, 58000 + static_cast<long long>(person.gamerScore % 997) * 13, 0, {}});
+            }
+            service_ = Service::makeFakeBackend(people, achievements, {best, laps});
+            const auto picture = Picture();
+            // The service's newest avatar catalog is this build's, so the avatar editor opens on it.
+            std::string catalog;
+            const auto newest = "v" + std::to_string(Avatars::embeddedCatalogs().back()->version) + "/catalog.json";
+            for (const auto& file : Avatars::embeddedCatalogFiles())
+                if (std::string_view(file.name) == newest)
+                    catalog.assign(reinterpret_cast<const char*>(file.data), file.size);
+            Service::setFakeAvatarCatalog(*service_, catalog, {{PictureHash(), picture}});
             Service::setBackendForTesting(service_);
         }
 
@@ -183,6 +243,17 @@ namespace
                      Guide::setNotificationPositionProperty(NotificationPosition::BottomRight);
                      Service::postGuideNotification("Bob invited you to a game");
                  }, 30},
+                {"20-achievement-detail", [] { Guide::ShowAchievementsEXT(PlayerIndex::One); }, 40, [] { Service::GuideUi::clickForTesting(0); }},
+                {"21-leaderboards", [] { Service::GuideUi::open(Service::GuideUi::leaderboardsScreen(PlayerIndex::One), PlayerIndex::One); }, 30},
+                {"22-leaderboard-top", [] { Service::GuideUi::open(Service::GuideUi::leaderboardsScreen(PlayerIndex::One), PlayerIndex::One); }, 60,
+                 [] { Service::GuideUi::clickForTesting(0); }},
+                {"23-leaderboard-around-you", [] { Service::GuideUi::open(Service::GuideUi::leaderboardsScreen(PlayerIndex::One), PlayerIndex::One); }, 60,
+                 [] { Service::GuideUi::clickForTesting(0); Service::GuideUi::sendForTesting(Service::GuideUi::Command::X); }},
+                {"24-home-edit-avatar", [] { Service::openSystemGuide(PlayerIndex::One); }, 120, [] {
+                     const auto labels = Service::GuideUi::labelsForTesting();
+                     const auto edit = std::find(labels.begin(), labels.end(), "Edit avatar");
+                     Service::GuideUi::clickForTesting(static_cast<int>(edit - labels.begin()));
+                 }},
             };
         }
 
@@ -262,6 +333,8 @@ namespace
 
         void EndDraw() override
         {
+            if (step_ < steps_.size() && opened_ && frame_ == 15 && steps_[step_].then)
+                steps_[step_].then();
             if (step_ < steps_.size() && opened_ && ++frame_ >= steps_[step_].frames)
             {
                 std::vector<Color> pixels(static_cast<std::size_t>(Width) * Height);

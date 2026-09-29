@@ -166,7 +166,7 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
 | GSX-U3 | Sign-in as profile selection over four player slots | done |
 | GSX-U4 | Gamer Card with avatar, presence, zone, reputation, relationship and actions | done |
 | GSX-U5 | Friends, invitations (send/receive as system events), notifications | done |
-| GSX-U6 | Achievements and leaderboards presentation | |
+| GSX-U6 | Achievements and leaderboards presentation | done |
 | GSX-U7 | Party and title-content panes in the same system; catalog updates as one product | |
 | GSX-U8 | Transitions, reduced motion, original system sounds (if an appropriate audio path exists) | |
 | GSX-U9 | Semantic UI tests; BEFORE/AFTER sheets and an ordered interaction sequence | |
@@ -250,3 +250,13 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
   (15 steps, OPENGL33, private display; `after-editor-sheet.png`), inspected: framings fit the band
   between header and footer, hints do not overlap. GS 583 + 1 skip (one process); Net 504/504
   (nine discovery/leaderboard cases share ports or a store when run 8-way parallel and pass alone).
+- GSX-U6 (achievements, leaderboards). **POL** A Leaderboards page joins the Guide rail (XNA has
+  no system leaderboard UI; games read their boards through `LeaderboardReader`): the service's new
+  `leaderboards.list` (capability `leaderboard-list`, read-only, unrecorded) lists the title's
+  provisioned boards with entry counts; a board shows the top players, the players around you (the
+  focus starts on your row) or your friends, with ranks in medal colours, portraits and grouped
+  ratings, and opens a gamer card. Achievements open a detail card: the picture (service asset or
+  the offline profile's title content), points, unlock date, how to earn, secrets kept secret.
+  Tests: 3 `GuideLeaderboardTest`, rail order, server `service_unit` (board list, modes, title
+  isolation, token). Evidence: `/rv/tmp/xbox-fidelity/ui/after3/` (24 screens incl.
+  20-achievement-detail, 21-23 leaderboards, 24 Home -> Edit avatar). GS 586 + 1 skip, Net 504.

@@ -13,7 +13,11 @@
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "System/IO/Stream.hpp"
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <map>
 #include <utility>
@@ -29,9 +33,8 @@ GS::SignedInGamer* signedIn(Xna::PlayerIndex player)
         if(gamer->getPlayerIndexProperty()==player)return gamer;
     return nullptr;
 }
+}
 
-// Service screens need a signed-in account; a local profile or nobody gets an honest explanation.
-enum class Access : std::uint8_t { Account, LocalProfile, Guest, Nobody, NoService };
 Access access(Xna::PlayerIndex player)
 {
     auto* gamer=signedIn(player);
@@ -60,6 +63,7 @@ std::string userOf(Xna::PlayerIndex player)
     return gamer?GamerAccess::userId(*gamer):std::string();
 }
 
+namespace {
 std::string lower(std::string value)
 {
     for(auto& c:value)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -548,7 +552,105 @@ private:
 };
 
 // ---- Achievements -------------------------------------------------------------------------------
-struct AchievementRow {std::string name,description,howToEarn;int score=0;bool earned=false;long long earnedTicks=0;bool secret=false;};
+struct AchievementRow {
+    std::string name,description,howToEarn;
+    int score=0;
+    bool earned=false;
+    long long earnedTicks=0;
+    bool secret=false;
+    // The picture: a service asset by hash, or the local profile's achievement (index) that opens it.
+    std::string picture;
+    int local=-1;
+};
+
+// .NET ticks -> "29 September 2026".
+std::string earnedDate(long long ticks)
+{
+    if(ticks<=0)return {};
+    static const char* const months[]{"January","February","March","April","May","June","July","August","September","October","November","December"};
+    const auto seconds=ticks/10000000LL-62135596800LL;
+    const std::chrono::year_month_day date{std::chrono::floor<std::chrono::days>(std::chrono::sys_seconds(std::chrono::seconds(seconds)))};
+    return std::to_string(static_cast<unsigned>(date.day()))+" "+months[static_cast<unsigned>(date.month())-1]+" "+std::to_string(static_cast<int>(date.year()));
+}
+
+// One achievement: its picture, what it is for and when it was earned.
+class AchievementScreen final : public Screen {
+public:
+    explicit AchievementScreen(AchievementRow row):row_(std::move(row)){}
+    std::string name() const override {return "achievement";}
+    std::string title() const override {return hidden()?"Secret achievement":row_.name;}
+    std::string subtitle() const override {
+        if(!row_.earned)return "Locked";
+        const auto date=earnedDate(row_.earnedTicks);
+        return date.empty()?"Unlocked":"Unlocked "+date;
+    }
+    float dialogWidth() const override {return 640;}
+    float dialogHeight() const override {return 340;}
+    void input(InputContext& ui) override {if(ui.input(Command::Accept)||ui.input.click)pop(this);}
+    void draw(Ui& ui,const Box& area) override {
+        const Box tile{area.x,area.y,ui.px(128),ui.px(128)};
+        if(image_&&!texture_)
+            texture_=std::make_unique<Xna::Graphics::Texture2D>(Xna::Graphics::Texture2D::CreateFromPixels(*ui.batch.getGraphicsDeviceProperty(),
+                image_->width,image_->height,image_->rgba));
+        if(texture_&&!hidden()) {
+            ui.batch.Draw(*texture_,Xna::Vector2(tile.x,tile.y),std::nullopt,row_.earned?Xna::Color::White:Xna::Color(110,110,110,255),0.0f,Xna::Vector2::Zero,
+                Xna::Vector2(tile.w/static_cast<float>(texture_->getWidthProperty()),tile.h/static_cast<float>(texture_->getHeightProperty())),
+                Xna::Graphics::SpriteEffects::None,0.0f);
+        } else {
+            ui.style.rounded(ui.batch,tile,ui.px(18),row_.earned?Xna::Color(96,72,22):Palette::rail());
+            ui.style.icon(ui.batch,row_.earned?Icon::Trophy:Icon::Lock,tile.inset(ui.px(30)),row_.earned?Palette::gold():Palette::faint());
+        }
+        const float tx=tile.right()+ui.px(24),w=area.right()-tx;
+        ui.style.icon(ui.batch,Icon::Trophy,Box{tx,area.y+ui.px(2),ui.px(22),ui.px(22)},row_.earned?Palette::gold():Palette::faint());
+        ui.style.text(ui.batch,Font::BodyBold,std::to_string(row_.score)+(row_.score==1?" point":" points"),Xna::Vector2(tx+ui.px(30),area.y),
+            row_.earned?Palette::gold():Palette::muted());
+        float y=area.y+ui.px(40);
+        auto paragraph=[&](const std::string& text,Xna::Color color) {
+            for(const auto& line:ui.style.wrap(Font::Body,text,w)) {
+                if(y>area.bottom()-ui.px(20))return;
+                ui.style.text(ui.batch,Font::Body,line,Xna::Vector2(tx,y),color);
+                y+=ui.style.measure(Font::Body,"Ag").Y;
+            }
+            y+=ui.px(8);
+        };
+        if(hidden()) {
+            paragraph("Keep playing to discover it.",Palette::muted());
+            return;
+        }
+        paragraph(row_.description,Palette::text());
+        if(!row_.earned&&!row_.howToEarn.empty()&&row_.howToEarn!=row_.description)paragraph(row_.howToEarn,Palette::muted());
+    }
+    std::vector<Hint> hints() const override {return {{Command::Accept,"OK"}};}
+    std::vector<std::string> labels() const override {return {title(),subtitle()};}
+    void start(const std::shared_ptr<AchievementScreen>& self) {
+        if(hidden())return;
+        if(!row_.picture.empty()) {
+            load<std::vector<unsigned char>>(self,[hash=row_.picture](IGamerServicesBackend& s){return s.asset(hash);},
+                [](AchievementScreen& screen,std::vector<unsigned char> bytes){screen.decode(bytes);});
+        } else if(row_.local>=0) {
+            // An offline profile's achievement picture is title content.
+            try {
+                auto achievements=signedIn(player)->GetAchievements();
+                if(row_.local<achievements.getCountProperty()) {
+                    auto achievement=achievements[row_.local];
+                    std::unique_ptr<System::IO::Stream> stream(achievement.GetPicture());
+                    std::vector<unsigned char> bytes(static_cast<std::size_t>(stream->getLengthProperty()));
+                    if(!bytes.empty())(void)stream->Read(bytes.data(),0,static_cast<SharpRuntime::intcs>(bytes.size()));
+                    decode(bytes);
+                }
+            } catch(...) {}
+        }
+    }
+private:
+    bool hidden() const {return row_.secret&&!row_.earned;}
+    void decode(const std::vector<unsigned char>& bytes) {
+        try {image_=Avatars::decodeAvatarImage(std::span<const std::uint8_t>(bytes.data(),bytes.size()));}
+        catch(const std::exception&) {}
+    }
+    AchievementRow row_;
+    std::optional<Avatars::AvatarImage> image_;
+    std::unique_ptr<Xna::Graphics::Texture2D> texture_;
+};
 
 class AchievementsScreen final : public Screen {
 public:
@@ -561,7 +663,18 @@ public:
         return std::to_string(earned)+" of "+std::to_string(rows_.size())+" unlocked \xe2\x80\xa2 "+std::to_string(score)+" of "+std::to_string(total)+" points";
     }
     Category category() const override {return Category::Achievements;}
-    void input(InputContext& ui) override {(void)list_.input(ui,static_cast<int>(rows_.size()),2);}
+    void input(InputContext& ui) override {
+        const int chosen=list_.input(ui,static_cast<int>(rows_.size()),2);
+        if(chosen>=0)activate(chosen);
+    }
+    void activate(int index) override {
+        if(index<0||index>=static_cast<int>(rows_.size()))return;
+        auto detail=std::make_shared<AchievementScreen>(rows_[static_cast<std::size_t>(index)]);
+        detail->player=player;
+        detail->start(detail);
+        push(std::move(detail));
+    }
+    std::vector<Hint> hints() const override {return {{Command::Accept,"Details"},{Command::Back,"Back"}};}
     void draw(Ui& ui,const Box& area) override {
         const auto a=access(player);
         if(a==Access::Nobody||a==Access::Guest){explainAccess(ui,area,a);return;}
@@ -601,7 +714,8 @@ public:
             load<std::vector<ServiceAchievement>>(self,[user=userOf(player)](IGamerServicesBackend& s){return s.achievements(user);},
                 [](AchievementsScreen& screen,std::vector<ServiceAchievement> list) {
                     for(auto& item:list)
-                        screen.rows_.push_back({item.name,item.description,item.howToEarn,item.score,item.earnedTicks!=0,item.earnedTicks,!item.displayBeforeEarned});
+                        screen.rows_.push_back({item.name,item.description,item.howToEarn,item.score,item.earnedTicks!=0,item.earnedTicks,
+                            !item.displayBeforeEarned,item.picture,-1});
                     screen.loaded_=true;
                 },[](AchievementsScreen& screen){screen.failed_=true;});
         } else if(a==Access::LocalProfile) {
@@ -609,9 +723,10 @@ public:
             try {
                 auto* gamer=signedIn(player);
                 auto achievements=gamer->GetAchievements();
-                for(const auto& item:achievements)
+                for(int index=0;const auto& item:achievements)
                     rows_.push_back({item.getNameProperty(),item.getDescriptionProperty(),item.getHowToEarnProperty(),item.getGamerScoreProperty(),
-                        item.getIsEarnedProperty(),0,!item.getDisplayBeforeEarnedProperty()});
+                        item.getIsEarnedProperty(),item.getIsEarnedProperty()?item.getEarnedDateTimeProperty().getTicksProperty():0,
+                        !item.getDisplayBeforeEarnedProperty(),{},index++});
                 loaded_=true;
             } catch(...) {failed_=true;}
         }

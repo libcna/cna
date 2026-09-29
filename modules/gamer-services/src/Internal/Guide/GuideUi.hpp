@@ -51,6 +51,8 @@ std::shared_ptr<Screen> gamerCardScreen(Microsoft::Xna::Framework::PlayerIndex p
 std::shared_ptr<Screen> messagesScreen(Microsoft::Xna::Framework::PlayerIndex player);
 /** @brief This title's achievements. @param player Player. @return Screen. */
 std::shared_ptr<Screen> achievementsScreen(Microsoft::Xna::Framework::PlayerIndex player);
+/** @brief This title's leaderboards on the service. @param player Player. @return Screen. */
+std::shared_ptr<Screen> leaderboardsScreen(Microsoft::Xna::Framework::PlayerIndex player);
 /** @brief Recently met players. @param player Player. @return Screen. */
 std::shared_ptr<Screen> playersScreen(Microsoft::Xna::Framework::PlayerIndex player);
 /** @brief A player review. @param player Player. @param gamertag Whom. @return Screen. */

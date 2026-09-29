@@ -393,7 +393,7 @@ struct RailEntry {Category category;Icon icon;const char* label;};
 constexpr RailEntry Rail[]{
     {Category::Home,Icon::Home,"Home"},{Category::Friends,Icon::People,"Friends"},{Category::Party,Icon::Party,"Party"},
     {Category::Messages,Icon::Message,"Messages"},{Category::Achievements,Icon::Trophy,"Achievements"},
-    {Category::Players,Icon::Clock,"Recent players"},{Category::Content,Icon::Store,"Game content"},
+    {Category::Leaderboards,Icon::Leaderboard,"Leaderboards"},{Category::Players,Icon::Clock,"Recent players"},{Category::Content,Icon::Store,"Game content"},
     {Category::Settings,Icon::Settings,"Settings"}};
 
 std::shared_ptr<Screen> rootFor(Category category,Xna::PlayerIndex player)
@@ -404,6 +404,7 @@ std::shared_ptr<Screen> rootFor(Category category,Xna::PlayerIndex player)
     case Category::Party: return partyScreen(player);
     case Category::Messages: return messagesScreen(player);
     case Category::Achievements: return achievementsScreen(player);
+    case Category::Leaderboards: return leaderboardsScreen(player);
     case Category::Players: return playersScreen(player);
     case Category::Content: return contentScreen(player);
     case Category::Settings: return settingsScreen(player);
@@ -486,7 +487,7 @@ void drawRail(Ui& ui,const Box& rail,Category current,float alpha)
     // Categories.
     float y=rail.y+ui.px(140);
     for(const auto& entry:Rail) {
-        const Box row{rail.x+ui.px(12),y,rail.w-ui.px(24),ui.px(44)};
+        const Box row{rail.x+ui.px(12),y,rail.w-ui.px(24),ui.px(42)};
         const bool lit=entry.category==current;
         if(lit) {
             ui.style.rounded(ui.batch,row,ui.px(12),faded(Palette::focus(),1.3f*alpha));
@@ -500,10 +501,10 @@ void drawRail(Ui& ui,const Box& rail,Category current,float alpha)
         if(entry.category==Category::Messages&&who.unread>0) {
             const auto count=std::to_string(who.unread);
             const float w=std::max(ui.px(24),ui.style.measure(Font::Caption,count).X+ui.px(12));
-            ui.style.rounded(ui.batch,Box{row.right()-w-ui.px(10),row.y+ui.px(11),w,ui.px(22)},ui.px(11),Palette::accent());
-            ui.style.text(ui.batch,Font::Caption,count,Xna::Vector2(row.right()-w/2-ui.px(10),row.y+ui.px(11)),Palette::text(),Align::Center);
+            ui.style.rounded(ui.batch,Box{row.right()-w-ui.px(10),row.y+ui.px(10),w,ui.px(22)},ui.px(11),Palette::accent());
+            ui.style.text(ui.batch,Font::Caption,count,Xna::Vector2(row.right()-w/2-ui.px(10),row.y+ui.px(10)),Palette::text(),Align::Center);
         }
-        y+=ui.px(48);
+        y+=ui.px(46);
     }
 }
 

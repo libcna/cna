@@ -309,6 +309,28 @@ public:
         if(rating!="prefer"&&rating!="avoid"&&rating!="clear")throw Unavailable("Invalid player review.");
         (void)request("reviews.submit",{{"gamertag",tag},{"rating",rating}},tokenFor(user));
     }
+    std::vector<ServiceLeaderboardInfo> leaderboards() override {
+        const auto result=request("leaderboards.list",Json::object(),tokenFor({}));
+        const auto& boards=result.at("boards");
+        if(!boards.is_array()||boards.size()>256)throw Unavailable("Invalid leaderboard list.");
+        std::vector<ServiceLeaderboardInfo> list;
+        for(const auto& board:boards) {
+            ServiceLeaderboardInfo info;
+            info.key=CnaService::stringField(board,"key",64);
+            if(!CnaService::identifier(info.key))throw Unavailable("Invalid leaderboard key.");
+            const auto& mode=board.at("mode");
+            const auto& entries=board.at("entries");
+            if(!mode.is_number_integer()||mode.get<long long>()<-2147483648LL||mode.get<long long>()>2147483647LL||
+               !entries.is_number_integer()||entries.get<long long>()<0||!board.at("ascending").is_boolean()||!board.at("arbitrated").is_boolean())
+                throw Unavailable("Invalid leaderboard list.");
+            info.mode=static_cast<int>(mode.get<long long>());
+            info.entries=entries.get<long long>();
+            info.ascending=board["ascending"].get<bool>();
+            info.arbitrated=board["arbitrated"].get<bool>();
+            list.push_back(std::move(info));
+        }
+        return list;
+    }
     ServiceLeaderboardPage readLeaderboard(const std::string& key,int mode,int start,int size,const std::string& pivot,const std::optional<std::vector<std::string>>& gamers) override {
         Json args{{"key",key},{"mode",mode},{"start",start},{"size",size}};
         if(!pivot.empty())args["pivot"]=pivot;
@@ -846,6 +868,13 @@ public:
     }
     /** @brief Deterministic view of recorded reviews for tests. */
     const std::map<std::pair<std::string,std::string>,std::string>& reviews()const{return reviews_;}
+    std::vector<ServiceLeaderboardInfo> leaderboards() override {
+        if(std::all_of(slots_.begin(),slots_.end(),[](const auto& id){return id.empty();}))throw Unavailable("No authenticated fixture gamer.");
+        std::vector<ServiceLeaderboardInfo> list;
+        for(const auto& board:boards_)list.push_back({board.key,board.mode,board.ascending,board.arbitrated,static_cast<long long>(board.entries.size())});
+        std::ranges::sort(list,[](const auto& a,const auto& b){return std::tie(a.key,a.mode)<std::tie(b.key,b.mode);});
+        return list;
+    }
     ServiceLeaderboardPage readLeaderboard(const std::string& key,int mode,int start,int size,const std::string& pivot,const std::optional<std::vector<std::string>>& gamers) override {
         if(std::all_of(slots_.begin(),slots_.end(),[](const auto& id){return id.empty();}))throw Unavailable("No authenticated fixture gamer.");
         const auto board=std::find_if(boards_.begin(),boards_.end(),[&](const auto& value){return value.key==key&&value.mode==mode;});
