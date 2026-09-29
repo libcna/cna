@@ -2611,3 +2611,18 @@ the C struct field documents local ticks. CnaGamerServicesTests 485 + 1 skip.
   host-disconnect purge) became unreachable and were replaced; the host-side purge stays as
   defensive code. CnaNetTests 486/486, CApi_NetSmoke, protocol drift check clean. Online
   `AddLocalGamer` is still refused (the directory admits one local group per machine).
+- [x] GS-007p Explicit local-gamer lists and the Find -> Join local limit (XNA over FNA; row in
+  `plans/plan_bindings_upstream.md`). The explicit-list `Create`/`JoinInvited` constructor sized the
+  local-gamer limit to the list, so a session created for one gamer refused `AddLocalGamer`; a gamer
+  listed twice joined twice. `BeginCreate`/`BeginFind`/`BeginJoinInvited` with a list skipped
+  reference `GetLocalGamers`. A SystemLink `Join` always allowed 4 local gamers, and ignored the list
+  a `Find` was given. Now explicit lists are checked first (null entry or empty list
+  `ArgumentException`; disposed gamer `ObjectDisposedException`, offline only, because an online
+  request dereferences a gamer only after finding it among the signed-in gamers). Such sessions have
+  the reference limit of 4 and fold duplicates. A SystemLink listing carries its search's limit, or
+  its list, into `Join`. Tests: `AddLocalGamerThrowsAtMaxLimit` (rewritten to the limit of 4),
+  `ExplicitLocalGamerListsAreCheckedFirst`, and two-process
+  `JoinKeepsTheLocalGamerLimitOfTheFindAcrossRealProcesses` /
+  `JoinUsesTheGamersTheFindWasGivenAcrossRealProcesses` over real LAN discovery; the client joins
+  the listing on its host's port, because other SystemLink hosts on the machine answer discovery
+  too (10 repeats clean). CnaNetTests 489/489, CApi_NetSmoke.

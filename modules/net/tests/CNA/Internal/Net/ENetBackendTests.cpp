@@ -147,9 +147,9 @@ namespace {
     }
 
     // A real client session joined to a raw ENet host that stands in for the host machine and
-    // answers only what a test sends it. There is room for a second local gamer (maxLocalGamers 2,
-    // one gamer signed in; the vector-based Create sizes it to its list). Welcomed by default with
-    // OtherPlayer, the host, at wire id 0 and this machine's gamer numbered 5.
+    // answers only what a test sends it. One gamer signed in and a local limit of 2 leave room for
+    // AddLocalGamer. Welcomed by default with OtherPlayer, the host, at wire id 0 and this machine's
+    // gamer numbered 5.
     struct FakeHostedClient {
         SignedInGamer signedIn{SignedInGamer::CreateInternal("ClientPlayer")};
         ENetHostHandle fakeHost{ENetHostHandle::CreateHost(kFakeHostTestPort, 4, 2)};
@@ -449,8 +449,7 @@ TEST(ENetBackendTest, ClientSendsClientHelloAndProcessesServerWelcome) {
 TEST(ENetBackendTest, HostLocalGamerAddedMidSessionIsAnnouncedAndSendsAtOnce) {
     std::size_t before = ENetBackend::GetDroppedAppDataCount();
 
-    // maxLocalGamers 2 with one gamer signed in leaves room for AddLocalGamer; the vector-based
-    // Create sizes it to its list.
+    // One gamer signed in and a local limit of 2 leave room for AddLocalGamer.
     SignedInGamer hostSignedIn = SignedInGamer::CreateInternal("HostPlayer");
     Gamer::setSignedInGamersProperty(
         new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({&hostSignedIn}))

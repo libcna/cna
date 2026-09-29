@@ -16,6 +16,8 @@ public:
     /** @brief Binds a remote session gamer to its authenticated service account.
      * @param gamer Gamer. @param userId Account ID from directory authority. */
     static void setUserId(Microsoft::Xna::Framework::GamerServices::Gamer& gamer,std::string userId){gamer.serviceUserId_=std::move(userId);}
+    /** @brief Disposes a gamer, as signing it out does. @param gamer Gamer. */
+    static void dispose(Microsoft::Xna::Framework::GamerServices::Gamer& gamer){gamer.isDisposed_=true;}
 };
 /** @brief The online session this process currently belongs to, registered by Net for Guide invitations. */
 struct ActiveOnlineSession {

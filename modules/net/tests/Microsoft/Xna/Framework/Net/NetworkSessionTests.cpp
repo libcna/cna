@@ -5,6 +5,7 @@
 #include "CNA/Internal/Net/ENetBackend.hpp"
 #include "CNA/Internal/Net/ENetHostHandle.hpp"
 #include "CNA/Internal/Net/NetPacketCodec.hpp"
+#include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
 #include "Microsoft/Xna/Framework/Net/GameStartedEventArgs.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
@@ -456,18 +457,55 @@ TEST(NetworkSessionTest, EndGameWhileNotPlayingThrows) {
     session->Dispose();
 }
 
+// Reference Create with an explicit list uses a local-gamer limit of 4, whatever the list's length,
+// and a gamer listed twice joins once.
 TEST(NetworkSessionTest, AddLocalGamerThrowsAtMaxLimit) {
     auto gamer = MakeSignedInGamer();
     auto second = MakeSignedInGamer("tag2");
+    auto third = MakeSignedInGamer("tag3");
+    auto fourth = MakeSignedInGamer("tag4");
+    auto fifth = MakeSignedInGamer("tag5");
     NetworkSession* session = NetworkSession::Create(
-        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer, &gamer}, 8, 0, NetworkSessionProperties{}
     );
+    ASSERT_EQ(session->getLocalGamersProperty().getCountProperty(), 1);
 
-    // maxLocalGamers_ tracks the count passed to the explicit-list constructor overload (1
-    // here), so the very next AddLocalGamer call is already at the limit.
-    EXPECT_THROW(session->AddLocalGamer(&second), System::InvalidOperationException);
+    session->AddLocalGamer(&second);
+    session->AddLocalGamer(&third);
+    session->AddLocalGamer(&fourth);
+    EXPECT_EQ(session->getLocalGamersProperty().getCountProperty(), 4);
+    EXPECT_THROW(session->AddLocalGamer(&fifth), System::InvalidOperationException);
 
     session->Dispose();
+}
+
+// Reference GetLocalGamers runs before every other check of an explicit-list Create, Find or
+// JoinInvited: a null entry or an empty list is an ArgumentException, a disposed gamer an
+// ObjectDisposedException. (Online requests look a gamer up among the signed-in gamers before
+// touching it, so a signed-out one is refused there as not signed in.)
+TEST(NetworkSessionTest, ExplicitLocalGamerListsAreCheckedFirst) {
+    SignedInGamer* none = nullptr;
+    // maxGamers 1 and a Local Find are invalid too; the list is reported instead.
+    EXPECT_THROW(NetworkSession::BeginCreate(NetworkSessionType::Local, std::vector<SignedInGamer*>{}, 1, 0,
+                     NetworkSessionProperties{}, System::AsyncCallback{}, std::any{}), System::ArgumentException);
+    EXPECT_THROW(NetworkSession::BeginCreate(NetworkSessionType::Local, std::vector<SignedInGamer*>{none}, 1, 0,
+                     NetworkSessionProperties{}, System::AsyncCallback{}, std::any{}), System::ArgumentException);
+    try {
+        (void)NetworkSession::BeginFind(NetworkSessionType::Local, std::vector<SignedInGamer*>{}, NetworkSessionProperties{},
+            System::AsyncCallback{}, std::any{});
+        ADD_FAILURE() << "an empty list was accepted";
+    } catch (const System::ArgumentException& e) {
+        EXPECT_EQ(e.getParamNameProperty(), "localGamers");
+    }
+    EXPECT_THROW(NetworkSession::BeginJoinInvited(std::vector<SignedInGamer*>{}, System::AsyncCallback{}, std::any{}),
+                 System::ArgumentException);
+
+    SignedInGamer disposed = MakeSignedInGamer("Disposed");
+    CNA::Internal::GamerServices::GamerAccess::dispose(disposed);
+    EXPECT_THROW(NetworkSession::BeginCreate(NetworkSessionType::Local, std::vector<SignedInGamer*>{&disposed}, 1, 0,
+                     NetworkSessionProperties{}, System::AsyncCallback{}, std::any{}), System::ObjectDisposedException);
+    EXPECT_THROW(NetworkSession::BeginFind(NetworkSessionType::Local, std::vector<SignedInGamer*>{&disposed},
+                     NetworkSessionProperties{}, System::AsyncCallback{}, std::any{}), System::ObjectDisposedException);
 }
 
 TEST(NetworkSessionTest, FindGamerByIdMatchesSoleLocalGamer) {
@@ -550,10 +588,8 @@ TEST(NetworkSessionTest, AJoinedSessionMakesLocalGamersReportIsHostFalse) {
     delete session;
 }
 
-// NOTE: the explicit-local-gamers Create()/JoinInvited() overloads always set maxLocalGamers_ to
-// the passed list's size (zero spare capacity — see AddLocalGamerThrowsAtMaxLimit's own comment
-// above), and the maxLocalGamers-only overload falls back to the global Gamer::SignedInGamers,
-// which defaults to empty in this test binary. An empty list makes the constructor's
+// NOTE: the maxLocalGamers-only overload falls back to the global Gamer::SignedInGamers, which
+// defaults to empty in this test binary. An empty list makes the constructor's
 // `host_ = localGamers_[0]` throw - Task 6.1 fixed EndCreate so that no longer permanently
 // corrupts activeAction_ (see FailedCreateDoesNotPermanentlyStrandActiveAction just below, which
 // now exercises this throw directly instead of avoiding it). Every other test in this file still

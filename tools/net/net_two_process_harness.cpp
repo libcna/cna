@@ -28,6 +28,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/Net/AvailableNetworkSession.hpp"
+#include "Microsoft/Xna/Framework/Net/AvailableNetworkSessionCollection.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "Microsoft/Xna/Framework/Net/HostChangedEventArgs.hpp"
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
@@ -213,6 +214,78 @@ namespace {
 
         if (!gotReply || received != payload) {
             std::fprintf(stderr, "client: echoed payload did not match what was sent\n");
+            return 2;
+        }
+        return 0;
+    }
+
+    // Join after a SystemLink Find keeps the search's local gamers: reference Join inherits the
+    // search's local-gamer limit, and a search given a list joins exactly that group. Two gamers are
+    // signed in; --find=limit searches with a limit of one, --find=list with only the second gamer.
+    // Either way exactly one local gamer joins, then exchanges the usual payload with a host role.
+    int RunFindJoinClient(uint16_t port, const std::string& mode, int timeoutSeconds) {
+        if (port == 0) {
+            std::fprintf(stderr, "find-join-client: --port is required and must be nonzero\n");
+            return 64;
+        }
+        auto first = SignedInGamer::CreateInternal("ClientPlayer");
+        auto second = SignedInGamer::CreateInternal("ClientPlayer2", false, false, Microsoft::Xna::Framework::PlayerIndex::Two);
+        using Microsoft::Xna::Framework::GamerServices::Gamer;
+        using Microsoft::Xna::Framework::GamerServices::SignedInGamerCollection;
+        Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({&first, &second})));
+        struct RestoreSignedIn {
+            ~RestoreSignedIn() { Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({}))); }
+        } restore;
+
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(timeoutSeconds);
+        NetworkSession* session = nullptr;
+        while (session == nullptr) {
+            if (std::chrono::steady_clock::now() >= deadline) {
+                std::fprintf(stderr, "find-join-client: timed out finding the host\n");
+                return 1;
+            }
+            AvailableNetworkSessionCollection found = mode == "list"
+                ? NetworkSession::Find(NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&second}, NetworkSessionProperties{})
+                : NetworkSession::Find(NetworkSessionType::SystemLink, 1, NetworkSessionProperties{});
+            // Discovery also reaches any other SystemLink host on this machine; join the one started
+            // for this test.
+            for (int i = 0; i < found.getCountProperty() && session == nullptr; ++i) {
+                AvailableNetworkSession listing = found.getItem(i);
+                if (listing.GetConnectPort() == port) session = NetworkSession::Join(&listing);
+            }
+        }
+
+        SignedInGamer* expected = mode == "list" ? &second : &first;
+        const auto& locals = session->getLocalGamersProperty();
+        if (locals.getCountProperty() != 1 || locals[0]->getSignedInGamerProperty() != expected) {
+            std::fprintf(stderr, "find-join-client: joined with %d local gamers, not just %s\n",
+                         locals.getCountProperty(), expected->getGamertagProperty().c_str());
+            session->Dispose();
+            return 3;
+        }
+        if (!PumpUntil(session, deadline, [&] { return session->getAllGamersProperty().getCountProperty() >= 2; })) {
+            std::fprintf(stderr, "find-join-client: timed out waiting to join host\n");
+            session->Dispose();
+            return 1;
+        }
+        NetworkGamer* remote = FindRemoteGamer(session);
+        LocalNetworkGamer* localGamer = locals[0];
+        std::vector<SharpRuntime::bytecs> payload(kMagicPayload, kMagicPayload + sizeof(kMagicPayload));
+        localGamer->SendData(payload, SendDataOptions::Reliable, remote);
+        std::vector<SharpRuntime::bytecs> received(sizeof(kMagicPayload));
+        NetworkGamer* sender = nullptr;
+        if (!PumpUntil(session, deadline, [&] {
+                if (!localGamer->getIsDataAvailableProperty()) return false;
+                localGamer->ReceiveData(received, sender);
+                return true;
+            })) {
+            std::fprintf(stderr, "find-join-client: timed out waiting for host's echo\n");
+            session->Dispose();
+            return 1;
+        }
+        session->Dispose();
+        if (received != payload) {
+            std::fprintf(stderr, "find-join-client: echoed payload did not match what was sent\n");
             return 2;
         }
         return 0;
@@ -660,6 +733,7 @@ int main(int argc, char** argv) {
     uint16_t port = 0;
     int timeoutSeconds = 8;
     std::string gamertag;
+    std::string findMode = "limit";
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -671,6 +745,8 @@ int main(int argc, char** argv) {
             timeoutSeconds = std::stoi(arg.substr(10));
         } else if (arg.rfind("--gamertag=", 0) == 0) {
             gamertag = arg.substr(11);
+        } else if (arg.rfind("--find=", 0) == 0) {
+            findMode = arg.substr(7);
         }
     }
 
@@ -680,6 +756,9 @@ int main(int argc, char** argv) {
         }
         if (role == "client") {
             return RunClient(port, timeoutSeconds);
+        }
+        if (role == "find-join-client") {
+            return RunFindJoinClient(port, findMode, timeoutSeconds);
         }
         if (role == "added-gamer-host") {
             return RunAddedGamerHost(timeoutSeconds);
@@ -701,9 +780,9 @@ int main(int argc, char** argv) {
             return RunMigrationSurvivor(port, gamertag, timeoutSeconds);
         }
         std::fprintf(stderr,
-                      "Usage: %s --role=host|client|added-gamer-host|added-gamer-client|start-hosting-partial-failure|"
-                      "migration-host|migration-survivor "
-                      "[--port=<n>] [--gamertag=<name>] [--timeout=<seconds>]\n",
+                      "Usage: %s --role=host|client|find-join-client|added-gamer-host|added-gamer-client|"
+                      "start-hosting-partial-failure|migration-host|migration-survivor "
+                      "[--port=<n>] [--gamertag=<name>] [--find=limit|list] [--timeout=<seconds>]\n",
                       argv[0]);
         return 64;
     } catch (const std::exception& ex) {

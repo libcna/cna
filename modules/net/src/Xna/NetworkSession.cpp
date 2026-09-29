@@ -45,6 +45,19 @@ namespace Microsoft::Xna::Framework::Net
             if (CNA::Internal::GamerServices::serviceCallsRestricted())
                 throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         }
+
+        // Reference GetLocalGamers, which every explicit-list Create/Find/JoinInvited runs first. An
+        // online request dereferences a gamer only once it is found among the signed-in gamers
+        // (ServiceLocalGamers), so it gets only the checks that need no dereference here.
+        void ValidateLocalGamers(const std::vector<SignedInGamer*>& localGamers, bool online)
+        {
+            for (SignedInGamer* gamer : localGamers)
+            {
+                if (gamer == nullptr) throw System::ArgumentException("Gamer is null.", "localGamers");
+                if (!online && gamer->getIsDisposedProperty()) throw System::ObjectDisposedException("localGamers");
+            }
+            if (localGamers.empty()) throw System::ArgumentException("Between 1 and 4 gamers are required.", "localGamers");
+        }
     }
 
     NetworkSession::NetworkSessionAction* NetworkSession::activeAction_ = nullptr;
@@ -221,11 +234,17 @@ namespace Microsoft::Xna::Framework::Net
         }
         else
         {
-            maxLocalGamers_ = 0;
+            // Reference Create/Find/JoinInvited with an explicit list pass a local-gamer limit of 4
+            // and fold the list into a user mask, so a gamer listed twice joins once
+            // (Microsoft.Xna.Framework.Net NetworkSession IL: BeginCreate(..., hostGamer, userMask, 4,
+            // ...) after GetLocalGamers). FNA sized the limit to the list, leaving no room for
+            // AddLocalGamer.
+            maxLocalGamers_ = 4;
             for (SignedInGamer* gamer : *localGamers)
             {
+                if (std::ranges::any_of(locals, [gamer](LocalNetworkGamer* local) { return local->getSignedInGamerProperty() == gamer; }))
+                    continue;
                 locals.push_back(new LocalNetworkGamer(LocalNetworkGamer::CreateInternal(gamer, this)));
-                ++maxLocalGamers_;
             }
         }
         for (LocalNetworkGamer* l : locals) localGamers_.Add(l);
@@ -1123,6 +1142,7 @@ namespace Microsoft::Xna::Framework::Net
     )
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
+        ValidateLocalGamers(localGamers, IsOnlineType(sessionType));
         if (maxGamers < 2 || maxGamers > MaxSupportedGamers)
         {
             throw System::ArgumentOutOfRangeException("maxGamers");
@@ -1395,6 +1415,7 @@ namespace Microsoft::Xna::Framework::Net
     )
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
+        ValidateLocalGamers(localGamers, IsOnlineType(sessionType));
         if (sessionType == NetworkSessionType::Local)
         {
             throw System::ArgumentException("sessionType");
@@ -1448,6 +1469,15 @@ namespace Microsoft::Xna::Framework::Net
             // searching local gamers (the online directory applies the same).
             auto matching = CNA::Internal::Net::ENetDiscoveryService::Matching(
                 CNA::Internal::Net::ENetDiscoveryService::FindSessions(type), action->MaxLocalGamers, action->SessionProperties);
+            // A join keeps the search's local gamers: the listed group, or the signed-in gamers up to
+            // the search's limit.
+            std::shared_ptr<const std::vector<SignedInGamer*>> listed;
+            if (action->LocalGamers) listed = std::make_shared<const std::vector<SignedInGamer*>>(*action->LocalGamers);
+            for (AvailableNetworkSession& found : matching)
+            {
+                found.joinMaxLocalGamers_ = action->LocalGamers ? 4 : action->MaxLocalGamers;
+                found.serviceLocals_ = listed;
+            }
             return AvailableNetworkSessionCollection::CreateInternal(std::move(matching));
         }
 
@@ -1506,8 +1536,11 @@ namespace Microsoft::Xna::Framework::Net
         // the connect address/port for EndJoin below) from availableSession instead.
         pendingJoinAddress_ = availableSession->GetConnectAddress();
         pendingJoinPort_ = availableSession->GetConnectPort();
+        std::optional<std::vector<SignedInGamer*>> joiningGamers;
+        if (availableSession->serviceLocals_) joiningGamers = *availableSession->serviceLocals_;
         activeAction_ = new NetworkSessionAction(
-            NetworkSessionOperation::Join, std::move(asyncState), std::move(callback), 4, std::nullopt, 0,
+            NetworkSessionOperation::Join, std::move(asyncState), std::move(callback), availableSession->joinMaxLocalGamers_,
+            std::move(joiningGamers), 0,
             // FNA passes null for SessionProperties here (marked FIXME upstream); substituted
             // with a default instance since this port's SessionProperties isn't nullable.
             NetworkSessionProperties{},
@@ -1656,12 +1689,7 @@ namespace Microsoft::Xna::Framework::Net
     )
     {
         ThrowIfRestricted();
-        // Reference GetLocalGamers: null entries, disposed gamers and an empty list are refused first.
-        for (SignedInGamer* gamer : localGamers)
-        {
-            if (gamer == nullptr) throw System::ArgumentException("Gamer is null.", "localGamers");
-        }
-        if (localGamers.empty() || localGamers.size() > 4) throw System::ArgumentException("localGamers");
+        ValidateLocalGamers(localGamers, true);
         if (activeAction_ != nullptr || activeSession_ != nullptr)
         {
             throw System::InvalidOperationException();

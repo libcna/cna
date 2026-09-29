@@ -138,7 +138,8 @@ namespace {
 }
 
 // Runs a host role, hands its port to a client role, and expects both to exit 0.
-static void RunHostAndClient(const std::string& hostRole, const std::string& clientRole) {
+static void RunHostAndClient(const std::string& hostRole, const std::string& clientRole,
+                             const std::string& clientArg = "") {
     std::string timeoutArg = "--timeout=" + std::to_string(kHarnessInternalTimeoutSeconds);
     auto outerDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(kOuterWatchdogSeconds);
 
@@ -154,7 +155,9 @@ static void RunHostAndClient(const std::string& hostRole, const std::string& cli
     int port = std::stoi(hostOutput.substr(portPos + 5));
     ASSERT_GT(port, 0) << "host reported an invalid port";
 
-    SpawnedProcess client = SpawnHarness({"--role=" + clientRole, "--port=" + std::to_string(port), timeoutArg});
+    std::vector<std::string> clientArgs{"--role=" + clientRole, "--port=" + std::to_string(port), timeoutArg};
+    if (!clientArg.empty()) clientArgs.push_back(clientArg);
+    SpawnedProcess client = SpawnHarness(clientArgs);
     ASSERT_NE(client.pid, -1);
 
     int hostExitCode = -1;
@@ -176,6 +179,16 @@ static void RunHostAndClient(const std::string& hostRole, const std::string& cli
 
 TEST(TwoProcessLoopbackTest, HostAndClientJoinAndExchangeAppDataAcrossRealProcesses) {
     RunHostAndClient("host", "client");
+}
+
+// A SystemLink Find with a local-gamer limit of one, with two gamers signed in, joins with one;
+// a Find given one gamer joins with exactly that gamer. Both go through real LAN discovery.
+TEST(TwoProcessLoopbackTest, JoinKeepsTheLocalGamerLimitOfTheFindAcrossRealProcesses) {
+    RunHostAndClient("host", "find-join-client", "--find=limit");
+}
+
+TEST(TwoProcessLoopbackTest, JoinUsesTheGamersTheFindWasGivenAcrossRealProcesses) {
+    RunHostAndClient("host", "find-join-client", "--find=list");
 }
 
 // NetworkSession.AddLocalGamer on a joined client: the host admits the gamer onto the client's
