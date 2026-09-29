@@ -6646,6 +6646,7 @@
         "CPP-98A70207EAEA",
         "CPP-B9E5137F3893",
         "CPP-C69B9B84148E",
+        "CPP-D83BDD9EB960",
         "CPP-D9B36A62F813"
       ]
     },
@@ -12740,6 +12741,7 @@
       "status": "implemented",
       "task": "CBIND-037G4",
       "approved_symbols": [
+        "CPP-03273597CE64",
         "CPP-0668C408D9A0",
         "CPP-12BDCD21736E",
         "CPP-1A50CFE9B785",
@@ -12748,12 +12750,11 @@
         "CPP-615BD378242E",
         "CPP-7B6CFBC3FD97",
         "CPP-91063CCB51DB",
-        "CPP-A62C30856C67",
         "CPP-AA3D79273EAA",
-        "CPP-AFEF09A9D3E8",
         "CPP-B30286E08CA1",
         "CPP-D0E291881B5F",
         "CPP-D10BE00CE8C9",
+        "CPP-DE36E4B7DD95",
         "CPP-E4A34190D903",
         "CPP-EF6479EF2584",
         "CPP-F7F60FF8C6B7"
