@@ -1800,6 +1800,8 @@ namespace Microsoft::Xna::Framework::Net
         InviteAccepted.SetReplayHook([](const System::EventHandler<GamerServices::InviteAcceptedEventArgs>::HandlerType& handler) {
             if(!pendingInviteAccepted_) return;
             const auto args=*pendingInviteAccepted_;pendingInviteAccepted_.reset();
+            // Only while its invitation is still there to join: one used or cleared since is not news.
+            if(!CNA::Internal::GamerServices::acceptedInvitation()) return;
             handler(nullptr, args);
         });
         return true;

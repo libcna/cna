@@ -65,6 +65,17 @@ TEST_F(OnlineInvitationTest, GuideAcceptanceRaisesInviteAcceptedAndTheInvitedJoi
     for(int index=0;index<5;++index)tick();EXPECT_EQ(1,raised);
 }
 
+TEST_F(OnlineInvitationTest, APendingAcceptanceWhoseInvitationIsGoneIsNotReplayed) {
+    invite();prompted();Ui::clickForTesting(0);
+    until([&]{return Service::acceptedInvitation().has_value();});
+    // Nobody was subscribed; the accepted invitation is then cleared (as a sign-out would).
+    Service::acceptedInvitation().reset();
+    int raised=0;
+    subscribe([&](const InviteAcceptedEventArgs&){++raised;});
+    for(int index=0;index<3;++index)tick();
+    EXPECT_EQ(0,raised);
+}
+
 TEST_F(OnlineInvitationTest, AnAcceptanceWithoutSubscribersIsDeliveredOnceToTheFirstSubscriber) {
     invite();prompted();Ui::clickForTesting(0);
     until([&]{return Service::acceptedInvitation().has_value();});
