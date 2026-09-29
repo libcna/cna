@@ -1,15 +1,14 @@
 # XNA 4.0 API Coverage Audit
 
-> **GamerServices service migration (GS-003/004, 2026-09-28):** Older aggregate labels below
-> overstate Xbox behavior. The authoritative measured boundary is §9 and
-> [the living plan](../plans/plan_gamer_services_server.md). TLS CNA accounts, four local
-> player slots, Dispatcher pumping, Guide sign-in, lookup/profile and achievement catalog/awards
-> have real-server tests. Online leaderboard reads and LocalWithLeaderboards final writes use the server.
-> Typed directory/invitation control and private verified-WSS/ENet relay are implemented/tested;
-> standard PlayerMatch/Ranked Find now has pending Begin/End and real-server restart/title tests;
-> public create/join/invited lifecycle and public Internet acceptance remain unfinished.
-> The standard Avatar API renders original CNA avatars without extension calls. These are active work, not
-> intentional exclusions. API symbol presence and historical percentages are not evidence of
+> **GamerServices and Net (2026-09-29):** the authoritative per-feature boundary is §9, with the
+> evidence in [the service plan](../plans/plan_gamer_services_server.md), the
+> [avatar and completion pass](../plans/plan_gamer_services_avatar_polish.md) and the
+> [final register](../plans/gamer_services_server_final_register.md). Against the CNA service:
+> accounts and Guide sign-in for four players, profiles, friends and presence, achievements,
+> leaderboards with Ranked arbitration, messages and reviews, avatars, and PlayerMatch/Ranked
+> NetworkSession create/find/join/invites, host migration and AddLocalGamer over the relay, all
+> tested between real processes (native only); offline, local profiles. Public Internet
+> deployment is not measured. API symbol presence and historical percentages are not evidence of
 > behavioral completeness. The CNA server/accounts/protocol are not Xbox LIVE compatible.
 
 
@@ -344,7 +343,7 @@ Also present and implemented, beyond this table's original scope: `Achievement`/
 the standard `Avatar*` API (`AvatarDescription`, `AvatarRenderer`, `AvatarAnimation`, `AvatarBone`,
 `AvatarExpression` — real descriptions, 71-bone animations and rendering, see `docs/avatars.md`), `GamerProfile`,
 `GamerZone`, `LeaderboardReader`/`LeaderboardWriter`/`LeaderboardEntry`/`LeaderboardIdentity`/
-`LeaderboardKey`/`LeaderboardOutcome` (local-fake-persisted, Phase 4), `PropertyDictionary`,
+`LeaderboardKey`/`LeaderboardOutcome` (service-backed online, a local store offline; §9), `PropertyDictionary`,
 `GamerServicesDispatcher`, and the full `*EventArgs`/exception family
 (`SignedInEventArgs`/`SignedOutEventArgs`/`InviteAcceptedEventArgs`/`GuideAlreadyVisibleException`/
 `GameUpdateRequiredException`/`NetworkException`/`NetworkNotAvailableException`).
@@ -674,11 +673,13 @@ both but never throws either from its own Audio source either), not a gap.
 
 ### `Microsoft::Xna::Framework::GamerServices`
 
-The standard API shape exists, but Xbox behavior remains partially implemented. Service identity,
-Guide sign-in, profile/lookup and achievement metadata/awards now have real TLS integration tests.
-Social/pictures, leaderboard lifecycle and the remaining Guide flows are active work; the
-standard Avatar API is implemented (`docs/avatars.md`). See §9 for measured behavior and the living plan for test evidence.
-- **Status:** Partial service implementation; historical symbol coverage is not completeness.
+The standard API behaves against the CNA service (identity, Guide flows, profiles and pictures,
+friends and presence, achievements, leaderboards, messages, reviews, notifications) and against
+local offline profiles without one; the standard Avatar API is implemented (`docs/avatars.md`).
+What is not provided -- voice, TrueSkill, parties, marketplace, push, privacy settings -- and what
+was never measured against Xbox (exact validation order, timing) is listed in §9 and the final
+register.
+- **Status:** Implemented against the CNA service, with the gaps named in §9.
 
 ---
 
@@ -735,9 +736,9 @@ implementations:
 - **Net** — `Microsoft.Xna.Framework.Net` (`NetworkSession`, `PacketReader`/`Writer`,
   `NetworkGamer`, etc.) is real, ENet-backed transport, not a stub. `NetworkSessionType::SystemLink`
   (LAN-style local play, including real host migration and simulated latency/packet-loss testing
-  hooks — `plans/plan_net.md` Phases 5/6) is fully implemented; `PlayerMatch`/`Ranked`/session invites
-  remain unfinished service work (see §9 for
-  the current per-feature breakdown).
+  hooks — `plans/plan_net.md` Phases 5/6) is fully implemented; `PlayerMatch`/`Ranked`, session
+  invites, online host migration and `AddLocalGamer` run against the CNA service (see §9 for the
+  per-feature breakdown).
 
 ---
 
@@ -921,7 +922,7 @@ Full Xbox validation order, lifetime and asynchronous compatibility are still be
 | `LocalNetworkGamer.SendData`/`ReceiveData`, `PacketReader`/`PacketWriter` | Implemented | Real serialization over the real transport. |
 | `NetworkSession.BytesPerSecondSent`/`Received`, `NetworkGamer.RoundtripTime` | Implemented (GS-007q) | Rates from the transport's wire totals, protocol overhead included, over each second. Round trips come from ENet. A gamer on another client machine is reached through the host, so its round trip adds the host's reported one. SystemLink and online sessions alike. |
 | `NetworkSession.Dispose()` / lifecycle | Implemented | Phases 2, 12-14 — several confirmed real bugs (double-dispose use-after-free, async callbacks never invoked, enumerator null-deref after Dispose) found and fixed. |
-| `NetworkSessionType::PlayerMatch` / `Ranked` | Service-backed (GS-007/008) | Standard Create/Find/Join and their Begin/End forms against the CNA session directory; realtime traffic over ENet through an authenticated relay with untrusted-packet limits, recovery inside a bounded window, properties, lobby readiness (GS-007i), canonical gamer order (GS-007l), Ranked rules. Accepted by SAMPLE-096 and SAMPLE-075 (LIVE route) between separate processes. `NetworkMachine.RemoveFromSession` removes a machine through the directory (GS-007j). Native only; online `AddLocalGamer` after create or join is refused. |
+| `NetworkSessionType::PlayerMatch` / `Ranked` | Service-backed (GS-007/008) | Standard Create/Find/Join and their Begin/End forms against the CNA session directory; realtime traffic over ENet through an authenticated relay with untrusted-packet limits, recovery inside a bounded window, properties, lobby readiness (GS-007i), canonical gamer order (GS-007l), Ranked rules. Accepted by SAMPLE-096 and SAMPLE-075 (LIVE route) between separate processes. `NetworkMachine.RemoveFromSession` removes a machine through the directory (GS-007j). `AddLocalGamer` adds an account gamer to this machine's group through the service; it joins at a later Update with `GamerJoined` everywhere (GSP-K2). Native only. |
 | Session invites | Service-backed (GS-007e3) | System-Guide invitations, Guide accept, `InviteAccepted` and `JoinInvited`/`BeginJoinInvited`; accepted by SAMPLE-096 and SAMPLE-075. Push-mode "Join Session In Progress" is not implemented. |
 
 ---
@@ -950,9 +951,8 @@ Full Xbox validation order, lifetime and asynchronous compatibility are still be
 
 6. **Content / Media / Storage** — ✅ Partial: ContentManager (file-extension approach), MediaPlayer, VideoPlayer done. `ResourceContentManager` stub needed.
 
-7. **GamerServices / Net** — In progress: service authentication/identity/achievements foundation
-   and existing ENet SystemLink work. Social, leaderboard lifecycle, online sessions/invites/relay,
-   acceptance samples remain incomplete; see §9 and the living plan.
+7. **GamerServices / Net** — ✅ Done against the CNA service and offline profiles (§9); the
+   remaining gaps are the non-goals and unmeasured Xbox details in the final register.
 
 ---
 
@@ -963,9 +963,9 @@ Full Xbox validation order, lifetime and asynchronous compatibility are still be
 - `docs/xna-4-api-coverage.md` (this file; updated Tasks 196, 200)
 - `include/Microsoft/Xna/Framework/Content/ResourceContentManager.hpp` — stub
 - `src/Content/Xna/ResourceContentManager.cpp` — stub
-- `include/Microsoft/Xna/Framework/GamerServices/GamerServicesComponent.hpp` — stub
-- `src/GamerServices/Xna/GamerServicesComponent.cpp` — stub
-- `include/Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp` — stub
+- `include/Microsoft/Xna/Framework/GamerServices/GamerServicesComponent.hpp` — stub then, implemented since (§9)
+- `src/GamerServices/Xna/GamerServicesComponent.cpp` — stub then, implemented since (§9)
+- `include/Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp` — stub then, implemented since
 - All 17 PackedVector types fully implemented with correct FNA Pack/Unpack math (Tasks 197–199)
 - `tests/PackedVectorGolden.md` — FNA bit-packing reference table for all 17 types
 - §7 Stock Effect Renderer Parity table (Task 196)
@@ -1009,8 +1009,8 @@ Full Xbox validation order, lifetime and asynchronous compatibility are still be
 **No longer excluded (decision 1a, `feature/net`):** GamerServices and Avatar API (Xbox 360
 exclusive, but implemented anyway against the real Xbox 360 reference behavior — see §9) and Net
 (`Microsoft.Xna.Framework.Net`, real ENet-backed `SystemLink` transport — see §9). `PlayerMatch`/
-`Ranked`/session invites are active service implementation requirements (GS-007), not intentional
-exclusions. The Xbox behavioral target is not yet met for the whole namespace.
+`Ranked` and session invites run against the CNA service. Voice, TrueSkill, parties, marketplace
+and Xbox LIVE compatibility are the deliberate exclusions (final register).
 
 ### Build status
 
@@ -1039,5 +1039,4 @@ too, and item 1's BLOCKED-task count dropped from 7 to 6 (447 resolved). Current
 GS-007b measured collection correction: NetworkSessionProperties has eight nullable signed-int
 slots; structural operations reject with NotSupportedException, indices outside 0..7 reject with
 ArgumentOutOfRangeException, and the reference IsReadOnly answer is false. Live-session host/disposal
-and advertised-snapshot writes are checked before mutation. This API/permission correction is
-separate from the still-unfinished public online matchmaking, invitations and Internet relay.
+and advertised-snapshot writes are checked before mutation.

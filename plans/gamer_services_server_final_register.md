@@ -37,8 +37,21 @@ Each is documented where it is declared (C++ and C) and in `docs/xna-4-api-cover
 | `QualityOfService.BytesPerSecondUpstream`; service search results' QoS | 0 / `IsAvailable` false | SystemLink measures the round trip and a downstream estimate from the host's probe train (GSP-L6); a host answers discovery at frame boundaries and cannot time arrivals, and a service listing has no path to its host before a join. |
 | `GamerServicesDispatcher.InstallingTitleUpdate` | never raised | CNA installs no title updates. |
 | `WriteTrueSkill` | raised; no skill is computed | Skill boards are ordinary arbitrated boards (GS-006e). |
+| `LeaderboardKey.BestScoreRecent`/`BestTimeRecent` | no time window: every row is kept, as for the lifetime keys | The XNA documentation says only "best recent scores/times"; neither it nor the IL gives a window, and the service would have to invent one. |
 | Guests in PlayerMatch/Ranked sessions | refused (not authorized for CNA online sessions) | A guest has no service credential for the service to authenticate; guests play Local, LocalWithLeaderboards and SystemLink sessions (GSP-L5). |
 | Browser multiplayer | limitations page | Owner scope: native plus a browser limitations page. |
+
+## Service limits a game can meet
+
+Measured and set by the 2026-09-29 production audit (GSP-O; the server README has the benchmark
+and every finding). They surface through the normal XNA exceptions for an unavailable service.
+
+| Limit | Behaviour | Why |
+|---|---|---|
+| Recorded request IDs per account, title and day | 20,000, then `RATE_LIMITED` | Replay protection for mutations; reads, heartbeats, leases and presence record none, so one account cannot spend a title's budget. |
+| Password sign-in and refresh per address | 10 a minute | Bounds scrypt work and guessing. |
+| Live sign-ins per account | 32; the 33rd signs the oldest out | Clients without credential storage sign in on every launch (GSP-O7). |
+| Relay machines per server; control connections | 1024; 256, 32 per address | One process, one SQLite writer (GSP-O5). |
 
 ## Host-language refusals
 

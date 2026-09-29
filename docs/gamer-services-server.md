@@ -64,7 +64,7 @@ Space chooses, Escape cancels) and to controllers (D-pad or left stick, A, B/Bac
 mouse. `CNA_GAMER_SERVICES_GUIDE_BUTTON=0` disables the Home/Guide-button shortcut for a game that
 needs the Home key.
 
-Server canonical protocol and administration commands live in sibling `cna-gamer-services-server/README.md` and `protocol/v1.md`. Desktop client depends on libcurl with TLS support and nlohmann/json. Browser/other secure platform transport integration remains unverified.
+Server canonical protocol and administration commands live in sibling `cna-gamer-services-server/README.md` and `protocol/v1.md`; its README also records the measured capacity and the 2026-09-29 production audit (GSP-O). Desktop client depends on libcurl with TLS support and nlohmann/json and keeps one connection to the service open between requests, sparing a TCP and TLS handshake per request (GSP-O6). Browser/other secure platform transport integration remains unverified.
 
 **Current state.** With a service: four local authenticated players, standard Guide sign-in,
 profiles and lookup, achievements (metadata, awards, pictures), mutual friends with joinable and
@@ -77,7 +77,8 @@ dies, the service hands the session to the machine with the lowest remaining gam
 machine raises `HostChanged` (see "Host migration" below). `AddLocalGamer` adds a signed-in account
 gamer to this machine's group through the service; it joins, with `GamerJoined` on every machine,
 at a later Update, as XNA's kernel reports it. Not implemented: voice, TrueSkill
-computation, and party and marketplace services. Friends see the online status (online, away,
+computation, time windows for the `...Recent` leaderboard keys (they keep every row), server push
+(the client polls), and party and marketplace services. Friends see the online status (online, away,
 busy) a player chooses in the Guide (`FriendGamer.IsAway`/`IsBusy`). Rich presence is sent during
 Dispatcher.Update; friend online state reflects authenticated activity within 90 seconds; Update
 schedules an authenticated heartbeat every 30 seconds. `docs/xna-4-api-coverage.md` §8–9 lists the
@@ -100,7 +101,7 @@ transport ceiling. Hashes do not make malformed image/model content valid.
 
 Avatars (`avatars` capability, server schema 12): the service stores one CNA-encoded description
 per account and imports CNA's avatar catalogs (`cna-gamer-services-admin <db> avatar-catalog
-<CNA>/modules/gamer-services/assets/avatars/v1`). `AvatarDescription.BeginGetFromGamer` reads a
+<CNA>/modules/gamer-services/assets/avatars/v1`, then `v2`). `AvatarDescription.BeginGetFromGamer` reads a
 gamer's description; the renderer downloads only the files of a newer catalog that the library
 does not embed, through the same verified hash cache. See `docs/avatars.md`.
 
@@ -114,8 +115,8 @@ explicit early leave uses IsLeaving=true. Ranked rows are arbitrated by strict m
 machines (GS-006e); a board may define `stream` columns (XNA `GetValueStream`, at most 256 bytes: a writer's entry
 hands out a writable stream that commits with the entry, a read a read-only one; GSP-L4; offline
 local boards do not keep them) and CNA computes no TrueSkill. Admin seed commands
-are development fixtures, not a gameplay write mechanism. Page limits and unsupported Stream/recent
-window/TrueSkill behavior are documented in the server protocol.
+are development fixtures, not a gameplay write mechanism. Page limits, Stream columns and the
+missing recent window and TrueSkill are documented in the server protocol.
 
 
 Refresh authority is user-level data. On POSIX, the private credential directory defaults to
@@ -125,7 +126,9 @@ Only rotating refresh credentials and estimated expiry are stored, bound to endp
 local slot. Passwords, access tokens and gameplay metadata are absent. Owner-only 0700 directories,
 0600 atomic files, no-follow opens, hard-link/size checks and a process lease prevent unsafe reads
 and concurrent use of the same refresh family. These are protected plaintext files, not an OS
-keychain. Windows/browser credentials remain ephemeral until a secure platform provider exists.
+keychain. Windows/browser credentials remain ephemeral until a secure platform provider exists, so
+such a client signs in afresh on every launch; past 32 live sign-ins the service signs the account's
+oldest one out instead of refusing the new one (GSP-O7).
 
 Dispatcher.Update restores up to four real service identities, refreshes access before expiry and
 maintains heartbeat. Transport loss retains the last authenticated identity and uses bounded

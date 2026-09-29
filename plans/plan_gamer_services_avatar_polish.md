@@ -219,8 +219,9 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
 | GSP-K2 | Online `AddLocalGamer` | done |
 | GSP-L1..L6 | Account GameDefaults, away/busy, toasts, Stream columns, guests, QoS bandwidth | done (L6: downstream only) |
 | GSP-M1 | GamerZone / Reputation | done |
-| GSP-O1 | Server concurrency benchmark and production audit | todo |
-| GSP-P1 | Documentation truth pass | todo |
+| GSP-O1 | Server concurrency benchmark (`tests/service_benchmark.py`, smoke in CTest) | done |
+| GSP-O2..O8 | Production audit fixes: worker pools and scrypt outside the lock, accept survives EMFILE (O2); durability classes and request-ID rules (O3); sign-in pool (O4); per-address admission, 1024 relays (O5); keep-alive and CNA connection reuse (O6); oldest-family sign-out (O7); statistics line (O8) | done |
+| GSP-P1 | Documentation truth pass | done (server README/protocols, CNA docs, register, demos) |
 | GSP-Q1 | Final acceptance and register | todo |
 
 ## Evidence log
@@ -343,6 +344,36 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   system Guide's Gamer zone) and derives stars from the reviews CNA already stores: 5 x prefer /
   (prefer + avoid), in quarters, sent only when the member has been reviewed. Nothing invented: no
   reviews, no rating (0). Tests: server social (+9), `SystemGuideTest.GamerZoneIsChosenInTheGuideAndReputationComesFromReviews`.
+- GSP-O (server concurrency and production audit). `tests/service_benchmark.py` (server) drives a
+  scratch title from one process per player, each from its own loopback address (the sign-in limit is
+  per address); Release build in `build-probe/`, 64 players, 15 s windows; JSON in
+  `/rv/tmp/avatar-polish/bench/{baseline,o2,o3,o3b,o3c,o5,o6-keepalive,after}.json`. Baseline at
+  server a1b2a51: steady 73 req/s (p50 703 ms, p99 3.6 s); under a sign-in storm 42 req/s; one
+  address holding 160 idle connections locked out 60 of 64 players; 90,000 request IDs: 188 req/s
+  once the fsync fix was in; a server at 48 descriptors facing 80 idle connections exited. Causes
+  and fixes, one commit each (server 171b8cf, 5b71f19, 512e0b9, fb43d9a, dcca1b4, 541679c, cb1d6e4;
+  CNA 24ce2bb79, 9ddfcf4d4):
+  service work ran on the two network threads under one lock that sign-in held through scrypt;
+  accept errors ended the process; two or three separately fsynced commits per request at 5.4 ms
+  each; the 30 s heartbeat spent a title's 100,000 daily request IDs after about 35 always-on
+  players and the count scanned the table per request; 128 connections shared by control and
+  relays (96 relays per server); a handshake per request (server `Connection: close`, CNA a new
+  curl handle per request); past 32 live refresh families sign-in was refused, locking out clients
+  that sign in on every launch; no operational output. After: steady 1,602 req/s (p50 38 ms, p99
+  67 ms); storm 1,193 req/s with ordinary p50 49 ms and sign-in about 11/s; idle attack no failures;
+  200,000 IDs 1,964 req/s; descriptor exhaustion survived. Avatar e2e service item 339 -> 308 ms
+  cold, 89 -> 81 ms cached on loopback. Retained (README audit table): one process and SQLite
+  writer, many-address floods need a firewall/proxy, in-memory account budget, certificate reload
+  by restart, polling. Tests: server unit +3 (repeated read/heartbeat IDs, account budget, family
+  eviction), `service_benchmark_smoke`; full corpus 28/28 with the CNA harnesses.
+- GSP-P1 (documentation). Server README rewritten from dated checkpoint notes to the current state
+  (capabilities, not provided, build/administration/operations, capacity, audit, tests);
+  `protocol/v1.md` and `relay-v1.md` lose stale "pending/unfinished" claims (host migration,
+  public NetworkSession, relay transport, arbitration, EndGame ordering) and state the new limits;
+  CNA `docs/gamer-services-server.md` (persistent connection, eviction, not-implemented list,
+  Stream), `docs/xna-4-api-coverage.md` (header, §3/§4/§5/§9/§10/§11: online AddLocalGamer was
+  still listed as refused), the final register (Recent-window gap, service limits); demo scope
+  comments below.
 - Visual evidence lives outside the repositories, as the sample evidence does:
   `/rv/tmp/avatar-polish/evidence/{before,after}/`.
 - BEFORE (catalog v1, 2026-09-29): `evidence/before/{jobs.json, preview/, opengl33/,
