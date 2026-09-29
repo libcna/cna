@@ -6,6 +6,7 @@
 #include "Microsoft/Xna/Framework/Net/NetworkSessionType.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -29,6 +30,25 @@ namespace CNA::Internal::Net
     {
         Query = 0x01,
         Announce = 0x02,
+        /** @brief One of a train a host sends right after its Announce, for bandwidth (GSP-L6). */
+        QosProbe = 0x03,
+    };
+
+    /** @brief Size of every QoS probe datagram, padding included. */
+    constexpr std::size_t kQosProbeBytes = 1200;
+    /** @brief Probes in a host's train. */
+    constexpr uint8_t kQosProbeCount = 8;
+
+    /** @brief One padded probe of a host's bandwidth train, sent back to back to the querier. */
+    struct DiscoveryQosProbeMessage
+    {
+        uint8_t ProtocolVersion{kDiscoveryProtocolVersion};
+        /** @brief The host's session (its Announce's ConnectPort). */
+        uint16_t ConnectPort{0};
+        /** @brief Position in the train, 0..Count-1. */
+        uint8_t Index{0};
+        /** @brief Probes in the train. */
+        uint8_t Count{kQosProbeCount};
     };
 
     /** @brief Broadcast (and sent to localhost as a fallback) by a client searching for LAN sessions. */
@@ -63,11 +83,15 @@ namespace CNA::Internal::Net
     public:
         static std::vector<SharpRuntime::bytecs> Encode(const DiscoveryQueryMessage& message);
         static std::vector<SharpRuntime::bytecs> Encode(const DiscoveryAnnounceMessage& message);
+        /** @brief Encodes a probe padded to exactly kQosProbeBytes. */
+        static std::vector<SharpRuntime::bytecs> Encode(const DiscoveryQosProbeMessage& message);
 
         /** @brief Reads the leading DiscoveryMessageTag byte without needing a full decode. */
         static DiscoveryMessageTag PeekTag(const std::vector<SharpRuntime::bytecs>& data);
 
         static DiscoveryQueryMessage DecodeQuery(const std::vector<SharpRuntime::bytecs>& data);
         static DiscoveryAnnounceMessage DecodeAnnounce(const std::vector<SharpRuntime::bytecs>& data);
+        /** @brief Decodes a probe; anything but a kQosProbeBytes datagram is refused. */
+        static DiscoveryQosProbeMessage DecodeQosProbe(const std::vector<SharpRuntime::bytecs>& data);
     };
 }

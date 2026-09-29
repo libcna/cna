@@ -217,7 +217,7 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
 | GSP-J1 | `AvatarDescription.Changed` | done |
 | GSP-K1 | Online host migration | done |
 | GSP-K2 | Online `AddLocalGamer` | done |
-| GSP-L1..L6 | Account GameDefaults, away/busy, toasts, Stream columns, guests, QoS bandwidth | L1-L5 done; L6 todo |
+| GSP-L1..L6 | Account GameDefaults, away/busy, toasts, Stream columns, guests, QoS bandwidth | done (L6: downstream only) |
 | GSP-M1 | GamerZone / Reputation | todo |
 | GSP-O1 | Server concurrency benchmark and production audit | todo |
 | GSP-P1 | Documentation truth pass | todo |
@@ -328,6 +328,15 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   `IsSignedInToLive` true, no online-session privilege (the service authenticates every
   participant), `AwardAchievement` refused, signs out with its host or from the system Guide.
   Tests: 3 new `SystemGuideTest`; GS 550 + 1 skip, Net 502.
+- GSP-L6 (QoS bandwidth). A SystemLink host now follows each discovery announce with eight 1200-byte
+  probes sent back to back; the searcher, which waits on the socket during its 150 ms window,
+  times their arrivals and reports (probes - 1) x 1200 bytes over the spread as
+  `BytesPerSecondDownstream` (two processes on loopback: about 231 MB/s). Upstream stays 0: the host
+  answers discovery from its frame-driven `Poll()`, so datagrams queued between frames are read back
+  to back and their arrival spacing is lost; a discovery thread would fix that and was judged not
+  worth the risk to the SystemLink corpus now. Old CNA builds drop the new tag (unknown tags were
+  already discarded). The qos_probe demo's stale "client RTT not tracked" text is corrected (client
+  RTT has been tracked since `ApplyClientRoundtrips`). Tests: 2 new discovery tests; Net 504/504.
 - Visual evidence lives outside the repositories, as the sample evidence does:
   `/rv/tmp/avatar-polish/evidence/{before,after}/`.
 - BEFORE (catalog v1, 2026-09-29): `evidence/before/{jobs.json, preview/, opengl33/,

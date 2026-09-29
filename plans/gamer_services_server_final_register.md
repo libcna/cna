@@ -34,7 +34,7 @@ Each is documented where it is declared (C++ and C) and in `docs/xna-4-api-cover
 | `Guide.ShowMarketplace` | explanatory pane after XNA's privilege checks | No store; titles are fully licensed. |
 | `Guide.IsTrialMode` | true only while `SimulateTrialMode` is set | No licensing service (GS-011b removed the public setter XNA keeps internal). |
 | `GamerProfile.GamerZone`/`Reputation` | `Unknown` / 0 | CNA keeps neither; reviews do not rate gamers (GS-004p). |
-| `QualityOfService` bandwidth | 0 | Only the discovery round trip is measured; service search results are unmeasured (`IsAvailable` false). |
+| `QualityOfService.BytesPerSecondUpstream`; service search results' QoS | 0 / `IsAvailable` false | SystemLink measures the round trip and a downstream estimate from the host's probe train (GSP-L6); a host answers discovery at frame boundaries and cannot time arrivals, and a service listing has no path to its host before a join. |
 | `GamerServicesDispatcher.InstallingTitleUpdate` | never raised | CNA installs no title updates. |
 | `WriteTrueSkill` | raised; no skill is computed | Skill boards are ordinary arbitrated boards (GS-006e). |
 | Guests in PlayerMatch/Ranked sessions | refused (not authorized for CNA online sessions) | A guest has no service credential for the service to authenticate; guests play Local, LocalWithLeaderboards and SystemLink sessions (GSP-L5). |

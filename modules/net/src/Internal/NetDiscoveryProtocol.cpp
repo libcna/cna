@@ -131,4 +131,31 @@ namespace CNA::Internal::Net
         message.Properties = ReadProperties(reader);
         return message;
     }
+
+    std::vector<bytecs> NetDiscoveryProtocol::Encode(const DiscoveryQosProbeMessage& message)
+    {
+        std::vector<bytecs> bytes(kQosProbeBytes, 0);
+        bytes[0] = static_cast<bytecs>(DiscoveryMessageTag::QosProbe);
+        bytes[1] = message.ProtocolVersion;
+        bytes[2] = static_cast<bytecs>(message.ConnectPort & 0xff);
+        bytes[3] = static_cast<bytecs>(message.ConnectPort >> 8);
+        bytes[4] = message.Index;
+        bytes[5] = message.Count;
+        return bytes;
+    }
+
+    DiscoveryQosProbeMessage NetDiscoveryProtocol::DecodeQosProbe(const std::vector<bytecs>& data)
+    {
+        if (data.size() != kQosProbeBytes)
+            throw std::runtime_error("NetDiscoveryProtocol: QoS probe size");
+        DiscoveryQosProbeMessage message;
+        message.ProtocolVersion = data[1];
+        ValidateProtocolVersion(message.ProtocolVersion);
+        message.ConnectPort = static_cast<uint16_t>(data[2] | (data[3] << 8));
+        message.Index = data[4];
+        message.Count = data[5];
+        if (message.Count < 2 || message.Count > 32 || message.Index >= message.Count)
+            throw std::runtime_error("NetDiscoveryProtocol: QoS probe index");
+        return message;
+    }
 }

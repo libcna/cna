@@ -110,6 +110,35 @@ TEST(ENetDiscoveryServiceTest, FindSessionsDiscoversRegisteredHost) {
 #endif
 }
 
+// GSP-L6: the host follows its announce with a train of padded probes; the searcher times their
+// arrivals for a downstream estimate. Upstream stays zero: the host answers at frame boundaries.
+TEST(ENetDiscoveryServiceTest, FindSessionsEstimatesTheHostsDownstreamBandwidth) {
+#ifndef __EMSCRIPTEN__
+    SystemLinkSessionFixture host("HostPlayer");
+    const auto found = ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink);
+    ASSERT_EQ(found.size(), 1u);
+    const auto& qos = found[0].getQualityOfServiceProperty();
+    EXPECT_TRUE(qos.getIsAvailableProperty());
+    EXPECT_GT(qos.getBytesPerSecondDownstreamProperty(), 0);
+    EXPECT_EQ(qos.getBytesPerSecondUpstreamProperty(), 0);
+#endif
+}
+
+TEST(ENetDiscoveryServiceTest, QosProbesAreFixedSizeAndValidated) {
+    DiscoveryQosProbeMessage probe;
+    probe.ConnectPort = 0xBEEF;
+    probe.Index = 3;
+    const auto bytes = NetDiscoveryProtocol::Encode(probe);
+    ASSERT_EQ(bytes.size(), kQosProbeBytes);
+    EXPECT_EQ(NetDiscoveryProtocol::PeekTag(bytes), DiscoveryMessageTag::QosProbe);
+    const auto decoded = NetDiscoveryProtocol::DecodeQosProbe(bytes);
+    EXPECT_EQ(decoded.ConnectPort, 0xBEEF);EXPECT_EQ(decoded.Index, 3);EXPECT_EQ(decoded.Count, kQosProbeCount);
+    auto truncated = bytes;truncated.pop_back();
+    EXPECT_THROW((void)NetDiscoveryProtocol::DecodeQosProbe(truncated), std::runtime_error);
+    auto outOfRange = bytes;outOfRange[4] = kQosProbeCount;
+    EXPECT_THROW((void)NetDiscoveryProtocol::DecodeQosProbe(outOfRange), std::runtime_error);
+}
+
 TEST(ENetDiscoveryServiceTest, UnregisterHostStopsAnsweringQueries) {
     SystemLinkSessionFixture host("HostPlayer");
     ASSERT_GT(ENetBackend::GetBoundPort(host.session), 0);

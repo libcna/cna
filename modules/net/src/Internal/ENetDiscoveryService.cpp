@@ -32,11 +32,42 @@ namespace CNA::Internal::Net
         uint16_t registeredHostPort_ = 0;
         ENetSocket socket_ = ENET_SOCKET_NULL;
 
+        // One host found by a search: its announce, round trip, and the arrivals of its QoS probe
+        // train (GSP-L6), timed as they arrive while FindSessions() waits on the socket.
+        struct Found
+        {
+            DiscoveryAnnounceMessage Announce;
+            std::string Address;
+            double RoundtripMs = 0.0;
+            int FirstIndex = -1, LastIndex = -1;
+            std::chrono::steady_clock::time_point FirstArrival, LastArrival;
+        };
+
         // Set only for the duration of FindSessions(); PollOnce()/HandleReceived() append any
         // DiscoveryAnnounce arriving while a search is in progress. Left null between searches so
         // Poll() (the passive host-side responder, called every NetworkSession::Update()) safely
         // ignores stray announces.
-        std::vector<AvailableNetworkSession>* currentResults_ = nullptr;
+        std::vector<Found>* currentResults_ = nullptr;
+        // Probe arrivals for hosts whose announce has not arrived yet (UDP may reorder).
+        std::vector<std::pair<uint16_t, std::chrono::steady_clock::time_point>>* earlyProbes_ = nullptr;
+
+        // Records one probe of a host's first train; a repeated train (the host answered the
+        // broadcast and the loopback copy of the query) is ignored.
+        void RecordProbe(Found& found, const DiscoveryQosProbeMessage& probe, std::chrono::steady_clock::time_point at)
+        {
+            if (found.FirstIndex < 0) { found.FirstIndex = found.LastIndex = probe.Index; found.FirstArrival = found.LastArrival = at; return; }
+            if (probe.Index <= found.LastIndex) return;
+            found.LastIndex = probe.Index; found.LastArrival = at;
+        }
+
+        // Bytes per second of a train: the probes after the first over the time they took to arrive.
+        int DownstreamEstimate(const Found& found)
+        {
+            if (found.FirstIndex < 0 || found.LastIndex <= found.FirstIndex) return 0;
+            const double seconds = std::max(1e-6, std::chrono::duration<double>(found.LastArrival - found.FirstArrival).count());
+            const double rate = static_cast<double>(found.LastIndex - found.FirstIndex) * static_cast<double>(kQosProbeBytes) / seconds;
+            return static_cast<int>(std::min(rate, 2147483647.0));
+        }
 
         // Task 4.2: when currentResults_ is set (a search is in progress), the wall-clock moment
         // FindSessions() sent its Query - used to measure a real round-trip time for each Announce
@@ -167,6 +198,14 @@ namespace CNA::Internal::Net
             announce.Properties = registeredHost_->getSessionPropertiesProperty();
 
             SendTo(sock, queryingAddress, NetDiscoveryProtocol::Encode(announce));
+            // Back to back, so their spacing at the querier measures the path's bandwidth.
+            DiscoveryQosProbeMessage probe;
+            probe.ConnectPort = announce.ConnectPort;
+            for (uint8_t index = 0; index < kQosProbeCount; ++index)
+            {
+                probe.Index = index;
+                SendTo(sock, queryingAddress, NetDiscoveryProtocol::Encode(probe));
+            }
         }
 
         void HandleReceived(ENetSocket sock, const ENetAddress& fromAddress, const std::vector<SharpRuntime::bytecs>& data)
@@ -205,9 +244,7 @@ namespace CNA::Internal::Net
                             // announce happened to take.
                             bool alreadyKnown = std::any_of(
                                 currentResults_->begin(), currentResults_->end(),
-                                [&](const AvailableNetworkSession& existing) {
-                                    return existing.GetConnectPort() == announce.ConnectPort;
-                                }
+                                [&](const Found& existing) { return existing.Announce.ConnectPort == announce.ConnectPort; }
                             );
                             if (!alreadyKnown)
                             {
@@ -217,24 +254,32 @@ namespace CNA::Internal::Net
                                 auto elapsed = std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(
                                     std::chrono::steady_clock::now() - queryStartTime_
                                 );
-                                currentResults_->push_back(AvailableNetworkSession::CreateInternal(
-                                    announce.CurrentGamerCount,
-                                    announce.HostGamertag,
-                                    announce.OpenPrivateSlots,
-                                    announce.OpenPublicSlots,
-                                    announce.Properties,
-                                    QualityOfService::CreateInternal(System::TimeSpan::FromMilliseconds(elapsed.count())),
-                                    address,
-                                    announce.ConnectPort,
-                                    // Task 2.15: explicit, even though it's also the default -
-                                    // FindSessions() (the only caller that can ever reach this
-                                    // code path) itself early-returns {} for any non-SystemLink
-                                    // filter before a single byte goes on the wire, so every
-                                    // AvailableNetworkSession discovered this way really is
-                                    // SystemLink.
-                                    NetworkSessionType::SystemLink
-                                ));
+                                Found found;
+                                found.Announce = announce;
+                                found.Address = address;
+                                found.RoundtripMs = elapsed.count();
+                                // Probes that overtook the announce.
+                                for (const auto& [port, at] : *earlyProbes_)
+                                    if (port == announce.ConnectPort)
+                                    {
+                                        DiscoveryQosProbeMessage early;
+                                        early.ConnectPort = port;
+                                        early.Index = static_cast<uint8_t>(found.FirstIndex < 0 ? 0 : found.LastIndex + 1);
+                                        RecordProbe(found, early, at);
+                                    }
+                                currentResults_->push_back(std::move(found));
                             }
+                        }
+                        break;
+                    case DiscoveryMessageTag::QosProbe:
+                        if (currentResults_ != nullptr)
+                        {
+                            const auto at = std::chrono::steady_clock::now();
+                            const auto probe = NetDiscoveryProtocol::DecodeQosProbe(data);
+                            auto found = std::find_if(currentResults_->begin(), currentResults_->end(),
+                                [&](const Found& existing) { return existing.Announce.ConnectPort == probe.ConnectPort; });
+                            if (found != currentResults_->end()) RecordProbe(*found, probe, at);
+                            else if (earlyProbes_->size() < 64) earlyProbes_->emplace_back(probe.ConnectPort, at);
                         }
                         break;
                 }
@@ -256,13 +301,15 @@ namespace CNA::Internal::Net
         class CurrentResultsGuard
         {
         public:
-            explicit CurrentResultsGuard(std::vector<AvailableNetworkSession>* results)
+            CurrentResultsGuard(std::vector<Found>* results, std::vector<std::pair<uint16_t, std::chrono::steady_clock::time_point>>* early)
             {
+                earlyProbes_ = early;
                 currentResults_ = results;
             }
             ~CurrentResultsGuard()
             {
                 currentResults_ = nullptr;
+                earlyProbes_ = nullptr;
             }
             CurrentResultsGuard(const CurrentResultsGuard&) = delete;
             CurrentResultsGuard& operator=(const CurrentResultsGuard&) = delete;
@@ -364,8 +411,9 @@ namespace CNA::Internal::Net
         loopbackAddress.port = kDiscoveryPort;
         SendTo(sock, loopbackAddress, bytes);
 
-        std::vector<AvailableNetworkSession> results;
-        CurrentResultsGuard resultsGuard(&results);
+        std::vector<Found> found;
+        std::vector<std::pair<uint16_t, std::chrono::steady_clock::time_point>> early;
+        CurrentResultsGuard resultsGuard(&found, &early);
 
         auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(kSearchWindowMs);
         while (true)
@@ -379,6 +427,23 @@ namespace CNA::Internal::Net
             PollOnce(sock, static_cast<uint32_t>(remaining));
         }
 
+        std::vector<AvailableNetworkSession> results;
+        for (const auto& host : found)
+        {
+            const auto& announce = host.Announce;
+            results.push_back(AvailableNetworkSession::CreateInternal(
+                announce.CurrentGamerCount,
+                announce.HostGamertag,
+                announce.OpenPrivateSlots,
+                announce.OpenPublicSlots,
+                announce.Properties,
+                QualityOfService::CreateInternal(System::TimeSpan::FromMilliseconds(host.RoundtripMs), DownstreamEstimate(host)),
+                host.Address,
+                announce.ConnectPort,
+                // Every listing found here is SystemLink: FindSessions returns early for any other type.
+                NetworkSessionType::SystemLink
+            ));
+        }
         return results;
     }
 
