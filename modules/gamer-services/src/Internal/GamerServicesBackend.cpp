@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
+#include "CNA/Internal/GamerServices/AssetDiskCache.hpp"
+#include "CNA/Internal/GamerServices/AvatarAssets.hpp"
 #include "CNA/Internal/GamerServices/BackendConfiguration.hpp"
 #include "CNA/GamerServices/Configuration.hpp"
 #include "CnaService/Protocol.hpp"
@@ -21,12 +23,9 @@
 #include <random>
 #include <thread>
 #include <algorithm>
-#include <filesystem>
-#include <fstream>
 #include <cstdlib>
 #include <cmath>
 #include <limits>
-#include "System/Security/Cryptography/SHA256.hpp"
 
 namespace CNA::Internal::GamerServices {
 using CnaService::Json;
@@ -383,24 +382,8 @@ public:
         if(hash.size()!=64||hash.find_first_not_of("0123456789abcdef")!=std::string::npos)throw Unavailable("Invalid service asset identifier.");
         const auto token=tokenFor({});
         std::lock_guard cacheLock(cacheMutex_);
-        std::filesystem::path root;
-        if(const auto* configured=std::getenv("CNA_GAMER_SERVICES_CACHE_DIR");configured&&*configured)root=configured;
-        else if(const auto* xdg=std::getenv("XDG_CACHE_HOME");xdg&&*xdg)root=std::filesystem::path(xdg)/"cna/gamer-services/assets";
-        else if(const auto* home=std::getenv("HOME");home&&*home)root=std::filesystem::path(home)/".cache/cna/gamer-services/assets";
-        const auto path=root/hash;
-        auto valid=[&hash](const std::vector<unsigned char>& bytes) {
-            System::Security::Cryptography::SHA256 algorithm;const auto digest=algorithm.ComputeHash(bytes);
-            constexpr char digits[]="0123456789abcdef";std::string actual;
-            for(auto byte:digest){actual+=digits[byte>>4];actual+=digits[byte&15];}return actual==hash;
-        };
-        if(!root.empty()) {
-            std::error_code error;
-            const auto size=std::filesystem::file_size(path,error);
-            if(!error&&size>0&&size<=16777216&&!std::filesystem::is_symlink(path,error)) {
-                std::ifstream stream(path,std::ios::binary);std::vector<unsigned char> bytes(static_cast<std::size_t>(size));
-                if(stream.read(reinterpret_cast<char*>(bytes.data()),bytes.size())&&valid(bytes))return bytes;
-            }
-        }
+        const AssetDiskCache cache(AssetDiskCache::defaultRoot(),prefix_);
+        if(auto cached=cache.read(hash))return std::move(*cached);
         std::vector<unsigned char> bytes;long long expected=0;std::string mime;
         while(bytes.empty()||static_cast<long long>(bytes.size())<expected) {
             const auto part=request("assets.read",{{"hash",hash},{"offset",bytes.size()},{"length",12288}},token);
@@ -416,23 +399,9 @@ public:
             auto digit=[](char c){return c<='9'?c-'0':c-'a'+10;};
             for(std::size_t i=0;i<hex.size();i+=2)bytes.push_back(static_cast<unsigned char>((digit(hex[i])<<4)|digit(hex[i+1])));
         }
-        if(!valid(bytes))throw Unavailable("Corrupt service asset.");
-        if(!root.empty()) {
-            std::error_code error;std::filesystem::create_directories(root,error);
-            if(!error) {
-                std::uintmax_t cachedBytes=0;
-                for(std::filesystem::directory_iterator entry(root,error),end;!error&&entry!=end;entry.increment(error)) {
-                    const auto name=entry->path().filename().string();
-                    if(name.size()!=64||name.find_first_not_of("0123456789abcdef")!=std::string::npos||!entry->is_regular_file(error))continue;
-                    cachedBytes+=entry->file_size(error);if(cachedBytes>268435456)return bytes;
-                }
-                if(error||bytes.size()>268435456-cachedBytes)return bytes;
-                const auto temporary=root/(hash+"."+prefix_+".tmp");
-                {std::ofstream output(temporary,std::ios::binary);output.write(reinterpret_cast<const char*>(bytes.data()),bytes.size());
-                 if(!output){std::filesystem::remove(temporary,error);return bytes;}}
-                std::filesystem::rename(temporary,path,error);if(error)std::filesystem::remove(temporary,error);
-            }
-        }
+        if(Avatars::sha256Hex(std::span<const std::uint8_t>(bytes.data(),bytes.size()))!=hash)throw Unavailable("Corrupt service asset.");
+        // A full or unwritable cache still returns the asset.
+        cache.write(hash,bytes);
         return bytes;
     }
 private:

@@ -212,7 +212,7 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
 | GSP-E* | Materials and renderer polish, per-renderer check | E1 done; renderer coverage in progress |
 | GSP-F* | Animation polish and key-pose/loop tests | done (F1) |
 | GSP-G1 | Server avatar GLB/manifest validation, malformed fixtures | done (server 7a8a629) |
-| GSP-H1 | Avatar cache audit, bounded cleanup, first/warm load measurement | todo |
+| GSP-H1 | Avatar cache audit, bounded cleanup, first/warm load measurement | done |
 | GSP-I1 | CNA-owned avatar customization (system level) | done |
 | GSP-J1 | `AvatarDescription.Changed` | done |
 | GSP-K1 | Online host migration | todo |
@@ -256,6 +256,17 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   headband rests on the hair. v2 is 13.82 MB (curly 645 KB per body, the largest asset). Review
   `/rv/tmp/avatar-polish/review-v2e/` (preview and OPENGL33, 255 jobs, 0 failures); GS 532 + 1
   skip; server avatar tests and `service_cna_avatars` pass.
+- GSP-H1 (cache audit). Found: writes were already atomic and reads verified, but a full cache
+  stopped caching (no eviction), a crash between write and rename left a temporary forever, a
+  damaged entry stayed until a download succeeded, none of it was unit tested (it lived inside the
+  online backend), and the in-process model cache kept the key of every avatar ever drawn. Now
+  `AssetDiskCache` (internal) evicts least recently used entries within 256 MiB (reads refresh
+  recency), deletes damaged entries and temporaries older than ten minutes, and has 10 tests
+  (damage, truncation, interruption, LRU order, oversize, links, six concurrent writers); the model
+  cache prunes expired keys. Load times (Debug, loopback TLS service, `service_cna_avatars`):
+  embedded avatar first in the process 70-72 ms, another 40-44 ms, the same again 0.1 ms (model
+  cache); an avatar with a service-only item 339 ms on first use (manifest + download) and 89 ms
+  from the disk cache (manifest request + verified read).
 - Visual evidence lives outside the repositories, as the sample evidence does:
   `/rv/tmp/avatar-polish/evidence/{before,after}/`.
 - BEFORE (catalog v1, 2026-09-29): `evidence/before/{jobs.json, preview/, opengl33/,

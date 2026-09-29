@@ -21,6 +21,7 @@
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "System/IServiceProvider.hpp"
 #include <chrono>
+#include <cstdio>
 #include <future>
 #include <iostream>
 #include <memory>
@@ -81,10 +82,31 @@ int main() {
         std::cout<<"avatar-lookup "<<summary(avatarOf(bob.get()))<<"\n"<<std::flush;
         std::unique_ptr<Gamer> charlie(Gamer::GetFromGamertag("Charlie"));
         std::cout<<"avatar-none "<<summary(avatarOf(charlie.get()))<<"\n"<<std::flush;
+        // GSP-H1: load times -- embedded catalog cold (first in the process), another avatar, the
+        // same avatar again (model cache); then the service-only item (download on the driver's
+        // first run, disk cache on its second).
+        auto readyMs=[&](AvatarDescription& value) {
+            const auto start=Clock::now();
+            AvatarRenderer timed(&value);
+            until([&]{return timed.getStateProperty()!=AvatarRendererState::Loading;});
+            check(timed.getStateProperty()==AvatarRendererState::Ready,"a timed avatar becomes ready");
+            return std::chrono::duration<double,std::milli>(Clock::now()-start).count();
+        };
+        auto first=AvatarDescription::CreateRandom(AvatarBodyType::Female);
+        auto second=AvatarDescription::CreateRandom(AvatarBodyType::Male);
+        const double cold=readyMs(first),warm=readyMs(second);
+        auto again=AvatarDescription(second.getDescriptionProperty());
+        AvatarRenderer keep(&second);
+        until([&]{return keep.getStateProperty()!=AvatarRendererState::Loading;});
+        const double same=readyMs(again);
         auto description=own;
+        const auto serviceStart=Clock::now();
         AvatarRenderer renderer(&description);
         until([&]{return renderer.getStateProperty()!=AvatarRendererState::Loading;});
         check(renderer.getStateProperty()==AvatarRendererState::Ready,"the service avatar becomes ready");
+        const double service=std::chrono::duration<double,std::milli>(Clock::now()-serviceStart).count();
+        std::printf("avatar-timing embedded-cold=%.1fms embedded-warm=%.1fms embedded-same=%.1fms service-item=%.1fms\n",cold,warm,same,service);
+        std::fflush(stdout);
         check(renderer.getBindPoseProperty().getCountProperty()==71,"71 bind pose bones");
         // The renderer keeps its model alive, so asking again returns the same assembled model.
         const auto load=Avatars::loadAvatarAsync(*Avatars::decode(description.getDescriptionProperty()));

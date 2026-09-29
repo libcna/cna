@@ -76,10 +76,12 @@ remained unfinished, a later slice (and the summary above) supersedes it.
 Achievement/profile picture streams now read immutable SHA-256 resources from the service. The
 per-user cache defaults to `$XDG_CACHE_HOME/cna/gamer-services/assets` or
 `$HOME/.cache/cna/gamer-services/assets`; CI can override `CNA_GAMER_SERVICES_CACHE_DIR`.
-Only content hashes form filenames; data is verified on download and on cache read, corrupt entries
-are replaced atomically, and each API call returns a separate read-only stream at position zero.
-Cache writes stop at 256 MiB (eviction is not implemented); a full/unwritable cache still allows
-retrieval. PNG assets are bounded to 512x512/512 KiB; larger version-2 GLB resources have a 16-MiB
+Only content hashes form filenames; data is verified on download and on every cache read (a damaged
+entry is a miss and is deleted), entries are written to a temporary and renamed into place (an
+interrupted write leaves no entry; temporaries older than ten minutes are deleted by later writes),
+and each API call returns a separate read-only stream at position zero. The cache keeps at most
+256 MiB, evicting the least recently used entries (a read counts as a use); several processes may
+share it. A full or unwritable cache still allows retrieval. PNG assets are bounded to 512x512/512 KiB; larger version-2 GLB resources have a 16-MiB
 transport ceiling. Hashes do not make malformed image/model content valid.
 
 Avatars (`avatars` capability, server schema 12): the service stores one CNA-encoded description

@@ -335,7 +335,8 @@ std::shared_ptr<AvatarLoad> loadAvatarAsync(const AvatarDescriptor& descriptor)
     const auto key=encode(descriptor);
     {
         std::lock_guard guard(cacheLock);
-        if(auto model=cache[key].lock()) {
+        const auto found=cache.find(key);
+        if(auto model=found!=cache.end()?found->second.lock():nullptr) {
             load->model=std::move(model);
             load->done=true;
             return load;
@@ -349,6 +350,8 @@ std::shared_ptr<AvatarLoad> loadAvatarAsync(const AvatarDescriptor& descriptor)
         catch(const std::exception& failure) {error=failure.what();}
         if(model) {
             std::lock_guard guard(cacheLock);
+            // Keys of avatars nobody draws any more would otherwise pile up for the whole run.
+            std::erase_if(cache,[](const auto& entry){return entry.second.expired();});
             cache[key]=model;
         }
         std::lock_guard guard(load->lock);
