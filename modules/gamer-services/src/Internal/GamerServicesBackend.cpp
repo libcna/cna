@@ -478,25 +478,28 @@ private:
         Json request{{"v",1},{"id",id},{"game",config_.gameId},{"op",op},{"args",std::move(args)}};
         if(!token.empty())request["token"]=token;
         const auto bytes=request.dump();if(bytes.size()>CnaService::MaxMessageBytes)throw Unavailable("Service request limit exceeded.");
-        std::unique_ptr<CURL,decltype(&curl_easy_cleanup)> curl(curl_easy_init(),curl_easy_cleanup);
-        if(!curl)throw Unavailable("Service transport unavailable.");
+        // One handle for every exchange (all under transportMutex_) keeps its connection open
+        // between requests, sparing a TCP and TLS handshake each.
+        if(!curl_)curl_.reset(curl_easy_init());
+        if(!curl_)throw Unavailable("Service transport unavailable.");
+        CURL* curl=curl_.get();
         std::string output;
-        curl_easy_setopt(curl.get(),CURLOPT_URL,config_.endpoint.c_str());
-        curl_easy_setopt(curl.get(),CURLOPT_PROTOCOLS_STR,config_.insecureLoopback?"https,http":"https");
-        curl_easy_setopt(curl.get(),CURLOPT_FOLLOWLOCATION,0L);curl_easy_setopt(curl.get(),CURLOPT_PROXY,"");
-        curl_easy_setopt(curl.get(),CURLOPT_SSL_VERIFYPEER,1L);curl_easy_setopt(curl.get(),CURLOPT_SSL_VERIFYHOST,2L);
-        curl_easy_setopt(curl.get(),CURLOPT_SSLVERSION,CURL_SSLVERSION_TLSv1_2);
-        if(!config_.caBundle.empty())curl_easy_setopt(curl.get(),CURLOPT_CAINFO,config_.caBundle.c_str());
-        curl_easy_setopt(curl.get(),CURLOPT_NOSIGNAL,1L);curl_easy_setopt(curl.get(),CURLOPT_CONNECTTIMEOUT_MS,3000L);
-        curl_easy_setopt(curl.get(),CURLOPT_TIMEOUT_MS,10000L);
-        curl_easy_setopt(curl.get(),CURLOPT_POSTFIELDS,bytes.data());curl_easy_setopt(curl.get(),CURLOPT_POSTFIELDSIZE,static_cast<long>(bytes.size()));
-        curl_easy_setopt(curl.get(),CURLOPT_WRITEFUNCTION,&OnlineBackend::write);curl_easy_setopt(curl.get(),CURLOPT_WRITEDATA,&output);
+        curl_easy_setopt(curl,CURLOPT_URL,config_.endpoint.c_str());
+        curl_easy_setopt(curl,CURLOPT_PROTOCOLS_STR,config_.insecureLoopback?"https,http":"https");
+        curl_easy_setopt(curl,CURLOPT_FOLLOWLOCATION,0L);curl_easy_setopt(curl,CURLOPT_PROXY,"");
+        curl_easy_setopt(curl,CURLOPT_SSL_VERIFYPEER,1L);curl_easy_setopt(curl,CURLOPT_SSL_VERIFYHOST,2L);
+        curl_easy_setopt(curl,CURLOPT_SSLVERSION,CURL_SSLVERSION_TLSv1_2);
+        if(!config_.caBundle.empty())curl_easy_setopt(curl,CURLOPT_CAINFO,config_.caBundle.c_str());
+        curl_easy_setopt(curl,CURLOPT_NOSIGNAL,1L);curl_easy_setopt(curl,CURLOPT_CONNECTTIMEOUT_MS,3000L);
+        curl_easy_setopt(curl,CURLOPT_TIMEOUT_MS,10000L);
+        curl_easy_setopt(curl,CURLOPT_POSTFIELDS,bytes.data());curl_easy_setopt(curl,CURLOPT_POSTFIELDSIZE,static_cast<long>(bytes.size()));
+        curl_easy_setopt(curl,CURLOPT_WRITEFUNCTION,&OnlineBackend::write);curl_easy_setopt(curl,CURLOPT_WRITEDATA,&output);
         curl_slist* headers=curl_slist_append(nullptr,"Content-Type: application/json");
         std::unique_ptr<curl_slist,decltype(&curl_slist_free_all)> owned(headers,curl_slist_free_all);
         if(!headers)throw Unavailable("Service transport unavailable.");
-        curl_easy_setopt(curl.get(),CURLOPT_HTTPHEADER,headers);
-        if(curl_easy_perform(curl.get())!=CURLE_OK)throw Unavailable("CNA service connection failed.");
-        long status=0;curl_easy_getinfo(curl.get(),CURLINFO_RESPONSE_CODE,&status);if(status!=200)throw Unavailable("CNA service HTTP failure.");
+        curl_easy_setopt(curl,CURLOPT_HTTPHEADER,headers);
+        if(curl_easy_perform(curl)!=CURLE_OK)throw Unavailable("CNA service connection failed.");
+        long status=0;curl_easy_getinfo(curl,CURLINFO_RESPONSE_CODE,&status);if(status!=200)throw Unavailable("CNA service HTTP failure.");
         const auto response=CnaService::parse(output);
         if(!response.is_object()||response.size()!=4||response.at("v")!=1||CnaService::stringField(response,"id",64)!=id||!response.at("result").is_object())
             throw Unavailable("CNA service protocol mismatch.");
@@ -651,6 +654,9 @@ private:
     CredentialStore credentials_;
     std::unique_ptr<IServiceSessionDirectory> directory_;
     std::mutex slotMutex_,transportMutex_,cacheMutex_;
+#ifndef __EMSCRIPTEN__
+    std::unique_ptr<CURL,decltype(&curl_easy_cleanup)> curl_{nullptr,curl_easy_cleanup};
+#endif
     std::array<Slot,4> slots_{};
     std::string prefix_=prefix();
     unsigned long long sequence_=0;
