@@ -9607,7 +9607,7 @@
       "mapping": "No C mapping: this is a friendship declaration that lets SystemLink discovery record the upstream bandwidth its search measured, not a callable public member",
       "tests": "Doxygen declaration inventory; no callable native operation exists",
       "status": "not-applicable",
-      "task": "GSX-E",
+      "task": "CBIND-127",
       "approved_symbols": [
         "CPP-6F0550570B2A"
       ]
