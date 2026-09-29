@@ -144,7 +144,13 @@ TEST_F(ServiceSearchTest, ThrowingUpdateCallbackLeavesCompletionConsumableExactl
 }
 TEST_F(ServiceSearchTest, QueueSaturationRefusesBeginWithoutLeakingOrStrandingBusyState) {
     const int before=NetworkSession::GetActiveActionInstanceCountForTesting();
-    for(int index=0;index<128;++index) service->submit([]{},[]{});
+    // SetUp's Update can leave service work queued (an invitation poll follows a backend change),
+    // so fill to the refusal instead of assuming all 128 slots are free.
+    int queued=0;
+    for(;queued<=128;++queued) {
+        try {service->submit([]{},[]{});} catch(const GamerServicesNotAvailableException&) {break;}
+    }
+    ASSERT_LE(queued,128);
     EXPECT_THROW((void)NetworkSession::BeginFind(NetworkSessionType::Ranked,1,properties(),{},{}),GamerServicesNotAvailableException);
     EXPECT_EQ(before,NetworkSession::GetActiveActionInstanceCountForTesting());
     for(int index=0;index<4;++index) GamerServicesDispatcher::Update();
