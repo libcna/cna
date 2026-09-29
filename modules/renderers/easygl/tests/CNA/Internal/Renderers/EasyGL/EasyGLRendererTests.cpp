@@ -189,8 +189,8 @@ TEST(EasyGLRendererFactory, MissingGlServiceIsAPlatformCapabilityRefusal)
     try
     {
         // plans/plan_runtimerenderer.md design decision 4: the factory lives in the FAMILY's namespace
-        // so several renderer archives can link into one binary. Called qualified, exactly as the
-        // GDI family's own programs do. (IGraphicsRenderer.hpp used to also declare a bare
+        // so several renderer archives can link into one binary. Called qualified.
+        // (IGraphicsRenderer.hpp used to also declare a bare
         // CNA::Internal::Renderers::CreateGraphicsRenderer, which made an unqualified call
         // ambiguous; that leftover declaration is gone, but qualifying the call is still what
         // states which family is under test.)

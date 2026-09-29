@@ -3,13 +3,13 @@
 **Generated** by `tools/platform/renderer_sdl_audit.py`. Regenerate with `--out`, gate with
 `--check` (PLAT-76). Do not hand-edit.
 
-22 renderer identities over 18 module families.
+18 renderer identities over 14 module families.
 
 | Verdict | Families | Meaning |
 |---|---:|---|
 | `sdl-native` | 2 | Identity **is** an SDL3 API. Permanently allowlisted. |
 | `sdl-upstream` | 1 | Own sources are effectively SDL-free; the wrapped third-party library links SDL3. Allowlisted for a dependency reason. |
-| `sdl-free` | 15 | No SDL references at all. |
+| `sdl-free` | 11 | No SDL references at all. |
 
 ## Per-family detail
 
@@ -23,14 +23,10 @@
 | `directx12` | DIRECTX12 | `sdl-free` | 0 / 0 | — | — |
 | `directx9` | DIRECTX9 | `sdl-free` | 0 / 0 | — | — |
 | `easygl` | OPENGL33 OPENGLES2 OPENGLES3 WEBGL1 WEBGL2 | `sdl-free` | 0 / 0 | — | — |
-| `gdi` | GDI | `sdl-free` | 0 / 0 | — | — |
 | `headless` | HEADLESS | `sdl-free` | 0 / 0 | — | — |
-| `html-dom` | HTML_DOM | `sdl-free` | 0 / 0 | — | — |
 | `metal` | METAL | `sdl-free` | 0 / 0 | — | — |
-| `opengl4` | OPENGL4 | `sdl-free` | 0 / 0 | — | — |
 | `software` | SOFTWARE | `sdl-free` | 0 / 0 | — | — |
 | `stub` | STUB | `sdl-free` | 0 / 0 | — | — |
-| `svg-dom` | SVG_DOM | `sdl-free` | 0 / 0 | — | — |
 | `vulkan` | VULKAN | `sdl-free` | 0 / 0 | — | — |
 | `webgpu` | WEBGPU | `sdl-free` | 0 / 0 | — | — |
 

@@ -47,9 +47,8 @@ namespace CNA::Examples::PortableTint
                     CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Fragment,
                     "main", std::string(kPayloads[1].source),
                     std::string(kEasyGlFragmentSource)),
-                // plans/plan_opengl4_modern_graphics.md GL4-0018: the desktop GLSL pair a desktop
-                // core context (EasyGL OPENGL33, OPENGL4) selects; without it the package had no
-                // variant those renderers accept.
+                // The desktop GLSL pair a desktop core context (EasyGL OPENGL33) selects; without
+                // it the package had no variant that renderer accepts.
                 ShaderCodeEXT(
                     CNA::ShaderLanguageEXT::GlslDesktop, CNA::ShaderStageEXT::Vertex,
                     "main", std::string(kPayloads[2].source),

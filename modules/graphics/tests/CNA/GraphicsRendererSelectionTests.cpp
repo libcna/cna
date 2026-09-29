@@ -60,7 +60,7 @@ namespace
         [[nodiscard]] static GraphicsRendererType Absent()
         {
             for (int ordinal = 0;
-                 ordinal <= static_cast<int>(GraphicsRendererType::SvgDom); ++ordinal)
+                 ordinal <= static_cast<int>(GraphicsRendererType::Fna3d); ++ordinal)
             {
                 const auto candidate = static_cast<GraphicsRendererType>(ordinal);
                 if (!GraphicsRendererSelection::IsAvailable(candidate))
@@ -134,6 +134,18 @@ TEST_F(GraphicsRendererSelectionTest, SetPreferredRejectsAnUnknownName)
     EXPECT_THROW(GraphicsRendererSelection::SetPreferred("NOT_A_RENDERER"),
                  System::ArgumentException);
     EXPECT_FALSE(GraphicsRendererSelection::IsLatched());
+}
+
+TEST_F(GraphicsRendererSelectionTest, SetPreferredRejectsARetiredIdentityInsteadOfSubstitutingOne)
+{
+    // docs/removed-renderers.md: a retired identity is not a renderer name any more, in any
+    // spelling, so asking for one is refused like an unknown name -- never quietly replaced.
+    for (const char* retired : {"GDI", "HTML_DOM", "SVG_DOM", "OPENGL4", "gdi", "OpenGL4"})
+    {
+        SCOPED_TRACE(retired);
+        EXPECT_THROW(GraphicsRendererSelection::SetPreferred(retired), System::ArgumentException);
+        EXPECT_FALSE(GraphicsRendererSelection::IsLatched());
+    }
 }
 
 TEST_F(GraphicsRendererSelectionTest, SetPreferredRejectsARendererThatIsNotCompiledIn)

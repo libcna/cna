@@ -25,8 +25,8 @@ linked in and the concrete one is chosen at runtime, before CNA is started.
 |---|---|
 | Descriptor / registry value types | ✅ present (`GraphicsRendererDescriptor`, `GraphicsRendererRegistry`, `GraphicsRendererFallbackRecord`) |
 | Pre-window contract extracted from `GraphicsDevice` | ✅ window flags, `SDL_INIT_VIDEO`, the no-window branch and per-family GL context attributes are all descriptor-driven |
-| Per-family descriptors | ✅ all 18 implementation families / 22 public renderer identities; guarded by `scripts/check_runtime_renderer_discipline.py` |
-| Namespaced factories / generated registry | ✅ all 18 factories namespaced; `cmake/RendererRegistry.cmake` emits the table, and the discipline gate checks every identity reaches it |
+| Per-family descriptors | ✅ all 14 implementation families / 18 public renderer identities; guarded by `scripts/check_runtime_renderer_discipline.py` |
+| Namespaced factories / generated registry | ✅ all 14 factories namespaced; `cmake/RendererRegistry.cmake` emits the table, and the discipline gate checks every identity reaches it |
 | `GraphicsRendererSelection` API | ✅ selection, latch, env var, availability; 20 tests |
 | Fallback chain | ✅ resolution, recording, logging and exhaustion; cross-window-kind recreation verified with `SDL_RENDERER;OPENGLES3;HEADLESS` and `OPENGLES3;VULKAN;SOFTWARE;HEADLESS;STUB` multi builds |
 | Multi-renderer CMake mode | ✅ `CNA_GRAPHICS_RENDERERS`, configure-time combination rules, CI job |
@@ -52,7 +52,7 @@ can serve them. Each renderer family answers them through its own
 | Does this renderer need a window at all? | `needsWindow` — false for `HEADLESS`, `SOFTWARE`, `STUB` |
 | Must the platform's video subsystem be started? | `needsVideoSubsystem` — false for the same families, which is what lets them run with no display server |
 | What kind of window does it need? | `windowKind` (`None`/`Plain`/`OpenGL`/`Vulkan`/`Metal`), plus `wantsHighDpi` |
-| Anything to fix before the window exists? | `glFramebuffer` — depth/stencil/double-buffer/multisample bits, which a desktop GLX visual fixes at window-creation time. Only `OPENGL4` and `FNA3D` have real work here |
+| Anything to fix before the window exists? | `glFramebuffer` — depth/stencil/double-buffer/multisample bits, which a desktop GLX visual fixes at window-creation time. Only `FNA3D` has real work here |
 | Which platform services is it handed? | `needsSurfacePresenter`, `needsGlContext`, `needsVulkanSurface` |
 
 These last three groups were function-pointer hooks (`prepareWindowFlags()`,
@@ -165,10 +165,10 @@ outside the list is a **configure error**:
 ```text
 CMake Error at cmake/RendererDefaultSelection.cmake:54 (message):
   CNA: CNA_GRAPHICS_RENDERER=SOFTWARE is not a member of
-  CNA_GRAPHICS_RENDERERS="OPENGL4;VULKAN".
+  CNA_GRAPHICS_RENDERERS="OPENGL33;VULKAN".
 
     CNA_GRAPHICS_RENDERER names the DEFAULT renderer chosen from the compiled-in set, so it has to be one of them.
-    Either add SOFTWARE to CNA_GRAPHICS_RENDERERS, or set -DCNA_GRAPHICS_RENDERER=OPENGL4 to make the list's first entry the default.
+    Either add SOFTWARE to CNA_GRAPHICS_RENDERERS, or set -DCNA_GRAPHICS_RENDERER=OPENGL33 to make the list's first entry the default.
 ```
 
 It is refused rather than silently corrected on purpose. The default is not merely which renderer
@@ -225,21 +225,20 @@ configure time, not merely to exist.
 
 | Combination | Why it is refused |
 |---|---|
-| `GDI` + `SOFTWARE` | GDI compiles the SOFTWARE module's own translation units a second time with `CNA_SOFTWARE_2D_ONLY`. Both in one binary would define the same functions twice with different bodies — an ODR violation. |
-| Renderers from different **platform** partitions | Windows-only (`DIRECTX9`, `DIRECTX11`, `DIRECTX12`, `GDI`), Emscripten-only (`WEBGL1`, `WEBGL2`, `CANVAS`, `HTML_DOM`, `SVG_DOM`) and macOS-only (`METAL`) cannot be targeted by one toolchain. |
+| Renderers from different **platform** partitions | Windows-only (`DIRECTX9`, `DIRECTX11`, `DIRECTX12`), Emscripten-only (`WEBGL1`, `WEBGL2`, `CANVAS`) and macOS-only (`METAL`) cannot be targeted by one toolchain. |
 
 ### Verified combinations
 
 | Set | Status |
 |---|---|
 | `HEADLESS;SOFTWARE;STUB` | ✅ builds, full test suite green, all three selectable at runtime, real fallback between them verified |
-| `WEBGL2;WEBGL1;CANVAS;HTML_DOM;SVG_DOM` (Emscripten) | 🟨 **one wasm bundle carries all five**, and the selection API works inside it — `GetAvailable()` reports all five and `GetSelected()` resolves. Creating a device needs a real browser, which is not yet automated here |
+| `WEBGL2;WEBGL1;CANVAS` (Emscripten) | ✅ **one wasm bundle carries all three.** In headless Chrome (2026-09-28, emsdk 6.0.9) the renderer benchmark ran to completion under each one preferred through `Module.cnaPreferredRenderer`, each reported as selected at runtime. In a bundle that holds `WEBGL2` the `WEBGL1` profile runs on a WebGL 2 context (`MIN_WEBGL_VERSION=2`). Not automated in CI |
 | `SDL_RENDERER;OPENGLES3;SOFTWARE;HEADLESS;STUB` | ✅ builds, all five selectable at runtime, window recreation across window kinds verified. Its 16 test failures are identical to a single-renderer `SDL_RENDERER` build's — pre-existing renderer boundaries, none caused by multi-renderer mode |
 | `OPENGLES3;OPENGLES2;OPENGL33;SOFTWARE;HEADLESS` | ✅ **6385 passed, 0 failed.** Three EasyGL GL profiles in one binary — `OPENGL33` really does get a desktop core context (`OpenGL 4.6 (Core Profile)`) while the ES profiles get an ES context |
 | `OPENGLES3;VULKAN;SOFTWARE;HEADLESS;STUB` | ✅ **6385 passed, 0 failed.** Two different GPU APIs in one binary, both selectable at runtime, including the `SDL_WINDOW_OPENGL` ↔ `SDL_WINDOW_VULKAN` crossing |
 
-Combinations whose evidence involved a renderer retired on 2026-09-17 or 2026-09-27 are no longer
-listed: they cannot be configured any more, so the measurement is not reproducible. Those rows are in
+Combinations whose evidence involved a renderer retired on 2026-09-17, 2026-09-27 or 2026-09-28
+are no longer listed: they cannot be configured any more, so the measurement is not reproducible. Those rows are in
 git history (`docs/removed-renderers.md` names the renderers).
 
 ### What a multi-renderer build makes newly testable
@@ -368,7 +367,7 @@ Build the bundle with several renderers as usual:
 ```bash
 emcmake cmake -S . -B cmake-build-wasm-multi -G Ninja \
       -DCNA_GRAPHICS_RENDERER=WEBGL2 \
-      -DCNA_GRAPHICS_RENDERERS="WEBGL2;CANVAS;HTML_DOM;SVG_DOM"
+      -DCNA_GRAPHICS_RENDERERS="WEBGL2;WEBGL1;CANVAS"
 ```
 
 Then have the page state its preference on the `Module` object, before the module starts:
@@ -395,7 +394,7 @@ var Module = {
 There is also a direct export for pages that already drive the module themselves:
 
 ```js
-Module.ccall("cna_set_preferred_renderer", "number", ["string"], ["SVG_DOM"]);  // 1 = accepted
+Module.ccall("cna_set_preferred_renderer", "number", ["string"], ["WEBGL1"]);  // 1 = accepted
 ```
 
 ### Where this sits in the resolution order

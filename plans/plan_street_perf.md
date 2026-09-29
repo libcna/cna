@@ -1,6 +1,6 @@
 # cna-street speed on Vulkan, SDL_GPU and WebGPU
 
-Owner brief of 2026-09-24: once cna-street ran on OpenGL4 ([`plan_street_opengl4.md`](plan_street_opengl4.md)),
+Owner brief of 2026-09-24: once cna-street ran on OpenGL4 (a renderer since retired; its bring-up plan is in Git history),
 the owner asked why OpenGL4 was so much faster than the other renderers, and then asked for the
 causes to be fixed.
 

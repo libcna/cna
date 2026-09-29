@@ -119,10 +119,10 @@ def strip_comments_and_strings(text: str) -> str:
     """Blank out comments and literals, keeping offsets irrelevant but line content intact.
 
     The inventory deliberately counts SDL named in comments -- a doc comment phrased in SDL's
-    vocabulary is coupling the plan removes. A *verdict*, though, must not be decided by prose:
-    html-dom's only "presentation call" is the words `SDL_SetRenderClipRect` inside a comment
-    explaining what this renderer does NOT do. Classifying it as a CPU presenter on that basis
-    would be wrong, so the verdict path reads code only.
+    vocabulary is coupling the plan removes. A *verdict*, though, must not be decided by prose: a
+    renderer whose only "presentation call" is an SDL function named inside a comment explaining
+    what it does NOT do must not be classified as a CPU presenter on that basis, so the verdict
+    path reads code only.
     """
     return _COMMENT_OR_STRING.sub(" ", text)
 

@@ -68,7 +68,7 @@ struct Owned
 };
 
 // Mirrors the real shape: GameLike (stands in for a Game subclass) owns its "device manager"
-// through a unique_ptr, exactly like SvgDomSmokeTest::gdm_ / HtmlDomSmokeTest::gdm_ do.
+// through a unique_ptr, exactly like a CNA smoke test's own gdm_ does.
 struct GameLike
 {
     std::unique_ptr<Owned> owned;
@@ -125,7 +125,7 @@ void GameLike::run()
 }
 
 // Mirrors Game::Run() being reached via a couple of nested stack frames, like the real
-// SvgDomSmokeTest::Run() -> Game::Run() -> Game::RunLoop() chain.
+// SmokeTest::Run() -> Game::Run() -> Game::RunLoop() chain of a CNA smoke test.
 static void callRunNested(GameLike& g)
 {
     g.run();

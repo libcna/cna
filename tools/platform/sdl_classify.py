@@ -104,7 +104,7 @@ AREAS: dict[str, tuple[str, str, str]] = {
     "dynamic-library": (
         "(none -- cut, see PLAT-45)",
         "PLAT-45",
-        "Empty: CNA never loads objects through SDL. GDI/GLIDE use dlopen/LoadLibrary directly.",
+        "Empty: CNA never loads objects through SDL; code that loads libraries uses dlopen/LoadLibrary directly.",
     ),
     "native-handle": (
         "NativeWindowHandle",
@@ -294,8 +294,8 @@ RULES: list[tuple[str, str, str]] = [
 
     # Dynamic library loading. PLAT-2 found CNA never calls SDL_LoadObject/LoadFunction/
     # UnloadObject -- the only match in the whole tree is SDL_FunctionPointer, and that is a doc
-    # comment quoting SDL_GL_GetProcAddress's signature, so it belongs to GL interop. The two
-    # renderers that do load libraries at run time (GDI, GLIDE) call dlopen/LoadLibrary directly.
+    # comment quoting SDL_GL_GetProcAddress's signature, so it belongs to GL interop. Code that
+    # does load libraries at run time calls dlopen/LoadLibrary directly.
     # The rules are kept so a future SDL_LoadObject call site is classified rather than falling
     # through, but the area is empty today and IPlatformDynamicLibrary was cut on that evidence.
     (r"^SDL_(LoadObject|LoadFunction|UnloadObject|SharedObject)", "dynamic-library", "dynamic library"),

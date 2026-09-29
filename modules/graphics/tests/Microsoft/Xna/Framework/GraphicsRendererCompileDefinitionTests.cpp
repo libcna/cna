@@ -33,9 +33,6 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
 #ifdef CNA_RENDERER_CANVAS
     ++enabled;
 #endif
-#ifdef CNA_RENDERER_HTML_DOM
-    ++enabled;
-#endif
 #ifdef CNA_RENDERER_DIRECTX11
     ++enabled;
 #endif
@@ -62,9 +59,6 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
     // plans/plan_opengles1.md (retired 2026-09-17): same class of gap DX2-84's comment above
     // documents -- a new renderer that never gets an entry here makes this test report 0 enabled
     // renderers rather than 1.
-#ifdef CNA_RENDERER_OPENGL4
-    ++enabled;
-#endif
     // plans/plan_opengl1.md phase 12 finding: same gap class as the D3D9 comment above -- no commit in
     // this file's own history ever added an OPENGL1 entry either, and the full unfiltered
     // CnaTests suite had never actually been run under CNA_GRAPHICS_RENDERER=OPENGL1 until this
@@ -74,9 +68,6 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
     // file, so its silent omission surfaced only when the full CnaTests suite first ran under
     // CNA_GRAPHICS_RENDERER=WICKED and this test reported 0 enabled renderers. The trap is not
     // specific to that identity: this counter must gain an arm for every renderer that is added.
-#ifdef CNA_RENDERER_GDI
-    ++enabled;
-#endif
 
     // plans/plan_metal.md METAL-232: the identical class of gap the D3D9 comment above documents --
     // no commit in this file's own history ever added a Metal entry here, and this file has never

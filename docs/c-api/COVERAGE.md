@@ -12,7 +12,7 @@ or renamed module stops this gate rather than inheriting a default. Paths whose 
 are `Internal` or `Detail` in any capitalization are excluded as implementation detail.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **469 headers**, **8124 symbols**, **7033 implemented**, **15 partial**, **640 planned**, **436 not applicable**. Explicitly excluded headers: **480**.
+Snapshot: **469 headers**, **8120 symbols**, **7029 implemented**, **15 partial**, **640 planned**, **436 not applicable**. Explicitly excluded headers: **461**.
 
 ## Out of runtime C API scope
 
@@ -28,14 +28,14 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/inspector` | 3 | the optional inspector agent and protocol have no C ABI routes |
 | `modules/phone` | 9 | CBIND-117, owner decision 2026-09-18: `Microsoft::Phone::{Shell,Notification}` is the Windows Phone 7 application-lifecycle and push-notification API, not XNA 4.0. Nothing in the repository links `cna_phone`, and no plan row promises it C parity |
 | `modules/platform` | 28 | CBIND-047, owner decision 2026-08-16: the platform abstraction is the substrate the C ABI is built on, not a surface it exposes. Its public headers are its internal contract -- the renderers and the runtime are its consumers, not applications -- and IPlatform deals in C++ interfaces, unique_ptr ownership and virtual dispatch that have no C form |
-| `modules/renderers/**` | 154 | renderer implementations are hidden behind `IGraphicsRenderer` by project policy; a C caller selects a renderer by identity (`CNA_GraphicsRendererType`) and never names an implementation |
+| `modules/renderers/**` | 137 | renderer implementations are hidden behind `IGraphicsRenderer` by project policy; a C caller selects a renderer by identity (`CNA_GraphicsRendererType`) and never names an implementation |
 | `modules/audio` internal/detail paths | 9 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/content` internal/detail paths | 43 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/core` internal/detail paths | 8 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/devices` internal/detail paths | 13 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/devices-ext` internal/detail paths | 1 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/gamer-services` internal/detail paths | 10 | implementation detail: a path segment is `Internal` or `Detail` |
-| `modules/graphics` internal/detail paths | 36 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/graphics` internal/detail paths | 34 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/graphics-ext` internal/detail paths | 2 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/input` internal/detail paths | 4 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/media` internal/detail paths | 12 | implementation detail: a path segment is `Internal` or `Detail` |
@@ -44,7 +44,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `044cb31c732ffdf33dde637c6b9905abd40a2c51e38cbddd42c3c51d0adb0683`.
+Full inventory SHA-256: `5fb908f66c8f9c882b12e1c0200ba4e8c67716dc4aae983658ddb6a2305e6f78`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:
@@ -65,7 +65,7 @@ owner, hashes the complete matrix, and compares this summary. The CTest
 |---|---:|---:|---:|---:|---:|---:|
 | `audio` | 22 | 320 | 217 | 0 | 10 | 93 |
 | `content` | 41 | 802 | 561 | 10 | 207 | 24 |
-| `core` | 15 | 140 | 134 | 0 | 0 | 6 |
+| `core` | 15 | 136 | 130 | 0 | 0 | 6 |
 | `devices` | 20 | 217 | 187 | 0 | 2 | 28 |
 | `devices-ext` | 17 | 84 | 79 | 0 | 0 | 5 |
 | `gamer-services` | 52 | 682 | 616 | 0 | 21 | 45 |

@@ -41,7 +41,7 @@
 
 namespace
 {
-/// plans/plan_opengl4_modern_graphics.md GL4-0004: HiDef as the PROGRAM's profile --
+/// HiDef as the PROGRAM's profile --
 /// it reads the back buffer, which is HiDef-only since SOFTWARE-213, so under the
 /// default Reach device this test died on a profile refusal before its first check. It is set
 /// here rather than on the GraphicsDeviceManager because `Game`'s own GraphicsDevice exists before

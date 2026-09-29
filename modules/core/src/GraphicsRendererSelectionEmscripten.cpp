@@ -5,7 +5,7 @@
 //
 // A browser build is the case where runtime selection earns the most: one bundle is downloaded and
 // cached, and the page decides which renderer it wants before the program starts -- WEBGL2 where
-// the GPU allows it, CANVAS or SVG_DOM where it does not, without shipping four bundles.
+// the GPU allows it, CANVAS where it does not, without shipping several bundles.
 //
 // The C++ contract is unchanged and this file adds none of its own: it is a thin translation of
 // two JS-shaped ways of asking into CNA::GraphicsRendererSelection::SetPreferred(). Both go through
@@ -35,13 +35,13 @@ namespace
     // the PIXIJS platform migration.
     //
     // Fixed by dropping embind rather than by adding `-lembind`, for two reasons: EM_JS is how
-    // every other JS interop in this project is written (the Canvas, HTML DOM, SVG DOM and PixiJS
-    // renderers all use it), and pulling embind's runtime into every consumer's bundle to read one
+    // every other JS interop in this project is written (the Canvas renderer uses it), and pulling
+    // embind's runtime into every consumer's bundle to read one
     // string property is a real cost paid by pages that never set it.
     //
     // The copy is written by hand rather than through `stringToUTF8`, so it cannot depend on a JS
     // runtime helper surviving link-time dead-code elimination. Renderer identities are ASCII by
-    // construction ("WEBGL2", "SVG_DOM", ...), so a code unit outside ASCII means the value is not
+    // construction ("WEBGL2", "CANVAS", ...), so a code unit outside ASCII means the value is not
     // a renderer name at all and the read reports "absent" rather than truncating it into
     // something that might parse.
     EM_JS(int, CnaReadModulePreferredRenderer, (char* buffer, int capacity), {
@@ -92,7 +92,7 @@ extern "C"
      * that already drives the module directly does not have to go through a property.
      *
      * @param name A public renderer identity, in the CNA_GRAPHICS_RENDERER spelling,
-     *             case-insensitive (e.g. "WEBGL2", "CANVAS", "SVG_DOM").
+     *             case-insensitive (e.g. "WEBGL2", "WEBGL1", "CANVAS").
      * @return 1 when the renderer was selected, 0 when the name is not a renderer identity, is not
      *         compiled into this bundle with no fallback chain configured, or the selection has
      *         already latched.

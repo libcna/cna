@@ -86,11 +86,11 @@ not reasonably covered by the existing renderer set. The number of renderers is 
 number is a target. On 2026-09-17 twenty-five identities were retired for exactly that reason
 (`plans/plan_renderer_cleanup.md`, `docs/removed-renderers.md`), leaving 25 public identities over
 21 implementation families; on 2026-09-27 `DIRECT2D`, `FREEDIRECT` and `PORTABLEGL` followed, leaving
-22 over 18.
+22 over 18, and on 2026-09-28 `GDI`, `HTML_DOM`, `SVG_DOM` and `OPENGL4`, leaving 18 over 14.
 
-Of the additions this phase once listed, `OPENGLES2`, `FNA3D` and `SVG_DOM` are live identities
-today; `OPENVG`, `IGL`, `BLEND2D`, `TINYGL`, `PIXIJS`, `NANOVG` and `PORTABLEGL` were delivered and
-later retired. `NVRHI`, `KORE`, `METHANEKIT`, `LINAGX`, `TEMPEST`, `THORVG` and `REACT_DOM` were
+Of the additions this phase once listed, `OPENGLES2` and `FNA3D` are live identities today;
+`OPENVG`, `IGL`, `BLEND2D`, `TINYGL`, `PIXIJS`, `NANOVG`, `PORTABLEGL` and `SVG_DOM` were delivered
+and later retired. `NVRHI`, `KORE`, `METHANEKIT`, `LINAGX`, `TEMPEST`, `THORVG` and `REACT_DOM` were
 never started, and this document no longer proposes them: they survive only as research in
 [`../docs/renderer-expansion-candidates.md`](../docs/renderer-expansion-candidates.md), which is a
 catalogue, not a roadmap. Any future renderer needs a fresh explicit owner instruction that states

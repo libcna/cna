@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MS-PL
 #
-# REMED-MEDIA-001 / GDI-067 32-bit CI coverage: a small, deliberately STANDALONE CMake project
+# REMED-MEDIA-001 and Software CPU allocation 32-bit CI coverage: a small, deliberately STANDALONE CMake project
 # (not add_subdirectory()'d into the main build) that compiles and runs width-dependent std::size_t
 # checks at a genuine 32-bit width.
 #
@@ -59,7 +59,7 @@ target_include_directories(cna_framebuffer_allocation_32bit_overflow_check PRIVA
     ${CNA_MODULE_INCLUDE_ROOTS}
 )
 
-# GDI-076: the CPU texture layout planner gets the same genuine-32-bit coverage as the
+# The Software CPU texture layout planner gets the same genuine-32-bit coverage as the
 # framebuffer planner above -- see tools/graphics/texture_allocation_32bit_check.cpp.
 add_executable(cna_texture_allocation_32bit_overflow_check
     "${CNA_ROOT}/tools/graphics/texture_allocation_32bit_check.cpp"

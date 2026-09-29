@@ -435,7 +435,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         "SingleRenderer|HEADLESS|EMPTY|ACCEPT|renderer set -- HEADLESS"
         "DefaultInsideTheSet|SOFTWARE|HEADLESS,SOFTWARE,STUB|ACCEPT|renderer set -- SOFTWARE"
         "DefaultIsListedFirst|STUB|HEADLESS,SOFTWARE,STUB|ACCEPT|renderer set -- STUB"
-        "DefaultOutsideTheSet|SOFTWARE|OPENGL4,VULKAN|REJECT|is not a member of")
+        "DefaultOutsideTheSet|SOFTWARE|OPENGL33,VULKAN|REJECT|is not a member of")
     foreach(_cna_renderer_default_case IN LISTS _cna_renderer_default_cases)
         string(REPLACE "|" ";" _cna_renderer_default_fields "${_cna_renderer_default_case}")
         list(GET _cna_renderer_default_fields 0 _cna_case_name)
@@ -485,12 +485,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
 
     # The other two routes, plus the controls that keep the refusal honest. BGFX and RLGL stand in
     # for the whole retired set on the SET and OPTION routes -- the per-identity sweep above already
-    # proves the table is complete, so repeating 29 identities on three routes would buy nothing but
-    # 87 tests. What these add is route coverage: a member of CNA_GRAPHICS_RENDERERS and a
+    # proves the table is complete, so repeating 33 identities on three routes would buy nothing but
+    # 99 tests. What these add is route coverage: a member of CNA_GRAPHICS_RENDERERS and a
     # CNA_RENDERER_<X>=ON option are read by different code than the cache selector.
     #
     # The ACCEPT and unknown-name controls exist because a refusal that refuses everything is not a
-    # working gate: without them, a bug that rejected all input would pass all 29 cases above.
+    # working gate: without them, a bug that rejected all input would pass all 33 cases above.
     set(_cna_retired_route_cases
         # name|route|identity|outcome|expected text
         "SetMember_BGFX|SET|BGFX|REFUSE|removed-renderers.md"
@@ -498,8 +498,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         "Option_RLGL|OPTION|RLGL|REFUSE|removed-renderers.md"
         "Option_DIRECTX7|OPTION|DIRECTX7|REFUSE|removed-renderers.md"
         "Option_FREEDIRECT|OPTION|FREEDIRECT|REFUSE|removed-renderers.md"
+        "SetMember_HTML_DOM|SET|HTML_DOM|REFUSE|removed-renderers.md"
+        "SetMember_SVG_DOM|SET|SVG_DOM|REFUSE|removed-renderers.md"
+        "Option_GDI|OPTION|GDI|REFUSE|removed-renderers.md"
+        "Option_OPENGL4|OPTION|OPENGL4|REFUSE|removed-renderers.md"
         "LiveSelectorAccepted_VULKAN|SELECTOR|VULKAN|ACCEPT|"
-        "LiveSelectorAccepted_SVG_DOM|SELECTOR|SVG_DOM|ACCEPT|"
+        "LiveSelectorAccepted_FNA3D|SELECTOR|FNA3D|ACCEPT|"
         "LiveSetMemberAccepted_STUB|SET|STUB|ACCEPT|"
         "UnknownNameStillUnknown|SELECTOR|NOT_A_RENDERER|REFUSE|unknown graphics renderer")
     foreach(_cna_retired_route_case IN LISTS _cna_retired_route_cases)

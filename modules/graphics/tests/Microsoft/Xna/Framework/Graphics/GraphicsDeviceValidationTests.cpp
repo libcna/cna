@@ -4,7 +4,7 @@
 
 #include "CNA/RendererTestGate.hpp"
 
-// Lets CNA_RENDERER_IS name identities bare (Stub, Gdi, ...), matching how the compile-time
+// Lets CNA_RENDERER_IS name identities bare (Stub, Software, ...), matching how the compile-time
 // guards these replaced read.
 using namespace CNA::Testing::Renderers;
 #include <array>
@@ -161,7 +161,7 @@ TEST(GraphicsDeviceValidationTest, ScissorRejectsInvalidValuesWithoutChangingSta
 
 TEST(GraphicsDeviceValidationTest, ViewportAndScissorUseActiveRenderTargetBounds)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGL4, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     GraphicsDevice gd;
     RenderTarget2D target(gd, 8, 6);
     gd.SetRenderTarget(&target);
@@ -181,7 +181,7 @@ TEST(GraphicsDeviceValidationTest, ViewportAndScissorUseActiveRenderTargetBounds
 
 TEST(GraphicsDeviceLifecycleTest, ResetUnbindsActiveRenderTargets)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGL4, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     GraphicsDevice gd;
     RenderTarget2D target(gd, 8, 6);
     gd.SetRenderTarget(&target);
@@ -425,7 +425,7 @@ TEST(TextureCollectionValidationTest, OwnedCollectionsRespectProfileSlotCounts)
 
 TEST(TextureCollectionValidationTest, VertexTextureFormatAndValidationOrderMatchXna)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGL4, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     GraphicsDevice gd;
     gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     Texture2D color(gd, 1, 1, false, SurfaceFormat::Color);
@@ -491,9 +491,9 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
         targets.push_back(std::make_unique<RenderTarget2D>(gd, 4, 4));
         bindings.emplace_back(targets.back().get());
     }
-    if (CNA_RENDERER_IS(SdlRenderer, Gdi))
+    if (CNA_RENDERER_IS(SdlRenderer))
     {
-    // Task 709 (the SDL_RENDERER family) / GDI: each
+    // Task 709: the SDL_RENDERER family
     // supports exactly one active render target at a time -- unlike the other, real-MRT-capable renderers,
     // binding more than one target here must throw clearly rather than silently rendering to only
     // the first. 4 is still within the MAX_RENDERTARGET_BINDINGS cap
@@ -586,7 +586,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_Empty_DoesNotThrow)
 
 TEST(GraphicsDeviceValidationTest, IdenticalRenderTargetBindingsAreNoOps)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGL4, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     GraphicsDevice gd;
     RenderTarget2D target(gd, 8, 8);
     gd.SetRenderTarget(&target);
@@ -617,7 +617,7 @@ TEST(GraphicsDeviceValidationTest, IdenticalRenderTargetBindingsAreNoOps)
 
 TEST(GraphicsDeviceValidationTest, CubeFaceParticipatesInRenderTargetBindingIdentity)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGL4, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     GraphicsDevice gd;
     RenderTargetCube target(
         gd, 8, false, Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color,
@@ -705,7 +705,7 @@ TEST(GraphicsDeviceValidationTest, SetVertexBuffers_EmptyClearsSingularBinding)
 {
     GraphicsDevice gd;
     // VertexBuffer/DrawPrimitives are inherently 3D concepts -- a permanently 2D-only renderer
-    // (Canvas, HTML DOM, SVG DOM, GDI, ... if this test is ever run against them) has no real
+    // (SDL_RENDERER, Canvas, ... if this test is ever run against them) has no real
     // vertex-buffer factory to construct one at all, so there is no "empty vertex-buffer state
     // DrawPrimitives should reject" to observe. Found running this file for the first time against
     // a native, CI-runnable 2D-only renderer -- this test was previously ungated and
@@ -733,7 +733,7 @@ TEST(GraphicsDeviceValidationTest, SetVertexBuffers_EmptyClearsSingularBinding)
 
 TEST(GraphicsDeviceValidationTest, ForeignBuffersAreRejectedTransactionally)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGL4, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     GraphicsDevice receiving;
     GraphicsDevice owner;
     receiving.SetGraphicsProfileEXT(
@@ -765,7 +765,7 @@ TEST(GraphicsDeviceValidationTest, ForeignBuffersAreRejectedTransactionally)
 
 TEST(GraphicsDeviceValidationTest, ForeignTexturesAreRejectedTransactionally)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGL4, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     GraphicsDevice receiving;
     GraphicsDevice owner;
     receiving.SetGraphicsProfileEXT(
@@ -790,7 +790,7 @@ TEST(GraphicsDeviceValidationTest, ForeignTexturesAreRejectedTransactionally)
 
 TEST(GraphicsDeviceDrawValidationTest, NumericArgumentsPrecedeMissingShaderAndData)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGL4, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     GraphicsDevice gd;
     const std::array<VertexPositionColor, 3> vertices{};
     const std::array<std::uint16_t, 3> indices{0, 1, 2};
@@ -817,7 +817,7 @@ TEST(GraphicsDeviceDrawValidationTest, NumericArgumentsPrecedeMissingShaderAndDa
 
 TEST(GraphicsDeviceDrawValidationTest, MissingShaderUsesInvalidOperationAcrossClassicDrawFamilies)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGL4, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     GraphicsDevice gd;
     const std::array<VertexPositionColor, 3> vertices{};
     const std::array<std::uint16_t, 3> indices{0, 1, 2};
@@ -844,7 +844,7 @@ TEST(GraphicsDeviceDrawValidationTest, MissingShaderUsesInvalidOperationAcrossCl
 
 TEST(GraphicsDeviceDrawValidationTest, ValidationPrecedenceMatchesRecoveredXna)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGL4, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
     GraphicsDevice gd;
     const std::array<VertexPositionColor, 3> vertices{};
 

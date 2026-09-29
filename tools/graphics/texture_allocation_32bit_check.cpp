@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// GDI-076: genuine 32-bit size_t coverage for CPU texture layout arithmetic.
+// Genuine 32-bit size_t coverage for the Software renderer's CPU texture layout arithmetic.
 
 #include "CNA/Internal/Renderers/Software/SoftwareTextureAllocation.hpp"
 

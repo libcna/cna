@@ -12,10 +12,10 @@ namespace CNA::Internal::Renderers { struct GpuDrawParams; }
 namespace Microsoft::Xna::Framework::Graphics
 {
     /**
-     * @brief A fixed CPU colour transform for SpriteBatch on the GDI and SOFTWARE renderers.
+     * @brief A fixed CPU colour transform for SpriteBatch on the SOFTWARE renderer.
      *
      * This is a CNA extension, not an XNA shader effect. It deliberately accepts only a fixed
-     * RGBA colour matrix and offset, so neither renderer needs to parse or silently ignore shader
+     * RGBA colour matrix and offset, so the renderer need not parse or silently ignore shader
      * source. Pass it to `SpriteBatch::Begin(..., &effect)`; it transforms each sprite's sampled
      * and tinted source colour before ordinary `BlendState` processing. It is unsupported by GPU
      * renderers unless they explicitly add the same contract.
@@ -53,7 +53,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Copies this fixed effect's state into a CPU SpriteBatch draw description.
          *
-         * Renderer-private routing point used by the shared GDI/SOFTWARE rasterizer; normal
+         * Renderer-private routing point used by the SOFTWARE rasterizer; normal
          * `Effect::FillGpuDrawParams()` is intentionally not overridden, so this extension cannot
          * accidentally alter a 3D draw.
          */

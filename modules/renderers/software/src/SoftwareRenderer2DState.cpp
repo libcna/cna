@@ -30,10 +30,8 @@ namespace CNA::Internal::Renderers::Software
             return *currentMrtFramebuffers_[0];
         if (currentRenderTarget_ != nullptr)
             return currentRenderTarget_->Framebuffer();
-#ifndef CNA_SOFTWARE_2D_ONLY
         if (currentCubeRenderTarget_ != nullptr)
             return currentCubeRenderTarget_->Framebuffer();
-#endif
         return backbuffer_;
     }
 
@@ -43,10 +41,8 @@ namespace CNA::Internal::Renderers::Software
             return *currentMrtFramebuffers_[0];
         if (currentRenderTarget_ != nullptr)
             return currentRenderTarget_->Framebuffer();
-#ifndef CNA_SOFTWARE_2D_ONLY
         if (currentCubeRenderTarget_ != nullptr)
             return currentCubeRenderTarget_->Framebuffer();
-#endif
         return backbuffer_;
     }
 
@@ -413,12 +409,7 @@ namespace CNA::Internal::Renderers::Software
 
     bool SoftwareRenderer::IsCompressedCubeTransferFormatEXT(int surfaceFormat) const
     {
-#ifdef CNA_SOFTWARE_2D_ONLY
-        (void)surfaceFormat;
-        return false;
-#else
         return IsCompressedTransferFormatEXT(surfaceFormat);
-#endif
     }
 
     bool SoftwareRenderer::SupportsHalfFloatTextureLinearFilteringEXT() const
@@ -428,7 +419,7 @@ namespace CNA::Internal::Renderers::Software
 
     bool SoftwareRenderer::SupportsCompiledEffects() const
     {
-#if defined(CNA_SOFTWARE_COMPILED_EFFECTS) && !defined(CNA_SOFTWARE_2D_ONLY)
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
         return true;
 #else
         return false;
@@ -521,12 +512,6 @@ namespace CNA::Internal::Renderers::Software
 
     void SoftwareRenderer::SetRenderTargetCubeFace(IRenderTargetCubeRenderer* rt, int face)
     {
-#ifdef CNA_SOFTWARE_2D_ONLY
-        (void)rt;
-        (void)face;
-        throw std::runtime_error(
-            "Software's GDI 2D compilation unit does not support RenderTargetCube.");
-#else
         auto* next = dynamic_cast<SoftwareRenderTargetCubeRenderer*>(rt);
         if (rt != nullptr && next == nullptr)
             throw std::runtime_error(
@@ -535,7 +520,6 @@ namespace CNA::Internal::Renderers::Software
         currentCubeRenderTarget_ = next;
         if (currentCubeRenderTarget_ != nullptr)
             currentCubeRenderTarget_->BindAsRenderTargetFace(face);
-#endif
     }
 
     void SoftwareRenderer::SetRenderTargets(
@@ -566,10 +550,6 @@ namespace CNA::Internal::Renderers::Software
         {
             if (renderTargets[slot].IsRenderTargetCubeFace())
             {
-#ifdef CNA_SOFTWARE_2D_ONLY
-                throw std::runtime_error(
-                    "Software's GDI 2D compilation unit does not support RenderTargetCube.");
-#else
                 nextCube[static_cast<std::size_t>(slot)] =
                     dynamic_cast<SoftwareRenderTargetCubeRenderer*>(
                         renderTargets[slot].GetRenderTargetCube());
@@ -577,7 +557,6 @@ namespace CNA::Internal::Renderers::Software
                 if (nextCube[static_cast<std::size_t>(slot)] == nullptr)
                     throw std::runtime_error(
                         "SoftwareRenderer::SetRenderTargets: incompatible cube target.");
-#endif
             }
             else
             {
@@ -604,13 +583,11 @@ namespace CNA::Internal::Renderers::Software
                     next2D[index]->BindAsRenderTarget();
                     currentMrtFramebuffers_[index] = &next2D[index]->Framebuffer();
                 }
-#ifndef CNA_SOFTWARE_2D_ONLY
                 else
                 {
                     currentMrtFramebuffers_[index] =
                         &nextCube[index]->BindForMrt(nextFaces[index], slot == 0);
                 }
-#endif
                 ++currentMrtCount_;
             }
         }
@@ -630,11 +607,9 @@ namespace CNA::Internal::Renderers::Software
                 const std::size_t index = static_cast<std::size_t>(slot);
                 if (currentMrt2DTargets_[index] != nullptr)
                     currentMrt2DTargets_[index]->UnbindAsRenderTarget();
-#ifndef CNA_SOFTWARE_2D_ONLY
                 else if (currentMrtCubeTargets_[index] != nullptr)
                     currentMrtCubeTargets_[index]->UnbindForMrt(
                         currentMrtCubeFaces_[index], slot == 0);
-#endif
                 currentMrtFramebuffers_[index] = nullptr;
                 currentMrt2DTargets_[index] = nullptr;
                 currentMrtCubeTargets_[index] = nullptr;
@@ -644,10 +619,8 @@ namespace CNA::Internal::Renderers::Software
         }
         if (currentRenderTarget_ != nullptr)
             currentRenderTarget_->UnbindAsRenderTarget();
-#ifndef CNA_SOFTWARE_2D_ONLY
         if (currentCubeRenderTarget_ != nullptr)
             currentCubeRenderTarget_->UnbindAsRenderTarget();
-#endif
         currentRenderTarget_ = nullptr;
         currentCubeRenderTarget_ = nullptr;
     }
@@ -686,7 +659,7 @@ namespace CNA::Internal::Renderers::Software
         // SOFTWARE-120: retain all four slot masks. Classic XNA stock effects emit COLOR0 only,
         // so the current fixed CPU fragment paths consume slot 0 and leave higher attachments at
         // their explicit clear/preserved contents. Single-sample surfaces use MultiSampleMask bit
-        // 0; the optional four-sample colour plane uses bits 0..3 (GDI-073).
+        // 0; the optional four-sample colour plane uses bits 0..3.
         std::copy_n(writeState.colorWriteChannels, colorWriteMasks_.size(),
                     colorWriteMasks_.begin());
         multiSampleMask_ = writeState.multiSampleMask;

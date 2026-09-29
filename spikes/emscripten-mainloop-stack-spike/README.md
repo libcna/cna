@@ -1,8 +1,9 @@
 # `emscripten-mainloop-stack-spike` — proven root cause of the `Game::BeginDraw()` Emscripten crash
 
 Everything here has actually been run and has actually worked (or actually failed, on purpose) on
-this machine. It exists because a prior remediation pass on the SVG_DOM renderer hit a crash
-inside `Game::BeginDraw()` under Emscripten — reproducing identically for HTML_DOM — that blocked
+this machine. It exists because a prior remediation pass on the since-retired SVG_DOM renderer
+hit a crash inside `Game::BeginDraw()` under Emscripten — reproducing identically for the
+since-retired HTML_DOM — that blocked
 real-browser verification, and initially suspected `GameServiceContainer`/multiple-inheritance
 pointer adjustment. That hypothesis was investigated and **ruled out** (see below) before the real
 root cause was found and proven here.
@@ -67,7 +68,7 @@ Owned(42) DESTRUCTED
 ```
 
 Mapped onto the real code: `GraphicsDeviceManager` is owned by a `std::unique_ptr` member of the
-user's `Game` subclass (e.g. `SvgDomSmokeTest::gdm_`). `Game` itself only holds a raw, non-owning
+user's `Game` subclass (e.g. a smoke test's own `gdm_`). `Game` itself only holds a raw, non-owning
 `IGraphicsDeviceManager* graphicsDeviceManager_`, obtained once via
 `GameServiceContainer::GetService<IGraphicsDeviceManager>()`
 (`Game::DoInitialize()`). If the `Game` subclass is a stack-local in `main()`, the spurious unwind

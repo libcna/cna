@@ -5,7 +5,7 @@
 > discoveries and the next starting point. The design note that started it is `cnaplatform.md`.
 >
 > This file exists separately from the root `NEXT.md` following the repository's own convention
-> for subsystem campaigns (`NEXT_skia.md`, `NEXTinput.md`, `NEXTaudio.md`, `NEXT_gdi.md`, …).
+> for subsystem campaigns (`NEXTinput.md`, `NEXTaudio.md`, …).
 > **`NEXT.md` had no record of this campaign at all** until this file was added and cross-linked.
 
 **Branch:** `feature/platform`

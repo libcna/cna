@@ -54,7 +54,7 @@ namespace
         [[nodiscard]] static GraphicsRendererType Absent()
         {
             for (int ordinal = 0;
-                 ordinal <= static_cast<int>(GraphicsRendererType::SvgDom); ++ordinal)
+                 ordinal <= static_cast<int>(GraphicsRendererType::Fna3d); ++ordinal)
             {
                 const auto candidate = static_cast<GraphicsRendererType>(ordinal);
                 if (!GraphicsRendererSelection::IsAvailable(candidate))

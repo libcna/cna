@@ -743,6 +743,6 @@ int main(void)
         ++accepted;
     }
 
-    printf("%d of 99 routes accepted a CNA_Bool of 9\n", accepted);
+    printf("%d of 97 routes accepted a CNA_Bool of 9\n", accepted);
     return accepted == 0 ? 0 : 1;
 }

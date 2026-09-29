@@ -160,7 +160,7 @@ The native window handle is the entire contract between this platform and a rend
 
 ```
 Win32Platform → IPlatformWindow::GetNativeHandle() → NativeWindowSystem::Win32 + HWND
-              → TryGetWin32() → DirectX11Renderer / DirectX12Renderer / GDI / …
+              → TryGetWin32() → DirectX11Renderer / DirectX12Renderer / …
 ```
 
 No renderer receives a `Win32Window*`, no renderer includes a platform implementation header, and

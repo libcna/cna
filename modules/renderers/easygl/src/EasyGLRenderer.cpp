@@ -1,7 +1,7 @@
 #include "CNA/Internal/Renderers/EasyGL/EasyGLRenderer.hpp"
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "CNA/Internal/Graphics/SrgbTransfer.hpp"
-#include "CNA/Internal/Renderers/Common/GlStockShaderSources.hpp"
+#include "CNA/Internal/Renderers/EasyGL/GlStockShaderSources.hpp"
 #include "CNA/Internal/Renderers/EasyGL/GlProfile.hpp"
 #include "CNA/ShaderLanguageEXT.hpp"
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
@@ -140,11 +140,9 @@ EM_JS(void, CNA_SetWebGLPolygonMode, (int wireframe), {
 });
 #endif
 
-// plans/plan_opengl4_modern_graphics.md GL4-0008: the GLSL declarations every stock program shares
-// (render-target orientation, sRGB transfer, skinning normal, handedness, instancing, shadow
-// reception, punctual light, image-based lighting) and the stock programs themselves live in
-// CNA/Internal/Renderers/Common/GlStockShaderSources.hpp, the one GL shader corpus EasyGL and
-// OpenGL4 both compile.
+// The GLSL declarations every stock program shares (render-target orientation, sRGB transfer,
+// skinning normal, handedness, instancing, shadow reception, punctual light, image-based lighting)
+// and the stock programs themselves live in CNA/Internal/Renderers/EasyGL/GlStockShaderSources.hpp.
 
 namespace CNA::Internal::Renderers::EasyGL
 {

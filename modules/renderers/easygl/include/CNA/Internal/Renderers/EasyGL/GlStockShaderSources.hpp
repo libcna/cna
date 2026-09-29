@@ -1,20 +1,17 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-// plans/plan_opengl4_modern_graphics.md GL4-0008: the one GL stock-effect shader corpus.
+// EasyGL's stock-effect shader corpus.
 //
-// Every stock program CNA's OpenGL renderers draw BasicEffect, AlphaTestEffect, DualTextureEffect,
+// Every stock program EasyGL draws BasicEffect, AlphaTestEffect, DualTextureEffect,
 // EnvironmentMapEffect, SkinnedEffect, PbrEffect, SkinnedPbrEffect and SpriteBatch with is
-// authored here once, in GLSL ES 3.00, and adapted per context by the renderer that compiles it
-// (EasyGL: to GLSL 3.30 core, GLSL ES 1.00 or left as ES 3.00; OpenGL4: to desktop core). The
-// text is moved verbatim from EasyGLRenderer.cpp, where it was the most-corrected statement of
-// XNA's stock-effect semantics in CNA (null texture, fog, saturation, render-target orientation,
-// shadow reception, image-based lighting). Keeping ONE copy is the point: a second renderer that
-// hand-maintained its own GLSL drifted from it for two months (plans/plan_opengl4_modern_graphics.md
-// GL4-0006), and every correction then had to be discovered twice.
+// authored here once, in GLSL ES 3.00, and adapted per profile when it is compiled (to GLSL 3.30
+// core, GLSL ES 1.00, or left as ES 3.00). It is the most-corrected statement of XNA's stock-effect
+// semantics in CNA (null texture, fog, saturation, render-target orientation, shadow reception,
+// image-based lighting).
 //
-// A renderer that compiles these programs owns the uniform/attribute contract they declare; the
-// names are part of that contract and must not change without both renderers' binders.
+// The uniform/attribute names these programs declare are the contract EasyGL's binders rely on and
+// must not change without them.
 
 #include "CNA/Internal/Graphics/SrgbTransfer.hpp"
 

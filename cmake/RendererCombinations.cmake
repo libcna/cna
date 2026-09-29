@@ -17,11 +17,11 @@ set(CNA_RENDERER_SHARED_EASYGL OPENGLES2 OPENGLES3 OPENGL33 WEBGL1 WEBGL2)
 
 # Platform partitions. A combination spanning two of these can never build: the toolchain targets
 # one of them at a time.
-set(CNA_RENDERER_WINDOWS_ONLY DIRECTX9 DIRECTX11 DIRECTX12 GDI)
+set(CNA_RENDERER_WINDOWS_ONLY DIRECTX9 DIRECTX11 DIRECTX12)
 # Listing the browser renderers here is what makes the PAIRWISE rule state the reason -- a
 # CANVAS + DIRECTX11 request should be refused as "two platforms, one toolchain", not left to
 # whichever per-identity gate in RendererSelection.cmake happens to fire first.
-set(CNA_RENDERER_EMSCRIPTEN_ONLY WEBGL1 WEBGL2 CANVAS HTML_DOM SVG_DOM)
+set(CNA_RENDERER_EMSCRIPTEN_ONLY WEBGL1 WEBGL2 CANVAS)
 set(CNA_RENDERER_MACOS_ONLY METAL)
 
 # Rejects an unbuildable combination with a specific, actionable reason.
@@ -67,14 +67,6 @@ function(cna_validate_renderer_combination)
         foreach(_second IN LISTS _identities)
             if(_first STREQUAL _second)
                 continue()
-            endif()
-
-            # GDI re-compiles the SOFTWARE translation units with CNA_SOFTWARE_2D_ONLY.
-            if(_first STREQUAL "GDI" AND _second STREQUAL "SOFTWARE")
-                _cna_reject_combination("${_first}" "${_second}"
-                    "GDI compiles the SOFTWARE module's own translation units a second time with "
-                    "CNA_SOFTWARE_2D_ONLY. Having both in one binary would define the same "
-                    "functions twice with different bodies -- an ODR violation, not just a clash.")
             endif()
 
             # plans/plan_runtimerenderer.md phase P11 REMOVED the rule that used to sit here: two

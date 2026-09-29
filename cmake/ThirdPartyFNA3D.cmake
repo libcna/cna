@@ -164,8 +164,8 @@ function(cna_configure_mojoshader)
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
 
-    # plans/plan_opengl4_modern_graphics.md GL4-0020: MojoShader itself has two standard-library
-    # routes -- SDL's (MOJOSHADER_USE_SDL_STDLIB, which FNA3D's build selects) and the C library's.
+    # MojoShader itself has two standard-library routes -- SDL's (MOJOSHADER_USE_SDL_STDLIB, which
+    # FNA3D's build selects) and the C library's.
     # A CNA_ENABLE_SDL=OFF configuration has no SDL3 target by design, so there the archive is built
     # on the C library route, without its SDL_GPU adapter, instead of refusing every compiled-effect
     # backend outright. FNA3D itself still needs SDL3; its renderer is refused by name in such a

@@ -581,8 +581,8 @@ actual count, because parameterized fixtures frequently increase the EasyGL tota
 - Run `git diff --check`, the focused test, and the relevant Software/EasyGL regressions before
   committing.
 - Do not push unless the owner explicitly asks in the active conversation.
-- Keep `CompiledEffects` conditional on `CNA_SOFTWARE_COMPILED_EFFECTS`; opt-out and reduced GDI
-  builds must continue to report false.
+- Keep `CompiledEffects` conditional on `CNA_SOFTWARE_COMPILED_EFFECTS`; opt-out builds must
+  continue to report false.
 - If a real gap is too large for a bounded implementation, document the architecture and remaining
   scope honestly instead of faking parity.
 

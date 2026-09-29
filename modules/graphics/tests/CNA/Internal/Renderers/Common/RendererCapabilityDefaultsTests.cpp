@@ -365,9 +365,9 @@ TEST(RendererCapabilityDefaultsTest, StorageTextureOperationsAndBindingsDefaultT
 
 TEST(RendererCapabilityDefaultsTest, AppliedMultiSampleCountEchoesTheRequest)
 {
-    // The identity default is the whole point: it is what every renderer except GDI did. Answering
-    // GetMultiSampleCount() instead would report "no MSAA" for every renderer that leaves that at
-    // its 0 default -- including renderers that genuinely honoured the request.
+    // The identity default is the whole point: a renderer that honours the request reports it back.
+    // Answering GetMultiSampleCount() instead would report "no MSAA" for every renderer that leaves
+    // that at its 0 default -- including renderers that genuinely honoured the request.
     DefaultsOnlyRenderer renderer;
     for (const int requested : {0, 1, 2, 4, 8, 16})
     {
