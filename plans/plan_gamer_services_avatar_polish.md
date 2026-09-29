@@ -236,6 +236,19 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   profile: 7 steps, saved avatar read back from the store (`/rv/tmp/avatar-polish/editor/capture/`).
   Server `service_cna_avatars` now also saves an editor edit through `avatars.set` against the
   service's newest (service-only) catalog and reads it back: pass.
+- GSP-C2 (garment fit, found in the editor's captures): limb garments now end exactly at their
+  `t_range` (the loft had snapped to its 20-step grid, leaving shorts' cuffs 4 cm below the hem and
+  boot collars 3.4 cm above the shaft); torso garments clear the tops of the leg lofts, which form
+  the hips' outline (skin showed through shirts at the hips at rest); the v2 body leaves out the
+  pelvis and thigh tops every bottom covers (a description always names a bottom), which bent
+  hips had swung out through the clothes; tops and skirts ride on both thighs below the hip joint,
+  shared across the centre, so a crouch lifts a hem instead of pushing the thighs through it; a
+  skirt's waist sits inside every top. A nearest-surface weight transfer was tried and dropped: it
+  gave trouser tops pelvis weights and tore shirt hems between the legs. Review
+  `/rv/tmp/avatar-polish/review-v2d/` (preview and OPENGL33, 255 jobs, 0 failures), close-ups in
+  `/rv/tmp/avatar-polish/closeups/`. v2 is 12.88 MB. GS 532 + 1 skip; server avatar tests (with
+  v2 as golden import) and `service_cna_avatars` pass. Residual: in the deepest crouch
+  (FemaleIdleFixShoe) a few millimetres of trouser front can show just above a shirt hem.
 - Visual evidence lives outside the repositories, as the sample evidence does:
   `/rv/tmp/avatar-polish/evidence/{before,after}/`.
 - BEFORE (catalog v1, 2026-09-29): `evidence/before/{jobs.json, preview/, opengl33/,

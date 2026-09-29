@@ -43,72 +43,72 @@
   },
   {
    "name": "body.female.glb",
-   "sha256": "259d8a6cb51abb2fe12ea89a5da379f5ef853d6522946c793430213773f3c78d",
-   "size": 430512
+   "sha256": "b4afa21b0c28ad0d8c01cd2252f53df9b7a3111bbae4c9b204b132616eadd784",
+   "size": 411972
   },
   {
    "name": "body.male.glb",
-   "sha256": "89b537eba6f35d64e7ab07f70fcbcf062dcfefb3b80e44460a51c64f67d73acb",
-   "size": 430304
+   "sha256": "129010e1ad562c5487701f558c067fa84c6e1d5858224dddacd4d6de27943fe9",
+   "size": 411768
   },
   {
    "name": "bottom_cargo.female.glb",
-   "sha256": "f2dbd946c0315ef5c354df5639da47a750574ac697f5cf0848db7019423bc1ae",
-   "size": 97440
+   "sha256": "5f6e41ce41087c62a08b3a5b2483666625b13f28d4fcbbc2f02c37fe179c0e89",
+   "size": 100380
   },
   {
    "name": "bottom_cargo.male.glb",
-   "sha256": "3fb7c00a8fd43b785dfc368e95322e26d4de4e572fd2174fb2eb8a3a9222a669",
-   "size": 97228
+   "sha256": "0984b8d71386e42d1c42a2316e4d353b5562d24eced8919a5698992e2bafcebe",
+   "size": 100172
   },
   {
    "name": "bottom_jeans.female.glb",
-   "sha256": "c8d2cd20f35c77b270041ed6c3905ebde05f54bea9f1196df94fe1f7e39b2586",
-   "size": 98596
+   "sha256": "fe3431ce965cc8f6ef30063d4e9826b89f8eaa12ac7a4af11ef08481fa636f42",
+   "size": 101536
   },
   {
    "name": "bottom_jeans.male.glb",
-   "sha256": "63e35d09e9361c66dbb19df369eaea4df3d62d7400a68cb9f96b1545afc5f6e8",
-   "size": 98388
+   "sha256": "39c7e28978913e3cf8e141dbb32a9e41929865346841e63cff771b77e1d4ea63",
+   "size": 101328
   },
   {
    "name": "bottom_joggers.female.glb",
-   "sha256": "ac6ce3bde4465eb6c19cd4f7e36720898d99a871a2d099491c1179dc4d0ab5df",
-   "size": 95536
+   "sha256": "5adf046a5535b087c2012d7f179fea31a03c974da4d49a7b4e4372ce194df762",
+   "size": 98480
   },
   {
    "name": "bottom_joggers.male.glb",
-   "sha256": "473b55393517a66b78db07a931cc616453ceba5e95b5c32655dad3e57f2b05b4",
-   "size": 95328
+   "sha256": "2b795a1349b81f5adf7bb27aaa1d33ab000c1c60ab627c5272815bd14c48f47d",
+   "size": 98272
   },
   {
    "name": "bottom_longskirt.female.glb",
-   "sha256": "e51a1eb4f22664de5303ac97d5e6242cd345426012f45967e73eb81398b9cfa2",
-   "size": 83852
+   "sha256": "2390e82850b720fedec159450ccf934574cd0e6c00117f15397e77da06fd23de",
+   "size": 83848
   },
   {
    "name": "bottom_longskirt.male.glb",
-   "sha256": "3f334d852fff7e827b0b468d20780c95d229cce415e5e8df1062a9b67b2d5653",
-   "size": 83640
+   "sha256": "6c0d1a95bf426e70eff9eb2872d7995109cd2466890b783c1ac0b2e8d627ecdb",
+   "size": 83636
   },
   {
    "name": "bottom_shorts.female.glb",
-   "sha256": "f0824f3cacf7ae8ae0f9aa8b386a62590d0f30d18227fb60672b81c2808345d0",
-   "size": 74432
+   "sha256": "3e40eaab9da04a9d17ccd6d8a17fbbc3d37c58956bec901e046efaa7cb4c02a9",
+   "size": 77376
   },
   {
    "name": "bottom_shorts.male.glb",
-   "sha256": "f60c37a98ae2084da7aed2658dab067be5e50c5931ab8bce5d40925d4e9b3ed9",
-   "size": 74212
+   "sha256": "e291fd096794a62f4394e2767c5decf5f3e7f17872af1183f108a39633664af0",
+   "size": 77156
   },
   {
    "name": "bottom_skirt.female.glb",
-   "sha256": "d367dc6afeca610180b3ec6f888b15138296800783ecfce6653bf799c5de2610",
-   "size": 76808
+   "sha256": "f933a53347b4639c2e75c4355ce1ea818bc587d25ebbd8bec9c3ca90a372ba5b",
+   "size": 76812
   },
   {
    "name": "bottom_skirt.male.glb",
-   "sha256": "ee8f4e2584ae6a23c730816cf91f322c4cd0115dfcbcae8ff1b421080f9b7bbc",
+   "sha256": "58b4eb8f98dc92abd81b5af863e0556b752e49cfeb0c76b8c12111af2e1f1836",
    "size": 76600
   },
   {
@@ -448,22 +448,22 @@
   },
   {
    "name": "shoes_boots.female.glb",
-   "sha256": "7ca18feb9ae0f6c692928bcb7cb11c12123d218386e310168c396a9f575aa567",
-   "size": 108108
+   "sha256": "8a004d50769841ea75f19e30aade2924b189194cf2846736090c36b231c13cd4",
+   "size": 109580
   },
   {
    "name": "shoes_boots.male.glb",
-   "sha256": "74ebf3ea7e65ff927a3cf422be2bab4ab5a84f79fd72cd57af68b062ca05a2a8",
-   "size": 107900
+   "sha256": "9d7a61a399b8adf5cff8493bb00fc663260cb8798f263dccba1ea3e447c3d67c",
+   "size": 109372
   },
   {
    "name": "shoes_dress.female.glb",
-   "sha256": "eb638e8ff9c8610aae1b13fdd3e859e3d6e7940c9589bd2b025c6abe02792f11",
-   "size": 72268
+   "sha256": "5304c0360715590f7823ecc8ea3d08c21d6d28db8401ed1dc1eae3921bdea75a",
+   "size": 72272
   },
   {
    "name": "shoes_dress.male.glb",
-   "sha256": "1dcc31bd283b5cc49ad962d1588fc7d0d688b7f739863c47691ae5abec8e0a16",
+   "sha256": "bca4065f689372094b9e84a9aea543c4ee0a78f78ba019e115a3eecf22fd4467",
    "size": 72060
   },
   {
@@ -478,113 +478,113 @@
   },
   {
    "name": "shoes_hightops.female.glb",
-   "sha256": "b73860ac0bb23119d3e2078c3b3bc6fc269823d3aa32dcfb58f980cdf3e6ba3f",
-   "size": 82788
+   "sha256": "6c87d8285351162bfdcf1bf4f1bca50f1db4cd193429007f4ac9d2c684eea901",
+   "size": 84260
   },
   {
    "name": "shoes_hightops.male.glb",
-   "sha256": "3c0843bfe5a954069eefedd5f7af818b1efb8b2f5e7383f1b0a7779bc2c8ae97",
-   "size": 82576
+   "sha256": "5578fc44dc1224570afd9b5b8c5b71153768ac46e81a3d0c7f70a8ab07b80319",
+   "size": 84048
   },
   {
    "name": "shoes_sneakers.female.glb",
-   "sha256": "0f5d8908062da9303ce39137868e8af2a4cc8900cf932567f2003949bacf5345",
-   "size": 102024
+   "sha256": "6a1e99e30bc9bae5afc134fc64f3687b4e24570ba6cd4102b6d1b026bf84e34b",
+   "size": 102028
   },
   {
    "name": "shoes_sneakers.male.glb",
-   "sha256": "9284e5fceda22251b0a88d8c757537a0b5d4bab1e6fb443ec6349eee9a8a050b",
-   "size": 101812
+   "sha256": "3f95ec705f7ae592e6db96d754c55f29131c49d6ef938505d5cbb49a5401c589",
+   "size": 101816
   },
   {
    "name": "top_hoodie.female.glb",
-   "sha256": "3259aabf4c565e45459076e3faed043e811e8adb58387ac3a00c1c743000c475",
-   "size": 144756
+   "sha256": "2e870851b73a4e4fd07240f922ea3b9b9b231fa7fd29b658029192df862fcfee",
+   "size": 146232
   },
   {
    "name": "top_hoodie.male.glb",
-   "sha256": "0f7268d7079200ebc8b641dffeea91b30e457d47c477d14b2f56f805d1dd459b",
-   "size": 144552
+   "sha256": "b6024b00e245cd2e9449b2b15edf1330d21441adef0a8de5ac0df27d52b10ddb",
+   "size": 146024
   },
   {
    "name": "top_jacket.female.glb",
-   "sha256": "7f3c1fa5ad95ab763b2cb635cdc481a69f8ab032fc4ce8cf4f60f0d7f42bebfb",
-   "size": 140228
+   "sha256": "80e688da90c7358ec4138a5c71e3e0a532e601cee60bc09d9478c3c9194fef78",
+   "size": 141700
   },
   {
    "name": "top_jacket.male.glb",
-   "sha256": "798c113daea03c6400248bfa0fcaf09108e5f2f2f476c1f3fb8c8a9bcaa17a37",
-   "size": 140016
+   "sha256": "3f95e02cdff64edd82259cf9a1be0780d5765631f9a6fc1e90b5034da623ce62",
+   "size": 141488
   },
   {
    "name": "top_longsleeve.female.glb",
-   "sha256": "aebfe1560f36077db6008c2632faa219483cd105a98e507a8916b10caba7791e",
-   "size": 116092
+   "sha256": "f6b6726ba6c86038f2e0836de7b93d9841ccae8cd06dc62aa7b725c192e1c3d1",
+   "size": 117564
   },
   {
    "name": "top_longsleeve.male.glb",
-   "sha256": "b8ec85264aac9ab7841f9e5bd451d67a9748a3b700fad6a68ae0575bd78fb97d",
-   "size": 115880
+   "sha256": "bade0e52d6eaced5a41398af7c52163b2d201ed8e47e644519d4bdf9a5f413cb",
+   "size": 117356
   },
   {
    "name": "top_polo.female.glb",
-   "sha256": "7923773e9a1ede86bdd2d46f188fe2caa5ba24ac2cbc989b68ee8ac0254873b1",
+   "sha256": "9991e7f6a9d53605eb4c6b5ee6f50da255bcb346337045b75addf4ccd1aa7a76",
    "size": 105152
   },
   {
    "name": "top_polo.male.glb",
-   "sha256": "7dd77c3c97e77073416d068a4fcf52d5d5706da684dba7ef557da14132f90590",
+   "sha256": "baa7e5c8dee25bdee00a4676c76b44cfa23ca4cb3bd28291760a5eee7da8eace",
    "size": 104948
   },
   {
    "name": "top_shirt.female.glb",
-   "sha256": "78a8c4a7185dd45d9f93e6f160d3e38958f270da13e52e507acfa9859f95e42d",
-   "size": 111336
+   "sha256": "62644ff656493b17309292f07ba4e90b6612a3bd449f8b1b29c6dbbd728422a9",
+   "size": 112808
   },
   {
    "name": "top_shirt.male.glb",
-   "sha256": "401ce443a0d73efc9445ebee43cc111477f34cca947a1cb847df9cb507f4d644",
-   "size": 111124
+   "sha256": "acaf7902a1690849522e417052de4710b71bb87283ffd72c903a7015931363d9",
+   "size": 112600
   },
   {
    "name": "top_sweater.female.glb",
-   "sha256": "0600b9684329bc8621128c48858152d4c2ea20cf1e13102a85772df9eb462f45",
-   "size": 121324
+   "sha256": "a0a27f73bef7c84e56256252175cc71d01b4e098a84af08bf7620c7749a3c56a",
+   "size": 122796
   },
   {
    "name": "top_sweater.male.glb",
-   "sha256": "59a47eaf97555308c2d773d2d2f1e220dd3c48706dfe7d4dcb45512a5436753b",
-   "size": 121116
+   "sha256": "46a65951faa50cafb367d5549f39be83efc79668c7e7fdecdec0d4e17faccadf",
+   "size": 122588
   },
   {
    "name": "top_tank.female.glb",
-   "sha256": "cf9bb9541b5a1dfc468e44510f56d0d60aa0b7d2d26c75e47947bb24005f7f76",
+   "sha256": "92b4fa60f02caa4f67792fdac388df1cf1d0b9e10666b252e4bdfb35a61dfc47",
    "size": 66672
   },
   {
    "name": "top_tank.male.glb",
-   "sha256": "ace52b594cd6d2449333c4be9fb8727526bc7df3a6e2aa5e7e19ecfdca6b6952",
+   "sha256": "43070b99f52b01f4563dca33ad144f677e0e5a8ce77cbe63f571cb014c79145e",
    "size": 66480
   },
   {
    "name": "top_tshirt.female.glb",
-   "sha256": "b6a3306df6bfcbcdeb4482fac1ded4ff3620c17b6e7c6f168592e47287b5e7cb",
+   "sha256": "8bf7ad4dbf61d57b9c9eec85794d83aaaeb36a37c3fbb25c7dde4b4616f59b30",
    "size": 101352
   },
   {
    "name": "top_tshirt.male.glb",
-   "sha256": "36c9d0f45ee89728c6df11ad675f2765459485f406c8e0dccd151b1f2a11e5da",
-   "size": 101148
+   "sha256": "fa4b9071d3093f91dc672668b049f9d15888827d0917168d877883358b17a145",
+   "size": 101144
   },
   {
    "name": "top_turtleneck.female.glb",
-   "sha256": "25ba22e075ea686393c3d62a7465c91835e81a5011eba6b4374fb6394dc544e0",
-   "size": 111428
+   "sha256": "00eae84e2915a06acbafb755002f1ccabd29156ff1f09de4a0cf2b23523a96a3",
+   "size": 112904
   },
   {
    "name": "top_turtleneck.male.glb",
-   "sha256": "84ff70032838243f1f19942f36a36451664de96ab779d35eb4c81dad3af814de",
-   "size": 111220
+   "sha256": "ffb7247cce6b746230a80f6746278eff24d622e09a409527b8740fa6424e65ce",
+   "size": 112692
   }
  ],
  "bodies": {

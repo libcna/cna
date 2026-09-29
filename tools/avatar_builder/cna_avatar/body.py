@@ -115,8 +115,9 @@ def torso_weights(body):
     return fn
 
 
-def section_loft(sections, segments, weight_fn, cap_bottom=None, cap_top=None, uv_band=(0.0, 1.0)):
-    """Loft through (centre, rx, rz, n) sections; caps are dome heights (None leaves an end open)."""
+def section_loft(sections, segments, weight_fn, cap_bottom=None, cap_top=None, uv_band=(0.0, 1.0), adjust=None):
+    """Loft through (centre, rx, rz, n) sections; caps are dome heights (None leaves an end open);
+    `adjust` moves each ring point (a garment clearing the hips)."""
     rows = []
     if cap_bottom is not None:
         c, rx, rz, n = sections[0]
@@ -125,7 +126,8 @@ def section_loft(sections, segments, weight_fn, cap_bottom=None, cap_top=None, u
             rows.append(superellipse_ring(add(c, (0.0, -cap_bottom * math.sin(a), 0.0)), rx * math.cos(a) + 1e-5,
                                           rz * math.cos(a) + 1e-5, n, segments))
     for c, rx, rz, n in sections:
-        rows.append(superellipse_ring(c, rx, rz, n, segments))
+        ring = superellipse_ring(c, rx, rz, n, segments)
+        rows.append([adjust(p) for p in ring] if adjust else ring)
     if cap_top is not None:
         c, rx, rz, n = sections[-1]
         for i in range(1, 5):
@@ -142,18 +144,37 @@ def torso(body, inflate=0.0, rows=None, segments=32, caps=(0.05, None)):
     return section_loft(sections, segments, torso_weights(body), cap_bottom=caps[0], cap_top=caps[1])
 
 
+def _profile_at(profile, t):
+    """The profile row at t (smooth cosine interpolation between rows)."""
+    for (ta, wa, da), (tb, wb, db) in zip(profile, profile[1:]):
+        if ta <= t <= tb:
+            s = 0.5 - 0.5 * math.cos(math.pi * (t - ta) / (tb - ta))
+            return (t, wa + (wb - wa) * s, da + (db - da) * s)
+    return None
+
+
 def _densify(profile, steps):
     """Profile rows resampled to `steps` evenly spaced t values (smooth cosine interpolation)."""
-    out = []
     t0, t1 = profile[0][0], profile[-1][0]
-    for k in range(steps + 1):
-        t = t0 + (t1 - t0) * k / steps
-        for (ta, wa, da), (tb, wb, db) in zip(profile, profile[1:]):
-            if ta <= t <= tb:
-                s = 0.5 - 0.5 * math.cos(math.pi * (t - ta) / (tb - ta))
-                out.append((t, wa + (wb - wa) * s, da + (db - da) * s))
-                break
-    return out
+    return [row for row in (_profile_at(profile, t0 + (t1 - t0) * k / steps) for k in range(steps + 1)) if row]
+
+
+def _clipped(profile, steps, t_range):
+    """The resampled rows within t_range, starting and ending exactly at its ends, so a garment's
+    hem sits where its cuff ring does."""
+    rows = [r for r in _densify(profile, steps) if t_range[0] - 1e-9 <= r[0] <= t_range[1] + 1e-9]
+    spacing = (profile[-1][0] - profile[0][0]) / steps
+    for end, index in ((t_range[0], 0), (t_range[1], -1)):
+        exact = _profile_at(profile, end)
+        if exact is None:
+            continue
+        # Replace a row that nearly coincides with the end rather than leaving a sliver.
+        rows = [r for r in rows if abs(r[0] - end) > 0.35 * spacing]
+        if index == 0:
+            rows.insert(0, exact)
+        else:
+            rows.append(exact)
+    return rows
 
 
 def limb(start, middle, end, profile, weights, segments=16, steps=20, inflate=0.0, t_range=None, hint=(0.0, 0.0, 1.0),
@@ -165,9 +186,7 @@ def limb(start, middle, end, profile, weights, segments=16, steps=20, inflate=0.
     total = upper + lower
     knee_t = upper / total
     axis_a, axis_b = normalize(sub(middle, start)), normalize(sub(end, middle))
-    rows_def = _densify(profile, steps)
-    if t_range:
-        rows_def = [r for r in rows_def if t_range[0] - 1e-9 <= r[0] <= t_range[1] + 1e-9]
+    rows_def = _clipped(profile, steps, t_range) if t_range else _densify(profile, steps)
     rows, ts = [], []
     for index, (t, w, d) in enumerate(rows_def):
         if t <= knee_t:
@@ -211,6 +230,44 @@ def limb(start, middle, end, profile, weights, segments=16, steps=20, inflate=0.
         ts = ts + [t for _, t in extra]
     last = len(rows) - 1
     return Mesh().grid(rows, lambda p, vv, uu: weights(ts[int(round(vv * last))]), uv_seam=True)
+
+
+def clear_of_hips(body, clearance):
+    """A point adjustment that moves torso-garment points out of the tops of the leg lofts, which
+    form the hips' outline above the hip joints (the torso sections alone are narrower there), to
+    `clearance` beyond them. Only points above the hip joints move, and only sideways from the leg
+    axis, so a crotch or a front stays where it is."""
+    pos = rig.joint_positions(body)
+    profile = LEG[body]
+    t0 = profile[0][0]
+    legs = []
+    for side, _ in rig.SIDES:
+        hip, knee, ankle = (pos[I[n + side]] for n in ("Hip", "Knee", "Ankle"))
+        axis = normalize(sub(knee, hip))
+        u, v, _ = frame_from_axis(axis, (0.0, 0.0, 1.0))
+        legs.append((hip, axis, u, v, length(sub(knee, hip)) + length(sub(ankle, knee))))
+
+    def adjust(p):
+        for hip, axis, u, v, total in legs:
+            rel = sub(p, hip)
+            if rel[1] < 0.0:
+                continue
+            t = dot(rel, axis) / total
+            _, w, d = _profile_at(profile, max(t, t0))
+            w, d = w + clearance, d + clearance
+            if t < t0:
+                # The loft's rounded top: a dome 0.9 of its radius high.
+                over = (t0 - t) * total / (0.45 * (w + d))
+                if over >= 1.0:
+                    continue
+                shrink = math.sqrt(1.0 - over * over)
+                w, d = w * shrink, d * shrink
+            du, dv = dot(rel, u), dot(rel, v)
+            r = math.hypot(du / w, dv / d)
+            if 1e-6 < r < 1.0:
+                p = add(p, add(mul(u, du * (1.0 / r - 1.0)), mul(v, dv * (1.0 / r - 1.0))))
+        return p
+    return adjust
 
 
 def arm_weights(body, side):
@@ -263,12 +320,12 @@ def arm(body, side, inflate=0.0, t_range=None, flare=0.0, segments=16):
                 hint=(0.0, 0.0, 1.0))
 
 
-def leg(body, side, inflate=0.0, t_range=None, flare=0.0, segments=16):
+def leg(body, side, inflate=0.0, t_range=None, flare=0.0, segments=16, cap_end=None):
     pos = rig.joint_positions(body)
     hip, knee, ankle = pos[I["Hip" + side]], pos[I["Knee" + side]], pos[I["Ankle" + side]]
     return limb(hip, knee, ankle, LEG[body], leg_weights(body, side), segments=segments, inflate=inflate,
-                t_range=t_range, cap_start=t_range is None or t_range[0] <= -0.07, cap_end=t_range is None, flare=flare,
-                hint=(0.0, 0.0, 1.0))
+                t_range=t_range, cap_start=t_range is None or t_range[0] <= -0.07,
+                cap_end=t_range is None if cap_end is None else cap_end, flare=flare, hint=(0.0, 0.0, 1.0))
 
 
 def hand(body, side, sign):
@@ -367,14 +424,26 @@ def neck(body, inflate=0.0):
     return limb(base, lerp(base, top, 0.5), top, profile, weights, segments=18, steps=10)
 
 
-def build(body):
-    """(skin Mesh without the head, head Mesh, nose/ears Mesh)."""
+# A description always names a top and a bottom, so the skin every bottom covers -- the pelvis and
+# the tops of the thighs -- is never seen. The dressed body leaves it out: bending a hip swings the
+# top of the thigh out through the pelvis, and through whatever is worn over it.
+DRESSED_TORSO_ROW = 2
+DRESSED_LEG_START = 0.12
+
+
+def build(body, dressed=True):
+    """(skin Mesh without the head, head Mesh, nose/ears Mesh); `dressed` leaves out the skin every
+    bottom covers."""
     skin = Mesh()
-    skin.append(torso(body)).append(neck(body))
+    if dressed:
+        skin.append(torso(body, rows=(DRESSED_TORSO_ROW, len(TORSO[body]) - 1), caps=(None, None)))
+    else:
+        skin.append(torso(body))
+    skin.append(neck(body))
     for side, sign in rig.SIDES:
         skin.append(arm(body, side))
         skin.append(hand(body, side, sign))
-        skin.append(leg(body, side))
+        skin.append(leg(body, side, t_range=(DRESSED_LEG_START, 1.0), cap_end=True) if dressed else leg(body, side))
         skin.append(foot(body, side))
     details = Mesh().append(head.nose_mesh(body)).append(head.ear_meshes(body))
     return skin, head.head_mesh(body), details

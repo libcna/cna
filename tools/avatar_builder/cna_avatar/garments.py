@@ -26,7 +26,32 @@ def shell(body_type, inflate, rows, segments=40, cap_bottom=None, lower=0.0, fla
     if lower or flare:
         c, rx, rz, n = sections[0]
         sections[0] = (add(c, (0.0, -lower, 0.0)), rx + flare, rz + flare, n)
-    return body.section_loft(sections, segments, body.torso_weights(body_type), cap_bottom=cap_bottom)
+    # Tops (from row 1 up) hang over the thighs; bottoms have legs of their own.
+    weights = hem_weights(body_type) if rows[0] >= 1 else body.torso_weights(body_type)
+    return body.section_loft(sections, segments, weights, cap_bottom=cap_bottom,
+                             adjust=body.clear_of_hips(body_type, inflate + HIP_CLEARANCE))
+
+
+def hem_weights(body_type):
+    """Torso weights for a top: below the waist the cloth follows both thighs, shared smoothly
+    across the front and back centre, so a bent hip lifts the hem instead of pushing the trousers
+    through it, and the hem neither tears between the legs nor stays behind."""
+    tw = body.torso_weights(body_type)
+    hip_y = rig.PROPORTIONS[body_type]["hip"][1]
+    left, right = I["HipLeft"], I["HipRight"]
+
+    def fn(p):
+        w = tw(p)
+        # Only below the hip joints: cloth above them would swing inward as a thigh rises.
+        share = 0.9 * smoothstep(hip_y + 0.01, hip_y - 0.05, p[1])
+        if share <= 0.0:
+            return w
+        w = {k: v * (1.0 - share) for k, v in w.items()}
+        side = smoothstep(-0.06, 0.06, p[0])
+        w[left] = w.get(left, 0.0) + share * side
+        w[right] = w.get(right, 0.0) + share * (1.0 - side)
+        return w
+    return fn
 
 
 def ring_band(body_type, row, inflate, radius, segments=40, offset=(0.0, 0.0, 0.0), squash=1.0):
@@ -41,7 +66,7 @@ def _hem(body_type, inflate, flare, lower, radius):
     """The rolled bottom hem of a top, matching shell(..., lower, flare)."""
     c, rx, rz, n = body.torso_sections(body_type, inflate)[1]
     loop = body.superellipse_ring(add(c, (0.0, -lower, 0.0)), rx + flare, rz + flare, n, 40)
-    return tube(loop, [radius] * len(loop), 8, body.torso_weights(body_type), closed=True)
+    return tube(loop, [radius] * len(loop), 8, hem_weights(body_type), closed=True)
 
 
 def neck_rib(body_type, inflate, radius, drop=0.0, depth=0.0, width=1.0):
@@ -86,7 +111,7 @@ def _limb_ring(body_type, side, kind, t, inflate, radius):
         centre, axis = add(a, mul(normalize(sub(b, a)), t * (upper + lower))), normalize(sub(b, a))
     else:
         centre, axis = add(b, mul(normalize(sub(c, b)), (t - knee) * (upper + lower))), normalize(sub(c, b))
-    w, d = next((w, d) for tt, w, d in body._densify(profile, 200) if tt >= t - 1e-9)
+    _, w, d = body._profile_at(profile, t)
     from .mathutil import frame_from_axis
     u, v, _ = frame_from_axis(axis, (0.0, 0.0, 1.0))
     loop = [add(centre, add(mul(u, (w + inflate) * math.cos(2 * PI * k / 24)), mul(v, (d + inflate) * math.sin(2 * PI * k / 24))))
@@ -94,6 +119,10 @@ def _limb_ring(body_type, side, kind, t, inflate, radius):
     wt = weights(t)
     return tube(loop, [radius] * len(loop), 8, lambda p: wt, closed=True)
 
+
+# How far a torso garment keeps beyond the tops of the legs, on top of its own inflation: enough
+# for a top to cover any bottom's legs.
+HIP_CLEARANCE = 0.004
 
 def patch(body_type, centre, size, normal, weights, depth=0.004, segments=12):
     """A thin rounded slab (pocket, label) lying on a surface facing `normal`."""
@@ -119,7 +148,7 @@ def row_y(body_type, row):
 # ----- tops ---------------------------------------------------------------------------------------
 
 def top(body_type, style):
-    tw = body.torso_weights(body_type)
+    tw = hem_weights(body_type)
     parts = []
     main = Mesh()
     trim = Mesh()
@@ -162,7 +191,7 @@ def top(body_type, style):
         sections = body.torso_sections(body_type, 0.017)
         c, rx, rz, n = sections[1]
         rows = [(add(c, (0.0, -0.03, 0.0)), rx + 0.028, rz + 0.028, n)] + sections[2:8]
-        main.append(body.section_loft(rows, 40, tw))
+        main.append(body.section_loft(rows, 40, tw, adjust=body.clear_of_hips(body_type, 0.017 + HIP_CLEARANCE)))
         main.append(_hem(body_type, 0.017, 0.028, 0.03, 0.005))
         c8, rx8, rz8, n8 = sections[8]
         c7 = sections[7][0]
@@ -309,17 +338,19 @@ def _button_at(body_type, inflate, y, weights):
 
 def _open_shell(body_type, inflate, rows, gap, lower=0.0, flare=0.004):
     """A jacket body open down the front: the loft covers every angle except `gap` radians."""
+    clear = body.clear_of_hips(body_type, inflate + HIP_CLEARANCE)
     sections = body.torso_sections(body_type, inflate)[rows[0]:rows[1] + 1]
     c, rx, rz, n = sections[0]
     sections[0] = (add(c, (0.0, -lower, 0.0)), rx + flare, rz + flare, n)
-    tw = body.torso_weights(body_type)
+    tw = hem_weights(body_type)
     grid = []
     for c, rx, rz, n in sections:
         ring = []
         for k in range(37):
             a = gap * 0.5 + (2.0 * PI - gap) * k / 36
             s, co = math.sin(a), math.cos(a)
-            ring.append((c[0] + rx * math.copysign(abs(s) ** (2.0 / n), s), c[1], c[2] + rz * math.copysign(abs(co) ** (2.0 / n), co)))
+            ring.append(clear((c[0] + rx * math.copysign(abs(s) ** (2.0 / n), s), c[1],
+                               c[2] + rz * math.copysign(abs(co) ** (2.0 / n), co))))
         grid.append(ring)
     outer = Mesh().grid(grid, lambda p, v, u: tw(p), wrap=False)
     # Lapel edges: a rolled border along both front edges.
@@ -370,13 +401,15 @@ def bottom(body_type, style):
             t = i / 9.0
             y = a["lower"] + 0.02 + (bottom_y - a["lower"] - 0.02) * t
             k = smoothstep(a["lower"] + 0.02, hip_y - 0.02, y)
-            rx = waist[1] + (hips[1] + 0.012 - waist[1]) * k + flare * t * t
-            rz = waist[2] + (hips[2] + 0.012 - waist[2]) * k + flare * 0.8 * t * t
+            # Within the hips' 1.2 cm: every top (1.7 cm out) must cover the skirt's waist.
+            rx = waist[1] + (hips[1] - waist[1]) * k + flare * t * t
+            rz = waist[2] + (hips[2] - waist[2]) * k + flare * 0.8 * t * t
             sections.append(((0.0, y, 0.0), rx, rz, 2.2))
         sections.reverse()
 
         def skirt(pt):
-            k = 0.7 * smoothstep(hip_y, bottom_y, pt[1])
+            # Below the hip joints the skirt rides on both thighs, so a raised knee lifts it.
+            k = 0.95 * smoothstep(hip_y + 0.005, hip_y - 0.06, pt[1])
             s = smoothstep(-0.07, 0.07, pt[0])
             w = {I["BackLower"]: 1.0 - k}
             if k > 0:
