@@ -4,6 +4,8 @@
 #include "Microsoft/Xna/Framework/GamerServices/LeaderboardIdentity.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/LeaderboardWriter.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/LeaderboardEntry.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/LeaderboardReader.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "Microsoft/Xna/Framework/Net/WriteLeaderboardsEventArgs.hpp"
 
 namespace {
@@ -162,5 +164,35 @@ TEST_F(OnlineLeaderboardTest, OutsideRankedOnlyTheHostReportsTrueSkillAndRemoteR
     session->StartGame();session->Update();session->EndGame();session->Update();
     EXPECT_EQ(0,arbitratedEvents);EXPECT_EQ(4u,trueSkill.size());
     EXPECT_EQ(77,rating("Alice"));EXPECT_EQ(77,rating("Charlie"));EXPECT_EQ(-1,rating("Bob"));
+}
+// XNA Stream columns: a writer's entry hands out a writable stream (there is no SetValue(Stream)),
+// committed with the entry; a read hands back a read-only stream of the same bytes.
+TEST_F(OnlineLeaderboardTest, AStreamColumnIsWrittenThroughItsStreamAndReadBack) {
+    session=NetworkSession::Create(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(0)},4,0,{});
+    auto* alice=session->getLocalGamersProperty()[0];
+    session->StartGame();session->Update();
+    auto* entry=alice->getLeaderboardWriterProperty().GetLeaderboard(board());
+    entry->setRatingProperty(42);
+    auto* stream=entry->getColumnsProperty().GetValueStream("Ghost");
+    ASSERT_NE(nullptr,stream);EXPECT_TRUE(stream->getCanWriteProperty());
+    const std::vector<SharpRuntime::bytecs> ghost{1,2,3,250};
+    stream->Write(ghost.data(),0,static_cast<int>(ghost.size()));
+    // The same stream every time, so a game may keep writing it.
+    EXPECT_EQ(stream,entry->getColumnsProperty().GetValueStream("Ghost"));
+    session->EndGame();session->Update();
+    EXPECT_EQ(42,rating("Alice"));
+    const auto page=service->readLeaderboard("BestScoreLifeTime",0,0,10,"",std::vector<std::string>{"Alice"});
+    ASSERT_EQ(1u,page.entries.size());
+    EXPECT_EQ("stream",page.entries.front().columns.at("Ghost").type);
+    auto reader=LeaderboardReader::Read(board(),0,10);
+    const auto& entries=reader.getEntriesProperty();ASSERT_EQ(1,entries.getCountProperty());
+    auto* read=entries[0].getColumnsProperty().GetValueStream("Ghost");
+    ASSERT_NE(nullptr,read);EXPECT_FALSE(read->getCanWriteProperty());
+    std::vector<SharpRuntime::bytecs> back(8);
+    EXPECT_EQ(4,read->Read(back.data(),0,static_cast<int>(back.size())));
+    back.resize(4);EXPECT_EQ(ghost,back);
+    // Outside a game a writer's columns refuse, as every other leaderboard write does.
+    EXPECT_THROW((void)alice->getLeaderboardWriterProperty().GetLeaderboard(board())->getColumnsProperty().GetValueStream("Ghost"),
+        System::InvalidOperationException);
 }
 #endif

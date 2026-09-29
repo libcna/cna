@@ -68,6 +68,8 @@ struct ServiceFriend {
     /** @brief The online friend's account status is away or busy (never both). */
     bool away = false, busy = false;
 };
+/** @brief Most bytes a leaderboard Stream column carries (CNA's bound; hex on the wire). */
+inline constexpr std::size_t MaxLeaderboardStreamBytes = 256;
 /** @brief Typed service column, independent of public dictionary objects. */
 struct ServiceLeaderboardColumn {
     /** @brief Provisioned type name. */

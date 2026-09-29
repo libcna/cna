@@ -105,7 +105,9 @@ an entire board or dropping gamers signed in on another machine. Begin/End compl
 Dispatcher update boundary; native C callbacks return completed reads. Online writer setters now
 retain transient data while Playing and flush after final write events at host EndGame;
 explicit early leave uses IsLeaving=true. Ranked rows are arbitrated by strict majority of the reporting
-machines (GS-006e); Stream columns are not stored and CNA computes no TrueSkill. Admin seed commands
+machines (GS-006e); a board may define `stream` columns (XNA `GetValueStream`, at most 256 bytes: a writer's entry
+hands out a writable stream that commits with the entry, a read a read-only one; GSP-L4; offline
+local boards do not keep them) and CNA computes no TrueSkill. Admin seed commands
 are development fixtures, not a gameplay write mechanism. Page limits and unsupported Stream/recent
 window/TrueSkill behavior are documented in the server protocol.
 

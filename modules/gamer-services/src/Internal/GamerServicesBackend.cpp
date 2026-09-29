@@ -304,6 +304,11 @@ public:
                 if(!CnaService::identifier(name)||name.size()>64||!field.is_object()||field.size()!=2)throw Unavailable("Invalid leaderboard column.");
                 ServiceLeaderboardColumn column;column.type=CnaService::stringField(field,"type",16);
                 if(column.type=="string")column.value=CnaService::stringField(field,"value",256);
+                else if(column.type=="stream") {
+                    auto hex=CnaService::stringField(field,"value",MaxLeaderboardStreamBytes*2);
+                    if(hex.size()%2||hex.find_first_not_of("0123456789abcdef")!=std::string::npos)throw Unavailable("Invalid leaderboard stream value.");
+                    column.value=std::move(hex);
+                }
                 else if(column.type=="single"||column.type=="double") {
                     if(!field.at("value").is_number())throw Unavailable("Invalid leaderboard floating value.");
                     const auto number=field["value"].get<double>();if(!std::isfinite(number)||(column.type=="single"&&std::abs(number)>std::numeric_limits<float>::max()))throw Unavailable("Invalid leaderboard floating value.");column.value=number;
