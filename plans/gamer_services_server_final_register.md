@@ -30,12 +30,10 @@ Each is documented where it is declared (C++ and C) and in `docs/xna-4-api-cover
 | `Gamer.GetPartnerToken`/`BeginGetPartnerToken`/`EndGetPartnerToken` | `NotSupportedException` | Partner tokens authenticate to Xbox LIVE partner web services; the CNA service is not LIVE and issues none. XNA for Windows refuses the same way. |
 | `Gamer.GetFromGamertag` family without a service | `NotSupportedException` | Offline profiles have no directory to search. With a service it is a real lookup (GS-004). |
 | `FriendGamer.HasVoice` | false | The service does not know a friend's audio hardware; in a session `NetworkGamer.HasVoice` reports it (GSX-E1). |
-| `LocalNetworkGamer.SendPartyInvites`, `Guide.ShowParty`/`ShowPartySessions` | refuses (party of one) / explanatory pane | No party service. |
-| `Guide.ShowMarketplace` | explanatory pane after XNA's privilege checks | No store; titles are fully licensed. |
-| `Guide.IsTrialMode` | true only while `SimulateTrialMode` is set | No licensing service (GS-011b removed the public setter XNA keeps internal). |
+| `Guide.ShowMarketplace` | the Guide's Game content page after XNA's privilege checks: the title's licence, with a Test Purchase while `SimulateTrialMode` is set, and the avatar catalogs installed | CNA has no store to sell from (GSX-E1). `IsTrialMode` itself behaves as XNA's (below). |
 | `GamerProfile.GamerZone`/`Reputation` of local profiles and unreviewed accounts | `Unknown` / 0 | XNA's unset values; nothing is invented. An account's chosen zone and review-based stars are reported (GSP-M1). |
 | Service search results' `QualityOfService` | `IsAvailable` false | A service listing has no path to its host before a join. SystemLink results measure the round trip and both bandwidths: downstream from the host's probe train (GSP-L6), upstream from the searcher's train timed by the host's responder thread (GSX-E). |
-| `GamerServicesDispatcher.InstallingTitleUpdate` | never raised | CNA installs no title updates. |
+| `GamerServicesDispatcher.InstallingTitleUpdate` | never raised (`GamerServicesComponent` still exits on it, as XNA's does) | CNA installs no title updates; a title that stops accepting old versions refuses them with `GameUpdateRequiredException` instead (GSX-E4). |
 | `WriteTrueSkill` | raised; no skill is computed | Skill boards are ordinary arbitrated boards (GS-006e). |
 | `LeaderboardKey.BestScoreRecent`/`BestTimeRecent` | no time window: every row is kept, as for the lifetime keys | The XNA documentation says only "best recent scores/times"; neither it nor the IL gives a window, and the service would have to invent one. |
 | Guests in PlayerMatch/Ranked sessions | refused (not authorized for CNA online sessions) | A guest has no service credential for the service to authenticate; guests play Local, LocalWithLeaderboards and SystemLink sessions (GSP-L5). |
@@ -51,7 +49,9 @@ and every finding). They surface through the normal XNA exceptions for an unavai
 | Recorded request IDs per account, title and day | 20,000, then `RATE_LIMITED` | Replay protection for mutations; reads, heartbeats, leases and presence record none, so one account cannot spend a title's budget. |
 | Password sign-in and refresh per address | 10 a minute | Bounds scrypt work and guessing. |
 | Live sign-ins per account | 32; the 33rd signs the oldest out | Clients without credential storage sign in on every launch (GSP-O7). |
-| Relay machines per server; control connections | 1024; 256, 32 per address | One process, one SQLite writer (GSP-O5). |
+| Relay machines per server; control connections | 1024; 256, 32 per address, 600 new ones a minute per address | One process, one SQLite writer (GSP-O5, GSX-E5). |
+| Server processes per database | one; a second refuses to start (`DATABASE_IN_USE`) | One SQLite writer and in-memory relay and event hubs (GSX-E5). |
+| Event channels | 8 per account, 4096 per server | Push hints only; clients still poll as the fallback (GSX-E6). |
 
 ## Host-language refusals
 
@@ -70,7 +70,14 @@ leaderboards with EndGame/leave windows and Ranked arbitration (GS-006); PlayerM
 sessions, invitations, readiness, machine removal and statistics (GS-007/008, 007i-q);
 `NetworkMachine.RemoveFromSession` (GS-007j); `PropertyDictionary.CopyTo` (GS-004o); the standard
 avatar API and renderer, with the Avatar EXT retired (GS-009); the Guide's message box, keyboard,
-system Guide and End waits (GS-005d/f/g/h/i).
+system Guide and End waits (GS-005d/f/g/h/i). Since the Xbox-fidelity pass
+(`plan_gamer_services_xbox_fidelity.md`): `Guide.IsTrialMode` latched at each Update from
+`SimulateTrialMode` and `AllowOnlineSessions` false in trial (GSX-E1); parties --
+`SignedInGamer.PartySize`, `Guide.ShowParty`/`ShowPartySessions`, `SendPartyInvites` -- and joining a
+friend's game (GSX-E2); SystemLink upstream bandwidth (GSX-E3); title versions and
+`GameUpdateRequiredException` (GSX-E4); network voice -- `HasVoice`, `IsTalking`,
+`IsMutedByLocalUser`, `EnableSendVoice` (GSX-E1 voice); the console's social notifications and push
+hints (GSX-E6).
 
 ## Evidence
 

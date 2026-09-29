@@ -1,6 +1,9 @@
 # CNA Gamer Services deployment
 
-The new CNA service has its own accounts/protocol/assets and is not Xbox LIVE compatible. The implementation is in progress: see [living plan](../plans/plan_gamer_services_server.md). Symbol coverage is not behavioral completeness.
+The CNA service has its own accounts, protocol and assets and is not Xbox LIVE compatible. What it
+does and deliberately does not do is recorded in the [final register](../plans/gamer_services_server_final_register.md);
+the plans ([server](../plans/plan_gamer_services_server.md), [Xbox fidelity](../plans/plan_gamer_services_xbox_fidelity.md))
+keep the decisions and evidence.
 
 Configure outside ported gameplay code. Precedence is complete `CNA::GamerServices::setConfigurationOverride` (deployment/test hosts only), environment fields, title manifest, user settings. User settings default to `$XDG_CONFIG_HOME/cna/gamer-services.json` or `$HOME/.config/cna/gamer-services.json`. Title manifest defaults to `cna-title.json` in launch CWD or explicit `CNA_GAMER_SERVICES_MANIFEST`. No credential fields are accepted. Endpoint is full `https://host:port/cna/v1`; `gameId` must be administrator-provisioned and stable. Optional `caBundle` configures trust, never bypasses TLS checks. Optional `titleVersion` (environment `CNA_GAME_VERSION`; one to four dot-separated numbers such as `1.2.0`) states the game's version to a service that checks it: an administrator can set the oldest version a title accepts (`title-minimum-version`), and older games are then refused at sign-in (the Guide says the game must be updated) and when a network session starts (`GameUpdateRequiredException`, as XNA threw when Xbox LIVE no longer accepted a title version). CNA installs no title updates itself, so `GamerServicesDispatcher.InstallingTitleUpdate` is never raised; `GamerServicesComponent` still exits the game on it, as XNA's does.
 
@@ -51,8 +54,9 @@ malformed catalog is refused with an `InvalidOperationException` naming the file
 Without one, offline achievements are the earned keys alone, with no text or score. An account's
 profile reports the `GamerZone` its member chose in the system Guide (Gamer zone) and a `Reputation`
 of 0-5 stars, in quarters, from the share of other players whose review would play with the member
-again (`prefer` against `avoid`); a member nobody has reviewed, and every local profile, reports
-`GamerZone.Unknown` and 0, XNA's unset values -- no rating is invented (GSP-M1).
+again (`prefer` against `avoid`) -- a CNA formula: XNA exposes the stars, not how Xbox LIVE computed
+them; a member nobody has reviewed, and every local profile, reports `GamerZone.Unknown` and 0,
+XNA's unset values -- no rating is invented (GSP-M1).
 
 **System Guide.** In a game that draws (a `GamerServicesComponent` with a graphics device service),
 the Home key, as in Games for Windows LIVE, or a controller's Guide button opens the Guide for that
@@ -90,8 +94,19 @@ speech plays through the SoundEffect path. `NetworkGamer.HasVoice`, `IsTalking` 
 `IsMutedByLocalUser` follow it, `LocalNetworkGamer.EnableSendVoice` switches one direction, and the
 Guide gamer card's Mute stops both. The microphone opens only while someone could hear it;
 `CNA_VOICE=0` turns voice off, and a build without libopus carries none (`CNA_ENABLE_VOICE`).
-Not implemented: TrueSkill computation, time windows for the `...Recent` leaderboard keys (they keep
-every row), server push (the client polls), and a store. Friends see the online status (online, away,
+The console's social notifications appear as Guide toasts: a new message, a friend request, a friend
+coming online, and invitations to games and parties. A signed-in client keeps the service's event
+channel open (capability `events`), so they arrive at once; without it the client reads every 15
+seconds (5 for invitations and parties). Not implemented: TrueSkill computation, time windows for the
+`...Recent` leaderboard keys (they keep every row), and a store.
+
+Guests (`ShowSignIn(onlineOnly)`, GSP-L5), by session type:
+
+| Session type | A guest may create, join or be added |
+|---|---|
+| Local, LocalWithLeaderboards | yes |
+| SystemLink | yes |
+| PlayerMatch, Ranked | no: a guest has no service credential, so `AllowOnlineSessions` is false | Friends see the online status (online, away,
 busy) a player chooses in the Guide (`FriendGamer.IsAway`/`IsBusy`). Rich presence is sent during
 Dispatcher.Update; friend online state reflects authenticated activity within 90 seconds; Update
 schedules an authenticated heartbeat every 30 seconds. `docs/xna-4-api-coverage.md` §8–9 lists the
@@ -327,13 +342,33 @@ nested progress, take/destruction inside a callback and abandoned joins are cove
 new coordinator cases pass; the real owned probes now use this coordinator through Dispatcher.Update.
 This is the private asynchronous lifetime boundary the public NetworkSession adapter uses.
 
+## The Guide
+
+CNA draws its own system UI over the game, in one visual language of its own (not a copy of the
+console's): the standard Guide calls (`ShowSignIn`, `ShowFriends`, `ShowGamerCard`, `ShowMessages`,
+`ShowComposeMessage`, `ShowPlayers`, `ShowPlayerReview`, `ShowGameInvite`, `ShowParty`,
+`ShowPartySessions`, `ShowMarketplace`, `ShowAchievementsEXT`, the message box and the keyboard) open
+its pages, and the Home key or a pad's Guide button opens the system Guide itself
+(`CNA_GAMER_SERVICES_GUIDE_BUTTON=0` turns that off). The system Guide has the signed-in gamer's
+portrait, gamertag, score and status, and a rail of pages -- Home, Friends, Party, Messages,
+Achievements, Leaderboards, Recent players, Game content, Settings -- switched with Q/E or the
+shoulder buttons. Sign-in picks a profile for a player slot among four; gamer cards show the avatar,
+score, zone, reputation, presence and relationship, with the actions that apply (join, invite to
+the game or the party, message, review, mute, friend request). Edit avatar opens the full-screen
+avatar editor: a live preview with a camera that follows the category, rendered item cards,
+named face controls, try-on before keeping, and a save that asks. Notifications appear at
+`Guide.NotificationPosition`. A keyboard, a pad or the mouse drive every page. Motion is short;
+`CNA_GAMER_SERVICES_REDUCED_MOTION=1` removes it. Quiet system sounds, synthesized by CNA, play
+when a player drives the Guide; `CNA_GAMER_SERVICES_SOUNDS=0` turns them off.
+
 ## Host migration (GSP-K1)
 
 `NetworkSession.AllowHostMigration` works for PlayerMatch and Ranked sessions as XNA describes it:
 only the host sets it, and every machine reads the host's value. The service decides: when the host
 machine leaves (`Dispose`/leave) or stops (its relay connection closes and it does not reconnect
 within 20 seconds, the relay-recovery grace), the machine holding the lowest remaining gamer ID
-becomes the host and that machine's first gamer the host gamer. On every machine the old host's
+becomes the host and that machine's first gamer the host gamer (CNA's choice: XNA shows only that a
+migration happened and raises `HostChanged`, not how the new host is picked). On every machine the old host's
 gamers leave (`GamerLeft`), then `HostChanged` is raised with the departed host as `OldHost`;
 the new host takes over settings, `StartGame`/`EndGame`, readiness relaying and machine removal.
 Gamer IDs, the roster and session properties carry over unchanged. A client whose host vanished

@@ -188,7 +188,8 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   rig, 31 presets, complete atlas layout). CNA's real v1 and v2 import as golden fixtures
   (`CNA_AVATAR_CATALOGS`); 30+ malformed models/manifests are refused.
 
-- **Avatar editor (GSP-I1).** A standalone program (`cna_avatar_editor`), not a Guide pane: the
+- **Avatar editor (GSP-I1; superseded by GSX-U2, where the editor became a full-screen Guide system
+  screen with its own 3D pre-pass).** At the time: a standalone program (`cna_avatar_editor`), not a Guide pane: the
   Guide overlay draws 2D panes over the game's frame, and a lit, animated 3D preview there would
   have to borrow the game's device state mid-frame. A separate program also matches the console,
   where the avatar editor was a dashboard application, and keeps customization out of games
@@ -207,9 +208,9 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
 | GSP-A3 | BEFORE evidence of catalog v1 | done |
 | GSP-B1 | Exact embedded catalog registry (version -> manifest -> content hash); v1 frozen | done |
 | GSP-B2 | Server catalog-version semantics verified and tested | done |
-| GSP-C* | Catalog v2: body, head/face, expression atlas, facial individuality decision | first pass done (C1); art iteration continues |
-| GSP-D* | Catalog v2 wardrobe and hair | first pass done (C1) |
-| GSP-E* | Materials and renderer polish, per-renderer check | E1 done; renderer coverage in progress |
+| GSP-C* | Catalog v2: body, head/face, expression atlas, facial individuality decision | done: catalog v2 released and frozen (GSX-B1); further art is catalog v3 (`plan_gamer_services_xbox_fidelity.md` GSX-B) |
+| GSP-D* | Catalog v2 wardrobe and hair | done: in the frozen v2 (C1, C2, D2) |
+| GSP-E* | Materials and renderer polish, per-renderer check | done: E1; OPENGL33 and VULKAN measured identical, the other renderers were not built in that pass |
 | GSP-F* | Animation polish and key-pose/loop tests | done (F1) |
 | GSP-G1 | Server avatar GLB/manifest validation, malformed fixtures | done (server 7a8a629) |
 | GSP-H1 | Avatar cache audit, bounded cleanup, first/warm load measurement | done |
