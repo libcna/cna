@@ -43,7 +43,7 @@ def body_glb(body_type):
 
 from . import wardrobe  # noqa: E402
 
-ITEMS = [  # (id, slot, name) -- must match catalogItems() in AvatarDescriptionCodec.cpp
+ITEMS = [  # (id, slot, name)
     (1, "hair", "hair_short"), (2, "hair", "hair_spiky"), (3, "hair", "hair_bob"), (4, "hair", "hair_ponytail"),
     (5, "hair", "hair_buzz"),
     (20, "top", "top_tshirt"), (21, "top", "top_longsleeve"), (22, "top", "top_hoodie"), (23, "top", "top_tank"),

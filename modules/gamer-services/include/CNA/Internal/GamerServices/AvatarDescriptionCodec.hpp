@@ -13,8 +13,8 @@ namespace CNA::Internal::GamerServices::Avatars {
 inline constexpr int DescriptionSize = 1021;
 /** @brief CNA encoding version stored in byte 0; nonzero, so the XNA IsValid rule holds. */
 inline constexpr std::uint8_t FormatVersion = 1;
-/** @brief Base asset catalog version this build embeds. */
-inline constexpr std::uint16_t CatalogVersion = 1;
+/** @brief The first catalog version, compiled into every build for good. */
+inline constexpr std::uint16_t BaseCatalogVersion = 1;
 /** @brief Shortest encodable avatar, feet to top of head. */
 inline constexpr std::uint16_t MinimumHeightMillimeters = 1450;
 /** @brief Tallest encodable avatar, feet to top of head. */
@@ -51,7 +51,7 @@ struct AvatarDescriptor {
     /** @brief 0 = slimmest, 255 = heaviest; 128 is the authored body. */
     std::uint8_t build=128;
     /** @brief Catalog version the item ids refer to. */
-    std::uint16_t catalogVersion=CatalogVersion;
+    std::uint16_t catalogVersion=BaseCatalogVersion;
     /** @brief Colors indexed by AvatarColorSlot. */
     std::array<AvatarColor,AvatarColorSlotCount> colors{};
     /** @brief Catalog item id per AvatarItemSlot; 0 means none (only Glasses and Hat may be none). */
@@ -60,25 +60,11 @@ struct AvatarDescriptor {
     bool operator==(const AvatarDescriptor& other) const=default;
 };
 
-/** @brief One wardrobe item of the embedded v1 catalog. */
-struct AvatarCatalogItem {
-    /** @brief Stable catalog id. */
-    std::uint16_t id;
-    /** @brief Slot the item occupies. */
-    AvatarItemSlot slot;
-    /** @brief Asset name inside the catalog (without body type suffix). */
-    std::string_view name;
-};
-
-/** @brief Every item of catalog v1, the ids a v1 description may name. @return Items. */
-std::span<const AvatarCatalogItem> catalogItems();
-/** @brief Finds a v1 catalog item. @param id Item id. @return Item or null. */
-const AvatarCatalogItem* findCatalogItem(std::uint16_t id);
-
 /** @brief IEEE CRC-32 of a byte range. @param bytes Input. @return Checksum. */
 std::uint32_t crc32(std::span<const std::uint8_t> bytes);
 
-/** @brief Checks field ranges and item/slot agreement for the catalog version the descriptor names.
+/** @brief Checks field ranges, and item/slot agreement when the catalog version the descriptor
+ * names is compiled in (other versions are checked by the service and the asset resolver).
  * @param descriptor Candidate. @return True when encodable. */
 bool isEncodable(const AvatarDescriptor& descriptor);
 
@@ -88,13 +74,10 @@ bool isEncodable(const AvatarDescriptor& descriptor);
 std::vector<std::uint8_t> encode(const AvatarDescriptor& descriptor);
 
 /** @brief Decodes a CNA description; foreign, damaged or newer-format buffers decode to nothing.
- * @param bytes Public buffer. @return Descriptor, or empty when the buffer is not a CNA v1 avatar. */
+ * @param bytes Public buffer. @return Descriptor, or empty when the buffer is not a CNA avatar. */
 std::optional<AvatarDescriptor> decode(std::span<const std::uint8_t> bytes);
 
-/** @brief Builds a random catalog v1 avatar. @param bodyType 0/1, or empty for either.
- * @param random Entropy source. @return Encodable descriptor. */
+/** @brief Builds a random avatar from the newest compiled-in catalog. @param bodyType 0/1, or empty
+ * for either. @param random Entropy source. @return Encodable descriptor. */
 AvatarDescriptor randomDescriptor(std::optional<std::uint8_t> bodyType,std::mt19937& random);
-
-/** @brief Feet-to-head height of an avatar body type as authored. @param bodyType 0/1. @return Millimeters. */
-std::uint16_t authoredHeightMillimeters(std::uint8_t bodyType);
 }

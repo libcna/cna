@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
+#include "CNA/Internal/GamerServices/AvatarAssets.hpp"
 #include "CNA/Internal/GamerServices/AvatarDescriptionCodec.hpp"
 
 #include <set>
@@ -89,21 +90,33 @@ TEST(AvatarDescriptionCodecTest, RefusesUnencodableDescriptors) {
 
 TEST(AvatarDescriptionCodecTest, NewerCatalogItemsAreCarriedForTheResolver) {
     auto newer = sample();
-    newer.catalogVersion = Avatars::CatalogVersion + 1;
+    newer.catalogVersion = static_cast<std::uint16_t>(Avatars::newestEmbeddedManifest().version + 1);
     newer.items[static_cast<std::size_t>(Avatars::AvatarItemSlot::Hat)] = 4000;
     const auto decoded = Avatars::decode(Avatars::encode(newer));
     ASSERT_TRUE(decoded.has_value());
     EXPECT_EQ(decoded->items[static_cast<std::size_t>(Avatars::AvatarItemSlot::Hat)], 4000);
 }
 
-TEST(AvatarDescriptionCodecTest, CatalogIdsAreUniqueAndOptionalOnlyForAccessories) {
-    std::set<std::uint16_t> ids;
-    for (const auto& item : Avatars::catalogItems()) {
-        EXPECT_NE(item.id, 0);
-        EXPECT_TRUE(ids.insert(item.id).second) << item.id;
-        EXPECT_EQ(Avatars::findCatalogItem(item.id), &item);
+TEST(AvatarDescriptionCodecTest, ItemsAreCheckedAgainstTheCatalogVersionTheyName) {
+    // Item 100 is a hat in catalog v1; naming it for another slot is refused whatever newer
+    // catalogs are compiled in.
+    auto hatAsTop = sample();
+    hatAsTop.catalogVersion = Avatars::BaseCatalogVersion;
+    hatAsTop.items[static_cast<std::size_t>(Avatars::AvatarItemSlot::Top)] = 100;
+    EXPECT_FALSE(Avatars::isEncodable(hatAsTop));
+    for (const auto& catalog : Avatars::embeddedCatalogs()) {
+        for (const auto& item : catalog->items) {
+            auto descriptor = sample();
+            descriptor.catalogVersion = catalog->version;
+            for (const auto& other : catalog->items) {
+                if (other.slot != Avatars::AvatarItemSlot::Glasses && other.slot != Avatars::AvatarItemSlot::Hat) {
+                    descriptor.items[static_cast<std::size_t>(other.slot)] = other.id;
+                }
+            }
+            descriptor.items[static_cast<std::size_t>(item.slot)] = item.id;
+            EXPECT_TRUE(Avatars::isEncodable(descriptor)) << "v" << catalog->version << " item " << item.id;
+        }
     }
-    EXPECT_EQ(Avatars::findCatalogItem(0), nullptr);
 }
 
 TEST(AvatarDescriptionCodecTest, RandomDescriptorsAreAlwaysEncodable) {
@@ -116,6 +129,7 @@ TEST(AvatarDescriptionCodecTest, RandomDescriptorsAreAlwaysEncodable) {
         hair.insert(descriptor.items[static_cast<std::size_t>(Avatars::AvatarItemSlot::Hair)]);
     }
     EXPECT_GE(hair.size(), 4u);
+    EXPECT_EQ(Avatars::randomDescriptor(std::nullopt, random).catalogVersion, Avatars::newestEmbeddedManifest().version);
     EXPECT_EQ(Avatars::randomDescriptor(std::uint8_t{0}, random).bodyType, 0);
     EXPECT_EQ(Avatars::randomDescriptor(std::uint8_t{1}, random).bodyType, 1);
 }

@@ -93,6 +93,22 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   tint-only `preview_avatar.py` is removed. The preview matches the OPENGL33 captures cell for cell
   (same framing, textures, atlas, lighting), so art iteration can happen on the CPU and be
   confirmed on the renderer.
+- **Exact catalogs (GSP-B1).** Every `assets/avatars/v<N>/` directory is compiled in as
+  `v<N>/<file>`; `embeddedCatalogs()` checks each manifest describes its own directory's version.
+  `catalogManifest(v)` returns exactly version v (compiled in, else the service's), or null — never
+  another version. Assets resolve by size + SHA-256 across every compiled-in file, so two versions
+  may reuse a file name with different contents, and identical contents are shared. A description
+  whose catalog is unavailable draws the newest compiled-in body with every item replaced by its
+  slot default (`AvatarModel::catalogUnavailable`, all ids in `substitutedItems`); its ids are never
+  read against another version (previously they were read against v1). The codec's hard-coded v1
+  item table is gone: `isEncodable` checks items against the compiled-in manifest of the named
+  version; `randomDescriptor` draws from the newest one, with optional per-item `random` weights
+  per body type in the manifest (absent = 1, so v1 is unchanged). Preset animations come from the
+  newest compiled-in catalog: they are system data, not part of what a description names.
+  Pinned: `v1/catalog.json` SHA-256 and the digests of three assembled v1 models
+  (`AvatarCatalogTest.CatalogV1IsFrozen`, `V1DescriptionsAssembleExactlyAsReleased`), taken while v1
+  was the only catalog. The server already kept versions immutable and items growing (GSP-B2 adds
+  per-version item checks and exact v1 service after v2).
 
 ## Tasks
 
@@ -102,8 +118,8 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
 | GSP-A1 | Texture-aware development preview (UV/texture/atlas/alpha, z-buffer) | done |
 | GSP-A2 | Deterministic captures from the real `AvatarRenderer` (views, contact sheets, animation keyframes) | done |
 | GSP-A3 | BEFORE evidence of catalog v1 | done |
-| GSP-B1 | Exact embedded catalog registry (version -> manifest -> content hash); v1 frozen | todo |
-| GSP-B2 | Server catalog-version semantics verified and tested | todo |
+| GSP-B1 | Exact embedded catalog registry (version -> manifest -> content hash); v1 frozen | done |
+| GSP-B2 | Server catalog-version semantics verified and tested | done |
 | GSP-C* | Catalog v2: body, head/face, expression atlas, facial individuality decision | todo |
 | GSP-D* | Catalog v2 wardrobe and hair | todo |
 | GSP-E* | Materials and renderer polish, per-renderer check | todo |

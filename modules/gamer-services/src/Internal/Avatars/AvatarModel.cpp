@@ -109,31 +109,35 @@ std::map<std::uint16_t,std::shared_ptr<const CatalogManifest>> serviceCatalogs;
 
 std::shared_ptr<const CatalogManifest> catalogManifest(std::uint16_t version)
 {
-    const auto& embedded=embeddedManifest();
-    const std::shared_ptr<const CatalogManifest> builtIn(std::shared_ptr<const CatalogManifest>{},&embedded);
-    if(version<=embedded.version)return builtIn;
+    if(auto embedded=embeddedManifest(version))return embedded;
     {
         std::lock_guard guard(catalogLock);
         if(auto found=serviceCatalogs.find(version);found!=serviceCatalogs.end())return found->second;
     }
     const auto text=onServiceExecutor<std::string>([version](IGamerServicesBackend& service){return service.avatarCatalog(version);});
-    if(!text)return builtIn;
+    if(!text)return nullptr;
     try {
         auto manifest=std::make_shared<const CatalogManifest>(parseManifest(*text));
-        if(manifest->version!=version)return builtIn;
+        if(manifest->version!=version)return nullptr;
         std::lock_guard guard(catalogLock);
         return serviceCatalogs.emplace(version,std::move(manifest)).first->second;
     } catch(const std::runtime_error&) {
-        return builtIn;
+        return nullptr;
     }
 }
 
 std::shared_ptr<const AvatarModel> buildAvatarModel(const AvatarDescriptor& descriptor)
 {
-    const auto catalog=catalogManifest(descriptor.catalogVersion);
+    auto catalog=catalogManifest(descriptor.catalogVersion);
+    auto model=std::make_shared<AvatarModel>();
+    if(!catalog) {
+        // The named catalog is neither compiled in nor obtainable: draw the newest compiled-in body
+        // with every item's slot default rather than reading the ids against another version.
+        model->catalogUnavailable=true;
+        catalog=embeddedCatalogs().back();
+    }
     const auto& manifest=*catalog;
     const int body=descriptor.bodyType==1?1:0;
-    auto model=std::make_shared<AvatarModel>();
     const auto bodyBytes=resolveAsset(manifest,manifest.bodies[body]);
     if(!bodyBytes)throw std::runtime_error("avatar body asset is unavailable");
     auto bodyGlb=parseAvatarGlb(bodyBytes->view);
@@ -141,7 +145,7 @@ std::shared_ptr<const AvatarModel> buildAvatarModel(const AvatarDescriptor& desc
     assets.emplace_back(std::move(bodyGlb),true);
     for(std::size_t slot=0;slot<AvatarItemSlotCount;++slot) {
         const auto id=descriptor.items[slot];
-        const auto* item=id?manifest.item(id):nullptr;
+        const auto* item=id&&!model->catalogUnavailable?manifest.item(id):nullptr;
         std::optional<AvatarGlb> glb;
         if(item&&item->slot==static_cast<AvatarItemSlot>(slot)) {
             if(auto bytes=resolveAsset(manifest,item->assets[body])) {
@@ -213,7 +217,7 @@ public:
     Loader()
     {
         // Constructed first, so these outlive the worker at exit.
-        (void)embeddedManifest();
+        (void)embeddedCatalogs();
         worker_=std::thread([this]{run();});
     }
     ~Loader()

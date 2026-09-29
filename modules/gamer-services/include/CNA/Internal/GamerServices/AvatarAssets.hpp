@@ -31,7 +31,8 @@ std::string_view boneName(int slot);
 /** @brief Slot for a joint name. @param name Name. @return Slot or -1. */
 int boneIndex(std::string_view name);
 
-/** @brief Every file of the base catalog compiled into the library (generated source). @return Files by name. */
+/** @brief Every file of every catalog version compiled into the library, named "v<N>/<file>"
+ * (generated source). @return Files by name. */
 std::span<const EmbeddedFile> embeddedCatalogFiles();
 
 /** @brief One file listed by a catalog manifest. */
@@ -54,6 +55,8 @@ struct CatalogItem {
     std::string name;
     /** @brief Asset per body type (female, male). */
     std::array<std::string,2> assets;
+    /** @brief Relative chance CreateRandom picks it, per body type (0 = never). */
+    std::array<float,2> randomWeight{1.0f,1.0f};
 };
 
 /** @brief Atlas tile indices of every expression state. */
@@ -95,8 +98,15 @@ struct CatalogManifest {
 /** @brief Parses and validates a manifest; every name, size and hash is checked. @param json Text.
  * @return Manifest. @throws std::runtime_error when malformed. */
 CatalogManifest parseManifest(std::string_view json);
-/** @brief The manifest of the embedded base catalog. @return Manifest. */
-const CatalogManifest& embeddedManifest();
+/** @brief Every catalog compiled into the library, oldest first; each "v<N>/catalog.json" must
+ * describe version N. @return Manifests. @throws std::runtime_error when an embedded manifest is malformed. */
+const std::vector<std::shared_ptr<const CatalogManifest>>& embeddedCatalogs();
+/** @brief The compiled-in manifest of exactly one catalog version. @param version Catalog version.
+ * @return Manifest, or null when this build does not embed that version. */
+std::shared_ptr<const CatalogManifest> embeddedManifest(std::uint16_t version);
+/** @brief The newest compiled-in catalog: the one CreateRandom draws from and whose preset
+ * animations AvatarAnimation plays. @return Manifest. */
+const CatalogManifest& newestEmbeddedManifest();
 /** @brief Lower-case hex SHA-256. @param bytes Input. @return Digest. */
 std::string sha256Hex(std::span<const std::uint8_t> bytes);
 
@@ -105,9 +115,9 @@ std::string sha256Hex(std::span<const std::uint8_t> bytes);
  * disabled, unreachable or failed. */
 template<typename T>
 std::optional<T> onServiceExecutor(std::function<T(IGamerServicesBackend&)> work);
-/** @brief The manifest describing a catalog version: the embedded one for versions it covers,
- * otherwise the service's (cached per process); falls back to the embedded manifest when the
- * service cannot provide it. @param version Catalog version a description names. @return Manifest. */
+/** @brief The manifest of exactly the catalog version a description names: compiled in, or the
+ * service's (cached per process). Never another version's. @param version Catalog version.
+ * @return Manifest, or null when neither the library nor the service has that version. */
 std::shared_ptr<const CatalogManifest> catalogManifest(std::uint16_t version);
 
 /** @brief Bytes of one asset, either static embedded data or an owned copy. */
@@ -117,8 +127,9 @@ struct AssetBytes {
     /** @brief The contents. */
     std::span<const std::uint8_t> view;
 };
-/** @brief Resolves a manifest asset to verified bytes: the embedded catalog when it holds the same
- * file, otherwise the service's hash-addressed copy (cached on disk by the backend).
+/** @brief Resolves a manifest asset to verified bytes by content: any compiled-in file with the
+ * listed size and SHA-256 (whatever catalog directory holds it), otherwise the service's
+ * hash-addressed copy (cached on disk by the backend). Names never identify contents.
  * @param manifest Manifest listing it. @param name Asset name. @return Bytes, or empty when
  * unavailable or when the contents do not match the manifest hash and size. */
 std::optional<AssetBytes> resolveAsset(const CatalogManifest& manifest,std::string_view name);
@@ -260,6 +271,9 @@ struct AvatarModel {
     FaceLayout face;
     /** @brief Items the catalog could not resolve and that were replaced by a default. */
     std::vector<std::uint16_t> substitutedItems;
+    /** @brief The description's catalog version was unavailable, so the newest compiled-in catalog
+     * supplied the body and every item fell back to its slot default. */
+    bool catalogUnavailable=false;
 };
 
 /** @brief Assembles an avatar from the catalog. @param descriptor Description.

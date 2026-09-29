@@ -29,7 +29,7 @@ struct Provider final : System::IServiceProvider {
     void* GetService(const std::type_info&) const override { return nullptr; }
 };
 
-std::vector<unsigned char> Encoded(std::uint8_t body, std::uint16_t height, std::uint16_t catalog = Avatars::CatalogVersion,
+std::vector<unsigned char> Encoded(std::uint8_t body, std::uint16_t height, std::uint16_t catalog = Avatars::BaseCatalogVersion,
                                    std::uint16_t hat = 0) {
     Avatars::AvatarDescriptor descriptor;
     descriptor.bodyType = body;
@@ -40,23 +40,29 @@ std::vector<unsigned char> Encoded(std::uint8_t body, std::uint16_t height, std:
     return {bytes.begin(), bytes.end()};
 }
 
-// Catalog v2 = v1 plus one hat that is not compiled into the library.
+// A catalog one version past everything compiled in: v1 plus one hat the library does not have.
+const std::uint16_t Newer = static_cast<std::uint16_t>(Avatars::newestEmbeddedManifest().version + 1);
+
 struct NewerCatalog {
     std::string manifest;
     std::map<std::string, std::vector<unsigned char>> assets;
 };
 
 NewerCatalog MakeNewerCatalog() {
-    const auto& embedded = Avatars::embeddedManifest();
+    const auto embedded = Avatars::embeddedManifest(Avatars::BaseCatalogVersion);
     const auto& files = Avatars::embeddedCatalogFiles();
-    auto manifestFile = std::find_if(files.begin(), files.end(), [](const auto& file) { return std::string_view(file.name) == "catalog.json"; });
+    auto manifestFile = std::find_if(files.begin(), files.end(), [](const auto& file) { return std::string_view(file.name) == "v1/catalog.json"; });
     auto json = nlohmann::json::parse(std::string(reinterpret_cast<const char*>(manifestFile->data), manifestFile->size));
-    json["catalogVersion"] = 2;
+    json["catalogVersion"] = Newer;
     NewerCatalog catalog;
     for (const char* body : {"female", "male"}) {
-        // A distinct file: the cap with a trailing marker, so its hash is new.
-        const auto base = Avatars::resolveAsset(embedded, std::string("hat_cap.") + body + ".glb");
-        std::vector<unsigned char> bytes(base->view.begin(), base->view.end());
+        // A distinct file: the cap renamed inside its JSON chunk, so its contents and hash are new.
+        const auto base = Avatars::resolveAsset(*embedded, std::string("hat_cap.") + body + ".glb");
+        std::string text(base->view.begin(), base->view.end());
+        for (auto at = text.find("hat_cap"); at != std::string::npos; at = text.find("hat_cap", at)) {
+            text.replace(at, 7, "hat_crn");
+        }
+        std::vector<unsigned char> bytes(text.begin(), text.end());
         const auto name = std::string("hat_crown.") + body + ".glb";
         const auto hash = Avatars::sha256Hex(bytes);
         json["assets"].push_back({{"name", name}, {"sha256", hash}, {"size", bytes.size()}});
@@ -164,10 +170,10 @@ TEST_F(AvatarServiceTest, TheServiceAvatarRendersThroughTheStandardApi) {
 TEST_F(AvatarServiceTest, ANewerCatalogItemIsFetchedFromTheServiceByHash) {
     const auto catalog = MakeNewerCatalog();
     Service::setFakeAvatarCatalog(*service_, catalog.manifest, catalog.assets);
-    const auto manifest = WhilePumping([] { return Avatars::catalogManifest(2); });
-    ASSERT_EQ(manifest->version, 2);
+    const auto manifest = WhilePumping([] { return Avatars::catalogManifest(Newer); });
+    ASSERT_EQ(manifest->version, Newer);
     ASSERT_NE(manifest->item(102), nullptr);
-    const auto bytes = Encoded(0, 1650, 2, 102);
+    const auto bytes = Encoded(0, 1650, Newer, 102);
     const auto descriptor = Avatars::decode(bytes);
     ASSERT_TRUE(descriptor.has_value());
     const auto model = WhilePumping([&] { return Avatars::buildAvatarModel(*descriptor); });
@@ -182,8 +188,8 @@ TEST_F(AvatarServiceTest, ANewerCatalogItemIsFetchedFromTheServiceByHash) {
 TEST_F(AvatarServiceTest, AnItemTheServiceCannotProvideIsLeftOut) {
     const auto catalog = MakeNewerCatalog();
     Service::setFakeAvatarCatalog(*service_, catalog.manifest, {});
-    ASSERT_EQ(WhilePumping([] { return Avatars::catalogManifest(2); })->version, 2);
-    const auto descriptor = Avatars::decode(Encoded(1, 1800, 2, 102));
+    ASSERT_EQ(WhilePumping([] { return Avatars::catalogManifest(Newer); })->version, Newer);
+    const auto descriptor = Avatars::decode(Encoded(1, 1800, Newer, 102));
     const auto model = WhilePumping([&] { return Avatars::buildAvatarModel(*descriptor); });
     ASSERT_EQ(model->substitutedItems.size(), 1u);
     EXPECT_EQ(model->substitutedItems[0], 102);
@@ -195,7 +201,7 @@ TEST_F(AvatarServiceTest, AnAssetWhoseBytesDoNotMatchTheManifestIsRefused) {
         bytes[bytes.size() / 2] ^= 0x5a;
     }
     Service::setFakeAvatarCatalog(*service_, catalog.manifest, catalog.assets);
-    const auto manifest = WhilePumping([] { return Avatars::catalogManifest(2); });
-    ASSERT_EQ(manifest->version, 2);
+    const auto manifest = WhilePumping([] { return Avatars::catalogManifest(Newer); });
+    ASSERT_EQ(manifest->version, Newer);
     EXPECT_FALSE(WhilePumping([&] { return Avatars::resolveAsset(*manifest, "hat_crown.male.glb"); }).has_value());
 }

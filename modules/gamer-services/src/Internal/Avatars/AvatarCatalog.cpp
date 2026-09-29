@@ -59,14 +59,7 @@ int tile(const nlohmann::json& value,int count)
 
 // Namespace scope so the avatar loader thread can use them until it is joined at exit.
 std::mutex verifiedLock;
-std::set<std::string,std::less<>> verified;
-
-const EmbeddedFile* embedded(std::string_view name)
-{
-    const auto files=embeddedCatalogFiles();
-    auto found=std::ranges::find_if(files,[&](const EmbeddedFile& file){return name==file.name;});
-    return found==files.end()?nullptr:&*found;
-}
+std::map<const unsigned char*,std::string> embeddedHashes;
 }
 
 template<typename T>
@@ -161,6 +154,13 @@ CatalogManifest parseManifestJson(std::string_view text)
         entry.slot=static_cast<AvatarItemSlot>(slot-SlotNames.begin());
         entry.name=item.at("name").get<std::string>();
         entry.assets={listed(item.at("assets").at("female")),listed(item.at("assets").at("male"))};
+        if(item.contains("random")) {
+            for(int body=0;body<2;++body) {
+                const float weight=item["random"].at(body==0?"female":"male").get<float>();
+                if(!(weight>=0.0f&&weight<=1000.0f))malformed("item random weight");
+                entry.randomWeight[body]=weight;
+            }
+        }
         manifest.items.push_back(std::move(entry));
     }
     const auto& face=json.at("face");
@@ -184,19 +184,43 @@ CatalogManifest parseManifestJson(std::string_view text)
     for(std::size_t state=0;state<MouthNames.size();++state)
         manifest.face.mouths[state]=tile(layout.at("mouths").at(std::string(MouthNames[state])),tiles);
     manifest.animationsAsset=listed(json.at("animations").at("asset"));
+    // Required slots need an item to fall back to and to draw at random.
+    for(auto required:{AvatarItemSlot::Hair,AvatarItemSlot::Top,AvatarItemSlot::Bottom,AvatarItemSlot::Shoes})
+        for(int body=0;body<2;++body)
+            if(std::ranges::none_of(manifest.items,[&](const CatalogItem& item){return item.slot==required&&item.randomWeight[body]>0;}))
+                malformed("a required slot has no item");
     return manifest;
 }
 }
 
-const CatalogManifest& embeddedManifest()
+const std::vector<std::shared_ptr<const CatalogManifest>>& embeddedCatalogs()
 {
-    static const CatalogManifest manifest=[] {
-        const auto* file=embedded("catalog.json");
-        if(!file)throw std::runtime_error("the avatar catalog is not compiled into this build");
-        return parseManifest(std::string_view(reinterpret_cast<const char*>(file->data),file->size));
+    static const std::vector<std::shared_ptr<const CatalogManifest>> catalogs=[] {
+        std::vector<std::shared_ptr<const CatalogManifest>> out;
+        for(const auto& file:embeddedCatalogFiles()) {
+            const std::string_view name(file.name);
+            if(!name.starts_with("v")||!name.ends_with("/catalog.json"))continue;
+            auto manifest=std::make_shared<const CatalogManifest>(
+                parseManifest(std::string_view(reinterpret_cast<const char*>(file.data),file.size)));
+            if(name!="v"+std::to_string(manifest->version)+"/catalog.json")
+                throw std::runtime_error("avatar catalog: "+std::string(name)+" describes another version");
+            out.push_back(std::move(manifest));
+        }
+        if(out.empty())throw std::runtime_error("the avatar catalog is not compiled into this build");
+        std::ranges::sort(out,{},[](const auto& manifest){return manifest->version;});
+        return out;
     }();
-    return manifest;
+    return catalogs;
 }
+
+std::shared_ptr<const CatalogManifest> embeddedManifest(std::uint16_t version)
+{
+    const auto& catalogs=embeddedCatalogs();
+    auto found=std::ranges::find(catalogs,version,[](const auto& manifest){return manifest->version;});
+    return found==catalogs.end()?nullptr:*found;
+}
+
+const CatalogManifest& newestEmbeddedManifest(){return *embeddedCatalogs().back();}
 
 std::string sha256Hex(std::span<const std::uint8_t> bytes)
 {
@@ -213,13 +237,14 @@ std::optional<AssetBytes> resolveAsset(const CatalogManifest& manifest,std::stri
     auto listed=manifest.assets.find(name);
     if(listed==manifest.assets.end())return std::nullopt;
     const auto& expected=listed->second;
-    if(const auto* file=embedded(name);file&&file->size==expected.size) {
-        // Embedded contents are checked against the manifest once per process.
+    // Compiled-in contents are found by size and hash, never by name: two catalog versions may
+    // hold different files under one name. Each file is hashed at most once per process.
+    for(const auto& file:embeddedCatalogFiles()) {
+        if(file.size!=expected.size)continue;
         std::lock_guard guard(verifiedLock);
-        if(verified.contains(expected.sha256)||sha256Hex(file->bytes())==expected.sha256) {
-            verified.insert(expected.sha256);
-            return AssetBytes{nullptr,file->bytes()};
-        }
+        auto hash=embeddedHashes.find(file.data);
+        if(hash==embeddedHashes.end())hash=embeddedHashes.emplace(file.data,sha256Hex(file.bytes())).first;
+        if(hash->second==expected.sha256)return AssetBytes{nullptr,file.bytes()};
     }
     // Not compiled in (a newer catalog): the service's immutable, hash-addressed copy, which the
     // backend caches on disk and verifies; checked again here against this manifest.
