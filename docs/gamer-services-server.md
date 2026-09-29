@@ -64,8 +64,9 @@ NetworkSession Create/Find/Join/JoinInvited with Guide invitations, lobby readin
 traffic and round-trip statistics, over the authenticated relay (native only; browsers use the
 limitations page). Online sessions honor `AllowHostMigration`: when the host leaves or its process
 dies, the service hands the session to the machine with the lowest remaining gamer ID and every
-machine raises `HostChanged` (see "Host migration" below). Not implemented: adding local gamers to
-an online session after create or join, voice, TrueSkill
+machine raises `HostChanged` (see "Host migration" below). `AddLocalGamer` adds a signed-in account
+gamer to this machine's group through the service; it joins, with `GamerJoined` on every machine,
+at a later Update, as XNA's kernel reports it. Not implemented: voice, TrueSkill
 computation, and party and marketplace services. Friends see the online status (online, away,
 busy) a player chooses in the Guide (`FriendGamer.IsAway`/`IsBusy`). Rich presence is sent during
 Dispatcher.Update; friend online state reflects authenticated activity within 90 seconds; Update
@@ -314,3 +315,17 @@ with their host. Evidence: `OnlineNetworkSessionTest` (a joiner becoming host, a
 the directory to a new remote host, the unchanged no-migration path), server directory and relay
 tests, and `service_cna_session_migration` / `service_cna_session_host_crash` (two processes over
 the TLS/WSS relay; the crash case kills the host process in its own NAT namespace).
+
+## Adding local gamers (GSP-K2)
+
+Online `NetworkSession.AddLocalGamer` validates as XNA does (null, disposed, duplicate, a game in
+progress without join-in-progress, ended, no open public slot, the session's local-gamer limit --
+4 for sessions created, found or invite-joined with a gamer list, as in the reference) and then
+asks the service to add the gamer to this machine's group (`sessions.addMembers`, capability
+`session-add-members`). The gamer arrives at a later Update: a `LocalNetworkGamer` sharing the
+machine, with its directory ID, and `GamerJoined` on every machine (the host announces a grown
+group to the others). A gamer without a service account refuses with `GamerPrivilegeException`;
+a service refusal (slots taken meanwhile, the account in another session) leaves the gamer out.
+Evidence: `OnlineNetworkSessionTest` (host and client adds, a refused add), server directory
+tests, and `service_cna_session_add_gamer` (two processes in separate NAT namespaces; the joiner
+adds its second gamer, then exchanges data and plays a Ranked round with it).

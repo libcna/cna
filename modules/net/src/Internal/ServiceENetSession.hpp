@@ -19,6 +19,8 @@ struct ServiceENetObservation {
         /** @brief Authenticated directory metadata changed. */ Snapshot,
         /** @brief Gamers' lobby ready state changed. */ Readiness,
         /** @brief The directory handed the host role to another machine (snapshot names it). */ HostChanged,
+        /** @brief Local gamers added to this machine's group (ids and gamers name them). */ LocalAdded,
+        /** @brief The service refused adding local gamers (failure names why). */ AddFailed,
         /** @brief Authority or transport became unavailable. */ Failed
     };
     /** @brief Observation category. */
@@ -77,6 +79,10 @@ public:
     /** @brief Publishes host-owned directory settings; clients observe them through authority.
      * @param settings Complete desired state, capacity, join-in-progress and properties. */
     void publish(const GamerServices::ServiceSessionSettings& settings);
+    /** @brief Asks the service to add signed-in local accounts to this machine's group
+     * (XNA AddLocalGamer); the outcome is a later LocalAdded or AddFailed observation.
+     * @param names Gamertags, in order. @param users Their accounts. */
+    void addLocal(std::vector<std::string> names,std::vector<std::string> users);
     /** @brief Gets whether host resources/client welcome are established. @return Ready flag. */
     bool ready() const;
     /** @brief Gets current authenticated metadata. @return Owner-thread snapshot. */

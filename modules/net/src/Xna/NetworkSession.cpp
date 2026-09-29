@@ -657,16 +657,21 @@ namespace Microsoft::Xna::Framework::Net
         if (sessionState_ == NetworkSessionState::Playing && !allowJoinInProgress_)
             throw System::InvalidOperationException("The session does not allow joining a game in progress.");
         if (sessionState_ == NetworkSessionState::Ended) throw System::InvalidOperationException("The session has ended.");
-        int fullPublicSlots = 0;
+        if (online_ && online_->adding(gamer)) throw System::ArgumentException("The gamer is already in the session.", "gamer");
+        int fullPublicSlots = online_ ? online_->pendingAdds() : 0;
         for (NetworkGamer* member : allGamers_) if (!member->getIsPrivateSlotProperty()) ++fullPublicSlots;
         if (maxGamers_ - privateGamerSlots_ - fullPublicSlots <= 0)
             throw System::InvalidOperationException("The session has no open public slot.");
-        // The service directory admits one complete local group per machine; extending it is not implemented yet.
-        if (online_)
-            throw System::NotSupportedException("CNA online sessions do not yet add local gamers after creation or join.");
-        if (localGamers_.getCountProperty() == maxLocalGamers_)
+        if (localGamers_.getCountProperty() + (online_ ? online_->pendingAdds() : 0) >= maxLocalGamers_)
         {
             throw System::InvalidOperationException("LocalGamer max limit!");
+        }
+        // Online, as the reference's kernel command: the service adds the gamer to this machine's
+        // group and it joins, with GamerJoined, at a later Update.
+        if (online_)
+        {
+            online_->addLocal(gamer);
+            return;
         }
         auto* adding = new LocalNetworkGamer(LocalNetworkGamer::CreateInternal(gamer, this));
         adding->SetIsHost(isHost_);
@@ -1463,6 +1468,7 @@ namespace Microsoft::Xna::Framework::Net
                     snapshot.openPrivateSlots,snapshot.openPublicSlots,std::move(properties),QualityOfService::CreateInternal(),"",0,type);
                 item.serviceSnapshot_=std::make_shared<const CNA::Internal::GamerServices::ServiceSessionSnapshot>(std::move(snapshot));
                 item.serviceLocals_=searchers;
+                item.joinMaxLocalGamers_=action->LocalGamers ? 4 : action->MaxLocalGamers;
                 available.push_back(std::move(item));
             }
             return AvailableNetworkSessionCollection::CreateInternal(std::move(available));
@@ -1527,9 +1533,11 @@ namespace Microsoft::Xna::Framework::Net
             // ObjectDisposedException; only an authenticated service search result has one here.
             if (!availableSession->serviceSnapshot_ || !availableSession->serviceLocals_)
                 throw System::ObjectDisposedException("availableSession");
+            // The joined session keeps the search's local-gamer limit (reference BeginFind passes 4 for a
+            // gamer list), which AddLocalGamer later honors.
             activeAction_ = new NetworkSessionAction(
                 NetworkSessionOperation::Join, std::move(asyncState), std::move(callback),
-                static_cast<int>(availableSession->serviceLocals_->size()), *availableSession->serviceLocals_, 0,
+                availableSession->joinMaxLocalGamers_, *availableSession->serviceLocals_, 0,
                 NetworkSessionProperties{}, availableSession->GetSessionType());
             return QueueOnlineSession(availableSession->serviceSnapshot_->session, {});
         }
@@ -1728,9 +1736,10 @@ namespace Microsoft::Xna::Framework::Net
                 if(gamer!=invitee && !gamer->getIsGuestProperty() && gamers.size()<static_cast<std::size_t>(maxLocalGamers)) gamers.push_back(gamer);
         }
         const auto type=accepted->invitation.kind==ServiceSessionKind::Ranked ? NetworkSessionType::Ranked : NetworkSessionType::PlayerMatch;
+        // Reference BeginJoinInvited(IEnumerable) passes a local-gamer limit of 4; the count overload passes its count.
         activeAction_ = new NetworkSessionAction(
             NetworkSessionOperation::JoinInvited, std::move(asyncState), std::move(callback),
-            static_cast<int>(gamers.size()), gamers, 0, NetworkSessionProperties{}, type);
+            localGamers ? 4 : maxLocalGamers, gamers, 0, NetworkSessionProperties{}, type);
         return QueueOnlineSession(accepted->invitation.session, accepted->invitation.invite);
     }
 

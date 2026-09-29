@@ -52,6 +52,15 @@ public:
     /** @brief Host: removes the machine that owns @p gamer from the session.
      * @param gamer Any gamer of that machine. */
     void removeMachine(Microsoft::Xna::Framework::Net::NetworkGamer* gamer);
+    /** @brief Asks the service to add a signed-in account gamer to this machine's group (XNA
+     * AddLocalGamer); it joins at a later Update with GamerJoined, or not at all if refused.
+     * @param gamer Signed-in gamer with a service account.
+     * @throws GamerPrivilegeException for a gamer without a service account. */
+    void addLocal(Microsoft::Xna::Framework::GamerServices::SignedInGamer* gamer);
+    /** @brief Gets the local gamers asked for but not yet added. @return Count. */
+    int pendingAdds() const {return static_cast<int>(pending_.size());}
+    /** @brief Gets whether a gamer is being added. @param gamer Gamer. @return True while pending. */
+    bool adding(const Microsoft::Xna::Framework::GamerServices::SignedInGamer* gamer) const;
     /** @brief Records the host's requested gameplay state for directory publication.
      * @param state Lobby or Playing. */
     void requestState(NetworkSessionState state);
@@ -80,6 +89,8 @@ private:
     Microsoft::Xna::Framework::Net::NetworkSession& session_;
     std::unique_ptr<ServiceENetSession> engine_;
     std::vector<std::string> users_;
+    // AddLocalGamer calls in flight, oldest first, with the account each names.
+    std::vector<std::pair<Microsoft::Xna::Framework::GamerServices::SignedInGamer*,std::string>> pending_;
     std::vector<std::unique_ptr<NetworkGamer>> remote_;
     std::map<unsigned char,NetworkGamer*> gamers_;
     TrafficRate traffic_;

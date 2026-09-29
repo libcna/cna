@@ -245,7 +245,8 @@ TEST_F(OnlineNetworkSessionTest, RankedCreateRefusesJoinInProgressAndPrivateSlot
     // No public slot is advertised until the new capacity reaches the directory.
     until([&]{const auto id=sessionId("b",1);if(id.empty())return false;
         const auto value=service->sessionDirectory().get("a",id);return value.maxGamers==5&&value.privateSlots==1;});
-    EXPECT_THROW(session->AddLocalGamer(gamer(1)),System::NotSupportedException);
+    // Created for one local gamer: the local limit refuses another, as for SystemLink.
+    EXPECT_THROW(session->AddLocalGamer(gamer(1)),System::InvalidOperationException);
 }
 
 TEST_F(OnlineNetworkSessionTest, JoinFailuresMapToReferenceExceptionFamilies) {
@@ -396,5 +397,79 @@ TEST_F(OnlineNetworkSessionTest, AClientFollowsTheDirectoryToANewRemoteHost) {
     EXPECT_TRUE(std::any_of(bob.observed.begin(),bob.observed.end(),[](const auto& value){return value.type==ServiceENetObservation::Type::HostChanged;}));
     bob.engine->send(host->getIdProperty(),charlie->getIdProperty(),{9},Microsoft::Xna::Framework::Net::SendDataOptions::Reliable);
     until([&]{pump();return charlie->getIsDataAvailableProperty();});
+}
+TEST_F(OnlineNetworkSessionTest, AHostsAddedLocalGamerJoinsAtUpdateOnEveryMachine) {
+    session=NetworkSession::Create(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(0)},6,0,properties());
+    privatePeer(true,sessionId("b"));
+    until([&]{return peer->ready()&&session->getAllGamersProperty().getCountProperty()==3;});
+    std::vector<std::string> joined;
+    session->GamerJoined+=[&](auto*,const GamerJoinedEventArgs& args){joined.push_back(args.getGamerProperty()->getGamertagProperty());};
+    joined.clear();
+    session->AddLocalGamer(gamer(2));
+    // As the reference: the gamer arrives later, through GamerJoined.
+    EXPECT_EQ(1,session->getLocalGamersProperty().getCountProperty());
+    EXPECT_THROW(session->AddLocalGamer(gamer(2)),System::ArgumentException);
+    until([&]{return joined.size()==1;});
+    EXPECT_EQ("Charlie",joined.front());
+    const auto& locals=session->getLocalGamersProperty();ASSERT_EQ(2,locals.getCountProperty());
+    auto* charlie=locals[1];
+    EXPECT_TRUE(charlie->getIsLocalProperty());EXPECT_FALSE(charlie->getIsHostProperty());EXPECT_FALSE(charlie->getIsPrivateSlotProperty());
+    EXPECT_EQ(4,charlie->getIdProperty());
+    EXPECT_EQ(&locals[0]->getMachineProperty(),&charlie->getMachineProperty());
+    EXPECT_EQ(charlie,session->FindGamerById(4));
+    // The other machine learns of it from the host.
+    until([&]{return std::any_of(observed.begin(),observed.end(),[](const auto& value){
+        return value.type==ServiceENetObservation::Type::Joined&&!value.gamers.empty()&&value.gamers.front().Gamertag!="Alice"
+            &&std::any_of(value.gamers.begin(),value.gamers.end(),[](const auto& entry){return entry.Gamertag=="Charlie";});});});
+    auto* bob=session->getRemoteGamersProperty()[0];
+    charlie->SendData(std::vector<SharpRuntime::bytecs>{4,2},Microsoft::Xna::Framework::Net::SendDataOptions::Reliable,bob);
+    until([&]{session->Update();return std::any_of(observed.begin(),observed.end(),[](const auto& value){return value.data&&value.data->SenderWireId==4;});});
+    peer->send(bob->getIdProperty(),4,{8},Microsoft::Xna::Framework::Net::SendDataOptions::Reliable);
+    until([&]{return charlie->getIsDataAvailableProperty();});
+    const auto directory=service->sessionDirectory().get("c",Service::activeOnlineSession()->session);
+    EXPECT_TRUE(std::any_of(directory.members.begin(),directory.members.end(),[&](const auto& row){
+        return row.userId=="c"&&row.machine==directory.hostMachine&&row.ordinal==3;}));
+}
+
+TEST_F(OnlineNetworkSessionTest, AClientsAddedLocalGamerReachesTheHost) {
+    privatePeer(false);
+    auto found=NetworkSession::Find(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(1)},{});
+    ASSERT_EQ(1,found.getCountProperty());
+    std::unique_ptr<System::IAsyncResult> joining(NetworkSession::BeginJoin(&std::as_const(found)[0],{},{}));
+    until([&]{return joining->getIsCompletedProperty();});
+    session=NetworkSession::EndJoin(joining.get());
+    until([&]{return session->getAllGamersProperty().getCountProperty()==3;});
+    int joinedEvents=0;
+    session->GamerJoined+=[&](auto*,const GamerJoinedEventArgs&){++joinedEvents;};
+    joinedEvents=0;
+    session->AddLocalGamer(gamer(3));
+    until([&]{return session->getLocalGamersProperty().getCountProperty()==2;});
+    auto* dana=session->getLocalGamersProperty()[1];
+    EXPECT_EQ("Dana",dana->getGamertagProperty());EXPECT_FALSE(session->getIsHostProperty());
+    // The host reads the grown group from the directory and announces it.
+    until([&]{return std::any_of(observed.begin(),observed.end(),[&](const auto& value){
+        return value.type==ServiceENetObservation::Type::Joined&&std::any_of(value.gamers.begin(),value.gamers.end(),
+            [&](const auto& entry){return entry.Gamertag=="Dana"&&entry.WireId==dana->getIdProperty();});});});
+    auto* host=session->getHostProperty();
+    dana->SendData(std::vector<SharpRuntime::bytecs>{3},Microsoft::Xna::Framework::Net::SendDataOptions::Reliable,host);
+    until([&]{session->Update();return std::any_of(observed.begin(),observed.end(),[&](const auto& value){
+        return value.data&&value.data->SenderWireId==dana->getIdProperty();});});
+    peer->send(host->getIdProperty(),dana->getIdProperty(),{6},Microsoft::Xna::Framework::Net::SendDataOptions::Reliable);
+    until([&]{return dana->getIsDataAvailableProperty();});
+    EXPECT_EQ(1,joinedEvents);
+}
+
+TEST_F(OnlineNetworkSessionTest, AnAddTheServiceRefusesLeavesTheGamerOut) {
+    session=NetworkSession::Create(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(0)},6,0,properties());
+    // Charlie already belongs to another session of this title.
+    Service::ServiceSessionSettings settings;settings.maxGamers=2;
+    service->sessionDirectory().create("c",{"c"},Service::ServiceSessionKind::PlayerMatch,settings);
+    int joined=0;session->GamerJoined+=[&](auto*,const GamerJoinedEventArgs&){++joined;};
+    joined=0;
+    session->AddLocalGamer(gamer(2));
+    for(int frame=0;frame<200;++frame){tick();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    EXPECT_EQ(0,joined);EXPECT_EQ(1,session->getLocalGamersProperty().getCountProperty());
+    // Nothing is left pending: the same gamer may be asked for again.
+    EXPECT_NO_THROW(session->AddLocalGamer(gamer(2)));
 }
 #endif

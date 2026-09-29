@@ -187,6 +187,16 @@ public:
         for(const auto& row:value.members)if(row.machine==machine)invalid();
         return value;
     }
+    ServiceSessionSnapshot addMembers(const std::string& actor,const std::vector<std::string>& users,const std::string& session) override {
+        actorGuard(actor);argument(opaque(session)&&!users.empty()&&users.size()<=3);
+        std::set<std::string> seen;for(const auto& user:users)argument(!user.empty()&&user.size()<=64&&user!=actor&&seen.insert(user).second);
+        if(!capability_||!capability_("session-add-members"))throw ServiceOperationError("NOT_SUPPORTED");
+        auto value=decode([&]{return snapshot(request_("sessions.addMembers",{{"session",session}},actor,users),true);});
+        if(value.session!=session)invalid();memberGuard(value,actor);
+        for(const auto& user:users)
+            if(std::none_of(value.members.begin(),value.members.end(),[&](const auto& row){return row.userId==user&&row.machine==value.machine;}))invalid();
+        return value;
+    }
     bool leave(const std::string& actor,const std::string& session) override {
         actorGuard(actor);argument(opaque(session));return decode([&]{const auto value=request_("sessions.leave",{{"session",session}},actor,{});fields(value,{"ended"});return boolean(value,"ended");});
     }

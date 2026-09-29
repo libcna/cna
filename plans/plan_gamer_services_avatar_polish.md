@@ -216,7 +216,7 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
 | GSP-I1 | CNA-owned avatar customization (system level) | done |
 | GSP-J1 | `AvatarDescription.Changed` | done |
 | GSP-K1 | Online host migration | done |
-| GSP-K2 | Online `AddLocalGamer` | todo |
+| GSP-K2 | Online `AddLocalGamer` | done |
 | GSP-L1..L6 | Account GameDefaults, away/busy, toasts, Stream columns, guests, QoS bandwidth | L2 done; others todo |
 | GSP-M1 | GamerZone / Reputation | todo |
 | GSP-O1 | Server concurrency benchmark and production audit | todo |
@@ -287,6 +287,14 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   assertions) and relay authorization, new e2e `service_cna_session_migration` (8.8 s) and
   `service_cna_session_host_crash` (NAT namespaces, host SIGKILLed, 47 s), all other session e2e
   pass; Net 498/498, GS 543 + 1 skip.
+- GSP-K2 (online AddLocalGamer). XNA validates synchronously and the kernel reports the gamer
+  through GamerJoined later; CNA does the same over `sessions.addMembers` (public slots, <= 4 per
+  machine, no add while a game refuses joiners). The host announces a grown group as a whole
+  (the packet policy requires complete groups). Found and fixed on the way: online Join and
+  JoinInvited with a gamer list set the session's local-gamer limit to the list's size, where the
+  reference passes 4. Tests: 3 new `OnlineNetworkSessionTest`, server directory (+15 assertions),
+  new e2e `service_cna_session_add_gamer` (NAT, both kinds, 10.8 s); Net 501/501, GS 543 + 1 skip;
+  20/20 server session/relay tests.
 - Visual evidence lives outside the repositories, as the sample evidence does:
   `/rv/tmp/avatar-polish/evidence/{before,after}/`.
 - BEFORE (catalog v1, 2026-09-29): `evidence/before/{jobs.json, preview/, opengl33/,

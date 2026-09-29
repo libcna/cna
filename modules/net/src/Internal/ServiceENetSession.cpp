@@ -6,6 +6,7 @@
 #include "CnaService/Protocol.hpp"
 #include "System/InvalidOperationException.hpp"
 #include <algorithm>
+#include <deque>
 #include <map>
 #include <set>
 #include <mutex>
@@ -26,6 +27,12 @@ constexpr auto RecoveryWindow=std::chrono::seconds(15);
 constexpr auto MigrationWindow=std::chrono::seconds(30);
 constexpr enet_uint32 PeerTimeoutMinimum=20000,PeerTimeoutMaximum=30000;
 struct Recovery {std::mutex mutex;bool pending=false;std::optional<ServiceRelayTicket> ticket;std::string refused;};
+// An AddLocalGamer in flight on the service executor.
+struct Adding {
+    std::mutex mutex;bool done=false;
+    std::vector<std::string> names,users;
+    std::optional<ServiceSessionSnapshot> snapshot;std::string failure;
+};
 bool transient(const std::string& code){return code=="SESSION_SERVICE_UNAVAILABLE"||code=="RATE_LIMITED";}
 struct OutgoingAllocation {std::shared_ptr<OutgoingBudget> budget;std::size_t bytes;bool data;};
 void releasedPacket(ENetPacket* packet) {
@@ -70,6 +77,7 @@ struct ServiceENetSession::Impl {
     // Client whose host vanished in a session allowing migration, until the directory names a new one.
     bool migrating=false;
     Time migrationDeadline;
+    std::deque<std::shared_ptr<Adding>> adds;
 
     Impl(std::unique_ptr<PreparedOnlineSession> prepared,std::vector<std::string> names,ServiceENetDependencies providers)
         :lease(std::move(prepared)),locals(std::move(names)),dependencies(std::move(providers)) {
@@ -252,6 +260,14 @@ struct ServiceENetSession::Impl {
         }
         std::vector<unsigned char> departed;for(const auto& [id,row]:remoteGamers)if(changed.contains(machineFor(id)))departed.push_back(id);
         remove(departed,host);
+        // Host: a machine already playing that grew (its AddLocalGamer) is announced as a whole group.
+        std::set<std::string> grown;
+        if(host)for(const auto& row:value.members) {
+            if(row.machine==value.machine||changed.contains(row.machine))continue;
+            const bool known=std::any_of(current.members.begin(),current.members.end(),[&](const auto& other){return other.userId==row.userId;});
+            const bool admittedMachine=std::any_of(peers.begin(),peers.end(),[&](const auto& item){return item.second.admitted&&item.second.machine==row.machine;});
+            if(!known&&admittedMachine)grown.insert(row.machine);
+        }
         const bool revised=value.revision!=current.revision;
         const bool stateChanged=value.state!=current.state;
         if(stateChanged)readiness.clear();
@@ -263,7 +279,45 @@ struct ServiceENetSession::Impl {
         if(revised){ServiceENetObservation event;event.type=ServiceENetObservation::Type::Snapshot;event.snapshot=current;emit(std::move(event));
             if(!host&&ready){recoverRoster=true;nextHello=now();}}
         if(handover){takeOver();if(stopped)return;}
+        for(const auto& machine:grown)announce(machine);
         if(host)hint(stateChanged,settingsChanged);
+    }
+    // Host: tells every other admitted machine about a machine's complete group; receivers add the
+    // gamers they do not know yet.
+    void announce(const std::string& machine) {
+        GamerJoinBroadcastMessage joined;
+        for(const auto& row:current.members)if(row.machine==machine)
+            joined.NewGamers.push_back({static_cast<unsigned char>(row.ordinal+1),row.gamertag,false});
+        if(joined.NewGamers.empty())return;
+        if(machine!=current.machine)add(joined.NewGamers);
+        const auto encoded=NetPacketCodec::Encode(joined);
+        for(const auto& [peer,value]:peers)if(value.admitted&&value.machine!=machine)transmit(peer,encoded);
+    }
+    // Owner thread: completes AddLocalGamer calls the service has answered, oldest first.
+    void completeAdds() {
+        while(!adds.empty()) {
+            auto& request=*adds.front();
+            std::optional<ServiceSessionSnapshot> value;std::string failure;
+            {std::lock_guard lock(request.mutex);if(!request.done)return;value=std::move(request.snapshot);failure=request.failure;}
+            auto names=std::move(request.names);auto accounts=std::move(request.users);adds.pop_front();
+            ServiceENetObservation event;
+            if(!value){event.type=ServiceENetObservation::Type::AddFailed;event.failure=failure;emit(std::move(event));continue;}
+            std::vector<RosterEntry> added;
+            for(std::size_t index=0;index<names.size();++index) {
+                auto row=std::find_if(value->members.begin(),value->members.end(),[&](const auto& item){return item.userId==accounts[index]&&item.machine==value->machine;});
+                if(row==value->members.end()){fail("INVALID_RESPONSE");return;}
+                locals.push_back(names[index]);users.push_back(accounts[index]);localIds.push_back(static_cast<unsigned char>(row->ordinal+1));
+                added.push_back({static_cast<unsigned char>(row->ordinal+1),names[index],false});
+            }
+            try{apply(std::move(*value));}catch(const ServiceOperationError&){fail("INVALID_RESPONSE");return;}
+            if(stopped)return;
+            event.type=ServiceENetObservation::Type::LocalAdded;event.gamers=added;
+            for(const auto& entry:added)event.ids.push_back(entry.WireId);
+            emit(std::move(event));
+            // The host tells the others itself; a client's host reads the directory, and this machine's
+            // next hello names its grown group.
+            if(host)announce(current.machine);else{recoverRoster=true;nextHello=now();control->expedite();}
+        }
     }
     // Admitted clients treat these broadcasts only as a prompt to reread directory authority.
     void hint(bool state,bool settings) {
@@ -421,6 +475,8 @@ struct ServiceENetSession::Impl {
     std::vector<ServiceENetObservation> update() {
         checkOwner();if(!stopped) {
             pumpRetainedCompletions(lease->backend());
+            // Before the directory read: a read after the add must find this group already grown.
+            completeAdds();
             const auto status=lease->transport().status();
             if(status.state!=RelayTransportState::Ready)recoverRelay(status);
             if(!stopped)if(auto observation=control->update()) {
@@ -429,7 +485,12 @@ struct ServiceENetSession::Impl {
                     if(transient(observation->failure)){beginRecovery();controlFailed=true;nextControlRetry=now()+std::chrono::seconds(1);}
                     else fail(observation->failure);
                 }
-                else {controlFailed=false;try{apply(std::move(*observation->snapshot));}catch(const ServiceOperationError&){fail("INVALID_RESPONSE");}}
+                else {
+                    controlFailed=false;
+                    // An add the service finished since the check above precedes any read that shows it.
+                    completeAdds();
+                    if(!stopped)try{apply(std::move(*observation->snapshot));}catch(const ServiceOperationError&){fail("INVALID_RESPONSE");}
+                }
             }
             if(!stopped&&controlFailed&&now()>=nextControlRetry) {
                 try{control->retry();}catch(const System::InvalidOperationException&){}
@@ -500,6 +561,21 @@ void ServiceENetSession::removeMachine(const std::string& machine) {
     const bool member=std::any_of(impl.current.members.begin(),impl.current.members.end(),[&](const auto& row){return row.machine==machine;});
     if(!member)return;
     impl.removing.insert(machine);impl.control->remove(machine);
+}
+void ServiceENetSession::addLocal(std::vector<std::string> names,std::vector<std::string> users) {
+    impl_->checkOwner();auto& impl=*impl_;
+    if(impl.stopped)throw ServiceOperationError("INVALID_STATE");
+    if(names.empty()||names.size()!=users.size()||impl.locals.size()+names.size()>4)throw ServiceOperationError("INVALID_ARGUMENT");
+    auto request=std::make_shared<Adding>();request->names=names;request->users=users;
+    auto* executor=impl.lease->backend().get();
+    impl.lease->backend()->submit([request,executor,owner=impl.account,users=std::move(users),session=impl.current.session] {
+        std::optional<ServiceSessionSnapshot> value;std::string failure;
+        try{value=executor->sessionDirectory().addMembers(owner,users,session);}
+        catch(const ServiceOperationError& error){failure=error.code;}
+        catch(...){failure="SESSION_SERVICE_UNAVAILABLE";}
+        std::lock_guard lock(request->mutex);request->snapshot=std::move(value);request->failure=failure;request->done=true;
+    },{});
+    impl.adds.push_back(std::move(request));
 }
 void ServiceENetSession::publish(const ServiceSessionSettings& settings) {
     impl_->checkOwner();if(!impl_->host)throw ServiceOperationError("NOT_AUTHORIZED");

@@ -101,6 +101,21 @@ public:
         for(const auto& row:session.value.members)if(row.machine==machine)session.removed.insert(row.userId);
         removeMachine(session,machine);return view(session,own);
     }
+    ServiceSessionSnapshot addMembers(const std::string& actor,const std::vector<std::string>& users,const std::string& id) override {
+        authorize_(actor);prune();require(!users.empty()&&users.size()<=3);
+        std::set<std::string> seen;for(const auto& user:users){require(user!=actor&&seen.insert(user).second);authorize_(user);}
+        auto& session=lookup(id);const auto machine=ownedMachine(session,actor);auto& value=session.value;
+        const auto group=std::count_if(value.members.begin(),value.members.end(),[&](const auto& row){return row.machine==machine;});
+        require(group+static_cast<long>(users.size())<=4,"LIMIT_EXCEEDED");
+        require(value.state!=ServiceSessionState::Playing||(value.kind==ServiceSessionKind::PlayerMatch&&value.allowJoinInProgress),"INVALID_STATE");
+        require(users.size()<=static_cast<std::size_t>(value.openPublicSlots),"SESSION_FULL");unoccupied(users);
+        std::set<int> ordinals;for(const auto& row:value.members)ordinals.insert(row.ordinal);
+        for(const auto& user:users) {
+            int ordinal=0;while(ordinals.contains(ordinal))++ordinal;ordinals.insert(ordinal);
+            value.members.push_back({user,tag_(user),machine,false,ordinal});
+        }
+        ++value.revision;recount(value);return view(session,machine);
+    }
     ServiceRelayTicket issueRelayTicket(const std::string& actor,const std::vector<std::string>& users,const std::string& id) override {
         prune();participants(actor,users);auto& session=lookup(id);const auto machine=ownedMachine(session,actor);
         std::set<std::string> group;for(const auto& member:session.value.members)if(member.machine==machine)group.insert(member.userId);

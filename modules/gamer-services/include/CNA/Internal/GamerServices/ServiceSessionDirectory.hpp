@@ -139,6 +139,12 @@ public:
      * Its users are then answered REMOVED_BY_HOST. @param owner Host identity. @param session ID.
      * @param machine The machine to remove. @return The host's updated snapshot. */
     virtual ServiceSessionSnapshot remove(const std::string& owner,const std::string& session,const std::string& machine)=0;
+    /** @brief Adds signed-in local accounts to the owner's machine (XNA NetworkSession.AddLocalGamer),
+     * in public slots, when the session admits joiners. @param owner Machine owner.
+     * @param users One to three new accounts, not the owner. @param session ID.
+     * @return The updated snapshot. @throws ServiceOperationError NOT_SUPPORTED without the
+     * service's session-add-members capability. */
+    virtual ServiceSessionSnapshot addMembers(const std::string& owner,const std::vector<std::string>& users,const std::string& session)=0;
     /** @brief Issues one-use secure relay authority for the exact authenticated local group.
      * @param actor Machine owner. @param users Local identities. @param session ID.
      * @return Ephemeral authority; issuance alone does not establish a data connection. */

@@ -83,9 +83,10 @@ std::vector<SharpRuntime::bytecs> payload(const std::string& from,const std::str
 int main(int argc,char** argv) {
     try {
         const std::string variant=argc==4?argv[3]:"";
-        check(argc==3||(argc==4&&(variant=="invite"||variant=="migrate"||variant=="crash")),"arguments");const std::string role=argv[1],kind=argv[2];
-        // migrate: the host allows host migration and leaves first; crash: the driver kills the host instead.
-        const bool invited=variant=="invite",migrating=variant=="migrate"||variant=="crash";
+        check(argc==3||(argc==4&&(variant=="invite"||variant=="migrate"||variant=="crash"||variant=="add")),"arguments");const std::string role=argv[1],kind=argv[2];
+        // migrate: the host allows host migration and leaves first; crash: the driver kills the host instead;
+        // add: the joiner joins with its first gamer and adds the second with AddLocalGamer.
+        const bool invited=variant=="invite",migrating=variant=="migrate"||variant=="crash",adding=variant=="add";
         check(role=="host"||role=="join","role");check(kind=="player"||kind=="ranked","kind");
         const bool host=role=="host";const auto type=kind=="player"?NetworkSessionType::PlayerMatch:NetworkSessionType::Ranked;
         const std::array<std::string,2> accounts=host?std::array<std::string,2>{"alice","charlie"}:std::array<std::string,2>{"bob","dana"};
@@ -140,7 +141,7 @@ int main(int argc,char** argv) {
         }else {
             phase="find";auto mismatched=properties;mismatched[7]=74;
             check(NetworkSession::Find(type,gamers,mismatched).getCountProperty()==0,"property filter excludes the session");
-            auto found=NetworkSession::Find(type,gamers,properties);
+            auto found=NetworkSession::Find(type,adding?std::vector<SignedInGamer*>{gamers[0]}:gamers,properties);
             check(found.getCountProperty()==1,"one matching online session");const auto& listing=std::as_const(found)[0];
             check(listing.getHostGamertagProperty()=="Alice"&&listing.getCurrentGamerCountProperty()==2,"listing host and count");
             check(listing.getOpenPrivateGamerSlotsProperty()==1&&listing.getOpenPublicGamerSlotsProperty()==2,"listing slots");
@@ -149,7 +150,7 @@ int main(int argc,char** argv) {
             check(!result->getCompletedSynchronouslyProperty(),"online join begins pending");
             until([&]{return result->getIsCompletedProperty();});check(callbacks==1,"join callback once");
             session=NetworkSession::EndJoin(result.get());
-            check(!session->getIsHostProperty()&&session->getAllGamersProperty().getCountProperty()==4,"joined complete roster");
+            check(!session->getIsHostProperty()&&session->getAllGamersProperty().getCountProperty()==(adding?3:4),"joined complete roster");
             auto* hostGamer=session->getHostProperty();
             check(hostGamer&&!hostGamer->getIsLocalProperty()&&hostGamer->getGamertagProperty()=="Alice"&&hostGamer->getIsHostProperty(),"remote host identity");
             check(session->getSessionPropertiesProperty().getItem(7)==73,"joined host properties");
@@ -165,6 +166,13 @@ int main(int argc,char** argv) {
         session->HostChanged+=[&](auto*,const HostChangedEventArgs& args) {
             hostChanges.emplace_back(args.getOldHostProperty()->getGamertagProperty(),args.getNewHostProperty()->getGamertagProperty());
         };
+        if(adding&&!host) {
+            // XNA AddLocalGamer online: accepted now, joined (GamerJoined) at a later Update on every machine.
+            phase="add";session->AddLocalGamer(gamers[1]);
+            check(session->getLocalGamersProperty().getCountProperty()==1,"the added gamer arrives later");
+            until([&]{return session->getLocalGamersProperty().getCountProperty()==2;});
+            check(session->getLocalGamersProperty()[1]->getGamertagProperty()=="Dana","Dana added");
+        }
         phase="roster";until([&]{return joined.size()==4;});
         check(std::set<std::string>(joined.begin(),joined.end())==std::set<std::string>{"Alice","Bob","Charlie","Dana"},"GamerJoined for every gamer once");
         const auto& locals=session->getLocalGamersProperty();const auto& remotes=session->getRemoteGamersProperty();
