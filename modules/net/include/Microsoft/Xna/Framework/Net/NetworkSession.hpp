@@ -362,20 +362,8 @@ namespace Microsoft::Xna::Framework::Net
         /** @brief Raised when a hosted game ends. */
         System::EventHandler<GameEndedEventArgs> GameEnded;
         /**
-         * @brief Raised when a gamer joins the session.
-         *
-         * The initial local gamer(s) established by `Create()`/`Join()`/`JoinInvited()` are
-         * queued internally at construction time, not raised into this event directly (a caller
-         * cannot possibly have subscribed yet at that point - the session pointer doesn't exist
-         * until the static factory method returns). Real XNA's `GamerJoined` is documented to
-         * replay itself immediately upon `+=` subscription for every gamer already in the session
-         * - `System::EventHandler<T>` (sharp-runtime) has no such "replay on subscribe" hook, so
-         * this port cannot reproduce that automatically (see `plans/plan_net.md`'s Task 12.3 for the
-         * full investigation). **Call `Update()` once, immediately after subscribing, to receive
-         * the initial join event(s) for this session's own local gamers** - this is the
-         * intentional, permanent, correct pattern (not a temporary workaround) given the above
-         * constraint; see `../cna-samples/samples/ClientServerSample`'s `HookSessionEvents()`
-         * call site for a real, working example.
+         * @brief Raised when a gamer joins the session. As in XNA, a handler is told at once, as it
+         * is added, of every gamer already in the session; later joins arrive at Update.
          */
         System::EventHandler<GamerJoinedEventArgs> GamerJoined;
         /** @brief Raised when a gamer leaves the session. */
@@ -384,19 +372,25 @@ namespace Microsoft::Xna::Framework::Net
         System::EventHandler<HostChangedEventArgs> HostChanged;
         /** @brief Raised when the session ends. */
         System::EventHandler<NetworkSessionEndedEventArgs> SessionEnded;
-        /** @brief Declared for API parity; never raised (leaderboards/TrueSkill unimplemented upstream). */
+        /**
+         * @brief Raised once per gamer in a Ranked CNA online session when its game ends or a gamer
+         * leaves, for the arbitrated leaderboard writes; the service commits the rows a strict
+         * majority of the reporting machines agree on.
+         */
         System::EventHandler<WriteLeaderboardsEventArgs> WriteArbitratedLeaderboard;
         /** @brief Requests final local statistics before service gameplay returns to the lobby. */
         System::EventHandler<WriteLeaderboardsEventArgs> WriteUnarbitratedLeaderboard;
-        /** @brief Declared for API parity; never raised (leaderboards/TrueSkill unimplemented upstream). */
+        /**
+         * @brief Raised once per gamer with the arbitrated writes, in a Ranked CNA online session and
+         * on a PlayerMatch host. CNA computes no TrueSkill: skill boards are ordinary arbitrated
+         * boards these handlers write.
+         */
         System::EventHandler<WriteLeaderboardsEventArgs> WriteTrueSkill;
 
         /**
-         * @brief Raised when the user accepts a game invitation.
-         *
-         * Declared for API parity and never raised here: CNA has no invitation service to
-         * deliver one. `JoinInvited` refuses for the same reason, so a handler subscribed to
-         * this event is unreachable rather than merely idle.
+         * @brief Raised at Update when a player accepts a game invitation in the Guide; the handler
+         * then joins with JoinInvited. As in XNA, an acceptance that arrives with no handler is
+         * delivered to the first one added.
          */
         static System::EventHandler<GamerServices::InviteAcceptedEventArgs> InviteAccepted;
 

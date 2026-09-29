@@ -127,20 +127,26 @@ namespace Microsoft::Xna::Framework::GamerServices
         [[nodiscard]] GamerProfile* EndGetProfile(System::IAsyncResult* result);
 
         /**
-         * @brief Not supported in this platform's implementation.
+         * @brief Looks up a gamer by gamertag on the CNA account service.
          *
          * @param gamertag The gamertag to look up.
-         * @return Never returns.
+         * @return A heap-allocated Gamer; the caller owns it.
+         * @throws System::NotSupportedException without a CNA account service (offline profiles
+         *         have no directory to search).
+         * @throws System::ArgumentException if gamertag is empty or longer than 32 bytes.
+         * @throws GamerServicesNotAvailableException if the service cannot find or return the gamer.
          */
         [[nodiscard]] static Gamer* GetFromGamertag(const std::string& gamertag);
 
         /**
-         * @brief Not supported in this platform's implementation.
+         * @brief Begins looking up a gamer by gamertag on the CNA account service.
          *
          * @param gamertag   The gamertag to look up.
          * @param callback   Invoked when the operation completes.
          * @param asyncState User-defined state passed through to the callback.
-         * @return Never returns.
+         * @return A caller-owned IAsyncResult to pass to EndGetFromGamertag.
+         * @throws System::NotSupportedException without a CNA account service.
+         * @throws System::ArgumentException if gamertag is empty or longer than 32 bytes.
          */
         [[nodiscard]] static System::IAsyncResult* BeginGetFromGamertag(
             const std::string& gamertag,
@@ -149,10 +155,12 @@ namespace Microsoft::Xna::Framework::GamerServices
         );
 
         /**
-         * @brief Not supported in this platform's implementation.
+         * @brief Completes a gamer lookup.
          *
          * @param result The result returned by BeginGetFromGamertag.
-         * @return Never returns.
+         * @return A heap-allocated Gamer; the caller owns it.
+         * @throws System::NotSupportedException without a CNA account service.
+         * @throws GamerServicesNotAvailableException if the service could not find or return the gamer.
          */
         [[nodiscard]] static Gamer* EndGetFromGamertag(System::IAsyncResult* result);
 

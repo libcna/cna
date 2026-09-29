@@ -41,7 +41,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          */
         static void setWindowHandleProperty(SharpRuntime::IntPtr value);
 
-        /** @brief Raised when a title update is being installed. Never raised in this platform's implementation. */
+        /** @brief Raised when a title update is being installed. CNA installs no title updates, so it is never raised. */
         static System::EventHandler<System::EventArgs> InstallingTitleUpdate;
 
         /**

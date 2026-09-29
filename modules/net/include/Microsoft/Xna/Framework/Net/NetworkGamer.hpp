@@ -26,14 +26,8 @@ namespace Microsoft::Xna::Framework::Net
         [[nodiscard]] bool getHasLeftSessionProperty() const;
 
         /**
-         * @brief Marks whether this gamer has left the session.
-         *
-         * FNA's setter for this is `private` (`{ get; private set; }`), not `internal` -
-         * FNA's own NetworkSession never actually calls it after construction, so real XNA's
-         * HasLeftSession is permanently false in practice (an unimplemented FNA stub, like several
-         * other NetworkSession-adjacent members). Restored here, as a CNAEXT extension, so this
-         * port's NetworkSession::RemoveGamer() (a sibling class, not a subclass, so it couldn't
-         * reach a real `private` setter either way) can make this property actually functional.
+         * @brief Marks whether this gamer has left the session. NetworkSession sets it when the
+         * gamer leaves, as XNA does; FNA never sets it.
          *
          * @param value The new value.
          */

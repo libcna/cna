@@ -56,14 +56,22 @@ needs the Home key.
 
 Server canonical protocol and administration commands live in sibling `cna-gamer-services-server/README.md` and `protocol/v1.md`. Desktop client depends on libcurl with TLS support and nlohmann/json. Browser/other secure platform transport integration remains unverified.
 
-Measured service features include four local authenticated players, standard Guide sign-in, profiles/
-lookup, achievements (metadata/awards), mutual friends and rich presence. Standard ShowFriends,
-ShowGamerCard and ShowFriendRequest use CNA system overlays. LocalWithLeaderboards submits final
-rows at EndGame or explicit early leave. PlayerMatch/Ranked, invitations,
-relay and standard avatars are implemented; see the living plan for what remains.
-Rich presence is sent during Dispatcher.Update; friend online state currently reflects authenticated
-activity within 90 seconds; Update schedules authenticated heartbeat every 30 seconds. Do not treat this as a production
-service release or a claim of measured Xbox event/validation parity across every method.
+**Current state.** With a service: four local authenticated players, standard Guide sign-in,
+profiles and lookup, achievements (metadata, awards, pictures), mutual friends with joinable and
+invitation state, rich presence, messages, player reviews, leaderboards (LocalWithLeaderboards,
+PlayerMatch and Ranked with majority arbitration), standard avatars, and PlayerMatch/Ranked
+NetworkSession Create/Find/Join/JoinInvited with Guide invitations, lobby readiness, machine removal,
+traffic and round-trip statistics, over the authenticated relay (native only; browsers use the
+limitations page). Not implemented: online host migration (an online session ends when its host
+leaves), adding local gamers to an online session after create or join, voice, TrueSkill
+computation, party and marketplace services, and away/busy status. Rich presence is sent during
+Dispatcher.Update; friend online state reflects authenticated activity within 90 seconds; Update
+schedules an authenticated heartbeat every 30 seconds. `docs/xna-4-api-coverage.md` §8–9 lists the
+state per feature. This is not a production service release or a claim of measured Xbox
+event/validation parity across every method.
+
+The sections below record the service's construction slice by slice; where one says something
+remained unfinished, a later slice (and the summary above) supersedes it.
 
 Achievement/profile picture streams now read immutable SHA-256 resources from the service. The
 per-user cache defaults to `$XDG_CACHE_HOME/cna/gamer-services/assets` or
@@ -86,7 +94,8 @@ scalar columns. Offset, gamer-centered and gamer-restricted reads page remotely 
 an entire board or dropping gamers signed in on another machine. Begin/End completions use the
 Dispatcher update boundary; native C callbacks return completed reads. Online writer setters now
 retain transient data while Playing and flush after final write events at host EndGame;
-explicit early leave uses IsLeaving=true. Ranked arbitration, Stream columns and TrueSkill are unfinished. Admin seed commands
+explicit early leave uses IsLeaving=true. Ranked rows are arbitrated by strict majority of the reporting
+machines (GS-006e); Stream columns are not stored and CNA computes no TrueSkill. Admin seed commands
 are development fixtures, not a gameplay write mechanism. Page limits and unsupported Stream/recent
 window/TrueSkill behavior are documented in the server protocol.
 
@@ -110,9 +119,9 @@ are service-control evidence; they do not prove Internet game-data transport or 
 
 
 The server now implements a persistent control-only PlayerMatch/Ranked directory with authenticated
-multi-local membership, property filtering and leased host revisions. Standard online Find now consumes this directory; public create/join/lifecycle integration
-and public Internet deployment acceptance remain unfinished. Membership in this directory alone
-cannot establish Internet connectivity or provide Ranked arbitration.
+multi-local membership, property filtering and leased host revisions. Standard online Create, Find,
+Join and JoinInvited use this directory (GS-007/008); public Internet deployment acceptance is not
+claimed. Membership in this directory alone cannot establish Internet connectivity.
 
 NetworkSessionProperties follows the fixed XNA eight-slot shape: Count=8, nullable signed integers
 at indices 0..7. Add/Insert/Remove/RemoveAt/Clear throw NotSupportedException; use the ordinary indexer
@@ -124,8 +133,8 @@ sharp-runtime's GS-007b proxy layout (16->24 bytes on the measured 64-bit ABI).
 
 The invitation control service now persists recipient-bound pending/accepted invitations and
 atomically joins up to four authenticated local users through an explicitly accepted invite,
-using available private then public slots. Client Guide/InviteAccepted/public invited joins remain pending; the private WSS relay is
-implemented and measured separately below. Invitations are CNA service IDs, not Xbox LIVE tokens.
+using available private then public slots. The Guide's invitation prompts, InviteAccepted and
+JoinInvited use it (GS-007e3); the private WSS relay is implemented and measured separately below. Invitations are CNA service IDs, not Xbox LIVE tokens.
 
 CNA's private backend now provides typed directory create/find/join/get/touch/update/leave and
 recipient send/list/get/accept/dismiss invitation operations with strict response validation.
@@ -152,8 +161,8 @@ Standalone verified-WSS forwarding tests are server transport evidence. The priv
 bridge now carries genuine ENet datagrams through stable per-machine loopback UDP routes; two CNA
 processes/four local accounts exchange reliable, unreliable and 32KiB fragmented application data
 for both categories/titles. CA/hostname refusals, local UDP source/length guards, secondary revocation
-and server failure are tested. Public online NetworkSession/invites, reconnect and isolated Internet
-acceptance remain unfinished.
+and server failure are tested. Public online NetworkSession and invitations followed (GS-007/008),
+with relay recovery inside a bounded window; public Internet deployment acceptance is not claimed.
 Control HTTPS, directory membership and realtime datagrams are separate responsibilities; service
 membership alone does not make direct ENet reachable across NAT. No new XNA or C transport API.
 
@@ -180,8 +189,8 @@ UDP source/size guards, multi-local revocation and server loss pass for both tit
 This is shared-host NAT-isolation evidence, not public Internet deployment or standard online
 NetworkSession acceptance. See sibling server README's optional `service_cna_relay_nat` setup.
 Test helpers are external optional prerequisites; production CNA/server neither link nor require
-GPL slirp4netns. No host network/package/desktop changes. Public online async/roster/lifecycle,
-reconnect, invitations and standard avatars remain unfinished.
+GPL slirp4netns. No host network/package/desktop changes. Public online sessions, invitations and
+standard avatars followed in later slices.
 
 GS-007e1 adds a private authenticated roster gate: service ordinals map to 1..31 wire IDs,
 only the actual host account receives the host flag, machine hello claims must exactly match
@@ -189,8 +198,8 @@ its 1..4 local accounts, and welcome identities/properties/represented groups ar
 gamer mutation. The real native probe now exchanges the existing Net ClientHello/ServerWelcome
 and AppData codec through ENet, rejects a cross-machine account spoof and verifies application
 sender/target IDs. Controls are preflighted for bounded counts/strings/UTF-8/canonical booleans/
-IDs/eight properties/exact length before decode/allocation. These helpers are still private;
-public PlayerMatch/Ranked create/join and Net Update roster/lease handling remain unfinished.
+IDs/eight properties/exact length before decode/allocation. Public PlayerMatch/Ranked create/join
+and Net Update roster/lease handling were built on these private helpers later (GS-007).
 Caller-owned APM metadata and public service Find are implemented as described below.
 
 
@@ -204,8 +213,8 @@ Begin/End adapters with a completion callback; they do not expose an asynchronou
 Net Begin/End/result release and Dispatcher.Update currently belong on the owning update thread.
 Dropping a pending search suppresses its callback and releases the Net busy slot; background
 read-only work can still finish. Search refuses more than 256 matches with LIMIT_EXCEEDED.
-Create/join/invited lifecycle remains unfinished; listings carry private service identity rather
-than a purported direct Internet endpoint. SystemLink transport is unchanged. Legacy offline
+Create/Join/JoinInvited followed (GS-007); listings carry private service identity rather than a
+purported direct Internet endpoint. SystemLink transport is unchanged. Legacy offline
 immediate actions report CompletedSynchronously=true; online actions false. SystemLink's existing
 Join preparation still happens in End and awaits the separate APM/lifecycle audit.
 
@@ -235,8 +244,8 @@ Private dispatcher subscriptions now drive preparation/lease observations after 
 batch, including nested End waits. Cancellation suppresses copied callback snapshots, self-entry
 is skipped and other pending operations can progress. Callback errors do not starve the batch.
 Automatic presence retains its dirty revision when the service queue is full and retries after
-queued work drains. This boundary does not yet construct public online sessions or XNA lifecycle
-events. Pending service and Net End calls also drain their retained origin after backend replacement;
+queued work drains. Public online sessions and their XNA lifecycle events are built on this
+boundary. Pending service and Net End calls also drain their retained origin after backend replacement;
 superseded identity events have no authority to replace current signed-in gamers.
 
 Service-bound game packet admission validates the authenticated relay source, complete machine
@@ -247,8 +256,8 @@ from the host for known remote senders and their own local targets. Length/tag/o
 unknown/partial leave or end claims cannot replace authority reconciliation. Genuine native and isolated-NAT probes
 reject both a forged existing sender ID and an unknown target, while fragmented and unreliable
 application exchange still passes. The service host remains trusted to relay game payloads; this
-is membership validation, not malicious-host anti-cheat. Public Create/Join, lifecycle conversion,
-reconnect and migration remain open. SystemLink keeps its existing codec and transport behavior.
+is membership validation, not malicious-host anti-cheat. Public Create/Join, lifecycle conversion
+and relay recovery followed; online host migration is not implemented. SystemLink keeps its existing codec and transport behavior.
 
 The private owned `ServiceENetSession` now consumes prepared membership and TLS/WSS/native ENet
 resources. Hosts become ready after transport preparation; joining clients become ready only after
@@ -268,8 +277,9 @@ both categories/titles, owned preparation, verified welcome, fragmented/unreliab
 secondary-account revocation, group departure and server failure. Use the same harness and NAT
 helper environment as the raw relay tests. They explicitly skip if the required harness/helpers
 are absent; a skip is not multiplayer evidence. The raw relay cases separately retain malicious
-fragments, source/size and forged incoming ID tests. These remain private-engine acceptance,
-not public NetworkSession Create/Join completion, reconnect or a public Internet deployment.
+fragments, source/size and forged incoming ID tests. These are private-engine acceptance; the
+public NetworkSession tests and samples (SAMPLE-096, SAMPLE-075) cover the standard API, and no public
+Internet deployment is claimed.
 
 A private `OnlineSessionOperation` now joins these stages under a weak dispatcher progress
 subscription. Begin-style construction stays pending; completion is published once on the owner
@@ -279,4 +289,4 @@ without publishing their identity events. Unconsumed resources continue pumping/
 before consumption becomes a deferred error. Callback exceptions preserve the result, while
 nested progress, take/destruction inside a callback and abandoned joins are covered. Thirteen
 new coordinator cases pass; the real owned probes now use this coordinator through Dispatcher.Update.
-This is the private asynchronous lifetime boundary; the public NetworkSession adapter is next.
+This is the private asynchronous lifetime boundary the public NetworkSession adapter uses.

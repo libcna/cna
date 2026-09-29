@@ -6,7 +6,9 @@
 namespace Microsoft::Xna::Framework::Net
 {
     /**
-     * @brief Describes measured network quality between the local machine and a remote gamer.
+     * @brief Describes measured network quality between the local machine and the host of a
+     * found session. A SystemLink search measures the round trip of the host's discovery reply;
+     * a service (PlayerMatch/Ranked) search result is not measured, and CNA measures no bandwidth.
      */
     class QualityOfService final
     {
@@ -21,21 +23,21 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets the measured downstream bandwidth in bytes per second.
          *
-         * @return The downstream bandwidth.
+         * @return 0: CNA does not measure bandwidth.
          */
         [[nodiscard]] int getBytesPerSecondDownstreamProperty() const;
 
         /**
          * @brief Gets the measured upstream bandwidth in bytes per second.
          *
-         * @return The upstream bandwidth.
+         * @return 0: CNA does not measure bandwidth.
          */
         [[nodiscard]] int getBytesPerSecondUpstreamProperty() const;
 
         /**
          * @brief Gets whether quality-of-service data is available.
          *
-         * @return true if available.
+         * @return true for a SystemLink search result, whose round trip was measured.
          */
         [[nodiscard]] bool getIsAvailableProperty() const;
 

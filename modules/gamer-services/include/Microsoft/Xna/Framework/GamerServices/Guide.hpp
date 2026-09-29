@@ -112,13 +112,10 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Begins showing the on-screen keyboard for text input.
          *
-         * Task 3.2: real captured text - accumulates each UTF-16 code unit
-         * Microsoft::Xna::Framework::Input::TextInputEXT::TextInput fires (surrogate-pair safe)
-         * into defaultText, and completes on Enter, matching real XNA/Xbox 360 on-screen keyboard
-         * semantics. Does **not** complete synchronously, unlike this class's other Begin* methods.
-         * title/description are stored and rendered by RenderPendingKeyboardInputEXT() below - a
-         * game's own Draw() must call it once per frame (after drawing its own scene) for the
-         * player to see the prompt/typed text at all; nothing renders automatically.
+         * Typed text (every UTF-16 code unit TextInputEXT delivers, surrogate pairs included)
+         * extends defaultText; Enter completes the input and Escape cancels it. The keyboard is
+         * drawn over the game after its Draw by the Guide overlay a GamerServicesComponent installs;
+         * a game without one draws it with RenderPendingKeyboardInputEXT.
          *
          * @param player      The player requesting input.
          * @param title       The input dialog title.
@@ -255,13 +252,12 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @brief CNAEXT/EXT: renders the currently pending keyboard input overlay (if any) -
          * title, description, and the text typed so far (masked as '*' per character if
          * usePasswordMode was set) - and checks real keyboard input for an Escape press,
-         * canceling the pending operation when detected. A game's own Draw() calls this once per
-         * frame, after drawing its own scene, so the overlay renders on top (same convention as
-         * RenderPendingMessageBoxEXT). No-op if no keyboard input is pending.
+         * canceling the pending operation when detected. The Guide overlay that a
+         * GamerServicesComponent installs calls this after the game's Draw; a game without one
+         * calls it once per frame after drawing its own scene. Does nothing when no input is
+         * pending.
          *
-         * Not part of the real XNA 4.0 Guide API - Guide has no access to a game's own
-         * GraphicsDevice/SpriteBatch on any real platform, so this needs an explicit pump/render
-         * entry point instead of an automatic hook (same reasoning as RenderPendingMessageBoxEXT).
+         * Not XNA API: on XNA the system draws the Guide.
          *
          * @param device      The graphics device backing spriteBatch, used to size/center the box.
          * @param spriteBatch An open-and-ready-to-draw-into SpriteBatch (between Begin()/End()).
@@ -300,10 +296,11 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Begins showing a system message box.
          *
-         * Task 3.1: unlike this class's other Begin* methods, this does **not** complete
-         * synchronously — a message box needs a real user response. Completes once the game's
-         * own Draw() loop calls RenderPendingMessageBoxEXT() and the user selects a button (or
-         * a test/headless caller calls SimulateMessageBoxClickEXT()).
+         * Completes when the user answers: a click on a button, or the keyboard or a controller
+         * (arrows, Tab, the D-pad or left stick move the focus; Enter, Space or A choose; Escape, B
+         * or Back cancel). The box is drawn over the game after its Draw by the Guide overlay a
+         * GamerServicesComponent installs; a game without one draws it with
+         * RenderPendingMessageBoxEXT.
          *
          * @param title       The message box title.
          * @param text        The message box body text.
@@ -333,8 +330,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Begins showing a system message box for a specific player.
          *
-         * See the player-less overload above; player is accepted for API parity but not
-         * otherwise used, matching this platform's single-active-message-box model.
+         * Otherwise as the overload without a player, which shows the box to player One. Any
+         * player's controller can answer it: CNA shows one message box at a time.
          *
          * @param player      The player the message box is shown to.
          * @param title       The message box title.
@@ -388,14 +385,12 @@ namespace Microsoft::Xna::Framework::GamerServices
         CNAEXT [[nodiscard]] static bool getHasPendingMessageBoxEXTProperty();
 
         /**
-         * @brief CNAEXT/EXT: renders the currently pending message box (if any) and checks real
-         * mouse input for a button click, completing the pending BeginShowMessageBox operation
-         * when one is detected. A game's own Draw() calls this once per frame, after drawing its
-         * own scene, so the overlay renders on top. No-op if no message box is pending.
+         * @brief CNAEXT: draws the pending message box (if any) and reads its input (mouse, keyboard
+         * and controllers), completing it when the user answers. The Guide overlay that a
+         * GamerServicesComponent installs calls this after the game's Draw; a game without one
+         * calls it once per frame after drawing its own scene. Does nothing when no box is pending.
          *
-         * Not part of the real XNA 4.0 Guide API - Guide has no access to a game's own
-         * GraphicsDevice/SpriteBatch on any real platform, so this needs an explicit pump/render
-         * entry point instead of an automatic hook.
+         * Not XNA API: on XNA the system draws the Guide.
          *
          * @param device      The graphics device backing spriteBatch, used to size/center the box.
          * @param spriteBatch An open-and-ready-to-draw-into SpriteBatch (between Begin()/End()).
@@ -446,18 +441,27 @@ namespace Microsoft::Xna::Framework::GamerServices
         CNAEXT [[nodiscard]] static int GetPendingMessageBoxFocusButtonForTestingEXT();
 
         /**
-         * @brief Delays gamer notification toasts by the given duration.
+         * @brief Delays the Guide's notifications (its game-invitation prompts) by the given
+         * duration, at most 120 seconds; a longer delay already in effect is kept.
          *
-         * @param delay The delay duration. No-op in this platform's implementation.
+         * @param delay The delay duration.
          */
         static void DelayNotifications(System::TimeSpan delay);
 
         /**
-         * @brief Shows the compose-message UI. No-op in this platform's implementation.
+         * @brief Shows the Guide's compose-message pane, which sends a CNA service message to the
+         * recipients (or asks for one when the list is empty).
          *
          * @param player     The player composing the message.
          * @param text       The initial message text.
          * @param recipients The message recipients.
+         * @throws System::ArgumentException if text has 256 or more characters, or recipients holds
+         *         more than 100 gamers or a null one.
+         * @throws System::ObjectDisposedException if a recipient is disposed.
+          * @throws System::ArgumentOutOfRangeException if player is not One to Four.
+         * @throws GamerServicesNotAvailableException if no CNA account service is configured or the
+         *         player has no account signed in.
+         * @throws GuideAlreadyVisibleException if a Guide screen is already up.
          */
         static void ShowComposeMessage(
             Microsoft::Xna::Framework::PlayerIndex player,
@@ -466,25 +470,45 @@ namespace Microsoft::Xna::Framework::GamerServices
         );
 
         /**
-         * @brief Shows the friend-request UI. No-op in this platform's implementation.
+         * @brief Asks the player to confirm a friend request to a gamer, then sends it through the
+         * CNA account service.
          *
          * @param player The player sending the request.
          * @param gamer  The gamer to request friendship with.
+         * @throws System::ArgumentNullException if gamer is null.
+         * @throws System::ObjectDisposedException if gamer is disposed.
+          * @throws System::ArgumentOutOfRangeException if player is not One to Four.
+         * @throws GamerServicesNotAvailableException if no CNA account service is configured or the
+         *         player has no account signed in.
+         * @throws GuideAlreadyVisibleException if a Guide screen is already up.
          */
         static void ShowFriendRequest(Microsoft::Xna::Framework::PlayerIndex player, Gamer* gamer);
 
         /**
-         * @brief Shows the friends list UI. No-op in this platform's implementation.
+         * @brief Shows the player's friends, with pending requests, and offers adding one by
+         * gamertag.
          *
          * @param player The player whose friends list is shown.
+          * @throws System::ArgumentOutOfRangeException if player is not One to Four.
+         * @throws GamerServicesNotAvailableException if no CNA account service is configured or the
+         *         player has no account signed in.
+         * @throws GuideAlreadyVisibleException if a Guide screen is already up.
          */
         static void ShowFriends(Microsoft::Xna::Framework::PlayerIndex player);
 
         /**
-         * @brief Shows the game-invite UI. No-op in this platform's implementation.
+         * @brief Invites gamers to the player's online network session after the player confirms,
+         * or asks for a gamertag when the list is empty.
          *
          * @param player     The player sending invites.
          * @param recipients The gamers to invite.
+         * @throws System::ArgumentException if recipients holds more than 100 gamers or a null one.
+         * @throws System::ObjectDisposedException if a recipient is disposed.
+          * @throws System::ArgumentOutOfRangeException if player is not One to Four.
+         * @throws GamerServicesNotAvailableException if no CNA account service is configured or the
+         *         player has no account signed in.
+         * @throws GuideAlreadyVisibleException if a Guide screen is already up.
+         * @throws System::InvalidOperationException if there is no online network session.
          */
         static void ShowGameInvite(
             Microsoft::Xna::Framework::PlayerIndex player,
@@ -492,60 +516,89 @@ namespace Microsoft::Xna::Framework::GamerServices
         );
 
         /**
-         * @brief Shows the game-invite UI for a specific session. No-op in this platform's implementation.
+         * @brief Shows the game-invite UI for a session identifier, which XNA supports only for
+         * Windows Phone titles.
          *
          * @param sessionId The session identifier to invite gamers to.
+         * @throws System::NotSupportedException always.
          */
         static void ShowGameInvite(const std::string& sessionId);
 
         /**
-         * @brief Shows a gamer's gamer card. No-op in this platform's implementation.
+         * @brief Shows a gamer's card (profile and friendship actions) from the CNA account service.
          *
          * @param player The player viewing the card.
          * @param gamer  The gamer whose card is shown.
+         * @throws System::ArgumentNullException if gamer is null.
+         * @throws System::ObjectDisposedException if gamer is disposed.
+          * @throws System::ArgumentOutOfRangeException if player is not One to Four.
+         * @throws GamerServicesNotAvailableException if no CNA account service is configured or the
+         *         player has no account signed in.
+         * @throws GuideAlreadyVisibleException if a Guide screen is already up.
          */
         static void ShowGamerCard(Microsoft::Xna::Framework::PlayerIndex player, Gamer* gamer);
 
         /**
-         * @brief Shows the marketplace UI. No-op in this platform's implementation.
+         * @brief Shows the marketplace. CNA runs no store, so the Guide explains that the title is
+         * fully licensed.
          *
          * @param player The player viewing the marketplace.
+         * @throws GamerPrivilegeException if the player has no account signed in or may not purchase
+         *         content.
+         * @throws GuideAlreadyVisibleException if a Guide screen is already up.
          */
         static void ShowMarketplace(Microsoft::Xna::Framework::PlayerIndex player);
 
         /**
-         * @brief Shows the messages UI. No-op in this platform's implementation.
+         * @brief Shows the player's CNA service messages: read, reply and delete.
          *
          * @param player The player viewing messages.
+          * @throws System::ArgumentOutOfRangeException if player is not One to Four.
+         * @throws GamerServicesNotAvailableException if no CNA account service is configured or the
+         *         player has no account signed in.
+         * @throws GuideAlreadyVisibleException if a Guide screen is already up.
          */
         static void ShowMessages(Microsoft::Xna::Framework::PlayerIndex player);
 
         /**
-         * @brief Shows the party UI. No-op in this platform's implementation.
+         * @brief Shows the party. CNA has no party service, so the Guide says so.
          *
          * @param player The player viewing their party.
+         * @throws GuideAlreadyVisibleException if a Guide screen is already up.
          */
         static void ShowParty(Microsoft::Xna::Framework::PlayerIndex player);
 
         /**
-         * @brief Shows the party-sessions UI. No-op in this platform's implementation.
+         * @brief Shows the party's sessions. CNA has no party service, so the Guide says so.
          *
          * @param player The player viewing party sessions.
+         * @throws GuideAlreadyVisibleException if a Guide screen is already up.
          */
         static void ShowPartySessions(Microsoft::Xna::Framework::PlayerIndex player);
 
         /**
-         * @brief Shows the player-review UI. No-op in this platform's implementation.
+         * @brief Asks the player to review a gamer (prefer, avoid or clear). The CNA service records
+         * it; sessions hosted by avoided players are no longer offered to the player.
          *
          * @param player The player leaving a review.
          * @param gamer  The gamer being reviewed.
+         * @throws System::ArgumentNullException if gamer is null.
+         * @throws System::ObjectDisposedException if gamer is disposed.
+          * @throws System::ArgumentOutOfRangeException if player is not One to Four.
+         * @throws GamerServicesNotAvailableException if no CNA account service is configured or the
+         *         player has no account signed in.
+         * @throws GuideAlreadyVisibleException if a Guide screen is already up.
          */
         static void ShowPlayerReview(Microsoft::Xna::Framework::PlayerIndex player, Gamer* gamer);
 
         /**
-         * @brief Shows the players list UI. No-op in this platform's implementation.
+         * @brief Shows the gamers the player recently played with, and a gamer card on request.
          *
          * @param player The player viewing the list.
+          * @throws System::ArgumentOutOfRangeException if player is not One to Four.
+         * @throws GamerServicesNotAvailableException if no CNA account service is configured or the
+         *         player has no account signed in.
+         * @throws GuideAlreadyVisibleException if a Guide screen is already up.
          */
         static void ShowPlayers(Microsoft::Xna::Framework::PlayerIndex player);
 
@@ -558,12 +611,14 @@ namespace Microsoft::Xna::Framework::GamerServices
         static void ShowSignIn(int paneCount, bool onlineOnly);
 
         /**
-         * @brief Shows the achievements UI (FNA extension). No-op in this platform's implementation.
-         *
-         * Task 7.11: FNA's own addition, not part of real XNA 4.0's Guide API - FNA's own
-         * reference source already names it with the "EXT" suffix for exactly this reason.
+         * @brief Shows the player's achievements in this title from the CNA account service (an FNA
+         * extension, not XNA API).
          *
          * @param player The player viewing achievements.
+          * @throws System::ArgumentOutOfRangeException if player is not One to Four.
+         * @throws GamerServicesNotAvailableException if no CNA account service is configured or the
+         *         player has no account signed in.
+         * @throws GuideAlreadyVisibleException if a Guide screen is already up.
          */
         CNAEXT static void ShowAchievementsEXT(Microsoft::Xna::Framework::PlayerIndex player);
 

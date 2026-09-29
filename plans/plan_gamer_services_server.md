@@ -2710,3 +2710,21 @@ the C struct field documents local ticks. CnaGamerServicesTests 485 + 1 skip.
   when the store is rewritten. Accounts have no game defaults (documented). Test
   `LocalSignInTest.ALocalProfileCarriesItsStoredGameDefaults`; CnaGamerServicesTests 498 + 1 skip,
   Gamers/GamerProperties C smokes.
+- [x] GS-011a Documentation pass over the audited stubs. Public headers described behaviour from
+  before this project. The Guide's social/marketplace/party panes were called "No-op", its keyboard
+  and message box "mouse-only" and needing the game to render them, and `IsFriend` "always false".
+  `GetFromGamertag` was "not supported", and `WriteArbitratedLeaderboard`/`WriteTrueSkill`/
+  `InviteAccepted` were "never raised". `GamerJoined` "cannot replay on subscribe", XNA's
+  `HasLeftSession` was "permanently false", `QualityOfService` bandwidth undocumented, the C
+  presence-string extension "a no-op".
+  - Each now states what CNA does and what it throws: the panes and their `SocialActor`
+    refusals, the automatic overlay and keyboard/controller answers, the lookup's service
+    requirement, the Ranked/PlayerMatch leaderboard events, Guide-driven `InviteAccepted` with
+    pending delivery, `GamerJoined`'s replay, measured discovery round trips with no bandwidth.
+  - `docs/gamer-services-server.md` gains a current-state summary (implemented and not
+    implemented) and marks its slice history as superseded; each "remain unfinished" claim that
+    later slices completed is corrected in place.
+  - `docs/xna-4-api-coverage.md` rows for achievements, friends, profiles, the Guide panes and
+    End waits are current.
+  - No code changes; C API inventory hash regenerated. CnaGamerServicesTests 498 + 1 skip,
+    CnaNetTests 495, Guide/Net/Gamers C smokes.

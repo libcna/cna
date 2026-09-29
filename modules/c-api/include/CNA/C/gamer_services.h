@@ -1291,8 +1291,8 @@ CNA_C_API CNA_Result cna_signed_in_gamer_set_presence(
  * @param mode Mode text, borrowed for the duration of the call.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * CNAEXT, and **currently a no-op**: the canonical extension accepts the text and stores nothing.
- * The route exists so the surface is complete and so the behavior is recorded rather than guessed.
+ * CNAEXT: the text is the presence friends see, in place of a mode's text, and is published to the
+ * CNA account service at the next Dispatcher update.
  */
 CNA_C_API CNA_Result cna_signed_in_gamer_set_presence_mode_string_ext(
     CNA_SignedInGamerHandle gamer,
