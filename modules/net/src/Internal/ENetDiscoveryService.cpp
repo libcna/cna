@@ -321,6 +321,24 @@ namespace CNA::Internal::Net
         while (PollOnce(socket_, 0)) { }
     }
 
+    std::vector<AvailableNetworkSession> ENetDiscoveryService::Matching(std::vector<AvailableNetworkSession> found,
+        int localGamers, const Microsoft::Xna::Framework::Net::NetworkSessionProperties& search)
+    {
+        std::vector<AvailableNetworkSession> matching;
+        for (auto& session : found)
+        {
+            if (session.getOpenPublicGamerSlotsProperty() < localGamers) continue;
+            bool matches = true;
+            for (int index = 0; index < search.getCountProperty() && matches; ++index)
+            {
+                const auto wanted = search.getItem(index);
+                matches = !wanted.has_value() || session.getSessionPropertiesProperty().getItem(index) == wanted;
+            }
+            if (matches) matching.push_back(std::move(session));
+        }
+        return matching;
+    }
+
     std::vector<AvailableNetworkSession> ENetDiscoveryService::FindSessions(NetworkSessionType sessionTypeFilter)
     {
         if (sessionTypeFilter != NetworkSessionType::SystemLink)

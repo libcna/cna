@@ -229,6 +229,8 @@ namespace {
         NetworkSession* session = NetworkSession::Create(
             NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
         );
+        // As in XNA, the host allows migration and every machine learns it from the host.
+        session->setAllowHostMigrationProperty(true);
 
         uint16_t port = ENetBackend::GetBoundPort(session);
         if (port == 0) {

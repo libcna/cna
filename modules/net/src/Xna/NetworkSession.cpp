@@ -345,9 +345,9 @@ namespace Microsoft::Xna::Framework::Net
     bool NetworkSession::getAllowHostMigrationProperty() const { return allowHostMigration_; }
     void NetworkSession::setAllowHostMigrationProperty(bool value)
     {
-        // Online sessions follow the reference SendAllowCommand guards. SystemLink keeps its
-        // per-machine flag: its clients set it locally because the transport does not propagate it.
-        if (value != allowHostMigration_ && online_)
+        // Reference SendAllowCommand guards for every networked session; the host's value reaches
+        // the other machines (online through the directory, SystemLink through the host).
+        if (value != allowHostMigration_ && (online_ || CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(sessionType_)))
         {
             if (isDisposed_) throw System::ObjectDisposedException("NetworkSession");
             if (!getIsHostProperty()) throw System::InvalidOperationException("This NetworkSession is not the host");
@@ -363,7 +363,7 @@ namespace Microsoft::Xna::Framework::Net
         // the host/disposed checks of SendAllowCommand (Microsoft.Xna.Framework.Net NetworkSession IL).
         if (sessionType_ == NetworkSessionType::Ranked)
             throw System::NotSupportedException("Ranked sessions do not support join-in-progress.");
-        if (online_)
+        if (online_ || CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(sessionType_))
         {
             if (isDisposed_) throw System::ObjectDisposedException("NetworkSession");
             if (!getIsHostProperty()) throw System::InvalidOperationException("This NetworkSession is not the host");
@@ -694,6 +694,15 @@ namespace Microsoft::Xna::Framework::Net
     void NetworkSession::ApplyGamerReadyInternal(NetworkGamer& gamer, bool value)
     {
         gamer.SetIsReadyInternal(value);
+    }
+
+    void NetworkSession::SetSettingsFromTransport(int maxGamers, int privateGamerSlots, bool allowJoinInProgress,
+        bool allowHostMigration)
+    {
+        maxGamers_ = maxGamers;
+        privateGamerSlots_ = privateGamerSlots;
+        allowJoinInProgress_ = allowJoinInProgress;
+        allowHostMigration_ = allowHostMigration;
     }
 
     void NetworkSession::RemoveMachineInternal(NetworkGamer* gamer)
@@ -1429,9 +1438,11 @@ namespace Microsoft::Xna::Framework::Net
 
         if (CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(type))
         {
-            return AvailableNetworkSessionCollection::CreateInternal(
-                CNA::Internal::Net::ENetDiscoveryService::FindSessions(type)
-            );
+            // Reference Find: only sessions matching the search properties, with public room for the
+            // searching local gamers (the online directory applies the same).
+            auto matching = CNA::Internal::Net::ENetDiscoveryService::Matching(
+                CNA::Internal::Net::ENetDiscoveryService::FindSessions(type), action->MaxLocalGamers, action->SessionProperties);
+            return AvailableNetworkSessionCollection::CreateInternal(std::move(matching));
         }
 
         // Non-SystemLink types stay fully synthetic: FNA never actually populates a

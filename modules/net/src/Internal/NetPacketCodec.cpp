@@ -298,6 +298,63 @@ namespace CNA::Internal::Net
         return message;
     }
 
+    // --- SessionSettingsBroadcast / MachineRosterBroadcast (SystemLink) ---
+
+    std::vector<bytecs> NetPacketCodec::Encode(const SessionSettingsMessage& message)
+    {
+        PacketWriter writer;
+        writer.Write(static_cast<bytecs>(MessageTag::SessionSettingsBroadcast));
+        writer.Write(static_cast<bytecs>(message.MaxGamers));
+        writer.Write(static_cast<bytecs>(message.PrivateGamerSlots));
+        writer.Write(message.AllowJoinInProgress);
+        writer.Write(message.AllowHostMigration);
+        return ExtractBytes(writer);
+    }
+
+    SessionSettingsMessage NetPacketCodec::DecodeSessionSettings(const std::vector<bytecs>& data)
+    {
+        PacketReader reader;
+        FillReader(reader, data);
+        (void) reader.ReadByte();
+        SessionSettingsMessage message;
+        message.MaxGamers = reader.ReadByte();
+        message.PrivateGamerSlots = reader.ReadByte();
+        message.AllowJoinInProgress = reader.ReadBoolean();
+        message.AllowHostMigration = reader.ReadBoolean();
+        return message;
+    }
+
+    std::vector<bytecs> NetPacketCodec::Encode(const MachineRosterMessage& message)
+    {
+        PacketWriter writer;
+        writer.Write(static_cast<bytecs>(MessageTag::MachineRosterBroadcast));
+        writer.Write(EncodeCount(message.Entries.size(), "MachineRosterMessage.Entries"));
+        for (const auto& entry : message.Entries)
+        {
+            writer.Write(static_cast<bytecs>(entry.WireId));
+            writer.Write(static_cast<bytecs>(entry.MachineId));
+        }
+        return ExtractBytes(writer);
+    }
+
+    MachineRosterMessage NetPacketCodec::DecodeMachineRoster(const std::vector<bytecs>& data)
+    {
+        PacketReader reader;
+        FillReader(reader, data);
+        (void) reader.ReadByte();
+        MachineRosterMessage message;
+        const bytecs count = reader.ReadByte();
+        message.Entries.reserve(count);
+        for (bytecs i = 0; i < count; ++i)
+        {
+            MachineRosterEntry entry;
+            entry.WireId = reader.ReadByte();
+            entry.MachineId = reader.ReadByte();
+            message.Entries.push_back(entry);
+        }
+        return message;
+    }
+
     // --- SessionPropertiesBroadcast ---
 
     std::vector<bytecs> NetPacketCodec::Encode(const SessionPropertiesBroadcastMessage& message)

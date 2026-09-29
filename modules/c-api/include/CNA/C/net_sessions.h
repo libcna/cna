@@ -508,11 +508,13 @@ CNA_C_API CNA_Result cna_network_session_get_allow_host_migration(
     CNA_Bool* out_value);
 
 /**
- * @brief Sets whether a session allows host migration.
+ * @brief Sets whether a session allows host migration; only the host of a networked session may
+ * change it, and every machine then reports the host's value.
  *
  * @param session Owned session handle.
  * @param value The new value.
- * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when a changed value is set on a disposed
+ * session or by a machine that is not the host, or a documented handle/thread/native failure.
  */
 CNA_C_API CNA_Result cna_network_session_set_allow_host_migration(
     CNA_NetworkSessionHandle session,
@@ -530,11 +532,14 @@ CNA_C_API CNA_Result cna_network_session_get_allow_join_in_progress(
     CNA_Bool* out_value);
 
 /**
- * @brief Sets whether a session allows joining in progress.
+ * @brief Sets whether a session allows joining in progress; only the host of a networked session
+ * may change it, and every machine then reports the host's value.
  *
  * @param session Owned session handle.
  * @param value The new value.
- * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` for a Ranked session,
+ * `CNA_RESULT_INVALID_STATE` when a changed value is set on a disposed session or by a machine that
+ * is not the host, or a documented handle/thread/native failure.
  */
 CNA_C_API CNA_Result cna_network_session_set_allow_join_in_progress(
     CNA_NetworkSessionHandle session,

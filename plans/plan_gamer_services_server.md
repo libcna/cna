@@ -2577,3 +2577,18 @@ the C struct field documents local ticks. CnaGamerServicesTests 485 + 1 skip.
   `PropertyDictionary.CopyTo` copied nothing and threw `NotImplementedException`; it now copies every
   pair from the index with the .NET collection checks. (`Add`/`Remove`/`Clear` stay working mutators,
   the documented Task 8.1 choice; the reference's explicit interface members refuse them.)
+- [x] GS-007n SystemLink session settings, machine grouping and Find filters (audit OPEN 20, 21 and
+  the grouping gap GS-007j left). A joiner reported MaxGamers 31, PrivateGamerSlots 4 and its own
+  AllowJoinInProgress/AllowHostMigration; its remote gamers had no shared `Machine`. Two SystemLink-only
+  control messages (`SessionSettingsBroadcast` 0x09, `MachineRosterBroadcast` 0x0A; the online path
+  takes both from the directory and its validator refuses them): the host sends its settings with
+  each welcome and republishes settings and its wire-id -> machine map whenever they change; clients
+  apply them (remote gamers regroup into shared machines). `AllowHostMigration`/`AllowJoinInProgress`
+  are host-only on SystemLink too (reference `SendAllowCommand`), which is what makes a host's
+  migration choice reach its clients: the two-process migration harness now sets it on the host, and
+  the roster demo moved the call from its client to its host. `Find` keeps only sessions whose
+  non-null search properties match and whose public slots fit the searchers
+  (`ENetDiscoveryService::Matching`). Tests: `HostSendsItsSettingsAndMachineGroupingAndRepublishesChanges`,
+  `AClientReportsTheHostsSettingsAndMachines`, `MatchingKeepsSessionsWithTheSearchedPropertiesAndRoom`,
+  two-process migration; CnaNetTests 484/484. Open: SystemLink `AddLocalGamer` after a client joined
+  is not announced to the other machines (wire ids are assigned only during a ClientHello).

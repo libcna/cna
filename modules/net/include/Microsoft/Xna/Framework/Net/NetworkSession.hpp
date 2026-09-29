@@ -828,6 +828,15 @@ namespace Microsoft::Xna::Framework::Net
         CNAEXT void RemoveMachineInternal(NetworkGamer* gamer);
 
         /**
+         * @brief Takes the host's session settings, which a client reports as its own.
+         *
+         * @param maxGamers MaxGamers. @param privateGamerSlots PrivateGamerSlots.
+         * @param allowJoinInProgress AllowJoinInProgress. @param allowHostMigration AllowHostMigration.
+         */
+        CNAEXT void SetSettingsFromTransport(int maxGamers, int privateGamerSlots, bool allowJoinInProgress,
+            bool allowHostMigration);
+
+        /**
          * @brief Sends the ready state of gamers to the other machines of the session: a client
          * reports its own gamers to the host, the host reports to every client.
          *

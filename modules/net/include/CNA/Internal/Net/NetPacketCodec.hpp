@@ -37,6 +37,10 @@ namespace CNA::Internal::Net
         StateChangeBroadcast = 0x06,
         SessionPropertiesBroadcast = 0x07,
         GamerReadyBroadcast = 0x08,
+        // SystemLink only: the host's session settings and machine grouping. The online path takes
+        // both from the session directory and refuses these tags.
+        SessionSettingsBroadcast = 0x09,
+        MachineRosterBroadcast = 0x0A,
         AppData = 0x10,
     };
 
@@ -110,6 +114,25 @@ namespace CNA::Internal::Net
     {
         std::vector<GamerReadyEntry> Entries;
     };
+    /** @brief The host's session settings, which every machine reports (SystemLink). */
+    struct SessionSettingsMessage
+    {
+        uint8_t MaxGamers{0};
+        uint8_t PrivateGamerSlots{0};
+        bool AllowJoinInProgress{false};
+        bool AllowHostMigration{false};
+    };
+    /** @brief One gamer's machine, numbered by the host (its own machine is 0). */
+    struct MachineRosterEntry
+    {
+        uint8_t WireId{0};
+        uint8_t MachineId{0};
+    };
+    /** @brief Every gamer's machine as the host groups them (SystemLink). */
+    struct MachineRosterMessage
+    {
+        std::vector<MachineRosterEntry> Entries;
+    };
     /** @brief Carries application SendData/ReceiveData payloads between peers, relayed by the host. */
     struct AppDataMessage
     {
@@ -150,6 +173,20 @@ namespace CNA::Internal::Net
          * @return Connected-channel packet bytes.
          */
         static std::vector<SharpRuntime::bytecs> Encode(const GamerReadyMessage& message);
+        /**
+         * @brief Encodes the host's session settings.
+         *
+         * @param message The settings.
+         * @return Connected-channel packet bytes.
+         */
+        static std::vector<SharpRuntime::bytecs> Encode(const SessionSettingsMessage& message);
+        /**
+         * @brief Encodes the host's machine grouping.
+         *
+         * @param message The entries (at most 255).
+         * @return Connected-channel packet bytes.
+         */
+        static std::vector<SharpRuntime::bytecs> Encode(const MachineRosterMessage& message);
         static std::vector<SharpRuntime::bytecs> Encode(const AppDataMessage& message);
 
         /** @brief Reads the leading MessageTag byte without needing a full decode. */
@@ -176,6 +213,20 @@ namespace CNA::Internal::Net
          * @return The decoded entries.
          */
         static GamerReadyMessage DecodeGamerReady(const std::vector<SharpRuntime::bytecs>& data);
+        /**
+         * @brief Decodes the host's session settings.
+         *
+         * @param data Connected-channel packet bytes.
+         * @return The decoded settings.
+         */
+        static SessionSettingsMessage DecodeSessionSettings(const std::vector<SharpRuntime::bytecs>& data);
+        /**
+         * @brief Decodes the host's machine grouping.
+         *
+         * @param data Connected-channel packet bytes.
+         * @return The decoded entries.
+         */
+        static MachineRosterMessage DecodeMachineRoster(const std::vector<SharpRuntime::bytecs>& data);
         static AppDataMessage DecodeAppData(const std::vector<SharpRuntime::bytecs>& data);
 
         /**

@@ -441,7 +441,13 @@ TEST(ENetBackendTest, AppDataQueuedBeforeSecondLocalGamerIsWiredIsDeliveredOnceR
     for (int i = 0; i < 5; ++i) {
         hostSession->Update();
         ENetEvent evt{};
-        ASSERT_EQ(fakeClient1.Service(0, evt), 0) << "AppData delivered before its sender was ever wired";
+        while (fakeClient1.Service(0, evt) > 0) {
+            // Session control (the host's settings and machine grouping) may arrive; AppData must not.
+            ASSERT_EQ(evt.type, ENET_EVENT_TYPE_RECEIVE);
+            std::vector<SharpRuntime::bytecs> data(evt.packet->data, evt.packet->data + evt.packet->dataLength);
+            enet_packet_destroy(evt.packet);
+            ASSERT_NE(NetPacketCodec::PeekTag(data), MessageTag::AppData) << "AppData delivered before its sender was ever wired";
+        }
     }
     EXPECT_EQ(ENetBackend::GetDroppedAppDataCount(), before);
 
@@ -1911,6 +1917,96 @@ TEST(ENetBackendTest, AClientTheHostRemovedEndsWithRemovedByHost) {
     }
     ASSERT_TRUE(ended.has_value());
     EXPECT_EQ(*ended, NetworkSessionEndReason::RemovedByHost);
+}
+
+// SystemLink: every machine reports the host's settings and machine grouping. The host sends both
+// with the welcome and again whenever they change.
+TEST(ENetBackendTest, HostSendsItsSettingsAndMachineGroupingAndRepublishesChanges) {
+    SystemLinkSessionFixture host("HostPlayer");
+    ENetHostHandle fakeClient = ENetHostHandle::CreateClient(2);
+    ENetPeer* hostFromClientSide = nullptr;
+    const uint8_t clientWireId = ConnectFakeClientAndCompleteHandshake(fakeClient, host.session, &hostFromClientSide);
+    std::optional<SessionSettingsMessage> settings;
+    std::optional<MachineRosterMessage> machines;
+    const auto drain = [&] {
+        for (int i = 0; i < 100; ++i, PollYield()) {
+            host.session->Update();
+            ENetEvent evt{};
+            while (fakeClient.Service(0, evt) > 0) {
+                if (evt.type != ENET_EVENT_TYPE_RECEIVE) continue;
+                std::vector<SharpRuntime::bytecs> data(evt.packet->data, evt.packet->data + evt.packet->dataLength);
+                enet_packet_destroy(evt.packet);
+                if (NetPacketCodec::PeekTag(data) == MessageTag::SessionSettingsBroadcast) settings = NetPacketCodec::DecodeSessionSettings(data);
+                if (NetPacketCodec::PeekTag(data) == MessageTag::MachineRosterBroadcast) machines = NetPacketCodec::DecodeMachineRoster(data);
+            }
+        }
+    };
+    drain();
+    ASSERT_TRUE(settings.has_value());
+    EXPECT_EQ(settings->MaxGamers, 8);
+    EXPECT_FALSE(settings->AllowHostMigration);
+    ASSERT_TRUE(machines.has_value());
+    ASSERT_EQ(machines->Entries.size(), 2u);
+    const uint8_t hostWireId = host.session->getLocalGamersProperty()[0]->getIdProperty();
+    for (const auto& entry : machines->Entries) {
+        EXPECT_EQ(entry.MachineId, entry.WireId == hostWireId ? 0 : 1) << static_cast<int>(entry.WireId);
+        EXPECT_TRUE(entry.WireId == hostWireId || entry.WireId == clientWireId);
+    }
+    settings.reset();
+    host.session->setAllowHostMigrationProperty(true);
+    host.session->setMaxGamersProperty(6);
+    drain();
+    ASSERT_TRUE(settings.has_value());
+    EXPECT_TRUE(settings->AllowHostMigration);
+    EXPECT_EQ(settings->MaxGamers, 6);
+}
+
+TEST(ENetBackendTest, AClientReportsTheHostsSettingsAndMachines) {
+    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(kFakeHostTestPort, 4, 2);
+    SystemLinkSessionFixture client("ClientPlayer");
+    ENetBackend::ConnectToHost(client.session, "127.0.0.1", fakeHost.getBoundPortProperty());
+    ENetPeer* clientFromHostSide = nullptr;
+    bool gotHello = false;
+    for (int i = 0; i < 200 && !gotHello; ++i, PollYield()) {
+        client.session->Update();
+        ENetEvent evt{};
+        if (fakeHost.Service(0, evt) > 0) {
+            if (evt.type == ENET_EVENT_TYPE_CONNECT) clientFromHostSide = evt.peer;
+            else if (evt.type == ENET_EVENT_TYPE_RECEIVE) {
+                std::vector<SharpRuntime::bytecs> data(evt.packet->data, evt.packet->data + evt.packet->dataLength);
+                gotHello = NetPacketCodec::PeekTag(data) == MessageTag::ClientHello;
+                enet_packet_destroy(evt.packet);
+            }
+        }
+    }
+    ASSERT_TRUE(gotHello);
+    ServerWelcomeMessage welcome;
+    welcome.AssignedWireIds = {5};
+    welcome.ExistingRoster = {RosterEntry{0, "HostPlayer", true}, RosterEntry{1, "HostPlayer2", false}, RosterEntry{2, "Other", false}};
+    for (const auto& bytes : {NetPacketCodec::Encode(welcome),
+                              NetPacketCodec::Encode(SessionSettingsMessage{12, 2, true, true}),
+                              NetPacketCodec::Encode(MachineRosterMessage{{{0, 0}, {1, 0}, {2, 7}, {5, 9}}})}) {
+        fakeHost.Send(clientFromHostSide, 0, bytes.data(), bytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    }
+    fakeHost.Flush();
+    NetworkGamer* hostPlayer = nullptr;
+    for (int i = 0; i < 200 && !(client.session->getMaxGamersProperty() == 12 &&
+                                 hostPlayer && hostPlayer->getMachineProperty().getGamersProperty().getCountProperty() == 2); ++i, PollYield()) {
+        client.session->Update();
+        ENetEvent evt{};
+        (void)fakeHost.Service(0, evt);
+        hostPlayer = client.session->FindGamerById(0);
+    }
+    ASSERT_NE(hostPlayer, nullptr);
+    EXPECT_EQ(client.session->getMaxGamersProperty(), 12);
+    EXPECT_EQ(client.session->getPrivateGamerSlotsProperty(), 2);
+    EXPECT_TRUE(client.session->getAllowJoinInProgressProperty());
+    EXPECT_TRUE(client.session->getAllowHostMigrationProperty());
+    // The host's two gamers share its machine; the third gamer is on another; the client's own
+    // gamer stays on the local machine.
+    EXPECT_EQ(&hostPlayer->getMachineProperty(), &client.session->FindGamerById(1)->getMachineProperty());
+    EXPECT_NE(&hostPlayer->getMachineProperty(), &client.session->FindGamerById(2)->getMachineProperty());
+    EXPECT_EQ(client.session->getLocalGamersProperty()[0]->getMachineProperty().getGamersProperty().getCountProperty(), 1);
 }
 
 TEST(ENetBackendTest, AJoiningMachineLearnsWhoIsAlreadyReady) {

@@ -6,6 +6,7 @@
 #include "CNA/Internal/Net/ENetDiscoveryService.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
+#include "Microsoft/Xna/Framework/Net/QualityOfService.hpp"
 #include <string>
 #include <vector>
 
@@ -310,3 +311,21 @@ TEST(ENetDiscoveryServiceTest, ReplyToQueryOnlyAnswersWhenSessionTypeFilterMatch
     close(sock);
 }
 #endif // !defined(__EMSCRIPTEN__) && !defined(_WIN32)
+
+// Reference NetworkSession.Find: a session is listed when every search property that has a value
+// matches and its public slots have room for the searching local gamers.
+TEST(ENetDiscoveryServiceTest, MatchingKeepsSessionsWithTheSearchedPropertiesAndRoom) {
+    const auto make = [](const std::string& host, int open, int mode) {
+        NetworkSessionProperties properties;
+        properties.setItem(0, mode);
+        return AvailableNetworkSession::CreateInternal(1, host, 0, open, properties,
+            Microsoft::Xna::Framework::Net::QualityOfService::CreateInternal());
+    };
+    NetworkSessionProperties search;
+    search.setItem(0, 2);
+    const auto found = ENetDiscoveryService::Matching({make("a", 3, 2), make("b", 3, 1), make("c", 1, 2)}, 2, search);
+    ASSERT_EQ(1u, found.size());
+    EXPECT_EQ("a", found[0].getHostGamertagProperty());
+    EXPECT_EQ(3u, ENetDiscoveryService::Matching({make("a", 3, 2), make("b", 3, 1), make("c", 1, 2)}, 1,
+        NetworkSessionProperties{}).size());
+}

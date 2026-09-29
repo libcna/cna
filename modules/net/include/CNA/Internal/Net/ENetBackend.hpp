@@ -304,6 +304,18 @@ namespace CNA::Internal::Net
         static void OrderTransportGamers(NetworkSession* session);
 
         /**
+         * @brief Applies the host's session settings a SystemLink client received.
+         *
+         * @param session The client session.
+         * @param maxGamers The host's MaxGamers.
+         * @param privateGamerSlots The host's PrivateGamerSlots.
+         * @param allowJoinInProgress The host's AllowJoinInProgress.
+         * @param allowHostMigration The host's AllowHostMigration.
+         */
+        static void ApplyTransportSettings(NetworkSession* session, int maxGamers, int privateGamerSlots,
+            bool allowJoinInProgress, bool allowHostMigration);
+
+        /**
          * @brief Removes the client machine that owns @p gamer from a hosted session: its gamers
          * leave for everyone else, and its session ends with RemovedByHost.
          *
