@@ -337,7 +337,8 @@ public:
     std::vector<std::vector<unsigned char>> avatars(const std::vector<std::string>& ids) override {
         if(!capabilities_.contains("avatars"))throw Unavailable("CNA service avatars capability missing.");
         if(ids.empty()||ids.size()>16)throw Unavailable("Invalid avatar request.");
-        const auto result=request("avatars.get",{{"userIds",ids}},tokenFor({}));
+        // This build reads description formats 1 and 2 (a service gives older readers a format 1 copy).
+        const auto result=request("avatars.get",{{"userIds",ids},{"formats",Json::array({1,2})}},tokenFor({}));
         const auto& entries=result.at("avatars");
         if(!entries.is_array()||entries.size()!=ids.size())throw Unavailable("Invalid avatar response.");
         std::vector<std::vector<unsigned char>> out;

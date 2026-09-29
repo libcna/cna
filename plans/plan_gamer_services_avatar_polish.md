@@ -139,6 +139,17 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   ellipsoidal falloff) on Head-weighted vertices, scoped to the face (body head, decals, facial hair)
   or the whole head (also hair, hats, glasses). A description that uses none of them is still
   encoded as format 1. Public XNA API unchanged (`DescriptionSize` 1021, byte 0 non-zero).
+- **Format negotiation (GSP-G1).** `avatars.get` takes `formats`; a caller that does not list 2
+  (every build before this pass) gets the format 1 copy of a format 2 avatar — same body, colours
+  and items, no facial hair or face shape — which it can render, fetching v2+ items by hash. This
+  build sends `formats: [1, 2]`. Descriptions exchanged directly between games (bytes over a
+  NetworkSession) cannot be negotiated: an older build reads a format 2 description as XNA's
+  "results are undefined" case (IsValid by byte 0, renderer Unavailable).
+- **Server import validation (GSP-G1).** An independent MIT validator (server `AvatarAssets.cpp`,
+  on nlohmann/json, no code from CNA) enforces the same contract as the CNA reader, plus
+  catalog-level rules a client would otherwise hit at render time (items fitted to their body's
+  rig, 31 presets, complete atlas layout). CNA's real v1 and v2 import as golden fixtures
+  (`CNA_AVATAR_CATALOGS`); 30+ malformed models/manifests are refused.
 
 ## Tasks
 
@@ -154,7 +165,7 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
 | GSP-D* | Catalog v2 wardrobe and hair | first pass done (C1) |
 | GSP-E* | Materials and renderer polish, per-renderer check | todo |
 | GSP-F* | Animation polish and key-pose/loop tests | todo |
-| GSP-G1 | Server avatar GLB/manifest validation, malformed fixtures | todo |
+| GSP-G1 | Server avatar GLB/manifest validation, malformed fixtures | done (server 7a8a629) |
 | GSP-H1 | Avatar cache audit, bounded cleanup, first/warm load measurement | todo |
 | GSP-I1 | CNA-owned avatar customization (system level) | todo |
 | GSP-J1 | `AvatarDescription.Changed` | todo |
