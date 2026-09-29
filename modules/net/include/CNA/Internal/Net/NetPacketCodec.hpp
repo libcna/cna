@@ -41,6 +41,8 @@ namespace CNA::Internal::Net
         // both from the session directory and refuses these tags.
         SessionSettingsBroadcast = 0x09,
         MachineRosterBroadcast = 0x0A,
+        // SystemLink only: a client asks the host to admit a local gamer it added (AddLocalGamer).
+        AddLocalGamerRequest = 0x0B,
         AppData = 0x10,
     };
 
@@ -133,6 +135,11 @@ namespace CNA::Internal::Net
     {
         std::vector<MachineRosterEntry> Entries;
     };
+    /** @brief A client's request that the host admit a local gamer it added (SystemLink). */
+    struct AddLocalGamerMessage
+    {
+        std::string Gamertag;
+    };
     /** @brief Carries application SendData/ReceiveData payloads between peers, relayed by the host. */
     struct AppDataMessage
     {
@@ -187,6 +194,13 @@ namespace CNA::Internal::Net
          * @return Connected-channel packet bytes.
          */
         static std::vector<SharpRuntime::bytecs> Encode(const MachineRosterMessage& message);
+        /**
+         * @brief Encodes a client's request to admit a local gamer.
+         *
+         * @param message The request.
+         * @return Connected-channel packet bytes.
+         */
+        static std::vector<SharpRuntime::bytecs> Encode(const AddLocalGamerMessage& message);
         static std::vector<SharpRuntime::bytecs> Encode(const AppDataMessage& message);
 
         /** @brief Reads the leading MessageTag byte without needing a full decode. */
@@ -227,6 +241,13 @@ namespace CNA::Internal::Net
          * @return The decoded entries.
          */
         static MachineRosterMessage DecodeMachineRoster(const std::vector<SharpRuntime::bytecs>& data);
+        /**
+         * @brief Decodes a client's request to admit a local gamer.
+         *
+         * @param data Connected-channel packet bytes.
+         * @return The decoded request.
+         */
+        static AddLocalGamerMessage DecodeAddLocalGamer(const std::vector<SharpRuntime::bytecs>& data);
         static AppDataMessage DecodeAppData(const std::vector<SharpRuntime::bytecs>& data);
 
         /**

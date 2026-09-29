@@ -16,10 +16,12 @@ namespace Microsoft::Xna::Framework::Net
 {
     class NetworkSession;
     class NetworkGamer;
+    class LocalNetworkGamer;
 }
 
 namespace CNA::Internal::Net
 {
+    using Microsoft::Xna::Framework::Net::LocalNetworkGamer;
     using Microsoft::Xna::Framework::Net::NetworkGamer;
     using Microsoft::Xna::Framework::Net::NetworkSession;
     using Microsoft::Xna::Framework::Net::NetworkSessionProperties;
@@ -314,6 +316,15 @@ namespace CNA::Internal::Net
          */
         static void ApplyTransportSettings(NetworkSession* session, int maxGamers, int privateGamerSlots,
             bool allowJoinInProgress, bool allowHostMigration);
+
+        /**
+         * @brief Tells the session's other machines about a local gamer added with AddLocalGamer: the
+         * host numbers it and announces it, a client asks the host to.
+         *
+         * @param session The session.
+         * @param local The new local gamer.
+         */
+        static void AnnounceLocalGamer(NetworkSession* session, LocalNetworkGamer* local);
 
         /**
          * @brief Removes the client machine that owns @p gamer from a hosted session: its gamers

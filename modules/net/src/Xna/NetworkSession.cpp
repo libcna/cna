@@ -668,6 +668,12 @@ namespace Microsoft::Xna::Framework::Net
         evt.Type = NetworkEventType::GamerJoin;
         evt.Gamer = adding;
         SendNetworkEvent(std::move(evt));
+
+        // The other machines learn of the new gamer through the host.
+        if (CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(sessionType_))
+        {
+            CNA::Internal::Net::ENetBackend::AnnounceLocalGamer(this, adding);
+        }
     }
 
     NetworkGamer* NetworkSession::FindGamerById(SharpRuntime::bytecs gameId) const

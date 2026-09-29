@@ -468,9 +468,19 @@ namespace Microsoft::Xna::Framework::Net
         void Update();
 
         /**
-         * @brief Adds a local gamer to the session.
+         * @brief Adds a local gamer to the session, on this machine. Every other machine in the
+         * session sees the gamer join. On a SystemLink client the host numbers the gamer, so its
+         * `Id` changes once the host answers; anything it sends before then is held until it does.
          *
          * @param gamer The signed-in gamer to add.
+         * @throws System::ArgumentNullException if gamer is null.
+         * @throws System::ObjectDisposedException if gamer or the session is disposed.
+         * @throws System::ArgumentException if gamer is already in the session.
+         * @throws System::InvalidOperationException if the session has ended, is playing and does
+         *         not allow joining a game in progress, has no open public slot, or already has its
+         *         maximum number of local gamers.
+         * @throws System::NotSupportedException for a PlayerMatch or Ranked session: CNA online
+         *         sessions do not yet add local gamers after creation or join.
          */
         void AddLocalGamer(GamerServices::SignedInGamer* gamer);
 

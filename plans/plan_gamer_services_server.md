@@ -2592,3 +2592,22 @@ the C struct field documents local ticks. CnaGamerServicesTests 485 + 1 skip.
   `AClientReportsTheHostsSettingsAndMachines`, `MatchingKeepsSessionsWithTheSearchedPropertiesAndRoom`,
   two-process migration; CnaNetTests 484/484. Open: SystemLink `AddLocalGamer` after a client joined
   is not announced to the other machines (wire ids are assigned only during a ClientHello).
+- [x] GS-007o SystemLink `AddLocalGamer` after the session has other machines (the gap GS-007n left
+  open). Before, a gamer added mid-session got only a local placeholder id; the other machines never
+  heard of it, and its sends waited until an unrelated ClientHello happened to number it. Now a
+  host numbers its added gamer at once and broadcasts the join; later joiners find it in their
+  welcome. A client sends `AddLocalGamerRequest` (0x0B, SystemLink only; the online validator
+  refuses it) once welcomed, including for a gamer added while it was still joining. The host
+  admits the gamer onto the requesting peer's machine and broadcasts the join to every peer; the
+  requester binds the returned id to its own gamer by gamertag rather than adding a remote copy.
+  Sends made before then stay held and are delivered in order. A migration clears outstanding
+  requests, because the next hello names every local gamer. Tests:
+  `HostLocalGamerAddedMidSessionIsAnnouncedAndSendsAtOnce`,
+  `ClientLocalGamerIsNumberedByTheHostAndItsEarlierSendsArriveInOrder`,
+  `ClientLocalGamerAddedWhileJoiningIsRequestedOnceWelcomed`,
+  `HostAdmitsAClientsAddedGamerOntoThatClientsMachine`, and the two-process
+  `ClientAddLocalGamerJoinsTheClientsMachineAcrossRealProcesses` (15 repeats clean). Three older
+  tests that relied on the gap (queue-until-a-second-hello, its ordering twin and the
+  host-disconnect purge) became unreachable and were replaced; the host-side purge stays as
+  defensive code. CnaNetTests 486/486, CApi_NetSmoke, protocol drift check clean. Online
+  `AddLocalGamer` is still refused (the directory admits one local group per machine).

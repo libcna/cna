@@ -355,6 +355,24 @@ namespace CNA::Internal::Net
         return message;
     }
 
+    std::vector<bytecs> NetPacketCodec::Encode(const AddLocalGamerMessage& message)
+    {
+        PacketWriter writer;
+        writer.Write(static_cast<bytecs>(MessageTag::AddLocalGamerRequest));
+        writer.Write(message.Gamertag);
+        return ExtractBytes(writer);
+    }
+
+    AddLocalGamerMessage NetPacketCodec::DecodeAddLocalGamer(const std::vector<bytecs>& data)
+    {
+        PacketReader reader;
+        FillReader(reader, data);
+        (void) reader.ReadByte();
+        AddLocalGamerMessage message;
+        message.Gamertag = reader.ReadString();
+        return message;
+    }
+
     // --- SessionPropertiesBroadcast ---
 
     std::vector<bytecs> NetPacketCodec::Encode(const SessionPropertiesBroadcastMessage& message)

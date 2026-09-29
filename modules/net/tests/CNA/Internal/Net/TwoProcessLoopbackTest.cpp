@@ -137,11 +137,12 @@ namespace {
     }
 }
 
-TEST(TwoProcessLoopbackTest, HostAndClientJoinAndExchangeAppDataAcrossRealProcesses) {
+// Runs a host role, hands its port to a client role, and expects both to exit 0.
+static void RunHostAndClient(const std::string& hostRole, const std::string& clientRole) {
     std::string timeoutArg = "--timeout=" + std::to_string(kHarnessInternalTimeoutSeconds);
     auto outerDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(kOuterWatchdogSeconds);
 
-    SpawnedProcess host = SpawnHarness({"--role=host", timeoutArg});
+    SpawnedProcess host = SpawnHarness({"--role=" + hostRole, timeoutArg});
     ASSERT_NE(host.pid, -1);
 
     std::string hostOutput;
@@ -153,7 +154,7 @@ TEST(TwoProcessLoopbackTest, HostAndClientJoinAndExchangeAppDataAcrossRealProces
     int port = std::stoi(hostOutput.substr(portPos + 5));
     ASSERT_GT(port, 0) << "host reported an invalid port";
 
-    SpawnedProcess client = SpawnHarness({"--role=client", "--port=" + std::to_string(port), timeoutArg});
+    SpawnedProcess client = SpawnHarness({"--role=" + clientRole, "--port=" + std::to_string(port), timeoutArg});
     ASSERT_NE(client.pid, -1);
 
     int hostExitCode = -1;
@@ -171,6 +172,16 @@ TEST(TwoProcessLoopbackTest, HostAndClientJoinAndExchangeAppDataAcrossRealProces
     EXPECT_TRUE(clientFinished) << "client process did not exit before the watchdog deadline and was killed; output: " << clientOutput;
     EXPECT_EQ(hostExitCode, 0) << "host exited with code " << hostExitCode << "; output: " << hostOutput;
     EXPECT_EQ(clientExitCode, 0) << "client exited with code " << clientExitCode << "; output: " << clientOutput;
+}
+
+TEST(TwoProcessLoopbackTest, HostAndClientJoinAndExchangeAppDataAcrossRealProcesses) {
+    RunHostAndClient("host", "client");
+}
+
+// NetworkSession.AddLocalGamer on a joined client: the host admits the gamer onto the client's
+// machine, and data flows both ways between it and the host across real processes.
+TEST(TwoProcessLoopbackTest, ClientAddLocalGamerJoinsTheClientsMachineAcrossRealProcesses) {
+    RunHostAndClient("added-gamer-host", "added-gamer-client");
 }
 
 // Task 6.3: ENetBackend::StartHosting used to commit a new session into its Sessions() map
