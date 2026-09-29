@@ -413,3 +413,18 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
   names every boundary and what replacing it needs (a browser control transport, a realtime adapter
   over `emscripten/websocket.h`, and the service's origin rules). Voice and the event channel are
   native too.
+- GSX-Q1 findings, fixed (found by re-running SAMPLE-096 Invites against the new Guide). (1) The
+  sign-in picker took typing as the start of a name only in tests: it never started platform text
+  input, so a real keyboard's letters never arrived; it now starts text input while on top and
+  leaves it as found. (2) Input the Guide used reached the game: the Escape that closed the Guide
+  was still held on the game's next read and the sample's menu, which exits on Escape, exited.
+  **POL/ART**, as the console's Guide took the controller: while the Guide is visible the game
+  reads a neutral keyboard, neutral connected pads and no mouse buttons, and whatever is held when
+  the Guide closes stays hidden from the game until released (`CNA::Internal::Input::SystemInput`;
+  the Guide reads through its system calls; touch was already withheld the same way). (3) The
+  Home key / Guide button now also closes the Guide it opened, as on the console, never a game's
+  own message box or keyboard or a sign-in in progress. Tests: `SystemInputTest` (keys and pads),
+  `GuideInputTest` (the Escape that closed the Guide, text input under the picker),
+  `SystemGuideTest.TheGuideButtonClosesTheGuideItOpened`. The Invites acceptance driver
+  (`/rv/tmp/samples/SAMPLE-096-InvitesSample_4_0/scripts/capture-cna-invites-gs.py`) now signs in
+  through the picker and invites through Friends -> Find gamer -> the gamer card -> Invite to game.

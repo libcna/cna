@@ -144,6 +144,8 @@ void GamerServicesDispatcher::Update() {
     catch(...) {if(!firstError)firstError=std::current_exception();}
     try {CNA::Internal::GamerServices::pumpSocial();}
     catch(...) {if(!firstError)firstError=std::current_exception();}
+    // A Guide closed from code, not by a player, hands input back here.
+    CNA::Internal::GamerServices::syncSystemInputOwnership();
     // The Guide button belongs to games that draw the Guide.
     if(CNA::Internal::GamerServices::guideOverlayAttached()) {
         try {CNA::Internal::GamerServices::pollSystemGuideButton();}

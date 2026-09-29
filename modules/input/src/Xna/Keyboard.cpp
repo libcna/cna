@@ -4,6 +4,8 @@
 //
 
 #include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
+#include "CNA/Internal/Input/SystemInput.hpp"
+#include "../Internal/SystemInput.hpp"
 
 #include "CNA/Internal/Input/SdlInputBridge.hpp"
 #include "CNA/Input/KeyModifiers.hpp"
@@ -39,26 +41,45 @@ namespace
     }
 }
 
-namespace Microsoft::Xna::Framework::Input
+namespace
 {
-    KeyboardState Keyboard::GetState()
+    std::unordered_set<Microsoft::Xna::Framework::Input::Keys> PressedKeys()
     {
+        std::unordered_set<Microsoft::Xna::Framework::Input::Keys> pressedKeys;
         const CNA::Platform::IPlatformKeyboard* keyboard = CurrentKeyboard();
         if (keyboard == nullptr)
         {
-            return KeyboardState();
+            return pressedKeys;
         }
-
-        std::unordered_set<Keys> pressedKeys;
         const CNA::Platform::KeyboardSnapshot& snapshot = keyboard->GetSnapshot();
         pressedKeys.reserve(snapshot.pressedKeys.size());
         for (const CNA::Platform::KeyCode key : snapshot.pressedKeys)
         {
             if (key != CNA::Platform::KeyCode::None)
             {
-                pressedKeys.insert(static_cast<Keys>(key));
+                pressedKeys.insert(static_cast<Microsoft::Xna::Framework::Input::Keys>(key));
             }
         }
+        return pressedKeys;
+    }
+}
+
+namespace CNA::Internal::Input
+{
+    Microsoft::Xna::Framework::Input::KeyboardState systemKeyboardState()
+    {
+        return Microsoft::Xna::Framework::Input::KeyboardState(PressedKeys());
+    }
+}
+
+namespace Microsoft::Xna::Framework::Input
+{
+    KeyboardState Keyboard::GetState()
+    {
+        std::unordered_set<Keys> pressedKeys = PressedKeys();
+        // While the Guide owns the keyboard the game sees nothing, and keys it used stay hidden
+        // until released.
+        CNA::Internal::Input::filterGameKeys(pressedKeys);
         return KeyboardState(pressedKeys);
     }
 

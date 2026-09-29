@@ -124,6 +124,20 @@ TEST_F(SystemGuideTest, WithNobodySignedInItOffersSignIn) {
     EXPECT_EQ("Robin", (*Gamer::getSignedInGamersProperty())[0]->getGamertagProperty());
 }
 
+// The Guide button toggles the Guide, as on the console, but never closes a game's own dialog.
+TEST_F(SystemGuideTest, TheGuideButtonClosesTheGuideItOpened) {
+    Fake()->signIn(0, "Alice", "fixture");
+    ASSERT_TRUE(Settle([] { return Count() == 1; }));
+    Service::systemGuideButton(PlayerIndex::One);
+    ASSERT_EQ("home", Ui::currentScreenForTesting());
+    Ui::sendForTesting(Ui::Command::Next);
+    Service::systemGuideButton(PlayerIndex::One);
+    EXPECT_FALSE(Ui::visible());
+    (void)Guide::BeginShowMessageBox(PlayerIndex::One, "Save", "Overwrite?", {"Yes", "No"}, 0, MessageBoxIcon::None, {}, {});
+    Service::systemGuideButton(PlayerIndex::One);
+    EXPECT_TRUE(Guide::getIsVisibleProperty());
+}
+
 TEST_F(SystemGuideTest, APlayersButtonSignsInThatPlayersSlot) {
     Offline();
     Service::openSystemGuide(PlayerIndex::Two);

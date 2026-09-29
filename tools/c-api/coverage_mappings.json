@@ -9599,6 +9599,20 @@
       ]
     },
     {
+      "id": "gamepad-friend-system-input",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePad::SystemInputAccess$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: this is a friendship declaration that lets the system UI read a pad unfiltered while it owns input, not a callable public member",
+      "tests": "Doxygen declaration inventory; no callable native operation exists",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-E6C970486DBD"
+      ]
+    },
+    {
       "id": "quality-of-service-friend-discovery",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Net::QualityOfService::ENetDiscoveryService$",
       "kinds": [

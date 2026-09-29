@@ -31,13 +31,20 @@ public:
         // Typing starts a name straight away.
         token_=In::TextInputEXT::TextInput.Add([this](In::charcs c){typed(c);});
     }
-    ~SignInScreen() override {In::TextInputEXT::TextInput.Remove(token_);}
+    ~SignInScreen() override {
+        In::TextInputEXT::TextInput.Remove(token_);
+        // Leave text input as it was found, unless a keyboard prompt now owns it.
+        if(startedTextInput_&&!pendingKeyboard()&&In::TextInputEXT::IsTextInputActive())In::TextInputEXT::StopTextInput();
+    }
     std::string name() const override {return "signIn";}
     std::string title() const override {return "Sign in";}
     std::string subtitle() const override {return "Choose a profile for Player "+std::to_string(request_.slot+1);}
     float dialogWidth() const override {return 940;}
     float dialogHeight() const override {return std::min(600.0f,380.0f+62.0f*static_cast<float>(choices_.size()));}
     void input(InputContext& ui) override {
+        // Typing starts a name, so the platform must deliver text while the picker is on top (a
+        // keyboard prompt that closed turned it off again).
+        if(onTop()&&!In::TextInputEXT::IsTextInputActive()){In::TextInputEXT::StartTextInput();startedTextInput_=true;}
         if(waiting_)return;
         if(ui.input(Command::Back)){cancel();return;}
         // Letters are names here, not shortcuts.
@@ -185,7 +192,7 @@ private:
     std::vector<Choice> choices_;
     std::map<std::string,std::vector<unsigned char>> avatars_;
     List list_;
-    bool waiting_=false;
+    bool waiting_=false,startedTextInput_=false;
     System::MulticastAction<In::charcs>::Token token_=System::MulticastAction<In::charcs>::InvalidToken;
 };
 }

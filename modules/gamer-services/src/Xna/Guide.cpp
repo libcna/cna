@@ -19,6 +19,7 @@
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
+#include "CNA/Internal/Input/SystemInput.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "CNA/Platform/CurrentPlatform.hpp"
@@ -346,6 +347,7 @@ namespace Microsoft::Xna::Framework::GamerServices
             Input::Touch::TouchPanel::setInputSuppressedEXT(
                 CNA::Internal::GamerServices::guideIsVisible() ||
                 suppressTouchUntilMouseRelease_);
+            CNA::Internal::GamerServices::syncSystemInputOwnership();
         }
 
         // audit_net.md remediation (2026-07-18): the actual masking decision, shared by
@@ -805,7 +807,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         Graphics::Texture2D&
     ) {
         if (suppressTouchUntilMouseRelease_ &&
-            Input::Mouse::GetState().getLeftButtonProperty() != Input::ButtonState::Pressed)
+            CNA::Internal::Input::systemMouseState().getLeftButtonProperty() != Input::ButtonState::Pressed)
         {
             suppressTouchUntilMouseRelease_ = false;
             SyncTouchInputSuppression();
@@ -1088,6 +1090,23 @@ void openSystemGuide(Microsoft::Xna::Framework::PlayerIndex player) {
     GuideUi::open(GuideUi::homeScreen(player),player);
 }
 
+void syncSystemInputOwnership() {
+    // The Guide owns the keyboard, the pads and the mouse buttons while it is up, as the console's
+    // Guide took the controller; games read neutral input meanwhile (see SystemInput.hpp).
+    CNA::Internal::Input::setSystemOwnsInput(guideIsVisible());
+}
+
+void systemGuideButton(Microsoft::Xna::Framework::PlayerIndex player) {
+    namespace Xna=Microsoft::Xna::Framework::GamerServices;
+    // As on the console, the button closes the Guide it opened; a game's own message box or
+    // keyboard, and a sign-in in progress, stay until they are answered.
+    if(GuideUi::visible()&&Xna::pendingMessageBox_==nullptr&&Xna::pendingKeyboardInput_==nullptr&&!Xna::signInActive) {
+        GuideUi::closeAll();
+        return;
+    }
+    openSystemGuide(player);
+}
+
 void pollSystemGuideButton() {
     using namespace Microsoft::Xna::Framework::Input;
     using Microsoft::Xna::Framework::PlayerIndex;
@@ -1095,12 +1114,12 @@ void pollSystemGuideButton() {
     static std::array<bool,5> previous{};
     if(disabled)return;
     // Home opens the Guide from a keyboard, as in Games for Windows LIVE; the Guide button from a pad.
-    const bool home=Keyboard::GetState().IsKeyDown(Keys::Home);
-    if(home&&!previous[4])openSystemGuide(PlayerIndex::One);
+    const bool home=CNA::Internal::Input::systemKeyboardState().IsKeyDown(Keys::Home);
+    if(home&&!previous[4])systemGuideButton(PlayerIndex::One);
     previous[4]=home;
     for(int index=0;index<4;++index) {
-        const bool pressed=GamePad::GetState(static_cast<PlayerIndex>(index)).IsButtonDown(Buttons::BigButton);
-        if(pressed&&!previous[index])openSystemGuide(static_cast<PlayerIndex>(index));
+        const bool pressed=CNA::Internal::Input::systemGamePadState(static_cast<PlayerIndex>(index)).IsButtonDown(Buttons::BigButton);
+        if(pressed&&!previous[index])systemGuideButton(static_cast<PlayerIndex>(index));
         previous[index]=pressed;
     }
 }
@@ -1121,7 +1140,7 @@ void answerMessageBox(std::optional<int> button) {
     namespace Xna=Microsoft::Xna::Framework::GamerServices;
     if(!Xna::pendingMessageBox_)return;
     // A click answers on the press; its release must not reach whatever the box was covering.
-    if(Microsoft::Xna::Framework::Input::Mouse::GetState().getLeftButtonProperty()==Microsoft::Xna::Framework::Input::ButtonState::Pressed)
+    if(CNA::Internal::Input::systemMouseState().getLeftButtonProperty()==Microsoft::Xna::Framework::Input::ButtonState::Pressed)
         Xna::suppressTouchUntilMouseRelease_=true;
     Xna::CompletePendingMessageBox(button);
 }
@@ -1139,7 +1158,7 @@ void cancelKeyboard() {
 void releaseTouchSuppression() {
     namespace Xna=Microsoft::Xna::Framework::GamerServices;
     if(Xna::suppressTouchUntilMouseRelease_&&
-       Microsoft::Xna::Framework::Input::Mouse::GetState().getLeftButtonProperty()!=Microsoft::Xna::Framework::Input::ButtonState::Pressed) {
+       CNA::Internal::Input::systemMouseState().getLeftButtonProperty()!=Microsoft::Xna::Framework::Input::ButtonState::Pressed) {
         Xna::suppressTouchUntilMouseRelease_=false;
         Xna::SyncTouchInputSuppression();
     }

@@ -9,11 +9,15 @@
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
 #include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
 #include "CNA/Platform/Input/IPlatformKeyboard.hpp"
+#include "CNA/Platform/Input/IPlatformTextInput.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Input/Buttons.hpp"
+#include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
+#include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
 #include "System/IServiceProvider.hpp"
 #include <chrono>
 #include <thread>
@@ -35,12 +39,23 @@ public:
     [[nodiscard]] const CNA::Platform::KeyboardSnapshot& GetSnapshot() const override { return snapshot; }
     [[nodiscard]] bool HasKeyboard() const override { return true; }
 };
+class TextInput final : public CNA::Platform::IPlatformTextInput {
+public:
+    bool active = false;
+    void Start(CNA::Platform::WindowId, CNA::Platform::TextInputType) override { active = true; }
+    void Stop(CNA::Platform::WindowId) override { active = false; }
+    [[nodiscard]] bool IsActive(CNA::Platform::WindowId) const override { return active; }
+    [[nodiscard]] bool IsScreenKeyboardShown(CNA::Platform::WindowId) const override { return false; }
+    void SetInputArea(CNA::Platform::WindowId, const CNA::Platform::TextInputArea&) override {}
+};
 class Devices final : public CNA::Platform::Testing::PlatformTestDecorator {
 public:
     Keyboard keyboard;
     CNA::Platform::Testing::CannedGamepad gamepad;
+    TextInput text;
     [[nodiscard]] CNA::Platform::IPlatformKeyboard* GetKeyboard() override { return &keyboard; }
     [[nodiscard]] CNA::Platform::IPlatformGamepad* GetGamepad() override { return &gamepad; }
+    [[nodiscard]] CNA::Platform::IPlatformTextInput* GetTextInput() override { return &text; }
 };
 
 class GuideInputTest : public ::testing::Test {
@@ -100,9 +115,19 @@ TEST_F(GuideInputTest, AKeyboardDrivesTheGuideFrame) {
     frame({});
     frame({KeyCode::E});
     EXPECT_EQ("achievements", Ui::currentScreenForTesting());
+    // While the Guide is up the game reads no keys.
+    frame({KeyCode::Down});
+    EXPECT_TRUE(Microsoft::Xna::Framework::Input::Keyboard::GetState().GetPressedKeys().empty());
     frame({});
     frame({KeyCode::Escape});
     EXPECT_FALSE(Ui::visible());
+    // The Escape that closed it is still held: the game does not see it until it is released.
+    using Microsoft::Xna::Framework::Input::Keys;
+    EXPECT_TRUE(Microsoft::Xna::Framework::Input::Keyboard::GetState().IsKeyUp(Keys::Escape));
+    devices.keyboard.snapshot.pressedKeys = {};
+    (void)Microsoft::Xna::Framework::Input::Keyboard::GetState();
+    devices.keyboard.snapshot.pressedKeys = {KeyCode::Escape};
+    EXPECT_TRUE(Microsoft::Xna::Framework::Input::Keyboard::GetState().IsKeyDown(Keys::Escape));
 }
 
 TEST_F(GuideInputTest, AControllerDrivesTheGuideFrame) {
@@ -134,4 +159,26 @@ TEST_F(GuideInputTest, AControllerDrivesTheGuideFrame) {
     frame(0);
     frame(static_cast<std::uint32_t>(Buttons::B));
     EXPECT_FALSE(Ui::visible());
+}
+
+// The sign-in picker takes typing as the start of a name: the platform must deliver text while it is
+// on top, and text input is off again once it closes.
+TEST_F(GuideInputTest, TheSignInPickerTurnsTextInputOnWhileItIsUp) {
+    using Microsoft::Xna::Framework::Input::TextInputEXT;
+    Devices devices;
+    CNA::Platform::Testing::ScopedCurrentPlatform scope(devices);
+    Microsoft::Xna::Framework::Graphics::GraphicsDevice device;
+    // A game window, as text input needs one.
+    TextInputEXT::setWindowHandleProperty(1);
+    TextInputEXT::INTERNAL_setWindowId(1);
+    struct Restore { ~Restore() { TextInputEXT::setWindowHandleProperty(0); } } restore;
+    const bool before = TextInputEXT::IsTextInputActive();
+    Guide::ShowSignIn(2, false);
+    ASSERT_EQ("signIn", Ui::currentScreenForTesting());
+    Ui::draw(device);
+    Ui::draw(device);
+    EXPECT_TRUE(TextInputEXT::IsTextInputActive());
+    Ui::sendForTesting(Ui::Command::Back);
+    EXPECT_FALSE(Ui::visible());
+    EXPECT_EQ(before, TextInputEXT::IsTextInputActive());
 }

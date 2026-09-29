@@ -12,7 +12,7 @@ or renamed module stops this gate rather than inheriting a default. Paths whose 
 are `Internal` or `Detail` in any capitalization are excluded as implementation detail.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **469 headers**, **8131 symbols**, **7029 implemented**, **15 partial**, **650 planned**, **437 not applicable**. Explicitly excluded headers: **466**.
+Snapshot: **469 headers**, **8132 symbols**, **7029 implemented**, **15 partial**, **650 planned**, **438 not applicable**. Explicitly excluded headers: **467**.
 
 ## Out of runtime C API scope
 
@@ -37,14 +37,14 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/gamer-services` internal/detail paths | 13 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/graphics` internal/detail paths | 34 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/graphics-ext` internal/detail paths | 2 | implementation detail: a path segment is `Internal` or `Detail` |
-| `modules/input` internal/detail paths | 4 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/input` internal/detail paths | 5 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/media` internal/detail paths | 12 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/net` internal/detail paths | 7 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/runtime` internal/detail paths | 2 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `1d2b5484d1a6c32a51d67b166e04d2010ec8a47e8ea55b0607f9148a9590dc3f`.
+Full inventory SHA-256: `375f7314123b05b4be52f3aab697b0d7266c3be01a9029711f946cc0b9266438`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:
@@ -71,7 +71,7 @@ owner, hashes the complete matrix, and compares this summary. The CTest
 | `gamer-services` | 52 | 689 | 615 | 0 | 29 | 45 |
 | `graphics` | 143 | 2938 | 2606 | 0 | 269 | 63 |
 | `graphics-ext` | 11 | 110 | 68 | 0 | 40 | 2 |
-| `input` | 51 | 894 | 836 | 0 | 30 | 28 |
+| `input` | 51 | 895 | 836 | 0 | 30 | 29 |
 | `math` | 24 | 954 | 926 | 0 | 27 | 1 |
 | `media` | 24 | 338 | 285 | 0 | 1 | 52 |
 | `net` | 23 | 284 | 252 | 1 | 14 | 17 |

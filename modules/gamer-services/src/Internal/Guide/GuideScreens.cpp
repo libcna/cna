@@ -2,6 +2,7 @@
 // The Guide's frame: input, the screen stack and its transitions, the shell (identity rail,
 // header, hints), dialogs, the game's own message box and keyboard, and notifications.
 #include "GuideScreen.hpp"
+#include "CNA/Internal/Input/SystemInput.hpp"
 #include "../GuideOverlay.hpp"
 #include "CNA/Internal/GamerServices/LocalProfiles.hpp"
 #include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
@@ -54,7 +55,7 @@ public:
     InputFrame poll(double now)
     {
         InputFrame frame;
-        const auto keys=In::Keyboard::GetState();
+        const auto keys=CNA::Internal::Input::systemKeyboardState();
         std::array<bool,10> keyDown{},padDown{};
         auto set=[](std::array<bool,10>& down,Command command,bool value){down[static_cast<std::size_t>(command)]=down[static_cast<std::size_t>(command)]||value;};
         set(keyDown,Command::Up,keys.IsKeyDown(In::Keys::Up));
@@ -68,7 +69,7 @@ public:
         set(keyDown,Command::Previous,keys.IsKeyDown(In::Keys::Q)||keys.IsKeyDown(In::Keys::PageUp));
         set(keyDown,Command::Next,keys.IsKeyDown(In::Keys::E)||keys.IsKeyDown(In::Keys::PageDown)||keys.IsKeyDown(In::Keys::Tab));
         for(int index=0;index<4;++index) {
-            const auto pad=In::GamePad::GetState(static_cast<Xna::PlayerIndex>(index));
+            const auto pad=CNA::Internal::Input::systemGamePadState(static_cast<Xna::PlayerIndex>(index));
             if(!pad.getIsConnectedProperty())continue;
             const auto stick=pad.getThumbSticksProperty().getLeftProperty();
             set(padDown,Command::Up,pad.IsButtonDown(In::Buttons::DPadUp)||stick.Y>0.5f);
@@ -86,14 +87,14 @@ public:
             (keys.IsKeyDown(In::Keys::OemPlus)||keys.IsKeyDown(In::Keys::Add)?1.0f:0.0f)-
             (keys.IsKeyDown(In::Keys::OemMinus)||keys.IsKeyDown(In::Keys::Subtract)?1.0f:0.0f));
         for(int index=0;index<4;++index) {
-            const auto pad=In::GamePad::GetState(static_cast<Xna::PlayerIndex>(index));
+            const auto pad=CNA::Internal::Input::systemGamePadState(static_cast<Xna::PlayerIndex>(index));
             if(!pad.getIsConnectedProperty())continue;
             const auto triggers=pad.getTriggersProperty();
             look.X+=pad.getThumbSticksProperty().getRightProperty().X;
             look.Y+=triggers.getRightProperty()-triggers.getLeftProperty();
         }
         frame.look=Xna::Vector2(std::clamp(look.X,-1.0f,1.0f),std::clamp(look.Y,-1.0f,1.0f));
-        const auto mouse=In::Mouse::GetState();
+        const auto mouse=CNA::Internal::Input::systemMouseState();
         frame.mouse=Xna::Vector2(static_cast<float>(mouse.getXProperty()),static_cast<float>(mouse.getYProperty()));
         const bool left=mouse.getLeftButtonProperty()==In::ButtonState::Pressed;
         frame.mouseDown=left;
@@ -868,6 +869,8 @@ void draw(Xna::Graphics::GraphicsDevice& device)
     }
     if(toast)drawToast(ui,*toast);
     s.batch->End();
+    // Whatever closed during this frame hands the keyboard, pads and mouse back to the game now.
+    syncSystemInputOwnership();
 }
 
 void drawGameDialogs(Xna::Graphics::GraphicsDevice& device,Xna::Graphics::SpriteBatch& batch)

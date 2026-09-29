@@ -25,6 +25,8 @@ namespace CNA::Input
     enum class PowerStateEXT;
 }
 
+namespace CNA::Internal::Input { class SystemInputAccess; }
+
 namespace Microsoft::Xna::Framework::Input
 {
     /**
@@ -225,5 +227,10 @@ namespace Microsoft::Xna::Framework::Input
          * @return The processed axis value.
          */
         CNAEXT static float ExcludeAxisDeadZone(float value, float deadZone);
+
+    private:
+        // One read: the game's, filtered while the system UI owns the pads, or the system UI's own.
+        static GamePadState ReadState(Microsoft::Xna::Framework::PlayerIndex playerIndex, GamePadDeadZone deadZoneMode, bool game);
+        friend class CNA::Internal::Input::SystemInputAccess;
     };
 }
