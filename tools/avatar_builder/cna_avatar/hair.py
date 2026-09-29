@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MS-PL
-"""Catalog v2 hair: a scalp cap inside the style's hairline, covered by sculpted locks.
+"""Catalog v3 hair: a scalp cap inside the style's hairline, covered by sculpted locks -- fewer,
+broader clumps than v2's so a style reads as one shaped mass.
 
 A lock is a flattened, tapering tube along a path that follows the head (waypoints in the head's
 (theta, phi) angles with a lift above the surface) and may continue through head-local space
@@ -127,6 +128,10 @@ def lock(body, path, width, thickness, segments=6, twist=0.0):
     return Mesh().grid(rows, lambda q, v, u: wf(q), uv_seam=True)
 
 
+# Catalog v3 clumps: a fifth fewer locks, each a third broader and a little thicker.
+CLUMP_COUNT, CLUMP_WIDTH, CLUMP_THICKNESS = 0.8, 1.35, 1.15
+
+
 def taper(w0, tip=0.12, power=1.6, swell=0.25):
     """Lock profile: full near the root, a little fuller at a third, narrowing to `tip`."""
     return lambda t: w0 * (1.0 + swell * math.sin(PI * min(t * 1.5, 1.0))) * (tip + (1.0 - tip) * (1.0 - t ** power))
@@ -136,6 +141,8 @@ def flow_locks(body, count, rows, theta_end, lift, width, thickness, seed, forwa
                start=(0.04, 0.22), phi_center=0.0, phi_range=PI):
     """Locks whose roots circle the crown and which flow outward and down to theta_end(phi)."""
     out = Mesh()
+    count = max(4, int(round(count * CLUMP_COUNT)))
+    width, thickness = width * CLUMP_WIDTH, thickness * CLUMP_THICKNESS
     for r in range(rows):
         for k in range(count):
             key = (seed, r, k)
@@ -207,6 +214,8 @@ def hanging(body, root_angles, drop_to, lift, width, thickness, seed, count, spr
     """Longer locks: over the head to the jaw, then hanging to head-local height drop_to."""
     out = Mesh()
     s = head.SCALE[body]
+    count = max(4, int(round(count * CLUMP_COUNT)))
+    width, thickness = width * CLUMP_WIDTH, thickness * CLUMP_THICKNESS
     for k in range(count):
         key = (seed, k)
         phi = root_angles[1] + spread_phi * ((k + 0.5) / count * 2.0 - 1.0) + 0.04 * jitter(*key, 1)

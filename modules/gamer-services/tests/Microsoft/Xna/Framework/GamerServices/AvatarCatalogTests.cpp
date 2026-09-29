@@ -63,6 +63,21 @@ TEST(AvatarCatalogTest, CatalogV1IsFrozen) {
     EXPECT_EQ(v1->authoredHeightMillimeters[1], 1800);
 }
 
+TEST(AvatarCatalogTest, CatalogV2IsFrozen) {
+    // Accounts, the service's golden fixtures and released builds name catalog 2: its manifest,
+    // and through it every file it lists, never changes. New art goes into a new catalog version.
+    const auto& files = Avatars::embeddedCatalogFiles();
+    auto manifest = std::find_if(files.begin(), files.end(), [](const auto& file) { return std::string_view(file.name) == "v2/catalog.json"; });
+    ASSERT_NE(manifest, files.end());
+    EXPECT_EQ(Avatars::sha256Hex(manifest->bytes()), "7a27a9d657efdc903e128736b22a1be381dc627c5631b6c7926c9535cf4c2ae1");
+    const auto v2 = Avatars::embeddedManifest(2);
+    ASSERT_NE(v2, nullptr);
+    EXPECT_EQ(v2->items.size(), 39u);
+    EXPECT_EQ(v2->featureItems.size(), 4u);
+    EXPECT_EQ(v2->authoredHeightMillimeters[0], 1680);
+    EXPECT_EQ(v2->authoredHeightMillimeters[1], 1800);
+}
+
 TEST(AvatarCatalogTest, EmbeddedAssetsResolveByContentNotByName) {
     const auto v1 = Avatars::embeddedManifest(1);
     // A manifest naming "body.female.glb" with the male body's contents gets the male body; one

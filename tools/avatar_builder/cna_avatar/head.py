@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""The sculpted head (catalog v2): a star-shaped surface around the head centre, made of a smooth
+"""The sculpted head (catalog v3): a star-shaped surface around the head centre, made of a smooth
 union of ellipsoids (cranium, face, cheeks, brow, muzzle, chin) with soft eye sockets, plus a
 separate nose and ears. Everything is skinned to the Head joint.
 
@@ -15,11 +15,11 @@ from .mesh import Mesh, tube
 I = rig.INDEX
 HEAD = lambda *args: {I["Head"]: 1.0}
 
-# The male head in head-local metres; the female head is the same shape at 0.955 of its size
-# with a slightly narrower jaw.
-RADII = (0.145, 0.172, 0.150)
-SCALE = {"male": 1.08, "female": 1.03}
-JAW = {"male": 0.20, "female": 0.24}
+# The male head in head-local metres; the female head is the same shape at 0.96 of its size
+# with a slightly narrower jaw. Catalog v3: larger and rounder, a softer jaw.
+RADII = (0.150, 0.172, 0.152)
+SCALE = {"male": 1.30, "female": 1.24}
+JAW = {"male": 0.15, "female": 0.19}
 
 # Feature anchors in head-local metres (male scale): eye centres, brows, nose, mouth, ears.
 EYE = (0.054, -0.004)           # |x|, y on the face surface
@@ -60,10 +60,10 @@ def _base_point(body, theta, phi):
     # Soft cheeks, brow, chin and the back of the skull, pushed along the direction.
     push = 0.0
     for side in (1.0, -1.0):
-        push += 0.010 * _bump(d, (side * 0.55, -0.30, 0.78), 6.0, 34.0)
+        push += 0.015 * _bump(d, (side * 0.55, -0.30, 0.78), 6.0, 36.0)
         push -= 0.0040 * _bump(d, (side * EYE[0] / 0.13, EYE[1] / 0.13, 1.0), 3.0, 17.0)
         push += 0.0030 * _bump(d, (side * 0.36, 0.34, 0.86), 4.0, 22.0)
-    push += 0.012 * _bump(d, (0.0, -0.78, 0.62), 4.0, 26.0)
+    push += 0.009 * _bump(d, (0.0, -0.78, 0.62), 4.0, 28.0)
     push += 0.008 * _bump(d, (0.0, -0.10, -1.0), 10.0, 60.0)
     x, y, z = x + d[0] * push, y + d[1] * push, z + d[2] * push
     return (x * s, y * s, z * s)
@@ -142,12 +142,12 @@ def nose_mesh(body):
     tip = add(tip_base, (0.0, 0.002 * s, 0.009 * s))
     m = Mesh()
     path = [lerp(root, tip, k / 4.0) for k in range(5)]
-    radii = [0.0065 * s, 0.0070 * s, 0.0082 * s, 0.0105 * s, 0.0125 * s]
+    radii = [0.0075 * s, 0.0082 * s, 0.0096 * s, 0.0122 * s, 0.0145 * s]
     m.append(tube(path, radii, 14, HEAD, round_end=True))
-    m.append(_blob(add(tip, (0.0, -0.001 * s, -0.002 * s)), (0.0135 * s, 0.0115 * s, 0.0110 * s), 14, 10))
+    m.append(_blob(add(tip, (0.0, -0.001 * s, -0.002 * s)), (0.0158 * s, 0.0132 * s, 0.0126 * s), 14, 10))
     for side in (1.0, -1.0):
-        wing = add(tip_base, (side * 0.0125 * s, 0.0005 * s, 0.001 * s))
-        m.append(_blob(wing, (0.0080 * s, 0.0072 * s, 0.0080 * s)))
+        wing = add(tip_base, (side * 0.0142 * s, 0.0003 * s, 0.001 * s))
+        m.append(_blob(wing, (0.0094 * s, 0.0082 * s, 0.0090 * s)))
     return m
 
 

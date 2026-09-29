@@ -61,7 +61,7 @@ def hair_clump():
     def fn(u, v):
         crest = 0.5 + 0.5 * math.cos(2.0 * math.pi * u)
         strands = fbm(u * 24.0, v * 3.0, 11, 2, wrap_x=24)
-        shade = 0.64 + 0.30 * crest + 0.14 * (strands - 0.5)
+        shade = 0.76 + 0.20 * crest + 0.11 * (strands - 0.5)
         shade *= 0.86 + 0.14 * smoothstep(0.0, 0.25, v)
         shine = 0.10 * crest * smoothstep(0.15, 0.35, v) * (1.0 - smoothstep(0.45, 0.7, v))
         return min(1.0, shade + shine)

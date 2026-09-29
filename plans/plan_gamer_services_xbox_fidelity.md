@@ -157,9 +157,9 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
 | GSX-A3 | Server: pack descriptor, binary content-addressed file route, reader level, negotiation and projection | done |
 | GSX-A4 | Client negotiation and fallback order; old-client behaviour | done |
 | GSX-A5 | Identity vs assets: determinism across clients | done |
-| GSX-B1 | Freeze catalog v2; generator writes v3 | |
-| GSX-B2..B9 | Catalog v3 art: head/face, atlas, body, hands, clothing, hair/facial hair, materials, animation | |
-| GSX-B10 | BEFORE/AFTER review with identical cameras, inspected | |
+| GSX-B1 | Freeze catalog v2; generator writes v3 | done |
+| GSX-B2..B9 | Catalog v3 art: head/face, atlas, body, hands, clothing, hair/facial hair, materials, animation | PART: head, face atlas, proportions, hands (scale), hair clumps, face controls, idles done; clothing re-sculpt, materials/AO open |
+| GSX-B10 | BEFORE/AFTER review with identical cameras, inspected | done |
 | GSX-U0 | System UI audit: every Guide pane, editor and demo; deterministic BEFORE screenshots; visual inventory | done |
 | GSX-U1 | One CNA system visual language (panel, title, tabs, focus, buttons, identity, presence, toast, dialog, loading, error) shared by Guide and editor | done |
 | GSX-U2 | Console-style avatar editor: large live preview, categories, rendered item cards, contextual camera, human face controls, coherent randomize, transactional save/cancel | done |
@@ -276,3 +276,21 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
   since, and the update setting with its size bound. Tests: `SystemGuideTest` trial latch and
   marketplace, updated trial/privilege tests. CApi 105/110 (content and audio smokes fail in this
   HEADLESS/NULL-audio tree, unrelated to GamerServices). GS 587 + 1 skip, Net 504.
+- GSX-B (catalog v3, **ART**, original CNA work). v2 frozen (`CatalogV2IsFrozen`, manifest SHA-256
+  7a27a9d6...; generator at d1730d4f3); the generator writes v3 with exactly v2's 39 item ids and
+  slots and 4 facial-hair ids. Changes: head a fifth larger (scale 1.30/1.24) with rounder cheeks and
+  a softer jaw on a shorter neck; shoulders, chest and hips lowered (shorter legs); limbs 17 %/14 %
+  sturdier; hands 1.40/1.28; torso 4 % broader; almond eye openings (wider than tall) with a smaller
+  iris under a bolder lid line and an outer wing, closed-eye shapes widened to match; fuller upper
+  and lower lips with a gentle resting smile and a wider mouth patch; a larger rounded nose; hair as
+  a fifth fewer, a third broader clumps with softer crevice shading; face controls reach about half
+  again as far; the standing idle sways foot to foot with head turn and nod, the weight-shift idle
+  shifts further; FemaleShocked's hands kept off the spine on the new proportions. Review: the same
+  255 jobs for v2 and v3 (close-ups framed in proportion to each avatar's own head, identical numbers
+  for v2), real OPENGL33 renderer: `/rv/tmp/xbox-fidelity/art/before/`, `/rv/tmp/xbox-fidelity/art/after/`
+  (sheets views, diverse, faces, animations, expressions) and `art/before-after.png`, inspected:
+  heads read larger and friendlier, eyes almond rather than round, lips visible, hair as masses,
+  every preset still plants its feet and keeps hands out of the body. The editor's head view and the
+  Guide's head portraits frame in proportion to the head (v3's larger head was cropped).
+  Open: clothing re-sculpt (folds, thicker garments), hand re-sculpt (finger separation), baked
+  occlusion/material pass. GS 588 + 1 skip.

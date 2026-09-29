@@ -146,7 +146,8 @@ def mix(c0, c1, t):
 
 # ----- eyes -------------------------------------------------------------------------------------
 
-RX, RY, CY, FLOOR = 0.62, 0.72, 0.04, -0.56
+# Catalog v3: an almond opening, wider than tall, with a smaller iris under a bolder lid line.
+RX, RY, CY, FLOOR = 0.70, 0.60, 0.02, -0.46
 
 
 def _opening(rx=RX, ry=RY):
@@ -156,7 +157,7 @@ def _opening(rx=RX, ry=RY):
 def eye_layers(state, side):
     """(white layer, iris layer) shape lists for 'Left'/'Right'."""
     inner = -1.0 if side == "Left" else 1.0
-    iris_c, iris_r = (0.0, -0.06), 0.40
+    iris_c, iris_r = (0.0, 0.0), 0.35
     rx, ry = RX, RY
     lid = None         # upper lid height at the inner and outer corners (a straight cut)
     raise_low = None   # lower lid pushed up (a smile squint)
@@ -169,19 +170,19 @@ def eye_layers(state, side):
         if side == "Left":
             lid, iris_c = (0.34, 0.26), (inner * 0.10, -0.08)
         else:
-            rx, ry, iris_c = 0.66, 0.80, (inner * 0.10, 0.0)
+            rx, ry, iris_c = 0.74, 0.70, (inner * 0.10, 0.04)
     elif state == "Shocked":
-        rx, ry, iris_c, iris_r = 0.70, 0.84, (0.0, 0.02), 0.30
+        rx, ry, iris_c, iris_r = 0.76, 0.76, (0.0, 0.04), 0.28
     elif state == "Happy":
         raise_low, iris_c = -0.30, (0.0, 0.02)
     elif state == "LookUp":
-        iris_c = (0.0, 0.26)
+        iris_c = (0.0, 0.22)
     elif state == "LookDown":
-        lid, iris_c = (0.36, 0.36), (0.0, -0.30)
+        lid, iris_c = (0.30, 0.30), (0.0, -0.24)
     elif state == "LookLeft":
-        iris_c = (0.24, -0.06)   # the avatar's left is the viewer's right
+        iris_c = (0.28, 0.0)   # the avatar's left is the viewer's right
     elif state == "LookRight":
-        iris_c = (-0.24, -0.06)
+        iris_c = (-0.28, 0.0)
     elif state == "Laughing":
         closed = "laugh"
     elif state == "Yawning":
@@ -207,9 +208,11 @@ def eye_layers(state, side):
         shade = 0.20 * smoothstep(0.05, ry * 0.95, y - CY) + 0.10 * smoothstep(0.35, 0.62, abs(x))
         return mix((252, 251, 248), (196, 194, 200), shade)
 
-    upper = both(band(visible, 0.13), Sdf(lambda x, y: (CY - 0.18) - y, FULL))
-    lower = both(band(visible, 0.05), Sdf(lambda x, y: y - (CY - 0.18), FULL))
-    crease = curve(lambda x: CY + ry + 0.09 - 0.20 * (x / rx) ** 2, -rx * 0.8, rx * 0.8, 0.045)
+    upper = both(band(visible, 0.16), Sdf(lambda x, y: (CY - 0.14) - y, FULL))
+    lower = both(band(visible, 0.05), Sdf(lambda x, y: y - (CY - 0.14), FULL))
+    # The lid line ends in a small wing at the outer corner.
+    wing = stroke([(-inner * rx * 0.86, CY + 0.10), (-inner * (rx + 0.13), CY + 0.20)], [0.10, 0.03])
+    crease = curve(lambda x: CY + ry + 0.10 - 0.22 * (x / rx) ** 2, -rx * 0.8, rx * 0.8, 0.045)
     lashes = []
     for k, (a, length_) in enumerate(((0.55, 0.16), (0.78, 0.20), (0.98, 0.18))):
         # Three short flicks off the outer end of the upper lid.
@@ -217,7 +220,7 @@ def eye_layers(state, side):
         sy = CY + ry * 0.92 * math.cos(a) * (0.35 if lid else 1.0) + (0.0 if not lid else 0.15)
         ex, ey = sx - inner * length_ * 0.8, sy + length_ * 0.7
         lashes.append(stroke([(sx, sy), (ex, ey)], [0.07, 0.02]))
-    white = [(visible, sclera, 1.0), (lower, LINE, 0.55), (upper, LINE, 1.0), (crease, LINE, 0.18)]
+    white = [(visible, sclera, 1.0), (lower, LINE, 0.45), (upper, LINE, 1.0), (wing, LINE, 1.0), (crease, LINE, 0.18)]
     white += [(lash, LINE, 1.0) for lash in lashes]
 
     ix, iy = iris_c
@@ -244,20 +247,20 @@ def eye_layers(state, side):
 def _closed_eye(kind, inner):
     if kind == "laugh":
         # Tight upward arcs.
-        line = curve(lambda x: -0.10 + 0.34 * (1.0 - (x / 0.56) ** 2), -0.56, 0.56, lambda t: 0.10 + 0.05 * math.sin(math.pi * t))
+        line = curve(lambda x: -0.10 + 0.32 * (1.0 - (x / 0.64) ** 2), -0.64, 0.64, lambda t: 0.10 + 0.05 * math.sin(math.pi * t))
         return [(line, LINE, 1.0)]
     if kind == "squeeze":
-        line = curve(lambda x: 0.02 - 0.22 * (1.0 - (x / 0.55) ** 2), -0.55, 0.55, lambda t: 0.09 + 0.04 * math.sin(math.pi * t))
+        line = curve(lambda x: 0.02 - 0.22 * (1.0 - (x / 0.63) ** 2), -0.63, 0.63, lambda t: 0.09 + 0.04 * math.sin(math.pi * t))
         tension = curve(lambda x: 0.30 + 0.06 * x * -inner, -0.30, 0.30, 0.035)
         return [(line, LINE, 1.0), (tension, LINE, 0.3)]
     if kind == "sleep":
-        line = curve(lambda x: -0.06 - 0.20 * (1.0 - (x / 0.56) ** 2), -0.56, 0.56, lambda t: 0.10)
+        line = curve(lambda x: -0.06 - 0.20 * (1.0 - (x / 0.64) ** 2), -0.64, 0.64, lambda t: 0.10)
     else:  # blink: the lids meet just below the middle
-        line = curve(lambda x: -0.10 - 0.08 * (1.0 - (x / 0.58) ** 2), -0.58, 0.58, lambda t: 0.09 + 0.03 * math.sin(math.pi * t))
+        line = curve(lambda x: -0.10 - 0.08 * (1.0 - (x / 0.66) ** 2), -0.66, 0.66, lambda t: 0.09 + 0.03 * math.sin(math.pi * t))
     lashes = []
     for k in range(3):
         sx = -inner * (0.26 + 0.14 * k)
-        base_y = (-0.06 - 0.20 * (1.0 - (sx / 0.56) ** 2)) if kind == "sleep" else (-0.10 - 0.08 * (1.0 - (sx / 0.58) ** 2))
+        base_y = (-0.06 - 0.20 * (1.0 - (sx / 0.64) ** 2)) if kind == "sleep" else (-0.10 - 0.08 * (1.0 - (sx / 0.66) ** 2))
         lashes.append(stroke([(sx, base_y), (sx - inner * 0.09, base_y - 0.14)], [0.05, 0.015]))
     crease = curve(lambda x: 0.30 - 0.12 * (x / 0.5) ** 2, -0.44, 0.44, 0.04)
     return [(line, LINE, 1.0), (crease, LINE, 0.16)] + [(lash, LINE, 0.9) for lash in lashes]
@@ -291,11 +294,11 @@ def eyebrow(state, side):
 
 def mouth(state):
     s = []
-    lips = lambda shape, o=0.30: (shape, LIP, o)
+    lips = lambda shape, o=0.34: (shape, LIP, o)
     if state in ("Neutral", "Happy", "Sad", "Confused"):
         if state == "Neutral":
-            fn = lambda x: -0.02 + 0.06 * (x / 0.5) ** 2
-            x0, x1 = -0.46, 0.46
+            fn = lambda x: -0.03 + 0.11 * (x / 0.5) ** 2
+            x0, x1 = -0.50, 0.50
         elif state == "Happy":
             fn = lambda x: 0.04 - 0.30 * (1.0 - (x / 0.62) ** 2)
             x0, x1 = -0.62, 0.62
@@ -305,9 +308,11 @@ def mouth(state):
         else:
             fn = lambda x: 0.02 + 0.10 * math.sin((x + 0.5) * 2.4 * math.pi / 1.0) * 0.5 + 0.10 * x
             x0, x1 = -0.5, 0.5
-        lower_lip = curve(lambda x: fn(x) - 0.11, x0 * 0.75, x1 * 0.75, lambda t: 0.10 * math.sin(math.pi * t) + 0.02)
-        line = curve(fn, x0, x1, lambda t: 0.055 + 0.03 * math.sin(math.pi * t))
-        s += [lips(lower_lip, 0.22), (line, LINE, 0.9)]
+        lower_lip = curve(lambda x: fn(x) - 0.12, x0 * 0.72, x1 * 0.72, lambda t: 0.15 * math.sin(math.pi * t) + 0.02)
+        upper_lip = curve(lambda x: fn(x) + 0.07 - 0.03 * math.cos(math.pi * x / 0.4), x0 * 0.62, x1 * 0.62,
+                          lambda t: 0.07 * math.sin(math.pi * t) + 0.01)
+        line = curve(fn, x0, x1, lambda t: 0.060 + 0.035 * math.sin(math.pi * t))
+        s += [lips(lower_lip, 0.34), lips(upper_lip, 0.22), (line, LINE, 0.92)]
         if state == "Happy":
             for side in (-1.0, 1.0):
                 s.append((curve(lambda x, side=side: fn(side * 0.62) + 0.02 + 0.5 * (x - side * 0.62) * side,
@@ -387,9 +392,9 @@ def atlas():
 
 FEATURES = {
     # name: (x centre, y centre, width, height) in head-local metres on the face (male scale)
-    "eyeLeft": (0.054, -0.004, 0.076, 0.084), "eyeRight": (-0.054, -0.004, 0.076, 0.084),
+    "eyeLeft": (0.054, -0.004, 0.080, 0.074), "eyeRight": (-0.054, -0.004, 0.080, 0.074),
     "eyebrowLeft": (0.056, 0.056, 0.080, 0.044), "eyebrowRight": (-0.056, 0.056, 0.080, 0.044),
-    "mouth": (0.0, -0.082, 0.118, 0.072),
+    "mouth": (0.0, -0.084, 0.136, 0.080),
 }
 LIFT = 0.0012
 

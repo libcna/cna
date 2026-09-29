@@ -42,7 +42,11 @@ Shot shotFor(Framing framing,const std::vector<Xna::Vector3>& joints,float heigh
     };
     const float head=y(Head,height*0.86f),hips=y(BackLower,height*0.55f);
     switch(framing) {
-    case Framing::Head: return Shot{Xna::Vector3(0,head+0.07f,0),Xna::Vector3(0.12f,0.03f,0.80f),0.42f};
+    case Framing::Head: {
+        // In proportion to the head (joint to crown): catalogs differ in head size.
+        const float k=std::max(0.5f,(height-head)/0.36f);
+        return Shot{Xna::Vector3(0,head+0.095f*k,0),Xna::Vector3(0.12f*k,0.03f*k,0.92f*k),0.42f};
+    }
     case Framing::Body: {
         // The whole avatar, a little space above the head and under the feet.
         const float fov=0.50f;

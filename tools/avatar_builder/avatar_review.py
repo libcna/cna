@@ -96,9 +96,14 @@ PRESETS = []
 
 
 def head_height(catalogs, library, description):
-    """Height to frame the face at: between the Head joint and the top of the head."""
+    """(height to frame the face at, the head's span from its joint to the top): close-ups keep
+    their distance in proportion to the head, so a larger head is framed as a v2 head was."""
     joint, height = posed_joint(catalogs, library, description, "Stand0", 0.0, "Head")
-    return joint[1] + 0.52 * (height - joint[1])
+    return joint[1] + 0.52 * (height - joint[1]), height - joint[1]
+
+
+# Catalog v2's head span (Head joint to the top of a 1.80 m male), the close-ups' reference.
+REFERENCE_SPAN = 0.36
 
 
 def job(name, sheet, description, eye, target, fov, yaw=0.0, animation="Stand0", time=0.0, expression=None, label=None):
@@ -125,8 +130,9 @@ def build_jobs(catalogs, version):
         eye, target, fov = full_body(h)
         for view, yaw in (("front", 0.0), ("three-quarter", -35.0), ("profile", -90.0), ("back", 180.0)):
             jobs.append(job("views-%s-%s" % (body, view), "views", d, eye, target, fov, yaw, label="%s %s" % (body, view)))
-        head = head_height(catalogs, library, data)
-        jobs.append(job("views-%s-head" % body, "views", d, (0.16, head + 0.03, 0.84), (0.0, head - 0.01, 0.0), 0.5,
+        head, span = head_height(catalogs, library, data)
+        k = span / REFERENCE_SPAN
+        jobs.append(job("views-%s-head" % body, "views", d, (0.16 * k, head + 0.03 * k, 0.84 * k), (0.0, head - 0.01 * k, 0.0), 0.5,
                         label="%s head" % body))
         wrist, _ = posed_joint(catalogs, library, data, "Stand0", 0.0, "WristRight")
         tip, _ = posed_joint(catalogs, library, data, "Stand0", 0.0, "FingerMiddle3Right")
@@ -143,8 +149,9 @@ def build_jobs(catalogs, version):
         jobs.append(job("diverse-%02d" % seed, "diverse", d, eye, target, fov, -20.0, label="seed %d" % seed))
     if "faceControls" in manifest:
         d = heroes[1]
-        head = head_height(catalogs, library, d.encode())
-        close = ((0.0, head + 0.01, 0.80), (0.0, head - 0.02, 0.0), 0.5)
+        head, span = head_height(catalogs, library, d.encode())
+        k = span / REFERENCE_SPAN
+        close = ((0.0, head + 0.01 * k, 0.80 * k), (0.0, head - 0.02 * k, 0.0), 0.5)
         names = [c["name"] for c in manifest["faceControls"]["male"]]
         for index, name in enumerate(names):
             for value in (0, 255):
@@ -154,8 +161,9 @@ def build_jobs(catalogs, version):
                 jobs.append(job("faces-%02d-%d" % (index, value), "faces", v, *close, yaw=-15.0, label="%s %s" % (name, "-" if value == 0 else "+")))
         for seed in range(16):
             v = seeded(manifest, 100 + seed, version)
-            h = head_height(catalogs, library, v.encode())
-            jobs.append(job("faces-random-%02d" % seed, "faces", v, (0.0, h + 0.01, 0.80), (0.0, h - 0.02, 0.0), 0.5, yaw=-15.0,
+            h, span = head_height(catalogs, library, v.encode())
+            k = span / REFERENCE_SPAN
+            jobs.append(job("faces-random-%02d" % seed, "faces", v, (0.0, h + 0.01 * k, 0.80 * k), (0.0, h - 0.02 * k, 0.0), 0.5, yaw=-15.0,
                             label="random face %d" % seed))
     presets = manifest["animations"]["presets"]
     for index, preset in enumerate(presets):
@@ -167,8 +175,9 @@ def build_jobs(catalogs, version):
             jobs.append(job("animations-%02d-%d" % (index, k), "animations", d, eye, target, fov, -20.0, preset,
                             duration * fraction, label="%s %.2fs" % (preset, duration * fraction)))
     d = heroes[1]
-    head = head_height(catalogs, library, d.encode())
-    close = ((0.0, head + 0.01, 0.72), (0.0, head - 0.02, 0.0), 0.42)
+    head, span = head_height(catalogs, library, d.encode())
+    k = span / REFERENCE_SPAN
+    close = ((0.0, head + 0.01 * k, 0.72 * k), (0.0, head - 0.02 * k, 0.0), 0.42)
     for state, name in enumerate(preview.MOUTHS):
         jobs.append(job("expressions-mouth-%02d" % state, "expressions", d, *close, expression=[state, 0, 0, 0, 0],
                         label="mouth %s" % name))

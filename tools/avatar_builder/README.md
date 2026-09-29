@@ -12,10 +12,11 @@ python3 tools/avatar_builder/generate_avatar_catalog.py --check   # verify (also
 python3 tools/avatar_builder/generate_avatar_catalog.py --out DIR # write elsewhere
 ```
 
-It writes catalog v2 to `modules/gamer-services/assets/avatars/v2/`; every `v<N>/` directory there
+It writes catalog v3 to `modules/gamer-services/assets/avatars/v3/`; every `v<N>/` directory there
 is embedded into the gamer-services library (`cmake/EmbedBinaryFiles.cmake`). A catalog must never
 change once descriptions can name it: catalog v1 is frozen (its generator is in Git history,
-commit 6ca06d069), and changed or new items go into a new version, distributed by the CNA service
+commit 6ca06d069), so is catalog v2 (this generator at commit d1730d4f3), and changed or new items
+go into a new version, distributed by the CNA service
 (`docs/gamer-services-server.md`) to builds that do not embed it.
 
 ## Modules
@@ -50,14 +51,15 @@ real renderer and iterated quickly on the CPU:
 
 ```
 A=modules/gamer-services/assets/avatars; R=/rv/tmp/avatar-polish/review
-python3 tools/avatar_builder/avatar_review.py jobs --catalogs $A --version 1 --out $R/jobs.json
+python3 tools/avatar_builder/avatar_review.py jobs --catalogs $A --version 3 --out $R/jobs.json
 python3 tools/avatar_builder/avatar_review.py preview $R/jobs.json $R/preview --catalogs $A   # numpy + Pillow
 tools/platform/run_gpu_tests_private.sh --exec $PWD/cmake-build-opengl33/cna_avatar_review $R/jobs.json $R/gpu
 python3 tools/avatar_builder/avatar_review.py sheets $R/jobs.json $R/gpu $R/sheets
 ```
 
 The jobs cover a female and a male avatar from the front, three-quarter, profile and back with
-head, hand and feet close-ups; 24 seeded random avatars; four key frames of every preset; and every
+head, hand and feet close-ups (close-ups keep their distance in proportion to the avatar's own head,
+so catalogs with different head sizes are framed alike); 24 seeded random avatars; four key frames of every preset; and every
 eye, eyebrow and mouth state plus independent left/right combinations. `cna_avatar_review`
 (`modules/gamer-services/examples/avatar_review/`) draws them through the standard XNA avatar API
 only. The CPU preview (`cna_avatar/preview.py`) assembles descriptions, samples animations,

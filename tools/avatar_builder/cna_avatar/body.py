@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""The catalog v2 bodies: soft, rounded toy-like figures skinned to the 71-slot rig.
+"""The catalog v3 bodies: soft, rounded toy-like figures skinned to the 71-slot rig.
 
 Limbs are single lofts from the shoulder or hip to the wrist or ankle, so elbows and knees bend
 one continuous surface instead of meeting capsules; hands are sculpted (palm pad, knuckles,
@@ -32,7 +32,11 @@ LEG = {
                (0.52, 0.052, 0.054), (0.60, 0.053, 0.056), (0.70, 0.054, 0.057), (0.86, 0.042, 0.043),
                (1.00, 0.035, 0.036)],
 }
-NECK = {"male": 0.054, "female": 0.047}
+# Catalog v3: sturdier limbs than v2's, in the same shapes.
+_LIMB = {"male": 1.17, "female": 1.14}
+ARM = {b: [(t, w * _LIMB[b], d * _LIMB[b]) for t, w, d in rows] for b, rows in ARM.items()}
+LEG = {b: [(t, w * _LIMB[b], d * _LIMB[b]) for t, w, d in rows] for b, rows in LEG.items()}
+NECK = {"male": 0.056, "female": 0.049}
 FOOT = {"male": (0.034, 0.032, 0.090), "female": (0.031, 0.030, 0.082)}
 HAND = {"male": dict(palm=(0.047, 0.021, 0.080), finger=0.0126, thumb=0.0142),
         "female": dict(palm=(0.042, 0.019, 0.074), finger=0.0112, thumb=0.0128)}
@@ -61,10 +65,14 @@ def anchors(body):
             "upper": p["back_upper"], "collar": p["collar"][1], "neck": p["neck"]}
 
 
+# Catalog v3: a slightly broader, deeper chest and belly.
+TORSO_SCALE = (1.04, 1.03)
+
+
 def torso_sections(body, inflate=0.0, scale=1.0):
     """(centre, half-width, half-depth, squareness) rows, crotch to neck."""
     a = anchors(body)
-    return [((0.0, a[anchor] + offset, z), rx * scale + inflate, rz * scale + inflate, n)
+    return [((0.0, a[anchor] + offset, z), rx * TORSO_SCALE[0] * scale + inflate, rz * TORSO_SCALE[1] * scale + inflate, n)
             for anchor, offset, rx, rz, z, n in TORSO[body]]
 
 

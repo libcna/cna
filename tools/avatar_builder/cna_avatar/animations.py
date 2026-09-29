@@ -76,13 +76,14 @@ def build_clips():
     clips = []
     c = lambda *a, **k: clips.append(Clip(*a, **k)) or clips[-1]
 
-    # --- Stand0: relaxed idle with a small sway -------------------------------------------------
+    # --- Stand0: relaxed idle, swaying from foot to foot with the head following ----------------
     clip = c("Stand0", 6.0, loop=True)
-    for k in range(9):
-        t = 6.0 * k / 8
-        phase = 2 * math.pi * k / 8
-        clip.key(t, finish(stance("male", root=(0.008 * math.sin(phase), 0.0, 0.0), breath=math.sin(2 * phase),
-                                  lean=-0.8 * math.sin(phase), tilt=0.8 * math.sin(phase))))
+    for k in range(17):
+        t = 6.0 * k / 16
+        phase = 2 * math.pi * k / 16
+        clip.key(t, finish(stance("male", root=(0.016 * math.sin(phase), 0.0, 0.0), breath=1.3 * math.sin(2 * phase),
+                                  lean=-1.8 * math.sin(phase), tilt=2.2 * math.sin(phase), turn=6.0 * math.sin(phase + 0.8),
+                                  nod=1.5 * math.sin(2 * phase + 0.5))))
     clip.face(0.0).blinks([1.4, 4.2])
 
     # --- Stand1: hands clasped behind the back --------------------------------------------------
@@ -136,7 +137,7 @@ def build_clips():
     clip = c("Stand5", 7.0, loop=True)
     for k in range(15):
         t = 7.0 * k / 14
-        shift = 0.035 * (0.5 - 0.5 * math.cos(2 * math.pi * k / 14))
+        shift = 0.05 * (0.5 - 0.5 * math.cos(2 * math.pi * k / 14))
         tap = 0.03 if k in (4, 6, 8) else 0.0
         p = stance("male", root=(shift, -0.01 * shift / 0.035, 0.0), lean=-3.0 * shift / 0.035,
                    tilt=2.5 * shift / 0.035, breath=math.sin(2 * math.pi * k / 7))
@@ -319,8 +320,8 @@ def build_clips():
     clip.key(0.0, finish(stance("female")))
     for t, back in ((0.35, 0.04), (1.0, 0.05), (2.2, 0.05)):
         p = stance("female", root=(0.0, 0.0, -back), bend=-8.0, nod=-6.0, relaxed=False)
-        p.reach("Left", p.face(0.11, -0.15, 0.05), pole=(1.0, -1.0, 0.0), hand=(-80.0, 0.0, 170.0))
-        p.reach("Right", p.face(-0.11, -0.15, 0.05), pole=(-1.0, -1.0, 0.0), hand=(-80.0, 0.0, 170.0))
+        p.reach("Left", p.face(0.13, -0.13, 0.09), pole=(1.0, -1.0, 0.0), hand=(-80.0, 0.0, 170.0))
+        p.reach("Right", p.face(-0.13, -0.13, 0.09), pole=(-1.0, -1.0, 0.0), hand=(-80.0, 0.0, 170.0))
         p.fingers("Left", 0.1, spread=1.0).fingers("Right", 0.1, spread=1.0)
         clip.key(t, finish(p))
     clip.key(3.5, finish(stance("female")))

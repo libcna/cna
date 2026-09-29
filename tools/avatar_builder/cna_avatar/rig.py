@@ -43,17 +43,18 @@ SIDES = (("Left", 1.0), ("Right", -1.0))
 
 BODY_TYPES = ("female", "male")
 
-# Authored proportions (catalog v2: a larger head, shorter neck and sturdier hands than v1); the
-# renderer scales uniformly to a description's height.
+# Authored proportions (catalog v3: a head about a fifth larger on a shorter neck, the shoulders
+# and chest lowered to meet it, shorter legs, sturdier limbs and larger hands -- a friendlier
+# toy-like figure); the renderer scales uniformly to a description's height.
 PROPORTIONS = {
-    "male": dict(height=1.80, head_center=1.604, head_joint=1.440, neck=1.388, collar=(0.034, 1.352),
-                 shoulder=(0.178, 1.328), back_upper=1.125, back_lower=0.930, hip=(0.094, 0.848),
-                 knee=(0.098, 0.468), ankle=(0.098, 0.082), toe=(0.098, 0.024, 0.122), arm_angle=71.0,
-                 upper_arm=0.258, forearm=0.236, hand=1.12),
-    "female": dict(height=1.68, head_center=1.493, head_joint=1.338, neck=1.294, collar=(0.031, 1.262),
-                   shoulder=(0.160, 1.242), back_upper=1.050, back_lower=0.872, hip=(0.097, 0.795),
-                   knee=(0.093, 0.440), ankle=(0.090, 0.078), toe=(0.090, 0.021, 0.110), arm_angle=71.0,
-                   upper_arm=0.236, forearm=0.218, hand=1.02),
+    "male": dict(height=1.80, head_center=1.566, head_joint=1.369, neck=1.321, collar=(0.037, 1.290),
+                 shoulder=(0.190, 1.266), back_upper=1.078, back_lower=0.890, hip=(0.100, 0.806),
+                 knee=(0.101, 0.444), ankle=(0.100, 0.082), toe=(0.100, 0.024, 0.132), arm_angle=73.0,
+                 upper_arm=0.246, forearm=0.222, hand=1.40),
+    "female": dict(height=1.68, head_center=1.457, head_joint=1.270, neck=1.227, collar=(0.034, 1.198),
+                   shoulder=(0.170, 1.178), back_upper=1.003, back_lower=0.834, hip=(0.102, 0.760),
+                   knee=(0.096, 0.420), ankle=(0.092, 0.078), toe=(0.092, 0.021, 0.120), arm_angle=73.0,
+                   upper_arm=0.226, forearm=0.206, hand=1.28),
 }
 FINGER_SEGMENTS = {"Index": (0.027, 0.019, 0.014), "Middle": (0.029, 0.021, 0.015),
                    "Ring": (0.027, 0.019, 0.014), "Small": (0.022, 0.016, 0.012), "Thumb": (0.026, 0.021, 0.015)}

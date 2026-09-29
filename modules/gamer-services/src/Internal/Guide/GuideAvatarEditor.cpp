@@ -270,8 +270,8 @@ public:
         auto shot=shotFor(framingOf(view),joints,height,aspect*usable);
         if(view==Av::EditorView::Head&&joints.size()>19) {
             // Head and shoulders with room for hair and a hat: wider than a portrait's head.
-            const float head=joints[19].Y,bottom=head-0.16f,top=head+0.38f;
-            const float half=std::max((top-bottom)/2,0.15f/(aspect*usable));
+            const float head=joints[19].Y,span=height-head,bottom=head-0.44f*span,top=head+1.06f*span;
+            const float half=std::max((top-bottom)/2,0.42f*span/(aspect*usable));
             shot.target=Xna::Vector3(0,(bottom+top)/2,0);
             shot.offset=Xna::Vector3(0,0.04f,half/std::tan(shot.fov/2));
         }
