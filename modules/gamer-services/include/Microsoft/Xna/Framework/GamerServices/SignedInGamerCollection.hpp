@@ -18,12 +18,13 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Brings GamerCollection<SignedInGamer>::operator[](int) into scope.
          *
-         * CNAEXT: without this, declaring the PlayerIndex overload below would hide the
-         * inherited int overload per C++ name-hiding rules (C# has no equivalent hiding for
-         * overloads with new parameter types) — FNA code such as
-         * `Gamer.SignedInGamers[i]` with an int index relies on that inherited overload.
+         * Without this, declaring the PlayerIndex overload below would hide the inherited
+         * int overload per C++ name-hiding rules (C# has no equivalent hiding for overloads
+         * with new parameter types) — FNA code such as `Gamer.SignedInGamers[i]` with an int
+         * index relies on that inherited overload. It restores XNA API rather than adding any,
+         * so it carries no CNAEXT marker (which C++ cannot attach to a using-declaration).
          */
-        CNAEXT using GamerCollection<SignedInGamer>::operator[];
+        using GamerCollection<SignedInGamer>::operator[];
 
         /**
          * @brief Gets the signed-in gamer for the specified player index.

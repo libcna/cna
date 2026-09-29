@@ -22,11 +22,11 @@ namespace Microsoft::Xna::Framework
     {
     public:
         /** @brief Element count type for C++ container compatibility. */
-        CNAEXT using size_type = std::vector<IGameComponent*>::size_type;
+        using size_type CNAEXT = std::vector<IGameComponent*>::size_type;
         /** @brief Mutable iterator over components (replaces IEnumerable<IGameComponent>). */
-        CNAEXT using iterator = std::vector<IGameComponent*>::iterator;
+        using iterator CNAEXT = std::vector<IGameComponent*>::iterator;
         /** @brief Read-only iterator over components. */
-        CNAEXT using const_iterator = std::vector<IGameComponent*>::const_iterator;
+        using const_iterator CNAEXT = std::vector<IGameComponent*>::const_iterator;
 
         /**
          * @brief Event that is triggered when a GameComponent is added to this collection.

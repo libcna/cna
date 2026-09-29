@@ -14,11 +14,11 @@ namespace Microsoft::Xna::Framework
     {
     public:
         /** @brief Underlying container type. */
-        CNAEXT using container_type = std::vector<CurveKey>;
+        using container_type CNAEXT = std::vector<CurveKey>;
         /** @brief Mutable iterator over the key sequence. */
-        CNAEXT using iterator = container_type::iterator;
+        using iterator CNAEXT = container_type::iterator;
         /** @brief Immutable iterator over the key sequence. */
-        CNAEXT using const_iterator = container_type::const_iterator;
+        using const_iterator CNAEXT = container_type::const_iterator;
 
         /**
          * @brief Returns the count of keys in this collection.

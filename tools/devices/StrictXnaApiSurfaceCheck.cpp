@@ -48,6 +48,23 @@
 #include "System/Exception.hpp"
 #include "System/TimeSpan.hpp"
 
+// Every header of this target's modules whose declarations carry CNAEXT on a `using` line
+// (gamer-services, net and content-pipeline are not linked here). An attribute is only valid
+// after an alias name (`using X CNAEXT = ...`) and never on a using-declaration, and a header
+// that gets this wrong compiles in normal builds while breaking every strict-mode consumer --
+// House Simulator's strict gate hit exactly that (its BL-18). Including them here keeps the
+// placement compiling under CNA_STRICT_XNA_API. The headers' own uses of CNAEXT types are not
+// calls made by this file, so deprecation is silenced while they are parsed; a misplaced
+// attribute is a syntax error either way.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
+#include "Microsoft/Xna/Framework/CurveKeyCollection.hpp"
+#include "Microsoft/Xna/Framework/GameComponentCollection.hpp"
+#include "Microsoft/Xna/Framework/GameWindow.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
+#pragma GCC diagnostic pop
+
 using namespace Microsoft::Devices;
 using namespace Microsoft::Devices::Sensors;
 using Microsoft::Xna::Framework::Matrix;

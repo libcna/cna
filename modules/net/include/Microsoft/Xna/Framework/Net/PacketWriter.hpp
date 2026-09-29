@@ -52,12 +52,13 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Brings BinaryWriter's other Write(...) overloads into scope.
          *
-         * CNAEXT: without this, declaring PacketWriter's own Write(Color)/Write(Matrix)/…
-         * overloads would hide all of BinaryWriter's unrelated Write(...) overloads per
-         * C++ name-hiding rules (C# has no equivalent hiding for overloads with new
-         * parameter types), silently breaking calls like Write(intcs) or Write(bool).
+         * Without this, declaring PacketWriter's own Write(Color)/Write(Matrix)/… overloads
+         * would hide all of BinaryWriter's unrelated Write(...) overloads per C++ name-hiding
+         * rules (C# has no equivalent hiding for overloads with new parameter types), silently
+         * breaking calls like Write(intcs) or Write(bool). The inherited overloads are XNA API,
+         * so this carries no CNAEXT marker (which C++ cannot attach to a using-declaration).
          */
-        CNAEXT using System::IO::BinaryWriter::Write;
+        using System::IO::BinaryWriter::Write;
 
         /** @brief Constructs an empty PacketWriter over a new backing buffer. */
         PacketWriter();

@@ -23,14 +23,14 @@ namespace Microsoft::Xna::Framework::Graphics
      * this real-Model-facing path and the Avatar-facing SkinnedModelEXT path share the exact
      * same keyframe representation and content-loading code.
      */
-    CNAEXT using Keyframe = KeyframeEXT;
+    using Keyframe CNAEXT = KeyframeEXT;
 
     /**
      * @brief A named animation clip: a fixed duration and a set of per-bone keyframe tracks.
      *
      * @note CNAEXT — see Keyframe above. A direct alias of AnimationClipEXT.
      */
-    CNAEXT using AnimationClip = AnimationClipEXT;
+    using AnimationClip CNAEXT = AnimationClipEXT;
 
     /**
      * @brief The skeleton and animation clip data needed to play back skeletal animation for

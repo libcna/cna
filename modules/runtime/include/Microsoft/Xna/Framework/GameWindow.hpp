@@ -49,9 +49,9 @@ namespace Microsoft::Xna::Framework
 
     public:
         /** @brief String type alias for C++ compatibility. */
-        CNAEXT using String = SharpRuntime::String;
+        using String CNAEXT = SharpRuntime::String;
         /** @brief Integer type alias matching the C# int used in the XNA API. */
-        CNAEXT using intcs = SharpRuntime::intcs;
+        using intcs CNAEXT = SharpRuntime::intcs;
 
         /** @brief Raised when the client area size changes. */
         System::EventHandler<System::EventArgs> ClientSizeChanged;

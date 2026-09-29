@@ -24,7 +24,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
      * is scheduled and written by the same registry as a native one, and it carries the stable
      * .NET type name the XNB writer needs to spell a reader.
      */
-    CNAEXT using ContentObject = CNA::Content::Pipeline::ContentValue;
+    using ContentObject CNAEXT = CNA::Content::Pipeline::ContentValue;
 
     /** @brief An `object` payload is named as `System.Object`. */
     template<>

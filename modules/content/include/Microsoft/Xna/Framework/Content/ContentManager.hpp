@@ -310,7 +310,7 @@ namespace Microsoft::Xna::Framework::Content
          * recursively loading any files it references), and returns a constructed T.
          */
         template <typename T>
-        CNAEXT using CnjLoaderFn = std::function<T(const std::string& cnjJson, ContentManager& cm)>;
+        using CnjLoaderFn CNAEXT = std::function<T(const std::string& cnjJson, ContentManager& cm)>;
 
         /**
          * @brief Registers a named .cnj loader for asset type T, selected by the .cnj
@@ -392,7 +392,7 @@ namespace Microsoft::Xna::Framework::Content
          * constructed T.
          */
         template <typename T>
-        CNAEXT using CnbLoaderFn =
+        using CnbLoaderFn CNAEXT =
             std::function<T(const CNA::Content::Cnb::CnbDocument& document, ContentManager& cm)>;
 
         /**
