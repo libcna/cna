@@ -19,6 +19,9 @@ struct Configuration {
     bool avatarCatalogUpdates = true;
     /** @brief Largest avatar catalog pack installed, in bytes. */
     std::uint64_t maxAvatarCatalogBytes = std::uint64_t{64} << 20;
+    /** @brief This game's version ("1.2.0"), stated to the service, which may refuse versions older
+     * than it accepts (XNA GameUpdateRequiredException). Empty states none. */
+    std::string titleVersion;
 };
 /** @brief Overrides deployment configuration before dispatcher initialization.
  * @param configuration Complete override; nullopt removes it. */

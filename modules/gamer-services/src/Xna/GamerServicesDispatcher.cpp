@@ -105,7 +105,7 @@ void GamerServicesDispatcher::Update() {
             using Type=CNA::Internal::GamerServices::BackendEvent::Type;
             if(event.type==Type::Completion){if(event.completion)event.completion();continue;}
             if(event.slot<0||event.slot>3)continue;
-            if(event.type==Type::Failed) { Guide::OnSignInResult(event.slot, false); continue; }
+            if(event.type==Type::Failed) { Guide::OnSignInResult(event.slot, false, event.error); continue; }
             if(event.type!=Type::SignedIn&&event.type!=Type::SignedOut)continue;
             if(auto* previous=slots[event.slot]) {
                 // Reference HandlePlayerSignInChanged: the old gamer is disposed, then SignedOut is raised.

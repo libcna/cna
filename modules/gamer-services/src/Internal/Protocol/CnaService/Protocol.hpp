@@ -40,6 +40,12 @@ Json parse(std::string_view bytes);
 void validateRequest(const Json& request);
 /** @brief Validates an identifier. @param value Identifier bytes. @return Whether accepted. */
 bool identifier(std::string_view value);
+/** @brief Validates a game version: one to four dot-separated decimal numbers ("1.2.10").
+ * @param value Version text. @return Whether accepted. */
+bool validVersion(std::string_view value);
+/** @brief Orders two valid versions numerically, a missing part counting as 0.
+ * @param a Version. @param b Version. @return Negative, zero or positive. */
+int compareVersions(std::string_view a, std::string_view b);
 /** @brief Gets a bounded string field. @param value Source object. @param key Field name.
  * @param maximum Byte limit. @return Field value. */
 std::string stringField(const Json& value, std::string_view key, std::size_t maximum);

@@ -42,3 +42,21 @@ TEST(ServiceConfigurationTest, AvatarCatalogUpdatesAreOnByDefaultAndCanBeTurnedO
     if (previous) setenv("CNA_AVATAR_CATALOG_UPDATES", saved.c_str(), 1);
     else unsetenv("CNA_AVATAR_CATALOG_UPDATES");
 }
+TEST(ServiceConfigurationTest, TheGameVersionIsStatedWhenConfiguredAndMustBeWellFormed) {
+    EXPECT_TRUE(Configuration{}.titleVersion.empty());
+    Configuration configured;
+    configured.titleVersion = "1.2.10";
+    EXPECT_NO_THROW(validateConfiguration(configured));
+    for (const auto* bad : {"1.x", "1..2", "v1", "1.2.3.4.5"}) {
+        configured.titleVersion = bad;
+        EXPECT_THROW(validateConfiguration(configured), std::runtime_error) << bad;
+    }
+    const auto* previous = std::getenv("CNA_GAME_VERSION");
+    const std::string saved = previous ? previous : "";
+    setenv("CNA_GAME_VERSION", "2.0", 1);
+    EXPECT_EQ(resolveConfiguration().titleVersion, "2.0");
+    setenv("CNA_GAME_VERSION", "two", 1);
+    EXPECT_THROW((void)resolveConfiguration(), std::runtime_error);
+    if (previous) setenv("CNA_GAME_VERSION", saved.c_str(), 1);
+    else unsetenv("CNA_GAME_VERSION");
+}

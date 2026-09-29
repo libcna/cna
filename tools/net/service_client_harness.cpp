@@ -12,6 +12,7 @@
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
 #include "../../modules/gamer-services/src/Internal/Guide/GuideUi.hpp"
+#include "../../modules/gamer-services/src/Internal/Guide/GuideSystem.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GuideAlreadyVisibleException.hpp"
@@ -172,7 +173,7 @@ int main(int argc,char** argv) {
             check(Guide::GetPendingKeyboardInputDisplayTextForTestingEXT()==std::string(secret.size(),'*'),"password masking");
             Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextInput(u'\r');
             check(collection->getCountProperty()==i,"authentication published before Update");
-            if(real&&std::string(argv[4])=="reject") {
+            if(real&&(action=="reject"||action=="update-required")) {
                 const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(15);
                 while(!Guide::getHasPendingMessageBoxEXTProperty()) {
                     GamerServicesDispatcher::Update();
@@ -180,6 +181,10 @@ int main(int argc,char** argv) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 }
                 check(collection->getCountProperty()==0&&signedIn==0,"rejected identity published");
+                // A version the title no longer accepts says so (XNA LIVEnTitleUpdateRequired).
+                const auto box=CNA::Internal::GamerServices::GuideUi::pendingMessageBox();
+                const bool updateText=box&&box->text.find("no longer supported")!=std::string::npos;
+                check(updateText==(action=="update-required"),"update-required explanation");
                 Guide::SimulateMessageBoxClickEXT(0);check(!Guide::getIsVisibleProperty(),"error pane cleanup");
                 std::cout<<checks<<" rejection checks passed\n";return 0;
             }

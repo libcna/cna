@@ -294,3 +294,14 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
   Guide's head portraits frame in proportion to the head (v3's larger head was cropped).
   Open: clothing re-sculpt (folds, thicker garments), hand re-sculpt (finger separation), baked
   occlusion/material pass. GS 588 + 1 skip.
+- GSX-E4 (title updates, **XNA** + **POL**). `GamerServicesComponent.Initialize` subscribes
+  `InstallingTitleUpdate` and exits the game (XNA IL); the event is still never raised because CNA
+  installs no title updates (**NO**, reason stated). **POL** version gate: a title may set the oldest
+  game version it accepts (server migration 019, admin `title-minimum-version`, envelope field
+  `titleVersion` sent only to a service advertising `title-version`); older clients and clients
+  stating none get `UPDATE_REQUIRED`, which the sign-in Guide explains and a starting network session
+  throws as `GameUpdateRequiredException` (XNA's `LIVEnTitleUpdateRequired` mapping). Client
+  `titleVersion` / `CNA_GAME_VERSION`. Tests: server `service_unit` (syntax, order, refusal, hello),
+  e2e `service_tls_e2e` (older and missing versions refused with the explanation), configuration.
+  The GamerServicesComponent subscription itself has no unit test, per the file's recorded reason
+  (a Game needs a live backend). Also: the client checks `leaderboard-list` before `leaderboards.list`.

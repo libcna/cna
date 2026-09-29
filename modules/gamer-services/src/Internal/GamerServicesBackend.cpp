@@ -177,10 +177,13 @@ public:
                 if(!previous.empty()){try{(void)exchange("auth.logout",Json::object(),previous);}catch(...){}}
                 readGameDefaults(person,signedInToken);
                 event.type=BackendEvent::Type::SignedIn;event.identity=std::move(person);
-            }catch(const std::exception&){
+            }catch(const std::exception& failure){
                 if(issuedToken.size()==64){try{(void)request("auth.logout",Json::object(),issuedToken);}catch(...){}}
                 {std::lock_guard lock(slotMutex_);if(slots_[slot].generation==generation)slots_[slot].busy=false;}
                 event.type=BackendEvent::Type::Failed;event.error="Sign-in failed.";
+                // The one reason the player can act on: the service no longer accepts this game version.
+                if(const auto* refused=dynamic_cast<const ServiceError*>(&failure);refused&&refused->code=="UPDATE_REQUIRED")
+                    event.error="UPDATE_REQUIRED";
             }
             std::fill(password.begin(),password.end(),'\0');return event;
         });
@@ -537,6 +540,8 @@ private:
         const auto id=prefix_+"-"+std::to_string(++sequence_);
         Json request{{"v",1},{"id",id},{"game",config_.gameId},{"op",op},{"args",std::move(args)}};
         if(!token.empty())request["token"]=token;
+        // Stated to a service that checks it; an older one would refuse the unknown field.
+        if(!config_.titleVersion.empty()&&capabilities_.contains("title-version"))request["titleVersion"]=config_.titleVersion;
         const auto bytes=request.dump();if(bytes.size()>CnaService::MaxMessageBytes)throw Unavailable("Service request limit exceeded.");
         // One handle for every exchange (all under transportMutex_) keeps its connection open
         // between requests, sparing a TCP and TLS handshake each.
@@ -622,6 +627,7 @@ private:
             if(op=="reviews.submit"&&!capabilities_.contains("player-reviews"))throw Unavailable("CNA service player-review capability missing.");
             if(op=="leaderboards.game.abort"&&!capabilities_.contains("leaderboard-epoch-abort"))throw Unavailable("CNA service leaderboard abort capability missing.");
             if(op.starts_with("leaderboards.game.")&&!capabilities_.contains("local-leaderboard-commit"))throw Unavailable("CNA service local leaderboard commit capability missing.");
+            if(op=="leaderboards.list"&&!capabilities_.contains("leaderboard-list"))throw Unavailable("CNA service leaderboard-list capability missing.");
             if(op.starts_with("leaderboards.")&&!capabilities_.contains("leaderboard-reads"))throw Unavailable("CNA service leaderboard-read capability missing.");
             if(op=="assets.read"&&!capabilities_.contains("assets"))throw Unavailable("CNA service asset capability missing.");
             if(op=="avatars.catalogPack"&&!capabilities_.contains("avatar-catalog-packs"))throw Unavailable("CNA service catalog pack capability missing.");

@@ -7,6 +7,7 @@
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionJoinException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GameUpdateRequiredException.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
@@ -63,6 +64,9 @@ void throwOnlineEndFailure(std::exception_ptr error,bool joining) {
         if(code=="NOT_AUTHORIZED"||code=="UNAUTHENTICATED")
             throw GamerPrivilegeException("A local gamer is not signed in with the privilege this network session requires.",error);
         if(code=="NOT_SUPPORTED")throw NetworkNotAvailableException("The CNA online session service is not available.",error);
+        if(code=="UPDATE_REQUIRED")
+            throw Microsoft::Xna::Framework::GamerServices::GameUpdateRequiredException(
+                "This version of the game is no longer supported by CNA Gamer Services. Install the latest version.");
         throw NetworkException("A network communication failure prevented the network session from starting.",error);
     }
 }

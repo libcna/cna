@@ -1017,14 +1017,18 @@ namespace Microsoft::Xna::Framework::GamerServices
         signInPaneCount = paneCount; signInSlot = 0; signInActive = true; signInLocal = !service; signInOnlineOnly = onlineOnly;
         try { StartSignInPane(); } catch (...) { signInActive = false; SyncTouchInputSuppression(); throw; }
     }
-    void Guide::OnSignInResult(int slot, bool success) {
+    void Guide::OnSignInResult(int slot, bool success, const std::string& reason) {
         if (!signInActive || slot != signInSlot) return;
         if (signInLocal && !success) return;
         if (success) { ++signInSlot; StartSignInPane(); }
         else {
             signInActive = false;
             CNA::Internal::GamerServices::GuideUi::closeAll();
-            (void)CNA::Internal::GamerServices::showGuideMessageBox(static_cast<PlayerIndex>(slot), "CNA Gamer Services", "Sign-in failed. Check the account and service connection.",
+            // XNA's LIVEnTitleUpdateRequired, in CNA's words.
+            const char* text = reason == "UPDATE_REQUIRED"
+                ? "This version of the game is no longer supported by CNA Gamer Services. Install the latest version to sign in."
+                : "Sign-in failed. Check the account and service connection.";
+            (void)CNA::Internal::GamerServices::showGuideMessageBox(static_cast<PlayerIndex>(slot), "CNA Gamer Services", text,
                 {"OK"}, 0, MessageBoxIcon::Error, [](System::IAsyncResult& result) {
                     std::unique_ptr<System::IAsyncResult> owned(&result); (void)Guide::EndShowMessageBox(&result);
                 }, {});

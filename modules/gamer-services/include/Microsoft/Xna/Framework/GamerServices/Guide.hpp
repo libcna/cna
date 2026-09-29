@@ -611,7 +611,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     private:
         friend class GamerServicesDispatcher;
-        static void OnSignInResult(int slot, bool success);
+        static void OnSignInResult(int slot, bool success, const std::string& reason = {});
         static bool simulateTrialMode_;
         static bool isTrialMode_;
         static NotificationPosition position_;
