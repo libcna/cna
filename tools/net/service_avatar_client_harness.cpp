@@ -131,9 +131,9 @@ int main(int argc,char** argv) {
         const auto stored=own.getDescriptionProperty();
         Avatars::AvatarEditorModel editor(catalog,std::vector<std::uint8_t>(stored.begin(),stored.end()),1);
         check(!editor.differsFromStored(),"the editor starts from the stored avatar");
-        editor.turnPage(2);
+        editor.setCategory(Avatars::EditorCategory::Hair);
         editor.select(1);
-        check(editor.field(editor.selection()).label=="Hair color","style page, hair color row");
+        check(editor.field(editor.selection()).label=="Hair color","hair category, hair color row");
         check(editor.adjust(1)&&editor.differsFromStored(),"an edit");
         const auto edited=editor.encoded();
         long long revision=0;

@@ -141,6 +141,7 @@ public:
             list.push_back({Icon::Message,"Messages"});
         }
         list.push_back({Icon::Trophy,"Achievements"});
+        list.push_back({Icon::Pencil,"Edit avatar"});
         if(a==Access::Account)list.push_back({Icon::Settings,"Online status and gamer zone"});
         list.push_back({Icon::SignOut,"Sign out"});
         return list;
@@ -160,6 +161,7 @@ public:
         } else if(label.starts_with("Friends")) replace(friendsScreen(player));
         else if(label=="Messages") replace(messagesScreen(player));
         else if(label=="Achievements") replace(achievementsScreen(player));
+        else if(label=="Edit avatar") push(avatarEditorScreen(player));
         else if(label.starts_with("Online status")) replace(settingsScreen(player));
         else if(label=="Sign out") {
             auto* gamer=signedIn(player);

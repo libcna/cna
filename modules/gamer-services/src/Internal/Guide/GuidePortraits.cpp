@@ -17,6 +17,45 @@ namespace GS = Microsoft::Xna::Framework::GamerServices;
 constexpr int KeepFrames=240;
 }
 
+std::vector<Xna::Vector3> bindJoints(const GS::AvatarRenderer& renderer)
+{
+    const auto parents=renderer.getParentBonesProperty();
+    const auto bind=renderer.getBindPoseProperty();
+    std::vector<Xna::Vector3> world(static_cast<std::size_t>(bind.getCountProperty()));
+    for(int bone=0;bone<bind.getCountProperty();++bone) {
+        const auto local=bind[bone].getTranslationProperty();
+        world[static_cast<std::size_t>(bone)]=parents[bone]<0?local:world[static_cast<std::size_t>(parents[bone])]+local;
+    }
+    return world;
+}
+
+Shot shotFor(Framing framing,const std::vector<Xna::Vector3>& joints,float height,float aspect)
+{
+    // Bones of the standard avatar skeleton.
+    constexpr std::size_t BackLower=1,Knee=6,Ankle=11,Head=19;
+    auto y=[&](std::size_t bone,float fallback){return bone<joints.size()?joints[bone].Y:fallback;};
+    // A vertical span and a width that must both fit, seen a little from the side and above.
+    auto span=[&](float bottom,float top,float width,float fov,float side,float lift) {
+        const float half=std::max((top-bottom)/2,width/2/aspect)*1.06f;
+        const float distance=half/std::tan(fov/2);
+        return Shot{Xna::Vector3(0,(bottom+top)/2,0),Xna::Vector3(side*distance,lift*distance,distance),fov};
+    };
+    const float head=y(Head,height*0.86f),hips=y(BackLower,height*0.55f);
+    switch(framing) {
+    case Framing::Head: return Shot{Xna::Vector3(0,head+0.07f,0),Xna::Vector3(0.12f,0.03f,0.80f),0.42f};
+    case Framing::Body: {
+        // The whole avatar, a little space above the head and under the feet.
+        const float fov=0.50f;
+        const float half=std::max(height*0.56f,height*0.30f/aspect);
+        return Shot{Xna::Vector3(0,height*0.49f,0),Xna::Vector3(0.45f,height*0.07f,half/std::tan(fov/2)),fov};
+    }
+    case Framing::Upper: return span(hips-0.08f,head+0.22f,0.9f,0.45f,0.22f,0.05f);
+    case Framing::Lower: return span(y(Ankle,0.08f)-0.06f,hips+0.14f,0.55f,0.45f,0.25f,0.10f);
+    case Framing::Feet: return span(-0.03f,y(Knee,height*0.28f)*0.7f,0.50f,0.45f,0.35f,0.45f);
+    }
+    return {};
+}
+
 struct Portraits::Entry {
     std::vector<unsigned char> bytes;
     Framing framing=Framing::Head;
@@ -62,45 +101,32 @@ Xna::Graphics::Texture2D* Portraits::request(const std::vector<unsigned char>& d
 void Portraits::render(Xna::Graphics::GraphicsDevice& device,double seconds)
 {
     bool drew=false;
+    waiting_=0;
     for(auto& owned:entries_) {
         auto& entry=*owned;
         const bool wanted=entry.requested;
         entry.requested=false;
         if(!wanted){++entry.unused;continue;}
         if(entry.drawn&&!entry.live)continue;
-        if(entry.renderer->getStateProperty()!=GS::AvatarRendererState::Ready)continue;
+        const auto state=entry.renderer->getStateProperty();
+        if(state!=GS::AvatarRendererState::Ready) {
+            waiting_+=state==GS::AvatarRendererState::Loading;
+            continue;
+        }
         if(!entry.target)
             entry.target=std::make_unique<Xna::Graphics::RenderTarget2D>(device,entry.width,entry.height,false,Xna::Graphics::SurfaceFormat::Color,
                 Xna::Graphics::DepthFormat::Depth24);
-        // Where the head is, from the avatar's own bind pose: its height and proportions vary.
-        const auto parents=entry.renderer->getParentBonesProperty();
-        const auto bind=entry.renderer->getBindPoseProperty();
-        std::vector<Xna::Vector3> world(static_cast<std::size_t>(bind.getCountProperty()));
-        for(int bone=0;bone<bind.getCountProperty();++bone) {
-            const auto local=bind[bone].getTranslationProperty();
-            world[static_cast<std::size_t>(bone)]=parents[bone]<0?local:world[static_cast<std::size_t>(parents[bone])]+local;
-        }
-        const auto head=world[19];
+        // Framed from the avatar's own bind pose: its height and proportions vary.
         const float height=entry.description->getHeightProperty();
-        Xna::Vector3 target,eye;
-        float fov;
         const float aspect=static_cast<float>(entry.width)/static_cast<float>(entry.height);
-        if(entry.framing==Framing::Head) {
-            target=Xna::Vector3(0,head.Y+0.07f,0);
-            eye=Xna::Vector3(0.12f,head.Y+0.10f,0.80f);
-            fov=0.42f;
-        } else {
-            // The whole avatar, a little space above the head and under the feet.
-            fov=0.50f;
-            const float half=std::max(height*0.56f,height*0.30f/aspect);
-            target=Xna::Vector3(0,height*0.49f,0);
-            eye=Xna::Vector3(0.45f,height*0.56f,half/std::tan(fov/2));
-        }
+        const auto shot=shotFor(entry.framing,bindJoints(*entry.renderer),height,aspect);
+        const auto target=shot.target,eye=shot.target+shot.offset;
+        const float fov=shot.fov;
         entry.animation->setCurrentPositionProperty(System::TimeSpan::FromTicks(0));
         if(entry.live)entry.animation->Update(System::TimeSpan::FromTicks(static_cast<SharpRuntime::longcs>(std::fmod(seconds,60.0)*1.0e7)),true);
         auto expression=entry.animation->getExpressionProperty();
         if(!entry.live)expression.setMouthProperty(GS::AvatarMouth::Happy);
-        entry.renderer->setWorldProperty(Xna::Matrix::CreateRotationY(entry.framing==Framing::Head?0.18f:-0.22f));
+        entry.renderer->setWorldProperty(Xna::Matrix::CreateRotationY(entry.framing==Framing::Body?-0.22f:0.18f));
         entry.renderer->setViewProperty(Xna::Matrix::CreateLookAt(eye,target,Xna::Vector3::Up));
         entry.renderer->setProjectionProperty(Xna::Matrix::CreatePerspectiveFieldOfView(fov,aspect,0.05f,20.0f));
         Xna::Vector3 light(-0.45f,-0.45f,-0.77f);
@@ -119,5 +145,5 @@ void Portraits::render(Xna::Graphics::GraphicsDevice& device,double seconds)
     std::erase_if(entries_,[](const auto& entry){return entry->unused>KeepFrames;});
 }
 
-void Portraits::clear(){entries_.clear();}
+void Portraits::clear(){entries_.clear();waiting_=0;}
 }

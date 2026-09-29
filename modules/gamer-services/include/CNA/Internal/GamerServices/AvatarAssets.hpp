@@ -438,6 +438,20 @@ struct AvatarLoad {
  * at once). @param descriptor Description. @return Progress. */
 std::shared_ptr<AvatarLoad> loadAvatarAsync(const AvatarDescriptor& descriptor);
 
+/** @brief Progress of a background catalog lookup. */
+struct CatalogLoad {
+    /** @brief Guards the fields below. */
+    std::mutex lock;
+    /** @brief The lookup finished. */
+    bool done=false;
+    /** @brief The catalog, or null when it is neither installed nor obtainable. */
+    std::shared_ptr<const CatalogManifest> manifest;
+};
+/** @brief Looks a catalog up on the avatar loader thread (catalogManifest may install a pack
+ * from the service; a compiled-in or installed catalog completes at once).
+ * @param version Catalog version. @return Progress. */
+std::shared_ptr<CatalogLoad> loadCatalogAsync(std::uint16_t version);
+
 /** @brief Samples a clip. @param clip Clip. @param seconds Time. @param rotations Out: local rotation per slot
  * (identity where the clip has no curve). @param rootTranslation Out: root offset. @return Expression key in effect. */
 AvatarExpressionKey sampleClip(const AvatarClip& clip,double seconds,

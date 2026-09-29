@@ -37,23 +37,6 @@ double seconds()
     return std::chrono::duration<double>(Clock::now()-start).count();
 }
 
-bool reducedMotion()
-{
-    static const bool reduced=[] {
-        const auto* value=std::getenv("CNA_GAMER_SERVICES_REDUCED_MOTION");
-        return value&&std::string(value)=="1";
-    }();
-    return reduced;
-}
-
-// 0..1 over a duration, eased out; 1 at once with reduced motion.
-float ease(double elapsed,double duration)
-{
-    if(reducedMotion()||duration<=0)return 1.0f;
-    const float t=static_cast<float>(std::clamp(elapsed/duration,0.0,1.0));
-    return 1.0f-(1.0f-t)*(1.0f-t)*(1.0f-t);
-}
-
 Xna::Color faded(Xna::Color color,float alpha)
 {
     return Xna::Color(static_cast<int>(color.getRProperty()*alpha),static_cast<int>(color.getGProperty()*alpha),
@@ -99,9 +82,21 @@ public:
             set(padDown,Command::Previous,pad.IsButtonDown(In::Buttons::LeftShoulder));
             set(padDown,Command::Next,pad.IsButtonDown(In::Buttons::RightShoulder));
         }
+        Xna::Vector2 look((keys.IsKeyDown(In::Keys::C)?1.0f:0.0f)-(keys.IsKeyDown(In::Keys::Z)?1.0f:0.0f),
+            (keys.IsKeyDown(In::Keys::OemPlus)||keys.IsKeyDown(In::Keys::Add)?1.0f:0.0f)-
+            (keys.IsKeyDown(In::Keys::OemMinus)||keys.IsKeyDown(In::Keys::Subtract)?1.0f:0.0f));
+        for(int index=0;index<4;++index) {
+            const auto pad=In::GamePad::GetState(static_cast<Xna::PlayerIndex>(index));
+            if(!pad.getIsConnectedProperty())continue;
+            const auto triggers=pad.getTriggersProperty();
+            look.X+=pad.getThumbSticksProperty().getRightProperty().X;
+            look.Y+=triggers.getRightProperty()-triggers.getLeftProperty();
+        }
+        frame.look=Xna::Vector2(std::clamp(look.X,-1.0f,1.0f),std::clamp(look.Y,-1.0f,1.0f));
         const auto mouse=In::Mouse::GetState();
         frame.mouse=Xna::Vector2(static_cast<float>(mouse.getXProperty()),static_cast<float>(mouse.getYProperty()));
         const bool left=mouse.getLeftButtonProperty()==In::ButtonState::Pressed;
+        frame.mouseDown=left;
         const bool right=mouse.getRightButtonProperty()==In::ButtonState::Pressed;
         const int wheel=mouse.getScrollWheelValueProperty();
         const bool idle=now-lastPoll_>0.5||primed_;
@@ -170,6 +165,22 @@ void noteTop()
     const Screen* current=s.stack.empty()?nullptr:s.stack.back().get();
     if(current!=s.top){s.top=current;s.topChangedAt=seconds();}
 }
+}
+
+bool reducedMotion()
+{
+    static const bool reduced=[] {
+        const auto* value=std::getenv("CNA_GAMER_SERVICES_REDUCED_MOTION");
+        return value&&std::string(value)=="1";
+    }();
+    return reduced;
+}
+
+float ease(double elapsed,double duration)
+{
+    if(reducedMotion()||duration<=0)return 1.0f;
+    const float t=static_cast<float>(std::clamp(elapsed/duration,0.0,1.0));
+    return 1.0f-(1.0f-t)*(1.0f-t)*(1.0f-t);
 }
 
 // ---- Stack -------------------------------------------------------------------------------
@@ -415,6 +426,8 @@ std::string commandLabel(Command command,Device device)
     }
 }
 
+}
+
 float drawHints(Ui& ui,const std::vector<Hint>& hints,Xna::Vector2 position,bool rightAligned)
 {
     // Measure first so the row can be right-aligned.
@@ -446,6 +459,7 @@ float drawHints(Ui& ui,const std::vector<Hint>& hints,Xna::Vector2 position,bool
     return total;
 }
 
+namespace {
 void drawRail(Ui& ui,const Box& rail,Category current,float alpha)
 {
     auto& s=state();
@@ -802,20 +816,31 @@ void draw(Xna::Graphics::GraphicsDevice& device)
         apply(*top,ui);
         noteTop();
     }
-    // Avatar views are drawn before any sprite, into their own targets.
+    // Under the top: the nearest full-screen screen, or else the nearest shell screen.
+    std::shared_ptr<Screen> base;
+    for(auto it=s.stack.rbegin();it!=s.stack.rend();++it)
+        if((*it)->fullScreen()||(*it)->category()!=Category::None){base=*it;break;}
+    const bool full=base&&base->fullScreen();
+    // 3D views are drawn before any sprite, into their own targets.
+    if(full)base->render(device,now);
     s.portraits.render(device,now);
     s.batch->Begin(Xna::Graphics::SpriteSortMode::Deferred,&Xna::Graphics::BlendState::AlphaBlend,&Xna::Graphics::SamplerState::LinearClamp,
         nullptr,&Xna::Graphics::RasterizerState::CullNone);
     if(!s.stack.empty()||dialogs) {
         const float appear=ease(ui.time,0.18);
-        s.style->fill(*s.batch,Box{0,0,static_cast<float>(width),static_cast<float>(height)},faded(Palette::dim(),s.stack.empty()?1.0f:appear));
-        // The shell under dialogs, then the top screen.
-        std::shared_ptr<Screen> shell;
-        for(auto it=s.stack.rbegin();it!=s.stack.rend();++it)if((*it)->category()!=Category::None){shell=*it;break;}
-        if(shell)drawShell(ui,*shell,appear,shell==s.stack.back()?ease(ui.screenTime,0.16):1.0f);
-        if(!s.stack.empty()&&s.stack.back()->category()==Category::None) {
-            if(shell)s.style->fill(*s.batch,Box{0,0,static_cast<float>(width),static_cast<float>(height)},Xna::Color(0,0,0,90));
-            drawDialog(ui,*s.stack.back(),shell?ease(ui.screenTime,0.16):appear);
+        const Box screenBox{0,0,static_cast<float>(width),static_cast<float>(height)};
+        if(full) {
+            // A full-screen system screen replaces the picture, fading in from black.
+            base->draw(ui,screenBox);
+            if(appear<1.0f)s.style->fill(*s.batch,screenBox,Xna::Color(0,0,0,static_cast<int>(255*(1.0f-appear))));
+        } else {
+            s.style->fill(*s.batch,screenBox,faded(Palette::dim(),s.stack.empty()?1.0f:appear));
+            if(base)drawShell(ui,*base,appear,base==s.stack.back()?ease(ui.screenTime,0.16):1.0f);
+        }
+        // A dialog above them.
+        if(!s.stack.empty()&&s.stack.back()!=base) {
+            if(base)s.style->fill(*s.batch,screenBox,Xna::Color(0,0,0,full?130:90));
+            drawDialog(ui,*s.stack.back(),base?ease(ui.screenTime,0.16):appear);
         }
         if(auto box=pendingMessageBox())drawMessageBox(ui,*box);
         else if(auto keys=pendingKeyboard())drawKeyboard(ui,*keys);
@@ -849,19 +874,30 @@ std::string currentScreenForTesting(){return state().stack.empty()?std::string()
 std::vector<std::string> labelsForTesting(){return state().stack.empty()?std::vector<std::string>{}:state().stack.back()->labels();}
 int focusForTesting(){return state().stack.empty()?-1:state().stack.back()->focus();}
 
-void sendForTesting(Command command)
+bool busyForTesting()
+{
+    auto& s=state();
+    return std::ranges::any_of(s.stack,[](const auto& screen){return screen->busy();})||s.portraits.waiting()>0;
+}
+
+namespace {
+void frameWith(std::optional<Command> command)
 {
     auto& s=state();
     if(s.stack.empty())return;
     // Screens handle input without drawing; a test needs no device.
     InputContext context;
-    context.input.pressed[static_cast<std::size_t>(command)]=true;
+    if(command)context.input.pressed[static_cast<std::size_t>(*command)]=true;
     context.input.mouse=Xna::Vector2(-1,-1);
     context.player=s.player;
     auto top=s.stack.back();
     apply(*top,context);
     noteTop();
 }
+}
+
+void frameForTesting(){frameWith(std::nullopt);}
+void sendForTesting(Command command){frameWith(command);}
 
 void clickForTesting(int index)
 {

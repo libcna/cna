@@ -360,6 +360,29 @@ private:
 
 std::mutex cacheLock;
 std::map<std::vector<std::uint8_t>,std::weak_ptr<const AvatarModel>> cache;
+
+Loader& loader()
+{
+    static Loader shared;
+    return shared;
+}
+}
+
+std::shared_ptr<CatalogLoad> loadCatalogAsync(std::uint16_t version)
+{
+    auto load=std::make_shared<CatalogLoad>();
+    if(auto local=embeddedManifest(version)) {
+        load->manifest=std::move(local);
+        load->done=true;
+        return load;
+    }
+    loader().submit([load,version] {
+        auto manifest=catalogManifest(version);
+        std::lock_guard guard(load->lock);
+        load->manifest=std::move(manifest);
+        load->done=true;
+    });
+    return load;
 }
 
 std::shared_ptr<AvatarLoad> loadAvatarAsync(const AvatarDescriptor& descriptor)
@@ -375,8 +398,7 @@ std::shared_ptr<AvatarLoad> loadAvatarAsync(const AvatarDescriptor& descriptor)
             return load;
         }
     }
-    static Loader loader;
-    loader.submit([load,descriptor,key] {
+    loader().submit([load,descriptor,key] {
         std::shared_ptr<const AvatarModel> model;
         std::string error;
         try {model=buildAvatarModel(descriptor);}

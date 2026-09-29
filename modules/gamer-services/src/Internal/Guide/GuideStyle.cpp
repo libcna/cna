@@ -44,6 +44,7 @@ constexpr std::array<FontSpec,static_cast<std::size_t>(Font::Count)> FontSpecs{{
 }};
 constexpr int DiscSize=128;
 constexpr int IconSize=96;
+constexpr int IconColumns=16;
 
 std::vector<SharpRuntime::bytecs> premultiplied(const std::vector<float>& alpha)
 {
@@ -130,16 +131,19 @@ Style::Style(Xna::Graphics::GraphicsDevice& device,int width,int height)
     std::vector<float> ramp(256);
     for(int i=0;i<256;++i)ramp[static_cast<std::size_t>(i)]=static_cast<float>(i)/255.0f;
     resources_->ramp=std::make_unique<Texture2D>(Texture2D::CreateFromPixels(device,1,256,premultiplied(ramp)));
-    // Every icon at 96 px in one row.
+    // Every icon at 96 px, IconColumns to a row (a Reach texture is at most 2048 wide).
     constexpr int Count=static_cast<int>(Icon::Count);
-    std::vector<float> icons(static_cast<std::size_t>(IconSize)*Count*IconSize,0.0f);
+    constexpr int Rows=(Count+IconColumns-1)/IconColumns;
+    constexpr int AtlasWidth=IconSize*IconColumns;
+    std::vector<float> icons(static_cast<std::size_t>(AtlasWidth)*Rows*IconSize,0.0f);
     for(int index=0;index<Count;++index) {
         const auto image=rasterizeStrokes(parseStrokes(iconStrokes(static_cast<Icon>(index))),IconSize/1000.0f,58.0f,0.0f,1000.0f,IconSize,IconSize);
+        const int left=index%IconColumns*IconSize,top=index/IconColumns*IconSize;
         for(int row=0;row<IconSize;++row)
             std::copy_n(image.alpha.begin()+static_cast<std::ptrdiff_t>(row)*IconSize,IconSize,
-                        icons.begin()+static_cast<std::ptrdiff_t>(row)*IconSize*Count+index*IconSize);
+                        icons.begin()+static_cast<std::ptrdiff_t>(top+row)*AtlasWidth+left);
     }
-    resources_->icons=std::make_unique<Texture2D>(Texture2D::CreateFromPixels(device,IconSize*Count,IconSize,premultiplied(icons)));
+    resources_->icons=std::make_unique<Texture2D>(Texture2D::CreateFromPixels(device,AtlasWidth,Rows*IconSize,premultiplied(icons)));
 }
 
 Style::~Style()=default;
@@ -282,7 +286,7 @@ void Style::disc(Xna::Graphics::SpriteBatch& batch,Xna::Vector2 center,float rad
 
 void Style::icon(Xna::Graphics::SpriteBatch& batch,Icon icon,const Box& box,Xna::Color color)
 {
-    batch.Draw(*resources_->icons,Xna::Vector2(box.x,box.y),Xna::Rectangle(static_cast<int>(icon)*IconSize,0,IconSize,IconSize),color,0.0f,
+    batch.Draw(*resources_->icons,Xna::Vector2(box.x,box.y),Xna::Rectangle(static_cast<int>(icon)%IconColumns*IconSize,static_cast<int>(icon)/IconColumns*IconSize,IconSize,IconSize),color,0.0f,
         Xna::Vector2::Zero,Xna::Vector2(box.w/IconSize,box.h/IconSize),Xna::Graphics::SpriteEffects::None,0.0f);
 }
 

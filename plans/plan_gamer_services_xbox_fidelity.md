@@ -161,8 +161,8 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
 | GSX-B2..B9 | Catalog v3 art: head/face, atlas, body, hands, clothing, hair/facial hair, materials, animation | |
 | GSX-B10 | BEFORE/AFTER review with identical cameras, inspected | |
 | GSX-U0 | System UI audit: every Guide pane, editor and demo; deterministic BEFORE screenshots; visual inventory | done |
-| GSX-U1 | One CNA system visual language (panel, title, tabs, focus, buttons, identity, presence, toast, dialog, loading, error) shared by Guide and editor | done (Guide); editor in U2 |
-| GSX-U2 | Console-style avatar editor: large live preview, categories, rendered item cards, contextual camera, human face controls, coherent randomize, transactional save/cancel | |
+| GSX-U1 | One CNA system visual language (panel, title, tabs, focus, buttons, identity, presence, toast, dialog, loading, error) shared by Guide and editor | done |
+| GSX-U2 | Console-style avatar editor: large live preview, categories, rendered item cards, contextual camera, human face controls, coherent randomize, transactional save/cancel | done |
 | GSX-U3 | Sign-in as profile selection over four player slots | done |
 | GSX-U4 | Gamer Card with avatar, presence, zone, reputation, relationship and actions | done |
 | GSX-U5 | Friends, invitations (send/receive as system events), notifications | done |
@@ -230,3 +230,23 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
   there ends sign-in. The slot shows "Signing in" while the service answers. Tests and the TLS
   client harness follow the picker (21 sign-in and system-Guide tests; harness 120 checks);
   `service_tls_e2e`, `service_cna_session`, `service_cna_invite`, `service_cna_avatars` pass.
+- GSX-U2 (avatar editor). The editor is a full-screen Guide screen (`GuideAvatarEditor.cpp`):
+  **POL** it opens from the Guide's Home over a running game, and `cna_avatar_editor` hosts the same
+  screen after sign-in. Model (`AvatarEditorModel`): twelve categories of rows (cards, swatches,
+  sliders, presets) that offer exactly what the catalog has; face presets move named controls
+  together (Balanced resets); sliders read in words; coherent randomize (natural colours mostly,
+  harmonious clothes, faces within +/-0.55, glasses 20 %, hats 15 %, facial hair only on the male
+  body) and per-category shuffle. Screen: large live avatar (own `AvatarRenderer` into a render
+  target; Wave on open, idles, Celebrate on save), the camera eases between body, head, upper,
+  lower and feet shots computed from the avatar's bind pose (`shotFor`, also new portrait
+  framings), try-on of the focused card, turn/zoom by stick, keys, drag and wheel, mouse hit-testing
+  of categories, cards, swatches and slider tracks; save/discard/keep dialog; saving failures
+  explained with the edits kept; stored avatar changed elsewhere detected (revision or profile
+  bytes). New icons (figure, drop, face, eye, mouth, hair, beard, shirt, trousers, shoe, glasses,
+  hat, dice); the icon atlas became a grid (a Reach texture is at most 2048 wide). Tests: 18
+  `AvatarEditorTest`, 9 `GuideAvatarEditorTest` (Home entry, wrap, try-on vs keep, sliders, save to
+  the service and identity, discard/keep editing, failed save, change elsewhere, local profile,
+  nobody signed in, catalog unavailable). Evidence: `/rv/tmp/xbox-fidelity/ui/after-editor/`
+  (15 steps, OPENGL33, private display; `after-editor-sheet.png`), inspected: framings fit the band
+  between header and footer, hints do not overlap. GS 583 + 1 skip (one process); Net 504/504
+  (nine discovery/leaderboard cases share ports or a store when run 8-way parallel and pass alone).

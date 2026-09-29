@@ -34,6 +34,10 @@ struct InputFrame {
     bool click=false;
     /** @brief Wheel notches this frame (positive up). */
     int wheel=0;
+    /** @brief Left button held. */
+    bool mouseDown=false;
+    /** @brief Turn (x, -1..1: right stick, Z/C) and zoom (y, -1..1, positive in: triggers, +/-) held this frame. */
+    Xna::Vector2 look;
     /** @brief Last device used. */
     Device device=Device::Keyboard;
     /** @brief Whether a command was pressed. @param command Command. @return Pressed. */
@@ -103,6 +107,15 @@ public:
     [[nodiscard]] virtual float dialogWidth() const { return 600; }
     /** @brief Dialog height (reference pixels), title and hints included. @return Height. */
     [[nodiscard]] virtual float dialogHeight() const { return 300; }
+    /** @brief Whether the screen covers the whole display (the avatar editor) rather than sitting
+     * in the shell or a dialog. @return Full screen. */
+    [[nodiscard]] virtual bool fullScreen() const { return false; }
+    /** @brief Draws into render targets before any sprite (a full-screen screen's 3D views).
+     * @param device Device. @param seconds Guide time. */
+    virtual void render(Xna::Graphics::GraphicsDevice& device,double seconds) { (void)device; (void)seconds; }
+    /** @brief Whether the screen is still waiting for something it will show (tests and captures).
+     * @return Busy. */
+    [[nodiscard]] virtual bool busy() const { return false; }
     /** @brief Player the screen belongs to. */
     Xna::PlayerIndex player=Xna::PlayerIndex::One;
 };
@@ -154,6 +167,14 @@ void load(const std::shared_ptr<S>& owner,std::type_identity_t<std::function<T(I
     });
 }
 
+/** @brief Whether motion is reduced (CNA_GAMER_SERVICES_REDUCED_MOTION=1): transitions finish at once. @return Reduced. */
+bool reducedMotion();
+/** @brief 0..1 over a duration, eased out; 1 at once with reduced motion. @param elapsed Seconds.
+ * @param duration Seconds. @return Progress. */
+float ease(double elapsed,double duration);
+/** @brief Draws a row of button hints. @param ui Context. @param hints Hints. @param position Start
+ * (or end when right-aligned), vertical centre. @param rightAligned Right-aligned. @return Width. */
+float drawHints(Ui& ui,const std::vector<Hint>& hints,Xna::Vector2 position,bool rightAligned);
 /** @brief Draws a focus highlight behind a row. @param ui Context. @param box Row. @param focused Focused. */
 void rowBackground(Ui& ui,const Box& box,bool focused);
 /** @brief Draws an avatar portrait tile (or a person icon while it loads). @param ui Context.

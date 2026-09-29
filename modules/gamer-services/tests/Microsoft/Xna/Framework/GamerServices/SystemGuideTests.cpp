@@ -144,7 +144,7 @@ TEST_F(SystemGuideTest, ALocalProfileCanSignOutFromTheGuide) {
     const auto token = SignedInGamer::SignedOut.Add([&](System::Object*, const SignedOutEventArgs&) { ++signedOut; });
     Service::openSystemGuide(PlayerIndex::One);
     // An offline profile: what works offline, and signing out.
-    EXPECT_EQ((std::vector<std::string>{"Achievements", "Sign out"}), Ui::labelsForTesting());
+    EXPECT_EQ((std::vector<std::string>{"Achievements", "Edit avatar", "Sign out"}), Ui::labelsForTesting());
     ASSERT_TRUE(Choose("Sign out"));
     EXPECT_FALSE(Ui::visible());
     EXPECT_TRUE(Settle([] { return Count() == 0; }));

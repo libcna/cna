@@ -79,34 +79,70 @@ TEST(AvatarEditorTest, WithoutAStoredAvatarItStartsFromARandomOne) {
     }
 }
 
-TEST(AvatarEditorTest, PagesShowBodyFeaturesAndStyle) {
+TEST(AvatarEditorTest, CategoriesOfferWhatTheirNameSays) {
     AvatarEditorModel model(newest(),storedAvatar(newest(),5),1);
     EXPECT_EQ(model.category(),EditorCategory::Body);
-    EXPECT_EQ(labels(model),(std::vector<std::string>{"Body","Height","Build","Skin"}));
-    model.turnPage(1);
-    EXPECT_EQ(model.category(),EditorCategory::Features);
-    const auto features=labels(model);
-    ASSERT_FALSE(features.empty());
-    EXPECT_EQ(features.front(),"Eye color");
+    EXPECT_STREQ(Avatars::editorCategoryName(EditorCategory::NoseAndMouth),"Nose & mouth");
+    EXPECT_EQ(labels(model),(std::vector<std::string>{"Body","Height","Build"}));
+    EXPECT_EQ(model.view(),Avatars::EditorView::Body);
+    pageTo(model,EditorCategory::Skin);
+    EXPECT_EQ(labels(model),(std::vector<std::string>{"Skin tone"}));
     const auto body=model.descriptor().bodyType==1?1:0;
     if(!newest()->faceControls[body].empty()) {
-        EXPECT_NE(std::ranges::find(features,"Facial hair"),features.end());
-        EXPECT_NE(std::ranges::find(features,"Jaw width"),features.end());
-        EXPECT_EQ(std::set<std::string>(features.begin(),features.end()).size(),features.size());
+        pageTo(model,EditorCategory::Face);
+        EXPECT_EQ(labels(model),(std::vector<std::string>{"Face shape","Head width","Head length","Jaw","Chin","Cheeks","Ears"}));
+        EXPECT_EQ(model.view(),Avatars::EditorView::Head);
+        pageTo(model,EditorCategory::Eyes);
+        EXPECT_EQ(labels(model),(std::vector<std::string>{"Eye color","Eye shape","Eye size","Eye spacing","Eye height","Eye tilt","Brows"}));
+        pageTo(model,EditorCategory::NoseAndMouth);
+        EXPECT_EQ(labels(model),(std::vector<std::string>{"Shape","Nose size","Nose width","Nose height","Mouth width","Mouth height"}));
+        pageTo(model,EditorCategory::FacialHair);
+        EXPECT_EQ(labels(model),(std::vector<std::string>{"Style","Color"}));
     }
-    model.turnPage(1);
-    EXPECT_EQ(labels(model),(std::vector<std::string>{"Hair","Hair color","Top","Top color","Bottom","Bottom color",
-        "Shoes","Shoe color","Glasses","Hat","Accessory color"}));
+    pageTo(model,EditorCategory::Hair);
+    EXPECT_EQ(labels(model),(std::vector<std::string>{"Hairstyle","Hair color"}));
+    pageTo(model,EditorCategory::Tops);
+    EXPECT_EQ(labels(model),(std::vector<std::string>{"Top","Color"}));
+    EXPECT_EQ(model.view(),Avatars::EditorView::Upper);
+    pageTo(model,EditorCategory::Bottoms);
+    EXPECT_EQ(model.view(),Avatars::EditorView::Lower);
+    pageTo(model,EditorCategory::Shoes);
+    EXPECT_EQ(labels(model),(std::vector<std::string>{"Shoes","Color"}));
+    EXPECT_EQ(model.view(),Avatars::EditorView::Feet);
+    pageTo(model,EditorCategory::Glasses);
+    EXPECT_EQ(labels(model),(std::vector<std::string>{"Glasses","Frame color"}));
+    pageTo(model,EditorCategory::Headwear);
+    EXPECT_EQ(labels(model),(std::vector<std::string>{"Headwear","Color"}));
     model.turnPage(1);
     EXPECT_EQ(model.category(),EditorCategory::Body);
     model.turnPage(-1);
-    EXPECT_EQ(model.category(),EditorCategory::Style);
+    EXPECT_EQ(model.category(),EditorCategory::Headwear);
+}
+
+TEST(AvatarEditorTest, RowsSayHowTheyAreShown) {
+    AvatarEditorModel model(newest(),storedAvatar(newest(),5),1);
+    EXPECT_EQ(model.field(0).kind,Avatars::EditorRowKind::Cards);
+    EXPECT_EQ(model.options(0).size(),2u);
+    EXPECT_EQ(model.field(1).kind,Avatars::EditorRowKind::Slider);
+    EXPECT_TRUE(model.options(1).empty());
+    pageTo(model,EditorCategory::Hair);
+    EXPECT_EQ(model.field(1).kind,Avatars::EditorRowKind::Swatches);
+    const auto swatches=model.options(1);
+    EXPECT_EQ(swatches.size(),Avatars::colorPalette(Avatars::AvatarColorSlot::Hair).size());
+    EXPECT_TRUE(std::ranges::all_of(swatches,[](const auto& option){return option.color.has_value();}));
+    const auto styles=model.options(0);
+    EXPECT_EQ(std::ranges::count_if(styles,&Avatars::EditorOption::current),1);
+    for(const auto& option:styles)EXPECT_TRUE(Avatars::isEncodable(option.result))<<option.label;
 }
 
 TEST(AvatarEditorTest, CatalogOneOffersNoFaceShapeOrFacialHair) {
     AvatarEditorModel model(first(),storedAvatar(first(),5),1);
-    pageTo(model,EditorCategory::Features);
+    pageTo(model,EditorCategory::Face);
+    EXPECT_TRUE(labels(model).empty());
+    pageTo(model,EditorCategory::Eyes);
     EXPECT_EQ(labels(model),(std::vector<std::string>{"Eye color"}));
+    pageTo(model,EditorCategory::FacialHair);
+    EXPECT_EQ(labels(model),(std::vector<std::string>{"Color"}));
 }
 
 TEST(AvatarEditorTest, HeightAndBuildStepWithinTheirRanges) {
@@ -118,6 +154,7 @@ TEST(AvatarEditorTest, HeightAndBuildStepWithinTheirRanges) {
     for(int i=0;i<100;++i)model.adjust(1);
     EXPECT_EQ(model.descriptor().heightMillimeters,Avatars::MaximumHeightMillimeters);
     EXPECT_FALSE(model.adjust(1));
+    EXPECT_FLOAT_EQ(*model.field(model.selection()).slider,1.0f);
     for(int i=0;i<100;++i)model.adjust(-1);
     EXPECT_EQ(model.descriptor().heightMillimeters,Avatars::MinimumHeightMillimeters);
     EXPECT_EQ(model.field(model.selection()).value,"1.45 m");
@@ -125,14 +162,18 @@ TEST(AvatarEditorTest, HeightAndBuildStepWithinTheirRanges) {
     ASSERT_TRUE(selectRow(model,"Build"));
     for(int i=0;i<20;++i)model.adjust(-1);
     EXPECT_EQ(model.descriptor().build,0);
-    EXPECT_EQ(model.field(model.selection()).value,"-8");
+    EXPECT_EQ(model.field(model.selection()).value,"Very slim");
     EXPECT_FLOAT_EQ(*model.field(model.selection()).slider,-1.0f);
     for(int i=0;i<8;++i)model.adjust(1);
     EXPECT_EQ(model.descriptor().build,Avatars::NeutralFaceParameter);
-    EXPECT_EQ(model.field(model.selection()).value,"0");
+    EXPECT_EQ(model.field(model.selection()).value,"Average");
+    model.adjust(1);
+    EXPECT_EQ(model.field(model.selection()).value,"A little heavy");
+    model.adjust(3);
+    EXPECT_EQ(model.field(model.selection()).value,"Heavy");
     for(int i=0;i<20;++i)model.adjust(1);
     EXPECT_EQ(model.descriptor().build,255);
-    EXPECT_EQ(model.field(model.selection()).value,"+8");
+    EXPECT_EQ(model.field(model.selection()).value,"Very heavy");
 }
 
 TEST(AvatarEditorTest, ChangingBodyTypeKeepsTheRelativeHeight) {
@@ -147,15 +188,22 @@ TEST(AvatarEditorTest, ChangingBodyTypeKeepsTheRelativeHeight) {
     EXPECT_EQ(model.descriptor().bodyType,1);
     EXPECT_EQ(model.field(model.selection()).value,"Male");
     EXPECT_EQ(model.descriptor().heightMillimeters,catalog.authoredHeightMillimeters[1]+40);
+    EXPECT_TRUE(model.choose(0,0));
+    EXPECT_EQ(model.descriptor().bodyType,0);
+    EXPECT_EQ(model.descriptor().heightMillimeters,catalog.authoredHeightMillimeters[0]+40);
+    EXPECT_FALSE(model.choose(0,0));
+    EXPECT_FALSE(model.choose(0,2));
 }
 
 TEST(AvatarEditorTest, ItemsCycleThroughTheCatalogAndOptionalSlotsOfferNone) {
     AvatarEditorModel model(newest(),storedAvatar(newest(),17),1);
-    pageTo(model,EditorCategory::Style);
+    pageTo(model,EditorCategory::Glasses);
     ASSERT_TRUE(selectRow(model,"Glasses"));
     std::set<std::uint16_t> seen;
     const auto slot=static_cast<std::size_t>(Avatars::AvatarItemSlot::Glasses);
     const auto count=std::ranges::count_if(newest()->items,[](const auto& item){return item.slot==Avatars::AvatarItemSlot::Glasses;});
+    EXPECT_EQ(model.options(0).size(),static_cast<std::size_t>(count)+1);
+    EXPECT_EQ(model.options(0).front().label,"None");
     for(int i=0;i<=count;++i) {
         seen.insert(model.descriptor().items[slot]);
         model.adjust(1);
@@ -165,33 +213,41 @@ TEST(AvatarEditorTest, ItemsCycleThroughTheCatalogAndOptionalSlotsOfferNone) {
     while(model.descriptor().items[slot]!=0)model.adjust(1);
     EXPECT_EQ(model.field(model.selection()).value,"None");
 
-    ASSERT_TRUE(selectRow(model,"Hair"));
+    pageTo(model,EditorCategory::Hair);
+    ASSERT_TRUE(selectRow(model,"Hairstyle"));
     for(int i=0;i<40;++i) {
         EXPECT_NE(model.descriptor().items[static_cast<std::size_t>(Avatars::AvatarItemSlot::Hair)],0);
         model.adjust(-1);
     }
-    ASSERT_TRUE(selectRow(model,"Top"));
-    while(newest()->item(model.descriptor().items[static_cast<std::size_t>(Avatars::AvatarItemSlot::Top)])->name!="top_hoodie")
-        model.adjust(1);
-    EXPECT_EQ(model.field(model.selection()).value,"Hoodie");
+    pageTo(model,EditorCategory::Tops);
+    const auto tops=model.options(0);
+    const auto hoodie=std::ranges::find(tops,"Hoodie",&Avatars::EditorOption::label);
+    ASSERT_NE(hoodie,tops.end());
+    EXPECT_TRUE(model.choose(0,static_cast<std::size_t>(hoodie-tops.begin())));
+    EXPECT_EQ(newest()->item(model.descriptor().items[static_cast<std::size_t>(Avatars::AvatarItemSlot::Top)])->name,"top_hoodie");
+    EXPECT_EQ(model.field(0).value,"Hoodie");
 }
 
 TEST(AvatarEditorTest, ColorsStepThroughThePaletteAndACustomColorJoinsIt) {
     auto descriptor=*Avatars::decode(storedAvatar(newest(),19));
     descriptor.colors[static_cast<std::size_t>(Avatars::AvatarColorSlot::Skin)]={1,2,3};
     AvatarEditorModel model(newest(),Avatars::encode(descriptor),1);
-    ASSERT_TRUE(selectRow(model,"Skin"));
+    pageTo(model,EditorCategory::Skin);
+    ASSERT_TRUE(selectRow(model,"Skin tone"));
     EXPECT_EQ(model.field(model.selection()).value,"Custom");
     EXPECT_EQ(*model.field(model.selection()).swatch,(Avatars::AvatarColor{1,2,3}));
+    EXPECT_TRUE(std::ranges::none_of(model.options(0),&Avatars::EditorOption::current));
     const auto palette=Avatars::colorPalette(Avatars::AvatarColorSlot::Skin);
     EXPECT_TRUE(model.adjust(1));
     EXPECT_EQ(model.descriptor().colors[0],palette[0]);
     EXPECT_EQ(model.field(model.selection()).value,"1 of "+std::to_string(palette.size()));
     model.adjust(-1);
     EXPECT_EQ(model.descriptor().colors[0],palette.back());
+    EXPECT_TRUE(model.choose(0,2));
+    EXPECT_EQ(model.descriptor().colors[0],palette[2]);
 }
 
-TEST(AvatarEditorTest, FaceShapeAndFacialHairUseFormatTwo) {
+TEST(AvatarEditorTest, FaceFeaturesAndFacialHairUseFormatTwo) {
     const auto body=0;
     if(newest()->faceControls[body].empty()||newest()->featureItems.empty())GTEST_SKIP()<<"no format 2 features";
     auto descriptor=*Avatars::decode(storedAvatar(newest(),23));
@@ -201,32 +257,69 @@ TEST(AvatarEditorTest, FaceShapeAndFacialHairUseFormatTwo) {
     const auto stored=Avatars::encode(descriptor);
     EXPECT_EQ(stored[0],Avatars::FormatVersion);
     AvatarEditorModel model(newest(),stored,1);
-    pageTo(model,EditorCategory::Features);
-    ASSERT_TRUE(selectRow(model,"Jaw width"));
-    EXPECT_EQ(model.field(model.selection()).value,"0");
+    pageTo(model,EditorCategory::Face);
+    ASSERT_TRUE(selectRow(model,"Jaw"));
+    EXPECT_EQ(model.field(model.selection()).value,"Average");
     EXPECT_TRUE(model.adjust(2));
-    EXPECT_EQ(model.field(model.selection()).value,"+2");
+    EXPECT_EQ(model.field(model.selection()).value,"A little broad");
     EXPECT_EQ(model.encoded()[0],Avatars::FaceFormatVersion);
     EXPECT_TRUE(model.adjust(-2));
     EXPECT_EQ(model.encoded(),stored);
-    ASSERT_TRUE(selectRow(model,"Facial hair"));
+    pageTo(model,EditorCategory::FacialHair);
+    ASSERT_TRUE(selectRow(model,"Style"));
     EXPECT_EQ(model.field(model.selection()).value,"None");
     EXPECT_TRUE(model.adjust(1));
     EXPECT_EQ(model.field(model.selection()).value,"Mustache");
     EXPECT_EQ(model.encoded()[0],Avatars::FaceFormatVersion);
 }
 
+TEST(AvatarEditorTest, PresetsMoveSeveralFeaturesAndBalancedResetsThem) {
+    auto descriptor=*Avatars::decode(storedAvatar(newest(),43));
+    if(newest()->faceControls[descriptor.bodyType].empty())GTEST_SKIP()<<"no face controls";
+    descriptor.face.fill(Avatars::NeutralFaceParameter);
+    descriptor.facialHair=0;
+    AvatarEditorModel model(newest(),Avatars::encode(descriptor),1);
+    pageTo(model,EditorCategory::Face);
+    ASSERT_EQ(model.field(0).kind,Avatars::EditorRowKind::Presets);
+    EXPECT_EQ(model.field(0).value,"Balanced");
+    const auto presets=model.options(0);
+    std::vector<std::string> names;
+    for(const auto& preset:presets)names.push_back(preset.label);
+    EXPECT_EQ(names,(std::vector<std::string>{"Balanced","Round","Long","Heart","Square","Soft"}));
+    EXPECT_TRUE(model.choose(0,1));
+    EXPECT_EQ(model.field(0).value,"Round");
+    const auto round=model.descriptor().face;
+    EXPECT_GT(std::ranges::count_if(round,[](auto value){return value!=Avatars::NeutralFaceParameter;}),2);
+    // A shape set here leaves the eyes alone.
+    pageTo(model,EditorCategory::Eyes);
+    EXPECT_EQ(model.field(1).value,"Balanced");
+    EXPECT_TRUE(model.choose(1,1));
+    pageTo(model,EditorCategory::Face);
+    EXPECT_EQ(model.field(0).value,"Round");
+    ASSERT_TRUE(selectRow(model,"Cheeks"));
+    model.adjust(1);
+    EXPECT_EQ(model.field(0).value,"Custom");
+    EXPECT_TRUE(model.choose(0,0));
+    EXPECT_EQ(model.field(0).value,"Balanced");
+    pageTo(model,EditorCategory::Eyes);
+    EXPECT_EQ(model.field(1).value,"Bright");
+}
+
 TEST(AvatarEditorTest, EveryReachableValueEncodes) {
     AvatarEditorModel model(newest(),storedAvatar(newest(),29),1);
     for(int page=0;page<Avatars::EditorCategoryCount;++page) {
         for(std::size_t row=0;row<model.fieldCount();++row) {
-            while(model.selection()!=row)model.select(1);
+            model.selectRow(row);
             for(int step=0;step<24;++step) {
                 model.adjust(step<12?1:-1);
                 const auto bytes=model.encoded();
                 const auto decoded=Avatars::decode(bytes);
                 ASSERT_TRUE(decoded.has_value())<<model.field(row).label;
                 EXPECT_EQ(*decoded,model.descriptor());
+            }
+            for(std::size_t option=0;option<model.options(row).size();++option) {
+                model.choose(row,option);
+                ASSERT_TRUE(Avatars::decode(model.encoded()).has_value())<<model.field(row).label<<" "<<option;
             }
         }
         model.turnPage(1);
@@ -240,6 +333,7 @@ TEST(AvatarEditorTest, RandomizeKeepsTheBodyAndRevertAndSaveTrackTheStoredAvatar
     for(int i=0;i<8;++i) {
         model.randomize();
         EXPECT_EQ(model.descriptor().bodyType,body);
+        EXPECT_TRUE(Avatars::decode(model.encoded()).has_value());
     }
     EXPECT_TRUE(model.differsFromStored());
     model.revert();
@@ -253,16 +347,54 @@ TEST(AvatarEditorTest, RandomizeKeepsTheBodyAndRevertAndSaveTrackTheStoredAvatar
     EXPECT_EQ(model.encoded(),saved);
 }
 
-TEST(AvatarEditorTest, SelectionWrapsAndSurvivesPageChanges) {
+TEST(AvatarEditorTest, RandomAvatarsAreCoherent) {
+    AvatarEditorModel model(newest(),storedAvatar(newest(),47),5);
+    const auto hair=Avatars::colorPalette(Avatars::AvatarColorSlot::Hair);
+    int natural=0,glasses=0,hats=0;
+    for(int i=0;i<200;++i) {
+        model.randomize();
+        const auto& avatar=model.descriptor();
+        const auto color=avatar.colors[static_cast<std::size_t>(Avatars::AvatarColorSlot::Hair)];
+        natural+=std::ranges::find(hair.first(6),color)!=hair.first(6).end();
+        glasses+=avatar.items[static_cast<std::size_t>(Avatars::AvatarItemSlot::Glasses)]!=0;
+        hats+=avatar.items[static_cast<std::size_t>(Avatars::AvatarItemSlot::Hat)]!=0;
+        // Nothing at an extreme of its range.
+        for(auto value:avatar.face)EXPECT_LE(std::abs(value-Avatars::NeutralFaceParameter),80);
+        if(avatar.bodyType==0)EXPECT_EQ(avatar.facialHair,0);
+    }
+    EXPECT_GT(natural,150);
+    EXPECT_LT(glasses,80);
+    EXPECT_LT(hats,70);
+}
+
+TEST(AvatarEditorTest, RandomizingACategoryChangesOnlyIt) {
+    AvatarEditorModel model(newest(),storedAvatar(newest(),53),1);
+    const auto before=model.descriptor();
+    pageTo(model,EditorCategory::Tops);
+    for(int i=0;i<6;++i)model.randomizeCategory();
+    auto expected=before;
+    expected.items[static_cast<std::size_t>(Avatars::AvatarItemSlot::Top)]=model.descriptor().items[static_cast<std::size_t>(Avatars::AvatarItemSlot::Top)];
+    expected.colors[static_cast<std::size_t>(Avatars::AvatarColorSlot::Top)]=model.descriptor().colors[static_cast<std::size_t>(Avatars::AvatarColorSlot::Top)];
+    EXPECT_EQ(model.descriptor(),expected);
+    pageTo(model,EditorCategory::Skin);
+    model.randomizeCategory();
+    EXPECT_EQ(model.descriptor().items,expected.items);
+    EXPECT_EQ(model.descriptor().face,expected.face);
+}
+
+TEST(AvatarEditorTest, SelectionStopsAtTheEndsAndResetsOnACategoryChange) {
     AvatarEditorModel model(newest(),storedAvatar(newest(),37),1);
     model.select(-1);
-    EXPECT_EQ(model.selection(),model.fieldCount()-1);
-    model.select(1);
     EXPECT_EQ(model.selection(),0u);
-    model.select(3);
+    model.select(10);
+    EXPECT_EQ(model.selection(),model.fieldCount()-1);
     model.turnPage(2);
     EXPECT_EQ(model.selection(),0u);
+    model.selectRow(99);
+    EXPECT_EQ(model.selection(),0u);
     EXPECT_FALSE(model.field(99).label.size());
+    EXPECT_TRUE(model.options(99).empty());
+    EXPECT_FALSE(model.choose(99,0));
 }
 
 TEST(AvatarEditorTest, TheFakeServiceStoresASavedAvatar) {

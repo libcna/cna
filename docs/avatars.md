@@ -66,30 +66,43 @@ catalog, or an unreachable service raises nothing; signing out empties the slot 
 
 ## The avatar editor
 
-`cna_avatar_editor` is CNA's avatar editor: a program of its own, as the console's was, so a game
-never contains customization code and no XNA API is added for it. The player signs in through the
-standard Guide -- a CNA service account or an offline local profile -- and edits on three pages:
+The CNA avatar editor is a system screen of the Guide: **Edit avatar** on the Guide's Home opens it
+over any game for a signed-in account or local profile, and `cna_avatar_editor` is the same screen
+as a program of its own, as the console's editor was. No game contains customization code and no
+XNA API is added for it. Opening it over a running game rather than leaving the game is CNA policy.
 
-- **Body**: body type, height (1.45-2.05 m in 1 cm steps), build, skin tone;
-- **Features**: eye color, facial hair and the catalog's face-shape controls (catalog 2 and later;
-  catalog 1 offers eye color only);
-- **Style**: hair, top, bottom, shoes, glasses, hat, and the hair, clothing and accessory colors.
+The avatar stands large on a lit stage, idle-animated (a wave on opening, a small gesture now and
+then, a cheer on saving). Beside it are twelve categories -- Body, Skin, Face, Eyes, Nose & mouth,
+Hair, Facial hair, Tops, Bottoms, Shoes, Glasses, Headwear -- and each category's choices:
+
+- **cards** rendered by the standard `AvatarRenderer` wearing that item (styles, body type, and the
+  face, eye and nose-and-mouth shapes, which move several face features together: Balanced resets them);
+- **swatches** for skin, hair, eye, clothing and accessory colors;
+- **sliders** for height (1.45-2.05 m), build and each face feature, labelled in words ("A little
+  wide", "Very broad") rather than numbers.
+
+What the focus rests on is tried on at once; Accept keeps it, and leaving the row without it goes
+back. The camera eases to what the category is about -- the whole avatar, head and shoulders, the
+top, the bottoms, the shoes -- and the player turns it (right stick, Z/C, dragging) and zooms
+(triggers, +/-, the wheel). X shuffles the category shown, Y randomizes the whole avatar coherently
+(natural hair and eye colors mostly, clothes in colors that go together, a face within its usual
+range, accessories now and then) and keeps the body type. Catalog 1 offers no face shapes or facial
+hair, and says so.
 
 It edits against the newest catalog the avatar's owner accepts -- the service's newest imported
-catalog for an account (the one it validates a save against), the newest compiled-in one for a local
-profile -- and carries an older catalog's avatar into it item by item. The preview is the standard
-`AvatarRenderer` playing `Stand0`, zoomed to the face on the Features page. Randomize keeps the body
-type; undo returns to the avatar the session started from. Save stores the description with the
-service's `avatars.set` (one change per account every two seconds) or in the local profile store;
-nothing is written until the player saves, and leaving with unsaved changes asks twice. Running
-games see the new avatar through `AvatarDescription.Changed`.
+catalog for an account (the one it validates a save against; a catalog this computer lacks is
+installed as a pack first), the newest compiled-in one for a local profile -- and carries an older
+catalog's avatar into it item by item. Saving is transactional: B asks to save, discard or keep
+editing when anything changed; the service's `avatars.set` (one change per account every two
+seconds) or the local profile store either holds the new avatar, or the editor explains why not and
+keeps the edits. When the stored avatar changes elsewhere while the editor is open, an untouched
+editor shows the new one and an edited one says that saving replaces it. Running games see a saved
+avatar through `AvatarDescription.Changed`.
 
-Keyboard and pad: Up/Down choose a row, Left/Right change it, Q/E (LB/RB) turn the page, R (Y)
-randomizes, Backspace (X) undoes everything, Enter (Start) saves, Z/C (right stick) turn the avatar,
-Esc (Back/B) leaves. It is built with the examples of a 3D renderer (`CNA_BUILD_EXAMPLES`).
-`--capture DIR` walks every page, edits, randomizes and saves, writing a PNG of each step; with
-`CNA_GAMER_SERVICES_AUTO_SIGN_IN` naming a profile and `CNA_GAMER_SERVICES_PROFILES_DIR` a scratch
-store it runs unattended on a private display.
+`cna_avatar_editor` is built with the examples of a 3D renderer (`CNA_BUILD_EXAMPLES`).
+`--capture DIR` walks the categories, tries on and keeps choices, randomizes and saves, writing a
+PNG of each step; with `CNA_GAMER_SERVICES_AUTO_SIGN_IN` naming a profile and
+`CNA_GAMER_SERVICES_PROFILES_DIR` a scratch store it runs unattended on a private display.
 
 ## Rendering
 

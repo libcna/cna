@@ -59,7 +59,8 @@ const std::vector<Glyph>& systemGlyphs();
 enum class Icon : std::uint8_t {
     Person, People, Party, Message, Invite, Trophy, Controller, Store, Settings, Star, StarOutline, Check, Cross, Plus,
     ChevronRight, ChevronLeft, Lock, Globe, Moon, Busy, Crown, Speaker, Clock, Search, PersonAdd, SignOut, Pencil,
-    Download, Info, Leaderboard, Home, Warning, Error, Question, Count
+    Download, Info, Leaderboard, Home, Warning, Error, Question, Figure, Drop, Face, Eye, Mouth, Hair, Beard, Shirt, Trousers, Shoe,
+    Glasses, Hat, Dice, Count
 };
 /** @brief An icon's skeleton, drawn in a 1000 x 1000 box (y up). @param icon Icon. @return Skeleton. */
 std::string_view iconStrokes(Icon icon);

@@ -64,6 +64,18 @@ std::shared_ptr<Screen> settingsScreen(Microsoft::Xna::Framework::PlayerIndex pl
 std::shared_ptr<Screen> partyScreen(Microsoft::Xna::Framework::PlayerIndex player);
 /** @brief This title's content, updates and avatar catalogs. @param player Player. @return Screen. */
 std::shared_ptr<Screen> contentScreen(Microsoft::Xna::Framework::PlayerIndex player);
+/** @brief What happens when the avatar editor closes. */
+struct AvatarEditorOptions {
+    /** @brief Randomize entropy (0: a random seed). */
+    std::uint32_t seed=0;
+    /** @brief Called once when the editor closes: true when the avatar was saved during it. */
+    std::function<void(bool)> closed;
+    /** @brief Seconds between checks for the stored avatar changing elsewhere while it is open. */
+    double refreshSeconds=5.0;
+};
+/** @brief The CNA avatar editor for a player's profile (a CNA account or a local profile).
+ * @param player Player. @param options Options. @return Screen. */
+std::shared_ptr<Screen> avatarEditorScreen(Microsoft::Xna::Framework::PlayerIndex player,AvatarEditorOptions options={});
 /** @brief A received game invitation. @param player Recipient's player. @param sender Sender gamertag.
  * @param senderId Sender service identity. @param detail Session description.
  * @param answer Called once: true (accept), false (decline), or empty (closed unanswered).
@@ -121,6 +133,10 @@ std::string currentScreenForTesting();
 std::vector<std::string> labelsForTesting();
 /** @brief Tests: the focused item of the top screen, or -1. @return Index. */
 int focusForTesting();
+/** @brief Tests and captures: whether a screen still waits for data or an avatar picture. @return Busy. */
+bool busyForTesting();
+/** @brief Tests: one frame passes for the top screen with nothing pressed. */
+void frameForTesting();
 /** @brief Tests: acts as if a command was pressed once. @param command Command. */
 void sendForTesting(Command command);
 /** @brief Tests: acts as if an item was clicked. @param index Item. */
