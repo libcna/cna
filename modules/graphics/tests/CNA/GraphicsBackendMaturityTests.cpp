@@ -16,9 +16,9 @@ using CNA::toStringView;
 static_assert(getCurrentGraphicsBackendMaturity() == getCurrentGraphicsBackendMaturity());
 static_assert(!toStringView(getCurrentGraphicsBackendMaturity()).empty());
 constexpr GraphicsBackendMaturity kCompileTimeMaturity = getCurrentGraphicsBackendMaturity();
-constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::SvgDom) + 1;
-static_assert(kPublicRendererCount == 22,
-              "GraphicsRendererType must expose all 22 public renderer identities");
+constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::Fna3d) + 1;
+static_assert(kPublicRendererCount == 18,
+              "GraphicsRendererType must expose all 18 public renderer identities");
 
 TEST(GraphicsBackendMaturityTest, GetCurrentGraphicsBackendMaturityDoesNotThrow)
 {
@@ -62,17 +62,13 @@ namespace
             case GraphicsRendererType::Headless:
             case GraphicsRendererType::Stub:
             case GraphicsRendererType::Canvas:
-            case GraphicsRendererType::HtmlDom:
             case GraphicsRendererType::SdlGpu:
-            case GraphicsRendererType::OpenGL4:
-            case GraphicsRendererType::Gdi:
             case GraphicsRendererType::Metal:
                 return GraphicsBackendMaturity::Supported;
 
             case GraphicsRendererType::WebGPU:
             case GraphicsRendererType::Software:
             case GraphicsRendererType::Fna3d:
-            case GraphicsRendererType::SvgDom:
                 return GraphicsBackendMaturity::Experimental;
 
                 return GraphicsBackendMaturity::Historical;

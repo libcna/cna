@@ -57,30 +57,18 @@ namespace CNA
         /** @brief HTML Canvas 2D (Emscripten). */
         Canvas,
 
-        /** @brief HTML DOM elements composited by CSS (Emscripten). */
-        HtmlDom,
-
         /** @brief Direct3D 9. */
         DirectX9,
 
         /** @brief SDL_GPU. */
         SdlGpu,
 
-        /** @brief Real desktop OpenGL 4.x core profile. */
-        OpenGL4,
-
-        /** @brief Classic Win32 GDI with private CPU 2D rasterization. */
-        Gdi,
-
         /** @brief Native Apple Metal. */
         Metal,
 
         /** @brief FNA3D (FNA-XNA/FNA3D), the XNA-shaped C graphics library FNA itself renders
          * through; it selects SDL_GPU, Direct3D 11 or OpenGL internally at runtime. */
-        Fna3d,
-
-        /** @brief SVG DOM (Emscripten only, 2D-only): SpriteBatch output as real SVG elements. */
-        SvgDom
+        Fna3d
     };
 
     /**
@@ -128,22 +116,14 @@ namespace CNA
         return GraphicsRendererType::DirectX12;
 #elif defined(CNA_RENDERER_CANVAS)
         return GraphicsRendererType::Canvas;
-#elif defined(CNA_RENDERER_HTML_DOM)
-        return GraphicsRendererType::HtmlDom;
 #elif defined(CNA_RENDERER_DIRECTX9)
         return GraphicsRendererType::DirectX9;
 #elif defined(CNA_RENDERER_SDL_GPU)
         return GraphicsRendererType::SdlGpu;
-#elif defined(CNA_RENDERER_OPENGL4)
-        return GraphicsRendererType::OpenGL4;
-#elif defined(CNA_RENDERER_GDI)
-        return GraphicsRendererType::Gdi;
 #elif defined(CNA_RENDERER_METAL)
         return GraphicsRendererType::Metal;
 #elif defined(CNA_RENDERER_FNA3D)
         return GraphicsRendererType::Fna3d;
-#elif defined(CNA_RENDERER_SVG_DOM)
-        return GraphicsRendererType::SvgDom;
 #else
 #error "CNA: no CNA_RENDERER_* compile definition set -- graphics renderer selection (cmake/RendererSelection.cmake) is broken"
 #endif
@@ -182,14 +162,10 @@ namespace CNA
             case GraphicsRendererType::DirectX11:        return "DIRECTX11";
             case GraphicsRendererType::DirectX12:        return "DIRECTX12";
             case GraphicsRendererType::Canvas:       return "CANVAS";
-            case GraphicsRendererType::HtmlDom:      return "HTML_DOM";
             case GraphicsRendererType::DirectX9:          return "DIRECTX9";
             case GraphicsRendererType::SdlGpu:        return "SDL_GPU";
-            case GraphicsRendererType::OpenGL4:       return "OPENGL4";
-            case GraphicsRendererType::Gdi:           return "GDI";
             case GraphicsRendererType::Metal:          return "METAL";
             case GraphicsRendererType::Fna3d:         return "FNA3D";
-            case GraphicsRendererType::SvgDom:         return "SVG_DOM";
         }
         return "UNKNOWN";
     }
@@ -223,7 +199,7 @@ namespace CNA
             return true;
         };
 
-        for (int ordinal = 0; ordinal <= static_cast<int>(GraphicsRendererType::SvgDom); ++ordinal)
+        for (int ordinal = 0; ordinal <= static_cast<int>(GraphicsRendererType::Fna3d); ++ordinal)
         {
             const auto candidate = static_cast<GraphicsRendererType>(ordinal);
             if (equalsIgnoreCase(getGraphicsRendererName(candidate), name))

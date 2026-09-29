@@ -58,7 +58,7 @@ namespace CnaTest::WireFrameOracle
     [[nodiscard]] inline bool HasPixelOracle()
     {
         return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Software, Vulkan, WebGPU, SdlGpu,
-                               DirectX9, DirectX11, DirectX12, OpenGL4);
+                               DirectX9, DirectX11, DirectX12);
     }
 
     // The subset actually measured. D3D12 is excluded because no D3D12 runtime exists in this

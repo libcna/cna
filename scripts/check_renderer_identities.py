@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Renderer-identity registry gate (plans/MODULARIZATION_PLAN.md §2.3).
 
-CNA has exactly 22 public renderer identities (plans/plan_renderer_cleanup.md). This check mechanically compares
+CNA has exactly 18 public renderer identities (docs/removed-renderers.md). This check mechanically compares
 the authoritative registries -- the public GraphicsRendererType enum, the
 CNA_GRAPHICS_RENDERER cmake selection list, and the runtime renderer registry --
 against the canonical identity table below. Any addition, removal or rename of a
@@ -92,7 +92,7 @@ COUNTED_DOCUMENTS = {
 IDENTITY_COUNT = re.compile(r"(?<![-\w])(\d+)\s+public\s+(?:renderer\s+)?identities")
 FAMILY_COUNT = re.compile(r"(?<![-\w])(\d+)\s+implementation\s+families\b")
 
-# Canonical public identities: (cmake selection name, enum name, C ABI value). 22 entries.
+# Canonical public identities: (cmake selection name, enum name, C ABI value). 18 entries.
 #
 # The C ABI value is the ONLY stable numeric identity contract CNA publishes. The C++ enum's
 # ordinals are not one and never were: they are dense and were renumbered when SKIA was retired in
@@ -114,21 +114,17 @@ IDENTITIES = [
     ("DIRECTX11", "DirectX11", 14),
     ("DIRECTX12", "DirectX12", 15),
     ("CANVAS", "Canvas", 17),
-    ("HTML_DOM", "HtmlDom", 18),
     ("DIRECTX9", "DirectX9", 22),
     ("SDL_GPU", "SdlGpu", 31),
-    ("OPENGL4", "OpenGL4", 33),
-    ("GDI", "Gdi", 40),
     ("METAL", "Metal", 42),
     ("FNA3D", "Fna3d", 43),
-    ("SVG_DOM", "SvgDom", 44),
 ]
 
 # Retired identities and their permanently reserved C ABI values. A retired value is never
 # reassigned -- not to a new renderer, and not to the same renderer if it is ever restored with
 # different semantics -- so this table only ever grows. SKIA (19) was retired in 2026-08; twenty-five
-# more on 2026-09-17, and DIRECT2D (16), FREEDIRECT (21) and PORTABLEGL (46) on 2026-09-27
-# (plans/plan_renderer_cleanup.md, docs/removed-renderers.md).
+# more on 2026-09-17, DIRECT2D (16), FREEDIRECT (21) and PORTABLEGL (46) on 2026-09-27, and
+# HTML_DOM (18), OPENGL4 (33), GDI (40) and SVG_DOM (44) on 2026-09-28 (docs/removed-renderers.md).
 #
 # It is pinned here as well as in cmake/RendererIdentities.cmake on purpose. The CMake list exists
 # to REFUSE a retired selector at configure time; this one exists to make the refusal itself
@@ -136,12 +132,12 @@ IDENTITIES = [
 # precedent is concrete: eleven identities were retired on 2026-08-30 and restored on 2026-09-04,
 # and nothing mechanical would have stopped that restoration from taking different numbers.
 RETIRED_IDENTITIES = {
-    "BGFX": 7, "MAGNUM": 10, "DIRECT2D": 16, "SKIA": 19, "BLEND2D": 20, "FREEDIRECT": 21,
-    "DIRECTX1": 23, "DIRECTX2": 24, "DIRECTX3": 25, "DIRECTX5": 26, "DIRECTX6": 27,
-    "DIRECTX7": 28, "DIRECTX8": 29, "DIRECTX10": 30, "OPENGLES1": 32, "OPENGL1": 34,
-    "OPENGL2": 35, "WICKED": 36, "SOKOL": 37, "DILIGENT": 38, "GLIDE": 39, "LLGL": 41,
-    "OPENVG": 45, "PORTABLEGL": 46, "TINYGL": 47, "IGL": 48, "PIXIJS": 49, "NANOVG": 50,
-    "RLGL": 51,
+    "BGFX": 7, "MAGNUM": 10, "DIRECT2D": 16, "HTML_DOM": 18, "SKIA": 19, "BLEND2D": 20,
+    "FREEDIRECT": 21, "DIRECTX1": 23, "DIRECTX2": 24, "DIRECTX3": 25, "DIRECTX5": 26,
+    "DIRECTX6": 27, "DIRECTX7": 28, "DIRECTX8": 29, "DIRECTX10": 30, "OPENGLES1": 32,
+    "OPENGL4": 33, "OPENGL1": 34, "OPENGL2": 35, "WICKED": 36, "SOKOL": 37, "DILIGENT": 38,
+    "GLIDE": 39, "GDI": 40, "LLGL": 41, "SVG_DOM": 44, "OPENVG": 45, "PORTABLEGL": 46,
+    "TINYGL": 47, "IGL": 48, "PIXIJS": 49, "NANOVG": 50, "RLGL": 51,
 }
 
 # The first value never assigned to any identity, live or retired. A new renderer takes this one.

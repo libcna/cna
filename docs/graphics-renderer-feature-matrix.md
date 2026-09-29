@@ -130,16 +130,12 @@ runtime contract is independently exercised by
 | DirectX 9 | ✅ | Explicit factory; `D3DFMT_INDEX32`. |
 | EasyGL | ✅ | Explicit factory; draw selects `GL_UNSIGNED_INT`. |
 | FNA3D | ✅ | Explicit factory; FNA3D 32-bit index element size. |
-| GDI | ❌ | Local, explicit `32-bit index buffers` unsupported error. |
 | Headless | ◇ | Width-locked uint32 shadow and validated indexed-draw trace; no pixels. |
-| HTML DOM | ❌ | 2D DOM renderer; inherits the shared refusal. |
 | Metal | ✅ | Explicit factory; `MTLIndexTypeUInt32`. |
-| OpenGL 4 | ✅ | Explicit factory; draw selects `GL_UNSIGNED_INT`. |
 | SDL_GPU | ✅ | Explicit width-locked factory; `SDL_GPU_INDEXELEMENTSIZE_32BIT`. |
 | SDL_Renderer | ❌ | 2D-only; inherits the shared refusal. |
-| Software | ✅ | Width-locked uint32 CPU buffer and raster path (2D-only GDI build rejects locally). |
+| Software | ✅ | Width-locked uint32 CPU buffer and raster path. |
 | Stub | ◇ | Explicit width-locked handle accepts uint32 exactly; renderer intentionally draws nothing. |
-| SVG DOM | ❌ | 2D DOM renderer; inherits the shared refusal. |
 | Vulkan | ✅ | Explicit factory; `VK_INDEX_TYPE_UINT32`. |
 | WebGPU | ✅ | Explicit factory; `WGPUIndexFormat_Uint32`. |
 

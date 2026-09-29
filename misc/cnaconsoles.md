@@ -98,7 +98,7 @@ Determined directly from this tree:
 |---|---|---|
 | SDL3 is a hard dependency of the core layer | `modules/input` 1092 direct `SDL_*`, `modules/devices` 338, `modules/graphics` 208, `modules/devices-ext` 154, `modules/audio` 97, `modules/runtime` 75, `modules/media` 43, `modules/core` 39 | This blocks platforms without an SDL port (Dreamcast, Xbox Classic, Wii)—hence `cnaplatform.md` |
 | Renderer selection is compile-time | `CNA_GRAPHICS_RENDERER`, 46 identities, per-family modules | **Strong point**—a console renderer is just another family in `modules/renderers/` |
-| A non-desktop port exists | Emscripten (WEBGL1/2, CANVAS, HTML_DOM, custom main-loop spike) | Proof that the codebase can accommodate a foreign lifecycle model |
+| A non-desktop port exists | Emscripten (WEBGL1/2, CANVAS, custom main-loop spike) | Proof that the codebase can accommodate a foreign lifecycle model |
 | Per-platform gating already exists | `modules/media/CMakeLists.txt` excludes FFmpeg sources where FFmpeg is unavailable | A template for a “console profile” |
 | Declared standard | `CMAKE_CXX_STANDARD 23`, `CXX_EXTENSIONS OFF` | See below—less painful than it seems |
 | C++23 library features actually used | `std::format` 0, `std::print` 0, `std::expected` 0, `std::mdspan` 0, `std::flat_map` 0, `import std` 0 | The code is effectively **C++20** (concepts 74, `requires` 403, `std::optional` 400, `std::bit_cast` 19, `std::span` 14) → GCC 12/13 from devkitPro is realistic |

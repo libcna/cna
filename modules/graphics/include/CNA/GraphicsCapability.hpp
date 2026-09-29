@@ -15,10 +15,9 @@ namespace CNA
     {
         /**
          * @brief The 3D pipeline as a whole (vertex/index buffers, 3D draw calls, depth/stencil
-         * clears and state). Several renderers, including the native 2D renderer, Canvas and GDI,
-         * are intentionally 2D-only and lack this entirely. Query the selected
-         * renderer rather than inferring support from its name. GDI's separate 2D stencil-mask
-         * extension does not imply a 3D pipeline.
+         * clears and state). Some renderers, such as the native 2D renderer and Canvas, are
+         * intentionally 2D-only and lack this entirely. Query the selected renderer rather than
+         * inferring support from its name.
          */
         ThreeD,
 
@@ -88,9 +87,9 @@ namespace CNA
         /**
          * @brief A real stencil plane usable independently of depth.
          *
-         * This is separate from DepthStencilBuffer so a 2D renderer such as GDI can advertise its
-         * CPU stencil-mask extension without falsely claiming a depth attachment or 3D pipeline.
-         * Appended to preserve the numeric values of the existing capability entries.
+         * This is separate from DepthStencilBuffer so a renderer can advertise stencil storage
+         * without claiming a depth attachment or a 3D pipeline. Appended to preserve the numeric
+         * values of the existing capability entries.
          */
         StencilBuffer,
 
@@ -98,13 +97,9 @@ namespace CNA
          * @brief `BlendState.Additive` uses the renderer's documented additive colour path, rather
          * than silently degrading to normal alpha blending. This flag does not widen that
          * renderer's documented alpha-channel contract or imply arbitrary custom BlendState
-         * support. HTML_DOM support is browser-version-dependent
-         * (plans/plan_html_dom.md HTMLDOM-117):
-         * on an engine without `plus-lighter`, the CSS value is simply ignored before any CNA code
-         * can observe it, and `Additive` silently renders as ordinary source-over blending instead
-         * -- no exception, a different visual result. Query this before relying on genuine additive
-         * compositing. Each renderer reports the fidelity of its CNA implementation, not merely
-         * whether its underlying graphics API could theoretically express additive blending.
+         * support. Query this before relying on genuine additive compositing. Each renderer reports
+         * the fidelity of its CNA implementation, not merely whether its underlying graphics API
+         * could theoretically express additive blending.
          */
         AdditiveBlending,
 

@@ -41,7 +41,7 @@ These are surface plumbing, not drawing APIs. OpenGL/Vulkan/CPU drawing remains 
 renderer; the platform boundary is crossed only for context or surface lifecycle and at most once
 per presented frame. `GraphicsRendererCreateArgs` must carry only the applicable narrow service,
 not `IPlatform*`, and a missing required service is a deterministic construction error naming the
-capability. Native-handle renderers (DirectX, GDI, the native WebGPU path) need no service
+capability. Native-handle renderers (DirectX, the native WebGPU path) need no service
 pointer at all.
 
 The three deliberate SDL exceptions (`SDL_RENDERER`, `SDL_GPU`, `FNA3D`) may keep

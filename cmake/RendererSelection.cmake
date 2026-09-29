@@ -34,19 +34,8 @@ option(CNA_RENDERER_DIRECTX12 "Enable Direct3D 12 graphics renderer (Windows onl
 # plans/plan_canvas.md: HTML Canvas 2D renderer -- Emscripten-only (design decision 1), a browser-native,
 # GPU-free 2D-only renderer using canvas.getContext('2d') instead of WEBGL2's WebGL context.
 option(CNA_RENDERER_CANVAS "Enable HTML Canvas 2D graphics renderer (Emscripten only)" OFF)
-# plans/plan_html_dom.md: HTML DOM renderer -- Emscripten-only (design decision 1), 2D-only, rendering
-# SpriteBatch output as pooled CSS-transformed <div> elements instead of rasterizing into a canvas.
-option(CNA_RENDERER_HTML_DOM "Enable HTML DOM (CSS-composited) graphics renderer (Emscripten only)" OFF)
 option(CNA_RENDERER_DIRECTX9 "Enable Direct3D 9 graphics renderer (Windows only)" OFF)
 option(CNA_RENDERER_SDL_GPU "Enable SDL_gpu graphics renderer" OFF)
-
-# plans/plan_opengl4.md GL4-1: real desktop OpenGL 4.x core-profile graphics renderer -- deliberately
-# independent of the GL-family OPENGLES3/OPENGL33/WEBGL1/WEBGL2 renderers (internally EasyGL; the
-# OPENGLES3 default targets OpenGL ES 3.0 via EasyGLRenderer's own
-# SDL_GL_CONTEXT_PROFILE_ES context request, not a real desktop GL 4.x core profile).
-option(CNA_RENDERER_OPENGL4 "Enable real desktop OpenGL 4.x core-profile graphics renderer" OFF)
-
-option(CNA_RENDERER_GDI "Enable classic Win32 GDI (2D-only) graphics renderer" OFF)
 
 # Metal owns the renderer directly; SDL provides only the native macOS window and CAMetalLayer.
 option(CNA_RENDERER_METAL "Enable native Apple Metal graphics renderer (macOS only)" OFF)
@@ -57,12 +46,6 @@ option(CNA_RENDERER_METAL "Enable native Apple Metal graphics renderer (macOS on
 # through MojoShader -- FNA3D has no other shader entry point at all, so the stock-effect blobs are
 # fetched from the pinned FNA checkout alongside FNA3D itself (see cmake/ThirdPartyFNA3D.cmake).
 option(CNA_RENDERER_FNA3D "Enable FNA3D graphics renderer (FNA-XNA/FNA3D + MojoShader)" OFF)
-
-# plans/plan_svg_dom.md: SVG DOM renderer -- Emscripten-only (same design decision as CANVAS/HTML_DOM),
-# 2D-only, rendering SpriteBatch output as real <svg>/<image> elements (an <svg> viewport per
-# sprite crops its source rectangle; SVG-native feColorMatrix filters apply the tint) instead of
-# either rasterizing into a <canvas> (CANVAS) or CSS-transforming pooled <div>s (HTML_DOM).
-option(CNA_RENDERER_SVG_DOM "Enable SVG DOM graphics renderer (Emscripten only)" OFF)
 
 set(_cna_enabled_renderers)
 foreach(_cna_identity IN LISTS CNA_RENDERER_PUBLIC_IDENTITIES)
@@ -141,8 +124,8 @@ endif()
 # plans/plan_dx.md design decision 2: DIRECTX11/DIRECTX12 genuinely cannot build anywhere but Windows (native or
 # MinGW/MSVC cross-compile) -- d3d11.h/d3d12.h/dxgi.h do not exist elsewhere, so this is a hard
 # FATAL_ERROR. plans/plan_dx9.md design decision 1 extends this same gate to DIRECTX9 (d3d9.h is
-# equally Windows-only), and GDI needs the Windows SDK in the same way.
-if((CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9" OR CNA_GRAPHICS_RENDERER STREQUAL "GDI")
+# equally Windows-only).
+if((CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
         AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
     message(FATAL_ERROR
         "CNA: ${CNA_GRAPHICS_RENDERER} renderer only builds when targeting Windows. Either build "
@@ -180,23 +163,6 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "CANVAS" AND NOT EMSCRIPTEN)
         "CNA: CANVAS renderer only builds when targeting Emscripten (HTML Canvas is a browser DOM "
         "API). Configure with -DCMAKE_TOOLCHAIN_FILE=\$EMSDK/upstream/emscripten/cmake/Modules/"
         "Platform/Emscripten.cmake (or use emcmake).")
-endif()
-
-# plans/plan_html_dom.md design decision 1: document, HTMLDivElement and CSS only exist inside a browser.
-if(CNA_GRAPHICS_RENDERER STREQUAL "HTML_DOM" AND NOT EMSCRIPTEN)
-    message(FATAL_ERROR
-        "CNA: HTML_DOM renderer only builds when targeting Emscripten (it renders through real DOM "
-        "elements and CSS). Configure with -DCMAKE_TOOLCHAIN_FILE=\$EMSDK/upstream/emscripten/"
-        "cmake/Modules/Platform/Emscripten.cmake (or use emcmake).")
-endif()
-
-# plans/plan_svg_dom.md design decision 1: same reasoning as CANVAS/HTML_DOM above -- document, SVG
-# namespace elements and the browser DOM only exist inside a browser.
-if(CNA_GRAPHICS_RENDERER STREQUAL "SVG_DOM" AND NOT EMSCRIPTEN)
-    message(FATAL_ERROR
-        "CNA: SVG_DOM renderer only builds when targeting Emscripten (it renders through real SVG "
-        "DOM elements). Configure with -DCMAKE_TOOLCHAIN_FILE=\$EMSDK/upstream/emscripten/"
-        "cmake/Modules/Platform/Emscripten.cmake (or use emcmake).")
 endif()
 
 # plans/plan_glbackends.md Phase A/GLB-7: all 5 GL-family public renderers (OPENGLES2/OPENGLES3/OPENGL33
@@ -397,12 +363,6 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "CANVAS")
     set(RENDERER_TARGET "cna_renderer_canvas")
     list(APPEND _cna_identity_defines CNA_RENDERER_CANVAS)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_CANVAS")
-elseif(CNA_GRAPHICS_RENDERER STREQUAL "HTML_DOM")
-    message(STATUS "CNA: Using HTML_DOM (CSS-composited DOM elements) graphics renderer")
-    set(RENDERER_DIR "modules/renderers/html-dom")
-    set(RENDERER_TARGET "cna_renderer_html_dom")
-    list(APPEND _cna_identity_defines CNA_RENDERER_HTML_DOM)
-    set(CNA_RENDERER_DEFINE "CNA_RENDERER_HTML_DOM")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     message(STATUS "CNA: Using DIRECTX9 graphics renderer")
     set(RENDERER_DIR "modules/renderers/directx9")
@@ -461,33 +421,6 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         endif()
         add_compile_definitions(CNA_SDL_GPU_COMPILED_EFFECTS)
     endif()
-elseif(CNA_GRAPHICS_RENDERER STREQUAL "OPENGL4")
-    message(STATUS "CNA: Using OPENGL4 (real desktop OpenGL 4.x core profile) graphics renderer")
-    set(RENDERER_DIR "modules/renderers/opengl4")
-    set(RENDERER_TARGET "cna_renderer_opengl4")
-    list(APPEND _cna_identity_defines CNA_RENDERER_OPENGL4)
-    set(CNA_RENDERER_DEFINE "CNA_RENDERER_OPENGL4")
-    find_package(OpenGL REQUIRED)
-    # plans/plan_opengl4_modern_graphics.md GL4-0020: compiled XNA Effect bytecode through
-    # MojoShader's own OpenGL adapter, asked for its desktop GLSL 1.20 dialect -- the route EasyGL's
-    # desktop profile takes under CNA_EASYGL_COMPILED_EFFECTS. Off by default and shaped exactly like
-    # that option, for the same reason: MojoShader is a fetched dependency this renderer does not
-    # otherwise need. OPENGL4 is a real SDL-free renderer (native X11/Wayland), so in a
-    # CNA_ENABLE_SDL=OFF build cna_configure_mojoshader() compiles MojoShader on the C standard
-    # library rather than SDL3's.
-    option(CNA_OPENGL4_COMPILED_EFFECTS
-           "Build OpenGL4 support for compiled XNA Effect bytecode (plans/plan_opengl4_modern_graphics.md GL4-0020)" OFF)
-    if(CNA_OPENGL4_COMPILED_EFFECTS)
-        include(cmake/ThirdPartyFNA3D.cmake)
-        cna_configure_mojoshader()
-        add_compile_definitions(CNA_OPENGL4_COMPILED_EFFECTS)
-    endif()
-elseif(CNA_GRAPHICS_RENDERER STREQUAL "GDI")
-    message(STATUS "CNA: Using classic Win32 GDI 2D graphics renderer")
-    set(RENDERER_DIR "modules/renderers/gdi")
-    set(RENDERER_TARGET "cna_renderer_gdi")
-    list(APPEND _cna_identity_defines CNA_RENDERER_GDI)
-    set(CNA_RENDERER_DEFINE "CNA_RENDERER_GDI")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
     message(STATUS "CNA: Using FNA3D graphics renderer (FNA-XNA/FNA3D + MojoShader)")
     set(RENDERER_DIR "modules/renderers/fna3d")
@@ -496,12 +429,6 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_FNA3D")
     include(cmake/ThirdPartyFNA3D.cmake)
     cna_configure_fna3d()
-elseif(CNA_GRAPHICS_RENDERER STREQUAL "SVG_DOM")
-    message(STATUS "CNA: Using SVG_DOM (real SVG DOM elements) graphics renderer")
-    set(RENDERER_DIR "modules/renderers/svg-dom")
-    set(RENDERER_TARGET "cna_renderer_svg_dom")
-    list(APPEND _cna_identity_defines CNA_RENDERER_SVG_DOM)
-    set(CNA_RENDERER_DEFINE "CNA_RENDERER_SVG_DOM")
 else()
     message(FATAL_ERROR "CNA: Unknown graphics renderer: ${CNA_GRAPHICS_RENDERER}")
 endif()

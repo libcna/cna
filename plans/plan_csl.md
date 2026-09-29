@@ -979,7 +979,7 @@ one backend. This is the first vertical slice: CSL → CSIR → GLSL → a real 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
 | CSL-1000 | `glsl-330` end-to-end: the `CSL-99` shaders emit, compile on the driver and draw | ⬜ | An EasyGL example draws the textured triangle from CSL source; the readback matches the expected image within the ABI's tolerance. **This row is Milestone 1.** |
-| CSL-1001 | `glsl-450` coverage | ⬜ | Same corpus, plus compute; run under the OPENGL4 identity. |
+| CSL-1001 | `glsl-450` coverage | ⛔ | Withdrawn 2026-09-28: it was to run under the `OPENGL4` identity, which is retired (`docs/removed-renderers.md`); no live identity promises a GLSL 4.50 context. |
 | CSL-1002 | `glsles-300` coverage | ⬜ | Same corpus under the OPENGLES3 identity, which is the repository's default test renderer. |
 | CSL-1003 | `glsles-310` coverage including compute | ⬜ | Compute cases run and read back. |
 | CSL-1004 | `glsles-100` coverage with its full legalization stack | ⬜ | Runs the Core-tier corpus; every case it cannot run is refused with a named capability, and the count of refusals is recorded rather than hidden. |
@@ -1412,7 +1412,7 @@ name and is not a gap. No row in this phase may add a compiler to a renderer (D3
 |---|---|---|---|
 | CSL-1766 | `OPENGLES3` (EasyGL) | ⬜ | Declares `glsles-300`; full Core + Extended corpus passes; the repository's default test renderer, so this row's pass count is the baseline every other GL row is compared against. |
 | CSL-1767 | `OPENGL33` (EasyGL) | ⬜ | Declares `glsl-330`, then `glsles-300`; Core + Extended pass. |
-| CSL-1768 | `OPENGL4` | ⬜ | Declares `glsl-450`, `glsl-330`; Core + Extended + Compute pass. |
+| CSL-1768 | `OPENGL4` | ⛔ | Withdrawn 2026-09-28: the `OPENGL4` identity is retired (`docs/removed-renderers.md`). |
 | CSL-1769 | `OPENGLES2` (EasyGL) | ⬜ | Declares `glsles-100`; Core passes; every Extended case refuses by capability with a named message, and the refusal list is recorded rather than counted as failure. |
 | CSL-1770 | `WEBGL2` (EasyGL) | ⬜ | Declares `glsles-300`; Core + Extended under Emscripten, verified in a real browser through the existing browser-test harness or 🟨 with the reason. |
 | CSL-1771 | `WEBGL1` (EasyGL) | ⬜ | Declares `glsles-100`; same shape as `OPENGLES2`. |
@@ -1459,7 +1459,7 @@ name and is not a gap. No row in this phase may add a compiler to a renderer (D3
 | CSL-1804 | `SOFTWARE` | ⬜ | **Owner decision Q1: no for v1.** SOFTWARE could run CSIR-L through the interpreter and become the first renderer whose shaders are genuinely CSL; the owner decided against it for v1, so it answers "none" and takes the same honest-skip behaviour as `HEADLESS` — a conformance run SKIPs and never reports a pass. The row records the decision and its reason (an interpreter written for correctness is not a rasterizer's shading core until measured otherwise); `CSL-2744` re-decides on the `CSL-1385` number. |
 | CSL-1805 | `STUB` | ⬜ | "none"; the no-op renderer, recorded. |
 | CSL-1806 | `SKIA` | ⬜ | CPU-raster 2D with no custom effects: "none", recorded against `docs/skia-renderer.md`. |
-| CSL-1807 | `DIRECT2D`, `GDI`, `BLEND2D`, `CANVAS`, `HTML_DOM`, `SVG_DOM`, `OPENVG` | ⬜ | Seven 2D/vector identities, one row: all "none". Each is listed explicitly with its boundary document, so the matrix has no blanks. |
+| CSL-1807 | `CANVAS` | ⬜ | The browser 2D identity: "none", listed with its boundary document so the matrix has no blanks. (The other 2D identities this row once listed are all retired, `docs/removed-renderers.md`.) |
 | CSL-1808 | `SDL_RENDERER` | ⬜ | SDL's 2D renderer: "none" unless SDL3's own shader hook applies; the row states which. |
 | CSL-1809 | `GLIDE` | ⬜ | Pre-shader 3D API: "none", recorded against `plan_glide.md`. |
 
@@ -1741,7 +1741,7 @@ numerically (D9, §25).
 | CSL-2373 | `compute/storage-access/*` | ⬜ | Read-only and write-only enforcement, and the refusals. |
 | CSL-2374 | `compute/image/*` — storage images where the capability exists | ⬜ | Capability-gated; ≥ 25 cases. |
 | CSL-2375 | Compute cases run in the interpreter with its deterministic schedule | ⬜ | And a second run with a different schedule (`CSL-1373`) asserts a properly-synchronized case is schedule-independent — which is how the corpus catches its own racy cases. |
-| CSL-2376 | Compute cases run on `VULKAN`, `WEBGPU`, `OPENGL4`, `glsles-310` | ⬜ | Pass counts recorded per renderer; every SKIP names its missing capability. |
+| CSL-2376 | Compute cases run on `VULKAN`, `WEBGPU`, `glsles-310` | ⬜ | Pass counts recorded per renderer; every SKIP names its missing capability. |
 | CSL-2377 | Compute cases are excluded from Core and Extended certification | ⬜ | Structural: they belong to the Compute tier only, enforced by the manifest schema. |
 
 ---

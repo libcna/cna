@@ -13,9 +13,9 @@ static_assert(getCurrentGraphicsRendererType() == getCurrentGraphicsRendererType
 static_assert(!getCurrentGraphicsRendererName().empty());
 constexpr GraphicsRendererType kCompileTimeType = getCurrentGraphicsRendererType();
 constexpr std::string_view kCompileTimeName = getCurrentGraphicsRendererName();
-constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::SvgDom) + 1;
-static_assert(kPublicRendererCount == 22,
-              "GraphicsRendererType must expose all 22 public renderer identities");
+constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::Fna3d) + 1;
+static_assert(kPublicRendererCount == 18,
+              "GraphicsRendererType must expose all 18 public renderer identities");
 
 TEST(GraphicsRendererTypeTest, GetCurrentGraphicsRendererTypeDoesNotThrow)
 {
@@ -63,15 +63,11 @@ namespace
             case GraphicsRendererType::DirectX11:       return "DIRECTX11";
             case GraphicsRendererType::DirectX12:       return "DIRECTX12";
             case GraphicsRendererType::Canvas:      return "CANVAS";
-            case GraphicsRendererType::HtmlDom:     return "HTML_DOM";
             case GraphicsRendererType::Stub:        return "STUB";
             case GraphicsRendererType::DirectX9:        return "DIRECTX9";
             case GraphicsRendererType::SdlGpu:      return "SDL_GPU";
-            case GraphicsRendererType::OpenGL4:     return "OPENGL4";
-            case GraphicsRendererType::Gdi:         return "GDI";
             case GraphicsRendererType::Metal:       return "METAL";
             case GraphicsRendererType::Fna3d:       return "FNA3D";
-            case GraphicsRendererType::SvgDom:      return "SVG_DOM";
         }
         return {};
     }

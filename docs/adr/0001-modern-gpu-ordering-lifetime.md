@@ -8,7 +8,7 @@
 ## Context
 
 CNA already presents XNA drawing, resource transfers, CNAEXT compute and indirect operations through
-one `GraphicsDevice`, but its renderer families execute them differently. EasyGL, OpenGL4 and D3D11
+one `GraphicsDevice`, but its renderer families execute them differently. EasyGL and D3D11
 mostly call an immediate context. Vulkan and WebGPU build deferred command streams. D3D12 and Metal
 also require explicit submitted-work lifetime tracking. A portable resource API cannot expose one
 of those implementation models or require an application to repair backend-specific hazards.
@@ -190,7 +190,7 @@ resource correctly.
 
 | Backend family | Ordered execution | Automatic synchronization | Safe native retirement |
 |---|---|---|---|
-| EasyGL / OpenGL4 | One current GL context; calls execute in public order. CNA-side batches snapshot their inputs. | Renderer selects `glMemoryBarrier` bits and pass/FBO boundaries from logical uses. | Delete on the context thread after CNA deferred records release; GL owns completion of already-issued uses. |
+| EasyGL | One current GL context; calls execute in public order. CNA-side batches snapshot their inputs. | Renderer selects `glMemoryBarrier` bits and pass/FBO boundaries from logical uses. | Delete on the context thread after CNA deferred records release; GL owns completion of already-issued uses. |
 | D3D11 | One immediate context in public order; any deferred command list must retain its inputs. | Runtime hazard tracking plus renderer-owned unbind/copy rules; no public D3D state. | Keep COM references through command-list consumption/submission; release on the device thread. |
 | Vulkan | One monotonic record stream on the selected graphics/compute queue for Phase 22. | Internal per-resource/subresource intent tracker emits Vulkan barriers/layout transitions and render-pass splits. | Reuse the existing frame-fence retirement queue; target readbacks wait a submission fence, never routine `vkDeviceWaitIdle`. |
 | D3D12 | Direct command lists/queue preserve the same sequence. | Existing resource-state tracker expands to the new logical uses and emits transitions/UAV barriers. | Stamp resources/descriptors with the shared submitted fence value and recycle after `GetCompletedValue`. |

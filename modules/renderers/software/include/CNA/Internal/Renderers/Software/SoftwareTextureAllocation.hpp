@@ -10,9 +10,9 @@ namespace CNA::Internal::Renderers::Software
     /**
      * Maximum committed pixel storage for one CPU texture resource, including every declared mip
      * level down to and including level 0, but excluding container bookkeeping and allocator
-     * capacity overhead. Shares GDI-067's 512 MiB framebuffer ceiling: both are one CPU-visible
-     * RGBA8 resource on the same renderer, and a texture with no documented ceiling of its own let
-     * a single-level request as large as 1 GiB pass silently (GDI-076).
+     * capacity overhead. Shares the 512 MiB framebuffer ceiling: both are one CPU-visible RGBA8
+     * resource on the same renderer, and a texture with no documented ceiling of its own let a
+     * single-level request as large as 1 GiB pass silently.
      */
     inline constexpr std::size_t SoftwareTextureMaxBytes = SoftwareFramebufferMaxBytes;
 

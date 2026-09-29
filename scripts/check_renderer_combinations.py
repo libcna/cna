@@ -24,7 +24,6 @@ IDENTITIES_SCRIPT = os.path.join(REPO, "scripts", "check_renderer_identities.py"
 # The rules the CMake file implements, each keyed by a phrase that must appear in the docs so a user
 # hitting the configure error can look it up.
 RULES = {
-    "GDI + SOFTWARE": "GDI",
     # The "shared EasyGL" rule was REMOVED by plans/plan_runtimerenderer.md phase P11, which made that
     # family's GL profile a runtime value. Its five identities now coexist, so there is no rule to
     # keep in step -- and listing one here would demand documentation for a restriction that no

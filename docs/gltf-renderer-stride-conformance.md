@@ -71,7 +71,7 @@ declaration directly. STUB and HEADLESS keep honest non-rendering capability bou
   pixel back on every renderer in the build. A renderer may render it -- the answer must be exactly
   that red -- or refuse it by name; a third answer is a defect. It found two, in two renderers,
   giving two different wrong colours: `OPENGL4` painted the record's `NORMAL` and `DILIGENT` drew
-  black, where the plan row that opened the investigation had predicted one renderer. It needs a
+  black (both renderers have since been retired), where the plan row that opened the investigation had predicted one renderer. It needs a
   multi-renderer build (`CNA_MULTI_RENDERER`) and colour readback, so it is not in the CI matrix
   below; it runs in `cmake-build-multi`, which covers eight renderers with `ThreeD`.
 - `FixedFunctionArrayLayout.*` (`GLTF-473`) pins the shared fixed-function layout guard's decision

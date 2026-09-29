@@ -208,7 +208,7 @@ authored extension factors. A grazing pair holds F0 at `.04` and changes only F9
 yielding bytes 33 and 15. `EveryPbrShaderHonorsTransportedFresnelEndpoints` separately inventories
 every CPU upload, dielectric/metal endpoint mix and Schlick expression, with explicit counts
 for separately stored rigid/skinned shader sources. The optional `specularTexture` and
-`specularColorTexture` are not part of this factor-only slice. EasyGL, OpenGL4, DirectX9/11/12,
+`specularColorTexture` are not part of this factor-only slice. EasyGL, DirectX9/11/12,
 SDL GPU and Vulkan now consume both; the remaining renderer bindings remain the named `GLTF-344`
 limit. DirectX9's two ps_3_0 variants use 7 texture and 271 arithmetic instruction slots (278 total of the 512-slot
 limit), with compiler-extracted c24–c29 constants and s5/s6 samplers.
@@ -373,7 +373,6 @@ ordinary `CnaTests`/glTF conformance run even on a host that cannot build that b
 | DirectX 9 | flat normal + white, rigid and skinned | `DirectX9_Pbr` |
 | DirectX 11 | flat normal + white, rigid and skinned | `DirectX11_Pbr_VertexColor` (emissive/no-map route) |
 | DirectX 12 | flat normal + white, rigid and skinned | source-policy lock; no dedicated PBR pixel executable yet |
-| OpenGL 4 | flat normal + white, rigid and skinned | `OpenGL4_PbrEffect` |
 | SDL GPU | flat normal + white, rigid and skinned | `SdlGpu_PbrEffect`, `SdlGpu_SkinnedPbrEffect` |
 | WebGPU | flat normal + white, rigid and skinned | `WebGPU_Pbr3D`, `WebGPU_SkinnedPbr3D` |
 | Metal | named slot policy: normal→flat, all others→white | `MetalTextureBindingPolicy` unit matrix; real-device pixel gate remains platform-owned |
@@ -397,9 +396,9 @@ vertex-coloured metallic-roughness primitive lost its material model entirely an
 `SkinnedEffect`.
 
 Auditing that change found a **pre-existing defect this table now prevents recurring**: most PBR
-renderers had never learned stride 60 even though it has been live since `GLTF-182`. `OPENGL4` and
-`DIRECTX9` degraded visibly (position-only, no attributes, or an outright refusal). `GLTF-465`
-then found a second layer of the same defect in `OPENGL4`: binding the record correctly
+renderers had never learned stride 60 even though it has been live since `GLTF-182`. `OPENGL4`
+(since retired) and `DIRECTX9` degraded visibly (position-only, no attributes, or an outright
+refusal). `GLTF-465` then found a second layer of the same defect in `OPENGL4`: binding the record correctly
 was **not** enough, because its PBR *program* selection was still keyed on the old stride sets, so a
 stride-76/80 draw would have run the rigid PBR program over a skinned record.
 

@@ -52,7 +52,7 @@ specifically want a CNA extension your original XNA code never used.
 ## Choosing a renderer
 
 CNA has 25 public renderer identities over 21 implementation families, chosen at CMake configure
-time (`-DCNA_GRAPHICS_RENDERER=<SDL_RENDERER|OPENGLES2|OPENGLES3|OPENGL33|WEBGL1|WEBGL2|VULKAN|WEBGPU|HEADLESS|SOFTWARE|STUB|DIRECTX11|DIRECTX12|CANVAS|HTML_DOM|DIRECTX9|SDL_GPU|OPENGL4|GDI|METAL|FNA3D|SVG_DOM>`). Full per-feature detail is in
+time (`-DCNA_GRAPHICS_RENDERER=<SDL_RENDERER|OPENGLES2|OPENGLES3|OPENGL33|WEBGL1|WEBGL2|VULKAN|WEBGPU|HEADLESS|SOFTWARE|STUB|DIRECTX11|DIRECTX12|CANVAS|DIRECTX9|SDL_GPU|METAL|FNA3D>`). Full per-feature detail is in
 `docs/graphics-renderer-feature-matrix.md`; the practical summary:
 
 - **Your game is 2D only** (SpriteBatch/SpriteFont, no 3D models or stock Effects): any renderer

@@ -56,7 +56,7 @@ clipboard, dialogs, tray, camera, Vulkan surface, surface presentation, power in
   `SDL_SysWMinfo`, but that union is deliberately not part of the initial backend contract: every
   window system needs its own typed mapping and its own test, and shipping an untested one would
   be exactly the fabricated capability claim the contract forbids. Until it exists, renderers that
-  reach a window system directly — the `DIRECTX*` family, `GDI`, `METAL` — cannot run on
+  reach a window system directly — the `DIRECTX*` family and `METAL` — cannot run on
   this platform. Renderers that go through `IPlatformGlContext` can, because a GL context is
   identified by `WindowId`, never by a native handle.
 - **No surface presentation.** `CreateSurfacePresenter()` throws
@@ -122,10 +122,10 @@ Two honest limits:
 
 | Renderer | On SDL2 |
 |---|---|
-| `OPENGLES2`, `OPENGLES3`, `OPENGL33`, `OPENGL4` | supported — `IPlatformGlContext` |
+| `OPENGLES2`, `OPENGLES3`, `OPENGL33` | supported — `IPlatformGlContext` |
 | `HEADLESS`, `STUB`, `SOFTWARE` | supported — need no window |
 | `SDL_RENDERER`, `SDL_GPU`, `FNA3D` | **rejected at configure time** when audio is also SDL2 |
-| `DIRECTX*`, `GDI`, `METAL` | not yet — need a native window handle |
+| `DIRECTX*`, `METAL` | not yet — need a native window handle |
 | `VULKAN` | not yet — needs `IPlatformVulkanSurface` |
 
 `cmake/Sdl2OnlyConfiguration.cmake` rejects the three allowlisted SDL3 renderer families when both

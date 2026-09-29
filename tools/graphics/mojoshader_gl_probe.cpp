@@ -5,7 +5,7 @@
 // real GLES3 context this machine can create -- before any EasyGL renderer code is written for
 // it.
 //
-// EasyGL is the shared implementation behind OPENGLES2/OPENGLES3/OPENGL33/OPENGL4/WEBGL1/WEBGL2
+// EasyGL is the shared implementation behind OPENGLES2/OPENGLES3/OPENGL33/WEBGL1/WEBGL2
 // (plans/plan_fx.md section 10.3). Its own stock shaders are authored once in GLSL ES 3.00 and string-
 // rewritten to whichever dialect the active profile needs at runtime -- but that pipeline is
 // irrelevant here: MojoShader emits already-correct-dialect GLSL for whatever profile

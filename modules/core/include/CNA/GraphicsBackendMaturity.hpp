@@ -82,17 +82,13 @@ namespace CNA
             case GraphicsRendererType::Headless:
             case GraphicsRendererType::Stub:
             case GraphicsRendererType::Canvas:
-            case GraphicsRendererType::HtmlDom:
             case GraphicsRendererType::SdlGpu:
-            case GraphicsRendererType::OpenGL4:
-            case GraphicsRendererType::Gdi:
             case GraphicsRendererType::Metal:
                 return GraphicsBackendMaturity::Supported;
 
             case GraphicsRendererType::WebGPU:
             case GraphicsRendererType::Software:
             case GraphicsRendererType::Fna3d:
-            case GraphicsRendererType::SvgDom:
                 return GraphicsBackendMaturity::Experimental;
         }
         // Unreachable as long as every GraphicsRendererType member has an arm above; kept as a

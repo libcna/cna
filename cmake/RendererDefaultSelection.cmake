@@ -43,7 +43,7 @@ else()
     # substitution of the one decision this option exists to express: the whole project-wide macro
     # environment, every `CNA_GRAPHICS_RENDERER STREQUAL` gate, which example targets exist and
     # which renderer the binary starts on all follow the default -- so a build asking for SOFTWARE
-    # and quietly getting OPENGL4 is a build whose every later renderer question answers about a
+    # and quietly getting VULKAN is a build whose every later renderer question answers about a
     # renderer nobody asked for, and a STATUS line is not read in a CI log that scrolls. It is also
     # exactly the failure mode design decision 6 refuses at RUNTIME ("CNA never silently
     # substitutes a different renderer"); configure time may not be laxer than run time about the

@@ -29,6 +29,10 @@ renderer count is not a goal.
 | RRC-011 | Remove retired renderer spikes and the rejected Three.js probe; repair current-tree references and retention policy | ✅ |
 | RRC-012 | Retire `DIRECT2D`, `FREEDIRECT` and `PORTABLEGL`: remove their families and every integration that existed only for them | ✅ `0f96ea703` |
 | RRC-013 | Repair the runtime-discipline gate's identity parser; remove stale current-state references left by RRC-012 | ✅ |
+| RRC-014 | Move the Software contracts only the GDI suite held into the Software suite | ✅ |
+| RRC-015 | Retire `GDI`, `HTML_DOM`, `SVG_DOM` and `OPENGL4`: remove their families and every integration that existed only for them | ✅ |
+| RRC-016 | Remove `CNA_SOFTWARE_2D_ONLY`, the reduced Software build that existed only for `GDI` | ✅ |
+| RRC-017 | Remove the four renderers' documents, plans and handoffs; one retirement record | ✅ |
 
 **2026-09-19 owner decision (`RRC-011`).** Retired renderer probes and the rejected Three.js
 candidate probe no longer belong in the current `spikes/` tree. The earlier archive-retention
@@ -892,3 +896,150 @@ are unchanged.
 **Out of scope, recorded.** `GDI` does not link on this tree: `SoftwareRenderer2D.cpp`, compiled into
 `GDI` with `CNA_SOFTWARE_2D_ONLY`, calls helpers defined only outside that mode (since
 `8465377b1`/`0f213ebaf`). It predates `RRC-012` and is a separate task.
+
+## RRC-014 — Software contracts held only by the GDI suite
+
+**Owner decision, 2026-09-28:** `GDI`, `HTML_DOM`, `SVG_DOM` and `OPENGL4` are retired (`RRC-015`).
+`GDI` compiled eight of the Software module's CPU-2D translation units, so its suite partly tested
+Software. Each of its 18 executables was classified before deletion:
+
+- **Win32 presentation, DC, DPI, DWM, damage and GDI-only contracts -- removed with `GDI`:** smoke,
+  dirty damage, repaint invalidation, presentation oracle/configuration/mode transaction, DC
+  release transaction, window metrics, applied state, unsupported features, the 2D benchmark.
+- **Already covered for Software:** 2D regression and public API (the Software example suite and
+  the shared graphics tests run against `SOFTWARE`), public stencil (`Software_DepthStencilState_*`),
+  and the MSAA contract (`Software_MsaaFragmentContract`, `Software_MsaaStorage`).
+- **Held only by the GDI suite, migrated:** the host-width framebuffer and texture allocation
+  layouts, the live Software allocation refusals (render target, resize, texture upload pitch,
+  source-buffer size, budget) and `ColorMatrixEffect` end to end, now
+  `SoftwareAllocationTests.cpp` and `SoftwareColorMatrixEffectTests.cpp`. One expectation changed
+  with the owner: a Software render target without a depth format is colour only, so the
+  byte-budget refusal is asserted at 11586², not GDI's 11000² (which only exceeded the budget with
+  GDI's mandatory stencil plane). The GDI-only "ShaderEffect is refused" check was not migrated;
+  Software accepts `ShaderEffect`.
+
+Verified in `cmake-build-software`: `CnaRendererTests --gtest_filter='Software*'` 36/36 pass.
+
+
+## RRC-015 — Retire `GDI`, `HTML_DOM`, `SVG_DOM` and `OPENGL4`
+
+An owner decision to move CNA from breadth to long-term human maintenance. None of the four is
+replaced: `OPENGL33` stays CNA's desktop OpenGL identity with its 3.3 contract (no EasyGL OpenGL 4
+profile), `CANVAS`, `WEBGL1`/`WEBGL2` and `WEBGPU` cover the browser, and `SOFTWARE` stays the full
+CPU renderer. Result: **18 public renderer identities over 14 implementation families**.
+
+- **Removed:** `modules/renderers/{gdi,html-dom,svg-dom,opengl4}` (118 files, 46,933 lines); the
+  GDI Windows and HTML DOM browser workflows; six DOM browser scripts; `tools/htmldom`,
+  `tools/opengl4`; the DOM host-test options; the OpenGL4 GL-error ctest output gate; the GDI branch
+  of the Software CMake (`CNA_GDI_SOFTWARE_SOURCES`, `cna_renderer_software_headers`); the
+  `GDI`+`SOFTWARE` combination rule; every per-renderer arm in the shared tests and examples.
+- **Identity:** the four names move to `CNA_RENDERER_RETIRED_IDENTITIES` (`HTML_DOM=18`,
+  `OPENGL4=33`, `GDI=40`, `SVG_DOM=44`) and are refused by name on every route; their C ABI
+  constants are gone and the values permanently reserved; `CNA_GRAPHICS_RENDERER_MAXIMUM` is `43`
+  (`FNA3D`); the next new value stays `52`. The dense C++ enum loses four enumerators. C ABI `0.33.0`.
+- **Ownership moved, not deleted:** `GlStockShaderSources.hpp` and `GlPresentationSurfaceState.hpp`
+  had been lifted into `Common/` only so `OPENGL4` could share them; they are EasyGL's again.
+- **Kept on purpose:** the Win32 platform's GDI surface presenter (`StretchDIBits`), which is the
+  Win32 CPU-frame path `SOFTWARE` presents through; GDI+/`gdi32`/GDI-object mentions that are
+  Windows API facts; the Mesa EGL leak suppression, which is not OpenGL4-specific.
+- **Emscripten multi-renderer CI** now builds `WEBGL2`+`WEBGL1`+`CANVAS`: a GPU and a GPU-free
+  renderer, and still a multi-identity family in one bundle.
+
+**Verified** (Linux x86-64, 2026-09-28). All five identity/registry gates pass: 18 identities over
+14 families, 33 retired values reserved, next free value 52. A real top-level configure refuses each
+of the four names by name and value in about 0.5 s, before any SDL sub-build, on every route
+(`CNA_GRAPHICS_RENDERER`, a `CNA_GRAPHICS_RENDERERS` member, `CNA_RENDERER_<X>=ON`, any letter
+case). The C ABI baseline changes only by the four constants, the maximum and the version; its
+3,215 exports are unchanged. In `cmake-build-software` (`SOFTWARE`, C API on) the full ctest corpus
+ran on the private display: 10,604 of 10,625 passed, including all 159 Software-labelled tests. Every
+failure was classified; none is a defect this change introduced:
+
+- Measured failing identically at the pre-retirement commit: `CApi_TextureVolumeSmoke`, the three
+  `CApi_Audio*Smoke` tests and `GuideTest.TheClickThatAnswersAMessageBoxDoesNotAlsoReachTheGame`.
+- Older stale checks: the WebGPU PBR binding evidence (the code changed in `85c3baa09`, also
+  counted by `CnaGltfConformanceL0`), the XNA pipeline parity/component reports (hand-edited in
+  `5cc244f23`), and two C API artefacts left by `MOD-RETIRE-1` (regenerated in `b6309c0a8`).
+- Configuration-dependent: `CnaXnbModelCorpusSweep` (vendored Draco builds fixtures the manifest
+  records as refused).
+- Load-sensitive: four ENet cases and two `DynamicSoundEffectInstance` cases pass when rerun alone,
+  and the audio pair passes 20/20 repeats both before and after the change.
+- Generated reports the ABI change had to refresh, regenerated here with their own tools and
+  passing afterwards: `CApiCoverageMatrix`, `CApiLimitations` and `CApiReleaseGate` (whose record
+  also still carried the unregenerated `0.32.0` and planned-symbol count).
+
+
+The Emscripten bundle the CI job now builds (`WEBGL2;WEBGL1;CANVAS`, emsdk 6.0.9) configures and
+links 54 of its 82 executables -- every Canvas/WebGL example, demo and the benchmark -- and every
+graphics test object compiles. The other 28 (the 21 gtest suite binaries, the strict-API leak check
+and six tools/harnesses) are blocked by six failures unrelated to renderers (`posix_spawnp` in the
+content-pipeline host process, host headers in two net harnesses, a missing `<algorithm>` in
+`PathUtf8Tests` under this newer emsdk). The bundle passes the job's own assertions: both JS selection exports, the `easygl` and `canvas` archives, three
+registered renderers. In headless Chrome the renderer benchmark ran to completion under each of the
+three, each selected at runtime.
+
+## RRC-016 — Remove `CNA_SOFTWARE_2D_ONLY`
+
+`GDI` was the only thing that ever compiled Software with `CNA_SOFTWARE_2D_ONLY`: its CMake defined
+the macro for the eight shared units, and `SoftwareRenderer2D.cpp` was a one-line wrapper that
+defined it and `#include`d `SoftwareRenderer.cpp`. With `GDI` gone the mode has no user (the only
+remaining textual mentions are this plan, the removal record and the historical
+`modularization/tools/gen_module_cmake.py`), so it is removed rather than left dormant:
+
+- `unifdef -UCNA_SOFTWARE_2D_ONLY` over `SoftwareRenderer.cpp` and `SoftwareRenderer2DState.cpp`
+  deletes only the 2D-only alternatives -- the `NotSupportedException` stubs for Texture3D,
+  TextureCube, RenderTargetCube, effects, vertex/index buffers and the 3D draw entry points, and
+  the no-environment-map fallbacks -- and keeps every line the full build compiled. One mixed
+  condition (`COMPILED_EFFECTS && !2D_ONLY`) is reduced by hand.
+- `SoftwareRenderer2D.cpp` and the glob exclusion that kept it out of the SOFTWARE archive are gone.
+- The hooks only `GDI` overrode are gone: the virtual `OnSpriteRasterBounds` with the per-sprite
+  damage-bounds computation that fed it, and the protected `BackbufferFramebuffer()` accessors.
+  Neither changes any Software output.
+- Comments that described `GDI` as a current consumer of Software are rewritten; dangling `GDI-0xx`
+  task tags in Software comments are dropped (their plan is deleted; Git has it).
+
+The full Software behaviour is unchanged: 23 lines added, 241 removed, all in the Software module.
+
+**Verified** in `cmake-build-software` on the private display: the full ctest corpus 10,616/10,624
+(the Guide test that hangs at the parent commit excluded), every Software test passing, the 8
+failures being the pre-existing ones classified in `RRC-015`; then, reconfigured with
+`CNA_SOFTWARE_COMPILED_EFFECTS=ON` (MojoShader from the shared `~/deps/FNA3D` pin), all 208
+Software-labelled, compiled-effect and Software gtest cases pass, including
+`Software_CompiledEffectRuntime`.
+
+## RRC-017 — Documentation: one retirement record, no archive
+
+The four renderers' own documents, plans and handoff were deleted, not marked retired: Git history
+is the archive (`docs/{gdi,html-dom,svg-dom,opengl4}-renderer.md`, `NEXT_gdi.md`,
+`plans/plan_{gdi,html_dom,svg_dom,opengl4,opengl4_modern_graphics,street_opengl4}.md`, 6,017
+lines). `docs/removed-renderers.md` carries the one concise record: identity, retired value, date,
+reason and the coverage that remains, plus the shared-code outcome. Active documents that listed
+the four as current were corrected (README, CLAUDE/AGENTS, indexes, feature matrices, platform
+notes, glTF limits, CHANGELOG, NEXT); open plan rows that depended on them are withdrawn with the
+reason in the row (`plan_modern.md`, `plan_csl.md`). Dated history -- task rows, ledgers,
+retrospectives, `integration/`, `modularization/`, `remediation/` -- is left as written.
+
+**Verification of the whole retirement** (after `RRC-016`):
+
+- `cmake-build-multi` (`OPENGL33` default, `VULKAN`, `SOFTWARE`, `HEADLESS`, `STUB`) configures and
+  builds; its `CnaTests` corpus on the private display's real GPU passes 10,210 of 10,232 (the hung
+  Guide case excluded). The 22 failures: four `EasyGLRedundantStateTest` aborts measured identically
+  at the parent commit; three `IndexedDrawDeferredTest` strip cases whose Vulkan-only block is gated
+  on Vulkan being compiled in rather than active (a multi-tree test defect this change does not
+  touch); the WebGPU policy evidence and glTF L0 from `RRC-015`; shared-`/tmp` and host collisions
+  (four Unicode-path cases, a storage sentinel, the content-CLI staging scavenger, a keyboard
+  orientation case, the Wine differential timeout); and load-sensitive ENet and audio cases.
+- A MinGW-w64 cross-build (`cmake-build-d3d11`: `DIRECTX11`, `DIRECTX12`, `SOFTWARE`, `HEADLESS`)
+  compiles 535 units and links; under Wine its renderer benchmark runs with `SOFTWARE` and with
+  `DIRECTX11`, each selected at runtime. That tree now has `CNA_ENABLE_NET=OFF`: networking needs a
+  MinGW CURL this host does not have, a requirement added after the tree was last configured.
+- A case-insensitive scan for every spelling of the four names leaves only the retired-identity
+  machinery (tables, reserved-value comments, refusal tests), `docs/removed-renderers.md` and this
+  plan, one test note marked historical, Windows API facts (the Win32 platform's GDI surface
+  presenter, GDI+, `gdi32`, GDI-object accounting, the D3D/GDI line rule, the `gdi` abbreviation of
+  `GraphicsDeviceInformation`), substrings of unrelated words, and dated history (task rows,
+  ledgers, retrospectives, `integration/`, `modularization/`, `remediation/`, `audit/`).
+- Found, not fixed (outside scope): the full ctest run rewrites
+  `docs/xna-content-pipeline-parity-report.md` and deletes
+  `tests/assets/media/video/video_xnb_object_fixture.xnb`; the renderer benchmark's banner names
+  the compile-time default rather than the runtime renderer; `check_renderer_configure_sweep.sh`
+  parses identities from a STRINGS line that no longer lists them literally.

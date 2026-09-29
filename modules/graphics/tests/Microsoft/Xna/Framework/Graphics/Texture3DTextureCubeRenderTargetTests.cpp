@@ -204,9 +204,6 @@ namespace
     ///     byte-exact content assertion for the identical `set_sub_image_2d` path lives on the
     ///     plain cube in
     ///     modules/graphics/examples/texturecube_texture3d_setdata_contract_test.cpp.
-    ///   OpenGL4 -- the same real upload shape, and unlike EasyGL it also implements the
-    ///     per-face+level FBO readback, so the byte-exact round trip is asserted directly by its
-    ///     own OpenGL4_RenderTargetCube CTest (plans/plan_opengl4.md GL4-15).
     ///   Wicked -- a real staged upload into the rendered cube's colour array (UploadTextureRegion,
     ///     plans/plan_wicked.md WICKED-55/79), with the per-face readback implemented, so the byte-exact
     ///     round trip is asserted by the shared TextureCube/RenderTargetCube suites. A
@@ -227,7 +224,7 @@ namespace
         // plans/plan_vulkan_parity.md VKPAR-0027: Vulkan uploads into the face through the same
         // per-face flush its readback uses; the exact round trip is asserted below.
         return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                               Software, OpenGL4, DirectX11, DirectX12, Vulkan);
+                               Software, DirectX11, DirectX12, Vulkan);
     }
 }
 
@@ -285,7 +282,7 @@ TEST(RenderTargetCubeSetDataContractTest, StoresTheFaceOrRefusesButNeverSilently
 // their round trip in their own suites.
 TEST(RenderTargetCubeSetDataContractTest, SeededFacesAndRegionsReadBackExactly)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGL4, DirectX11, DirectX12, Vulkan);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, DirectX11, DirectX12, Vulkan);
 
     GraphicsDevice gd;
     RenderTargetCube rt(gd, 4, false, SurfaceFormat::Color, DepthFormat::None, 0,

@@ -433,9 +433,7 @@ endif()
 # §5/§11): file physical module location == declared CMake ownership. Every production TU
 # must live under a declared module's src/ tree (module CMakeLists glob exactly their own
 # src/, so location IS ownership); a TU outside every module src/ tree, or a module
-# directory outside the declared set, fails the configure. The one documented
-# target-membership exception is GDI compiling eight software-module 2D TUs
-# (modules/renderers/gdi/CMakeLists.txt) -- physical ownership stays with software.
+# directory outside the declared set, fails the configure.
 # examples/ and benchmarks/ joined src/ and tests/ as declared owned areas when the tracked examples
 # moved into their owning modules (module-examples campaign): a module may own
 # modules/<name>/examples/ or modules/<name>/benchmarks/, and TUs outside every declared
@@ -445,8 +443,8 @@ set(_cna_framework_modules
     content-pipeline storage
     devices devices-ext graphics-ext gamer-services net phone)
 set(_cna_renderer_modules
-    canvas directx9 directx11 directx12 easygl fna3d gdi headless html-dom
-    metal opengl4 sdl-gpu sdl-renderer software stub svg-dom vulkan webgpu
+    canvas directx9 directx11 directx12 easygl fna3d headless
+    metal sdl-gpu sdl-renderer software stub vulkan webgpu
     common/d3d common/mojoshader)
 string(JOIN "|" _cna_framework_module_pattern ${_cna_framework_modules})
 string(JOIN "|" _cna_renderer_module_pattern ${_cna_renderer_modules})

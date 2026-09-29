@@ -12,7 +12,7 @@ namespace CNA::Internal::Renderers::Software
      * Maximum committed pixel storage for one CPU framebuffer, including generated mip levels
      * when requested but excluding container bookkeeping and allocator capacity overhead. The
      * 512 MiB ceiling keeps one surface practical on a 32-bit process while permitting a
-     * 3840x2160 GDI backbuffer with RGBA8, stencil and 4x MSAA.
+     * 3840x2160 backbuffer with RGBA8, stencil and 4x MSAA.
      */
     inline constexpr std::size_t SoftwareFramebufferMaxBytes =
         static_cast<std::size_t>(512u) * 1024u * 1024u;

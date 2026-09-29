@@ -179,10 +179,9 @@ namespace CNA::Internal::Renderers::Software
             return ApplyBlendFunction(function, sourceTerm, destinationTerm);
         }
 
-        /// One CPU stencil state snapshot. The shared framebuffer stores one unsigned 8-bit value
-        /// per sample (one per pixel without MSAA). GDI uses this through SpriteBatch for 2D
-        /// masking; retaining it in the shared rasterizer also keeps a target switch from losing
-        /// its stencil image.
+        /// One CPU stencil state snapshot. The framebuffer stores one unsigned 8-bit value per
+        /// sample (one per pixel without MSAA), for SpriteBatch masking and 3D draws alike, so a
+        /// target switch does not lose its stencil image.
         struct RasterStencilState
         {
             bool testEnabled = false;
@@ -1517,10 +1516,6 @@ namespace CNA::Internal::Renderers::Software
             return (lambda > 0.0f) ? lambda : 0.0f;
         }
 
-        // WriteShadedFragment below is compiled into the 2D-only build GDI uses as well
-        // (SoftwareRenderer2D.cpp, CNA_SOFTWARE_2D_ONLY), and it reads these helpers, so they
-        // stay outside the 3D-only region. The vertex-stage preparation that also uses them does
-        // not, and remains inside it.
         [[nodiscard]] Vector3 NormalizeOrZero(const Vector3& value)
         {
             const float lengthSquared = value.X * value.X + value.Y * value.Y +
@@ -1611,7 +1606,6 @@ namespace CNA::Internal::Renderers::Software
             return result;
         }
 
-#ifndef CNA_SOFTWARE_2D_ONLY
         /// SOFTWARE-82: applies a column-major 4x4 matrix (GpuDrawParams::worldColMajor's own
         /// layout, and SkinnedEffect's boneTransforms per-bone entries) to a vector using the
         /// standard column-vector convention `v' = M*v` -- deliberately NOT going through CNA's
@@ -2690,7 +2684,6 @@ namespace CNA::Internal::Renderers::Software
                          static_cast<int>(std::clamp(outG, 0.0f, 1.0f) * 255.0f + 0.5f),
                          static_cast<int>(std::clamp(outB, 0.0f, 1.0f) * 255.0f + 0.5f));
         }
-#endif
 
         /// SOFTWARE-81: whether a triangle with the given signed screen-space `area` should be
         /// culled under the given raw CullMode ordinal (0=None, 1=CullClockwiseFace,
@@ -3015,7 +3008,6 @@ namespace CNA::Internal::Renderers::Software
         /// byte-identical for the Solid fill and reused verbatim by the WireFrame line walk. The clip
         /// guard is a no-op for the fill loop (its bounding box is already clamped to `clip`) and the
         /// safety net for the line walk.
-#ifndef CNA_SOFTWARE_2D_ONLY
         inline void WriteColoredFragment(SoftwareFramebuffer& fb, const RasterDepthState& depthState,
                                          const RasterStencilState& stencilState,
                                          const RasterClipRect& clip, int x, int y,
@@ -3216,11 +3208,9 @@ namespace CNA::Internal::Renderers::Software
                 }
             }
         }
-#endif
 
         // ---- Phase S5/S6: generalized (textured/blended/effect-driven) rasterization ----
 
-#ifndef CNA_SOFTWARE_2D_ONLY
 #if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
         void WriteCompiledPixelResult(
             const std::array<SoftwareFramebuffer*, 4>& colorTargets, int colorTargetCount,
@@ -4568,7 +4558,6 @@ namespace CNA::Internal::Renderers::Software
             PrepareClassicLightingVertex(out, position, normal, haveNormal, params);
             return out;
         }
-#endif
 
         /// REMED-GFX-073/079: the raster clip rectangle = the GraphicsDevice.Viewport rectangle
         /// intersected with the framebuffer. Uses a wider intermediate for the right/bottom edge so
@@ -4631,7 +4620,7 @@ namespace CNA::Internal::Renderers::Software
             SoftwareBlendState blendState;
             std::array<float, 4> blendFactor;
             RasterDepthState depthState; // REMED-GFX-030: per-draw test/write/function snapshot
-            RasterStencilState stencilState; // GDI-026: per-draw 8-bit stencil snapshot
+            RasterStencilState stencilState; // per-draw 8-bit stencil snapshot
             int colorWriteMask;           // REMED-GFX-077: raw XNA ColorWriteChannels (bit0=R..bit3=A)
             unsigned int multiSampleMask; // REMED-GFX-077: single-sample ⇒ only bit 0 is meaningful
             /// SOFTWARE-122: query open when this draw was submitted, or null outside Begin/End.
@@ -4693,7 +4682,7 @@ namespace CNA::Internal::Renderers::Software
         {
             if (x < clip.minX || x > clip.maxX || y < clip.minY || y > clip.maxY)
                 return;
-            // GDI-025: 4x CPU MSAA evaluates a 2x2 sub-pixel coverage pattern in the triangle
+            // 4x CPU MSAA evaluates a 2x2 sub-pixel coverage pattern in the triangle
             // walker below. MultiSampleMask gates those actual samples; single-sample renderers
             // retain the established bit-0 behavior exactly.
             const unsigned int availableSamples = fb.HasMultiSampleColor() ? 0xFu : 0x1u;
@@ -4817,7 +4806,7 @@ namespace CNA::Internal::Renderers::Software
             if (passingSamples == 0u)
                 return;
 
-            // GDI-022: ColorMatrixEffect is intentionally a small fixed CPU SpriteBatch effect,
+            // ColorMatrixEffect is intentionally a small fixed CPU SpriteBatch effect,
             // not a shader language. It acts after the ordinary texture/tint calculation and
             // before stock-effect additions and BlendState, so its output is the source colour
             // consumed by the normal XNA blend implementation.
@@ -4836,7 +4825,6 @@ namespace CNA::Internal::Renderers::Software
                 a = transform(3);
             }
 
-#ifndef CNA_SOFTWARE_2D_ONLY
             if (ctx.useEnvMap)
             {
                 // SOFTWARE-114: FNA computes reflection and Fresnel at each vertex. These are
@@ -4859,7 +4847,6 @@ namespace CNA::Internal::Renderers::Software
 
                 if (g_cubeTrace.enabled) PrintCubeTraceLine(r, g, b);   // REMED-GFX-182
             }
-#endif
 
             // SOFTWARE-112: FNA computes this factor per vertex from the post-skin object
             // position, then the rasterizer perspective-interpolates it. Fog affects RGB only and
@@ -4926,17 +4913,9 @@ namespace CNA::Internal::Renderers::Software
         {
             const auto* texture0 = dynamic_cast<const SoftwareColorSurface*>(params.texture0);
             const auto* texture1 = dynamic_cast<const SoftwareColorSurface*>(params.texture1);
-#ifndef CNA_SOFTWARE_2D_ONLY
             const auto* envMap = dynamic_cast<const SoftwareCubeSurface*>(params.envMap);
-#else
-            const SoftwareCubeSurface* envMap = nullptr;
-#endif
             const bool useDualTexture = params.dualTexture;
-#ifndef CNA_SOFTWARE_2D_ONLY
             const bool useEnvMap = params.envMapping;
-#else
-            constexpr bool useEnvMap = false;
-#endif
             const bool needUV = useDualTexture || useEnvMap || params.textureEnabled;
             return ShadedContext{params, texture0, texture1, envMap, useDualTexture, useEnvMap,
                                  needUV, blendState, blendFactor, depthState, stencilState,
@@ -5056,17 +5035,9 @@ namespace CNA::Internal::Renderers::Software
             // resolve here. A foreign renderer still resolves to nullptr exactly as before.
             const auto* texture0 = dynamic_cast<const SoftwareColorSurface*>(params.texture0);
             const auto* texture1 = dynamic_cast<const SoftwareColorSurface*>(params.texture1);
-#ifndef CNA_SOFTWARE_2D_ONLY
             const auto* envMap = dynamic_cast<const SoftwareCubeSurface*>(params.envMap);
-#else
-            const SoftwareCubeSurface* envMap = nullptr;
-#endif
             const bool useDualTexture = params.dualTexture;
-#ifndef CNA_SOFTWARE_2D_ONLY
             const bool useEnvMap = params.envMapping;
-#else
-            constexpr bool useEnvMap = false;
-#endif
             const bool needUV = useDualTexture || useEnvMap || params.textureEnabled;
             // REMED-GFX-150: classify magnification once per triangle per bound texture. Only XNA
             // filters 5..8 distinguish the two halves, so this is inert for Point, Linear and
@@ -5090,16 +5061,11 @@ namespace CNA::Internal::Renderers::Software
             const bool magnify1 = !(rho1 > 1.0f);
             // REMED-GFX-182: the cube's own footprint, resolved once per triangle from the SAME
             // reflection expression the fragment path uses and only when a cube is actually bound.
-#ifndef CNA_SOFTWARE_2D_ONLY
             const TextureFootprint footprintCube = useEnvMap && envMap != nullptr
                 ? TriangleCubeTextureFootprint(v0, v1, v2,
                                                std::max(1, envMap->CubeSize()))
                 : TextureFootprint{};
             const float rhoCube = footprintCube.isotropicRate;
-#else
-            constexpr float rhoCube = 1.0f;
-            const TextureFootprint footprintCube{};
-#endif
             const ShadedContext ctx{params, texture0, texture1, envMap, useDualTexture, useEnvMap,
                                     needUV, blendState, blendFactor,
                                     depthState, faceStencil, colorWriteMask, multiSampleMask,
@@ -5111,7 +5077,6 @@ namespace CNA::Internal::Renderers::Software
             if (g_samplerTrace.enabled) ++g_samplerTrace.triangles;
             // REMED-GFX-182: stamp BOTH captured slot descriptions, so the cube trace can print the
             // public state this draw carried beside the description its cube sample really ran under.
-#ifndef CNA_SOFTWARE_2D_ONLY
             if (g_cubeTrace.enabled)
             {
                 g_cubeTrace.slot0Filter = sampler0.filter;
@@ -5121,7 +5086,6 @@ namespace CNA::Internal::Renderers::Software
                 g_cubeTrace.slot1AddrU = sampler1.addressU;
                 g_cubeTrace.slot1AddrV = sampler1.addressV;
             }
-#endif
 
             // REMED-GFX-083: one polygon-offset value for the whole triangle (after culling). hasBias is
             // 0 for the common zero-bias case, so the depth expressions below stay byte-identical then.
@@ -5220,7 +5184,7 @@ namespace CNA::Internal::Renderers::Software
                     {
                         // SOFTWARE-319: evaluate the canonical standard 4x positions. A partially
                         // covered edge blends only its covered samples and ResolveColor() averages
-                        // them before GDI blits.
+                        // them when the frame is resolved.
                         coverageMask = 0u;
                         for (int sample = 0; sample < 4; ++sample)
                         {
@@ -5293,7 +5257,6 @@ namespace CNA::Internal::Renderers::Software
             }
         }
 
-#ifndef CNA_SOFTWARE_2D_ONLY
         // ---- REMED-GFX-110 / SOFTWARE-322: indexed addressing and safe fallback bounds ----
         //
         // Shared by the strict renderer-contract/legacy fallback paths so they cannot drift apart.
@@ -5439,12 +5402,10 @@ namespace CNA::Internal::Renderers::Software
                         std::to_string(availableVertexCount) + " vertices.");
             }
         }
-#endif
     }
 
     // ---- SoftwareVertexBufferRenderer ----
 
-#ifndef CNA_SOFTWARE_2D_ONLY
 
     SoftwareVertexBufferRenderer::SoftwareVertexBufferRenderer(int vertexCapacity)
         : capacity_(vertexCapacity)
@@ -5497,11 +5458,9 @@ namespace CNA::Internal::Renderers::Software
     void SoftwareIndexBufferRenderer::SetData32WithOptions(const void* data, int index_count, SetDataOptions)
     { Upload(data, index_count, true); }
 
-#endif
 
     // ---- SoftwareTextureCubeRenderer (SOFTWARE-82) ----
 
-#ifndef CNA_SOFTWARE_2D_ONLY
 
     // REMED-GFX-135: mirrors TextureCube.cpp's CalculateMipLevels(size,size) -- cube faces are
     // square, so the chain length is driven by a single edge.
@@ -5855,7 +5814,6 @@ namespace CNA::Internal::Renderers::Software
         a = samples[offset + 3];
     }
 
-#endif
 
     // ---- SoftwareOcclusionQueryRenderer (SOFTWARE-122) ----
 
@@ -5912,7 +5870,6 @@ namespace CNA::Internal::Renderers::Software
 
     // ---- SoftwareEffectRenderer ----
 
-#ifndef CNA_SOFTWARE_2D_ONLY
 
     bool SoftwareEffectRenderer::CompileProgram(const std::string& vertSrc, const std::string& fragSrc)
     {
@@ -5922,7 +5879,6 @@ namespace CNA::Internal::Renderers::Software
         return true;
     }
 
-#endif
 
     void SoftwareRenderer::RasterizeSpriteQuad(
         const ITextureRenderer& texture,
@@ -5995,9 +5951,9 @@ namespace CNA::Internal::Renderers::Software
         // the shared one already accepted it.
         spriteParams.texture0 = &texture;
         spriteParams.textureEnabled = true;
-        // A `ColorMatrixEffect` is the sole custom Effect GDI/SOFTWARE accepts for SpriteBatch.
-        // ShaderEffect stays rejected by GDI; every unrelated Effect keeps the regular sprite
-        // path rather than being misidentified as a programmable shader.
+        // A `ColorMatrixEffect` is the only custom Effect this CPU sprite path applies; every
+        // unrelated Effect keeps the regular sprite path rather than being misidentified as a
+        // programmable shader.
         if (const auto* colorMatrix =
                 dynamic_cast<const Microsoft::Xna::Framework::Graphics::ColorMatrixEffect*>(customEffect))
             colorMatrix->FillSpriteDrawParams(spriteParams);
@@ -6017,11 +5973,6 @@ namespace CNA::Internal::Renderers::Software
         // channel (SetSamplerFilter/SetSamplerAddressMode), exactly as it does on every GPU renderer.
         // Begin always re-applies it, so it cannot leak in from a previous batch, and passing it
         // here rather than through the device slots means a sprite batch cannot leak it out either.
-        float visibleMinX = std::numeric_limits<float>::infinity();
-        float visibleMinY = std::numeric_limits<float>::infinity();
-        float visibleMaxX = -std::numeric_limits<float>::infinity();
-        float visibleMaxY = -std::numeric_limits<float>::infinity();
-        bool haveVisibleVertex = false;
         const auto rasterizeClippedTriangle = [&](const ClipVertex& aClip,
                                                    const ClipVertex& bClip,
                                                    const ClipVertex& cClip) {
@@ -6037,11 +5988,6 @@ namespace CNA::Internal::Renderers::Software
                 RasterVertex& vertex = vertices[static_cast<std::size_t>(i)];
                 vertex = SpriteClipVertexToRasterVertex(
                     clipped[static_cast<std::size_t>(i)], vpT);
-                visibleMinX = std::min(visibleMinX, vertex.x);
-                visibleMinY = std::min(visibleMinY, vertex.y);
-                visibleMaxX = std::max(visibleMaxX, vertex.x);
-                visibleMaxY = std::max(visibleMaxY, vertex.y);
-                haveVisibleVertex = true;
             }
 
             // Fan triangulation retains only the clipped polygon boundary in wireframe. For an
@@ -6066,14 +6012,6 @@ namespace CNA::Internal::Renderers::Software
 
         rasterizeClippedTriangle(cv0, cv1, cv2);
         rasterizeClippedTriangle(cv2, cv3, cv0);
-
-        int damageMinX = 0, damageMinY = 0, damageMaxX = -1, damageMaxY = -1;
-        if (haveVisibleVertex &&
-            CalculateRasterBounds(visibleMinX, visibleMinY, visibleMaxX, visibleMaxY, clip,
-                                  damageMinX, damageMinY, damageMaxX, damageMaxY))
-        {
-            OnSpriteRasterBounds(damageMinX, damageMinY, damageMaxX, damageMaxY);
-        }
     }
 
 #if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
@@ -6132,89 +6070,43 @@ namespace CNA::Internal::Renderers::Software
     std::unique_ptr<ITexture3DRenderer> SoftwareRenderer::CreateTexture3D(
         int w, int h, int depth, bool mipMap, int surfaceFormat)
     {
-#ifdef CNA_SOFTWARE_2D_ONLY
-        (void)w;
-        (void)h;
-        (void)depth;
-        (void)mipMap;
-        (void)surfaceFormat;
-        throw System::NotSupportedException(
-            "Software's GDI 2D compilation unit does not include Texture3D resources.");
-#else
         return std::make_unique<SoftwareTexture3DRenderer>(
             w, h, depth, mipMap, surfaceFormat);
-#endif
     }
 
     std::unique_ptr<ITextureCubeRenderer> SoftwareRenderer::CreateTextureCube(
         int size, bool mipMap, int surfaceFormat)
     {
-#ifdef CNA_SOFTWARE_2D_ONLY
-        (void)size;
-        (void)mipMap;
-        (void)surfaceFormat;
-        throw System::NotSupportedException(
-            "Software's GDI 2D compilation unit does not include TextureCube resources.");
-#else
         // REMED-GFX-135: `mipMap` used to be discarded here, so a mipmapped TextureCube reported a
         // LevelCount whose storage did not exist and every mip upload was dropped in silence.
         return std::make_unique<SoftwareTextureCubeRenderer>(size, mipMap, surfaceFormat);
-#endif
     }
 
     std::unique_ptr<IRenderTargetCubeRenderer> SoftwareRenderer::CreateRenderTargetCube(
         int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
-#ifdef CNA_SOFTWARE_2D_ONLY
-        (void)size;
-        (void)depthFormat;
-        (void)preserveContents;
-        (void)mipMap;
-        (void)multiSampleCount;
-        throw System::NotSupportedException(
-            "Software's GDI 2D compilation unit does not include RenderTargetCube resources.");
-#else
         return std::make_unique<SoftwareRenderTargetCubeRenderer>(
             size, depthFormat, preserveContents, mipMap, multiSampleCount);
-#endif
     }
 
     std::unique_ptr<IRenderTargetCubeRenderer> SoftwareRenderer::CreateRenderTargetCubeEXT(
         int size, int depthFormat, bool preserveContents, bool mipMap,
         int multiSampleCount, int surfaceFormat)
     {
-#ifdef CNA_SOFTWARE_2D_ONLY
-        (void)size;
-        (void)depthFormat;
-        (void)preserveContents;
-        (void)mipMap;
-        (void)multiSampleCount;
-        (void)surfaceFormat;
-        throw System::NotSupportedException(
-            "Software's GDI 2D compilation unit does not include RenderTargetCube resources.");
-#else
         if (ClassifyRenderTargetFormatEXT(surfaceFormat) != RendererFormatVerdict::Supported)
             throw std::runtime_error(
                 "SoftwareRenderer::CreateRenderTargetCubeEXT: unsupported SurfaceFormat ordinal " +
                 std::to_string(surfaceFormat));
         return std::make_unique<SoftwareRenderTargetCubeRenderer>(
             size, depthFormat, preserveContents, mipMap, multiSampleCount, surfaceFormat);
-#endif
     }
 
     std::unique_ptr<IEffectRenderer> SoftwareRenderer::CreateEffectRenderer(const std::string& vertSrc,
                                                                                 const std::string& fragSrc)
     {
-#ifdef CNA_SOFTWARE_2D_ONLY
-        (void)vertSrc;
-        (void)fragSrc;
-        throw System::NotSupportedException(
-            "Software's GDI 2D compilation unit does not include programmable effect resources.");
-#else
         auto effect = std::make_unique<SoftwareEffectRenderer>();
         effect->CompileProgram(vertSrc, fragSrc);
         return effect;
-#endif
     }
 
     std::unique_ptr<ICompiledEffectRuntime> SoftwareRenderer::CreateCompiledEffect(
@@ -6232,41 +6124,22 @@ namespace CNA::Internal::Renderers::Software
 
     std::unique_ptr<IVertexBufferRenderer> SoftwareRenderer::CreateVertexBuffer(int vertex_capacity)
     {
-#ifdef CNA_SOFTWARE_2D_ONLY
-        (void)vertex_capacity;
-        throw System::NotSupportedException(
-            "Software's GDI 2D compilation unit does not include vertex buffers.");
-#else
         return std::make_unique<SoftwareVertexBufferRenderer>(vertex_capacity);
-#endif
     }
 
     std::unique_ptr<IIndexBufferRenderer> SoftwareRenderer::CreateIndexBuffer16(int index_capacity)
     {
-#ifdef CNA_SOFTWARE_2D_ONLY
-        (void)index_capacity;
-        throw System::NotSupportedException(
-            "Software's GDI 2D compilation unit does not include index buffers.");
-#else
         return std::make_unique<SoftwareIndexBufferRenderer>(index_capacity, false);
-#endif
     }
 
     std::unique_ptr<IIndexBufferRenderer> SoftwareRenderer::CreateIndexBuffer32(int index_capacity)
     {
-#ifdef CNA_SOFTWARE_2D_ONLY
-        (void)index_capacity;
-        throw System::NotSupportedException(
-            "Software's GDI 2D compilation unit does not include index buffers.");
-#else
         return std::make_unique<SoftwareIndexBufferRenderer>(index_capacity, true);
-#endif
     }
 
     // Phase S4 (SOFTWARE-30..34) plus SOFTWARE-105: real transform/rasterize/depth-test pipeline
     // for triangle lists and strips. Effect-aware paths below additionally support line and point
     // topologies.
-#ifndef CNA_SOFTWARE_2D_ONLY
     void SoftwareRenderer::DrawColoredPrimitives(const IVertexBufferRenderer& vb, const Matrix& world,
                                                         const Matrix& view, const Matrix& projection,
                                                         PrimitiveType primitive, int primitiveCount)
@@ -7016,46 +6889,6 @@ namespace CNA::Internal::Renderers::Software
                 vb, ib, world, view, projection, primitive, primitiveCount, current, true);
         }
     }
-#else
-    void SoftwareRenderer::DrawColoredPrimitives(const IVertexBufferRenderer&, const Matrix&,
-                                                         const Matrix&, const Matrix&, PrimitiveType, int)
-    {
-        throw System::NotSupportedException(
-            "Software's GDI 2D compilation unit does not include 3D primitive drawing.");
-    }
-
-    void SoftwareRenderer::DrawIndexedColoredPrimitives(
-        const IVertexBufferRenderer&, const IIndexBufferRenderer&, const Matrix&, const Matrix&,
-        const Matrix&, PrimitiveType, int)
-    {
-        throw System::NotSupportedException(
-            "Software's GDI 2D compilation unit does not include indexed 3D primitive drawing.");
-    }
-
-    void SoftwareRenderer::DrawPrimitivesEx(const IVertexBufferRenderer&, const Matrix&,
-                                                    const Matrix&, const Matrix&, PrimitiveType, int,
-                                                    const GpuDrawParams&)
-    {
-        throw System::NotSupportedException(
-            "Software's GDI 2D compilation unit does not include effect-aware 3D drawing.");
-    }
-
-    void SoftwareRenderer::DrawIndexedPrimitivesEx(
-        const IVertexBufferRenderer&, const IIndexBufferRenderer&, const Matrix&, const Matrix&,
-        const Matrix&, PrimitiveType, int, const GpuDrawParams&)
-    {
-        throw System::NotSupportedException(
-            "Software's GDI 2D compilation unit does not include indexed effect-aware 3D drawing.");
-    }
-
-    void SoftwareRenderer::DrawInstancedPrimitivesEx(
-        const IVertexBufferRenderer&, const IIndexBufferRenderer&, const Matrix&, const Matrix&,
-        const Matrix&, PrimitiveType, int, int, const GpuDrawParams&)
-    {
-        throw System::NotSupportedException(
-            "Software's GDI 2D compilation unit does not include instanced 3D drawing.");
-    }
-#endif
 }
 
 namespace CNA::Internal::Renderers

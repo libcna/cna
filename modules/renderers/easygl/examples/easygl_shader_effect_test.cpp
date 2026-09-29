@@ -71,9 +71,8 @@ protected:
         Game::Initialize();
         auto& device = getGraphicsDeviceProperty();
 
-        // plans/plan_opengl4_modern_graphics.md GL4-0018: the GL dialect is the context's -- GLSL ES
-        // for the ES/WebGL profiles, desktop GLSL for OPENGL33 and OPENGL4 -- and the language the
-        // renderer accepts must be that same one. Asserting GLSL ES outright failed every desktop
+        // The GL dialect is the context's -- GLSL ES for the ES/WebGL profiles, desktop GLSL for
+        // OPENGL33 -- and the language the renderer accepts must be that same one. Asserting GLSL ES outright failed every desktop
         // context, EasyGL's own OPENGL33 included.
         const auto dialect = device.GetShaderDialectEXT();
         const bool desktop = dialect == CNA::Internal::Renderers::ShaderDialectEXT::GlslDesktop;
