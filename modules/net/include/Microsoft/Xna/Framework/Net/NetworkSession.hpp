@@ -209,16 +209,18 @@ namespace Microsoft::Xna::Framework::Net
         void setAllowJoinInProgressProperty(bool value);
 
         /**
-         * @brief Gets the measured inbound bandwidth in bytes per second.
+         * @brief Gets the bytes per second this machine received for the session, transport
+         * overhead included, measured over each second of Update calls.
          *
-         * @return The received bandwidth.
+         * @return The received bandwidth; 0 until a second has been measured.
          */
         [[nodiscard]] int getBytesPerSecondReceivedProperty() const;
 
         /**
-         * @brief Gets the measured outbound bandwidth in bytes per second.
+         * @brief Gets the bytes per second this machine sent for the session, transport overhead
+         * included, measured over each second of Update calls.
          *
-         * @return The sent bandwidth.
+         * @return The sent bandwidth; 0 until a second has been measured.
          */
         [[nodiscard]] int getBytesPerSecondSentProperty() const;
 
@@ -845,6 +847,13 @@ namespace Microsoft::Xna::Framework::Net
          */
         CNAEXT void SetSettingsFromTransport(int maxGamers, int privateGamerSlots, bool allowJoinInProgress,
             bool allowHostMigration);
+
+        /**
+         * @brief Takes the transport's measured traffic for BytesPerSecondSent/Received.
+         *
+         * @param sent Bytes per second sent. @param received Bytes per second received.
+         */
+        CNAEXT void SetTrafficFromTransport(int sent, int received);
 
         /**
          * @brief Sends the ready state of gamers to the other machines of the session: a client

@@ -373,6 +373,37 @@ namespace CNA::Internal::Net
         return message;
     }
 
+    std::vector<bytecs> NetPacketCodec::Encode(const NetworkStatsMessage& message)
+    {
+        PacketWriter writer;
+        writer.Write(static_cast<bytecs>(MessageTag::NetworkStatsBroadcast));
+        writer.Write(EncodeCount(message.Entries.size(), "NetworkStatsMessage.Entries"));
+        for (const auto& entry : message.Entries)
+        {
+            writer.Write(static_cast<bytecs>(entry.WireId));
+            writer.Write(static_cast<SharpRuntime::ushortcs>(entry.Milliseconds));
+        }
+        return ExtractBytes(writer);
+    }
+
+    NetworkStatsMessage NetPacketCodec::DecodeNetworkStats(const std::vector<bytecs>& data)
+    {
+        PacketReader reader;
+        FillReader(reader, data);
+        (void) reader.ReadByte();
+        NetworkStatsMessage message;
+        const bytecs count = reader.ReadByte();
+        message.Entries.reserve(count);
+        for (bytecs i = 0; i < count; ++i)
+        {
+            RoundtripEntry entry;
+            entry.WireId = reader.ReadByte();
+            entry.Milliseconds = reader.ReadUInt16();
+            message.Entries.push_back(entry);
+        }
+        return message;
+    }
+
     // --- SessionPropertiesBroadcast ---
 
     std::vector<bytecs> NetPacketCodec::Encode(const SessionPropertiesBroadcastMessage& message)

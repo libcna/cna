@@ -185,9 +185,11 @@ namespace Microsoft::Xna::Framework::Net
         CNAEXT void SetIsPrivateSlot(bool value);
 
         /**
-         * @brief Gets the measured round-trip time to this gamer.
+         * @brief Gets the measured round-trip time to this gamer, refreshed at each session Update.
+         * Traffic to a gamer on another client machine goes through the host, so it is the round
+         * trip to the host plus the host's own, which the host reports about once a second.
          *
-         * @return The round-trip time.
+         * @return The round-trip time; zero for a local gamer or before any measurement.
          */
         [[nodiscard]] System::TimeSpan getRoundtripTimeProperty() const;
 

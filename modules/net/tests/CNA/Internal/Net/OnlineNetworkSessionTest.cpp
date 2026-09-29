@@ -151,6 +151,16 @@ TEST_F(OnlineNetworkSessionTest, TheHostRemovesAMachineWhoseGamersLeave) {
     EXPECT_EQ("REMOVED_BY_HOST",failed->failure);
 }
 
+// An online session reports its traffic and each remote gamer's round trip, as a SystemLink one does.
+TEST_F(OnlineNetworkSessionTest, TrafficAndRoundTripsReachTheSession) {
+    session=NetworkSession::Create(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(0),gamer(2)},6,0,properties());
+    privatePeer(true,sessionId("b"));
+    until([&]{return peer->ready()&&session->getAllGamersProperty().getCountProperty()==4;});
+    until([&]{return session->getBytesPerSecondSentProperty()>0&&session->getBytesPerSecondReceivedProperty()>0;});
+    for(NetworkGamer* remote:session->getRemoteGamersProperty())
+        until([&]{return remote->getRoundtripTimeProperty()>System::TimeSpan::Zero;});
+    EXPECT_EQ(System::TimeSpan::Zero,session->getLocalGamersProperty()[0]->getRoundtripTimeProperty());
+}
 TEST_F(OnlineNetworkSessionTest, AMachineTheHostRemovesEndsWithRemovedByHost) {
     privatePeer(false);
     auto found=NetworkSession::Find(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(1),gamer(3)},{});

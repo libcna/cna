@@ -4,6 +4,7 @@
 #include "CNA/Internal/Net/ENetDiscoveryService.hpp"
 #include "CNA/Internal/Net/ENetHostHandle.hpp"
 #include "CNA/Internal/Net/NetPacketCodec.hpp"
+#include "TrafficRate.hpp"
 #include "CNA/Logger.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/AvailableNetworkSession.hpp"
@@ -190,6 +191,12 @@ namespace CNA::Internal::Net
             // Client: local gamers added after the welcome, waiting for the host to number them.
             std::vector<LocalNetworkGamer*> PendingLocalAdds;
             bool Welcomed{false};
+            // BytesPerSecondSent/Received, from this host's wire totals.
+            TrafficRate Traffic;
+            // Host: when the round trips to client gamers are next published.
+            std::chrono::steady_clock::time_point NextStatsBroadcast{};
+            // Client: the host's round trips to the gamers on client machines, by wire id.
+            std::map<uint8_t, uint16_t> HostRoundtrips;
             // Client: the host-numbered machines of remote gamers.
             std::map<uint8_t, std::shared_ptr<Microsoft::Xna::Framework::Net::NetworkMachine>> RemoteMachines;
         };
@@ -368,6 +375,36 @@ namespace CNA::Internal::Net
                 state.LastPublishedMachines = std::move(machines);
             }
             state.Host.Flush();
+        }
+
+        // Host: once a second, the round trip to each gamer on a client machine. A client measures its
+        // own round trip to this host; one to a gamer on another client, relayed through this host,
+        // also needs this host's.
+        void PublishNetworkStats(SessionState& state, std::chrono::steady_clock::time_point now)
+        {
+            if (state.HostPeer != nullptr || state.PeerWireIds.empty() || now < state.NextStatsBroadcast) return;
+            state.NextStatsBroadcast = now + std::chrono::seconds(1);
+            NetworkStatsMessage message;
+            for (const auto& [wireId, peer] : state.WireIdToPeer)
+                message.Entries.push_back(RoundtripEntry{wireId, static_cast<uint16_t>(std::min<enet_uint32>(peer->roundTripTime, 65535))});
+            if (message.Entries.empty()) return;
+            const auto bytes = NetPacketCodec::Encode(message);
+            for (auto& [peer, wireIds] : state.PeerWireIds) QueueSend(state, peer, bytes, SendDataOptions::None);
+        }
+
+        // Client: a gamer on the host's machine is one round trip to the host away; one on another
+        // client adds the host's round trip to it.
+        void ApplyClientRoundtrips(SessionState& state)
+        {
+            if (state.HostPeer == nullptr || state.HostPeer->state != ENET_PEER_STATE_CONNECTED) return;
+            for (const auto& [wireId, gamer] : state.WireIdToGamer)
+            {
+                if (gamer->getIsLocalProperty()) continue;
+                const auto relayed = state.HostRoundtrips.find(wireId);
+                const double milliseconds = static_cast<double>(state.HostPeer->roundTripTime) +
+                    (relayed != state.HostRoundtrips.end() ? relayed->second : 0);
+                gamer->SetRoundtripTime(System::TimeSpan::FromMilliseconds(milliseconds));
+            }
         }
 
         void HandleSessionSettings(NetworkSession* session, const SessionSettingsMessage& message)
@@ -1078,6 +1115,7 @@ namespace CNA::Internal::Net
             // The next hello (or this machine's own numbering) covers every local gamer.
             state.Welcomed = false;
             state.PendingLocalAdds.clear();
+            state.HostRoundtrips.clear();
 
             if (selfIsNewHost)
             {
@@ -1352,6 +1390,16 @@ namespace CNA::Internal::Net
                         }
                         HandleMachineRoster(state, NetPacketCodec::DecodeMachineRoster(data));
                         break;
+                    case MessageTag::NetworkStatsBroadcast:
+                        if (!IsFromAuthoritativeHost(state, peer))
+                        {
+                            RejectUnauthorizedHostOnlyMessage(state, peer, "NetworkStatsBroadcast");
+                            break;
+                        }
+                        state.HostRoundtrips.clear();
+                        for (const auto& entry : NetPacketCodec::DecodeNetworkStats(data).Entries)
+                            state.HostRoundtrips[entry.WireId] = entry.Milliseconds;
+                        break;
                     case MessageTag::AppData:
                         HandleAppData(session, state, peer, NetPacketCodec::DecodeAppData(data));
                         break;
@@ -1579,7 +1627,14 @@ namespace CNA::Internal::Net
         // every pump regardless of whether any new ENet events arrived above, so a packet queued
         // by a previous pump still gets released on schedule even if nothing new comes in.
         ReleaseDuePendingDeliveries(session, state);
+        ApplyClientRoundtrips(state);
+        const auto now = std::chrono::steady_clock::now();
+        if (state.Traffic.sample(now, state.Host.getTotalSentDataProperty(), state.Host.getTotalReceivedDataProperty()))
+        {
+            session->SetTrafficFromTransport(state.Traffic.sentPerSecond(), state.Traffic.receivedPerSecond());
+        }
         PublishSessionPropertiesIfChanged(session, state);
+        PublishNetworkStats(state, now);
         PublishSettingsAndMachinesIfChanged(session, state);
     }
 

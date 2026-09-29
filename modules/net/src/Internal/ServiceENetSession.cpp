@@ -50,6 +50,10 @@ struct ServiceENetSession::Impl {
     std::set<std::string> removing;
     // Lobby readiness by gamer ID, as last published or reported; cleared when a game starts or ends.
     std::map<unsigned char,bool> readiness;
+    // Client: the host's round trips to the gamers on client machines, as last reported.
+    std::map<unsigned char,std::uint16_t> hostRoundtrips;
+    // Host: when those round trips are next sent.
+    Time nextStats{};
     std::vector<ServiceENetObservation> observations;
     std::shared_ptr<OutgoingBudget> outgoing=std::make_shared<OutgoingBudget>();
     std::size_t queuedBytes=0,queuedData=0;
@@ -263,6 +267,14 @@ struct ServiceENetSession::Impl {
         if(found==peers.end()||found->second.machine.empty()||source(peer->address)!=found->second.machine){++rejected;return;}
         const std::span<const unsigned char> bytes(packet->data,packet->dataLength);
         if(bytes.empty()){++rejected;return;}
+        if(!host&&bytes[0]==static_cast<unsigned char>(MessageTag::NetworkStatsBroadcast)) {
+            try{(void)validateServiceControlPacket(bytes);}catch(const CnaService::Error&){++rejected;return;}
+            if(found->second.machine!=current.hostMachine||!ready){++rejected;return;}
+            hostRoundtrips.clear();
+            for(const auto& entry:NetPacketCodec::DecodeNetworkStats(std::vector<unsigned char>(bytes.begin(),bytes.end())).Entries)
+                if(remoteGamers.contains(entry.WireId))hostRoundtrips[entry.WireId]=entry.Milliseconds;
+            return;
+        }
         if(!host&&(bytes[0]==static_cast<unsigned char>(MessageTag::StateChangeBroadcast)
             ||bytes[0]==static_cast<unsigned char>(MessageTag::SessionPropertiesBroadcast))) {
             // The directory stays authoritative: a bounded, well-formed host hint only expedites a read.
@@ -331,6 +343,36 @@ struct ServiceENetSession::Impl {
         for(const auto& [id,row]:remoteGamers)if(machineFor(id)==machine)departed.push_back(id);
         remove(departed,host);
     }
+    // Host: once a second, the round trip to each gamer on a client machine. A client measures its own
+    // round trip to this host; one to a gamer on another client, relayed through this host, also
+    // needs this host's.
+    void publishStats() {
+        nextStats=now()+std::chrono::seconds(1);
+        NetworkStatsMessage message;
+        for(const auto& [peer,value]:peers) {
+            if(!value.admitted)continue;
+            const auto milliseconds=static_cast<std::uint16_t>(std::min<enet_uint32>(peer->roundTripTime,65535));
+            for(const auto& row:current.members)if(row.machine==value.machine)
+                message.Entries.push_back({static_cast<unsigned char>(row.ordinal+1),milliseconds});
+        }
+        if(message.Entries.empty())return;
+        const auto bytes=NetPacketCodec::Encode(message);
+        for(const auto& [peer,value]:peers)if(value.admitted)transmit(peer,bytes,SendDataOptions::None);
+    }
+    std::map<unsigned char,std::uint32_t> roundTrips() const {
+        std::map<unsigned char,std::uint32_t> result;
+        if(host) {
+            for(const auto& [peer,value]:peers)if(value.admitted)
+                for(const auto& row:current.members)if(row.machine==value.machine)
+                    result[static_cast<unsigned char>(row.ordinal+1)]=peer->roundTripTime;
+        }else if(upstream&&upstream->state==ENET_PEER_STATE_CONNECTED) {
+            for(const auto& [id,row]:remoteGamers) {
+                const auto relayed=hostRoundtrips.find(id);
+                result[id]=upstream->roundTripTime+(relayed!=hostRoundtrips.end()?relayed->second:0u);
+            }
+        }
+        return result;
+    }
     std::vector<ServiceENetObservation> update() {
         checkOwner();if(!stopped) {
             pumpRetainedCompletions(lease->backend());
@@ -364,6 +406,7 @@ struct ServiceENetSession::Impl {
                 }
                 if(!stopped&&!host&&(!ready||recoverRoster)&&now()>=nextHello)hello();
                 if(!stopped&&!ready&&now()>=deadline)fail("JOIN_TIMED_OUT");
+                if(!stopped&&host&&now()>=nextStats)publishStats();
                 if(!stopped){for(auto& [peer,value]:peers)if(!value.admitted&&now()>=value.deadline)transport().Disconnect(peer,0);transport().Flush();}
             }
         }
@@ -424,5 +467,10 @@ void ServiceENetSession::send(unsigned char sender,unsigned char target,const st
 bool ServiceENetSession::ready()const{impl_->checkOwner();return impl_->ready;}
 const ServiceSessionSnapshot& ServiceENetSession::snapshot()const{impl_->checkOwner();return impl_->current;}
 std::uint64_t ServiceENetSession::rejected()const{impl_->checkOwner();return impl_->rejected;}
+std::map<unsigned char,std::uint32_t> ServiceENetSession::roundTrips()const{impl_->checkOwner();return impl_->roundTrips();}
+std::pair<std::uint32_t,std::uint32_t> ServiceENetSession::traffic()const {
+    impl_->checkOwner();auto& host=impl_->transport();
+    return {host.getTotalSentDataProperty(),host.getTotalReceivedDataProperty()};
+}
 const std::shared_ptr<IGamerServicesBackend>& ServiceENetSession::origin()const{return impl_->lease->backend();}
 }

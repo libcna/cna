@@ -2626,3 +2626,19 @@ the C struct field documents local ticks. CnaGamerServicesTests 485 + 1 skip.
   `JoinUsesTheGamersTheFindWasGivenAcrossRealProcesses` over real LAN discovery; the client joins
   the listing on its host's port, because other SystemLink hosts on the machine answer discovery
   too (10 repeats clean). CnaNetTests 489/489, CApi_NetSmoke.
+- [x] GS-007q `NetworkSession.BytesPerSecondSent`/`Received` and `NetworkGamer.RoundtripTime` (audit
+  OPEN 18, 19). XNA fills all three from the kernel's periodic network stats at Update
+  (`ProcessUpdateNetworkStats`). CNA reported 0 for both rates on every session type. Round trips
+  were measured only on a SystemLink host and never online. Now both transports feed a
+  `TrafficRate` from their ENet host's wire totals (`totalSentData`/`totalReceivedData`, protocol
+  overhead included; unsigned deltas survive the 2^32 wrap) and publish per-second rates. Both are
+  stars, so a gamer's round trip is the direct peer's where there is one: on the host, each
+  client's; on a client, the host's. For a gamer on another client, relayed through the host, the
+  host's own round trip is added: the host sends `NetworkStatsBroadcast` (0x0C) about once a second
+  (SystemLink control channel; online, validated by `validateServiceControlPacket` and accepted only
+  from the host machine once welcomed). Local gamers stay at zero. Tests:
+  `TrafficRateTest` (2), `HostMeasuresTrafficAndPublishesItsRoundTripsToClientGamers`,
+  `ClientAddsTheHostsRoundTripForAGamerOnAnotherClient`,
+  `RoundTripsCoverEveryRemoteGamerAndARelayedOneAddsTheHosts` (three-machine engine),
+  `OnlineNetworkSessionTest.TrafficAndRoundTripsReachTheSession`, and validator preflight/round-trip
+  cases. CnaNetTests 495/495, CApi_NetSmoke, protocol drift check clean.

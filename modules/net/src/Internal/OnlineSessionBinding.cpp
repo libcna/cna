@@ -212,6 +212,15 @@ void OnlineSessionBinding::pump() {
         observations=engine_->update();
     }catch(const ServiceOperationError& error){end(error.code);return;}
     for(auto& observation:observations){convert(std::move(observation));if(ended_)break;}
+    if(ended_)return;
+    const auto [sent,received]=engine_->traffic();
+    if(traffic_.sample(std::chrono::steady_clock::now(),sent,received))
+        session_.SetTrafficFromTransport(traffic_.sentPerSecond(),traffic_.receivedPerSecond());
+    for(const auto& [id,milliseconds]:engine_->roundTrips()) {
+        auto found=gamers_.find(id);
+        if(found!=gamers_.end()&&!found->second->getIsLocalProperty())
+            found->second->SetRoundtripTime(System::TimeSpan::FromMilliseconds(static_cast<double>(milliseconds)));
+    }
 }
 void OnlineSessionBinding::send(NetworkGamer* sender,NetworkGamer* target,const std::vector<SharpRuntime::bytecs>& payload,SendDataOptions options) {
     if(ended_||!engine_)return;

@@ -21,6 +21,7 @@
 #include "Microsoft/Xna/Framework/Net/NetworkSessionEndedEventArgs.hpp"
 #include "System/InvalidOperationException.hpp"
 #include <limits>
+#include <thread>
 #include <string>
 #include <vector>
 
@@ -729,6 +730,73 @@ TEST(ENetBackendTest, GamerLeaveBroadcastPurgesPendingAppDataNamingTheDepartedGa
     // The pending send named OtherPlayer as its target - now gone, it must have been purged and
     // counted, not left to linger in the queue forever.
     EXPECT_EQ(ENetBackend::GetDroppedAppDataCount(), before + 1);
+}
+
+// NetworkSession.BytesPerSecondSent/Received and NetworkGamer.RoundtripTime on a SystemLink host:
+// the rates come from the host's wire totals over each second, and every client is told, about once
+// a second, the host's round trip to each gamer on a client machine.
+TEST(ENetBackendTest, HostMeasuresTrafficAndPublishesItsRoundTripsToClientGamers) {
+    SystemLinkSessionFixture host("HostPlayer");
+    ENetHostHandle fakeClient = ENetHostHandle::CreateClient(2);
+    ENetPeer* peerFromHostSide = nullptr;
+    const uint8_t remoteWireId = ConnectFakeClientAndCompleteHandshake(fakeClient, host.session, &peerFromHostSide);
+
+    std::optional<RoundtripEntry> reported;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (std::chrono::steady_clock::now() < deadline &&
+           !(reported && host.session->getBytesPerSecondSentProperty() > 0 && host.session->getBytesPerSecondReceivedProperty() > 0)) {
+        host.session->Update();
+        ENetEvent evt{};
+        while (fakeClient.Service(0, evt) > 0) {
+            if (evt.type != ENET_EVENT_TYPE_RECEIVE) continue;
+            std::vector<SharpRuntime::bytecs> data(evt.packet->data, evt.packet->data + evt.packet->dataLength);
+            enet_packet_destroy(evt.packet);
+            if (NetPacketCodec::PeekTag(data) != MessageTag::NetworkStatsBroadcast) continue;
+            for (const RoundtripEntry& entry : NetPacketCodec::DecodeNetworkStats(data).Entries) {
+                if (entry.WireId == remoteWireId) reported = entry;
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    ASSERT_TRUE(reported.has_value()) << "the host never published its round trip to the client's gamer";
+    NetworkGamer* remote = nullptr;
+    for (NetworkGamer* g : host.session->getAllGamersProperty()) {
+        if (g->getGamertagProperty() == "RemotePlayer") remote = g;
+    }
+    ASSERT_NE(remote, nullptr);
+    EXPECT_GT(remote->getRoundtripTimeProperty(), System::TimeSpan::Zero);
+    EXPECT_GT(host.session->getBytesPerSecondSentProperty(), 0);
+    EXPECT_GT(host.session->getBytesPerSecondReceivedProperty(), 0);
+    EXPECT_EQ(host.session->getLocalGamersProperty()[0]->getRoundtripTimeProperty(), System::TimeSpan::Zero);
+}
+
+// A SystemLink client reaches the host's gamers in one round trip to the host; a gamer on another
+// client is reached through the host, so the host's reported round trip to it is added. Reports
+// naming this machine's own gamers are ignored.
+TEST(ENetBackendTest, ClientAddsTheHostsRoundTripForAGamerOnAnotherClient) {
+    FakeHostedClient client;
+    ASSERT_NE(client.otherPlayer, nullptr);
+    client.SendFromHost(NetPacketCodec::Encode(GamerJoinBroadcastMessage{{RosterEntry{7, "ThirdPlayer", false}}}));
+    NetworkGamer* third = nullptr;
+    for (int i = 0; i < 200 && third == nullptr; ++i, PollYield()) {
+        client.session->Update();
+        for (NetworkGamer* g : client.session->getAllGamersProperty()) {
+            if (g->getGamertagProperty() == "ThirdPlayer") third = g;
+        }
+    }
+    ASSERT_NE(third, nullptr);
+
+    client.SendFromHost(NetPacketCodec::Encode(NetworkStatsMessage{{RoundtripEntry{7, 40}, RoundtripEntry{5, 99}}}));
+    const auto relayedBy40 = [&] {
+        return third->getRoundtripTimeProperty() - client.otherPlayer->getRoundtripTimeProperty() ==
+            System::TimeSpan::FromMilliseconds(40);
+    };
+    for (int i = 0; i < 200 && !relayedBy40(); ++i, PollYield()) {
+        client.session->Update();
+    }
+    EXPECT_TRUE(relayedBy40());
+    EXPECT_GT(client.otherPlayer->getRoundtripTimeProperty(), System::TimeSpan::Zero);
+    EXPECT_EQ(client.LocalFor(client.signedIn)->getRoundtripTimeProperty(), System::TimeSpan::Zero);
 }
 
 // The host's side of a client's AddLocalGamer: the requested gamer joins the requesting machine,

@@ -43,6 +43,8 @@ namespace CNA::Internal::Net
         MachineRosterBroadcast = 0x0A,
         // SystemLink only: a client asks the host to admit a local gamer it added (AddLocalGamer).
         AddLocalGamerRequest = 0x0B,
+        // The host's round-trip time to each gamer on a client machine, for the gamers' RoundtripTime.
+        NetworkStatsBroadcast = 0x0C,
         AppData = 0x10,
     };
 
@@ -140,6 +142,17 @@ namespace CNA::Internal::Net
     {
         std::string Gamertag;
     };
+    /** @brief The host's measured round trip to one gamer, in milliseconds. */
+    struct RoundtripEntry
+    {
+        uint8_t WireId{0};
+        uint16_t Milliseconds{0};
+    };
+    /** @brief The host's round trips to the gamers on client machines, sent about once a second. */
+    struct NetworkStatsMessage
+    {
+        std::vector<RoundtripEntry> Entries;
+    };
     /** @brief Carries application SendData/ReceiveData payloads between peers, relayed by the host. */
     struct AppDataMessage
     {
@@ -201,6 +214,7 @@ namespace CNA::Internal::Net
          * @return Connected-channel packet bytes.
          */
         static std::vector<SharpRuntime::bytecs> Encode(const AddLocalGamerMessage& message);
+        static std::vector<SharpRuntime::bytecs> Encode(const NetworkStatsMessage& message);
         static std::vector<SharpRuntime::bytecs> Encode(const AppDataMessage& message);
 
         /** @brief Reads the leading MessageTag byte without needing a full decode. */
@@ -248,6 +262,7 @@ namespace CNA::Internal::Net
          * @return The decoded request.
          */
         static AddLocalGamerMessage DecodeAddLocalGamer(const std::vector<SharpRuntime::bytecs>& data);
+        static NetworkStatsMessage DecodeNetworkStats(const std::vector<SharpRuntime::bytecs>& data);
         static AppDataMessage DecodeAppData(const std::vector<SharpRuntime::bytecs>& data);
 
         /**

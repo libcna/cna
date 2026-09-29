@@ -29,6 +29,7 @@ std::vector<unsigned char> roundTrip(const std::vector<unsigned char>& bytes) {
         case MessageTag::GamerLeaveBroadcast:return NetPacketCodec::Encode(NetPacketCodec::DecodeGamerLeaveBroadcast(bytes));
         case MessageTag::StateChangeBroadcast:return NetPacketCodec::Encode(NetPacketCodec::DecodeStateChangeBroadcast(bytes));
         case MessageTag::SessionPropertiesBroadcast:return NetPacketCodec::Encode(NetPacketCodec::DecodeSessionPropertiesBroadcast(bytes));
+        case MessageTag::NetworkStatsBroadcast:return NetPacketCodec::Encode(NetPacketCodec::DecodeNetworkStats(bytes));
         default:throw std::runtime_error("unreachable test control");
     }
 }
@@ -109,14 +110,15 @@ TEST(ServiceRosterTest, ControlPreflightBoundsEveryFieldBeforeExistingDecoder) {
     const auto welcome=ServiceRoster(fixture()).welcomeFor(remote,{"Bob","Dana"});
     std::vector<std::vector<unsigned char>> valid{NetPacketCodec::Encode(ClientHelloMessage{{"Bob","Dana"}}),NetPacketCodec::Encode(welcome),
         NetPacketCodec::Encode(GamerJoinBroadcastMessage{{{3,"Bob",false},{4,"Dana",false}}}),NetPacketCodec::Encode(GamerLeaveBroadcastMessage{{3,4}}),
-        NetPacketCodec::Encode(StateChangeBroadcastMessage{NetworkSessionState::Playing}),NetPacketCodec::Encode(SessionPropertiesBroadcastMessage{welcome.SessionProperties})};
+        NetPacketCodec::Encode(StateChangeBroadcastMessage{NetworkSessionState::Playing}),NetPacketCodec::Encode(SessionPropertiesBroadcastMessage{welcome.SessionProperties}),
+        NetPacketCodec::Encode(NetworkStatsMessage{{{3,40},{4,65535}}})};
     for(const auto& bytes:valid) {
         EXPECT_EQ(bytes,roundTrip(bytes));
         for(std::size_t length=0;length<bytes.size();++length)refused([&]{(void)validateServiceControlPacket(std::span(bytes).first(length));},"INVALID_SERVICE_PACKET");
         auto extra=bytes;extra.push_back(0);refused([&]{(void)validateServiceControlPacket(extra);},"INVALID_SERVICE_PACKET");
     }
     for(const auto& bytes:std::vector<std::vector<unsigned char>>{{1,0},{1,5},{1,1,128,128,128,128,127},{1,1,33},{1,1,1,255},{1,1,1,0},
-        {2,1,0},{2,1,32},{6,3},{7,7},{7,8,2},{16,1,2,0},std::vector<unsigned char>(4097,1)})
+        {2,1,0},{2,1,32},{6,3},{7,7},{7,8,2},{12,0},{12,1,3,40},{16,1,2,0},std::vector<unsigned char>(4097,1)})
         refused([&]{(void)validateServiceControlPacket(bytes);},"INVALID_SERVICE_PACKET");
     auto flags=NetPacketCodec::Encode(GamerJoinBroadcastMessage{{{1,"Alice",true}}});flags.back()=2;
     refused([&]{(void)validateServiceControlPacket(flags);},"INVALID_SERVICE_PACKET");

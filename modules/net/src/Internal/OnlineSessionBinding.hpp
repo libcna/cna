@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 #include "OnlineSessionOperation.hpp"
+#include "TrafficRate.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkMachine.hpp"
 #include <map>
@@ -80,6 +81,7 @@ private:
     std::vector<std::string> users_;
     std::vector<std::unique_ptr<NetworkGamer>> remote_;
     std::map<unsigned char,NetworkGamer*> gamers_;
+    TrafficRate traffic_;
     std::map<std::string,std::shared_ptr<Microsoft::Xna::Framework::Net::NetworkMachine>> machines_;
     GamerServices::ServiceSessionSnapshot snapshot_;
     std::optional<GamerServices::ServiceSessionSettings> requested_;

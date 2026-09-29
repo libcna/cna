@@ -64,6 +64,10 @@ MessageTag validateServiceControlPacket(std::span<const unsigned char> bytes) {
                 const auto count=cursor.count(1,CnaService::MaxSessionGamers);
                 for(int index=0;index<count;++index){cursor.id();(void)cursor.boolean();}break;
             }
+            case MessageTag::NetworkStatsBroadcast: {
+                const auto count=cursor.count(1,CnaService::MaxSessionGamers);
+                for(int index=0;index<count;++index){cursor.id();(void)cursor.take(2);}break;
+            }
             default:packet();
         }
         if(cursor.position!=bytes.size())packet();return tag;

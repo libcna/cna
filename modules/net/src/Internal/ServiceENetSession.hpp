@@ -3,7 +3,9 @@
 #include "OnlineSessionPreparation.hpp"
 #include "CNA/Internal/Net/NetPacketCodec.hpp"
 #include <chrono>
+#include <map>
 #include <optional>
+#include <utility>
 
 namespace CNA::Internal::Net {
 /** @brief Owned logical realtime observation for conversion at the XNA owner's update boundary. */
@@ -82,6 +84,13 @@ public:
     const std::shared_ptr<GamerServices::IGamerServicesBackend>& origin() const;
     /** @brief Gets rejected source/control/application packet count. @return Cumulative drops. */
     std::uint64_t rejected() const;
+    /** @brief Gets the round trip to each remote gamer: the direct peer's on the host; on a client the
+     * round trip to the host, plus the host's reported round trip for a gamer on another client.
+     * @return Milliseconds by gamer ID; empty before a client is connected. */
+    std::map<unsigned char,std::uint32_t> roundTrips() const;
+    /** @brief Gets this session's ENet wire totals, protocol overhead included.
+     * @return Cumulative bytes sent and received, each wrapping at 2^32. */
+    std::pair<std::uint32_t,std::uint32_t> traffic() const;
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;

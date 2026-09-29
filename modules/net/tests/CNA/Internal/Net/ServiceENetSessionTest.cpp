@@ -236,6 +236,22 @@ TEST(ServiceENetSessionTest, LobbyReadinessIsRelayedOwnedAndReplayedToALateJoine
     // Nobody echoes a machine's own gamers back to it, so a change in flight is never undone.
     EXPECT_FALSE(readiness(fixture.clientEvents).contains(2));EXPECT_FALSE(readiness(thirdEvents).contains(3));
 }
+// NetworkGamer.RoundtripTime over the service's star: the host measures each client directly; a
+// client reaches the host's gamer in one round trip to the host, and another client's gamer through
+// the host, which reports its own round trip to that gamer once a second.
+TEST(ServiceENetSessionTest, RoundTripsCoverEveryRemoteGamerAndARelayedOneAddsTheHosts) {
+    Fixture fixture;fixture.host=std::make_unique<ServiceENetSession>(fixture.prepare(false,{"a"}),std::vector<std::string>{"Alice"},fixture.routes());
+    fixture.client=std::make_unique<ServiceENetSession>(fixture.prepare(true,{"b"}),std::vector<std::string>{"Bob"},fixture.routes());
+    fixture.until([&]{return fixture.client->ready();});
+    auto third=std::make_unique<ServiceENetSession>(fixture.prepare(true,{"c"}),std::vector<std::string>{"Charlie"},fixture.routes());
+    fixture.until([&]{(void)third->update();return third->ready();});
+    fixture.until([&]{(void)third->update();const auto trips=fixture.host->roundTrips();return trips.contains(2)&&trips.contains(3);});
+    *fixture.skew+=std::chrono::seconds(2);
+    fixture.until([&]{(void)third->update();const auto trips=fixture.client->roundTrips();return trips.contains(3)&&trips.at(3)>trips.at(1);});
+    fixture.until([&]{(void)third->update();const auto trips=third->roundTrips();return trips.contains(2)&&trips.at(2)>trips.at(1);});
+    EXPECT_FALSE(fixture.client->roundTrips().contains(2));
+    const auto [sent,received]=fixture.host->traffic();EXPECT_GT(sent,0u);EXPECT_GT(received,0u);
+}
 // XNA NetworkMachine.RemoveFromSession over the service: the directory removes the machine, the
 // host's peers see it leave, and the removed machine fails with REMOVED_BY_HOST.
 TEST(ServiceENetSessionTest, TheHostRemovesAMachineWhichFailsWithRemovedByHost) {

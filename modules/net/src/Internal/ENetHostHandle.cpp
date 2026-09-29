@@ -140,6 +140,16 @@ namespace CNA::Internal::Net
         enet_host_broadcast(host_, channel, packet);
     }
 
+    uint32_t ENetHostHandle::getTotalSentDataProperty() const
+    {
+        return host_ != nullptr ? host_->totalSentData : 0;
+    }
+
+    uint32_t ENetHostHandle::getTotalReceivedDataProperty() const
+    {
+        return host_ != nullptr ? host_->totalReceivedData : 0;
+    }
+
     void ENetHostHandle::Flush() const
     {
         enet_host_flush(host_);

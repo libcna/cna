@@ -393,6 +393,12 @@ namespace Microsoft::Xna::Framework::Net
     int NetworkSession::getBytesPerSecondReceivedProperty() const { return bytesPerSecondReceived_; }
     int NetworkSession::getBytesPerSecondSentProperty() const { return bytesPerSecondSent_; }
 
+    void NetworkSession::SetTrafficFromTransport(int sent, int received)
+    {
+        bytesPerSecondSent_ = sent;
+        bytesPerSecondReceived_ = received;
+    }
+
     NetworkGamer* NetworkSession::getHostProperty() const { return host_; }
 
     bool NetworkSession::getIsEveryoneReadyProperty() const
