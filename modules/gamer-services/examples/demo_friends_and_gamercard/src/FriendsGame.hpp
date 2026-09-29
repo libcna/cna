@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
@@ -16,12 +17,16 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Input/KeyboardState.hpp"
 
-// Task 15.14: cna_demo_friends_and_gamercard. FriendCollection (via CreateInternal) and the
-// no-op Guide::ShowGamerCard/ShowFriendRequest/ShowFriends/ShowComposeMessage calls. A
-// friends-list panel (Up/Down to select) plus an on-screen scrolling log printing
-// "ShowGamerCard(...) called" etc. every time a key triggers one of those Guide calls, since
-// none produce real OS UI otherwise (all 4 are confirmed no-ops in this platform's
-// implementation, matching FNA's own reference).
+// Task 15.14: cna_demo_friends_and_gamercard. FriendCollection/FriendGamer and the Guide's
+// ShowGamerCard/ShowFriendRequest/ShowFriends/ShowComposeMessage. A friends-list panel (Up/Down to
+// select) plus an on-screen scrolling log recording what each G/R/F/C key's Guide call did.
+//
+// The list is sample data built with FriendCollection::CreateInternal: SignedInGamer::GetFriends()
+// returns an account's friends from a CNA account service and throws GamerPrivilegeException for a
+// local offline profile. The four Guide calls open service panes (gamer card, friend request,
+// friends list, message composer) for a gamer signed in to a CNA account as player One (Home opens
+// the Guide to sign in); without a CNA account service (the default), or without such a gamer, each
+// throws GamerServicesNotAvailableException, and the log shows that refusal.
 class FriendsGame : public Microsoft::Xna::Framework::Game
 {
 public:
@@ -36,6 +41,9 @@ public:
     void SetSmokeFrames(int n) { smokeFramesLeft_ = n; }
 
 private:
+    // The Guide draws its panes and notifications through the game's graphics device service.
+    Microsoft::Xna::Framework::GraphicsDeviceManager graphics_{this};
+
     void Log(const std::string& line);
     void TriggerAction(int actionIndex);
 

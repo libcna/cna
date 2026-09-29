@@ -55,11 +55,10 @@ void LeaderboardGame::Initialize()
     // collide with any other CNA app's own local GamerServices store.
     Storage::StorageDevice::SetAppNameEXT("CnaDemoLeaderboardViewer");
 
-    // 20 synthetic gamers, published as "signed in" (LeaderboardReader::Read only attaches to
-    // currently signed-in gamers - see its own doc comment on this documented, honest local-only
-    // limitation), each given a real rating through LeaderboardWriter - the real "write path"
-    // (LeaderboardEntry::setRatingProperty() persists on every call - see its own doc comment for
-    // why that, not a separate commit method, is the real XNA-faithful trigger).
+    // 20 synthetic gamers, published as "signed in" (an offline LeaderboardReader::Read lists only
+    // stored entries whose gamertag is signed in on this machine), each given a real rating
+    // through LeaderboardWriter - the offline "write path" (the entry an offline writer hands out
+    // persists to the local store on every setRatingProperty() call).
     //
     // Each gamer is constructed with `new SignedInGamer(SignedInGamer::CreateInternal(tag))`, not
     // a plain push_back of the by-value CreateInternal() result - see syntheticGamers_'s own doc
@@ -109,9 +108,9 @@ void LeaderboardGame::LoadContent()
 
 void LeaderboardGame::Update(GameTime& /*gameTime*/)
 {
-    // Task 4.4 (plans/plan_net.md Phase 4): PageDown()/PageUp() are now real - they mutate reader_ in
-    // place (reslicing the already-cached full leaderboard, no new disk read), so no separate
-    // "rebuild the reader" step is needed anymore.
+    // Task 4.4 (plans/plan_net.md Phase 4): PageDown()/PageUp() mutate reader_ in place (reslicing
+    // the already-cached full leaderboard, no new disk read), so there is no separate "rebuild the
+    // reader" step.
     KeyboardState keys = Keyboard::GetState();
     if (keys.IsKeyDown(Keys::Down) && !previousKeys_.IsKeyDown(Keys::Down) && reader_->getCanPageDownProperty())
     {

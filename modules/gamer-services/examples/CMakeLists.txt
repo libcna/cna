@@ -114,7 +114,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
     endif()
 
     # Task 15.10: cna_demo_leaderboard_viewer - LeaderboardReader (CanPageUp/Down, Entries,
-    # PageStart) plus LeaderboardWriter::GetLeaderboard's always-throws boundary. Needs
+    # PageStart) over ratings written through LeaderboardWriter::GetLeaderboard. Needs
     # CNA_GamerServices and windowing (SpriteBatch/SpriteFont HUD) - same gating as
     # cna_demo_avatar above.
     if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
@@ -143,7 +143,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         endif()
     endif()
 
-    # Task 15.11: cna_demo_guide_overlay_console - the full Guide static API surface via a
+    # Task 15.11: cna_demo_guide_overlay_console - Guide static API calls via a
     # numbered console menu. Console-only, single process, no graphics/window needed - needs only
     # CNA_GamerServices.
     if(CNA_ENABLE_NET)
@@ -213,8 +213,9 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
     endif()
 
     # Task 15.14: cna_demo_friends_and_gamercard - FriendCollection (via CreateInternal) and the
-    # no-op Guide::ShowGamerCard/ShowFriendRequest/ShowFriends/ShowComposeMessage calls. Needs
-    # CNA_GamerServices and windowing - same gating as cna_demo_avatar above.
+    # Guide::ShowGamerCard/ShowFriendRequest/ShowFriends/ShowComposeMessage service panes, which
+    # refuse without a CNA account service. Needs CNA_GamerServices and windowing - same gating as
+    # cna_demo_avatar above.
     if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
         add_executable(cna_demo_friends_and_gamercard
             demo_friends_and_gamercard/src/Main.cpp

@@ -190,9 +190,9 @@ void RosterGame::Update(GameTime& gameTime)
 
     KeyboardState keys = Keyboard::GetState();
     // 'R' toggles the local gamer's IsReady - edge-triggered so holding the key doesn't flicker
-    // it every frame. IsReady is plain local storage (see NetworkGamer.cpp) never sent over the
-    // wire, so this process's own roster panel updates immediately but the *other* process's
-    // roster panel for this same gamer never changes - a real, honest limitation, not a bug.
+    // it every frame. The setter sends the change to the other machines (it is valid only in
+    // Lobby, where this demo's session stays), so the other process's roster panel shows it after
+    // its next session Update.
     if (keys.IsKeyDown(Keys::R) && !previousKeys_.IsKeyDown(Keys::R) && localNetworkGamer_ != nullptr)
     {
         localNetworkGamer_->setIsReadyProperty(!localNetworkGamer_->getIsReadyProperty());

@@ -92,6 +92,10 @@ void WatchdogGame::AdvanceStateMachine()
                 GamerServicesDispatcher::Initialize(services);
             });
             initializeResult_.done = true;
+            // Profiles signed in at startup (main sets CNA_GAMER_SERVICES_AUTO_SIGN_IN) appear, as
+            // in XNA, at the first GamerServicesDispatcher.Update; this game has no
+            // GamerServicesComponent to call it.
+            GamerServicesDispatcher::Update();
             std::printf("[Watchdog] GamerServicesDispatcher::Initialize() completed in %.2fms "
                         "(Task 12.1's historical hang would have meant this line never prints).\n",
                         initializeResult_.elapsedMs);
@@ -107,6 +111,14 @@ void WatchdogGame::AdvanceStateMachine()
 
         case Step::RunCreate:
         {
+            if (Gamer::getSignedInGamersProperty()->getCountProperty() == 0)
+            {
+                // Create needs a signed-in gamer to host the session.
+                std::printf("[Watchdog] Nobody is signed in; NetworkSession::Create() and "
+                            "GetAchievements() cannot run.\n");
+                step_ = Step::AllDone;
+                break;
+            }
             NetworkSession* session = nullptr;
             createResult_.elapsedMs = MeasureMs([&]() {
                 session = NetworkSession::Create(NetworkSessionType::Local, 1, 8);

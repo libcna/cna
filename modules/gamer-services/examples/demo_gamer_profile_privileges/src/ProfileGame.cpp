@@ -7,6 +7,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/GamerPrivileges.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerProfile.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerZone.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
 #include "System/Globalization/RegionInfo.hpp"
@@ -82,30 +83,25 @@ ProfileGame::~ProfileGame()
 
 void ProfileGame::SelectGamer(int index)
 {
-    selectedIndex_ = ((index % static_cast<int>(gamers_.size())) + static_cast<int>(gamers_.size())) %
-                      static_cast<int>(gamers_.size());
     if (currentProfile_ != nullptr)
     {
         currentProfile_->Dispose();
         delete currentProfile_;
+        currentProfile_ = nullptr;
     }
+    if (gamers_.empty())
+    {
+        selectedIndex_ = 0;
+        return;
+    }
+    selectedIndex_ = ((index % static_cast<int>(gamers_.size())) + static_cast<int>(gamers_.size())) %
+                      static_cast<int>(gamers_.size());
     currentProfile_ = gamers_[static_cast<std::size_t>(selectedIndex_)]->GetProfile();
 }
 
 void ProfileGame::Initialize()
 {
     Game::Initialize();
-
-    const auto* signedIn = Gamer::getSignedInGamersProperty();
-    for (int i = 0; i < signedIn->getCountProperty(); ++i)
-    {
-        gamers_.push_back((*signedIn)[i]);
-    }
-    SelectGamer(0);
-
-    std::printf("[Profile] %zu signed-in gamers. GamerProfile/GamerPrivileges are both built via "
-                "hardcoded CreateInternal() with no per-gamer configuration - every gamer's card "
-                "and privilege flags below are expected to be identical.\n", gamers_.size());
 }
 
 void ProfileGame::LoadContent()
@@ -118,8 +114,28 @@ void ProfileGame::LoadContent()
     font_ = MakeSimpleFont(device);
 }
 
-void ProfileGame::Update(GameTime& /*gameTime*/)
+void ProfileGame::Update(GameTime& gameTime)
 {
+    // Runs the GamerServicesComponent, whose GamerServicesDispatcher.Update signs gamers in.
+    Game::Update(gameTime);
+
+    const auto* signedIn = Gamer::getSignedInGamersProperty();
+    std::vector<SignedInGamer*> current;
+    for (int i = 0; i < signedIn->getCountProperty(); ++i)
+    {
+        current.push_back((*signedIn)[i]);
+    }
+    if (current != gamers_)
+    {
+        gamers_ = std::move(current);
+        SelectGamer(selectedIndex_);
+        std::printf("[Profile] %zu signed-in gamer(s).\n", gamers_.size());
+    }
+    if (gamers_.empty() && !Guide::getIsVisibleProperty())
+    {
+        Guide::ShowSignIn(1, false);
+    }
+
     KeyboardState keys = Keyboard::GetState();
     if (keys.IsKeyDown(Keys::Right) && !previousKeys_.IsKeyDown(Keys::Right))
     {
@@ -136,7 +152,7 @@ void ProfileGame::Update(GameTime& /*gameTime*/)
     // >= 0: once smokeFramesLeft_ reaches 0 it stops decrementing (see the block below), so an
     // >= 0 check here would keep re-triggering every subsequent frame - Exit() does not halt
     // Update() immediately (Task 15.14's own discovery of this exact bug class).
-    if (smokeFramesLeft_ > 0 && smokeFramesLeft_ % 30 == 0)
+    if (smokeFramesLeft_ > 0 && smokeFramesLeft_ % 30 == 0 && !gamers_.empty())
     {
         SelectGamer(selectedIndex_ + 1);
     }
@@ -145,12 +161,24 @@ void ProfileGame::Update(GameTime& /*gameTime*/)
     {
         if (--smokeFramesLeft_ == 0)
         {
-            const GamerPrivileges& priv = gamers_[static_cast<std::size_t>(selectedIndex_)]->getPrivilegesProperty();
-            std::printf("[Profile] Smoke test complete: selectedIndex=%d gamerScore=%d gamerZone=%s "
-                        "allowCommunication=%s\n",
-                        selectedIndex_, currentProfile_->getGamerScoreProperty(),
-                        GamerZoneName(currentProfile_->getGamerZoneProperty()),
-                        PrivilegeSettingName(priv.getAllowCommunicationProperty()));
+            if (gamers_.empty())
+            {
+                std::printf("[Profile] Smoke test complete: nobody signed in.\n");
+            }
+            else
+            {
+                SignedInGamer* gamer = gamers_[static_cast<std::size_t>(selectedIndex_)];
+                const GamerPrivileges& priv = gamer->getPrivilegesProperty();
+                std::printf("[Profile] Smoke test complete: selectedIndex=%d gamertag=%s gamerScore=%d "
+                            "totalAchievements=%d gamerZone=%s allowCommunication=%s "
+                            "allowOnlineSessions=%s\n",
+                            selectedIndex_, gamer->getGamertagProperty().c_str(),
+                            currentProfile_->getGamerScoreProperty(),
+                            currentProfile_->getTotalAchievementsProperty(),
+                            GamerZoneName(currentProfile_->getGamerZoneProperty()),
+                            PrivilegeSettingName(priv.getAllowCommunicationProperty()),
+                            priv.getAllowOnlineSessionsProperty() ? "true" : "false");
+            }
             Exit();
         }
     }
@@ -162,6 +190,13 @@ void ProfileGame::Draw(const GameTime& /*gameTime*/)
     device.Clear(Color(18, 18, 28, 255));
 
     spriteBatch_->Begin();
+
+    if (gamers_.empty())
+    {
+        spriteBatch_->DrawString(*font_, "Nobody is signed in.", Vector2(16.0f, 16.0f), Color(255, 255, 255, 255));
+        spriteBatch_->End();
+        return;
+    }
 
     SignedInGamer* gamer = gamers_[static_cast<std::size_t>(selectedIndex_)];
     char header[128];

@@ -76,14 +76,14 @@ PresenceGame::PresenceGame()
 {
     // Real idiomatic XNA registration - Components.Add(new GamerServicesComponent(this)) in the
     // constructor, matching cna-samples' own documented real-world usage. Game::Initialize()'s own
-    // per-component loop calls GamerServicesComponent::Initialize() (which populates
-    // Gamer::SignedInGamers) automatically; no direct GamerServicesDispatcher::Initialize() call
-    // needed, unlike every earlier Phase 15 Net demo.
+    // per-component loop calls GamerServicesComponent::Initialize() and Game::Update() calls its
+    // Update(), which runs GamerServicesDispatcher.Update, where gamers sign in and out; no direct
+    // GamerServicesDispatcher call is needed.
     gamerServicesComponent_ = new GamerServicesComponent(*this);
     getComponentsProperty().Add(gamerServicesComponent_);
 
-    // Subscribed before Initialize() runs so every SignedIn firing during startup is observed
-    // (matches Task 9.8's own proven harness pattern).
+    // Subscribed before Initialize() runs; a handler added later is also told about every gamer
+    // already signed in.
     SignedInGamer::SignedIn += [this](System::Object*, const SignedInEventArgs& e) {
         ++signInFireCount_;
         std::printf("[Presence] SignedIn: %s\n", e.getGamerProperty()->getGamertagProperty().c_str());
@@ -102,14 +102,6 @@ PresenceGame::~PresenceGame()
 void PresenceGame::Initialize()
 {
     Game::Initialize();
-
-    const auto* signedIn = Gamer::getSignedInGamersProperty();
-    for (int i = 0; i < signedIn->getCountProperty(); ++i)
-    {
-        gamers_.push_back((*signedIn)[i]);
-    }
-    std::printf("[Presence] %zu signed-in gamers after GamerServicesComponent::Initialize() "
-                "(signInFireCount=%d)\n", gamers_.size(), signInFireCount_);
 }
 
 void PresenceGame::LoadContent()
@@ -122,8 +114,18 @@ void PresenceGame::LoadContent()
     font_ = MakeSimpleFont(device);
 }
 
-void PresenceGame::Update(GameTime& /*gameTime*/)
+void PresenceGame::Update(GameTime& gameTime)
 {
+    Game::Update(gameTime);
+
+    // The signed-in gamers as of this frame's GamerServicesDispatcher.Update.
+    gamers_.clear();
+    const auto* signedIn = Gamer::getSignedInGamersProperty();
+    for (int i = 0; i < signedIn->getCountProperty(); ++i)
+    {
+        gamers_.push_back((*signedIn)[i]);
+    }
+
     KeyboardState keys = Keyboard::GetState();
     const Keys numberKeys[4] = {Keys::D1, Keys::D2, Keys::D3, Keys::D4};
     for (int i = 0; i < 4 && i < static_cast<int>(gamers_.size()); ++i)
@@ -174,6 +176,11 @@ void PresenceGame::Draw(const GameTime& /*gameTime*/)
                               Vector2(16.0f, 16.0f), Color(255, 255, 255, 255));
 
     float y = 48.0f;
+    if (gamers_.empty())
+    {
+        spriteBatch_->DrawString(*font_, "Nobody is signed in - Home opens the Guide to sign in.",
+                                  Vector2(16.0f, y), Color(150, 150, 150, 255));
+    }
     for (std::size_t i = 0; i < gamers_.size(); ++i)
     {
         const GamerPresence& presence = gamers_[i]->getPresenceProperty();

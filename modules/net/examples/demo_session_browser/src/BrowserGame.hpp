@@ -19,11 +19,11 @@
 
 // Task 15.5: cna_demo_session_browser. One process hosts/advertises ("Hosting..."); another
 // repeatedly calls NetworkSession::Find(...), renders the resulting AvailableNetworkSessionCollection
-// as a scrollable list (host gamertag, port used to disambiguate identical "Stub Gamer" entries,
-// current/max gamer counts), Up/Down to move the selection, Enter to Join - the classic "session
-// lobby" screen. Real two-process ENet; supports launching several --host processes at once (the
-// discovery port allows this, see ENetDiscoveryService.cpp's Task 6.5 comment) to prove the list
-// genuinely scrolls across multiple distinct entries, not just a single-item stub.
+// as a scrollable list (host gamertag, port - which tells apart hosts signed in with the same
+// profile name - and current/max gamer counts), Up/Down to move the selection, Enter to Join - the
+// classic "session lobby" screen. Real two-process ENet; supports launching several --host
+// processes at once (the discovery port allows this, see ENetDiscoveryService.cpp's Task 6.5
+// comment) to prove the list genuinely scrolls across multiple distinct entries.
 class BrowserGame : public Microsoft::Xna::Framework::Game
 {
 public:

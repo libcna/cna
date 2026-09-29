@@ -17,20 +17,17 @@
 // NetworkSessionType::Local (no real networking at all - purely the local event queue).
 //
 // Demonstrates NetworkSession::StartGame()/EndGame() and the resulting NetworkSessionState
-// transitions/GameStarted/GameEnded events, then an honest spotlight on a documented gap: this
-// codebase's WriteArbitratedLeaderboard/WriteUnarbitratedLeaderboard/WriteTrueSkill delegates are
-// fully wired (subscribing and Raise()-ing them works correctly) but nothing in production code
-// ever calls Raise() on them (confirmed by grep - zero call sites outside this demo) - a real,
-// intentional CNA/FNA-parity gap (FNA's own arbitration/leaderboard-writing pipeline was never
-// implemented either), not something silently broken. This demo proves the delegate wiring itself
-// is sound by manually raising all three, while being explicit in its own output that production
-// code never does this on its own.
+// transitions/GameStarted/GameEnded events, then the WriteArbitratedLeaderboard/
+// WriteUnarbitratedLeaderboard/WriteTrueSkill events. NetworkSession raises them
+// (WriteArbitratedLeaderboard only in Ranked) when a round that writes service leaderboards ends,
+// at EndGame or when a gamer leaves while Playing: a LocalWithLeaderboards session with a CNA
+// account service, or an online PlayerMatch/Ranked session. A Local session writes none, so this
+// demo raises all three itself to show the subscriptions working, and says so in its output.
 //
-// Also corrects an imprecision in this task's own original description: EndGame() transitions
-// NetworkSessionState::Playing back to Lobby (not Ended) - confirmed by reading NetworkSession.cpp
-// directly. Reaching Ended requires the local gamer to actually leave the session (this demo does
-// so explicitly via RemoveGamer(), which is what a real disconnect/session-end path funnels
-// through), giving a genuine, complete Lobby -> Playing -> Lobby -> Ended tour.
+// EndGame() returns the session from Playing to Lobby, not Ended. Reaching Ended requires the
+// local gamer to actually leave the session (this demo does so explicitly via RemoveGamer(), which
+// is what a real disconnect/session-end path funnels through), giving a complete
+// Lobby -> Playing -> Lobby -> Ended tour.
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Net;
@@ -107,8 +104,8 @@ int main()
                 "own real transition target, confirmed by reading NetworkSession.cpp)\n",
                 StateName(session->getSessionStateProperty()));
 
-    std::printf("[Lifecycle] Manually raising all 3 leaderboard delegates (production code never "
-                "does this - confirmed zero real call sites by grep):\n");
+    std::printf("[Lifecycle] Manually raising all 3 leaderboard events (a Local session writes no "
+                "service leaderboards, so NetworkSession raises none here):\n");
     session->WriteArbitratedLeaderboard.Raise(session, WriteLeaderboardsEventArgs::CreateInternal(localNetworkGamer, false));
     session->WriteUnarbitratedLeaderboard.Raise(session, WriteLeaderboardsEventArgs::CreateInternal(localNetworkGamer, false));
     session->WriteTrueSkill.Raise(session, WriteLeaderboardsEventArgs::CreateInternal(localNetworkGamer, false));
@@ -118,8 +115,8 @@ int main()
     std::printf("[Lifecycle] After RemoveGamer(localGamer)+Update(): %s\n",
                 StateName(session->getSessionStateProperty()));
 
-    std::printf("[Lifecycle] Summary: leaderboardDelegateFireCount=%d (expected 3 - only from this "
-                "demo's own manual Raise() calls, never from production code)\n", leaderboardFireCount);
+    std::printf("[Lifecycle] Summary: leaderboardDelegateFireCount=%d (expected 3 - all from this "
+                "demo's own Raise() calls)\n", leaderboardFireCount);
 
     session->Dispose();
     return 0;
