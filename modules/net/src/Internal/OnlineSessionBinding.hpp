@@ -46,6 +46,11 @@ public:
      * @param options Delivery semantics. */
     void send(Microsoft::Xna::Framework::Net::NetworkGamer* sender,Microsoft::Xna::Framework::Net::NetworkGamer* target,
         const std::vector<SharpRuntime::bytecs>& payload,SendDataOptions options);
+    /** @brief Sends one voice frame to an admitted remote gamer, unreliably; dropped when either end
+     * is unknown or the transport is full. @param sender Local gamer. @param target Remote gamer.
+     * @param frame The frame. */
+    void sendVoice(Microsoft::Xna::Framework::Net::NetworkGamer* sender,Microsoft::Xna::Framework::Net::NetworkGamer* target,
+        const VoiceDataMessage& frame);
     /** @brief Sends gamers' lobby ready state to the other machines.
      * @param gamers Gamers whose ready state changed. */
     void publishReady(const std::vector<Microsoft::Xna::Framework::Net::NetworkGamer*>& gamers);

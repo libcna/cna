@@ -82,18 +82,15 @@ ServiceGameControl ServiceGamePacketPolicy::control(const std::string& source,st
         default:packet();
     }
 }
-AppDataMessage ServiceGamePacketPolicy::application(const std::string& source,std::span<const unsigned char> bytes,
-    unsigned char channel,bool established,const std::vector<std::string>& admitted) const {
-    // The existing connected-channel AppData codec has a four-byte tag/sender/target/options prefix.
-    if(bytes.size()<4 || bytes.size()>MaxRelayGamePacketBytes || channel>1
-        ||bytes[0]!=static_cast<unsigned char>(MessageTag::AppData) || bytes[3]>static_cast<unsigned char>(SendDataOptions::Chat))packet();
+void ServiceGamePacketPolicy::routeGuard(const std::string& source,unsigned char senderId,unsigned char targetId,bool established,
+    const std::vector<std::string>& admitted) const {
     sourceGuard(source);if(!established || admitted.size()>static_cast<std::size_t>(CnaService::MaxSessionGamers-1))authority();
     std::set<std::string> active;
     for(const auto& machine:admitted) {
         if(machine==snapshot_.machine || !groupSizes_.contains(machine) || !active.insert(machine).second)authority();
     }
     if(!active.contains(source))authority();
-    const auto sender=machinesById_.find(bytes[1]),target=machinesById_.find(bytes[2]);
+    const auto sender=machinesById_.find(senderId),target=machinesById_.find(targetId);
     if(sender==machinesById_.end() || target==machinesById_.end())authority();
     if(snapshot_.machine==snapshot_.hostMachine) {
         if(sender->second!=source || (target->second!=snapshot_.machine && !active.contains(target->second)))authority();
@@ -102,6 +99,23 @@ AppDataMessage ServiceGamePacketPolicy::application(const std::string& source,st
         if(source!=snapshot_.hostMachine || sender->second==snapshot_.machine
             || !active.contains(sender->second) || target->second!=snapshot_.machine)authority();
     }
+}
+VoiceDataMessage ServiceGamePacketPolicy::voice(const std::string& source,std::span<const unsigned char> bytes,
+    unsigned char channel,bool established,const std::vector<std::string>& admitted) const {
+    // Voice is unreliable: only the second channel carries it.
+    if(bytes.size()<6 || bytes.size()>6+MaxVoicePayloadBytes || channel!=1
+        || bytes[0]!=static_cast<unsigned char>(MessageTag::VoiceData))packet();
+    VoiceDataMessage frame;
+    try{frame=NetPacketCodec::DecodeVoiceData(bytes);}catch(const std::runtime_error&){packet();}
+    routeGuard(source,frame.SenderWireId,frame.TargetWireId,established,admitted);
+    return frame;
+}
+AppDataMessage ServiceGamePacketPolicy::application(const std::string& source,std::span<const unsigned char> bytes,
+    unsigned char channel,bool established,const std::vector<std::string>& admitted) const {
+    // The existing connected-channel AppData codec has a four-byte tag/sender/target/options prefix.
+    if(bytes.size()<4 || bytes.size()>MaxRelayGamePacketBytes || channel>1
+        ||bytes[0]!=static_cast<unsigned char>(MessageTag::AppData) || bytes[3]>static_cast<unsigned char>(SendDataOptions::Chat))packet();
+    routeGuard(source,bytes[1],bytes[2],established,admitted);
     AppDataMessage result;result.SenderWireId=bytes[1];result.TargetWireId=bytes[2];
     result.Options=static_cast<SendDataOptions>(bytes[3]);result.Payload.assign(bytes.begin()+4,bytes.end());return result;
 }

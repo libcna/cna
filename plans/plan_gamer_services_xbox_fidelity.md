@@ -364,3 +364,22 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
   server `49c260a`). Evidence `/rv/tmp/xbox-fidelity/bench/`. Decisions kept, with their evidence in
   the register: partner tokens refused as XNA for Windows does; `WriteTrueSkill` raised with no skill
   computed; Recent leaderboard keys without a window.
+- GSX-E1 (voice, **XNA** + **POL**). XNA routes voice automatically between every gamer of a session
+  and exposes `NetworkGamer.HasVoice`/`IsTalking`/`IsMutedByLocalUser` and
+  `LocalNetworkGamer.EnableSendVoice` (all enabled at first). CNA now carries it on SystemLink and
+  online sessions. **POL**: one microphone per machine, owned by Player One's gamer (else the first
+  local gamer), opened as its own recording session (a game's `Microphone` loses no bytes) and only
+  while someone could hear it; speech detection against an adaptive noise floor with 300 ms
+  hangover; Opus (system libopus, `CNA_ENABLE_VOICE` AUTO/ON/OFF, `CNA_VOICE=0`) at 16 kHz, 20 ms,
+  16 kbit/s; new message tag `VoiceData` 0x0D sent unreliably on ENet channel 1 to one gamer per
+  remote machine, relayed by the host with the same sender/target authority as game data (the
+  online policy validates it; older builds ignore it on SystemLink and count it rejected online); a
+  silent frame once a second carries HasVoice; per-talker streams through
+  `DynamicSoundEffectInstance`, a lost frame concealed and a late one dropped, over 120 ms queued
+  skipped. `GamerPrivileges.AllowCommunication` is honoured (Everyone today). The Guide gamer card
+  offers Mute/Unmute (both directions, per local profile, for the life of the process).
+  `FriendGamer.HasVoice` stays false (**NO**: the service does not know a friend's hardware). Tests:
+  codec, online policy, SystemLink send/receive/concealment/EnableSendVoice/mute/host authority and
+  relay, online both ways, two real processes both ways, Guide mute. Net 514/514, GS 598 + 1 skip.
+  **UNV**: a real microphone and speaker (none on this host); the capture and playback adapters are
+  the platform recording provider and the SoundEffect path the rest of CNA uses.

@@ -32,7 +32,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Gets whether this friend has voice communication capability.
          *
-         * @return Always false: CNA carries no voice.
+         * @return Always false: the CNA service does not know a friend's audio hardware (network
+         * sessions report each gamer's voice through NetworkGamer.HasVoice).
          */
         [[nodiscard]] bool getHasVoiceProperty() const;
 

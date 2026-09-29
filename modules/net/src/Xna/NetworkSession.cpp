@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 #include "CNA/Internal/Net/ENetBackend.hpp"
 #include "CNA/Internal/Net/ENetDiscoveryService.hpp"
+#include "CNA/Internal/Net/VoiceChat.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
@@ -481,9 +482,47 @@ namespace Microsoft::Xna::Framework::Net
         ReleaseSessionResources();
     }
 
+    void NetworkSession::UpdateVoiceInternal()
+    {
+        if (!voice_)
+        {
+            if (!(CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(sessionType_) || online_)) return;
+            if (!CNA::Internal::Net::voiceAvailable()) return;
+            CNA::Internal::Net::VoiceChat::Hooks hooks;
+            hooks.gamers = [this] {
+                std::vector<NetworkGamer*> gamers;
+                for (NetworkGamer* gamer : allGamers_) gamers.push_back(gamer);
+                return gamers;
+            };
+            hooks.send = [this](NetworkGamer* sender, NetworkGamer* target, const CNA::Internal::Net::VoiceDataMessage& frame) {
+                if (online_) online_->sendVoice(sender, target, frame);
+                else CNA::Internal::Net::ENetBackend::SendVoice(this, sender, target, frame);
+            };
+            hooks.apply = [](NetworkGamer& gamer, bool hasVoice, bool talking, bool muted) {
+                gamer.hasVoice_ = hasVoice;
+                gamer.isTalking_ = talking;
+                gamer.isMutedByLocalUser_ = muted;
+            };
+            voice_ = std::make_unique<CNA::Internal::Net::VoiceChat>(std::move(hooks));
+        }
+        voice_->update(std::chrono::steady_clock::now());
+    }
+
+    void NetworkSession::ReceiveVoiceInternal(NetworkGamer* sender, const CNA::Internal::Net::VoiceDataMessage& frame)
+    {
+        if (voice_) voice_->receive(sender, frame, std::chrono::steady_clock::now());
+    }
+
+    void NetworkSession::EnableSendVoiceInternal(LocalNetworkGamer* local, NetworkGamer* remote, bool enable)
+    {
+        if (voice_) voice_->enableSend(local, remote, enable);
+    }
+
     void NetworkSession::ReleaseSessionResources()
     {
         if(isDisposed_)return;
+        // Voice first: it holds gamer pointers and a capture session.
+        voice_.reset();
         // Finalization must not invoke user callbacks or throw from a C++ destructor.
         AbandonServiceLeaderboards();
         for (LocalNetworkGamer* gamer : localGamers_)
@@ -547,6 +586,7 @@ namespace Microsoft::Xna::Framework::Net
             CNA::Internal::Net::ENetDiscoveryService::Poll();
         }
         if (online_) online_->pump();
+        UpdateVoiceInternal();
 
         while (!networkEvents_.empty())
         {
@@ -976,6 +1016,7 @@ namespace Microsoft::Xna::Framework::Net
     void NetworkSession::RemoveGamer(NetworkGamer* gamer, NetworkSessionEndReason reason)
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
+        if (voice_) voice_->forget(gamer);
         bool isLocal = false;
         for (LocalNetworkGamer* local : localGamers_)
         {

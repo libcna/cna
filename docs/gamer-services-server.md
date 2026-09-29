@@ -82,9 +82,16 @@ Guide's Party page invites friends, answers party invitations and leaves; `ShowP
 party members' joinable games, or shows Friends without a party, as XNA does;
 `LocalNetworkGamer.SendPartyInvites` invites the rest of the party to the current online session).
 A friend's or party member's joinable game can be joined from their gamer card or the party pages:
-the game hears `InviteAccepted` as for an invitation. Not implemented: voice, TrueSkill
-computation, time windows for the `...Recent` leaderboard keys (they keep every row), server push
-(the client polls), and a store. Friends see the online status (online, away,
+the game hears `InviteAccepted` as for an invitation. Voice is routed automatically in SystemLink
+and online sessions, as XNA routes it: the machine's microphone belongs to Player One's gamer (else
+its first local gamer), speech is detected, encoded with Opus at 16 kHz in 20 ms frames and sent
+unreliably to each remote machine allowed to hear it (the host relays, like game data); received
+speech plays through the SoundEffect path. `NetworkGamer.HasVoice`, `IsTalking` and
+`IsMutedByLocalUser` follow it, `LocalNetworkGamer.EnableSendVoice` switches one direction, and the
+Guide gamer card's Mute stops both. The microphone opens only while someone could hear it;
+`CNA_VOICE=0` turns voice off, and a build without libopus carries none (`CNA_ENABLE_VOICE`).
+Not implemented: TrueSkill computation, time windows for the `...Recent` leaderboard keys (they keep
+every row), server push (the client polls), and a store. Friends see the online status (online, away,
 busy) a player chooses in the Guide (`FriendGamer.IsAway`/`IsBusy`). Rich presence is sent during
 Dispatcher.Update; friend online state reflects authenticated activity within 90 seconds; Update
 schedules an authenticated heartbeat every 30 seconds. `docs/xna-4-api-coverage.md` §8–9 lists the

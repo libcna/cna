@@ -7,6 +7,8 @@
 #include "CNA/Internal/Net/ENetDiscoveryService.hpp"
 #include "CNA/Internal/Net/ENetHostHandle.hpp"
 #include "CNA/Internal/Net/NetPacketCodec.hpp"
+#include "CNA/Internal/Net/VoiceChat.hpp"
+#include "CNA/Internal/GamerServices/VoiceMutes.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
@@ -20,7 +22,9 @@
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionEndedEventArgs.hpp"
 #include "System/InvalidOperationException.hpp"
+#include <cmath>
 #include <limits>
+#include <memory>
 #include <thread>
 #include <string>
 #include <vector>
@@ -3181,4 +3185,259 @@ TEST(ENetBackendTest, HostAcceptsFreshClientHelloAfterALegitimateDisconnectAndRe
     // OwnedRemoteGamers) alongside the second, freshly-joined one - this is pre-existing,
     // unrelated-to-this-fix lifetime behavior, not a leak this test is asserting against.
     EXPECT_EQ(ENetBackend::GetOwnedRemoteGamerCountForTesting(host.session), 2u);
+}
+
+// ---- Network voice (GSX-E1) ---------------------------------------------------------------------
+namespace {
+    // The devices voice uses in these tests: a microphone that hears a 440 Hz tone while `talking`,
+    // and a speaker that records what it was given.
+    struct VoiceProbe {
+        bool talking = true;
+        bool open = false;
+        double phase = 0.0;
+        std::vector<std::pair<std::uint8_t, std::size_t>> played;
+        double playedEnergy = 0.0;
+    };
+    class ToneCapture final : public IVoiceCapture {
+    public:
+        explicit ToneCapture(std::shared_ptr<VoiceProbe> probe) : probe_(std::move(probe)) {}
+        bool present() override { return true; }
+        void setOpen(bool open) override { probe_->open = open; }
+        void read(std::vector<std::int16_t>& out) override {
+            if (!probe_->open) return;
+            for (int i = 0; i < 2 * VoiceFrameSamples; ++i) {
+                out.push_back(probe_->talking ? static_cast<std::int16_t>(8000.0 * std::sin(probe_->phase)) : 0);
+                probe_->phase += 2.0 * 3.14159265358979 * 440.0 / VoiceSampleRate;
+            }
+        }
+    private:
+        std::shared_ptr<VoiceProbe> probe_;
+    };
+    class RecordingPlayback final : public IVoicePlayback {
+    public:
+        explicit RecordingPlayback(std::shared_ptr<VoiceProbe> probe) : probe_(std::move(probe)) {}
+        void play(std::uint8_t talker, std::span<const std::int16_t> pcm) override {
+            probe_->played.emplace_back(talker, pcm.size());
+            for (const auto sample : pcm) probe_->playedEnergy += static_cast<double>(sample) * sample;
+        }
+        void release(std::uint8_t) override {}
+    private:
+        std::shared_ptr<VoiceProbe> probe_;
+    };
+    // Installs the probe's devices for one test (before its session's first Update) and restores
+    // the defaults and the mute list after it.
+    struct VoiceDevices {
+        std::shared_ptr<VoiceProbe> probe = std::make_shared<VoiceProbe>();
+        VoiceDevices() {
+            auto shared = probe;
+            setVoiceDevicesForTesting([shared] { return std::make_unique<ToneCapture>(shared); },
+                                      [shared] { return std::make_unique<RecordingPlayback>(shared); });
+        }
+        ~VoiceDevices() {
+            setVoiceDevicesForTesting({}, {});
+            CNA::Internal::GamerServices::resetVoiceMutesForTesting();
+        }
+    };
+
+    // Voice frames reaching the fake host over a stretch of real time.
+    std::vector<VoiceDataMessage> CollectVoice(FakeHostedClient& client, std::chrono::milliseconds span) {
+        std::vector<VoiceDataMessage> frames;
+        const auto until = std::chrono::steady_clock::now() + span;
+        while (std::chrono::steady_clock::now() < until) {
+            client.session->Update();
+            ENetEvent evt{};
+            while (client.fakeHost.Service(0, evt) > 0) {
+                if (evt.type != ENET_EVENT_TYPE_RECEIVE) continue;
+                std::vector<SharpRuntime::bytecs> data(evt.packet->data, evt.packet->data + evt.packet->dataLength);
+                enet_packet_destroy(evt.packet);
+                if (NetPacketCodec::PeekTag(data) == MessageTag::VoiceData) frames.push_back(NetPacketCodec::DecodeVoiceData(data));
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        return frames;
+    }
+    std::optional<VoiceDataMessage> FirstSpeech(FakeHostedClient& client) {
+        for (int round = 0; round < 20; ++round)
+            for (const auto& frame : CollectVoice(client, std::chrono::milliseconds(50)))
+                if (frame.Flags & VoiceFlagTalking) return frame;
+        return std::nullopt;
+    }
+    std::size_t Speech(const std::vector<VoiceDataMessage>& frames) {
+        return static_cast<std::size_t>(std::count_if(frames.begin(), frames.end(), [](const auto& frame) { return (frame.Flags & VoiceFlagTalking) != 0; }));
+    }
+}
+
+// XNA: voice is routed automatically between every gamer of a session. The microphone's owner
+// sends Opus speech to each remote machine and reads as talking; silence ends the talking.
+TEST(ENetBackendTest, VoiceFromTheMicrophoneOwnerReachesTheRemoteMachine) {
+    if (!voiceAvailable()) GTEST_SKIP() << "built without libopus";
+    VoiceDevices devices;
+    FakeHostedClient client;
+    ASSERT_NE(client.otherPlayer, nullptr);
+    const auto speech = FirstSpeech(client);
+    ASSERT_TRUE(speech.has_value()) << "no speech reached the other machine";
+    EXPECT_EQ(speech->SenderWireId, 5);
+    EXPECT_EQ(speech->TargetWireId, 0);
+    EXPECT_FALSE(speech->Payload.empty());
+    EXPECT_LE(speech->Payload.size(), MaxVoicePayloadBytes);
+    LocalNetworkGamer* local = client.LocalFor(client.signedIn);
+    ASSERT_NE(local, nullptr);
+    EXPECT_TRUE(local->getHasVoiceProperty());
+    EXPECT_TRUE(local->getIsTalkingProperty());
+    EXPECT_TRUE(devices.probe->open);
+    // Quiet: talking ends once the hangover has passed; the gamer still has voice.
+    devices.probe->talking = false;
+    for (int i = 0; i < 30; ++i) client.session->Update();
+    EXPECT_FALSE(local->getIsTalkingProperty());
+    EXPECT_TRUE(local->getHasVoiceProperty());
+}
+
+// A remote gamer's speech makes it talk and is played, once; a lost frame is concealed and a late
+// one dropped. Its HasVoice comes from any frame, speech or not.
+TEST(ENetBackendTest, RemoteVoiceMakesItsGamerTalkAndIsPlayed) {
+    if (!voiceAvailable()) GTEST_SKIP() << "built without libopus";
+    VoiceDevices devices;
+    FakeHostedClient client;
+    ASSERT_NE(client.otherPlayer, nullptr);
+    EXPECT_FALSE(client.otherPlayer->getHasVoiceProperty());
+    // Real speech: this client's own, sent back as OtherPlayer's.
+    auto speech = FirstSpeech(client);
+    ASSERT_TRUE(speech.has_value());
+    VoiceDataMessage frame = *speech;
+    frame.SenderWireId = 0;
+    frame.TargetWireId = 5;
+    frame.Sequence = 40;
+    client.SendFromHost(NetPacketCodec::Encode(frame));
+    for (int i = 0; i < 200 && devices.probe->played.empty(); ++i, PollYield()) client.session->Update();
+    ASSERT_EQ(devices.probe->played.size(), 1u);
+    EXPECT_EQ(devices.probe->played[0].first, 0);
+    EXPECT_EQ(devices.probe->played[0].second, static_cast<std::size_t>(VoiceFrameSamples));
+    EXPECT_GT(devices.probe->playedEnergy, 0.0);
+    EXPECT_TRUE(client.otherPlayer->getHasVoiceProperty());
+    EXPECT_TRUE(client.otherPlayer->getIsTalkingProperty());
+    EXPECT_FALSE(client.otherPlayer->getIsMutedByLocalUserProperty());
+    // Frame 41 lost: 42 plays after one concealed frame; then the late 41 is dropped.
+    frame.Sequence = 42;
+    client.SendFromHost(NetPacketCodec::Encode(frame));
+    for (int i = 0; i < 200 && devices.probe->played.size() < 3; ++i, PollYield()) client.session->Update();
+    EXPECT_EQ(devices.probe->played.size(), 3u);
+    frame.Sequence = 41;
+    client.SendFromHost(NetPacketCodec::Encode(frame));
+    for (int i = 0; i < 20; ++i, PollYield()) client.session->Update();
+    EXPECT_EQ(devices.probe->played.size(), 3u);
+    // A quarter second without speech: no longer talking, still has voice.
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    client.session->Update();
+    EXPECT_FALSE(client.otherPlayer->getIsTalkingProperty());
+    EXPECT_TRUE(client.otherPlayer->getHasVoiceProperty());
+}
+
+// EnableSendVoice(remote, false) stops this gamer's speech to that gamer (the microphone closes
+// when nobody could hear it) but not the once-a-second presence; the Guide's Mute stops both
+// directions and shows as IsMutedByLocalUser.
+TEST(ENetBackendTest, EnableSendVoiceAndMuteStopSpeechButNotPresence) {
+    if (!voiceAvailable()) GTEST_SKIP() << "built without libopus";
+    VoiceDevices devices;
+    FakeHostedClient client;
+    ASSERT_NE(client.otherPlayer, nullptr);
+    auto speech = FirstSpeech(client);
+    ASSERT_TRUE(speech.has_value());
+    LocalNetworkGamer* local = client.LocalFor(client.signedIn);
+    local->EnableSendVoice(client.otherPlayer, false);
+    (void)CollectVoice(client, std::chrono::milliseconds(100));
+    auto frames = CollectVoice(client, std::chrono::milliseconds(1200));
+    EXPECT_EQ(Speech(frames), 0u);
+    EXPECT_GE(frames.size(), 1u) << "presence stopped with the speech";
+    EXPECT_FALSE(devices.probe->open);
+    local->EnableSendVoice(client.otherPlayer, true);
+    EXPECT_GT(Speech(CollectVoice(client, std::chrono::milliseconds(300))), 0u);
+
+    CNA::Internal::GamerServices::setVoiceMuted("ClientPlayer", "OtherPlayer", true);
+    (void)CollectVoice(client, std::chrono::milliseconds(100));
+    EXPECT_TRUE(client.otherPlayer->getIsMutedByLocalUserProperty());
+    frames = CollectVoice(client, std::chrono::milliseconds(1200));
+    EXPECT_EQ(Speech(frames), 0u);
+    EXPECT_GE(frames.size(), 1u);
+    VoiceDataMessage incoming = *speech;
+    incoming.SenderWireId = 0;
+    incoming.TargetWireId = 5;
+    client.SendFromHost(NetPacketCodec::Encode(incoming));
+    (void)CollectVoice(client, std::chrono::milliseconds(200));
+    EXPECT_TRUE(devices.probe->played.empty()) << "a muted gamer was heard";
+    EXPECT_TRUE(client.otherPlayer->getIsTalkingProperty()) << "a muted gamer still shows talking";
+}
+
+// The host takes a voice frame only from the machine that owns its sender, and relays one between
+// two other machines unchanged.
+TEST(ENetBackendTest, TheHostTakesVoiceOnlyFromItsSendersMachineAndRelaysIt) {
+    if (!voiceAvailable()) GTEST_SKIP() << "built without libopus";
+    VoiceDevices devices;
+    SystemLinkSessionFixture host("HostPlayer");
+    ENetHostHandle fakeClient1 = ENetHostHandle::CreateClient(2);
+    ENetHostHandle fakeClient2 = ENetHostHandle::CreateClient(2);
+    ENetPeer* peer1 = nullptr;
+    ENetPeer* peer2 = nullptr;
+    const uint8_t remote1 = ConnectFakeClientAndCompleteHandshake(fakeClient1, host.session, &peer1);
+    const uint8_t remote2 = ConnectFakeClientAndCompleteHandshake(fakeClient2, host.session, &peer2);
+    NetworkGamer* first = nullptr;
+    for (NetworkGamer* gamer : host.session->getAllGamersProperty())
+        if (gamer->getIdProperty() == remote1) first = gamer;
+    ASSERT_NE(first, nullptr);
+    const uint8_t hostId = host.session->getLocalGamersProperty()[0]->getIdProperty();
+    // Speech from the host, for a real payload.
+    std::optional<VoiceDataMessage> speech;
+    for (int i = 0; i < 400 && !speech; ++i, PollYield()) {
+        host.session->Update();
+        ENetEvent evt{};
+        while (fakeClient1.Service(0, evt) > 0) {
+            if (evt.type != ENET_EVENT_TYPE_RECEIVE) continue;
+            std::vector<SharpRuntime::bytecs> data(evt.packet->data, evt.packet->data + evt.packet->dataLength);
+            enet_packet_destroy(evt.packet);
+            if (NetPacketCodec::PeekTag(data) == MessageTag::VoiceData && (data[3] & VoiceFlagTalking)) speech = NetPacketCodec::DecodeVoiceData(data);
+        }
+    }
+    ASSERT_TRUE(speech.has_value());
+    auto sendFrom = [&](ENetHostHandle& from, ENetPeer* to, VoiceDataMessage frame) {
+        const auto bytes = NetPacketCodec::Encode(frame);
+        from.Send(to, 1, bytes.data(), bytes.size(), ENET_PACKET_FLAG_UNSEQUENCED);
+        from.Flush();
+    };
+    // Client 2 claiming client 1's gamer is ignored.
+    VoiceDataMessage spoof = *speech;
+    spoof.SenderWireId = remote1;
+    spoof.TargetWireId = hostId;
+    sendFrom(fakeClient2, peer2, spoof);
+    for (int i = 0; i < 30; ++i, PollYield()) host.session->Update();
+    EXPECT_TRUE(devices.probe->played.empty());
+    EXPECT_FALSE(first->getHasVoiceProperty());
+    // Client 1 as itself is heard.
+    sendFrom(fakeClient1, peer1, spoof);
+    for (int i = 0; i < 200 && devices.probe->played.empty(); ++i, PollYield()) host.session->Update();
+    EXPECT_EQ(devices.probe->played.size(), 1u);
+    EXPECT_TRUE(first->getHasVoiceProperty());
+    EXPECT_TRUE(first->getIsTalkingProperty());
+    // Client 1 to client 2 goes through the host unchanged.
+    VoiceDataMessage relayed = *speech;
+    relayed.SenderWireId = remote1;
+    relayed.TargetWireId = remote2;
+    relayed.Sequence = 7;
+    sendFrom(fakeClient1, peer1, relayed);
+    std::optional<VoiceDataMessage> arrived;
+    for (int i = 0; i < 200 && !arrived; ++i, PollYield()) {
+        host.session->Update();
+        ENetEvent evt{};
+        while (fakeClient2.Service(0, evt) > 0) {
+            if (evt.type != ENET_EVENT_TYPE_RECEIVE) continue;
+            std::vector<SharpRuntime::bytecs> data(evt.packet->data, evt.packet->data + evt.packet->dataLength);
+            enet_packet_destroy(evt.packet);
+            if (NetPacketCodec::PeekTag(data) == MessageTag::VoiceData) {
+                auto frame = NetPacketCodec::DecodeVoiceData(data);
+                if (frame.SenderWireId == remote1) arrived = frame;
+            }
+        }
+    }
+    ASSERT_TRUE(arrived.has_value());
+    EXPECT_EQ(arrived->TargetWireId, remote2);
+    EXPECT_EQ(arrived->Sequence, 7);
+    EXPECT_EQ(arrived->Payload, relayed.Payload);
 }

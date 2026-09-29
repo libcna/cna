@@ -262,6 +262,6 @@ the same fixed `CNA_NetworkEventInfo` description the session pump uses, so no c
 object crosses the ABI.
 
 `EnableSendVoice` runs the canonical checks (a null or foreign remote gamer, either gamer having left)
-and otherwise succeeds: CNA carries no voice. `SendPartyInvites` always answers
-`CNA_RESULT_INVALID_STATE`, the canonical "alone in the party" refusal, because CNA has no party
-service.
+and then stops or resumes the gamer's voice to that remote gamer. `SendPartyInvites` answers
+`CNA_RESULT_INVALID_STATE`, the canonical refusal, while the gamer's CNA service party has fewer
+than two people, and otherwise invites the rest of the party to the current online session.

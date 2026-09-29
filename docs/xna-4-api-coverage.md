@@ -676,9 +676,9 @@ both but never throws either from its own Audio source either), not a gap.
 The standard API behaves against the CNA service (identity, Guide flows, profiles and pictures,
 friends and presence, achievements, leaderboards, messages, reviews, notifications) and against
 local offline profiles without one; the standard Avatar API is implemented (`docs/avatars.md`).
-What is not provided -- voice, TrueSkill, parties, marketplace, push, privacy settings -- and what
-was never measured against Xbox (exact validation order, timing) is listed in §9 and the final
-register.
+What is not provided -- TrueSkill computation, push, a store, privacy settings -- and what was never
+measured against Xbox (exact validation order, timing) is listed in §9 and the final register.
+Voice, parties and the trial/test-purchase flow are implemented (`docs/gamer-services-server.md`).
 - **Status:** Implemented against the CNA service, with the gaps named in §9.
 
 ---
@@ -1009,8 +1009,9 @@ Full Xbox validation order, lifetime and asynchronous compatibility are still be
 **No longer excluded (decision 1a, `feature/net`):** GamerServices and Avatar API (Xbox 360
 exclusive, but implemented anyway against the real Xbox 360 reference behavior — see §9) and Net
 (`Microsoft.Xna.Framework.Net`, real ENet-backed `SystemLink` transport — see §9). `PlayerMatch`/
-`Ranked` and session invites run against the CNA service. Voice, TrueSkill, parties, marketplace
-and Xbox LIVE compatibility are the deliberate exclusions (final register).
+`Ranked`, session invites, parties and voice run against the CNA service and its session
+transports. TrueSkill computation, a store and Xbox LIVE compatibility are the deliberate exclusions
+(final register).
 
 ### Build status
 

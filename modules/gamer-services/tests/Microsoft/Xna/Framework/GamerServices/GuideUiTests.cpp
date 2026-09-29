@@ -7,6 +7,7 @@
 #include "../../../../../src/Internal/Guide/GuideScreen.hpp"
 #include "../../../../../src/Internal/Guide/GuideUi.hpp"
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
+#include "CNA/Internal/GamerServices/VoiceMutes.hpp"
 #include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
@@ -135,7 +136,7 @@ TEST_F(GuideUiTest, TheGamerCardAcceptsAFriendRequestAndReflectsIt) {
     std::unique_ptr<Gamer> dave(Gamer::GetFromGamertag("Dave"));
     Guide::ShowGamerCard(PlayerIndex::One, dave.get());
     ASSERT_TRUE(Labels(2));
-    EXPECT_EQ((std::vector<std::string>{"Dave", "Accept friend request", "Send message", "Review player"}), Ui::labelsForTesting());
+    EXPECT_EQ((std::vector<std::string>{"Dave", "Accept friend request", "Send message", "Review player", "Mute"}), Ui::labelsForTesting());
     Ui::sendForTesting(Ui::Command::Accept);
     // A friend's card offers what friends do first; removing the friend is its last action.
     ASSERT_TRUE(Settle([] { return Ui::labelsForTesting().size() > 1 && Ui::labelsForTesting().back() == "Remove friend"; }));
@@ -145,6 +146,27 @@ TEST_F(GuideUiTest, TheGamerCardAcceptsAFriendRequestAndReflectsIt) {
     EXPECT_EQ("gamerCard", Ui::currentScreenForTesting());
     const auto toasts = Service::guideNotifications();
     EXPECT_NE(std::find(toasts.begin(), toasts.end(), "Friends updated: Dave"), toasts.end());
+}
+
+// The card's Mute: for this profile, neither hears the other in a network session; the action
+// becomes Unmute, and a notification says what changed.
+TEST_F(GuideUiTest, TheGamerCardMutesAndUnmutesVoice) {
+    Service::resetVoiceMutesForTesting();
+    std::unique_ptr<Gamer> dave(Gamer::GetFromGamertag("Dave"));
+    Guide::ShowGamerCard(PlayerIndex::One, dave.get());
+    ASSERT_TRUE(Labels(2));
+    auto labels = Ui::labelsForTesting();
+    auto mute = std::find(labels.begin(), labels.end(), "Mute");
+    ASSERT_NE(mute, labels.end());
+    Ui::clickForTesting(static_cast<int>(mute - labels.begin()) - 1);
+    EXPECT_TRUE(Service::voiceMuted("Alice", "Dave"));
+    labels = Ui::labelsForTesting();
+    const auto unmute = std::find(labels.begin(), labels.end(), "Unmute");
+    ASSERT_NE(unmute, labels.end());
+    const auto toasts = Service::guideNotifications();
+    EXPECT_NE(std::find(toasts.begin(), toasts.end(), "Dave muted: Neither of you hears the other in a game"), toasts.end());
+    Ui::clickForTesting(static_cast<int>(unmute - labels.begin()) - 1);
+    EXPECT_FALSE(Service::voiceMuted("Alice", "Dave"));
 }
 
 TEST_F(GuideUiTest, YourOwnCardHasNoActions) {

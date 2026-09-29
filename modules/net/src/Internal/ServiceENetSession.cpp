@@ -183,7 +183,8 @@ struct ServiceENetSession::Impl {
         ServiceENetObservation event;event.type=ServiceENetObservation::Type::Failed;event.failure=code;emit(std::move(event));
     }
     bool transmit(ENetPeer* peer,const std::vector<unsigned char>& bytes,SendDataOptions options=SendDataOptions::Reliable) {
-        const bool data=!bytes.empty()&&bytes.front()==static_cast<unsigned char>(MessageTag::AppData);
+        const bool data=!bytes.empty()&&(bytes.front()==static_cast<unsigned char>(MessageTag::AppData)
+            ||bytes.front()==static_cast<unsigned char>(MessageTag::VoiceData));
         if((data&&(outgoing->dataCount>=128||outgoing->dataBytes+bytes.size()>MaxRelayWaitingBytes))
             ||(!data&&(outgoing->controlCount>=64||outgoing->controlBytes+bytes.size()>64*4096))){++rejected;return false;}
         const unsigned char channel=options==SendDataOptions::None||options==SendDataOptions::InOrder?1:0;
@@ -376,6 +377,16 @@ struct ServiceENetSession::Impl {
             control->expedite();return;
         }
         try {
+            if(bytes[0]==static_cast<unsigned char>(MessageTag::VoiceData)) {
+                auto message=policy->voice(found->second.machine,bytes,channel,ready,admitted());
+                const auto target=machineFor(message.TargetWireId);
+                if(target==current.machine){ServiceENetObservation event;event.type=ServiceENetObservation::Type::Voice;event.voice=std::move(message);emit(std::move(event));}
+                else {
+                    auto destination=std::find_if(peers.begin(),peers.end(),[&](const auto& item){return item.second.admitted&&item.second.machine==target;});
+                    if(destination==peers.end()){++rejected;return;}transmit(destination->first,NetPacketCodec::Encode(message),SendDataOptions::None);
+                }
+                return;
+            }
             if(bytes[0]==static_cast<unsigned char>(MessageTag::AppData)) {
                 auto message=policy->application(found->second.machine,bytes,channel,ready,admitted());
                 const auto target=machineFor(message.TargetWireId);
@@ -538,6 +549,20 @@ struct ServiceENetSession::Impl {
         transport().Flush();
     }
 };
+void ServiceENetSession::sendVoice(const VoiceDataMessage& frame) {
+    impl_->checkOwner();
+    auto& impl=*impl_;
+    if(!impl.ready||impl.stopped)return;
+    if(std::find(impl.localIds.begin(),impl.localIds.end(),frame.SenderWireId)==impl.localIds.end()
+        ||!impl.remoteGamers.contains(frame.TargetWireId))throw ServiceOperationError("NOT_AUTHORIZED");
+    ENetPeer* destination=impl.upstream;
+    if(impl.host) {
+        const auto machine=impl.machineFor(frame.TargetWireId);destination=nullptr;
+        for(const auto& [peer,value]:impl.peers)if(value.admitted&&value.machine==machine){destination=peer;break;}
+    }
+    if(!destination)return;
+    if(impl.transmit(destination,NetPacketCodec::Encode(frame),SendDataOptions::None))impl.transport().Flush();
+}
 void ServiceENetSession::publishReady(const std::vector<GamerReadyEntry>& entries) {
     impl_->checkOwner();
     auto& impl=*impl_;

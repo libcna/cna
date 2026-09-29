@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/Microphone.hpp"
 #include "CNA/Audio/Platform/IAudioRecordingDevice.hpp"
+#include "CNA/Internal/Audio/RecordingProvider.hpp"
 #include "Platform/AudioDeviceFactory.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "System/ArgumentException.hpp"
@@ -11,19 +12,26 @@
 #include <limits>
 #include <span>
 
+namespace CNA::Internal::Audio
+{
+    CNA::Audio::Platform::IAudioRecordingDeviceProvider* RecordingProvider()
+    {
+#ifdef SOUND_ENABLED
+        static auto provider = CNA::Audio::Platform::CreateSelectedAudioRecordingDeviceProvider();
+        return provider.get();
+#else
+        return nullptr;
+#endif
+    }
+}
+
 namespace Microsoft::Xna::Framework::Audio
 {
     namespace
     {
         CNA::Audio::Platform::IAudioRecordingDeviceProvider* GetRecordingProvider()
         {
-#ifdef SOUND_ENABLED
-            static auto provider =
-                CNA::Audio::Platform::CreateSelectedAudioRecordingDeviceProvider();
-            return provider.get();
-#else
-            return nullptr;
-#endif
+            return CNA::Internal::Audio::RecordingProvider();
         }
     }
 

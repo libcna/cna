@@ -52,15 +52,15 @@ namespace Microsoft::Xna::Framework::Net
     GamerServices::SignedInGamer* LocalNetworkGamer::getSignedInGamerProperty() const { return signedInGamer_; }
     bool LocalNetworkGamer::getIsLocalProperty() const { return true; }
 
-    void LocalNetworkGamer::EnableSendVoice(NetworkGamer* remoteGamer, bool /*enable*/)
+    void LocalNetworkGamer::EnableSendVoice(NetworkGamer* remoteGamer, bool enable)
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
-        // Reference EnableSendVoice checks; CNA carries no voice, so there is nothing to switch.
         if (getHasLeftSessionProperty()) throw System::InvalidOperationException("The gamer has left the session.");
         if (remoteGamer == nullptr) throw System::ArgumentNullException("remoteGamer");
         if (remoteGamer->getHasLeftSessionProperty()) throw System::InvalidOperationException("The remote gamer has left the session.");
         if (remoteGamer->getSessionProperty() != getSessionProperty())
             throw System::ArgumentException("The gamer is not in this session.", "remoteGamer");
+        getSessionProperty()->EnableSendVoiceInternal(this, remoteGamer, enable);
     }
 
     void LocalNetworkGamer::SendPartyInvites()

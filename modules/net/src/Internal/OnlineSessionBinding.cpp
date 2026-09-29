@@ -174,6 +174,13 @@ void OnlineSessionBinding::convert(ServiceENetObservation observation) {
             event.Reliable=observation.data->Options;session_.SendNetworkEvent(std::move(event));
             break;
         }
+        case Type::Voice: {
+            if(!observation.voice)break;
+            auto sender=gamers_.find(observation.voice->SenderWireId),target=gamers_.find(observation.voice->TargetWireId);
+            if(sender==gamers_.end()||target==gamers_.end()||!target->second->getIsLocalProperty()||sender->second->getIsLocalProperty())break;
+            session_.ReceiveVoiceInternal(sender->second,*observation.voice);
+            break;
+        }
         case Type::Snapshot:
             if(observation.snapshot)apply(*observation.snapshot,false);
             break;
@@ -281,6 +288,14 @@ void OnlineSessionBinding::send(NetworkGamer* sender,NetworkGamer* target,const 
         if(error.code=="INVALID_ARGUMENT")throw System::ArgumentException("data");
         // Any other refusal races a transport failure that the next observation reports as SessionEnded.
     }
+}
+void OnlineSessionBinding::sendVoice(NetworkGamer* sender,NetworkGamer* target,const VoiceDataMessage& frame) {
+    if(ended_||!engine_)return;
+    auto found=gamers_.find(target->getIdProperty());
+    if(found==gamers_.end()||found->second!=target||!gamers_.contains(sender->getIdProperty()))return;
+    VoiceDataMessage message=frame;message.SenderWireId=sender->getIdProperty();message.TargetWireId=target->getIdProperty();
+    // Voice is best effort: a full queue or a refusal drops the frame; a transport failure ends the session later.
+    try{engine_->sendVoice(message);}catch(const ServiceOperationError&){}
 }
 void OnlineSessionBinding::publishReady(const std::vector<NetworkGamer*>& gamers) {
     if(ended_||!engine_)return;

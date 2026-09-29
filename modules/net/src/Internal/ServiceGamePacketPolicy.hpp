@@ -29,8 +29,17 @@ public:
      * @return Owned application message; throws before mutation for unauthorized IDs. */
     AppDataMessage application(const std::string& source,std::span<const unsigned char> bytes,
         unsigned char channel,bool established,const std::vector<std::string>& admitted) const;
+    /** @brief Validates a voice frame's layout, channel and sender/target authority exactly as
+     * application() does for game data. @param source Authenticated relay source machine.
+     * @param bytes Complete voice frame. @param channel ENet channel. @param established Welcome completed.
+     * @param admitted Remote machines whose full groups completed their realtime handshake.
+     * @return Owned voice frame; throws before mutation for unauthorized IDs. */
+    VoiceDataMessage voice(const std::string& source,std::span<const unsigned char> bytes,
+        unsigned char channel,bool established,const std::vector<std::string>& admitted) const;
 private:
     void sourceGuard(const std::string& source) const;
+    void routeGuard(const std::string& source,unsigned char senderId,unsigned char targetId,bool established,
+        const std::vector<std::string>& admitted) const;
     ServiceRoster roster_;
     GamerServices::ServiceSessionSnapshot snapshot_;
     std::map<unsigned char,std::string> machinesById_;

@@ -2,6 +2,7 @@
 // The Guide's screens: home, friends, gamer card, messages, achievements, recent players, player
 // review, invitations (sent and received), settings, party and game content.
 #include "GuideScreen.hpp"
+#include "CNA/Internal/GamerServices/VoiceMutes.hpp"
 #include "../GuideOverlay.hpp"
 #include "CNA/Internal/GamerServices/AvatarAssets.hpp"
 #include "CNA/Internal/GamerServices/LocalProfiles.hpp"
@@ -328,6 +329,9 @@ public:
         if(friends&&!inMyParty())out.push_back({Icon::Party,"Invite to party"});
         out.push_back({Icon::Message,"Send message"});
         out.push_back({Icon::StarOutline,"Review player"});
+        // Voice: neither hears the other in a network session while muted.
+        if(voiceMuted(identity(player).gamertag,person_.gamertag))out.push_back({Icon::Speaker,"Unmute"});
+        else out.push_back({Icon::Muted,"Mute"});
         if(friends)out.push_back({Icon::Cross,"Remove friend"});
         return out;
     }
@@ -342,6 +346,12 @@ public:
         const auto& label=list[static_cast<std::size_t>(index)].second;
         const auto who=player;
         const auto tag=person_.gamertag;
+        if(label=="Mute"||label=="Unmute") {
+            setVoiceMuted(identity(who).gamertag,tag,label=="Mute");
+            notify({Notification::Kind::Info,label=="Mute"?tag+" muted":tag+" unmuted",
+                label=="Mute"?"Neither of you hears the other in a game":"Voice is back on in games"});
+            return;
+        }
         if(label=="Join game") {
             closeAll();
             joinFriendGame(userOf(who),tag,[who](std::string reason){inform(who,"Join game",reason,Icon::Info);});

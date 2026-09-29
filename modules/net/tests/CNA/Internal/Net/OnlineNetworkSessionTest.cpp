@@ -7,6 +7,8 @@
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 #include <optional>
+#include "CNA/Internal/Net/VoiceChat.hpp"
+#include <cmath>
 
 namespace {
 using namespace OnlineSessionTesting;
@@ -473,3 +475,55 @@ TEST_F(OnlineNetworkSessionTest, AnAddTheServiceRefusesLeavesTheGamerOut) {
     EXPECT_NO_THROW(session->AddLocalGamer(gamer(2)));
 }
 #endif
+
+namespace {
+// A microphone hearing a steady tone and a speaker counting what it played.
+struct OnlineVoiceProbe {int played=0;double phase=0.0;};
+class OnlineTone final : public IVoiceCapture {
+public:
+    explicit OnlineTone(std::shared_ptr<OnlineVoiceProbe> probe):probe_(std::move(probe)){}
+    bool present() override {return true;}
+    void setOpen(bool) override {}
+    void read(std::vector<std::int16_t>& out) override {
+        for(int i=0;i<2*VoiceFrameSamples;++i){out.push_back(static_cast<std::int16_t>(8000.0*std::sin(probe_->phase)));probe_->phase+=0.17;}
+    }
+private:
+    std::shared_ptr<OnlineVoiceProbe> probe_;
+};
+class OnlineSpeaker final : public IVoicePlayback {
+public:
+    explicit OnlineSpeaker(std::shared_ptr<OnlineVoiceProbe> probe):probe_(std::move(probe)){}
+    void play(std::uint8_t,std::span<const std::int16_t>) override {++probe_->played;}
+    void release(std::uint8_t) override {}
+private:
+    std::shared_ptr<OnlineVoiceProbe> probe_;
+};
+}
+
+// GSX-E1: voice crosses an online session on the unreliable channel. Alice (Player One) owns this
+// machine's microphone; one frame goes to the joined machine's first gamer, and speech from that
+// machine makes its gamer talk here.
+TEST_F(OnlineNetworkSessionTest, VoiceCrossesTheServiceSessionBothWays) {
+    if(!voiceAvailable())GTEST_SKIP()<<"built without libopus";
+    auto probe=std::make_shared<OnlineVoiceProbe>();
+    setVoiceDevicesForTesting([probe]{return std::make_unique<OnlineTone>(probe);},[probe]{return std::make_unique<OnlineSpeaker>(probe);});
+    struct Restore{~Restore(){setVoiceDevicesForTesting({},{});}}restore;
+    session=NetworkSession::Create(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(0),gamer(2)},6,0,properties());
+    privatePeer(true,sessionId("b"));
+    until([&]{return peer->ready()&&session->getAllGamersProperty().getCountProperty()==4;});
+    until([&]{return std::any_of(observed.begin(),observed.end(),[](const auto& value){return value.voice&&(value.voice->Flags&VoiceFlagTalking);});});
+    const auto speech=*std::find_if(observed.begin(),observed.end(),[](const auto& value){return value.voice&&(value.voice->Flags&VoiceFlagTalking);})->voice;
+    EXPECT_EQ(1,speech.SenderWireId);EXPECT_EQ(3,speech.TargetWireId);
+    auto* alice=session->getLocalGamersProperty()[0];auto* charlie=session->getLocalGamersProperty()[1];
+    EXPECT_TRUE(alice->getHasVoiceProperty());EXPECT_TRUE(alice->getIsTalkingProperty());
+    EXPECT_FALSE(charlie->getHasVoiceProperty());
+    auto* bob=session->getRemoteGamersProperty()[0];
+    EXPECT_FALSE(bob->getIsTalkingProperty());
+    VoiceDataMessage reply=speech;reply.SenderWireId=3;reply.TargetWireId=1;
+    peer->sendVoice(reply);
+    until([&]{return probe->played>0;});
+    EXPECT_TRUE(bob->getHasVoiceProperty());EXPECT_TRUE(bob->getIsTalkingProperty());
+    // A machine cannot speak for a gamer it does not own.
+    reply.SenderWireId=1;
+    EXPECT_THROW(peer->sendVoice(reply),Service::ServiceOperationError);
+}

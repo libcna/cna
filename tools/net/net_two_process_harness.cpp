@@ -24,6 +24,7 @@
 // AttemptHostMigration's own doc comment in ENetBackend.cpp), deliberately exercising the exact
 // cross-process discovery-port sharing this file's own host/client roles avoid.
 #include "CNA/Internal/Net/ENetBackend.hpp"
+#include "CNA/Internal/Net/VoiceChat.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
@@ -38,7 +39,9 @@
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <set>
@@ -656,6 +659,81 @@ namespace {
     // naive "does a retry work" check would be). Restores the original file descriptor limit and
     // retries with the same session type as a secondary sanity check that real hosting still
     // works normally afterward.
+    // Voice between two real processes: each machine's microphone hears a tone, each speaker
+    // counts what it played; both wait until the other gamer talks and was heard.
+    std::atomic<int> voicePlayed{0};
+    class ToneMicrophone final : public IVoiceCapture {
+    public:
+        bool present() override { return true; }
+        void setOpen(bool) override {}
+        void read(std::vector<std::int16_t>& out) override {
+            const auto now = std::chrono::steady_clock::now();
+            const auto samples = std::chrono::duration_cast<std::chrono::microseconds>(now - last_).count() * VoiceSampleRate / 1000000;
+            last_ = now;
+            for (long long i = 0; i < std::min<long long>(samples, VoiceSampleRate / 10); ++i) {
+                out.push_back(static_cast<std::int16_t>(8000.0 * std::sin(phase_)));
+                phase_ += 0.17;
+            }
+        }
+    private:
+        std::chrono::steady_clock::time_point last_ = std::chrono::steady_clock::now();
+        double phase_ = 0.0;
+    };
+    class CountingSpeaker final : public IVoicePlayback {
+    public:
+        void play(std::uint8_t, std::span<const std::int16_t>) override { ++voicePlayed; }
+        void release(std::uint8_t) override {}
+    };
+    int RunVoice(bool hosting, uint16_t port, int timeoutSeconds) {
+        if (!voiceAvailable()) {
+            std::printf("PORT=0\nVOICE_UNAVAILABLE\n");
+            std::fflush(stdout);
+            return 0;
+        }
+        setVoiceDevicesForTesting([] { return std::make_unique<ToneMicrophone>(); }, [] { return std::make_unique<CountingSpeaker>(); });
+        auto gamer = SignedInGamer::CreateInternal(hosting ? "HostPlayer" : "ClientPlayer");
+        using Microsoft::Xna::Framework::GamerServices::Gamer;
+        using Microsoft::Xna::Framework::GamerServices::SignedInGamerCollection;
+        Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({&gamer})));
+        struct RestoreSignedIn {
+            ~RestoreSignedIn() { Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({}))); }
+        } restore;
+        NetworkSession* session = nullptr;
+        if (hosting) {
+            session = NetworkSession::Create(NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{});
+            std::printf("PORT=%u\n", static_cast<unsigned>(ENetBackend::GetBoundPort(session)));
+            std::fflush(stdout);
+        } else {
+            auto available = AvailableNetworkSession::CreateInternal(1, "HostPlayer", 0, 7, NetworkSessionProperties{},
+                QualityOfService::CreateInternal(), "127.0.0.1", port, NetworkSessionType::SystemLink);
+            session = NetworkSession::Join(&available);
+        }
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(timeoutSeconds);
+        NetworkGamer* remote = nullptr;
+        bool talking = false;
+        const bool heard = PumpUntil(session, deadline, [&] {
+            remote = FindRemoteGamer(session);
+            talking = talking || session->getLocalGamersProperty()[0]->getIsTalkingProperty();
+            return remote != nullptr && remote->getHasVoiceProperty() && remote->getIsTalkingProperty() && voicePlayed > 0;
+        });
+        // Keep speaking a while, so the other process hears this one too. (Once it has left, nobody
+        // can hear this one and its microphone closes.)
+        const auto linger = std::chrono::steady_clock::now() + std::chrono::milliseconds(800);
+        while (std::chrono::steady_clock::now() < linger) {
+            session->Update();
+            if (FindRemoteGamer(session) != nullptr) talking = talking || session->getLocalGamersProperty()[0]->getIsTalkingProperty();
+            std::this_thread::sleep_for(kPollInterval);
+        }
+        session->Dispose();
+        setVoiceDevicesForTesting({}, {});
+        if (!heard || !talking) {
+            std::fprintf(stderr, "voice: heard=%d talking=%d played=%d\n", heard, talking, voicePlayed.load());
+            return 1;
+        }
+        std::printf("VOICE_OK played=%d\n", voicePlayed.load());
+        return 0;
+    }
+
     int RunStartHostingPartialFailure() {
         rlimit originalLimit{};
         if (getrlimit(RLIMIT_NOFILE, &originalLimit) != 0) {
@@ -766,6 +844,12 @@ int main(int argc, char** argv) {
         if (role == "added-gamer-client") {
             return RunAddedGamerClient(port, timeoutSeconds);
         }
+        if (role == "voice-host") {
+            return RunVoice(true, 0, timeoutSeconds);
+        }
+        if (role == "voice-client") {
+            return RunVoice(false, port, timeoutSeconds);
+        }
         if (role == "start-hosting-partial-failure") {
             return RunStartHostingPartialFailure();
         }
@@ -781,7 +865,7 @@ int main(int argc, char** argv) {
         }
         std::fprintf(stderr,
                       "Usage: %s --role=host|client|find-join-client|added-gamer-host|added-gamer-client|"
-                      "start-hosting-partial-failure|migration-host|migration-survivor "
+                      "start-hosting-partial-failure|migration-host|migration-survivor|voice-host|voice-client "
                       "[--port=<n>] [--gamertag=<name>] [--find=limit|list] [--timeout=<seconds>]\n",
                       argv[0]);
         return 64;

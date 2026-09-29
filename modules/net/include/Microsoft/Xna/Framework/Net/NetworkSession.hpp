@@ -44,6 +44,8 @@ namespace CNA::Internal::Net
     class ENetBackend;
     class OnlineSessionBinding;
     class OnlineSessionOperation;
+    class VoiceChat;
+    struct VoiceDataMessage;
 }
 
 namespace Microsoft::Xna::Framework::Net
@@ -822,8 +824,16 @@ namespace Microsoft::Xna::Framework::Net
     private:
         friend class CNA::Internal::Net::ENetBackend;
         friend class CNA::Internal::Net::OnlineSessionBinding;
+        friend class LocalNetworkGamer;
         friend class NetworkGamer;
         friend class NetworkMachine;
+
+        // Network voice: started with the first Update of a session that reaches other machines,
+        // fed by the transports, and asked at every Update for each gamer's voice flags.
+        void UpdateVoiceInternal();
+        void ReceiveVoiceInternal(NetworkGamer* sender, const CNA::Internal::Net::VoiceDataMessage& frame);
+        void EnableSendVoiceInternal(LocalNetworkGamer* local, NetworkGamer* remote, bool enable);
+        std::unique_ptr<CNA::Internal::Net::VoiceChat> voice_;
 
         /**
          * @brief Removes the remote machine that owns @p gamer (NetworkMachine.RemoveFromSession,

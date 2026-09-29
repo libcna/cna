@@ -183,3 +183,25 @@ TEST(ServiceGamePacketPolicyTest, HostLeaveBroadcastRemovesOnlyCompleteAdmittedR
         refused([&]{(void)policy.control(host,NetPacketCodec::Encode(GamerLeaveBroadcastMessage{ids}),0,true,{}, {host,third});});
     refused([&]{(void)policy.control(third,NetPacketCodec::Encode(GamerLeaveBroadcastMessage{{5,6}}),0,true,{}, {host,third});});
 }
+TEST(ServiceGamePacketPolicyTest, VoiceFramesFollowGameDataAuthorityOnTheUnreliableChannelOnly) {
+    const auto voice=[](unsigned char sender,unsigned char target){
+        return NetPacketCodec::Encode(VoiceDataMessage{sender,target,VoiceFlagTalking,12,{5,6,7}});
+    };
+    ServiceGamePacketPolicy hostPolicy(fixture());
+    const auto frame=hostPolicy.voice(remote,voice(3,1),1,true,{remote,third});
+    EXPECT_EQ(3,frame.SenderWireId);EXPECT_EQ(1,frame.TargetWireId);EXPECT_EQ(12,frame.Sequence);
+    EXPECT_EQ(5,hostPolicy.voice(remote,voice(3,5),1,true,{remote,third}).TargetWireId);
+    // Only the sender's own machine, only once admitted, only on channel 1.
+    refused([&]{(void)hostPolicy.voice(third,voice(3,1),1,true,{remote,third});});
+    refused([&]{(void)hostPolicy.voice(remote,voice(3,1),1,false,{remote,third});});
+    refused([&]{(void)hostPolicy.voice(remote,voice(3,1),0,true,{remote,third});},"INVALID_SERVICE_PACKET");
+    auto flags=voice(3,1);flags[3]=0x02;
+    refused([&]{(void)hostPolicy.voice(remote,flags,1,true,{remote,third});},"INVALID_SERVICE_PACKET");
+    // A client takes voice only from the host, for its own gamers, from another admitted machine.
+    ServiceGamePacketPolicy clientPolicy(fixture(true));
+    EXPECT_EQ(3,clientPolicy.voice(host,voice(1,3),1,true,{host,third}).TargetWireId);
+    EXPECT_EQ(5,clientPolicy.voice(host,voice(5,4),1,true,{host,third}).SenderWireId);
+    refused([&]{(void)clientPolicy.voice(host,voice(3,4),1,true,{host,third});});
+    refused([&]{(void)clientPolicy.voice(host,voice(1,5),1,true,{host,third});});
+    refused([&]{(void)clientPolicy.voice(third,voice(5,3),1,true,{host,third});});
+}

@@ -16,6 +16,7 @@ struct ServiceENetObservation {
         /** @brief A complete authenticated remote group connected. */ Joined,
         /** @brief An admitted remote group disconnected or lost authority. */ Left,
         /** @brief An admitted game packet targets this local group. */ Data,
+        /** @brief An admitted voice frame targets this local group. */ Voice,
         /** @brief Authenticated directory metadata changed. */ Snapshot,
         /** @brief Gamers' lobby ready state changed. */ Readiness,
         /** @brief The directory handed the host role to another machine (snapshot names it). */ HostChanged,
@@ -31,6 +32,8 @@ struct ServiceENetObservation {
     std::vector<unsigned char> ids;
     /** @brief Owned local-target game data. */
     std::optional<AppDataMessage> data;
+    /** @brief Owned local-target voice frame. */
+    std::optional<VoiceDataMessage> voice;
     /** @brief Owned directory metadata. */
     std::optional<GamerServices::ServiceSessionSnapshot> snapshot;
     /** @brief Lobby ready states for a Readiness observation. */
@@ -68,6 +71,10 @@ public:
      * @param sender Local source. @param target Known connected target. @param payload Game bytes.
      * @param options Delivery semantics. */
     void send(unsigned char sender,unsigned char target,const std::vector<unsigned char>& payload,SendDataOptions options);
+    /** @brief Sends a voice frame from a local ID to an admitted remote target on the unreliable
+     * channel (a client through the host); best effort, never queued locally.
+     * @param frame Frame naming sender and target. */
+    void sendVoice(const VoiceDataMessage& frame);
     /** @brief Sends local gamers' lobby ready state (a client to the host, the host to every
      * client); the host also reports any gamer, as ResetReady does.
      * @param entries Changed ready states. */

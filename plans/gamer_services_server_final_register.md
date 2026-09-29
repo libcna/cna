@@ -29,7 +29,7 @@ Each is documented where it is declared (C++ and C) and in `docs/xna-4-api-cover
 |---|---|---|
 | `Gamer.GetPartnerToken`/`BeginGetPartnerToken`/`EndGetPartnerToken` | `NotSupportedException` | Partner tokens authenticate to Xbox LIVE partner web services; the CNA service is not LIVE and issues none. XNA for Windows refuses the same way. |
 | `Gamer.GetFromGamertag` family without a service | `NotSupportedException` | Offline profiles have no directory to search. With a service it is a real lookup (GS-004). |
-| `LocalNetworkGamer.EnableSendVoice`, `FriendGamer.HasVoice`, `SignedInGamer` voice paths | argument checks only; `HasVoice` false | CNA carries no voice. |
+| `FriendGamer.HasVoice` | false | The service does not know a friend's audio hardware; in a session `NetworkGamer.HasVoice` reports it (GSX-E1). |
 | `LocalNetworkGamer.SendPartyInvites`, `Guide.ShowParty`/`ShowPartySessions` | refuses (party of one) / explanatory pane | No party service. |
 | `Guide.ShowMarketplace` | explanatory pane after XNA's privilege checks | No store; titles are fully licensed. |
 | `Guide.IsTrialMode` | true only while `SimulateTrialMode` is set | No licensing service (GS-011b removed the public setter XNA keeps internal). |
