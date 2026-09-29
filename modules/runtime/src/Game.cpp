@@ -1372,11 +1372,21 @@ namespace Microsoft::Xna::Framework
                         // cost nothing.
                         Exit();
                         break;
+                    // On Android, IsActive follows the application lifecycle below, as XNA's did on
+                    // the phone. Window focus there is not a reliable signal: SDL gives the one
+                    // window focus when it is created and the activity's own focus changes arrive
+                    // after it, so a launch that rotates to landscape can deliver FocusGained
+                    // then FocusLost while the activity is focused and in front -- and the game
+                    // would stay deactivated, ignoring input, until it is sent away and back.
                     case CNA::Platform::WindowEventKind::FocusLost:
+#if !defined(__ANDROID__)
                         setIsActiveProperty(false);
+#endif
                         break;
                     case CNA::Platform::WindowEventKind::FocusGained:
+#if !defined(__ANDROID__)
                         setIsActiveProperty(true);
+#endif
                         GraphicsDevice_.GetRenderer().OnSurfaceInvalidated(platformEvent.window);
                         break;
                     case CNA::Platform::WindowEventKind::Exposed:
