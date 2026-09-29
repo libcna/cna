@@ -188,6 +188,15 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   rig, 31 presets, complete atlas layout). CNA's real v1 and v2 import as golden fixtures
   (`CNA_AVATAR_CATALOGS`); 30+ malformed models/manifests are refused.
 
+- **Avatar editor (GSP-I1).** A standalone program (`cna_avatar_editor`), not a Guide pane: the
+  Guide overlay draws 2D panes over the game's frame, and a lit, animated 3D preview there would
+  have to borrow the game's device state mid-frame. A separate program also matches the console,
+  where the avatar editor was a dashboard application, and keeps customization out of games
+  entirely. The testable part is `AvatarEditorModel` (internal): pages of rows stepping through
+  what the catalog offers, fitted to the catalog the owner accepts. Saving uses a new backend call
+  (`setAvatar` -> `avatars.set`) or `setLocalProfileAvatar`. Catalogs gained optional face-control
+  `name`s (already in v2's manifest) for the labels.
+
 ## Tasks
 
 | Id | Task | Status |
@@ -204,7 +213,7 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
 | GSP-F* | Animation polish and key-pose/loop tests | done (F1) |
 | GSP-G1 | Server avatar GLB/manifest validation, malformed fixtures | done (server 7a8a629) |
 | GSP-H1 | Avatar cache audit, bounded cleanup, first/warm load measurement | todo |
-| GSP-I1 | CNA-owned avatar customization (system level) | todo |
+| GSP-I1 | CNA-owned avatar customization (system level) | done |
 | GSP-J1 | `AvatarDescription.Changed` | done |
 | GSP-K1 | Online host migration | todo |
 | GSP-K2 | Online `AddLocalGamer` | todo |
@@ -222,6 +231,11 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   v2 existed still match with v2 embedded. OPENGL33 `cna_avatar_review`: 255 jobs, 0 failures
   (`/rv/tmp/avatar-polish/review-v2c/`). v2 may still change until this pass ends; it is frozen from
   then on.
+- GSP-I1 (avatar editor): 14 `AvatarEditorTest` cases; GS 532 + 1 known skip, Net 495/495 per
+  process. OPENGL33 `cna_avatar_editor --capture` on the private runner with a scratch local
+  profile: 7 steps, saved avatar read back from the store (`/rv/tmp/avatar-polish/editor/capture/`).
+  Server `service_cna_avatars` now also saves an editor edit through `avatars.set` against the
+  service's newest (service-only) catalog and reads it back: pass.
 - Visual evidence lives outside the repositories, as the sample evidence does:
   `/rv/tmp/avatar-polish/evidence/{before,after}/`.
 - BEFORE (catalog v1, 2026-09-29): `evidence/before/{jobs.json, preview/, opengl33/,

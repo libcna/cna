@@ -147,6 +147,10 @@ void readFaceControls(const nlohmann::json& json,CatalogManifest& manifest)
             const auto scope=entry.at("scope").get<std::string>();
             if(scope!="face"&&scope!="head")malformed("face control scope");
             control.wholeHead=scope=="head";
+            if(entry.contains("name")) {
+                control.name=entry["name"].get<std::string>();
+                if(control.name.size()>32)malformed("face control name");
+            }
             const auto& ops=entry.at("ops");
             if(!ops.is_array()||ops.size()>MaximumDeformers)malformed("face control ops");
             for(const auto& op:ops) {

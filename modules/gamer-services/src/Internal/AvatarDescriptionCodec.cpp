@@ -29,6 +29,16 @@ constexpr AvatarColor ClothColors[]={{220,60,56},{240,150,40},{250,210,60},{90,1
     {230,120,170},{240,240,236},{60,62,70},{120,90,60},{40,110,110}};
 }
 
+std::span<const AvatarColor> colorPalette(AvatarColorSlot slot)
+{
+    switch(slot) {
+    case AvatarColorSlot::Skin:return SkinTones;
+    case AvatarColorSlot::Hair:return HairColors;
+    case AvatarColorSlot::Eyes:return EyeColors;
+    default:return ClothColors;
+    }
+}
+
 std::uint32_t crc32(std::span<const std::uint8_t> bytes)
 {
     std::uint32_t crc=0xffffffffu;
@@ -117,7 +127,11 @@ std::optional<AvatarDescriptor> decode(std::span<const std::uint8_t> bytes)
 
 AvatarDescriptor randomDescriptor(std::optional<std::uint8_t> bodyType,std::mt19937& random)
 {
-    const auto& catalog=newestEmbeddedManifest();
+    return randomDescriptor(newestEmbeddedManifest(),bodyType,random);
+}
+
+AvatarDescriptor randomDescriptor(const CatalogManifest& catalog,std::optional<std::uint8_t> bodyType,std::mt19937& random)
+{
     auto pick=[&](auto& range)->const auto& {
         std::uniform_int_distribution<std::size_t> index(0,std::size(range)-1);
         return range[index(random)];
@@ -133,6 +147,11 @@ AvatarDescriptor randomDescriptor(std::optional<std::uint8_t> bodyType,std::mt19
                 ids.push_back(item.id);
                 weights.push_back(item.randomWeight[descriptor.bodyType]);
             }
+        if(ids.empty()) {
+            // A catalog may offer a body type nothing weighted for a slot; any item of it will do.
+            for(const auto& item:catalog.items)if(item.slot==slot)return item.id;
+            return std::uint16_t{0};
+        }
         return ids[std::discrete_distribution<std::size_t>(weights.begin(),weights.end())(random)];
     };
     const int authored=catalog.authoredHeightMillimeters[descriptor.bodyType];

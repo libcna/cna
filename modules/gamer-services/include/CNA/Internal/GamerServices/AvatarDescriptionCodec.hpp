@@ -95,6 +95,10 @@ std::vector<std::uint8_t> encode(const AvatarDescriptor& descriptor);
  * @param bytes Public buffer. @return Descriptor, or empty when the buffer is not a CNA avatar. */
 std::optional<AvatarDescriptor> decode(std::span<const std::uint8_t> bytes);
 
+/** @brief The colors CreateRandom and the avatar editor offer for a slot (a description may carry
+ * any RGB value). @param slot Color slot. @return Palette. */
+std::span<const AvatarColor> colorPalette(AvatarColorSlot slot);
+
 /** @brief Builds a random avatar from the newest compiled-in catalog. @param bodyType 0/1, or empty
  * for either. @param random Entropy source. @return Encodable descriptor. */
 AvatarDescriptor randomDescriptor(std::optional<std::uint8_t> bodyType,std::mt19937& random);

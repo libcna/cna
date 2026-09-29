@@ -361,6 +361,15 @@ public:
         }
         return out;
     }
+    long long setAvatar(const std::string& userId,const std::vector<unsigned char>& description) override {
+        if(!capabilities_.contains("avatars"))throw Unavailable("CNA service avatars capability missing.");
+        if(description.size()!=1021)throw Unavailable("Invalid avatar description.");
+        constexpr char digits[]="0123456789abcdef";std::string hex;hex.reserve(2042);
+        for(auto byte:description){hex+=digits[byte>>4];hex+=digits[byte&15];}
+        const auto result=request("avatars.set",{{"description",hex}},tokenFor(userId));
+        if(!result.contains("revision")||!result["revision"].is_number_integer())throw Unavailable("Invalid avatar response.");
+        return result["revision"].get<long long>();
+    }
     std::string avatarCatalog(int version) override {
         if(!capabilities_.contains("avatars"))throw Unavailable("CNA service avatars capability missing.");
         if(version<0||version>65535)throw Unavailable("Invalid avatar catalog version.");
@@ -781,7 +790,13 @@ public:
         }
         return out;
     }
-    void setAvatar(const std::string& userId,std::vector<unsigned char> description) {
+    long long setAvatar(const std::string& userId,const std::vector<unsigned char>& description) override {
+        std::lock_guard guard(avatarLock_);
+        if(avatarsUnreachable_)throw Unavailable("Fake fixture is unreachable.");
+        for(auto& person:identities_)if(person.userId==userId){person.avatar=description;return ++avatarRevision_;}
+        throw ServiceError("NOT_FOUND");
+    }
+    void replaceAvatar(const std::string& userId,std::vector<unsigned char> description) {
         std::lock_guard guard(avatarLock_);
         for(auto& person:identities_)if(person.userId==userId)person.avatar=std::move(description);
     }
@@ -810,6 +825,7 @@ private:
     std::string avatarCatalog_;
     std::mutex avatarLock_;
     bool avatarsUnreachable_=false;
+    long long avatarRevision_=0;
     std::map<std::string,std::vector<unsigned char>> avatarAssets_;
     std::map<std::string,std::vector<ServiceMessage>> inbox_;
     std::map<std::pair<std::string,std::string>,std::string> reviews_;
@@ -849,7 +865,7 @@ void setBackendForTesting(std::shared_ptr<IGamerServicesBackend> value) {std::lo
 void setFakeAvatar(IGamerServicesBackend& fake,const std::string& userId,std::vector<unsigned char> description) {
     auto* backend=dynamic_cast<FakeBackend*>(&fake);
     if(!backend)throw System::InvalidOperationException("Not a fake Gamer Services backend.");
-    backend->setAvatar(userId,std::move(description));
+    backend->replaceAvatar(userId,std::move(description));
 }
 void setFakeAvatarsUnreachable(IGamerServicesBackend& fake,bool failing) {
     auto* backend=dynamic_cast<FakeBackend*>(&fake);

@@ -336,6 +336,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         if(TARGET SDL3::SDL3main)
             target_link_libraries(cna_avatar_review PRIVATE SDL3::SDL3main)
         endif()
+        # GSP-I1: the CNA avatar editor, a program of its own so no game needs customization code.
+        add_executable(cna_avatar_editor avatar_editor/AvatarEditor.cpp)
+        target_link_libraries(cna_avatar_editor PRIVATE CNA CNA_GamerServices SHARP_RUNTIME)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_avatar_editor PRIVATE SDL3::SDL3main)
+        endif()
+        if(WIN32)
+            cna_windows_gui_executable(cna_avatar_editor)
+            cna_copy_sdl_runtime(cna_avatar_editor)
+        endif()
     endif()
 endif()
 

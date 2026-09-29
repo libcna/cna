@@ -48,8 +48,9 @@ invalid, all-zero description, so games take their usual "no avatar" path.
 A signed-in local offline profile (no service configured, see `docs/gamer-services-server.md`) has
 the avatar stored with the profile, created at random when the profile is, and the operation
 completes synchronously with it. The service stores one
-avatar per account and accepts only CNA v1 descriptions whose items exist in a catalog it has
-imported; administration assigns them (`cna-gamer-services-admin <db> avatar <user> random`).
+avatar per account and accepts only CNA descriptions (formats 1 and 2) whose items exist in a
+catalog it has imported; players change theirs with the CNA avatar editor (below) and
+administration can assign one (`cna-gamer-services-admin <db> avatar <user> random`).
 
 Games that share avatars in a session the XNA way (sending `Description` bytes to other machines
 and constructing an `AvatarDescription` from them) need nothing from the service at all.
@@ -62,6 +63,33 @@ slot and raises that description's `Changed` on the dispatcher thread with the `
 sender. The C++ description is a value, so its `Changed` is shared by every copy of it (subscribing
 or unsubscribing through any copy is subscribing to the one event). An unchanged avatar, a new
 catalog, or an unreachable service raises nothing; signing out empties the slot without an event.
+
+## The avatar editor
+
+`cna_avatar_editor` is CNA's avatar editor: a program of its own, as the console's was, so a game
+never contains customization code and no XNA API is added for it. The player signs in through the
+standard Guide -- a CNA service account or an offline local profile -- and edits on three pages:
+
+- **Body**: body type, height (1.45-2.05 m in 1 cm steps), build, skin tone;
+- **Features**: eye color, facial hair and the catalog's face-shape controls (catalog 2 and later;
+  catalog 1 offers eye color only);
+- **Style**: hair, top, bottom, shoes, glasses, hat, and the hair, clothing and accessory colors.
+
+It edits against the newest catalog the avatar's owner accepts -- the service's newest imported
+catalog for an account (the one it validates a save against), the newest compiled-in one for a local
+profile -- and carries an older catalog's avatar into it item by item. The preview is the standard
+`AvatarRenderer` playing `Stand0`, zoomed to the face on the Features page. Randomize keeps the body
+type; undo returns to the avatar the session started from. Save stores the description with the
+service's `avatars.set` (one change per account every two seconds) or in the local profile store;
+nothing is written until the player saves, and leaving with unsaved changes asks twice. Running
+games see the new avatar through `AvatarDescription.Changed`.
+
+Keyboard and pad: Up/Down choose a row, Left/Right change it, Q/E (LB/RB) turn the page, R (Y)
+randomizes, Backspace (X) undoes everything, Enter (Start) saves, Z/C (right stick) turn the avatar,
+Esc (Back/B) leaves. It is built with the examples of a 3D renderer (`CNA_BUILD_EXAMPLES`).
+`--capture DIR` walks every page, edits, randomizes and saves, writing a PNG of each step; with
+`CNA_GAMER_SERVICES_AUTO_SIGN_IN` naming a profile and `CNA_GAMER_SERVICES_PROFILES_DIR` a scratch
+store it runs unattended on a private display.
 
 ## Rendering
 

@@ -209,6 +209,10 @@ public:
     /** @brief Reads accounts' avatar descriptions. @param userIds 1..16 service identities.
      * @return Description bytes per identity, in order; empty when the account has no avatar. */
     virtual std::vector<std::vector<unsigned char>> avatars(const std::vector<std::string>& userIds) = 0;
+    /** @brief Stores a signed-in account's own avatar (the CNA avatar editor's save).
+     * @param userId Signed-in account. @param description Valid 1021-byte CNA description.
+     * @return The avatar's new revision. */
+    virtual long long setAvatar(const std::string& userId,const std::vector<unsigned char>& description) = 0;
     /** @brief Reads an imported avatar catalog manifest. @param version Catalog version, 0 for the newest.
      * @return catalog.json text. */
     virtual std::string avatarCatalog(int version) = 0;

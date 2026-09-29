@@ -86,6 +86,8 @@ struct FaceDeformer {
 struct FaceControl {
     /** @brief Index into AvatarDescriptor::face. */
     int parameter=0;
+    /** @brief What it shapes ("jawWidth"), for editors; may be empty. */
+    std::string name;
     /** @brief Deforms hair, hats and glasses too, not only the face. */
     bool wholeHead=false;
     /** @brief Deformers. */
@@ -146,6 +148,10 @@ std::shared_ptr<const CatalogManifest> embeddedManifest(std::uint16_t version);
 /** @brief The newest compiled-in catalog: the one CreateRandom draws from and whose preset
  * animations AvatarAnimation plays. @return Manifest. */
 const CatalogManifest& newestEmbeddedManifest();
+/** @brief Builds a random avatar from one catalog, as CreateRandom does from the newest compiled-in
+ * one. @param catalog Catalog. @param bodyType 0/1, or empty for either. @param random Entropy
+ * source. @return Descriptor naming that catalog. */
+AvatarDescriptor randomDescriptor(const CatalogManifest& catalog,std::optional<std::uint8_t> bodyType,std::mt19937& random);
 /** @brief Lower-case hex SHA-256. @param bytes Input. @return Digest. */
 std::string sha256Hex(std::span<const std::uint8_t> bytes);
 
