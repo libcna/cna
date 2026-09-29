@@ -5,11 +5,15 @@
 #include "CNA/Internal/Json.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/PropertyDictionary.hpp"
 #include "Microsoft/Xna/Framework/Storage/StorageDevice.hpp"
+#include "Microsoft/Xna/Framework/TitleContainer.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "System/DateTime.hpp"
 #include "System/TimeSpan.hpp"
 
 #include <any>
+#include <memory>
+#include <algorithm>
 #include <cctype>
 #include <filesystem>
 #include <fstream>
@@ -422,5 +426,125 @@ namespace CNA::Internal::GamerServices
     {
         std::error_code ec;
         fs::remove_all(StoreRoot(), ec);
+    }
+
+    namespace
+    {
+        std::optional<std::optional<std::vector<OfflineAchievementDefinition>>>& OfflineCatalog()
+        {
+            static std::optional<std::optional<std::vector<OfflineAchievementDefinition>>> catalog;
+            return catalog;
+        }
+
+        [[noreturn]] void RefuseCatalog(const std::string& problem)
+        {
+            throw System::InvalidOperationException(
+                std::string("The offline achievement catalog ") + OfflineAchievementCatalogPath + " is invalid: " + problem + ".");
+        }
+
+        // The same key rule as the service's catalog identifiers.
+        bool IsCatalogKey(const std::string& key)
+        {
+            if (key.empty() || key.size() > 64) return false;
+            return std::all_of(key.begin(), key.end(), [](unsigned char c) {
+                return std::isalnum(c) || c == '_' || c == '-' || c == '.';
+            });
+        }
+
+        std::string CatalogText(const JsonValue& entry, const char* name, std::size_t limit, bool required)
+        {
+            const JsonValue* value = entry.FindMember(name);
+            if (value == nullptr)
+            {
+                if (required) RefuseCatalog(std::string("an entry has no \"") + name + "\"");
+                return {};
+            }
+            if (!value->IsString() || value->stringValue.size() > limit)
+                RefuseCatalog(std::string("\"") + name + "\" must be text of at most " + std::to_string(limit) + " bytes");
+            return value->stringValue;
+        }
+
+        // A title-relative PNG path that cannot leave the title's directory.
+        bool IsTitlePicturePath(const std::string& path)
+        {
+            if (path.empty() || path.size() > 256 || path.front() == '/' || path.front() == '\\' ||
+                path.find(':') != std::string::npos || path.find('\0') != std::string::npos)
+                return false;
+            const fs::path parsed(path);
+            for (const auto& part : parsed)
+                if (part == "..") return false;
+            std::string extension = parsed.extension().string();
+            std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            return extension == ".png";
+        }
+
+        std::vector<OfflineAchievementDefinition> ParseOfflineCatalog(const std::string& text)
+        {
+            JsonValue root;
+            try { root = ParseJson(text); }
+            catch (const JsonParseException&) { RefuseCatalog("it is not JSON"); }
+            if (root.type != JsonType::Array) RefuseCatalog("it must be an array of achievements");
+            if (root.arrayValue.size() > 1024) RefuseCatalog("it lists more than 1024 achievements");
+            std::vector<OfflineAchievementDefinition> definitions;
+            for (const JsonValue& entry : root.arrayValue)
+            {
+                if (!entry.IsObject()) RefuseCatalog("every achievement must be an object");
+                OfflineAchievementDefinition definition;
+                definition.Key = CatalogText(entry, "key", 64, true);
+                if (!IsCatalogKey(definition.Key)) RefuseCatalog("\"" + definition.Key + "\" is not a valid key");
+                for (const auto& earlier : definitions)
+                    if (earlier.Key == definition.Key) RefuseCatalog("\"" + definition.Key + "\" is listed twice");
+                definition.Name = CatalogText(entry, "name", 128, false);
+                definition.Description = CatalogText(entry, "description", 1024, false);
+                definition.HowToEarn = CatalogText(entry, "howToEarn", 1024, false);
+                definition.Picture = CatalogText(entry, "picture", 256, false);
+                if (!definition.Picture.empty() && !IsTitlePicturePath(definition.Picture))
+                    RefuseCatalog("the picture of \"" + definition.Key + "\" must be a PNG path inside the title");
+                const JsonValue* score = entry.FindMember("score");
+                if (score == nullptr || !score->IsNumber() || score->numberValue < 0 || score->numberValue > 1000 ||
+                    score->numberValue != static_cast<double>(static_cast<int>(score->numberValue)))
+                    RefuseCatalog("the score of \"" + definition.Key + "\" must be a whole number from 0 to 1000");
+                definition.Score = static_cast<int>(score->numberValue);
+                if (const JsonValue* display = entry.FindMember("display"))
+                {
+                    if (display->type != JsonType::Boolean) RefuseCatalog("\"display\" must be true or false");
+                    definition.DisplayBeforeEarned = display->boolValue;
+                }
+                definitions.push_back(std::move(definition));
+            }
+            return definitions;
+        }
+    }
+
+    const std::optional<std::vector<OfflineAchievementDefinition>>& LoadOfflineAchievementCatalogEXT()
+    {
+        auto& catalog = OfflineCatalog();
+        if (catalog) return *catalog;
+        std::unique_ptr<System::IO::Stream> stream;
+        try
+        {
+            stream = Microsoft::Xna::Framework::TitleContainer::OpenStream(OfflineAchievementCatalogPath);
+        }
+        catch (const std::runtime_error&)
+        {
+            catalog.emplace();
+            return *catalog;
+        }
+        std::string text;
+        std::vector<SharpRuntime::bytecs> buffer(4096);
+        for (;;)
+        {
+            const auto read = stream->Read(buffer.data(), 0, static_cast<SharpRuntime::intcs>(buffer.size()));
+            if (read <= 0) break;
+            text.append(reinterpret_cast<const char*>(buffer.data()), static_cast<std::size_t>(read));
+            if (text.size() > 1024 * 1024) RefuseCatalog("it is larger than 1 MiB");
+        }
+        catalog.emplace(ParseOfflineCatalog(text));
+        return *catalog;
+    }
+
+    void ResetOfflineAchievementCatalogForTestingEXT()
+    {
+        OfflineCatalog().reset();
     }
 }

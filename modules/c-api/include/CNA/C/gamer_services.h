@@ -770,16 +770,19 @@ typedef struct CNA_GamerProfileInfo {
     /** @brief The gamer's accumulated score. */
     int32_t gamer_score;
 
-    /** @brief One of the `CNA_GAMER_ZONE_*` identities. */
+    /** @brief One of the `CNA_GAMER_ZONE_*` identities; always `CNA_GAMER_ZONE_UNKNOWN`, as CNA has
+     * no gamer zones. */
     CNA_GamerZone gamer_zone;
 
-    /** @brief How many titles this gamer has played. */
+    /** @brief How many titles this gamer has played: on the CNA service, those with the gamer's
+     * presence, an earned achievement or a leaderboard row; offline, this title once the gamer has
+     * earned an achievement in it. */
     int32_t titles_played;
 
     /** @brief How many achievements this gamer has earned in total. */
     int32_t total_achievements;
 
-    /** @brief The gamer's reputation. */
+    /** @brief The gamer's reputation in stars, 0 to 5; always 0, as CNA keeps no reputation. */
     float reputation;
 
     /** @brief Non-zero once the profile has been disposed. */
@@ -2649,7 +2652,8 @@ CNA_C_API CNA_Result cna_achievement_copy_how_to_earn(
  *
  * @param achievement Owned achievement handle.
  * @param out_bytes Receives the picture size in bytes.
- * @return Success for configured service artwork, or a documented service/argument/handle failure.
+ * @return Success for configured artwork (the service catalog's, or offline the PNG the title's
+ * achievement catalog names), or a documented service/argument/handle failure when there is none.
  */
 CNA_C_API CNA_Result cna_achievement_get_picture_size(
     CNA_AchievementHandle achievement,

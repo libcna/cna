@@ -79,7 +79,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Returns a stream containing the achievement picture.
          *
-         * Service catalog pictures are immutable and cached by content hash.
+         * Service catalog pictures are immutable and cached by content hash; offline, the picture is
+         * the PNG the title's achievement catalog names.
          * @return A caller-owned, read-only picture stream at position zero.
          * @throws GamerServicesNotAvailableException if the picture is absent or cannot be retrieved.
          */
@@ -119,7 +120,8 @@ namespace Microsoft::Xna::Framework::GamerServices
     private:
         friend class SignedInGamer;
         std::string pictureHash_;
-        bool serviceBacked_=false;
+        // Offline: the picture's title-relative path from the title's achievement catalog.
+        std::string picturePath_;
         Achievement(
             const std::string& key,
             const std::string& name,

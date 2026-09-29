@@ -2660,3 +2660,31 @@ the C struct field documents local ticks. CnaGamerServicesTests 485 + 1 skip.
   `GameTest.ModalFramesPresentTheOverlayWithoutTheGamesUpdateOrDraw`,
   `ModalFramesBelongToTheLiveGameOnly`, GuideSmoke re-read. CnaGamerServicesTests 494 + 1 skip,
   CnaRuntimeTests 192, Guide/Gamers/Net C smokes.
+- [x] GS-004p Offline achievement catalog and honest profile fields (audit OPEN 5, 7). Offline
+  achievements were only the earned keys (empty text, score 0). `Achievement.GetPicture` threw
+  `NotImplementedException` offline, against its documented `GamerServicesNotAvailableException`.
+  A profile reported FNA's invented `GamerZone.Pro`, reputation 5 and one title played on every
+  path, and an offline profile totalled nothing it had earned. Now:
+  - A title may ship `GamerServices/Achievements.json`: the service admin tool's catalog objects,
+    with `picture` a title-relative PNG path (validated: keys, lengths, score 0..1000, unique keys,
+    no path escaping, at most 1024 entries and 1 MiB). Offline `GetAchievements` lists every
+    defined achievement with its earned state, text, score and picture. `AwardAchievement` refuses
+    undefined keys (`GamerServicesNotAvailableException`, as online) and keeps the first earned
+    date. A malformed catalog is refused with `InvalidOperationException` naming the file.
+  - `GetPicture` without a picture throws `GamerServicesNotAvailableException` everywhere.
+  - Profiles report `GamerZone.Unknown` and reputation 0 (CNA keeps neither). An offline
+    profile totals this title's earned achievements (scores from the catalog), and titles played
+    is 1 once it has earned one.
+  - Server e575adc adds `titlesPlayed` (titles with presence, an earned achievement or a
+    leaderboard row), which the client reads when present.
+  - C/C++ docs and `docs/gamer-services-server.md` describe the catalog. The client harness now
+    checks the refreshed profile's titles/zone/reputation, and its sign-out checks follow GS-004n
+    (the signed-out gamer is disposed; `IsSignedInToLive` is left as it was). The TLS e2e had
+    failed on the stale expectation.
+
+  Tests: `AnOfflineCatalogListsEveryDefinedAchievementWithItsEarnedState`,
+  `AMalformedOfflineCatalogIsRefusedNamingTheFile`,
+  `AnOfflineProfileWithoutACatalogCountsEarnedAchievements`, and the updated defaults and picture
+  tests. CnaGamerServicesTests 497 + 1 skip; Guide/GamerProperties/Leaderboards/Achievements/Gamers
+  and GamerIdentities C smokes pass. Server suite with the CNA harnesses: 22/23, with
+  `service_cna_avatars` skipped because its harness variables were not set.

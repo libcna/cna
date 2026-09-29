@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include <algorithm>
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/ArgumentException.hpp"
@@ -322,10 +323,11 @@ TEST(AchievementTest, PropertiesFromCtor) {
     EXPECT_EQ("", a.getHowToEarnProperty());
 }
 
+// An achievement without a picture reports that as the service path does, as documented.
 TEST(AchievementTest, GetPictureThrows) {
     System::DateTime dt;
     auto a = Achievement::CreateInternal("k", "n", "d", false, true, dt);
-    EXPECT_THROW(a.GetPicture(), System::NotImplementedException);
+    EXPECT_THROW(a.GetPicture(), GamerServicesNotAvailableException);
 }
 
 // ---------------------------------------------------------------------------

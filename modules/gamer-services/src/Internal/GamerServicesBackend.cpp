@@ -50,6 +50,11 @@ ServiceIdentity identity(const Json& j) {
         if(!j.contains(field)||!j[field].is_number_integer()||j[field]<0||j[field]>2147483647)throw CnaService::Error("INVALID_RESPONSE");
     if(!j.contains("allowOnlineSessions")||!j["allowOnlineSessions"].is_boolean())throw CnaService::Error("INVALID_RESPONSE");
     value.gamerScore=j["gamerScore"].get<int>();value.totalAchievements=j["totalAchievements"].get<int>();
+    // A server older than titlesPlayed leaves it out; one that sends it sends a valid count.
+    if(j.contains("titlesPlayed")) {
+        if(!j["titlesPlayed"].is_number_integer()||j["titlesPlayed"]<0||j["titlesPlayed"]>2147483647)throw CnaService::Error("INVALID_RESPONSE");
+        value.titlesPlayed=j["titlesPlayed"].get<int>();
+    }
     value.allowOnlineSessions=j["allowOnlineSessions"].get<bool>();return value;
 }
 class QueuedBackend : public IGamerServicesBackend {
@@ -635,6 +640,7 @@ public:
     ServiceIdentity profile(const std::string& tag) override {
         for(const auto& person:identities_)if(person.gamertag==tag) {
             auto value=person;for(const auto& entry:catalog_)if(earned_[person.userId][entry.key]){value.gamerScore+=entry.score;++value.totalAchievements;}
+            if(value.totalAchievements>0)value.titlesPlayed=std::max(value.titlesPlayed,1);
             return value;
         }throw Unavailable("Gamer not found.");
     }

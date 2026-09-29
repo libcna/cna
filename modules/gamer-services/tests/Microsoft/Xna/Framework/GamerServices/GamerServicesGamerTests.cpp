@@ -23,6 +23,12 @@
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 #include "Microsoft/Xna/Framework/Storage/StorageDevice.hpp"
+#include "Microsoft/Xna/Framework/TitleLocation.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/Achievement.hpp"
+#include "System/IO/Stream.hpp"
+#include <array>
+#include <memory>
 #include "SignedInGamerTestAccess.hpp"
 
 namespace {
@@ -239,13 +245,14 @@ TEST(GamerTest, EndGetPartnerTokenThrows) {
 
 // --- GamerProfile ---
 
+// CNA has no gamer zones or reputation, so a profile reports none instead of inventing values.
 TEST(GamerProfileTest, DefaultValues) {
     auto p = GamerProfile::CreateInternal();
     EXPECT_EQ(0, p.getGamerScoreProperty());
-    EXPECT_EQ(GamerZone::Pro, p.getGamerZoneProperty());
+    EXPECT_EQ(GamerZone::Unknown, p.getGamerZoneProperty());
     EXPECT_EQ("", p.getMottoProperty());
-    EXPECT_FLOAT_EQ(5.0f, p.getReputationProperty());
-    EXPECT_EQ(1, p.getTitlesPlayedProperty());
+    EXPECT_FLOAT_EQ(0.0f, p.getReputationProperty());
+    EXPECT_EQ(0, p.getTitlesPlayedProperty());
     EXPECT_EQ(0, p.getTotalAchievementsProperty());
     EXPECT_FALSE(p.getIsDisposedProperty());
 }
@@ -923,6 +930,100 @@ TEST(SignedInGamerTest, AchievementsAreIsolatedPerGamertag) {
 
     EXPECT_EQ(1, gamerA.GetAchievements().getCountProperty());
     EXPECT_EQ(0, gamerB.GetAchievements().getCountProperty());
+}
+
+namespace {
+    // Points the title at a fixture directory holding GamerServices/Achievements.json, restoring the
+    // real title location and forgetting the catalog read afterwards.
+    struct OfflineTitleGuard {
+        std::string previous = Microsoft::Xna::Framework::TitleLocation::getPathProperty();
+        explicit OfflineTitleGuard(const std::string& fixture) {
+            Microsoft::Xna::Framework::TitleLocation::setPathProperty(std::string(CNA_GAMER_SERVICES_TEST_FIXTURES) + "/" + fixture);
+            CNA::Internal::GamerServices::ResetOfflineAchievementCatalogForTestingEXT();
+        }
+        ~OfflineTitleGuard() {
+            Microsoft::Xna::Framework::TitleLocation::setPathProperty(previous);
+            CNA::Internal::GamerServices::ResetOfflineAchievementCatalogForTestingEXT();
+        }
+    };
+}
+
+// A title that ships an achievement catalog (the service's catalog format, pictures as title files)
+// gets the service's offline equivalent: every defined achievement, earned or not, with its text,
+// score and picture; only defined keys can be awarded; a second award keeps the first date.
+TEST(SignedInGamerTest, AnOfflineCatalogListsEveryDefinedAchievementWithItsEarnedState) {
+    GamerServicesStoreGuard store;
+    OfflineTitleGuard title("offline-title");
+    auto gamer = SignedInGamer::CreateInternal("catalog_tag");
+    gamer.AwardAchievement("first-steps");
+    EXPECT_THROW(gamer.AwardAchievement("not-defined"), GamerServicesNotAvailableException);
+
+    auto achievements = gamer.GetAchievements();
+    ASSERT_EQ(2, achievements.getCountProperty());
+    const Achievement first = achievements[0];
+    EXPECT_EQ("first-steps", first.getKeyProperty());
+    EXPECT_EQ("First Steps", first.getNameProperty());
+    EXPECT_EQ("Finish the tutorial.", first.getDescriptionProperty());
+    EXPECT_EQ("Complete the first level.", first.getHowToEarnProperty());
+    EXPECT_EQ(10, first.getGamerScoreProperty());
+    EXPECT_TRUE(first.getIsEarnedProperty());
+    EXPECT_TRUE(first.getDisplayBeforeEarnedProperty());
+    const Achievement hidden = achievements[1];
+    EXPECT_EQ("hidden.one", hidden.getKeyProperty());
+    EXPECT_FALSE(hidden.getIsEarnedProperty());
+    EXPECT_FALSE(hidden.getDisplayBeforeEarnedProperty());
+    EXPECT_EQ(25, hidden.getGamerScoreProperty());
+
+    Achievement withPicture = achievements[0];
+    std::unique_ptr<System::IO::Stream> picture(withPicture.GetPicture());
+    ASSERT_NE(nullptr, picture);
+    std::array<SharpRuntime::bytecs, 8> signature{};
+    ASSERT_EQ(8, picture->Read(signature.data(), 0, 8));
+    EXPECT_EQ((std::array<SharpRuntime::bytecs, 8>{0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'}), signature);
+    Achievement withoutPicture = achievements[1];
+    EXPECT_THROW((void)withoutPicture.GetPicture(), GamerServicesNotAvailableException);
+
+    const auto earnedAt = first.getEarnedDateTimeProperty();
+    gamer.AwardAchievement("first-steps");
+    EXPECT_EQ(earnedAt, gamer.GetAchievements()[0].getEarnedDateTimeProperty());
+
+    // The offline profile totals what this title's catalog says the gamer earned.
+    std::unique_ptr<GamerProfile> profile(gamer.GetProfile());
+    EXPECT_EQ(10, profile->getGamerScoreProperty());
+    EXPECT_EQ(1, profile->getTotalAchievementsProperty());
+    EXPECT_EQ(1, profile->getTitlesPlayedProperty());
+    EXPECT_EQ(GamerZone::Unknown, profile->getGamerZoneProperty());
+    EXPECT_FLOAT_EQ(0.0f, profile->getReputationProperty());
+}
+
+// A malformed catalog is a title's mistake: it is refused loudly, naming the file and the problem.
+TEST(SignedInGamerTest, AMalformedOfflineCatalogIsRefusedNamingTheFile) {
+    GamerServicesStoreGuard store;
+    OfflineTitleGuard title("offline-title-invalid");
+    auto gamer = SignedInGamer::CreateInternal("catalog_tag");
+    try {
+        (void)gamer.GetAchievements();
+        FAIL() << "a catalog listing a key twice was accepted";
+    } catch (const System::InvalidOperationException& error) {
+        const std::string message = error.what();
+        EXPECT_NE(std::string::npos, message.find("GamerServices/Achievements.json")) << message;
+        EXPECT_NE(std::string::npos, message.find("listed twice")) << message;
+    }
+}
+
+// Without a catalog an offline profile still counts what this title recorded: no scores (nothing
+// defines them), one title once something was earned.
+TEST(SignedInGamerTest, AnOfflineProfileWithoutACatalogCountsEarnedAchievements) {
+    GamerServicesStoreGuard store;
+    OfflineTitleGuard title("offline-title-absent");
+    auto gamer = SignedInGamer::CreateInternal("profile_tag");
+    std::unique_ptr<GamerProfile> before(gamer.GetProfile());
+    EXPECT_EQ(0, before->getTitlesPlayedProperty());
+    gamer.AwardAchievement("anything");
+    std::unique_ptr<GamerProfile> after(gamer.GetProfile());
+    EXPECT_EQ(1, after->getTotalAchievementsProperty());
+    EXPECT_EQ(0, after->getGamerScoreProperty());
+    EXPECT_EQ(1, after->getTitlesPlayedProperty());
 }
 
 // Task 4.7: a corrupt/missing store file must never crash - starts empty instead.

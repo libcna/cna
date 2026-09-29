@@ -28,6 +28,17 @@ appear, raising `SignedIn`, at the first `Dispatcher.Update`, as XNA reports pro
 in at startup. Local profiles are never sent to a service. With an endpoint configured, sign-in uses
 accounts only.
 
+**Offline achievement catalog.** A title can ship `GamerServices/Achievements.json` in its title
+directory: a JSON array of the objects the service administration tool takes (`key`, `name`,
+`description`, `howToEarn`, `score` 0..1000, `display`), with `picture` a title-relative PNG path in
+place of a content hash. Offline, `GetAchievements` then lists every defined achievement, earned or
+not, with its text, score and picture; `AwardAchievement` refuses keys the catalog does not define
+(`GamerServicesNotAvailableException`, as the service does) and keeps an achievement's first earned
+date; a local profile's `GamerScore`/`TotalAchievements` total what the catalog says was earned. A
+malformed catalog is refused with an `InvalidOperationException` naming the file and the problem.
+Without one, offline achievements are the earned keys alone, with no text or score. Profiles report
+`GamerZone.Unknown` and a reputation of 0 on every path: CNA keeps neither.
+
 **System Guide.** In a game that draws (a `GamerServicesComponent` with a graphics device service),
 the Home key, as in Games for Windows LIVE, or a controller's Guide button opens the Guide for that
 player without any call from the game: sign in when nobody is signed in there; Friends, Invite to

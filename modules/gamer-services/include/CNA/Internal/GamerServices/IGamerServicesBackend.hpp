@@ -28,6 +28,8 @@ struct ServiceIdentity {
     int gamerScore = 0;
     /** @brief Number of earned achievements. */
     int totalAchievements = 0;
+    /** @brief Titles in which the account has presence, an earned achievement or a leaderboard row. */
+    int titlesPlayed = 0;
     /** @brief Account online-session permission. */
     bool allowOnlineSessions = false;
     /** @brief Fixture-only avatar description (1021 bytes), empty for none. */

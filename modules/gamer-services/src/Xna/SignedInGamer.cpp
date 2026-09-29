@@ -11,7 +11,9 @@
 #include "Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/TimeZone.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include "../Internal/ServiceAsyncResult.hpp"
+#include <algorithm>
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
@@ -114,6 +116,13 @@ namespace Microsoft::Xna::Framework::GamerServices
             CNA::Internal::GamerServices::backend()->award(serviceUserId_, achievementKey);
             return;
         }
+        // Offline, a title that ships an achievement catalog awards only what it defines, as the
+        // service does; awarding one already earned keeps its first date.
+        const auto& catalog = CNA::Internal::GamerServices::LoadOfflineAchievementCatalogEXT();
+        if (catalog && std::none_of(catalog->begin(), catalog->end(), [&](const auto& entry) { return entry.Key == achievementKey; }))
+            throw GamerServicesNotAvailableException("The title defines no achievement \"" + achievementKey + "\".");
+        for (const auto& record : CNA::Internal::GamerServices::LoadEarnedAchievementsEXT(getGamertagProperty()))
+            if (record.Key == achievementKey) return;
         CNA::Internal::GamerServices::SaveEarnedAchievementEXT(
             getGamertagProperty(), achievementKey, System::DateTime::getNowProperty().getTicksProperty()
         );
@@ -220,14 +229,31 @@ namespace Microsoft::Xna::Framework::GamerServices
                     : System::DateTime(0);
                 auto value = Achievement::CreateInternal(record.key, record.name, record.description,
                     record.displayBeforeEarned, record.earnedTicks != 0, earned);
-                value.gamerScore_ = record.score; value.howToEarn_ = record.howToEarn;value.pictureHash_=record.picture;value.serviceBacked_=true;
+                value.gamerScore_ = record.score; value.howToEarn_ = record.howToEarn;value.pictureHash_=record.picture;
                 values.push_back(std::move(value));
             }
             return AchievementCollection::CreateInternal(std::move(values));
         }
         statReceiveAction_ = nullptr;
         std::vector<Achievement> achievements;
-        for (const auto& record : CNA::Internal::GamerServices::LoadEarnedAchievementsEXT(getGamertagProperty()))
+        const auto earned = CNA::Internal::GamerServices::LoadEarnedAchievementsEXT(getGamertagProperty());
+        if (const auto& catalog = CNA::Internal::GamerServices::LoadOfflineAchievementCatalogEXT())
+        {
+            // The title's catalog, in its order, each earned or not.
+            for (const auto& definition : *catalog)
+            {
+                const auto record = std::find_if(earned.begin(), earned.end(), [&](const auto& value) { return value.Key == definition.Key; });
+                const bool isEarned = record != earned.end();
+                auto value = Achievement::CreateInternal(definition.Key, definition.Name, definition.Description,
+                    definition.DisplayBeforeEarned, isEarned, isEarned ? System::DateTime(record->EarnedTicks) : System::DateTime(0));
+                value.gamerScore_ = definition.Score;
+                value.howToEarn_ = definition.HowToEarn;
+                value.picturePath_ = definition.Picture;
+                achievements.push_back(std::move(value));
+            }
+            return AchievementCollection::CreateInternal(std::move(achievements));
+        }
+        for (const auto& record : earned)
         {
             achievements.push_back(Achievement::CreateInternal(
                 record.Key, "", "", true, true, System::DateTime(record.EarnedTicks)

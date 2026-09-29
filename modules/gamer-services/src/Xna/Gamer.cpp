@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
+#include "CNA/Internal/GamerServices/LocalGamerServicesStore.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerProfile.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "System/ObjectDisposedException.hpp"
@@ -125,10 +127,26 @@ namespace Microsoft::Xna::Framework::GamerServices
             auto profile = std::make_unique<GamerProfile>(GamerProfile::CreateInternal());
             profile->pictureHash_=person.picture;profile->motto_ = person.motto; profile->gamerScore_ = person.gamerScore;
             profile->totalAchievements_ = person.totalAchievements;
+            profile->titlesPlayed_ = person.titlesPlayed;
             profile->region_ = System::Globalization::RegionInfo(person.region);
             return profile.release();
         }
-        return new GamerProfile(GamerProfile::CreateInternal());
+        auto profile = std::make_unique<GamerProfile>(GamerProfile::CreateInternal());
+        // An offline profile's totals come from this title's local store; a remote gamer's progress
+        // is not on this machine.
+        if (dynamic_cast<SignedInGamer*>(this) != nullptr)
+        {
+            const auto earned = CNA::Internal::GamerServices::LoadEarnedAchievementsEXT(gamertag_);
+            const auto& catalog = CNA::Internal::GamerServices::LoadOfflineAchievementCatalogEXT();
+            for (const auto& record : earned)
+            {
+                if (!catalog) { ++profile->totalAchievements_; continue; }
+                for (const auto& definition : *catalog)
+                    if (definition.Key == record.Key) { ++profile->totalAchievements_; profile->gamerScore_ += definition.Score; }
+            }
+            profile->titlesPlayed_ = earned.empty() ? 0 : 1;
+        }
+        return profile.release();
     }
 
     Gamer* Gamer::GetFromGamertag(const std::string& gamertag) {
