@@ -63,6 +63,8 @@ struct ServiceFriend {
     bool inviteReceivedFrom = false, inviteSentTo = false, inviteAccepted = false, inviteRejected = false;
     /** @brief Friend's current title-scoped rich presence. */
     std::string presence;
+    /** @brief The online friend's account status is away or busy (never both). */
+    bool away = false, busy = false;
 };
 /** @brief Typed service column, independent of public dictionary objects. */
 struct ServiceLeaderboardColumn {
@@ -206,6 +208,9 @@ public:
     virtual void reviewPlayer(const std::string& userId,const std::string& gamertag,const std::string& rating) = 0;
     /** @brief Publishes rich presence. @param userId Actor. @param mode Stable mode. @param text Display text. */
     virtual void setPresence(const std::string& userId,int mode,const std::string& text) = 0;
+    /** @brief Sets the account-wide status friends see. @param userId Actor.
+     * @param status "online", "away" or "busy". */
+    virtual void setPresenceStatus(const std::string& userId,const std::string& status) = 0;
     /** @brief Reads accounts' avatar descriptions. @param userIds 1..16 service identities.
      * @return Description bytes per identity, in order; empty when the account has no avatar. */
     virtual std::vector<std::vector<unsigned char>> avatars(const std::vector<std::string>& userIds) = 0;

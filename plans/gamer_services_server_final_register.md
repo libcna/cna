@@ -35,7 +35,6 @@ Each is documented where it is declared (C++ and C) and in `docs/xna-4-api-cover
 | `LocalNetworkGamer.SendPartyInvites`, `Guide.ShowParty`/`ShowPartySessions` | refuses (party of one) / explanatory pane | No party service. |
 | `Guide.ShowMarketplace` | explanatory pane after XNA's privilege checks | No store; titles are fully licensed. |
 | `Guide.IsTrialMode` | true only while `SimulateTrialMode` is set | No licensing service (GS-011b removed the public setter XNA keeps internal). |
-| `FriendGamer.IsAway`/`IsBusy` | false | Accounts have no away/busy status. |
 | `GamerProfile.GamerZone`/`Reputation` | `Unknown` / 0 | CNA keeps neither; reviews do not rate gamers (GS-004p). |
 | `QualityOfService` bandwidth | 0 | Only the discovery round trip is measured; service search results are unmeasured (`IsAvailable` false). |
 | `GameDefaults` for accounts | XNA's unset values | Accounts carry no game defaults; local profiles do (GS-004r). |

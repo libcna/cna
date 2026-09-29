@@ -64,7 +64,8 @@ NetworkSession Create/Find/Join/JoinInvited with Guide invitations, lobby readin
 traffic and round-trip statistics, over the authenticated relay (native only; browsers use the
 limitations page). Not implemented: online host migration (an online session ends when its host
 leaves), adding local gamers to an online session after create or join, voice, TrueSkill
-computation, party and marketplace services, and away/busy status. Rich presence is sent during
+computation, and party and marketplace services. Friends see the online status (online, away,
+busy) a player chooses in the Guide (`FriendGamer.IsAway`/`IsBusy`). Rich presence is sent during
 Dispatcher.Update; friend online state reflects authenticated activity within 90 seconds; Update
 schedules an authenticated heartbeat every 30 seconds. `docs/xna-4-api-coverage.md` §8–9 lists the
 state per feature. This is not a production service release or a claim of measured Xbox

@@ -154,6 +154,45 @@ TEST_F(SystemGuideTest, AServicePlayerReachesFriendsAndInvitations) {
     EXPECT_FALSE(Guide::getIsVisibleProperty());
 }
 
+TEST_F(SystemGuideTest, OnlineStatusIsWhatFriendsSeeAsAwayOrBusy) {
+    Service::ServiceIdentity alice, bob;
+    alice.userId = "a";
+    alice.gamertag = "Alice";
+    bob.userId = "b";
+    bob.gamertag = "Bob";
+    auto fake = Service::makeFakeBackend({alice, bob});
+    Service::setBackendForTesting(fake);
+    fake->signIn(0, "Alice", "fixture");
+    fake->signIn(1, "Bob", "fixture");
+    ASSERT_TRUE(Settle([] { return Count() == 2; }));
+    fake->changeFriend("a", "Bob", "add");
+    fake->changeFriend("b", "Alice", "accept");
+    auto bobSees = [&] {
+        auto friends = (*Gamer::getSignedInGamersProperty())[PlayerIndex::Two]->GetFriends();
+        return std::pair{friends[0]->getIsAwayProperty(), friends[0]->getIsBusyProperty()};
+    };
+    EXPECT_EQ(bobSees(), std::pair(false, false));
+
+    for (const auto& [button, expected] : {std::pair{1, std::pair{true, false}}, std::pair{2, std::pair{false, true}},
+                                           std::pair{0, std::pair{false, false}}}) {
+        Service::openSystemGuide(PlayerIndex::One);
+        ASSERT_TRUE(Guide::getHasPendingMessageBoxEXTProperty());
+        Guide::SimulateMessageBoxClickEXT(3);
+        ASSERT_TRUE(Guide::getHasPendingMessageBoxEXTProperty());
+        Guide::SimulateMessageBoxClickEXT(button);
+        EXPECT_TRUE(Settle([&] { return bobSees() == expected; })) << button;
+        Settle([] { return !Guide::getIsVisibleProperty(); });
+    }
+    // A friend who signs out is simply offline, whatever the status.
+    Service::openSystemGuide(PlayerIndex::One);
+    Guide::SimulateMessageBoxClickEXT(3);
+    Guide::SimulateMessageBoxClickEXT(1);
+    ASSERT_TRUE(Settle([&] { return bobSees().first; }));
+    fake->signOut(0);
+    ASSERT_TRUE(Settle([] { return Count() == 1; }));
+    EXPECT_EQ(bobSees(), std::pair(false, false));
+}
+
 TEST_F(SystemGuideTest, NothingOpensWhileTheGuideIsVisible) {
     Offline();
     auto* result = Guide::BeginShowMessageBox("Game", "Busy", {"OK"}, 0, MessageBoxIcon::None, {}, {});

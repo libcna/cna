@@ -230,7 +230,7 @@ public:
             // A server older than these flags leaves them out; one that sends them sends booleans.
             for(auto [key,target]:{std::pair{"joinable",&friendState.joinable},std::pair{"inviteReceivedFrom",&friendState.inviteReceivedFrom},
                 std::pair{"inviteSentTo",&friendState.inviteSentTo},std::pair{"inviteAccepted",&friendState.inviteAccepted},
-                std::pair{"inviteRejected",&friendState.inviteRejected}}) {
+                std::pair{"inviteRejected",&friendState.inviteRejected},std::pair{"away",&friendState.away},std::pair{"busy",&friendState.busy}}) {
                 if(!e.contains(key))continue;
                 if(!e[key].is_boolean())throw Unavailable("Invalid friend response.");
                 *target=e[key].get<bool>();
@@ -244,6 +244,11 @@ public:
     }
     void setPresence(const std::string& user,int mode,const std::string& text) override {
         (void)request("presence.set",{{"mode",mode},{"text",text}},tokenFor(user));
+    }
+    void setPresenceStatus(const std::string& user,const std::string& status) override {
+        if(!capabilities_.contains("presence-status"))throw Unavailable("CNA service presence-status capability missing.");
+        if(status!="online"&&status!="away"&&status!="busy")throw Unavailable("Invalid presence status.");
+        (void)request("presence.status",{{"status",status}},tokenFor(user));
     }
     void sendMessage(const std::string& user,const std::vector<std::string>& tags,const std::string& text) override {
         (void)request("messages.send",{{"gamertags",tags},{"text",text}},tokenFor(user));
@@ -646,7 +651,9 @@ public:
             ServiceFriend value;value.gamertag=target.gamertag;value.accepted=sent&&received;
             value.requestSent=sent&&!received;value.requestReceived=received&&!sent;
             value.online=value.accepted&&std::find(slots_.begin(),slots_.end(),target.userId)!=slots_.end();
-            value.presence=value.online?presence_[target.userId]:"";result.push_back(std::move(value));
+            value.presence=value.online?presence_[target.userId]:"";
+            value.away=value.online&&status_[target.userId]=="away";value.busy=value.online&&status_[target.userId]=="busy";
+            result.push_back(std::move(value));
         }return result;
     }
     void changeFriend(const std::string& user,const std::string& tag,const std::string& action) override {
@@ -657,6 +664,10 @@ public:
         else throw Unavailable("Invalid friendship operation.");
     }
     void setPresence(const std::string& user,int,const std::string& text) override {require(user);presence_[user]=text;}
+    void setPresenceStatus(const std::string& user,const std::string& status) override {
+        require(user);if(status!="online"&&status!="away"&&status!="busy")throw ServiceOperationError("INVALID_ARGUMENT");
+        status_[user]=status;
+    }
     void sendMessage(const std::string& user,const std::vector<std::string>& tags,const std::string& text) override {
         require(user);if(tags.empty()||tags.size()>100||text.size()>256)throw ServiceOperationError("INVALID_ARGUMENT");
         for(const auto& tag:tags){const auto target=profile(tag).userId;if(target==user)throw ServiceOperationError("INVALID_ARGUMENT");
@@ -811,7 +822,7 @@ private:
     std::array<std::string,4> slots_{};
     std::map<std::string,std::map<std::string,long long>> earned_;
     std::set<std::pair<std::string,std::string>> edges_;
-    std::map<std::string,std::string> presence_;
+    std::map<std::string,std::string> presence_,status_;
 };
 thread_local int serviceRestrictionDepth=0;
 std::mutex registryMutex;

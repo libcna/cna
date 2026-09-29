@@ -102,9 +102,9 @@ namespace Microsoft::Xna::Framework::GamerServices
             std::vector<std::shared_ptr<FriendGamer>> owned;
             std::vector<FriendGamer*> friends;
             for (const auto& entry : CNA::Internal::GamerServices::backend()->friends(serviceUserId_)) {
-                // CNA has no away/busy status and carries no voice, so those flags stay false; an
-                // online CNA account is always in a game, so it is playing.
-                auto friendGamer = std::shared_ptr<FriendGamer>(new FriendGamer(entry.gamertag, entry.gamertag, entry.online, entry.online, false, false, entry.requestSent, entry.requestReceived));
+                // Away/busy is the status the friend chose (the Guide's Online status); an online
+                // CNA account is always in a game, so it is playing.
+                auto friendGamer = std::shared_ptr<FriendGamer>(new FriendGamer(entry.gamertag, entry.gamertag, entry.online, entry.online, entry.away, entry.busy, entry.requestSent, entry.requestReceived));
                 friendGamer->presence_ = entry.presence;
                 friendGamer->isJoinable_ = entry.joinable;
                 friendGamer->inviteReceivedFrom_ = entry.inviteReceivedFrom;

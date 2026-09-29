@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
+#include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
 #include "CNA/GamerServices/Configuration.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
@@ -304,6 +305,9 @@ int main(int argc,char** argv) {
             if(std::string(argv[4])=="presence-wait") {
                 check(gamer->IsFriend(target.get()),"real mutual friendship");
                 gamer->getPresenceProperty().setPresenceModeProperty(GamerPresenceMode::Level);gamer->getPresenceProperty().setPresenceValueProperty(12);
+                // GSP-L2: the account-wide status the Guide's Online status sets.
+                const auto self=Service::GamerAccess::userId(*gamer);auto* executor=Service::backend().get();
+                Service::backend()->submit([executor,self]{executor->setPresenceStatus(self,"busy");},[]{});
                 GamerServicesDispatcher::Update();bool barrier=false;Service::backend()->submit([]{},[&]{barrier=true;});
                 while(!barrier){GamerServicesDispatcher::Update();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
                 std::cout<<"READY_PRESENCE"<<std::endl;std::string command;std::getline(std::cin,command);
@@ -315,6 +319,7 @@ int main(int argc,char** argv) {
             check(friends[0]->getPresenceProperty()=="Level 12","real rich presence/value");
             check(friends[0]->getIsPlayingProperty()&&!friends[0]->getIsJoinableProperty()&&!friends[0]->getInviteReceivedFromProperty()
                 &&!friends[0]->getInviteSentToProperty()&&!friends[0]->getIsAwayProperty(),"real friend state flags");
+            check(friends[0]->getIsBusyProperty(),"real friend chose busy");
             Guide::ShowFriends(Microsoft::Xna::Framework::PlayerIndex::One);Guide::SimulateMessageBoxClickEXT(2);
         }
         if(real&&std::string(argv[4])=="revoke-wait") {

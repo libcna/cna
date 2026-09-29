@@ -217,7 +217,7 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
 | GSP-J1 | `AvatarDescription.Changed` | done |
 | GSP-K1 | Online host migration | todo |
 | GSP-K2 | Online `AddLocalGamer` | todo |
-| GSP-L1..L6 | Account GameDefaults, away/busy, toasts, Stream columns, guests, QoS bandwidth | todo |
+| GSP-L1..L6 | Account GameDefaults, away/busy, toasts, Stream columns, guests, QoS bandwidth | L2 done; others todo |
 | GSP-M1 | GamerZone / Reputation | todo |
 | GSP-O1 | Server concurrency benchmark and production audit | todo |
 | GSP-P1 | Documentation truth pass | todo |
@@ -267,6 +267,14 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   embedded avatar first in the process 70-72 ms, another 40-44 ms, the same again 0.1 ms (model
   cache); an avatar with a service-only item 339 ms on first use (manifest + download) and 89 ms
   from the disk cache (manifest request + verified read).
+- GSP-L2 (away/busy): an account-wide status the player chooses in the system Guide (Online
+  status: Online / Away / Busy), stored by the service (schema 15, `presence.status`, capability
+  `presence-status`) and reported to accepted, online friends as `away`/`busy`, which
+  `FriendGamer.IsAway`/`IsBusy` return. It is never inferred from inactivity: Xbox's status was
+  the player's choice, and the service has no reliable idle signal. Tests: server unit (status
+  per title and account, invalid values), CNA `SystemGuideTest.OnlineStatusIsWhatFriendsSeeAsAwayOrBusy`,
+  and the live transport e2e (a real Busy friend). While here the server's "future schema" unit
+  check was repaired (broken since migration 014) by one `SchemaVersion` constant.
 - Visual evidence lives outside the repositories, as the sample evidence does:
   `/rv/tmp/avatar-polish/evidence/{before,after}/`.
 - BEFORE (catalog v1, 2026-09-29): `evidence/before/{jobs.json, preview/, opengl33/,
