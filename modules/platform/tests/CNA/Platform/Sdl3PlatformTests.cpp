@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdint>
 #include <cstdlib>
 #include <functional>
 #include <memory>
@@ -380,54 +381,68 @@ namespace {
         }));
     }
 
-    /// SDL_PushEvent needs a running event queue, which the video subsystem brings in a game but
-    /// nothing guarantees when these tests run on their own.
-    struct EventQueueRunning
+    /// A push needs a running event queue: a game has one through video, a test run on its own
+    /// may not. Held for the whole test, because stopping the queue discards what it holds.
+    class EventQueue
     {
-        EventQueueRunning() { up = SDL_InitSubSystem(SDL_INIT_EVENTS); }
-        ~EventQueueRunning()
+    public:
+        EventQueue() : up_(SDL_InitSubSystem(SDL_INIT_EVENTS)) {}
+        ~EventQueue()
         {
-            if (up)
+            if (up_)
             {
                 SDL_QuitSubSystem(SDL_INIT_EVENTS);
             }
         }
-        bool up = false;
+        EventQueue(const EventQueue&) = delete;
+        EventQueue& operator=(const EventQueue&) = delete;
+
+        [[nodiscard]] bool Up() const noexcept { return up_; }
+
+        /// Pushes one event of @p type. With @p watchersOnly its queued copy is removed again,
+        /// which leaves what the application-lifecycle sender leaves: the watchers told and
+        /// nothing queued.
+        [[nodiscard]] bool Push(std::uint32_t type, bool watchersOnly) const
+        {
+            SDL_Event event{};
+            event.type = type;
+            const bool pushed = SDL_PushEvent(&event);
+            if (watchersOnly)
+            {
+                SDL_FlushEvent(type);
+            }
+            return pushed;
+        }
+
+    private:
+        bool up_;
     };
 }
 
 TEST_F(Sdl3PlatformTest, LifecycleEventsSdlNeverQueuesStillReachPollEvents)
 {
-    // SDL_SendAppEvent hands entering the background/foreground, low memory and termination to
-    // the event watchers only; SDL_PollEvent never returns them. Pushing one and flushing the
-    // queued copy before polling reproduces exactly that on the desktop.
-    const EventQueueRunning queue;
-    ASSERT_TRUE(queue.up) << SDL_GetError();
+    // Entering the background or foreground, low memory and termination go to event watchers
+    // only; polling the queue never returns them.
+    const EventQueue queue;
+    ASSERT_TRUE(queue.Up());
     std::vector<PlatformEvent> batch;
     platform_->PollEvents(batch);
 
-    SDL_Event background{};
-    background.type = SDL_EVENT_WILL_ENTER_BACKGROUND;
-    ASSERT_TRUE(SDL_PushEvent(&background));
-    SDL_FlushEvent(SDL_EVENT_WILL_ENTER_BACKGROUND);
-
+    ASSERT_TRUE(queue.Push(SDL_EVENT_WILL_ENTER_BACKGROUND, true));
     platform_->PollEvents(batch);
     EXPECT_EQ(CountLifecycle(batch, AppLifecycleKind::WillEnterBackground), 1u);
 }
 
 TEST_F(Sdl3PlatformTest, APushedLifecycleEventArrivesExactlyOnce)
 {
-    // SDL_PushEvent both notifies the watchers and queues, so the queued copy must not be
-    // delivered a second time.
-    const EventQueueRunning queue;
-    ASSERT_TRUE(queue.up) << SDL_GetError();
+    // A push both notifies the watchers and queues, so the queued copy must not be delivered a
+    // second time.
+    const EventQueue queue;
+    ASSERT_TRUE(queue.Up());
     std::vector<PlatformEvent> batch;
     platform_->PollEvents(batch);
 
-    SDL_Event foreground{};
-    foreground.type = SDL_EVENT_DID_ENTER_FOREGROUND;
-    ASSERT_TRUE(SDL_PushEvent(&foreground));
-
+    ASSERT_TRUE(queue.Push(SDL_EVENT_DID_ENTER_FOREGROUND, false));
     platform_->PollEvents(batch);
     EXPECT_EQ(CountLifecycle(batch, AppLifecycleKind::DidEnterForeground), 1u);
     platform_->PollEvents(batch);
