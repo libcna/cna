@@ -118,8 +118,7 @@ TEST_F(SystemGuideTest, WithNobodySignedInItOffersSignIn) {
     EXPECT_EQ(std::vector<std::string>{"Sign in"}, Ui::labelsForTesting());
     EXPECT_EQ(0, Ui::focusForTesting());
     Ui::sendForTesting(Ui::Command::Accept);
-    ASSERT_TRUE(Guide::getHasPendingKeyboardInputEXTProperty());
-    EXPECT_EQ("Sign in", Guide::GetPendingKeyboardInputTitleForTestingEXT());
+    ASSERT_EQ("signIn", Ui::currentScreenForTesting());
     Type("Robin");
     ASSERT_TRUE(Settle([] { return Count() == 1; }));
     EXPECT_EQ("Robin", (*Gamer::getSignedInGamersProperty())[0]->getGamertagProperty());
@@ -131,7 +130,7 @@ TEST_F(SystemGuideTest, APlayersButtonSignsInThatPlayersSlot) {
     ASSERT_TRUE(Choose("Sign in"));
     // Two panes: the first empty slot is player one's, then player two's.
     Type("Robin");
-    ASSERT_TRUE(Settle([] { return Count() == 1 && Guide::getHasPendingKeyboardInputEXTProperty(); }));
+    ASSERT_TRUE(Settle([] { return Count() == 1 && Ui::currentScreenForTesting() == "signIn"; }));
     Type("Sam");
     ASSERT_TRUE(Settle([] { return Count() == 2; }));
     EXPECT_EQ(PlayerIndex::Two, (*Gamer::getSignedInGamersProperty())[1]->getPlayerIndexProperty());
@@ -236,7 +235,8 @@ TEST_F(SystemGuideTest, AGuestSignsInWithItsAccountAndLeavesWithIt) {
     fake->signIn(0, "Alice", "fixture");
     ASSERT_TRUE(Settle([] { return Count() == 1; }));
     Guide::ShowSignIn(2, true);
-    ASSERT_TRUE(Guide::getHasPendingKeyboardInputEXTProperty());
+    ASSERT_EQ("signIn", Ui::currentScreenForTesting());
+    EXPECT_EQ((std::vector<std::string>{"Sign in with a CNA account", "Play as a guest of Alice"}), Ui::labelsForTesting());
     Type("guest");
     ASSERT_TRUE(Settle([] { return Count() == 2; }));
     auto* guest = (*Gamer::getSignedInGamersProperty())[PlayerIndex::Two];

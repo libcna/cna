@@ -527,7 +527,10 @@ void drawDialog(Ui& ui,Screen& screen,float appear)
     ui.style.rounded(ui.batch,card,ui.px(20),faded(Palette::panel(),appear));
     ui.style.rounded(ui.batch,Box{card.x,card.y,card.w,ui.px(6)},ui.px(3),faded(Palette::accent(),appear));
     ui.style.text(ui.batch,Font::Heading,screen.title(),Xna::Vector2(card.x+ui.px(28),card.y+ui.px(24)),faded(Palette::text(),appear));
-    const Box content{card.x+ui.px(28),card.y+ui.px(74),card.w-ui.px(56),card.h-ui.px(74)-ui.px(66)};
+    const auto subtitle=screen.subtitle();
+    if(!subtitle.empty())ui.style.text(ui.batch,Font::Body,subtitle,Xna::Vector2(card.x+ui.px(28),card.y+ui.px(62)),faded(Palette::muted(),appear));
+    const float top=ui.px(subtitle.empty()?74:108);
+    const Box content{card.x+ui.px(28),card.y+top,card.w-ui.px(56),card.h-top-ui.px(66)};
     screen.draw(ui,content);
     drawHints(ui,screen.hints(),Xna::Vector2(card.right()-ui.px(26),card.bottom()-ui.px(32)),true);
 }

@@ -160,7 +160,8 @@ int main(int argc,char** argv) {
             waitFor(localCount);check((*collection)[0]->getGamertagProperty()=="Alice","restored service identity");
         }else {
         Guide::ShowSignIn(localCount,true);
-        check(Guide::getIsVisibleProperty()&&Guide::getHasPendingKeyboardInputEXTProperty(),"Guide username pane");
+        // The sign-in picker; typing the account name starts it.
+        check(Guide::getIsVisibleProperty()&&Ui::currentScreenForTesting()=="signIn","Guide sign-in picker");
         bool busy=false;try{Guide::ShowSignIn(1,true);}catch(const GuideAlreadyVisibleException&){busy=true;}check(busy,"Guide overlapping sign-in");
         for(int i=0;i<localCount;++i) {
             const std::array<std::string,4> accounts{"alice","bob","charlie","dana"};
@@ -394,10 +395,12 @@ int main(int argc,char** argv) {
         // XNA disposes a signed-out gamer and leaves IsSignedInToLive as it was.
         check(signedOut==1&&retired->getIsDisposedProperty()&&retired->getIsSignedInToLiveProperty(),"retired identity/event lifetime");
         if(!real) {
-            Guide::ShowSignIn(1,true);Guide::SimulateKeyboardInputCancelEXT();
-            check(!Guide::getIsVisibleProperty()&&collection->getCountProperty()==3,"Guide username cancellation");
+            // Back on the picker cancels; cancelling the password returns to the picker.
+            Guide::ShowSignIn(1,true);Ui::sendForTesting(Ui::Command::Back);
+            check(!Guide::getIsVisibleProperty()&&collection->getCountProperty()==3,"Guide sign-in cancellation");
             Guide::ShowSignIn(1,true);enterText("Player0");Guide::SimulateKeyboardInputCancelEXT();
-            check(!Guide::getIsVisibleProperty(),"Guide password cancellation");
+            check(Ui::currentScreenForTesting()=="signIn"&&!Guide::getHasPendingKeyboardInputEXTProperty(),"Guide password cancellation");
+            Ui::sendForTesting(Ui::Command::Back);check(!Guide::getIsVisibleProperty(),"Guide sign-in closed");
         }
         SignedInGamer::SignedIn.Remove(in);SignedInGamer::SignedOut.Remove(out);
         std::fill(password.begin(),password.end(),'\0');std::cout<<checks<<" client checks passed\n";return 0;

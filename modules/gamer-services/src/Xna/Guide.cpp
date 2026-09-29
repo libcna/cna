@@ -454,7 +454,6 @@ namespace Microsoft::Xna::Framework::GamerServices
                 if(!taken)return name;
             }
         }
-        std::string signInUsername;
         std::string Folded(std::string value) {
             for(auto& c:value)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
             return value;
@@ -465,76 +464,54 @@ namespace Microsoft::Xna::Framework::GamerServices
             return false;
         }
         void EndLocalSignIn(const std::string& message) {
-            signInActive = false; SyncTouchInputSuppression();
+            signInActive = false; CNA::Internal::GamerServices::GuideUi::closeAll(); SyncTouchInputSuppression();
             (void)CNA::Internal::GamerServices::showGuideMessageBox(static_cast<PlayerIndex>(signInSlot), "Sign in", message, {"OK"}, 0, MessageBoxIcon::Error,
                 [](System::IAsyncResult& result) { std::unique_ptr<System::IAsyncResult> owned(&result); (void)Guide::EndShowMessageBox(&result); }, {});
         }
-        // Without a service, a pane signs in a local offline profile, creating it on first use.
-        void StartLocalSignInPane() {
+        // Without a service, a local offline profile, created on first use.
+        void SignInLocalProfile(std::string name) {
             namespace Service = CNA::Internal::GamerServices;
-            std::string known, suggestion; int listed = 0;
-            for (const auto& profile : Service::loadLocalProfiles()) {
-                if (ProfileSignedIn(profile.gamertag)) continue;
-                if (suggestion.empty()) suggestion = profile.gamertag;
-                if (listed++ < 8) known += (known.empty() ? "" : ", ") + profile.gamertag;
+            const auto first = name.find_first_not_of(' '), last = name.find_last_not_of(' ');
+            name = first == std::string::npos ? std::string{} : name.substr(first, last - first + 1);
+            if (!Service::isValidLocalGamertag(name)) {
+                EndLocalSignIn("Profile names are 1 to 15 letters, digits and single spaces, starting with a letter."); return;
             }
-            const auto player = "Profile for player " + std::to_string(signInSlot + 1);
-            (void)CNA::Internal::GamerServices::showGuideKeyboardInput(static_cast<PlayerIndex>(signInSlot), "Sign in",
-                known.empty() ? player + ". Enter a name to create a profile." : player + ": " + known + ", or a new name.",
-                suggestion, [](System::IAsyncResult& input) {
-                    std::unique_ptr<System::IAsyncResult> owned(&input);
-                    if (Guide::WasKeyboardInputCanceledEXT(&input)) { signInActive = false; SyncTouchInputSuppression(); return; }
-                    auto name = Guide::EndShowKeyboardInput(&input);
-                    const auto first = name.find_first_not_of(' '), last = name.find_last_not_of(' ');
-                    name = first == std::string::npos ? std::string{} : name.substr(first, last - first + 1);
-                    if (!Service::isValidLocalGamertag(name)) {
-                        EndLocalSignIn("Profile names are 1 to 15 letters, digits and single spaces, starting with a letter."); return;
-                    }
-                    if (ProfileSignedIn(name)) { EndLocalSignIn("That profile is already signed in."); return; }
-                    const auto profile = Service::openLocalProfile(name);
-                    try { Service::backend()->signInLocal(signInSlot, profile.gamertag); }
-                    catch (...) { signInActive = false; SyncTouchInputSuppression(); throw; }
-                    SyncTouchInputSuppression();
-                }, {});
+            if (ProfileSignedIn(name)) { EndLocalSignIn("That profile is already signed in."); return; }
+            const auto profile = Service::openLocalProfile(name);
+            try { Service::backend()->signInLocal(signInSlot, profile.gamertag); }
+            catch (...) { signInActive = false; Service::GuideUi::closeAll(); SyncTouchInputSuppression(); throw; }
+            SyncTouchInputSuppression();
         }
         void StartSignInPane() {
+            namespace Service = CNA::Internal::GamerServices;
             auto occupied=[](int slot) {
                 for(auto* gamer:*Gamer::getSignedInGamersProperty())
                     if(gamer->getPlayerIndexProperty()==static_cast<PlayerIndex>(slot))return true;
                 return false;
             };
             while (signInSlot < signInPaneCount && occupied(signInSlot)) ++signInSlot;
-            if (signInSlot >= signInPaneCount) { signInActive = false; SyncTouchInputSuppression(); return; }
-            if (signInLocal) { StartLocalSignInPane(); return; }
-            auto* host = signInOnlineOnly ? GuestHost() : nullptr;
-            const std::string prompt = "Username for player " + std::to_string(signInSlot + 1) +
-                (host ? ", or Guest to play as a guest of " + host->getGamertagProperty() : "");
-            (void)CNA::Internal::GamerServices::showGuideKeyboardInput(static_cast<PlayerIndex>(signInSlot), "CNA Gamer Services sign-in",
-                prompt, "", [](System::IAsyncResult& usernameResult) {
-                    std::unique_ptr<System::IAsyncResult> owned(&usernameResult);
-                    if (Guide::WasKeyboardInputCanceledEXT(&usernameResult)) { signInActive = false; SyncTouchInputSuppression(); return; }
-                    signInUsername = Guide::EndShowKeyboardInput(&usernameResult);
-                    if(signInUsername.empty()||signInUsername.size()>64){signInActive=false;signInUsername.clear();SyncTouchInputSuppression();return;}
-                    std::string lowered=signInUsername;
-                    std::transform(lowered.begin(),lowered.end(),lowered.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
-                    if(auto* guestHost=signInOnlineOnly?GuestHost():nullptr;guestHost&&lowered=="guest") {
-                        // A guest needs no password: it plays on its account's sign-in.
-                        signInUsername.clear();
-                        CNA::Internal::GamerServices::backend()->signInGuest(signInSlot,GuestName(*guestHost),
-                            static_cast<int>(guestHost->getPlayerIndexProperty()));
-                        SyncTouchInputSuppression();return;
-                    }
-                    (void)CNA::Internal::GamerServices::showGuideKeyboardInput(static_cast<PlayerIndex>(signInSlot), "CNA Gamer Services sign-in", "Password", "",
-                        [](System::IAsyncResult& passwordResult) {
-                            std::unique_ptr<System::IAsyncResult> passwordOwned(&passwordResult);
-                            if (Guide::WasKeyboardInputCanceledEXT(&passwordResult)) { signInActive = false; SyncTouchInputSuppression(); return; }
-                            auto password = Guide::EndShowKeyboardInput(&passwordResult);
-                            if(password.size()>256){std::fill(password.begin(),password.end(),'\0');signInActive=false;signInUsername.clear();SyncTouchInputSuppression();return;}
-                            try {CNA::Internal::GamerServices::backend()->signIn(signInSlot, signInUsername, std::move(password));}
-                            catch(...) {signInActive=false;signInUsername.clear();SyncTouchInputSuppression();throw;}
-                            signInUsername.clear(); SyncTouchInputSuppression();
-                        }, {}, true);
-                }, {});
+            if (signInSlot >= signInPaneCount) { signInActive = false; Service::GuideUi::closeAll(); SyncTouchInputSuppression(); return; }
+            // The console's sign-in: the player slots and what this player may sign in as.
+            Service::GuideUi::SignInRequest request;
+            request.slot = signInSlot; request.panes = signInPaneCount; request.local = signInLocal;
+            if (signInLocal)
+                for (const auto& profile : Service::loadLocalProfiles())
+                    if (!ProfileSignedIn(profile.gamertag)) request.profiles.push_back(profile.gamertag);
+            if (auto* host = signInOnlineOnly ? GuestHost() : nullptr) request.guestHost = host->getGamertagProperty();
+            Service::GuideUi::SignInHandlers handlers;
+            handlers.local = [](const std::string& name) { SignInLocalProfile(name); };
+            handlers.account = [](const std::string& username, std::string password) {
+                try { Service::backend()->signIn(signInSlot, username, std::move(password)); }
+                catch (...) { signInActive = false; Service::GuideUi::closeAll(); SyncTouchInputSuppression(); throw; }
+            };
+            handlers.guest = [] {
+                // A guest needs no password: it plays on its account's sign-in.
+                if (auto* host = GuestHost())
+                    Service::backend()->signInGuest(signInSlot, GuestName(*host), static_cast<int>(host->getPlayerIndexProperty()));
+            };
+            handlers.cancel = [] { signInActive = false; SyncTouchInputSuppression(); };
+            Service::GuideUi::open(Service::GuideUi::signInScreen(static_cast<PlayerIndex>(signInSlot), std::move(request), std::move(handlers)),
+                static_cast<PlayerIndex>(signInSlot));
         }
     }
 
@@ -1036,6 +1013,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         if (success) { ++signInSlot; StartSignInPane(); }
         else {
             signInActive = false;
+            CNA::Internal::GamerServices::GuideUi::closeAll();
             (void)CNA::Internal::GamerServices::showGuideMessageBox(static_cast<PlayerIndex>(slot), "CNA Gamer Services", "Sign-in failed. Check the account and service connection.",
                 {"OK"}, 0, MessageBoxIcon::Error, [](System::IAsyncResult& result) {
                     std::unique_ptr<System::IAsyncResult> owned(&result); (void)Guide::EndShowMessageBox(&result);

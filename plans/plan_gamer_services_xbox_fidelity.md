@@ -163,7 +163,7 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
 | GSX-U0 | System UI audit: every Guide pane, editor and demo; deterministic BEFORE screenshots; visual inventory | done |
 | GSX-U1 | One CNA system visual language (panel, title, tabs, focus, buttons, identity, presence, toast, dialog, loading, error) shared by Guide and editor | done (Guide); editor in U2 |
 | GSX-U2 | Console-style avatar editor: large live preview, categories, rendered item cards, contextual camera, human face controls, coherent randomize, transactional save/cancel | |
-| GSX-U3 | Sign-in as profile selection over four player slots | |
+| GSX-U3 | Sign-in as profile selection over four player slots | done |
 | GSX-U4 | Gamer Card with avatar, presence, zone, reputation, relationship and actions | done |
 | GSX-U5 | Friends, invitations (send/receive as system events), notifications | done |
 | GSX-U6 | Achievements and leaderboards presentation | |
@@ -221,3 +221,12 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
   `GraphicsDevice.Disposing`), and static teardown after the device (the UI state is never
   destroyed). Evidence: `/rv/tmp/xbox-fidelity/ui/after1/`. GS 570 + 1 skip, Net 504/504,
   Runtime 192 + 2, server corpus 28/28 with every CNA harness.
+- GSX-U3 (sign-in). `ShowSignIn` opens a picker: the four player slots (who is signed in, the one
+  choosing, the ones still to come), then what this player may be: this computer's local profiles
+  with their avatars, a new profile, a CNA account, or a guest of the signed-in account for an
+  online-only sign-in. Typing starts a name at once (the name or account field opens with the
+  first character), so keyboard players and every existing automated sign-in still just type;
+  Enter alone takes the focused profile; cancelling a name or password returns to the picker, Back
+  there ends sign-in. The slot shows "Signing in" while the service answers. Tests and the TLS
+  client harness follow the picker (21 sign-in and system-Guide tests; harness 120 checks);
+  `service_tls_e2e`, `service_cna_session`, `service_cna_invite`, `service_cna_avatars` pass.

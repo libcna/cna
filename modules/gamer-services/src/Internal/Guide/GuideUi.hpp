@@ -71,6 +71,34 @@ std::shared_ptr<Screen> contentScreen(Microsoft::Xna::Framework::PlayerIndex pla
 std::shared_ptr<Screen> invitationScreen(Microsoft::Xna::Framework::PlayerIndex player,std::string sender,std::string senderId,
     std::string detail,std::function<void(std::optional<bool>)> answer);
 
+/** @brief What one player's sign-in may choose from. */
+struct SignInRequest {
+    /** @brief The slot being signed in (0..3). */
+    int slot=0;
+    /** @brief Slots the game asked for (1, 2 or 4). */
+    int panes=1;
+    /** @brief Offline: local profiles only. */
+    bool local=false;
+    /** @brief The account a guest would join as (online-only sign-in), or empty. */
+    std::string guestHost;
+    /** @brief Local profiles not yet signed in. */
+    std::vector<std::string> profiles;
+};
+/** @brief What a sign-in choice does (the XNA Guide's sign-in state). */
+struct SignInHandlers {
+    /** @brief Sign in (or create) a local profile by name. */
+    std::function<void(const std::string&)> local;
+    /** @brief Sign in to an account. */
+    std::function<void(const std::string&,std::string)> account;
+    /** @brief Sign in as a guest of guestHost. */
+    std::function<void()> guest;
+    /** @brief The player cancelled. */
+    std::function<void()> cancel;
+};
+/** @brief The sign-in picker for one slot. @param player Slot's player. @param request Choices.
+ * @param handlers What they do. @return Screen. */
+std::shared_ptr<Screen> signInScreen(Microsoft::Xna::Framework::PlayerIndex player,SignInRequest request,SignInHandlers handlers);
+
 /** @brief A system notification. */
 struct Notification {
     /** @brief What it is about, which picks its icon. */
