@@ -217,7 +217,7 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
 | GSP-J1 | `AvatarDescription.Changed` | done |
 | GSP-K1 | Online host migration | done |
 | GSP-K2 | Online `AddLocalGamer` | done |
-| GSP-L1..L6 | Account GameDefaults, away/busy, toasts, Stream columns, guests, QoS bandwidth | L2 done; others todo |
+| GSP-L1..L6 | Account GameDefaults, away/busy, toasts, Stream columns, guests, QoS bandwidth | L2, L3 done; others todo |
 | GSP-M1 | GamerZone / Reputation | todo |
 | GSP-O1 | Server concurrency benchmark and production audit | todo |
 | GSP-P1 | Documentation truth pass | todo |
@@ -295,6 +295,14 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   reference passes 4. Tests: 3 new `OnlineNetworkSessionTest`, server directory (+15 assertions),
   new e2e `service_cna_session_add_gamer` (NAT, both kinds, 10.8 s); Net 501/501, GS 543 + 1 skip;
   20/20 server session/relay tests.
+- GSP-L3 (Guide notifications). XNA's `NotificationPosition` setter hands the position to the
+  system, which draws its toasts there; CNA's Guide overlay now does: a queue (one shown for four
+  seconds, eight kept), drawn at the position inside a 5 % title-safe margin without taking input,
+  for sign-in/sign-out and first-time achievement unlocks (the service's `achievements.award` now
+  says whether the call earned it, and its name). Invitations keep their Guide pane. Tests:
+  `GuideNotificationTest` (nine positions, timing, burst, sign-in/award/sign-out); the avatar
+  editor's captures draw the overlay, and `/rv/tmp/avatar-polish/editor/capture/01-body.png`
+  shows "Editor signed in" at bottom center.
 - Visual evidence lives outside the repositories, as the sample evidence does:
   `/rv/tmp/avatar-polish/evidence/{before,after}/`.
 - BEFORE (catalog v1, 2026-09-29): `evidence/before/{jobs.json, preview/, opengl33/,

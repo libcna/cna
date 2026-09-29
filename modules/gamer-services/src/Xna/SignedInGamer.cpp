@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
+#include "../Internal/GuideOverlay.hpp"
 #include "CNA/Internal/GamerServices/LocalGamerServicesStore.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/Audio/Microphone.hpp"
@@ -122,7 +123,8 @@ namespace Microsoft::Xna::Framework::GamerServices
     void SignedInGamer::AwardAchievement(const std::string& achievementKey)
     {
         if (!serviceUserId_.empty()) {
-            CNA::Internal::GamerServices::backend()->award(serviceUserId_, achievementKey);
+            const auto name = CNA::Internal::GamerServices::backend()->award(serviceUserId_, achievementKey);
+            if (!name.empty()) CNA::Internal::GamerServices::postGuideNotification("Achievement unlocked: " + name);
             return;
         }
         // Offline, a title that ships an achievement catalog awards only what it defines, as the
@@ -135,6 +137,10 @@ namespace Microsoft::Xna::Framework::GamerServices
         CNA::Internal::GamerServices::SaveEarnedAchievementEXT(
             getGamertagProperty(), achievementKey, System::DateTime::getNowProperty().getTicksProperty()
         );
+        std::string name = achievementKey;
+        if (catalog)
+            for (const auto& entry : *catalog) if (entry.Key == achievementKey && !entry.Name.empty()) name = entry.Name;
+        CNA::Internal::GamerServices::postGuideNotification("Achievement unlocked: " + name);
     }
 
     System::IAsyncResult* SignedInGamer::BeginAwardAchievement(
@@ -145,7 +151,11 @@ namespace Microsoft::Xna::Framework::GamerServices
         if (!serviceUserId_.empty()) {
             auto service = CNA::Internal::GamerServices::backend(); const auto user = serviceUserId_;
             return CNA::Internal::GamerServices::ServiceAsyncResult::begin("award", this,
-                [user, achievementKey](auto& executor) -> std::any { executor.award(user, achievementKey); return {}; }, std::move(callback), std::move(state),std::move(service));
+                [user, achievementKey](auto& executor) -> std::any {
+                    const auto name = executor.award(user, achievementKey);
+                    if (!name.empty()) CNA::Internal::GamerServices::postGuideNotification("Achievement unlocked: " + name);
+                    return {};
+                }, std::move(callback), std::move(state),std::move(service));
         }
         AwardAchievement(achievementKey);
         // FNA: the overlap check on statStoreAction is intentionally a no-op — the
@@ -273,6 +283,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void SignedInGamer::OnSignIn(SignedInGamer* gamer)
     {
+        CNA::Internal::GamerServices::postGuideNotification(gamer->getGamertagProperty() + " signed in");
         if (!SignedIn.Empty())
         {
             SignedIn.Raise(nullptr, SignedInEventArgs(gamer));
@@ -281,6 +292,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void SignedInGamer::OnSignOut(SignedInGamer* gamer)
     {
+        CNA::Internal::GamerServices::postGuideNotification(gamer->getGamertagProperty() + " signed out");
         if (!SignedOut.Empty())
         {
             SignedOut.Raise(nullptr, SignedOutEventArgs(gamer));

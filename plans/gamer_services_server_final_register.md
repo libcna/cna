@@ -37,7 +37,6 @@ Each is documented where it is declared (C++ and C) and in `docs/xna-4-api-cover
 | `QualityOfService` bandwidth | 0 | Only the discovery round trip is measured; service search results are unmeasured (`IsAvailable` false). |
 | `GameDefaults` for accounts | XNA's unset values | Accounts carry no game defaults; local profiles do (GS-004r). |
 | `GamerServicesDispatcher.InstallingTitleUpdate` | never raised | CNA installs no title updates. |
-| `Guide.NotificationPosition` | stored; no toasts are drawn | The Guide shows invitation prompts as panes, not toasts. |
 | `WriteTrueSkill` | raised; no skill is computed | Skill boards are ordinary arbitrated boards (GS-006e). |
 | Leaderboard `Stream` columns | not stored | No stream storage on the service. |
 | Guest sign-in (`ShowSignIn` guests) | not offered | Accounts and local profiles only. |

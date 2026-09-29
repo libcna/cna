@@ -218,7 +218,12 @@ public:
             a.score=entry["score"].get<int>();a.earnedTicks=entry["earnedTicks"].get<long long>();a.displayBeforeEarned=entry["display"].get<bool>();values.push_back(std::move(a));
         }return values;
     }
-    void award(const std::string& user,const std::string& key) override {(void)request("achievements.award",{{"key",key}},tokenFor(user));}
+    std::string award(const std::string& user,const std::string& key) override {
+        const auto result=request("achievements.award",{{"key",key}},tokenFor(user));
+        // A service older than these fields answers with an empty object.
+        if(!result.is_object()||!result.contains("awarded")||!result["awarded"].is_boolean()||!result["awarded"].get<bool>())return {};
+        return CnaService::stringField(result,"name",128);
+    }
     std::vector<ServiceFriend> friends(const std::string& user) override {
         const auto result=request("friends.list",Json::object(),tokenFor(user));const auto& entries=result.at("friends");
         if(!entries.is_array()||entries.size()>256)throw Unavailable("Invalid friend response.");
@@ -639,8 +644,12 @@ public:
     std::vector<ServiceAchievement> achievements(const std::string& user) override {
         require(user);auto values=catalog_;for(auto& entry:values)entry.earnedTicks=earned_[user][entry.key];return values;
     }
-    void award(const std::string& user,const std::string& key) override {
-        require(user);for(const auto& entry:catalog_)if(entry.key==key){if(!earned_[user][key])earned_[user][key]=638000000000000000LL;return;}
+    std::string award(const std::string& user,const std::string& key) override {
+        require(user);
+        for(const auto& entry:catalog_)if(entry.key==key) {
+            if(earned_[user][key])return {};
+            earned_[user][key]=638000000000000000LL;return entry.name;
+        }
         throw Unavailable("Achievement not found.");
     }
     std::vector<ServiceFriend> friends(const std::string& user) override {

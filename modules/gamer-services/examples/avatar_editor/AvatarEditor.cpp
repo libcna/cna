@@ -20,6 +20,7 @@
 #include "CNA/Internal/GamerServices/ServiceSessionDirectory.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include "CNA/Internal/Graphics/SystemFont.hpp"
+#include "CNA/Internal/Runtime/IGameOverlay.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -325,6 +326,9 @@ namespace
             auto& device = getGraphicsDeviceProperty();
             device.SetRenderTarget(captureTarget_.get());
             DrawFrame();
+            // What the player sees includes the Guide's notifications ("Editor signed in").
+            if (auto* overlay = getServicesProperty().GetService<CNA::Internal::Runtime::IGameOverlay>())
+                overlay->draw();
             device.SetRenderTarget(nullptr);
             std::vector<Color> pixels(static_cast<std::size_t>(Width) * Height);
             captureTarget_->GetData(pixels.data(), static_cast<int>(pixels.size()));

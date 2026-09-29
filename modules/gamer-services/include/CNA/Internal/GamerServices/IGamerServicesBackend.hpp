@@ -187,8 +187,10 @@ public:
     virtual ServiceIdentity profile(const std::string& gamertag) = 0;
     /** @brief Gets achievements. @param userId Authenticated identity. @return Catalog/state. */
     virtual std::vector<ServiceAchievement> achievements(const std::string& userId) = 0;
-    /** @brief Awards a title-defined achievement. @param userId Identity. @param key Catalog key. */
-    virtual void award(const std::string& userId,const std::string& key) = 0;
+    /** @brief Awards a title-defined achievement. @param userId Identity. @param key Catalog key.
+     * @return The achievement's name when this call earned it, else empty (already earned, or a
+     * service that does not say). */
+    virtual std::string award(const std::string& userId,const std::string& key) = 0;
     /** @brief Gets friend snapshot. @param userId Identity. @return Friends. */
     virtual std::vector<ServiceFriend> friends(const std::string& userId) = 0;
     /** @brief Changes an account friendship. @param userId Actor. @param gamertag Target.

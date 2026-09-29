@@ -5,14 +5,34 @@
 #include "System/IAsyncResult.hpp"
 #include "System/IServiceProvider.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/MessageBoxIcon.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/NotificationPosition.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
+#include "Microsoft/Xna/Framework/Point.hpp"
 #include <any>
+#include <chrono>
+#include <functional>
 #include <string>
 #include <vector>
 namespace CNA::Internal::GamerServices {
 /** @brief Installs automatic system Guide presentation in a standard Game service container.
  * @param provider Dispatcher service provider. */
 void installGuideOverlay(System::IServiceProvider& provider);
+/** @brief How long one Guide notification stays on screen. */
+inline constexpr std::chrono::seconds GuideNotificationDuration{4};
+/** @brief Queues a Guide notification toast ("Alice signed in", "Achievement unlocked"), drawn over
+ * the game at Guide.NotificationPosition without taking input; any thread. @param text Message. */
+void postGuideNotification(std::string text);
+/** @brief Gets the notifications showing or waiting, oldest (the one on screen) first.
+ * @return Texts. */
+std::vector<std::string> guideNotifications();
+/** @brief Where a notification box sits for a position, inside a five-percent title-safe margin.
+ * @param position Guide.NotificationPosition. @param screenWidth Back buffer width.
+ * @param screenHeight Back buffer height. @param width Box width. @param height Box height.
+ * @return Top-left corner. */
+Microsoft::Xna::Framework::Point guideNotificationOrigin(Microsoft::Xna::Framework::GamerServices::NotificationPosition position,
+    int screenWidth,int screenHeight,int width,int height);
+/** @brief Replaces the notification clock for tests. @param clock Clock, or empty for steady_clock. */
+void setGuideNotificationClockForTesting(std::function<std::chrono::steady_clock::time_point()> clock);
 /** @brief Gets non-sensitive sign-in progress text. @return Progress label, or empty. */
 std::string guideSignInStatus();
 /** @brief Reports whether the Guide draws in a game (a graphics device service was found).
