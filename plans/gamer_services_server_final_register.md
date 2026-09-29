@@ -81,33 +81,20 @@ hints (GSX-E6).
 
 ## Evidence
 
-Final validation of the avatar fidelity and completion pass, 2026-09-29, CNA branch
-`feature/gamer-services-server` (the GSP commits; `plans/plan_gamer_services_avatar_polish.md`)
-with the server at 4ba7f95 and cna-samples `feature/gamer-services-samples` 378483b:
+Final validation of the Xbox-fidelity pass, 2026-09-30 (`plan_gamer_services_xbox_fidelity.md`,
+acceptance matrix): CNA branch `feature/gamer-services-server`, server 2c974d1, cna-samples 378483b.
 
-- Server corpus with every CNA harness (client, C API, directory, relay, session, avatar) and the
-  slirp4netns NAT helper: **28/28, no skips, 106 s** -- adds host migration and host crash (NAT),
-  AddLocalGamer (NAT) and the benchmark smoke to TLS control and restart, directory, arbitration,
-  avatars and catalog items on demand, social, invitations, WSS relay, owned ENet, sessions,
-  invites and session restart, natively and across separate NAT namespaces. Protocol drift clean.
-- Server capacity (`tests/service_benchmark.py`, Release, 64 players): steady 1,602 req/s (was 73),
-  sign-in storm 1,193 req/s with ordinary requests at p50 49 ms, one address holding 160 idle
-  connections causes no failure, descriptor exhaustion survived (server README).
-- CNA, one process per test: CnaGamerServicesTests **551 + 1 known skip** (552),
-  CnaNetTests **504/504**, CnaRuntimeTests **192 + 2 environment skips**; `CApi_*` **95/98** (the
-  three standing environment smokes: audio, audio-unavailable, content; `CApi_InstalledConsumer`
-  passes) and the twelve `CApi*` gate tests pass (82a3a094c brought the coverage inventory up to
-  the gamer declarations this pass changed; five new `GetTypeName` overrides are planned C routes);
-  C ABI baseline `--check` current (3,202 exports); platform boundary gates pass except
-  the `SDL_TOUCH_MOUSEID` classification inherited from `next`.
-- Samples (Release/OPENGLES3, private Xvfb, evidence directories `*-20260929-polish`): SAMPLE-096
-  Invites pass; SAMPLE-075 NetworkStateManagement SystemLink and LIVE pass; the
-  achievements/leaderboards program passes; SAMPLE-087 AvatarShadows draws 16 catalog v2 avatars
-  with shadows.
-- Avatars: the real renderer (OPENGL33, private display) renders the 255-job catalog v2 review with
-  0 failures (`/rv/tmp/avatar-polish/review-final/`).
-- Demos (cmake-build-opengl33, private display): the SystemLink pairs net_avatar_sync,
-  net_client_server_arena, simulated_network_conditions, gamer_roster_hud, session_browser and
-  qos_probe, and session_lifecycle_events, exit 0; the GamerServices demos (achievement showcase,
-  sign-in/presence, profile/privileges, friends, leaderboard viewer, Guide console, dispatcher
-  watchdog) exit 0 after GSP-P1 fixed their stub-era sign-in.
+- Server corpus with every CNA harness: **28/28**, including the WSS event channel and the CNA
+  client hearing a message through it; capacity re-run in the server README.
+- CNA, one process per test: CnaGamerServicesTests **603 + 1 known skip**, CnaNetTests **515/515**,
+  CnaRuntimeTests **192 + 2 environment skips**; `CApi_*` **107/110** (the three standing
+  environment smokes) with the coverage, limitations and release-gate records current and the ABI
+  baseline current (3,202 exports).
+- Samples (Release/OPENGLES3, private Xvfb, `*-20260930-xbox-fidelity`): SAMPLE-087 AvatarShadows
+  draws 16 catalog v3 avatars with shadows; SAMPLE-096 Invites and SAMPLE-075 (SystemLink and
+  online) sign in through the Guide's picker and invite through a gamer card; the
+  achievements/leaderboards program passes.
+- Avatars: the real renderer draws the 257-job catalog v3 review with 0 failures.
+- Demos: 18 GamerServices and Net demos exit 0 on the private display.
+
+The previous pass's validation (2026-09-29, GSP) is in Git history.

@@ -170,9 +170,9 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
 | GSX-U7 | Party and title-content panes in the same system; catalog updates as one product | done |
 | GSX-U8 | Transitions, reduced motion, original system sounds (if an appropriate audio path exists) | done |
 | GSX-U9 | Semantic UI tests; BEFORE/AFTER sheets and an ordered interaction sequence | done |
-| GSX-E* | Remaining register gaps, one decision each | |
-| GSX-P1 | Documentation and register | |
-| GSX-Q1 | Final acceptance | |
+| GSX-E* | Remaining register gaps, one decision each | done: trial/test purchase (E1), voice (E1), parties (E2), upstream QoS (E3), title versions (E4), single process and connection rate (E5), social notifications and push (E6), browser multiplayer kept out of scope by the owner (E7); partner tokens, TrueSkill and Recent windows kept with their evidence |
+| GSX-P1 | Documentation and register | done |
+| GSX-Q1 | Final acceptance | done (acceptance matrix below) |
 
 ## Evidence log
 
@@ -428,3 +428,24 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
   `SystemGuideTest.TheGuideButtonClosesTheGuideItOpened`. The Invites acceptance driver
   (`/rv/tmp/samples/SAMPLE-096-InvitesSample_4_0/scripts/capture-cna-invites-gs.py`) now signs in
   through the picker and invites through Friends -> Find gamer -> the gamer card -> Invite to game.
+
+## Acceptance matrix (GSX-Q1, 2026-09-30)
+
+CNA `feature/gamer-services-server`, server `feature/gamer-services-server` 2c974d1, cna-samples
+`feature/gamer-services-samples` 378483b (unchanged). Nothing pushed, nothing merged into `next`.
+
+| Requirement | Result | Evidence |
+|---|---|---|
+| Avatars: server-owned description, client-owned catalogs, packs only as update/fallback | met | GSX-A1..A5; `AvatarCatalogStoreTests`, server avatar e2e |
+| Catalog immutability; v2 frozen, new art in v3 | met | `CatalogV2IsFrozen`, `GamerServices_AvatarCatalogUpToDate` |
+| Avatar fidelity beyond v2, inspected on the real renderer | met, occlusion open | `art/after-b2/` (257 jobs, 0 failures), `art/before-after.png`, `art/hands-before-after.png` |
+| Old descriptions and formats preserved | met | format 1/2 codec tests, v1/v2 golden fixtures |
+| Console-style Guide, sign-in, gamer card, friends, invitations, achievements, leaderboards, party, content, editor | met | GSX-U1..U9; `ui/after6/`, `ui/sequence/`, `ui/before-after-*.png` |
+| Register gaps closed or decided | met | GSX-E1..E7, final register |
+| No public CNA machinery added to Microsoft.Xna GamerServices/Net | met | diff of the public headers since e46db9822: private members and friends only; `setPartySizeProperty` removed |
+| Tests | met | per process: CnaGamerServicesTests 603 + 1 known skip, CnaNetTests 515/515, CnaRuntimeTests 192 + 2 environment skips; CnaTests (all modules, less the content-pipeline differential) 9,018 pass, 10 HEADLESS graphics/content failures untouched by this pass |
+| C API | met | CApi_* 107/110 (the three standing audio/content environment smokes); coverage/limitations/release-gate current (650 planned, as at the start); ABI baseline current (3,202 exports) |
+| Server | met | corpus 28/28 with every CNA harness; capacity re-run (README) |
+| Samples | met | SAMPLE-087 AvatarShadows (v3 avatars), SAMPLE-096 Invites, SAMPLE-075 SystemLink and online, achievements/leaderboards program: `*-20260930-xbox-fidelity` |
+| Demos | met | 18 GamerServices/Net demos exit 0 on the private display, two consecutive runs (`final/demos*.txt`) |
+| Platform gates, protocol drift | met | gates pass except the `SDL_TOUCH_MOUSEID` classification inherited from `next`; drift clean |
