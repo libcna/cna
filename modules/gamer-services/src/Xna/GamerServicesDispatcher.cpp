@@ -142,6 +142,8 @@ void GamerServicesDispatcher::Update() {
     catch(...) {if(!firstError)firstError=std::current_exception();}
     try {CNA::Internal::GamerServices::pumpParties();}
     catch(...) {if(!firstError)firstError=std::current_exception();}
+    try {CNA::Internal::GamerServices::pumpSocial();}
+    catch(...) {if(!firstError)firstError=std::current_exception();}
     // The Guide button belongs to games that draw the Guide.
     if(CNA::Internal::GamerServices::guideOverlayAttached()) {
         try {CNA::Internal::GamerServices::pollSystemGuideButton();}

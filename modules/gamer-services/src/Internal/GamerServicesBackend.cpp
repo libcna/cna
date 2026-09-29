@@ -6,6 +6,7 @@
 #include "CNA/GamerServices/Configuration.hpp"
 #include "CnaService/Protocol.hpp"
 #include "CredentialStore.hpp"
+#include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
 #include "ServiceSessionDirectoryClient.hpp"
 #include "ServiceSessionDirectoryFake.hpp"
 #include <chrono>
@@ -15,6 +16,7 @@
 #ifndef __EMSCRIPTEN__
 #include <curl/curl.h>
 #endif
+#include <atomic>
 #include <condition_variable>
 #include <deque>
 #include <map>
@@ -151,7 +153,12 @@ public:
             {std::lock_guard lock(slotMutex_);slots_[slot].refresh=stored->refreshToken;slots_[slot].refreshExpires=stored->expires;}
         }
     }
-    ~OnlineBackend() override {stop();}
+    ~OnlineBackend() override {
+#ifndef __EMSCRIPTEN__
+        events_.request_stop();if(events_.joinable())events_.join();
+#endif
+        stop();
+    }
     bool serviceEnabled() const override {return !config_.endpoint.empty();}
     const CNA::GamerServices::Configuration& configuration() const {return config_;}
     IServiceSessionDirectory& sessionDirectory() override {return *directory_;}
@@ -201,6 +208,7 @@ public:
     }
     std::vector<BackendEvent> pump() override {
         const auto timestamp=unixTime();
+        startEvents();
         for(int slot=0;slot<4;++slot) {
             unsigned long long generation=0;bool schedule=false;
             {std::lock_guard lock(slotMutex_);auto& state=slots_[slot];
@@ -715,6 +723,7 @@ private:
                     capabilities_.insert(capability.get<std::string>());
                 }
                 negotiated_=true;
+                eventsCapable_=capabilities_.contains("events");
             }
     }
     void renewParticipantsLocked(const std::vector<std::string>& users) {
@@ -795,6 +804,123 @@ private:
             if(result.contains("gameDefaults")&&result["gameDefaults"].is_object()){auto text=result["gameDefaults"].dump();if(text.size()<=4096)person.gameDefaults=std::move(text);}
         }catch(...){}
     }
+#ifndef __EMSCRIPTEN__
+    // Push hints (capability "events"): one WebSocket per signed-in account, served by a thread of its
+    // own. A hint only moves the next read of the invitation, party or social watcher forward, so a
+    // channel that is down costs nothing but that read's interval. CNA_GAMER_SERVICES_EVENTS=0 turns
+    // it off.
+    struct EventLink {
+        std::unique_ptr<CURL,decltype(&curl_easy_cleanup)> handle{nullptr,curl_easy_cleanup};
+        std::string token,partial;
+        long long retryAt=0;
+        int failures=0;
+    };
+    void startEvents() {
+        static const bool disabled=[]{const char* value=std::getenv("CNA_GAMER_SERVICES_EVENTS");return value&&std::string(value)=="0";}();
+        if(disabled||!eventsCapable_||events_.joinable())return;
+        events_=std::jthread([this](std::stop_token stop){runEvents(stop);});
+    }
+    std::string eventsUrl() const {
+        auto url=config_.endpoint;
+        if(url.starts_with("https://"))url="wss://"+url.substr(8);
+        else if(url.starts_with("http://"))url="ws://"+url.substr(7);
+        while(url.ends_with("/"))url.pop_back();
+        return url+"/events";
+    }
+    static bool sendText(CURL* curl,const std::string& text,std::stop_token stop) {
+        const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+        std::size_t offset=0;
+        while(offset<text.size()) {
+            if(stop.stop_requested()||std::chrono::steady_clock::now()>=deadline)return false;
+            std::size_t sent=0;
+            const auto code=curl_ws_send(curl,text.data()+offset,text.size()-offset,&sent,0,CURLWS_TEXT);
+            if(code!=CURLE_OK&&code!=CURLE_AGAIN)return false;
+            offset+=std::min(sent,text.size()-offset);
+            if(code==CURLE_AGAIN)std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        return true;
+    }
+    // One complete text message, or nothing yet; false when the channel is gone.
+    static bool receiveText(EventLink& link,std::optional<std::string>& message) {
+        for(int frames=0;frames<64;++frames) {
+            std::array<char,1024> scratch{};std::size_t count=0;const curl_ws_frame* metadata=nullptr;
+            const auto code=curl_ws_recv(link.handle.get(),scratch.data(),scratch.size(),&count,&metadata);
+            if(code==CURLE_AGAIN)return true;
+            if(code!=CURLE_OK||!metadata||(metadata->flags&CURLWS_CLOSE))return false;
+            if(!(metadata->flags&(CURLWS_TEXT|CURLWS_CONT)))continue;
+            if(link.partial.size()+count>4096)return false;
+            link.partial.append(scratch.data(),count);
+            if(metadata->bytesleft==0&&!(metadata->flags&CURLWS_CONT)){message=std::move(link.partial);link.partial.clear();return true;}
+        }
+        return true;
+    }
+    bool connectEvents(EventLink& link,const std::string& token,std::stop_token stop) {
+        link.handle.reset(curl_easy_init());link.partial.clear();
+        CURL* curl=link.handle.get();
+        if(!curl)return false;
+        const auto url=eventsUrl();
+        curl_easy_setopt(curl,CURLOPT_URL,url.c_str());
+        curl_easy_setopt(curl,CURLOPT_PROTOCOLS_STR,config_.insecureLoopback?"wss,ws":"wss");
+        curl_easy_setopt(curl,CURLOPT_CONNECT_ONLY,2L);curl_easy_setopt(curl,CURLOPT_HTTP_VERSION,CURL_HTTP_VERSION_1_1);
+        curl_easy_setopt(curl,CURLOPT_FOLLOWLOCATION,0L);curl_easy_setopt(curl,CURLOPT_PROXY,"");
+        curl_easy_setopt(curl,CURLOPT_SSL_VERIFYPEER,1L);curl_easy_setopt(curl,CURLOPT_SSL_VERIFYHOST,2L);
+        curl_easy_setopt(curl,CURLOPT_SSLVERSION,CURL_SSLVERSION_TLSv1_2);
+        if(!config_.caBundle.empty())curl_easy_setopt(curl,CURLOPT_CAINFO,config_.caBundle.c_str());
+        curl_easy_setopt(curl,CURLOPT_NOSIGNAL,1L);curl_easy_setopt(curl,CURLOPT_CONNECTTIMEOUT_MS,3000L);curl_easy_setopt(curl,CURLOPT_TIMEOUT_MS,5000L);
+        long status=0;
+        if(curl_easy_perform(curl)!=CURLE_OK||curl_easy_getinfo(curl,CURLINFO_RESPONSE_CODE,&status)!=CURLE_OK||status!=101){link.handle.reset();return false;}
+        Json hello{{"v",1},{"id","events"},{"game",config_.gameId},{"token",token}};
+        auto text=hello.dump();
+        const bool sent=sendText(curl,text,stop);
+        std::fill(text.begin(),text.end(),'\0');
+        if(!sent){link.handle.reset();return false;}
+        const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+        while(!stop.stop_requested()&&std::chrono::steady_clock::now()<deadline) {
+            std::optional<std::string> message;
+            if(!receiveText(link,message)){link.handle.reset();return false;}
+            if(message) {
+                try {
+                    const auto welcome=CnaService::parse(*message);
+                    if(welcome.value("error","")=="OK"){link.token=token;return true;}
+                }catch(...){}
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        link.handle.reset();return false;
+    }
+    void runEvents(std::stop_token stop) {
+        std::map<std::string,EventLink> links;
+        while(!stop.stop_requested()) {
+            std::map<std::string,std::string> tokens;
+            {std::lock_guard lock(slotMutex_);
+             for(const auto& slot:slots_)if(!slot.token.empty()&&!slot.identity.userId.empty())tokens.emplace(slot.identity.userId,slot.token);}
+            std::erase_if(links,[&](const auto& entry){return !tokens.contains(entry.first);});
+            const auto now=unixTime();
+            for(const auto& [user,token]:tokens) {
+                auto& link=links[user];
+                // A renewed token: the channel reconnects with it (the server closes one that expired).
+                if(link.handle&&link.token!=token)link.handle.reset();
+                if(!link.handle&&now>=link.retryAt) {
+                    if(connectEvents(link,token,stop))link.failures=0;
+                    else {link.failures=std::min(link.failures+1,5);link.retryAt=now+std::min(60,2<<link.failures);}
+                }
+                if(!link.handle)continue;
+                std::optional<std::string> message;
+                if(!receiveText(link,message)){link.handle.reset();link.retryAt=now+2;continue;}
+                if(!message)continue;
+                try {
+                    const auto hint=CnaService::parse(*message);
+                    if(hint.value("v",0)==1&&hint.contains("topics")&&hint["topics"].is_array())
+                        for(const auto& topic:hint["topics"])if(topic.is_string())serviceHint(topic.get<std::string>());
+                }catch(...){}
+            }
+            for(int wait=0;wait<10&&!stop.stop_requested();++wait)std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    }
+#else
+    void startEvents() {}
+#endif
     static std::string prefix() {
         std::random_device source;std::string value;constexpr char hex[]="0123456789abcdef";
         for(int i=0;i<16;++i){auto byte=source();value+=hex[(byte>>4)&15];value+=hex[byte&15];}return value;
@@ -811,6 +937,11 @@ private:
     unsigned long long sequence_=0;
     bool negotiated_=false;
     std::set<std::string> capabilities_;
+    std::atomic<bool> eventsCapable_{false};
+#ifndef __EMSCRIPTEN__
+    // Last: stopped (in the destructor) before anything it reads.
+    std::jthread events_;
+#endif
 };
 class FakeBackend final : public QueuedBackend {
 public:

@@ -11,6 +11,7 @@
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
+#include "../../modules/gamer-services/src/Internal/GuideOverlay.hpp"
 #include "../../modules/gamer-services/src/Internal/Guide/GuideUi.hpp"
 #include "../../modules/gamer-services/src/Internal/Guide/GuideSystem.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -395,6 +396,22 @@ int main(int argc,char** argv) {
             check(joinless,"no game of Bob's to join");
             Ui::clickForTesting(2);check(uiLabel("party",0,"Invite friends")&&gamer->getPartySizeProperty()==0,"left the party");
             Ui::closeAll();
+        }
+        if(real&&std::string(argv[4])=="push-wait") {
+            // GSX-E6: the social watcher's first read after sign-in only learns what is there; the
+            // message sent next must reach the Guide through the event channel, well inside the 15 s
+            // interval of the next read.
+            const auto settle=std::chrono::steady_clock::now()+std::chrono::seconds(3);
+            while(std::chrono::steady_clock::now()<settle){GamerServicesDispatcher::Update();std::this_thread::sleep_for(std::chrono::milliseconds(10));}
+            std::cout<<"READY_PUSH"<<std::endl;std::string command;std::getline(std::cin,command);
+            const auto sent=std::chrono::steady_clock::now();bool shown=false;
+            while(!shown&&std::chrono::steady_clock::now()-sent<std::chrono::seconds(5)) {
+                GamerServicesDispatcher::Update();
+                for(const auto& toast:Service::guideNotifications())shown=shown||toast=="Message from Bob: pushed";
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            check(shown,"a message reaches the Guide through the event channel");
+            std::cout<<checks<<" push checks passed\n";return 0;
         }
         if(real&&std::string(argv[4])=="revoke-wait") {
             std::cout<<"READY_REVOKE"<<std::endl;std::string command;std::getline(std::cin,command);

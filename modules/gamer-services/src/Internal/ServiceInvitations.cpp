@@ -7,6 +7,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <deque>
 #include <map>
@@ -38,6 +39,11 @@ struct State {
     std::deque<std::string> recent;
 };
 State& state(){static State value;return value;}
+// Push hints from the service's event channel arrive on its thread; the watchers take them at Update.
+enum Hint : unsigned {HintInvitations=1,HintParty=2,HintSocial=4};
+std::atomic<unsigned>& hints(){static std::atomic<unsigned> value{0};return value;}
+bool takeHint(Hint hint){return (hints().fetch_and(~static_cast<unsigned>(hint))&hint)!=0;}
+
 SignedInGamer* published(const std::string& user) {
     for(auto* gamer:*Gamer::getSignedInGamersProperty())
         if(gamer&&!gamer->getIsGuestProperty()&&gamer->getIsSignedInToLiveProperty()&&GamerAccess::userId(*gamer)==user)return gamer;
@@ -187,6 +193,7 @@ void pumpParties()
 {
     auto& current=parties();auto service=backend();
     if(current.origin!=service.get()){current=PartyState{};current.origin=service.get();}
+    if(takeHint(HintParty))current.nextPoll={};
     if(!service||!service->serviceEnabled()||current.polling||Clock::now()<current.nextPoll)return;
     std::vector<std::string> users;
     for(auto* gamer:*Gamer::getSignedInGamersProperty())
@@ -214,6 +221,91 @@ void pumpParties()
     }catch(...){current.polling=false;current.nextPoll=Clock::now()+FailureInterval;}
 }
 
+namespace {
+constexpr auto SocialInterval=std::chrono::seconds(15);
+struct Social {
+    bool known=false;
+    std::set<std::string> messages,requests,online;
+};
+struct SocialState {
+    const IGamerServicesBackend* origin=nullptr;
+    Clock::time_point nextPoll{};
+    bool polling=false;
+    std::map<std::string,Social> accounts;
+};
+SocialState& social(){static SocialState value;return value;}
+struct SocialRead {std::string user;bool ok=false;std::vector<ServiceFriend> friends;ServiceMessagePage inbox;};
+std::string excerpt(const std::string& text) {
+    if(text.size()<=48)return text;
+    std::size_t cut=45;while(cut>0&&(static_cast<unsigned char>(text[cut])&0xC0)==0x80)--cut;
+    return text.substr(0,cut)+"...";
+}
+}
+
+void serviceHint(const std::string& topic)
+{
+    if(topic=="invitations")hints()|=HintInvitations;
+    else if(topic=="party")hints()|=HintParty;
+    else if(topic=="messages"||topic=="friends")hints()|=HintSocial;
+}
+
+void pollSocialNowForTesting(){social().nextPoll={};}
+
+void pumpSocial()
+{
+    auto& current=social();auto service=backend();
+    if(current.origin!=service.get()){current=SocialState{};current.origin=service.get();}
+    if(takeHint(HintSocial))current.nextPoll={};
+    if(!service||!service->serviceEnabled())return;
+    std::vector<std::string> users;
+    for(auto* gamer:*Gamer::getSignedInGamersProperty())
+        if(gamer&&!gamer->getIsGuestProperty()&&gamer->getIsSignedInToLiveProperty()&&!GamerAccess::userId(*gamer).empty())
+            users.push_back(GamerAccess::userId(*gamer));
+    // Accounts that signed out start over when they return; one that just signed in is read at once,
+    // so what it already has is known before anything new arrives.
+    std::erase_if(current.accounts,[&](const auto& entry){return std::find(users.begin(),users.end(),entry.first)==users.end();});
+    for(const auto& user:users)if(current.accounts.try_emplace(user).second)current.nextPoll={};
+    if(current.polling||Clock::now()<current.nextPoll)return;
+    current.nextPoll=Clock::now()+SocialInterval;
+    if(users.empty())return;
+    auto reads=std::make_shared<std::vector<SocialRead>>();
+    auto* executor=service.get();current.polling=true;
+    try {
+        service->submit([executor,users,reads] {
+            for(const auto& user:users) {
+                SocialRead read;read.user=user;
+                try{read.friends=executor->friends(user);read.inbox=executor->messages(user,0,10);read.ok=true;}catch(...){}
+                reads->push_back(std::move(read));
+            }
+        },[reads,origin=executor] {
+            auto& now=social();if(now.origin!=origin)return;now.polling=false;
+            for(auto& read:*reads) {
+                if(!read.ok||!published(read.user))continue;
+                auto& account=now.accounts[read.user];
+                Social next;next.known=true;
+                for(const auto& message:read.inbox.messages)if(!message.read)next.messages.insert(message.id);
+                for(const auto& entry:read.friends) {
+                    if(entry.requestReceived)next.requests.insert(entry.gamertag);
+                    if(entry.accepted&&entry.online)next.online.insert(entry.gamertag);
+                }
+                // The console's social notifications, for what changed since the last read.
+                if(account.known) {
+                    for(const auto& message:read.inbox.messages)
+                        if(!message.read&&!account.messages.contains(message.id))
+                            GuideUi::notify({GuideUi::Notification::Kind::Message,"Message from "+message.sender,excerpt(message.text),{}});
+                    for(const auto& tag:next.requests)
+                        if(!account.requests.contains(tag))
+                            GuideUi::notify({GuideUi::Notification::Kind::FriendRequest,"Friend request from "+tag,"Open their gamer card to answer",{}});
+                    for(const auto& tag:next.online)
+                        if(!account.online.contains(tag))
+                            GuideUi::notify({GuideUi::Notification::Kind::FriendOnline,tag+" is now online","",{}});
+                }
+                account=std::move(next);
+            }
+        });
+    }catch(...){current.polling=false;current.nextPoll=Clock::now()+FailureInterval;}
+}
+
 void setActiveOnlineSession(std::optional<ActiveOnlineSession> value){state().active=std::move(value);}
 const std::optional<ActiveOnlineSession>& activeOnlineSession(){return state().active;}
 std::optional<AcceptedInvitation>& acceptedInvitation(){return state().accepted;}
@@ -226,6 +318,7 @@ void pumpInvitations() {
         current.seen.clear();current.seenOrder.clear();current.queue.clear();current.accepted.reset();
     }
     if(!service||!service->serviceEnabled())return;
+    if(takeHint(HintInvitations))current.nextPoll={};
     if(!current.polling&&Clock::now()>=current.nextPoll)poll();
     if(!current.prompting&&!current.accepting&&!guideIsVisible()&&Clock::now()>=current.quietUntil)prompt();
 }
@@ -257,5 +350,6 @@ void resetInvitationsForTesting() {
     current.seen.clear();current.seenOrder.clear();current.queue.clear();current.accepted.reset();
     current.quietUntil={};current.recent.clear();
     parties()=PartyState{};
+    social()=SocialState{};hints()=0;
 }
 }

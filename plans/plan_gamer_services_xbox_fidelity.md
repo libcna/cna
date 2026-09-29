@@ -383,3 +383,17 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
   relay, online both ways, two real processes both ways, Guide mute. Net 514/514, GS 598 + 1 skip.
   **UNV**: a real microphone and speaker (none on this host); the capture and playback adapters are
   the platform recording provider and the SoundEffect path the rest of CNA uses.
+- GSX-E6 (social notifications and push, **ART** + **POL**). The console raised system notifications
+  for a new message, a friend request and a friend coming online; CNA raised none of them (only
+  invitations and parties were watched). A social watcher now reads each signed-in account's inbox
+  and friends (every 15 s, and at once after sign-in, where it only learns what is there) and posts
+  "Message from X" (with an excerpt cut on a whole character), "Friend request from X" and "X is now
+  online". **POL** push: the server's account event channel (`/cna/v1/events`, capability `events`,
+  server `e3e78a8`) sends coalesced topic hints to every channel of an account another request
+  changed, only after that request succeeded; the client keeps one WebSocket per signed-in account
+  on a thread of its own (reconnecting with backoff and with a renewed token;
+  `CNA_GAMER_SERVICES_EVENTS=0` turns it off), and a hint only moves the invitation, party or social
+  watcher's next read forward, so a lost hint costs only the interval. Tests: three
+  `SocialNotificationTest`, server hint checks per operation, WSS e2e (delivery across titles,
+  refusal, a refused request telling nobody), and the TLS e2e's CNA client seeing a message arrive
+  through the channel within 5 s (the read interval is 15 s). GS 601, Net 514.

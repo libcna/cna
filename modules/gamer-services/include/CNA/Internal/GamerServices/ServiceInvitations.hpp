@@ -84,6 +84,15 @@ std::optional<ServiceParty> knownParty(const std::string& user);
 /** @brief Records a party the Guide just changed (PartySize follows at once). @param user Account.
  * @param party The service's answer. */
 void applyParty(const std::string& user,ServiceParty party);
+/** @brief Watches each signed-in account's inbox and friends and posts the console's social
+ * notifications: a new message, a friend request, a friend coming online. The first read after
+ * sign-in only learns what is already there. Called by GamerServicesDispatcher.Update. */
+void pumpSocial();
+/** @brief Asks the watchers to read now rather than at their next interval (a push hint from the
+ * service); any thread. @param topic "invitations", "party", "messages" or "friends". */
+void serviceHint(const std::string& topic);
+/** @brief Makes the next pumpSocial poll immediately; deterministic tests only. */
+void pollSocialNowForTesting();
 /** @brief Makes the next pumpParties poll immediately; deterministic tests only. */
 void pollPartiesNowForTesting();
 /** @brief Makes the next pumpInvitations poll immediately; deterministic tests only. */
