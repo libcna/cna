@@ -89,7 +89,9 @@ with the server at 4ba7f95 and cna-samples `feature/gamer-services-samples` 3784
 - CNA, one process per test: CnaGamerServicesTests **551 + 1 known skip** (552),
   CnaNetTests **504/504**, CnaRuntimeTests **192 + 2 environment skips**; `CApi_*` **95/98** (the
   three standing environment smokes: audio, audio-unavailable, content; `CApi_InstalledConsumer`
-  passes); C ABI baseline `--check` current (3,202 exports); platform boundary gates pass except
+  passes) and the twelve `CApi*` gate tests pass (82a3a094c brought the coverage inventory up to
+  the gamer declarations this pass changed; five new `GetTypeName` overrides are planned C routes);
+  C ABI baseline `--check` current (3,202 exports); platform boundary gates pass except
   the `SDL_TOUCH_MOUSEID` classification inherited from `next`.
 - Samples (Release/OPENGLES3, private Xvfb, evidence directories `*-20260929-polish`): SAMPLE-096
   Invites pass; SAMPLE-075 NetworkStateManagement SystemLink and LIVE pass; the

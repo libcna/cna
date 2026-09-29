@@ -383,8 +383,9 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   and had no graphics device service, so nobody signed in and four of them (and the dispatcher
   watchdog) crashed; fixed in 7e613498c, all run to exit 0.
 - GSP-Q1 (final acceptance). Results in the register's Evidence section: server corpus 28/28 (no
-  skips), GS 551 + 1 skip, Net 504, Runtime 192 + 2 skips, C API 95/98 (standing smokes), ABI and
-  drift clean, the four sample acceptances (`*-20260929-polish`), the 255-job v2 review and the
+  skips), GS 551 + 1 skip, Net 504, Runtime 192 + 2 skips, C API 95/98 (standing smokes) and the
+  twelve `CApi*` gates (the coverage inventory had missed Gamer's new override/GetTypeName
+  declarations: 82a3a094c), ABI and drift clean, the four sample acceptances (`*-20260929-polish`), the 255-job v2 review and the
   demos. `next` is one commit ahead (2c70eaf0f, BL-18: CNAEXT placement on `using` lines, only
   visible under CNA_STRICT_XNA_API); it touches none of this branch's files, and merging it here
   would rebuild three trees for no acceptance value, so it is left for the merge into `next`.
