@@ -56,6 +56,11 @@ struct ServiceFriend {
     bool online = false;
     /** @brief Mutual friendship, or pending request flags. */
     bool accepted = false, requestSent = false, requestReceived = false;
+    /** @brief In this title's live session that admits joiners now with a public slot free. */
+    bool joinable = false;
+    /** @brief This title's unexpired invitations between the two: pending either way, and the
+     * friend's answer to the caller's. */
+    bool inviteReceivedFrom = false, inviteSentTo = false, inviteAccepted = false, inviteRejected = false;
     /** @brief Friend's current title-scoped rich presence. */
     std::string presence;
 };

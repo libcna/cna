@@ -228,6 +228,14 @@ public:
             ServiceFriend friendState;friendState.gamertag=CnaService::stringField(e,"gamertag",32);friendState.online=e["online"].get<bool>();
             for(const auto* key:{"accepted","requestSent","requestReceived"})if(!e.at(key).is_boolean())throw Unavailable("Invalid friend response.");
             friendState.accepted=e["accepted"].get<bool>();friendState.requestSent=e["requestSent"].get<bool>();friendState.requestReceived=e["requestReceived"].get<bool>();
+            // A server older than these flags leaves them out; one that sends them sends booleans.
+            for(auto [key,target]:{std::pair{"joinable",&friendState.joinable},std::pair{"inviteReceivedFrom",&friendState.inviteReceivedFrom},
+                std::pair{"inviteSentTo",&friendState.inviteSentTo},std::pair{"inviteAccepted",&friendState.inviteAccepted},
+                std::pair{"inviteRejected",&friendState.inviteRejected}}) {
+                if(!e.contains(key))continue;
+                if(!e[key].is_boolean())throw Unavailable("Invalid friend response.");
+                *target=e[key].get<bool>();
+            }
             friendState.presence=CnaService::stringField(e,"presenceText",256);values.push_back(std::move(friendState));
         }return values;
     }

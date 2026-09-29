@@ -313,6 +313,8 @@ int main(int argc,char** argv) {
             std::unique_ptr<Gamer> other(Gamer::GetFromGamertag("Bob"));check(gamer->IsFriend(other.get()),"real accepted friend");
             auto friends=gamer->GetFriends();check(friends.getCountProperty()==1&&friends[0]->getIsOnlineProperty(),"real online friend");
             check(friends[0]->getPresenceProperty()=="Level 12","real rich presence/value");
+            check(friends[0]->getIsPlayingProperty()&&!friends[0]->getIsJoinableProperty()&&!friends[0]->getInviteReceivedFromProperty()
+                &&!friends[0]->getInviteSentToProperty()&&!friends[0]->getIsAwayProperty(),"real friend state flags");
             Guide::ShowFriends(Microsoft::Xna::Framework::PlayerIndex::One);Guide::SimulateMessageBoxClickEXT(2);
         }
         if(real&&std::string(argv[4])=="revoke-wait") {

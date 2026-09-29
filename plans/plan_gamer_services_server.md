@@ -2688,3 +2688,15 @@ the C struct field documents local ticks. CnaGamerServicesTests 485 + 1 skip.
   tests. CnaGamerServicesTests 497 + 1 skip; Guide/GamerProperties/Leaderboards/Achievements/Gamers
   and GamerIdentities C smokes pass. Server suite with the CNA harnesses: 22/23, with
   `service_cna_avatars` skipped because its harness variables were not set.
+- [x] GS-004q `FriendGamer` state from the service (audit OPEN 9). XNA derives every flag from one
+  `FriendState`. CNA passed `online` as `IsPlaying` (correct: an account is online only from a game)
+  but never set `IsJoinable` or the four invitation flags, and nothing documented that away, busy
+  and voice have no source. Server ce8ff32 adds, for an accepted friend in the
+  calling title: `joinable` (online in a live player-match session that admits joiners now with a
+  public slot free), `inviteReceivedFrom`/`inviteSentTo` (unexpired pending invitations either
+  way) and `inviteAccepted`/`inviteRejected` (the friend's answer to the caller's unexpired
+  invitation). The client reads them when present, older servers leaving them out. `IsAway`,
+  `IsBusy` and `HasVoice` are documented as always false (C and C++). Tests: server
+  `service_invitations` (pending both ways, full session not joinable, open lobby joinable,
+  closed lobby not, accepted invitation); the TLS e2e's real friends flow checks the parsed flags.
+  CnaGamerServicesTests 497 + 1 skip, Gamers/GamerProperties C smokes.

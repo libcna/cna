@@ -29,33 +29,37 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Gets whether this friend has voice communication capability.
          *
-         * @return true if this gamer has voice.
+         * @return Always false: CNA carries no voice.
          */
         [[nodiscard]] bool getHasVoiceProperty() const;
 
         /**
-         * @brief Gets whether this friend accepted an invite from the local gamer.
+         * @brief Gets whether this friend accepted an invite from the local gamer, among this title's
+         * unexpired invitations.
          *
          * @return true if the invite was accepted.
          */
         [[nodiscard]] bool getInviteAcceptedProperty() const;
 
         /**
-         * @brief Gets whether this friend sent an invite to the local gamer.
+         * @brief Gets whether this friend has a pending, unexpired invite to the local gamer in this
+         * title.
          *
          * @return true if an invite was received from this gamer.
          */
         [[nodiscard]] bool getInviteReceivedFromProperty() const;
 
         /**
-         * @brief Gets whether this friend rejected an invite from the local gamer.
+         * @brief Gets whether this friend declined an invite from the local gamer, among this title's
+         * unexpired invitations.
          *
          * @return true if the invite was rejected.
          */
         [[nodiscard]] bool getInviteRejectedProperty() const;
 
         /**
-         * @brief Gets whether the local gamer sent an invite to this friend.
+         * @brief Gets whether the local gamer has a pending, unexpired invite to this friend in this
+         * title.
          *
          * @return true if an invite was sent to this gamer.
          */
@@ -64,19 +68,20 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Gets whether this friend is currently away.
          *
-         * @return true if away.
+         * @return Always false: CNA accounts have no away status.
          */
         [[nodiscard]] bool getIsAwayProperty() const;
 
         /**
          * @brief Gets whether this friend is currently busy.
          *
-         * @return true if busy.
+         * @return Always false: CNA accounts have no busy status.
          */
         [[nodiscard]] bool getIsBusyProperty() const;
 
         /**
-         * @brief Gets whether this friend's session can be joined.
+         * @brief Gets whether this friend is in a public session that can be joined: online in this
+         * title's player-match session that admits joiners now and has a public slot free.
          *
          * @return true if joinable.
          */
@@ -90,7 +95,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         [[nodiscard]] bool getIsOnlineProperty() const;
 
         /**
-         * @brief Gets whether this friend is currently playing a game.
+         * @brief Gets whether this friend is currently playing a game. A CNA account is online only
+         * from a game, so this is true exactly when the friend is online.
          *
          * @return true if playing.
          */

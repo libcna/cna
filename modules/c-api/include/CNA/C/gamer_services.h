@@ -811,34 +811,37 @@ typedef struct CNA_FriendGamerInfo {
     /** @brief Non-zero when the local gamer has sent this friend a friend request. */
     CNA_Bool friend_request_sent_to;
 
-    /** @brief Non-zero when this friend has voice hardware. */
+    /** @brief Non-zero when this friend has voice hardware; always zero, as CNA carries no voice. */
     CNA_Bool has_voice;
 
-    /** @brief Non-zero when this friend accepted a game invitation. */
+    /** @brief Non-zero when this friend accepted the local gamer's game invitation (this title's
+     * unexpired invitations). */
     CNA_Bool invite_accepted;
 
-    /** @brief Non-zero when this friend has sent a game invitation. */
+    /** @brief Non-zero when this friend has a pending game invitation to the local gamer. */
     CNA_Bool invite_received_from;
 
-    /** @brief Non-zero when this friend declined a game invitation. */
+    /** @brief Non-zero when this friend declined the local gamer's game invitation (this title's
+     * unexpired invitations). */
     CNA_Bool invite_rejected;
 
-    /** @brief Non-zero when a game invitation has been sent to this friend. */
+    /** @brief Non-zero when the local gamer has a pending game invitation to this friend. */
     CNA_Bool invite_sent_to;
 
-    /** @brief Non-zero when this friend is away. */
+    /** @brief Non-zero when this friend is away; always zero, as CNA accounts have no away status. */
     CNA_Bool is_away;
 
-    /** @brief Non-zero when this friend is busy. */
+    /** @brief Non-zero when this friend is busy; always zero, as CNA accounts have no busy status. */
     CNA_Bool is_busy;
 
-    /** @brief Non-zero when this friend's session can be joined. */
+    /** @brief Non-zero when this friend is online in this title's player-match session that admits
+     * joiners now and has a public slot free. */
     CNA_Bool is_joinable;
 
     /** @brief Non-zero when this friend is online. */
     CNA_Bool is_online;
 
-    /** @brief Non-zero when this friend is playing. */
+    /** @brief Non-zero when this friend is playing; a CNA account is online only from a game. */
     CNA_Bool is_playing;
 
     /** @brief Reserved; must be zero. */
