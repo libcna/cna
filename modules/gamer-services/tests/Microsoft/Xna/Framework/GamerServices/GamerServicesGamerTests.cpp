@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
 #include <any>
 #include <filesystem>
 #include <fstream>
@@ -723,7 +724,7 @@ TEST(SignedInGamerTest, DefaultsFromCreateInternal) {
     EXPECT_EQ("tag1", gamer.getDisplayNameProperty());
     EXPECT_FALSE(gamer.getIsGuestProperty());
     EXPECT_FALSE(gamer.getIsSignedInToLiveProperty());
-    EXPECT_EQ(1, gamer.getPartySizeProperty());
+    EXPECT_EQ(0, gamer.getPartySizeProperty());
     EXPECT_EQ(Microsoft::Xna::Framework::PlayerIndex::One, gamer.getPlayerIndexProperty());
 }
 
@@ -734,9 +735,10 @@ TEST(SignedInGamerTest, CustomParameters) {
     EXPECT_EQ(Microsoft::Xna::Framework::PlayerIndex::Two, gamer.getPlayerIndexProperty());
 }
 
-TEST(SignedInGamerTest, PartySizeSet) {
+TEST(SignedInGamerTest, PartySizeFollowsTheInternalSetter) {
+    // XNA's setter is internal: only the party service (or a C host through the ABI) moves it.
     auto gamer = SignedInGamer::CreateInternal("tag1");
-    gamer.setPartySizeProperty(4);
+    CNA::Internal::GamerServices::GamerAccess::setPartySize(gamer, 4);
     EXPECT_EQ(4, gamer.getPartySizeProperty());
 }
 

@@ -97,7 +97,7 @@ TEST_F(GuideSocialPaneTest, PlayerReviewRecordsPreferAvoidAndClear) {
 TEST_F(GuideSocialPaneTest, UnavailableServicesExplainThemselvesInsteadOfDoingNothing) {
     Guide::ShowMarketplace(PlayerIndex::One);EXPECT_EQ("content",Ui::currentScreenForTesting());Ui::sendForTesting(Ui::Command::Back);
     Guide::ShowParty(PlayerIndex::One);EXPECT_EQ("party",Ui::currentScreenForTesting());Ui::sendForTesting(Ui::Command::Back);
-    Guide::ShowPartySessions(PlayerIndex::One);EXPECT_EQ("party",Ui::currentScreenForTesting());Ui::sendForTesting(Ui::Command::Back);
+    Guide::ShowPartySessions(PlayerIndex::One);EXPECT_EQ("partySessions",Ui::currentScreenForTesting());Ui::sendForTesting(Ui::Command::Back);
     EXPECT_FALSE(Guide::getIsVisibleProperty());
     EXPECT_FALSE(Guide::getIsTrialModeProperty());
     EXPECT_THROW(Guide::ShowMarketplace(PlayerIndex::Three),GamerPrivilegeException);

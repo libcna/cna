@@ -54,18 +54,13 @@ namespace Microsoft::Xna::Framework::GamerServices
         [[nodiscard]] bool getIsSignedInToLiveProperty() const;
 
         /**
-         * @brief Gets the number of players in this gamer's party.
+         * @brief Gets the number of people in this gamer's party, the gamer included; 0 when the
+         * gamer is in no party. It follows the CNA party service at gamer-services updates, as
+         * XNA's follows the platform (its setter is internal).
          *
          * @return The party size.
          */
         [[nodiscard]] int getPartySizeProperty() const;
-
-        /**
-         * @brief Sets the number of players in this gamer's party.
-         *
-         * @param value The party size.
-         */
-        void setPartySizeProperty(int value);
 
         /**
          * @brief Gets the controller/player slot this gamer occupies.
@@ -214,6 +209,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         // currently has zero callers at all. Tightened from `public ... CNAEXT` to match this
         // project's own documented convention for C# `internal` members (see CHECKLIST.md).
         friend class GamerServicesDispatcher;
+        friend class CNA::Internal::GamerServices::GamerAccess;
         CNAEXT friend struct SignedInGamerTestAccess;
 
         /**

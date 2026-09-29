@@ -121,6 +121,37 @@ struct ServiceLeaderboardPage {
     /** @brief Entries on this page. */
     std::vector<ServiceLeaderboardEntry> entries;
 };
+/** @brief One member of a party, as the calling title sees them. */
+struct ServicePartyMember {
+    /** @brief Service identity and gamertag. */
+    std::string userId, gamertag;
+    /** @brief Signed in to the service recently. */
+    bool online=false;
+    /** @brief Rich presence in the calling title. */
+    std::string presence;
+    /** @brief Away or busy (online only). */
+    bool away=false, busy=false;
+    /** @brief In a player-match game of the calling title that admits joiners now. */
+    bool joinable=false;
+};
+/** @brief An invitation to someone's party. */
+struct ServicePartyInvitation {
+    /** @brief Party identity. */
+    std::string party;
+    /** @brief Who invited. */
+    std::string senderId, senderGamertag;
+    /** @brief Members the party has. */
+    int members=0;
+};
+/** @brief An account's party (empty id: none) and the party invitations it holds. */
+struct ServiceParty {
+    /** @brief Party identity and its leader; empty when not in a party. */
+    std::string id, leaderId;
+    /** @brief Members in joining order, the account included. */
+    std::vector<ServicePartyMember> members;
+    /** @brief Invitations to this account, oldest first. */
+    std::vector<ServicePartyInvitation> invitations;
+};
 /** @brief A leaderboard the title has provisioned, as a system leaderboard page lists it. */
 struct ServiceLeaderboardInfo {
     /** @brief Board key. */
@@ -294,6 +325,12 @@ public:
      * @param gamers Optional restricted names. @return Ranked page. */
     virtual ServiceLeaderboardPage readLeaderboard(const std::string& key,int mode,int start,int size,
         const std::string& pivot,const std::optional<std::vector<std::string>>& gamers) = 0;
+    /** @brief Reads an account's party (parties.get). @param userId Account. @return Party. */
+    virtual ServiceParty party(const std::string& userId) = 0;
+    /** @brief A party operation: "invite" (argument: gamertag of a friend; starts a party when
+     * there is none), "accept" / "decline" (argument: party), "leave". @param userId Account.
+     * @param action Operation. @param argument Gamertag or party. @return The party afterwards. */
+    virtual ServiceParty changeParty(const std::string& userId,const std::string& action,const std::string& argument) = 0;
     /** @brief The title's provisioned leaderboards (leaderboards.list), for the Guide's leaderboard
      * page; a game reads its own boards by identity. @return Boards in key and mode order. */
     virtual std::vector<ServiceLeaderboardInfo> leaderboards() = 0;
@@ -356,6 +393,9 @@ void setFakeRemotePresence(IGamerServicesBackend& fake,const std::string& userId
     const std::string& status="online");
 /** @brief Sets a fake backend's catalog update policy. @param fake Backend. @param policy Policy. */
 void setFakeAvatarCatalogPolicy(IGamerServicesBackend& fake,AvatarCatalogPolicy policy);
+/** @brief Tests: whether an account is in a joinable game, as friends and party members see it.
+ * @param fake Backend from makeFakeBackend. @param userId Account. @param joinable Joinable. */
+void setFakeJoinable(IGamerServicesBackend& fake,const std::string& userId,bool joinable);
 /** @brief Creates deterministic fake with explicitly supplied identities and catalog.
  * @param identities Accounts. @param catalog Title catalog. @param boards Explicit test boards.
  * @return Fake backend. */

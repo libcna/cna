@@ -322,7 +322,9 @@ public:
         else if(friendship_&&friendship_->requestReceived)out.push_back({Icon::PersonAdd,"Accept friend request"});
         else if(friendship_&&friendship_->requestSent)out.push_back({Icon::Cross,"Cancel friend request"});
         else out.push_back({Icon::PersonAdd,"Send friend request"});
+        if(friendship_&&friendship_->accepted&&friendship_->joinable)out.insert(out.begin(),{Icon::Controller,"Join game"});
         if(activeOnlineSession())out.push_back({Icon::Invite,"Invite to game"});
+        if(friendship_&&friendship_->accepted&&!inMyParty())out.push_back({Icon::Party,"Invite to party"});
         out.push_back({Icon::Message,"Send message"});
         out.push_back({Icon::StarOutline,"Review player"});
         return out;
@@ -338,7 +340,16 @@ public:
         const auto& label=list[static_cast<std::size_t>(index)].second;
         const auto who=player;
         const auto tag=person_.gamertag;
-        if(label=="Invite to game") {
+        if(label=="Join game") {
+            closeAll();
+            joinFriendGame(userOf(who),tag,[who](std::string reason){inform(who,"Join game",reason,Icon::Info);});
+        } else if(label=="Invite to party") {
+            load<ServiceParty>(std::static_pointer_cast<GamerCardScreen>(shared_from_this()),[user=userOf(player),tag](IGamerServicesBackend& s) {
+                return s.changeParty(user,"invite",tag);
+            },[tag](GamerCardScreen& screen,ServiceParty party){applyParty(userOf(screen.player),std::move(party));
+                notify({Notification::Kind::Party,"Party invitation sent",tag});},
+              [who](GamerCardScreen&){inform(who,"Party","The party invitation could not be sent.",Icon::Error);});
+        } else if(label=="Invite to game") {
             sendInvitations(userOf(player),{tag},[who,tag](int failures) {
                 if(failures)inform(who,"Game invitation","The invitation could not be sent.",Icon::Error);
                 else notify({Notification::Kind::Invitation,"Invitation sent",tag});
@@ -433,6 +444,11 @@ public:
         },[](GamerCardScreen& screen){screen.failed_=true;});
     }
 private:
+    bool inMyParty() const {
+        const auto party=knownParty(userOf(player));
+        if(!party)return false;
+        return std::ranges::any_of(party->members,[&](const ServicePartyMember& m){return m.gamertag==person_.gamertag;});
+    }
     std::string relationship() const {
         if(self_)return "Your gamer card";
         if(!friendship_)return "Not on your friends list";
@@ -987,17 +1003,6 @@ private:
 };
 
 // ---- Party and game content (the services behind them are added separately) --------------------
-class PartyScreen final : public Screen {
-public:
-    std::string name() const override {return "party";}
-    std::string title() const override {return "Party";}
-    Category category() const override {return Category::Party;}
-    void draw(Ui& ui,const Box& area) override {
-        if(explainAccess(ui,area,access(player)))return;
-        emptyState(ui,area,Icon::Party,"Parties are not available","This CNA Gamer Services server offers no parties. Invite friends to your game from their gamer cards.");
-    }
-    std::vector<std::string> labels() const override {return {"Parties are not available"};}
-};
 
 // XNA's own emulation of a purchase for a game simulating trial mode (its resources' "Test
 // Purchase" prompt): Yes turns SimulateTrialMode off, and IsTrialMode follows at the next update.
@@ -1171,7 +1176,6 @@ std::shared_ptr<Screen> playersScreen(Xna::PlayerIndex player){auto s=make<Playe
 std::shared_ptr<Screen> reviewScreen(Xna::PlayerIndex player,std::string tag){return make<ReviewScreen>(player,std::move(tag));}
 std::shared_ptr<Screen> inviteScreen(Xna::PlayerIndex player,std::vector<std::string> chosen){auto s=make<InviteScreen>(player,std::move(chosen));s->start(s);return s;}
 std::shared_ptr<Screen> settingsScreen(Xna::PlayerIndex player){auto s=make<SettingsScreen>(player);s->start();return s;}
-std::shared_ptr<Screen> partyScreen(Xna::PlayerIndex player){return make<PartyScreen>(player);}
 std::shared_ptr<Screen> contentScreen(Xna::PlayerIndex player){return make<ContentScreen>(player);}
 std::shared_ptr<Screen> testPurchaseScreen(Xna::PlayerIndex player){return make<TestPurchaseScreen>(player);}
 std::shared_ptr<Screen> invitationScreen(Xna::PlayerIndex player,std::string sender,std::string senderId,std::string detail,std::function<void(std::optional<bool>)> answer)

@@ -6,6 +6,7 @@
 #include "System/ArgumentException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
+#include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "System/IO/MemoryStream.hpp"
 #include <algorithm>
@@ -65,10 +66,22 @@ namespace Microsoft::Xna::Framework::Net
     void LocalNetworkGamer::SendPartyInvites()
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
-        // Reference SendPartyInvites; CNA has no party service, so every profile is alone in its party.
+        // XNA IL: a gamer who left, or who is alone in (or without) a party, is refused.
         if (getHasLeftSessionProperty()) throw System::InvalidOperationException("The gamer has left the session.");
         if (signedInGamer_ == nullptr || signedInGamer_->getPartySizeProperty() < 2)
             throw System::InvalidOperationException("There is nobody else in the party to invite.");
+        // The rest of the party, invited to this online session as the Guide's invitations are.
+        const auto& user = CNA::Internal::GamerServices::GamerAccess::userId(*signedInGamer_);
+        const auto& active = CNA::Internal::GamerServices::activeOnlineSession();
+        if (user.empty() || !active || std::find(active->users.begin(), active->users.end(), user) == active->users.end())
+            throw System::InvalidOperationException("Party invitations need an online network session.");
+        std::vector<std::string> recipients;
+        if (const auto party = CNA::Internal::GamerServices::knownParty(user))
+            for (const auto& member : party->members)
+                if (member.userId != user && std::find(active->users.begin(), active->users.end(), member.userId) == active->users.end())
+                    recipients.push_back(member.gamertag);
+        if (!recipients.empty())
+            CNA::Internal::GamerServices::sendInvitations(user, recipients, [](int) {});
     }
 
     int LocalNetworkGamer::ReceiveData(std::vector<SharpRuntime::bytecs>& data, NetworkGamer*& sender)

@@ -18,6 +18,9 @@ public:
     static void setUserId(Microsoft::Xna::Framework::GamerServices::Gamer& gamer,std::string userId){gamer.serviceUserId_=std::move(userId);}
     /** @brief Disposes a gamer, as signing it out does. @param gamer Gamer. */
     static void dispose(Microsoft::Xna::Framework::GamerServices::Gamer& gamer){gamer.isDisposed_=true;}
+    /** @brief Sets a signed-in gamer's party size (XNA's internal setter). @param gamer Gamer.
+     * @param size People in the party, 0 for none. */
+    static void setPartySize(Microsoft::Xna::Framework::GamerServices::SignedInGamer& gamer,int size);
 };
 /** @brief The online session this process currently belongs to, registered by Net for Guide invitations. */
 struct ActiveOnlineSession {
@@ -67,6 +70,22 @@ void delayNotifications(long long milliseconds);
 void rememberRecentPlayer(const std::string& gamertag);
 /** @brief Gets recently met players, newest first. @return Gamertags. */
 std::vector<std::string> recentPlayers();
+/** @brief Joins a friend's or party member's joinable game from the Guide: the service grants a join
+ * request, it is accepted as an invitation, and the game hears InviteAccepted as for any invitation.
+ * @param user Local service identity. @param gamertag Whose game. @param failed Owner-thread
+ * completion with a reason when nothing could be joined. */
+void joinFriendGame(const std::string& user,const std::string& gamertag,std::function<void(std::string)> failed={});
+
+/** @brief Polls each signed-in account's party (PartySize follows it) and announces party
+ * invitations once each. Called by GamerServicesDispatcher.Update beside pumpInvitations. */
+void pumpParties();
+/** @brief The last party read for an account, if one was. @param user Account. @return Party. */
+std::optional<ServiceParty> knownParty(const std::string& user);
+/** @brief Records a party the Guide just changed (PartySize follows at once). @param user Account.
+ * @param party The service's answer. */
+void applyParty(const std::string& user,ServiceParty party);
+/** @brief Makes the next pumpParties poll immediately; deterministic tests only. */
+void pollPartiesNowForTesting();
 /** @brief Makes the next pumpInvitations poll immediately; deterministic tests only. */
 void pollInvitationsNowForTesting();
 /** @brief Forgets seen/queued invitations and any accepted invitation; deterministic tests only. */

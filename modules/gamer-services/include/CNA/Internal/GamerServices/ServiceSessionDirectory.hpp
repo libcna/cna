@@ -165,5 +165,11 @@ public:
     /** @brief Dismisses an unconsumed invite. @param actor Recipient. @param invite ID.
      * @return Dismissed invitation. */
     virtual ServiceInvitation dismissInvite(const std::string& actor,const std::string& invite)=0;
+    /** @brief Asks to join a friend's or party member's joinable game (invites.joinFriend): the
+     * invitation that game grants the actor, to accept and join as any invitation; never listed.
+     * @param actor Requesting identity. @param gamertag Whose game. @return Pending invitation.
+     * @throws ServiceOperationError NOT_FOUND when nothing is joinable, NOT_AUTHORIZED for a
+     * stranger, NOT_SUPPORTED without the service's join-friend capability. */
+    virtual ServiceInvitation requestJoin(const std::string& actor,const std::string& gamertag)=0;
 };
 }

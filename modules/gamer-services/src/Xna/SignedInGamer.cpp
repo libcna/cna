@@ -49,7 +49,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         , gameDefaults_(GameDefaults::CreateInternal())
         , presence_(GamerPresence::CreateInternal())
         , privileges_(GamerPrivileges::CreateInternal())
-        , partySize_(1)
+        , partySize_(0)
     {
     }
 
@@ -66,7 +66,6 @@ namespace Microsoft::Xna::Framework::GamerServices
     bool SignedInGamer::getIsGuestProperty() const                        { return isGuest_; }
     bool SignedInGamer::getIsSignedInToLiveProperty() const               { return isSignedInToLive_; }
     int SignedInGamer::getPartySizeProperty() const                       { return partySize_; }
-    void SignedInGamer::setPartySizeProperty(int value)                  { partySize_ = value; }
 
     Microsoft::Xna::Framework::PlayerIndex SignedInGamer::getPlayerIndexProperty() const
     {

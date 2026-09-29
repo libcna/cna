@@ -167,7 +167,7 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
 | GSX-U4 | Gamer Card with avatar, presence, zone, reputation, relationship and actions | done |
 | GSX-U5 | Friends, invitations (send/receive as system events), notifications | done |
 | GSX-U6 | Achievements and leaderboards presentation | done |
-| GSX-U7 | Party and title-content panes in the same system; catalog updates as one product | |
+| GSX-U7 | Party and title-content panes in the same system; catalog updates as one product | done |
 | GSX-U8 | Transitions, reduced motion, original system sounds (if an appropriate audio path exists) | |
 | GSX-U9 | Semantic UI tests; BEFORE/AFTER sheets and an ordered interaction sequence | |
 | GSX-E* | Remaining register gaps, one decision each | |
@@ -305,3 +305,17 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
   e2e `service_tls_e2e` (older and missing versions refused with the explanation), configuration.
   The GamerServicesComponent subscription itself has no unit test, per the file's recorded reason
   (a Game needs a live backend). Also: the client checks `leaderboard-list` before `leaderboards.list`.
+- GSX-E2/U7 (parties, **XNA** surface + **POL** service). Server migration 020: account-level parties
+  (one per account, eight people, hour-long invitations, the leader passing to the longest-standing
+  member) and `invites.joinFriend` (an invitation a friend's or party member's joinable player-match
+  game grants the asker, never listed). Client: `SignedInGamer.PartySize` follows the party at
+  gamer-services updates (0 without one; XNA's setter is internal, so the public C++ setter is gone,
+  the C ABI setter stays for hosts and is overwritten by the service); party invitations arrive as
+  notifications; the Guide's Party page (members with portraits, presence, leader crown and joinable
+  mark; invitations with Accept/Decline; Invite friends picker; Leave party); `ShowPartySessions`
+  lists joinable party members' games and shows Friends without a party (XNA XML); gamer cards offer
+  "Join game" for a joinable friend and "Invite to party"; joining raises `InviteAccepted` through
+  the normal invitation path; `SendPartyInvites` invites the rest of the party to the current online
+  session after XNA's checks. Tests: server social unit (party lifecycle, leadership, friends only,
+  join requests stay out of inboxes and friend states), 5 `GuidePartyTest`, the TLS e2e drives a
+  party through the Guide against the real service. GS 594 + 1 skip, Net 504.

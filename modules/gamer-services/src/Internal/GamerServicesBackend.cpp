@@ -312,6 +312,42 @@ public:
         if(rating!="prefer"&&rating!="avoid"&&rating!="clear")throw Unavailable("Invalid player review.");
         (void)request("reviews.submit",{{"gamertag",tag},{"rating",rating}},tokenFor(user));
     }
+    static ServiceParty partyFrom(const Json& result) {
+        ServiceParty value;
+        const auto& party=result.at("party");
+        auto flag=[](const Json& object,const char* key){const auto& v=object.at(key);if(!v.is_boolean())throw Unavailable("Invalid party response.");return v.get<bool>();};
+        if(!party.is_null()) {
+            value.id=CnaService::stringField(party,"id",32);value.leaderId=CnaService::stringField(party,"leaderId",64);
+            const auto& members=party.at("members");
+            if(value.id.size()!=32||!members.is_array()||members.empty()||members.size()>8)throw Unavailable("Invalid party response.");
+            for(const auto& row:members) {
+                ServicePartyMember member;
+                member.userId=CnaService::stringField(row,"userId",64);member.gamertag=CnaService::stringField(row,"gamertag",32);
+                member.online=flag(row,"online");member.presence=CnaService::stringField(row,"presenceText",256);
+                member.away=flag(row,"away");member.busy=flag(row,"busy");member.joinable=flag(row,"joinable");
+                value.members.push_back(std::move(member));
+            }
+        }
+        const auto& invitations=result.at("invitations");
+        if(!invitations.is_array()||invitations.size()>16)throw Unavailable("Invalid party response.");
+        for(const auto& row:invitations) {
+            ServicePartyInvitation invitation;
+            invitation.party=CnaService::stringField(row,"party",32);invitation.senderId=CnaService::stringField(row,"senderId",64);
+            invitation.senderGamertag=CnaService::stringField(row,"senderGamertag",32);
+            const auto& members=row.at("members");
+            if(invitation.party.size()!=32||!members.is_number_integer()||members.get<long long>()<0||members.get<long long>()>8)throw Unavailable("Invalid party response.");
+            invitation.members=static_cast<int>(members.get<long long>());
+            value.invitations.push_back(std::move(invitation));
+        }
+        return value;
+    }
+    ServiceParty party(const std::string& user) override {return partyFrom(request("parties.get",Json::object(),tokenFor(user)));}
+    ServiceParty changeParty(const std::string& user,const std::string& action,const std::string& argument) override {
+        if(action=="invite")return partyFrom(request("parties.invite",{{"gamertag",argument}},tokenFor(user)));
+        if(action=="accept"||action=="decline")return partyFrom(request("parties."+action,{{"party",argument}},tokenFor(user)));
+        if(action=="leave")return partyFrom(request("parties.leave",Json::object(),tokenFor(user)));
+        throw Unavailable("Invalid party operation.");
+    }
     std::vector<ServiceLeaderboardInfo> leaderboards() override {
         const auto result=request("leaderboards.list",Json::object(),tokenFor({}));
         const auto& boards=result.at("boards");
@@ -628,6 +664,8 @@ private:
             if(op=="leaderboards.game.abort"&&!capabilities_.contains("leaderboard-epoch-abort"))throw Unavailable("CNA service leaderboard abort capability missing.");
             if(op.starts_with("leaderboards.game.")&&!capabilities_.contains("local-leaderboard-commit"))throw Unavailable("CNA service local leaderboard commit capability missing.");
             if(op=="leaderboards.list"&&!capabilities_.contains("leaderboard-list"))throw Unavailable("CNA service leaderboard-list capability missing.");
+            if(op.starts_with("parties.")&&!capabilities_.contains("parties"))throw ServiceError("NOT_SUPPORTED");
+            if(op=="invites.joinFriend"&&!capabilities_.contains("join-friend"))throw ServiceError("NOT_SUPPORTED");
             if(op.starts_with("leaderboards.")&&!capabilities_.contains("leaderboard-reads"))throw Unavailable("CNA service leaderboard-read capability missing.");
             if(op=="assets.read"&&!capabilities_.contains("assets"))throw Unavailable("CNA service asset capability missing.");
             if(op=="avatars.catalogPack"&&!capabilities_.contains("avatar-catalog-packs"))throw Unavailable("CNA service catalog pack capability missing.");
@@ -826,6 +864,7 @@ public:
             value.online=value.accepted&&(std::find(slots_.begin(),slots_.end(),target.userId)!=slots_.end()||remoteOnline_.contains(target.userId));
             value.presence=value.online?presence_[target.userId]:"";
             value.away=value.online&&status_[target.userId]=="away";value.busy=value.online&&status_[target.userId]=="busy";
+            value.joinable=value.online&&joinable_.contains(target.userId);
             result.push_back(std::move(value));
         }return result;
     }
@@ -874,6 +913,70 @@ public:
     }
     /** @brief Deterministic view of recorded reviews for tests. */
     const std::map<std::pair<std::string,std::string>,std::string>& reviews()const{return reviews_;}
+    ServiceParty party(const std::string& user) override {
+        require(user);
+        ServiceParty value;
+        if(const auto found=partyOf_.find(user);found!=partyOf_.end()) {
+            const auto& party=parties_.at(found->second);
+            value.id=found->second;value.leaderId=party.leader;
+            for(const auto& id:party.members) {
+                const auto person=std::find_if(identities_.begin(),identities_.end(),[&](const auto& p){return p.userId==id;});
+                ServicePartyMember member;member.userId=id;member.gamertag=person==identities_.end()?id:person->gamertag;
+                member.online=std::find(slots_.begin(),slots_.end(),id)!=slots_.end()||remoteOnline_.contains(id);
+                member.presence=member.online?presence_[id]:"";
+                member.away=member.online&&status_[id]=="away";member.busy=member.online&&status_[id]=="busy";
+                member.joinable=member.online&&joinable_.contains(id);
+                value.members.push_back(std::move(member));
+            }
+        }
+        for(const auto& [id,party]:parties_)
+            if(const auto invited=party.invitations.find(user);invited!=party.invitations.end()) {
+                const auto sender=std::find_if(identities_.begin(),identities_.end(),[&](const auto& p){return p.userId==invited->second;});
+                value.invitations.push_back({id,invited->second,sender==identities_.end()?invited->second:sender->gamertag,static_cast<int>(party.members.size())});
+            }
+        return value;
+    }
+    ServiceParty changeParty(const std::string& user,const std::string& action,const std::string& argument) override {
+        require(user);
+        auto leave=[&](const std::string& party) {
+            auto& value=parties_.at(party);
+            std::erase(value.members,user);partyOf_.erase(user);
+            if(value.members.empty()){parties_.erase(party);return;}
+            if(value.leader==user)value.leader=value.members.front();
+        };
+        if(action=="invite") {
+            const auto target=profile(argument).userId;
+            if(target==user)throw ServiceOperationError("INVALID_ARGUMENT");
+            if(!edges_.contains({user,target})||!edges_.contains({target,user}))throw ServiceOperationError("NOT_AUTHORIZED");
+            if(!partyOf_.contains(user)) {
+                const auto id=std::string(28,'0')+std::to_string(1000+(++partySequence_)).substr(0,4);
+                parties_[id]=FakeParty{user,{user},{}};partyOf_[user]=id;
+            }
+            auto& party=parties_.at(partyOf_.at(user));
+            if(std::find(party.members.begin(),party.members.end(),target)!=party.members.end())throw ServiceOperationError("CONFLICT");
+            if(party.members.size()+party.invitations.size()>=8&&!party.invitations.contains(target))throw ServiceOperationError("LIMIT_EXCEEDED");
+            party.invitations[target]=user;
+        } else if(action=="accept") {
+            const auto found=parties_.find(argument);
+            if(found==parties_.end()||!found->second.invitations.contains(user))throw ServiceOperationError("NOT_FOUND");
+            if(partyOf_[user]!=argument) {
+                if(found->second.members.size()>=8)throw ServiceOperationError("LIMIT_EXCEEDED");
+                if(const auto previous=partyOf_.find(user);previous!=partyOf_.end()&&!previous->second.empty())leave(previous->second);
+                parties_.at(argument).members.push_back(user);partyOf_[user]=argument;
+            }
+            parties_.at(argument).invitations.erase(user);
+        } else if(action=="decline") {
+            if(const auto found=parties_.find(argument);found!=parties_.end())found->second.invitations.erase(user);
+        } else if(action=="leave") {
+            if(const auto found=partyOf_.find(user);found!=partyOf_.end())leave(found->second);
+        } else {
+            throw ServiceOperationError("INVALID_ARGUMENT");
+        }
+        std::erase_if(partyOf_,[](const auto& entry){return entry.second.empty();});
+        return party(user);
+    }
+    /** @brief Fixture: whether an account is in a joinable game (friends and party members see it). */
+    void setJoinable(const std::string& user,bool joinable){if(joinable)joinable_.insert(user);else joinable_.erase(user);}
     std::vector<ServiceLeaderboardInfo> leaderboards() override {
         if(std::all_of(slots_.begin(),slots_.end(),[](const auto& id){return id.empty();}))throw Unavailable("No authenticated fixture gamer.");
         std::vector<ServiceLeaderboardInfo> list;
@@ -1055,6 +1158,11 @@ private:
     std::set<std::pair<std::string,std::string>> edges_;
     std::map<std::string,std::string> presence_,status_;
     std::set<std::string> remoteOnline_;
+    struct FakeParty {std::string leader;std::vector<std::string> members;std::map<std::string,std::string> invitations;};
+    std::map<std::string,FakeParty> parties_;
+    std::map<std::string,std::string> partyOf_;
+    std::set<std::string> joinable_;
+    int partySequence_=0;
 };
 thread_local int serviceRestrictionDepth=0;
 std::mutex registryMutex;
@@ -1103,6 +1211,11 @@ void setFakeRemotePresence(IGamerServicesBackend& fake,const std::string& userId
     auto* backend=dynamic_cast<FakeBackend*>(&fake);
     if(!backend)throw System::InvalidOperationException("Not a fake Gamer Services backend.");
     backend->setRemotePresence(userId,online,presence,status);
+}
+void setFakeJoinable(IGamerServicesBackend& fake,const std::string& userId,bool joinable) {
+    auto* backend=dynamic_cast<FakeBackend*>(&fake);
+    if(!backend)throw System::InvalidOperationException("Not a fake Gamer Services backend.");
+    backend->setJoinable(userId,joinable);
 }
 void setFakeAvatarCatalogPolicy(IGamerServicesBackend& fake,AvatarCatalogPolicy policy) {
     auto* backend=dynamic_cast<FakeBackend*>(&fake);

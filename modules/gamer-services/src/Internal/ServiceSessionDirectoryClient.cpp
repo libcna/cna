@@ -220,6 +220,11 @@ public:
         auto value=decode([&]{return invitation(request_("invites.send",{{"session",session},{"gamertag",gamertag}},actor,{}));});
         if(value.session!=session||value.senderId!=actor||(value.state!=ServiceInvitationState::Pending&&value.state!=ServiceInvitationState::Accepted))invalid();return value;
     }
+    ServiceInvitation requestJoin(const std::string& actor,const std::string& gamertag) override {
+        actorGuard(actor);argument(!gamertag.empty()&&gamertag.size()<=32);
+        auto value=decode([&]{return invitation(request_("invites.joinFriend",{{"gamertag",gamertag}},actor,{}));});
+        if(value.senderId==actor||value.state!=ServiceInvitationState::Pending&&value.state!=ServiceInvitationState::Accepted)invalid();return value;
+    }
     ServiceInvitationPage listInvites(const std::string& actor,int start,int limit) override {
         actorGuard(actor);argument(start>=0&&start<=CnaService::MaxIncomingInvites&&limit>=1&&limit<=32);
         return decode([&]{const auto data=request_("invites.list",{{"start",start},{"limit",limit}},actor,{});

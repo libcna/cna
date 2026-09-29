@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/C/gamer_services.h"
+#include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
 #include "CnaCApiGamerServicesDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
@@ -865,7 +866,9 @@ CNA_Result cna_signed_in_gamer_set_party_size(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        gamer->setPartySizeProperty(static_cast<int>(partySize));
+        // XNA's setter is internal; a C host without a party service may still drive it, and the
+        // CNA party service overwrites it at the next gamer-services update.
+        CNA::Internal::GamerServices::GamerAccess::setPartySize(*gamer, static_cast<int>(partySize));
         return CNA_RESULT_SUCCESS;
     });
 }

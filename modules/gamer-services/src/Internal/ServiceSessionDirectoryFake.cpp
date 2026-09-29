@@ -138,11 +138,29 @@ public:
         value.senderId=actor;value.senderGamertag=tag_(actor);value.kind=session.value.kind;value.created=now();value.expires=now()+CnaService::InviteLifetimeSeconds;
         const auto key=value.invite;auto result=value;invitations_.emplace(key,std::move(invitation));++quota.second;return result;
     }
+    ServiceInvitation requestJoin(const std::string& actor,const std::string& tag) override {
+        // The fixture has no friends list: any account's joinable player-match game may be asked for.
+        authorize_(actor);prune();require(!tag.empty()&&tag.size()<=32);const auto host=user_(tag);require(host!=actor);
+        for(auto& [id,session]:sessions_) {
+            const auto& value=session.value;
+            if(!hasMember(value,host)||value.kind!=ServiceSessionKind::PlayerMatch)continue;
+            require(!hasMember(value,actor),"INVALID_STATE");
+            if((value.state!=ServiceSessionState::Lobby&&!value.allowJoinInProgress)||value.openPublicSlots<=0)continue;
+            for(const auto& [key,invitation]:invitations_) {
+                (void)key;if(live(invitation)&&invitation.recipient==actor&&invitation.value.session==id&&invitation.value.senderId==host)return invitation.value;
+            }
+            Invitation invitation;invitation.recipient=actor;auto& result=invitation.value;result.invite=nextId();result.session=id;
+            result.senderId=host;result.senderGamertag=tag_(host);result.kind=value.kind;result.created=now();result.expires=now()+CnaService::InviteLifetimeSeconds;
+            invitation.requested=true;
+            const auto key=result.invite;auto copy=result;invitations_.emplace(key,std::move(invitation));return copy;
+        }
+        throw ServiceOperationError("NOT_FOUND");
+    }
     ServiceInvitationPage listInvites(const std::string& actor,int start,int limit) override {
         authorize_(actor);prune();require(start>=0&&start<=CnaService::MaxIncomingInvites&&limit>=1&&limit<=32);
         ServiceInvitationPage page;page.start=start;int skipped=0;
         for(const auto& [key,invitation]:invitations_) {
-            (void)key;if(invitation.recipient!=actor||!live(invitation))continue;
+            (void)key;if(invitation.recipient!=actor||!live(invitation)||invitation.requested)continue;
             if(skipped++<start)continue;
             if(page.invites.size()==static_cast<std::size_t>(limit)){page.more=true;break;}page.invites.push_back(invitation.value);
         }return page;
@@ -159,7 +177,7 @@ public:
     }
 private:
     struct Session {ServiceSessionSnapshot value;std::map<std::string,std::string> owners;std::map<std::string,long long> leases;std::set<std::string> removed;};
-    struct Invitation {ServiceInvitation value;std::string recipient,usedMachine;};
+    struct Invitation {ServiceInvitation value;std::string recipient,usedMachine;bool requested=false;};
     long long now() const{return clock_();}
     std::string nextId(){std::ostringstream stream;stream<<std::hex<<std::setfill('0')<<std::setw(32)<<++sequence_;return stream.str();}
     static void kindGuard(ServiceSessionKind kind){require(kind==ServiceSessionKind::PlayerMatch||kind==ServiceSessionKind::Ranked);}

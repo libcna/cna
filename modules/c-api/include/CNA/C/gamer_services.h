@@ -1238,7 +1238,8 @@ CNA_C_API CNA_Result cna_signed_in_gamer_get_party_size(
     int32_t* out_party_size);
 
 /**
- * @brief Sets a signed-in gamer's party size.
+ * @brief Sets a signed-in gamer's party size (XNA's setter is internal: a host without a party
+ * service may drive it; the CNA party service overwrites it at the next gamer-services update).
  *
  * @param gamer Owned signed-in gamer handle.
  * @param party_size New party size.

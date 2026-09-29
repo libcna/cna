@@ -140,6 +140,8 @@ void GamerServicesDispatcher::Update() {
     // Invitation prompts and InviteAccepted belong to the outer update, never a nested End pump.
     try {CNA::Internal::GamerServices::pumpInvitations();}
     catch(...) {if(!firstError)firstError=std::current_exception();}
+    try {CNA::Internal::GamerServices::pumpParties();}
+    catch(...) {if(!firstError)firstError=std::current_exception();}
     // The Guide button belongs to games that draw the Guide.
     if(CNA::Internal::GamerServices::guideOverlayAttached()) {
         try {CNA::Internal::GamerServices::pollSystemGuideButton();}

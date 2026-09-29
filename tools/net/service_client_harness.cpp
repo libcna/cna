@@ -368,6 +368,21 @@ int main(int argc,char** argv) {
             check(friends[0]->getIsBusyProperty(),"real friend chose busy");
             Guide::ShowFriends(Microsoft::Xna::Framework::PlayerIndex::One);check(uiItems("friends",1),"real friends list");
             check(Ui::labelsForTesting()[0].starts_with("Bob - Busy"),"the list shows the chosen status");Ui::sendForTesting(Ui::Command::Back);
+            // GSX-E2: a party through the Guide against the real service, then left again.
+            Guide::ShowParty(Microsoft::Xna::Framework::PlayerIndex::One);
+            check(uiLabel("party",0,"Invite friends"),"no party yet");
+            Ui::clickForTesting(0);check(uiItems("partyInvite",1)&&Ui::labelsForTesting()[0]=="Bob","friends to invite");
+            Ui::clickForTesting(0);Ui::sendForTesting(Ui::Command::Back);
+            check(uiLabel("party",0,"Alice (leader)")&&gamer->getPartySizeProperty()==1,"inviting started a party");
+            const auto self=Service::GamerAccess::userId(*gamer);
+            const auto known=Service::knownParty(self);
+            check(known&&known->members.size()==1&&known->leaderId==self,"real party read back");
+            bool joinless=false;
+            try{(void)Service::backend()->sessionDirectory().requestJoin(self,"Bob");}
+            catch(const Service::ServiceOperationError& error){joinless=error.code=="NOT_FOUND";}
+            check(joinless,"no game of Bob's to join");
+            Ui::clickForTesting(2);check(uiLabel("party",0,"Invite friends")&&gamer->getPartySizeProperty()==0,"left the party");
+            Ui::closeAll();
         }
         if(real&&std::string(argv[4])=="revoke-wait") {
             std::cout<<"READY_REVOKE"<<std::endl;std::string command;std::getline(std::cin,command);

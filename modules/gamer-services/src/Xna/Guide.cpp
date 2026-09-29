@@ -987,7 +987,7 @@ namespace Microsoft::Xna::Framework::GamerServices
     {
         if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException();
         (void)SocialActor(player);
-        CNA::Internal::GamerServices::GuideUi::open(CNA::Internal::GamerServices::GuideUi::partyScreen(player),player);
+        CNA::Internal::GamerServices::GuideUi::open(CNA::Internal::GamerServices::GuideUi::partySessionsScreen(player),player);
     }
 
     void Guide::ShowPlayerReview(PlayerIndex player, Gamer* gamer)

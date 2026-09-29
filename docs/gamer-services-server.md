@@ -76,9 +76,15 @@ limitations page). Online sessions honor `AllowHostMigration`: when the host lea
 dies, the service hands the session to the machine with the lowest remaining gamer ID and every
 machine raises `HostChanged` (see "Host migration" below). `AddLocalGamer` adds a signed-in account
 gamer to this machine's group through the service; it joins, with `GamerJoined` on every machine,
-at a later Update, as XNA's kernel reports it. Not implemented: voice, TrueSkill
+at a later Update, as XNA's kernel reports it. Parties: an account-level party of up to eight
+friends (`SignedInGamer.PartySize` follows it at gamer-services updates, 0 without a party; the
+Guide's Party page invites friends, answers party invitations and leaves; `ShowPartySessions` lists
+party members' joinable games, or shows Friends without a party, as XNA does;
+`LocalNetworkGamer.SendPartyInvites` invites the rest of the party to the current online session).
+A friend's or party member's joinable game can be joined from their gamer card or the party pages:
+the game hears `InviteAccepted` as for an invitation. Not implemented: voice, TrueSkill
 computation, time windows for the `...Recent` leaderboard keys (they keep every row), server push
-(the client polls), and party and marketplace services. Friends see the online status (online, away,
+(the client polls), and a store. Friends see the online status (online, away,
 busy) a player chooses in the Guide (`FriendGamer.IsAway`/`IsBusy`). Rich presence is sent during
 Dispatcher.Update; friend online state reflects authenticated activity within 90 seconds; Update
 schedules an authenticated heartbeat every 30 seconds. `docs/xna-4-api-coverage.md` §8–9 lists the
