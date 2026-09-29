@@ -26,7 +26,10 @@ processes, and a store that cannot be read is never overwritten. Profiles whose 
 created when missing; for unattended runs and CI), are signed in when gamer services start and
 appear, raising `SignedIn`, at the first `Dispatcher.Update`, as XNA reports profiles already signed
 in at startup. Local profiles are never sent to a service. With an endpoint configured, sign-in uses
-accounts only. An entry may also carry `"gameDefaults"`, the profile's `GameDefaults`:
+accounts only; with `ShowSignIn(panes, onlineOnly: true)` a player may instead type Guest to play as a
+guest of the first signed-in account ("Alice (1)", `IsGuest`): nothing is sent to the service, the
+guest earns no achievements, cannot be in a PlayerMatch/Ranked session (the service admits only
+authenticated accounts), and signs out with its account (GSP-L5). An entry may also carry `"gameDefaults"`, the profile's `GameDefaults`:
 `gameDifficulty` (`Easy`/`Normal`/`Hard`), `controllerSensitivity` (`Low`/`Medium`/`High`),
 `racingCameraAngle` (`Back`/`Front`/`Inside`), `primaryColor`/`secondaryColor` (`#rrggbb`) and the
 booleans `autoAim`, `autoCenter`, `moveWithRightThumbStick`, `invertYAxis`, `manualTransmission`,

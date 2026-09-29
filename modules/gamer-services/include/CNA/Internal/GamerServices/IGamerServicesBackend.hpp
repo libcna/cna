@@ -157,6 +157,8 @@ struct BackendEvent {
     int slot = 0;
     /** @brief Whether a SignedIn identity is a service account (false for a local offline profile). */
     bool signedInToLive = true;
+    /** @brief A SignedIn guest of the account signed in at this slot, or -1 (XNA IsGuest). */
+    int guestOf = -1;
     /** @brief Identity snapshot. */
     ServiceIdentity identity;
     /** @brief Safe diagnostic code, never credentials. */
@@ -182,6 +184,12 @@ public:
     virtual void signInLocal(int slot,const std::string& gamertag) = 0;
     /** @brief Queues revocation. @param slot Local slot. */
     virtual void signOut(int slot) = 0;
+    /** @brief Signs a guest of a signed-in account into a slot at the next pump (XNA guests of a
+     * LIVE profile); nothing is sent to the service. @param slot Local slot.
+     * @param gamertag Guest name ("Alice (1)"). @param host Slot of the account. */
+    virtual void signInGuest(int slot,const std::string& gamertag,int host) = 0;
+    /** @brief Signs a guest out at the next pump. @param slot The guest's slot. */
+    virtual void signOutGuest(int slot) = 0;
     /** @brief Takes bounded ready events. @return Ordered events. */
     virtual std::vector<BackendEvent> pump() = 0;
     /** @brief Queues logical work on the backend executor. @param work Background work.

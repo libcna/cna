@@ -9,6 +9,8 @@
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GameDefaults.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerPrivileges.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
@@ -211,6 +213,53 @@ TEST_F(SystemGuideTest, AnAccountCarriesItsServiceGameDefaults) {
     EXPECT_EQ(Microsoft::Xna::Framework::Color(0, 128, 255), *defaults.getSecondaryColorProperty());
     EXPECT_EQ(RacingCameraAngle::Front, defaults.getRacingCameraAngleProperty());
     EXPECT_EQ(ControllerSensitivity::Low, defaults.getControllerSensitivityProperty());
+}
+
+// XNA ShowSignIn(onlineOnly: true): "local gamers can sign in as guests of a profile currently signed in".
+TEST_F(SystemGuideTest, AGuestSignsInWithItsAccountAndLeavesWithIt) {
+    auto fake = Fake();
+    fake->signIn(0, "Alice", "fixture");
+    ASSERT_TRUE(Settle([] { return Count() == 1; }));
+    Guide::ShowSignIn(2, true);
+    ASSERT_TRUE(Guide::getHasPendingKeyboardInputEXTProperty());
+    Type("guest");
+    ASSERT_TRUE(Settle([] { return Count() == 2; }));
+    auto* guest = (*Gamer::getSignedInGamersProperty())[PlayerIndex::Two];
+    ASSERT_NE(nullptr, guest);
+    EXPECT_EQ("Alice (1)", guest->getGamertagProperty());
+    EXPECT_TRUE(guest->getIsGuestProperty());
+    EXPECT_TRUE(guest->getIsSignedInToLiveProperty());
+    EXPECT_FALSE(guest->getPrivilegesProperty().getAllowOnlineSessionsProperty());
+    EXPECT_THROW(guest->AwardAchievement("first"), GamerPrivilegeException);
+    EXPECT_FALSE((*Gamer::getSignedInGamersProperty())[PlayerIndex::One]->getIsGuestProperty());
+    // Signing the account out takes its guest along.
+    fake->signOut(0);
+    ASSERT_TRUE(Settle([] { return Count() == 0; }));
+}
+
+TEST_F(SystemGuideTest, WithoutOnlineOnlyGuestIsAnOrdinaryUsername) {
+    auto fake = Fake();
+    fake->signIn(0, "Alice", "fixture");
+    ASSERT_TRUE(Settle([] { return Count() == 1; }));
+    Guide::ShowSignIn(2, false);
+    Type("guest");
+    // The account sign-in carries on: the password pane.
+    ASSERT_TRUE(Guide::getHasPendingKeyboardInputEXTProperty());
+    EXPECT_EQ(1, Count());
+    Guide::ResetPendingKeyboardInputForTestingEXT();
+}
+
+TEST_F(SystemGuideTest, AGuestSignsItselfOutFromTheGuide) {
+    auto fake = Fake();
+    fake->signIn(0, "Alice", "fixture");
+    ASSERT_TRUE(Settle([] { return Count() == 1; }));
+    fake->signInGuest(1, "Alice (1)", 0);
+    ASSERT_TRUE(Settle([] { return Count() == 2; }));
+    Service::openSystemGuide(PlayerIndex::Two);
+    ASSERT_TRUE(Guide::getHasPendingMessageBoxEXTProperty());
+    Guide::SimulateMessageBoxClickEXT(0);
+    ASSERT_TRUE(Settle([] { return Count() == 1; }));
+    EXPECT_EQ("Alice", (*Gamer::getSignedInGamersProperty())[0]->getGamertagProperty());
 }
 
 TEST_F(SystemGuideTest, NothingOpensWhileTheGuideIsVisible) {

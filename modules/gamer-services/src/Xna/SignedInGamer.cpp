@@ -122,6 +122,8 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void SignedInGamer::AwardAchievement(const std::string& achievementKey)
     {
+        // A guest has no profile of its own to keep achievements in.
+        if (isGuest_) throw GamerPrivilegeException("A guest cannot earn achievements.");
         if (!serviceUserId_.empty()) {
             const auto name = CNA::Internal::GamerServices::backend()->award(serviceUserId_, achievementKey);
             if (!name.empty()) CNA::Internal::GamerServices::postGuideNotification("Achievement unlocked: " + name);

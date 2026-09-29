@@ -83,6 +83,16 @@ public:
         event.identity.gamertag=gamertag;event.identity.displayName=gamertag;
         ready(std::move(event));
     }
+    void signInGuest(int slot,const std::string& gamertag,int host) override {
+        slotGuard(slot);slotGuard(host);
+        if(host==slot||gamertag.empty()||gamertag.size()>36)throw Unavailable("Invalid guest.");
+        BackendEvent event;event.type=BackendEvent::Type::SignedIn;event.slot=slot;event.signedInToLive=true;event.guestOf=host;
+        event.identity.gamertag=gamertag;event.identity.displayName=gamertag;
+        ready(std::move(event));
+    }
+    void signOutGuest(int slot) override {
+        slotGuard(slot);BackendEvent event;event.type=BackendEvent::Type::SignedOut;event.slot=slot;ready(std::move(event));
+    }
     std::vector<BackendEvent> pump() override {
         if(!background_) {
             for(int i=0;i<32;++i) {

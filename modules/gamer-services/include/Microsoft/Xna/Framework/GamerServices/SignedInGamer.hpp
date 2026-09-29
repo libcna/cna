@@ -238,6 +238,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         );
 
         bool isGuest_;
+        // A guest's host account slot (it signs out with its host), or -1.
+        int guestHost_{-1};
         bool isSignedInToLive_;
         Microsoft::Xna::Framework::PlayerIndex playerIndex_;
         GameDefaults gameDefaults_;

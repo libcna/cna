@@ -217,7 +217,7 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
 | GSP-J1 | `AvatarDescription.Changed` | done |
 | GSP-K1 | Online host migration | done |
 | GSP-K2 | Online `AddLocalGamer` | done |
-| GSP-L1..L6 | Account GameDefaults, away/busy, toasts, Stream columns, guests, QoS bandwidth | L1-L4 done; L5, L6 todo |
+| GSP-L1..L6 | Account GameDefaults, away/busy, toasts, Stream columns, guests, QoS bandwidth | L1-L5 done; L6 todo |
 | GSP-M1 | GamerZone / Reputation | todo |
 | GSP-O1 | Server concurrency benchmark and production audit | todo |
 | GSP-P1 | Documentation truth pass | todo |
@@ -319,6 +319,15 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   is not documented), and reads return read-only streams. Server type `stream` validated; offline
   local boards skip streams as before. Tests: server unit (+8),
   `OnlineLeaderboardTest.AStreamColumnIsWrittenThroughItsStreamAndReadBack`; Net 502, GS 547 + 1.
+- GSP-L5 (guest sign-in). Evidence: the XNA IL only carries `IsGuest` as native player state
+  (also replicated on NetworkGamer); the Xbox documentation says "If onlineOnly is true, local
+  gamers can sign in as guests of a profile currently signed in", a guest is "the guest of an Xbox
+  LIVE-enabled profile", and LocalWithLeaderboards "allows guests ... to join". CNA: with
+  `ShowSignIn(..., true)` typing Guest signs in "Alice (1)" (Xbox naming) as a guest of the
+  lowest-numbered signed-in account, without a password or a service call; `IsGuest`,
+  `IsSignedInToLive` true, no online-session privilege (the service authenticates every
+  participant), `AwardAchievement` refused, signs out with its host or from the system Guide.
+  Tests: 3 new `SystemGuideTest`; GS 550 + 1 skip, Net 502.
 - Visual evidence lives outside the repositories, as the sample evidence does:
   `/rv/tmp/avatar-polish/evidence/{before,after}/`.
 - BEFORE (catalog v1, 2026-09-29): `evidence/before/{jobs.json, preview/, opengl33/,

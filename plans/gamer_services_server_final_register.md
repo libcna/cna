@@ -37,7 +37,7 @@ Each is documented where it is declared (C++ and C) and in `docs/xna-4-api-cover
 | `QualityOfService` bandwidth | 0 | Only the discovery round trip is measured; service search results are unmeasured (`IsAvailable` false). |
 | `GamerServicesDispatcher.InstallingTitleUpdate` | never raised | CNA installs no title updates. |
 | `WriteTrueSkill` | raised; no skill is computed | Skill boards are ordinary arbitrated boards (GS-006e). |
-| Guest sign-in (`ShowSignIn` guests) | not offered | Accounts and local profiles only. |
+| Guests in PlayerMatch/Ranked sessions | refused (not authorized for CNA online sessions) | A guest has no service credential for the service to authenticate; guests play Local, LocalWithLeaderboards and SystemLink sessions (GSP-L5). |
 | Browser multiplayer | limitations page | Owner scope: native plus a browser limitations page. |
 
 ## Host-language refusals

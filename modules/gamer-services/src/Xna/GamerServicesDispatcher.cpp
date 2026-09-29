@@ -108,12 +108,20 @@ void GamerServicesDispatcher::Update() {
             if(auto* previous=slots[event.slot]) {
                 // Reference HandlePlayerSignInChanged: the old gamer is disposed, then SignedOut is raised.
                 slots[event.slot]=nullptr;previous->isDisposed_=true;publish();SignedInGamer::OnSignOut(previous);
+                // Guests leave with the account they are guests of.
+                if(!previous->isGuest_)for(int guest=0;guest<4;++guest)
+                    if(auto* other=slots[guest];other&&other->isGuest_&&other->guestHost_==event.slot) {
+                        slots[guest]=nullptr;other->isDisposed_=true;publish();SignedInGamer::OnSignOut(other);
+                    }
             }
             if(event.type==Type::SignedIn) {
-                auto gamer=std::unique_ptr<SignedInGamer>(new SignedInGamer(event.identity.gamertag,event.signedInToLive,false,static_cast<PlayerIndex>(event.slot)));
-                gamer->serviceUserId_=event.identity.userId;gamer->displayName_=event.identity.displayName;
-                // A local profile has no service: no online sessions and no purchases.
-                gamer->privileges_.allowOnlineSessions_=event.signedInToLive&&event.identity.allowOnlineSessions;
+                const bool guest=event.guestOf>=0;
+                if(guest&&(!slots[event.guestOf]||slots[event.guestOf]->isGuest_)){Guide::OnSignInResult(event.slot,false);continue;}
+                auto gamer=std::unique_ptr<SignedInGamer>(new SignedInGamer(event.identity.gamertag,event.signedInToLive,guest,static_cast<PlayerIndex>(event.slot)));
+                gamer->serviceUserId_=event.identity.userId;gamer->displayName_=event.identity.displayName;gamer->guestHost_=event.guestOf;
+                // A local profile has no service: no online sessions and no purchases. A guest has no
+                // account the service could admit to an online session.
+                gamer->privileges_.allowOnlineSessions_=event.signedInToLive&&!guest&&event.identity.allowOnlineSessions;
                 if(!event.signedInToLive)gamer->privileges_.allowPurchaseContent_=false;
                 // A local profile carries its own preferred game settings; an account's come from the service.
                 if(!event.signedInToLive) {

@@ -436,6 +436,25 @@ namespace Microsoft::Xna::Framework::GamerServices
         int signInPaneCount = 0;
         int signInSlot = 0;
         bool signInLocal = false;
+        // ShowSignIn(onlineOnly: true): further players may sign in as guests of a signed-in account.
+        bool signInOnlineOnly = false;
+        // The account a guest joins as (the lowest-numbered signed-in account), or null.
+        SignedInGamer* GuestHost() {
+            SignedInGamer* host=nullptr;
+            for(auto* gamer:*Gamer::getSignedInGamersProperty())
+                if(gamer->getIsSignedInToLiveProperty()&&!gamer->getIsGuestProperty()&&
+                   (!host||gamer->getPlayerIndexProperty()<host->getPlayerIndexProperty()))host=gamer;
+            return host;
+        }
+        // Xbox names a guest after its account: "Alice (1)", "Alice (2)".
+        std::string GuestName(const SignedInGamer& host) {
+            for(int number=1;;++number) {
+                const auto name=host.getGamertagProperty()+" ("+std::to_string(number)+")";
+                bool taken=false;
+                for(auto* gamer:*Gamer::getSignedInGamersProperty())if(gamer->getGamertagProperty()==name)taken=true;
+                if(!taken)return name;
+            }
+        }
         std::string signInUsername;
         std::string Folded(std::string value) {
             for(auto& c:value)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -488,12 +507,24 @@ namespace Microsoft::Xna::Framework::GamerServices
             while (signInSlot < signInPaneCount && occupied(signInSlot)) ++signInSlot;
             if (signInSlot >= signInPaneCount) { signInActive = false; SyncTouchInputSuppression(); return; }
             if (signInLocal) { StartLocalSignInPane(); return; }
+            auto* host = signInOnlineOnly ? GuestHost() : nullptr;
+            const std::string prompt = "Username for player " + std::to_string(signInSlot + 1) +
+                (host ? ", or Guest to play as a guest of " + host->getGamertagProperty() : "");
             (void)CNA::Internal::GamerServices::showGuideKeyboardInput(static_cast<PlayerIndex>(signInSlot), "CNA Gamer Services sign-in",
-                "Username for player " + std::to_string(signInSlot + 1), "", [](System::IAsyncResult& usernameResult) {
+                prompt, "", [](System::IAsyncResult& usernameResult) {
                     std::unique_ptr<System::IAsyncResult> owned(&usernameResult);
                     if (Guide::WasKeyboardInputCanceledEXT(&usernameResult)) { signInActive = false; SyncTouchInputSuppression(); return; }
                     signInUsername = Guide::EndShowKeyboardInput(&usernameResult);
                     if(signInUsername.empty()||signInUsername.size()>64){signInActive=false;signInUsername.clear();SyncTouchInputSuppression();return;}
+                    std::string lowered=signInUsername;
+                    std::transform(lowered.begin(),lowered.end(),lowered.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
+                    if(auto* guestHost=signInOnlineOnly?GuestHost():nullptr;guestHost&&lowered=="guest") {
+                        // A guest needs no password: it plays on its account's sign-in.
+                        signInUsername.clear();
+                        CNA::Internal::GamerServices::backend()->signInGuest(signInSlot,GuestName(*guestHost),
+                            static_cast<int>(guestHost->getPlayerIndexProperty()));
+                        SyncTouchInputSuppression();return;
+                    }
                     (void)CNA::Internal::GamerServices::showGuideKeyboardInput(static_cast<PlayerIndex>(signInSlot), "CNA Gamer Services sign-in", "Password", "",
                         [](System::IAsyncResult& passwordResult) {
                             std::unique_ptr<System::IAsyncResult> passwordOwned(&passwordResult);
@@ -1341,7 +1372,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         // Without a service only local offline profiles exist, which an online-only sign-in excludes.
         const bool service = CNA::Internal::GamerServices::backend()->serviceEnabled();
         if (!service && onlineOnly) throw GamerServicesNotAvailableException("No CNA account service is configured.");
-        signInPaneCount = paneCount; signInSlot = 0; signInActive = true; signInLocal = !service;
+        signInPaneCount = paneCount; signInSlot = 0; signInActive = true; signInLocal = !service; signInOnlineOnly = onlineOnly;
         try { StartSignInPane(); } catch (...) { signInActive = false; SyncTouchInputSuppression(); throw; }
     }
     void Guide::OnSignInResult(int slot, bool success) {
@@ -1430,6 +1461,13 @@ void openSystemGuide(Microsoft::Xna::Framework::PlayerIndex player) {
         (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"Guide","Signed in to the local profile "+gamer->getGamertagProperty()+
             ". Online features need a CNA account service.",{"Sign out","Close"},1,MessageBoxIcon::None,[player,index,close](System::IAsyncResult& result) {
                 if(close(result)==0)systemGuideAction(player,[index]{backend()->signOut(index);});
+            },{});
+        return;
+    }
+    if(gamer->getIsGuestProperty()) {
+        (void)CNA::Internal::GamerServices::showGuideMessageBox(player,"Guide","Playing as "+gamer->getGamertagProperty()+", a guest.",
+            {"Sign out","Close"},1,MessageBoxIcon::None,[player,index,close](System::IAsyncResult& result) {
+                if(close(result)==0)systemGuideAction(player,[index]{backend()->signOutGuest(index);});
             },{});
         return;
     }
