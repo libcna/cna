@@ -66,6 +66,8 @@ public:
     // One read per frame. Directions repeat while held; everything else fires on the press. A
     // reader that was idle takes whatever is held as already held, so the press that opened a
     // screen (A in a game menu, Enter confirming a prompt) cannot also answer it.
+    // Whatever is held when something new appears on top is already held for it.
+    void prime(){primed_=true;}
     InputFrame poll(double now)
     {
         InputFrame frame;
@@ -102,8 +104,9 @@ public:
         const bool left=mouse.getLeftButtonProperty()==In::ButtonState::Pressed;
         const bool right=mouse.getRightButtonProperty()==In::ButtonState::Pressed;
         const int wheel=mouse.getScrollWheelValueProperty();
-        const bool idle=now-lastPoll_>0.5;
+        const bool idle=now-lastPoll_>0.5||primed_;
         lastPoll_=now;
+        primed_=false;
         if(idle) {
             keyHeld_=keyDown;padHeld_=padDown;leftHeld_=left;rightHeld_=right;wheel_=wheel;mouse_=frame.mouse;
             return frame;
@@ -138,6 +141,7 @@ private:
     int wheel_=0;
     Xna::Vector2 mouse_;
     double lastPoll_=-10;
+    bool primed_=false;
     Device device_=Device::Keyboard;
 };
 
@@ -152,7 +156,7 @@ struct GuideState {
     Portraits portraits;
     std::unique_ptr<Xna::Graphics::SpriteBatch> batch;
     Xna::Graphics::GraphicsDevice* device=nullptr;
-    std::vector<std::shared_ptr<Screen>> pending;  // pushed during a frame, added after it
+    std::string shownTop;  // what was on top last frame (a new top primes the input)
     // Identity shown on the rail, per player.
     std::array<Identity,4> identities;
 };
@@ -767,6 +771,18 @@ Style& styleFor(Xna::Graphics::GraphicsDevice& device,int width,int height)
 }
 }
 
+namespace {
+void primeOnNewTop()
+{
+    auto& s=state();
+    std::string top;
+    if(auto box=pendingMessageBox())top="box:"+box->title+"\n"+box->text;
+    else if(auto keys=pendingKeyboard())top="keys:"+keys->title+"\n"+keys->description;
+    else if(!s.stack.empty())top="screen:"+std::to_string(reinterpret_cast<std::uintptr_t>(s.stack.back().get()));
+    if(top!=s.shownTop){s.shownTop=top;s.input.prime();}
+}
+}
+
 void draw(Xna::Graphics::GraphicsDevice& device)
 {
     auto& s=state();
@@ -778,6 +794,7 @@ void draw(Xna::Graphics::GraphicsDevice& device)
     const int width=viewport.getWidthProperty(),height=viewport.getHeightProperty();
     (void)styleFor(device,width,height);
     const double now=seconds();
+    primeOnNewTop();
     Ui ui(*s.style,*s.batch,s.portraits,InputContext{s.input.poll(now),now-s.openedAt,now-s.topChangedAt,s.player});
     // Input goes to whatever is on top: the game's dialog, else the top screen.
     if(!dialogs&&!s.stack.empty()) {
@@ -813,6 +830,7 @@ void drawGameDialogs(Xna::Graphics::GraphicsDevice& device,Xna::Graphics::Sprite
     const auto viewport=device.getViewportProperty();
     (void)styleFor(device,viewport.getWidthProperty(),viewport.getHeightProperty());
     const double now=seconds();
+    primeOnNewTop();
     Ui ui(*s.style,batch,s.portraits,InputContext{s.input.poll(now),now,now,s.player});
     if(auto box=pendingMessageBox())drawMessageBox(ui,*box);
     else if(auto keys=pendingKeyboard())drawKeyboard(ui,*keys);
