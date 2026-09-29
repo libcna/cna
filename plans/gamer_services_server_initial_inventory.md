@@ -2,6 +2,8 @@
 
 Baseline b2fd47a45. Every candidate needs individual Xbox-target review; this is not a defect count. Re-run rg after migrations; retain this baseline as evidence.
 
+This is the historical GS-001 baseline, not an open list: `gamer_services_server_final_register.md` records what every candidate became.
+
 * `modules/gamer-services/include/CNA/Internal/GamerServices/LocalGamerServicesStore.hpp:43` — `* Reuses Microsoft::Xna::Framework::Storage::StorageDevice::GetStorageRootEXT() (the`
 * `modules/gamer-services/include/CNA/Internal/GamerServices/LocalGamerServicesStore.hpp:49` — `std::string GetGamerServicesStoreRootEXT();`
 * `modules/gamer-services/include/CNA/Internal/GamerServices/LocalGamerServicesStore.hpp:71` — `std::string MakeLeaderboardFileKeyEXT(const std::string& leaderboardKeyName, int gameMode);`

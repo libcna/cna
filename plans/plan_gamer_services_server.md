@@ -1,5 +1,11 @@
 # CNA Gamer Services server implementation — living plan
 
+> **Status: complete (2026-09-29).** The historical checkpoint checkboxes below are not the current
+> task list; the items that were left open at a checkpoint are marked with the later milestone that
+> closed them. The authoritative final status is the GS-001..GS-011 checklist plus
+> [`gamer_services_server_final_register.md`](gamer_services_server_final_register.md), which also
+> lists the deliberate remaining limits.
+
 Mission authorized 2026-09-28. Xbox 360 XNA behavior is the target; Windows/FNA service and avatar stubs are **not** behavioral evidence for Xbox 360. CNA protocol, accounts and original avatar assets have no Xbox LIVE compatibility. This plan supersedes plan_net.md's refusal of PlayerMatch/Ranked/invites and its standard-avatar/EXT split. Prohibition on proprietary/third-party avatar assets remains.
 
 ## Repository boundary and initial audit
@@ -264,9 +270,9 @@ callback before Lobby and atomic/idempotent server commit. Ranked arbitration fo
   invalid-row atomicity, duplicate rows and identical commit retry across server restart tested.
 - [x] LocalNetworkGamer publishes the real signed-in gamertag/display name; the previous test
   asserting Stub Gamer was corrected. SystemLink wire identity remains its real account identity.
-- [ ] GS-006c: leaving/disposal write events/submission, explicit epoch abort, transport-loss retry
+- [x] *(Closed by the GS-006c checkpoint and GS-006d/GS-006e; Stream columns are a documented limit in the final register.)* GS-006c: leaving/disposal write events/submission, explicit epoch abort, transport-loss retry
   policy; Stream columns, catalog validation timing and full event restriction audit.
-- [ ] Ranked/all-machine arbitration and TrueSkill require GS-007 session directory integration.
+- [x] *(Closed by GS-006e for arbitration; TrueSkill computation is a documented limit in the final register.)* Ranked/all-machine arbitration and TrueSkill require GS-007 session directory integration.
 
 CNA fake harness **99 checks pass**, including four local signed-in gamers; Net **316/316 pass**
 (including real ENet two-process data/host migration); GamerServices **388 run, 387 pass, 1 existing
@@ -659,9 +665,9 @@ public online NetworkSession/InviteAccepted/relay/avatar capability is claimed b
   accounts, achievements and boards. Host lease expiration still closes sessions; no host migration.
 - [x] Canonical protocol header/parser/golden copies synchronized; drift/property/C ABI gates
   10/10 passed. Affected client/protocol/C API harnesses build. Public C ABI unchanged.
-- [ ] GS-007d: typed private client directory/invitation boundary, strict response validation,
+- [x] *(Closed by the GS-007d checkpoint.)* GS-007d: typed private client directory/invitation boundary, strict response validation,
   deterministic fake model and real two-CNA-process control tests (including four local credentials).
-- [ ] GS-007e/GS-008: authenticated realtime relay and public online NetworkSession integration;
+- [x] *(Closed by GS-008a-d and GS-007e1-e3.)* GS-007e/GS-008: authenticated realtime relay and public online NetworkSession integration;
   Guide invite confirmation/InviteAccepted/BeginJoinInvited, lifecycle/event parity and Ranked writes.
 
 Server c1dcdda99401133ccf146530592a0fe81638b248: clean `-Werror` build, 4/4 CTest passed
@@ -704,7 +710,7 @@ server c1dcdda99401133ccf146530592a0fe81638b248.
   join/leave/retry/filtering, expired owner+secondary/secondary-only credentials, revoked secondary
   at Update and multi-local leaderboard scope recovery. Private control probe is NOT an original
   XNA online NetworkSession gameplay sample or Internet-connectivity proof.
-- [ ] Next GS-008a: canonical bounded realtime relay framing/tickets; GS-008b secure relay and
+- [x] *(Closed by GS-008a1/a2, GS-008b and GS-007e.)* Next GS-008a: canonical bounded realtime relay framing/tickets; GS-008b secure relay and
   loopback ENet bridge, then public online NetworkSession/Guide invitation integration (GS-007e).
 
 Validation: clean affected native/C API build, zero new warnings. 11/11 new deterministic tests
@@ -759,7 +765,7 @@ CNA-specific transport routing; generic proxy change remains the only runtime mo
   protocol/certificate validation and controlled Net updates. SystemLink keeps its direct path.
 - [x] GS-008d1: two actual ENet clients in separate rootless outbound NAT namespaces.
 - [x] GS-008d2: client reconnect/server-restart and remaining authenticated fault corpus (see GS-008d2 checkpoint).
-- [ ] GS-008d: genuine ENet exchange under relay-only isolated routing/firewall conditions,
+- [x] *(Closed by GS-008d1 and GS-008d2.)* GS-008d: genuine ENet exchange under relay-only isolated routing/firewall conditions,
   forged source/destination/malformed/rate/disconnect/revoke/server failure/reconnect corpus.
 - [x] GS-007e1: private authenticated roster/control gate and genuine spoof/refusal relay probes.
 - [x] GS-007e2a: exact null/family guards for public Net End operations.
@@ -770,7 +776,7 @@ CNA-specific transport routing; generic proxy change remains the only runtime mo
 - [x] GS-007e2c3: consume prepared transport in standard public create/join and E2E.
 - [x] GS-007e2c: owned online create/join preparation, including cleanup on abandonment/failure.
 - [x] GS-007e2: public async operation ownership/preparation and online lifecycle wiring.
-- [ ] GS-007e: publish standard PlayerMatch/Ranked lifecycle and Guide/invited joins once directory
+- [x] *(Closed by GS-007e2c3b and GS-007e3.)* GS-007e: publish standard PlayerMatch/Ranked lifecycle and Guide/invited joins once directory
   plus realtime transport succeeds; do not report membership-only success as multiplayer.
 
 Relay control/membership and game datagrams are separate protocols. WSS uses the existing
@@ -1402,7 +1408,7 @@ invited refusal, untouched invitation/membership, migration and restart. Canonic
 doc updated; envelope/CNR v1/header/golden encodings unchanged. Validation below.
 
 - [x] GS-007f1a: server persistence/client/fake Ranked lobby-only admission, tests and integration.
-- [ ] GS-007f1b: public AllowJoinInProgress validation/event propagation after public Ranked
+- [x] *(Closed by GS-007e2c3b: Ranked `AllowJoinInProgress` refuses, test `RankedCreateRefusesJoinInProgressAndPrivateSlotsFollowReferenceBounds`.)* GS-007f1b: public AllowJoinInProgress validation/event propagation after public Ranked
   construction is enabled; host/dispose/unchanged-value order needs focused standard API tests.
 Public online construction is still refused, so do not invent a public test factory solely to
 instantiate an otherwise unreachable Ranked session. Existing public setter/migration guard
@@ -2086,7 +2092,7 @@ gamers, otherwise only the host reports TrueSkill; leaving Ranked players get "b
 - [x] Fix: remote gamers now carry their service identity (their writers used the offline store).
 - [x] Fix: Gamer copy/move (now protected) bind a fresh LeaderboardWriter to the new object; a moved
   gamer's writer used to point at the destroyed temporary (make_unique(CreateInternal) exposed it).
-- [ ] CNA computes no TrueSkill (skill boards are ordinary arbitrated boards) — documented gap.
+- [x] *(Documented limit, listed in the final register.)* CNA computes no TrueSkill (skill boards are ordinary arbitrated boards) — documented gap.
 
 Validation: Net **465/465**; GamerServices **459 pass / 1 known skip**; fake **113**; private gates
 **13/13**; server **18/18, zero skips, 213.91s** (`build/ranked-full.log`) incl. 43 arbitration
