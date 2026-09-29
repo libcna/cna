@@ -2728,3 +2728,16 @@ the C struct field documents local ticks. CnaGamerServicesTests 485 + 1 skip.
     End waits are current.
   - No code changes; C API inventory hash regenerated. CnaGamerServicesTests 498 + 1 skip,
     CnaNetTests 495, Guide/Net/Gamers C smokes.
+- [x] GS-011b C ABI 0.34.0: the two Guide setters XNA keeps internal are gone. XNA's
+  `Guide.IsVisible` and `Guide.IsTrialMode` have `internal set`. CNA exposed both publicly and in C
+  (`cna_guide_set_is_visible`, `cna_guide_set_is_trial_mode`). The first was a no-op, and the second
+  let a title flip its own licence state. `Guide::getIsTrialModeProperty` now follows
+  `SimulateTrialMode` alone (CNA titles are fully licensed). The Guide tests, GuideSmoke,
+  BoolContractSmoke and the console Guide demo use the public surface. ABI minor 34:
+  `ABI_VERSIONING.md` release notes, export counts 3,204 -> 3,202 (CONSUMING, LIMITATIONS source,
+  RELEASE_GATE), baseline regenerated and `--check` clean against the built library, and the XNA
+  member report's two symbols edited. The report tool's local rerun differs wholesale from the
+  committed closure for environmental reasons, so it was not committed. CnaGamerServicesTests 498
+  + 1 skip. `ctest -R '^CApi_'` 94/98, the four failures being the three standing environment
+  smokes and `CApi_InstalledConsumer`, which passes once the static archive is rebuilt; the demo
+  object compiles in cmake-build-opengl33.

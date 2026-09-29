@@ -105,10 +105,10 @@ TEST(GamerServicesDispatcherTest, UpdateAsyncReturnsIsInitialized) {
 
 // --- Guide ---
 
-TEST(GuideTest, IsTrialModeGetSet) {
-    Guide::setIsTrialModeProperty(true);
-    EXPECT_TRUE(Guide::getIsTrialModeProperty());
-    Guide::setIsTrialModeProperty(false);
+// XNA's IsTrialMode setter is internal (the platform's licensing sets it); CNA titles are fully
+// licensed, so only SimulateTrialMode makes a trial.
+TEST(GuideTest, IsTrialModeIsFalseUnlessSimulated) {
+    Guide::setSimulateTrialModeProperty(false);
     EXPECT_FALSE(Guide::getIsTrialModeProperty());
 }
 
@@ -121,15 +121,10 @@ TEST(GuideTest, SimulateTrialModeGetSet) {
     EXPECT_FALSE(Guide::getSimulateTrialModeProperty());
 }
 
-// Post-plans/plan_net.md remediation (2026-07-18): IsVisible now reflects real pending
-// message-box/keyboard-input state (decision 1a - real observable behavior over a PC no-op stub,
-// now that both overlays are genuinely real). With nothing pending, it still reads false, and the
-// setter is still a no-op - only the "always" part of the old test name/assumption was wrong.
-// The public getter needs initialized gamer services, which this suite never initializes; the
-// pane state behind it is read directly (SystemGuideTests covers the public property).
-TEST(GuideTest, IsVisibleFalseWithNothingPendingAndSetterIsNoOp) {
-    EXPECT_FALSE(CNA::Internal::GamerServices::guideIsVisible());
-    Guide::setIsVisibleProperty(true);
+// IsVisible reflects the Guide's panes (XNA's setter is internal). The public getter needs
+// initialized gamer services, which this suite never initializes; the pane state behind it is read
+// directly (SystemGuideTests covers the public property).
+TEST(GuideTest, IsVisibleFalseWithNothingPending) {
     EXPECT_FALSE(CNA::Internal::GamerServices::guideIsVisible());
 }
 

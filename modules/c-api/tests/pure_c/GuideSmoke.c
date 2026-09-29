@@ -33,16 +33,15 @@ static int validate_settings(void)
         cna_guide_get_is_screen_saver_enabled(0) != CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
-    if (cna_guide_set_is_trial_mode(CNA_TRUE) != CNA_RESULT_SUCCESS ||
+    /* Trial mode follows the simulation only: CNA titles are fully licensed. */
+    if (cna_guide_set_simulate_trial_mode(CNA_TRUE) != CNA_RESULT_SUCCESS ||
         cna_guide_get_is_trial_mode(&flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE ||
-        cna_guide_set_is_trial_mode(CNA_FALSE) != CNA_RESULT_SUCCESS ||
+        cna_guide_set_simulate_trial_mode(CNA_FALSE) != CNA_RESULT_SUCCESS ||
         cna_guide_get_is_trial_mode(&flag) != CNA_RESULT_SUCCESS || flag != CNA_FALSE) {
         return 0;
     }
     /* The canonical getter refuses before gamer services are initialized. */
-    if (cna_guide_set_is_visible(CNA_TRUE) != CNA_RESULT_SUCCESS ||
-        cna_guide_get_is_visible(&flag) != CNA_RESULT_INVALID_STATE ||
-        cna_guide_set_is_visible(CNA_FALSE) != CNA_RESULT_SUCCESS) {
+    if (cna_guide_get_is_visible(&flag) != CNA_RESULT_INVALID_STATE) {
         return 0;
     }
     if (cna_guide_set_notification_position(CNA_NOTIFICATION_POSITION_BOTTOM_RIGHT) !=

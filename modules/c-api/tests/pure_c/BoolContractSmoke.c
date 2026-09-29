@@ -385,20 +385,6 @@ int main(void)
                (unsigned)result);
         ++accepted;
     }
-    result = cna_guide_set_is_trial_mode(UINT8_C(9));
-    if (result != CNA_RESULT_INVALID_ARGUMENT &&
-        result != CNA_RESULT_NOT_SUPPORTED) {
-        printf("accepted a non-canonical CNA_Bool (%u): cna_guide_set_is_trial_mode\n",
-               (unsigned)result);
-        ++accepted;
-    }
-    result = cna_guide_set_is_visible(UINT8_C(9));
-    if (result != CNA_RESULT_INVALID_ARGUMENT &&
-        result != CNA_RESULT_NOT_SUPPORTED) {
-        printf("accepted a non-canonical CNA_Bool (%u): cna_guide_set_is_visible\n",
-               (unsigned)result);
-        ++accepted;
-    }
     result = cna_guide_set_simulate_trial_mode(UINT8_C(9));
     if (result != CNA_RESULT_INVALID_ARGUMENT &&
         result != CNA_RESULT_NOT_SUPPORTED) {

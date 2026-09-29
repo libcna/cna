@@ -508,7 +508,6 @@ namespace Microsoft::Xna::Framework::GamerServices
         }
     }
 
-    bool Guide::isTrialMode_ = false;
     bool Guide::simulateTrialMode_ = false;
     NotificationPosition Guide::position_ = NotificationPosition::BottomCenter;
 
@@ -530,8 +529,8 @@ namespace Microsoft::Xna::Framework::GamerServices
     }
 
     // Reference: SimulateTrialMode forces IsTrialMode to report true.
-    bool Guide::getIsTrialModeProperty()          { return isTrialMode_ || simulateTrialMode_; }
-    void Guide::setIsTrialModeProperty(bool value) { isTrialMode_ = value; }
+    // CNA titles are fully licensed; only simulating trial mode makes a trial.
+    bool Guide::getIsTrialModeProperty()          { return simulateTrialMode_; }
 
     bool Guide::getIsVisibleProperty()
     {
@@ -540,7 +539,6 @@ namespace Microsoft::Xna::Framework::GamerServices
             throw System::InvalidOperationException("Gamer services are not initialized.");
         return CNA::Internal::GamerServices::guideIsVisible();
     }
-    void Guide::setIsVisibleProperty(bool /*value*/) { }
 
     NotificationPosition Guide::getNotificationPositionProperty() { return position_; }
 

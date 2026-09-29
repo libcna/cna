@@ -1822,20 +1822,13 @@ CNA_C_API CNA_Result cna_guide_get_is_screen_saver_enabled(CNA_Bool* out_is_enab
 CNA_C_API CNA_Result cna_guide_set_is_screen_saver_enabled(CNA_Bool is_enabled);
 
 /**
- * @brief Reports whether the title is running in trial mode.
+ * @brief Reports whether the title is running in trial mode: only while trial mode is simulated
+ * (`cna_guide_set_simulate_trial_mode`), since CNA titles are fully licensed.
  *
  * @param out_is_trial_mode Receives non-zero in trial mode.
  * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
  */
 CNA_C_API CNA_Result cna_guide_get_is_trial_mode(CNA_Bool* out_is_trial_mode);
-
-/**
- * @brief Sets whether the title is running in trial mode.
- *
- * @param is_trial_mode Non-zero for trial mode.
- * @return `CNA_RESULT_SUCCESS` or a documented argument failure.
- */
-CNA_C_API CNA_Result cna_guide_set_is_trial_mode(CNA_Bool is_trial_mode);
 
 /**
  * @brief Reports whether a guide screen is currently up.
@@ -1845,14 +1838,6 @@ CNA_C_API CNA_Result cna_guide_set_is_trial_mode(CNA_Bool is_trial_mode);
  *         `CNA_RESULT_INVALID_STATE` before gamer services are initialized.
  */
 CNA_C_API CNA_Result cna_guide_get_is_visible(CNA_Bool* out_is_visible);
-
-/**
- * @brief Shows or hides the guide.
- *
- * @param is_visible Non-zero to show it.
- * @return `CNA_RESULT_SUCCESS` or a documented argument failure.
- */
-CNA_C_API CNA_Result cna_guide_set_is_visible(CNA_Bool is_visible);
 
 /**
  * @brief Reads where the guide draws its notifications.

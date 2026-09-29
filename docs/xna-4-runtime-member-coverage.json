@@ -86070,7 +86070,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.GamerServices",
         "xna_signature": "Microsoft.Xna.Framework.GamerServices.Guide.IsTrialMode",
-        "cna_symbol": "modules/gamer-services/include/Microsoft/Xna/Framework/GamerServices/Guide.hpp::getIsTrialModeProperty()/setIsTrialModeProperty(bool)",
+        "cna_symbol": "modules/gamer-services/include/Microsoft/Xna/Framework/GamerServices/Guide.hpp::getIsTrialModeProperty()",
         "notes": "XNA property represented by CNA accessor convention.",
         "metadata": {
           "kind": "property",
@@ -86103,7 +86103,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.GamerServices",
         "xna_signature": "Microsoft.Xna.Framework.GamerServices.Guide.IsVisible",
-        "cna_symbol": "modules/gamer-services/include/Microsoft/Xna/Framework/GamerServices/Guide.hpp::getIsVisibleProperty()/setIsVisibleProperty(bool)",
+        "cna_symbol": "modules/gamer-services/include/Microsoft/Xna/Framework/GamerServices/Guide.hpp::getIsVisibleProperty()",
         "notes": "XNA property represented by CNA accessor convention.",
         "metadata": {
           "kind": "property",

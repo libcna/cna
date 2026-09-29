@@ -56,13 +56,6 @@ namespace Microsoft::Xna::Framework::GamerServices
         [[nodiscard]] static bool getIsTrialModeProperty();
 
         /**
-         * @brief Sets whether the game is running in trial mode.
-         *
-         * @param value true to run in trial mode.
-         */
-        static void setIsTrialModeProperty(bool value);
-
-        /**
          * @brief Gets whether the Guide is currently visible: a message box, keyboard input,
          * sign-in pane or any other Guide screen (including the system Guide) is up.
          *
@@ -70,15 +63,6 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @throws System::InvalidOperationException if gamer services are not initialized.
          */
         [[nodiscard]] static bool getIsVisibleProperty();
-
-        /**
-         * @brief No-op, matching real XNA: there is no way to programmatically force the Guide
-         * overlay to show/hide independently of an actual pending BeginShowMessageBox/
-         * BeginShowKeyboardInput operation.
-         *
-         * @param value Ignored.
-         */
-        static void setIsVisibleProperty(bool value);
 
         /**
          * @brief Gets the screen position used for gamer notification toasts (default BottomCenter;
@@ -625,7 +609,6 @@ namespace Microsoft::Xna::Framework::GamerServices
     private:
         friend class GamerServicesDispatcher;
         static void OnSignInResult(int slot, bool success);
-        static bool isTrialMode_;
         static bool simulateTrialMode_;
         static NotificationPosition position_;
     };

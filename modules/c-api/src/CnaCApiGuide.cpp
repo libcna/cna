@@ -312,22 +312,6 @@ CNA_Result cna_guide_get_is_trial_mode(CNA_Bool* const outIsTrialMode)
     });
 }
 
-CNA_Result cna_guide_set_is_trial_mode(const CNA_Bool isTrialMode)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(isTrialMode, "is_trial_mode");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateBoolean(isTrialMode, "The trial-mode flag is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Guide::setIsTrialModeProperty(isTrialMode == CNA_TRUE);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_guide_get_is_visible(CNA_Bool* const outIsVisible)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -335,22 +319,6 @@ CNA_Result cna_guide_get_is_visible(CNA_Bool* const outIsVisible)
             return InvalidInput("The guide-visibility output is null.");
         }
         *outIsVisible = Guide::getIsVisibleProperty() ? CNA_TRUE : CNA_FALSE;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_guide_set_is_visible(const CNA_Bool isVisible)
-{
-    return CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result result = ValidateCanonicalBool(isVisible, "is_visible");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        if (const CNA_Result result = ValidateBoolean(isVisible, "The guide-visibility flag is invalid.");
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        Guide::setIsVisibleProperty(isVisible == CNA_TRUE);
         return CNA_RESULT_SUCCESS;
     });
 }

@@ -2,7 +2,17 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.33.0** (`GS-009f`). The standard avatar types now behave as
+The current experimental ABI is **0.34.0** (`GS-011b`). It removes the two Guide setters that XNA
+keeps internal: `cna_guide_set_is_visible` (a no-op, since the Guide is visible exactly while one of
+its screens is up) and `cna_guide_set_is_trial_mode` (CNA titles are fully licensed, so trial mode
+follows `cna_guide_set_simulate_trial_mode` alone). Two fewer exports, now 3,202; no structure,
+constant or other route changes. A binding that calls either route no longer links; that
+incompatible change takes this minor increment, these notes and an updated baseline under the
+`0.x` rule below.
+
+### Previous ABI 0.33.0
+
+The ABI was **0.33.0** (`GS-009f`). The standard avatar types now behave as
 real avatars (`docs/avatars.md`): a random description reports its body type and height, a preset
 animation has a length and moving bones, and a renderer loads (`LOADING` -> `READY`), reads its
 bind pose once ready and draws through initialized gamer services. The Avatar real-rendering
@@ -481,7 +491,7 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-The current baseline records 3,204 exports; build configurations must export the same surface.
+The current baseline records 3,202 exports; build configurations must export the same surface.
 That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose backend or layer is absent exists and refuses, rather than
