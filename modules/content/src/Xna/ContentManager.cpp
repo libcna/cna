@@ -6444,18 +6444,20 @@ namespace Microsoft::Xna::Framework::Content
         // Through shared_ptr because SoundEffect is move-only and std::any cannot hold it.
         const std::string cnbCandidate =
             ResolveExistingAssetPath(BuildAssetPath(assetName) + ".cnb");
-        if (std::filesystem::exists(CNA::Internal::PathFromUtf8(cnbCandidate)))
+        std::vector<std::uint8_t> cnbBytes;
+        if (TryReadAssetBytes(cnbCandidate, cnbBytes))
         {
-            return std::move(
-                *LoadCnbAsset<std::shared_ptr<Audio::SoundEffect>>(cnbCandidate, assetName));
+            return std::move(*LoadCnbAsset<std::shared_ptr<Audio::SoundEffect>>(
+                std::move(cnbBytes), cnbCandidate, assetName));
         }
         if (assetName.size() > 4 && assetName.compare(assetName.size() - 4, 4, ".cnb") == 0)
         {
             const std::string literalCnb = ResolveExistingAssetPath(BuildAssetPath(assetName));
-            if (std::filesystem::exists(CNA::Internal::PathFromUtf8(literalCnb)))
+            std::vector<std::uint8_t> literalBytes;
+            if (TryReadAssetBytes(literalCnb, literalBytes))
             {
-                return std::move(
-                    *LoadCnbAsset<std::shared_ptr<Audio::SoundEffect>>(literalCnb, assetName));
+                return std::move(*LoadCnbAsset<std::shared_ptr<Audio::SoundEffect>>(
+                    std::move(literalBytes), literalCnb, assetName));
             }
         }
 

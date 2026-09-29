@@ -524,11 +524,15 @@ namespace Microsoft::Xna::Framework::Content
             // the file's own asset type identifier selects the loader through the process-wide
             // CNA::Content::CnbLoaderRegistry, with no reader registered on this ContentManager
             // at all.
+            //
+            // Read, not stat'ed, for the same reason as the .xnb tier: on Android a relative
+            // content path is a packaged asset that no filesystem query can see.
             const std::string cnbCandidate =
                 ResolveExistingAssetPath(BuildAssetPath(assetName) + ".cnb");
-            if (std::filesystem::exists(CNA::Internal::PathFromUtf8(cnbCandidate)))
+            std::vector<std::uint8_t> cnbBytes;
+            if (TryReadAssetBytes(cnbCandidate, cnbBytes))
             {
-                T result = LoadCnbAsset<T>(cnbCandidate, assetName);
+                T result = LoadCnbAsset<T>(std::move(cnbBytes), cnbCandidate, assetName);
                 loadedAssets_[cacheKey] = result;
                 return result;
             }
@@ -540,9 +544,10 @@ namespace Microsoft::Xna::Framework::Content
                 assetName.compare(assetName.size() - 4, 4, ".cnb") == 0)
             {
                 const std::string literalCnb = ResolveExistingAssetPath(BuildAssetPath(assetName));
-                if (std::filesystem::exists(CNA::Internal::PathFromUtf8(literalCnb)))
+                std::vector<std::uint8_t> literalBytes;
+                if (TryReadAssetBytes(literalCnb, literalBytes))
                 {
-                    T result = LoadCnbAsset<T>(literalCnb, assetName);
+                    T result = LoadCnbAsset<T>(std::move(literalBytes), literalCnb, assetName);
                     loadedAssets_[cacheKey] = result;
                     return result;
                 }
@@ -650,7 +655,9 @@ namespace Microsoft::Xna::Framework::Content
          *
          * @tparam T       Requested asset type; must match exactly what the registered loader
          *                 produces.
-         * @param cnbPath   Full filesystem path to the `.cnb` file.
+         * @param bytes     The whole `.cnb` file, as `TryReadAssetBytes` read it -- from the
+         *                  filesystem or, on Android, from the packaged assets.
+         * @param cnbPath   The path it was read from, for diagnostics.
          * @param assetName Logical asset name, passed to the loader for diagnostics.
          * @return The decoded asset.
          * @throws ContentLoadException if the file is malformed, holds an asset type this build
@@ -658,10 +665,12 @@ namespace Microsoft::Xna::Framework::Content
          *         registered one, or holds a different type than @p T.
          */
         template <typename T>
-        [[nodiscard]] T LoadCnbAsset(const std::string& cnbPath, const std::string& assetName)
+        [[nodiscard]] T LoadCnbAsset(std::vector<std::uint8_t> bytes,
+                                     const std::string& cnbPath,
+                                     const std::string& assetName)
         {
             const CNA::Content::Cnb::CnbDocument document =
-                CNA::Content::Cnb::CnbDocument::ParseFile(cnbPath);
+                CNA::Content::Cnb::CnbDocument::Parse(std::move(bytes), cnbPath);
 
             // Through ResolveForDocument rather than a bare numeric lookup: for a CUSTOM asset
             // type the identifier is only a 31-bit hash, so a numeric match does not prove the
