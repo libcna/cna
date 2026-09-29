@@ -158,7 +158,7 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
 | GSX-A4 | Client negotiation and fallback order; old-client behaviour | done |
 | GSX-A5 | Identity vs assets: determinism across clients | done |
 | GSX-B1 | Freeze catalog v2; generator writes v3 | done |
-| GSX-B2..B9 | Catalog v3 art: head/face, atlas, body, hands, clothing, hair/facial hair, materials, animation | PART: head, face atlas, proportions, hands (scale), hair clumps, face controls, idles done; clothing re-sculpt, materials/AO open |
+| GSX-B2..B9 | Catalog v3 art: head/face, atlas, body, hands, clothing, hair/facial hair, materials, animation | PART: head, face atlas, proportions, hands (re-sculpted), hair clumps, face controls, idles, hoodie pocket done; baked occlusion open (the avatar renderer has no occlusion input) |
 | GSX-B10 | BEFORE/AFTER review with identical cameras, inspected | done |
 | GSX-U0 | System UI audit: every Guide pane, editor and demo; deterministic BEFORE screenshots; visual inventory | done |
 | GSX-U1 | One CNA system visual language (panel, title, tabs, focus, buttons, identity, presence, toast, dialog, loading, error) shared by Guide and editor | done |
@@ -397,3 +397,19 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
   `SocialNotificationTest`, server hint checks per operation, WSS e2e (delivery across titles,
   refusal, a refused request telling nobody), and the TLS e2e's CNA client seeing a message arrive
   through the channel within 5 s (the read interval is 15 s). GS 601, Net 514.
+- GSX-B (hands and garments, **ART**). The v3 hand close-ups showed a mitten: finger tubes wider
+  than their spacing on a palm twice the finger row's width and 6 cm thick, a jagged crack where the
+  palm met the forearm, and the curled fingers' in-palm parts swinging out of the back of the hand.
+  Now the palm is a rounded box as wide as the finger row (fingers slimmer, spread a little wider),
+  starts inside the forearm at its own section and flares out (no seam), the in-palm part of each
+  finger is bound to the wrist so a curled finger never pokes through, and the thumb is shorter with
+  a smaller pad; finer tessellation. The hoodie's pocket is a flat rounded trapezoid with a rolled
+  edge hugging the belly (it was a bulging oval) and its ribbed hem sits closer. The review gained a
+  back-of-hand view. Real-renderer review `/rv/tmp/xbox-fidelity/art/after-b2/` (257 jobs, 0
+  failures) and `art/hands-before-after.png`, inspected; avatar tests 153/153. Open: baked occlusion
+  (the avatar renderer takes no occlusion input; adding one touches every renderer).
+- GSX-E7 (browser multiplayer, **NO**, owner scope). Kept as decided on 2026-09-28: native builds
+  play online, the browser build has the limitations page `docs/browser-network-readiness.md`, which
+  names every boundary and what replacing it needs (a browser control transport, a realtime adapter
+  over `emscripten/websocket.h`, and the service's origin rules). Voice and the event channel are
+  native too.

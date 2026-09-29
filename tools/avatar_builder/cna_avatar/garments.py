@@ -133,6 +133,43 @@ def patch(body_type, centre, size, normal, weights, depth=0.004, segments=12):
                      lambda p, v, u: weights(p))
 
 
+def front_z(body_type, inflate, x, y):
+    """Depth of the torso's front surface at (x, y), between the section rows around y."""
+    sections = body.torso_sections(body_type, inflate)
+    for low, high in zip(sections, sections[1:]):
+        if low[0][1] <= y <= high[0][1]:
+            t = (y - low[0][1]) / max(high[0][1] - low[0][1], 1e-6)
+            z = []
+            for c, rx, rz, n in (low, high):
+                s = clamp(x / rx, -1.0, 1.0)
+                z.append(c[2] + rz * (1.0 - abs(s) ** n) ** (1.0 / n))
+            return z[0] + (z[1] - z[0]) * t
+    c, rx, rz, n = sections[0] if y < sections[0][0][1] else sections[-1]
+    return c[2] + rz * (1.0 - abs(clamp(x / rx, -1.0, 1.0)) ** n) ** (1.0 / n)
+
+
+def kangaroo_pocket(body_type, inflate, bottom, height, bottom_half, top_half, weights, depth=0.005):
+    """A hoodie's front pocket: a flat rounded trapezoid hugging the belly, wider at the bottom,
+    with a rolled edge all round."""
+    m = Mesh()
+    m.patch_origin = (0.0, bottom + height * 0.5, 0.0)
+    columns, rows_ = 14, 8
+    grid = []
+    for j in range(rows_ + 1):
+        v = j / rows_
+        half = bottom_half + (top_half - bottom_half) * v
+        y = bottom + height * v
+        grid.append([(half * (2.0 * i / columns - 1.0), y, 0.0) for i in range(columns + 1)])
+    face = [[(x, y, front_z(body_type, inflate, x, y) + depth) for x, y, _ in row] for row in grid]
+    m.append(Mesh().grid(face, lambda q, v, u: weights(q), wrap=False))
+    m.patch_origin = (0.0, bottom + height * 0.5, 0.0)
+    # The rolled edge: round the outline, just proud of the face.
+    outline = [q for q in face[0]] + [row[-1] for row in face[1:]] + list(reversed(face[-1][:-1])) + \
+        [row[0] for row in reversed(face[1:-1])]
+    m.append(tube(outline, [depth * 0.9] * len(outline), 6, lambda q: weights(q), closed=True))
+    return m
+
+
 def front_point(body_type, row, inflate, x):
     """A point on the front of a torso row at horizontal offset x."""
     c, rx, rz, n = body.torso_sections(body_type, inflate)[row]
@@ -172,15 +209,14 @@ def top(body_type, style):
             main.append(sleeve(body_type, side, 0.014, 0.95, cuff=0.007))
         parts.append((main, "top", "knit", (1.0, 1.0, 1.0)))
     elif style == "top_hoodie":
-        main.append(shell(body_type, 0.028, (1, 10), lower=0.04, flare=0.026))
-        main.append(_hem(body_type, 0.028, 0.026, 0.04, 0.012))
+        main.append(shell(body_type, 0.028, (1, 10), lower=0.04, flare=0.010))
+        main.append(_hem(body_type, 0.028, 0.010, 0.04, 0.012))
         main.append(neck_rib(body_type, 0.024, 0.011, drop=0.0))
         for side, _ in rig.SIDES:
             main.append(sleeve(body_type, side, 0.024, 0.93, cuff=0.011))
         main.append(_hood(body_type))
-        pocket_y = row_y(body_type, 3) + 0.01
-        c = front_point(body_type, 3, 0.028, 0.0)
-        main.append(patch(body_type, (0.0, pocket_y, c[2]), (0.10, 0.055), (0.0, 0.05, 1.0), tw, depth=0.010))
+        pocket_y = row_y(body_type, 3) - 0.035
+        main.append(kangaroo_pocket(body_type, 0.028, pocket_y, 0.10, 0.105, 0.078, tw))
         for sx in (0.024, -0.024):
             p = front_point(body_type, 10, 0.03, sx)
             trim.append(tube([add(p, (0.0, 0.0, 0.012)), add(p, (0.0, -0.05, 0.024)), add(p, (sx * 0.2, -0.10, 0.03))],

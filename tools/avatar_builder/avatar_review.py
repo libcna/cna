@@ -9,7 +9,7 @@ AvatarRenderer (cna_avatar_review), then laid out as contact sheets.
     cna_avatar_review jobs.json OUT/renderer                  # the real renderer, same jobs
     python3 tools/avatar_builder/avatar_review.py sheets jobs.json OUT/renderer OUT/sheets
 
-Sheets: `views` (front, three-quarter, profile, back, head, hands, feet of a female and a male
+Sheets: `views` (front, three-quarter, profile, back, head, hand from the front and the back, feet of a female and a male
 avatar), `diverse` (seeded random avatars), `animations` (key frames of every preset) and
 `expressions` (every eye, eyebrow and mouth state, and independent left/right states).
 """
@@ -139,6 +139,9 @@ def build_jobs(catalogs, version):
         hand = (wrist + tip) / 2.0
         jobs.append(job("views-%s-hands" % body, "views", d, hand + np.array([-0.06, 0.03, 0.42]), hand, 0.45,
                         label="%s hand" % body))
+        # The back of the (right) hand, from outside: where the fingers show.
+        jobs.append(job("views-%s-hands-back" % body, "views", d, hand + np.array([-0.40, 0.05, 0.12]), hand, 0.42,
+                        label="%s hand, back" % body))
         ankle, _ = posed_joint(catalogs, library, data, "Stand0", 0.0, "AnkleLeft")
         feet = np.array([0.0, 0.05, ankle[2] + 0.06])
         jobs.append(job("views-%s-feet" % body, "views", d, feet + np.array([0.30, 0.34, 0.62]), feet, 0.55,
@@ -225,7 +228,7 @@ def cmd_sheets(args):
     from PIL import Image, ImageDraw
     data = json.loads(args.jobs.read_text())
     args.out.mkdir(parents=True, exist_ok=True)
-    columns = {"views": 7, "diverse": 8, "animations": 8, "expressions": 8, "faces": 8}
+    columns = {"views": 8, "diverse": 8, "animations": 8, "expressions": 8, "faces": 8}
     cell = args.cell
     sheets = {}
     for j in data["jobs"]:

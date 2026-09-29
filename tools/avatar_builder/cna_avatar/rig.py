@@ -58,7 +58,7 @@ PROPORTIONS = {
 }
 FINGER_SEGMENTS = {"Index": (0.027, 0.019, 0.014), "Middle": (0.029, 0.021, 0.015),
                    "Ring": (0.027, 0.019, 0.014), "Small": (0.022, 0.016, 0.012), "Thumb": (0.026, 0.021, 0.015)}
-FINGER_SPREAD = {"Index": 0.024, "Middle": 0.008, "Ring": -0.008, "Small": -0.023}
+FINGER_SPREAD = {"Index": 0.026, "Middle": 0.009, "Ring": -0.009, "Small": -0.025}
 
 
 def arm_direction(sign, p):

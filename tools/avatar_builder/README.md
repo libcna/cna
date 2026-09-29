@@ -58,7 +58,7 @@ python3 tools/avatar_builder/avatar_review.py sheets $R/jobs.json $R/gpu $R/shee
 ```
 
 The jobs cover a female and a male avatar from the front, three-quarter, profile and back with
-head, hand and feet close-ups (close-ups keep their distance in proportion to the avatar's own head,
+head, hand (front and back) and feet close-ups (close-ups keep their distance in proportion to the avatar's own head,
 so catalogs with different head sizes are framed alike); 24 seeded random avatars; four key frames of every preset; and every
 eye, eyebrow and mouth state plus independent left/right combinations. `cna_avatar_review`
 (`modules/gamer-services/examples/avatar_review/`) draws them through the standard XNA avatar API

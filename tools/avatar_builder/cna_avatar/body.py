@@ -38,8 +38,11 @@ ARM = {b: [(t, w * _LIMB[b], d * _LIMB[b]) for t, w, d in rows] for b, rows in A
 LEG = {b: [(t, w * _LIMB[b], d * _LIMB[b]) for t, w, d in rows] for b, rows in LEG.items()}
 NECK = {"male": 0.056, "female": 0.049}
 FOOT = {"male": (0.034, 0.032, 0.090), "female": (0.031, 0.030, 0.082)}
-HAND = {"male": dict(palm=(0.047, 0.021, 0.080), finger=0.0126, thumb=0.0142),
-        "female": dict(palm=(0.042, 0.019, 0.074), finger=0.0112, thumb=0.0128)}
+# Palm (half-width, half-thickness, length) and finger/thumb radii, before the hand scale. The
+# palm is as wide as the finger row it carries (v3: the fingers used to fuse into a mitten on a palm
+# twice their span).
+HAND = {"male": dict(palm=(0.0375, 0.0135, 0.080), finger=0.0086, thumb=0.0098),
+        "female": dict(palm=(0.0345, 0.0122, 0.074), finger=0.0079, thumb=0.0090)}
 
 # Torso sections from the crotch to the base of the neck: (anchor, offset, half-width, half-depth,
 # centre z, squareness exponent). Anchors are rig heights.
@@ -349,20 +352,28 @@ def hand(body, side, sign):
     m = Mesh()
     pw, pt, pl = H["palm"]
     pw, pt, pl = pw * k, pt * k, pl * k
-    # Palm: superellipse sections from the wrist to the knuckles, thickest at the heel of the hand.
+    # The forearm's section at the wrist: the palm starts just inside it, so the two close without a
+    # seam, and flares into the palm proper.
+    _, arm_w, arm_d = ARM[body][-1]
+    wrist_w, wrist_d = arm_w * 0.97, arm_d * 0.97
+    # Palm: superellipse sections from inside the wrist to the knuckles, thickest at the heel of the hand.
     rows = []
-    steps = 9
+    steps = 14
+    start, end = -0.018, pl + 0.002
     for i in range(steps + 1):
         t = i / steps
-        c = add(wrist, mul(along, (0.004 + t * (pl - 0.008))))
-        width = pw * (0.66 + 0.34 * smoothstep(0.0, 0.45, t)) * (1.0 - 0.06 * smoothstep(0.8, 1.0, t))
-        thick = pt * (1.0 + 0.18 * math.sin(math.pi * min(t * 1.4, 1.0))) * (1.0 - 0.25 * smoothstep(0.75, 1.0, t))
+        c = add(wrist, mul(along, start + t * (end - start)))
+        # Width reaches the palm's quickly; thickness slowly, so the forearm's rounded end stays inside.
+        width = wrist_w + (pw - wrist_w) * smoothstep(0.0, 0.38, t)
+        thick = (wrist_d + (pt * (1.0 + 0.16 * math.sin(math.pi * min(t * 1.3, 1.0))) - wrist_d) * smoothstep(0.0, 0.62, t)) \
+            * (1.0 - 0.12 * smoothstep(0.8, 1.0, t))
         ring = []
-        for s in range(16):
-            a = 2.0 * math.pi * s / 16
+        for s in range(24):
+            a = 2.0 * math.pi * s / 24
             ca, sa = math.cos(a), math.sin(a)
-            x = width * math.copysign(abs(ca) ** 0.8, ca)
-            y = thick * math.copysign(abs(sa) ** 0.9, sa)
+            # A rounded box: thick right out to the edges, where the outer fingers leave it.
+            x = width * math.copysign(abs(ca) ** 0.6, ca)
+            y = thick * math.copysign(abs(sa) ** 0.6, sa)
             ring.append(add(c, add(mul(spread, x), mul(normal, y))))
         rows.append(ring)
     # Close both ends with shallow domes.
@@ -373,13 +384,13 @@ def hand(body, side, sign):
         centre = mul(centre, 1.0 / len(ring))
         return [[add(add(centre, mul(sub(q, centre), math.cos(math.pi * 0.5 * j / 3) + 1e-4)),
                      mul(direction, depth * math.sin(math.pi * 0.5 * j / 3))) for q in ring] for j in (1, 2, 3)]
-    rows = list(reversed(dome(rows[0], mul(along, -1.0), 0.010 * k))) + rows + dome(rows[-1], along, 0.012 * k)
+    rows = list(reversed(dome(rows[0], mul(along, -1.0), 0.006 * k))) + rows + dome(rows[-1], along, 0.007 * k)
     palm = Mesh().grid(rows, lambda q, v, u: {wr: 1.0})
     m.append(palm)
     # Thumb pad (thenar), toward the thumb side of the palm.
     thumb_root = pos[I["FingerThumb" + side]]
-    pad = add(lerp(wrist, thumb_root, 0.55), mul(normal, 0.006 * k))
-    m.append(ellipsoid(pad, (spread, along, normal), (0.016 * k, 0.026 * k, 0.014 * k), 12, 8,
+    pad = add(lerp(wrist, thumb_root, 0.6), mul(normal, 0.004 * k))
+    m.append(ellipsoid(pad, (spread, along, normal), (0.013 * k, 0.022 * k, 0.011 * k), 16, 10,
                        lambda q, v, u: {wr: 0.7, I["FingerThumb" + side]: 0.3}))
     for finger in rig.FINGERS + ("Thumb",):
         joints = [I["Finger%s%s" % (finger, side)], I["Finger%s2%s" % (finger, side)], I["Finger%s3%s" % (finger, side)]]
@@ -389,8 +400,10 @@ def hand(body, side, sign):
         points.append(tip)
         base = H["thumb" if finger == "Thumb" else "finger"] * k * {"Index": 1.0, "Middle": 1.04, "Ring": 0.98,
                                                                       "Small": 0.86, "Thumb": 1.0}[finger]
-        start = sub(points[0], mul(direction, 0.012 * k))
-        path, weights, radii = [start], [{wr: 0.6, joints[0]: 0.4}], [base * 1.05]
+        # Fingers begin well inside the palm, so the knuckle row grows out of it without a step.
+        start = sub(points[0], mul(direction, (0.020 if finger != "Thumb" else 0.014) * k))
+        # The part inside the palm moves with the palm, so a curled finger never pokes out of its back.
+        path, weights, radii = [start, lerp(start, points[0], 0.6)], [{wr: 1.0}, {wr: 0.9, joints[0]: 0.1}], [base * 0.8, base * 0.92]
         for s in range(3):
             parent = wr if s == 0 else joints[s - 1]
             a, b = points[s], points[s + 1]
@@ -401,7 +414,7 @@ def hand(body, side, sign):
         path.append(points[3])
         weights.append({joints[2]: 1.0})
         radii.append(base * 0.74)
-        m.append(tube(path, radii, 8, None, row_weights=weights, round_end=True))
+        m.append(tube(path, radii, 12, None, row_weights=weights, round_end=True))
     return m
 
 

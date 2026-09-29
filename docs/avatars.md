@@ -162,7 +162,9 @@ Catalog v3 (the newest) has:
 
 - a body per body type in toy-like console proportions: a large round head (about a fifth larger
   than v2's, a softer jaw and fuller cheeks) on a short neck, lowered shoulders, shorter legs,
-  sturdier limbs and larger sculpted hands; a rounded nose, ears and the face-feature decal patches;
+  sturdier limbs and larger hands (a rounded palm as wide as its finger row, four separate fingers
+  and a thumb, closing on the forearm without a seam); a rounded nose, ears and the face-feature
+  decal patches;
 - 39 wardrobe items fitted to both bodies, with exactly catalog v2's ids and slots: 10 hair styles
   (as broader clumps than v2's, so each reads as one shaped mass), 9 tops, 6 bottoms, 5 shoes,
   4 glasses and 5 hats, with per-body CreateRandom weights;
