@@ -12,8 +12,12 @@
 
 #include <cstdint>
 #include <map>
+#include <mutex>
 #include <optional>
 #include <string>
+#include <vector>
+
+union SDL_Event;
 
 namespace CNA::Platform::Sdl3 {
 
@@ -137,6 +141,16 @@ namespace CNA::Platform::Sdl3 {
 
     private:
         [[nodiscard]] bool HasVulkanSupport() const;
+
+        /// SDL3 hands the application lifecycle events -- entering the background or the
+        /// foreground, low memory, termination -- only to event watchers and never queues them
+        /// (`SDL_SendAppEvent`), so `SDL_PollEvent` cannot see them. This watch collects them for
+        /// the next PollEvents; without it a mobile game never learns it was sent away.
+        static bool LifecycleWatch(void* userdata, SDL_Event* event);
+
+        std::mutex lifecycleMutex_;
+        std::vector<PlatformEvent> pendingLifecycle_;
+        bool lifecycleWatchAdded_ = false;
 
         /// Acquires the controller subsystem the first time something asks for the gamepad or
         /// joystick service, and at most once per instance. See the definition for why this is

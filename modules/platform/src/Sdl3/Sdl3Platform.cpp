@@ -231,6 +231,10 @@ namespace CNA::Platform::Sdl3 {
         {
             lock.emplace();
         }
+        if (lifecycleWatchAdded_)
+        {
+            SDL_RemoveEventWatch(&Sdl3Platform::LifecycleWatch, this);
+        }
         sensors_.Deactivate();
         haptics_.Deactivate();
         for (const auto& [subsystem, count] : ownedRefCounts_)
@@ -520,16 +524,55 @@ namespace CNA::Platform::Sdl3 {
         return std::make_unique<Sdl3Window>(raw, false);
     }
 
+    bool Sdl3Platform::LifecycleWatch(void* userdata, SDL_Event* event)
+    {
+        switch (event->type)
+        {
+            case SDL_EVENT_WILL_ENTER_BACKGROUND:
+            case SDL_EVENT_DID_ENTER_FOREGROUND:
+            case SDL_EVENT_LOW_MEMORY:
+            case SDL_EVENT_TERMINATING:
+            {
+                PlatformEvent translated;
+                if (MapSdlEvent(*event, translated))
+                {
+                    auto* platform = static_cast<Sdl3Platform*>(userdata);
+                    const std::lock_guard lock(platform->lifecycleMutex_);
+                    platform->pendingLifecycle_.push_back(translated);
+                }
+                break;
+            }
+            default:
+                break;
+        }
+        return true;
+    }
+
     void Sdl3Platform::PollEvents(std::vector<PlatformEvent>& destination)
     {
         // clear() keeps the vector's capacity, which is the whole reason the buffer belongs to
         // the caller: a reused batch stops allocating after the first few frames.
         destination.clear();
 
+        // Added here rather than in the constructor: SDL keeps event watchers with its events
+        // subsystem, which is only running once something has initialised it.
+        if (!lifecycleWatchAdded_)
+        {
+            lifecycleWatchAdded_ = SDL_AddEventWatch(&Sdl3Platform::LifecycleWatch, this);
+        }
+
         SDL_Event event;
         PlatformEvent translated;
         while (SDL_PollEvent(&event))
         {
+            // A lifecycle event that did reach the queue (SDL_PushEvent queues AND notifies the
+            // watchers) has already been collected by LifecycleWatch.
+            if (lifecycleWatchAdded_ &&
+                (event.type == SDL_EVENT_WILL_ENTER_BACKGROUND || event.type == SDL_EVENT_DID_ENTER_FOREGROUND ||
+                 event.type == SDL_EVENT_LOW_MEMORY || event.type == SDL_EVENT_TERMINATING))
+            {
+                continue;
+            }
             if (MapSdlEvent(event, translated))
             {
                 mouse_.ObserveEvent(translated);
@@ -540,6 +583,10 @@ namespace CNA::Platform::Sdl3 {
                 destination.push_back(translated);
             }
         }
+
+        const std::lock_guard lock(lifecycleMutex_);
+        destination.insert(destination.end(), pendingLifecycle_.begin(), pendingLifecycle_.end());
+        pendingLifecycle_.clear();
     }
 
     std::uint64_t Sdl3Platform::GetPerformanceCounter() const

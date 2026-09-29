@@ -218,7 +218,7 @@ RULES: list[tuple[str, str, str]] = [
     # SDL2 has one window event carrying a sub-code (SDL_WindowEventID); SDL3 promoted every
     # sub-code to its own SDL_EVENT_WINDOW_* type. Both are the window half of the event taxonomy.
     (r"^SDL_WINDOWEVENT", "event", "SDL2 window event type/sub-code"),
-    (r"^SDL_(Poll|Pump|Push|Peep|Wait|Flush|Has|Add|Remove|Filter|Set|Get)Event", "event", "event pump"),
+    (r"^SDL_(Poll|Pump|Push|Peep|Wait|Flush|Has|Add|Remove|Filter|Set|Get|SendApp)Event", "event", "event pump"),
     (r"^SDL_(Event|CommonEvent|DisplayEvent|WindowEvent|KeyboardEvent|KeyboardDeviceEvent|TextEditingEvent|TextEditingCandidatesEvent|TextInputEvent|MouseMotionEvent|MouseButtonEvent|MouseWheelEvent|MouseDeviceEvent|JoyAxisEvent|JoyBallEvent|JoyHatEvent|JoyButtonEvent|JoyDeviceEvent|JoyBatteryEvent|GamepadAxisEvent|GamepadButtonEvent|GamepadDeviceEvent|GamepadTouchpadEvent|GamepadSensorEvent|AudioDeviceEvent|CameraDeviceEvent|SensorEvent|QuitEvent|UserEvent|TouchFingerEvent|PenProximityEvent|PenMotionEvent|PenTouchEvent|PenButtonEvent|PenAxisEvent|DropEvent|ClipboardEvent|RenderEvent|EventFilter|EventAction|EventType|EventEntry)$", "event", "event payload type"),
 
     # Application lifecycle / subsystem init.
@@ -243,7 +243,7 @@ RULES: list[tuple[str, str, str]] = [
     (r"^SDL_HAT_", "input", "joystick hat"),
     (r"^SDL_(Haptic|HAPTIC_|OpenHaptic|CloseHaptic|GetHaptic|IsHaptic|InitHapticRumble|PlayHapticRumble|StopHapticRumble|RunHapticEffect|StopHapticEffect|CreateHapticEffect|UpdateHapticEffect|DestroyHapticEffect|PauseHaptic|ResumeHaptic|SetHaptic|GetNumHaptic)", "input", "haptics"),
     (r"^SDL_(Sensor|SENSOR_|OpenSensor|CloseSensor|GetSensor|UpdateSensors|StandardGravity)", "input", "sensors"),
-    (r"^SDL_(Touch|Finger|GetTouch|FINGER_)", "input", "touch"),
+    (r"^SDL_(Touch|Finger|GetTouch|FINGER_|TOUCH_MOUSEID$)", "input", "touch"),
     (r"^SDL_(Pen|PEN_)", "input", "pen input"),
     (r"^SDL_(SYSTEM_CURSOR_|STANDARD_GRAVITY)", "input", "cursor/sensor constant"),
     # Infix fallbacks: SDL puts the device noun mid-name as often as at the front
