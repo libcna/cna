@@ -2,6 +2,9 @@
 // Offline local profiles: the store, Guide sign-in without a service, and automatic sign-in.
 // Sorted after GamerServicesServiceTests.cpp, so IsInitializedDefaultsFalse still runs first.
 #include <gtest/gtest.h>
+#include "CNA/Internal/GamerServices/AvatarAssets.hpp"
+#include "CNA/Internal/GamerServices/AvatarDescriptionCodec.hpp"
+#include <random>
 #include "CNA/GamerServices/Configuration.hpp"
 #include "CNA/Internal/GamerServices/AvatarDescriptionCodec.hpp"
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
@@ -346,6 +349,37 @@ TEST_F(LocalSignInTest, ALocalProfilesAvatarIsItsStoredDescription) {
     ASSERT_TRUE(description.getIsValidProperty());
     const auto& bytes = description.getDescriptionProperty();
     EXPECT_TRUE(std::equal(bytes.begin(), bytes.end(), profile.avatar.begin(), profile.avatar.end()));
+}
+
+TEST_F(LocalSignInTest, SavingAnotherAvatarIntoTheProfileRaisesChanged) {
+    (void)Service::openLocalProfile("Robin");
+    Guide::ShowSignIn(1, false);
+    Enter();
+    ASSERT_TRUE(Settle([] { return Count() == 1; }));
+    CNA::Internal::GamerServices::Avatars::setAvatarChangeCheckInterval(std::chrono::milliseconds(0));
+    auto* result = AvatarDescription::BeginGetFromGamer(Player(0), {}, std::any{});
+    auto description = AvatarDescription::EndGetFromGamer(result);
+    delete result;
+    int calls = 0;
+    System::Object* sender = nullptr;
+    description.Changed += [&](System::Object* from, const System::EventArgs&) { ++calls; sender = from; };
+    for (int i = 0; i < 5; ++i) GamerServicesDispatcher::Update();
+    EXPECT_EQ(0, calls);
+    // What the CNA avatar editor does when a player saves a new avatar for this profile.
+    std::mt19937 random(7);
+    const auto saved = CNA::Internal::GamerServices::Avatars::encode(
+        CNA::Internal::GamerServices::Avatars::randomDescriptor(std::nullopt, random));
+    ASSERT_TRUE(Service::setLocalProfileAvatar("robin", saved));
+    EXPECT_TRUE(Settle([&] { return calls == 1; }));
+    EXPECT_EQ(sender, static_cast<System::Object*>(Player(0)));
+    CNA::Internal::GamerServices::Avatars::setAvatarChangeCheckInterval(std::chrono::milliseconds(10000));
+    auto* again = AvatarDescription::BeginGetFromGamer(Player(0), {}, std::any{});
+    const auto next = AvatarDescription::EndGetFromGamer(again);
+    delete again;
+    EXPECT_TRUE(std::equal(saved.begin(), saved.end(), next.getDescriptionProperty().begin()));
+    // An invalid description or an unknown profile is not stored.
+    EXPECT_FALSE(Service::setLocalProfileAvatar("robin", std::vector<unsigned char>(1021, 0)));
+    EXPECT_FALSE(Service::setLocalProfileAvatar("Nobody", saved));
 }
 
 // A local profile carries its preferred game settings (XNA GameDefaults) in its store entry. What a

@@ -12,6 +12,8 @@
 
 namespace Microsoft::Xna::Framework::Net
 {
+    GetTypeNameCPP(LocalNetworkGamer, "Microsoft.Xna.Framework.Net.LocalNetworkGamer")
+
     namespace
     {
         std::vector<SharpRuntime::bytecs> TakePacket(PacketWriter& data)

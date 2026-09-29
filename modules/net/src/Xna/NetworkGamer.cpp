@@ -8,6 +8,8 @@
 
 namespace Microsoft::Xna::Framework::Net
 {
+    GetTypeNameCPP(NetworkGamer, "Microsoft.Xna.Framework.Net.NetworkGamer")
+
     NetworkGamer::NetworkGamer(NetworkSession* session, const std::string& gamertag)
         : Gamer(gamertag, gamertag)
         , machine_(std::make_shared<NetworkMachine>(NetworkMachine::CreateInternal()))

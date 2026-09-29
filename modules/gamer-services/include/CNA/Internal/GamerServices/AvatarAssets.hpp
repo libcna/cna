@@ -8,6 +8,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include <array>
+#include <chrono>
 #include <functional>
 #include <cstdint>
 #include <map>
@@ -341,4 +342,8 @@ std::shared_ptr<AvatarLoad> loadAvatarAsync(const AvatarDescriptor& descriptor);
  * (identity where the clip has no curve). @param rootTranslation Out: root offset. @return Expression key in effect. */
 AvatarExpressionKey sampleClip(const AvatarClip& clip,double seconds,
     std::array<Microsoft::Xna::Framework::Quaternion,BoneCount>& rotations,Microsoft::Xna::Framework::Vector3& rootTranslation);
+
+/** @brief How often GamerServicesDispatcher.Update reads a cached signed-in gamer's avatar again
+ * to raise AvatarDescription.Changed (10 s; tests shorten it). @param interval Interval. */
+void setAvatarChangeCheckInterval(std::chrono::milliseconds interval);
 }

@@ -12,6 +12,9 @@ namespace Microsoft::Xna::Framework::GamerServices
     class FriendGamer : public Gamer
     {
     public:
+        /** @brief .NET type name. @return Name. */
+        GetTypeNameHPP()
+
         /**
          * @brief Gets whether this friend sent a friend request to the local gamer.
          *

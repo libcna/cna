@@ -772,6 +772,8 @@ public:
         games_.erase(gameplay);
     }
     std::vector<std::vector<unsigned char>> avatars(const std::vector<std::string>& ids) override {
+        std::lock_guard guard(avatarLock_);
+        if(avatarsUnreachable_)throw Unavailable("Fake fixture is unreachable.");
         std::vector<std::vector<unsigned char>> out;
         for(const auto& id:ids) {
             auto person=std::find_if(identities_.begin(),identities_.end(),[&](const auto& value){return value.userId==id;});
@@ -779,6 +781,11 @@ public:
         }
         return out;
     }
+    void setAvatar(const std::string& userId,std::vector<unsigned char> description) {
+        std::lock_guard guard(avatarLock_);
+        for(auto& person:identities_)if(person.userId==userId)person.avatar=std::move(description);
+    }
+    void setAvatarsUnreachable(bool failing){std::lock_guard guard(avatarLock_);avatarsUnreachable_=failing;}
     std::string avatarCatalog(int) override {
         if(avatarCatalog_.empty())throw Unavailable("Fake fixture has no avatar catalog.");
         return avatarCatalog_;
@@ -801,6 +808,8 @@ private:
         entry->rating=row.rating;entry->columns=row.columns;
     }
     std::string avatarCatalog_;
+    std::mutex avatarLock_;
+    bool avatarsUnreachable_=false;
     std::map<std::string,std::vector<unsigned char>> avatarAssets_;
     std::map<std::string,std::vector<ServiceMessage>> inbox_;
     std::map<std::pair<std::string,std::string>,std::string> reviews_;
@@ -837,6 +846,16 @@ CNA::GamerServices::Configuration configurationForBackend(const IGamerServicesBa
     return online->configuration();
 }
 void setBackendForTesting(std::shared_ptr<IGamerServicesBackend> value) {std::lock_guard lock(registryMutex);current=std::move(value);}
+void setFakeAvatar(IGamerServicesBackend& fake,const std::string& userId,std::vector<unsigned char> description) {
+    auto* backend=dynamic_cast<FakeBackend*>(&fake);
+    if(!backend)throw System::InvalidOperationException("Not a fake Gamer Services backend.");
+    backend->setAvatar(userId,std::move(description));
+}
+void setFakeAvatarsUnreachable(IGamerServicesBackend& fake,bool failing) {
+    auto* backend=dynamic_cast<FakeBackend*>(&fake);
+    if(!backend)throw System::InvalidOperationException("Not a fake Gamer Services backend.");
+    backend->setAvatarsUnreachable(failing);
+}
 void setFakeAvatarCatalog(IGamerServicesBackend& fake,std::string manifest,std::map<std::string,std::vector<unsigned char>> assets) {
     auto* backend=dynamic_cast<FakeBackend*>(&fake);
     if(!backend)throw System::InvalidOperationException("Not a fake Gamer Services backend.");

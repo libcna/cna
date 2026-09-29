@@ -83,6 +83,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         }
     }
 
+    GetTypeNameCPP(Gamer, "Microsoft.Xna.Framework.GamerServices.Gamer")
+
     std::string Gamer::ToString() const
     {
         return displayName_;

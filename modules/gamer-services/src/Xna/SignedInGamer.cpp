@@ -17,6 +17,8 @@
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
+    GetTypeNameCPP(SignedInGamer, "Microsoft.Xna.Framework.GamerServices.SignedInGamer")
+
     System::EventHandler<SignedInEventArgs> SignedInGamer::SignedIn;
     System::EventHandler<SignedOutEventArgs> SignedInGamer::SignedOut;
 

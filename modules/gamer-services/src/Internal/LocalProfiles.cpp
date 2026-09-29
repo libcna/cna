@@ -272,11 +272,29 @@ std::optional<LocalProfile> findLocalProfile(const std::string& gamertag) {
 }
 
 std::vector<unsigned char> localProfileAvatar(const std::string& gamertag) {
-    {
-        std::lock_guard guard(storeMutex);
-        for(const auto& profile:opened)if(folded(profile.gamertag)==folded(gamertag))return profile.avatar;
-    }
-    for(const auto& profile:loadLocalProfiles())if(folded(profile.gamertag)==folded(gamertag))return profile.avatar;
+    // The store first: another process (the avatar editor) may have changed it.
+    for(const auto& profile:loadLocalProfiles())if(folded(profile.gamertag)==folded(gamertag)&&!profile.avatar.empty())return profile.avatar;
+    std::lock_guard guard(storeMutex);
+    for(const auto& profile:opened)if(folded(profile.gamertag)==folded(gamertag))return profile.avatar;
     return {};
+}
+
+bool setLocalProfileAvatar(const std::string& gamertag,const std::vector<unsigned char>& description) {
+    if(description.size()!=AvatarBytes||!Avatars::decode(description))return false;
+    std::lock_guard guard(storeMutex);
+    for(auto& profile:opened)if(folded(profile.gamertag)==folded(gamertag))profile.avatar=description;
+    try {
+        const auto path=localProfilesPath();
+        if(path.empty()||!prepareDirectory(path))return false;
+        StoreLock lock(path);
+        auto stored=readStore(path);
+        if(!stored)return false;
+        for(auto& profile:*stored)
+            if(folded(profile.gamertag)==folded(gamertag)) {
+                profile.avatar=description;
+                return writeStore(path,*stored);
+            }
+    }catch(...) {}
+    return false;
 }
 }

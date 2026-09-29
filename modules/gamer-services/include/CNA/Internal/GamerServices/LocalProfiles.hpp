@@ -98,4 +98,13 @@ std::optional<LocalProfile> findLocalProfile(const std::string& gamertag);
  * @return The 1021-byte description, or empty when the profile or its avatar is missing.
  */
 std::vector<unsigned char> localProfileAvatar(const std::string& gamertag);
+
+/**
+ * @brief Replaces the avatar of a stored profile (the CNA avatar editor's save).
+ * @param gamertag Profile name, ignoring case.
+ * @param description A valid 1021-byte CNA description.
+ * @return True when the store now holds it; false for an invalid description, an unknown
+ * profile or a store that cannot be written.
+ */
+bool setLocalProfileAvatar(const std::string& gamertag,const std::vector<unsigned char>& description);
 }

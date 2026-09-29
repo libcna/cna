@@ -3,6 +3,8 @@
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
+    GetTypeNameCPP(FriendGamer, "Microsoft.Xna.Framework.GamerServices.FriendGamer")
+
     FriendGamer::FriendGamer(
         const std::string& gamertag,
         const std::string& displayName,

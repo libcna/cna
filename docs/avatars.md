@@ -54,8 +54,14 @@ imported; administration assigns them (`cna-gamer-services-admin <db> avatar <us
 Games that share avatars in a session the XNA way (sending `Description` bytes to other machines
 and constructing an `AvatarDescription` from them) need nothing from the service at all.
 
-`AvatarDescription.Changed` is never raised: C++ descriptions are values, so the cached instance
-XNA raised it on has no counterpart; read the description again to see a change.
+As in XNA, each signed-in player index keeps the description `EndGetFromGamer` returned for it
+until that gamer's avatar changes; other gamers get a fresh description on every read.
+`GamerServicesDispatcher.Update` reads a kept avatar again every 10 seconds (the service's copy, or
+the local profile's store, which the CNA avatar editor writes) and, when it differs, empties the
+slot and raises that description's `Changed` on the dispatcher thread with the `SignedInGamer` as
+sender. The C++ description is a value, so its `Changed` is shared by every copy of it (subscribing
+or unsubscribing through any copy is subscribing to the one event). An unchanged avatar, a new
+catalog, or an unreachable service raises nothing; signing out empties the slot without an event.
 
 ## Rendering
 

@@ -23,6 +23,9 @@ namespace Microsoft::Xna::Framework::Net
     class LocalNetworkGamer final : public NetworkGamer
     {
     public:
+        /** @brief .NET type name. @return Name. */
+        GetTypeNameHPP()
+
         /**
          * @brief Gets whether an incoming packet is queued and ready to receive.
          *

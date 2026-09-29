@@ -205,3 +205,133 @@ TEST_F(AvatarServiceTest, AnAssetWhoseBytesDoNotMatchTheManifestIsRefused) {
     ASSERT_EQ(manifest->version, Newer);
     EXPECT_FALSE(WhilePumping([&] { return Avatars::resolveAsset(*manifest, "hat_crown.male.glb"); }).has_value());
 }
+
+namespace {
+// Reads a signed-in gamer's description the XNA way and pumps until it completes.
+AvatarDescription ReadAvatar(Gamer* gamer) {
+    std::unique_ptr<System::IAsyncResult> result(AvatarDescription::BeginGetFromGamer(gamer, {}, {}));
+    const auto limit = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (!result->getIsCompletedProperty() && std::chrono::steady_clock::now() < limit) {
+        GamerServicesDispatcher::Update();
+    }
+    return AvatarDescription::EndGetFromGamer(result.get());
+}
+
+void PumpFor(std::chrono::milliseconds duration) {
+    const auto limit = std::chrono::steady_clock::now() + duration;
+    while (std::chrono::steady_clock::now() < limit) {
+        GamerServicesDispatcher::Update();
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+}
+
+class AvatarChangedTest : public AvatarServiceTest {
+protected:
+    void SetUp() override {
+        AvatarServiceTest::SetUp();
+        Avatars::setAvatarChangeCheckInterval(std::chrono::milliseconds(0));
+    }
+    void TearDown() override {
+        Avatars::setAvatarChangeCheckInterval(std::chrono::milliseconds(10000));
+        Service::setFakeAvatarsUnreachable(*service_, false);
+        AvatarServiceTest::TearDown();
+    }
+};
+}
+
+TEST_F(AvatarChangedTest, TheSameAvatarRaisesNothingAndTheSlotKeepsItsDescription) {
+    auto first = ReadAvatar(gamer(0));
+    int calls = 0;
+    first.Changed += [&](System::Object*, const System::EventArgs&) { ++calls; };
+    PumpFor(std::chrono::milliseconds(80));
+    EXPECT_EQ(calls, 0);
+    // The slot hands out the same description (and so the same event) while nothing changes.
+    auto second = ReadAvatar(gamer(0));
+    EXPECT_TRUE(second.Changed.IsShared());
+    EXPECT_EQ(second.Changed.Size(), 1u);
+    // A new catalog on the service is not a change of anyone's avatar.
+    Service::setFakeAvatarCatalog(*service_, "{}", {});
+    PumpFor(std::chrono::milliseconds(80));
+    EXPECT_EQ(calls, 0);
+}
+
+TEST_F(AvatarChangedTest, ANewServiceAvatarRaisesChangedOnceWithTheGamerOnTheDispatcherThread) {
+    auto description = ReadAvatar(gamer(0));
+    int calls = 0;
+    System::Object* sender = nullptr;
+    std::thread::id thread;
+    auto copy = description;  // subscribing through any copy is subscribing to the one event
+    copy.Changed += [&](System::Object* from, const System::EventArgs&) {
+        ++calls;
+        sender = from;
+        thread = std::this_thread::get_id();
+    };
+    const auto updated = Encoded(0, 1600);
+    Service::setFakeAvatar(*service_, "a", updated);
+    const auto limit = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (calls == 0 && std::chrono::steady_clock::now() < limit) {
+        GamerServicesDispatcher::Update();
+    }
+    ASSERT_EQ(calls, 1);
+    EXPECT_EQ(sender, static_cast<System::Object*>(gamer(0)));
+    EXPECT_EQ(thread, std::this_thread::get_id());
+    // The slot was emptied: the next read is the new avatar, and the old event never fires again.
+    const auto next = ReadAvatar(gamer(0));
+    EXPECT_EQ(next.getDescriptionProperty(), std::vector<SharpRuntime::bytecs>(updated.begin(), updated.end()));
+    EXPECT_EQ(next.Changed.Size(), 0u);
+    Service::setFakeAvatar(*service_, "a", Encoded(1, 1700));
+    PumpFor(std::chrono::milliseconds(80));
+    EXPECT_EQ(calls, 1);
+}
+
+TEST_F(AvatarChangedTest, UnsubscribingThroughAnyCopyStopsTheHandler) {
+    auto description = ReadAvatar(gamer(0));
+    int calls = 0;
+    const auto token = description.Changed.Add([&](System::Object*, const System::EventArgs&) { ++calls; });
+    auto other = ReadAvatar(gamer(0));
+    other.Changed.Remove(token);
+    Service::setFakeAvatar(*service_, "a", Encoded(0, 1600));
+    PumpFor(std::chrono::milliseconds(120));
+    EXPECT_EQ(calls, 0);
+}
+
+TEST_F(AvatarChangedTest, AnUnreachableServiceRaisesNothingUntilItAnswersAgain) {
+    auto description = ReadAvatar(gamer(0));
+    int calls = 0;
+    description.Changed += [&](System::Object*, const System::EventArgs&) { ++calls; };
+    Service::setFakeAvatarsUnreachable(*service_, true);
+    Service::setFakeAvatar(*service_, "a", Encoded(0, 1600));
+    PumpFor(std::chrono::milliseconds(120));
+    EXPECT_EQ(calls, 0);
+    Service::setFakeAvatarsUnreachable(*service_, false);
+    const auto limit = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (calls == 0 && std::chrono::steady_clock::now() < limit) {
+        GamerServicesDispatcher::Update();
+    }
+    EXPECT_EQ(calls, 1);
+}
+
+TEST_F(AvatarChangedTest, SigningOutDropsTheSlotWithoutAnEvent) {
+    auto description = ReadAvatar(gamer(0));
+    int calls = 0;
+    description.Changed += [&](System::Object*, const System::EventArgs&) { ++calls; };
+    service_->signOut(0);
+    GamerServicesDispatcher::Update();
+    Service::setFakeAvatar(*service_, "a", Encoded(0, 1600));
+    PumpFor(std::chrono::milliseconds(120));
+    EXPECT_EQ(calls, 0);
+    service_->signIn(0, "Alice", "fixture");
+    GamerServicesDispatcher::Update();
+}
+
+TEST_F(AvatarChangedTest, GamersWhoAreNotSignedInAreReadFreshAndNeverRaise) {
+    std::unique_ptr<Gamer> alice(Gamer::GetFromGamertag("Alice"));
+    auto description = ReadAvatar(alice.get());
+    EXPECT_FALSE(description.Changed.IsShared());
+    int calls = 0;
+    description.Changed += [&](System::Object*, const System::EventArgs&) { ++calls; };
+    Service::setFakeAvatar(*service_, "a", Encoded(0, 1600));
+    PumpFor(std::chrono::milliseconds(80));
+    EXPECT_EQ(calls, 0);
+    EXPECT_FLOAT_EQ(ReadAvatar(alice.get()).getHeightProperty(), 1.6f);
+}

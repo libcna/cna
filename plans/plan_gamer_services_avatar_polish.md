@@ -166,6 +166,22 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   (eyes 2.5-3, lips 1.6, hair 2.2, leather 2, glasses frames 2.5, cloth 0.25-0.5). Older readers
   ignore it; v1 has none (scale 1, unchanged). No shader, lighting-API or state change; the
   renderer still restores blend/depth/rasterizer/sampler state after Draw.
+- **AvatarDescription.Changed (GSP-J1).** Evidence (Windows IL, the only IL available; the Xbox
+  reference assemblies are metadata-only): `AvatarDescription` keeps `signedInGamerDescriptions[4]`;
+  `EndGetFromGamer` for a `SignedInGamer` returns that slot's instance (created once);
+  `GamerServicesDispatcher.Update` reads an `AvatarChanged` bitmask per player and
+  `OnAvatarChanged` takes the slot's `Changed`, empties the slot, then invokes it with the
+  `SignedInGamer` as sender. CNA does the same: the dispatcher re-reads a kept slot's avatar every
+  10 s (service `avatars.get`, or the local profile store) and raises when the bytes differ. The C++
+  description is a value, so sharp-runtime gained `EventHandler::Share()` (88f6b11f): copies of a
+  shared event have one subscriber list, add and remove through any copy. `Gamer` now derives from
+  `System::Object`, as in C#, so the sender can be the gamer. Same bytes, a catalog-only change or an
+  unreachable service raise nothing; sign-out, another gamer in the slot or a replaced backend drop
+  the slot silently. `setLocalProfileAvatar` (store write) and `localProfileAvatar` reading the store
+  first let another process's save be seen.
+- **Renderer coverage (GSP-E).** OPENGL33 and VULKAN draw the 255-job v2 review identically;
+  `EasyGL_AvatarRenderer_Standard` and `Vulkan_AvatarRenderer_Standard` pass. Other renderers were
+  not built in this worktree (they share SkinnedEffect; not measured here).
 - **Server import validation (GSP-G1).** An independent MIT validator (server `AvatarAssets.cpp`,
   on nlohmann/json, no code from CNA) enforces the same contract as the CNA reader, plus
   catalog-level rules a client would otherwise hit at render time (items fitted to their body's
@@ -189,7 +205,7 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
 | GSP-G1 | Server avatar GLB/manifest validation, malformed fixtures | done (server 7a8a629) |
 | GSP-H1 | Avatar cache audit, bounded cleanup, first/warm load measurement | todo |
 | GSP-I1 | CNA-owned avatar customization (system level) | todo |
-| GSP-J1 | `AvatarDescription.Changed` | todo |
+| GSP-J1 | `AvatarDescription.Changed` | done |
 | GSP-K1 | Online host migration | todo |
 | GSP-K2 | Online `AddLocalGamer` | todo |
 | GSP-L1..L6 | Account GameDefaults, away/busy, toasts, Stream columns, guests, QoS bandwidth | todo |

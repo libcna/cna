@@ -247,6 +247,12 @@ bool serviceCallsRestricted();
 void withRestrictedServiceCalls(const std::function<void()>& callback);
 /** @brief Injects an explicit test backend. @param value Backend or null to reset configuration. */
 void setBackendForTesting(std::shared_ptr<IGamerServicesBackend> value);
+/** @brief Replaces an account's avatar on a fake backend. @param fake Backend from makeFakeBackend.
+ * @param userId Account. @param description Bytes (empty = no avatar). */
+void setFakeAvatar(IGamerServicesBackend& fake,const std::string& userId,std::vector<unsigned char> description);
+/** @brief Makes a fake backend's avatar reads fail as an unreachable service would. @param fake Backend.
+ * @param failing Whether reads fail. */
+void setFakeAvatarsUnreachable(IGamerServicesBackend& fake,bool failing);
 /** @brief Gives a fake backend an avatar catalog to serve. @param fake Backend from makeFakeBackend.
  * @param manifest catalog.json text. @param assets File bytes by SHA-256. */
 void setFakeAvatarCatalog(IGamerServicesBackend& fake,std::string manifest,std::map<std::string,std::vector<unsigned char>> assets);

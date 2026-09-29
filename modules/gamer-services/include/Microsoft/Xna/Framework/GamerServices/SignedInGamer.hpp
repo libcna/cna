@@ -29,6 +29,9 @@ namespace Microsoft::Xna::Framework::GamerServices
     class SignedInGamer final : public Gamer
     {
     public:
+        /** @brief .NET type name. @return Name. */
+        GetTypeNameHPP()
+
         /**
          * @brief Gets the default preferences for this gamer.
          *
