@@ -172,19 +172,34 @@ def spikes(body, count, theta_range, lift, length_, width, seed):
     return out
 
 
-def curls(body, count, theta_max, lift, size, seed):
+def ringlets(body, count, theta_max, lift, size, seed):
+    """Short coiled curls spread evenly over the scalp, each hanging downhill from its root."""
     out = Mesh()
     w = weights_for(body)
+    c = head.centre(body)
     for k in range(count):
         key = (seed, k)
-        golden = k * 2.399963
+        phi = k * 2.399963
         f = (k + 0.5) / count
-        phi = golden
         theta = math.acos(1.0 - f * (1.0 - math.cos(theta_max(phi)))) * 0.98
         r = size * (0.85 + 0.25 * jitter(*key, 1))
-        centre = head.point(body, theta, phi, lift + r * 0.3 + 0.004 * jitter(*key, 2))
-        out.append(ellipsoid(centre, ((1, 0, 0), (0, 1, 0), (0, 0, 1)), (r, r * 0.9, r), 8, 5,
-                             lambda p, v, u: w(p)))
+        base = head.point(body, theta, phi, lift + 0.004 * jitter(*key, 2))
+        normal = normalize(sub(base, c))
+        # Downhill along the scalp; at the crown, any direction.
+        downhill = sub(head.point(body, min(theta + 0.08, PI), phi + 0.3 * jitter(*key, 3), lift), base)
+        down = normalize(sub(downhill, mul(normal, dot(downhill, normal))))
+        side = cross(normal, down)
+        turns = 1.5 + 0.35 * jitter(*key, 4)
+        phase = 2.0 * PI * (0.5 + 0.5 * jitter(*key, 5))
+        coil, span, steps = r * 0.42, r * (1.3 + 0.3 * jitter(*key, 6)), 8
+        path, radii = [], []
+        for i in range(steps + 1):
+            t = i / steps
+            a = phase + 2.0 * PI * turns * t
+            path.append(add(add(base, mul(down, span * (t - 0.25))),
+                            add(mul(normal, coil * (1.0 + 0.9 * math.cos(a))), mul(side, coil * math.sin(a)))))
+            radii.append(r * 0.5 * (1.0 - 0.3 * t))
+        out.append(tube(path, radii, 6, lambda p: w(p), round_end=True))
     return out
 
 
@@ -271,7 +286,7 @@ def build(body, style):
         return locks, cap(body, line, 0.012 * s)
     if style == "hair_curly":
         line = hairline(0.28 * PI, 0.39 * PI, 0.51 * PI, 0.74 * PI)
-        return curls(body, 96, lambda phi: line(phi) * 1.02, 0.020 * s, 0.029 * s, 9), cap(body, line, 0.018 * s)
+        return ringlets(body, 175, lambda phi: line(phi) * 1.02, 0.014 * s, 0.026 * s, 9), cap(body, line, 0.016 * s)
     if style == "hair_sidepart":
         line = hairline(0.30 * PI, 0.39 * PI, 0.50 * PI, 0.74 * PI)
         ends = hairline(0.34 * PI, 0.42 * PI, 0.47 * PI, 0.64 * PI)

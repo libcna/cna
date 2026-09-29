@@ -249,6 +249,13 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   `/rv/tmp/avatar-polish/closeups/`. v2 is 12.88 MB. GS 532 + 1 skip; server avatar tests (with
   v2 as golden import) and `service_cna_avatars` pass. Residual: in the deepest crouch
   (FemaleIdleFixShoe) a few millimetres of trouser front can show just above a shirt hem.
+- GSP-D2 (hair and hats): curly hair is 175 short ringlets (coils hanging downhill from their
+  roots) instead of 96 faceted balls; the fedora has a real crown -- walls to above the head,
+  tapering, pinched at the front sides, a lengthwise crease on top, a front dip -- with its ribbon
+  band outside the crown (the old band sat inside it); the cap's button sits on the crown; the
+  headband rests on the hair. v2 is 13.82 MB (curly 645 KB per body, the largest asset). Review
+  `/rv/tmp/avatar-polish/review-v2e/` (preview and OPENGL33, 255 jobs, 0 failures); GS 532 + 1
+  skip; server avatar tests and `service_cna_avatars` pass.
 - Visual evidence lives outside the repositories, as the sample evidence does:
   `/rv/tmp/avatar-polish/evidence/{before,after}/`.
 - BEFORE (catalog v1, 2026-09-29): `evidence/before/{jobs.json, preview/, opengl33/,

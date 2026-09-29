@@ -258,23 +258,23 @@
   },
   {
    "name": "hair_curly.female.glb",
-   "sha256": "c8a40809e61b7ce0f494422dce145371d09ee8cb9d48196691d3aaf59a2bc67a",
-   "size": 254348
+   "sha256": "8f8cc2fd39c428ce2409ab4e8e694c2f63043259b4484fe286aa5b069137b33c",
+   "size": 645432
   },
   {
    "name": "hair_curly.hat.female.glb",
-   "sha256": "385c2ed85e3e9943b2b8844629c689302268fd478d7e1fba0511c6f7c9d9f769",
-   "size": 84420
+   "sha256": "b327749724aa629c7512b061b6e5f4fa1a9d321aad836090d3e917b7bb1ab4e1",
+   "size": 175728
   },
   {
    "name": "hair_curly.hat.male.glb",
-   "sha256": "9faf616f71d87414a4ad4326be8b44a8d9ac99ea93456c6d8a1c29f68d2d1c80",
-   "size": 84208
+   "sha256": "0d2816a5a3c49c3a1d149bbb38ea2d95f4d3787a05977a593494f32d863c9a93",
+   "size": 175516
   },
   {
    "name": "hair_curly.male.glb",
-   "sha256": "4fe5e39420d929bd2dba9522b7b63393abf06670ee025df9392261955103bbe2",
-   "size": 254136
+   "sha256": "dd733c2a4d7a15e4f419c3dc3526599513173d2fd501c7cf87fe39d843a9f717",
+   "size": 645228
   },
   {
    "name": "hair_long.female.glb",
@@ -418,32 +418,32 @@
   },
   {
    "name": "hat_cap.female.glb",
-   "sha256": "74290147c9b0fd066982c4680dff958a861c763b8b8f11a1d93120307398d0b6",
+   "sha256": "6a32a45dcacf1a8d4a7fb72efd3ba282f2c1cf972dc396f6036321c952cd0852",
    "size": 59988
   },
   {
    "name": "hat_cap.male.glb",
-   "sha256": "978cb70e5be0d7a06b1217c62b7ef8f29d87b0a2343d7415bb764fd1f45051ac",
+   "sha256": "935be489df578463fa5e23df5c4e094f628ef6a9c380476d9557cd50fbacc0a1",
    "size": 59776
   },
   {
    "name": "hat_fedora.female.glb",
-   "sha256": "de8471d811b42e8a9778b7209269caadf83fbc35ea51b4e038fe873d185a21a1",
-   "size": 80408
+   "sha256": "465b7eb0774c12dea16a4799c31a643b3f54af6cc00ba3dc3a99f30d182c0071",
+   "size": 64884
   },
   {
    "name": "hat_fedora.male.glb",
-   "sha256": "85c7e9504cd9d6fcac23291d46eb2033c53a8813a2f8dcf515f5345ea16d415e",
-   "size": 80196
+   "sha256": "33cf4eb597f3a28e9957aaa07455322c8ed2ba5dc70b22575dcc255a7e4437d8",
+   "size": 64680
   },
   {
    "name": "hat_headband.female.glb",
-   "sha256": "078087530e8b45b0da57cfcb8b404e493dec4db8c2bfdf9308fb8930b3b405ca",
-   "size": 30476
+   "sha256": "4008c196c4633bc24b4750f45d5bb53d2044e0655db7c5bdbcdb7ac346e4159c",
+   "size": 30472
   },
   {
    "name": "hat_headband.male.glb",
-   "sha256": "c1fcf4469b42d6d8008e7b1384b4c4839960057e74af58c56995a9298c772346",
+   "sha256": "456022f8510e82e640cf1f4657d6a0e415c9171534df9702d41f8e128ca504e7",
    "size": 30260
   },
   {

@@ -108,6 +108,50 @@ def crown(body_type, line, lift, bulge=lambda theta, phi: 0.0, segments=48, ring
     return Mesh().grid(rows + inner, HEADW, uv_seam=True)
 
 
+def _angle_to(phi, centre):
+    return (phi - centre + PI) % (2.0 * PI) - PI
+
+
+def fedora_crown(body_type, line, lift, segments=48):
+    """A fedora's crown: walls rising from the band line to above the head, pinched at the front
+    sides and tapering a little, closed by a top with a crease along its length. Returns the crown
+    and the ribbon band around its foot."""
+    s = head.SCALE[body_type]
+    c = head.centre(body_type)
+    top_y = head.point(body_type, 0.0, 0.0, lift)[1] + 0.024 * s
+    bases = [(PI + 2.0 * PI * k / segments, head.point(body_type, line(PI + 2.0 * PI * k / segments),
+                                                       PI + 2.0 * PI * k / segments, lift)) for k in range(segments)]
+    centre = (c[0], top_y, c[2] - 0.006 * s)
+
+    def wall(phi, b, f, out=0.0):
+        pinch = sum(math.exp(-(_angle_to(phi, a) / (0.13 * PI)) ** 2) for a in (0.22 * PI, -0.22 * PI))
+        scale = 1.0 - 0.13 * f ** 1.3 - 0.13 * pinch * f ** 1.6
+        rel = (b[0] - centre[0], b[2] - centre[2])
+        norm = math.hypot(*rel) or 1.0
+        # The crown dips toward the front, as a snap-brim fedora does.
+        y_top = top_y - 0.012 * s * max(0.0, math.cos(phi))
+        return (centre[0] + rel[0] * scale + rel[0] / norm * out, b[1] + (y_top - b[1]) * f,
+                centre[2] + rel[1] * scale + rel[1] / norm * out)
+
+    walls = [[wall(phi, b, f) for phi, b in bases] for f in (1.0, 0.8, 0.6, 0.4, 0.2, 0.0)]
+    length_ = max(abs(edge[2] - centre[2]) for edge in walls[0])
+    rows = []
+    for u in (0.0, 0.25, 0.5, 0.72, 0.9):
+        ring = []
+        for edge in walls[0]:
+            x, z = centre[0] + (edge[0] - centre[0]) * u, centre[2] + (edge[2] - centre[2]) * u
+            # The crease: a trough along the crown's length, fading before its ends.
+            crease = 0.024 * s * math.exp(-((x - centre[0]) / (0.030 * s)) ** 2) * \
+                (1.0 - smoothstep(0.55, 0.95, abs(z - centre[2]) / length_))
+            ring.append((x, edge[1] - crease + 0.004 * s * (1.0 - u), z))
+        rows.append(ring)
+    inner = [head.point(body_type, line(phi), phi, lift * 0.55) for phi, _ in bases]
+    crown_mesh = Mesh().grid(rows + walls + [inner], HEADW, uv_seam=True)
+    band = Mesh().grid([[wall(phi, b, 0.26, 0.003 * s) for phi, b in bases],
+                        [wall(phi, b, 0.02, 0.003 * s) for phi, b in bases]], HEADW)
+    return crown_mesh, band
+
+
 def brim(body_type, line, lift, width, droop, segments=48, phi_range=None, curl=0.0):
     """A brim leaving the crown's rim: width(phi) outward, droop(phi) down (metres at male
     scale). A full ring, or a bill between phi_range's two angles."""
@@ -147,7 +191,8 @@ def hat(body_type, style):
         main.append(crown(body_type, line, lift, bulge=lambda t, p: 0.010 * s * math.sin(t) * (0.5 + 0.5 * math.cos(p))))
         main.append(brim(body_type, line, lift * 0.9, lambda p: 0.085 * math.cos(p) ** 2, lambda p: 0.020 * math.cos(p) ** 2,
                          segments=24, phi_range=(-0.36 * PI, 0.36 * PI), curl=0.03))
-        top = head.point(body_type, 0.0, 0.0, lift + 0.012 * s)
+        # The button sits on the crown's top (whose bulge is zero there).
+        top = head.point(body_type, 0.0, 0.0, lift + 0.003 * s)
         trim.append(ellipsoid(top, ((1, 0, 0), (0, 1, 0), (0, 0, 1)), (0.009 * s, 0.006 * s, 0.009 * s), 8, 6, HEADW))
         parts = [(main, "accessory", "canvas", (1.0, 1.0, 1.0)), (trim, "accessory", "plain", (0.8, 0.8, 0.8))]
     elif style == "hat_beanie":
@@ -169,20 +214,18 @@ def hat(body_type, style):
         parts = [(main, "accessory", "canvas", (1.0, 1.0, 1.0))]
     elif style == "hat_fedora":
         line = hat_line(0.38 * PI, 0.43 * PI, 0.45 * PI)
-        main.append(crown(body_type, line, lift,
-                          bulge=lambda t, p: 0.034 * s * math.sin(min(t * 2.4, PI * 0.5)) -
-                          0.030 * s * math.exp(-((t / (0.10 * PI)) ** 2)) * (0.5 + 0.5 * math.cos(p) ** 2)))
-        main.append(brim(body_type, line, lift * 0.9, lambda p: 0.055 + 0.01 * math.cos(p),
-                         lambda p: 0.004 - 0.016 * math.sin(p) ** 2 + 0.012 * max(0.0, math.cos(p))))
-        band = [head.point(body_type, line(PI + 2 * PI * k / 48) - 0.03 * PI, PI + 2 * PI * k / 48, lift + 0.003 * s) for k in range(48)]
-        trim.append(tube(band, [0.009 * s] * 48, 6, HEADW, closed=True))
+        crown_mesh, band = fedora_crown(body_type, line, lift)
+        main.append(crown_mesh)
+        main.append(brim(body_type, line, lift * 0.9, lambda p: 0.058 + 0.01 * math.cos(p),
+                         lambda p: 0.004 - 0.018 * math.sin(p) ** 2 + 0.014 * max(0.0, math.cos(p))))
+        trim.append(band)
         parts = [(main, "accessory", "fleece", (1.0, 1.0, 1.0)), (trim, "none", "plain", (0.16, 0.15, 0.15))]
     elif style == "hat_headband":
         line = hat_line(0.30 * PI, 0.44 * PI, 0.52 * PI)
         band = []
         for k in range(48):
             phi = PI + 2 * PI * k / 48
-            band.append(head.point(body_type, line(phi) - 0.02 * PI, phi, 0.016 * s))
+            band.append(head.point(body_type, line(phi) - 0.02 * PI, phi, 0.022 * s))
         main.append(tube(band, [0.013 * s] * 48, 8, HEADW, closed=True))
         parts = [(main, "accessory", "rib", (1.0, 1.0, 1.0))]
     else:
