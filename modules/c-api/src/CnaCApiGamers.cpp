@@ -3,6 +3,7 @@
 #include "CNA/C/gamer_services.h"
 #include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
 #include "CnaCApiGamerServicesDetail.hpp"
+#include "CnaCApiNetDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Audio/Microphone.hpp"
@@ -16,6 +17,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedOutEventArgs.hpp"
+#include "Microsoft/Xna/Framework/Net/NetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 #include "System/EventHandler.hpp"
 
@@ -109,6 +111,19 @@ struct GamerEnumeratorResource final {
     if (const CNA_Result result = TryBorrowSignedInGamerQuietly(handle, &signedInGamer);
         result == CNA_RESULT_SUCCESS) {
         *outGamer = signedInGamer;
+        return CNA_RESULT_SUCCESS;
+    }
+    // A NetworkGamer is a Gamer, and for a remote one these routes are the only way to its
+    // gamertag and display name.
+    ObjectKind kind = ObjectKind::Unknown;
+    if (GetRuntimeHandles().GetKind(handle, &kind) == CNA_RESULT_SUCCESS &&
+        kind == ObjectKind::NetworkGamer) {
+        Microsoft::Xna::Framework::Net::NetworkGamer* networkGamer = nullptr;
+        if (const CNA_Result result = CNA::C::Detail::BorrowNetworkGamer(handle, &networkGamer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outGamer = networkGamer;
         return CNA_RESULT_SUCCESS;
     }
     return Fail(

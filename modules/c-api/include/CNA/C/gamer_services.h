@@ -686,7 +686,13 @@ CNA_C_API CNA_Result cna_gamer_get_signed_in_gamer_count(int32_t* out_count);
 
 /* ---- Gamers, their values and their collections ---- */
 
-/** @brief Owned handle for a gamer that is not the local signed-in gamer. */
+/**
+ * @brief Owned handle for a gamer that is not the local signed-in gamer.
+ *
+ * The `cna_gamer_*` routes that read or set a gamer's own members (gamertag, display name, text,
+ * tag, profile) also accept a signed-in gamer or a `CNA_NetworkGamerHandle`, because both are
+ * gamers; `cna_gamer_destroy` releases only the handles this family creates.
+ */
 typedef CNA_Handle CNA_GamerHandle;
 
 /** @brief Owned handle for a gamer profile. */
