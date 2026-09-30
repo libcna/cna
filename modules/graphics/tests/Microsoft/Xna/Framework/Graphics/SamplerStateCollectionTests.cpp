@@ -128,6 +128,72 @@ TEST(SamplerStateCollectionTest, ReassigningSameDisposedSamplerIdentityIsNoOp)
     EXPECT_TRUE(coll[3].getIsDisposedProperty());
 }
 
+// House Simulator BL-16: XNA's `SamplerStates[i] = state` is the collection's indexer setter. The
+// C++ `coll[i] = state` spelling goes through SamplerState's CNAEXT copy assignment, so strict-XNA
+// code needs this non-CNAEXT setter, with the same semantics.
+TEST(SamplerStateCollectionTest, IndexerSetterUpdatesSlot)
+{
+    SamplerStateCollection coll;
+    coll(3, SamplerState::PointClamp);
+    EXPECT_EQ(coll[3].getFilterProperty(), TextureFilter::Point);
+    EXPECT_EQ(coll[3].getAddressUProperty(), TextureAddressMode::Clamp);
+    EXPECT_EQ(coll[3].getNameProperty(), "SamplerState.PointClamp");
+}
+
+TEST(SamplerStateCollectionTest, IndexerSetterBindsSource)
+{
+    SamplerStateCollection coll;
+    SamplerState custom;
+    custom.setAddressUProperty(TextureAddressMode::Mirror);
+
+    coll(3, custom);
+
+    EXPECT_EQ(coll[3].getAddressUProperty(), TextureAddressMode::Mirror);
+    EXPECT_THROW(custom.setFilterProperty(TextureFilter::Point),
+                 System::InvalidOperationException);
+}
+
+TEST(SamplerStateCollectionTest, IndexerSetterRejectsDisposedSampler)
+{
+    SamplerStateCollection coll;
+    SamplerState disposed;
+    disposed.Dispose();
+
+    EXPECT_THROW(coll(3, disposed), System::ObjectDisposedException);
+    EXPECT_EQ(coll[3].getNameProperty(), "SamplerState.LinearWrap");
+}
+
+TEST(SamplerStateCollectionTest, IndexerSetterOutOfRangeThrows)
+{
+    SamplerStateCollection coll;
+    EXPECT_THROW(coll(-1, SamplerState::PointClamp), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(coll(SamplerStateCollection::MaxSamplers, SamplerState::PointClamp),
+                 System::ArgumentOutOfRangeException);
+}
+
+TEST(GraphicsDeviceSamplerStatesTest, IndexerSetterReachesDeviceSlot)
+{
+    GraphicsDevice gd;
+    gd.getSamplerStatesProperty()(0, SamplerState::AnisotropicClamp);
+    EXPECT_EQ(gd.getSamplerStatesProperty()[0].getNameProperty(),
+              "SamplerState.AnisotropicClamp");
+}
+
+TEST(GraphicsDeviceSamplerStatesTest, VertexIndexerSetterHonoursProfileRange)
+{
+    GraphicsDevice gd;
+    gd.SetGraphicsProfileEXT(Microsoft::Xna::Framework::Graphics::GraphicsProfile::Reach);
+    EXPECT_THROW(gd.getVertexSamplerStatesProperty()(0, SamplerState::PointClamp),
+                 System::ArgumentOutOfRangeException);
+
+    gd.SetGraphicsProfileEXT(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
+    gd.getVertexSamplerStatesProperty()(3, SamplerState::PointClamp);
+    EXPECT_EQ(gd.getVertexSamplerStatesProperty()[3].getNameProperty(),
+              "SamplerState.PointClamp");
+    EXPECT_THROW(gd.getVertexSamplerStatesProperty()(4, SamplerState::PointClamp),
+                 System::ArgumentOutOfRangeException);
+}
+
 TEST(GraphicsDeviceSamplerStatesTest, CustomSamplerCanBeReappliedAcrossDevices)
 {
     GraphicsDevice first;

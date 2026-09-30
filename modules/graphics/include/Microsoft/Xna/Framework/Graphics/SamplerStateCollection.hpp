@@ -32,6 +32,15 @@ namespace Microsoft::Xna::Framework::Graphics
          * @return Const reference to the SamplerState at the specified slot.
          */
         [[nodiscard]] const SamplerState& operator[](int index) const;
+        /**
+         * @brief Assigns a sampler state to the given slot.
+         * @param index Sampler slot index within the owning profile's active range.
+         * @param value Sampler state the slot uses from now on.
+         * @throws System::ArgumentOutOfRangeException if @p index is outside the active range.
+         * @throws System::ObjectDisposedException if @p value is disposed and is not already the
+         *         state of this slot.
+         */
+        void operator()(int index, const SamplerState& value);
 
     private:
         SamplerStateCollection(GraphicsDevice* graphicsDevice, bool vertexStage);
