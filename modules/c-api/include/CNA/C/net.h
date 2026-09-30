@@ -460,8 +460,7 @@ CNA_C_API CNA_Result cna_packet_writer_set_position(
  * @param value The color to write.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
  *
- * This is deliberately not the inverse of `cna_packet_reader_read_color`, which reads four floats;
- * the canonical implementation is asymmetric and the C API preserves that.
+ * The inverse of `cna_packet_reader_read_color`, which reads the same four bytes back.
  */
 CNA_C_API CNA_Result cna_packet_writer_write_color(
     CNA_PacketWriterHandle writer,
@@ -635,15 +634,15 @@ CNA_C_API CNA_Result cna_packet_reader_set_position(
     int32_t position);
 
 /**
- * @brief Reads a color as four floats.
+ * @brief Reads a color as four bytes in R, G, B, A order.
  *
  * @param reader Owned packet-reader handle.
  * @param out_value Receives the color.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_IO` at end of buffer, or a documented
  * argument/handle/thread failure.
  *
- * The canonical reader reads floats here while the writer writes bytes; the asymmetry is preserved
- * rather than corrected, so a color round trip needs the caller to match the two formats.
+ * The inverse of `cna_packet_writer_write_color`: a color written into a packet reads back
+ * unchanged.
  */
 CNA_C_API CNA_Result cna_packet_reader_read_color(
     CNA_PacketReaderHandle reader,

@@ -667,6 +667,9 @@ first.
   since XNASWEEP-197 and narrows those widths to 16-bit. Constant and text corrected within 0.35.0;
   the baseline change is recorded in `ABI_VERSIONING.md` for owner review. Pinned by
   `AbiHeaderC.c` and `CApiAbiBaseline`.
+- **BINDFIX-049** — `net.h` still described `cna_packet_reader_read_color` as reading four floats and
+  the pair as deliberately asymmetric; BINDFIX-022 had made them inverses. Documentation only
+  (reported by `cna-python`).
 
 ---
 
