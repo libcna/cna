@@ -273,7 +273,7 @@ namespace CNA::Internal::Net
                 // below) - forwarding it lets a newly-joining client's HandleServerWelcome
                 // correctly identify which roster entry is the host.
                 roster.push_back(RosterEntry{state.GamerToWireId.at(gamer), WireGamertagFor(gamer),
-                                              gamer->getIsHostProperty()});
+                                              gamer->getIsHostProperty(), gamer->getIsGuestProperty()});
             }
             return roster;
         }
@@ -619,9 +619,12 @@ namespace CNA::Internal::Net
             // The connecting peer is one machine: its gamers share it (NetworkGamer.Machine).
             auto machine = std::make_shared<Microsoft::Xna::Framework::Net::NetworkMachine>(
                 Microsoft::Xna::Framework::Net::NetworkMachine::CreateInternal());
-            for (const std::string& gamertag : hello.LocalGamertags)
+            for (std::size_t index = 0; index < hello.LocalGamertags.size(); ++index)
             {
+                const std::string& gamertag = hello.LocalGamertags[index];
+                const bool guest = index < hello.LocalGuests.size() && hello.LocalGuests[index];
                 auto* gamer = new NetworkGamer(NetworkGamer::CreateInternal(session, gamertag));
+                gamer->SetIsGuest(guest);
                 state.OwnedRemoteGamers.emplace_back(gamer); // Task 3.1
                 gamer->SetSharedMachine(machine);
                 machine->AddGamerInternal(gamer);
@@ -632,7 +635,7 @@ namespace CNA::Internal::Net
                 welcome.AssignedWireIds.push_back(id);
                 newWireIds.push_back(id);
                 newGamers.push_back(gamer);
-                broadcastMsg.NewGamers.push_back(RosterEntry{id, gamertag, false});
+                broadcastMsg.NewGamers.push_back(RosterEntry{id, gamertag, false, guest});
                 state.WireIdToPeer[id] = peer;
             }
             state.PeerWireIds[peer] = std::move(newWireIds);
@@ -683,7 +686,7 @@ namespace CNA::Internal::Net
         {
             if (!state.Welcomed || state.HostPeer == nullptr) return;
             for (LocalNetworkGamer* local : state.PendingLocalAdds)
-                SendTo(state, state.HostPeer, NetPacketCodec::Encode(AddLocalGamerMessage{WireGamertagFor(local)}),
+                SendTo(state, state.HostPeer, NetPacketCodec::Encode(AddLocalGamerMessage{WireGamertagFor(local), local->getIsGuestProperty()}),
                        SendDataOptions::Reliable);
         }
 
@@ -697,6 +700,7 @@ namespace CNA::Internal::Net
             auto* gamer = new NetworkGamer(NetworkGamer::CreateInternal(session, msg.Gamertag));
             state.OwnedRemoteGamers.emplace_back(gamer);
             gamer->SetIsHost(false);
+            gamer->SetIsGuest(msg.IsGuest);
             const auto sibling = state.WireIdToGamer.find(owned->second.front());
             if (sibling != state.WireIdToGamer.end())
             {
@@ -707,7 +711,7 @@ namespace CNA::Internal::Net
             state.WireIdToPeer[id] = peer;
             owned->second.push_back(id);
             session->AddRemoteGamer(gamer);
-            const auto bytes = NetPacketCodec::Encode(GamerJoinBroadcastMessage{{RosterEntry{id, msg.Gamertag, false}}});
+            const auto bytes = NetPacketCodec::Encode(GamerJoinBroadcastMessage{{RosterEntry{id, msg.Gamertag, false, msg.IsGuest}}});
             for (auto& [other, wireIds] : state.PeerWireIds) QueueSend(state, other, bytes, SendDataOptions::Reliable);
             state.Host.Flush();
             FlushPendingPreHandshakeAppData(state);
@@ -744,6 +748,7 @@ namespace CNA::Internal::Net
                 // side forwards each gamer's own accurate IsHost), so a client correctly learns
                 // which remote gamer is the actual host here instead of always defaulting false.
                 gamer->SetIsHost(entry.IsHost);
+                gamer->SetIsGuest(entry.IsGuest);
                 session->AddRemoteGamer(gamer);
                 if (entry.IsHost)
                 {
@@ -812,6 +817,7 @@ namespace CNA::Internal::Net
                 // false in practice here, since a newly-joining client (the only thing this
                 // broadcast ever announces) can never be the host.
                 gamer->SetIsHost(entry.IsHost);
+                gamer->SetIsGuest(entry.IsGuest);
                 session->AddRemoteGamer(gamer);
             }
 
@@ -1328,6 +1334,7 @@ namespace CNA::Internal::Net
             for (LocalNetworkGamer* gamer : session->getLocalGamersProperty())
             {
                 hello.LocalGamertags.push_back(gamer->getSignedInGamerProperty()->getGamertagProperty());
+                hello.LocalGuests.push_back(gamer->getIsGuestProperty());
             }
             SendTo(state, peer, NetPacketCodec::Encode(hello), SendDataOptions::Reliable);
         }
@@ -1526,7 +1533,7 @@ namespace CNA::Internal::Net
             // it in their welcome).
             if (state.PeerWireIds.empty()) return;
             const uint8_t id = AssignWireId(state, local);
-            const auto bytes = NetPacketCodec::Encode(GamerJoinBroadcastMessage{{RosterEntry{id, WireGamertagFor(local), local->getIsHostProperty()}}});
+            const auto bytes = NetPacketCodec::Encode(GamerJoinBroadcastMessage{{RosterEntry{id, WireGamertagFor(local), local->getIsHostProperty(), local->getIsGuestProperty()}}});
             for (auto& [peer, wireIds] : state.PeerWireIds) QueueSend(state, peer, bytes, SendDataOptions::Reliable);
             state.Host.Flush();
             ENetBackend::OrderTransportGamers(session);
@@ -1535,7 +1542,7 @@ namespace CNA::Internal::Net
         state.PendingLocalAdds.push_back(local);
         if (state.Welcomed)
         {
-            SendTo(state, state.HostPeer, NetPacketCodec::Encode(AddLocalGamerMessage{WireGamertagFor(local)}),
+            SendTo(state, state.HostPeer, NetPacketCodec::Encode(AddLocalGamerMessage{WireGamertagFor(local), local->getIsGuestProperty()}),
                    SendDataOptions::Reliable);
         }
     }

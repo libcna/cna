@@ -95,6 +95,13 @@ namespace Microsoft::Xna::Framework::Net
         CNAEXT void SetIsHost(bool value);
 
         /**
+         * @brief Sets whether a remote gamer is a guest, as its machine announced it.
+         *
+         * @param value Whether the gamer is a guest.
+         */
+        CNAEXT void SetIsGuest(bool value);
+
+        /**
          * @brief Gets whether this gamer is a local gamer.
          *
          * FNA implements this as a `this is LocalNetworkGamer` runtime type check.

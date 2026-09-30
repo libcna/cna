@@ -422,6 +422,129 @@ namespace {
         return 0;
     }
 
+    // GSH-02: every machine sees each gamer's IsGuest as its own machine does. Returns an empty
+    // string when the session holds exactly `expected` (gamertag -> guest), else what differs.
+    std::string GuestMismatch(NetworkSession* session, const std::vector<std::pair<std::string, bool>>& expected) {
+        std::string problems;
+        if (session->getAllGamersProperty().getCountProperty() != static_cast<int>(expected.size()))
+            problems += "count " + std::to_string(session->getAllGamersProperty().getCountProperty()) + "; ";
+        for (const auto& [tag, guest] : expected) {
+            NetworkGamer* found = nullptr;
+            for (NetworkGamer* g : session->getAllGamersProperty())
+                if (g->getGamertagProperty() == tag) found = g;
+            if (found == nullptr) problems += tag + " missing; ";
+            else if (found->getIsGuestProperty() != guest) problems += tag + " IsGuest=" + (guest ? "false; " : "true; ");
+        }
+        return problems;
+    }
+
+    // Host with a guest of its own. A client machine with a guest joins, leaves, joins again and
+    // then adds a second guest; each time the host must see exactly who is a guest.
+    int RunGuestHost(int timeoutSeconds) {
+        auto gamer = SignedInGamer::CreateInternal("HostPlayer");
+        auto guest = SignedInGamer::CreateInternal("HostPlayer (1)", false, true, Microsoft::Xna::Framework::PlayerIndex::Two);
+        NetworkSession* session = NetworkSession::Create(
+            NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&gamer, &guest}, 8, 0, NetworkSessionProperties{});
+        const uint16_t port = ENetBackend::GetBoundPort(session);
+        if (port == 0) {
+            std::fprintf(stderr, "guest-host: never bound a real ENet port\n");
+            session->Dispose();
+            return 2;
+        }
+        std::printf("PORT=%u\n", static_cast<unsigned>(port));
+        std::fflush(stdout);
+        const std::vector<std::pair<std::string, bool>> alone{{"HostPlayer", false}, {"HostPlayer (1)", true}};
+        auto joined = alone;
+        joined.insert(joined.end(), {{"ClientPlayer", false}, {"ClientPlayer (1)", true}});
+        auto added = joined;
+        added.emplace_back("ClientPlayer (2)", true);
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(timeoutSeconds);
+        const char* stages[] = {"first join", "leave", "rejoin", "added guest"};
+        const std::vector<std::pair<std::string, bool>>* expected[] = {&joined, &alone, &joined, &added};
+        for (int stage = 0; stage < 4; ++stage) {
+            if (!PumpUntil(session, deadline, [&] { return GuestMismatch(session, *expected[stage]).empty(); })) {
+                std::fprintf(stderr, "guest-host: after the %s: %s\n", stages[stage], GuestMismatch(session, *expected[stage]).c_str());
+                session->Dispose();
+                return 1;
+            }
+        }
+        // Tell the added guest it was admitted; the client, which checks its own view, waits for it.
+        NetworkGamer* addedGuest = nullptr;
+        for (NetworkGamer* g : session->getAllGamersProperty())
+            if (g->getGamertagProperty() == "ClientPlayer (2)") addedGuest = g;
+        std::vector<SharpRuntime::bytecs> payload(kMagicPayload, kMagicPayload + sizeof(kMagicPayload));
+        session->getLocalGamersProperty()[0]->SendData(payload, SendDataOptions::Reliable, addedGuest);
+        PumpUntil(session, deadline, [&] { return session->getAllGamersProperty().getCountProperty() == 2; });
+        session->Dispose();
+        return 0;
+    }
+
+    int RunGuestClient(uint16_t port, int timeoutSeconds) {
+        if (port == 0) {
+            std::fprintf(stderr, "guest-client: --port is required and must be nonzero\n");
+            return 64;
+        }
+        using Microsoft::Xna::Framework::PlayerIndex;
+        auto gamer = SignedInGamer::CreateInternal("ClientPlayer");
+        auto guest = SignedInGamer::CreateInternal("ClientPlayer (1)", false, true, PlayerIndex::Two);
+        auto second = SignedInGamer::CreateInternal("ClientPlayer (2)", false, true, PlayerIndex::Three);
+        using Microsoft::Xna::Framework::GamerServices::Gamer;
+        using Microsoft::Xna::Framework::GamerServices::SignedInGamerCollection;
+        Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({&gamer, &guest, &second})));
+        struct RestoreSignedIn {
+            ~RestoreSignedIn() { Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({}))); }
+        } restore;
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(timeoutSeconds);
+        const std::vector<std::pair<std::string, bool>> joined{
+            {"HostPlayer", false}, {"HostPlayer (1)", true}, {"ClientPlayer", false}, {"ClientPlayer (1)", true}};
+        // The guest travels in this machine's hello: it joins through a Find given both gamers.
+        auto join = [&]() -> NetworkSession* {
+            while (std::chrono::steady_clock::now() < deadline) {
+                AvailableNetworkSessionCollection found = NetworkSession::Find(
+                    NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&gamer, &guest}, NetworkSessionProperties{});
+                for (int i = 0; i < found.getCountProperty(); ++i) {
+                    AvailableNetworkSession listing = found.getItem(i);
+                    if (listing.GetConnectPort() == port) return NetworkSession::Join(&listing);
+                }
+            }
+            return nullptr;
+        };
+        for (int round = 0; round < 2; ++round) {
+            NetworkSession* session = join();
+            if (session == nullptr) {
+                std::fprintf(stderr, "guest-client: timed out finding the host\n");
+                return 1;
+            }
+            if (!PumpUntil(session, deadline, [&] { return GuestMismatch(session, joined).empty(); })) {
+                std::fprintf(stderr, "guest-client: round %d: %s\n", round, GuestMismatch(session, joined).c_str());
+                session->Dispose();
+                return 1;
+            }
+            if (round == 0) {
+                // Leave; the host must see both of this machine's gamers go before the rejoin.
+                session->Dispose();
+                std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                continue;
+            }
+            // A second guest added to the joined machine travels in AddLocalGamer.
+            session->AddLocalGamer(&second);
+            auto added = joined;
+            added.emplace_back("ClientPlayer (2)", true);
+            LocalNetworkGamer* addedGamer = nullptr;
+            for (LocalNetworkGamer* local : session->getLocalGamersProperty())
+                if (local->getSignedInGamerProperty() == &second) addedGamer = local;
+            // The host answers the added guest once it has admitted it.
+            if (addedGamer == nullptr || !PumpUntil(session, deadline, [&] {
+                    return GuestMismatch(session, added).empty() && addedGamer->getIsDataAvailableProperty(); })) {
+                std::fprintf(stderr, "guest-client: added guest: %s\n", GuestMismatch(session, added).c_str());
+                session->Dispose();
+                return 1;
+            }
+            session->Dispose();
+        }
+        return 0;
+    }
+
     // Task 5.5 (plans/plan_net.md Phase 5): the host role for a genuine 3-process host migration test.
     // Waits for both migration-survivor roles below to join (3 total gamers: this host + 2
     // survivors), then Dispose()s - a graceful Dispose() sends real ENet DISCONNECT notifications
@@ -844,6 +967,12 @@ int main(int argc, char** argv) {
         if (role == "added-gamer-client") {
             return RunAddedGamerClient(port, timeoutSeconds);
         }
+        if (role == "guest-host") {
+            return RunGuestHost(timeoutSeconds);
+        }
+        if (role == "guest-client") {
+            return RunGuestClient(port, timeoutSeconds);
+        }
         if (role == "voice-host") {
             return RunVoice(true, 0, timeoutSeconds);
         }
@@ -864,7 +993,7 @@ int main(int argc, char** argv) {
             return RunMigrationSurvivor(port, gamertag, timeoutSeconds);
         }
         std::fprintf(stderr,
-                      "Usage: %s --role=host|client|find-join-client|added-gamer-host|added-gamer-client|"
+                      "Usage: %s --role=host|client|find-join-client|added-gamer-host|added-gamer-client|guest-host|guest-client|"
                       "start-hosting-partial-failure|migration-host|migration-survivor|voice-host|voice-client "
                       "[--port=<n>] [--gamertag=<name>] [--find=limit|list] [--timeout=<seconds>]\n",
                       argv[0]);

@@ -343,17 +343,16 @@ claim about how Xbox LIVE decided.
   |---|---|---|
   | Local | yes | through an explicit gamer list or `AddLocalGamer`; the implicit selection (no list) skips guests |
   | LocalWithLeaderboards | yes, as Local | the game starts and ends normally; the accounts' rows reach the service's boards, while a guest's writes stay in this computer's local store (a guest has no service identity; `OnlineLeaderboardTest.AGuestInALocalWithLeaderboardsGameLeavesTheAccountsRowsToTheService`) |
-  | SystemLink | yes, as Local | `NetworkGamer.IsGuest` is true on the guest's own machine (`LocalNetworkGamerTest.IsGuestFollowsTheSignedInProfile`); the SystemLink roster does not carry it, so other machines read false |
+  | SystemLink | yes, as Local | `NetworkGamer.IsGuest` is true on every machine: the roster carries a guest flag, in the join, the welcome and `AddLocalGamer` (`TwoProcessLoopbackTest.GuestsAreGuestsOnEveryMachineAcrossRealProcesses`); a peer built before 2026-09-30 reads other machines' guests as non-guests, and its own guests reach newer peers as non-guests |
   | PlayerMatch, Ranked | no | `AllowOnlineSessions` is false; creating, joining or adding a guest refuses (`GamerServicesNotAvailableException`, `GamerPrivilegeException` for `AddLocalGamer`) |
 
   A guest earns no achievements (`GamerPrivilegeException`). Without a service there are no
   guests: offline profiles are full local profiles.
 - **Reason:** the service authenticates every participant of an online session and every
   leaderboard writer; a guest has no credential of its own.
-- **Observable impact:** online guests are refused; a remote SystemLink guest reads as a non-guest.
+- **Observable impact:** online guests are refused.
 - **Porting impact:** specialized titles only (online split-screen with guests).
-- **Future work:** online guests need a service-side guest identity bound to its host account;
-  carrying `IsGuest` on SystemLink needs a roster field (a SystemLink wire change).
+- **Future work:** online guests need a service-side guest identity bound to its host account.
 
 ### 17. `QualityOfService`
 
@@ -778,7 +777,7 @@ cluster and flood limits (34-37), public Internet qualification (31), avatar sha
 (39, 40), host-language differences (42-44).
 
 **Only affects specialized titles or samples:** partner tokens (2), a real store (3), a
-service-computed skill (4), expiring Recent scores (7), online guests or remote `IsGuest` (16),
+service-computed skill (4), expiring Recent scores (7), online guests (16),
 online QoS before joining (17), friend headset icons (18), privilege restrictions (20), large Stream
 columns (22), several local talkers on one PC (14), avatar catalog edge cases (41).
 

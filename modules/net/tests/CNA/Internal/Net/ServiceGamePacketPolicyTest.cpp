@@ -34,6 +34,9 @@ TEST(ServiceGamePacketPolicyTest, HostAcceptsOnlyExactSourceLocalHelloBeforeHand
         std::vector<std::string>{"Bob","Bob"},std::vector<std::string>{"Bob","secret-marker"}})
         refused([&]{(void)policy.control(remote,NetPacketCodec::Encode(ClientHelloMessage{names}),0,false,{});});
     refused([&]{(void)policy.control(third,NetPacketCodec::Encode(ClientHelloMessage{{"Bob","Dana"}}),0,false,{});});
+    // GSH-02: online sessions admit no guests; the strict parser refuses the guest block outright.
+    refused([&]{(void)policy.control(remote,NetPacketCodec::Encode(ClientHelloMessage{{"Dana","Bob"},{false,true}}),0,false,{});},
+        "INVALID_SERVICE_PACKET");
 }
 TEST(ServiceGamePacketPolicyTest, ClientWelcomeRequiresAuthenticatedHostAndItsExactLocalAssignments) {
     ServiceRoster roster(fixture());ServiceGamePacketPolicy policy(fixture(true));
