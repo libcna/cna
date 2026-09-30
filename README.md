@@ -269,12 +269,20 @@ Beyond graphics, CNA ports the XNA 4.0 `GamerServices` and `Net` namespaces (and
 - The XNA gamer services API with real behaviour: with a configured CNA service, accounts and Guide
   sign-in, profiles, friends and presence, messages and player reviews, achievements, leaderboards
   (including Ranked arbitration), invitations, parties and social notifications; without one, local
-  offline profiles, as on a console without Xbox LIVE. A console-style Guide (sign-in picker, gamer
-  cards, friends, party, avatar editor) is drawn by CNA over the game.
+  offline profiles, as on a console without Xbox LIVE. An Xbox 360-inspired Guide (sign-in picker,
+  gamer cards, friends, party, avatar editor) is drawn by CNA over the game, in CNA's own look.
 - A **CNA-owned, XNA/Xbox-like** implementation with its own protocol, accounts and backend
   policies — **not** Xbox LIVE compatible. See [`docs/gamer-services-server.md`](docs/gamer-services-server.md)
   and, for everything that is not done or done differently,
   [`docs/gamer-services-known-limitations.md`](docs/gamer-services-known-limitations.md).
+- What "Xbox-like" does and does not claim: the **public API is XNA-compatible** (names, types,
+  exceptions and event order read from the XNA 4.0 assemblies and documentation); the **workflow is
+  Xbox-like** (sign in, Guide, friends, invitations, parties, as XNA games expected); how the backend
+  decides what XNA only reports -- the Reputation formula, host election, party rules, presence
+  timeouts, invitation lifetime, Ranked arbitration, privilege policy -- is **CNA policy**, not a
+  claim about Xbox LIVE; console behaviour was **never traced** on an Xbox 360, so exact historical
+  equivalence is claimed nowhere; and the Guide and avatars **resemble** the Xbox 360 era in
+  original CNA art only.
 
 ### Net (`Microsoft::Xna::Framework::Net`)
 
@@ -300,8 +308,8 @@ Beyond graphics, CNA ports the XNA 4.0 `GamerServices` and `Net` namespaces (and
 
 ### Avatar
 
-- `AvatarAnimation`, `AvatarDescription` and `AvatarRenderer` behave as on the Xbox 360 (the
-  Windows assembly only stubbed them): real rendering on XNA's 71-bone skeleton, the 31 animation
+- `AvatarAnimation`, `AvatarDescription` and `AvatarRenderer` work as XNA's documentation describes
+  them on the Xbox 360 (the Windows assembly only stubbed them): real rendering on XNA's 71-bone skeleton, the 31 animation
   presets, expressions and `AvatarDescription.Changed`, drawn from original CNA avatar catalogs
   compiled into the runtime. The service stores each account's description; a catalog a client
   lacks is installed as a verified pack. See [`docs/avatars.md`](docs/avatars.md).
