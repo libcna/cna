@@ -432,7 +432,9 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
 ## Acceptance matrix (GSX-Q1, 2026-09-30)
 
 CNA `feature/gamer-services-server`, server `feature/gamer-services-server` 2c974d1, cna-samples
-`feature/gamer-services-samples` 378483b (unchanged). Nothing pushed, nothing merged into `next`.
+`feature/gamer-services-samples` 378483b (unchanged). Pushed as feature branches on 2026-09-30, then
+merged into CNA `next` (7d7141c6b) with sharp-runtime `next` (e03e8465) the same day; the server and
+cna-samples branches have no `next` and stay as they are.
 
 | Requirement | Result | Evidence |
 |---|---|---|
