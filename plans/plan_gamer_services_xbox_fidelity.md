@@ -472,7 +472,12 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
   platform gates clean; `GamerServices_AvatarCatalogUpToDate` passes; server corpus 28/28 with every
   CNA harness, no skips; the 18 GamerServices/Net demos exit 0 on the private display; SAMPLE-096,
   SAMPLE-075 (SystemLink and online), SAMPLE-087 (16 catalog v3 avatars with shadows) and the
-  achievements/leaderboards program pass (`*-20260930-cleanup`).
+  achievements/leaderboards program pass (`*-20260930-cleanup`). Committed `next` had advanced by
+  six commits (0f7166cd8, BINDFIX-037..041, local and not pushed); it was merged into the branch
+  (65c1d21e3; only the coverage-inventory hash conflicted, regenerated) and everything above was run
+  again with the same results (`cleanup/after-merge/`, samples `*-20260930-cleanup-merged`): GS
+  604 + 1, Net 518/518, Runtime 192 + 2, CnaTests 9,026 with the same 10 failures, C API 111/114
+  (next's four new tests pass; the same three smokes fail), server 28/28, 18 demos, four samples.
 
 ## Acceptance matrix (GSX-Q1, 2026-09-30)
 
