@@ -1,6 +1,6 @@
 {
   "id": "skin-mesh-node-transform",
-  "description": "A skinned mesh whose instancing node carries translation [0,0,50], with an identity joint and an identity inverse bind matrix. The joint matrix is exactly the mesh node's inverse, so this isolates the mesh-space cancellation from the joint ancestry that skin-armature-ancestor covers.",
+  "description": "A skinned mesh whose instancing node carries translation [0,0,50], with an identity joint and an identity inverse bind matrix. The node's transform must be ignored, so the joint matrix is the identity; this isolates the mesh node from the joint ancestry that skin-armature-ancestor covers.",
   "generator": {
     "tool": "tools/gltf_fixtures",
     "version": 1,
@@ -32,7 +32,7 @@
     ],
     "features": [
       "skinned mesh node transform",
-      "mesh-space cancellation",
+      "mesh node transform ignored",
       "skin.inverseBindMatrices",
       "JOINTS_0 / WEIGHTS_0"
     ],
@@ -431,7 +431,7 @@
             0.0,
             0.0,
             0.0,
-            -50.0,
+            0.0,
             1.0
           ]
         }
@@ -440,20 +440,20 @@
         [
           0.0,
           0.0,
-          -50.0
+          0.0
         ],
         [
           1.0,
           0.0,
-          -50.0
+          0.0
         ],
         [
           0.0,
           1.0,
-          -50.0
+          0.0
         ]
       ],
-      "note": "jointMatrix = inverse(globalTransform(meshNode)) * globalTransform(joint) * inverseBindMatrix = T(0,0,-50) * I * I. The cancellation must be applied exactly once: omitting it leaves the mesh 50 units along +Z, and applying the mesh node's bone as well cancels it a second time and leaves the mesh 50 units along -Z."
+      "note": "jointMatrix = globalTransform(joint) * inverseBindMatrix = I * I; the mesh node's T(0,0,50) is ignored (section 3.7.3.2). Applying it leaves the mesh 50 units along +Z; applying its inverse without it leaves the mesh 50 units along -Z."
     }
   },
   "l5": {

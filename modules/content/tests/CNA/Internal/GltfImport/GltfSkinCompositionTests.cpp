@@ -133,7 +133,7 @@ namespace
     SkeletonResult SkeletonOf(const Parsed& parsed)
     {
         const SceneGraphOut scene = BuildSceneGraph(parsed.data);
-        return BuildSkeleton(parsed.data->skins, scene, Matrix::getIdentityProperty(), 1.0f);
+        return BuildSkeleton(parsed.data->skins, scene, 1.0f);
     }
 }
 
@@ -222,7 +222,7 @@ TEST(GltfSkinComposition, TheBindPoseIsLocalTimesParentWorldInXnasRowVectorOrder
 
     const SceneGraphOut scene = BuildSceneGraph(parsed.data);
     const SkeletonResult skeleton =
-        BuildSkeleton(parsed.data->skins, scene, Matrix::getIdentityProperty(), 1.0f);
+        BuildSkeleton(parsed.data->skins, scene, 1.0f);
     ASSERT_EQ(2u, skeleton.bones.size());
 
     // The topological reorder may renumber the joints, so the child is found by name rather than
@@ -330,8 +330,7 @@ TEST(GltfSkinComposition, TheSkinReportCarriesEveryApproximationTheImportMade)
         const CnaTest::GltfOracle::LoadedFixture fixture("skin-eight-influences");
         ASSERT_TRUE(fixture.Ok()) << fixture.Error();
         const SceneGraphOut scene = BuildSceneGraph(&fixture.Data());
-        const SkeletonResult skeleton = BuildSkeleton(fixture.Data().skins, scene,
-                                                      Matrix::getIdentityProperty(), 1.0f);
+        const SkeletonResult skeleton = BuildSkeleton(fixture.Data().skins, scene, 1.0f);
         const MeshOut mesh = ExtractMesh(&fixture.Data(),
                                           fixture.Data().meshes[0].primitives[0], "probe",
                                           &skeleton, 1.0f);
@@ -350,8 +349,7 @@ TEST(GltfSkinComposition, TheSkinReportCarriesEveryApproximationTheImportMade)
         const CnaTest::GltfOracle::LoadedFixture fixture("skin-unnormalized");
         ASSERT_TRUE(fixture.Ok()) << fixture.Error();
         const SceneGraphOut scene = BuildSceneGraph(&fixture.Data());
-        const SkeletonResult skeleton = BuildSkeleton(fixture.Data().skins, scene,
-                                                      Matrix::getIdentityProperty(), 1.0f);
+        const SkeletonResult skeleton = BuildSkeleton(fixture.Data().skins, scene, 1.0f);
         const MeshOut mesh = ExtractMesh(&fixture.Data(),
                                           fixture.Data().meshes[0].primitives[0], "probe",
                                           &skeleton, 1.0f);
@@ -369,8 +367,7 @@ TEST(GltfSkinComposition, TheSkinReportCarriesEveryApproximationTheImportMade)
         const CnaTest::GltfOracle::LoadedFixture fixture("skin-skeleton-hint");
         ASSERT_TRUE(fixture.Ok()) << fixture.Error();
         const SceneGraphOut scene = BuildSceneGraph(&fixture.Data());
-        const SkeletonResult skeleton = BuildSkeleton(fixture.Data().skins, scene,
-                                                      Matrix::getIdentityProperty(), 1.0f);
+        const SkeletonResult skeleton = BuildSkeleton(fixture.Data().skins, scene, 1.0f);
         const MeshOut mesh = ExtractMesh(&fixture.Data(),
                                           fixture.Data().meshes[0].primitives[0], "probe",
                                           &skeleton, 1.0f);
@@ -444,7 +441,7 @@ TEST(GltfSkinComposition, AMorphedSkinnedPrimitiveKeepsBothItsSkinAndItsBlendedP
     ASSERT_TRUE(Parse(doc, json));
     const SceneGraphOut scene = BuildSceneGraph(doc.data);
     const SkeletonResult skeleton =
-        BuildSkeleton(doc.data->skins, scene, Matrix::getIdentityProperty(), 1.0f);
+        BuildSkeleton(doc.data->skins, scene, 1.0f);
     const MeshOut mesh =
         ExtractMesh(doc.data, doc.data->meshes[0].primitives[0], "probe", &skeleton, 1.0f);
 

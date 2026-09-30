@@ -1416,6 +1416,7 @@ std::string("#version 300 es\n") +
 // uniforms rather than one vec2, to stay on the single-float set_uniform overload this file
 // already uses everywhere.
 "uniform float uNormalScale;\n"
+"uniform float uDoubleSided;\n"
 "uniform float uOcclusionStrength;\n"
 + (dualUv ? "uniform vec4 uTextureCoordinateSets;\n"
           "uniform float uOcclusionTextureCoordinateSet;\n"
@@ -1482,9 +1483,18 @@ CNA_GL_PUNCTUAL_DECL
           : "    vec4 cnaVertexColor=vec4(1.0,1.0,1.0,1.0);\n") +
 "    vec3 albedo=baseRGB*uDiffuseColor.rgb*cnaVertexColor.rgb;\n"
 "    float alpha=baseColorTex.a*uDiffuseColor.a*cnaVertexColor.a;\n"
-"    vec3 N=normalize(vNormal);\n"
-"    vec3 T=normalize(vTangent-N*dot(N,vTangent));\n"
+// living-room-simulator's non-finite pixels: normalize() of a zero vector is NaN, and it spreads
+// through every term after it. A zero normal comes from a singular World (a node scaled flat), a
+// zero tangent from a mesh whose tangent is missing, zero or parallel to its normal. Any
+// perpendicular unit tangent is as good as another there, so pick one rather than shade NaN.
+"    vec3 N=dot(vNormal,vNormal)>1e-8?normalize(vNormal):vec3(0.0,0.0,1.0);\n"
+"    vec3 T=vTangent-N*dot(N,vTangent);\n"
+"    T=dot(T,T)>1e-8?normalize(T):normalize(cross(N,abs(N.x)<0.9?vec3(1.0,0.0,0.0):vec3(0.0,1.0,0.0)));\n"
 "    vec3 B=cross(N,T)*vBitangentSign;\n"
+// glTF doubleSided (living-room-simulator R-3), the Sample Viewer's rule: a back face is shaded
+// with its whole basis reversed. uDoubleSided is -1 under a mirroring World, where gl_FrontFacing
+// names the other face.
+"    if(uDoubleSided!=0.0&&(gl_FrontFacing==(uDoubleSided<0.0))){N=-N;T=-T;B=-B;}\n"
 "    mat3 TBN=mat3(T,B,N);\n"
 "    vec3 sampledNormal=texture(uNormalMap,cnaSampleUV(cnaPbrTransformUV(" + normalUv + ",1),uRtFlipV.y)).rgb*2.0-1.0;\n"
 // glTF §3.9.3: normalTexture.scale scales the tangent-space X and Y only. Scaling Z as well would
@@ -1665,6 +1675,7 @@ std::string("#version 300 es\n") +
 // uniforms rather than one vec2, to stay on the single-float set_uniform overload this file
 // already uses everywhere.
 "uniform float uNormalScale;\n"
+"uniform float uDoubleSided;\n"
 "uniform float uOcclusionStrength;\n"
 + (dualUv ? "uniform vec4 uTextureCoordinateSets;\n"
           "uniform float uOcclusionTextureCoordinateSet;\n"
@@ -1726,9 +1737,18 @@ CNA_GL_PUNCTUAL_DECL
           : "    vec4 cnaVertexColor=vec4(1.0,1.0,1.0,1.0);\n") +
 "    vec3 albedo=baseRGB*uDiffuseColor.rgb*cnaVertexColor.rgb;\n"
 "    float alpha=baseColorTex.a*uDiffuseColor.a*cnaVertexColor.a;\n"
-"    vec3 N=normalize(vNormal);\n"
-"    vec3 T=normalize(vTangent-N*dot(N,vTangent));\n"
+// living-room-simulator's non-finite pixels: normalize() of a zero vector is NaN, and it spreads
+// through every term after it. A zero normal comes from a singular World (a node scaled flat), a
+// zero tangent from a mesh whose tangent is missing, zero or parallel to its normal. Any
+// perpendicular unit tangent is as good as another there, so pick one rather than shade NaN.
+"    vec3 N=dot(vNormal,vNormal)>1e-8?normalize(vNormal):vec3(0.0,0.0,1.0);\n"
+"    vec3 T=vTangent-N*dot(N,vTangent);\n"
+"    T=dot(T,T)>1e-8?normalize(T):normalize(cross(N,abs(N.x)<0.9?vec3(1.0,0.0,0.0):vec3(0.0,1.0,0.0)));\n"
 "    vec3 B=cross(N,T)*vBitangentSign;\n"
+// glTF doubleSided (living-room-simulator R-3), the Sample Viewer's rule: a back face is shaded
+// with its whole basis reversed. uDoubleSided is -1 under a mirroring World, where gl_FrontFacing
+// names the other face.
+"    if(uDoubleSided!=0.0&&(gl_FrontFacing==(uDoubleSided<0.0))){N=-N;T=-T;B=-B;}\n"
 "    mat3 TBN=mat3(T,B,N);\n"
 "    vec3 sampledNormal=texture(uNormalMap,cnaSampleUV(cnaPbrTransformUV(" + normalUv + ",1),uRtFlipV.y)).rgb*2.0-1.0;\n"
 // glTF §3.9.3: normalTexture.scale scales the tangent-space X and Y only. Scaling Z as well would

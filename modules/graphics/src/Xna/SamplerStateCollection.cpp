@@ -51,4 +51,9 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         return samplers_[static_cast<std::size_t>(index)];
     }
+
+    void SamplerStateCollection::operator()(int index, const SamplerState& value)
+    {
+        (*this)[index] = value;
+    }
 }

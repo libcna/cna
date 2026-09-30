@@ -452,15 +452,9 @@ namespace
         SkeletonResult skeleton;
         if (hasSkin)
         {
-            // plans/plan_gltf.md GLTF-245/GLTF-247: same two coordinate spaces the runtime path resolves
-            // -- the joints' full scene ancestry, and the skinned mesh node's own placement, which
-            // glTF cancels rather than applies.
-            Matrix meshNodeWorld = Matrix::getIdentityProperty();
-            for (const MeshInstanceOut& placement : group.instances)
-            {
-                if (placement.skinned) { meshNodeWorld = placement.worldTransform; break; }
-            }
-            skeleton = BuildSkeleton(group.skin, sceneGraph, meshNodeWorld, unitScale);
+            // plans/plan_gltf.md GLTF-245: the joints' full scene ancestry, as on the runtime path;
+            // the skinned mesh node's own placement is ignored (CNASTREET-SKINDRAW).
+            skeleton = BuildSkeleton(group.skin, sceneGraph, unitScale);
         }
 
         struct MeshEntry {

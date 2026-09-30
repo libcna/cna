@@ -63,6 +63,17 @@ TEST(ImageLoaderTests, ZoomFillsWideAndTallTargetsByCroppingTheOverflow)
     // Full height, centre columns only: the mirror image.
     EXPECT_EQ(tall.pixels[1], pixels[1]);
     EXPECT_GT(tall.pixels[0], pixels[0]);
+
+    // A target so much wider or taller than the source that the crop is under one pixel
+    // (cna-swift SW-05): the crop keeps one row or column instead of becoming empty.
+    const std::vector<uint8_t> tiny(2 * 2 * 4, 200);
+    const auto strip = ImageLoader::ResizeRgba(tiny.data(), 2, 2, 8, 2, true);
+    const auto column = ImageLoader::ResizeRgba(tiny.data(), 2, 2, 2, 8, true);
+    EXPECT_EQ(strip.width, 8);
+    EXPECT_EQ(strip.height, 2);
+    EXPECT_EQ(column.width, 2);
+    EXPECT_EQ(column.height, 8);
+    EXPECT_EQ(strip.pixels[0], 200);
 }
 
 TEST(ImageLoaderTests, XnaSaveResizeUsesFloorMappedNearestTexelsOnBothAxes)

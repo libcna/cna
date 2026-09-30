@@ -7,7 +7,7 @@
   ],
   "capturedOn": "2026-08-18",
   "corpusManifest": "tests/assets/gltf/manifest.json",
-  "corpusManifestSha256": "ab18b1513c8048e9a09c4aa45b9cd79ef3593ea15bddd8fbd9cfd3874e278a04",
+  "corpusManifestSha256": "35b6dfec5172c725809e13552286dc4b827d35ded253c10adae5dc613c47ca18",
   "distinctAssetCount": 148,
   "capturedAssetCount": 140,
   "rejectedAssetCount": 8,

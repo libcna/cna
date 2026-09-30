@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "Sdl3Camera.hpp"
+#include "Sdl3Synchronization.hpp"
 
 #include <SDL3/SDL.h>
 
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <utility>
 
 namespace CNA::Platform::Sdl3 {
@@ -212,6 +214,13 @@ namespace CNA::Platform::Sdl3 {
         bool EnsureCameraSubsystem()
         {
             static const bool started = []() {
+                // Subsystem start-up is process-global SDL state; unlocked, it ran beside another
+                // thread's SDL_CreateWindow and corrupted the heap (RUST-UPSTREAM-023).
+                std::optional<SdlGlobalStateLock> lock;
+                if (!SdlGlobalStateHeldByThisThread())
+                {
+                    lock.emplace();
+                }
                 if (SDL_WasInit(SDL_INIT_CAMERA) != 0)
                 {
                     return true;

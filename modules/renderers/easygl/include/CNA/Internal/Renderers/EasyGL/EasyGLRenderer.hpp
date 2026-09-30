@@ -1263,6 +1263,10 @@ namespace CNA::Internal::Renderers::EasyGL
         // compiled-effect draw (ordinary, indexed, instanced and SpriteBatch alike).
         ::easygl::VertexArray compiledEffectVao_;
         bool compiledEffectVaoCreated_ = false;
+        /// BINDFIX-053: which colour outputs (bit i = oCi) the pixel shader of the pass that
+        /// BindCompiledEffectForDrawEXT last bound writes, so a draw into a multi-target set leaves
+        /// the other targets untouched instead of enabling draw buffers it has no output for.
+        unsigned int compiledEffectColorOutputMask_ = 1u;
         /**
          * @brief One slot's row-order-corrected copy of a render target being sampled. CNAEXT.
          *
@@ -1495,6 +1499,7 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_pbr_srgb        = -1;
             /// plans/plan_gltf.md GLTF-224: float normalTexture.scale (PbrEffect only).
             int loc_pbr_normalscale = -1;
+            int loc_pbr_doublesided = -1;
             /// plans/plan_gltf.md GLTF-225: float occlusionTexture.strength (PbrEffect only).
             int loc_pbr_occlstrength = -1;
             /// plans/plan_gltf.md GLTF-182/183: vec4 UV1 selectors for PBR slots 0-3.

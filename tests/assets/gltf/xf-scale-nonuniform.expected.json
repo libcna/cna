@@ -297,7 +297,7 @@
         ],
         "vertexBufferFile": "xf-scale-nonuniform.vb.bin",
         "vertexBufferBytes": 144,
-        "vertexBufferSha256": "188749347a148d3d53d4e2b7d26661d101d1623dc25e1d2e6855a1c6d7a1bbff",
+        "vertexBufferSha256": "2af81ffbfa691c75966d9476369ae0b925323cbefe242e6e9d4af43a87d27329",
         "indexElementSize": 2,
         "indexCount": 3,
         "indexBufferFile": "xf-scale-nonuniform.ib.bin",

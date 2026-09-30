@@ -52,7 +52,6 @@ namespace
             try
             {
                 skeletons.push_back(BuildSkeleton(&data.skins[s], scene,
-                                                   Microsoft::Xna::Framework::Matrix::getIdentityProperty(),
                                                    1.0f));
             }
             catch (const std::exception& e)

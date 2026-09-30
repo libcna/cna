@@ -10,23 +10,31 @@
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
+#include <string>
 
 #include "CNA/GraphicsCapability.hpp"
 #include <vector>
 
+#include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 using Microsoft::Xna::Framework::Content::ContentLoadException;
 using Microsoft::Xna::Framework::Content::ContentManager;
+using Microsoft::Xna::Framework::Color;
+using Microsoft::Xna::Framework::Graphics::BasicEffect;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::Model;
 using Microsoft::Xna::Framework::Graphics::ModelMesh;
+using Microsoft::Xna::Framework::Graphics::Texture2D;
 
 namespace
 {
@@ -152,6 +160,53 @@ TEST_F(CnjModelTest, LoadsRealCnjFixture)
     ASSERT_NE(mesh, nullptr);
     EXPECT_EQ(mesh->getNameProperty(), "Quad");
     ASSERT_EQ(mesh->getMeshPartsProperty().getCountProperty(), 1);
+}
+
+// cna-street CNA-F20: parts that name the same image get the same Texture2D, as XNA's shared
+// external references do; a different image is a different object.
+TEST_F(CnjModelTest, PartsNamingOneTextureShareOneTexture2D)
+{
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
+    ScratchContentRoot root;
+    WriteQuadModelFixture(root.path());
+    for (const char* name : {"atlas.png", "other.png"})
+    {
+        Texture2D texture(gd, 1, 1);
+        const Color pixel(17, 34, 51, 255);
+        texture.SetData(&pixel, 1);
+        texture.SaveAsPng((root.path() / name).string());
+    }
+    std::string meshes;
+    int index = 0;
+    for (const char* texture : {"atlas.png", "atlas.png", "other.png"})
+    {
+        if (index > 0) { meshes += ","; }
+        meshes += R"({"name": "Quad)" + std::to_string(index) +
+                  R"(", "vertices": "quad_verts.bin", "indices": "quad_idx.bin",
+                      "vertexStride": 32, "effect": "BasicEffect", "texture": ")" +
+                  texture + "\"}";
+        ++index;
+    }
+    WriteFile(root.path() / "atlased.cnj",
+              R"({"cnjVersion": 1, "type": "Model", "meshes": [)" + meshes + "]}");
+
+    ContentManager cm(nullptr, root.path().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("atlased");
+
+    ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 3);
+    const auto textureOf = [&](int mesh) {
+        const auto* effect = dynamic_cast<const BasicEffect*>(
+            model.getMeshesProperty()[mesh]->getMeshPartsProperty()[0]->getEffectProperty());
+        EXPECT_NE(effect, nullptr);
+        return effect != nullptr ? effect->getTextureProperty() : nullptr;
+    };
+    ASSERT_NE(textureOf(0), nullptr);
+    EXPECT_EQ(textureOf(0), textureOf(1));
+    ASSERT_NE(textureOf(2), nullptr);
+    EXPECT_NE(textureOf(0), textureOf(2));
 }
 
 TEST_F(CnjModelTest, MismatchedTypeThrowsContentLoadException)

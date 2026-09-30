@@ -1905,7 +1905,7 @@ _Static_assert(CNA_CNB_SPRITE_FONT_CHUNK_HEADER == UINT32_C(0x544E4F46) &&
                "CNB sprite-font schema constants are wire format and must remain stable");
 _Static_assert(CNA_CNB_SOUND_EFFECT_CHUNK_HEADER == UINT32_C(0x48445541) &&
                    CNA_CNB_SOUND_EFFECT_CHUNK_DATA == UINT32_C(0x44445541) &&
-                   CNA_CNB_SOUND_EFFECT_SCHEMA_VERSION == UINT32_C(1) &&
+                   CNA_CNB_SOUND_EFFECT_SCHEMA_VERSION == UINT32_C(2) &&
                    CNA_CNB_SOUND_EFFECT_HEADER_STRIDE == UINT32_C(28) &&
                    CNA_CNB_MAX_AUDIO_SAMPLE_RATE == UINT32_C(384000),
                "CNB sound-effect schema constants are wire format and must remain stable");

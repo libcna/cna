@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
+#include "Internal/AudioLog.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
@@ -13,7 +14,6 @@
 #include <algorithm>
 #include <exception>
 #include <fstream>
-#include <iostream>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -131,15 +131,16 @@ namespace Microsoft::Xna::Framework::Audio
         try
         {
             auto xwb = CNA::Internal::Audio::ParseXwb(std::move(raw));
-            std::cerr << "[WaveBank] Loaded XWB: " << filename
-                      << " bank=\"" << xwb.bankName << "\""
-                      << " entries=" << xwb.entries.size() << "\n";
+            CNA::Internal::Audio::LogAudio(CNA::LogLevel::DEBUG,
+                "[WaveBank] Loaded XWB: ", filename, " bank=\"", xwb.bankName, "\" entries=",
+                xwb.entries.size());
             xactImpl_ = std::make_unique<XactWaveBankImpl>(std::move(xwb));
             engine_->RegisterWaveBank(this);
         }
         catch (const std::exception& ex)
         {
-            std::cerr << "[WaveBank] XWB parse error (" << filename << "): " << ex.what() << "\n";
+            CNA::Internal::Audio::LogAudio(CNA::LogLevel::ERROR,
+                "[WaveBank] XWB parse error (", filename, "): ", ex.what());
         }
     }
 
@@ -149,16 +150,16 @@ namespace Microsoft::Xna::Framework::Audio
         {
             const std::string resolvedFilename = CNA::Internal::ResolveExistingXnaPath(filename);
             auto xwb = CNA::Internal::Audio::ParseXwbStreamingHeader(resolvedFilename);
-            std::cerr << "[WaveBank] Loaded XWB (streaming): " << filename
-                      << " bank=\"" << xwb.bankName << "\""
-                      << " entries=" << xwb.entries.size() << "\n";
+            CNA::Internal::Audio::LogAudio(CNA::LogLevel::DEBUG,
+                "[WaveBank] Loaded XWB (streaming): ", filename, " bank=\"", xwb.bankName,
+                "\" entries=", xwb.entries.size());
             xactImpl_ = std::make_unique<XactWaveBankImpl>(std::move(xwb));
             engine_->RegisterWaveBank(this);
         }
         catch (const std::exception& ex)
         {
-            std::cerr << "[WaveBank] XWB streaming parse error (" << filename << "): "
-                      << ex.what() << "\n";
+            CNA::Internal::Audio::LogAudio(CNA::LogLevel::ERROR,
+                "[WaveBank] XWB streaming parse error (", filename, "): ", ex.what());
         }
     }
 
@@ -245,8 +246,9 @@ namespace Microsoft::Xna::Framework::Audio
             if (nativeSource) { sf.open(*nativeSource, std::ios::binary); }
             if (!sf.is_open())
             {
-                std::cerr << "[WaveBank] Cannot reopen streaming source for wave " << waveIndex
-                          << ": " << xactImpl_->data.sourcePath << "\n";
+                CNA::Internal::Audio::LogAudio(CNA::LogLevel::ERROR,
+                    "[WaveBank] Cannot reopen streaming source for wave ", waveIndex, ": ",
+                    xactImpl_->data.sourcePath);
                 return nullptr;
             }
 
@@ -260,7 +262,8 @@ namespace Microsoft::Xna::Framework::Audio
             if (fileSize < 0 ||
                 static_cast<uint64_t>(entry.dataOffset) + audioLen > static_cast<uint64_t>(fileSize))
             {
-                std::cerr << "[WaveBank] Wave " << waveIndex << " streaming data out of range\n";
+                CNA::Internal::Audio::LogAudio(CNA::LogLevel::ERROR,
+                    "[WaveBank] Wave ", waveIndex, " streaming data out of range");
                 return nullptr;
             }
             sf.seekg(static_cast<std::streamoff>(entry.dataOffset));
@@ -271,14 +274,15 @@ namespace Microsoft::Xna::Framework::Audio
             }
             catch (const std::exception& ex)
             {
-                std::cerr << "[WaveBank] Wave " << waveIndex << " streaming allocation failed: "
-                          << ex.what() << "\n";
+                CNA::Internal::Audio::LogAudio(CNA::LogLevel::ERROR,
+                    "[WaveBank] Wave ", waveIndex, " streaming allocation failed: ", ex.what());
                 return nullptr;
             }
             sf.read(reinterpret_cast<char*>(streamedBytes.data()), static_cast<std::streamsize>(audioLen));
             if (static_cast<uint32_t>(sf.gcount()) != audioLen)
             {
-                std::cerr << "[WaveBank] Wave " << waveIndex << " streaming read truncated\n";
+                CNA::Internal::Audio::LogAudio(CNA::LogLevel::ERROR,
+                    "[WaveBank] Wave ", waveIndex, " streaming read truncated");
                 return nullptr;
             }
             audioData = streamedBytes.data();
@@ -291,7 +295,8 @@ namespace Microsoft::Xna::Framework::Audio
             const auto& fd = xactImpl_->data.fileData;
             if (static_cast<uint64_t>(entry.dataOffset) + entry.dataLength > fd.size())
             {
-                std::cerr << "[WaveBank] Wave " << waveIndex << " data out of range\n";
+                CNA::Internal::Audio::LogAudio(CNA::LogLevel::ERROR,
+                    "[WaveBank] Wave ", waveIndex, " data out of range");
                 return nullptr;
             }
             audioData = fd.data() + entry.dataOffset;
@@ -365,16 +370,17 @@ namespace Microsoft::Xna::Framework::Audio
                 const char* formatName =
                     entry.format == XwbFormat::XMA ? "XMA/XMA2" :
                     entry.format == XwbFormat::WMA ? "WMA" : "unknown";
-                std::cerr << "[WaveBank] Wave " << waveIndex << " in bank \"" << getBankName()
-                          << "\" uses " << formatName << " compression, which has no decode path "
-                          << "(CHECKLIST.md accepted deviation) -- sound will be missing\n";
+                CNA::Internal::Audio::LogAudio(CNA::LogLevel::WARN,
+                    "[WaveBank] Wave ", waveIndex, " in bank \"", getBankName(), "\" uses ",
+                    formatName, " compression, which has no decode path "
+                    "(CHECKLIST.md accepted deviation) -- sound will be missing");
                 return nullptr;
             }
         }
         catch (const std::exception& ex)
         {
-            std::cerr << "[WaveBank] Failed to create SoundEffect for wave "
-                      << waveIndex << ": " << ex.what() << "\n";
+            CNA::Internal::Audio::LogAudio(CNA::LogLevel::ERROR,
+                "[WaveBank] Failed to create SoundEffect for wave ", waveIndex, ": ", ex.what());
             return nullptr;
         }
 

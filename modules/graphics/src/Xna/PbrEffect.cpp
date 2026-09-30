@@ -560,6 +560,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // separate decisions -- two about what a texture contains, one about where the fragment
         // is going.
         p.pbrNormalScale       = normalScale_;
+        p.pbrDoubleSided       = doubleSided_;
         p.pbrOcclusionStrength = occlusionStrength_;
         p.pbrTextureCoordinateSetMask = 0;
         for (std::size_t i = 0; i < textureCoordinateSetsEXT_.size(); ++i)

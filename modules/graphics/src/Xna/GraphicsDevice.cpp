@@ -42,6 +42,7 @@
 #include <cstdlib>
 #include <exception>
 #include <limits>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -61,6 +62,16 @@ namespace Microsoft::Xna::Framework::Graphics
 
     namespace
     {
+        /// Serialises building and tearing down a device's window, renderer and native context.
+        /// Devices created on several threads at once overlapped SDL window creation with another
+        /// device's GL context work on the same X connection and aborted or stalled inside SDL/Xlib
+        /// (RUST-UPSTREAM-023). Recursive: a fallback chain rebuilds within one construction.
+        std::recursive_mutex& NativeDeviceLifecycleMutex()
+        {
+            static std::recursive_mutex mutex;
+            return mutex;
+        }
+
 #if CNA_DIAGNOSTICS_LEVEL >= 1
         void RecordGraphicsDraw(bool indexed, std::int64_t primitiveCount) noexcept
         {
@@ -3874,6 +3885,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::RecreateRendererForMultiSampleCount(int multiSampleCount)
     {
+        const std::scoped_lock lifecycle(NativeDeviceLifecycleMutex());
         presentationParameters_.setMultiSampleCountProperty(multiSampleCount);
         InvalidateRendererCapabilityProfileEXT();
         renderer_.reset();
@@ -4154,6 +4166,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::resolveRenderer()
     {
+        const std::scoped_lock lifecycle(NativeDeviceLifecycleMutex());
         namespace Renderers = CNA::Internal::Renderers;
         using CNA::GraphicsRendererFallbackReason;
         using CNA::GraphicsRendererFallbackRecord;
@@ -4495,6 +4508,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::destroyNativeResources()
     {
+        const std::scoped_lock lifecycle(NativeDeviceLifecycleMutex());
         InvalidateRendererCapabilityProfileEXT();
         renderer_.reset();
         surfacePresenter_.reset();

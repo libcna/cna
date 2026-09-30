@@ -437,8 +437,9 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Gets whether this material's back faces are drawn (glTF §3.9.5).
          *
-         * @note CNAEXT — not part of the XNA 4.0 API. Defaults to `false`, matching both glTF's
-         * own default and XNA's `CullCounterClockwise`.
+         * @note CNAEXT — not part of the XNA 4.0 API. Defaults to `false`, glTF's own default:
+         * one face is drawn. Which one is the draw's cull state; glTF's counter-clockwise front
+         * face needs `RasterizerState::CullClockwise`, not XNA's default (`docs/gltf-conventions.md`).
          *
          * **This is carried state, not applied state.** Culling is a `RasterizerState` the
          * application sets per draw, and having `Model::Draw` mutate device state as a side effect

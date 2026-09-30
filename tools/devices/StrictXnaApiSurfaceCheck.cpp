@@ -64,6 +64,8 @@
 #include "Microsoft/Xna/Framework/GameWindow.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
 #pragma GCC diagnostic pop
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
 
 using namespace Microsoft::Devices;
 using namespace Microsoft::Devices::Sensors;
@@ -246,6 +248,16 @@ namespace
         (void)motionReading.getDeviceRotationRateProperty();
         (void)motionReading.getGravityProperty();
         (void)motionReading.getTimestampProperty();
+    }
+
+    // XNA's `SamplerStates[i] = state`, House Simulator's BL-16. Compiled, never called: strict
+    // code has no windowless GraphicsDevice to take the collection from.
+    [[maybe_unused]] void ExerciseSamplerStates(
+        Microsoft::Xna::Framework::Graphics::SamplerStateCollection& samplers)
+    {
+        using Microsoft::Xna::Framework::Graphics::SamplerState;
+        samplers(0, SamplerState::LinearWrap);
+        (void)samplers[0].getFilterProperty();
     }
 } // namespace
 

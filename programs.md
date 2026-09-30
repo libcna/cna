@@ -20,7 +20,7 @@ sudo apt-get update
 sudo apt-get install -y \
   build-essential gcc g++ cmake ninja-build git pkg-config \
   libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
-  libxfixes-dev libxss-dev \
+  libxfixes-dev libxss-dev libxtst-dev \
   libgl1-mesa-dev libegl1-mesa-dev libglu1-mesa-dev mesa-common-dev \
   libasound2-dev libpulse-dev \
   libvulkan-dev vulkan-tools vulkan-validationlayers mesa-vulkan-drivers \
@@ -56,7 +56,7 @@ sudo apt-get install -y build-essential gcc g++ cmake ninja-build git pkg-config
 ```bash
 sudo apt-get install -y \
   libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
-  libxfixes-dev libxss-dev \
+  libxfixes-dev libxss-dev libxtst-dev \
   libgl1-mesa-dev libegl1-mesa-dev libglu1-mesa-dev mesa-common-dev \
   libasound2-dev libpulse-dev
 ```
@@ -65,12 +65,13 @@ SDL3, SDL3_image, and SDL3_mixer are **built from vendored git submodules** (`th
 not installed as system packages (`README.md` §9 already covers this) — but building *that vendored
 source* still needs the underlying platform dev headers SDL3 probes for at CMake-configure time.
 This project always drives tests with `SDL_VIDEODRIVER=x11` (see `NEXT.md` §7), so the X11 dev
-headers are the load-bearing ones; Wayland is not currently exercised by any test in this repo and
-is deliberately omitted here (SDL3 will still build fine without Wayland dev headers — it just won't
-offer that video driver).
+headers are the load-bearing ones. SDL3 builds without the Wayland dev headers (it just won't offer
+that video driver); CNA's own `WAYLAND` platform backend needs the packages listed in
+[`docs/platform-wayland.md`](docs/platform-wayland.md).
 
 - **X11 libs** (`libx11-dev` + `libxext-dev`/`libxrandr-dev`/`libxinerama-dev`/`libxcursor-dev`/
-  `libxi-dev`/`libxfixes-dev`/`libxss-dev`) — SDL3's X11 video backend.
+  `libxi-dev`/`libxfixes-dev`/`libxss-dev`/`libxtst-dev`) — SDL3's X11 video backend. XTest is not
+  optional: with X11 on, SDL's configure stops if `libxtst-dev` is missing.
 - **`libgl1-mesa-dev`, `libegl1-mesa-dev`, `libglu1-mesa-dev`, `mesa-common-dev`** — OpenGL/EGL
   headers. Needed by SDL3's own GL context creation and the `EASYGL` backend (`../easy-gl`, GL ES
   3.2 via the `easy-gl` wrapper).

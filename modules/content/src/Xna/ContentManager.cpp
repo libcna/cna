@@ -71,6 +71,7 @@
 #include <filesystem>
 #include <optional>
 #include <fstream>
+#include <unordered_map>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
@@ -2017,7 +2018,61 @@ namespace Microsoft::Xna::Framework::Content
             // untextured glTF SkinnedEffect material samples, created once per model on first use and
             // owned by textureOwners.
             Graphics::Texture2D* gltfWhiteBaseColorTexture = nullptr;
+            // CNA-F20: one Texture2D per referenced asset for the whole model, so parts that name
+            // the same image share one object, as XNA's shared external references do.
+            std::unordered_map<std::string, Graphics::Texture2D*> texturesByAsset;
         };
+
+        /** @brief Returns the model's Texture2D for @p assetName, loading it on first use. */
+        Graphics::Texture2D* LoadModelTextureEXT(
+            ContentManager& cm, ModelResources& res, const std::string& assetName)
+        {
+            if (const auto found = res.texturesByAsset.find(assetName);
+                found != res.texturesByAsset.end())
+            {
+                return found->second;
+            }
+            auto tex = std::make_unique<Graphics::Texture2D>(
+                cm.Load<Graphics::Texture2D>(assetName));
+            Graphics::Texture2D* texPtr = tex.get();
+            res.textureOwners.push_back(std::move(tex));
+            res.texturesByAsset.emplace(assetName, texPtr);
+            return texPtr;
+        }
+
+        /**
+         * @brief Publishes a compiled model's one skeleton through Model::SkinsEXT as well as Tag.
+         *
+         * A `.cnj` or `.cnb` model carries at most one skeleton, and the runtime glTF path already
+         * lists its skins here (cna-street's CNASTREET-SKINMETA; BINDFIX-035). The skin drives the
+         * meshes whose vertices carry BlendIndices, which are the ones that consume its palette.
+         */
+        void SetCompiledModelSkinEXT(Graphics::Model& model, Graphics::SkinningData& data)
+        {
+            Graphics::ModelSkinEXT skin;
+            skin.Data = &data;
+            auto& meshes = model.getMeshesProperty();
+            for (int m = 0; m < meshes.getCountProperty(); ++m)
+            {
+                Graphics::ModelMesh* mesh = meshes[m];
+                auto& parts = mesh->getMeshPartsProperty();
+                for (int p = 0; p < parts.getCountProperty(); ++p)
+                {
+                    const Graphics::VertexBuffer* vb = parts[p]->getVertexBufferProperty();
+                    if (vb == nullptr) { continue; }
+                    const auto& elements = vb->getVertexDeclarationProperty().GetVertexElements();
+                    if (std::any_of(elements.begin(), elements.end(), [](const auto& element) {
+                            return element.getVertexElementUsageProperty() ==
+                                   Graphics::VertexElementUsage::BlendIndices;
+                        }))
+                    {
+                        skin.Meshes.push_back(mesh);
+                        break;
+                    }
+                }
+            }
+            model.setSkinsEXTProperty({std::move(skin)});
+        }
 
         /**
          * @brief Gives an untextured glTF SkinnedEffect material glTF's white base-colour texture.
@@ -2591,24 +2646,17 @@ namespace Microsoft::Xna::Framework::Content
                 // via "effect" has no standard texture slot to bind through here.
                 if (const std::string textureAsset = resolveAsset("texture");
                     !textureAsset.empty()) {
-                    auto tex = std::make_unique<Graphics::Texture2D>(
-                        cm.Load<Graphics::Texture2D>(textureAsset));
                     if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(fx.get())) {
-                        basicFx->setTextureProperty(tex.get());
+                        basicFx->setTextureProperty(LoadModelTextureEXT(cm, res, textureAsset));
                         basicFx->setTextureEnabledProperty(true);
-                        res.textureOwners.push_back(std::move(tex));
                     } else if (auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(fx.get())) {
-                        skinnedFx->setTextureProperty(tex.get());
-                        res.textureOwners.push_back(std::move(tex));
+                        skinnedFx->setTextureProperty(LoadModelTextureEXT(cm, res, textureAsset));
                     } else if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get())) {
-                        dualFx->setTextureProperty(tex.get());
-                        res.textureOwners.push_back(std::move(tex));
+                        dualFx->setTextureProperty(LoadModelTextureEXT(cm, res, textureAsset));
                     } else if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get())) {
-                        pbrFx->setTextureProperty(tex.get());
-                        res.textureOwners.push_back(std::move(tex));
+                        pbrFx->setTextureProperty(LoadModelTextureEXT(cm, res, textureAsset));
                     } else if (auto* skinnedPbrFx = dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get())) {
-                        skinnedPbrFx->setTextureProperty(tex.get());
-                        res.textureOwners.push_back(std::move(tex));
+                        skinnedPbrFx->setTextureProperty(LoadModelTextureEXT(cm, res, textureAsset));
                     }
                 }
 
@@ -2618,10 +2666,7 @@ namespace Microsoft::Xna::Framework::Content
                 if (const std::string texture2Asset = resolveAsset("texture2");
                     !texture2Asset.empty()) {
                     if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get())) {
-                        auto tex2 = std::make_unique<Graphics::Texture2D>(
-                            cm.Load<Graphics::Texture2D>(texture2Asset));
-                        dualFx->setTexture2Property(tex2.get());
-                        res.textureOwners.push_back(std::move(tex2));
+                        dualFx->setTexture2Property(LoadModelTextureEXT(cm, res, texture2Asset));
                     }
                 }
 
@@ -2659,12 +2704,8 @@ namespace Microsoft::Xna::Framework::Content
                 if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get())) {
                     auto loadPbrMap = [&](const char* field) -> Graphics::Texture2D* {
                         const std::string assetName = resolveAsset(field);
-                        if (assetName.empty()) { return nullptr; }
-                        auto tex = std::make_unique<Graphics::Texture2D>(
-                            cm.Load<Graphics::Texture2D>(assetName));
-                        Graphics::Texture2D* texPtr = tex.get();
-                        res.textureOwners.push_back(std::move(tex));
-                        return texPtr;
+                        return assetName.empty() ? nullptr
+                                                 : LoadModelTextureEXT(cm, res, assetName);
                     };
                     if (Graphics::Texture2D* t = loadPbrMap("normalMap"))
                         pbrFx->setNormalMapProperty(t);
@@ -2715,12 +2756,8 @@ namespace Microsoft::Xna::Framework::Content
                 } else if (auto* skinnedPbrFx = dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get())) {
                     auto loadPbrMap = [&](const char* field) -> Graphics::Texture2D* {
                         const std::string assetName = resolveAsset(field);
-                        if (assetName.empty()) { return nullptr; }
-                        auto tex = std::make_unique<Graphics::Texture2D>(
-                            cm.Load<Graphics::Texture2D>(assetName));
-                        Graphics::Texture2D* texPtr = tex.get();
-                        res.textureOwners.push_back(std::move(tex));
-                        return texPtr;
+                        return assetName.empty() ? nullptr
+                                                 : LoadModelTextureEXT(cm, res, assetName);
                     };
                     if (Graphics::Texture2D* t = loadPbrMap("normalMap"))
                         skinnedPbrFx->setNormalMapProperty(t);
@@ -3070,18 +3107,10 @@ namespace Microsoft::Xna::Framework::Content
             {
                 const MeshGroup& group = groups[gi];
                 if (group.skin == nullptr) { continue; }
-                // plans/plan_gltf.md GLTF-245/GLTF-247: the skeleton needs two things the skin alone
-                // cannot supply -- the joints' full scene ancestry, and the world transform of the
-                // node instancing the skinned mesh, which glTF requires to be cancelled. A skin
-                // referenced by several nodes resolves to the first placement in this group, the
-                // same documented simplification ExtractMorphWeightTrack already makes.
-                Matrix meshNodeWorld = Matrix::getIdentityProperty();
-                for (const MeshInstanceOut& placement : group.instances)
-                {
-                    if (placement.skinned) { meshNodeWorld = placement.worldTransform; break; }
-                }
-                groupSkeletons[gi] =
-                    BuildSkeleton(group.skin, sceneGraph, meshNodeWorld, 1.0f);
+                // plans/plan_gltf.md GLTF-245: the skeleton needs the joints' full scene ancestry,
+                // which the skin alone cannot supply. The node instancing the skinned mesh plays no
+                // part -- glTF ignores its transform (CNASTREET-SKINDRAW).
+                groupSkeletons[gi] = BuildSkeleton(group.skin, sceneGraph, 1.0f);
             }
 
             Graphics::GraphicsDevice& device = cm.getGraphicsDeviceInternal();
@@ -4168,9 +4197,7 @@ namespace Microsoft::Xna::Framework::Content
                     // instantiates it, so Model::Draw composes the glTF world transform for free.
                     // A skinned instance is parented to the identity root instead: glTF requires a
                     // skinned mesh's own node transform to be ignored, because its joints already
-                    // place the geometry. Completing that rule -- the inverse(meshNodeWorld) term
-                    // and the joint ancestry BuildSkeleton still drops -- is GLTF-245/247/260, so
-                    // this is deliberately the conservative half, not a claim that skinning works.
+                    // place the geometry, and BuildSkeleton leaves it out of the joint matrices too.
                     const std::size_t parentBoneIndex = instance.skinned
                         ? 0u : static_cast<std::size_t>(instance.sceneNodeIndex);
                     meshObj->setParentBoneProperty(boneRawPtrs[parentBoneIndex]);
@@ -5171,6 +5198,7 @@ namespace Microsoft::Xna::Framework::Content
                 // model is not merely unanimated, it is wrong.
                 if (res->skinningData)
                 {
+                    SetCompiledModelSkinEXT(model, *res->skinningData);
                     Graphics::ApplyBindPoseBoneTransformsEXT(model, *res->skinningData);
                 }
                 model.setGltfImportReportEXTProperty(std::move(gltfImportReport));
@@ -5536,6 +5564,7 @@ namespace Microsoft::Xna::Framework::Content
             else if (res->modelAnimations) { model.setTagProperty(res->modelAnimations.get()); }
             if (res->skinningData)
             {
+                SetCompiledModelSkinEXT(model, *res->skinningData);
                 Graphics::ApplyBindPoseBoneTransformsEXT(model, *res->skinningData);
             }
             return model;
@@ -5682,19 +5711,33 @@ namespace Microsoft::Xna::Framework::Content
             {
                 return Vector3(value[0], value[1], value[2]);
             };
+            // One object per referenced texture for the whole model, as in XNA, so effects that
+            // name the same image share it (living-room-simulator R-29; CNA-F20 for V1).
+            std::unordered_map<std::string, std::shared_ptr<Graphics::Texture2D>> textures2D;
+            std::unordered_map<std::string, std::shared_ptr<Graphics::TextureCube>> texturesCube;
             const auto texture2D = [&](const std::string& logical)
                 -> std::shared_ptr<Graphics::Texture2D>
             {
                 if (logical.empty()) { return {}; }
-                return std::make_shared<Graphics::Texture2D>(
-                    cm.Load<Graphics::Texture2D>(logical));
+                auto& slot = textures2D[logical];
+                if (!slot)
+                {
+                    slot = std::make_shared<Graphics::Texture2D>(
+                        cm.Load<Graphics::Texture2D>(logical));
+                }
+                return slot;
             };
             const auto textureCube = [&](const std::string& logical)
                 -> std::shared_ptr<Graphics::TextureCube>
             {
                 if (logical.empty()) { return {}; }
-                return std::make_shared<Graphics::TextureCube>(
-                    cm.Load<Graphics::TextureCube>(logical));
+                auto& slot = texturesCube[logical];
+                if (!slot)
+                {
+                    slot = std::make_shared<Graphics::TextureCube>(
+                        cm.Load<Graphics::TextureCube>(logical));
+                }
+                return slot;
             };
 
             std::vector<Graphics::Effect*> effects;

@@ -2872,6 +2872,60 @@ if (!ProfileIsEs2ApiGeneration())
         constexpr ::metagl::GLuint kUndefinedTimerResult = 0xFFFFFFFFu;
     } // namespace
 
+    namespace
+    {
+        /// Every stock EasyGL program writes one colour output (FragColor); a custom ShaderEffect's
+        /// outputs are the author's and are assumed to cover the whole bound set.
+        constexpr unsigned int kStockProgramOutputs = 1u;
+        constexpr unsigned int kEveryOutput = 0xFu;
+
+        /// BINDFIX-053: for one draw, enables only the bound multi-target set's draw buffers the
+        /// program writes, then restores the whole set. WebGL 2 refuses a draw that leaves an
+        /// enabled draw buffer without a fragment output ("Active draw buffers with missing fragment
+        /// shader outputs", INVALID_OPERATION), and GLES 3.0 leaves such a buffer undefined; XNA
+        /// leaves a target the pixel shader does not write unchanged. Clear and every later draw
+        /// still see the whole set, because the narrowing never outlives the draw.
+        class MrtOutputScope
+        {
+        public:
+            MrtOutputScope(const EasyGLBoundTargetEXT* bound, const unsigned int writtenOutputs)
+                : count_(bound != nullptr ? bound->mrtCount : 0)
+            {
+                const unsigned int boundOutputs = (1u << std::max(count_, 0)) - 1u;
+                if (count_ <= 1 || (writtenOutputs & boundOutputs) == boundOutputs)
+                {
+                    count_ = 0;
+                    return;
+                }
+                Apply(writtenOutputs);
+            }
+
+            ~MrtOutputScope()
+            {
+                if (count_ > 0)
+                    Apply(kEveryOutput);
+            }
+
+            MrtOutputScope(const MrtOutputScope&) = delete;
+            MrtOutputScope& operator=(const MrtOutputScope&) = delete;
+
+        private:
+            void Apply(const unsigned int enabled) const
+            {
+                std::array<::metagl::DrawBuffer, 4> buffers{};
+                for (int i = 0; i < count_; ++i)
+                    buffers[i] = (enabled & (1u << i)) != 0
+                        ? ::metagl::to_draw_buffer(static_cast<::metagl::ColorAttachment>(
+                              static_cast<GLenum>(::metagl::ColorAttachment::Color0)
+                              + static_cast<GLenum>(i)))
+                        : ::metagl::DrawBuffer::None;
+                ::metagl::glDrawBuffers(count_, buffers.data());
+            }
+
+            int count_;
+        };
+    } // namespace
+
     void EasyGLGpuTimerRenderer::End()
     {
         if (metagl::IsContextLost() || !created_ || !open_) return;
@@ -5297,6 +5351,8 @@ if (ProfileUsesGlslEs100())
 
         if (graphicsRenderer_)
             graphicsRenderer_->ApplyStencilPrimitiveTopology(PrimitiveType::TriangleList);
+        const MrtOutputScope outputs(graphicsRenderer_ ? graphicsRenderer_->bound_.get() : nullptr,
+                                     prog == &program_ ? kStockProgramOutputs : kEveryOutput);
         device_.draw_elements(
             ::easygl::PrimitiveType::Triangles,
             static_cast<int>(pending_indices_.size()),
@@ -5472,6 +5528,8 @@ if (ProfileUsesGlslEs100())
                                                             &deviceSamplerStates,
                                                             &deviceVertexTextures,
                                                             &deviceVertexSamplerStates);
+            const MrtOutputScope outputs(graphicsRenderer_->bound_.get(),
+                                         graphicsRenderer_->compiledEffectColorOutputMask_);
             easyIndexBuffer->ibo.bind(::easygl::BufferTarget::ElementArray);
             device_.draw_elements(::easygl::PrimitiveType::Triangles, indexCount,
                                   ::easygl::DataType::UnsignedShort, nullptr);
@@ -6416,7 +6474,9 @@ if (!ProfileIsEs2ApiGeneration())
 
     bool EasyGLRenderer::GetCurrentRenderTarget2DSize(int& width, int& height) const
     {
-        if (!bound_->rt2D && bound_->mrtCount == 0) return false;
+        // A bound cube face is a render target too (living-room-simulator R-23): XNA lays a
+        // sprite out in the face's Size x Size pixels, which bound_ records when the face is set.
+        if (!bound_->rt2D && !bound_->cube && bound_->mrtCount == 0) return false;
         width = bound_->width;
         height = bound_->height;
         return true;
@@ -10119,6 +10179,7 @@ if (ProfileUsesGlslEs100())
             p.prog.uniform_location("uSpecularFresnelInputs");
         p.loc_pbr_srgb          = p.prog.uniform_location("uSrgb");
         p.loc_pbr_normalscale   = p.prog.uniform_location("uNormalScale");
+        p.loc_pbr_doublesided   = p.prog.uniform_location("uDoubleSided");
         p.loc_pbr_occlstrength  = p.prog.uniform_location("uOcclusionStrength");
         p.loc_pbr_texcoordsets  = p.prog.uniform_location("uTextureCoordinateSets");
         p.loc_pbr_occlusiontexcoordset =
@@ -10195,6 +10256,7 @@ if (ProfileUsesGlslEs100())
             p.prog.uniform_location("uSpecularFresnelInputs");
         p.loc_pbr_srgb          = p.prog.uniform_location("uSrgb");
         p.loc_pbr_normalscale   = p.prog.uniform_location("uNormalScale");
+        p.loc_pbr_doublesided   = p.prog.uniform_location("uDoubleSided");
         p.loc_pbr_occlstrength  = p.prog.uniform_location("uOcclusionStrength");
         p.loc_pbr_texcoordsets  = p.prog.uniform_location("uTextureCoordinateSets");
         p.loc_pbr_occlusiontexcoordset =
@@ -11102,6 +11164,22 @@ if (ProfileUsesGlslEs100())
         // behaviour exactly, which is what makes adopting it a per-renderer step.
         if (p.loc_pbr_normalscale >= 0)
             p.prog.set_uniform(p.loc_pbr_normalscale, params.pbrNormalScale);
+        // living-room-simulator R-3: 0 single-sided, +1 double-sided, -1 double-sided under a
+        // mirroring World -- which reverses the on-screen winding, so gl_FrontFacing then names
+        // the back face and the shader has to read it the other way round.
+        if (p.loc_pbr_doublesided >= 0)
+        {
+            float sidedness = 0.0f;
+            if (params.pbrDoubleSided)
+            {
+                const float* w = params.worldColMajor;
+                const float det = w[0] * (w[5] * w[10] - w[9] * w[6])
+                                - w[4] * (w[1] * w[10] - w[9] * w[2])
+                                + w[8] * (w[1] * w[6] - w[5] * w[2]);
+                sidedness = det < 0.0f ? -1.0f : 1.0f;
+            }
+            p.prog.set_uniform(p.loc_pbr_doublesided, sidedness);
+        }
         if (p.loc_pbr_occlstrength >= 0)
             p.prog.set_uniform(p.loc_pbr_occlstrength, params.pbrOcclusionStrength);
         if (p.loc_pbr_texcoordsets >= 0)
@@ -11482,6 +11560,7 @@ if (ProfileIsEs2ApiGeneration())
         if (maskActive) ForceAllColorWriteMasks();
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Stencil);
         if (maskActive) ApplyCurrentColorWriteMasks();
+        RestoreWriteMasksAfterClear(false, true);
         RestoreScissorAfterClear(scissorWasEnabled);
     }
 
@@ -11697,6 +11776,7 @@ if (ProfileIsEs2ApiGeneration())
         wvp.ToColumnMajor(wvp_col);
 
         prog_colored_.prog.use();
+        const MrtOutputScope outputs(bound_.get(), kStockProgramOutputs);
         if (prog_colored_.loc_wvp >= 0)
             prog_colored_.prog.set_uniform_matrix4(prog_colored_.loc_wvp, wvp_col);
         // This path carries no BasicEffect diffuse; output the raw vertex colors
@@ -11735,6 +11815,7 @@ if (ProfileIsEs2ApiGeneration())
         wvp.ToColumnMajor(wvp_col);
 
         prog_colored_.prog.use();
+        const MrtOutputScope outputs(bound_.get(), kStockProgramOutputs);
         if (prog_colored_.loc_wvp >= 0)
             prog_colored_.prog.set_uniform_matrix4(prog_colored_.loc_wvp, wvp_col);
         // This path carries no BasicEffect diffuse; output the raw vertex colors
@@ -11897,6 +11978,7 @@ if (ProfileIsEs2ApiGeneration())
                                          params.compiledDeviceSamplerStates,
                                          params.compiledDeviceVertexTextures,
                                          params.compiledDeviceVertexSamplerStates);
+            const MrtOutputScope outputs(bound_.get(), compiledEffectColorOutputMask_);
             const int compiledVertexCount = VertexCountForPrimitives(primitive, primitiveCount);
             // glDrawArrays' `first` advances every bound stream by that many of its own records,
             // which is the same rule the stock multi-stream route relies on.
@@ -11949,6 +12031,7 @@ if (ProfileIsEs2ApiGeneration())
         Prog3D& p = SelectProgram(layoutStride, params);
         p.prog.use();
         BindDrawParams(p, world, view, projection, params);
+        const MrtOutputScope outputs(bound_.get(), kStockProgramOutputs);
         const int vertex_count = VertexCountForPrimitives(primitive, primitiveCount);
         CNA_RENDER_LOG("DrawPrimitivesEx: stride=" << layoutStride
             << " prim=" << static_cast<int>(primitive) << " verts=" << vertex_count);
@@ -12033,6 +12116,7 @@ if (ProfileIsEs2ApiGeneration())
                                          params.compiledDeviceSamplerStates,
                                          params.compiledDeviceVertexTextures,
                                          params.compiledDeviceVertexSamplerStates);
+            const MrtOutputScope outputs(bound_.get(), compiledEffectColorOutputMask_);
             const int compiledIndexCount = VertexCountForPrimitives(primitive, primitiveCount);
             const auto compiledIdxType = compiledIb.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
                                                                   : ::easygl::DataType::UnsignedShort;
@@ -12099,6 +12183,7 @@ if (ProfileIsEs2ApiGeneration())
         Prog3D& p = SelectProgram(layoutStride, params);
         p.prog.use();
         BindDrawParams(p, world, view, projection, params);
+        const MrtOutputScope outputs(bound_.get(), kStockProgramOutputs);
         const int index_count = VertexCountForPrimitives(primitive, primitiveCount);
         CNA_RENDER_LOG("DrawIndexedPrimitivesEx: stride=" << layoutStride
             << " prim=" << static_cast<int>(primitive) << " indices=" << index_count);
@@ -12204,6 +12289,7 @@ else
                                          params.compiledDeviceSamplerStates,
                                          params.compiledDeviceVertexTextures,
                                          params.compiledDeviceVertexSamplerStates);
+            const MrtOutputScope outputs(bound_.get(), compiledEffectColorOutputMask_);
             const int compiledIndexCount = VertexCountForPrimitives(primitive, primitiveCount);
             const auto compiledIdxType = compiledIb.thirtyTwoBit
                 ? ::easygl::DataType::UnsignedInt : ::easygl::DataType::UnsignedShort;
@@ -12329,6 +12415,8 @@ else
             p.prog.use();
             BindDrawParams(p, world, view, projection, params);
         }
+        const MrtOutputScope outputs(
+            bound_.get(), params.customEffectRenderer ? kEveryOutput : kStockProgramOutputs);
 
         DrawIndexedWithBaseVertexFallback(
             ib, ToEasyGl(primitive), index_count, idxType, indexOffset,
@@ -12463,6 +12551,8 @@ else
             p.prog.use();
             BindDrawParams(p, world, view, projection, params);
         }
+        const MrtOutputScope outputs(
+            bound_.get(), params.customEffectRenderer ? kEveryOutput : kStockProgramOutputs);
         if (ib != nullptr)
             ib->ibo.bind(::easygl::BufferTarget::ElementArray);
 

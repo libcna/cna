@@ -1302,7 +1302,7 @@ namespace CNA::Internal::Renderers
         virtual void SetUniformVec3(const char* name, float x, float y, float z) {}
         /// Sets a vec4 uniform by name.
         virtual void SetUniformVec4(const char* name, float x, float y, float z, float w) {}
-        /// Sets a column-major 4×4 matrix uniform by name.
+        /// Sets a mat4 uniform from an XNA Matrix's fields M11..M44 in order, untransposed.
         virtual void SetUniformMat4(const char* name, const float* matrix) {}
         /// Sets a float array uniform by name. `count` is the number of scalar elements.
         virtual void SetUniformFloatArray(const char* name, const float* values, int count) {}
@@ -1316,7 +1316,7 @@ namespace CNA::Internal::Renderers
         /// at the origin and an image with no occlusion in it at all.
         virtual void SetUniformVec3Array(const char* name, const float* values, int count) {}
 
-        /// plans/plan_modern.md MOD-810: uploads @p count column-major 4x4 matrices, for a shader that
+        /// plans/plan_modern.md MOD-810: uploads @p count 4x4 matrices (as SetUniformMat4), for a shader that
         /// declares `mat4 name[N]` -- a skinning palette, most of the time. Separate from
         /// SetUniformMat4 for the same reason the array forms above are separate from their scalar
         /// ones: the single-matrix call uploads exactly one matrix whatever the uniform's declared
@@ -1998,6 +1998,10 @@ namespace CNA::Internal::Renderers
         /// whatever the map holds -- and at 1 it is the map unchanged. Only meaningful when
         /// `pbrOcclusionMap` is bound.
         float pbrOcclusionStrength = 1.0f;
+        /// glTF `doubleSided` (living-room-simulator R-3): a back face is shaded with its normal
+        /// reversed, so it is lit from the side that shows it. Culling stays the application's
+        /// RasterizerState; this only decides the shading normal of the faces it lets through.
+        bool pbrDoubleSided = false;
         /// plans/plan_gltf.md GLTF-210: the base-colour texture's samples are sRGB-ENCODED and must be
         /// decoded to linear before lighting (glTF §3.9.2). The `DiffuseColor` FACTOR is already
         /// linear and must NOT be decoded -- the two multiply, and decoding both would apply the

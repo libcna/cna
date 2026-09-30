@@ -1,6 +1,7 @@
 # VertexElementFormat / VertexElementUsage Renderer Support — CNA
 
-> Source-inspected against Tasks 248–250 (Phase 30).
+> Revised 2026-09-30 (cna-car-simulator CCS-3): the stride-keyed description this page used to give
+> was true in Phase 30 and had long stopped being true on EasyGL.
 > Covers: EasyGL, Vulkan, SDL_Renderer renderers.
 
 ---
@@ -11,25 +12,29 @@
 |--------|---------|
 | ✅ | Fully supported; correct GPU mapping. |
 | ⚠️ | Partially supported; works with caveats documented below. |
-| ❌ | Unsupported; throws, silently ignored, or falls back to a wrong type. |
+| ❌ | Unsupported; refused with an exception. |
 | — | Not applicable (renderer has no 3D vertex pipeline). |
 
 ---
 
-## How vertex layout selection works (current state)
+## How vertex layout selection works
 
-All three renderers select their GPU vertex attribute layout from the **byte stride** of the
-bound `VertexBuffer`, not from the `VertexDeclaration` elements.  The `VertexDeclaration`
-is stored in the XNA layer and used for stride auto-computation and API conformance, but
-it is not forwarded to `IGraphicsRenderer::DrawPrimitivesEx`.
+**EasyGL** binds a stock effect's inputs from the bound buffers' `VertexDeclaration`s, element by
+element, by XNA usage and usage index (SAMPLE-005, `8b4e6ec30`;
+`EasyGLRenderer::ConfigureDeclarationForStockProgramEXT`). The program is chosen from the effect's
+state, not from the stride, so any declared layout -- a 36-byte Position+Normal+Color+Texture, a
+40-byte dual-UV vertex, an instance stream -- reaches the program's inputs. A buffer without a
+declaration binds the known layout of its stride; an unknown stride without a declaration is refused
+(GLTF-157, `7b9fdec0a`).
 
-The practical consequence is that only the **five hardcoded strides** described below are
-rendered correctly.  Any other stride triggers a fallback that may produce incorrect shading
-or a crash-free but visually wrong draw.
+**Vulkan** still builds its native pipeline layout from the stride, but a declared layout is checked
+against it (`RequireFaithfulVertexDeclaration`) and a buffer with neither a declaration nor a known
+stride is refused (VULKAN-165), so a layout it cannot honour fails by name instead of drawing the
+wrong bytes.
 
----
-
-## Supported vertex strides per renderer
+A user draw (`DrawUserPrimitives` / `DrawUserIndexedPrimitives`) of anything but the four stock
+vertex structures needs its `VertexDeclaration` argument; the call without one does not compile
+(CCS-2).
 
 | Stride | Vertex type                   | EasyGL | Vulkan | SDL_Renderer |
 |-------:|-------------------------------|:------:|:------:|:------------:|
@@ -38,13 +43,8 @@ or a crash-free but visually wrong draw.
 | 24     | `VertexPositionColorTexture`  | ✅     | ✅     | —            |
 | 32     | `VertexPositionNormalTexture` | ✅     | ✅     | —            |
 | 52     | Skinned (custom)              | ✅     | ✅     | —            |
-| Other  | Custom                        | ⚠️     | ❌     | —            |
-
-**EasyGL other-stride fallback**: position-only (float3 at offset 0), warning logged via
-`CNA_RENDER_LOG`.  No crash, but color/UV attributes are missing.
-
-**Vulkan other-stride fallback**: no pipeline is compiled for unknown strides; the draw call
-is silently skipped (guard in `DrawPrimitivesEx`).
+| Other, with a declaration    | Custom | ✅     | ⚠️ faithful layouts only | — |
+| Other, without a declaration | Custom | ❌     | ❌     | —            |
 
 ---
 
@@ -67,16 +67,11 @@ Each row shows what GPU type the XNA format maps to in each renderer.
 | `HalfVector2`         | 4         | half (2 comp.)               | `VK_FORMAT_R16G16_SFLOAT`   | —            |
 | `HalfVector4`         | 8         | half (4 comp.)               | `VK_FORMAT_R16G16B16A16_SFLOAT` | —        |
 
-**EasyGL caveat**: the `ApplyLayout` function selects attribute types by stride, not by the
-declared `VertexElementFormat`.  As long as the stride matches one of the five hardcoded
-cases, the correct GL type is used for that slot.  Individual format values within a stride
-are not inspected — a custom layout using `Short4` at offset 0 with stride 32 would still
-receive the `float3 position` binding.
+**EasyGL**: each element is bound with its declared format.
 
 **Vulkan caveat**: `VulkanVertexFormatHelper::VertexElementFormatToVk()` provides a correct
-per-format `VkFormat`, but the active pipeline is selected by stride.  Shader attribute
-locations are hardcoded per-stride, so the format mapping table is only an audit reference
-until per-declaration pipeline compilation is implemented.
+per-format `VkFormat`, but the active pipeline is selected by stride and a declaration it cannot
+honour is refused.
 
 ---
 
@@ -98,8 +93,9 @@ until per-declaration pipeline compilation is implemented.
 | `Sample`              | ❌                      | ❌                      | —            |
 | `TessellateFactor`    | ❌                      | ❌                      | —            |
 
-EasyGL and Vulkan resolve the usage slot from the **stride-keyed hardcoded layout**, not
-from the `VertexElementUsage` enum.
+The EasyGL column is Phase 30's and is kept for Vulkan comparison only: EasyGL now resolves every
+stock input by usage and usage index, Tangent included (the PBR programs). Vulkan resolves the slot
+from its stride-keyed layout.
 
 ---
 
@@ -116,7 +112,5 @@ draw path.
 
 | Area | Task |
 |------|------|
-| Derive vertex layout from `VertexDeclaration` in EasyGL | Phase 34+ |
-| Derive vertex layout from `VertexDeclaration` in Vulkan (per-declaration pipeline) | Phase 34+ |
-| Support `Tangent` / `Binormal` attributes in EasyGL / Vulkan shaders | Phase 34+ |
+| Derive vertex layout from `VertexDeclaration` in Vulkan (per-declaration pipeline) | open |
 | Support `Depth`, `Fog`, `PointSize` usages (XNA legacy semantics) | Low priority |

@@ -40,6 +40,7 @@ here is open.
 | `SignedInGamerCollection::operator[](PlayerIndex)` | returned the collection element at the enum's ordinal, as the FNA-era port did (`return collection[(int)index];`). XNA's IL (`get_Item(PlayerIndex)`) walks the collection and returns the gamer whose `PlayerIndex` matches, else null — so with only player two signed in, `SignedInGamers[PlayerIndex.One]` named player two in CNA and is null in XNA | `GS-004m`, 2026-09-29 |
 | `NetworkSession::BeginCreate` private slots | accepted `privateGamerSlots == maxGamers`, the CNA/FNA-era bound. The XNA IL (`BeginCreate(NetworkSessionType,int,int,int,int,int,NetworkSessionProperties,...)`) throws `ArgumentOutOfRangeException` for `privateGamerSlots < 0 \|\| privateGamerSlots >= maxGamers`, so one slot is always public; the local XML's contradictory range text does not override the IL | `GS-007e2c3b`, 2026-09-28 |
 | `NetworkSession` explicit local-gamer lists | sized the local-gamer limit to the list, as FNA's constructor does, so a session created for one gamer refused `AddLocalGamer`; a gamer listed twice joined twice; SystemLink `Join` always used a limit of 4 whatever the `Find` had asked. XNA's IL: `BeginCreate`/`BeginFind`/`BeginJoinInvited(IEnumerable<SignedInGamer>, ...)` run `GetLocalGamers` first (null entry or empty list `ArgumentException`, disposed gamer `ObjectDisposedException`), fold the list into a user mask and pass a limit of 4; `Join` keeps the search's limit | `GS-007p`, 2026-09-29 |
+| `Game::Tick()` after `Exit()` | kept running the frame's remaining fixed-step catch-up Updates, and the variable step's one Update, after `Exit()` — from an earlier Update or from a quit handled by `PollEvents()` — exactly as `FNA/src/Game.cs:479` does. XNA's IL begins `Tick` with `if (ShouldExit) return;`, loops `while (num > 0 && !ShouldExit)` and guards the variable step with `if (!ShouldExit)`. Found by `cna-killer`, whose stop condition fired three times in one slow frame | `KILLER-1`, 2026-09-30 |
 
 The fourth was found by the sample campaign rather than by a binding, and is the only one
 backed by a side-by-side capture of both runtimes on this machine rather than by reading
@@ -450,6 +451,11 @@ at.
 
 ## BINDFIX-035 — a `.cnb` model carries its skeleton and publishes no skins
 
+**Status: fixed by `fix(CNASTREET-SKINMETA)` (cna-street's GLTF-207, 2026-09-30).** A compiled
+`.cnj` or `.cnb` model lists its one skin -- the `Tag`'s `SkinningData`, driving the meshes whose
+vertices carry `BlendIndices` -- so `skinned_model.cnb` now answers 1. A skin's name still has no
+place in the format and stays empty.
+
 Found while adding the skinned content asset the owner asked for. `cna_tool_gltf_to_cnb`
 compiles `tests/assets/gltf/skin-four-weighted.gltf` into a model whose container holds an
 `MSKL` chunk of 792 bytes -- `cna_tool_cnb_info` lists it beside `MBON`, `MMSH` and the
@@ -641,7 +647,9 @@ first.
   orientation; where its crop overflows, FNA3D's blit clips it and CNA threw. Zooming now scales by
   the larger ratio -- identical wherever the old crop fitted. The non-zoom (fit) path is unchanged;
   whether XNA's native decoder can exceed the requested height there (SW-05's second half) has no
-  IL to settle it. Pinned by `ImageLoaderTests.ZoomFillsWideAndTallTargetsByCroppingTheOverflow`.
+  IL to settle it. A crop narrower than one source pixel (2x2 zoomed to 8x2) now keeps one pixel
+  instead of truncating to an empty rectangle (reported by `cna-swift` after the first fix).
+  Pinned by `ImageLoaderTests.ZoomFillsWideAndTallTargetsByCroppingTheOverflow`.
 - **BINDFIX-044** — `System::InvalidCastException` (a compiled effect parameter read or written in a
   shape it does not have, FX-089/FX-105) fell through the exception barrier to
   `CNA_RESULT_INTERNAL`, which `docs/c-api/ERRORS.md` reserves for native failures with no public
@@ -662,6 +670,47 @@ first.
   remote gamer's gamertag and display name were unreachable, though `NetworkGamer` is a `Gamer`.
   `BorrowGamerBase` now also resolves network gamers; `cna_gamer_destroy` is unchanged. Pinned by
   `CApi_NetSmoke`.
+- **BINDFIX-048** — `cna-python`: `cnb.h` said `CNA_CNB_SOUND_EFFECT_SCHEMA_VERSION` is `1` and that
+  the WAV importer refuses 24/32-bit and float, while the library has written schema 2 (8-bit PCM)
+  since XNASWEEP-197 and narrows those widths to 16-bit. Constant and text corrected within 0.35.0;
+  the baseline change is recorded in `ABI_VERSIONING.md`, approved by the owner (2026-09-30).
+  Pinned by `AbiHeaderC.c` and `CApiAbiBaseline`.
+- **BINDFIX-050** — `RUST-UPSTREAM-023`: six threads creating and destroying standalone devices at
+  once aborted 28 of 40 runs on OPENGLES3 (heap corruption, occasionally a stall). Five unguarded
+  process-wide paths, found one backtrace at a time: the preset state objects' shared identity
+  list (`GraphicsResource`), window and GL-context teardown and the camera subsystem start outside
+  the SDL lock, the adapter cache and SDL's display queries, and overlapping device construction.
+  Each now has a lock (order: device lifecycle, adapter cache, SDL). 240 of 240 runs pass. Pinned
+  by `CApi_ConcurrentDeviceCreationSmoke` (fails 10 of 10 runs against the previous library).
+- **BINDFIX-049** — `net.h` still described `cna_packet_reader_read_color` as reading four floats and
+  the pair as deliberately asymmetric; BINDFIX-022 had made them inverses. Documentation only
+  (reported by `cna-python`).
+- **BINDFIX-051** — `cna-ts` finding 2: the audio module wrote its diagnostics straight to stderr
+  (28 sites, one of them a format line on every successful mixer open), and `ShaderEffect` its
+  compile error, past `CNA::Logger` -- so a consumer that had replaced the destination with
+  `cna_logger_set_sink_ext` still got them on stderr. They are now log lines in the `AUDIO` and
+  `RENDER` categories: the mixer's negotiated-format announcement at INFO (as the renderer
+  banner), load confirmations at DEBUG, advisories at WARN, failures at ERROR. Pinned by
+  `SoundEffectTest.RawBufferDiagnosticReachesAnInstalledLoggerSinkAndNotStderr`.
+- **BINDFIX-052** — `cna-ts` finding 32: on WebAssembly a caller-created `GraphicsDevice` made and
+  destroyed while a Game was alive left the Game undestroyable -- `cna_game_destroy` threw
+  Emscripten's `ErrnoError` (ENOENT) instead of returning. Each device is an SDL window on the same
+  page; SDL's Emscripten backend creates the shared `/tmp/filedrop` drop directory inside a `try`
+  but removed it unguarded, so the second window torn down threw out of `SDL_DestroyWindow`. CNA
+  carries an Emscripten-only SDL patch guarding the removal as setup already does
+  (`cmake/patches/sdl-cbe3fbe9-0003-emscripten-filedrop-rmdir.patch`; SDL `main` still has the
+  bug). Pinned by the twelfth check of `modules/c-api/wasm/browser_probe.html`
+  (`CApi_WasmBrowserProbe`), which fails 11/12 against the previous module.
+- **BINDFIX-053** — `cna-ts` finding 30: on WEBGL2 a `BasicEffect` draw into two bound render
+  targets painted neither and left `INVALID_OPERATION` pending. WebGL 2 refuses a draw that leaves
+  an enabled draw buffer without a fragment output ("Active draw buffers with missing fragment
+  shader outputs"); GLES 3.0 only leaves such a buffer undefined, which is why native OPENGLES3
+  (Mesa) drew correctly all along. Every stock EasyGL program writes one output, so EasyGL now
+  enables, for the length of each draw, only the draw buffers the program writes -- the stock
+  programs' one, a compiled effect's `oCn` outputs from its pixel-shader reflection, a custom
+  `ShaderEffect`'s whole set -- and restores the full set afterwards, so `Clear` still reaches every
+  target. The untouched target stays unchanged, as in XNA. Pinned by the thirteenth check of
+  `modules/c-api/wasm/browser_probe.html`, which fails 12/13 against the unfixed renderer.
 
 ---
 

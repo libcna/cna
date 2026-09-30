@@ -2135,7 +2135,13 @@ TEST(GltfFixtureCorpus, InlineGltfDocumentsDoNotGrowWithoutADecision)
     // tools/gltf_fixtures/ is the wrong home for it (docs/gltf-conformance.md 3.7). It also sits
     // with the five URI-containment probes already in that file, which are the same kind and were
     // dispositioned the same way.
-    constexpr int kCeiling = 281;
+    //
+    // 281 -> 282 is living-room-simulator's R-1: GltfImportCoreTests' degenerate-UV, +X-normal
+    // triangle, a **loader-machinery probe** of ComputeTangentsEXT's fallback. Its UVs exist but are
+    // all equal, and the L5 packer deliberately refuses to derive generated tangents for a
+    // primitive that authors UVs, so the corpus could not state its expected bytes; what the test
+    // asserts is only that the fallback is a unit vector perpendicular to the normal.
+    constexpr int kCeiling = 282;
 
     int found = 0;
     std::map<std::string, int> perFile;

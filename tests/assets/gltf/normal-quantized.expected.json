@@ -345,7 +345,7 @@
         ],
         "vertexBufferFile": "normal-quantized.vb.bin",
         "vertexBufferBytes": 144,
-        "vertexBufferSha256": "c1e3e9bc7b36d436f1ac7babe92209385d06397d526fdac313522e59cecb7512",
+        "vertexBufferSha256": "b7b6294527e90411fdcbf98df78280a58b34cbf2416be4eff3f53e20251cb6c9",
         "indexElementSize": 2,
         "indexCount": 3,
         "indexBufferFile": "normal-quantized.ib.bin",

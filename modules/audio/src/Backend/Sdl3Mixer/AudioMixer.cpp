@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Audio/AudioMixer.hpp"
+#include "Internal/AudioLog.hpp"
 #include "CNA/Internal/Audio/MixerEngine.hpp"
 #include "CNA/Audio/Platform/IAudioDevice.hpp"
 #include "Platform/AudioDeviceFactory.hpp"
@@ -11,7 +12,6 @@
 #include <algorithm>
 #include <atomic>
 #include <cstddef>
-#include <iostream>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -194,13 +194,14 @@ namespace CNA::Internal::Audio
                         std::string("MIX_CreateMixer failed: ") + SDL_GetError());
                 }
 
-                std::cerr << "[AudioMixer] Requested format=0x" << std::hex
-                          << static_cast<int>(requestedFormat.sampleFormat) << std::dec
-                          << " channels=" << requestedFormat.channels
-                          << " freq=" << requestedFormat.sampleRate
-                          << "; application format=0x" << std::hex << mixerSpec.format
-                          << std::dec << " channels=" << mixerSpec.channels
-                          << " freq=" << mixerSpec.freq << "\n";
+                // INFO, like the renderer banner: it is the only place the negotiated format is
+                // stated, and a consumer reads its sample rate from it.
+                LogAudio(LogLevel::INFO,
+                    "[AudioMixer] Requested format=0x", std::hex,
+                    static_cast<int>(requestedFormat.sampleFormat), std::dec, " channels=",
+                    requestedFormat.channels, " freq=", requestedFormat.sampleRate,
+                    "; application format=0x", std::hex, mixerSpec.format, std::dec, " channels=",
+                    mixerSpec.channels, " freq=", mixerSpec.freq);
 
                 callback->Configure(mixer, negotiated);
                 g_generatedBytes.store(0, std::memory_order_release);

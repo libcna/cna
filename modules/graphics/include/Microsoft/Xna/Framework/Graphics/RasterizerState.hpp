@@ -14,9 +14,13 @@ namespace Microsoft::Xna::Framework::Graphics
     class RasterizerState : public GraphicsResource
     {
     public:
-        /** @brief Preset: cull clockwise-wound faces. */
+        /** @brief Preset: cull faces that are clockwise on screen, keeping counter-clockwise ones. */
         static const RasterizerState CullClockwise;
-        /** @brief Preset: cull counter-clockwise-wound faces (XNA default). */
+        /**
+         * @brief Preset: cull faces that are counter-clockwise on screen (XNA default).
+         *
+         * Clockwise triangles are front faces, the opposite of the OpenGL and glTF convention.
+         */
         static const RasterizerState CullCounterClockwise;
         /** @brief Preset: no face culling. */
         static const RasterizerState CullNone;

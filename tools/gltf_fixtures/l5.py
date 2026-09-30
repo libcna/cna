@@ -23,6 +23,7 @@ point at which someone has to look at every renderer's `ApplyLayout` and agree.
 from __future__ import annotations
 
 import hashlib
+import math
 import struct
 from typing import Any, Sequence
 
@@ -72,18 +73,40 @@ DEFAULT_TEXCOORD = (0.0, 0.0)
 #: would multiply an uncoloured surface to black on any renderer that read the slot.
 DEFAULT_COLOR = (1.0, 1.0, 1.0, 1.0)
 
-#: The tangent every vertex of a primitive with **no UV channel** receives, exactly.
+#: Every vertex of a primitive with **no UV channel** receives ComputeTangentsEXT's fallback tangent,
+#: exactly -- see `_untextured_tangent`.
 #:
 #: This is not an approximation, it is the arithmetic falling out. ComputeTangentsEXT reads a
 #: missing UV as (0,0), so every triangle has du1=dv1=du2=dv2=0, its determinant is 0, and the
 #: `|denom| < 1e-12` guard skips it -- no triangle contributes anything. Every accumulator is
-#: therefore exactly zero, the orthogonalised tangent falls to its own `len > 1e-8` fallback
-#: (1,0,0), and the handedness test `dot(cross(n,t), 0) < 0` is false, giving +1.
+#: therefore exactly zero, the orthogonalised tangent falls to its `len > 1e-8` fallback, and the
+#: handedness test `dot(cross(n,t), 0) < 0` is false, giving +1.
 #:
 #: That makes a stride-48 golden byte-exact for such a primitive without reproducing the
 #: angle-weighted algorithm at all. A primitive that DOES author UVs needs the real thing, and
 #: this packer refuses rather than guessing -- see `_tangents_for`.
-UNTEXTURED_TANGENT = (1.0, 0.0, 0.0, 1.0)
+
+
+def _f32r(value: float) -> float:
+    return struct.unpack("<f", struct.pack("<f", float(value)))[0]
+
+
+def _untextured_tangent(normal: Sequence[float]) -> tuple[float, float, float, float]:
+    """ComputeTangentsEXT's fallback, in its own float32 operation order.
+
+    A unit tangent perpendicular to the normal (living-room-simulator R-1: a fixed (1,0,0) is the
+    normal itself on a +-X face): +X, or +Y when the normal is within ~26 degrees of the X axis,
+    with the normal's component removed. Every step is rounded to float32 as the C++ does it, so
+    the golden stays byte-exact; binary64 sqrt and division rounded once to binary32 equal the
+    binary32 operations.
+    """
+    nx, ny, nz = (_f32r(c) for c in normal)
+    axis = (1.0, 0.0, 0.0) if abs(nx) < _f32r(0.9) else (0.0, 1.0, 0.0)
+    d = _f32r(_f32r(_f32r(nx * axis[0]) + _f32r(ny * axis[1])) + _f32r(nz * axis[2]))
+    o = [_f32r(axis[i] - _f32r(c * d)) for i, c in enumerate((nx, ny, nz))]
+    length = _f32r(math.sqrt(_f32r(_f32r(_f32r(o[0] * o[0]) + _f32r(o[1] * o[1]))
+                                   + _f32r(o[2] * o[2]))))
+    return (_f32r(o[0] / length), _f32r(o[1] / length), _f32r(o[2] / length), 1.0)
 
 
 def _f32(values: Sequence[float]) -> bytes:
@@ -158,7 +181,7 @@ def _tangents_for(primitive: dict[str, Any], count: int) -> list[tuple[float, fl
 
     An authored TANGENT is used as-is. Otherwise CNA generates one, and this reproduces exactly the
     one case where generation has a closed form: a primitive with no UV channel, whose every
-    tangent is `UNTEXTURED_TANGENT` for the reasons recorded there.
+    tangent is `_untextured_tangent` of its normal for the reasons recorded there.
     """
     authored = primitive.get("tangents") or []
     if authored:
@@ -176,7 +199,9 @@ def _tangents_for(primitive: dict[str, Any], count: int) -> list[tuple[float, fl
             "the angle-weighted algorithm. Reproducing that here is GLTF-149's, together with the "
             "fixture that needs it -- emitting a golden nobody has checked would be worse than "
             "having none.")
-    return [UNTEXTURED_TANGENT] * count
+    normals = primitive.get("normals") or []
+    return [_untextured_tangent(normals[v] if v < len(normals) else DEFAULT_NORMAL)
+            for v in range(count)]
 
 
 def pack_vertex_buffer(primitive: dict[str, Any], stride: int) -> bytes:

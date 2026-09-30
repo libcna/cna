@@ -235,7 +235,7 @@
     },
     {
       "id": "D8",
-      "summary": "BuildSkeleton walked parent links only inside the skin's own joint set, so the armature transform above the joints was dropped from the bind pose while the authored inverseBindMatrices still contained it -- leaving every skinned vertex multiplied by the inverse of what was lost. GLTF-245 walks the full scene ancestry (skin.skeleton is a hint, never a traversal stop) and GLTF-247 adds the inverse(globalTransform(meshNode)) term, both carried on each root bone's parentWorldPrefix so animating a root joint cannot undo them.",
+      "summary": "BuildSkeleton walked parent links only inside the skin's own joint set, so the armature transform above the joints was dropped from the bind pose while the authored inverseBindMatrices still contained it -- leaving every skinned vertex multiplied by the inverse of what was lost. GLTF-245 walks the full scene ancestry (skin.skeleton is a hint, never a traversal stop), carried on each root bone's parentWorldPrefix so animating a root joint cannot undo it. (GLTF-247's inverse(globalTransform(meshNode)) term was withdrawn by CNASTREET-SKINDRAW: glTF ignores the skinned mesh node.)",
       "owner": "GLTF-SKIN",
       "owningTasks": [
         "GLTF-245",
@@ -1833,7 +1833,7 @@
       ],
       "features": [
         "skinned mesh node transform",
-        "mesh-space cancellation",
+        "mesh node transform ignored",
         "skin.inverseBindMatrices",
         "JOINTS_0 / WEIGHTS_0"
       ],
@@ -1934,7 +1934,7 @@
       ],
       "features": [
         "skinned mesh node transform",
-        "mesh-space cancellation",
+        "mesh node transform ignored",
         "transformed ancestor above the mesh node",
         "JOINTS_0 / WEIGHTS_0"
       ],
@@ -4561,7 +4561,7 @@
     {
       "path": "morph-asymmetric-deltas.expected.json",
       "bytes": 8593,
-      "sha256": "70fd1f38c7c9911c4a98d88fc496db12df3d12f080dd76c84790366a2d88a6ba"
+      "sha256": "ccaa7c339508a69d9eb8dfee0c07db81ccdd8857c4b9bf65f5c5f3b25cc80029"
     },
     {
       "path": "morph-asymmetric-deltas.glb",
@@ -4581,12 +4581,12 @@
     {
       "path": "morph-asymmetric-deltas.vb.bin",
       "bytes": 144,
-      "sha256": "596d55ababd79c382727b38674754a611388b5f8265007111bab8dd4cd094862"
+      "sha256": "fc374cada6b97ce82600919a58678c85a69fa413ee32b93fbf69c6ee9069473d"
     },
     {
       "path": "morph-eight-targets.expected.json",
       "bytes": 12267,
-      "sha256": "a3c6c3f799110c03eda446138e1c93f228f7e370b74493308e73c166cdcbeef1"
+      "sha256": "27640df2796317f35acb31aef30cdd7409c77a0d683d2e7707fd7662033ef990"
     },
     {
       "path": "morph-eight-targets.glb",
@@ -4606,12 +4606,12 @@
     {
       "path": "morph-eight-targets.vb.bin",
       "bytes": 144,
-      "sha256": "596d55ababd79c382727b38674754a611388b5f8265007111bab8dd4cd094862"
+      "sha256": "fc374cada6b97ce82600919a58678c85a69fa413ee32b93fbf69c6ee9069473d"
     },
     {
       "path": "morph-mesh-weights-only.expected.json",
       "bytes": 8070,
-      "sha256": "d45a5e0b3b44cf95268d6230df68dfa22c25510ebbef74b5131d5c2003fee2f9"
+      "sha256": "3ef806b24faa411b492012227fd365e6371ba33ce68d039ac12c014a73674418"
     },
     {
       "path": "morph-mesh-weights-only.glb",
@@ -4631,7 +4631,7 @@
     {
       "path": "morph-mesh-weights-only.vb.bin",
       "bytes": 144,
-      "sha256": "596d55ababd79c382727b38674754a611388b5f8265007111bab8dd4cd094862"
+      "sha256": "fc374cada6b97ce82600919a58678c85a69fa413ee32b93fbf69c6ee9069473d"
     },
     {
       "path": "morph-no-base-normals.expected.json",
@@ -4686,7 +4686,7 @@
     {
       "path": "morph-node-weights-zero.expected.json",
       "bytes": 8098,
-      "sha256": "c44b812fef7364c1977eb1f330707fd3619a59c17b99267ed6622c93bc69371c"
+      "sha256": "a88064241c7dfb7a8aa5617bdb84a35d6d98745dae3cf19304806e1daaedaf4b"
     },
     {
       "path": "morph-node-weights-zero.glb",
@@ -4706,12 +4706,12 @@
     {
       "path": "morph-node-weights-zero.vb.bin",
       "bytes": 144,
-      "sha256": "596d55ababd79c382727b38674754a611388b5f8265007111bab8dd4cd094862"
+      "sha256": "fc374cada6b97ce82600919a58678c85a69fa413ee32b93fbf69c6ee9069473d"
     },
     {
       "path": "morph-normal-only-target.expected.json",
       "bytes": 8083,
-      "sha256": "d7a0390cfc0a482803dbe64d6942b31f580e40ef83e29487d855cca765a5350b"
+      "sha256": "013cfb5312400d46603dd41a8e77d3cd59a9e3e41b46651deb042e327c7d175f"
     },
     {
       "path": "morph-normal-only-target.glb",
@@ -4731,7 +4731,7 @@
     {
       "path": "morph-normal-only-target.vb.bin",
       "bytes": 144,
-      "sha256": "596d55ababd79c382727b38674754a611388b5f8265007111bab8dd4cd094862"
+      "sha256": "fc374cada6b97ce82600919a58678c85a69fa413ee32b93fbf69c6ee9069473d"
     },
     {
       "path": "morph-normalless-quad.expected.json",
@@ -4761,7 +4761,7 @@
     {
       "path": "morph-overdriven-weight.expected.json",
       "bytes": 8668,
-      "sha256": "69082a9e57ec527b38f5a202e7015ff314880cb3d4034f2f40e594e376b0c3e7"
+      "sha256": "f25c81cc436bbd62aac73c0c94ca87c44c22c7d8a0943f09b80db9b837b21f85"
     },
     {
       "path": "morph-overdriven-weight.glb",
@@ -4781,7 +4781,7 @@
     {
       "path": "morph-overdriven-weight.vb.bin",
       "bytes": 144,
-      "sha256": "596d55ababd79c382727b38674754a611388b5f8265007111bab8dd4cd094862"
+      "sha256": "fc374cada6b97ce82600919a58678c85a69fa413ee32b93fbf69c6ee9069473d"
     },
     {
       "path": "morph-position-normal-tangent.expected.json",
@@ -4811,7 +4811,7 @@
     {
       "path": "morph-position-normal.expected.json",
       "bytes": 8590,
-      "sha256": "699646a0caec8d7015c8491845a9449fa955d1d8203ad05967d99fc09de20613"
+      "sha256": "dd1d168c9b2d696058f5bdfd1f242752a0a60bc70c0e3aa4babce6d72ff56186"
     },
     {
       "path": "morph-position-normal.glb",
@@ -4831,12 +4831,12 @@
     {
       "path": "morph-position-normal.vb.bin",
       "bytes": 144,
-      "sha256": "596d55ababd79c382727b38674754a611388b5f8265007111bab8dd4cd094862"
+      "sha256": "fc374cada6b97ce82600919a58678c85a69fa413ee32b93fbf69c6ee9069473d"
     },
     {
       "path": "morph-position-only.expected.json",
       "bytes": 7972,
-      "sha256": "38bd09fec964bac5440454444f52b214eda307cbf5a0f4ae35e3c720022fed0b"
+      "sha256": "0f1726f360adfd71f120b8c8d09b34878e891a1d412e87e98d5a42c13b62c3c5"
     },
     {
       "path": "morph-position-only.glb",
@@ -4856,12 +4856,12 @@
     {
       "path": "morph-position-only.vb.bin",
       "bytes": 144,
-      "sha256": "596d55ababd79c382727b38674754a611388b5f8265007111bab8dd4cd094862"
+      "sha256": "fc374cada6b97ce82600919a58678c85a69fa413ee32b93fbf69c6ee9069473d"
     },
     {
       "path": "morph-two-targets.expected.json",
       "bytes": 8606,
-      "sha256": "1984021c9395e213591dc222d94340ff768c66e4bee8ec73490f9cf4fcb56f7d"
+      "sha256": "21c4bed344a3429da47d820cd3c0faf8fd2c6fa7e94cbc21d29d778fbc737e4b"
     },
     {
       "path": "morph-two-targets.glb",
@@ -4881,12 +4881,12 @@
     {
       "path": "morph-two-targets.vb.bin",
       "bytes": 144,
-      "sha256": "596d55ababd79c382727b38674754a611388b5f8265007111bab8dd4cd094862"
+      "sha256": "fc374cada6b97ce82600919a58678c85a69fa413ee32b93fbf69c6ee9069473d"
     },
     {
       "path": "morph-zero-weights.expected.json",
       "bytes": 8028,
-      "sha256": "8797adaf9bf9c66a901b3eebaa39a7f2aa82d1512c1911470a07ef230687b9fb"
+      "sha256": "311175dbc554d52edb2fe16f904b5279ba1ab4051db787b99420985414a7c65c"
     },
     {
       "path": "morph-zero-weights.glb",
@@ -4906,7 +4906,7 @@
     {
       "path": "morph-zero-weights.vb.bin",
       "bytes": 144,
-      "sha256": "596d55ababd79c382727b38674754a611388b5f8265007111bab8dd4cd094862"
+      "sha256": "fc374cada6b97ce82600919a58678c85a69fa413ee32b93fbf69c6ee9069473d"
     },
     {
       "path": "non-indexed-triangles.expected.json",
@@ -4961,7 +4961,7 @@
     {
       "path": "normal-nonuniform-scale.expected.json",
       "bytes": 7226,
-      "sha256": "de1211369e5f2e3e838f883b71faabe5d901daf348979ac6be72315d3ce41ea0"
+      "sha256": "fb669ac974ff4bcaa28f0dc4aff0e32582ef13ea6ede0bea5c10c2ddc6423289"
     },
     {
       "path": "normal-nonuniform-scale.glb",
@@ -4981,12 +4981,12 @@
     {
       "path": "normal-nonuniform-scale.vb.bin",
       "bytes": 144,
-      "sha256": "188749347a148d3d53d4e2b7d26661d101d1623dc25e1d2e6855a1c6d7a1bbff"
+      "sha256": "2af81ffbfa691c75966d9476369ae0b925323cbefe242e6e9d4af43a87d27329"
     },
     {
       "path": "normal-quantized.expected.json",
       "bytes": 8097,
-      "sha256": "984c834340cb2a01b7ec4e7939c6cba8ecfa8f2e6e85e01ff462c556dcb54a10"
+      "sha256": "51bf99a1e9277514669a2834875f981b65112bffe8fc3ed2f96ba44c6367d8eb"
     },
     {
       "path": "normal-quantized.glb",
@@ -5006,12 +5006,12 @@
     {
       "path": "normal-quantized.vb.bin",
       "bytes": 144,
-      "sha256": "c1e3e9bc7b36d436f1ac7babe92209385d06397d526fdac313522e59cecb7512"
+      "sha256": "b7b6294527e90411fdcbf98df78280a58b34cbf2416be4eff3f53e20251cb6c9"
     },
     {
       "path": "normalized-i8-normal.expected.json",
       "bytes": 7029,
-      "sha256": "ef0d5cb0b4e0cfbb8fcf33b20deb5c843a6ffc68b9748b07d905fc50f819d9e6"
+      "sha256": "fc5df5497e3fc9f071704cc8238f7d3f0bfa22d634361f3dcf0d0f44d38c56d8"
     },
     {
       "path": "normalized-i8-normal.glb",
@@ -5031,7 +5031,7 @@
     {
       "path": "normalized-i8-normal.vb.bin",
       "bytes": 144,
-      "sha256": "3ca1c02f8e24cdf74cda1388017ebd650fa16bcbfe6dd5b7b35052a68abe9d43"
+      "sha256": "11fbdc7a6ce5c503f6040ffce889e65ac0039b1477734a19c22e55f24fa9daec"
     },
     {
       "path": "normalized-u16-color.expected.json",
@@ -5200,8 +5200,8 @@
     },
     {
       "path": "skin-armature-ancestor.expected.json",
-      "bytes": 12616,
-      "sha256": "d9ab969afc76d1e07cd960405d65dd28d2a31793e9ed9d21c2a3dd13b5ace2bd"
+      "bytes": 12673,
+      "sha256": "fa61e2678f14ceff70d43a4570023144f58f213b44125a2922a8a0997e77c2f9"
     },
     {
       "path": "skin-armature-ancestor.glb",
@@ -5315,8 +5315,8 @@
     },
     {
       "path": "skin-mesh-node-parent-transform.expected.json",
-      "bytes": 10455,
-      "sha256": "d4b089cd296425744c8490ad4a90b55821fde642ab5c3eee44dd6bbc4575a877"
+      "bytes": 10456,
+      "sha256": "9eac34e987f58f92063232ea546827495f43474d45cff86add978f3ffe367687"
     },
     {
       "path": "skin-mesh-node-parent-transform.glb",
@@ -5340,8 +5340,8 @@
     },
     {
       "path": "skin-mesh-node-transform.expected.json",
-      "bytes": 10525,
-      "sha256": "49acabe3e9d128a34e07aeb8ad1a6a27a503784626ee5b804385d283d92bc51d"
+      "bytes": 10446,
+      "sha256": "bc81353bb5d6ad1796a6366fec04f6023ce0178aed0feba45fbd3dec6cd68c84"
     },
     {
       "path": "skin-mesh-node-transform.glb",
@@ -6471,7 +6471,7 @@
     {
       "path": "xf-scale-nonuniform.expected.json",
       "bytes": 6710,
-      "sha256": "5cd7083c291dcdf599efeb0b6300af687d9f64b2583518ac919a64e682c834c2"
+      "sha256": "e946282cd48170d03a0a91f33ec7101e2fe91de32803ade41a5dc23e8575bc50"
     },
     {
       "path": "xf-scale-nonuniform.glb",
@@ -6491,12 +6491,12 @@
     {
       "path": "xf-scale-nonuniform.vb.bin",
       "bytes": 144,
-      "sha256": "188749347a148d3d53d4e2b7d26661d101d1623dc25e1d2e6855a1c6d7a1bbff"
+      "sha256": "2af81ffbfa691c75966d9476369ae0b925323cbefe242e6e9d4af43a87d27329"
     },
     {
       "path": "xf-scale-uniform.expected.json",
       "bytes": 6575,
-      "sha256": "987b1ea2ac666294149acb3d02c7ecd3b55fdd7d2f385f22de7744f98993cc8e"
+      "sha256": "2dc0bf088f1e81ac77dc10f3223ce72e6c31a23f7f8491be61989206bc489ac1"
     },
     {
       "path": "xf-scale-uniform.glb",
@@ -6516,7 +6516,7 @@
     {
       "path": "xf-scale-uniform.vb.bin",
       "bytes": 144,
-      "sha256": "188749347a148d3d53d4e2b7d26661d101d1623dc25e1d2e6855a1c6d7a1bbff"
+      "sha256": "2af81ffbfa691c75966d9476369ae0b925323cbefe242e6e9d4af43a87d27329"
     },
     {
       "path": "xf-shared-mesh.expected.json",

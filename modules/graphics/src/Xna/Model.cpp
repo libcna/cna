@@ -222,12 +222,11 @@ namespace Microsoft::Xna::Framework::Graphics
                 placement = absoluteBoneTransforms.at(static_cast<std::size_t>(boneIndex));
             }
 
-            // A glTF skin palette operates before Model::Draw's mesh placement. In particular,
-            // the palette carries inverse(meshNodeWorld), so a translated skinned mesh node can
-            // be cancelled back to its skeleton's actual bind-pose space. Applying only
-            // `placement` here framed that file around the node transform while the GPU drew its
-            // vertices somewhere else. The current effect palette is public, live state; union
-            // the local sphere under every joint transform and then the mesh placement.
+            // A glTF skin palette operates before Model::Draw's mesh placement, and it -- not the
+            // mesh's own node -- places a skinned mesh. Applying only `placement` here framed a
+            // skinned file around the wrong point while the GPU drew its vertices somewhere
+            // else. The current effect palette is public, live state; union the local sphere
+            // under every joint transform and then the mesh placement.
             //
             // This is conservative for linear blend skinning: each vertex is a convex combination
             // of its joint-transformed positions, and the merged sphere is convex and contains all

@@ -1,6 +1,6 @@
 {
   "id": "skin-mesh-node-parent-transform",
-  "description": "A skinned mesh node translated [0,0,50] under a parent translated [30,0,0]. The cancellation term is the node's COMPOSED world transform, so an implementation that used only its local one is off by the parent's 30 units.",
+  "description": "A skinned mesh node translated [0,0,50] under a parent translated [30,0,0]. The node's COMPOSED world transform is ignored, so an implementation that ignored only its local one is off by the parent's 30 units.",
   "generator": {
     "tool": "tools/gltf_fixtures",
     "version": 1,
@@ -32,7 +32,7 @@
     ],
     "features": [
       "skinned mesh node transform",
-      "mesh-space cancellation",
+      "mesh node transform ignored",
       "transformed ancestor above the mesh node",
       "JOINTS_0 / WEIGHTS_0"
     ],
@@ -431,31 +431,31 @@
             0.0,
             1.0,
             0.0,
-            -30.0,
             0.0,
-            -50.0,
+            0.0,
+            0.0,
             1.0
           ]
         }
       ],
       "skinnedPositions": [
         [
-          -30.0,
           0.0,
-          -50.0
+          0.0,
+          0.0
         ],
         [
-          -29.0,
-          0.0,
-          -50.0
-        ],
-        [
-          -30.0,
           1.0,
-          -50.0
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0
         ]
       ],
-      "note": "globalTransform(meshNode) is T(30,0,0) * T(0,0,50) -- the parent's transform is part of it. Cancelling only the node's own local transform leaves the mesh 30 units along +X, which looks like a rigging problem rather than a space error."
+      "note": "globalTransform(meshNode) is T(30,0,0) * T(0,0,50), and all of it is ignored -- the parent's transform is part of it. Ignoring only the node's own local transform leaves the mesh 30 units along +X, which looks like a rigging problem rather than a space error."
     }
   },
   "l5": {

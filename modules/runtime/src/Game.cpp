@@ -670,6 +670,13 @@ namespace Microsoft::Xna::Framework
 
     void Game::Tick()
     {
+        // XNA's Tick() begins with `if (ShouldExit) return;`: after Exit() a frame neither
+        // updates nor draws, whether the loop or a caller of Tick()/RunOneFrame() drives it.
+        if (!RunApplication)
+        {
+            return;
+        }
+
         CNA_DIAGNOSTICS_FRAME_SCOPE();
         CNA_PROFILE_SCOPE_CATEGORY("Game/Tick", CNA::Diagnostics::Category::Core);
         AdvanceElapsedTime();
@@ -702,7 +709,12 @@ namespace Microsoft::Xna::Framework
         {
             int stepCount = 0;
 
-            while (TimeSpanGreaterOrEqual(accumulatedElapsedTime_, TargetElapsedTime_))
+            // XNA's catch-up loop is `while (num > 0 && !ShouldExit)`: once an Update calls
+            // Exit(), or PollEvents() above handled a quit, the remaining fixed steps of this frame
+            // do not run. FNA keeps stepping (FNA/src/Game.cs:479), so a game exiting during a
+            // catch-up frame got further Updates after it had asked to stop.
+            while (RunApplication &&
+                   TimeSpanGreaterOrEqual(accumulatedElapsedTime_, TargetElapsedTime_))
             {
                 // XNA 4.0's own clock, measured against the real runtime rather than inherited
                 // from FNA: the game's FIRST update runs with a zero ElapsedGameTime, and
@@ -765,19 +777,23 @@ namespace Microsoft::Xna::Framework
             }
 
             accumulatedElapsedTime_ = System::TimeSpan::Zero;
-            AssertNotDisposed();
+            // XNA guards the variable step with `if (!ShouldExit)` for the same reason.
+            if (RunApplication)
             {
-                CNA_PROFILE_SCOPE_CATEGORY("Game/Update", CNA::Diagnostics::Category::Update);
-                Update(gameTime_);
-            }
-            CNA_DIAGNOSTICS_FRAME_COUNTER_ADD("Runtime/UpdateCount", 1);
+                AssertNotDisposed();
+                {
+                    CNA_PROFILE_SCOPE_CATEGORY("Game/Update", CNA::Diagnostics::Category::Update);
+                    Update(gameTime_);
+                }
+                CNA_DIAGNOSTICS_FRAME_COUNTER_ADD("Runtime/UpdateCount", 1);
 
-            // Same rule as the fixed path: TotalGameTime is the time before this step. Measured
-            // on the real XNA runtime with IsFixedTimeStep = false, where update 3 reports
-            // elapsed=0.0211 with total still 0 and update 4 reports total=0.0211.
-            gameTime_.setTotalGameTimeProperty(
-                gameTime_.getTotalGameTimeProperty() + gameTime_.getElapsedGameTimeProperty());
-            hasUpdatedOnce_ = true;
+                // Same rule as the fixed path: TotalGameTime is the time before this step.
+                // Measured on the real XNA runtime with IsFixedTimeStep = false, where update 3
+                // reports elapsed=0.0211 with total still 0 and update 4 reports total=0.0211.
+                gameTime_.setTotalGameTimeProperty(
+                    gameTime_.getTotalGameTimeProperty() + gameTime_.getElapsedGameTimeProperty());
+                hasUpdatedOnce_ = true;
+            }
         }
 
         if (suppressDraw_)
@@ -1163,7 +1179,7 @@ namespace Microsoft::Xna::Framework
             const auto stepSpan = System::TimeSpan::FromMilliseconds(targetMs);
 
             bool updated = false;
-            while (state.accumulatorMs >= targetMs)
+            while (state.game->RunApplication && state.accumulatorMs >= targetMs)
             {
                 state.accumulatorMs -= targetMs;
 

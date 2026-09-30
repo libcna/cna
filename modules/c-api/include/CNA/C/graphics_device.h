@@ -775,7 +775,8 @@ CNA_C_API CNA_Result cna_graphics_device_present(CNA_Handle graphics_device);
  * Every other route in this ABI hands out the Game's own device, borrowed for the duration of a
  * callback. This one creates an independent device with XNA's own constructor arguments, and the
  * caller destroys it with @ref cna_graphics_device_destroy. Several may exist at once, and one may
- * be destroyed while another is still live.
+ * be destroyed while another is still live. Several threads may create and destroy devices at the
+ * same time; building and tearing down the window, renderer and context is serialised inside CNA.
  *
  * The returned handle is accepted everywhere a borrowed device handle is, so resources are created
  * on it exactly as they are on a Game's device. Resources remember which device made them: mixing

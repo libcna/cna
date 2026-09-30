@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/SoundBank.hpp"
+#include "Internal/AudioLog.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioListener.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
@@ -13,7 +14,6 @@
 #include <algorithm>
 #include <chrono>
 #include <exception>
-#include <iostream>
 #include <vector>
 
 namespace Microsoft::Xna::Framework::Audio
@@ -57,15 +57,16 @@ namespace Microsoft::Xna::Framework::Audio
         try
         {
             auto xsb = CNA::Internal::Audio::ParseXsb(raw);
-            std::cerr << "[SoundBank] Loaded XSB: " << filename
-                      << " cues=" << xsb.cues.size()
-                      << " sounds=" << xsb.sounds.size() << "\n";
+            CNA::Internal::Audio::LogAudio(CNA::LogLevel::DEBUG,
+                "[SoundBank] Loaded XSB: ", filename, " cues=", xsb.cues.size(), " sounds=",
+                xsb.sounds.size());
             xactImpl_ = std::make_unique<XactSoundBankImpl>(std::move(xsb));
             engine_->RegisterSoundBank(this); // XA-8: lets AudioEngine::Dispose() cascade here
         }
         catch (const std::exception& ex)
         {
-            std::cerr << "[SoundBank] XSB parse error (" << filename << "): " << ex.what() << "\n";
+            CNA::Internal::Audio::LogAudio(CNA::LogLevel::ERROR,
+                "[SoundBank] XSB parse error (", filename, "): ", ex.what());
         }
     }
 

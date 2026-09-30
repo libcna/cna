@@ -37,6 +37,14 @@ include("${CMAKE_CURRENT_LIST_DIR}/SdlPrebuiltFingerprint.cmake")
 set(CNA_SDL3_PATCHES
     "${CMAKE_CURRENT_LIST_DIR}/patches/sdl-cbe3fbe9-0001-vulkan-defrag-barriers-f286e420.patch"
     "${CMAKE_CURRENT_LIST_DIR}/patches/sdl-cbe3fbe9-0002-vulkan-swapchain-barrier-fields-86296ac8.patch")
+# A CNA fix, not an upstream commit (SDL main still has the bug): the Emscripten video backend's
+# window teardown removed /tmp/filedrop unguarded, so destroying a second window on one page threw
+# ENOENT out of SDL_DestroyWindow (plans/plan_bindings_upstream.md BINDFIX-052). The file compiles
+# only for Emscripten, so it is carried only there and leaves the native build manifest unchanged.
+if(EMSCRIPTEN)
+    list(APPEND CNA_SDL3_PATCHES
+        "${CMAKE_CURRENT_LIST_DIR}/patches/sdl-cbe3fbe9-0003-emscripten-filedrop-rmdir.patch")
+endif()
 set(_cna_sdl_wayland_build_capable OFF)
 if(EMSCRIPTEN)
     if(CNA_ENABLE_EMSCRIPTEN_THREADS)
@@ -310,7 +318,19 @@ function(cna_configure_vendored_sdl)
     #
     # Every build tree on the machine shares this root, so two configures can reach this point at
     # once; the lock makes the second wait for the first and then find its result current.
-    file(MAKE_DIRECTORY "${CNA_SDL_PREBUILT_ROOT}")
+    #
+    # By default the root is inside the CNA checkout. A consumer whose checkout is read-only gets a
+    # message naming the option to move it, not a bare "failed to create directory".
+    execute_process(
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${CNA_SDL_PREBUILT_ROOT}"
+        RESULT_VARIABLE _cna_sdl_mkdir_result
+        OUTPUT_QUIET ERROR_QUIET)
+    if(NOT _cna_sdl_mkdir_result EQUAL 0)
+        message(FATAL_ERROR
+            "CNA: cannot create the SDL build cache ${CNA_SDL_PREBUILT_ROOT}. Every build tree "
+            "shares this directory, which defaults to one inside the CNA checkout. For a "
+            "read-only checkout pass -DCNA_SDL_PREBUILT_ROOT=<a writable directory>.")
+    endif()
     file(LOCK "${CNA_SDL_PREBUILT_ROOT}/.cna-prebuilt.lock" GUARD FUNCTION TIMEOUT 7200
         RESULT_VARIABLE _cna_sdl_lock_result)
     if(NOT _cna_sdl_lock_result EQUAL 0)
@@ -523,7 +543,9 @@ function(_cna_ensure_sdl_dep)
         RESULT_VARIABLE _rc
     )
     if(_rc)
-        message(FATAL_ERROR "CNA: ${_A_NAME} cmake configure failed (exit code ${_rc})")
+        message(FATAL_ERROR
+            "CNA: ${_A_NAME} cmake configure failed (exit code ${_rc}). On Linux the usual "
+            "cause is a missing development package; programs.md section 2 lists them.")
     endif()
 
     message(STATUS "CNA: Building ${_A_NAME}...")

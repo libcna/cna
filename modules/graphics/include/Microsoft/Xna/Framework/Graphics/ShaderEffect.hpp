@@ -27,9 +27,9 @@ namespace Microsoft::Xna::Framework::Graphics
     class TextureCube;
 
     /**
-     * @brief GLSL-source-based effect loaded from vertex and fragment shader strings.
-     *
-     * @note CNAEXT — not part of the XNA 4.0 API. CNA extension.
+     * @brief GLSL-source-based effect loaded from vertex and fragment shader strings. CNAEXT.
+     * @note The GLSL is compiled as written: on OpenGL it keeps GL's [-1, 1] clip depth, where the
+     *       stock effects match XNA's [0, 1] with `gl_Position.z = 2.0 * gl_Position.z - w`.
      */
     CNAEXT class ShaderEffect : public Effect, public IEffectMatrices
     {
@@ -109,7 +109,6 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         CNAEXT [[nodiscard]] CNA::ShaderLanguageEXT GetSelectedShaderLanguageEXT() const noexcept;
 
-        /** @brief Sets a column-major 4×4 matrix uniform by name. */
         /**
          * @brief Declares the std140 uniform block this effect's parameters live in. CNAEXT.
          *
@@ -129,6 +128,7 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT void DeclareUniformBlockEXT(int blockSizeBytes, const char* const* names,
                                            const int* offsets, int count);
 
+        /** @brief Sets a mat4 uniform from an XNA Matrix's fields M11..M44 in order (`&m.M11`). */
         CNAEXT void SetUniformMat4(const char* name, const float* matrix);
         /** @brief Sets a vec4 uniform by name (x, y, z, w). */
         CNAEXT void SetUniformVec4(const char* name, float x, float y, float z, float w);
@@ -171,7 +171,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param name     The uniform's name in the shader; the `[0]` spelling GLSL uses for the
          *                 first element is tried too, so either form works.
-         * @param matrices Pointer to @p count * 16 floats, column-major.
+         * @param matrices Pointer to @p count matrices, each laid out as for SetUniformMat4.
          * @param count    Number of matrices.
          */
         CNAEXT void SetUniformMat4Array(const char* name, const float* matrices, int count);

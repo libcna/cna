@@ -95,6 +95,19 @@ namespace CNA::Internal::Renderers
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    struct VertexPositionColor;
+    struct VertexPositionColorTexture;
+    struct VertexPositionNormalTexture;
+    struct VertexPositionTexture;
+
+    /** @brief The four stock vertex structures GraphicsDevice's typed user-draw overloads take. */
+    template <typename T>
+    inline constexpr bool IsStockUserVertexTypeEXT =
+        std::is_same_v<std::remove_cv_t<T>, VertexPositionColor> ||
+        std::is_same_v<std::remove_cv_t<T>, VertexPositionColorTexture> ||
+        std::is_same_v<std::remove_cv_t<T>, VertexPositionNormalTexture> ||
+        std::is_same_v<std::remove_cv_t<T>, VertexPositionTexture>;
+
     class GraphicsDevice : public System::Object, public System::IDisposable
     {
     public:
@@ -660,6 +673,25 @@ namespace Microsoft::Xna::Framework::Graphics
                                 int vertexOffset, int primitiveCount);
 
         /**
+         * @brief Refuses (deleted), at compile time, a pointer to a vertex structure this call cannot
+         * lay out.
+         *
+         * XNA's `DrawUserPrimitives<T>` reads the layout from `T`. With no VertexDeclaration
+         * argument, a pointer to anything but the four stock vertex structures would otherwise fall
+         * to the untyped overload, which assumes VertexPositionColor and draws any other structure
+         * as garbage (found through cna-car-simulator). Pass the structure's VertexDeclaration.
+         *
+         * @param primitiveType  The type of primitive to draw.
+         * @param vertexData     The vertices.
+         * @param vertexOffset   Starting vertex index.
+         * @param primitiveCount Number of primitives to draw.
+         */
+        template <typename T>
+            requires(!std::is_void_v<std::remove_cv_t<T>> && !IsStockUserVertexTypeEXT<T>)
+        void DrawUserPrimitives(PrimitiveType primitiveType, const T* vertexData, int vertexOffset,
+                                int primitiveCount) = delete;
+
+        /**
          * @brief Draws non-indexed primitives from a user-supplied raw vertex buffer with an
          *        explicit VertexDeclaration describing the vertex layout.
          *
@@ -874,6 +906,27 @@ namespace Microsoft::Xna::Framework::Graphics
         void DrawUserIndexedPrimitives(PrimitiveType primitiveType,
                                        const void* vertexData, int vertexOffset, int numVertices,
                                        const void* indexData, int indexOffset, int primitiveCount);
+
+        /**
+         * @brief Refuses (deleted), at compile time, a pointer to a vertex structure this call cannot
+         * lay out.
+         *
+         * The indexed counterpart of the DrawUserPrimitives refusal: without a VertexDeclaration a
+         * non-stock structure would fall to the untyped overload and be read as VertexPositionColor.
+         *
+         * @param primitiveType  The type of primitive to draw.
+         * @param vertexData     The vertices.
+         * @param vertexOffset   Starting vertex index.
+         * @param numVertices    Number of vertices referenced.
+         * @param indexData      The indices.
+         * @param indexOffset    Starting index.
+         * @param primitiveCount Number of primitives to draw.
+         */
+        template <typename T, typename TIndex>
+            requires(!std::is_void_v<std::remove_cv_t<T>> && !IsStockUserVertexTypeEXT<T>)
+        void DrawUserIndexedPrimitives(PrimitiveType primitiveType, const T* vertexData,
+                                       int vertexOffset, int numVertices, const TIndex* indexData,
+                                       int indexOffset, int primitiveCount) = delete;
         /**
          * @brief Draws indexed VertexPositionColor primitives from user-supplied arrays (16-bit indices).
          * @param primitiveType  The type of primitive to draw.

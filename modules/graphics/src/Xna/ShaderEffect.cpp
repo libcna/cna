@@ -6,7 +6,6 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Logger.hpp"
-#include <iostream>
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -21,7 +20,8 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             effectRenderer_ = device.renderer_->CreateEffectRenderer(vertSrc, fragSrc);
             if (effectRenderer_ && !effectRenderer_->IsValid())
-                std::cerr << "[ShaderEffect] Compile error: " << effectRenderer_->GetCompileError() << "\n";
+                CNA::Logger::Error("[ShaderEffect] Compile error: " + effectRenderer_->GetCompileError(),
+                                   CNA::LogCategory::RENDER);
         }
     }
 

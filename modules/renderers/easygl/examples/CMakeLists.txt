@@ -260,6 +260,18 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_PbrEffect_Golden COMMAND cna_test_easygl_pbreffect_golden
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # living-room-simulator's non-finite PBR pixels: a zero normal or tangent must not shade NaN.
+        cna_easygl_test(cna_test_easygl_pbr_degenerate_basis
+                        easygl_pbr_degenerate_basis_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_Pbr_DegenerateBasis COMMAND cna_test_easygl_pbr_degenerate_basis
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # living-room-simulator R-3: a double-sided material shades its back face with the normal reversed.
+        cna_easygl_test(cna_test_easygl_pbr_double_sided
+                        easygl_pbr_double_sided_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_Pbr_DoubleSided COMMAND cna_test_easygl_pbr_double_sided
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # PBR + skinning combo: SkinnedPbrEffect's shader (EnsurePbrSkinnedProgram()).
         cna_easygl_test(cna_test_easygl_skinnedpbreffect_golden
                         easygl_skinnedpbreffect_golden_test.cpp)
@@ -1153,6 +1165,21 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_easygl_test(cna_test_easygl_spritebatch_rendertarget_size
                         easygl_spritebatch_rendertarget_size_test.cpp)
         cna_register_renderer_test(NAME EasyGL_SpriteBatch_RenderTargetSize COMMAND cna_test_easygl_spritebatch_rendertarget_size
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        # cna-car-simulator stencil triage: Clear(Target|Stencil) must put StencilWriteMask back.
+        cna_easygl_test(cna_test_easygl_clear_restores_stencil_write_mask
+                        easygl_clear_restores_stencil_write_mask_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_Clear_RestoresStencilWriteMask COMMAND cna_test_easygl_clear_restores_stencil_write_mask
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        # living-room-simulator R-33: SamplerStates[n] reach a ShaderEffect's DrawIndexedPrimitives, per unit.
+        cna_easygl_test(cna_test_easygl_shadereffect_sampler_states
+                        easygl_shadereffect_sampler_states_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_ShaderEffect_SamplerStates COMMAND cna_test_easygl_shadereffect_sampler_states
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        # living-room-simulator R-23: SpriteBatch into a bound RenderTargetCube face.
+        cna_easygl_test(cna_test_easygl_spritebatch_rendertargetcube_face
+                        easygl_spritebatch_rendertargetcube_face_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_SpriteBatch_RenderTargetCubeFace COMMAND cna_test_easygl_spritebatch_rendertargetcube_face
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 419: SpriteBatch Draw sourceRectangle must crop, not stretch the whole texture

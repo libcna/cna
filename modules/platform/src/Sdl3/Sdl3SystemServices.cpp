@@ -4,11 +4,13 @@
 
 #include "CNA/Platform/PlatformException.hpp"
 #include "../Common/StandardFileSystem.hpp"
+#include "Sdl3Synchronization.hpp"
 #include "Sdl3Window.hpp"
 
 #include <algorithm>
 #include <cctype>
 #include <memory>
+#include <optional>
 
 #include <SDL3/SDL.h>
 
@@ -331,6 +333,13 @@ namespace CNA::Platform::Sdl3 {
 
     std::vector<DisplayInfo> Sdl3Displays::GetDisplays() const
     {
+        // SDL's display list is process-global and refreshed by these queries; unserialised, a
+        // device enumerating adapters on one thread corrupted another's (RUST-UPSTREAM-023).
+        std::optional<SdlGlobalStateLock> lock;
+        if (!SdlGlobalStateHeldByThisThread())
+        {
+            lock.emplace();
+        }
         int count = 0;
         SDL_DisplayID* ids = SDL_GetDisplays(&count);
         if (ids == nullptr)
@@ -390,6 +399,11 @@ namespace CNA::Platform::Sdl3 {
 
     std::vector<DisplayMode> Sdl3Displays::GetDisplayModes(const std::uint32_t displayId) const
     {
+        std::optional<SdlGlobalStateLock> lock;
+        if (!SdlGlobalStateHeldByThisThread())
+        {
+            lock.emplace();
+        }
         int count = 0;
         SDL_DisplayMode** modes = SDL_GetFullscreenDisplayModes(static_cast<SDL_DisplayID>(displayId), &count);
         if (modes == nullptr)
@@ -419,6 +433,11 @@ namespace CNA::Platform::Sdl3 {
     bool Sdl3Displays::TryGetCurrentDisplayMode(
         const std::uint32_t displayId, DisplayMode& mode) const
     {
+        std::optional<SdlGlobalStateLock> lock;
+        if (!SdlGlobalStateHeldByThisThread())
+        {
+            lock.emplace();
+        }
         const SDL_DisplayMode* current =
             SDL_GetCurrentDisplayMode(static_cast<SDL_DisplayID>(displayId));
         if (current == nullptr)

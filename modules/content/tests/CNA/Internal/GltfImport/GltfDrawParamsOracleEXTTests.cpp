@@ -860,10 +860,9 @@ TEST(GltfConformanceL6, AFreshlyLoadedSkinnedModelIsAlreadyPosedInItsBindPose)
     EXPECT_GT(skinnedFixtures, 0u) << "the corpus has no skinned fixture any more";
     // At least one corpus fixture must have a bind pose that differs from the identity default,
     // or the assertion above could pass on a model that was never posed at all. Deliberately a
-    // corpus-wide claim and not a per-fixture one: `skin-armature-ancestor`'s bind pose IS
-    // all-identity, and that is the whole point of GLTF-260 -- the armature ancestor's transform
-    // cancels out of the joint matrix. `skin-mesh-node-transform` is the one that cannot,
-    // because glTF requires the mesh node's own transform to be cancelled (section 3.7.3).
+    // corpus-wide claim and not a per-fixture one: a well-authored bind pose IS all-identity --
+    // `skin-armature-ancestor`'s armature transform cancels against its inverse bind matrix, and
+    // `skin-mesh-node-transform`'s mesh node is ignored (section 3.7.3.2).
     EXPECT_TRUE(anyFixtureHasANonIdentityBindPose)
         << "no skinned fixture has a non-identity bind pose, so this test can no longer tell a "
            "posed model from an unposed one";

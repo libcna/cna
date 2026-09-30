@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
+#include "Internal/AudioLog.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioListener.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundBank.hpp"
@@ -14,7 +15,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <iostream>
 #include <numbers>
 #include <random>
 #include <utility>
@@ -1092,16 +1092,18 @@ namespace Microsoft::Xna::Framework::Audio
             WaveBank* wb = wbName.empty() ? nullptr : eng->FindWaveBank(wbName);
             if (!wb)
             {
-                std::cerr << "[Cue] \"" << getNameProperty() << "\" could not find wave bank \""
-                          << wbName << "\" for wave " << effectiveWaveIndex << " -- skipping\n";
+                CNA::Internal::Audio::LogAudio(CNA::LogLevel::WARN,
+                    "[Cue] \"", getNameProperty(), "\" could not find wave bank \"", wbName,
+                    "\" for wave ", effectiveWaveIndex, " -- skipping");
                 continue;
             }
 
             const SoundEffect* sf = wb->GetSoundEffect(effectiveWaveIndex);
             if (!sf)
             {
-                std::cerr << "[Cue] \"" << getNameProperty() << "\" wave " << effectiveWaveIndex
-                          << " in bank \"" << wbName << "\" failed to load -- skipping\n";
+                CNA::Internal::Audio::LogAudio(CNA::LogLevel::WARN,
+                    "[Cue] \"", getNameProperty(), "\" wave ", effectiveWaveIndex, " in bank \"",
+                    wbName, "\" failed to load -- skipping");
                 continue;
             }
 
