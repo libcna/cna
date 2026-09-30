@@ -78,6 +78,19 @@ TEST(AvatarCatalogTest, CatalogV2IsFrozen) {
     EXPECT_EQ(v2->authoredHeightMillimeters[1], 1800);
 }
 
+TEST(AvatarCatalogTest, CatalogV3IsFrozen) {
+    // Released in next on 2026-09-30: profiles and accounts name catalog 3 and a service refuses a
+    // different catalog under an imported version, so it never changes. New art goes into catalog 4.
+    const auto& files = Avatars::embeddedCatalogFiles();
+    auto manifest = std::find_if(files.begin(), files.end(), [](const auto& file) { return std::string_view(file.name) == "v3/catalog.json"; });
+    ASSERT_NE(manifest, files.end());
+    EXPECT_EQ(Avatars::sha256Hex(manifest->bytes()), "5c347f38cbadce2a77b6766f3339b480623bf2b2f81ec1318669e97eb751a0af");
+    const auto v3 = Avatars::embeddedManifest(3);
+    ASSERT_NE(v3, nullptr);
+    EXPECT_EQ(v3->items.size(), 39u);
+    EXPECT_EQ(v3->featureItems.size(), 4u);
+}
+
 TEST(AvatarCatalogTest, EmbeddedAssetsResolveByContentNotByName) {
     const auto v1 = Avatars::embeddedManifest(1);
     // A manifest naming "body.female.glb" with the male body's contents gets the male body; one
