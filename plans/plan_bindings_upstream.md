@@ -667,8 +667,8 @@ first.
 - **BINDFIX-048** — `cna-python`: `cnb.h` said `CNA_CNB_SOUND_EFFECT_SCHEMA_VERSION` is `1` and that
   the WAV importer refuses 24/32-bit and float, while the library has written schema 2 (8-bit PCM)
   since XNASWEEP-197 and narrows those widths to 16-bit. Constant and text corrected within 0.35.0;
-  the baseline change is recorded in `ABI_VERSIONING.md` for owner review. Pinned by
-  `AbiHeaderC.c` and `CApiAbiBaseline`.
+  the baseline change is recorded in `ABI_VERSIONING.md`, approved by the owner (2026-09-30).
+  Pinned by `AbiHeaderC.c` and `CApiAbiBaseline`.
 - **BINDFIX-050** — `RUST-UPSTREAM-023`: six threads creating and destroying standalone devices at
   once aborted 28 of 40 runs on OPENGLES3 (heap corruption, occasionally a stall). Five unguarded
   process-wide paths, found one backtrace at a time: the preset state objects' shared identity

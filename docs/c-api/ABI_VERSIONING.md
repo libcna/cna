@@ -8,13 +8,13 @@ lines had each used 0.33.0 for a different change, so the merged ABI takes a num
 holds all three changes described below and exports 3,202 routes; nothing else changes. A binding
 built against either earlier 0.33.0 or against 0.34.0 must rebuild against these headers.
 
-### A correction within 0.35.0 (BINDFIX-048, for owner review)
+### A correction within 0.35.0 (BINDFIX-048)
 
 `CNA_CNB_SOUND_EFFECT_SCHEMA_VERSION` said `1` while the library had read and written `SoundEffect`
 schema `2` (8-bit PCM) since `XNASWEEP-197` (2026-09-10); it now says `2`. The baseline records this
 as a changed constant. No version moved: every 0.35.0 library already behaves as schema 2, so the
-old value could only make a consumer refuse files CNA itself wrote. Flagged for the owner because
-the policy below asks for an approved break.
+old value could only make a consumer refuse files CNA itself wrote. The policy below asks for an
+approved break; the owner approved it on 2026-09-30 as a correction within 0.35.0.
 
 ### 0.34.0 on `feature/gamer-services-server`
 
