@@ -679,6 +679,15 @@ first.
 - **BINDFIX-049** — `net.h` still described `cna_packet_reader_read_color` as reading four floats and
   the pair as deliberately asymmetric; BINDFIX-022 had made them inverses. Documentation only
   (reported by `cna-python`).
+- **BINDFIX-052** — `cna-ts` finding 32: on WebAssembly a caller-created `GraphicsDevice` made and
+  destroyed while a Game was alive left the Game undestroyable -- `cna_game_destroy` threw
+  Emscripten's `ErrnoError` (ENOENT) instead of returning. Each device is an SDL window on the same
+  page; SDL's Emscripten backend creates the shared `/tmp/filedrop` drop directory inside a `try`
+  but removed it unguarded, so the second window torn down threw out of `SDL_DestroyWindow`. CNA
+  carries an Emscripten-only SDL patch guarding the removal as setup already does
+  (`cmake/patches/sdl-cbe3fbe9-0003-emscripten-filedrop-rmdir.patch`; SDL `main` still has the
+  bug). Pinned by the twelfth check of `modules/c-api/wasm/browser_probe.html`
+  (`CApi_WasmBrowserProbe`), which fails 11/12 against the previous module.
 
 ---
 

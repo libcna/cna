@@ -37,6 +37,14 @@ include("${CMAKE_CURRENT_LIST_DIR}/SdlPrebuiltFingerprint.cmake")
 set(CNA_SDL3_PATCHES
     "${CMAKE_CURRENT_LIST_DIR}/patches/sdl-cbe3fbe9-0001-vulkan-defrag-barriers-f286e420.patch"
     "${CMAKE_CURRENT_LIST_DIR}/patches/sdl-cbe3fbe9-0002-vulkan-swapchain-barrier-fields-86296ac8.patch")
+# A CNA fix, not an upstream commit (SDL main still has the bug): the Emscripten video backend's
+# window teardown removed /tmp/filedrop unguarded, so destroying a second window on one page threw
+# ENOENT out of SDL_DestroyWindow (plans/plan_bindings_upstream.md BINDFIX-052). The file compiles
+# only for Emscripten, so it is carried only there and leaves the native build manifest unchanged.
+if(EMSCRIPTEN)
+    list(APPEND CNA_SDL3_PATCHES
+        "${CMAKE_CURRENT_LIST_DIR}/patches/sdl-cbe3fbe9-0003-emscripten-filedrop-rmdir.patch")
+endif()
 set(_cna_sdl_wayland_build_capable OFF)
 if(EMSCRIPTEN)
     if(CNA_ENABLE_EMSCRIPTEN_THREADS)

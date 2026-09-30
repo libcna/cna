@@ -1,0 +1,28 @@
+From: Robert Vokac <robertvokac@robertvokac.com>
+Date: Wed, 30 Sep 2026 12:00:00 +0200
+Subject: [PATCH] emscripten: tolerate a missing /tmp/filedrop when a window is
+ destroyed
+
+Emscripten_set_drag_event_callbacks creates /tmp/filedrop inside a try/catch,
+so every window shares the directory, but Emscripten_unset_drag_event_callbacks
+removes it unguarded. With two windows on one page the first destroy removes
+the directory and the second destroy's FS.rmdir throws ErrnoError(ENOENT) out
+of MAIN_THREAD_EM_ASM into whatever called SDL_DestroyWindow.
+
+Not an upstream commit: SDL main still has the unguarded rmdir (checked
+2026-09-30). Carried by CNA (plans/plan_bindings_upstream.md BINDFIX-052).
+---
+diff --git a/src/video/emscripten/SDL_emscriptenevents.c b/src/video/emscripten/SDL_emscriptenevents.c
+--- a/src/video/emscripten/SDL_emscriptenevents.c
++++ b/src/video/emscripten/SDL_emscriptenevents.c
+@@ -1253,7 +1253,9 @@
+                 FS.rmdir(dirpath);
+             }("/tmp/filedrop");
+ 
+-            FS.rmdir("/tmp/filedrop");
++            // Every window's setup shares this one directory and ignores FS errors; teardown has to
++            // do the same, or the second window destroyed throws ENOENT out of this block.
++            try { FS.rmdir("/tmp/filedrop"); } catch (e) {}
+             target.removeEventListener("dragover", SDL3.eventHandlerDropDragover);
+             SDL3.eventHandlerDropDragover = undefined;
+             SDL3.eventHandlerDropDrop = undefined;

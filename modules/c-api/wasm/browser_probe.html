@@ -20,7 +20,7 @@
 // Reports in the same shape as every other CNA browser page, so
 // scripts/run_browser_tests.mjs runs it unchanged.
 const requestedFrames = Number(new URLSearchParams(location.search).get('frames') || 5);
-const EXPECTED = 11;
+const EXPECTED = 12;
 let passed = 0;
 const out = document.getElementById('out');
 const canvas = document.getElementById('canvas');
@@ -212,6 +212,55 @@ try {
         cna._free(clearColor);
         cna.removeFunction(draw);
         cna.removeFunction(update);
+    }
+
+    // BINDFIX-052: a caller-created GraphicsDevice made and destroyed while a Game is alive is a
+    // second SDL window on this page. Its teardown removed the drop directory both windows share,
+    // so the Game's own teardown threw ENOENT out of cna_game_destroy instead of returning.
+    const standalone = {};
+    const loadContent = cna.addFunction((game, gameTime, context, outError) => {
+        void game; void gameTime; void context; void outError;
+        const parameters = cna._malloc(44);
+        const deviceOut = cna._malloc(8);
+        try {
+            cna.HEAPU8.fill(0, parameters, parameters + 44);
+            cna.HEAPU32[parameters >> 2] = 44;
+            cna.HEAPU32[(parameters >> 2) + 1] = 1;
+            cna.setValue(deviceOut, 0n, 'i64');
+            standalone.init = cna._cna_presentation_parameters_init(parameters);
+            standalone.create = cna._cna_graphics_device_create(0, 0, parameters, deviceOut);
+            standalone.destroy = cna._cna_graphics_device_destroy(cna.getValue(deviceOut, 'i64'));
+        } finally { cna._free(deviceOut); cna._free(parameters); }
+        return 0;
+    }, 'ijiii');
+    const secondCallbacks = cna._malloc(32);
+    const secondInfo = cna._malloc(48);
+    const secondOut = cna._malloc(8);
+    try {
+        cna.HEAPU8.fill(0, secondCallbacks, secondCallbacks + 32);
+        cna.HEAPU32[secondCallbacks >> 2] = 32;
+        cna.HEAPU32[(secondCallbacks >> 2) + 1] = 1;
+        cna.HEAPU32[(secondCallbacks >> 2) + 2] = loadContent;
+        cna.HEAPU8.fill(0, secondInfo, secondInfo + 48);
+        cna.HEAPU32[secondInfo >> 2] = 48;
+        cna.HEAPU32[(secondInfo >> 2) + 1] = 1;
+        cna.setValue(secondInfo + 16, 166667n, 'i64');
+        cna.HEAPU32[(secondInfo + 40) >> 2] = secondCallbacks;
+        cna.setValue(secondOut, 0n, 'i64');
+        standalone.gameCreate = cna._cna_game_create(secondInfo, secondOut);
+        const secondGame = cna.getValue(secondOut, 'i64');
+        standalone.frame = cna._cna_game_run_one_frame(secondGame);
+        try { standalone.gameDestroy = cna._cna_game_destroy(secondGame); }
+        catch (error) { standalone.gameDestroy = `threw ${error?.name} errno=${error?.errno}`; }
+        check('a Game outlives a caller-created device made and destroyed in its load_content',
+              standalone.gameCreate === 0 && standalone.create === 0 && standalone.destroy === 0 &&
+                  standalone.frame === 0 && standalone.gameDestroy === 0,
+              JSON.stringify(standalone));
+    } finally {
+        cna._free(secondOut);
+        cna._free(secondInfo);
+        cna._free(secondCallbacks);
+        cna.removeFunction(loadContent);
     }
 } catch (error) {
     say(`[FAIL] the probe threw: ${error && error.stack ? error.stack : error}`);
