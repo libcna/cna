@@ -367,7 +367,7 @@
         ],
         "vertexBufferFile": "morph-zero-weights.vb.bin",
         "vertexBufferBytes": 144,
-        "vertexBufferSha256": "596d55ababd79c382727b38674754a611388b5f8265007111bab8dd4cd094862",
+        "vertexBufferSha256": "fc374cada6b97ce82600919a58678c85a69fa413ee32b93fbf69c6ee9069473d",
         "indexElementSize": 2,
         "indexCount": 3,
         "indexBufferFile": "morph-zero-weights.ib.bin",

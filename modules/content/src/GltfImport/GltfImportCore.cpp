@@ -931,7 +931,19 @@ namespace CNA::Internal::GltfImport
                                                    : Vector3(normals[o], normals[o + 1], normals[o + 2]);
                 Vector3 t = tanAccum[v] - n * Vector3::Dot(n, tanAccum[v]);
                 const float len = t.Length();
-                Vector3 tOrtho = (len > 1e-8f) ? Vector3(t.X / len, t.Y / len, t.Z / len) : Vector3(1.0f, 0.0f, 0.0f);
+                Vector3 tOrtho = (len > 1e-8f) ? Vector3(t.X / len, t.Y / len, t.Z / len) : Vector3();
+                if (len <= 1e-8f)
+                {
+                    // No UV-bearing triangle reached this vertex. Any unit vector perpendicular to
+                    // the normal will do, but it must be perpendicular: a fixed (1,0,0) is the
+                    // normal itself on a +-X face, and the shader's Gram-Schmidt step then
+                    // normalises a zero vector into NaN (living-room-simulator R-1).
+                    const Vector3 axis = std::fabs(n.X) < 0.9f ? Vector3(1.0f, 0.0f, 0.0f)
+                                                               : Vector3(0.0f, 1.0f, 0.0f);
+                    const Vector3 o = axis - n * Vector3::Dot(n, axis);
+                    const float oLen = o.Length();
+                    tOrtho = Vector3(o.X / oLen, o.Y / oLen, o.Z / oLen);
+                }
                 const float handedness = (Vector3::Dot(Vector3::Cross(n, tOrtho), bitanAccum[v]) < 0.0f) ? -1.0f : 1.0f;
                 result[v] = Vector4(tOrtho.X, tOrtho.Y, tOrtho.Z, handedness);
             }

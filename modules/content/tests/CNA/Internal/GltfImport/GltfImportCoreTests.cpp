@@ -239,6 +239,38 @@ namespace
   ]
 })GLTF";
 
+    // living-room-simulator R-1: every UV equal, so no triangle yields a tangent and each vertex
+    // takes the fallback -- and every normal is +X, the axis the old fallback (1,0,0) lay along.
+    const char* kDegenerateUvXNormalGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "mesh": 0 } ],
+  "meshes": [ { "primitives": [ { "attributes": {
+      "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2
+  }, "indices": 3, "material": 0 } ] } ],
+  "materials": [ { "normalTexture": { "index": 0 } } ],
+  "textures": [ { "source": 0 } ],
+  "images": [ { "bufferView": 4, "mimeType": "image/png" } ],
+  "buffers": [ {
+    "byteLength": 173,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAAAAPwAAAD8AAAA/AAAAPwAAAD8AAAA/AAABAAIAAACJUE5HDQoaCgAAAA1JSERSAAAAAQAAAAEIAgAAAJB3U94AAAAMSURBVHicY/jPwAAAAwEBAMn+ku8AAAAASUVORK5CYII="
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,   "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 72,  "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 96,  "byteLength": 6 },
+    { "buffer": 0, "byteOffset": 104, "byteLength": 69 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [0,1,1] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC2" },
+    { "bufferView": 3, "componentType": 5123, "count": 3, "type": "SCALAR" }
+  ]
+})GLTF";
+
     // GLTF-179: two triangles meet along a data-identical but separately indexed edge. Their UV
     // gradients produce tangents +X and normalize((1,10,0)) respectively. CNA owns one tangent per
     // glTF vertex, so it keeps those two bases separate; reference MikkTSpace internally welds the
@@ -503,6 +535,29 @@ TEST(GltfImportCoreTest, ComputeTangentsEXTAngleWeightsTriangleContributions)
     EXPECT_NEAR(tangent[1], 0.40639884f, 1e-4f);
     EXPECT_NEAR(tangent[2], 0.0f, 1e-4f);
     EXPECT_FLOAT_EQ(tangent[3], 1.0f); // handedness
+}
+
+TEST(GltfImportCoreTest, ComputeTangentsEXTFallbackIsPerpendicularToTheNormal)
+{
+    // living-room-simulator R-1: a vertex no UV-bearing triangle reaches used to get (1,0,0)
+    // whatever its normal, which is the normal itself here; the shader's Gram-Schmidt step then
+    // normalises a zero vector and the surface shades as NaN.
+    const MeshOut out = ExtractPrimitive0(kDegenerateUvXNormalGltf);
+    ASSERT_TRUE(out.usePbr);
+    ASSERT_EQ(out.stride, 48);
+    ASSERT_EQ(out.vertexBytes.size(), 3u * 48u);
+    for (std::size_t vertex = 0; vertex < 3u; ++vertex)
+    {
+        float normal[3];
+        float tangent[4];
+        std::memcpy(normal, out.vertexBytes.data() + vertex * 48u + 12u, sizeof(normal));
+        std::memcpy(tangent, out.vertexBytes.data() + vertex * 48u + 24u, sizeof(tangent));
+        const float length = std::sqrt(tangent[0] * tangent[0] + tangent[1] * tangent[1] +
+                                       tangent[2] * tangent[2]);
+        const float dot = normal[0] * tangent[0] + normal[1] * tangent[1] + normal[2] * tangent[2];
+        EXPECT_NEAR(length, 1.0f, 1e-5f) << "vertex " << vertex;
+        EXPECT_NEAR(dot, 0.0f, 1e-5f) << "vertex " << vertex << ": the tangent is not perpendicular";
+    }
 }
 
 TEST(GltfImportCoreTest, GeneratedTangentsHaveAQuantifiedMikkTSpaceWeldDivergence)

@@ -303,7 +303,7 @@
         ],
         "vertexBufferFile": "normalized-i8-normal.vb.bin",
         "vertexBufferBytes": 144,
-        "vertexBufferSha256": "3ca1c02f8e24cdf74cda1388017ebd650fa16bcbfe6dd5b7b35052a68abe9d43",
+        "vertexBufferSha256": "11fbdc7a6ce5c503f6040ffce889e65ac0039b1477734a19c22e55f24fa9daec",
         "indexElementSize": 2,
         "indexCount": 3,
         "indexBufferFile": "normalized-i8-normal.ib.bin",
