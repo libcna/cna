@@ -358,6 +358,25 @@ namespace
 
         ExpectSkinningEquivalent(dynamic_cast<SkinningData*>(expected.getTagProperty()),
                                  dynamic_cast<SkinningData*>(actual.getTagProperty()));
+
+        // cna-street's CNASTREET-SKINMETA: a compiled model lists its skin through SkinsEXT as
+        // the runtime glTF path does -- the Tag's SkinningData, driving the same meshes.
+        const auto* skinning = dynamic_cast<SkinningData*>(actual.getTagProperty());
+        ASSERT_EQ(actual.getSkinsEXTProperty().size(), skinning != nullptr ? 1u : 0u)
+            << "SkinsEXT must list a compiled model's skin";
+        ASSERT_EQ(actual.getSkinsEXTProperty().size(), expected.getSkinsEXTProperty().size());
+        for (std::size_t s = 0; s < actual.getSkinsEXTProperty().size(); ++s)
+        {
+            const auto& e = expected.getSkinsEXTProperty()[s];
+            const auto& a = actual.getSkinsEXTProperty()[s];
+            EXPECT_EQ(a.Data, skinning) << "SkinsEXT's skin is the Tag's SkinningData";
+            ASSERT_EQ(a.Meshes.size(), e.Meshes.size()) << "skin " << s << " mesh count";
+            for (std::size_t m = 0; m < a.Meshes.size(); ++m)
+            {
+                EXPECT_EQ(a.Meshes[m]->getNameProperty(), e.Meshes[m]->getNameProperty())
+                    << "skin " << s << " mesh " << m;
+            }
+        }
     }
 
     /// Converts one corpus fixture with the real glTF tool, compiles the result to .cnb, then
@@ -428,6 +447,27 @@ TEST(CnbModelEquivalenceTest, ARealSkinnedFixtureLoadsIdenticallyFromCnjAndFromC
         GTEST_SKIP() << "the skin-four-weighted fixture is not present";
     }
     CompareBothPathsForFixture(fixture, "skin");
+}
+
+// BINDFIX-035 / cna-street's CNASTREET-SKINMETA: the checked-in compiled skinned model lists its
+// skin through SkinsEXT -- the Tag's SkinningData, driving the model's skinned mesh.
+TEST(CnbModelEquivalenceTest, ACheckedInSkinnedCnbPublishesItsSkin)
+{
+    const std::filesystem::path dir = std::filesystem::path("tests") / "assets" / "cnb" / "skinned";
+    if (!std::filesystem::exists(dir / "skinned_model.cnb"))
+    {
+        GTEST_SKIP() << "the skinned .cnb fixture is not present (run from the source root)";
+    }
+    GraphicsDevice device;
+    ContentManager manager(nullptr, dir.string());
+    manager.setGraphicsDevice(device);
+    const Model model = manager.Load<Model>("skinned_model");
+
+    const auto* skinning = dynamic_cast<SkinningData*>(model.getTagProperty());
+    ASSERT_NE(skinning, nullptr);
+    ASSERT_EQ(model.getSkinsEXTProperty().size(), 1u);
+    EXPECT_EQ(model.getSkinsEXTProperty()[0].Data, skinning);
+    EXPECT_FALSE(model.getSkinsEXTProperty()[0].Meshes.empty());
 }
 
 TEST(CnbModelEquivalenceTest, ARepresentativeSliceOfTheCorpusLoadsIdenticallyBothWays)

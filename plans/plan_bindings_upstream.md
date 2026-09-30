@@ -450,6 +450,11 @@ at.
 
 ## BINDFIX-035 — a `.cnb` model carries its skeleton and publishes no skins
 
+**Status: fixed by `fix(CNASTREET-SKINMETA)` (cna-street's GLTF-207, 2026-09-30).** A compiled
+`.cnj` or `.cnb` model lists its one skin -- the `Tag`'s `SkinningData`, driving the meshes whose
+vertices carry `BlendIndices` -- so `skinned_model.cnb` now answers 1. A skin's name still has no
+place in the format and stays empty.
+
 Found while adding the skinned content asset the owner asked for. `cna_tool_gltf_to_cnb`
 compiles `tests/assets/gltf/skin-four-weighted.gltf` into a model whose container holds an
 `MSKL` chunk of 792 bytes -- `cna_tool_cnb_info` lists it beside `MBON`, `MMSH` and the

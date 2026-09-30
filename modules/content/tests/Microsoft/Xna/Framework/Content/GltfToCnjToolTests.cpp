@@ -1351,6 +1351,15 @@ TEST(GltfToCnjToolTest, ImportsAllSkinsAsSeparateModels)
     ASSERT_NE(dataB, nullptr);
     EXPECT_EQ(dataA->BoneCount, 1);
     EXPECT_EQ(dataB->BoneCount, 1);
+    // cna-street's CNASTREET-SKINMETA: each compiled single-skin model lists that skin through
+    // SkinsEXT too, driving its one skinned mesh, as the direct load below does.
+    for (const Model* compiled : {&modelA, &modelB})
+    {
+        const std::vector<ModelSkinEXT>& compiledSkins = compiled->getSkinsEXTProperty();
+        ASSERT_EQ(1u, compiledSkins.size());
+        EXPECT_EQ(compiled->getTagProperty(), compiledSkins[0].Data);
+        EXPECT_EQ(1u, compiledSkins[0].Meshes.size());
+    }
 
     // GLTF-265's runtime half: one direct Load<Model>() must retain both skins rather than
     // silently dropping every group after the first. Model::Tag remains the first SkinningData

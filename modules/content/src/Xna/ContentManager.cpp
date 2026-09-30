@@ -2041,6 +2041,40 @@ namespace Microsoft::Xna::Framework::Content
         }
 
         /**
+         * @brief Publishes a compiled model's one skeleton through Model::SkinsEXT as well as Tag.
+         *
+         * A `.cnj` or `.cnb` model carries at most one skeleton, and the runtime glTF path already
+         * lists its skins here (cna-street's CNASTREET-SKINMETA; BINDFIX-035). The skin drives the
+         * meshes whose vertices carry BlendIndices, which are the ones that consume its palette.
+         */
+        void SetCompiledModelSkinEXT(Graphics::Model& model, Graphics::SkinningData& data)
+        {
+            Graphics::ModelSkinEXT skin;
+            skin.Data = &data;
+            auto& meshes = model.getMeshesProperty();
+            for (int m = 0; m < meshes.getCountProperty(); ++m)
+            {
+                Graphics::ModelMesh* mesh = meshes[m];
+                auto& parts = mesh->getMeshPartsProperty();
+                for (int p = 0; p < parts.getCountProperty(); ++p)
+                {
+                    const Graphics::VertexBuffer* vb = parts[p]->getVertexBufferProperty();
+                    if (vb == nullptr) { continue; }
+                    const auto& elements = vb->getVertexDeclarationProperty().GetVertexElements();
+                    if (std::any_of(elements.begin(), elements.end(), [](const auto& element) {
+                            return element.getVertexElementUsageProperty() ==
+                                   Graphics::VertexElementUsage::BlendIndices;
+                        }))
+                    {
+                        skin.Meshes.push_back(mesh);
+                        break;
+                    }
+                }
+            }
+            model.setSkinsEXTProperty({std::move(skin)});
+        }
+
+        /**
          * @brief Gives an untextured glTF SkinnedEffect material glTF's white base-colour texture.
          *
          * glTF defines a missing baseColorTexture as a white multiplier of baseColorFactor. XNA's
@@ -5174,6 +5208,7 @@ namespace Microsoft::Xna::Framework::Content
                 // model is not merely unanimated, it is wrong.
                 if (res->skinningData)
                 {
+                    SetCompiledModelSkinEXT(model, *res->skinningData);
                     Graphics::ApplyBindPoseBoneTransformsEXT(model, *res->skinningData);
                 }
                 model.setGltfImportReportEXTProperty(std::move(gltfImportReport));
@@ -5539,6 +5574,7 @@ namespace Microsoft::Xna::Framework::Content
             else if (res->modelAnimations) { model.setTagProperty(res->modelAnimations.get()); }
             if (res->skinningData)
             {
+                SetCompiledModelSkinEXT(model, *res->skinningData);
                 Graphics::ApplyBindPoseBoneTransformsEXT(model, *res->skinningData);
             }
             return model;
