@@ -20,13 +20,13 @@ typedef CNA_Handle CNA_NetworkMachineHandle;
  *
  * @param session Owning session handle, or `CNA_INVALID_HANDLE` for a gamer with no session.
  * @param gamertag UTF-8 gamertag copied during this call; an empty view selects the canonical
- * default.
+ * placeholder ("Stub Gamer") for a gamer without an identity.
  * @param out_gamer Receives an owned gamer handle on success.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_ENCODING` for invalid UTF-8, or a documented
  * argument/handle/thread/native failure.
  *
- * Session handles arrive with the session slice; until then only `CNA_INVALID_HANDLE` is accepted
- * and any other value is refused as an invalid handle.
+ * A session handle binds the gamer to that session; any other value is refused as an invalid
+ * handle.
  */
 CNA_C_API CNA_Result cna_network_gamer_create(
     CNA_Handle session,

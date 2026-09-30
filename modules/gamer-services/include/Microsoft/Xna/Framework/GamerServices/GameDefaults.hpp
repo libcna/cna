@@ -11,9 +11,9 @@ namespace Microsoft::Xna::Framework::GamerServices
 {
     /**
      * @brief Stores the default game preferences for a signed-in gamer. A local profile takes them
-     * from the `gameDefaults` object of its store entry; a CNA account, which has no such
-     * settings, reports what XNA reports for a profile that never set them (each enumeration's
-     * first member, no colors, false).
+     * from the `gameDefaults` object of its store entry, a CNA account from its service
+     * (`profile.gameDefaults`); a field never set reports what XNA reports for a profile that never
+     * set it (each enumeration's first member, no colors, false).
      */
     class GameDefaults
     {

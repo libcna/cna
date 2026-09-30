@@ -1,11 +1,13 @@
 # Gamer services in the C API
 
-Gamer services is the last module the binding covers, and the one where the honest answer differs
-most from what the canonical API describes. **On every verification tree there is no signed-in gamer
-and no live service.** Where the canonical API answers a value, the C route answers an ordinary
-success with the flag clear; where it throws, the C route reports a documented refusal. Neither
-pretends a gamer exists. That is the same rule the absent compass and the absent microphone already
-follow: availability is separate from the answer.
+Every route forwards to the canonical GamerServices implementation. With a configured CNA account
+service (`docs/gamer-services-server.md`) gamers sign in and their profiles, lookups, friends,
+achievements, leaderboards, avatars and Guide pages are real; without one, players are local offline
+profiles. **The C API verification trees run with no service and, mostly, with nobody signed in**, so
+their smoke tests pin the answers of that configuration: where the canonical API answers a value, the
+C route answers an ordinary success with the flag clear; where it throws, the C route reports a
+documented refusal. Neither pretends a gamer exists. What remains unsupported is listed in
+[`docs/gamer-services-known-limitations.md`](../gamer-services-known-limitations.md).
 
 ## Identities come first, because they need nothing
 
@@ -80,15 +82,16 @@ value.
 
 ### Asynchronous routes are one call that still runs the callback
 
-The canonical API pairs `GetX` with `BeginGetX`/`EndGetX`, and every one of those operations here
-**completes before `Begin` returns**. So each pair is one C route that produces the answer and then
-invokes the completion callback, and the callback receives only the caller's context: no operation
-object crosses this ABI. Passing a null callback is fine when the caller only wants the answer.
+The canonical API pairs `GetX` with `BeginGetX`/`EndGetX`. Each pair is **one C route that waits for
+the answer** -- a service operation completes at a `GamerServicesDispatcher.Update`, which the
+canonical End wait pumps -- and then invokes the completion callback, which receives only the caller's
+context: no operation object crosses this ABI. Passing a null callback is fine when the caller only
+wants the answer.
 
-Two of those operations cannot succeed at all: **looking a gamer up by tag and requesting a partner
-token both answer `CNA_RESULT_NOT_SUPPORTED`**, because the canonical implementations refuse outright
-on every runtime this ABI builds on. The refusal is the answer rather than a gap, and the callback
-does not run when the operation is refused.
+**Requesting a partner token always answers `CNA_RESULT_NOT_SUPPORTED`** (CNA issues no Xbox LIVE
+partner tokens). **Looking a gamer up by tag** is a real service lookup, and answers
+`CNA_RESULT_NOT_SUPPORTED` only without a service, where offline profiles have no directory. The
+callback does not run when the operation is refused.
 
 ### Values, and one object that earns a handle
 
@@ -96,14 +99,14 @@ Presence and privileges are fixed values read from a gamer. Presence is written 
 because the canonical API hands out a mutable object rather than taking a new one. The privileges keep
 the canonical shape rather than flattening it: three of the seven are graded — communication, profile
 viewing and user-created content each answer *how widely* — and four are yes-or-no.
-`cna_signed_in_gamer_set_presence_mode_string_ext` is the exception that carries no information: the
-canonical extension accepts the text and **stores nothing**, and the test asserts the structured
-presence is unchanged afterwards so the no-op is visible rather than assumed.
+`cna_signed_in_gamer_set_presence_mode_string_ext` sets free presence text, which friends see in place
+of a mode's text once the next Dispatcher update publishes it to the service.
 
 A **profile** earns a handle, because it is disposable and carries a stream. Its numbers are one
 snapshot; its motto and its region *name* are count/copy pairs. The gamer picture follows the
-availability-separate-from-the-answer rule and is never present here: a clear flag and a zero size,
-reported as an ordinary success.
+availability-separate-from-the-answer rule: a service profile's picture is retrieved and cached by the
+runtime and copied out whole; without one the answer is a clear flag and a zero size, an ordinary
+success.
 
 ### Friends, and the collection that holds them
 
@@ -112,11 +115,11 @@ routes refuse an ordinary gamer. Its twelve predicates are one snapshot. **A fri
 text while a signed-in gamer's is a mode and a value** — a canonical asymmetry, preserved rather than
 evened out.
 
-No runtime this ABI builds on has a friend service, so `cna_signed_in_gamer_get_friends` answers an
-**empty collection**, which is a success and not a refusal, and `cna_signed_in_gamer_is_friend` always
-answers negatively. `cna_friend_gamer_create_ext` and `cna_friend_collection_create_ext` map the
-canonical factories and are also the only way a C caller obtains a friend to exercise the surface
-against — the same shape the sensors' test backends already use.
+`cna_signed_in_gamer_get_friends` answers the account's friends from the service; for a local offline
+profile it answers an **empty collection**, which is a success and not a refusal, and
+`cna_signed_in_gamer_is_friend` then answers negatively. `cna_friend_gamer_create_ext` and
+`cna_friend_collection_create_ext` map the canonical factories and let a C caller exercise the surface
+without a service -- the same shape the sensors' test backends already use.
 
 A collection **keeps every gamer handle it holds alive**, because the canonical collection stores
 pointers it does not own, and an index or a cursor hands back the same handle the caller published
@@ -140,28 +143,27 @@ that no longer exist. And the protected members of `Gamer` and `GamerCollection`
 the reason already settled for sensors and windows: **a protected member is mappable only when this
 ABI supplies a derived class to hang it on**, and it supplies none here.
 
-## The guide: two real screens and thirteen that do nothing
+## The guide
 
 The guide is a static class with a deleted constructor, so it has no handle: every route is a free
-`cna_guide_*` function.
+`cna_guide_*` function, and each forwards to the canonical call after validating its arguments.
 
-**Thirteen of its screens are no-ops on this runtime.** Compose message, friend request, friends,
-both game-invite forms, gamer card, marketplace, messages, party, party sessions, player review,
-players, sign-in and achievements all validate their arguments and do nothing, and so does
-`cna_guide_delay_notifications` — there is no notification system to delay. The routes exist because
-the canonical API does, and because a platform that grows these screens would need them. A bad player
-index or an invalid gamer handle is still refused, because argument validation is the boundary's job
-whether or not anything downstream uses the value.
+**Every screen is the Guide's own.** Compose message, friend request, friends, both game-invite forms,
+gamer card, marketplace (the Guide's Game content page), messages, party, party sessions, player
+review, players, sign-in and achievements open the CNA Guide's pages after XNA's own checks, and
+`cna_guide_delay_notifications` delays its notifications; the service-backed pages need a configured
+service and a signed-in account and refuse as the canonical calls do otherwise (the string form of
+`ShowGameInvite` refuses everywhere, as in XNA). A bad player index or an invalid gamer handle is
+refused at the boundary.
 
-**Two screens are real, and they are real because this ABI draws them.** The on-screen keyboard and
-the message box have no system overlay behind them here, so the runtime renders them and the game
-supplies the surfaces — that is what `cna_guide_render_pending_keyboard_input_ext` and
-`cna_guide_render_pending_message_box_ext` are for, and why the pending title, description, display
-text and focused button are readable at all.
+**The keyboard and the message box** are drawn by the Guide over a game with a
+`GamerServicesComponent` and a graphics device. `cna_guide_render_pending_keyboard_input_ext` and
+`cna_guide_render_pending_message_box_ext` let a C host draw them itself, which is why the pending
+title, description, display text and focused button are readable.
 
 ### The one operation that is genuinely deferred
 
-Every other asynchronous pair in this ABI completes before its begin route returns. **These two do
+Every other asynchronous pair in this module is one waiting route. **These two are
 not.** `cna_guide_begin_show_keyboard_input` leaves an input pending and returns; the completion
 callback runs only when the user confirms or cancels, and the same is true of the message box. Poll
 `cna_guide_get_has_pending_*_ext` or wait for the callback.
@@ -204,18 +206,16 @@ canonical indexers are mapped — by position and by key. Removal here **answers
 found**, unlike the gamer collection's, because the canonical operation does. `begin`/`end` have no C
 form for the reason already settled: a C++ iterator is not expressible across a C ABI.
 
-Two absences differ, and the difference is reported rather than flattened. The **gamer picture** is
-*absent* — a clear flag and a zero size, an ordinary success. The **achievement picture** is
-*unimplemented* — the canonical accessor says so outright, so `cna_achievement_get_picture_size`
-answers `CNA_RESULT_NOT_SUPPORTED`. A caller can tell "there is none" from "this runtime cannot".
+Two absences differ, and the difference is reported rather than flattened. A **gamer picture** that
+is not configured is *absent* -- a clear flag and a zero size, an ordinary success. An **achievement
+picture** comes from the service catalog, or offline from the PNG the title's
+`GamerServices/Achievements.json` names; an achievement without one answers the canonical
+`GamerServicesNotAvailableException` as `CNA_RESULT_NOT_SUPPORTED`.
 
-`cna_signed_in_gamer_get_achievements` is the one gamer-services read on this runtime that finds real
-data: it answers what `cna_signed_in_gamer_award_achievement` **persisted**, so an achievement earned
-in one process run is still there in the next. Each entry carries only a key, an earned flag and a
-timestamp — no catalog exists here to supply a name, a description or a score, and the binding says so
-rather than inventing them. The asynchronous form is one synchronous call that still invokes the
-callback, because the canonical read marks itself complete before `Begin` returns precisely so a game
-does not spin waiting for work that is already done.
+`cna_signed_in_gamer_get_achievements` answers the title's achievements: from the service catalog for
+an account, and offline from the title's catalog when it ships one (every defined achievement with its
+text, score and earned state) or else the keys `cna_signed_in_gamer_award_achievement` **persisted**,
+with no text or score. The asynchronous form is one waiting route that then invokes the callback.
 
 ## A variant map across a C ABI
 
@@ -252,11 +252,11 @@ A leaderboard identity is a **value with an inline key**, so a caller builds one
 passes its address. The canonical keys are short names, and a key that does not fit the inline
 capacity — or has no terminator inside it — is refused rather than truncated.
 
-A read is **complete when the route returns**. The canonical asynchronous form marks itself completed
-before its own begin route returns, so each begin/end pair here is one route that then invokes the
-callback: the same shape the gamer's reads use, not the deferred shape the guide needed. Paging
-reslices entries the reader already holds, so it finishes immediately too. Check which of the two
-shapes a canonical operation is before binding it; both exist in this module.
+A read is **complete when the route returns**: each begin/end pair here is one route that waits for the
+read (from the service, or the local store without one) and then invokes the callback -- the same
+shape the gamer's reads use, not the deferred shape the guide needed. Paging a service board reads the
+next page from the service. Check which of the two shapes a canonical operation is before binding it;
+both exist in this module.
 
 **Every entry this ABI hands out is a copy.** The canonical entry list is answered by value, so an
 entry read from a reader is a snapshot: writing its rating changes the snapshot. Its columns are a

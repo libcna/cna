@@ -111,7 +111,8 @@ namespace Microsoft::Xna::Framework::Net
          * BeginJoin()/EndJoin() need this to derive the real session type to construct instead of
          * a hardcoded value (an acknowledged upstream FNA FIXME that's otherwise harmless there,
          * since FNA's networking is entirely stubbed out regardless of session type - but matters
-         * for CNA, whose real ENet transport is gated specifically on SystemLink).
+         * for CNA, which joins a SystemLink listing over LAN ENet and a PlayerMatch/Ranked listing
+         * through the CNA service).
          *
          * @return The session type this listing was found under.
          */

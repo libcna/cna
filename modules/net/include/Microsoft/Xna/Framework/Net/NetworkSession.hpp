@@ -165,7 +165,13 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets whether host migration is allowed.
          *
-         * Task 5.1-5.4 (plans/plan_net.md Phase 5): real, local-only implementation - `false` (the
+         * PlayerMatch and Ranked (CNA service): only the host sets it and every machine reads the
+         * host's value; when the host leaves or its relay connection stays closed for 20 seconds,
+         * the service makes the machine holding the lowest remaining gamer ordinal the host (a
+         * CNA policy; XNA shows only that a migration happened), gamer IDs and the roster carry
+         * over, and HostChanged is raised after the old host's GamerLeft.
+         *
+         * SystemLink, Task 5.1-5.4 (plans/plan_net.md Phase 5): a LAN implementation - `false` (the
          * default) keeps FNA's own reference behavior exactly (`ENetBackend::HandleDisconnect`
          * unconditionally ends the session the instant its host peer disconnects). `true` enables
          * a real, full-reconnect migration instead: every surviving peer independently computes
@@ -477,8 +483,10 @@ namespace Microsoft::Xna::Framework::Net
          * @throws System::InvalidOperationException if the session has ended, is playing and does
          *         not allow joining a game in progress, has no open public slot, or already has its
          *         maximum number of local gamers.
-         * @throws System::NotSupportedException for a PlayerMatch or Ranked session: CNA online
-         *         sessions do not yet add local gamers after creation or join.
+         * @throws GamerServices::GamerPrivilegeException for a PlayerMatch or Ranked session when
+         *         the gamer has no CNA service account (a local profile or a guest). Online, the
+         *         service adds the gamer to this machine's group and it joins, with GamerJoined, at
+         *         a later Update; a service refusal leaves it out.
          */
         void AddLocalGamer(GamerServices::SignedInGamer* gamer);
 

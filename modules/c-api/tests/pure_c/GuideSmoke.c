@@ -244,11 +244,9 @@ static int validate_message_box(void)
         cna_guide_end_show_message_box(0, &button) == CNA_RESULT_INVALID_ARGUMENT;
 }
 
-/* Every guide screen is a no-op here, so what a caller can observe is that it is accepted and that
-   a bad identity is still refused at the boundary. */
 /* Without a configured CNA account service (this container's case) every screen that belongs to
-   a signed-in service player -- the social screens and the marketplace, party and achievement
-   information panes -- refuses: as unavailable, or for the marketplace as a profile without the
+   a signed-in service player -- the social screens, the party pages and the marketplace and
+   achievement pages -- refuses: as unavailable, or for the marketplace as a profile without the
    purchase privilege. The session overload of the game invite is Windows Phone only. */
 static int validate_screens(const CNA_SignedInGamerHandle gamer)
 {

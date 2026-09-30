@@ -66,8 +66,7 @@ typedef struct CNA_AvailableNetworkSessionCreateInfo {
  * argument/handle/thread/native failure.
  *
  * CNAEXT: the canonical factory exists so a discovery backend can publish what it found. A C
- * consumer needs it for the same reason, and because discovery results are otherwise unreachable
- * until the session slice lands.
+ * consumer needs it for the same reason, and to build a description without a search.
  */
 CNA_C_API CNA_Result cna_available_network_session_create_ext(
     const CNA_AvailableNetworkSessionCreateInfo* create_info,
@@ -388,8 +387,9 @@ typedef struct CNA_NetworkEventInfo {
  * out-of-range count, `CNA_RESULT_INVALID_STATE` when a session already exists, or a documented
  * thread/native failure.
  *
- * The canonical creation is a fake-async pair the canonical synchronous overload already drives to
- * completion, so this is one synchronous call. Only one session exists at a time, matching the
+ * The canonical synchronous overload drives the Begin/End pair to completion (a PlayerMatch or
+ * Ranked session waits for the CNA service while its End pumps Dispatcher updates), so this is one
+ * synchronous call. Only one session exists at a time, matching the
  * canonical process-wide restriction. This overload takes its local gamers from the process-wide
  * signed-in collection, so that collection must already hold at least one gamer; the canonical
  * constructor otherwise fails while selecting its host.
@@ -948,7 +948,8 @@ typedef void (*CNA_NetworkSessionAsyncCallback)(void* context);
  * @param out_session Receives an owned session handle on success.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/state/thread/native failure.
  *
- * CNA completes the canonical `Begin`/`End` pair before `Begin` returns, so this is one
+ * The route drives the canonical `Begin`/`End` pair to completion (a PlayerMatch or Ranked
+ * session waits for the CNA service while its End pumps Dispatcher updates), so this is one
  * synchronous call that still invokes the completion callback. The requested gamer limit is
  * preserved by the resulting session just as it is by `cna_network_session_create`.
  */
@@ -1017,8 +1018,9 @@ CNA_C_API CNA_Result cna_network_session_create_with_local_gamers_async(
  * @param out_collection Receives an owned collection handle on success.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/state/handle/thread/native failure.
  *
- * Only a `SystemLink` search reaches real discovery; every other session type returns an empty
- * collection, matching the canonical implementation rather than pretending to search.
+ * A `SystemLink` search runs LAN discovery; a `PlayerMatch` or `Ranked` search reads the CNA
+ * service directory (refused without a configured service); `Local` is refused, and
+ * `LocalWithLeaderboards`, which no search can find, returns an empty collection.
  */
 CNA_C_API CNA_Result cna_network_session_find(
     CNA_NetworkSessionType session_type,
@@ -1119,8 +1121,9 @@ CNA_C_API CNA_Result cna_network_session_join_async(
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when a session already exists, or a
  * documented argument/thread/native failure.
  *
- * The canonical implementation builds a session from the accepted invite's own fixed values rather
- * than from any live invite state.
+ * Joins the session of the invitation accepted in the Guide (reported through `InviteAccepted`),
+ * through the CNA service; without a configured service or an accepted invitation the canonical
+ * call refuses.
  */
 CNA_C_API CNA_Result cna_network_session_join_invited(
     int32_t max_local_gamers,
@@ -1241,7 +1244,7 @@ CNA_C_API CNA_Result cna_local_network_gamer_enable_send_voice(
     CNA_Bool enable);
 
 /**
- * @brief Sends party invites to nearby gamers.
+ * @brief Invites the rest of the gamer's CNA service party to this online session.
  *
  * @param gamer Gamer handle naming a local gamer.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the gamer has left the session or

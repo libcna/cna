@@ -1647,10 +1647,10 @@ static int validate_session_discovery(const CNA_SignedInGamerHandle signed_in)
         return 0;
     }
 
-    /* The invite path refuses: nothing raises InviteAccepted, which is the only place XNA's own
-       contract calls JoinInvited from, so no invitation can ever be pending. This used to return a
-       PlayerMatch session assembled from fixed values -- no invitation token, no host address, no
-       transport. */
+    /* Without a configured CNA service (this tree) the invite path refuses as unavailable:
+       invitations come from the service and the Guide, which raises InviteAccepted. This used to
+       return a PlayerMatch session assembled from fixed values -- no invitation token, no host
+       address, no transport. */
     if (cna_network_session_join_invited(1, &session) != CNA_RESULT_NOT_SUPPORTED) {
         return 0;
     }

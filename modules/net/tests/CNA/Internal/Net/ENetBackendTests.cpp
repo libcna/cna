@@ -342,17 +342,15 @@ TEST(ENetBackendTest, HostRespondsToClientHelloWithServerWelcomeAndAddsRemoteGam
 
     ASSERT_EQ(welcome.AssignedWireIds.size(), 1u);
     ASSERT_EQ(welcome.ExistingRoster.size(), 1u);
-    // The host's own local gamer, snapshotted via its real SignedInGamer gamertag (not the
-    // "Stub Gamer" value NetworkGamer::getGamertagProperty() reports for local gamers).
+    // The host's own local gamer, snapshotted with its SignedInGamer's gamertag.
     EXPECT_EQ(welcome.ExistingRoster[0].Gamertag, "HostPlayer");
 
     EXPECT_EQ(host.session->getAllGamersProperty().getCountProperty(), 2);
     EXPECT_EQ(joinCount, 1);
     NetworkGamer* remoteGamer = nullptr;
     for (NetworkGamer* g : host.session->getAllGamersProperty()) {
-        // Local gamers always report "Stub Gamer" (see WireGamertagFor's own comment); a real
-        // gamertag search only ever finds the remote gamer, so the host's own local gamer is
-        // looked up directly below instead.
+        // Only the remote gamer is looked for by gamertag; the host's own local gamer is taken
+        // from LocalGamers below.
         if (g->getGamertagProperty() == "RemotePlayer") remoteGamer = g;
     }
     ASSERT_NE(remoteGamer, nullptr);

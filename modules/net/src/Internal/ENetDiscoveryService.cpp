@@ -270,9 +270,9 @@ namespace CNA::Internal::Net
             return socket_;
         }
 
-        // The gamertag to put on the wire for gamer. Mirrors ENetBackend.cpp's own
-        // WireGamertagFor helper (duplicated rather than shared, since the two .cpp files are
-        // otherwise independent) — see there for why LocalNetworkGamer needs this indirection.
+        // The gamertag to put on the wire for gamer: a local gamer's signed-in profile, else the
+        // received remote identity. Mirrors ENetBackend.cpp's own WireGamertagFor helper
+        // (duplicated rather than shared, since the two .cpp files are otherwise independent).
         std::string WireGamertagFor(NetworkGamer* gamer)
         {
             if (auto* local = dynamic_cast<LocalNetworkGamer*>(gamer))
@@ -313,9 +313,9 @@ namespace CNA::Internal::Net
             announce.CurrentGamerCount = registeredHost_->getAllGamersProperty().getCountProperty();
             announce.MaxGamers = registeredHost_->getMaxGamersProperty();
             announce.OpenPrivateSlots = registeredHost_->getPrivateGamerSlotsProperty();
-            // Nothing in this codebase tracks per-gamer slot occupancy (NetworkGamer::
-            // getIsPrivateSlotProperty() is a never-toggled stub), so private slots are reported
-            // as fully open and public slots are simply "max minus private minus current".
+            // SystemLink does not track per-gamer slot occupancy (only online sessions set
+            // NetworkGamer::getIsPrivateSlotProperty()), so private slots are reported as fully
+            // open and public slots are simply "max minus private minus current".
             announce.OpenPublicSlots = std::max(
                 0, announce.MaxGamers - announce.OpenPrivateSlots - announce.CurrentGamerCount
             );

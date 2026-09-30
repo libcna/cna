@@ -770,8 +770,8 @@ typedef struct CNA_GamerProfileInfo {
     /** @brief The gamer's accumulated score. */
     int32_t gamer_score;
 
-    /** @brief One of the `CNA_GAMER_ZONE_*` identities; always `CNA_GAMER_ZONE_UNKNOWN`, as CNA has
-     * no gamer zones. */
+    /** @brief One of the `CNA_GAMER_ZONE_*` identities: the zone a service account chose in the
+     * Guide; `CNA_GAMER_ZONE_UNKNOWN` for a local profile or an account that chose none. */
     CNA_GamerZone gamer_zone;
 
     /** @brief How many titles this gamer has played: on the CNA service, those with the gamer's
@@ -782,7 +782,8 @@ typedef struct CNA_GamerProfileInfo {
     /** @brief How many achievements this gamer has earned in total. */
     int32_t total_achievements;
 
-    /** @brief The gamer's reputation in stars, 0 to 5; always 0, as CNA keeps no reputation. */
+    /** @brief The gamer's reputation in stars, 0 to 5, in quarters: from other players' reviews on
+     * the CNA service (a CNA formula); 0 for an unreviewed account or a local profile. */
     float reputation;
 
     /** @brief Non-zero once the profile has been disposed. */
@@ -811,7 +812,8 @@ typedef struct CNA_FriendGamerInfo {
     /** @brief Non-zero when the local gamer has sent this friend a friend request. */
     CNA_Bool friend_request_sent_to;
 
-    /** @brief Non-zero when this friend has voice hardware; always zero, as CNA carries no voice. */
+    /** @brief Non-zero when this friend has voice capability; always zero, as the service does not
+     * know a friend's audio devices (network session voice reports it per session gamer). */
     CNA_Bool has_voice;
 
     /** @brief Non-zero when this friend accepted the local gamer's game invitation (this title's
@@ -828,10 +830,10 @@ typedef struct CNA_FriendGamerInfo {
     /** @brief Non-zero when the local gamer has a pending game invitation to this friend. */
     CNA_Bool invite_sent_to;
 
-    /** @brief Non-zero when this friend is away; always zero, as CNA accounts have no away status. */
+    /** @brief Non-zero when this friend chose Away as their online status in the Guide. */
     CNA_Bool is_away;
 
-    /** @brief Non-zero when this friend is busy; always zero, as CNA accounts have no busy status. */
+    /** @brief Non-zero when this friend chose Busy as their online status in the Guide. */
     CNA_Bool is_busy;
 
     /** @brief Non-zero when this friend is online in this title's player-match session that admits
@@ -1046,9 +1048,10 @@ CNA_C_API CNA_Result cna_gamer_get_profile(
  * @param out_profile Receives an owned profile handle, or `CNA_INVALID_HANDLE` on failure.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * **This is one synchronous call that still invokes the callback**, which is what the canonical
- * begin/end pair already does — the canonical operation completes before `Begin` returns. The two
- * canonical halves are one route here because no operation object crosses this ABI.
+ * **This is one waiting call that then invokes the callback.** A service read completes at a
+ * `GamerServicesDispatcher.Update`, which the canonical End wait pumps; an offline read completes
+ * at once. The two canonical halves are one route here because no operation object crosses this
+ * ABI.
  */
 CNA_C_API CNA_Result cna_gamer_begin_get_profile(
     CNA_GamerHandle gamer,
@@ -1061,12 +1064,12 @@ CNA_C_API CNA_Result cna_gamer_begin_get_profile(
  *
  * @param gamertag Gamertag to look up, borrowed for the duration of the call.
  * @param out_gamer Receives an owned gamer handle, or `CNA_INVALID_HANDLE` on failure.
- * @return `CNA_RESULT_NOT_SUPPORTED` on this runtime, or `CNA_RESULT_INVALID_ARGUMENT` for a null
- *         output.
+ * @return `CNA_RESULT_SUCCESS` with a configured CNA service, `CNA_RESULT_NOT_SUPPORTED` without
+ *         one, a documented service failure, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
  *
- * **No runtime this ABI builds on can look a gamer up by tag**, so the honest answer is a refusal
- * rather than an empty result. The route exists because the canonical API does, and because the
- * answer may differ on a platform that has a directory service.
+ * **With a configured CNA service this is a real directory lookup.** Without one, local offline
+ * profiles have no directory to search, so the answer is the canonical refusal rather than an
+ * empty result.
  */
 CNA_C_API CNA_Result cna_gamer_get_from_gamertag(
     CNA_StringView gamertag,
@@ -1318,8 +1321,8 @@ CNA_C_API CNA_Result cna_signed_in_gamer_get_privileges(
  * @param out_is_friend Receives non-zero when the two are friends.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * **On this runtime the answer is always negative**, because no friend list exists to consult. That
- * is the real answer rather than a gap in the binding.
+ * The answer consults the account's friends on the CNA service; a local offline profile has no
+ * friend list, so for it the answer is negative.
  */
 CNA_C_API CNA_Result cna_signed_in_gamer_is_friend(
     CNA_SignedInGamerHandle gamer,
@@ -1350,8 +1353,8 @@ CNA_C_API CNA_Result cna_signed_in_gamer_is_headset(
  * @param out_friends Receives an owned collection handle, or `CNA_INVALID_HANDLE` on failure.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * **On this runtime the collection is always empty**, because there is no friend service. An empty
- * collection is the real answer, and it is a success rather than a refusal.
+ * With a configured CNA service the collection holds the account's friends; for a local offline
+ * profile it is empty, which is a success rather than a refusal.
  */
 CNA_C_API CNA_Result cna_signed_in_gamer_get_friends(
     CNA_SignedInGamerHandle gamer,
@@ -1364,8 +1367,8 @@ CNA_C_API CNA_Result cna_signed_in_gamer_get_friends(
  * @param achievement_key Achievement key, borrowed for the duration of the call.
  * @return `CNA_RESULT_SUCCESS`, or a documented argument/handle/thread/IO failure.
  *
- * This **persists locally**: an achievement earned in one process run is still earned in the next.
- * The canonical API carries no catalog metadata here — only the key, the fact of earning it and when.
+ * An account's award is recorded by the CNA service; a local offline profile's **persists
+ * locally**, so an achievement earned in one process run is still earned in the next.
  */
 CNA_C_API CNA_Result cna_signed_in_gamer_award_achievement(
     CNA_SignedInGamerHandle gamer,
@@ -1380,7 +1383,8 @@ CNA_C_API CNA_Result cna_signed_in_gamer_award_achievement(
  * @param context Caller context passed back to @p callback.
  * @return The same answers as @ref cna_signed_in_gamer_award_achievement.
  *
- * One synchronous call that still invokes the callback, like every other fake-async pair here.
+ * One waiting call that then invokes the callback, like every other asynchronous pair here (a
+ * service award completes at a Dispatcher update, which the canonical End wait pumps).
  */
 CNA_C_API CNA_Result cna_signed_in_gamer_begin_award_achievement(
     CNA_SignedInGamerHandle gamer,
@@ -2042,8 +2046,9 @@ CNA_C_API CNA_Result cna_guide_copy_pending_keyboard_input_display_text_ext(
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure. Drawing when nothing
  *         is pending is a no-op that reports success.
  *
- * CNAEXT: no real platform makes a game draw its own on-screen keyboard. This runtime has no system
- * overlay, so it draws one and the game supplies the surfaces.
+ * CNAEXT: no real platform makes a game draw its own on-screen keyboard. The Guide draws it over a
+ * game with a `GamerServicesComponent` and a graphics device; this route lets a host without one
+ * draw it on surfaces it supplies.
  */
 CNA_C_API CNA_Result cna_guide_render_pending_keyboard_input_ext(
     CNA_Handle device,
@@ -2276,10 +2281,10 @@ CNA_C_API CNA_Result cna_guide_show_gamer_card(CNA_PlayerIndex player, CNA_Gamer
  * @brief Opens the marketplace.
  *
  * @param player One of the `CNA_PLAYER_INDEX_*` identities.
- * @return `CNA_RESULT_SUCCESS` (an information pane: CNA has no store and titles are fully
- *         licensed), `CNA_RESULT_INVALID_STATE` for a player not signed in or without the purchase
- *         privilege, or while another Guide screen is open, or `CNA_RESULT_INVALID_ARGUMENT` for an
- *         undefined identity.
+ * @return `CNA_RESULT_SUCCESS` (the Guide's Game content page -- CNA has no store -- with XNA's
+ *         Test Purchase while trial mode is simulated), `CNA_RESULT_INVALID_STATE` for a player
+ *         not signed in or without the purchase privilege, or while another Guide screen is open,
+ *         or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
  */
 CNA_C_API CNA_Result cna_guide_show_marketplace(CNA_PlayerIndex player);
 
@@ -2887,9 +2892,10 @@ CNA_C_API CNA_Result cna_achievement_collection_copy_to(
  * @param out_achievements Receives an owned collection handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/IO failure.
  *
- * This reads what `cna_signed_in_gamer_award_achievement` persisted, so an achievement earned in one
- * process run is still there in the next. The achievements it answers carry **only a key, an earned
- * flag and a timestamp**: no catalog exists here to supply a name, a description or a score.
+ * An account's achievements come from the CNA service's catalog for the title. A local offline
+ * profile's come from the title's `GamerServices/Achievements.json` when it ships one (every defined
+ * achievement with its text, score and earned state), else from what
+ * `cna_signed_in_gamer_award_achievement` persisted: only a key, an earned flag and a timestamp.
  */
 CNA_C_API CNA_Result cna_signed_in_gamer_get_achievements(
     CNA_SignedInGamerHandle gamer,
@@ -2904,8 +2910,8 @@ CNA_C_API CNA_Result cna_signed_in_gamer_get_achievements(
  * @param out_achievements Receives an owned collection handle.
  * @return The same answers as @ref cna_signed_in_gamer_get_achievements.
  *
- * One synchronous call that still invokes the callback: the canonical read marks itself complete
- * before `Begin` returns, precisely so a game does not spin waiting for work that is already done.
+ * One waiting call that then invokes the callback: a service read completes at a Dispatcher
+ * update, which the canonical End wait pumps; an offline read completes at once.
  */
 CNA_C_API CNA_Result cna_signed_in_gamer_begin_get_achievements(
     CNA_SignedInGamerHandle gamer,
@@ -4028,8 +4034,9 @@ CNA_C_API CNA_Result cna_avatar_description_create_random_for_body_type(
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` for a disposed gamer, or a documented
  *         argument/handle/thread failure.
  *
- * One synchronous call that still invokes the callback: the canonical read completes before its own
- * begin route returns.
+ * One waiting call that then invokes the callback: a gamer with a service identity is read from the
+ * service (completing at a Dispatcher update, which the canonical End wait pumps); a local profile's
+ * avatar is answered at once.
  */
 CNA_C_API CNA_Result cna_avatar_description_get_from_gamer(
     CNA_GamerHandle gamer,
@@ -4085,7 +4092,8 @@ CNA_C_API CNA_Result cna_avatar_description_copy_description(
  * The canonical event is an **instance** event -- `Microsoft.Xna.Framework.GamerServices`
  * declares `public event EventHandler<EventArgs> Changed;` -- so this route names the
  * description it belongs to. The registration borrows that description and must be released
- * before it is destroyed. **Nothing in this runtime raises it.**
+ * before it is destroyed. It is raised at a `GamerServicesDispatcher.Update` on the description a
+ * signed-in player's read returned, when that player's stored avatar changes.
  */
 CNA_C_API CNA_Result cna_avatar_description_subscribe_changed_ext(
     CNA_AvatarDescriptionHandle description,
@@ -4301,9 +4309,9 @@ CNA_C_API CNA_Result cna_avatar_renderer_get_parent_bone_at(
  *         `CNA_RESULT_INVALID_STATE` while the avatar's assets are unavailable or the renderer has
  *         been disposed, or a documented handle/thread failure.
  *
- * **On this runtime the state is always unavailable**, so this route always refuses — the parent-bone
- * hierarchy is readable and the bind pose is not. That is the renderer's real state rather than a gap
- * in the binding.
+ * The bind pose is readable once the renderer is ready (the avatar's catalog loaded); before that,
+ * and for a description without a readable avatar, the route refuses while the parent-bone
+ * hierarchy stays readable.
  */
 CNA_C_API CNA_Result cna_avatar_renderer_get_bind_pose_at(
     CNA_AvatarRendererHandle renderer,

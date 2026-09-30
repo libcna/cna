@@ -6,7 +6,7 @@
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
-    // CNA keeps no gamer zone or reputation, so a profile reports none rather than invent one.
+    // XNA's unset zone and reputation; a service profile fills in what its account has.
     GamerProfile::GamerProfile()
         : gamerScore_(0)
         , gamerZone_(GamerZone::Unknown)

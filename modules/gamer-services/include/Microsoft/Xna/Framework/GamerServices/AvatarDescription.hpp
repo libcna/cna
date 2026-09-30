@@ -113,10 +113,10 @@ namespace Microsoft::Xna::Framework::GamerServices
          * A per-instance event, as Microsoft declares it (`public event EventHandler<EventArgs>
          * Changed;`): XNA keeps one cached AvatarDescription per signed-in player and raises the
          * event on the description of the player whose avatar changed, so subscribers of one
-         * description never hear about another. Nothing in this runtime raises it -- the live
-         * avatar service it reported was an Xbox 360 one -- but the ownership and delivery shape
-         * is the documented one, and a copy of a description carries the subscribers it had when
-         * it was copied.
+         * description never hear about another. CNA raises it at GamerServicesDispatcher.Update,
+         * with the SignedInGamer as sender, when a signed-in player's stored avatar (service
+         * revision or local profile store) changes. The C++ description is a value, so every copy
+         * of that cached description shares this one event.
          */
         System::EventHandler<System::EventArgs> Changed;
 

@@ -54,9 +54,9 @@ namespace CNA::Internal::Net
         /**
          * @brief Returns whether sessionType uses real ENet-backed networking.
          *
-         * Only SystemLink does. Local/LocalWithLeaderboards are single-machine by XNA design;
-         * PlayerMatch/Ranked imply Xbox LIVE-style internet matchmaking that this project has no
-         * server for, so they stay fully synthetic (unchanged from the pre-Phase-5 stub).
+         * Only SystemLink does, on the LAN. Local/LocalWithLeaderboards are single-machine by XNA
+         * design; PlayerMatch/Ranked run through the CNA service's directory and relay
+         * (OnlineSessionBinding, ServiceENetSession) instead of this LAN host.
          *
          * @param sessionType The session type to check.
          * @return true if sessionType should be backed by a real ENet host.

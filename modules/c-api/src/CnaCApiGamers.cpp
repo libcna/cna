@@ -615,8 +615,8 @@ CNA_Result cna_gamer_get_from_gamertag(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        // The canonical lookup refuses outright on every platform this ABI builds on, so the refusal
-        // is the canonical one rather than an early return invented here.
+        // A real service lookup, or the canonical refusal without a service (offline profiles have no
+        // directory); either way the answer is the canonical one, not an early return invented here.
         return PublishGamer(
             std::shared_ptr<Gamer>(Gamer::GetFromGamertag(nativeGamertag)),
             nullptr,

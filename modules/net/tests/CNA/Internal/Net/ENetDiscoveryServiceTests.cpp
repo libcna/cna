@@ -52,8 +52,8 @@ namespace {
 }
 
 TEST(ENetDiscoveryServiceTest, FindSessionsReturnsEmptyImmediatelyForNonSystemLinkTypes) {
-    // No socket I/O at all for non-SystemLink types — matches the NetworkSessionType policy that
-    // only SystemLink is backed by real networking (see ENetBackend::RealNetworkingEnabled).
+    // No socket I/O at all for non-SystemLink types — only SystemLink uses LAN discovery (see
+    // ENetBackend::RealNetworkingEnabled; PlayerMatch/Ranked search the CNA service directory).
     EXPECT_TRUE(ENetDiscoveryService::FindSessions(NetworkSessionType::Local).empty());
     EXPECT_TRUE(ENetDiscoveryService::FindSessions(NetworkSessionType::PlayerMatch).empty());
     EXPECT_TRUE(ENetDiscoveryService::FindSessions(NetworkSessionType::Ranked).empty());

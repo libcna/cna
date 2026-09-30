@@ -34,7 +34,8 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets the measured upstream bandwidth in bytes per second.
          *
-         * @return 0: a host answers discovery at frame boundaries and cannot time what arrives.
+         * @return A SystemLink search result's estimate from this machine's probe train, timed by
+         *         the host's responder; 0 when unmeasured.
          */
         [[nodiscard]] int getBytesPerSecondUpstreamProperty() const;
 

@@ -1014,7 +1014,7 @@ private:
     int status_=0,zone_=-1;
 };
 
-// ---- Party and game content (the services behind them are added separately) --------------------
+// ---- Party and game content ---------------------------------------------------------------------
 
 // XNA's own emulation of a purchase for a game simulating trial mode (its resources' "Test
 // Purchase" prompt): Yes turns SimulateTrialMode off, and IsTrialMode follows at the next update.

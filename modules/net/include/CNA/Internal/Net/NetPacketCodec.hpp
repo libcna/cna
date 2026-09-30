@@ -34,7 +34,8 @@ namespace CNA::Internal::Net
         ServerWelcome = 0x02,
         GamerJoinBroadcast = 0x03,
         GamerLeaveBroadcast = 0x04,
-        // 0x05 is reserved for a future HostChangeBroadcast (host migration); not implemented.
+        // 0x05 is unused (once reserved for a HostChangeBroadcast): host migration works without
+        // one, by reconnecting to the new host.
         StateChangeBroadcast = 0x06,
         SessionPropertiesBroadcast = 0x07,
         GamerReadyBroadcast = 0x08,
