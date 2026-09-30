@@ -1351,9 +1351,13 @@ TEST(SoundEffectTest, HugeOffsetNearIntMaxThrowsBeforeReachingBackend)
 // the unsigned-arithmetic pattern.
 TEST(SoundEffectTest, OffsetPlusCountThatWouldOverflowInt32ThrowsCleanly)
 {
+    // XNA computes offset + count checked and turns the overflow into
+    // ArgumentException(InvalidOffsetCountLength); an offset past the buffer is refused before
+    // that, with ArgumentException(InvalidAudioBufferOffset).
     std::vector<unsigned char> buffer(16, 0);
-    const auto nearMax = std::numeric_limits<SharpRuntime::intcs>::max() - 2;
-    EXPECT_THROW(
-        SoundEffect(buffer, nearMax, 10, 44100, AudioChannels::Stereo, 0, 0),
-        System::ArgumentOutOfRangeException);
+    const auto nearMax = std::numeric_limits<SharpRuntime::intcs>::max() - 3;
+    EXPECT_THROW(SoundEffect(buffer, 4, nearMax, 44100, AudioChannels::Stereo, 0, 0),
+                 System::ArgumentException);
+    EXPECT_THROW(SoundEffect(buffer, nearMax, 4, 44100, AudioChannels::Stereo, 0, 0),
+                 System::ArgumentException);
 }
