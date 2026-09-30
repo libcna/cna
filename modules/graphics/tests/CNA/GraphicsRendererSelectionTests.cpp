@@ -13,9 +13,11 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
 #include "System/ArgumentException.hpp"
+#include "System/Environment.hpp"
 #include "System/InvalidOperationException.hpp"
 
 #include <algorithm>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -99,6 +101,26 @@ TEST_F(GraphicsRendererSelectionTest, QueryingSelectionDoesNotLatchIt)
     (void)GraphicsRendererSelection::GetAvailable();
     EXPECT_FALSE(GraphicsRendererSelection::IsLatched());
     EXPECT_NO_THROW(GraphicsRendererSelection::SetPreferred(Built()));
+}
+
+// BINDFIX-038: the variable used to be read while the library loaded, where a refusal was
+// std::terminate, and a refusal was consumed by the first query so every later one quietly took the
+// default renderer. It is read on first use and keeps refusing until a renderer is set explicitly.
+TEST_F(GraphicsRendererSelectionTest, ARefusedEnvironmentVariableKeepsRefusingUntilARendererIsSet)
+{
+    const std::optional<std::string> previous =
+        System::Environment::GetEnvironmentVariable("CNA_GRAPHICS_RENDERER");
+    System::Environment::SetEnvironmentVariable("CNA_GRAPHICS_RENDERER", std::string("NOT_A_RENDERER"));
+    GraphicsRendererSelection::ResetForTestingEXT();
+    EnsurePublished();
+
+    EXPECT_THROW((void)GraphicsRendererSelection::GetSelected(), System::InvalidOperationException);
+    EXPECT_THROW((void)GraphicsRendererSelection::GetSelected(), System::InvalidOperationException);
+    GraphicsRendererSelection::SetPreferred(Built());
+    EXPECT_EQ(GraphicsRendererSelection::GetSelected(), Built());
+
+    System::Environment::SetEnvironmentVariable("CNA_GRAPHICS_RENDERER", previous);
+    GraphicsRendererSelection::ResetForTestingEXT();
 }
 
 // ---------------------------------------------------------------------------

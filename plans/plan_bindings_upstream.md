@@ -587,6 +587,48 @@ CNA contradicted its own documentation or its own siblings:
   C API" though `skin->Data` held it; it is now published as an aliasing borrow of the
   Model. Reported by `cna-rust` (`RUST-UPSTREAM-022`).
 
+## Fixed in the 2026-09-30 binding retirement pass
+
+The seven standalone bindings (Go, Java, Python, Ruby, Rust, Swift, TS) were requalified against
+ABI 0.35.0 before being archived into `cna-lab`; every row below was reproduced against `next`
+first.
+
+- **BINDFIX-037** — `cna_graphics_device_supports_capability(TEXTURE_3D)` answered true on
+  OPENGLES3 for a device in XNA's default Reach profile, where `Texture3D` refuses every volume
+  (SOFTWARE-179), so `CApi_TextureVolumeSmoke` failed on every GL tree. The capability now folds in
+  the profile exactly as `MultipleRenderTargets` already did (RLGL-040), and a profile change
+  invalidates the cached feature snapshot. Pinned by `CApi_TextureVolumeSmoke` (Reach refuses,
+  HiDef follows the renderer) and `Texture3DProfileTest.CapabilityFollowsTheDeviceGraphicsProfile`.
+- **BINDFIX-038** — `JAVA-UPSTREAM-017`: a `CNA_GRAPHICS_RENDERER` naming no renderer, or one this
+  build lacks, made `libcna_c_api.so` call `std::terminate` while it loaded, because the static
+  initializer that publishes the compiled-in set also consulted the variable; a JVM, Python or Node
+  host died before its first call. The variable is now read on first use, where the refusal is an
+  ordinary `CNA_RESULT_INVALID_STATE`, and it keeps refusing instead of being consumed by the first
+  query and quietly replaced by the default. Pinned by `CApi_RendererEnvironment_{unknown,absent}`
+  and `GraphicsRendererSelectionTest.ARefusedEnvironmentVariableKeepsRefusingUntilARendererIsSet`.
+- **BINDFIX-039** — `next` no longer built the WebAssembly C ABI (`cna_c_api_wasm`) that `cna-ts`
+  runs in the browser. Three breaks landed since the last Emscripten C API build: an unqualified
+  `apply(*top, ui)` in `GuideScreens.cpp` that ADL resolved to `std::apply` (`Screen` derives from
+  `enable_shared_from_this`; libc++ hard-errors where libstdc++ quietly falls back), a missing
+  `override` on `DisplayMode::ToString` that clang's `-Werror` in the C API target refuses, and
+  `ENetDiscoveryService::Matching` defined only inside the native-only block. Proven by building
+  `cna_c_api_wasm` (WEBGL2) and running `CApi_WasmModuleSmoke` and the browser probe (11/11).
+- **BINDFIX-040** — `cna-ruby` A8: `cna_effect_get_parameters`, `_get_techniques` and
+  `_get_current_technique` segfaulted on the effect a content-loaded `Model` publishes, on every
+  renderer. The model mirror published it as an `EffectResource` without the adapter state all 24
+  generic Effect routes read; it now gets the same state `CreateEffectHandle` builds, minus the
+  game-child count: the loading content owns that effect, and counting it (the first version did)
+  left the game undestroyable once a model had been loaded. Pinned by
+  `CApi_ContentModelEffectSmoke` (loads `tests/assets/xnb/.../BlenderDefaultCube.xnb`, leaves the
+  model to its content manager, then destroys the game).
+- **BINDFIX-041** — `JAVA-UPSTREAM-014`: a process exiting with a live game whose creating thread
+  had already ended -- every JVM, whose launcher runs `main` on a thread of its own -- aborted on
+  the GL renderers. The static handle registry destroyed the game on the exiting thread, whose
+  thread-local GL function table is empty, and meta-gl terminates there. At exit the registry now
+  leaves objects created by another thread to the operating system. Pinned by
+  `CApi_ExitWithForeignThreadGameSmoke` (a game and a dynamic vertex buffer made on a thread that
+  ends first; the process must exit 0 -- it aborted with 134 on OPENGLES3 before).
+
 ---
 
 ## The rest of the backlog

@@ -48,7 +48,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Retrieves a string representation of this display mode.
          * @return Width, height, format, and aspect ratio in XNA field order.
          */
-        [[nodiscard]] std::string ToString() const;
+        [[nodiscard]] std::string ToString() const override;
 
         /**
          * @brief Returns true if both display modes have the same width, height, and format.

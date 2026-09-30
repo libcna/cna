@@ -423,6 +423,13 @@ template<typename TCallable>
 
 class HandleRegistry final {
 public:
+    /// The process-wide registry is destroyed with the process's static objects, on whichever
+    /// thread called exit(). An object still registered by another thread -- a JVM runs main on a
+    /// thread of its own, which has ended by then -- is left to the operating system rather than
+    /// destroyed: its GL context and thread-local GL function table belong to that thread, and
+    /// tearing a live game down from here terminated the process (JAVA-UPSTREAM-014).
+    ~HandleRegistry();
+
     CNA_Result Create(
         ObjectKind kind,
         std::shared_ptr<void> object,

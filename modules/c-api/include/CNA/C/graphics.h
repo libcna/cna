@@ -797,7 +797,9 @@ CNA_C_API CNA_Result cna_graphics_device_copy_renderer_name(
  *
  * A recognized but unavailable capability is a successful query that writes `CNA_FALSE`.
  * Operations requiring that capability return `CNA_RESULT_NOT_SUPPORTED` rather than silently
- * substituting another behavior.
+ * substituting another behavior. `CNA_GRAPHICS_CAPABILITY_MULTIPLE_RENDER_TARGETS` and
+ * `CNA_GRAPHICS_CAPABILITY_TEXTURE_3D` also answer for the device's current graphics profile:
+ * `CNA_GRAPHICS_PROFILE_REACH` binds one render target and has no volume textures.
  */
 CNA_C_API CNA_Result cna_graphics_device_supports_capability(
     CNA_Handle graphics_device,

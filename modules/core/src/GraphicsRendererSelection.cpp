@@ -40,6 +40,9 @@ namespace CNA
             std::optional<GraphicsRendererType> preferred;
             std::optional<GraphicsRendererType> environmentPreferred;
             bool environmentConsulted = false;
+            /// Why the environment variable was refused, reported again on every later query so a
+            /// refusal can never turn into a silent use of the default renderer.
+            std::optional<std::string> environmentError;
 
             bool fallbackEnabled = false;
             std::vector<GraphicsRendererType> fallbackChain;
@@ -96,32 +99,28 @@ namespace CNA
         /// Design decision 6: an identity that is not compiled in is an error, NOT a silent
         /// downgrade -- unless the caller has explicitly asked for fallback, in which case the
         /// chain gets its chance and the rejection is recorded rather than thrown.
-        void RejectIfNotCompiledIn(GraphicsRendererType type)
+        [[nodiscard]] std::optional<std::string> NotCompiledInMessage(GraphicsRendererType type)
         {
             SelectionState& state = State();
             if (!state.published || Contains(state.available, type) || state.fallbackEnabled)
-                return;
+                return std::nullopt;
 
-            throw System::InvalidOperationException(
-                std::string("CNA::GraphicsRendererSelection: the ") +
+            return std::string("CNA::GraphicsRendererSelection: the ") +
                 std::string(getGraphicsRendererName(type)) +
                 " renderer is not compiled into this build. Available: " + AvailableList() +
                 ". Rebuild with -DCNA_GRAPHICS_RENDERER=" +
                 std::string(getGraphicsRendererName(type)) +
-                ", or configure a fallback chain with SetFallbackChain().");
+                ", or configure a fallback chain with SetFallbackChain().";
         }
 
-        /// Design decision 1: the environment variable is a convenience below an explicit call, and
-        /// follows the CNA_BGFX_RENDERER / CNA_DILIGENT_DEVICE precedent. A value naming a renderer
-        /// that is not compiled in throws, consistent with SetPreferred() -- silently ignoring it
-        /// would leave the user believing they had switched renderer when they had not.
-        void ConsultEnvironmentOnce()
+        void RejectIfNotCompiledIn(GraphicsRendererType type)
         {
-            SelectionState& state = State();
-            if (state.environmentConsulted)
-                return;
-            state.environmentConsulted = true;
+            if (std::optional<std::string> message = NotCompiledInMessage(type))
+                throw System::InvalidOperationException(*message);
+        }
 
+        void ReadEnvironment(SelectionState& state)
+        {
             const char* raw = std::getenv("CNA_GRAPHICS_RENDERER");
 
 #ifdef __EMSCRIPTEN__
@@ -141,13 +140,31 @@ namespace CNA
             GraphicsRendererType parsed{};
             if (!tryParseGraphicsRendererName(raw, parsed))
             {
-                throw System::InvalidOperationException(
-                    std::string("CNA_GRAPHICS_RENDERER=\"") + raw +
-                    "\" does not name any CNA graphics renderer.");
+                state.environmentError = std::string("CNA_GRAPHICS_RENDERER=\"") + raw +
+                    "\" does not name any CNA graphics renderer.";
+                return;
             }
 
-            RejectIfNotCompiledIn(parsed);
-            state.environmentPreferred = parsed;
+            state.environmentError = NotCompiledInMessage(parsed);
+            if (!state.environmentError.has_value())
+                state.environmentPreferred = parsed;
+        }
+
+        /// Design decision 1: the environment variable is a convenience below an explicit call, and
+        /// follows the CNA_BGFX_RENDERER / CNA_DILIGENT_DEVICE precedent. A value naming a renderer
+        /// that is not compiled in throws, consistent with SetPreferred() -- silently ignoring it
+        /// would leave the user believing they had switched renderer when they had not. So does
+        /// every later query: the refusal is kept rather than consumed by the first one.
+        void ConsultEnvironmentOnce()
+        {
+            SelectionState& state = State();
+            if (!state.environmentConsulted)
+            {
+                state.environmentConsulted = true;
+                ReadEnvironment(state);
+            }
+            if (state.environmentError.has_value())
+                throw System::InvalidOperationException(*state.environmentError);
         }
 
         void RebuildAttemptOrder()
@@ -294,12 +311,13 @@ namespace CNA
         state.preferred.reset();
         state.environmentPreferred.reset();
         state.environmentConsulted = false;
+        state.environmentError.reset();
         state.fallbackEnabled = false;
         state.fallbackChain.clear();
         state.active.reset();
         state.history.clear();
         state.latched.store(false, std::memory_order_release);
-        RebuildAttemptOrder();
+        state.attemptOrder.clear();
     }
 
     void GraphicsRendererSelectionAccessEXT::PublishAvailable(
@@ -309,7 +327,10 @@ namespace CNA
         state.available.assign(available.begin(), available.end());
         state.defaultType = defaultType;
         state.published = true;
-        RebuildAttemptOrder();
+        // Not rebuilt here: this runs from a static initializer, where a refused
+        // CNA_GRAPHICS_RENDERER would escape as std::terminate while the library is still loading.
+        // GetAttemptOrder() rebuilds it on first use, where the refusal is an ordinary exception.
+        state.attemptOrder.clear();
     }
 
     void GraphicsRendererSelectionAccessEXT::Latch(GraphicsRendererType active)

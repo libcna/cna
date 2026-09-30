@@ -557,6 +557,34 @@ if(CNA_BUILD_TESTS)
     cna_c_api_enable_strict_warnings(cna_c_api_abi_smoke)
     add_test(NAME CApi_AbiSmoke COMMAND cna_c_api_abi_smoke)
 
+    # BINDFIX-038: a refused CNA_GRAPHICS_RENDERER must not terminate the process while the library
+    # loads. One run names no renderer at all, the other a real one this build does not contain.
+    add_executable(cna_c_api_renderer_environment_smoke
+        tests/pure_c/RendererEnvironmentSmoke.c
+    )
+    set_target_properties(cna_c_api_renderer_environment_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_renderer_environment_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_renderer_environment_smoke)
+    set(_cna_absent_renderer METAL)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "METAL" OR "METAL" IN_LIST CNA_GRAPHICS_RENDERERS)
+        set(_cna_absent_renderer DIRECTX12)
+    endif()
+    foreach(_cna_refused unknown absent)
+        if(_cna_refused STREQUAL "unknown")
+            set(_cna_refused_value NOT_A_RENDERER)
+        else()
+            set(_cna_refused_value ${_cna_absent_renderer})
+        endif()
+        add_test(NAME CApi_RendererEnvironment_${_cna_refused}
+            COMMAND cna_c_api_renderer_environment_smoke)
+        set_tests_properties(CApi_RendererEnvironment_${_cna_refused} PROPERTIES
+            ENVIRONMENT "CNA_GRAPHICS_RENDERER=${_cna_refused_value}")
+    endforeach()
+
     add_executable(cna_c_api_error_smoke
         tests/pure_c/ErrorSmoke.c
     )
@@ -1840,6 +1868,36 @@ if(CNA_BUILD_TESTS)
             ENVIRONMENT "SDL_VIDEODRIVER=dummy"
         )
     endif()
+
+    # BINDFIX-041: exiting with a live game whose creating thread has already ended.
+    add_executable(cna_c_api_exit_with_foreign_thread_game_smoke
+        tests/pure_c/ExitWithForeignThreadGameSmoke.c
+    )
+    set_target_properties(cna_c_api_exit_with_foreign_thread_game_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_exit_with_foreign_thread_game_smoke PRIVATE cna_c_api Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_exit_with_foreign_thread_game_smoke)
+    add_test(NAME CApi_ExitWithForeignThreadGameSmoke
+        COMMAND cna_c_api_exit_with_foreign_thread_game_smoke)
+
+    # BINDFIX-040: the generic Effect routes on the effect a content-loaded Model publishes.
+    add_executable(cna_c_api_content_model_effect_smoke
+        tests/pure_c/ContentModelEffectSmoke.c
+    )
+    set_target_properties(cna_c_api_content_model_effect_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_content_model_effect_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_content_model_effect_smoke)
+    target_compile_definitions(cna_c_api_content_model_effect_smoke PRIVATE
+        CNA_C_API_TEST_ASSET_DIR="${PROJECT_SOURCE_DIR}/tests/assets")
+    add_test(NAME CApi_ContentModelEffectSmoke COMMAND cna_c_api_content_model_effect_smoke)
+    set_tests_properties(CApi_ContentModelEffectSmoke PROPERTIES SKIP_RETURN_CODE 77)
 
     # CABI-35: the frame-identity coverage needs a real decodable video, and this is the first C
     # test to want an asset at all. The source tree's own fixture directory is compiled in rather

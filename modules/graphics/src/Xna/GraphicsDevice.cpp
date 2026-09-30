@@ -1189,6 +1189,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::SetGraphicsProfileEXT(GraphicsProfile profile)
     {
+        if (graphicsProfile_ != profile)
+        {
+            // MultipleRenderTargets and Texture3D are profile limits, and the cached feature
+            // profile derives its answers from them.
+            InvalidateRendererCapabilityProfileEXT();
+        }
         graphicsProfile_ = profile;
     }
 
@@ -3438,6 +3444,14 @@ namespace Microsoft::Xna::Framework::Graphics
             return GetRenderer().SupportsCapability(capability) &&
                 GetRenderer().GetMaxRenderTargetsForProfileEXT(
                     static_cast<int>(graphicsProfile_)) > 1;
+        }
+        // The same holds for volume textures: Reach has none at all (a maximum extent of 0), so
+        // Texture3D's constructor refuses every request there however capable the renderer is.
+        if (capability == CNA::GraphicsCapability::Texture3D)
+        {
+            return GetRenderer().SupportsCapability(capability) &&
+                GetRenderer().GetMaxVolumeExtentForProfileEXT(
+                    static_cast<int>(graphicsProfile_)) > 0;
         }
         return GetRenderer().SupportsCapability(capability);
     }

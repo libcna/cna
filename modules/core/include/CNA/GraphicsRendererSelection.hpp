@@ -66,6 +66,9 @@ namespace CNA
          * CNA_GRAPHICS_RENDERER environment variable, this build's compile-time default.
          *
          * @return The currently selected renderer identity.
+         * @throws System::InvalidOperationException while the environment variable names a
+         *         renderer this build refuses and nothing was set explicitly -- on every call, not
+         *         only the first. The variable is read on first use, never while the library loads.
          */
         [[nodiscard]] static GraphicsRendererType GetSelected();
 

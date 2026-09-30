@@ -476,6 +476,23 @@ static CNA_Result on_load(
     }
     state->stage = 2;
     /*
+     * The game's device starts in XNA's default Reach profile, which has no volume textures on any
+     * renderer. The capability has to say so: OPENGLES3 used to answer true here while every
+     * create was refused, so a caller that followed the capability could not make a volume.
+     */
+    CNA_GraphicsProfile profile = CNA_GRAPHICS_PROFILE_HI_DEF;
+    if (!VOL(cna_graphics_device_get_graphics_profile(device, &profile) == CNA_RESULT_SUCCESS) ||
+        !VOL(profile == CNA_GRAPHICS_PROFILE_REACH) ||
+        !VOL(supports_texture3d == CNA_FALSE) ||
+        !validate_texture3d_rejection(device) ||
+        !VOL(cna_graphics_device_set_graphics_profile_ext(
+            device, CNA_GRAPHICS_PROFILE_HI_DEF) == CNA_RESULT_SUCCESS) ||
+        !VOL(cna_graphics_device_supports_capability(
+            device, CNA_GRAPHICS_CAPABILITY_TEXTURE_3D, &supports_texture3d) ==
+            CNA_RESULT_SUCCESS)) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    /*
      * This file's own comment above promises it "branches on the reported capabilities and runs
      * unchanged on any backend". It did not: it required the capability to be ABSENT and then
      * asserted a blanket rejection, so a renderer growing volume-texture support turned the suite

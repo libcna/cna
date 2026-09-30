@@ -127,6 +127,13 @@ struct TextureCubeResourceView final {
     std::shared_ptr<void> adapterLifetime,
     CNA_Handle* outTexture);
 
+/// Builds the state every generic Effect route reads through EffectResource::adapterState -- the
+/// parameter and technique views and the retained texture slots -- for an effect that loaded
+/// content owns, so it is not counted among the game's C children. An effect published without it
+/// (a loaded Model's) faulted in the first route that asked.
+[[nodiscard]] std::shared_ptr<void> CreateEffectAdapterState(
+    const std::shared_ptr<Microsoft::Xna::Framework::Graphics::Effect>& effect);
+
 [[nodiscard]] CNA_Result CreateBorrowedEffect(
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::Effect> effect,
     CNA_Handle parentGame,

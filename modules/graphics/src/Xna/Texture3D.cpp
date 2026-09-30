@@ -166,8 +166,10 @@ namespace Microsoft::Xna::Framework::Graphics
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(depth, "depth");
         // REMED-CONTENT-004: renderers without real volume storage leave CreateTexture3D() at its
         // null shared default. Previously that let every subsequent SetData()/GetData() call
-        // silently no-op, so the capability is checked before renderer creation instead.
-        if (!device.SupportsCapability(CNA::GraphicsCapability::Texture3D))
+        // silently no-op, so the capability is checked before renderer creation instead. The
+        // renderer is asked directly: the device's answer also folds in the profile, which the
+        // next check refuses with its own message.
+        if (!device.GetRenderer().SupportsCapability(CNA::GraphicsCapability::Texture3D))
         {
             throw System::NotSupportedException(
                 "Texture3D: this renderer does not support real volume (3D) texture storage");

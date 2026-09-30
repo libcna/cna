@@ -560,7 +560,9 @@ CNA_C_API CNA_Result cna_graphics_renderer_set_preferred_by_name_ext(CNA_StringV
  * @brief Gets the renderer CNA will attempt first.
  *
  * @param out_type Receives the identity.
- * @return `CNA_RESULT_SUCCESS` or an argument failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` while the `CNA_GRAPHICS_RENDERER`
+ *         environment variable names a renderer this build refuses and no renderer was set
+ *         explicitly, or an argument failure.
  */
 CNA_C_API CNA_Result cna_graphics_renderer_get_selected_ext(CNA_GraphicsRendererType* out_type);
 

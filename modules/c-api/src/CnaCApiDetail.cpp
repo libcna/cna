@@ -3,6 +3,8 @@
 #include "CnaCApiDetail.hpp"
 
 #include <limits>
+#include <thread>
+#include <vector>
 
 namespace CNA::C::Detail {
 
@@ -227,6 +229,19 @@ CNA_Result CheckedElementByteCount(
     }
     *outByteCount = static_cast<std::size_t>(byteCount);
     return CNA_RESULT_SUCCESS;
+}
+
+HandleRegistry::~HandleRegistry()
+{
+    // Held rather than dropped, so the objects stay reachable and a leak checker does not report
+    // what is deliberate; the process is ending.
+    static auto* const abandoned = new std::vector<std::shared_ptr<void>>();
+    const std::thread::id current = std::this_thread::get_id();
+    for (Slot& slot : slots_) {
+        if (slot.object != nullptr && slot.creationThread != current) {
+            abandoned->push_back(std::move(slot.object));
+        }
+    }
 }
 
 CNA_Result HandleRegistry::Create(
