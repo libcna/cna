@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -21,6 +22,13 @@ void setPlayerBlocked(const std::string& localGamertag,const std::string& gamert
 /** @brief Replaces a local profile's block list with the service's. @param localGamertag Local
  * profile. @param gamertags Blocked gamers. */
 void setBlockedPlayers(const std::string& localGamertag,const std::vector<std::string>& gamertags);
+/** @brief Installs what says whether this machine can talk now: voice built and switched on and a
+ * capture device present. NetworkSession's voice installs it; without it nobody can talk.
+ * @param provider Capability test, or empty. @return The provider it replaces. */
+std::function<bool()> setLocalVoiceCapabilityProvider(std::function<bool()> provider);
+/** @brief Whether this machine can talk now, as friends see it (XNA FriendGamer.HasVoice).
+ * @return Capable. */
+bool localVoiceCapable();
 /** @brief Forgets every mute and block; deterministic tests only. */
 void resetVoiceMutesForTesting();
 }

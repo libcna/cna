@@ -1,12 +1,26 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/GamerServices/VoiceMutes.hpp"
 #include <map>
+#include <mutex>
+#include <utility>
 #include <set>
 
 namespace CNA::Internal::GamerServices {
 namespace {
 std::map<std::string,std::set<std::string>>& mutes(){static std::map<std::string,std::set<std::string>> value;return value;}
 std::map<std::string,std::set<std::string>>& blocks(){static std::map<std::string,std::set<std::string>> value;return value;}
+std::mutex& providerMutex(){static std::mutex value;return value;}
+std::function<bool()>& provider(){static std::function<bool()> value;return value;}
+}
+std::function<bool()> setLocalVoiceCapabilityProvider(std::function<bool()> value)
+{
+    std::lock_guard lock(providerMutex());return std::exchange(provider(),std::move(value));
+}
+bool localVoiceCapable()
+{
+    std::function<bool()> test;
+    {std::lock_guard lock(providerMutex());test=provider();}
+    try{return test&&test();}catch(...){return false;}
 }
 bool voiceMuted(const std::string& localGamertag,const std::string& gamertag)
 {

@@ -118,3 +118,23 @@ TEST_F(GuidePrivilegeTest, TheBlockListReadAtSignInMutesVoice) {
     EXPECT_TRUE(Service::voiceMuted("Pal", "Bob"));
     EXPECT_FALSE(Service::voiceMuted("Pal", "Kid"));
 }
+
+// GSH-04: FriendGamer.HasVoice is what the friend's client reports, and only while it is online.
+TEST_F(GuidePrivilegeTest, AFriendHasVoiceWhileOnlineWithAClientThatCanTalk) {
+    SignedInGamer* pal = SignIn(0, "Pal");
+    Service::setFakeRemotePresence(*service_, "b", true);
+    service_->changeFriend("p", "Bob", "add");
+    service_->changeFriend("b", "Pal", "accept");
+    auto bobHasVoice = [&] {
+        auto friends = pal->GetFriends();
+        for (int i = 0; i < friends.getCountProperty(); ++i)
+            if (friends[i]->getGamertagProperty() == "Bob") return friends[i]->getHasVoiceProperty();
+        ADD_FAILURE() << "Bob is not a friend";
+        return false;
+    };
+    EXPECT_FALSE(bobHasVoice());
+    Service::setFakeVoice(*service_, "b", true);
+    EXPECT_TRUE(bobHasVoice());
+    Service::setFakeRemotePresence(*service_, "b", false);
+    EXPECT_FALSE(bobHasVoice());
+}

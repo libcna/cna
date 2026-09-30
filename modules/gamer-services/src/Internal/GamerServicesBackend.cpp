@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
+#include "CNA/Internal/GamerServices/VoiceMutes.hpp"
 #include "CNA/Internal/GamerServices/AssetDiskCache.hpp"
 #include "CNA/Internal/GamerServices/AvatarAssets.hpp"
 #include "CNA/Internal/GamerServices/BackendConfiguration.hpp"
@@ -40,6 +41,7 @@ constexpr bool backgroundServiceWork = false;
 #else
 constexpr bool backgroundServiceWork = true;
 #endif
+std::atomic<int> heartbeatSeconds{30};
 long long unixTime(){return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();}
 void slotGuard(int slot) {if(slot<0||slot>3)throw System::ArgumentOutOfRangeException("slot");}
 ServiceIdentity identity(const Json& j) {
@@ -225,7 +227,12 @@ public:
                         if(state.generation==generation) {
                             if(state.expires<=unixTime()+300&&!state.refresh.empty())renewLocked(slot,generation);
                             else if(capabilities_.contains("heartbeat")&&!state.token.empty()) {
-                                try{(void)exchange("auth.ping",Json::object(),state.token);}
+                                // With the heartbeat the client says whether it can talk now (XNA
+                                // FriendGamer.HasVoice as friends see it); one boolean, no device detail.
+                                Json ping=Json::object();
+                                if(capabilities_.contains("friend-voice"))
+                                    ping["voice"]=localVoiceCapable()&&state.identity.communication!="blocked";
+                                try{(void)exchange("auth.ping",ping,state.token);}
                                 catch(const ServiceError& error){if(error.code!="UNAUTHENTICATED")throw;renewLocked(slot,generation);}
                             }
                             succeeded=true;
@@ -233,7 +240,7 @@ public:
                     }catch(const ServiceError& error) {if(error.code=="UNAUTHENTICATED")invalidateSlot(slot,generation);}
                      catch(...) {}
                     {std::lock_guard lock(slotMutex_);auto& state=slots_[slot];if(state.generation==generation){state.busy=false;
-                        if(succeeded){state.failures=0;state.retryAt=0;state.heartbeatAt=unixTime()+30;}
+                        if(succeeded){state.failures=0;state.retryAt=0;state.heartbeatAt=unixTime()+heartbeatSeconds;}
                         else {state.failures=std::min(state.failures+1,6);state.retryAt=unixTime()+std::min(300,10*(1<<state.failures));}}}
                     BackendEvent event;event.type=BackendEvent::Type::Completion;return event;
                 });
@@ -273,7 +280,8 @@ public:
             // A server older than these flags leaves them out; one that sends them sends booleans.
             for(auto [key,target]:{std::pair{"joinable",&friendState.joinable},std::pair{"inviteReceivedFrom",&friendState.inviteReceivedFrom},
                 std::pair{"inviteSentTo",&friendState.inviteSentTo},std::pair{"inviteAccepted",&friendState.inviteAccepted},
-                std::pair{"inviteRejected",&friendState.inviteRejected},std::pair{"away",&friendState.away},std::pair{"busy",&friendState.busy}}) {
+                std::pair{"inviteRejected",&friendState.inviteRejected},std::pair{"away",&friendState.away},std::pair{"busy",&friendState.busy},
+                std::pair{"hasVoice",&friendState.hasVoice}}) {
                 if(!e.contains(key))continue;
                 if(!e[key].is_boolean())throw Unavailable("Invalid friend response.");
                 *target=e[key].get<bool>();
@@ -768,7 +776,7 @@ private:
             serverNow=result["serverTime"].get<long long>();
         }
         if(!result.contains("expires")||!result["expires"].is_number_integer()||result["expires"]<=serverNow||result["expires"]>serverNow+3600)throw Unavailable("Invalid credential expiry.");
-        state.expires=localNow+(result["expires"].get<long long>()-serverNow);state.heartbeatAt=localNow+30;
+        state.expires=localNow+(result["expires"].get<long long>()-serverNow);state.heartbeatAt=localNow+heartbeatSeconds;
         if(capabilities_.contains("session-refresh")) {
             state.refresh=CnaService::stringField(result,"refreshToken",64);
             if(state.refresh.size()!=64||state.refresh.find_first_not_of("0123456789abcdef")!=std::string::npos||!result.contains("refreshExpires")||!result["refreshExpires"].is_number_integer()||result["refreshExpires"]<result["expires"]||result["refreshExpires"]>serverNow+30LL*86400)throw Unavailable("Invalid refresh credential.");
@@ -1044,6 +1052,7 @@ public:
             value.presence=value.online?presence_[target.userId]:"";
             value.away=value.online&&status_[target.userId]=="away";value.busy=value.online&&status_[target.userId]=="busy";
             value.joinable=value.online&&joinable_.contains(target.userId);
+            value.hasVoice=value.online&&voice_.contains(target.userId);
             result.push_back(std::move(value));
         }return result;
     }
@@ -1168,6 +1177,7 @@ public:
     }
     /** @brief Fixture: whether an account is in a joinable game (friends and party members see it). */
     void setJoinable(const std::string& user,bool joinable){if(joinable)joinable_.insert(user);else joinable_.erase(user);}
+    void setVoice(const std::string& user,bool voice){if(voice)voice_.insert(user);else voice_.erase(user);}
     std::vector<ServiceLeaderboardInfo> leaderboards() override {
         if(std::all_of(slots_.begin(),slots_.end(),[](const auto& id){return id.empty();}))throw Unavailable("No authenticated fixture gamer.");
         std::vector<ServiceLeaderboardInfo> list;
@@ -1354,6 +1364,7 @@ private:
     std::map<std::string,FakeParty> parties_;
     std::map<std::string,std::string> partyOf_;
     std::set<std::string> joinable_;
+    std::set<std::string> voice_;
     int partySequence_=0;
 };
 thread_local int serviceRestrictionDepth=0;
@@ -1408,6 +1419,12 @@ void setFakeJoinable(IGamerServicesBackend& fake,const std::string& userId,bool 
     auto* backend=dynamic_cast<FakeBackend*>(&fake);
     if(!backend)throw System::InvalidOperationException("Not a fake Gamer Services backend.");
     backend->setJoinable(userId,joinable);
+}
+void setHeartbeatIntervalForTesting(int seconds){heartbeatSeconds=seconds;}
+void setFakeVoice(IGamerServicesBackend& fake,const std::string& userId,bool voice) {
+    auto* backend=dynamic_cast<FakeBackend*>(&fake);
+    if(!backend)throw System::InvalidOperationException("Not a fake Gamer Services backend.");
+    backend->setVoice(userId,voice);
 }
 void setFakeAvatarCatalogPolicy(IGamerServicesBackend& fake,AvatarCatalogPolicy policy) {
     auto* backend=dynamic_cast<FakeBackend*>(&fake);

@@ -63,7 +63,7 @@ avatar catalogs and versioned catalog-pack updates.
 | 15 | Guide look, sounds, input ownership | CNA-equivalent only | None | Yes | n/a |
 | 16 | Guests | Partial | Specialized titles only | Partly | Online guests: needs service design |
 | 17 | QoS of service search results; one round-trip sample | Partial | Minor | Yes (no path before a join) | Yes, after a direct/relay probe |
-| 18 | `FriendGamer.HasVoice` | Unsupported | Minor | Yes | Yes, if clients publish their audio devices |
+| 18 | `FriendGamer.HasVoice`: CNA's definition of "voice capability" | CNA policy | None | Yes | n/a |
 | 19 | Push scope | Partial | None | Yes | Yes (more topics) |
 | 20 | Privileges and privacy: operator policy, not console parental controls | CNA policy | Minor | Yes | n/a |
 | 21 | Profile editing, account self-service | Partial | None | Partly | Yes |
@@ -373,13 +373,23 @@ claim about how Xbox LIVE decided.
 
 ### 18. `FriendGamer.HasVoice`
 
-- **Status:** intentionally unsupported.
-- **XNA / Xbox:** "whether this friend currently has voice capability".
-- **CNA now:** always false. Inside a session `NetworkGamer.HasVoice` is real (14).
-- **Reason:** the service does not know a friend's audio devices; reporting true would be a guess.
-- **Observable impact:** friend lists show no headset icon.
-- **Porting impact:** minor.
-- **Future work:** clients could publish device presence with their presence.
+- **Status:** implementation differs by design (the value is real; its definition is CNA's).
+- **XNA / Xbox:** "whether this friend currently has voice capability". The IL reads one bit of
+  the friend state the console supplied (`FriendState.FriendHasVoice`); what set it is not in the
+  managed code or the documentation. `NetworkGamer.HasVoice` is documented as "has a voice
+  headset".
+- **CNA now:** true while the friend is online and the friend's client reported, with its latest
+  heartbeat (every 30 seconds), that it can talk: voice built and switched on, a recording device
+  present, and the account's communication privilege not Blocked. Offline friends, clients without
+  voice and services without capability `friend-voice` report false. Only that one boolean leaves
+  the friend's machine; no device detail. A client that stops without signing out stops counting
+  when it stops counting as online (90 seconds).
+- **Reason:** "currently has voice capability" names a live state of the friend's machine; this is
+  the closest CNA can observe, and it is observed, not guessed.
+- **Observable impact:** a friend with a headset shows as able to talk within 30 seconds of it
+  changing; whether a console counted a muted or unplugged headset the same way is unknown.
+- **Porting impact:** none.
+- **Future work:** none needed.
 
 ### 19. Service push scope
 
@@ -790,14 +800,14 @@ parties and the other console-only services.
 ## Impact on porting XNA games and samples
 
 **Normally irrelevant to ordinary XNA games:** Xbox LIVE compatibility (1), title-update
-installation (5), Microsoft avatar assets (6), the CNA backend policies (8-13, 15, 20), push scope (19),
+installation (5), Microsoft avatar assets (6), the CNA backend policies (8-13, 15, 18, 20), push scope (19),
 profile self-service (21), credential persistence (24), the server's single process, SQLite,
 cluster and flood limits (34-37), public Internet qualification (31), avatar shading and likeness
 (39, 40), host-language differences (42-44).
 
 **Only affects specialized titles or samples:** partner tokens (2), a real store (3), a
 service-computed skill (4), expiring Recent scores (7), online guests (16),
-online QoS before joining (17), friend headset icons (18), large Stream
+online QoS before joining (17), large Stream
 columns (22), several local talkers on one PC (14), avatar catalog edge cases (41).
 
 **Platform-specific:** browser multiplayer (26), voice builds and devices (27), non-Linux

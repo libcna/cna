@@ -8,6 +8,7 @@
 #if defined(__unix__) || defined(__APPLE__)
 #include "CNA/Internal/GamerServices/BackendConfiguration.hpp"
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
+#include "CNA/Internal/GamerServices/VoiceMutes.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include <nlohmann/json.hpp>
 #include <arpa/inet.h>
@@ -48,6 +49,7 @@ public:
     // The next `count` requests of `op` are read, then their connection closes without an answer.
     void drop(const std::string& op,int count) {std::lock_guard lock(mutex_);drops_[op]=count;}
     std::vector<std::string> ids(const std::string& op) {std::lock_guard lock(mutex_);return seen_[op];}
+    std::vector<Json> arguments(const std::string& op) {std::lock_guard lock(mutex_);return args_[op];}
 private:
     void serve() {
         while(!stop_) {
@@ -61,7 +63,7 @@ private:
                 if(request.empty())break;
                 const auto body=Json::parse(request);const auto op=body.at("op").get<std::string>();
                 bool dropped=false;
-                {std::lock_guard lock(mutex_);seen_[op].push_back(body.at("id").get<std::string>());
+                {std::lock_guard lock(mutex_);seen_[op].push_back(body.at("id").get<std::string>());args_[op].push_back(body.value("args",Json::object()));
                  if(drops_[op]>0){--drops_[op];dropped=true;}}
                 if(dropped)break;
                 const auto text=Json{{"v",1},{"id",body.at("id")},{"error","OK"},{"result",result(op)}}.dump();
@@ -94,7 +96,7 @@ private:
         if(op=="hello") {
             Json capabilities=Json::array({"identity","authentication","achievements"});
             if(outcomes_)capabilities.push_back("request-outcomes");
-            if(privacy_)capabilities.push_back("privacy");
+            if(privacy_)for(const auto* name:{"privacy","friend-voice","heartbeat"})capabilities.push_back(name);
             return {{"version",1},{"capabilities",capabilities},{"maxMessageBytes",65536}};
         }
         if(op=="auth.login")
@@ -108,7 +110,7 @@ private:
         return Json::object();
     }
     bool outcomes_,privacy_;int listener_=-1;unsigned short port_=0;std::atomic<bool> stop_{false};std::atomic<int> connection_{-1};std::thread thread_;
-    std::mutex mutex_;std::map<std::string,int> drops_;std::map<std::string,std::vector<std::string>> seen_;
+    std::mutex mutex_;std::map<std::string,int> drops_;std::map<std::string,std::vector<std::string>> seen_;std::map<std::string,std::vector<Json>> args_;
 };
 
 class ServiceRequestRetryTest : public ::testing::Test {
@@ -187,5 +189,33 @@ TEST_F(ServiceRequestRetryTest, SignInCarriesTheAccountsPrivilegesAndBlockList) 
     EXPECT_TRUE(person.purchaseContent);
     EXPECT_FALSE(person.premiumContent);
     EXPECT_EQ((std::vector<std::string>{"Bob","Carol"}),person.blocked);
+}
+#endif
+
+#if defined(__unix__) || defined(__APPLE__)
+// GSH-04: the heartbeat says whether this machine can talk now, which friends see as
+// FriendGamer.HasVoice; it follows the capability as it changes.
+TEST_F(ServiceRequestRetryTest, TheHeartbeatSaysWhetherThisMachineCanTalk) {
+    LoopbackService service(true,true);
+    std::atomic<bool> capable{true};
+    const auto previousProvider=Service::setLocalVoiceCapabilityProvider([&]{return capable.load();});
+    Service::setHeartbeatIntervalForTesting(1);
+    struct Restore {
+        std::function<bool()> provider;
+        ~Restore(){Service::setHeartbeatIntervalForTesting(30);(void)Service::setLocalVoiceCapabilityProvider(provider);}
+    } restore{previousProvider};
+    const auto backend=signedIn(service);
+    auto awaitPing=[&](bool voice) {
+        for(int i=0;i<400;++i) {
+            (void)backend->pump();
+            const auto pings=service.arguments("auth.ping");
+            if(!pings.empty()&&pings.back().contains("voice")&&pings.back()["voice"]==voice)return true;
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        return false;
+    };
+    EXPECT_TRUE(awaitPing(true));
+    capable=false;
+    EXPECT_TRUE(awaitPing(false));
 }
 #endif

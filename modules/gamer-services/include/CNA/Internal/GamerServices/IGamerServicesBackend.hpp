@@ -107,6 +107,9 @@ struct ServiceFriend {
     std::string presence;
     /** @brief The online friend's account status is away or busy (never both). */
     bool away = false, busy = false;
+    /** @brief XNA FriendGamer.HasVoice: the friend's live client can currently talk (voice built
+     * and on, a capture device present, communication allowed); false while the friend is offline. */
+    bool hasVoice = false;
 };
 /** @brief Most bytes a leaderboard Stream column carries (CNA's bound; hex on the wire). */
 inline constexpr std::size_t MaxLeaderboardStreamBytes = 256;
@@ -417,6 +420,11 @@ void setFakeAvatarCatalogPolicy(IGamerServicesBackend& fake,AvatarCatalogPolicy 
 /** @brief Tests: whether an account is in a joinable game, as friends and party members see it.
  * @param fake Backend from makeFakeBackend. @param userId Account. @param joinable Joinable. */
 void setFakeJoinable(IGamerServicesBackend& fake,const std::string& userId,bool joinable);
+/** @brief Tests: whether an account's client reports it can talk, as friends see it while online.
+ * @param fake Backend from makeFakeBackend. @param userId Account. @param voice Can talk. */
+void setFakeVoice(IGamerServicesBackend& fake,const std::string& userId,bool voice);
+/** @brief Tests: seconds between a signed-in account's heartbeats (30 normally). @param seconds Interval. */
+void setHeartbeatIntervalForTesting(int seconds);
 /** @brief Creates deterministic fake with explicitly supplied identities and catalog.
  * @param identities Accounts. @param catalog Title catalog. @param boards Explicit test boards.
  * @return Fake backend. */
