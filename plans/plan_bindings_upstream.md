@@ -652,6 +652,11 @@ first.
   with no owning `Effect`, so `cna_effect_set_current_technique` refused it as foreign
   (SOFTWARE-257's owner check) and a reflection-built effect could never select its technique. The
   add routes now pass the collection's owner. Pinned by `CApi_EffectSmoke`.
+- **BINDFIX-046** — `RUST-UPSTREAM-031`: ending a process while the shared avatar loader thread was
+  still assembling models segfaulted (28 of 30 runs) or hung for good. The first finished job built
+  function-local lookup maps after the `Loader`, so `exit()` destroyed them before `~Loader` joined
+  the worker still reading them. The two tables are now constant arrays that are never constructed
+  or destroyed. Pinned by `CApi_AvatarExitWhileLoadingSmoke` (fails 16 of 20 runs before).
 
 ---
 

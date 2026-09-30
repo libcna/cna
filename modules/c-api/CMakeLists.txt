@@ -1686,6 +1686,21 @@ if(CNA_BUILD_TESTS)
     cna_c_api_enable_strict_warnings(cna_c_api_avatars_smoke)
     add_test(NAME CApi_AvatarsSmoke COMMAND cna_c_api_avatars_smoke)
 
+    # BINDFIX-046: returning from main while the avatar loader thread is still assembling models.
+    add_executable(cna_c_api_avatar_exit_while_loading_smoke
+        tests/pure_c/AvatarExitWhileLoadingSmoke.c
+    )
+    set_target_properties(cna_c_api_avatar_exit_while_loading_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_avatar_exit_while_loading_smoke PRIVATE cna_c_api Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_avatar_exit_while_loading_smoke)
+    add_test(NAME CApi_AvatarExitWhileLoadingSmoke
+        COMMAND cna_c_api_avatar_exit_while_loading_smoke)
+    set_tests_properties(CApi_AvatarExitWhileLoadingSmoke PROPERTIES TIMEOUT 120)
+
     add_executable(cna_c_api_achievements_smoke
         tests/pure_c/AchievementsSmoke.c
     )
