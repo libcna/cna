@@ -21,6 +21,7 @@
 #include "CNA/Internal/Runtime/IModalFrames.hpp"
 
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <thread>
 #include <utility>
@@ -324,6 +325,100 @@ TEST(GameTest, RunExecutesLifecycleInDocumentedOrder)
     EXPECT_EQ(game.loadContentCalls, 1);
     EXPECT_GE(game.updateCalls, 1);
     EXPECT_GE(game.drawCalls, 1);
+}
+
+namespace
+{
+    // KILLER-1: XNA's Tick() never calls Update once Exit() has been requested -- the fixed-step
+    // catch-up loop is `while (num > 0 && !ShouldExit)` and the variable step is guarded by
+    // `if (!ShouldExit)`. Counts the Updates that break that rule.
+    class ExitObservingGame : public Game
+    {
+    public:
+        explicit ExitObservingGame(std::unique_ptr<CNA::Platform::IPlatform> platform)
+            : Game(std::move(platform))
+        {
+        }
+
+        ScriptedEventPlatform* events = nullptr;
+        int updates = 0;
+        int draws = 0;
+        int updatesAfterExit = 0;
+        int sleptBeforeDraw = -1;
+
+    protected:
+        void Update(GameTime& gameTime) override
+        {
+            if (!RunApplication)
+                ++updatesAfterExit;
+            ++updates;
+
+            if (events != nullptr)
+            {
+                // The quit arrives through the next frame's PollEvents(), before its Update.
+                if (updates == 3)
+                    events->Queue({CNA::Platform::QuitEvent{}});
+            }
+            else if (sleptBeforeDraw < 0 && draws >= 1)
+            {
+                // Stall long enough that the next frame owes roughly twelve fixed steps.
+                std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                sleptBeforeDraw = draws;
+            }
+            else if (sleptBeforeDraw >= 0 && draws > sleptBeforeDraw)
+            {
+                Exit(); // first step of the catch-up frame
+            }
+            Game::Update(gameTime);
+        }
+
+        void Draw(const GameTime& gameTime) override
+        {
+            ++draws;
+            Game::Draw(gameTime);
+        }
+    };
+}
+
+TEST(GameTest, ExitStopsTheRemainingCatchUpUpdatesOfItsFrame)
+{
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
+    {
+        GTEST_SKIP() << "The selected platform cannot create a test window in this environment.";
+    }
+
+    ExitObservingGame game(CNA::Platform::PlatformFactory::Create());
+    GraphicsDeviceManager gdm(&game);
+    game.setIsFixedTimeStepProperty(true);
+
+    ASSERT_NO_THROW(game.Run());
+
+    ASSERT_GE(game.sleptBeforeDraw, 1) << "the catch-up frame was never set up";
+    EXPECT_EQ(game.updatesAfterExit, 0);
+}
+
+TEST(GameTest, AQuitHandledByPollEventsPreventsThatFramesUpdate)
+{
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
+    {
+        GTEST_SKIP() << "The selected platform cannot create a test window in this environment.";
+    }
+
+    for (const bool fixedTimeStep : {true, false})
+    {
+        auto scripted = std::make_unique<ScriptedEventPlatform>(
+            CNA::Platform::PlatformFactory::Create());
+        ScriptedEventPlatform& events = *scripted;
+        ExitObservingGame game(std::move(scripted));
+        game.events = &events;
+        GraphicsDeviceManager gdm(&game);
+        game.setIsFixedTimeStepProperty(fixedTimeStep);
+
+        ASSERT_NO_THROW(game.Run());
+
+        EXPECT_GE(game.updates, 3) << "fixed=" << fixedTimeStep;
+        EXPECT_EQ(game.updatesAfterExit, 0) << "fixed=" << fixedTimeStep;
+    }
 }
 
 TEST(GameTest, MobileLifecycleEventsSuspendResumeAndTerminateTheLoop)
