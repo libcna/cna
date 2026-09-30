@@ -1998,6 +1998,10 @@ namespace CNA::Internal::Renderers
         /// whatever the map holds -- and at 1 it is the map unchanged. Only meaningful when
         /// `pbrOcclusionMap` is bound.
         float pbrOcclusionStrength = 1.0f;
+        /// glTF `doubleSided` (living-room-simulator R-3): a back face is shaded with its normal
+        /// reversed, so it is lit from the side that shows it. Culling stays the application's
+        /// RasterizerState; this only decides the shading normal of the faces it lets through.
+        bool pbrDoubleSided = false;
         /// plans/plan_gltf.md GLTF-210: the base-colour texture's samples are sRGB-ENCODED and must be
         /// decoded to linear before lighting (glTF §3.9.2). The `DiffuseColor` FACTOR is already
         /// linear and must NOT be decoded -- the two multiply, and decoding both would apply the

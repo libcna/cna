@@ -21,6 +21,7 @@ None of it is physical-GPU evidence.
 | GSC-0007 | `CaseInsensitivePathTest` contract (formerly WINNATIVE-F26) | ✅ |
 | GSC-0008 | Audio test fixtures isolated per process (`%TEMP%` race) | ✅ |
 | GSC-0009 | PBR shading basis guarded against a zero normal or tangent on every family | ⬜ EasyGL done |
+| GSC-0010 | PBR double-sided materials shade the back face with the basis reversed on every family | ⬜ EasyGL done |
 
 Follow-ups found on the way are listed at the end; none of them was fixed here.
 
@@ -243,6 +244,25 @@ every case loses 0.74 of its light -- and passes with it on llvmpipe and the GPU
 `sdl-gpu/src/shaders/pbr3d.frag.glsl`, `metal/src/MetalRenderer.mm`,
 `directx9/src/shaders/cna/Pbr3D.hlsl` and `PbrSkinned3D.hlsl` (precompiled bytecode), and the two
 WGSL programs in `webgpu_shaders.hpp`; the shared Direct3D 11/12 HLSL needs the same check.
+
+---
+
+## GSC-0010 — A double-sided PBR back face is lit from the side that shows it
+
+**Cause** (living-room-simulator's R-3). `PbrEffect`/`SkinnedPbrEffect` carried glTF `doubleSided`
+but it never reached a renderer, so the back of a leaf or curtain was shaded with the normal of the
+side facing away. glTF's Sample Viewer reverses the whole tangent basis on a back face.
+
+**EasyGL, done.** `GpuDrawParams::pbrDoubleSided`; EasyGL uploads `uDoubleSided` as +1, or -1 when
+the World mirrors (the on-screen winding, and so `gl_FrontFacing`, is then reversed), and both PBR
+programs flip N, T and B on the face `gl_FrontFacing` identifies as the back.
+`easygl_pbr_double_sided_test` fails without the flip (back face 0.10 against 0.43) and without the
+mirror sign (mirrored front face 0.10), and passes with both on the GPU and llvmpipe.
+
+**Open.** Every other PBR family ignores `pbrDoubleSided`: Vulkan (`pbr3d*.frag.glsl`, SPIR-V
+regenerated), SDL_GPU, Metal, WebGPU, DirectX 9 (precompiled) and the shared Direct3D 11/12 HLSL.
+Each needs the flag, the mirror sign and its own front-facing input (`SV_IsFrontFace`,
+`@builtin(front_facing)`, `[[front_facing]]`), checked against that family's winding convention.
 
 ---
 

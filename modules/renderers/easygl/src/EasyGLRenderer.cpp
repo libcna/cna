@@ -10179,6 +10179,7 @@ if (ProfileUsesGlslEs100())
             p.prog.uniform_location("uSpecularFresnelInputs");
         p.loc_pbr_srgb          = p.prog.uniform_location("uSrgb");
         p.loc_pbr_normalscale   = p.prog.uniform_location("uNormalScale");
+        p.loc_pbr_doublesided   = p.prog.uniform_location("uDoubleSided");
         p.loc_pbr_occlstrength  = p.prog.uniform_location("uOcclusionStrength");
         p.loc_pbr_texcoordsets  = p.prog.uniform_location("uTextureCoordinateSets");
         p.loc_pbr_occlusiontexcoordset =
@@ -10255,6 +10256,7 @@ if (ProfileUsesGlslEs100())
             p.prog.uniform_location("uSpecularFresnelInputs");
         p.loc_pbr_srgb          = p.prog.uniform_location("uSrgb");
         p.loc_pbr_normalscale   = p.prog.uniform_location("uNormalScale");
+        p.loc_pbr_doublesided   = p.prog.uniform_location("uDoubleSided");
         p.loc_pbr_occlstrength  = p.prog.uniform_location("uOcclusionStrength");
         p.loc_pbr_texcoordsets  = p.prog.uniform_location("uTextureCoordinateSets");
         p.loc_pbr_occlusiontexcoordset =
@@ -11162,6 +11164,22 @@ if (ProfileUsesGlslEs100())
         // behaviour exactly, which is what makes adopting it a per-renderer step.
         if (p.loc_pbr_normalscale >= 0)
             p.prog.set_uniform(p.loc_pbr_normalscale, params.pbrNormalScale);
+        // living-room-simulator R-3: 0 single-sided, +1 double-sided, -1 double-sided under a
+        // mirroring World -- which reverses the on-screen winding, so gl_FrontFacing then names
+        // the back face and the shader has to read it the other way round.
+        if (p.loc_pbr_doublesided >= 0)
+        {
+            float sidedness = 0.0f;
+            if (params.pbrDoubleSided)
+            {
+                const float* w = params.worldColMajor;
+                const float det = w[0] * (w[5] * w[10] - w[9] * w[6])
+                                - w[4] * (w[1] * w[10] - w[9] * w[2])
+                                + w[8] * (w[1] * w[6] - w[5] * w[2]);
+                sidedness = det < 0.0f ? -1.0f : 1.0f;
+            }
+            p.prog.set_uniform(p.loc_pbr_doublesided, sidedness);
+        }
         if (p.loc_pbr_occlstrength >= 0)
             p.prog.set_uniform(p.loc_pbr_occlstrength, params.pbrOcclusionStrength);
         if (p.loc_pbr_texcoordsets >= 0)

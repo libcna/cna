@@ -1499,6 +1499,7 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_pbr_srgb        = -1;
             /// plans/plan_gltf.md GLTF-224: float normalTexture.scale (PbrEffect only).
             int loc_pbr_normalscale = -1;
+            int loc_pbr_doublesided = -1;
             /// plans/plan_gltf.md GLTF-225: float occlusionTexture.strength (PbrEffect only).
             int loc_pbr_occlstrength = -1;
             /// plans/plan_gltf.md GLTF-182/183: vec4 UV1 selectors for PBR slots 0-3.
