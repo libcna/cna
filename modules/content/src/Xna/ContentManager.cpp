@@ -5711,19 +5711,33 @@ namespace Microsoft::Xna::Framework::Content
             {
                 return Vector3(value[0], value[1], value[2]);
             };
+            // One object per referenced texture for the whole model, as in XNA, so effects that
+            // name the same image share it (living-room-simulator R-29; CNA-F20 for V1).
+            std::unordered_map<std::string, std::shared_ptr<Graphics::Texture2D>> textures2D;
+            std::unordered_map<std::string, std::shared_ptr<Graphics::TextureCube>> texturesCube;
             const auto texture2D = [&](const std::string& logical)
                 -> std::shared_ptr<Graphics::Texture2D>
             {
                 if (logical.empty()) { return {}; }
-                return std::make_shared<Graphics::Texture2D>(
-                    cm.Load<Graphics::Texture2D>(logical));
+                auto& slot = textures2D[logical];
+                if (!slot)
+                {
+                    slot = std::make_shared<Graphics::Texture2D>(
+                        cm.Load<Graphics::Texture2D>(logical));
+                }
+                return slot;
             };
             const auto textureCube = [&](const std::string& logical)
                 -> std::shared_ptr<Graphics::TextureCube>
             {
                 if (logical.empty()) { return {}; }
-                return std::make_shared<Graphics::TextureCube>(
-                    cm.Load<Graphics::TextureCube>(logical));
+                auto& slot = texturesCube[logical];
+                if (!slot)
+                {
+                    slot = std::make_shared<Graphics::TextureCube>(
+                        cm.Load<Graphics::TextureCube>(logical));
+                }
+                return slot;
             };
 
             std::vector<Graphics::Effect*> effects;

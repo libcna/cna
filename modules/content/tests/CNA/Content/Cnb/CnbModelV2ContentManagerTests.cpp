@@ -9,6 +9,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Content/Cnb/CnbModelV2Codec.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
@@ -20,6 +21,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 
 namespace Cnb = CNA::Content::Cnb;
@@ -248,6 +250,53 @@ TEST(CnbModelV2ContentManagerTest, LoadsExactRootDeclarationWindowsBoundsAndShar
     EXPECT_FLOAT_EQ(effect->getSpecularPowerProperty(), 9.5f);
     EXPECT_FLOAT_EQ(effect->getAlphaProperty(), 0.75f);
     EXPECT_TRUE(effect->getVertexColorEnabledProperty());
+}
+
+// living-room-simulator R-29 on the V2 path: effects that name one texture share one Texture2D, as
+// parts referring to one external texture do in XNA; another texture is another object.
+TEST(CnbModelV2ContentManagerTest, EffectsNamingOneTextureShareOneTexture2D)
+{
+    ScratchRoot root;
+    GraphicsDevice device;
+    for (const char* name : {"atlas.png", "other.png"})
+    {
+        Microsoft::Xna::Framework::Graphics::Texture2D texture(device, 1, 1);
+        const Microsoft::Xna::Framework::Color pixel(17, 34, 51, 255);
+        texture.SetData(&pixel, 1);
+        texture.SaveAsPng((root.Path() / name).string());
+    }
+
+    Cnb::CnbModelV2Data model = RuntimeStockEffectsModel();
+    Cnb::CnbModelV2Effect textured;
+    textured.kind = Cnb::CnbModelV2EffectKind::BasicEffect;
+    textured.alpha = 1.0f;
+    textured.primaryTexture = "atlas";
+    Cnb::CnbModelV2Effect other = textured;
+    other.primaryTexture = "other";
+    model.effects = {textured, textured, other};
+    model.meshes[0].parts.clear();
+    for (std::uint32_t effect = 0u; effect < 3u; ++effect)
+    {
+        model.meshes[0].parts.push_back({0u, 3u, 0u, 1u, 0u, 0u, effect});
+    }
+    WriteBytes(root.Path() / "atlased.cnb", Cnb::EncodeModelV2ToCnb(model, "atlased"));
+
+    ContentManager manager(nullptr, root.Path().string());
+    manager.setGraphicsDevice(device);
+    const Model loaded = manager.Load<Model>("atlased");
+    const auto* mesh = loaded.getMeshesProperty()[0];
+    ASSERT_NE(mesh, nullptr);
+    ASSERT_EQ(mesh->getMeshPartsProperty().getCountProperty(), 3);
+    const auto textureOf = [&](int part) {
+        const auto* effect = dynamic_cast<const BasicEffect*>(
+            mesh->getMeshPartsProperty()[part]->getEffectProperty());
+        EXPECT_NE(effect, nullptr);
+        return effect != nullptr ? effect->getTextureProperty() : nullptr;
+    };
+    ASSERT_NE(textureOf(0), nullptr);
+    EXPECT_EQ(textureOf(0), textureOf(1));
+    ASSERT_NE(textureOf(2), nullptr);
+    EXPECT_NE(textureOf(0), textureOf(2));
 }
 
 TEST(CnbModelV2ContentManagerTest, ConstructsAllFiveStockEffectKindsWithExactParameters)
