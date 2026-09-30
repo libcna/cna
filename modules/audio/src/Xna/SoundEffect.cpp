@@ -651,16 +651,20 @@ namespace Microsoft::Xna::Framework::Audio
         AudioChannels channels)
     {
         const int ch = static_cast<int>(channels);
-        if (ch <= 0 || sampleRate <= 0)
+        if (ch <= 0 || sampleRate <= 0 || sizeInBytes <= 0)
         {
             return System::TimeSpan::Zero;
         }
-        // Matches FNA: truncate to whole milliseconds. 16-bit PCM => 2 bytes per sample.
-        const int samples = sizeInBytes / 2;
-        const int ms = static_cast<int>(
-            (samples / ch) / (sampleRate / 1000.0f)
-        );
-        return System::TimeSpan::FromMilliseconds(ms);
+        // XNA's AudioFormat.DurationFromSize: whole 16-bit frames, milliseconds computed in float,
+        // then TimeSpan.FromMilliseconds -- which on .NET Framework rounds to the NEAREST
+        // millisecond (away from zero on a tie). FNA truncates instead; 559 stereo frames at
+        // 31184 Hz are 17.93 ms, 18 ms in XNA and 17 in FNA (cna-killer KF-7).
+        const int frames = sizeInBytes / (2 * ch);
+        const float milliseconds =
+            static_cast<float>(frames) * 1000.0f / static_cast<float>(sampleRate);
+        const auto wholeMilliseconds =
+            static_cast<std::int64_t>(static_cast<double>(milliseconds) + 0.5);
+        return System::TimeSpan::FromTicks(wholeMilliseconds * System::TimeSpan::TicksPerMillisecond);
     }
 
     SharpRuntime::intcs SoundEffect::GetSampleSizeInBytes(
@@ -668,12 +672,20 @@ namespace Microsoft::Xna::Framework::Audio
         SharpRuntime::intcs sampleRate,
         AudioChannels channels)
     {
-        return static_cast<SharpRuntime::intcs>(
-            duration.getTotalSecondsProperty() *
-            sampleRate *
-            static_cast<int>(channels) *
-            2 // 16-bit PCM
-        );
+        // XNA's AudioFormat.SizeFromDuration: a whole number of frames, never a partial one --
+        // (int)(ms * (rate / 1000f)) frames, plus frames % channels, times the 16-bit block
+        // alignment. Multiplying seconds by rate * channels * 2 instead returned byte counts that
+        // are not whole frames (6743 for 83 ms of mono at 40622 Hz, where XNA says 6742), and a
+        // game sizing a SubmitBuffer by it submitted a torn sample (cna-killer KF-8).
+        const int ch = static_cast<int>(channels);
+        if (ch <= 0 || sampleRate <= 0)
+        {
+            return 0;
+        }
+        const double factor = static_cast<double>(static_cast<float>(sampleRate) / 1000.0f);
+        const auto frames =
+            static_cast<std::int64_t>(duration.getTotalMillisecondsProperty() * factor);
+        return static_cast<SharpRuntime::intcs>((frames + frames % ch) * 2 * ch);
     }
 
     namespace

@@ -218,7 +218,8 @@ TEST(MicrophoneTest, GetSampleDurationRoundTripsWithGetSampleSizeInBytes)
 {
     Microphone mic = MakeMic();
     const auto bytes = mic.GetSampleSizeInBytes(System::TimeSpan::FromSeconds(1.0));
-    EXPECT_EQ(bytes, 88200); // 44100 Hz * mono(1) * 2 bytes/sample
+    // XNA's (int)(ms * (double)(44100f / 1000f)): 44099 whole frames of 16-bit mono.
+    EXPECT_EQ(bytes, 88198);
     EXPECT_DOUBLE_EQ(mic.GetSampleDuration(bytes).getTotalSecondsProperty(), 1.0);
 }
 

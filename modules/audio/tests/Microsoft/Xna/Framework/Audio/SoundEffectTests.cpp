@@ -198,12 +198,35 @@ TEST(SoundEffectTest, GetSampleDurationOneSecond)
     EXPECT_NEAR(d.getTotalSecondsProperty(), 1.0, 1e-9);
 }
 
-TEST(SoundEffectTest, GetSampleDurationTruncatesToWholeMilliseconds)
+TEST(SoundEffectTest, GetSampleDurationRoundsToTheNearestMillisecondAsXnaDoes)
 {
-    // 1000 stereo frames = 4000 bytes; 1000/44100 s = 22.6757 ms -> FNA truncates to 22 ms.
-    const System::TimeSpan d =
-        SoundEffect::GetSampleDuration(4000, 44100, AudioChannels::Stereo);
-    EXPECT_NEAR(d.getTotalSecondsProperty(), 0.022, 1e-6);
+    // 1000 stereo frames = 4000 bytes; 1000/44100 s = 22.6757 ms. XNA's TimeSpan.FromMilliseconds
+    // (.NET Framework) rounds to 23 ms; FNA truncates to 22 (cna-killer KF-7).
+    EXPECT_EQ(SoundEffect::GetSampleDuration(4000, 44100, AudioChannels::Stereo).getTicksProperty(),
+              23 * System::TimeSpan::TicksPerMillisecond);
+    // 559 stereo frames at 31184 Hz = 17.926 ms -> 18.
+    EXPECT_EQ(SoundEffect::GetSampleDuration(2236, 31184, AudioChannels::Stereo).getTicksProperty(),
+              18 * System::TimeSpan::TicksPerMillisecond);
+    // Below the half: 1000 mono frames at 44100 Hz = 22.676 ms -> 23; 441 frames = 10.0 ms -> 10.
+    EXPECT_EQ(SoundEffect::GetSampleDuration(882, 44100, AudioChannels::Mono).getTicksProperty(),
+              10 * System::TimeSpan::TicksPerMillisecond);
+}
+
+TEST(SoundEffectTest, GetSampleSizeInBytesIsAlwaysWholeFramesAsXnaComputesThem)
+{
+    // XNA: (int)(ms * (double)((float)rate / 1000f)) frames, plus frames % channels, times the
+    // block alignment -- never a partial frame (cna-killer KF-8).
+    EXPECT_EQ(SoundEffect::GetSampleSizeInBytes(System::TimeSpan::FromMilliseconds(83), 40622,
+                                                AudioChannels::Mono),
+              6742);
+    EXPECT_EQ(SoundEffect::GetSampleSizeInBytes(System::TimeSpan::FromMilliseconds(73), 33191,
+                                                AudioChannels::Stereo),
+              9688);
+    // 44100f / 1000f is 44.0999985 in float, so one second is 44099 frames: 88198 bytes of mono.
+    // Stereo gets the frame back through the frames % channels term: 176400.
+    EXPECT_EQ(SoundEffect::GetSampleSizeInBytes(System::TimeSpan::FromSeconds(1.0), 44100,
+                                                AudioChannels::Mono),
+              88198);
 }
 
 TEST(SoundEffectTest, GetSampleDurationZeroForBadFormat)
