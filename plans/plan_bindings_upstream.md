@@ -641,7 +641,9 @@ first.
   orientation; where its crop overflows, FNA3D's blit clips it and CNA threw. Zooming now scales by
   the larger ratio -- identical wherever the old crop fitted. The non-zoom (fit) path is unchanged;
   whether XNA's native decoder can exceed the requested height there (SW-05's second half) has no
-  IL to settle it. Pinned by `ImageLoaderTests.ZoomFillsWideAndTallTargetsByCroppingTheOverflow`.
+  IL to settle it. A crop narrower than one source pixel (2x2 zoomed to 8x2) now keeps one pixel
+  instead of truncating to an empty rectangle (reported by `cna-swift` after the first fix).
+  Pinned by `ImageLoaderTests.ZoomFillsWideAndTallTargetsByCroppingTheOverflow`.
 - **BINDFIX-044** — `System::InvalidCastException` (a compiled effect parameter read or written in a
   shape it does not have, FX-089/FX-105) fell through the exception barrier to
   `CNA_RESULT_INTERNAL`, which `docs/c-api/ERRORS.md` reserves for native failures with no public

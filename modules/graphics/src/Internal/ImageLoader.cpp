@@ -345,6 +345,12 @@ namespace CNA::Internal::Graphics
             cropX = width / 2 - static_cast<int>((targetWidth / scale) / 2);
             cropWidth = static_cast<int>(targetWidth / scale);
         }
+        // A target far wider or taller than a small source crops to under one source pixel, which
+        // truncated to an empty rectangle; keep at least one.
+        cropWidth = std::max(cropWidth, 1);
+        cropHeight = std::max(cropHeight, 1);
+        cropX = std::min(cropX, width - cropWidth);
+        cropY = std::min(cropY, height - cropHeight);
         return ResizeRegion(
             pixels, width, height, cropX, cropY, cropWidth, cropHeight,
             targetWidth, targetHeight);
