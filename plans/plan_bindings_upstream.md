@@ -587,6 +587,19 @@ CNA contradicted its own documentation or its own siblings:
   C API" though `skin->Data` held it; it is now published as an aliasing borrow of the
   Model. Reported by `cna-rust` (`RUST-UPSTREAM-022`).
 
+## Fixed in the 2026-09-30 binding retirement pass
+
+The seven standalone bindings (Go, Java, Python, Ruby, Rust, Swift, TS) were requalified against
+ABI 0.35.0 before being archived into `cna-lab`; every row below was reproduced against `next`
+first.
+
+- **BINDFIX-037** — `cna_graphics_device_supports_capability(TEXTURE_3D)` answered true on
+  OPENGLES3 for a device in XNA's default Reach profile, where `Texture3D` refuses every volume
+  (SOFTWARE-179), so `CApi_TextureVolumeSmoke` failed on every GL tree. The capability now folds in
+  the profile exactly as `MultipleRenderTargets` already did (RLGL-040), and a profile change
+  invalidates the cached feature snapshot. Pinned by `CApi_TextureVolumeSmoke` (Reach refuses,
+  HiDef follows the renderer) and `Texture3DProfileTest.CapabilityFollowsTheDeviceGraphicsProfile`.
+
 ---
 
 ## The rest of the backlog

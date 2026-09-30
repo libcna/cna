@@ -31,6 +31,7 @@
 #include <vector>
 
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/RendererTestGate.hpp"
 
 // Lets CNA_RENDERER_IS name identities bare, matching the compile-time guards it replaced.
@@ -178,6 +179,28 @@ TEST(Texture3DUnsupportedRendererTest, ConstructorThrowsNotSupportedExceptionWhe
         GTEST_SKIP() << "this renderer supports Texture3D; nothing to verify here";
     }
     EXPECT_THROW((Texture3D(gd, 2, 2, 2, false, SurfaceFormat::Color)), System::NotSupportedException);
+}
+
+// XNA's Reach profile has no volume textures, so the constructor refuses every one there. The
+// capability must answer for the device's profile rather than for the renderer alone, and the cached
+// feature snapshot must follow a profile change.
+TEST(Texture3DProfileTest, CapabilityFollowsTheDeviceGraphicsProfile)
+{
+    using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
+    GraphicsDevice gd;
+    gd.SetGraphicsProfileEXT(GraphicsProfile::Reach);
+    EXPECT_FALSE(gd.SupportsCapability(CNA::GraphicsCapability::Texture3D));
+    EXPECT_EQ(gd.GetRendererFeatureSupportEXT(CNA::RendererFeature::Texture3DStorage),
+              CNA::RendererFeatureSupport::Unsupported);
+    EXPECT_THROW((Texture3D(gd, 2, 2, 2, false, SurfaceFormat::Color)), System::NotSupportedException);
+
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+    const bool rendererStoresVolumes =
+        gd.GetRenderer().SupportsCapability(CNA::GraphicsCapability::Texture3D);
+    EXPECT_EQ(gd.SupportsCapability(CNA::GraphicsCapability::Texture3D), rendererStoresVolumes);
+    EXPECT_EQ(gd.GetRendererFeatureSupportEXT(CNA::RendererFeature::Texture3DStorage) ==
+                  CNA::RendererFeatureSupport::Supported,
+              rendererStoresVolumes);
 }
 
 TEST_F(Texture3DTest, ConstructorSetsWidth)

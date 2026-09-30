@@ -1534,7 +1534,8 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * Query this before relying on a feature that isn't universally supported (e.g. 3D on
          * the 2D-only SDL_RENDERER and CANVAS renderers), instead of calling it and handling the
-         * resulting exception.
+         * resulting exception. MultipleRenderTargets and Texture3D also answer for this device's
+         * GraphicsProfile: Reach binds one render target and has no volume textures.
          *
          * @param capability The capability to check.
          * @return True if supported by the active renderer/device.
