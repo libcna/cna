@@ -2,9 +2,10 @@
 
 This is the authoritative list of what CNA's GamerServices, Net, Guide and Avatar implementation
 does **not** do, does only in part, does differently from XNA on Xbox 360 by design, or has not been
-able to verify. It describes the current code (verified 2026-09-30 against CNA
-`feature/gamer-services-server`, which then equalled `next` plus this cleanup, and
-cna-gamer-services-server `feature/gamer-services-server`). When code changes one of these
+able to verify. It describes the current code (verified 2026-09-30 after the final hardening pass,
+[`plans/plan_gamer_services_final_hardening.md`](../plans/plan_gamer_services_final_hardening.md),
+against CNA `feature/gamer-services-server` and cna-gamer-services-server
+`feature/gamer-services-server`). When code changes one of these
 entries, change it here in the same commit.
 
 CNA provides a **CNA-owned, XNA/Xbox-like** GamerServices implementation: CNA's own protocol,
@@ -18,14 +19,13 @@ deployment), [`avatars.md`](avatars.md) (the avatar system),
 ([`plans/gamer_services_server_final_register.md`](../plans/gamer_services_server_final_register.md))
 lists each refusal in the code with its evidence; the three GamerServices plans are history.
 
-**Status values:** *intentionally unsupported* (CNA will not do it, for the reason given) ·
-*partially implemented* (the working part and the missing part are stated) · *platform-limited*
-(works on some targets only) · *not independently validated* (implemented, not measured in the way
-named) · *implementation differs by design* (XNA shows the outcome, CNA decided how) ·
-*CNA-equivalent only* (a CNA function stands where Xbox had its own service). The summary table
-abbreviates them as Unsupported, Partial, CNA policy (XNA shows the outcome, CNA decides it),
-Differs by design, CNA-equivalent only, Platform limitation, Unverified, Deployment limitation and
-Host-language difference.
+**Categories** (the summary's third column): *intentional* (CNA will not do it, or does it its own
+way, for the reason given) · *compatibility gap* (XNA-observable behaviour CNA lacks) · *platform
+limitation* (works on some targets only, or was not run on some) · *deployment limitation* (the
+server's operating model, not XNA compatibility) · *hardware-unverified* (implemented; the physical
+device loop was not closed) · *CNA backend-policy difference* (XNA shows the outcome, CNA decides
+it) · *historically unknown Xbox behaviour* (XNA does not say, and no console trace exists). Each
+entry below also keeps its own status line.
 
 ## Not limitations: implemented and tested
 
@@ -40,56 +40,60 @@ NetworkSession voice, SystemLink QoS including upstream bandwidth, trial mode an
 title-version gating, the console-style Guide with its sign-in picker, gamer cards and avatar
 editor, the Guide owning input while visible, the standard `AvatarRenderer`/`AvatarAnimation`/
 `AvatarDescription` with XNA's 71-bone skeleton and `AvatarDescription.Changed`, locally installed
-avatar catalogs and versioned catalog-pack updates.
+avatar catalogs and versioned catalog-pack updates. Since the final hardening pass (2026-09-30):
+service requests that survive a crash or a lost response exactly once, `NetworkGamer.IsGuest` of
+remote SystemLink guests, `GamerPrivileges` from account policy with blocking, `FriendGamer.HasVoice`,
+a single-owner database lock on every server host, refresh credentials in the desktop keyring (Linux)
+or sealed with DPAPI (Windows), and serialized avatar catalog installs.
 
 ## Summary
 
-| # | Area | Status | XNA-port impact | Intentional? | Future feasible? |
-|---|---|---|---|---|---|
-| 1 | Xbox LIVE protocol, accounts, credentials | Unsupported | None through the XNA API | Yes | No (outside CNA's identity) |
-| 2 | `Gamer.GetPartnerToken` family | Unsupported | Blocks only titles using partner web services | Yes | No |
-| 3 | Marketplace, store, payments | CNA-equivalent only | Minor: no real purchase | Yes | Possible as a CNA store; not planned |
-| 4 | TrueSkill computation | Unsupported | None observable through the API | Yes | Only with a documented CNA algorithm |
-| 5 | Title-update installation | CNA-equivalent only | None | Yes | Not needed |
-| 6 | Microsoft avatar assets | Unsupported | None functionally | Yes | No |
-| 7 | `...Recent` leaderboard window | Partial | Minor | Yes (no evidence for a window) | Yes, if evidence appears |
-| 8 | Reputation formula | CNA policy | None | Yes | n/a |
-| 9 | Host election | CNA policy | None | Yes | n/a |
-| 10 | Ranked arbitration rule | CNA policy | None | Yes | n/a |
-| 11 | Party model | CNA policy | None | Yes | n/a |
-| 12 | Online status and presence timing | CNA policy | None | Yes | n/a |
-| 13 | Invitation lifetime and identity | CNA policy | None | Yes | n/a |
-| 14 | Voice routing: one microphone per machine, mute list | CNA policy | Minor | Yes | Yes (per-gamer devices) |
-| 15 | Guide look, sounds, input ownership | CNA-equivalent only | None | Yes | n/a |
-| 16 | Guests | Partial | Specialized titles only | Partly | Online guests: needs service design |
-| 17 | QoS of service search results; one round-trip sample | Partial | Minor | Yes (no path before a join) | Yes, after a direct/relay probe |
-| 18 | `FriendGamer.HasVoice`: CNA's definition of "voice capability" | CNA policy | None | Yes | n/a |
-| 19 | Push scope | Partial | None | Yes | Yes (more topics) |
-| 20 | Privileges and privacy: operator policy, not console parental controls | CNA policy | Minor | Yes | n/a |
-| 21 | Profile editing, account self-service | Partial | None | Partly | Yes |
-| 22 | Leaderboard Stream columns, unmeasured Xbox rules | Partial | Minor | Yes | Partly |
-| 23 | No service configured (offline profiles) | Platform limitation | Minor | Yes | n/a |
-| 24 | Credentials at rest: plaintext files without a keyring; no macOS Keychain | Platform limitation | None | Partly | Yes |
-| 25 | Relay-only online transport over TCP | Differs by design | Minor latency | Yes | Yes (direct path) |
-| 26 | Browser (WebAssembly) multiplayer and services | Platform limitation | Blocks online/LAN play in browsers | Yes (owner scope) | Yes, with new adapters |
-| 27 | Voice availability by build and device | Platform limitation | Minor | Yes | Partly |
-| 28 | Non-Linux clients and server hosts | Unverified | Unknown | No | Yes |
-| 29 | Voice heard through the air (microphone and speaker exercised; the loop between them not) | Hardware-unverified | Unknown | No | Yes, with an unmuted speaker |
-| 30 | Guide system sounds heard by a person | Hardware-unverified | None | No | Yes, with a listener |
-| 31 | Public Internet deployment | Unverified | None for a LAN/NAT test; unknown in production | No | Yes |
-| 32 | Console-only rules read from Windows IL | Unverified | Unknown, believed minor | No | Only with console traces |
-| 33 | `AvatarRenderer` on renderers other than OpenGL 3.3/Vulkan | Unverified | Unknown | No | Yes |
-| 34 | Single server process, SQLite writer, in-memory hubs | Deployment limitation | None | Yes | Yes, with coordination work |
-| 35 | SQLite as the only database | Deployment limitation | None | Yes | Yes |
-| 36 | No cluster or horizontal scale | Deployment limitation | None | Yes | Yes, substantial |
-| 37 | Distributed hostile traffic | Deployment limitation | None | Yes | Operator's firewall/proxy |
-| 38 | Operational limits a game can meet | Deployment limitation | Rare, surfaces as XNA exceptions | Yes | Tunable |
-| 39 | Avatar baked shading and occlusion | Partial (visual quality) | None | Yes | Only inside the renderer |
-| 40 | Avatar visual fidelity of catalog v3 | Differs by design | None | Yes | New catalog versions |
-| 41 | Avatar catalog and format edge cases | Partial | Minor | Yes | Partly |
-| 42 | `PropertyDictionary` equality of arbitrary `std::any` | Host-language difference | Minor | Yes | No |
-| 43 | Leaderboard columns of non-XNA C++ types | Host-language difference | None | Yes | No |
-| 44 | Value-type `AvatarDescription` and shared `Changed` | Host-language difference | None | Yes | No |
+| # | Area | Category | XNA-port impact | Future feasible? |
+|---|---|---|---|---|
+| 1 | Xbox LIVE protocol, accounts, credentials | Intentional | None through the XNA API | No (outside CNA's identity) |
+| 2 | `Gamer.GetPartnerToken` family | Intentional | Blocks only titles using partner web services | No |
+| 3 | Marketplace, store, payments (CNA equivalent: trial and test purchase) | Intentional | Minor: no real purchase | Possible as a CNA store; not planned |
+| 4 | TrueSkill computation | Intentional | None observable through the API | Only as a documented CNA algorithm |
+| 5 | Title-update installation (CNA equivalent: version gating) | Intentional | None | Not needed |
+| 6 | Microsoft avatar assets | Intentional | None functionally | No |
+| 7 | `...Recent` leaderboard window | Historically unknown Xbox behaviour | Minor | Yes, if evidence appears |
+| 8 | Reputation formula | CNA backend-policy difference | None | n/a |
+| 9 | Host election | CNA backend-policy difference | None | n/a |
+| 10 | Ranked arbitration rule | CNA backend-policy difference | None | n/a |
+| 11 | Party model | CNA backend-policy difference | None | n/a |
+| 12 | Online status and presence timing | CNA backend-policy difference | None | n/a |
+| 13 | Invitation lifetime and identity | CNA backend-policy difference | None | n/a |
+| 14 | Voice routing: one microphone per machine, session-long mutes | CNA backend-policy difference | Minor | Yes (per-gamer devices) |
+| 15 | Guide look, sounds, input ownership | Intentional | None | n/a |
+| 16 | Online guests refused | Compatibility gap | Specialized titles only | Needs a service guest identity |
+| 17 | QoS of online search results | Compatibility gap | Minor | Yes, with a relay probe |
+| 18 | `FriendGamer.HasVoice`: CNA's definition of "voice capability" | Historically unknown Xbox behaviour | None | n/a |
+| 19 | Push scope | Intentional | None | Yes (more topics) |
+| 20 | Privileges and privacy: operator policy, not console parental controls | CNA backend-policy difference | Minor | Self-service settings |
+| 21 | Profile editing, account self-service | Intentional | None | Yes |
+| 22 | Leaderboard Stream columns, unmeasured Xbox rules | Historically unknown Xbox behaviour | Minor | Partly |
+| 23 | No service configured (offline profiles) | Intentional | Minor | n/a |
+| 24 | Credentials at rest: plaintext files without a keyring; no macOS Keychain | Platform limitation | None | Yes |
+| 25 | Relay-only online transport over TCP | Intentional | Minor latency | Yes (direct path) |
+| 26 | Browser (WebAssembly) multiplayer and services | Platform limitation | Blocks online/LAN play in browsers | Yes, with new adapters |
+| 27 | Voice availability by build and device | Platform limitation | Minor | Partly |
+| 28 | Windows and macOS clients and server hosts not run | Platform limitation (unverified) | Unknown | Yes, with those hosts |
+| 29 | Voice heard through the air (devices exercised, loop not) | Hardware-unverified | Unknown | Yes, with an unmuted speaker |
+| 30 | Guide system sounds heard by a person | Hardware-unverified | None | Yes, with a listener |
+| 31 | Public Internet deployment | Deployment limitation (unqualified) | None for a LAN/NAT test; unknown in production | Yes |
+| 32 | Console-only rules read from Windows IL | Historically unknown Xbox behaviour | Unknown, believed minor | Only with console traces |
+| 33 | `AvatarRenderer` on renderers needing Windows/macOS (and OpenGL ES 2, FNA3D) | Platform limitation (unverified) | Unknown; none on the five measured | Yes |
+| 34 | Single server process, SQLite writer, in-memory hubs | Deployment limitation | None | Yes, with coordination work |
+| 35 | SQLite as the only database | Deployment limitation | None | Yes |
+| 36 | No cluster or horizontal scale | Deployment limitation | None | Yes, substantial |
+| 37 | Distributed hostile traffic | Deployment limitation | None | Operator's firewall/proxy |
+| 38 | Operational limits a game can meet | Deployment limitation | Rare, surfaces as XNA exceptions | Tunable |
+| 39 | Avatar baked shading and occlusion | Intentional (visual quality) | None | Only inside the renderer |
+| 40 | Avatar visual fidelity of catalog v3 | Intentional (art direction) | None | New catalog versions |
+| 41 | Avatar catalog and format edge cases | Intentional | Minor | Partly |
+| 42 | `PropertyDictionary` equality of arbitrary `std::any` | Intentional (host-language difference) | Minor | No |
+| 43 | Leaderboard columns of non-XNA C++ types | Intentional (host-language difference) | None | No |
+| 44 | Value-type `AvatarDescription` and shared `Changed` | Intentional (host-language difference) | None | No |
 
 ---
 
@@ -354,22 +358,28 @@ claim about how Xbox LIVE decided.
 - **Porting impact:** specialized titles only (online split-screen with guests).
 - **Future work:** online guests need a service-side guest identity bound to its host account.
 
-### 17. `QualityOfService`
+### 17. `QualityOfService` of online search results
 
-- **Status:** partially implemented.
+- **Status:** compatibility gap (partially implemented).
 - **XNA / Xbox:** `AvailableNetworkSession.QualityOfService`: round trip (average and minimum),
-  estimated bandwidth up and down, `IsAvailable`.
+  estimated bandwidth up and down, `IsAvailable`. XNA's documentation expects it for matchmaking
+  results too: they are "returned before the quality of service probing has finished", and
+  `IsAvailable` turns true once the probes complete; the IL polls the same native QoS query for
+  every session type.
 - **CNA now:** SystemLink search results measure the round trip and both bandwidths (downstream
-  from the host's probe train, upstream from the searcher's train timed by the host's responder).
-  The round trip is one discovery exchange, so average and minimum are the same value. PlayerMatch
-  and Ranked search results report `IsAvailable` false: before a join there is no path to the
-  host, whose realtime traffic exists only through the relay after joining. Joined sessions measure
-  `NetworkGamer.RoundtripTime` and `NetworkSession.BytesPerSecondSent`/`Received` on every
-  transport.
-- **Reason:** a service listing has no network path to measure.
+  from the host's probe train, upstream from the searcher's train timed by the host's responder);
+  the round trip is one discovery exchange, so average and minimum are the same value. PlayerMatch
+  and Ranked search results report `IsAvailable` false. Joined sessions measure
+  `NetworkGamer.RoundtripTime` and `NetworkSession.BytesPerSecondSent`/`Received` on every transport.
+- **Reason (re-examined 2026-09-30, GSH-05):** an online game's path is searcher -> service relay
+  -> host, and before a join there is no such path. The searcher's round trip to the service alone is
+  not the game's path, and neither leg's bandwidth can be estimated from the other; reporting either
+  as the session's quality would invent a number. A faithful measurement needs probe traffic through
+  the relay to the host before joining -- relay authority for a non-member and a responder in the
+  host -- which is new protocol, not a fix.
 - **Observable impact:** online lobbies cannot sort by connection quality.
 - **Porting impact:** minor.
-- **Future work:** a pre-join probe through the relay is feasible.
+- **Future work:** the relay probe described above.
 
 ### 18. `FriendGamer.HasVoice`
 
@@ -565,9 +575,14 @@ claim about how Xbox LIVE decided.
 
 - **Status:** not independently validated.
 - **CNA now:** the online client paths (HTTPS, relay, event channel, credential store) and the
-  server were tested on Linux. CNA builds for Windows, but its GamerServices online paths were not
-  exercised there; Windows and macOS server builds are unvalidated.
-- **Reason:** the test hosts are Linux.
+  server were tested on Linux. On 2026-09-30 the server's single-owner database lock and the Windows
+  credential store (DPAPI) were built with MinGW and passed their tests under Wine 10
+  (`tests/DatabaseLockTests.cpp`, `tools/gamer-services/windows-credential-probe`); Wine is not
+  Windows. Nothing ran on Windows itself or on macOS: the Windows 10 VM this project used is gone
+  and no macOS host exists. CNA builds for Windows, but its GamerServices online paths, TLS, Guide
+  input, SystemLink, voice and `AvatarRenderer` were not exercised there; Windows and macOS server
+  builds are unvalidated (the server has not been built on either).
+- **Reason:** the only test host is Linux.
 - **Observable impact:** none known; defects there would be undiscovered.
 - **Porting impact:** unknown.
 - **Future work:** run the server's CNA harness corpus on those hosts.
@@ -614,7 +629,8 @@ claim about how Xbox LIVE decided.
   host migration and a killed host; the server README has a public deployment checklist. No
   deployment between two genuinely remote networks has been qualified: public Internet latency,
   loss and failover are unmeasured. The service is unqualified there, not unsupported.
-- **Reason:** no second, genuinely remote network was available.
+- **Reason:** no second, genuinely remote network was available (re-checked 2026-09-30: still none;
+  the qualification stays pending, not simulated).
 - **Observable impact:** none in the tests; production latency and failure behaviour are unknown.
 - **Porting impact:** none for porting; relevant to whoever operates a public service.
 - **Future work:** a two-network qualification following the README's deployment checklist.
@@ -634,13 +650,17 @@ claim about how Xbox LIVE decided.
 ### 33. `AvatarRenderer` on other renderers
 
 - **Status:** not independently validated.
-- **CNA now:** drawn and compared on OpenGL 3.3 (EasyGL) and Vulkan (the catalog reviews and
-  `EasyGL_AvatarRenderer_Standard`, `Vulkan_AvatarRenderer_Standard`); HEADLESS runs the API tests.
-  Other renderers use the same `SkinnedEffect` path but were not measured with avatars.
-- **Reason:** those renderers were not built in the avatar passes.
-- **Observable impact:** unknown; a renderer-specific skinning defect would show there first.
-- **Porting impact:** unknown.
-- **Future work:** run the avatar review (`cna_avatar_review`) on each renderer.
+- **CNA now:** on 2026-09-30 the full avatar review (257 frames: views, hands, feet, faces, every
+  expression, key frames of every animation; catalog v3) ran on OpenGL 3.3, Vulkan, SOFTWARE,
+  SDL_GPU (Vulkan backend) and WebGPU, one multi-renderer build, each renderer confirmed by its log.
+  Against OpenGL 3.3 the mean absolute pixel difference is at most 0.10/255 and silhouette overlap at
+  least 0.9995 in every frame; sheets inspected by eye agree. The XNA AvatarShadows sample runs on
+  OpenGL ES 3 (Mesa software). HEADLESS runs the API tests. Not measured: OpenGL ES 2, the DirectX
+  and Metal renderers (no Windows or macOS host), FNA3D and SDL_RENDERER.
+- **Reason:** the remaining renderers need another host or a separate build.
+- **Observable impact:** unknown on those; none found on the five measured.
+- **Porting impact:** none known.
+- **Future work:** the same review on a Windows and a macOS host.
 
 ## Deployment and operations (not XNA compatibility)
 
@@ -648,7 +668,9 @@ claim about how Xbox LIVE decided.
 
 - **Status:** deployment limitation.
 - **CNA now:** one process owns the database (a second on the same database refuses to start with
-  `DATABASE_IN_USE`, through an advisory lock on `<database>.lock`; the admin tool takes none), one
+  `DATABASE_IN_USE`: an operating-system lock on `<database>.lock` -- `flock` on Linux and macOS, a
+  file opened without sharing on Windows -- released by the system when the owner ends, crash
+  included; the admin tool takes none), one
   SQLite writer, and in-memory state for the relay hub (live relay channels), the event hub (live
   event channels) and the per-account request budget.
 - **Reason:** simple, measured (about 1,300 requests a second on the reference machine), enough
@@ -681,10 +703,13 @@ claim about how Xbox LIVE decided.
 ### 37. Distributed hostile traffic
 
 - **Status:** deployment limitation.
-- **CNA now:** per-address limits (32 control connections, 600 new connections and 10 sign-ins a
-  minute per address), 256 control connections and 1,024 relays per server, bounded queues and rate
-  limits per relay channel. A flood from many addresses can still fill the connection table: a
-  firewall, L4 proxy or DDoS filter in front is required. CNA does not claim DDoS protection.
+- **CNA now:** per-address limits checked before the TLS handshake (32 held connections, 600 new
+  ones a minute), a server-wide pool of 256 connections also checked before it, 10 sign-ins a minute
+  per address after it, 1,024 relays per server, bounded queues and rate limits per relay channel.
+  There is no server-wide handshake rate: many addresses stalling handshakes can keep the pool full,
+  and many completing them cost unbounded CPU. A firewall, L4 proxy or DDoS filter in front is
+  required; CNA does not claim DDoS protection (the server README's "Connection and rate limits,
+  precisely").
 - **Reason:** distributed floods are filtered upstream of any single service process.
 - **Porting impact:** none.
 - **Future work:** the operator's firewall or proxy.
@@ -841,7 +866,7 @@ blocked.
 **Samples.** GamerServices/Net/Avatar functionality is no longer a general blocker for ordinary
 XNA 4 sample ports. The currently verified corpus includes AvatarShadows (SAMPLE-087), Invites
 (SAMPLE-096), NetworkStateManagement over SystemLink and online PlayerMatch (SAMPLE-075), and the
-achievements/leaderboards compatibility program (a CNA-written program on the XNA API), run on
-2026-09-30 (`/rv/tmp/samples/*/evidence/*-20260930-xbox-fidelity`). This does not mean that every
+achievements/leaderboards compatibility program (a CNA-written program on the XNA API), last run on
+2026-09-30 after the final hardening pass (`/rv/tmp/samples/*/evidence/*-20260930-final-hardening`). This does not mean that every
 historical XNA sample has been individually ported and executed. Samples depending specifically on
 one of the limitations above may still require adaptation or may not be faithfully reproducible.

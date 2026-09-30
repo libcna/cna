@@ -26,30 +26,32 @@ Branches: CNA `feature/gamer-services-server` (worktree `cnawork/cna-gamer-servi
 
 ## Findings and status
 
-| Id | Finding | Class | Status |
+Commits: CNA `63b3d2a9a`..; server `f5ce769`.. (each row names its own).
+
+| Id | Finding | Class | Outcome |
 |---|---|---|---|
-| GSH-01 | A recorded request ID committed in its own transaction before the mutation ran; a crash in between left the ID spent and the change missing, so the retry was refused as a duplicate | DEFECT | Fixed (below) |
-| GSH-02 | A SystemLink guest reads `IsGuest` false on every other machine: the roster carries no guest flag | COMPAT | Open |
-| GSH-03 | `GamerPrivileges` other than online sessions and purchase are always `Everyone`/true; no block list; no profile privacy | COMPAT | Open |
-| GSH-04 | `FriendGamer.HasVoice` is always false | COMPAT | Open |
-| GSH-05 | Online (PlayerMatch/Ranked) search results never report QoS | COMPAT | Open |
-| GSH-06 | The single-owner database lock is `flock` under `#ifdef __unix__`: nothing on Windows, and nothing on macOS (which does not define `__unix__`) | PLATFORM + DEFECT | Open |
-| GSH-07 | Refresh credentials: POSIX keeps them in owner-only files, not encrypted at rest; Windows keeps none | HARDEN + PLATFORM | Open |
-| GSH-08 | Host migration combined with Ranked results, a server restart and reconnects has no adversarial test | INFER | Open |
-| GSH-09 | Avatar catalog install: gaps for concurrent installs, a client restart during staging, a restart of the server during a download and an unknown description format | INFER | Open |
-| GSH-10 | README throughput figures have no committed raw evidence | VALID | Open |
-| GSH-11 | README wording on TLS handshake and connection rate limits | DOC | Open |
-| GSH-12 | README wording claims more Xbox 360 fidelity than was verified | DOC | Open |
-| GSH-13 | `NEXTnet.md`, inventories and old plans read as current | DOC | Open |
-| GSH-14 | Windows and macOS clients and server hosts are unvalidated | VALID | Open |
-| GSH-15 | `AvatarRenderer` was measured only on OpenGL 3.3 and Vulkan | VALID | Open |
-| GSH-16 | Voice and Guide sounds were never heard through real devices | VALID | Open |
-| GSH-17 | No public-Internet qualification | VALID | Open |
+| GSH-01 | A recorded request ID committed in its own transaction before the mutation ran; a crash in between left the ID spent and the change missing, so the retry was refused as a duplicate | DEFECT | **Fixed**: server `f5ce769`, CNA `63b3d2a9a` |
+| GSH-02 | A SystemLink guest read `IsGuest` false on every other machine | COMPAT | **Fixed**: CNA `07fe3074c` |
+| GSH-03 | `GamerPrivileges` other than online sessions and purchase were always Everyone/true; no block list | COMPAT | **Implemented** as CNA account policy: server `1e4cca6`, CNA `148d9db35` |
+| GSH-04 | `FriendGamer.HasVoice` was always false | COMPAT | **Implemented**, CNA definition: server `bdc0d7b`, CNA `422857620` |
+| GSH-05 | Online search results never report QoS | COMPAT | **Kept unavailable, justified** (below); limitation 17 |
+| GSH-06 | No single-owner database lock on Windows or macOS | PLATFORM + DEFECT | **Fixed**: server `d1d130c` (Linux; Windows code under Wine) |
+| GSH-07 | Refresh credentials plaintext on POSIX, absent on Windows | HARDEN + PLATFORM | **Improved**: CNA `835810e5a` (Secret Service on Linux, DPAPI on Windows; macOS keeps 0600 files) |
+| GSH-08 | Host migration + Ranked results, restart, reconnect untested | INFER -> DEFECT | **Reproduced and fixed**: a report made after the session moved on was lost; server `824decd` |
+| GSH-09 | Avatar catalog install under concurrency, restarts, unknown formats | INFER -> DEFECT | **Reproduced and fixed**: concurrent installers of one pack failed each other; CNA `62f88b4e9` |
+| GSH-10 | README throughput without raw evidence | VALID | **Done**: server `50f3862` (`benchmarks/`) |
+| GSH-11 | README wording on handshake and rate limits | DOC | **Done**: server `e45049a` |
+| GSH-12 | README claims more Xbox fidelity than verified | DOC | **Done**: CNA `aff1ff7ba` |
+| GSH-13 | History read as current | DOC | **Done**: CNA `4788ff066` |
+| GSH-14 | Windows and macOS unvalidated | VALID | **Partly**: lock and DPAPI store under Wine; no Windows (VM gone) or macOS host: UNVERIFIED |
+| GSH-15 | `AvatarRenderer` measured on two renderers only | VALID | **Done** on five renderers (below) |
+| GSH-16 | Voice and Guide sounds never on real devices | VALID | **Partly**: real microphone and output device exercised; the air loop not (speaker muted by its owner): CNA `35f4e379b` |
+| GSH-17 | No public-Internet qualification | VALID | **Pending**: no remote network available; not simulated |
 | GSH-18 | Xbox LIVE wire, Microsoft accounts and assets, PartnerToken, Marketplace, TrueSkill, the Recent window | NONGOAL | Kept |
-| GSH-19 | SQLite and no clustering | NONGOAL | Kept |
-| GSH-20 | Full evidence corpus | VALID | Open |
-| GSH-21 | Sample acceptance | VALID | Open |
-| GSH-22 | Canonical limitations list | DOC | Open |
+| GSH-19 | SQLite and no clustering | NONGOAL | Kept; the benchmark shows no database bottleneck at this scale (GSH-10) |
+| GSH-20 | Full evidence corpus | VALID | **Run** (below) |
+| GSH-21 | Sample acceptance | VALID | **Run**: all five pass (below) |
+| GSH-22 | Canonical limitations list | DOC | **Done**: every entry categorized |
 
 ## GSH-01 Request-ID atomicity
 
@@ -124,3 +126,114 @@ operations.
   - only once;
   - never against a service without `request-outcomes`;
   - never for sign-in.
+
+## GSH-02 SystemLink guests
+
+The join (ClientHello), welcome, join broadcast and AddLocalGamer end with a gamer-flags block,
+`[0x47][count][flags]*count`, bit 0 = guest, written only when a gamer is a guest. Without guests the
+bytes are the old format, so the online relay path (strict parser, no guests) is unchanged and
+still refuses a claimed guest. Older SystemLink peers stop reading before the block. Evidence: codec
+tests pin the old bytes; `TwoProcessLoopbackTest.GuestsAreGuestsOnEveryMachineAcrossRealProcesses`
+(guests on both machines, leave, rejoin, a second guest via AddLocalGamer). Noted, not changed: a
+local gamer who signs out does not leave a SystemLink session in CNA (XNA's rule there was not
+re-established in this pass).
+
+## GSH-03 Privileges and privacy
+
+XNA contract (IL): seven properties from the account's native state; tri-state communication,
+profile viewing and user content; only `ShowMarketplace` checks a bit in managed code, every other
+refusal is the console's `ProfileNotPrivileged` mapped to `GamerPrivilegeException`; no block-list
+API. CNA: operator-set account policy (admin `privilege`, schema 22), returned to the signed-in
+client; the service enforces communication on messages, game and party invitations, join and
+friend requests, and profile viewing on profile reads; the Guide refuses ShowComposeMessage,
+ShowGameInvite and another gamer's ShowGamerCard when the privilege is Blocked (inferred from the IL
+mapping and Guide.xml, not observed on a console). Blocking (gamer card, `privacy.*`) works both
+ways, ends friendship and pending invitations, hides sessions, mutes voice. User content, trade and
+premium are reported only. Evidence: server `PrivacyTests` (66 checks), `GuidePrivilegeTest`,
+`GuideUiTest.TheGamerCardBlocksAndUnblocksAMember`.
+
+## GSH-04 FriendGamer.HasVoice
+
+XNA reads a console-supplied "friend has voice" bit ("currently has voice capability"); what set it
+is not documented. CNA: the heartbeat says whether the client can talk now (voice built and on, a
+recording device, communication not Blocked); friends see it while the friend is online. One
+boolean; stale with presence (90 s). A CNA definition, recorded as such (limitation 18).
+
+## GSH-05 Online QoS (kept unavailable)
+
+XNA did expect QoS for matchmaking results (filled asynchronously; the same native query for every
+session type). CNA's online path is searcher -> service relay -> host; before joining there is no
+path to the host, the searcher's round trip to the service is not the game's path, and one leg's
+bandwidth says nothing of the other's. A faithful measurement needs relay probes to the host before
+joining (non-member relay authority, a host responder): new protocol. Kept unavailable rather than
+invented; limitation 17 states it.
+
+## GSH-06, GSH-07 Platform storage
+
+`DatabaseLock`: flock on POSIX (macOS included), a no-sharing file on Windows; `DatabaseLockTests`
+(separate processes, a holder that dies without cleanup) on Linux and, MinGW-built, under Wine.
+Credentials: Secret Service via run-time libsecret (a keyring that refuses a write leaves the private
+file; one that does not answer in two seconds counts as absent), DPAPI-sealed files on Windows
+(`tools/gamer-services/windows-credential-probe`, 11 checks under Wine). Keyring tests run in a
+private D-Bus session with a throwaway gnome-keyring. During development one early test run wrote
+four test records into the owner's login keyring; they were identified by schema and deleted
+(nothing else there was touched), and the store now uses the keyring only for the default location.
+
+## GSH-08 Ranked + host migration
+
+`RankedMigrationTests` (server): the host crashes mid-game; the service migrates the host (gamer ids
+unchanged; the old host cannot end the game or keep its machine); the new host ends the game; one
+machine reports and leaves; the service restarts; the other reports with its later revision and
+retries. Found: that last report was NOT_FOUND (lost), because a report had to name a revision within
+the round's start and end. Fixed: the latest round started at or before the revision. Verified:
+exactly one round resolved once, one report per reporting machine, one row per gamer, retries
+answered from the record, a second game's report goes to the second round. The CNA client-level
+migration and host-crash end-to-end tests (`service_cna_session_migration`, `_host_crash`) pass.
+
+## GSH-09 Avatar catalogs
+
+Found: two installers of one pack (threads or processes) raced; the one that activated the pack
+removed the other's staging (5 of 12 runs failed). Fixed with a per-version OS lock (flock,
+LockFileEx); 0 of 20 afterwards, and 5 of 6 fail with the lock removed. Tests added: four threads,
+two processes, a client restarted mid-install (staging reused, week-old staging removed), an
+unavailable update, a pack claiming another version, v1-v3 descriptions unchanged by a newer
+catalog (geometry fingerprints), an unknown description format. v1, v2 and v3 stay pinned by the
+existing `CatalogV1/2/3IsFrozen`.
+
+## GSH-10 Benchmarks
+
+Server `benchmarks/2026-09-30-824decd.json`: steady 1,210 req/s, sign-in storm 1,013, 160 idle
+connections 1,161, 90,000 request IDs 1,335, descriptor exhaustion survived; alternated with the
+audited `a85a146` in the same minutes the difference is noise; under load average 13-17 the same run
+measures half.
+
+## GSH-14..17 Validation
+
+- Windows/macOS: see GSH-06/07; nothing else runnable (the Windows 10 VM was deleted; no macOS).
+- Renderers: one multi-renderer build (OPENGL33 default; VULKAN, SOFTWARE, SDL_GPU, WEBGPU), 257-frame
+  avatar review on each through the private display runner; against OpenGL 3.3 the mean absolute
+  difference is at most 0.10/255 and silhouette IoU at least 0.9995; sheets inspected. AvatarShadows
+  runs on OpenGL ES 3. Evidence `/rv/tmp/gs-final-hardening/avatar-review/`.
+- Audio (`tools/net/voice_physical_check.sh`): the real microphone's sound goes through speech
+  detection, Opus and SystemLink to a decoder; a synthetic voice reaches the real output device intact
+  (433 Hz share 0.9993); the six Guide sounds reach it. Speaker muted by its owner, left muted: no
+  air loop, nothing heard. Programs without a Game must pump FrameworkDispatcher.Update for audio, as
+  XNA requires.
+- Public Internet: pending; no second network.
+
+## GSH-20, GSH-21 Evidence corpus (final HEADs)
+
+| Suite | Result |
+|---|---|
+| Server ctest with every CNA harness and NAT tools | 32/32 pass, 0 skipped |
+| `CnaGamerServicesTests` | 627: 626 pass, 1 skip (`GuideTest.IsScreenSaverEnabledGetSet`), 0 fail |
+| `CnaNetTests` | 523/523 pass |
+| `CnaRuntimeTests` | 196: 194 pass, 2 skip (platform-window tests), 0 fail |
+| C API gates (`-R '^CApi'`) | 116: 113 pass; 3 known environment failures of this HEADLESS/NULL-audio tree (Content, Audio, AudioUnavailable smokes), as in the previous baseline |
+| Protocol drift (`check_service_protocol.py`) | match |
+| SDL/platform boundary gates (5) | pass |
+| Demos (18, private display) | 18/18 |
+| Samples | AvatarShadows, Invites, NetworkStateManagement SystemLink and online, Achievements/Leaderboards: 5/5 |
+| Avatar review, five renderers | all frames, see GSH-15 |
+
+Evidence: `/rv/tmp/gs-final-hardening/`, `/rv/tmp/samples/*/evidence/*-20260930-final-hardening`.
