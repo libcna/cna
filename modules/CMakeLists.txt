@@ -235,6 +235,7 @@ target_compile_features(cna_build_config INTERFACE cxx_std_23)
 target_compile_definitions(cna_build_config INTERFACE
         XNA5
         ${CNA_RENDERER_DEFINE}
+        ${CNA_PLATFORM_DEFINE}
         $<$<BOOL:${CNA_CNAEXT}>:CNA_CNAEXT>
         $<$<BOOL:${CNA_DEVICES}>:CNA_DEVICES>
         $<$<BOOL:${CNA_DRACO_AVAILABLE}>:CNA_DRACO_AVAILABLE>

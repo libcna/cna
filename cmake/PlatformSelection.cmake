@@ -126,6 +126,10 @@ if(CNA_PLATFORM STREQUAL "WAYLAND")
 endif()
 
 # The compile definition an implementation's own sources and the entrypoint header key
-# off. Named CNA_PLATFORM_<NAME> to match the CNA_RENDERER_<NAME> convention.
+# off. Named CNA_PLATFORM_<NAME> to match the CNA_RENDERER_<NAME> convention. The directory
+# definition reaches only this source tree; CNA::BuildConfig exports CNA_PLATFORM_DEFINE to
+# consumers too, because a game's own main() includes CNA/Platform/Entrypoint.hpp (without it,
+# a game that adds CNA as a subdirectory got no SDL_main rename on Android -- House Simulator's
+# BL-13).
 add_compile_definitions(CNA_PLATFORM_${CNA_PLATFORM})
 set(CNA_PLATFORM_DEFINE "CNA_PLATFORM_${CNA_PLATFORM}")
