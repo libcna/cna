@@ -235,7 +235,7 @@
     },
     {
       "id": "D8",
-      "summary": "BuildSkeleton walked parent links only inside the skin's own joint set, so the armature transform above the joints was dropped from the bind pose while the authored inverseBindMatrices still contained it -- leaving every skinned vertex multiplied by the inverse of what was lost. GLTF-245 walks the full scene ancestry (skin.skeleton is a hint, never a traversal stop) and GLTF-247 adds the inverse(globalTransform(meshNode)) term, both carried on each root bone's parentWorldPrefix so animating a root joint cannot undo them.",
+      "summary": "BuildSkeleton walked parent links only inside the skin's own joint set, so the armature transform above the joints was dropped from the bind pose while the authored inverseBindMatrices still contained it -- leaving every skinned vertex multiplied by the inverse of what was lost. GLTF-245 walks the full scene ancestry (skin.skeleton is a hint, never a traversal stop), carried on each root bone's parentWorldPrefix so animating a root joint cannot undo it. (GLTF-247's inverse(globalTransform(meshNode)) term was withdrawn by CNASTREET-SKINDRAW: glTF ignores the skinned mesh node.)",
       "owner": "GLTF-SKIN",
       "owningTasks": [
         "GLTF-245",
@@ -1833,7 +1833,7 @@
       ],
       "features": [
         "skinned mesh node transform",
-        "mesh-space cancellation",
+        "mesh node transform ignored",
         "skin.inverseBindMatrices",
         "JOINTS_0 / WEIGHTS_0"
       ],
@@ -1934,7 +1934,7 @@
       ],
       "features": [
         "skinned mesh node transform",
-        "mesh-space cancellation",
+        "mesh node transform ignored",
         "transformed ancestor above the mesh node",
         "JOINTS_0 / WEIGHTS_0"
       ],
@@ -5200,8 +5200,8 @@
     },
     {
       "path": "skin-armature-ancestor.expected.json",
-      "bytes": 12616,
-      "sha256": "d9ab969afc76d1e07cd960405d65dd28d2a31793e9ed9d21c2a3dd13b5ace2bd"
+      "bytes": 12673,
+      "sha256": "fa61e2678f14ceff70d43a4570023144f58f213b44125a2922a8a0997e77c2f9"
     },
     {
       "path": "skin-armature-ancestor.glb",
@@ -5315,8 +5315,8 @@
     },
     {
       "path": "skin-mesh-node-parent-transform.expected.json",
-      "bytes": 10455,
-      "sha256": "d4b089cd296425744c8490ad4a90b55821fde642ab5c3eee44dd6bbc4575a877"
+      "bytes": 10456,
+      "sha256": "9eac34e987f58f92063232ea546827495f43474d45cff86add978f3ffe367687"
     },
     {
       "path": "skin-mesh-node-parent-transform.glb",
@@ -5340,8 +5340,8 @@
     },
     {
       "path": "skin-mesh-node-transform.expected.json",
-      "bytes": 10525,
-      "sha256": "49acabe3e9d128a34e07aeb8ad1a6a27a503784626ee5b804385d283d92bc51d"
+      "bytes": 10446,
+      "sha256": "bc81353bb5d6ad1796a6366fec04f6023ce0178aed0feba45fbd3dec6cd68c84"
     },
     {
       "path": "skin-mesh-node-transform.glb",

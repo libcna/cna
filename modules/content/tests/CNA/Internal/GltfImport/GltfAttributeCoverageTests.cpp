@@ -371,8 +371,7 @@ TEST(GltfAttributeCoverage, EveryAuthoredAttributeEitherArrivesOrIsNamedInARepor
         for (cgltf_size s = 0; s < parsed.data->skins_count; ++s)
         {
             skeletons.push_back(BuildSkeleton(
-                &parsed.data->skins[s], scene,
-                Microsoft::Xna::Framework::Matrix::getIdentityProperty(), 1.0f));
+                &parsed.data->skins[s], scene, 1.0f));
         }
 
         MeshOut out;

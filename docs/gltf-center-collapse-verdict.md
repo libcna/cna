@@ -244,6 +244,13 @@ a uniformly scaled armature it is a division by that scale, i.e. the collapse.
 
 **Owning task:** `GLTF-260` (depends on `GLTF-247`, `GLTF-114`, `GLTF-248`).
 
+> **Corrected 2026-09-30 (cna-street's `CNASTREET-SKINDRAW`).** The verdict below took the glTF
+> tutorial's `inverse(globalTransform(meshNode))` factor for the specification. §3.7.3.2 says the
+> skinned mesh node's transform MUST be *ignored*; the tutorial's factor assumes the renderer also
+> draws the mesh with that transform, and CNA does not. The correct joint matrix here is the
+> identity and the mesh stays at z=0; `-50` was the defect. `GLTF-247`'s term is withdrawn and
+> `GltfSkinSpaces.MeshNodeTransformIsIgnored` asserts the identity.
+
 This fixture did not exist before P0-D. It had to be created because `skin-armature-ancestor`
 **cannot** detect the defect `GLTF-260` owns: its mesh node is untransformed, so a missing
 cancellation and a correct one produce the same number.
@@ -382,7 +389,7 @@ inverted known-defect test. A regression is a normal build break naming the fixt
 | D5 (conversion) | `mode-triangle-strip`, `mode-triangle-fan`, `mode-triangles` | `GltfConformanceL3`, `GltfConformanceL5.AConvertedTopologyProducesTheSameBufferAsAnExplicitTriangleList`, `GltfPrimitiveTopology` | a strip converts with the fan's rule, or loses the odd triangle's winding swap |
 | D5 (rejection) | `mode-points`, `mode-lines`, `mode-line-strip`, `mode-line-loop` | `GltfPrimitiveTopology`, `GltfKnownDefect` | a mode with no draw path imports silently instead of being named and rejected |
 | D8 (ancestry) | `skin-armature-ancestor` | `GltfSkinSpaces.RootJointCarriesTheSceneAncestryAboveTheJointSet`, `…SkinnedVertexLandsWhereTheSpecificationSaysItDoes` | joint matrix drifts from identity to `T(0,-100,0)` |
-| D8 (cancellation) | `skin-mesh-node-transform` | `GltfSkinSpaces.MeshNodeTransformIsCancelledExactlyOnce` | `M43` becomes `0` (missing) or `-100` (doubled) |
+| D8 (mesh node) | `skin-mesh-node-transform` | `GltfSkinSpaces.MeshNodeTransformIsIgnored` | `M43` becomes `-50` (inverse applied alone) or `+50` (node applied) |
 | D8 (structure) | `skin-armature-ancestor` | `GltfSceneGraphBones.SkinnedMeshKeepsItsNodeBoneButIsNotTransformedByIt`, `…AncestryIsPreservedInTheSceneModelButDoesNotTransformIt` | the mesh node's bone is deleted rather than merely not applied |
 
 A defect record is **never deleted** from the corpus ledger. A fixed one keeps its original

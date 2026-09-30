@@ -248,9 +248,9 @@ TEST(GltfSceneGraphBones, SkinnedMeshAncestryIsPreservedInTheSceneModelButDoesNo
     // intact, while the mesh itself hangs off the identity root.
     //
     // This fixture's own mesh node is untransformed, so the non-identity mesh-node case is not
-    // covered here; that is skin-mesh-node-transform (plans/plan_gltf.md §15.4), which P0-D adds together
-    // with GLTF-247/GLTF-260. Asserting a translation this fixture does not declare would be
-    // fabricated coverage, so it is deliberately absent rather than approximated.
+    // covered here; that is skin-mesh-node-transform (plans/plan_gltf.md §15.4). Asserting a
+    // translation this fixture does not declare would be fabricated coverage, so it is
+    // deliberately absent rather than approximated.
     const LoadedFixture fixture("skin-armature-ancestor");
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
 
@@ -322,7 +322,7 @@ TEST(GltfSkinSpaces, SceneNodeAndPaletteMappingsAreExplicitAndBidirectional)
     EXPECT_STREQ("JointA", groups[0].skin->joints[1]->name);
 
     const SkeletonResult skeleton =
-        BuildSkeleton(groups[0].skin, scene, instance.worldTransform, 1.0f);
+        BuildSkeleton(groups[0].skin, scene, 1.0f);
     ASSERT_EQ(2u, skeleton.bones.size());
     ASSERT_EQ(2u, skeleton.oldToNew.size());
     EXPECT_EQ(1, skeleton.oldToNew[0]);
@@ -448,17 +448,17 @@ TEST(GltfSkinSpaces, SkinnedVertexLandsWhereTheSpecificationSaysItDoes)
     EXPECT_NEAR(0.0f, skinned.Z, kTolerance);
 }
 
-TEST(GltfSkinSpaces, MeshNodeTransformIsCancelledExactlyOnce)
+TEST(GltfSkinSpaces, MeshNodeTransformIsIgnored)
 {
-    // GLTF-260, both halves, on the fixture that isolates them. Joint0 has an identity bind pose
-    // and an identity inverse bind matrix, so the entire joint matrix is the mesh node's own
-    // cancellation: inverse(T(0,0,50)) = T(0,0,-50).
+    // GLTF-260 as corrected by cna-street's CNASTREET-SKINDRAW, on the fixture that isolates it.
+    // glTF section 3.7.3.2: "the transform of the skinned mesh node MUST be ignored". Joint0 has an
+    // identity bind pose and an identity inverse bind matrix, so the joint matrix is the identity.
     //
     // Three outcomes are distinguishable here, which is the point of the fixture:
-    //   * no cancellation at all      -> joint matrix is the identity  (GLTF-247 missing)
-    //   * cancelled once              -> T(0,0,-50)                    (correct)
-    //   * cancelled AND the node bone -> the mesh renders at -50 in world space rather than 0,
-    //     because Model::Draw would apply the node bone on top of the already-cancelled geometry
+    //   * the node's transform ignored           -> identity, mesh at z=0         (correct)
+    //   * the node's transform applied           -> the mesh at z=+50
+    //   * the tutorial's inverse(meshNode) alone -> the mesh at z=-50 (CNA until CNASTREET-SKINDRAW;
+    //     that factor assumes the renderer also draws the mesh with its node, which CNA does not)
     const LoadedFixture fixture("skin-mesh-node-transform");
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
 
@@ -475,15 +475,15 @@ TEST(GltfSkinSpaces, MeshNodeTransformIsCancelledExactlyOnce)
     Microsoft::Xna::Framework::Graphics::AnimationPlayer player(*skinning);
     const Matrix jointMatrix = player.GetSkinTransforms()[0];
 
-    // (a) the cancellation exists and is applied exactly once
-    EXPECT_NEAR(-50.0f, jointMatrix.M43, kTolerance)
-        << "expected inverse(T(0,0,50)); 0 means GLTF-247's cancellation is missing, -100 means it "
-           "was applied twice";
+    // (a) the node's transform reaches neither the joint matrix nor its inverse
+    EXPECT_NEAR(0.0f, jointMatrix.M43, kTolerance)
+        << "expected the identity; -50 means the inverse(meshNode) term is back, +50 means the "
+           "node's transform is applied";
     EXPECT_NEAR(0.0f, jointMatrix.M41, kTolerance);
     EXPECT_NEAR(0.0f, jointMatrix.M42, kTolerance);
 
     // (b) the node's bone exists and keeps its transform, but does not transform the mesh -- so the
-    //     cancellation is not silently undone by the hierarchy Phase 5 introduced.
+    //     hierarchy Phase 5 introduced does not apply what glTF ignores.
     const auto& bones = model.getBonesProperty();
     const ModelBone* meshNodeBone = nullptr;
     for (int i = 0; i < bones.getCountProperty(); ++i)
@@ -492,32 +492,31 @@ TEST(GltfSkinSpaces, MeshNodeTransformIsCancelledExactlyOnce)
     }
     ASSERT_NE(nullptr, meshNodeBone);
     EXPECT_NEAR(50.0f, meshNodeBone->getTransformProperty().M43, kTolerance)
-        << "the mesh node's transform was deleted rather than cancelled";
+        << "the mesh node's bone lost its transform; only the skinned mesh ignores it";
 
     ASSERT_EQ(1, model.getMeshesProperty().getCountProperty());
     ASSERT_NE(nullptr, model.getMeshesProperty()[0]->getParentBoneProperty());
     EXPECT_EQ(0, model.getMeshesProperty()[0]->getParentBoneProperty()->getIndexProperty())
-        << "the skinned mesh is parented to its own node's bone, so Model::Draw will apply the very "
-           "transform the joint matrix just cancelled -- the double application GLTF-260 forbids";
+        << "the skinned mesh is parented to its own node's bone, so Model::Draw would apply the "
+           "transform glTF ignores";
 
-    // (c) the two together: a vertex at mesh-local (1,0,0) ends up at (1,0,-50) in skin space and
-    //     the identity-rooted mesh adds nothing, so that is also its world position.
+    // (c) the two together: a vertex at mesh-local (1,0,0) stays at (1,0,0) in skin space and the
+    //     identity-rooted mesh adds nothing, so that is also its world position.
     const Microsoft::Xna::Framework::Vector3 skinned =
         Microsoft::Xna::Framework::Vector3::Transform(
             Microsoft::Xna::Framework::Vector3(1.0f, 0.0f, 0.0f), jointMatrix);
     EXPECT_NEAR(1.0f, skinned.X, kTolerance);
     EXPECT_NEAR(0.0f, skinned.Y, kTolerance);
-    EXPECT_NEAR(-50.0f, skinned.Z, kTolerance);
+    EXPECT_NEAR(0.0f, skinned.Z, kTolerance);
 
     // GLTF-128/GLTF-427: camera framing must follow the position the skin palette actually sends
-    // to the GPU, not the mesh-local sphere at z=0 or the ignored mesh node at z=+50. This exact
-    // fixture exposed the gap in the viewer: the draw was correct but entirely outside its camera.
+    // to the GPU, not the ignored mesh node at z=+50.
     const auto bounds = model.getBoundingSphereEXTProperty();
     ASSERT_TRUE(bounds.has_value());
-    EXPECT_NEAR(-50.0f, bounds->Center.Z, kTolerance);
+    EXPECT_NEAR(0.0f, bounds->Center.Z, kTolerance);
     for (const Microsoft::Xna::Framework::Vector3& position :
          std::vector<Microsoft::Xna::Framework::Vector3>{
-             {0.0f, 0.0f, -50.0f}, {1.0f, 0.0f, -50.0f}, {0.0f, 1.0f, -50.0f}})
+             {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}})
     {
         EXPECT_LE(Microsoft::Xna::Framework::Vector3::Distance(bounds->Center, position),
                   bounds->Radius + kTolerance);
@@ -1301,8 +1300,7 @@ TEST(GltfSkinSpaces, UnnormalisedWeightsAreRenormalisedAndReportedButOnlyWhenThe
     const CNA::Internal::GltfImport::SceneGraphOut scene =
         CNA::Internal::GltfImport::BuildSceneGraph(&fixture.Data());
     const CNA::Internal::GltfImport::SkeletonResult skeleton =
-        CNA::Internal::GltfImport::BuildSkeleton(fixture.Data().skins, scene,
-                                                  Matrix::getIdentityProperty(), 1.0f);
+        CNA::Internal::GltfImport::BuildSkeleton(fixture.Data().skins, scene, 1.0f);
     const CNA::Internal::GltfImport::MeshOut skinned = CNA::Internal::GltfImport::ExtractMesh(
         &fixture.Data(), fixture.Data().meshes[0].primitives[0], "probe", &skeleton, 1.0f);
 
@@ -1372,8 +1370,7 @@ TEST(GltfSkinSpaces, ASecondInfluenceSetIsDroppedAndTheLostShareIsMeasured)
     const CNA::Internal::GltfImport::SceneGraphOut scene =
         CNA::Internal::GltfImport::BuildSceneGraph(&fixture.Data());
     const CNA::Internal::GltfImport::SkeletonResult skeleton =
-        CNA::Internal::GltfImport::BuildSkeleton(fixture.Data().skins, scene,
-                                                  Matrix::getIdentityProperty(), 1.0f);
+        CNA::Internal::GltfImport::BuildSkeleton(fixture.Data().skins, scene, 1.0f);
     const CNA::Internal::GltfImport::MeshOut skinned = CNA::Internal::GltfImport::ExtractMesh(
         &fixture.Data(), fixture.Data().meshes[0].primitives[0], "probe", &skeleton, 1.0f);
 
@@ -1403,8 +1400,7 @@ TEST(GltfSkinSpaces, TruncatedInfluencesAreRenormalisedSoTheVertexIsNotDraggedTo
     const CNA::Internal::GltfImport::SceneGraphOut scene =
         CNA::Internal::GltfImport::BuildSceneGraph(&fixture.Data());
     const CNA::Internal::GltfImport::SkeletonResult skeleton =
-        CNA::Internal::GltfImport::BuildSkeleton(fixture.Data().skins, scene,
-                                                  Matrix::getIdentityProperty(), 1.0f);
+        CNA::Internal::GltfImport::BuildSkeleton(fixture.Data().skins, scene, 1.0f);
     const CNA::Internal::GltfImport::MeshOut skinned = CNA::Internal::GltfImport::ExtractMesh(
         &fixture.Data(), fixture.Data().meshes[0].primitives[0], "probe", &skeleton, 1.0f);
 
@@ -1469,7 +1465,7 @@ TEST(GltfSkinSpaces, ARigPastTheBonePaletteIsRefusedRatherThanTruncated)
     try
     {
         (void)CNA::Internal::GltfImport::BuildSkeleton(
-            fixture.Data().skins, scene, Matrix::getIdentityProperty(), 1.0f);
+            fixture.Data().skins, scene, 1.0f);
     }
     catch (const std::exception& e)
     {
@@ -1486,7 +1482,6 @@ TEST(GltfSkinSpaces, ARigPastTheBonePaletteIsRefusedRatherThanTruncated)
         const LoadedFixture ok("skin-armature-ancestor");
         ASSERT_TRUE(ok.Ok());
         (void)CNA::Internal::GltfImport::BuildSkeleton(
-            ok.Data().skins, CNA::Internal::GltfImport::BuildSceneGraph(&ok.Data()),
-            Matrix::getIdentityProperty(), 1.0f);
+            ok.Data().skins, CNA::Internal::GltfImport::BuildSceneGraph(&ok.Data()), 1.0f);
     });
 }

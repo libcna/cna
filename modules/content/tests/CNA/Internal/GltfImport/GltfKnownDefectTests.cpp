@@ -212,8 +212,9 @@ namespace
 // REMEDIATED by GLTF-245 -> GLTF-247 -> GLTF-248 -> GLTF-260. No known-defect test here any more,
 // for the same reason D1-D4 have none: GltfSkinSpaces asserts the joint matrix and the resulting
 // skinned position through the real loader on skin-armature-ancestor (the full scene ancestry above
-// the joint set) and on skin-mesh-node-transform (the mesh-space cancellation, applied exactly
-// once), so D8 reappearing fails an ordinary green test. The audit's original measurement --
+// the joint set) and on skin-mesh-node-transform (the mesh node's transform, ignored as glTF
+// requires -- CNASTREET-SKINDRAW withdrew GLTF-247's cancellation term), so D8 reappearing fails
+// an ordinary green test. The audit's original measurement --
 // joint matrix translate(0,-100,0) -- is preserved under the record's priorActual.
 
 // --- Ledger completeness -------------------------------------------------------------------------

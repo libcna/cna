@@ -27,9 +27,9 @@ _ARMATURE_TRANSLATION = [0.0, 100.0, 0.0]
 _JOINTS = [(0, 0, 0, 0)] * 3
 _WEIGHTS = [(1.0, 0.0, 0.0, 0.0)] * 3
 
-#: The skinned mesh node's own translation, for the fixture that isolates the mesh-space
-#: cancellation. Deliberately on a different axis from the armature's so a leak of either term is
-#: attributable to that term alone.
+#: The skinned mesh node's own translation, for the fixture that isolates the ignored mesh node.
+#: Deliberately on a different axis from the armature's so a leak of either term is attributable to
+#: that term alone.
 _MESH_NODE_TRANSLATION = [0.0, 0.0, 50.0]
 
 
@@ -114,9 +114,10 @@ def skin_armature_ancestor() -> Fixture:
                     "armature transform above the joints was dropped from the bind pose while the "
                     "authored inverseBindMatrices still contained it -- leaving every skinned "
                     "vertex multiplied by the inverse of what was lost. GLTF-245 walks the full "
-                    "scene ancestry (skin.skeleton is a hint, never a traversal stop) and GLTF-247 "
-                    "adds the inverse(globalTransform(meshNode)) term, both carried on each root "
-                    "bone's parentWorldPrefix so animating a root joint cannot undo them.",
+                    "scene ancestry (skin.skeleton is a hint, never a traversal stop), carried on "
+                    "each root bone's parentWorldPrefix so animating a root joint cannot undo it. "
+                    "(GLTF-247's inverse(globalTransform(meshNode)) term was withdrawn by "
+                    "CNASTREET-SKINDRAW: glTF ignores the skinned mesh node.)",
             owning_tasks=["GLTF-245", "GLTF-247", "GLTF-248", "GLTF-260"],
             closed_tasks=["GLTF-245", "GLTF-247", "GLTF-248", "GLTF-260"], status="fixed",
             divergent_fields=[],
@@ -150,17 +151,16 @@ def skin_armature_ancestor() -> Fixture:
 def skin_mesh_node_transform() -> Fixture:
     """A skinned mesh whose own node is transformed. Owns the second half of **GLTF-260**.
 
-    glTF places a skinned mesh entirely through its joints, so the node that instantiates it
-    contributes ``inverse(globalTransform(meshNode))`` to the joint matrix -- its transform is
-    *cancelled*, never applied. Here ``Joint0`` sits at the scene root with an identity bind pose
-    and an identity inverse bind matrix, so the whole joint matrix reduces to that cancellation:
-    ``inverse(T(0,0,50))`` = ``T(0,0,-50)``.
+    glTF places a skinned mesh entirely through its joints: "the transform of the skinned mesh node
+    MUST be ignored" (section 3.7.3.2). Here ``Joint0`` sits at the scene root with an identity bind
+    pose and an identity inverse bind matrix, so the joint matrix is the identity and the mesh stays
+    where it was authored.
 
-    That makes this the fixture that separates the two ways of getting a skinned mesh wrong. If the
-    cancellation is missing, the mesh sits 50 units too far along +Z. If the node's bone *also*
-    transforms the mesh -- the double application Phase 5's real bone hierarchy makes newly possible
-    -- the two cancel by accident and the mesh looks right for the wrong reason, which the world
-    positions below detect because they are asserted against the joint matrix, not the eye.
+    That makes this the fixture that separates the two ways of getting a skinned mesh wrong. Applying
+    the node's transform leaves the mesh 50 units along +Z. Applying the glTF tutorial's
+    ``inverse(globalTransform(meshNode))`` factor without also drawing the mesh with that node --
+    which is what that formula assumes -- leaves it 50 units along -Z; CNA did exactly that until
+    cna-street's CNASTREET-SKINDRAW.
     """
     b = GltfBuilder("skin-mesh-node-transform")
     position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
@@ -191,12 +191,11 @@ def skin_mesh_node_transform() -> Fixture:
     b.set_default_scene(0)
 
     mesh_node_world = mat_translation(_MESH_NODE_TRANSLATION)
-    mesh_node_inverse = mat_translation([-c for c in _MESH_NODE_TRANSLATION])
     joint_global = mat_identity()
-    joint_matrix = mat_mul(mesh_node_inverse, mat_mul(joint_global, inverse_bind))
-    skinned = [[p[0], p[1], p[2] - _MESH_NODE_TRANSLATION[2]] for p in TRIANGLE_POSITIONS]
+    joint_matrix = mat_mul(joint_global, inverse_bind)
+    skinned = [list(p) for p in TRIANGLE_POSITIONS]
 
-    # The mesh node's transform is cancelled, so the mesh's own world placement is NOT its node's.
+    # The mesh node's transform is ignored, so the mesh's own world placement is NOT its node's.
     l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
     l4["skin"] = {
         "jointCount": 1,
@@ -211,20 +210,19 @@ def skin_mesh_node_transform() -> Fixture:
             "jointMatrixColumnMajor": joint_matrix,
         }],
         "skinnedPositions": skinned,
-        "note": "jointMatrix = inverse(globalTransform(meshNode)) * globalTransform(joint) * "
-                "inverseBindMatrix = T(0,0,-50) * I * I. The cancellation must be applied exactly "
-                "once: omitting it leaves the mesh 50 units along +Z, and applying the mesh node's "
-                "bone as well cancels it a second time and leaves the mesh 50 units along -Z.",
+        "note": "jointMatrix = globalTransform(joint) * inverseBindMatrix = I * I; the mesh node's "
+                "T(0,0,50) is ignored (section 3.7.3.2). Applying it leaves the mesh 50 units along "
+                "+Z; applying its inverse without it leaves the mesh 50 units along -Z.",
     }
     return Fixture(
         id="skin-mesh-node-transform", owning_group="skinning",
         description="A skinned mesh whose instancing node carries translation [0,0,50], with an "
-                    "identity joint and an identity inverse bind matrix. The joint matrix is "
-                    "exactly the mesh node's inverse, so this isolates the mesh-space cancellation "
-                    "from the joint ancestry that skin-armature-ancestor covers.",
+                    "identity joint and an identity inverse bind matrix. The node's transform "
+                    "must be ignored, so the joint matrix is the identity; this isolates the mesh "
+                    "node from the joint ancestry that skin-armature-ancestor covers.",
         builder=b, validated_layers=["L1", "L2", "L3", "L4"],
         referencing_groups=["transforms"],
-        features=["skinned mesh node transform", "mesh-space cancellation",
+        features=["skinned mesh node transform", "mesh node transform ignored",
                   "skin.inverseBindMatrices", "JOINTS_0 / WEIGHTS_0"],
         spec_anchors=["skins", "joint-hierarchy", "skinned-mesh-attributes"],
         l3={"primitives": [l3_primitive(
@@ -243,13 +241,13 @@ _MESH_PARENT_TRANSLATION = [30.0, 0.0, 0.0]
 def skin_mesh_node_parent_transform() -> Fixture:
     """A skinned mesh node under a transformed **parent** -- `GLTF-270`.
 
-    `skin-mesh-node-transform` proves the cancellation uses the mesh node's transform. This proves
-    it uses the node's **composed** one: §3.7.3 says a skinned mesh is placed by its joints alone,
-    which means the whole world transform of the instancing node is cancelled, ancestors included.
+    `skin-mesh-node-transform` proves the mesh node's own transform is ignored. This proves its
+    **composed** one is: section 3.7.3.2 says a skinned mesh is placed by its joints alone, and its
+    own example ignores the parent's translation as well as the node's rotation.
 
-    An implementation that cancelled only the node's *local* transform passes the earlier fixture
-    exactly and fails here by the parent's 30 units -- and it fails in the direction that looks
-    like a rigging problem, because the mesh lands somewhere plausible and the skeleton does not.
+    An implementation that ignored only the node's *local* transform passes the earlier fixture
+    exactly and fails here by the parent's 30 units -- in the direction that looks like a rigging
+    problem, because the mesh lands somewhere plausible and the skeleton does not.
     """
     b = GltfBuilder("skin-mesh-node-parent-transform")
     position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
@@ -283,11 +281,9 @@ def skin_mesh_node_parent_transform() -> Fixture:
 
     composed = [_MESH_PARENT_TRANSLATION[i] + _MESH_NODE_TRANSLATION[i] for i in range(3)]
     mesh_node_world = mat_translation(composed)
-    mesh_node_inverse = mat_translation([-c for c in composed])
     joint_global = mat_identity()
-    joint_matrix = mat_mul(mesh_node_inverse, mat_mul(joint_global, inverse_bind))
-    skinned = [[p[0] - composed[0], p[1] - composed[1], p[2] - composed[2]]
-               for p in TRIANGLE_POSITIONS]
+    joint_matrix = mat_mul(joint_global, inverse_bind)
+    skinned = [list(p) for p in TRIANGLE_POSITIONS]
 
     l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
     l4["skin"] = {
@@ -303,18 +299,19 @@ def skin_mesh_node_parent_transform() -> Fixture:
             "jointMatrixColumnMajor": joint_matrix,
         }],
         "skinnedPositions": skinned,
-        "note": "globalTransform(meshNode) is T(30,0,0) * T(0,0,50) -- the parent's transform is "
-                "part of it. Cancelling only the node's own local transform leaves the mesh 30 "
-                "units along +X, which looks like a rigging problem rather than a space error.",
+        "note": "globalTransform(meshNode) is T(30,0,0) * T(0,0,50), and all of it is ignored -- "
+                "the parent's transform is part of it. Ignoring only the node's own local "
+                "transform leaves the mesh 30 units along +X, which looks like a rigging problem "
+                "rather than a space error.",
     }
     return Fixture(
         id="skin-mesh-node-parent-transform", owning_group="skinning",
         description="A skinned mesh node translated [0,0,50] under a parent translated [30,0,0]. "
-                    "The cancellation term is the node's COMPOSED world transform, so an "
-                    "implementation that used only its local one is off by the parent's 30 units.",
+                    "The node's COMPOSED world transform is ignored, so an implementation that "
+                    "ignored only its local one is off by the parent's 30 units.",
         builder=b, validated_layers=["L1", "L2", "L3", "L4"],
         referencing_groups=["transforms"],
-        features=["skinned mesh node transform", "mesh-space cancellation",
+        features=["skinned mesh node transform", "mesh node transform ignored",
                   "transformed ancestor above the mesh node", "JOINTS_0 / WEIGHTS_0"],
         spec_anchors=["skins", "joint-hierarchy", "skinned-mesh-attributes"],
         l3={"primitives": [l3_primitive(

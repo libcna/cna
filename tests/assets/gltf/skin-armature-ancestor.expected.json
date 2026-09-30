@@ -512,7 +512,7 @@
   "defects": [
     {
       "id": "D8",
-      "summary": "BuildSkeleton walked parent links only inside the skin's own joint set, so the armature transform above the joints was dropped from the bind pose while the authored inverseBindMatrices still contained it -- leaving every skinned vertex multiplied by the inverse of what was lost. GLTF-245 walks the full scene ancestry (skin.skeleton is a hint, never a traversal stop) and GLTF-247 adds the inverse(globalTransform(meshNode)) term, both carried on each root bone's parentWorldPrefix so animating a root joint cannot undo them.",
+      "summary": "BuildSkeleton walked parent links only inside the skin's own joint set, so the armature transform above the joints was dropped from the bind pose while the authored inverseBindMatrices still contained it -- leaving every skinned vertex multiplied by the inverse of what was lost. GLTF-245 walks the full scene ancestry (skin.skeleton is a hint, never a traversal stop), carried on each root bone's parentWorldPrefix so animating a root joint cannot undo it. (GLTF-247's inverse(globalTransform(meshNode)) term was withdrawn by CNASTREET-SKINDRAW: glTF ignores the skinned mesh node.)",
       "firstDivergentLayer": "L4",
       "divergentFields": [],
       "divergentFieldsByLayer": {},

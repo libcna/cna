@@ -1586,14 +1586,14 @@ namespace CNA::Internal::GltfImport
     SkeletonResult BuildSkeleton(const cgltf_skin* skin, float unitScale)
     {
         // No scene graph available: every root joint keeps an identity prefix, which is only
-        // correct when the joint set already reaches the scene root and the mesh node is
-        // untransformed. Callers that can build the graph must use the four-argument overload --
-        // both model loaders do (plans/plan_gltf.md GLTF-245).
-        return BuildSkeleton(skin, SceneGraphOut{}, Matrix::getIdentityProperty(), unitScale);
+        // correct when the joint set already reaches the scene root. Callers that can build the
+        // graph must use the three-argument overload -- both model loaders do
+        // (plans/plan_gltf.md GLTF-245).
+        return BuildSkeleton(skin, SceneGraphOut{}, unitScale);
     }
 
     SkeletonResult BuildSkeleton(const cgltf_skin* skin, const SceneGraphOut& scene,
-                                  const Matrix& meshNodeWorld, float unitScale)
+                                  float unitScale)
     {
         SkeletonResult result;
 
@@ -1707,10 +1707,11 @@ namespace CNA::Internal::GltfImport
             cgltf_node_transform_local(node, localMat);
             bone.bindPoseLocal = ScaleTranslation(ConvertGltfMatrix(localMat), unitScale);
 
-            // GLTF-245/GLTF-247: a root joint -- one whose parent is not itself in this skin's
-            // joint set -- carries the two terms that live above the joint set. Everything the
-            // ancestry contributes is real scene data; skin.skeleton does not truncate it, and an
-            // ancestor that is not a joint contributes exactly as much as one that is.
+            // GLTF-245: a root joint -- one whose parent is not itself in this skin's joint set --
+            // carries the ancestry above the joint set. Everything it contributes is real scene
+            // data; skin.skeleton does not truncate it, and an ancestor that is not a joint
+            // contributes exactly as much as one that is. The skinned mesh node's transform is
+            // not part of it: glTF §3.7.3.2 says it MUST be ignored (CNASTREET-SKINDRAW).
             if (bone.parentIndex == -1)
             {
                 Matrix ancestorWorld = Matrix::getIdentityProperty();
@@ -1734,9 +1735,7 @@ namespace CNA::Internal::GltfImport
                 // Ancestor translations are unit-scaled for the same reason bone translations are:
                 // the correction has to apply uniformly across every position-derived quantity, or
                 // an animated bone would jump between two different unit spaces mid-clip.
-                ancestorWorld = ScaleTranslation(ancestorWorld, unitScale);
-                bone.parentWorldPrefix =
-                    ancestorWorld * Matrix::Invert(ScaleTranslation(meshNodeWorld, unitScale));
+                bone.parentWorldPrefix = ScaleTranslation(ancestorWorld, unitScale);
             }
 
             if (!ibm.empty())

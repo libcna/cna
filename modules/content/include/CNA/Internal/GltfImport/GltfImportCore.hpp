@@ -1287,9 +1287,8 @@ namespace CNA::Internal::GltfImport
     SkeletonResult BuildSkeleton(const cgltf_skin* skin, float unitScale);
 
     /**
-     * @brief Topologically reorders a glTF skin's joints and resolves the two coordinate spaces the
-     * one-argument overload cannot see: the joints' full scene ancestry and the skinned mesh node's
-     * own placement (plans/plan_gltf.md GLTF-245/GLTF-247, Phase 5).
+     * @brief Topologically reorders a glTF skin's joints and resolves what the one-argument overload
+     * cannot see: the joints' full scene ancestry (plans/plan_gltf.md GLTF-245, Phase 5).
      *
      * A joint's global transform includes **every** scene ancestor, whether or not that ancestor is
      * itself a joint and whether or not it lies above `skin.skeleton` — the declared skeleton root
@@ -1297,20 +1296,20 @@ namespace CNA::Internal::GltfImport
      * retaining the file's own `inverseBindMatrices` is defect D8: the joint matrix ends up
      * multiplied by the inverse of whatever was dropped.
      *
-     * The skinned mesh node's transform is separately *cancelled*, not applied: glTF places a
-     * skinned mesh entirely through its joints. Both terms are returned on each root bone's
-     * @ref BoneOut::parentWorldPrefix rather than folded into its bind pose, so animating a root
-     * joint cannot undo them.
+     * The skinned mesh node's own transform, ancestors included, plays no part: glTF §3.7.3.2
+     * says it MUST be ignored, because a skinned mesh is placed by its joints alone. (The glTF
+     * tutorial's `inverse(globalTransform(meshNode))` factor assumes a renderer that also draws
+     * the mesh with that transform, so the two cancel; CNA draws a skinned mesh from the identity
+     * root bone, so it applies neither -- cna-street's CNASTREET-SKINDRAW.) The ancestry is
+     * returned on each root bone's @ref BoneOut::parentWorldPrefix rather than folded into its
+     * bind pose, so animating a root joint cannot undo it.
      *
      * @param skin The glTF skin to process.
      * @param scene The graph `BuildSceneGraph` produced for the same file.
-     * @param meshNodeWorld World transform of the node instancing the skinned mesh, in XNA
-     *        row-vector form. Pass the identity when no such node applies.
      * @param unitScale Uniform scale applied to every bone's translation (see `ScaleTranslation`).
      * @return The reordered skeleton, plus the file-joint, scene-node and palette mappings.
      */
     SkeletonResult BuildSkeleton(const cgltf_skin* skin, const SceneGraphOut& scene,
-                                  const Microsoft::Xna::Framework::Matrix& meshNodeWorld,
                                   float unitScale);
 
     /**

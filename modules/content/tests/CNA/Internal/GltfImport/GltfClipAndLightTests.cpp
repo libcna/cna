@@ -137,7 +137,7 @@ namespace
     {
         const SceneGraphOut scene = BuildSceneGraph(parsed.data);
         const SkeletonResult skeleton =
-            BuildSkeleton(parsed.data->skins, scene, Matrix::getIdentityProperty(), unitScale);
+            BuildSkeleton(parsed.data->skins, scene, unitScale);
         std::vector<std::string> warnings;
         return ExtractClips(parsed.data, skeleton, unitScale, warnings);
     }

@@ -366,31 +366,31 @@ asserts the generated run is `0,1,2`, not absent.
 
 ## The joint matrix, in both conventions
 
-`plans/plan_gltf.md` `GLTF-251`. §3.7.3.2's own equation, written once so no reader has to reconstruct it
+`plans/plan_gltf.md` `GLTF-251`. The joint matrix, written once so no reader has to reconstruct it
 from three call sites:
 
 ```
-glTF (column-vector):  jointMatrix(j) = inverse(globalTransform(meshNode))
-                                      · globalTransform(joint j)
-                                      · inverseBindMatrix(j)
+glTF (column-vector):  jointMatrix(j) = globalTransform(joint j) · inverseBindMatrix(j)
 
-XNA  (row-vector):     jointMatrix(j) = inverseBindMatrix(j)
-                                      * globalTransform(joint j)
-                                      * inverse(globalTransform(meshNode))
+XNA  (row-vector):     jointMatrix(j) = inverseBindMatrix(j) * globalTransform(joint j)
 ```
 
 The two are the same transform: XNA's row-vector convention applies the *left* operand first, so
 the order is reversed term for term. `BuildSkeleton` produces the second form.
 
-Three properties of that equation are load-bearing, and each was a defect when it was missing:
+Three properties of that equation are load-bearing, and each was a defect when it was wrong:
 
 * **`globalTransform(joint)` is the joint's full scene ancestry**, not its position within the
   skin's joint list. A transform on an armature node *above* the joints is part of it. Dropping it
   while keeping the file's own `inverseBindMatrices` — which do include it — leaves every skinned
   vertex multiplied by the inverse of what was lost (`D8`, `GLTF-245`).
-* **`inverse(globalTransform(meshNode))` cancels the skinned mesh node's own placement.** glTF
-  requires a skinned mesh to be placed by its joints alone, so the term exists precisely to undo
-  the node transform rather than to ignore it (`GLTF-247`).
+* **The skinned mesh node's transform, ancestors included, is not part of it.** §3.7.3.2: "the
+  transform of the skinned mesh node MUST be ignored". The glTF tutorial writes an extra
+  `inverse(globalTransform(meshNode))` in front; that form is for a renderer that also draws the
+  mesh with its node's transform, so the two cancel. CNA draws a skinned mesh from the identity
+  root bone and applies neither. Until cna-street's `CNASTREET-SKINDRAW` it applied the inverse
+  alone (`GLTF-247`, withdrawn), which moved every skinned mesh by the inverse of its node --
+  CesiumMan, whose mesh node sits under a Z-up armature, drew lying on its side.
 * **`skin.skeleton` is a hint, never a traversal stop.** It names a convenient common root for the
   joints; walking only as far as it drops any ancestor above it (`GLTF-249`).
 

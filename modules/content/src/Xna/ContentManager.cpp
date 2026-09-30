@@ -3107,18 +3107,10 @@ namespace Microsoft::Xna::Framework::Content
             {
                 const MeshGroup& group = groups[gi];
                 if (group.skin == nullptr) { continue; }
-                // plans/plan_gltf.md GLTF-245/GLTF-247: the skeleton needs two things the skin alone
-                // cannot supply -- the joints' full scene ancestry, and the world transform of the
-                // node instancing the skinned mesh, which glTF requires to be cancelled. A skin
-                // referenced by several nodes resolves to the first placement in this group, the
-                // same documented simplification ExtractMorphWeightTrack already makes.
-                Matrix meshNodeWorld = Matrix::getIdentityProperty();
-                for (const MeshInstanceOut& placement : group.instances)
-                {
-                    if (placement.skinned) { meshNodeWorld = placement.worldTransform; break; }
-                }
-                groupSkeletons[gi] =
-                    BuildSkeleton(group.skin, sceneGraph, meshNodeWorld, 1.0f);
+                // plans/plan_gltf.md GLTF-245: the skeleton needs the joints' full scene ancestry,
+                // which the skin alone cannot supply. The node instancing the skinned mesh plays no
+                // part -- glTF ignores its transform (CNASTREET-SKINDRAW).
+                groupSkeletons[gi] = BuildSkeleton(group.skin, sceneGraph, 1.0f);
             }
 
             Graphics::GraphicsDevice& device = cm.getGraphicsDeviceInternal();
@@ -4205,9 +4197,7 @@ namespace Microsoft::Xna::Framework::Content
                     // instantiates it, so Model::Draw composes the glTF world transform for free.
                     // A skinned instance is parented to the identity root instead: glTF requires a
                     // skinned mesh's own node transform to be ignored, because its joints already
-                    // place the geometry. Completing that rule -- the inverse(meshNodeWorld) term
-                    // and the joint ancestry BuildSkeleton still drops -- is GLTF-245/247/260, so
-                    // this is deliberately the conservative half, not a claim that skinning works.
+                    // place the geometry, and BuildSkeleton leaves it out of the joint matrices too.
                     const std::size_t parentBoneIndex = instance.skinned
                         ? 0u : static_cast<std::size_t>(instance.sceneNodeIndex);
                     meshObj->setParentBoneProperty(boneRawPtrs[parentBoneIndex]);
