@@ -11560,6 +11560,7 @@ if (ProfileIsEs2ApiGeneration())
         if (maskActive) ForceAllColorWriteMasks();
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Stencil);
         if (maskActive) ApplyCurrentColorWriteMasks();
+        RestoreWriteMasksAfterClear(false, true);
         RestoreScissorAfterClear(scissorWasEnabled);
     }
 
