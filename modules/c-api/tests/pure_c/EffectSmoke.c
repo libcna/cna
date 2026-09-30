@@ -199,6 +199,22 @@ static int validate_base_effect(const CNA_Handle device)
                 CNA_RESULT_SUCCESS &&
             cna_effect_set_current_technique(effect, foreign) ==
                 CNA_RESULT_INVALID_ARGUMENT);
+    /* BINDFIX-045 (RUST-UPSTREAM-030): a technique added to the effect's own collection belongs to
+       that effect and can be selected; both add routes built it ownerless, and the setter refused
+       it as foreign. */
+    {
+        CNA_EffectTechniqueHandle added_named = CNA_INVALID_HANDLE;
+        CNA_EffectTechniqueHandle added_default = CNA_INVALID_HANDLE;
+        REQUIRE(cna_effect_technique_collection_add_named(
+                    techniques, string_view("Added"), &added_named) == CNA_RESULT_SUCCESS &&
+                cna_effect_set_current_technique(effect, added_named) == CNA_RESULT_SUCCESS);
+        REQUIRE(cna_effect_technique_collection_add_default(techniques, &added_default) ==
+                    CNA_RESULT_SUCCESS &&
+                cna_effect_set_current_technique(effect, added_default) == CNA_RESULT_SUCCESS);
+        REQUIRE(cna_effect_set_current_technique(effect, indexed) == CNA_RESULT_SUCCESS);
+        REQUIRE(cna_effect_technique_destroy(added_default) == CNA_RESULT_SUCCESS &&
+                cna_effect_technique_destroy(added_named) == CNA_RESULT_SUCCESS);
+    }
 
     /* CBIND-052B: the reflected technique shape a compiled effect produces. Both parameters are
        observable, which is why they get a route at all: the index reads back, and the default-pass

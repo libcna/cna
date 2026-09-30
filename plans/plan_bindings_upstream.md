@@ -647,6 +647,11 @@ first.
   `CNA_RESULT_INTERNAL`, which `docs/c-api/ERRORS.md` reserves for native failures with no public
   category; it is the caller's argument and now maps to `CNA_RESULT_INVALID_ARGUMENT` (reported by
   `cna-ruby`). Pinned by `CApi_BoundaryDetail`.
+- **BINDFIX-045** — `RUST-UPSTREAM-030`: a technique added through
+  `cna_effect_technique_collection_add_named`/`_add_default` to an effect's own collection was built
+  with no owning `Effect`, so `cna_effect_set_current_technique` refused it as foreign
+  (SOFTWARE-257's owner check) and a reflection-built effect could never select its technique. The
+  add routes now pass the collection's owner. Pinned by `CApi_EffectSmoke`.
 
 ---
 
