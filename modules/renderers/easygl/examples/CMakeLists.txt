@@ -1160,6 +1160,11 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                         easygl_spritebatch_rendertarget_size_test.cpp)
         cna_register_renderer_test(NAME EasyGL_SpriteBatch_RenderTargetSize COMMAND cna_test_easygl_spritebatch_rendertarget_size
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        # living-room-simulator R-23: SpriteBatch into a bound RenderTargetCube face.
+        cna_easygl_test(cna_test_easygl_spritebatch_rendertargetcube_face
+                        easygl_spritebatch_rendertargetcube_face_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_SpriteBatch_RenderTargetCubeFace COMMAND cna_test_easygl_spritebatch_rendertargetcube_face
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 419: SpriteBatch Draw sourceRectangle must crop, not stretch the whole texture
         cna_easygl_test(cna_test_easygl_spritebatch_sourcerect

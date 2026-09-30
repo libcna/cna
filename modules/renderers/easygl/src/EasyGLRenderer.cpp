@@ -6474,7 +6474,9 @@ if (!ProfileIsEs2ApiGeneration())
 
     bool EasyGLRenderer::GetCurrentRenderTarget2DSize(int& width, int& height) const
     {
-        if (!bound_->rt2D && bound_->mrtCount == 0) return false;
+        // A bound cube face is a render target too (living-room-simulator R-23): XNA lays a
+        // sprite out in the face's Size x Size pixels, which bound_ records when the face is set.
+        if (!bound_->rt2D && !bound_->cube && bound_->mrtCount == 0) return false;
         width = bound_->width;
         height = bound_->height;
         return true;
