@@ -31,6 +31,8 @@
 
 #include <SDL3_mixer/SDL_mixer.h>
 #include "System/Environment.hpp"
+#include "System/ArgumentException.hpp"
+#include "Microsoft/Xna/Framework/Audio/NoAudioHardwareException.hpp"
 
 using Microsoft::Xna::Framework::Audio::AudioChannels;
 using Microsoft::Xna::Framework::Audio::SoundEffect;
@@ -237,12 +239,11 @@ TEST(SoundEffectTest, GetSampleDurationZeroForBadFormat)
 
 // ===================== static properties (headless) =====================
 
-TEST(SoundEffectTest, MasterVolumePassesThroughUnclamped)
+TEST(SoundEffectTest, MasterVolumeTakesZeroToOneAndRefusesTheRest)
 {
-    // CP-16: the getter/setter now round-trip through SDL3_mixer's real master gain
-    // (MIX_GetMixerGain/MIX_SetMixerGain), matching FNA's own live-query-the-device semantics
-    // (SoundEffect.cs's MasterVolume queries/sets the FAudio master voice directly, no local
-    // cache) -- so this now needs a (dummy) audio device, unlike before this fix.
+    // CP-16: the getter/setter round-trip through SDL3_mixer's real master gain, so this needs a
+    // (dummy) audio device. KF-12: XNA refuses NaN and anything outside 0..1 with
+    // ArgumentOutOfRangeException, where FNA passed the value through.
     System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
     float saved = 1.0f;
     try
@@ -255,10 +256,13 @@ TEST(SoundEffectTest, MasterVolumePassesThroughUnclamped)
     }
     SoundEffect::setMasterVolumeProperty(0.5f);
     EXPECT_FLOAT_EQ(SoundEffect::getMasterVolumeProperty(), 0.5f);
-    SoundEffect::setMasterVolumeProperty(2.0f); // FNA does not clamp
-    EXPECT_FLOAT_EQ(SoundEffect::getMasterVolumeProperty(), 2.0f);
-    SoundEffect::setMasterVolumeProperty(1.25f); // move overload
-    EXPECT_FLOAT_EQ(SoundEffect::getMasterVolumeProperty(), 1.25f);
+    EXPECT_THROW(SoundEffect::setMasterVolumeProperty(2.0f), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(SoundEffect::setMasterVolumeProperty(-0.1f), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(SoundEffect::setMasterVolumeProperty(std::numeric_limits<float>::quiet_NaN()),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_FLOAT_EQ(SoundEffect::getMasterVolumeProperty(), 0.5f);
+    SoundEffect::setMasterVolumeProperty(1.0f); // move overload
+    EXPECT_FLOAT_EQ(SoundEffect::getMasterVolumeProperty(), 1.0f);
     SoundEffect::setMasterVolumeProperty(saved);
 }
 
@@ -313,14 +317,30 @@ TEST(SoundEffectTest, MasterVolumeAffectsAlreadyPlayingInstanceViaMixerGainNotTr
     SoundEffect::setMasterVolumeProperty(savedMaster);
 }
 
-TEST(SoundEffectTest, DistanceScaleRejectsNonPositive)
+// XNA refuses a negative DistanceScale and turns zero into float.Epsilon (KF-12).
+TEST(SoundEffectTest, DistanceScaleRejectsNegativeAndLiftsZeroToEpsilon)
 {
     const float saved = SoundEffect::getDistanceScaleProperty();
     SoundEffect::setDistanceScaleProperty(2.0f);
     EXPECT_FLOAT_EQ(SoundEffect::getDistanceScaleProperty(), 2.0f);
-    EXPECT_THROW(SoundEffect::setDistanceScaleProperty(0.0f), System::ArgumentOutOfRangeException);
+    SoundEffect::setDistanceScaleProperty(0.0f);
+    EXPECT_EQ(SoundEffect::getDistanceScaleProperty(), std::numeric_limits<float>::denorm_min());
     EXPECT_THROW(SoundEffect::setDistanceScaleProperty(-1.0f), System::ArgumentOutOfRangeException);
     SoundEffect::setDistanceScaleProperty(saved);
+}
+
+// XNA: SpeedOfSound must be positive, DopplerScale non-negative, NaN refused by both (KF-12).
+TEST(SoundEffectTest, SpeedOfSoundAndDopplerScaleRefuseWhatXnaRefuses)
+{
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    EXPECT_THROW(SoundEffect::setSpeedOfSoundProperty(0.0f), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(SoundEffect::setSpeedOfSoundProperty(nan), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(SoundEffect::setDopplerScaleProperty(-0.5f), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(SoundEffect::setDopplerScaleProperty(nan), System::ArgumentOutOfRangeException);
+    const float speed = SoundEffect::getSpeedOfSoundProperty();
+    SoundEffect::setSpeedOfSoundProperty(300.0f);
+    EXPECT_FLOAT_EQ(SoundEffect::getSpeedOfSoundProperty(), 300.0f);
+    SoundEffect::setSpeedOfSoundProperty(speed);
 }
 
 TEST(SoundEffectTest, DopplerScaleRejectsNegative)
@@ -346,82 +366,46 @@ TEST(SoundEffectTest, BufferRangeConstructorThrowsOnBadRange)
 {
     std::vector<unsigned char> pcm(16, 0);
     // Range check runs before any device access, so this is safe headlessly.
-    EXPECT_THROW(SoundEffect(pcm, 8, 16, 44100, AudioChannels::Stereo, 0, 0),
-                 System::ArgumentOutOfRangeException);
-    EXPECT_THROW(SoundEffect(pcm, -1, 4, 44100, AudioChannels::Stereo, 0, 0),
-                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(SoundEffect(pcm, 8, 16, 44100, AudioChannels::Stereo, 0, 0), System::ArgumentException);
+    EXPECT_THROW(SoundEffect(pcm, -4, 4, 44100, AudioChannels::Stereo, 0, 0), System::ArgumentException);
+    EXPECT_THROW(SoundEffect(pcm, 0, 6, 44100, AudioChannels::Stereo, 0, 0), System::ArgumentException);
+    EXPECT_THROW(SoundEffect(std::vector<unsigned char>(6, 0), 44100, AudioChannels::Stereo),
+                 System::ArgumentException); // not whole stereo frames
+    EXPECT_THROW(SoundEffect(std::vector<unsigned char>{}, 44100, AudioChannels::Mono),
+                 System::ArgumentException);
 }
 
 // P9-VALIDATION-003: offset+count must be checked without computing the (possibly overflowing)
-// sum directly -- two individually-plausible int32 values can overflow, and on a typical
+// sum in 32 bits -- two individually-plausible int32 values can overflow, and on a typical
 // two's-complement wraparound the result can come out small/negative, silently passing a naive
 // "offset + count > buffer.size()" check while still reading far out of bounds via
-// buffer.data() + offset. This must throw, not attempt the out-of-bounds read.
+// buffer.data() + offset. XNA refuses it with ArgumentException.
 TEST(SoundEffectTest, BufferRangeConstructorRejectsOffsetCountIntegerOverflow)
 {
     std::vector<unsigned char> pcm(16, 0);
     constexpr int hugeOffset = 2000000000;
     constexpr int hugeCount  = 2000000000; // offset+count overflows int32 (INT32_MAX ~2.147e9)
     EXPECT_THROW(SoundEffect(pcm, hugeOffset, hugeCount, 44100, AudioChannels::Stereo, 0, 0),
+                 System::ArgumentException);
+}
+
+// cna-killer KF-12 (was AUD-05-001/002): XNA's FromBuffer refuses a sample rate outside
+// 8000..48000 Hz and a channel count other than mono or stereo with ArgumentOutOfRangeException,
+// before anything reaches the audio backend. FNA left both to the backend, which reported
+// NotSupportedException here; since 2026-09-04 XNA decides.
+TEST(SoundEffectTest, BufferRangeConstructorRefusesTheSampleRatesAndChannelsXnaRefuses)
+{
+    std::vector<unsigned char> pcm(16, 0);
+    const int size = static_cast<int>(pcm.size());
+    for (const int rate : {0, -1, 7999, 48001})
+    {
+        EXPECT_THROW(SoundEffect(pcm, 0, size, rate, AudioChannels::Stereo, 0, 0),
+                     System::ArgumentOutOfRangeException) << rate;
+    }
+    EXPECT_THROW(SoundEffect(pcm, 0, size, 44100, static_cast<AudioChannels>(0), 0, 0),
                  System::ArgumentOutOfRangeException);
-}
-
-// AUD-05-001/002 (2026-07-17 deep audit): investigated whether the raw buffer constructor should
-// validate sampleRate/channels before reaching the backend. Confirmed real FNA's own internal
-// SoundEffect constructor (SoundEffect.cs) does zero validation of either field at the C# layer
-// (same resolved-decision pattern as P10-DYN-001..003's DynamicSoundEffectInstance constructor) --
-// it relies entirely on the native backend (FAudio) to reject an invalid WAVEFORMATEX. Empirically
-// confirmed CNA's own backend (SDL3_mixer's MIX_LoadRawAudio) already does exactly this: a direct
-// probe against zero/negative sampleRate and zero/negative channels all return NULL ("Audio data
-// is in unknown/unsupported/corrupt format"), which the existing `if (!raw) throw
-// NotSupportedException(...)` guard already converts into a clean, safe failure -- no crash, no
-// garbage SoundEffect, no distorted/mispitched playback. These tests lock that behavior down as a
-// resolved decision (matching FNA: no CNA-side pre-validation) rather than leaving it as an
-// untested, accidental gap.
-TEST(SoundEffectTest, BufferRangeConstructorWithZeroSampleRateThrowsNotSupported)
-{
-    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
-    std::vector<unsigned char> pcm(16, 0);
-    try
-    {
-        EXPECT_THROW(SoundEffect(pcm, 0, static_cast<int>(pcm.size()), 0, AudioChannels::Stereo, 0, 0),
-                     System::NotSupportedException);
-    }
-    catch (...)
-    {
-        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
-    }
-}
-
-TEST(SoundEffectTest, BufferRangeConstructorWithNegativeSampleRateThrowsNotSupported)
-{
-    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
-    std::vector<unsigned char> pcm(16, 0);
-    try
-    {
-        EXPECT_THROW(SoundEffect(pcm, 0, static_cast<int>(pcm.size()), -1, AudioChannels::Stereo, 0, 0),
-                     System::NotSupportedException);
-    }
-    catch (...)
-    {
-        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
-    }
-}
-
-TEST(SoundEffectTest, BufferRangeConstructorWithZeroChannelsThrowsNotSupported)
-{
-    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
-    std::vector<unsigned char> pcm(16, 0);
-    try
-    {
-        EXPECT_THROW(
-            SoundEffect(pcm, 0, static_cast<int>(pcm.size()), 44100, static_cast<AudioChannels>(0), 0, 0),
-            System::NotSupportedException);
-    }
-    catch (...)
-    {
-        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
-    }
+    EXPECT_THROW(SoundEffect(pcm, 0, size, 44100, static_cast<AudioChannels>(3), 0, 0),
+                 System::ArgumentOutOfRangeException);
 }
 
 // AUD-05-003 (2026-07-17 deep audit): a byte count that isn't a whole multiple of the frame size
@@ -501,22 +485,28 @@ TEST(SoundEffectTest, BufferRangeConstructorPropagatesLoopRegionEndingExactlyAtF
     instance.Play();
 }
 
-// P9-VALIDATION-002: an explicitly-invalid loop region (start+length exceeding the sample's
-// actual frame count) is intentionally NOT validated/clamped, matching FNA's own ctor -- the
-// values must still propagate exactly as given, and Play() must not throw or crash.
-TEST(SoundEffectTest, BufferRangeConstructorAcceptsLoopRegionExceedingActualSampleLength)
+// cna-killer KF-12: XNA's FromBuffer refuses a loop region outside the sound -- a negative start
+// or length, or start + length past the frame count -- with ArgumentException. FNA stored the
+// values unvalidated (P9-VALIDATION-002). A region that fits is kept exactly.
+TEST(SoundEffectTest, BufferRangeConstructorRefusesALoopRegionOutsideTheSound)
 {
-    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
     std::vector<unsigned char> pcm(4 * 1000, 0); // 1000 stereo S16 frames
-    SoundEffect effect(pcm, 0, static_cast<int>(pcm.size()), 44100, AudioChannels::Stereo,
-                       900, 5000); // 900 + 5000 far exceeds the 1000-frame sample
-
-    SoundEffectInstance instance = effect.CreateInstance();
-    EXPECT_EQ(SoundEffectInstanceTestAccess::LoopStart(instance), 900u);
-    EXPECT_EQ(SoundEffectInstanceTestAccess::LoopLength(instance), 5000u);
-
-    instance.setIsLoopedProperty(true);
-    instance.Play(); // must not throw/crash despite the region exceeding the buffer
+    const int size = static_cast<int>(pcm.size());
+    EXPECT_THROW(SoundEffect(pcm, 0, size, 44100, AudioChannels::Stereo, 900, 5000), System::ArgumentException);
+    EXPECT_THROW(SoundEffect(pcm, 0, size, 44100, AudioChannels::Stereo, -1, 10), System::ArgumentException);
+    EXPECT_THROW(SoundEffect(pcm, 0, size, 44100, AudioChannels::Stereo, 0, -1), System::ArgumentException);
+    try
+    {
+        System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+        SoundEffect effect(pcm, 0, size, 44100, AudioChannels::Stereo, 900, 100);
+        SoundEffectInstance instance = effect.CreateInstance();
+        EXPECT_EQ(SoundEffectInstanceTestAccess::LoopStart(instance), 900u);
+        EXPECT_EQ(SoundEffectInstanceTestAccess::LoopLength(instance), 100u);
+    }
+    catch (const Microsoft::Xna::Framework::Audio::NoAudioHardwareException&)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
 }
 
 // ===================== FromStream (headless) =====================
@@ -794,25 +784,15 @@ TEST(SoundEffectTest, CreateInstanceProducesBoundInstance)
     EXPECT_FALSE(inst.getIsDisposedProperty());
 }
 
-// P9-VALIDATION-012/013: matches FNA exactly -- FNA's CreateInstance()/SoundEffectInstance ctor
-// don't check IsDisposed either (SoundEffectInstance.cs's internal ctor only reads
-// parentEffect.channels, a plain field that survives Dispose()); a disposed SoundEffect only
-// becomes observable once Play() is attempted on the resulting instance, at which point it
-// fails safely (getNativeAudioHandle() returns nullptr) rather than crashing. Locks in that
-// CNA already matches this "deferred failure" pattern rather than throwing eagerly.
-TEST(SoundEffectTest, CreateInstanceOnDisposedSoundEffectDoesNotThrowButResultingPlayIsInert)
+// cna-killer KF-12: XNA's CreateInstance refuses a disposed SoundEffect with
+// ObjectDisposedException; FNA created an inert instance (P9-VALIDATION-012/013).
+TEST(SoundEffectTest, CreateInstanceOnDisposedSoundEffectThrowsObjectDisposed)
 {
     auto fx = makeEffect();
     if (!fx) GTEST_SKIP() << "no audio device";
 
     fx->Dispose();
-
-    SoundEffectInstance inst = fx->CreateInstance();
-    EXPECT_FALSE(inst.getIsDisposedProperty());
-    EXPECT_EQ(inst.getStateProperty(), SoundState::Stopped);
-
-    EXPECT_NO_THROW(inst.Play());
-    EXPECT_EQ(inst.getStateProperty(), SoundState::Stopped); // inert: no native audio to play
+    EXPECT_THROW((void)fx->CreateInstance(), System::ObjectDisposedException);
 }
 
 // CP-22: the move-only static_asserts above only prove move-constructibility is possible, not
@@ -1329,7 +1309,7 @@ TEST(SoundEffectTest, HugeCountAgainstSmallBufferThrowsBeforeReachingBackend)
     EXPECT_THROW(
         SoundEffect(buffer, 0, std::numeric_limits<SharpRuntime::intcs>::max(),
                     44100, AudioChannels::Stereo, 0, 0),
-        System::ArgumentOutOfRangeException);
+        System::ArgumentException);
 }
 
 TEST(SoundEffectTest, HugeOffsetNearIntMaxThrowsBeforeReachingBackend)
@@ -1338,7 +1318,7 @@ TEST(SoundEffectTest, HugeOffsetNearIntMaxThrowsBeforeReachingBackend)
     EXPECT_THROW(
         SoundEffect(buffer, std::numeric_limits<SharpRuntime::intcs>::max(), 4,
                     44100, AudioChannels::Stereo, 0, 0),
-        System::ArgumentOutOfRangeException);
+        System::ArgumentException);
 }
 
 // The exact scenario P9-VALIDATION-003 exists for: offset + count individually look plausible

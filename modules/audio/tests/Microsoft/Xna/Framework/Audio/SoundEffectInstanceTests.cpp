@@ -29,6 +29,7 @@
 
 #include <SDL3_mixer/SDL_mixer.h>
 #include "System/Environment.hpp"
+#include <limits>
 
 using Microsoft::Xna::Framework::Audio::AudioChannels;
 using Microsoft::Xna::Framework::Audio::AudioEmitter;
@@ -98,15 +99,17 @@ TEST_F(SoundEffectInstanceTest, DefaultState)
     EXPECT_FLOAT_EQ(inst.getPitchProperty(), 0.0f);
 }
 
-TEST_F(SoundEffectInstanceTest, VolumePassesThroughUnclamped)
+// KF-12: XNA refuses NaN and a volume outside 0..1 with ArgumentOutOfRangeException; FNA passed it through.
+TEST_F(SoundEffectInstanceTest, VolumeRefusesValuesOutsideTheRange)
 {
     REQUIRE_DEVICE();
     SoundEffectInstance inst = instance();
-    inst.setVolumeProperty(2.0f); // FNA does not clamp
-    EXPECT_FLOAT_EQ(inst.getVolumeProperty(), 2.0f);
-    inst.setVolumeProperty(-0.5f);
-    EXPECT_FLOAT_EQ(inst.getVolumeProperty(), -0.5f);
     inst.setVolumeProperty(0.3f); // move overload
+    EXPECT_FLOAT_EQ(inst.getVolumeProperty(), 0.3f);
+    EXPECT_THROW(inst.setVolumeProperty(2.0f), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(inst.setVolumeProperty(-0.5f), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(inst.setVolumeProperty(std::numeric_limits<float>::quiet_NaN()),
+                 System::ArgumentOutOfRangeException);
     EXPECT_FLOAT_EQ(inst.getVolumeProperty(), 0.3f);
 }
 
@@ -147,15 +150,15 @@ TEST_F(SoundEffectInstanceTest, VolumeSetAfterStopDoesNotThrow)
     EXPECT_FLOAT_EQ(inst.getVolumeProperty(), 0.7f);
 }
 
-TEST_F(SoundEffectInstanceTest, VolumeSetAfterDisposeDoesNotThrow)
+TEST_F(SoundEffectInstanceTest, VolumeSetAfterDisposeThrowsObjectDisposed)
 {
     REQUIRE_DEVICE();
     SoundEffectInstance inst = instance();
     inst.Play();
     inst.Dispose();
     ASSERT_TRUE(inst.getIsDisposedProperty());
-    inst.setVolumeProperty(0.8f); // unlike Pan, FNA's Volume setter has no IsDisposed check
-    EXPECT_FLOAT_EQ(inst.getVolumeProperty(), 0.8f);
+    // XNA's setter checks IsDisposed first; FNA's had no check (KF-12).
+    EXPECT_THROW(inst.setVolumeProperty(0.8f), System::ObjectDisposedException);
 }
 
 TEST_F(SoundEffectInstanceTest, PanRangeAndDisposed)
@@ -244,16 +247,18 @@ TEST_F(SoundEffectInstanceTest, PanSetBeforePlayDoesNotCrashOrCreateDspState)
     EXPECT_FLOAT_EQ(SoundEffectInstanceTestAccess::GetPanState(inst), 0.0f);
 }
 
-TEST_F(SoundEffectInstanceTest, PitchClampsToRange)
+// KF-12: XNA refuses NaN and a pitch outside -1..1 with ArgumentOutOfRangeException; FNA clamped.
+TEST_F(SoundEffectInstanceTest, PitchRefusesValuesOutsideTheRange)
 {
     REQUIRE_DEVICE();
     SoundEffectInstance inst = instance();
     inst.setPitchProperty(0.5f);
     EXPECT_FLOAT_EQ(inst.getPitchProperty(), 0.5f);
-    inst.setPitchProperty(2.0f);
-    EXPECT_FLOAT_EQ(inst.getPitchProperty(), 1.0f);
-    inst.setPitchProperty(-2.0f); // move overload
-    EXPECT_FLOAT_EQ(inst.getPitchProperty(), -1.0f);
+    EXPECT_THROW(inst.setPitchProperty(2.0f), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(inst.setPitchProperty(-2.0f), System::ArgumentOutOfRangeException); // move overload
+    EXPECT_THROW(inst.setPitchProperty(std::numeric_limits<float>::quiet_NaN()),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_FLOAT_EQ(inst.getPitchProperty(), 0.5f);
 }
 
 // P12-PITCH-001: setPitchProperty() must actually push the exponential-octave-curve ratio to the
@@ -319,15 +324,15 @@ TEST_F(SoundEffectInstanceTest, PitchSetAfterStopDoesNotThrow)
     EXPECT_FLOAT_EQ(inst.getPitchProperty(), 0.2f);
 }
 
-TEST_F(SoundEffectInstanceTest, PitchSetAfterDisposeDoesNotThrow)
+TEST_F(SoundEffectInstanceTest, PitchSetAfterDisposeThrowsObjectDisposed)
 {
     REQUIRE_DEVICE();
     SoundEffectInstance inst = instance();
     inst.Play();
     inst.Dispose();
     ASSERT_TRUE(inst.getIsDisposedProperty());
-    inst.setPitchProperty(-0.1f); // unlike Pan, FNA's Pitch setter has no IsDisposed check
-    EXPECT_FLOAT_EQ(inst.getPitchProperty(), -0.1f);
+    // XNA's setter checks IsDisposed first; FNA's had no check (KF-12).
+    EXPECT_THROW(inst.setPitchProperty(-0.1f), System::ObjectDisposedException);
 }
 
 TEST_F(SoundEffectInstanceTest, IsLoopedBeforePlay)

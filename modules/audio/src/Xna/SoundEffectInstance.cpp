@@ -1204,7 +1204,16 @@ namespace Microsoft::Xna::Framework::Audio
 
     void SoundEffectInstance::setVolumeProperty(const float& volume)
     {
-        Volume_ = volume; // FNA passes the value straight through, without clamping
+        // XNA refuses NaN and anything outside 0..1; FNA passed the value through (KF-12).
+        if (isDisposed_)
+        {
+            throw System::ObjectDisposedException("SoundEffectInstance");
+        }
+        if (!(volume >= 0.0f && volume <= 1.0f))
+        {
+            throw System::ArgumentOutOfRangeException("value");
+        }
+        Volume_ = volume;
 
         // AUDIO-001: directly setting track gain here used to erase spatial
         // attenuation Apply3D had established (FNA's Volume setter never touches the separate
@@ -1229,7 +1238,7 @@ namespace Microsoft::Xna::Framework::Audio
         {
             throw System::ObjectDisposedException("SoundEffectInstance");
         }
-        if (pan > 1.0f || pan < -1.0f)
+        if (!(pan >= -1.0f && pan <= 1.0f)) // NaN included, as in XNA
         {
             throw System::ArgumentOutOfRangeException("value");
         }
@@ -1268,7 +1277,16 @@ namespace Microsoft::Xna::Framework::Audio
 
     void SoundEffectInstance::setPitchProperty(const float& pitch)
     {
-        Pitch_ = (pitch < -1.0f) ? -1.0f : ((pitch > 1.0f) ? 1.0f : pitch);
+        // XNA refuses NaN and anything outside -1..1 where FNA clamped (KF-12).
+        if (isDisposed_)
+        {
+            throw System::ObjectDisposedException("SoundEffectInstance");
+        }
+        if (!(pitch >= -1.0f && pitch <= 1.0f))
+        {
+            throw System::ArgumentOutOfRangeException("value");
+        }
+        Pitch_ = pitch;
 
         // AUDIO-001: was a direct ratio write with no Doppler term, which erased any Doppler
         // shift Apply3D had established (FNA's UpdatePitch() always recombines pitch with the

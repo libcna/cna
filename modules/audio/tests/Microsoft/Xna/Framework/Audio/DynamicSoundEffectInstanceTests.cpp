@@ -25,6 +25,7 @@
 #include "CNA/Internal/Audio/AudioMixer.hpp"
 
 #include <SDL3_mixer/SDL_mixer.h>
+#include "System/ArgumentException.hpp"
 
 using Microsoft::Xna::Framework::Audio::AudioChannels;
 using Microsoft::Xna::Framework::Audio::AudioEmitter;
@@ -87,36 +88,19 @@ TEST(DynamicSoundEffectInstanceTest, ConstructionDefaultState)
     EXPECT_FALSE(d.getIsLoopedProperty());
 }
 
-// P10-DYN-001/002/003 (2026-07-06 audit, Phase 10): real FNA's constructor (DynamicSoundEffectInstance.cs)
-// stores `sampleRate`/`channels` directly into a FAudioWaveFormatEx with zero validation -- no
-// range check, no throw, for ANY value (confirmed by reading the FNA source line-by-line: the
-// ctor body is a straight field-assignment + FAudioWaveFormatEx construction, no guard at all).
-// This diverges from MSDN's *documented* contract for this constructor (8,000-48,000 Hz,
-// ArgumentOutOfRangeException otherwise) -- an XNA-docs-vs-FNA-behavior split, resolved here in
-// favor of matching real FNA behavior (this project's established practical-compatibility
-// policy, consistent with e.g. P9-VALIDATION-001's identical resolution for SoundEffect's own
-// constructors). CNA's constructor already has zero validation, matching FNA -- these tests lock
-// that decision down instead of it being an untested, accidental gap.
-TEST(DynamicSoundEffectInstanceTest, ConstructorAcceptsSampleRateBelowXnaDocumentedMinimum)
+// cna-killer KF-12: XNA's constructor refuses a sample rate outside 8000..48000 Hz and a channel
+// count other than mono or stereo with ArgumentOutOfRangeException. FNA validated neither, and
+// P10-DYN-001..003 had followed FNA; since 2026-09-04 XNA decides.
+TEST(DynamicSoundEffectInstanceTest, ConstructorRefusesWhatXnaRefuses)
 {
-    // MSDN documents 8000 as the minimum; FNA itself never enforces it.
-    EXPECT_NO_THROW(DynamicSoundEffectInstance d(4000, AudioChannels::Mono));
-}
-
-TEST(DynamicSoundEffectInstanceTest, ConstructorAcceptsSampleRateAboveXnaDocumentedMaximum)
-{
-    // MSDN documents 48000 as the maximum; FNA itself never enforces it.
-    EXPECT_NO_THROW(DynamicSoundEffectInstance d(96000, AudioChannels::Stereo));
-}
-
-TEST(DynamicSoundEffectInstanceTest, ConstructorAcceptsZeroSampleRate)
-{
-    EXPECT_NO_THROW(DynamicSoundEffectInstance d(0, AudioChannels::Mono));
-}
-
-TEST(DynamicSoundEffectInstanceTest, ConstructorAcceptsNegativeSampleRate)
-{
-    EXPECT_NO_THROW(DynamicSoundEffectInstance d(-1, AudioChannels::Mono));
+    EXPECT_THROW(DynamicSoundEffectInstance(7999, AudioChannels::Mono), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(DynamicSoundEffectInstance(48001, AudioChannels::Stereo), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(DynamicSoundEffectInstance(0, AudioChannels::Mono), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(DynamicSoundEffectInstance(-1, AudioChannels::Mono), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(DynamicSoundEffectInstance(22050, static_cast<AudioChannels>(3)),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_NO_THROW(DynamicSoundEffectInstance(8000, AudioChannels::Mono));
+    EXPECT_NO_THROW(DynamicSoundEffectInstance(48000, AudioChannels::Stereo));
 }
 
 // P10-DYN-004/005: real FNA's GetSampleDuration/GetSampleSizeInBytes (DynamicSoundEffectInstance.cs)
@@ -138,22 +122,26 @@ TEST(DynamicSoundEffectInstanceTest, GetSampleSizeInBytesAfterDisposeDoesNotThro
     EXPECT_NO_THROW({ auto result = d.GetSampleSizeInBytes(System::TimeSpan::FromSeconds(1.0)); (void)result; });
 }
 
-TEST(DynamicSoundEffectInstanceTest, IsLoopedSetterIsNoOpDirect)
+// KF-12: a streamed voice cannot loop. XNA refuses IsLooped = true with InvalidOperationException
+// and accepts false; FNA ignored both.
+TEST(DynamicSoundEffectInstanceTest, IsLoopedTrueIsRefusedFalseIsAccepted)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Mono);
-    EXPECT_NO_THROW(d.setIsLoopedProperty(true));
+    EXPECT_THROW(d.setIsLoopedProperty(true), System::InvalidOperationException);
+    EXPECT_NO_THROW(d.setIsLoopedProperty(false));
     EXPECT_FALSE(d.getIsLoopedProperty());
 }
 
-// Regression for the override bug (T-2A): going through a SoundEffectInstance&
-// must dispatch to the dynamic no-op override, not the base setter.
-TEST(DynamicSoundEffectInstanceTest, IsLoopedSetterIsNoOpViaBaseRefWhenStopped)
+// Regression for the override bug (T-2A): going through a SoundEffectInstance& must dispatch to
+// the dynamic override, whose rule is XNA's: true is refused, false accepted.
+TEST(DynamicSoundEffectInstanceTest, IsLoopedViaBaseRefFollowsTheDynamicRuleWhenStopped)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Mono);
     SoundEffectInstance& base = d;
     bool lvalue = true;
-    EXPECT_NO_THROW(base.setIsLoopedProperty(lvalue)); // const bool& overload
-    EXPECT_NO_THROW(base.setIsLoopedProperty(true));   // bool&& overload
+    EXPECT_THROW(base.setIsLoopedProperty(lvalue), System::InvalidOperationException); // const bool&
+    EXPECT_THROW(base.setIsLoopedProperty(true), System::InvalidOperationException);   // bool&&
+    EXPECT_NO_THROW(base.setIsLoopedProperty(false));
     EXPECT_FALSE(d.getIsLoopedProperty());
 }
 
@@ -237,9 +225,10 @@ TEST(DynamicSoundEffectInstanceTest, SubmitBufferRangeThrows)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
     std::vector<unsigned char> pcm(16, 0);
-    EXPECT_THROW(d.SubmitBuffer(pcm, -1, 4), System::ArgumentOutOfRangeException);
-    EXPECT_THROW(d.SubmitBuffer(pcm, 0, -1), System::ArgumentOutOfRangeException);
-    EXPECT_THROW(d.SubmitBuffer(pcm, 8, 16), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(d.SubmitBuffer(pcm, -4, 4), System::ArgumentException);
+    EXPECT_THROW(d.SubmitBuffer(pcm, 0, -4), System::ArgumentException);
+    EXPECT_THROW(d.SubmitBuffer(pcm, 8, 16), System::ArgumentException);
+    EXPECT_THROW(d.SubmitBuffer(pcm, 16, 4), System::ArgumentException); // offset at the end
 }
 
 TEST(DynamicSoundEffectInstanceTest, SubmitFloatBufferRangeThrows)
@@ -251,27 +240,31 @@ TEST(DynamicSoundEffectInstanceTest, SubmitFloatBufferRangeThrows)
 }
 
 // P9-VALIDATION-010/011: offset+count must be checked without computing the (possibly
-// overflowing) sum directly -- see SoundEffect's identical fix/test for the full rationale.
+// overflowing) sum in 32 bits -- see SoundEffect's identical fix/test. XNA refuses it with
+// ArgumentException.
 TEST(DynamicSoundEffectInstanceTest, SubmitBufferRangeIntegerOverflowThrows)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
     std::vector<unsigned char> pcm(16, 0);
     constexpr int hugeOffset = 2000000000;
     constexpr int hugeCount  = 2000000000; // offset+count overflows int32
-    EXPECT_THROW(d.SubmitBuffer(pcm, hugeOffset, hugeCount), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(d.SubmitBuffer(pcm, hugeOffset, hugeCount), System::ArgumentException);
 }
 
-// P9-DYNAMIC-009: matches FNA's SubmitBuffer exactly -- there is no block-alignment validation
-// at all (FAudio's FACTSoundBank_Prepare-adjacent buffer submission just stores whatever byte
-// count is given; FAudioBuffer.PlayLength = AudioBytes / channels / bytesPerSample truncates via
-// plain integer division for a non-frame-aligned count, it never throws). A 16-bit stereo frame
-// is 4 bytes; 63 is deliberately not a multiple of that.
-TEST(DynamicSoundEffectInstanceTest, SubmitBufferWithNonFrameAlignedByteCountDoesNotThrowWhileStopped)
+// KF-12: XNA's SubmitBuffer takes whole sample frames only -- the buffer, the offset and the count
+// must each be a multiple of the block alignment (4 bytes for 16-bit stereo), and an empty buffer
+// is refused too, all with ArgumentException. FNA accepted any byte count (P9-DYNAMIC-009).
+TEST(DynamicSoundEffectInstanceTest, SubmitBufferRefusesPartialFrames)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
-    std::vector<unsigned char> pcm(63, 0); // not a multiple of 4 (2ch * 2 bytes/sample)
-    EXPECT_NO_THROW(d.SubmitBuffer(pcm));
-    EXPECT_EQ(d.getPendingBufferCountProperty(), 1); // a whole buffer either way, alignment-agnostic
+    EXPECT_THROW(d.SubmitBuffer(std::vector<unsigned char>(63, 0)), System::ArgumentException);
+    EXPECT_THROW(d.SubmitBuffer(std::vector<unsigned char>{}), System::ArgumentException);
+    const std::vector<unsigned char> pcm(64, 0);
+    EXPECT_THROW(d.SubmitBuffer(pcm, 2, 32), System::ArgumentException);
+    EXPECT_THROW(d.SubmitBuffer(pcm, 0, 30), System::ArgumentException);
+    EXPECT_EQ(d.getPendingBufferCountProperty(), 0);
+    EXPECT_NO_THROW(d.SubmitBuffer(pcm, 4, 32));
+    EXPECT_EQ(d.getPendingBufferCountProperty(), 1);
 }
 
 // P9-DYNAMIC-009: same as above, but for SubmitFloatBufferEXT, where `count` is a *sample* count
@@ -286,19 +279,17 @@ TEST(DynamicSoundEffectInstanceTest, SubmitFloatBufferWithSampleCountNotDivisibl
     EXPECT_EQ(d.getPendingBufferCountProperty(), 1);
 }
 
-// P9-DYNAMIC-009: a non-frame-aligned submission while actually playing must not crash or wedge
-// subsequent buffer bookkeeping (Update()'s byte-based consumption tracking is alignment-agnostic
-// by construction -- it compares total submitted bytes against SDL_GetAudioStreamQueued(), never
-// frame counts -- but this exercises the real SDL3_mixer/SDL_AudioStream path end-to-end).
-TEST(DynamicSoundEffectInstanceTest, SubmitBufferWithNonFrameAlignedByteCountWhilePlayingDoesNotThrow)
+// A refused partial-frame submission while playing leaves the buffer bookkeeping intact.
+TEST(DynamicSoundEffectInstanceTest, SubmitBufferRefusesPartialFramesWhilePlaying)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
     if (!tryStartHeadless(d))
     {
         GTEST_SKIP() << "no audio device (dummy driver unavailable)";
     }
-    std::vector<unsigned char> misaligned(63, 0);
-    EXPECT_NO_THROW(d.SubmitBuffer(misaligned));
+    const int pending = d.getPendingBufferCountProperty();
+    EXPECT_THROW(d.SubmitBuffer(std::vector<unsigned char>(63, 0)), System::ArgumentException);
+    EXPECT_EQ(d.getPendingBufferCountProperty(), pending);
     EXPECT_NO_THROW(d.Update());
 }
 
@@ -438,35 +429,6 @@ TEST(DynamicSoundEffectInstanceTest, PlayAfterDisposeThrowsObjectDisposed)
     EXPECT_THROW(d.Play(), System::ObjectDisposedException);
 }
 
-// AUD-02-007/AUD-07-007 (2026-07-17 deep audit, A-04): SDL_CreateAudioStream fails outright for
-// freq=0 (confirmed empirically: SDL reports "Parameter 'src_spec->freq' is invalid"). Per
-// P10-DYN-001/002/003 (resolved decision matching real FNA), the constructor itself must NOT
-// validate/reject sampleRate=0 -- but Play() must not report a false "Playing" state when the
-// resulting stream creation silently fails. Without EnsureStream()'s new audioStream_ check, this
-// used to fall through: MIX_SetTrackAudioStream(track, nullptr) is documented as legal (detaches
-// input), so the pre-fix code sailed past its own "if (!MIX_SetTrackAudioStream(...)) return;"
-// guard and reported Playing with a track that has no audio input at all.
-TEST(DynamicSoundEffectInstanceTest, PlayWithZeroSampleRateDoesNotReportPlayingOnStreamCreationFailure)
-{
-    DynamicSoundEffectInstance d(0, AudioChannels::Stereo);
-    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
-    std::vector<unsigned char> pcm(4 * 256, 0);
-    d.SubmitBuffer(pcm);
-
-    // GetMixerOrThrowXna() can still throw NoAudioHardwareException if there's truly no audio
-    // device at all (unrelated to this test's own freq=0 failure) -- skip in that unrelated case.
-    try
-    {
-        d.Play();
-    }
-    catch (const Microsoft::Xna::Framework::Audio::NoAudioHardwareException&)
-    {
-        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
-    }
-
-    EXPECT_NE(d.getStateProperty(), SoundState::Playing);
-}
-
 // P9-VALIDATION-010: Resume() delegates to Play() when there's no active track_, which is
 // also how a disposed instance surfaces this instead of silently no-op'ing -- see
 // SoundEffectInstanceTests.cpp's identical base-class test for the full FNA-matching rationale.
@@ -548,9 +510,9 @@ TEST(DynamicSoundEffectInstanceTest, StopFalseAfterPlayingThrowsInvalidOperation
     EXPECT_THROW(d.Stop(false), System::InvalidOperationException);
 }
 
-// T-2A: setting IsLooped through a base reference on a playing dynamic instance must
-// remain a no-op (the base setter would otherwise throw "cannot change while playing").
-TEST(DynamicSoundEffectInstanceTest, IsLoopedViaBaseRefWhilePlayingDoesNotThrow)
+// T-2A: through a base reference on a playing dynamic instance the dynamic rule still applies,
+// not the base setter's "cannot change while playing".
+TEST(DynamicSoundEffectInstanceTest, IsLoopedViaBaseRefWhilePlayingFollowsTheDynamicRule)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
     if (!tryStartHeadless(d))
@@ -558,7 +520,8 @@ TEST(DynamicSoundEffectInstanceTest, IsLoopedViaBaseRefWhilePlayingDoesNotThrow)
         GTEST_SKIP() << "no audio device (dummy driver unavailable)";
     }
     SoundEffectInstance& base = d;
-    EXPECT_NO_THROW(base.setIsLoopedProperty(true));
+    EXPECT_THROW(base.setIsLoopedProperty(true), System::InvalidOperationException);
+    EXPECT_NO_THROW(base.setIsLoopedProperty(false));
     EXPECT_FALSE(d.getIsLoopedProperty());
 }
 

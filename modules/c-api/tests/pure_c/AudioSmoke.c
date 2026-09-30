@@ -126,8 +126,10 @@ int main(void)
         return CNA_TEST_FAIL(9);
     }
 
+    /* Pitch outside -1..1 is refused, as XNA refuses it; FNA clamped it (cna-killer KF-12). */
     if (cna_sound_effect_instance_set_volume(instance, 0.25F) != CNA_RESULT_SUCCESS ||
-        cna_sound_effect_instance_set_pitch(instance, 2.0F) != CNA_RESULT_SUCCESS ||
+        cna_sound_effect_instance_set_pitch(instance, 1.0F) != CNA_RESULT_SUCCESS ||
+        cna_sound_effect_instance_set_pitch(instance, 2.0F) != CNA_RESULT_INVALID_ARGUMENT ||
         cna_sound_effect_instance_set_pan(instance, -0.5F) != CNA_RESULT_SUCCESS ||
         cna_sound_effect_instance_set_is_looped(instance, CNA_TRUE) != CNA_RESULT_SUCCESS ||
         cna_sound_effect_instance_set_pan(instance, 1.5F) != CNA_RESULT_INVALID_ARGUMENT ||

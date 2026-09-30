@@ -9,6 +9,7 @@
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 
@@ -56,6 +57,11 @@ namespace Microsoft::Xna::Framework::Audio
           sampleRate_(sampleRate),
           channels_(channels)
     {
+        // XNA's constructor refuses what its SoundEffect refuses (cna-killer KF-12).
+        if (sampleRate < 8000 || sampleRate > 48000)
+            throw System::ArgumentOutOfRangeException("sampleRate");
+        if (channels != AudioChannels::Mono && channels != AudioChannels::Stereo)
+            throw System::ArgumentOutOfRangeException("channels");
     }
 
     DynamicSoundEffectInstance::~DynamicSoundEffectInstance()
@@ -82,14 +88,19 @@ namespace Microsoft::Xna::Framework::Audio
         return false;
     }
 
-    void DynamicSoundEffectInstance::setIsLoopedProperty(const bool& /*looped*/)
+    void DynamicSoundEffectInstance::setIsLoopedProperty(const bool& looped)
     {
-        // No-op: DynamicSoundEffectInstance cannot be looped.
+        // A streamed voice cannot loop. XNA refuses true rather than ignoring it, and accepts
+        // false; FNA ignored both (KF-12).
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("DynamicSoundEffectInstance");
+        if (looped)
+            throw System::InvalidOperationException("A DynamicSoundEffectInstance cannot be looped.");
     }
 
-    void DynamicSoundEffectInstance::setIsLoopedProperty(bool&& /*looped*/)
+    void DynamicSoundEffectInstance::setIsLoopedProperty(bool&& looped)
     {
-        // No-op: DynamicSoundEffectInstance cannot be looped.
+        setIsLoopedProperty(static_cast<const bool&>(looped));
     }
 
     SoundState DynamicSoundEffectInstance::getStateProperty() const
@@ -365,19 +376,19 @@ namespace Microsoft::Xna::Framework::Audio
             throw System::ObjectDisposedException("DynamicSoundEffectInstance");
         }
 
-        // P9-VALIDATION-010: offset+count must never be computed as a plain intcs addition -- see
-        // SoundEffect's buffer/range constructor for why (int32 overflow can silently wrap past
-        // this check, then buffer.begin()+offset+count below is out-of-bounds iterator arithmetic).
-        if (offset < 0 || count < 0)
-        {
-            throw System::ArgumentOutOfRangeException("count");
-        }
+        // XNA's SubmitBuffer: a non-empty buffer of whole 16-bit frames, and an offset and count on
+        // frame boundaries inside it (KF-12). The sum is taken in 64 bits: C++ has no bounds check to
+        // catch a wrapped int, where C#'s checked addition throws.
+        const std::int64_t blockAlign = 2 * static_cast<std::int64_t>(channels_);
+        const auto size = static_cast<std::int64_t>(buffer.size());
+        if (size == 0 || size % blockAlign != 0)
+            throw System::ArgumentException("The buffer is empty or not a whole number of sample frames.", "buffer");
+        if (offset < 0 || offset >= size || offset % blockAlign != 0)
+            throw System::ArgumentException("The offset is outside the buffer or not on a sample frame.", "offset");
+        if (count <= 0 || static_cast<std::int64_t>(offset) + count > size || count % blockAlign != 0)
+            throw System::ArgumentException("The count is outside the buffer or not a whole number of sample frames.", "count");
         const auto off = static_cast<std::size_t>(offset);
         const auto cnt = static_cast<std::size_t>(count);
-        if (off > buffer.size() || cnt > buffer.size() - off)
-        {
-            throw System::ArgumentOutOfRangeException("count");
-        }
 
         // AUD-07-001/002/A-03: real FNA's own SubmitBuffer has no equivalent guard at all --
         // once SubmitFloatBufferEXT (an FNA/CNAEXT extension, not real XNA) has flipped

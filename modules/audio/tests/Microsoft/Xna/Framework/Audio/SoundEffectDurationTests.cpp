@@ -38,11 +38,11 @@ TEST(SoundEffectDurationTest, ARawPcmEffectReportsItsDurationOnEveryAudioPlatfor
     }
 }
 
-TEST(SoundEffectDurationTest, ARangeCountsWholeStereoFramesOnly)
+TEST(SoundEffectDurationTest, ARangeCountsWholeStereoFrames)
 {
-    // 401 bytes of stereo 16-bit PCM is 100 whole frames and one stray byte; the stray byte is not
-    // a frame, on any platform (SoundEffectTests.cpp locks the same truncation for SDL3).
-    const std::vector<unsigned char> pcm(401, 0);
+    // 400 bytes of stereo 16-bit PCM is 100 whole frames. A stray trailing byte is no longer
+    // truncated here: XNA refuses a buffer that is not whole frames (cna-killer KF-12).
+    const std::vector<unsigned char> pcm(400, 0);
     try
     {
         SoundEffect effect(pcm, 0, static_cast<int>(pcm.size()), 44100, AudioChannels::Stereo, 0, 0);

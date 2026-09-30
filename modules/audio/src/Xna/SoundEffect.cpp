@@ -8,12 +8,15 @@
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <cstring>
 #include <istream>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Audio/NoAudioHardwareException.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/ObjectDisposedException.hpp"
 #include "System/NotSupportedException.hpp"
 
 #ifdef SOUND_ENABLED
@@ -313,28 +316,28 @@ namespace Microsoft::Xna::Framework::Audio
         SharpRuntime::intcs loopLength)
         : impl_(std::make_shared<Impl>())
     {
-        // P9-VALIDATION-002: loopStart/loopLength are intentionally NOT validated here, matching
-        // FNA's own internal ctor (SoundEffect.cs: `this.loopStart = (uint) loopStart;`) -- a
-        // negative value wraps to a huge unsigned value in both FNA and here, identically.
+        // XNA's SoundEffect.FromBuffer, in its order (cna-killer KF-12). FNA validated only the
+        // window, and a negative loop value wrapped to a huge unsigned one.
+        if (sampleRate < 8000 || sampleRate > 48000)
+            throw System::ArgumentOutOfRangeException("sampleRate");
+        if (channels != AudioChannels::Mono && channels != AudioChannels::Stereo)
+            throw System::ArgumentOutOfRangeException("channels");
+        const std::int64_t blockAlign = 2 * static_cast<std::int64_t>(channels);
+        const auto size = static_cast<std::int64_t>(buffer.size());
+        if (size == 0 || size % blockAlign != 0)
+            throw System::ArgumentException("The buffer is empty or not a whole number of sample frames.", "buffer");
+        if (offset < 0 || offset >= size || offset % blockAlign != 0)
+            throw System::ArgumentException("The offset is outside the buffer or not on a sample frame.", "offset");
+        // 64-bit sums: C#'s checked addition is the equivalent, and C++ has no bounds check to fall back on.
+        if (count <= 0 || static_cast<std::int64_t>(offset) + count > size || count % blockAlign != 0)
+            throw System::ArgumentException("The count is outside the buffer or not a whole number of sample frames.", "count");
+        if (loopStart < 0 || loopLength < 0 ||
+            static_cast<std::int64_t>(loopStart) + loopLength > count / blockAlign)
+            throw System::ArgumentException("The loop region lies outside the sound.", "loopLength");
         loopStart_  = static_cast<SharpRuntime::uintcs>(loopStart);
         loopLength_ = static_cast<SharpRuntime::uintcs>(loopLength);
-
-        // P9-VALIDATION-003: offset+count must never be computed as a plain intcs addition --
-        // two individually-plausible-looking values can overflow int32 (UB), and on a typical
-        // two's-complement wraparound the overflowed sum can come out negative/small, silently
-        // passing this check while `buffer.data() + offset` below is a wildly out-of-bounds
-        // pointer. FNA gets away without this check because C#'s array bounds checking is the
-        // real safety net there; C++ has none, so this has to be exact.
-        if (offset < 0 || count < 0)
-        {
-            throw System::ArgumentOutOfRangeException("count");
-        }
         const auto off = static_cast<std::size_t>(offset);
         const auto cnt = static_cast<std::size_t>(count);
-        if (off > buffer.size() || cnt > buffer.size() - off)
-        {
-            throw System::ArgumentOutOfRangeException("count");
-        }
         // 16-bit PCM: two bytes per sample, one sample per channel per frame.
         if (static_cast<int>(channels) > 0 && sampleRate > 0)
         {
@@ -449,6 +452,9 @@ namespace Microsoft::Xna::Framework::Audio
 
     void SoundEffect::setMasterVolumeProperty(const float& v)
     {
+        // XNA: NaN and anything outside 0..1 are refused; FNA passed them through (KF-12).
+        if (!(v >= 0.0f && v <= 1.0f))
+            throw System::ArgumentOutOfRangeException("value");
 #ifdef SOUND_ENABLED
         // CP-16: the mixer engine's gain is a real global, applied to every track (including
         // already-playing ones) at mix time -- unlike the old per-track-baked-in approach, this
@@ -473,11 +479,14 @@ namespace Microsoft::Xna::Framework::Audio
 
     void SoundEffect::setDistanceScaleProperty(float value)
     {
-        if (value <= 0.0f)
+        // XNA refuses a negative scale and turns zero into float.Epsilon (KF-12).
+        if (value < 0.0f)
         {
-            throw System::ArgumentOutOfRangeException("value <= 0.0f");
+            throw System::ArgumentOutOfRangeException("value");
         }
-        DistanceScale_ = value;
+        DistanceScale_ = value <= std::numeric_limits<float>::denorm_min()
+            ? std::numeric_limits<float>::denorm_min()
+            : value;
     }
 
     float SoundEffect::getDopplerScaleProperty()
@@ -487,9 +496,9 @@ namespace Microsoft::Xna::Framework::Audio
 
     void SoundEffect::setDopplerScaleProperty(float value)
     {
-        if (value < 0.0f)
+        if (!(value >= 0.0f)) // NaN included, as XNA's `value >= 0f` test refuses it
         {
-            throw System::ArgumentOutOfRangeException("value < 0.0f");
+            throw System::ArgumentOutOfRangeException("value");
         }
         DopplerScale_ = value;
     }
@@ -501,6 +510,10 @@ namespace Microsoft::Xna::Framework::Audio
 
     void SoundEffect::setSpeedOfSoundProperty(float value)
     {
+        if (!(value > 0.0f))
+        {
+            throw System::ArgumentOutOfRangeException("value");
+        }
         SpeedOfSound_ = value;
     }
 
@@ -508,6 +521,10 @@ namespace Microsoft::Xna::Framework::Audio
 
     SoundEffectInstance SoundEffect::CreateInstance() const
     {
+        if (isDisposed_)
+        {
+            throw System::ObjectDisposedException("SoundEffect");
+        }
         return SoundEffectInstance(*this);
     }
 
