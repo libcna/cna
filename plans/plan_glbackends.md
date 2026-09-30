@@ -518,6 +518,17 @@ list. **All of GLB-30 through GLB-35 are `easy-gl` repo work** (on `easy-glrvc`,
   `vertexAttribDivisor` per frame plus the matching enable/pointer/VAO binds; uniforms account for
   roughly 43,000 more. Caching the remapped layout needs every path that relies on the restored
   layout (custom and compiled effects) audited first, which is why it was not folded into GLB-41.
+- ⬜ **GLB-43** — **Open, recorded 2026-09-30 from cna-street's `CNA-F19`.** The uniform and texture
+  half of the same per-draw cost: `EasyGLRenderer::BindDrawParams` uploads every uniform the stock
+  program declares (WVP, normal matrix, lights, material, shadow values, the sampler-unit indices)
+  and rebinds every texture unit and default texture on every draw, even when the previous draw
+  used the same program, material and textures; easy-gl's `Program::set_uniform` and
+  `Texture::active_bind` keep no record. Two consecutive draws sharing a material therefore cost
+  as much as two different ones -- about 9 µs per draw on either GL renderer in cna-street
+  (`plans/plan_street_perf.md`). Proposed: a per-`Prog3D` record of the last value at each uniform
+  location (sampler-unit uniforms set once at link time) and a per-unit bound-texture record,
+  dropped on context loss, texture deletion and relink -- GLB-41's lifecycle -- with real-context
+  tests in the style of `EasyGLRedundantStateTests.cpp`. Performance only; no picture is wrong.
 
 ## 4. Open questions for the project owner — resolved 2026-07-19
 
