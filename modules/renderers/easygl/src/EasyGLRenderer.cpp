@@ -6361,6 +6361,68 @@ else
 #endif
     }
 
+    namespace
+    {
+        // The back buffer is drawn into the window's drawable through the presentation rectangle
+        // (Letterbox scales and centres it, a display scale of 2 doubles it), while
+        // GetBackBufferData addresses the back buffer itself, which XNA keeps at its own size
+        // whatever the window does (cna-killer KF-6). When the two differ, each back-buffer pixel
+        // is read from the drawable pixel its centre lands on. Returns false when they agree, where
+        // a plain 1:1 read is exact.
+        template <typename Read>
+        bool ReadThroughPresentation(int x, int y, int w, int h, int logicalWidth, int logicalHeight,
+                                     int presentX, int presentY, int presentWidth, int presentHeight,
+                                     int physicalWidth, int physicalHeight, uint8_t* pixels, Read&& read)
+        {
+            if (logicalWidth <= 0 || logicalHeight <= 0 || presentWidth <= 0 || presentHeight <= 0 ||
+                (presentX == 0 && presentY == 0 && presentWidth == logicalWidth &&
+                 presentHeight == logicalHeight))
+            {
+                return false;
+            }
+
+            // GL rows count from the bottom; the presentation rectangle's Y does too.
+            std::vector<int> columns(static_cast<std::size_t>(w));
+            std::vector<int> rows(static_cast<std::size_t>(h));
+            for (int i = 0; i < w; ++i)
+            {
+                const double centre = (static_cast<double>(x + i) + 0.5) * presentWidth / logicalWidth;
+                columns[static_cast<std::size_t>(i)] =
+                    std::clamp(presentX + static_cast<int>(centre), 0, std::max(0, physicalWidth - 1));
+            }
+            for (int j = 0; j < h; ++j)
+            {
+                const double centre =
+                    (static_cast<double>(logicalHeight - (y + j)) - 0.5) * presentHeight / logicalHeight;
+                rows[static_cast<std::size_t>(j)] =
+                    std::clamp(presentY + static_cast<int>(centre), 0, std::max(0, physicalHeight - 1));
+            }
+            const auto [minColumn, maxColumn] = std::minmax_element(columns.begin(), columns.end());
+            const auto [minRow, maxRow] = std::minmax_element(rows.begin(), rows.end());
+            const int readWidth = *maxColumn - *minColumn + 1;
+            const int readHeight = *maxRow - *minRow + 1;
+            std::vector<uint8_t> region(
+                static_cast<std::size_t>(readWidth) * static_cast<std::size_t>(readHeight) * 4u);
+            read(*minColumn, *minRow, readWidth, readHeight, region.data());
+            for (int j = 0; j < h; ++j)
+            {
+                const std::size_t sourceRow =
+                    static_cast<std::size_t>(rows[static_cast<std::size_t>(j)] - *minRow);
+                for (int i = 0; i < w; ++i)
+                {
+                    const std::size_t sourceColumn =
+                        static_cast<std::size_t>(columns[static_cast<std::size_t>(i)] - *minColumn);
+                    std::memcpy(pixels + (static_cast<std::size_t>(j) * static_cast<std::size_t>(w) +
+                                          static_cast<std::size_t>(i)) * 4u,
+                                region.data() +
+                                    (sourceRow * static_cast<std::size_t>(readWidth) + sourceColumn) * 4u,
+                                4u);
+                }
+            }
+            return true;
+        }
+    }
+
     void EasyGLRenderer::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
     {
         if (metagl::IsContextLost())
@@ -6398,6 +6460,27 @@ if (!ProfileIsEs2ApiGeneration())
         {
             int physicalWidth = 0;
             getPhysicalSize(physicalWidth, fbH);
+            int logicalWidth = 0;
+            int logicalHeight = 0;
+            getLogicalSize(logicalWidth, logicalHeight);
+            int presentX = 0;
+            int presentY = 0;
+            int presentWidth = 0;
+            int presentHeight = 0;
+            surfaceState_.GetDefaultViewportRect(presentX, presentY, presentWidth, presentHeight);
+            const auto readPhysical = [this](int readX, int readY, int readW, int readH, uint8_t* out)
+            {
+                device.read_pixels(readX, readY, readW, readH, ::metagl::PixelFormat::Rgba,
+                                   ::metagl::PixelType::UnsignedByte, out);
+            };
+            if (ReadThroughPresentation(x, y, w, h, logicalWidth, logicalHeight, presentX, presentY,
+                                        presentWidth, presentHeight, physicalWidth, fbH, pixels,
+                                        readPhysical))
+            {
+                if (sampleCount_ > 1)
+                    msaaFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
+                return;
+            }
         }
 
         // OpenGL origin is bottom-left; flip y so caller gets top-left origin.
