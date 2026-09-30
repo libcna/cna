@@ -27,9 +27,9 @@ namespace Microsoft::Xna::Framework::Graphics
     class TextureCube;
 
     /**
-     * @brief GLSL-source-based effect loaded from vertex and fragment shader strings.
-     *
-     * @note CNAEXT — not part of the XNA 4.0 API. CNA extension.
+     * @brief GLSL-source-based effect loaded from vertex and fragment shader strings. CNAEXT.
+     * @note The GLSL is compiled as written: on OpenGL it keeps GL's [-1, 1] clip depth, where the
+     *       stock effects match XNA's [0, 1] with `gl_Position.z = 2.0 * gl_Position.z - w`.
      */
     CNAEXT class ShaderEffect : public Effect, public IEffectMatrices
     {

@@ -458,9 +458,11 @@ XNA is a Direct3D 9 programming model, and D3D9 maps clip space to depth over **
 vertex at `z = 0` is on the **near** plane, `z = 1` on the far plane. Vulkan's native range is the
 same, so this renderer matches XNA without doing anything.
 
-**EasyGL, the reference renderer, does not.** It leaves OpenGL's `[-1, 1]` clip depth in place, so
-the same `z = 0` vertex lands at depth **0.5**. Measured on 2026-09-05 by compiling the identical
-test source against both configurations:
+**EasyGL, the reference renderer, did not until SOFTWARE-336** (`7400285c3`, 2026-09-11): it left
+OpenGL's `[-1, 1]` clip depth in place, so the same `z = 0` vertex landed at depth **0.5**. Its stock
+programs now rescale `gl_Position.z = 2z - w`, as MojoShader does for FNA3D; a `ShaderEffect`'s own
+GLSL is compiled as written and keeps OpenGL's range unless it does the same. Measured on
+2026-09-05, before that fix, by compiling the identical test source against both configurations:
 
 | | Vulkan | EasyGL |
 |---|---|---|
@@ -476,8 +478,8 @@ depth the two ranges fall on opposite sides of — to see it.
 
 Two consequences worth knowing before writing anything that depends on depth:
 
-- **An XNA scene loses half its depth precision on EasyGL.** Content authored for `[0, 1]` uses only
-  the upper half of `[-1, 1]` there, so the depth buffer resolves half as finely as XNA's would.
+- **An XNA scene lost half its depth precision on EasyGL** (before SOFTWARE-336). Content authored
+  for `[0, 1]` used only the upper half of `[-1, 1]`, so the depth buffer resolved half as finely.
 - **A shared fixture cannot encode a depth value and be run on both.** It can compare depths, but
   the moment it asserts one, it is asserting a renderer-specific number. `Vulkan_DepthRangeContract`
   is therefore registered for Vulkan only, on purpose.
