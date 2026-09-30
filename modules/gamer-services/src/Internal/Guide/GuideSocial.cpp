@@ -321,6 +321,12 @@ public:
         if(!loaded_||self_)return out;
         // What a friend is for comes first; removing one is never what the card opens on.
         const bool friends=friendship_&&friendship_->accepted;
+        // A blocked member can only be reviewed or unblocked.
+        if(playerBlocked(identity(player).gamertag,person_.gamertag)) {
+            out.push_back({Icon::StarOutline,"Review player"});
+            out.push_back({Icon::Speaker,"Unblock"});
+            return out;
+        }
         if(friends&&friendship_->joinable)out.push_back({Icon::Controller,"Join game"});
         if(!friends&&friendship_&&friendship_->requestReceived)out.push_back({Icon::PersonAdd,"Accept friend request"});
         else if(!friends&&friendship_&&friendship_->requestSent)out.push_back({Icon::Cross,"Cancel friend request"});
@@ -332,6 +338,7 @@ public:
         // Voice: neither hears the other in a network session while muted.
         if(voiceMuted(identity(player).gamertag,person_.gamertag))out.push_back({Icon::Speaker,"Unmute"});
         else out.push_back({Icon::Muted,"Mute"});
+        out.push_back({Icon::Cross,"Block"});
         if(friends)out.push_back({Icon::Cross,"Remove friend"});
         return out;
     }
@@ -350,6 +357,19 @@ public:
             setVoiceMuted(identity(who).gamertag,tag,label=="Mute");
             notify({Notification::Kind::Info,label=="Mute"?tag+" muted":tag+" unmuted",
                 label=="Mute"?"Neither of you hears the other in a game":"Voice is back on in games"});
+            return;
+        }
+        if(label=="Block"||label=="Unblock") {
+            const bool block=label=="Block";
+            busy_=true;
+            load<bool>(std::static_pointer_cast<GamerCardScreen>(shared_from_this()),[user=userOf(player),tag,block](IGamerServicesBackend& s) {
+                s.setBlocked(user,tag,block);return true;
+            },[who,tag,block](GamerCardScreen& screen,bool) {
+                screen.busy_=false;setPlayerBlocked(identity(who).gamertag,tag,block);
+                screen.start(std::static_pointer_cast<GamerCardScreen>(screen.shared_from_this()));
+                notify({Notification::Kind::Info,block?tag+" blocked":tag+" unblocked",
+                    block?"Neither of you can message, invite, hear or find the other":"You can play and talk again"});
+            },[who](GamerCardScreen& screen){screen.busy_=false;inform(who,"Block","The change could not be made.",Icon::Error);});
             return;
         }
         if(label=="Join game") {

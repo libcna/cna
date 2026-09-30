@@ -8,6 +8,7 @@
 #include "CNA/Internal/GamerServices/ServiceUpdateSubscription.hpp"
 #include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
 #include "CNA/Internal/GamerServices/LocalProfiles.hpp"
+#include "CNA/Internal/GamerServices/VoiceMutes.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
 #include "../Internal/GuideOverlay.hpp"
@@ -125,6 +126,21 @@ void GamerServicesDispatcher::Update() {
                 // account the service could admit to an online session.
                 gamer->privileges_.allowOnlineSessions_=event.signedInToLive&&!guest&&event.identity.allowOnlineSessions;
                 if(!event.signedInToLive)gamer->privileges_.allowPurchaseContent_=false;
+                // An account's other privileges are the policy its service states (the operator's
+                // stand-in for parental controls); its block list mutes voice with those players.
+                if(event.signedInToLive&&!guest) {
+                    auto setting=[](const std::string& value) {
+                        return value=="blocked"?GamerPrivilegeSetting::Blocked:value=="friends"?GamerPrivilegeSetting::FriendsOnly:GamerPrivilegeSetting::Everyone;
+                    };
+                    auto& privileges=gamer->privileges_;
+                    privileges.allowCommunication_=setting(event.identity.communication);
+                    privileges.allowProfileViewing_=setting(event.identity.profileViewing);
+                    privileges.allowUserCreatedContent_=setting(event.identity.userContent);
+                    privileges.allowTradeContent_=event.identity.tradeContent;
+                    privileges.allowPurchaseContent_=event.identity.purchaseContent;
+                    privileges.allowPremiumContent_=event.identity.premiumContent;
+                    CNA::Internal::GamerServices::setBlockedPlayers(event.identity.gamertag,event.identity.blocked);
+                }
                 // A local profile carries its own preferred game settings; an account's come from the service.
                 if(!event.signedInToLive) {
                     if(const auto profile=CNA::Internal::GamerServices::findLocalProfile(event.identity.gamertag))

@@ -886,6 +886,14 @@ namespace Microsoft::Xna::Framework::GamerServices
             service->submit([executor,work=std::move(work),failed]{try{work(*executor);}catch(...){*failed=true;}},
                 [player,failed,failure=std::move(failure)]{if(*failed)SocialMessage(player,"CNA Gamer Services",failure);});
         }
+        // XNA refuses these Guide calls with GamerPrivilegeException when the profile's privilege
+        // is Blocked (the native result ProfileNotPrivileged, mapped by ErrorHandler); Guide.xml
+        // names AllowCommunication for messages and invitations and AllowProfileViewing for gamer
+        // cards. FriendsOnly is enforced by the service per recipient.
+        void RequireCommunication(SignedInGamer* actor) {
+            if(actor->getPrivilegesProperty().getAllowCommunicationProperty()==GamerPrivilegeSetting::Blocked)
+                throw GamerPrivilegeException("The profile may not communicate with other gamers.");
+        }
         void SendMessage(PlayerIndex player,const std::string& user,const std::vector<std::string>& tags,const std::string& text) {
             SocialCall(player,[user,tags,text](auto& executor){executor.sendMessage(user,tags,text);},"The message could not be sent.");
         }
@@ -911,7 +919,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         if(text.size()>=256)throw System::ArgumentException("Text is too long.","text");
         ValidateRecipients(recipients);
         if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException();
-        auto* actor=SocialActor(player);std::vector<std::string> tags;
+        auto* actor=SocialActor(player);RequireCommunication(actor);std::vector<std::string> tags;
         for(auto* gamer:recipients)tags.push_back(gamer->getGamertagProperty());
         Compose(player,Service::GamerAccess::userId(*actor),tags,text);
     }
@@ -937,7 +945,7 @@ namespace Microsoft::Xna::Framework::GamerServices
             if(gamer->getIsDisposedProperty())throw System::ObjectDisposedException("recipients");
         }
         if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException();
-        auto* actor=SocialActor(player);
+        auto* actor=SocialActor(player);RequireCommunication(actor);
         if(!Service::activeOnlineSession())
             throw System::InvalidOperationException("There is no online network session to invite gamers to.");
         (void)actor;
@@ -954,7 +962,10 @@ namespace Microsoft::Xna::Framework::GamerServices
     void Guide::ShowGamerCard(PlayerIndex player,Gamer* gamer) {
         ValidateGamer(gamer);
         if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException();
-        (void)SocialActor(player);
+        auto* actor=SocialActor(player);
+        if(gamer->getGamertagProperty()!=actor->getGamertagProperty()&&
+           actor->getPrivilegesProperty().getAllowProfileViewingProperty()==GamerPrivilegeSetting::Blocked)
+            throw GamerPrivilegeException("The profile may not view other gamers' profiles.");
         CNA::Internal::GamerServices::GuideUi::open(CNA::Internal::GamerServices::GuideUi::gamerCardScreen(player,gamer->getGamertagProperty()),player);
     }
 

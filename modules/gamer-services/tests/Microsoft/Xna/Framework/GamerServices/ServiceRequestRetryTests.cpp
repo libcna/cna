@@ -31,7 +31,7 @@ using Unavailable=Microsoft::Xna::Framework::GamerServices::GamerServicesNotAvai
 
 class LoopbackService {
 public:
-    explicit LoopbackService(bool outcomes):outcomes_(outcomes) {
+    explicit LoopbackService(bool outcomes,bool privacy=false):outcomes_(outcomes),privacy_(privacy) {
         listener_=socket(AF_INET,SOCK_STREAM,0);
         sockaddr_in address{};address.sin_family=AF_INET;address.sin_addr.s_addr=htonl(INADDR_LOOPBACK);
         EXPECT_EQ(0,bind(listener_,reinterpret_cast<sockaddr*>(&address),sizeof(address)));
@@ -94,16 +94,20 @@ private:
         if(op=="hello") {
             Json capabilities=Json::array({"identity","authentication","achievements"});
             if(outcomes_)capabilities.push_back("request-outcomes");
+            if(privacy_)capabilities.push_back("privacy");
             return {{"version",1},{"capabilities",capabilities},{"maxMessageBytes",65536}};
         }
         if(op=="auth.login")
             return {{"identity",{{"userId","u1"},{"gamertag","Alice"},{"displayName","Alice"},{"motto",""},{"region","US"},
                 {"picture",""},{"gamerScore",0},{"totalAchievements",0},{"allowOnlineSessions",true}}},
-                {"token",std::string(64,'a')},{"expires",now+3600},{"serverTime",now}};
+                {"token",std::string(64,'a')},{"expires",now+3600},{"serverTime",now},
+                {"privileges",{{"communication","friends"},{"profileViewing","blocked"},{"userContent","everyone"},
+                    {"trade",false},{"purchase",true},{"premium",false}}}};
+        if(op=="privacy.list")return {{"blocked",Json::array({"Bob","Carol"})}};
         if(op=="achievements.award")return {{"awarded",true},{"name","First"}};
         return Json::object();
     }
-    bool outcomes_;int listener_=-1;unsigned short port_=0;std::atomic<bool> stop_{false};std::atomic<int> connection_{-1};std::thread thread_;
+    bool outcomes_,privacy_;int listener_=-1;unsigned short port_=0;std::atomic<bool> stop_{false};std::atomic<int> connection_{-1};std::thread thread_;
     std::mutex mutex_;std::map<std::string,int> drops_;std::map<std::string,std::vector<std::string>> seen_;
 };
 
@@ -114,14 +118,14 @@ protected:
         Service::setBackendForTesting(previous);Deployment::setConfigurationOverride({});
         unsetenv("CNA_GAMER_SERVICES_CREDENTIALS_DIR");
     }
-    std::shared_ptr<Service::IGamerServicesBackend> signedIn(const LoopbackService& service) {
+    std::shared_ptr<Service::IGamerServicesBackend> signedIn(const LoopbackService& service,Service::ServiceIdentity* identity=nullptr) {
         Deployment::setConfigurationOverride(Deployment::Configuration{service.endpoint(),"retry",{},true});
         Service::setBackendForTesting({});
         auto backend=Service::backend();
         backend->signIn(0,"alice","alice-password");
         for(int i=0;i<500;++i) {
             for(const auto& event:backend->pump())
-                if(event.type==Service::BackendEvent::Type::SignedIn)return backend;
+                if(event.type==Service::BackendEvent::Type::SignedIn){if(identity)*identity=event.identity;return backend;}
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
         ADD_FAILURE()<<"sign-in did not complete";return backend;
@@ -167,5 +171,21 @@ TEST_F(ServiceRequestRetryTest, ASignInWhoseResultIsASecretIsNotAskedAgain) {
     }
     EXPECT_TRUE(failed);
     EXPECT_EQ(1u,service.ids("auth.login").size());
+}
+#endif
+
+#if defined(__unix__) || defined(__APPLE__)
+// GSH-03: the account's privileges come with its credentials, and its block list is read at sign-in.
+TEST_F(ServiceRequestRetryTest, SignInCarriesTheAccountsPrivilegesAndBlockList) {
+    LoopbackService service(true,true);
+    Service::ServiceIdentity person;
+    (void)signedIn(service,&person);
+    EXPECT_EQ("friends",person.communication);
+    EXPECT_EQ("blocked",person.profileViewing);
+    EXPECT_EQ("everyone",person.userContent);
+    EXPECT_FALSE(person.tradeContent);
+    EXPECT_TRUE(person.purchaseContent);
+    EXPECT_FALSE(person.premiumContent);
+    EXPECT_EQ((std::vector<std::string>{"Bob","Carol"}),person.blocked);
 }
 #endif

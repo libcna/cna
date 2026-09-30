@@ -136,7 +136,7 @@ TEST_F(GuideUiTest, TheGamerCardAcceptsAFriendRequestAndReflectsIt) {
     std::unique_ptr<Gamer> dave(Gamer::GetFromGamertag("Dave"));
     Guide::ShowGamerCard(PlayerIndex::One, dave.get());
     ASSERT_TRUE(Labels(2));
-    EXPECT_EQ((std::vector<std::string>{"Dave", "Accept friend request", "Send message", "Review player", "Mute"}), Ui::labelsForTesting());
+    EXPECT_EQ((std::vector<std::string>{"Dave", "Accept friend request", "Send message", "Review player", "Mute", "Block"}), Ui::labelsForTesting());
     Ui::sendForTesting(Ui::Command::Accept);
     // A friend's card offers what friends do first; removing the friend is its last action.
     ASSERT_TRUE(Settle([] { return Ui::labelsForTesting().size() > 1 && Ui::labelsForTesting().back() == "Remove friend"; }));
@@ -167,6 +167,30 @@ TEST_F(GuideUiTest, TheGamerCardMutesAndUnmutesVoice) {
     EXPECT_NE(std::find(toasts.begin(), toasts.end(), "Dave muted: Neither of you hears the other in a game"), toasts.end());
     Ui::clickForTesting(static_cast<int>(unmute - labels.begin()) - 1);
     EXPECT_FALSE(Service::voiceMuted("Alice", "Dave"));
+}
+
+// GSH-03: the card's Block reaches the service's block list, ends the friendship, mutes voice and
+// leaves only Review and Unblock; Unblock undoes it.
+TEST_F(GuideUiTest, TheGamerCardBlocksAndUnblocksAMember) {
+    Service::resetVoiceMutesForTesting();
+    std::unique_ptr<Gamer> bob(Gamer::GetFromGamertag("Bob"));
+    ASSERT_TRUE((*Gamer::getSignedInGamersProperty())[0]->IsFriend(bob.get()));
+    Guide::ShowGamerCard(PlayerIndex::One, bob.get());
+    ASSERT_TRUE(Settle([] { const auto l = Ui::labelsForTesting(); return std::find(l.begin(), l.end(), "Block") != l.end(); }));
+    auto labels = Ui::labelsForTesting();
+    Ui::clickForTesting(static_cast<int>(std::find(labels.begin(), labels.end(), "Block") - labels.begin()) - 1);
+    ASSERT_TRUE(Settle([] { return Ui::labelsForTesting() == std::vector<std::string>{"Bob", "Review player", "Unblock"}; }));
+    EXPECT_EQ((std::vector<std::string>{"Bob"}), service_->blockedPlayers("a"));
+    EXPECT_TRUE(Service::playerBlocked("Alice", "Bob"));
+    EXPECT_TRUE(Service::voiceMuted("Alice", "Bob"));
+    EXPECT_FALSE((*Gamer::getSignedInGamersProperty())[0]->IsFriend(bob.get()));
+    EXPECT_THROW(service_->sendMessage("a", {"Bob"}, "hi"), std::exception);
+    const auto toasts = Service::guideNotifications();
+    EXPECT_NE(std::find(toasts.begin(), toasts.end(), "Bob blocked: Neither of you can message, invite, hear or find the other"), toasts.end());
+    Ui::clickForTesting(1);
+    ASSERT_TRUE(Settle([] { const auto l = Ui::labelsForTesting(); return std::find(l.begin(), l.end(), "Block") != l.end(); }));
+    EXPECT_TRUE(service_->blockedPlayers("a").empty());
+    EXPECT_FALSE(Service::voiceMuted("Alice", "Bob"));
 }
 
 TEST_F(GuideUiTest, YourOwnCardHasNoActions) {

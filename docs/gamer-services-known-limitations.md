@@ -65,7 +65,7 @@ avatar catalogs and versioned catalog-pack updates.
 | 17 | QoS of service search results; one round-trip sample | Partial | Minor | Yes (no path before a join) | Yes, after a direct/relay probe |
 | 18 | `FriendGamer.HasVoice` | Unsupported | Minor | Yes | Yes, if clients publish their audio devices |
 | 19 | Push scope | Partial | None | Yes | Yes (more topics) |
-| 20 | Privacy, blocking, privileges | Unsupported | Minor | Not decided | Yes |
+| 20 | Privileges and privacy: operator policy, not console parental controls | CNA policy | Minor | Yes | n/a |
 | 21 | Profile editing, account self-service | Partial | None | Partly | Yes |
 | 22 | Leaderboard Stream columns, unmeasured Xbox rules | Partial | Minor | Yes | Partly |
 | 23 | No service configured (offline profiles) | Platform limitation | Minor | Yes | n/a |
@@ -302,12 +302,12 @@ claim about how Xbox LIVE decided.
   `DynamicSoundEffectInstance` (lost frames concealed, late ones dropped). Policy: **one microphone
   per machine**, owned by Player One's gamer (else the first local gamer), so other local gamers on
   that machine report `HasVoice` false; the Guide gamer card's Mute stops both directions for that
-  local profile for the life of the process (no stored mute list); `AllowCommunication` is honoured
-  and is `Everyone` for every gamer, since CNA has no parental controls (20). Local sessions carry
-  no voice (one machine).
-- **Reason:** a desktop has one audio input device in the common case; CNA has no persistent
-  privacy settings yet.
-- **Observable impact:** a second local player on one PC cannot talk; mutes are forgotten at exit.
+  local profile for the life of the process; a player the account has blocked is muted for as long
+  as the block lasts (stored by the service, 20); `AllowCommunication` is honoured (Blocked: no
+  voice; FriendsOnly: friends only). Local sessions carry no voice (one machine).
+- **Reason:** a desktop has one audio input device in the common case.
+- **Observable impact:** a second local player on one PC cannot talk; a Mute (unlike a Block) is
+  forgotten at exit.
 - **Porting impact:** minor.
 - **Future work:** per-gamer devices and stored mutes are feasible.
 
@@ -403,21 +403,40 @@ claim about how Xbox LIVE decided.
 - **Porting impact:** none.
 - **Future work:** further topics are easy to add.
 
-### 20. Privacy, blocking and privileges
+### 20. Privileges, privacy and blocking
 
-- **Status:** intentionally unsupported until designed.
-- **XNA / Xbox:** `GamerPrivileges` (`AllowCommunication`, `AllowProfileViewing`,
-  `AllowUserCreatedContent`, `AllowTradeContent`, `AllowPurchaseContent`, `AllowPremiumContent`,
-  `AllowOnlineSessions`) came from account settings and parental controls.
-- **CNA now:** accounts carry `AllowOnlineSessions` from the service (false for guests and in
-  trial); `AllowPurchaseContent` is false for local profiles; every other privilege is
-  `Everyone`/true. There is no block list and no profile-privacy setting; any signed-in account can
-  read any gamertag, profile, picture and avatar; `sessions.find` hides hosts the searcher marked
-  "avoid".
-- **Reason:** not yet designed; inventing restrictions would break games for no one's benefit.
-- **Observable impact:** privileges never restrict.
-- **Porting impact:** minor; privilege-checking code takes its "allowed" branch.
-- **Future work:** feasible as account settings.
+- **Status:** implementation differs by design (CNA account policy).
+- **XNA / Xbox:** `GamerPrivileges` (`AllowCommunication`, `AllowProfileViewing` and
+  `AllowUserCreatedContent` as Everyone/FriendsOnly/Blocked; `AllowTradeContent`,
+  `AllowPurchaseContent`, `AllowPremiumContent`, `AllowOnlineSessions` as booleans) came from the
+  account's membership and the console's parental controls. The XNA IL checks one of them itself
+  (`ShowMarketplace`, purchase); every other refusal was the console's result code
+  `ProfileNotPrivileged`, surfacing as `GamerPrivilegeException`. XNA has no block-list API.
+- **CNA now:**
+  - The operator sets each account's privileges (`cna-gamer-services-admin <db> privilege ...`,
+    the stand-in for parental controls); the player learns them at sign-in.
+  - The service enforces communication (both ends) on messages, game and party invitations, join
+    requests and friend requests, and profile viewing on reading another member's profile; voice
+    follows `AllowCommunication` on the client.
+  - `Guide.ShowComposeMessage` and `ShowGameInvite` throw `GamerPrivilegeException` when
+    communication is Blocked, and `ShowGamerCard` of another gamer does when profile viewing is.
+    That Xbox refused exactly these calls is inferred from the IL's result-code mapping and the
+    Guide documentation's "check this privilege first" remarks; it was not observed on a console.
+  - A member may block another from the gamer card (Block/Unblock): both ways, it ends the
+    friendship, withdraws pending invitations, refuses messages, invitations, friend requests,
+    profile reads and join requests, hides either one's sessions from the other's search, and mutes
+    voice between them.
+  - `AllowUserCreatedContent`, `AllowTradeContent` and `AllowPremiumContent` are reported but
+    restrict nothing: CNA has no service for them. A game may read them, as XNA intended.
+  - Local profiles and guests keep every privilege but online sessions (and purchase for local
+    profiles).
+  - `PrivacyTests` (service), `GuidePrivilegeTest`, `GuideUiTest.TheGamerCardBlocksAndUnblocksAMember`.
+- **Reason:** CNA has no console parental controls; an operator policy is the honest equivalent.
+- **Observable impact:** privileges and blocks behave as the operator and players set them; the
+  console's exact rules (for example, whether a friends-only child could send a friend request)
+  are CNA's.
+- **Porting impact:** minor; privilege-checking code sees real values.
+- **Future work:** self-service privacy settings for adults, if wanted.
 
 ### 21. Profile editing and account self-service
 
@@ -771,14 +790,14 @@ parties and the other console-only services.
 ## Impact on porting XNA games and samples
 
 **Normally irrelevant to ordinary XNA games:** Xbox LIVE compatibility (1), title-update
-installation (5), Microsoft avatar assets (6), the CNA backend policies (8-13, 15), push scope (19),
+installation (5), Microsoft avatar assets (6), the CNA backend policies (8-13, 15, 20), push scope (19),
 profile self-service (21), credential persistence (24), the server's single process, SQLite,
 cluster and flood limits (34-37), public Internet qualification (31), avatar shading and likeness
 (39, 40), host-language differences (42-44).
 
 **Only affects specialized titles or samples:** partner tokens (2), a real store (3), a
 service-computed skill (4), expiring Recent scores (7), online guests (16),
-online QoS before joining (17), friend headset icons (18), privilege restrictions (20), large Stream
+online QoS before joining (17), friend headset icons (18), large Stream
 columns (22), several local talkers on one PC (14), avatar catalog edge cases (41).
 
 **Platform-specific:** browser multiplayer (26), voice builds and devices (27), non-Linux
