@@ -72,9 +72,11 @@ What remains:
   they did natively before. The owner's accepted scope is native plus a browser limitations page
   (`docs/browser-network-readiness.md`), not browser multiplayer.
 Online host migration and `AddLocalGamer` in online sessions, listed here until 2026-09-29, now work
-(`plans/plan_gamer_services_avatar_polish.md` GSP-K1/K2), as do away/busy, gamer zone and
-reputation. `plans/gamer_services_server_final_register.md` lists every other deliberate refusal
-or constant (voice, party, marketplace, partner tokens, TrueSkill, the Recent leaderboard window).
+(`plans/plan_gamer_services_avatar_polish.md` GSP-K1/K2), as do away/busy, gamer zone, reputation,
+parties and network voice (`plans/plan_gamer_services_xbox_fidelity.md`). Every remaining
+GamerServices/Net/Avatar limitation -- partner tokens, TrueSkill computation, the Recent leaderboard
+window, the store, online guests, service-listing QoS and the browser among them -- is listed in
+`docs/gamer-services-known-limitations.md`.
 
 ### What was closed first
 

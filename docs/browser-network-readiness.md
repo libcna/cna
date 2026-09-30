@@ -1,5 +1,12 @@
 # Browser network readiness — SAMPLE-104 partial release
 
+> **Status (2026-09-30).** Browser multiplayer is outside the current GamerServices/Net scope by
+> the owner's decision of 2026-09-28, kept in the Xbox-fidelity pass (GSX-E7): native builds play
+> SystemLink and online sessions; a browser build has local profiles only. The refusals below are the
+> documented boundary, not work in progress, and voice and the service event channel are native only
+> as well. The full list of limitations is
+> [`gamer-services-known-limitations.md`](gamer-services-known-limitations.md).
+
 ## Accepted scope — 2026-09-28
 
 The samples owner requested a playable WEBGL2 Performance Utility release, explicitly marked

@@ -11,6 +11,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
 
 ### Added
 
+- GamerServices and Net against CNA's own account service (`cna-gamer-services-server`; not Xbox
+  LIVE compatible): accounts and a console-style Guide, profiles, friends, presence, messages,
+  reviews, achievements, leaderboards with Ranked arbitration, PlayerMatch/Ranked sessions with
+  invitations, host migration, `AddLocalGamer` and parties over an authenticated TLS/WSS relay, push
+  hints, network voice (optional libopus), and the standard avatar API drawn from original CNA
+  catalogs. See `docs/gamer-services-server.md`, `docs/avatars.md` and, for what remains,
+  `docs/gamer-services-known-limitations.md`.
 - The `RLGL` renderer identity and standalone raylib 6.0 `rlgl.h` dependency baseline, pinned to
   an immutable commit without building or initializing the raylib application framework. The
   GraphicsDevice clear/readback/present/resize slice, all 20 classic Texture2D formats (including

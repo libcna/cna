@@ -66,7 +66,7 @@ this row's original "will not compile at all" claim is stale.**
 | **Framework.Content** | ~20 | 4 | ~20 % | ~60 % | Historical 2026-06 row; current Content/XNB status is in `docs/xna-content-pipeline-final-audit.md`. |
 | **Framework.Storage** | ~5 | 3 | ~100 % | ~75 % | StorageDevice/Container with filesystem; async patterns simplified |
 | **Framework.GamerServices** | ~15 | 54 | **~85 %** | **~85 %** | **Stale row (2026-06-21) — corrected `feature/net`:** Gamer/SignedInGamer/Achievement/Leaderboard/Friends/Presence/Privileges/Avatar all real now, not absent. See `docs/xna-4-api-coverage.md` §9. |
-| **Framework.Net** | ~20 | 23 | **~90 %** | **~80 %** | **Stale row (2026-06-21) — corrected `feature/net`:** NetworkSession/NetworkGamer/PacketReader/PacketWriter/LocalNetworkGamer all real (ENet-backed `SystemLink`, host migration, simulated latency/packet-loss), not absent. `PlayerMatch`/`Ranked`/invites remain stubs (no matchmaking renderer exists). See `docs/xna-4-api-coverage.md` §9. |
+| **Framework.Net** | ~20 | 23 | **~90 %** | **~80 %** | **Stale row (2026-06-21) — corrected `feature/net`:** NetworkSession/NetworkGamer/PacketReader/PacketWriter/LocalNetworkGamer all real (ENet-backed `SystemLink`, host migration, simulated latency/packet-loss), not absent. `PlayerMatch`/`Ranked`/invites run through the CNA account service and its relay since 2026-09-29 (`docs/gamer-services-server.md`). See `docs/xna-4-api-coverage.md` §9 and `docs/gamer-services-known-limitations.md`. |
 
 ---
 
@@ -156,7 +156,7 @@ this row's original "will not compile at all" claim is stale.**
 | Gap | Severity | Notes |
 |---|---|---|
 | **Content pipeline (.xnb) — historical 0 %** | Resolved in later work | See `docs/xna-content-pipeline-final-audit.md` for current reader coverage and limitations. |
-| ~~**Framework.Net — 0 %**~~ / ~~**GamerServices — ~5 %**~~ | **Stale (2026-06-21) — corrected `feature/net`** | Both rows described these as blocking gaps with entirely-absent headers; both are now real, tested implementations (`SystemLink`/host-migration/simulated-conditions for Net; Achievements/Leaderboards/Friends/Presence/Privileges/Avatar for GamerServices). See `docs/xna-4-api-coverage.md` §9 for current per-feature status; `PlayerMatch`/`Ranked`/invites remain stubs (no matchmaking renderer exists), not a namespace-wide gap. |
+| ~~**Framework.Net — 0 %**~~ / ~~**GamerServices — ~5 %**~~ | **Stale (2026-06-21) — corrected `feature/net`** | Both rows described these as blocking gaps with entirely-absent headers; both are now real, tested implementations (`SystemLink`/host-migration/simulated-conditions for Net; Achievements/Leaderboards/Friends/Presence/Privileges/Avatar for GamerServices). See `docs/xna-4-api-coverage.md` §9 for current per-feature status; `PlayerMatch`/`Ranked`/invites have run through the CNA account service since 2026-09-29; what remains is in `docs/gamer-services-known-limitations.md`. |
 | **XACT audio runtime — ~90 %** | Mostly closed (updated 2026-07-04) | Real hand-written `.xgs`/`.xsb`/`.xwb` parser + SDL3_mixer playback; remaining gap is documented accepted deviations (`instanceLimit`/fade parsed not enforced, no HRTF/elevation), not stubbing — see `plans/plan_audio.md` |
 | **Microphone — ~95 %** | Minor (updated 2026-07-04) | Real SDL3 capture device enumeration, Start/Stop, GetData/GetQueuedBytes, BufferReady event |
 | **Media library (Album/Artist/Genre) — ~5 %** | Minor for most games | Song/Video playback real; device media-library browsing = pure stubs |

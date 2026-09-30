@@ -15,9 +15,10 @@ python3 tools/avatar_builder/generate_avatar_catalog.py --out DIR # write elsewh
 It writes catalog v3 to `modules/gamer-services/assets/avatars/v3/`; every `v<N>/` directory there
 is embedded into the gamer-services library (`cmake/EmbedBinaryFiles.cmake`). A catalog must never
 change once descriptions can name it: catalog v1 is frozen (its generator is in Git history,
-commit 6ca06d069), so is catalog v2 (this generator at commit d1730d4f3), and changed or new items
-go into a new version, distributed by the CNA service
-(`docs/gamer-services-server.md`) to builds that do not embed it.
+commit 6ca06d069), so is catalog v2 (this generator at commit d1730d4f3), and so is catalog v3,
+released on 2026-09-30 (`AvatarCatalogTest.CatalogV3IsFrozen`). Changed or new items go into a new
+version: change the generator to write v4, which releases compile in and the CNA service offers as
+a catalog pack to builds that do not (`docs/avatars.md`).
 
 ## Modules
 

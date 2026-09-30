@@ -1,14 +1,13 @@
 # XNA 4.0 API Coverage Audit
 
-> **GamerServices and Net (2026-09-29):** the authoritative per-feature boundary is §9, with the
-> evidence in [the service plan](../plans/plan_gamer_services_server.md), the
-> [avatar and completion pass](../plans/plan_gamer_services_avatar_polish.md) and the
-> [final register](../plans/gamer_services_server_final_register.md). Against the CNA service:
-> accounts and Guide sign-in for four players, profiles, friends and presence, achievements,
-> leaderboards with Ranked arbitration, messages and reviews, avatars, and PlayerMatch/Ranked
-> NetworkSession create/find/join/invites, host migration and AddLocalGamer over the relay, all
-> tested between real processes (native only); offline, local profiles. Public Internet
-> deployment is not measured. API symbol presence and historical percentages are not evidence of
+> **GamerServices and Net (2026-09-30):** the per-feature boundary is §9; everything not done,
+> partial or decided differently from Xbox is in
+> [`gamer-services-known-limitations.md`](gamer-services-known-limitations.md). Against the CNA
+> service: accounts and Guide sign-in for four players, profiles, friends and presence, achievements,
+> leaderboards with Ranked arbitration, messages and reviews, parties, push hints and social
+> notifications, avatars, and PlayerMatch/Ranked NetworkSession create/find/join/invites, host
+> migration, AddLocalGamer and voice over the relay, all tested between real processes (native
+> only); offline, local profiles. Public Internet deployment has not been independently qualified. API symbol presence and historical percentages are not evidence of
 > behavioral completeness. The CNA server/accounts/protocol are not Xbox LIVE compatible.
 
 
@@ -891,7 +890,8 @@ maturity levels.
 This matrix separates API shape, measured behavior and actual service backing. CNA's versioned
 TLS service is independent of Xbox LIVE accounts, protocols and assets. Existing local-only
 factory fixtures remain explicit offline support; they are not evidence of online behavior.
-Full Xbox validation order, lifetime and asynchronous compatibility are still being measured.
+Xbox validation order, lifetime and asynchronous behaviour follow the XNA IL and documentation;
+they have not been measured on a console.
 
 ### GamerServices
 
@@ -907,9 +907,9 @@ Full Xbox validation order, lifetime and asynchronous compatibility are still be
 | Guide friends/gamer card/request | Service UI | Standard APIs present profiles, page friends/find gamer and confirm/manage friendship changes. Exact Xbox validation order remains unmeasured. |
 | Guide messages/review/players/invites | Service UI (GS-005c/d) | `ShowComposeMessage`, `ShowMessages`, `ShowPlayerReview`, `ShowPlayers`, invitations (send from the system Guide, accept/decline prompts, `DelayNotifications`) with reference argument validation. |
 | Guide marketplace/party | Implemented (GSX-E1, GSX-E2) | `IsTrialMode` starts true and follows `SimulateTrialMode` at each `Update`, as XNA's latch does, and trial closes online sessions; `ShowMarketplace` opens the Game content page (the licence, a Test Purchase while simulating trial, the installed avatar catalogs) -- there is no store to sell from. Parties are the service's: `SignedInGamer.PartySize`, the Party page (invite friends, answer invitations, leave), `ShowPartySessions` (joinable party members' games, or Friends without a party), and `SendPartyInvites` inviting the rest of the party to the current online session. |
-| Guide notifications | Functional (GSP-L3) | Toasts over the game at `Guide.NotificationPosition` (default bottom center, inside a 5 % title-safe margin), one at a time for four seconds, never taking input: a gamer signing in or out, an achievement unlocked (the first time only). |
+| Guide notifications | Functional (GSP-L3) | Toasts over the game at `Guide.NotificationPosition` (default bottom center, inside a 5 % title-safe margin), one at a time for four seconds, never taking input: a gamer signing in or out, an achievement unlocked (the first time only), and the console's social notifications -- a message, a friend request, a friend coming online, a game or party invitation (GSX-E6). |
 | Guide keyboard/message box | Functional | Existing text-input/message overlays reused by automatic system overlay; message boxes answer to keyboard, controller and mouse. `EndShowMessageBox`/`EndShowKeyboardInput` wait for the answer while the game's modal frames keep the Guide running (GS-005i). The system Guide (Home key / Guide button) offers sign-in, friends, invitations, messages and sign-out without game calls (GS-005d). |
-| Avatar standard API | Implemented (GS-009, GSP) | CNA 1021-byte descriptions (format 1, and format 2 with facial hair and face shape), `CreateRandom` from the newest catalog, service-backed `BeginGetFromGamer`, 71-slot rig, 31 original presets with expressions, `Loading`/`Ready`/`Unavailable`, lit skinned Draw and loading effect; every catalog version resolved exactly, newer ones by hash from the service with a verified cache. `AvatarDescription.Changed` is raised on a signed-in player's kept description when that avatar changes (service or local profile). The former Avatar EXT surface is removed. |
+| Avatar standard API | Implemented (GS-009, GSP) | CNA 1021-byte descriptions (format 1, and format 2 with facial hair and face shape), `CreateRandom` from the newest catalog, service-backed `BeginGetFromGamer`, 71-slot rig, 31 original presets with expressions, `Loading`/`Ready`/`Unavailable`, lit skinned Draw and loading effect; every catalog version resolved exactly from the catalogs compiled into the release; a catalog the release lacks is installed once as a validated, kept pack from the service (an update path only; no per-user model is downloaded). `AvatarDescription.Changed` is raised on a signed-in player's kept description when that avatar changes (service or local profile). The former Avatar EXT surface is removed. |
 | Dispatcher/Component | Implemented | Initialize rejects duplicate initialization and starts with zero accounts. Backend completions and events apply at Update, where the invitation, party and social watchers run (on push hints from the service at once, else every 5-15 s). `GamerServicesComponent` exits the game on `InstallingTitleUpdate`, which CNA never raises; an old title version is refused with `GameUpdateRequiredException` (GSX-E4). |
 
 ### Net
@@ -1012,8 +1012,8 @@ Full Xbox validation order, lifetime and asynchronous compatibility are still be
 exclusive, but implemented anyway against the real Xbox 360 reference behavior — see §9) and Net
 (`Microsoft.Xna.Framework.Net`, real ENet-backed `SystemLink` transport — see §9). `PlayerMatch`/
 `Ranked`, session invites, parties and voice run against the CNA service and its session
-transports. TrueSkill computation, a store and Xbox LIVE compatibility are the deliberate exclusions
-(final register).
+transports. TrueSkill computation, a store and Xbox LIVE compatibility are the deliberate exclusions; the full
+list is [`gamer-services-known-limitations.md`](gamer-services-known-limitations.md).
 
 ### Build status
 
