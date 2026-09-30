@@ -260,6 +260,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_PbrEffect_Golden COMMAND cna_test_easygl_pbreffect_golden
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # living-room-simulator's non-finite PBR pixels: a zero normal or tangent must not shade NaN.
+        cna_easygl_test(cna_test_easygl_pbr_degenerate_basis
+                        easygl_pbr_degenerate_basis_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_Pbr_DegenerateBasis COMMAND cna_test_easygl_pbr_degenerate_basis
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # PBR + skinning combo: SkinnedPbrEffect's shader (EnsurePbrSkinnedProgram()).
         cna_easygl_test(cna_test_easygl_skinnedpbreffect_golden
                         easygl_skinnedpbreffect_golden_test.cpp)

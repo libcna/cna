@@ -1482,8 +1482,13 @@ CNA_GL_PUNCTUAL_DECL
           : "    vec4 cnaVertexColor=vec4(1.0,1.0,1.0,1.0);\n") +
 "    vec3 albedo=baseRGB*uDiffuseColor.rgb*cnaVertexColor.rgb;\n"
 "    float alpha=baseColorTex.a*uDiffuseColor.a*cnaVertexColor.a;\n"
-"    vec3 N=normalize(vNormal);\n"
-"    vec3 T=normalize(vTangent-N*dot(N,vTangent));\n"
+// living-room-simulator's non-finite pixels: normalize() of a zero vector is NaN, and it spreads
+// through every term after it. A zero normal comes from a singular World (a node scaled flat), a
+// zero tangent from a mesh whose tangent is missing, zero or parallel to its normal. Any
+// perpendicular unit tangent is as good as another there, so pick one rather than shade NaN.
+"    vec3 N=dot(vNormal,vNormal)>1e-8?normalize(vNormal):vec3(0.0,0.0,1.0);\n"
+"    vec3 T=vTangent-N*dot(N,vTangent);\n"
+"    T=dot(T,T)>1e-8?normalize(T):normalize(cross(N,abs(N.x)<0.9?vec3(1.0,0.0,0.0):vec3(0.0,1.0,0.0)));\n"
 "    vec3 B=cross(N,T)*vBitangentSign;\n"
 "    mat3 TBN=mat3(T,B,N);\n"
 "    vec3 sampledNormal=texture(uNormalMap,cnaSampleUV(cnaPbrTransformUV(" + normalUv + ",1),uRtFlipV.y)).rgb*2.0-1.0;\n"
@@ -1726,8 +1731,13 @@ CNA_GL_PUNCTUAL_DECL
           : "    vec4 cnaVertexColor=vec4(1.0,1.0,1.0,1.0);\n") +
 "    vec3 albedo=baseRGB*uDiffuseColor.rgb*cnaVertexColor.rgb;\n"
 "    float alpha=baseColorTex.a*uDiffuseColor.a*cnaVertexColor.a;\n"
-"    vec3 N=normalize(vNormal);\n"
-"    vec3 T=normalize(vTangent-N*dot(N,vTangent));\n"
+// living-room-simulator's non-finite pixels: normalize() of a zero vector is NaN, and it spreads
+// through every term after it. A zero normal comes from a singular World (a node scaled flat), a
+// zero tangent from a mesh whose tangent is missing, zero or parallel to its normal. Any
+// perpendicular unit tangent is as good as another there, so pick one rather than shade NaN.
+"    vec3 N=dot(vNormal,vNormal)>1e-8?normalize(vNormal):vec3(0.0,0.0,1.0);\n"
+"    vec3 T=vTangent-N*dot(N,vTangent);\n"
+"    T=dot(T,T)>1e-8?normalize(T):normalize(cross(N,abs(N.x)<0.9?vec3(1.0,0.0,0.0):vec3(0.0,1.0,0.0)));\n"
 "    vec3 B=cross(N,T)*vBitangentSign;\n"
 "    mat3 TBN=mat3(T,B,N);\n"
 "    vec3 sampledNormal=texture(uNormalMap,cnaSampleUV(cnaPbrTransformUV(" + normalUv + ",1),uRtFlipV.y)).rgb*2.0-1.0;\n"
