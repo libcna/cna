@@ -313,7 +313,13 @@ namespace CNA::Internal::Graphics
         if (targetWidth <= 0 || targetHeight <= 0)
             throw std::invalid_argument("ImageLoader: target dimensions must be positive");
 
-        const bool scaleWidth = zoom ? (width < height) : (width > height);
+        // Zooming fills the target and crops the overflow, so it scales by the larger ratio. That is
+        // the axis FNA3D picks from the source's orientation whenever its crop fits; where it does
+        // not -- a wide target over a square or tall source -- FNA3D's blit clips it and this
+        // refused the request as a crop outside the image.
+        const bool scaleWidth = zoom
+            ? static_cast<double>(targetWidth) / width >= static_cast<double>(targetHeight) / height
+            : (width > height);
         const double scale = scaleWidth
             ? static_cast<double>(targetWidth) / width
             : static_cast<double>(targetHeight) / height;

@@ -35,6 +35,36 @@ TEST(ImageLoaderTests, BilinearResizeSamplesPixelCentres)
     EXPECT_EQ(resized.pixels, (std::vector<std::uint8_t>{50, 50, 50, 139}));
 }
 
+// BINDFIX-043 (cna-ruby A3, cna-swift SW-05): zooming a square image into a wide or a tall target
+// fills it and crops the overflow on either orientation; a wide target used to be refused.
+TEST(ImageLoaderTests, ZoomFillsWideAndTallTargetsByCroppingTheOverflow)
+{
+    std::vector<uint8_t> pixels(8 * 8 * 4);
+    for (int y = 0; y < 8; ++y)
+    {
+        for (int x = 0; x < 8; ++x)
+        {
+            uint8_t* texel = pixels.data() + (y * 8 + x) * 4;
+            texel[0] = static_cast<uint8_t>(x * 30);
+            texel[1] = static_cast<uint8_t>(y * 30);
+            texel[2] = 0;
+            texel[3] = 255;
+        }
+    }
+    const auto wide = ImageLoader::ResizeRgba(pixels.data(), 8, 8, 8, 4, true);
+    const auto tall = ImageLoader::ResizeRgba(pixels.data(), 8, 8, 4, 8, true);
+    ASSERT_EQ(wide.width, 8);
+    ASSERT_EQ(wide.height, 4);
+    ASSERT_EQ(tall.width, 4);
+    ASSERT_EQ(tall.height, 8);
+    // Full width, centre rows only: red runs the whole range across, green stays inside it.
+    EXPECT_EQ(wide.pixels[0], pixels[0]);
+    EXPECT_GT(wide.pixels[1], pixels[1]);
+    // Full height, centre columns only: the mirror image.
+    EXPECT_EQ(tall.pixels[1], pixels[1]);
+    EXPECT_GT(tall.pixels[0], pixels[0]);
+}
+
 TEST(ImageLoaderTests, XnaSaveResizeUsesFloorMappedNearestTexelsOnBothAxes)
 {
     constexpr std::array<std::uint8_t, 16> pixels{

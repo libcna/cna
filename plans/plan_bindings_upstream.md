@@ -635,6 +635,13 @@ first.
   zeroed the other three texels -- both reporting success (reported by `cna-ruby`). The region is
   now measured in the caller's elements, and `out_required_elements` reports it even when the
   count is too small. Pinned by `CApi_TextureSmoke` (byte-view round trip; per-width counts).
+- **BINDFIX-043** — `cna-ruby` A3 / `cna-swift` SW-05: `cna_texture2d_create_from_encoded_memory`
+  with `zoom` refused a target wider than tall over a square or tall image ("crop rectangle lies
+  outside the source image"). The ported FNA3D rule picks the scale axis from the source's
+  orientation; where its crop overflows, FNA3D's blit clips it and CNA threw. Zooming now scales by
+  the larger ratio -- identical wherever the old crop fitted. The non-zoom (fit) path is unchanged;
+  whether XNA's native decoder can exceed the requested height there (SW-05's second half) has no
+  IL to settle it. Pinned by `ImageLoaderTests.ZoomFillsWideAndTallTargetsByCroppingTheOverflow`.
 
 ---
 
