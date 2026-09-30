@@ -318,7 +318,19 @@ function(cna_configure_vendored_sdl)
     #
     # Every build tree on the machine shares this root, so two configures can reach this point at
     # once; the lock makes the second wait for the first and then find its result current.
-    file(MAKE_DIRECTORY "${CNA_SDL_PREBUILT_ROOT}")
+    #
+    # By default the root is inside the CNA checkout. A consumer whose checkout is read-only gets a
+    # message naming the option to move it, not a bare "failed to create directory".
+    execute_process(
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${CNA_SDL_PREBUILT_ROOT}"
+        RESULT_VARIABLE _cna_sdl_mkdir_result
+        OUTPUT_QUIET ERROR_QUIET)
+    if(NOT _cna_sdl_mkdir_result EQUAL 0)
+        message(FATAL_ERROR
+            "CNA: cannot create the SDL build cache ${CNA_SDL_PREBUILT_ROOT}. Every build tree "
+            "shares this directory, which defaults to one inside the CNA checkout. For a "
+            "read-only checkout pass -DCNA_SDL_PREBUILT_ROOT=<a writable directory>.")
+    endif()
     file(LOCK "${CNA_SDL_PREBUILT_ROOT}/.cna-prebuilt.lock" GUARD FUNCTION TIMEOUT 7200
         RESULT_VARIABLE _cna_sdl_lock_result)
     if(NOT _cna_sdl_lock_result EQUAL 0)
