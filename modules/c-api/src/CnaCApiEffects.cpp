@@ -857,11 +857,9 @@ template<typename TNative, typename TC, typename TConvert>
     return std::static_pointer_cast<EffectState>(effect->adapterState);
 }
 
-[[nodiscard]] CNA_Result CreateEffectHandle(
-    std::shared_ptr<Effect> value,
-    const CNA_Handle parentGame,
-    CNA_EffectHandle* const outEffect,
-    const bool disposeAllowed = true)
+[[nodiscard]] std::shared_ptr<EffectState> MakeEffectState(
+    const std::shared_ptr<Effect>& value,
+    const CNA_Handle parentGame)
 {
     auto state = std::make_shared<EffectState>();
     state->lifetime = std::make_shared<EffectLifetime>(parentGame);
@@ -876,7 +874,16 @@ template<typename TNative, typename TC, typename TConvert>
         value, &value->getTechniquesProperty());
     state->techniques->owner = value.get();
     state->techniques->effectOwnership = state->lifetime;
+    return state;
+}
 
+[[nodiscard]] CNA_Result CreateEffectHandle(
+    std::shared_ptr<Effect> value,
+    const CNA_Handle parentGame,
+    CNA_EffectHandle* const outEffect,
+    const bool disposeAllowed = true)
+{
+    auto state = MakeEffectState(value, parentGame);
     const auto resource = std::make_shared<EffectResource>(EffectResource{
         std::move(value), parentGame, state, 0U, disposeAllowed});
     const CNA_Result result = GetRuntimeHandles().Create(
@@ -1225,6 +1232,13 @@ template<typename TSetter>
 } // namespace
 
 namespace CNA::C::Detail {
+
+std::shared_ptr<void> CreateEffectAdapterState(
+    const std::shared_ptr<Effect>& effect,
+    const CNA_Handle parentGame)
+{
+    return MakeEffectState(effect, parentGame);
+}
 
 CNA_Result CreateBorrowedEffect(
     std::shared_ptr<Effect> effect,

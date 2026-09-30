@@ -7421,8 +7421,13 @@ template <typename TResource, typename TValue>
                 std::shared_ptr<EffectResource> effect;
                 if (const CNA_Result result = ResolveEffect(handle, &effect);
                     result == CNA_RESULT_SUCCESS) {
-                    // A model-owned effect is not the caller's to dispose.
+                    // A model-owned effect is not the caller's to dispose, but every other Effect
+                    // route must work on it; parts sharing one effect share this one state.
                     effect->disposeAllowed = false;
+                    if (effect->adapterState == nullptr) {
+                        effect->adapterState =
+                            CNA::C::Detail::CreateEffectAdapterState(effect->value, parentGame);
+                    }
                 }
                 if (const CNA_Result result = SetPartEffect(part, handle);
                     result != CNA_RESULT_SUCCESS) {

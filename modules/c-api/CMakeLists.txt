@@ -1869,6 +1869,22 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    # BINDFIX-040: the generic Effect routes on the effect a content-loaded Model publishes.
+    add_executable(cna_c_api_content_model_effect_smoke
+        tests/pure_c/ContentModelEffectSmoke.c
+    )
+    set_target_properties(cna_c_api_content_model_effect_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_content_model_effect_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_content_model_effect_smoke)
+    target_compile_definitions(cna_c_api_content_model_effect_smoke PRIVATE
+        CNA_C_API_TEST_ASSET_DIR="${PROJECT_SOURCE_DIR}/tests/assets")
+    add_test(NAME CApi_ContentModelEffectSmoke COMMAND cna_c_api_content_model_effect_smoke)
+    set_tests_properties(CApi_ContentModelEffectSmoke PROPERTIES SKIP_RETURN_CODE 77)
+
     # CABI-35: the frame-identity coverage needs a real decodable video, and this is the first C
     # test to want an asset at all. The source tree's own fixture directory is compiled in rather
     # than relying on the working directory, which ctest does not guarantee.

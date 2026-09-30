@@ -613,6 +613,11 @@ first.
   `override` on `DisplayMode::ToString` that clang's `-Werror` in the C API target refuses, and
   `ENetDiscoveryService::Matching` defined only inside the native-only block. Proven by building
   `cna_c_api_wasm` (WEBGL2) and running `CApi_WasmModuleSmoke` and the browser probe (11/11).
+- **BINDFIX-040** — `cna-ruby` A8: `cna_effect_get_parameters`, `_get_techniques` and
+  `_get_current_technique` segfaulted on the effect a content-loaded `Model` publishes, on every
+  renderer. The model mirror published it as an `EffectResource` without the adapter state all 24
+  generic Effect routes read; it now gets the same state `CreateEffectHandle` builds. Pinned by
+  `CApi_ContentModelEffectSmoke` (loads `tests/assets/xnb/.../BlenderDefaultCube.xnb`).
 
 ---
 
