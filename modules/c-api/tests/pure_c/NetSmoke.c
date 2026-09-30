@@ -561,6 +561,19 @@ static int validate_gamers(void)
         gamer == CNA_INVALID_HANDLE) {
         return 0;
     }
+    /* BINDFIX-047: a NetworkGamer is a Gamer; the base routes answer for it, and for a remote gamer
+       they are the only route to its gamertag. */
+    {
+        char tag[16];
+        uint64_t bytes = UINT64_C(0);
+        if (cna_gamer_get_gamertag_size(gamer, &bytes) != CNA_RESULT_SUCCESS ||
+            bytes != UINT64_C(6) ||
+            cna_gamer_copy_gamertag(gamer, tag, sizeof(tag), &bytes) != CNA_RESULT_SUCCESS ||
+            bytes != UINT64_C(6) || memcmp(tag, "Tester", 6U) != 0) {
+            (void)cna_network_gamer_destroy(gamer);
+            return 0;
+        }
+    }
     if (!validate_gamer_defaults(gamer) || !validate_gamer_mutation(gamer) ||
         !validate_machine(gamer) || !validate_event_descriptions(gamer)) {
         (void)cna_network_gamer_destroy(gamer);

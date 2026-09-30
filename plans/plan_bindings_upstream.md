@@ -657,6 +657,11 @@ first.
   function-local lookup maps after the `Loader`, so `exit()` destroyed them before `~Loader` joined
   the worker still reading them. The two tables are now constant arrays that are never constructed
   or destroyed. Pinned by `CApi_AvatarExitWhileLoadingSmoke` (fails 16 of 20 runs before).
+- **BINDFIX-047** — `cna-python` online finding 3 / `cna-rust` RUST-BEHAVIOR-010: the `cna_gamer_*`
+  base routes refused a network-gamer handle ("does not name a gamer this call can use"), so a
+  remote gamer's gamertag and display name were unreachable, though `NetworkGamer` is a `Gamer`.
+  `BorrowGamerBase` now also resolves network gamers; `cna_gamer_destroy` is unchanged. Pinned by
+  `CApi_NetSmoke`.
 
 ---
 
