@@ -23,7 +23,10 @@
 //
 // The bad request is issued through Xlib resolved with `dlsym`, exactly as the production handler
 // installs itself: libX11 is present only when SDL chose its x11 video driver, and neither the
-// renderer nor this test may grow an X11 build dependency for it.
+// renderer nor this test may grow an X11 build dependency for it. Both look in the libX11 SDL
+// loaded, not in RTLD_DEFAULT: SDL opens it RTLD_LOCAL, where RTLD_DEFAULT cannot see it. Asking
+// RTLD_DEFAULT made this test skip itself and the handler never install, which went unnoticed until
+// a single-process run reached here after a GL test had made libX11 global by accident.
 
 #include "CNA/Platform/NativeWindowHandle.hpp"
 #include "CNA/Platform/PlatformException.hpp"
@@ -115,13 +118,15 @@ TEST_F(Sdl3XErrorHandlerTest, ADeliberateBadRequestDoesNotEndTheProcessAndLeaves
     using XChangePropertyFn = int (*)(void*, unsigned long, unsigned long, unsigned long, int, int,
                                       const unsigned char*, int);
     using XSyncFn = int (*)(void*, int);
-    auto* xChangeProperty =
-        reinterpret_cast<XChangePropertyFn>(dlsym(RTLD_DEFAULT, "XChangeProperty"));
-    auto* xSync = reinterpret_cast<XSyncFn>(dlsym(RTLD_DEFAULT, "XSync"));
-    if (xChangeProperty == nullptr || xSync == nullptr)
-    {
-        GTEST_SKIP() << "libX11 is loaded but XChangeProperty/XSync were not resolvable";
-    }
+    // RTLD_NOLOAD finds the copy SDL loaded and never loads one; the window is an X11 window, so
+    // there must be one.
+    void* libX11 = dlopen("libX11.so.6", RTLD_LAZY | RTLD_NOLOAD);
+    ASSERT_NE(libX11, nullptr) << "an X11 window exists but libX11.so.6 is not loaded";
+    auto* xChangeProperty = reinterpret_cast<XChangePropertyFn>(dlsym(libX11, "XChangeProperty"));
+    auto* xSync = reinterpret_cast<XSyncFn>(dlsym(libX11, "XSync"));
+    dlclose(libX11);
+    ASSERT_NE(xChangeProperty, nullptr);
+    ASSERT_NE(xSync, nullptr);
 
     // X_ChangeProperty (major opcode 18) against a resource id that cannot be a live window --
     // the same request F-23 recorded failing for real. XA_STRING is the predefined atom 31, so no

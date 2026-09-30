@@ -12,7 +12,6 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
-#include <atomic>
 #include <cstdio>
 #include <mutex>
 #include <optional>
@@ -64,15 +63,18 @@ namespace CNA::Platform::Sdl3 {
          *
          * Resolved through `dlsym` rather than by linking Xlib: libX11 is loaded only when SDL
          * chose its x11 video driver, and CNA must not grow an X11 build dependency for a
-         * diagnostic. On any other driver this is a no-op.
+         * diagnostic. On any other driver this is a no-op. The lookup goes to the libX11 SDL
+         * loaded (`RTLD_NOLOAD`), not to `RTLD_DEFAULT`: SDL opens it `RTLD_LOCAL`, where
+         * `RTLD_DEFAULT` cannot see it, and asking there left this handler uninstalled.
+         *
+         * Installed on every video acquisition rather than once per process: the handler belongs
+         * to the loaded libX11, and SDL unloads it with the last video reference and loads a
+         * fresh copy -- with Xlib's default handler -- the next time. The caller holds
+         * `SdlGlobalStateMutex()`.
          */
-        void InstallX11NonFatalErrorHandlerOnce()
+        void InstallX11NonFatalErrorHandler()
         {
 #if defined(__linux__) || defined(__unix__)
-            static std::atomic<bool> installed{false};
-            bool expected = false;
-            if (!installed.compare_exchange_strong(expected, true)) { return; }
-
             const char* driver = SDL_GetCurrentVideoDriver();
             if (driver == nullptr || std::string(driver) != "x11") { return; }
 
@@ -95,8 +97,10 @@ namespace CNA::Platform::Sdl3 {
             using HandlerFn = int (*)(void*, XErrorEventLayout*);
             using SetHandlerFn = HandlerFn (*)(HandlerFn);
 
-            auto* setHandler =
-                reinterpret_cast<SetHandlerFn>(dlsym(RTLD_DEFAULT, "XSetErrorHandler"));
+            void* libX11 = dlopen("libX11.so.6", RTLD_LAZY | RTLD_NOLOAD);
+            if (libX11 == nullptr) { return; }
+            auto* setHandler = reinterpret_cast<SetHandlerFn>(dlsym(libX11, "XSetErrorHandler"));
+            dlclose(libX11);
             if (setHandler == nullptr) { return; }
 
             setHandler([](void*, XErrorEventLayout* e) -> int {
@@ -360,7 +364,7 @@ namespace CNA::Platform::Sdl3 {
         {
             // VULKAN-154/VULKAN-157: as soon as there is an X connection, and before any window
             // exists to fail a request about.
-            InstallX11NonFatalErrorHandlerOnce();
+            InstallX11NonFatalErrorHandler();
         }
         ++ownedRefCounts_[subsystem];
     }
