@@ -1,16 +1,20 @@
 # GamerServices / Avatar fidelity and completion pass (living plan)
 
+> **HISTORICAL CHECKPOINT.** This document describes CNA GamerServices/Net as of the GSP pass,
+> 2026-09-29 (e8ecc7197..e46db9822; closed and merged into `next`). It is not current capability
+> documentation: several statements below (for example the starting audit's "Online host migration
+> | G" gap and "Voice (`EnableSendVoice`, `HasVoice`) | N" non-goal) no longer hold. The audit
+> tables record the state at the start of this pass, not today's: online host migration, online
+> AddLocalGamer, away/busy, GamerZone, Reputation, Stream columns, guests and
+> `AvatarDescription.Changed` were done here; voice, parties, the store-equivalent content page,
+> upstream QoS, push and catalog packs followed in the Xbox-fidelity pass
+> (`plan_gamer_services_xbox_fidelity.md`, GSX). For the current implementation and every
+> remaining limitation see
+> [`docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md).
+
 Task ids `GSP-*`. Continues `plan_gamer_services_server.md` (GS-001..GS-011, closed) and its
 register `gamer_services_server_final_register.md`. This file is updated as work lands; the
 historical plan is not.
-
-> **Current state (2026-09-30): closed; this file is history.** Every GSP task is done and merged into
-> `next`; the Xbox-fidelity pass (`plan_gamer_services_xbox_fidelity.md`, GSX) continued it. The audit
-> tables below record the state at the start of this pass (2026-09-29), not today's: online host
-> migration, online AddLocalGamer, away/busy, GamerZone, Reputation, Stream columns, guests and
-> `AvatarDescription.Changed` were done here; voice, parties, the store-equivalent content page,
-> upstream QoS, push and catalog packs followed in GSX. Current limitations:
-> `docs/gamer-services-known-limitations.md`.
 
 ## Verified starting point (2026-09-29, from the repositories, not the prompt)
 

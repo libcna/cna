@@ -85,7 +85,7 @@ author (or generate) the `.model.json` + sidecar format directly.
 
 **Zero test coverage**: confirmed via repo-wide search that no test or example anywhere exercises
 `ModelTypeReader` (`ContentManager::Load<Model>(...)`) at all — only the unrelated
-`SkinnedModelEXT`/Avatar binary-descriptor pipeline (a completely separate CNAEXT system, see
+`SkinnedModelEXT` pipeline (a completely separate CNAEXT system, see
 below) has any content-loading test coverage. None of Tasks 431-439's extensive `Model` unit/pixel
 tests load a `Model` through `ContentManager` — they all hand-build `Model`/`ModelMesh`/
 `ModelBone` instances directly in C++, which is exactly what let Task 439's own dead-`ParentBone`
@@ -93,7 +93,7 @@ gap go unnoticed for as long as it did. This is flagged as an open follow-up, no
 documentation task; fixing the bone-hierarchy/`ParentBone`/`BoundingSphere`/`Tag` gaps above and
 adding real test coverage for the JSON loader are natural next steps but out of this task's scope).
 
-## Not the same system: `SkinnedModelEXT` / Avatar real-rendering
+## Not the same system: `SkinnedModelEXT`
 
 `SkinnedModelEXT` (`.skeleton.bin`/`.clip.bin`, loaded via `SkinnedModelTypeReader`) is a
 **deliberately separate**, `CNAEXT`, GPU-vertex-skinned mesh+skeleton+animation container — not

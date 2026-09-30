@@ -1,9 +1,13 @@
 # Gamer Services standard-API acceptance sources
 
-> **Historical (2026-09-28).** Every "remaining prerequisite" below was met: SAMPLE-075, SAMPLE-087,
-> SAMPLE-096 and the achievements/leaderboards compatibility program were ported and accepted
-> (last run 2026-09-30, `plan_gamer_services_xbox_fidelity.md` acceptance matrix). Current
-> limitations: `docs/gamer-services-known-limitations.md`.
+> **HISTORICAL CHECKPOINT.** This document describes CNA GamerServices/Net as of 2026-09-28
+> (c611878d5). It is not current capability documentation: several statements below (for example
+> the "authenticated realtime relay" and the "Standard renderer/description/animation migration"
+> listed as remaining prerequisites) no longer hold. Every "remaining prerequisite" below was met:
+> SAMPLE-075, SAMPLE-087, SAMPLE-096 and the achievements/leaderboards compatibility program were
+> ported and accepted (last run 2026-09-30, `plan_gamer_services_xbox_fidelity.md` acceptance
+> matrix). For the current implementation and every remaining limitation see
+> [`docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md).
 
 This is an evidence/porting queue, not a claim that these samples are unblocked. Source inspection
 only, no sample-agent files changed and no Xbox Avatar model/assets inspected or extracted.

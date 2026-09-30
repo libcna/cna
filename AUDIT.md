@@ -666,10 +666,10 @@ Partial audit via agent. Key gaps identified and fixed: SpriteBatch Draw overloa
 | VertexPositionColor | ✅ | API complete |
 | VertexPositionColorTexture | ✅ | API complete |
 | VertexPositionNormalTexture | ✅ | API complete |
-| VertexPositionNormalTextureSkinned | ✅ | NOXNA — not part of the XNA 4.0 API. GPU-skinned vertex (position/normal/texcoord/4 blend weights/4 blend indices, 52-byte logical layout) added for the Avatar real-rendering extension (see `docs/avatar-real-rendering-ext.md`); matching `VertexBuffer::SetData` overloads added |
+| VertexPositionNormalTextureSkinned | ✅ | NOXNA — not part of the XNA 4.0 API. GPU-skinned vertex (position/normal/texcoord/4 blend weights/4 blend indices, 52-byte logical layout) used by the standard `AvatarRenderer` and by `SkinnedModelEXT` (see `docs/skinned-model-ext.md`); matching `VertexBuffer::SetData` overloads added |
 | VertexPositionTexture | ✅ | API complete |
 | Viewport | ✅ | API complete |
-| SkinnedModelEXT | ✅ | NOXNA — not part of the XNA 4.0 API. Real, GPU-skinnable mesh + skeleton + animation-clip container for the Avatar real-rendering extension. Deliberately not built on `Model`/`ModelBone`/`ModelMesh` (those encode rigid multi-part model animation, the wrong shape for per-vertex GPU skinning). Its bone hierarchy is entirely independent of the real Xbox Avatar 71-bone arrays. Loaded via a new `SkinnedModelTypeReader` (`.skinnedmodel.json`/`.skeleton.bin`/`.clip.bin`) registered in `ContentManager` |
+| SkinnedModelEXT | ✅ | NOXNA — not part of the XNA 4.0 API. Real, GPU-skinnable mesh + skeleton + animation-clip container for games that bring their own skinned characters (see `docs/skinned-model-ext.md`). Deliberately not built on `Model`/`ModelBone`/`ModelMesh` (those encode rigid multi-part model animation, the wrong shape for per-vertex GPU skinning). Its bone hierarchy is entirely independent of the real Xbox Avatar 71-bone arrays. Loaded via a new `SkinnedModelTypeReader` (`.skinnedmodel.json`/`.skeleton.bin`/`.clip.bin`) registered in `ContentManager` |
 
 ### glTF campaign additions to the types above (`GLTF-453`)
 

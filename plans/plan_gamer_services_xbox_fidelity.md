@@ -1,14 +1,19 @@
 # GamerServices / Avatar Xbox-fidelity pass (living plan)
 
+> **HISTORICAL CHECKPOINT.** This document describes CNA GamerServices/Net as of the GSX pass,
+> 2026-09-29 to 2026-09-30 (e46db9822..943a34617; GSX-000..GSX-Q1 merged into `next` as 7d7141c6b,
+> GSX-Q2 the final truth cleanup). It is not current capability documentation: several statements
+> below (for example "`FriendGamer.HasVoice` stays false" and "`GamerPrivileges.AllowCommunication`
+> is honoured (Everyone today)") no longer hold. The "Audit" and "System UI inventory" sections
+> record the state at the start of this pass (e46db9822), not even the end of it. For the current
+> implementation and every remaining limitation -- what is still not implemented, partial,
+> platform-limited, unverified or decided differently from Xbox -- see
+> [`docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md); it
+> supersedes every "open" or "gap" wording below.
+
 Task ids `GSX-*`. Continues `plan_gamer_services_avatar_polish.md` (GSP-*, closed) and
 `plan_gamer_services_server.md` (GS-*, closed). This file is the authoritative plan for this pass
 and is updated as work lands.
-
-> **Current state (2026-09-30).** GSX-000..GSX-Q1 are done and merged into `next` (7d7141c6b); GSX-Q2
-> is the final truth cleanup. The "Audit" and "System UI inventory" sections record the state at the
-> start of this pass (e46db9822), not today's. The canonical list of what is still not implemented,
-> partial, platform-limited, unverified or decided differently from Xbox is
-> `docs/gamer-services-known-limitations.md`; it supersedes every "open" or "gap" wording below.
 
 ## Evidence classes
 

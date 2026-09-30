@@ -1,5 +1,12 @@
 # Final throw / no-op evidence register (GS-011)
 
+> **HISTORICAL CHECKPOINT.** This document describes CNA GamerServices/Net as of 2026-09-29 to
+> 2026-09-30 (f5df1c824..943a34617, GS-011 through the GSX-Q2 cleanup). It is not current
+> capability documentation: several statements below (for example "`FriendGamer.HasVoice` | false"
+> and "`NetworkGamer.IsGuest` of a remote SystemLink gamer | false") no longer hold. For the
+> current implementation and every remaining limitation see
+> [`docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md).
+
 The GS-001 inventory (`gamer_services_server_initial_inventory.md`) listed every candidate stub in
 GamerServices and Net at baseline b2fd47a45. This register records what remains after the project:
 each refusal, constant or never-raised member still in `modules/gamer-services` and `modules/net`,

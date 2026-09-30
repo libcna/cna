@@ -31,7 +31,10 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 - [`plan_cna_devices.md`](plan_cna_devices.md) — `CNA::Devices` extensions.
 - [`plan_input.md`](plan_input.md) — input compatibility and stabilization.
 - [`plan_media.md`](plan_media.md) — media API implementation.
-- [`plan_net.md`](plan_net.md) — networking, GamerServices, and Avatar APIs.
+- [`plan_net.md`](plan_net.md) — networking, GamerServices, and Avatar APIs up to 2026-07 (history;
+  continued in `plan_gamer_services_server.md`, `plan_gamer_services_avatar_polish.md`,
+  `plan_gamer_services_xbox_fidelity.md` and `plan_gamer_services_final_hardening.md`; the current
+  state is [`../docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md)).
 - [`plan_binding.md`](plan_binding.md) — native C API and stable C ABI.
 - [`plan_bindings_upstream.md`](plan_bindings_upstream.md) — defects the ten language
   bindings measured in CNA, and the CNA-side work they are waiting on.

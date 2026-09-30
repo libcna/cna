@@ -1,21 +1,17 @@
 # CNA Gamer Services server implementation — living plan
 
-> **Status: complete (2026-09-29); this file is history.** Everything below the checklist is a dated
-> checkpoint (2026-09-28/29): its "remain unfinished", "still refused" and "not yet" statements
-> describe that moment and were closed later -- by later GS slices, then by the avatar-polish pass
-> ([`plan_gamer_services_avatar_polish.md`](plan_gamer_services_avatar_polish.md), GSP) and the
-> Xbox-fidelity pass ([`plan_gamer_services_xbox_fidelity.md`](plan_gamer_services_xbox_fidelity.md),
-> GSX), all merged into `next`.
->
-> **Current state (2026-09-30):** service accounts and the console-style Guide; profiles, friends,
-> presence, away/busy, messages, reviews, GamerZone and review-based Reputation; achievements;
-> leaderboards with Stream columns and Ranked arbitration; PlayerMatch/Ranked sessions with
-> invitations, online host migration, online AddLocalGamer and parties over the authenticated relay;
-> push hints and social notifications; NetworkSession voice; SystemLink with measured QoS; the
-> standard avatars on locally installed catalogs. The remaining limitations are listed, with their
-> reasons, in [`docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md);
+> **HISTORICAL CHECKPOINT.** This document describes CNA GamerServices/Net as of the GS pass,
+> 2026-09-28 to 2026-09-29 (b8eb9c2b9..6abdfa4e8; the GS plan was complete on 2026-09-29). It is not
+> current capability documentation: several statements below (for example "Full account
+> privacy/block/voice/invite state and social push remain unfinished" and C API wrappers that
+> "expose ... avatar EXT entry points") no longer hold. Its "remain unfinished", "still refused"
+> and "not yet" statements describe that moment and were closed later -- by later GS slices, then
+> by the avatar-polish pass ([`plan_gamer_services_avatar_polish.md`](plan_gamer_services_avatar_polish.md),
+> GSP) and the Xbox-fidelity pass ([`plan_gamer_services_xbox_fidelity.md`](plan_gamer_services_xbox_fidelity.md),
+> GSX), all merged into `next`. For the current implementation and every remaining limitation see
+> [`docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md);
 > [`gamer_services_server_final_register.md`](gamer_services_server_final_register.md) keeps each
-> refusal's evidence.
+> refusal's evidence as of 2026-09-30.
 
 Mission authorized 2026-09-28. Xbox 360 XNA behavior is the target; Windows/FNA service and avatar stubs are **not** behavioral evidence for Xbox 360. CNA protocol, accounts and original avatar assets have no Xbox LIVE compatibility. This plan supersedes plan_net.md's refusal of PlayerMatch/Ranked/invites and its standard-avatar/EXT split. Prohibition on proprietary/third-party avatar assets remains.
 
