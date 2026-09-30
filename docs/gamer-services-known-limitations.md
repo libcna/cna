@@ -745,7 +745,12 @@ per-user models. A server catalog pack is only the update path for a catalog a c
     newest body with the description's body type, height, build and colours, every item its slot
     default); ids are never read against another version;
   - a pack that fails to download or validate is discarded and not asked for again for a minute;
-    an interrupted one leaves only a staging directory that a retry verifies and reuses;
+    an interrupted one (a lost connection, a restarted service or client) leaves only a staging
+    directory that a retry verifies and reuses, and staging abandoned for a week is removed;
+  - installs of one catalog version are serialized by an operating-system lock, across threads and
+    processes: several accounts or games needing the same pack at once install it once;
+  - a pack whose manifest names another version is refused, never substituted; installing a newer
+    catalog changes nothing about how v1, v2 or v3 descriptions look (`ServiceAvatarTests`, GSH-09);
   - installed packs are kept, never evicted or uninstalled; the server's file route allows each
     account 1 GiB of downloads per title and hour;
   - CNA builds older than format 2 read a format 2 description exchanged directly as invalid; the
