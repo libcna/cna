@@ -71,6 +71,7 @@
 #include <filesystem>
 #include <optional>
 #include <fstream>
+#include <unordered_map>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
@@ -2017,7 +2018,27 @@ namespace Microsoft::Xna::Framework::Content
             // untextured glTF SkinnedEffect material samples, created once per model on first use and
             // owned by textureOwners.
             Graphics::Texture2D* gltfWhiteBaseColorTexture = nullptr;
+            // CNA-F20: one Texture2D per referenced asset for the whole model, so parts that name
+            // the same image share one object, as XNA's shared external references do.
+            std::unordered_map<std::string, Graphics::Texture2D*> texturesByAsset;
         };
+
+        /** @brief Returns the model's Texture2D for @p assetName, loading it on first use. */
+        Graphics::Texture2D* LoadModelTextureEXT(
+            ContentManager& cm, ModelResources& res, const std::string& assetName)
+        {
+            if (const auto found = res.texturesByAsset.find(assetName);
+                found != res.texturesByAsset.end())
+            {
+                return found->second;
+            }
+            auto tex = std::make_unique<Graphics::Texture2D>(
+                cm.Load<Graphics::Texture2D>(assetName));
+            Graphics::Texture2D* texPtr = tex.get();
+            res.textureOwners.push_back(std::move(tex));
+            res.texturesByAsset.emplace(assetName, texPtr);
+            return texPtr;
+        }
 
         /**
          * @brief Gives an untextured glTF SkinnedEffect material glTF's white base-colour texture.
@@ -2591,24 +2612,17 @@ namespace Microsoft::Xna::Framework::Content
                 // via "effect" has no standard texture slot to bind through here.
                 if (const std::string textureAsset = resolveAsset("texture");
                     !textureAsset.empty()) {
-                    auto tex = std::make_unique<Graphics::Texture2D>(
-                        cm.Load<Graphics::Texture2D>(textureAsset));
                     if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(fx.get())) {
-                        basicFx->setTextureProperty(tex.get());
+                        basicFx->setTextureProperty(LoadModelTextureEXT(cm, res, textureAsset));
                         basicFx->setTextureEnabledProperty(true);
-                        res.textureOwners.push_back(std::move(tex));
                     } else if (auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(fx.get())) {
-                        skinnedFx->setTextureProperty(tex.get());
-                        res.textureOwners.push_back(std::move(tex));
+                        skinnedFx->setTextureProperty(LoadModelTextureEXT(cm, res, textureAsset));
                     } else if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get())) {
-                        dualFx->setTextureProperty(tex.get());
-                        res.textureOwners.push_back(std::move(tex));
+                        dualFx->setTextureProperty(LoadModelTextureEXT(cm, res, textureAsset));
                     } else if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get())) {
-                        pbrFx->setTextureProperty(tex.get());
-                        res.textureOwners.push_back(std::move(tex));
+                        pbrFx->setTextureProperty(LoadModelTextureEXT(cm, res, textureAsset));
                     } else if (auto* skinnedPbrFx = dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get())) {
-                        skinnedPbrFx->setTextureProperty(tex.get());
-                        res.textureOwners.push_back(std::move(tex));
+                        skinnedPbrFx->setTextureProperty(LoadModelTextureEXT(cm, res, textureAsset));
                     }
                 }
 
@@ -2618,10 +2632,7 @@ namespace Microsoft::Xna::Framework::Content
                 if (const std::string texture2Asset = resolveAsset("texture2");
                     !texture2Asset.empty()) {
                     if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get())) {
-                        auto tex2 = std::make_unique<Graphics::Texture2D>(
-                            cm.Load<Graphics::Texture2D>(texture2Asset));
-                        dualFx->setTexture2Property(tex2.get());
-                        res.textureOwners.push_back(std::move(tex2));
+                        dualFx->setTexture2Property(LoadModelTextureEXT(cm, res, texture2Asset));
                     }
                 }
 
@@ -2659,12 +2670,8 @@ namespace Microsoft::Xna::Framework::Content
                 if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get())) {
                     auto loadPbrMap = [&](const char* field) -> Graphics::Texture2D* {
                         const std::string assetName = resolveAsset(field);
-                        if (assetName.empty()) { return nullptr; }
-                        auto tex = std::make_unique<Graphics::Texture2D>(
-                            cm.Load<Graphics::Texture2D>(assetName));
-                        Graphics::Texture2D* texPtr = tex.get();
-                        res.textureOwners.push_back(std::move(tex));
-                        return texPtr;
+                        return assetName.empty() ? nullptr
+                                                 : LoadModelTextureEXT(cm, res, assetName);
                     };
                     if (Graphics::Texture2D* t = loadPbrMap("normalMap"))
                         pbrFx->setNormalMapProperty(t);
@@ -2715,12 +2722,8 @@ namespace Microsoft::Xna::Framework::Content
                 } else if (auto* skinnedPbrFx = dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get())) {
                     auto loadPbrMap = [&](const char* field) -> Graphics::Texture2D* {
                         const std::string assetName = resolveAsset(field);
-                        if (assetName.empty()) { return nullptr; }
-                        auto tex = std::make_unique<Graphics::Texture2D>(
-                            cm.Load<Graphics::Texture2D>(assetName));
-                        Graphics::Texture2D* texPtr = tex.get();
-                        res.textureOwners.push_back(std::move(tex));
-                        return texPtr;
+                        return assetName.empty() ? nullptr
+                                                 : LoadModelTextureEXT(cm, res, assetName);
                     };
                     if (Graphics::Texture2D* t = loadPbrMap("normalMap"))
                         skinnedPbrFx->setNormalMapProperty(t);
