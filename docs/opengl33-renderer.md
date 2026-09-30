@@ -92,3 +92,13 @@ The one thing that does not work is the game thread waiting, inside `LoadContent
 `Draw`, for another thread that is creating graphics resources: it still holds the context, so the
 two wait for each other. XNA 4.0 allows that, and FNA and MonoGame deadlock on it the same way.
 Start the work, keep running frames, and pick the results up once the thread says it is done.
+
+On Wayland (SDL's Wayland driver, Mesa's EGL) a loading thread that takes the context between two
+frames binds the window's surface, and that makes EGL fetch the window's next back buffer at the
+size the window has at that moment. If the game thread then processes a resize before its next
+frame, that one frame is drawn at the previous size while the device already reports the new one:
+`Clear` covers only part of the back buffer and `GetBackBufferData` reads zeros outside it. The
+frame after is correct. Binding the context without a surface on the loading thread would avoid it,
+but SDL's Wayland driver turns that request into an unbind (`Wayland_GLES_MakeCurrent` passes no
+context when it gets no window) while reporting success, so it needs an SDL fix first (cna-killer
+KF-6). X11 is not affected.
