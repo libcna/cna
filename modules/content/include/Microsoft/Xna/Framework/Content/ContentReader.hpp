@@ -226,7 +226,8 @@ namespace Microsoft::Xna::Framework::Content
         template <typename T>
         T ReadObject(ContentTypeReaderBase& typeReader)
         {
-            T result = std::any_cast<T>(typeReader.ReadUntyped(*this, std::any{}));
+            T result = CastReadResult<T>(typeReader.ReadUntyped(*this, std::any{}), assetName_,
+                                         typeReader.getTargetTypeNameProperty());
             RecordDisposable(result);
             return result;
         }
@@ -235,7 +236,8 @@ namespace Microsoft::Xna::Framework::Content
         template <typename T>
         T ReadObject(ContentTypeReaderBase& typeReader, T existingInstance)
         {
-            T result = std::any_cast<T>(typeReader.ReadUntyped(*this, std::any(std::move(existingInstance))));
+            T result = CastReadResult<T>(typeReader.ReadUntyped(*this, std::any(std::move(existingInstance))),
+                                         assetName_, typeReader.getTargetTypeNameProperty());
             RecordDisposable(result);
             return result;
         }
@@ -281,14 +283,16 @@ namespace Microsoft::Xna::Framework::Content
         template <typename T>
         T ReadRawObject(ContentTypeReaderBase& typeReader)
         {
-            return std::any_cast<T>(typeReader.ReadUntyped(*this, std::any{}));
+            return CastReadResult<T>(typeReader.ReadUntyped(*this, std::any{}), assetName_,
+                                     typeReader.getTargetTypeNameProperty());
         }
 
         /** @brief FNA's `T ReadRawObject<T>(ContentTypeReader typeReader, T existingInstance)`. */
         template <typename T>
         T ReadRawObject(ContentTypeReaderBase& typeReader, T existingInstance)
         {
-            return std::any_cast<T>(typeReader.ReadUntyped(*this, std::any(std::move(existingInstance))));
+            return CastReadResult<T>(typeReader.ReadUntyped(*this, std::any(std::move(existingInstance))),
+                                     assetName_, typeReader.getTargetTypeNameProperty());
         }
 
         /**
@@ -300,7 +304,7 @@ namespace Microsoft::Xna::Framework::Content
          * InitializeTypeReaders()/the root object have been read, matching FNA's own two-pass
          * "read every shared resource, then run all fixups" order.
          *
-         * @throws std::bad_any_cast if the shared resource ends up holding something other than @p T.
+         * @throws ContentLoadException if the shared resource ends up holding something other than @p T.
          */
         template <typename T>
         void ReadSharedResource(std::function<void(T)> fixup)
@@ -314,7 +318,8 @@ namespace Microsoft::Xna::Framework::Content
                         "'" + assetName_ + "' references an out-of-range shared resource index.");
                 }
                 sharedResourceFixups_[static_cast<std::size_t>(index - 1)].push_back(
-                    [fixup](const std::any& value) { fixup(std::any_cast<T>(value)); });
+                    [fixup, assetName = assetName_](const std::any& value)
+                    { fixup(CastReadResult<T>(std::any(value), assetName, std::string())); });
             }
         }
 
@@ -428,6 +433,22 @@ namespace Microsoft::Xna::Framework::Content
         CNAEXT [[nodiscard]] std::vector<uint8_t> ReadBytesExactOrThrow(int32_t count, const std::string& readerName);
 
     private:
+        /// What a type reader produced, as the T the caller asked for. XNA refuses a mismatch with a
+        /// ContentLoadException (FrameworkResources.BadXnbWrongType) -- a corrupted or mislabelled
+        /// file names a reader of another type -- where an unchecked std::any_cast would let
+        /// std::bad_any_cast out of the content subsystem.
+        template <typename T>
+        [[nodiscard]] static T CastReadResult(std::any&& value, const std::string& assetName,
+                                              const std::string& producedTypeName)
+        {
+            if (T* result = std::any_cast<T>(&value))
+                return std::move(*result);
+            throw ContentLoadException(
+                "Error loading \"" + assetName + "\". File contains " +
+                (producedTypeName.empty() ? std::string("an object") : producedTypeName) +
+                ", which is not the type it is being loaded as.");
+        }
+
         /// The reader ContentTypeReaderManager has for T, kept alive for the duration of the read.
         /// XNA's manager hands back a cached reader instance; CNA's factory creates a fresh one per
         /// call, so the caller owns it -- which is why this returns the owning pointer rather than a
@@ -542,7 +563,7 @@ namespace Microsoft::Xna::Framework::Content
                     ? std::any(std::move(*existingInstance))
                     : std::any{};
                 std::any resultAny = typeReader.ReadUntyped(*this, std::move(existingAny));
-                T result = std::any_cast<T>(std::move(resultAny));
+                T result = CastReadResult<T>(std::move(resultAny), assetName_, typeReader.getTargetTypeNameProperty());
                 RecordDisposable(result);
                 return result;
             }
@@ -552,7 +573,8 @@ namespace Microsoft::Xna::Framework::Content
                     ? std::any(std::make_shared<T>(std::move(*existingInstance)))
                     : std::any{};
                 std::any resultAny = typeReader.ReadUntyped(*this, std::move(existingAny));
-                T result = std::move(*std::any_cast<std::shared_ptr<T>>(std::move(resultAny)));
+                T result = std::move(*CastReadResult<std::shared_ptr<T>>(
+                    std::move(resultAny), assetName_, typeReader.getTargetTypeNameProperty()));
                 RecordDisposable(result);
                 return result;
             }

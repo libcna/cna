@@ -184,3 +184,28 @@ TEST_F(CustomContentTypeReaderTest, CustomReaderRegistrationIsIndependentOfBuilt
     EXPECT_TRUE(ContentTypeReaderManager::IsRegistered("MyGame.Content.GameLevelDataReader"));
     EXPECT_TRUE(ContentTypeReaderManager::IsRegistered("Microsoft.Xna.Framework.Content.Int32Reader"));
 }
+
+TEST_F(CustomContentTypeReaderTest, LoadingAsAnotherTypeThrowsContentLoadExceptionNotBadAnyCast)
+{
+    // cna-killer KF-9: the root reader produces a GameLevelData and the caller asks for a string.
+    // XNA's ContentReader refuses that with a ContentLoadException (BadXnbWrongType); an unchecked
+    // std::any_cast threw std::bad_any_cast instead, which no content handler catches.
+    ContentTypeReaderManager::AddTypeCreator(
+        "MyGame.Content.GameLevelDataReader", [] { return std::make_unique<GameLevelDataReader>(); });
+
+    ScratchContentRoot root;
+    WriteBytes(root.path() / "level1.xnb", BuildGameLevelXnbFile(7, "The Sunken Keep"));
+
+    ContentManager cm(nullptr, root.path().string());
+    try
+    {
+        (void)cm.Load<std::string>("level1");
+        FAIL() << "a GameLevelData asset loaded as a string";
+    }
+    catch (const Microsoft::Xna::Framework::Content::ContentLoadException& error)
+    {
+        const std::string message = error.what();
+        EXPECT_NE(message.find("level1"), std::string::npos) << message;
+        EXPECT_NE(message.find("MyGame.Content.GameLevelData"), std::string::npos) << message;
+    }
+}

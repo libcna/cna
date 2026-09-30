@@ -173,10 +173,6 @@ namespace
                     throw;
                 ++cleanlyRejected;
             }
-            catch (const std::bad_any_cast&)
-            {
-                ++cleanlyRejected; // a mutated type-reader-table/dispatch index resolved to the wrong type
-            }
             catch (const std::out_of_range&)
             {
                 ++cleanlyRejected; // e.g. a bad bone-reference/shared-resource index caught by .at()
