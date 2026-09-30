@@ -13,6 +13,7 @@
 // Draw-call pixel-readback tests live in tasks 255–256 (integration tests).
 
 #include <gtest/gtest.h>
+#include <cstdint>
 #include <limits>
 #include <stdexcept>
 #include <vector>
@@ -294,4 +295,49 @@ TEST_F(DrawUserPrimitivesArgumentGuardTest, NullVertexDataThrowsArgumentNullExce
         gd.DrawUserPrimitives(PrimitiveType::TriangleList,
                               static_cast<const VertexPositionColor*>(nullptr), 0, 1),
         System::ArgumentNullException);
+}
+
+// cna-car-simulator (CCS-2): XNA's DrawUserPrimitives<T> reads the layout from T. Without a
+// VertexDeclaration argument a pointer to any structure but the four stock ones used to fall to the
+// untyped overload, which reads it as VertexPositionColor and draws garbage. Such a call no longer
+// compiles; the stock structures, an explicit const void*, and every overload taking a
+// VertexDeclaration still do.
+namespace
+{
+    struct PlainDualTextureVertex
+    {
+        float px, py, pz, nx, ny, nz, u0, v0, u1, v1;
+    };
+
+    template <typename T>
+    concept DrawsWithoutADeclaration = requires(GraphicsDevice& device, const T* vertices) {
+        device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices, 0, 1);
+    };
+
+    template <typename T>
+    concept DrawsIndexedWithoutADeclaration =
+        requires(GraphicsDevice& device, const T* vertices, const std::uint16_t* indices) {
+            device.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, vertices, 0, 3, indices, 0, 1);
+        };
+
+    template <typename T>
+    concept DrawsWithADeclaration =
+        requires(GraphicsDevice& device, const T* vertices,
+                 const Microsoft::Xna::Framework::Graphics::VertexDeclaration& declaration) {
+            device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices, 0, 1, declaration);
+        };
+}
+
+TEST(DrawUserPrimitivesTest, APointerToANonStockStructureNeedsItsVertexDeclaration)
+{
+    static_assert(!DrawsWithoutADeclaration<PlainDualTextureVertex>);
+    static_assert(!DrawsIndexedWithoutADeclaration<PlainDualTextureVertex>);
+    static_assert(DrawsWithADeclaration<PlainDualTextureVertex>);
+    static_assert(DrawsWithoutADeclaration<VertexPositionColor>);
+    static_assert(DrawsWithoutADeclaration<VertexPositionColorTexture>);
+    static_assert(DrawsWithoutADeclaration<VertexPositionNormalTexture>);
+    static_assert(DrawsWithoutADeclaration<VertexPositionTexture>);
+    static_assert(DrawsIndexedWithoutADeclaration<VertexPositionColor>);
+    static_assert(DrawsWithoutADeclaration<void>);
+    SUCCEED();
 }
