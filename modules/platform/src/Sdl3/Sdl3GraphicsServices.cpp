@@ -15,6 +15,7 @@
 #endif
 
 #include <mutex>
+#include <optional>
 #include <type_traits>
 
 namespace CNA::Platform::Sdl3 {
@@ -179,6 +180,13 @@ namespace CNA::Platform::Sdl3 {
         if (context == nullptr)
         {
             return;
+        }
+        // Serialised with CreateContext and window creation: GL context teardown touches the same
+        // process-global SDL video state (RUST-UPSTREAM-023).
+        std::optional<SdlGlobalStateLock> lock;
+        if (!SdlGlobalStateHeldByThisThread())
+        {
+            lock.emplace();
         }
         SDL_GL_DestroyContext(static_cast<SDL_GLContext>(context));
     }

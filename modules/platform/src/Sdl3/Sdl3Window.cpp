@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "Sdl3Window.hpp"
+#include "Sdl3Synchronization.hpp"
 
 #include "CNA/Platform/PlatformException.hpp"
 #include "CNA/TargetPlatform.hpp"
@@ -17,6 +18,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <optional>
 
 namespace CNA::Platform::Sdl3 {
 
@@ -141,6 +143,15 @@ namespace CNA::Platform::Sdl3 {
     {
         if (ownsWindow_)
         {
+            // SDL's window list is process-global: a window destroyed on one thread while another
+            // creates one in CreateWindow corrupted the heap (RUST-UPSTREAM-023). The lock is
+            // skipped only when this thread already holds it -- a window released while
+            // CreateWindow unwinds -- as ~Sdl3Platform does for VULKAN-159.
+            std::optional<SdlGlobalStateLock> lock;
+            if (!SdlGlobalStateHeldByThisThread())
+            {
+                lock.emplace();
+            }
             SDL_DestroyWindow(window_);
         }
     }

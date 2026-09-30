@@ -6,6 +6,7 @@
 #include "CNA/Platform/IPlatformSystemServices.hpp"
 #include "CNA/Platform/PlatformException.hpp"
 
+#include <mutex>
 #include <stdexcept>
 #include <utility>
 
@@ -119,6 +120,15 @@ namespace Microsoft::Xna::Framework::Graphics
         };
 
         char AdapterVideoPin::ownerToken_ = 0;
+
+        /// The adapter cache is process-wide and rebuilt in place; devices created on several
+        /// threads enumerated it at once and freed each other's entries (RUST-UPSTREAM-023).
+        /// Locked after a device's own lifecycle lock and before SDL's, never the other way round.
+        std::recursive_mutex& AdapterCacheMutex()
+        {
+            static std::recursive_mutex mutex;
+            return mutex;
+        }
     }
 
     GraphicsAdapter& GraphicsAdapter::getDefaultAdapterProperty()
@@ -344,6 +354,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     const std::vector<std::unique_ptr<GraphicsAdapter>>& GraphicsAdapter::getAdaptersProperty()
     {
+        const std::scoped_lock lock(AdapterCacheMutex());
         if (adapters_.empty())
         {
             AdaptersChanged();
@@ -457,6 +468,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsAdapter::AdaptersChanged()
     {
+        const std::scoped_lock lock(AdapterCacheMutex());
         adapters_.clear();
 
         // Before GetDisplays and before every queryDisplayModes below, both of which need it.

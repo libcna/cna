@@ -3,10 +3,25 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
 #include <algorithm>
+#include <mutex>
 #include <vector>
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    namespace
+    {
+        // Shared identities are process-wide: the static preset states (SamplerState::LinearWrap
+        // and the rest) are aliased by every copy in every device, and each new device rebinds
+        // them while it builds its state collections. Devices created on several threads at once
+        // raced on one aliases list and faulted (RUST-UPSTREAM-023). Recursive, because sharing
+        // detaches and a dispose raises Disposing on aliases that may detach in turn.
+        std::recursive_mutex& IdentityMutex()
+        {
+            static std::recursive_mutex mutex;
+            return mutex;
+        }
+    }
+
     struct GraphicsResource::SharedIdentity
     {
         GraphicsDevice* graphicsDevice = nullptr;
@@ -37,9 +52,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
     GraphicsResource::GraphicsResource(const GraphicsResource& other)
         : graphicsDevice_(other.getGraphicsDeviceProperty())
-        , graphicsDeviceLifetime_(other.sharedIdentity_
-              ? other.sharedIdentity_->graphicsDeviceLifetime
-              : other.graphicsDeviceLifetime_)
+        , graphicsDeviceLifetime_([&other] {
+              const std::scoped_lock lock(IdentityMutex());
+              return other.sharedIdentity_
+                  ? other.sharedIdentity_->graphicsDeviceLifetime
+                  : other.graphicsDeviceLifetime_;
+          }())
         , name_(other.getNameProperty())
         , tag_(other.getTagProperty())
         , isDisposed_(false)
@@ -55,6 +73,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (this != &other)
         {
+            const std::scoped_lock lock(IdentityMutex());
             DetachSharedIdentity();
             graphicsDevice_ = other.getGraphicsDeviceProperty();
             graphicsDeviceLifetime_ = other.sharedIdentity_
@@ -88,6 +107,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (other.sharedIdentity_)
         {
+            const std::scoped_lock lock(IdentityMutex());
             sharedIdentity_ = std::move(other.sharedIdentity_);
             for (GraphicsResource*& alias : sharedIdentity_->aliases)
             {
@@ -116,6 +136,7 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             if (other.sharedIdentity_)
             {
+                const std::scoped_lock lock(IdentityMutex());
                 if (sharedIdentity_)
                     DetachSharedIdentity();
                 else if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
@@ -191,23 +212,33 @@ namespace Microsoft::Xna::Framework::Graphics
 
     GraphicsDevice* GraphicsResource::getGraphicsDeviceProperty() const
     {
-        return sharedIdentity_ ? sharedIdentity_->graphicsDevice : graphicsDevice_;
+        if (!sharedIdentity_)
+            return graphicsDevice_;
+        const std::scoped_lock lock(IdentityMutex());
+        return sharedIdentity_->graphicsDevice;
     }
 
     bool GraphicsResource::getIsDisposedProperty() const
     {
-        return sharedIdentity_ ? sharedIdentity_->isDisposed : isDisposed_;
+        if (!sharedIdentity_)
+            return isDisposed_;
+        const std::scoped_lock lock(IdentityMutex());
+        return sharedIdentity_->isDisposed;
     }
 
     std::string GraphicsResource::getNameProperty() const
     {
-        return sharedIdentity_ ? sharedIdentity_->name : name_;
+        if (!sharedIdentity_)
+            return name_;
+        const std::scoped_lock lock(IdentityMutex());
+        return sharedIdentity_->name;
     }
 
     void GraphicsResource::setNameProperty(const std::string& value)
     {
         if (sharedIdentity_)
         {
+            const std::scoped_lock lock(IdentityMutex());
             sharedIdentity_->name = value;
             for (GraphicsResource* alias : sharedIdentity_->aliases)
                 alias->name_ = value;
@@ -220,13 +251,17 @@ namespace Microsoft::Xna::Framework::Graphics
 
     System::Object* GraphicsResource::getTagProperty() const
     {
-        return sharedIdentity_ ? sharedIdentity_->tag : tag_;
+        if (!sharedIdentity_)
+            return tag_;
+        const std::scoped_lock lock(IdentityMutex());
+        return sharedIdentity_->tag;
     }
 
     void GraphicsResource::setTagProperty(System::Object* value)
     {
         if (sharedIdentity_)
         {
+            const std::scoped_lock lock(IdentityMutex());
             sharedIdentity_->tag = value;
             for (GraphicsResource* alias : sharedIdentity_->aliases)
                 alias->tag_ = value;
@@ -252,6 +287,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (sharedIdentity_)
         {
+            const std::scoped_lock lock(IdentityMutex());
             const std::shared_ptr<SharedIdentity> identity = sharedIdentity_;
             if (identity->isDisposed)
                 return;
@@ -311,6 +347,7 @@ namespace Microsoft::Xna::Framework::Graphics
     std::shared_ptr<GraphicsResource::SharedIdentity>
     GraphicsResource::EnsureSharedIdentity() const
     {
+        const std::scoped_lock lock(IdentityMutex());
         if (sharedIdentity_)
             return sharedIdentity_;
 
@@ -330,6 +367,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!sharedIdentity_)
             return;
+        const std::scoped_lock lock(IdentityMutex());
 
         const std::shared_ptr<SharedIdentity> identity = sharedIdentity_;
         identity->aliases.erase(
@@ -354,6 +392,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (this == &other)
             return;
 
+        const std::scoped_lock lock(IdentityMutex());
         const std::shared_ptr<SharedIdentity> identity = other.EnsureSharedIdentity();
         if (sharedIdentity_ == identity)
             return;
@@ -372,6 +411,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsResource::BindSharedResourceIdentityToDevice(GraphicsDevice* device) const
     {
+        const std::scoped_lock lock(IdentityMutex());
         const std::shared_ptr<SharedIdentity> identity = EnsureSharedIdentity();
         if (identity->graphicsDevice == device &&
             (device == nullptr || !identity->graphicsDeviceLifetime.expired()))

@@ -705,6 +705,23 @@ if(CNA_BUILD_TESTS)
     set_tests_properties(CApi_OwnedGraphicsDeviceSmoke PROPERTIES
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # BINDFIX-050: several threads creating and releasing devices at once.
+    add_executable(cna_c_api_concurrent_device_creation_smoke
+        tests/pure_c/ConcurrentDeviceCreationSmoke.c
+    )
+    set_target_properties(cna_c_api_concurrent_device_creation_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_concurrent_device_creation_smoke PRIVATE
+        cna_c_api Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_concurrent_device_creation_smoke)
+    add_test(NAME CApi_ConcurrentDeviceCreationSmoke
+        COMMAND cna_c_api_concurrent_device_creation_smoke)
+    set_tests_properties(CApi_ConcurrentDeviceCreationSmoke PROPERTIES
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}" TIMEOUT 120)
+
     add_executable(cna_c_api_game_secondary_graphics_context_smoke
         tests/pure_c/GameSecondaryGraphicsDeviceContextSmoke.c
     )

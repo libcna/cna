@@ -669,6 +669,13 @@ first.
   since XNASWEEP-197 and narrows those widths to 16-bit. Constant and text corrected within 0.35.0;
   the baseline change is recorded in `ABI_VERSIONING.md` for owner review. Pinned by
   `AbiHeaderC.c` and `CApiAbiBaseline`.
+- **BINDFIX-050** — `RUST-UPSTREAM-023`: six threads creating and destroying standalone devices at
+  once aborted 28 of 40 runs on OPENGLES3 (heap corruption, occasionally a stall). Five unguarded
+  process-wide paths, found one backtrace at a time: the preset state objects' shared identity
+  list (`GraphicsResource`), window and GL-context teardown and the camera subsystem start outside
+  the SDL lock, the adapter cache and SDL's display queries, and overlapping device construction.
+  Each now has a lock (order: device lifecycle, adapter cache, SDL). 240 of 240 runs pass. Pinned
+  by `CApi_ConcurrentDeviceCreationSmoke` (fails 10 of 10 runs against the previous library).
 - **BINDFIX-049** — `net.h` still described `cna_packet_reader_read_color` as reading four floats and
   the pair as deliberately asymmetric; BINDFIX-022 had made them inverses. Documentation only
   (reported by `cna-python`).
