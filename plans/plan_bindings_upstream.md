@@ -621,6 +621,13 @@ first.
   left the game undestroyable once a model had been loaded. Pinned by
   `CApi_ContentModelEffectSmoke` (loads `tests/assets/xnb/.../BlenderDefaultCube.xnb`, leaves the
   model to its content manager, then destroys the game).
+- **BINDFIX-041** — `JAVA-UPSTREAM-014`: a process exiting with a live game whose creating thread
+  had already ended -- every JVM, whose launcher runs `main` on a thread of its own -- aborted on
+  the GL renderers. The static handle registry destroyed the game on the exiting thread, whose
+  thread-local GL function table is empty, and meta-gl terminates there. At exit the registry now
+  leaves objects created by another thread to the operating system. Pinned by
+  `CApi_ExitWithForeignThreadGameSmoke` (a game and a dynamic vertex buffer made on a thread that
+  ends first; the process must exit 0 -- it aborted with 134 on OPENGLES3 before).
 
 ---
 

@@ -1869,6 +1869,20 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    # BINDFIX-041: exiting with a live game whose creating thread has already ended.
+    add_executable(cna_c_api_exit_with_foreign_thread_game_smoke
+        tests/pure_c/ExitWithForeignThreadGameSmoke.c
+    )
+    set_target_properties(cna_c_api_exit_with_foreign_thread_game_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_exit_with_foreign_thread_game_smoke PRIVATE cna_c_api Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_exit_with_foreign_thread_game_smoke)
+    add_test(NAME CApi_ExitWithForeignThreadGameSmoke
+        COMMAND cna_c_api_exit_with_foreign_thread_game_smoke)
+
     # BINDFIX-040: the generic Effect routes on the effect a content-loaded Model publishes.
     add_executable(cna_c_api_content_model_effect_smoke
         tests/pure_c/ContentModelEffectSmoke.c
