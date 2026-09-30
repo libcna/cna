@@ -599,6 +599,13 @@ first.
   the profile exactly as `MultipleRenderTargets` already did (RLGL-040), and a profile change
   invalidates the cached feature snapshot. Pinned by `CApi_TextureVolumeSmoke` (Reach refuses,
   HiDef follows the renderer) and `Texture3DProfileTest.CapabilityFollowsTheDeviceGraphicsProfile`.
+- **BINDFIX-038** — `JAVA-UPSTREAM-017`: a `CNA_GRAPHICS_RENDERER` naming no renderer, or one this
+  build lacks, made `libcna_c_api.so` call `std::terminate` while it loaded, because the static
+  initializer that publishes the compiled-in set also consulted the variable; a JVM, Python or Node
+  host died before its first call. The variable is now read on first use, where the refusal is an
+  ordinary `CNA_RESULT_INVALID_STATE`, and it keeps refusing instead of being consumed by the first
+  query and quietly replaced by the default. Pinned by `CApi_RendererEnvironment_{unknown,absent}`
+  and `GraphicsRendererSelectionTest.ARefusedEnvironmentVariableKeepsRefusingUntilARendererIsSet`.
 
 ---
 
