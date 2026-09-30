@@ -231,7 +231,10 @@ count × {
 }
 ```
 
-`logicalName` is validated on read **and on write**, by one shared function
+`logicalName` is relative to the content root the file was compiled against, not to the `.cnb`'s
+own directory as an `.xnb` external reference is in XNA: a compiled model therefore loads through a
+`ContentManager` rooted where it was compiled, and moving it into a subdirectory needs a
+recompile (living-room-simulator R-28). It is validated on read **and on write**, by one shared function
 (`CnbLogicalNameProblem()`): non-empty, well-formed UTF-8, no backslash, not starting with `/`, not
 drive-qualified (`X:`), and containing no `..` segment. `ContentManager`'s own containment checks
 still run afterwards; this is defence in depth, so a compiled file can never hand path-traversal
