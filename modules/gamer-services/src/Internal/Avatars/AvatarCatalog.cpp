@@ -5,6 +5,7 @@
 #include <future>
 #include "System/Security/Cryptography/SHA256.hpp"
 #include <algorithm>
+#include <cmath>
 #include <mutex>
 #include <nlohmann/json.hpp>
 #include <set>
@@ -59,14 +60,7 @@ int tile(const nlohmann::json& value,int count)
 
 // Namespace scope so the avatar loader thread can use them until it is joined at exit.
 std::mutex verifiedLock;
-std::set<std::string,std::less<>> verified;
-
-const EmbeddedFile* embedded(std::string_view name)
-{
-    const auto files=embeddedCatalogFiles();
-    auto found=std::ranges::find_if(files,[&](const EmbeddedFile& file){return name==file.name;});
-    return found==files.end()?nullptr:&*found;
-}
+std::map<const unsigned char*,std::string> embeddedHashes;
 }
 
 template<typename T>
@@ -92,6 +86,7 @@ std::optional<T> onServiceExecutor(std::function<T(IGamerServicesBackend&)> work
     }
 }
 template std::optional<std::string> onServiceExecutor(std::function<std::string(IGamerServicesBackend&)>);
+template std::optional<std::vector<unsigned char>> onServiceExecutor(std::function<std::vector<unsigned char>(IGamerServicesBackend&)>);
 
 const std::array<int,BoneCount>& parentBones(){return Parents;}
 std::string_view boneName(int slot){return slot>=0&&slot<BoneCount?Names[slot]:std::string_view{};}
@@ -105,6 +100,12 @@ const CatalogItem* CatalogManifest::item(std::uint16_t id) const
 {
     auto found=std::ranges::find(items,id,&CatalogItem::id);
     return found==items.end()?nullptr:&*found;
+}
+
+const CatalogItem* CatalogManifest::featureItem(std::uint16_t id) const
+{
+    auto found=std::ranges::find(featureItems,id,&CatalogItem::id);
+    return found==featureItems.end()?nullptr:&*found;
 }
 
 namespace {
@@ -121,6 +122,69 @@ CatalogManifest parseManifest(std::string_view text)
 }
 
 namespace {
+Microsoft::Xna::Framework::Vector3 vector3(const nlohmann::json& value,float bound)
+{
+    if(!value.is_array()||value.size()!=3)malformed("face control vector");
+    std::array<float,3> v{};
+    for(int k=0;k<3;++k) {
+        v[k]=value[k].get<float>();
+        if(!std::isfinite(v[k])||std::fabs(v[k])>bound)malformed("face control value");
+    }
+    return {v[0],v[1],v[2]};
+}
+
+void readFaceControls(const nlohmann::json& json,CatalogManifest& manifest)
+{
+    // Bounded so that a hostile catalog can neither tear a head apart nor cost real time.
+    constexpr std::size_t MaximumControls=32, MaximumDeformers=8;
+    if(!json.is_object())malformed("face controls");
+    for(int body=0;body<2;++body) {
+        const auto& list=json.at(body==0?"female":"male");
+        if(!list.is_array()||list.size()>MaximumControls)malformed("face control list");
+        for(const auto& entry:list) {
+            FaceControl control;
+            control.parameter=entry.at("parameter").get<int>();
+            if(control.parameter<0||control.parameter>=static_cast<int>(FaceParameterCount))malformed("face control parameter");
+            const auto scope=entry.at("scope").get<std::string>();
+            if(scope!="face"&&scope!="head")malformed("face control scope");
+            control.wholeHead=scope=="head";
+            if(entry.contains("name")) {
+                control.name=entry["name"].get<std::string>();
+                if(control.name.size()>32)malformed("face control name");
+            }
+            const auto& ops=entry.at("ops");
+            if(!ops.is_array()||ops.size()>MaximumDeformers)malformed("face control ops");
+            for(const auto& op:ops) {
+                FaceDeformer deformer;
+                deformer.centre=vector3(op.at("centre"),5.0f);
+                deformer.radii=vector3(op.at("radii"),1.0f);
+                if(deformer.radii.X<1e-3f||deformer.radii.Y<1e-3f||deformer.radii.Z<1e-3f)malformed("face control radii");
+                deformer.inner=op.at("inner").get<float>();
+                if(!(deformer.inner>=0.0f&&deformer.inner<1.0f))malformed("face control inner");
+                if(op.contains("scale")) {
+                    deformer.kind=FaceDeformer::Kind::Scale;
+                    deformer.amount=vector3(op["scale"],2.0f);
+                    if(deformer.amount.X<0.5f||deformer.amount.Y<0.5f||deformer.amount.Z<0.5f)malformed("face control scale");
+                } else if(op.contains("move")) {
+                    deformer.kind=FaceDeformer::Kind::Move;
+                    deformer.amount=vector3(op["move"],0.1f);
+                } else if(op.contains("rotate")) {
+                    deformer.kind=FaceDeformer::Kind::Rotate;
+                    deformer.amount=vector3(op["rotate"],1.0f);
+                    if(deformer.amount.Length()<1e-3f)malformed("face control axis");
+                    deformer.amount.Normalize();
+                    deformer.degrees=op.at("degrees").get<float>();
+                    if(!(std::fabs(deformer.degrees)<=45.0f))malformed("face control angle");
+                } else {
+                    malformed("face control op");
+                }
+                control.deformers.push_back(deformer);
+            }
+            manifest.faceControls[body].push_back(std::move(control));
+        }
+    }
+}
+
 CatalogManifest parseManifestJson(std::string_view text)
 {
     const auto json=nlohmann::json::parse(text,nullptr,false);
@@ -151,18 +215,45 @@ CatalogManifest parseManifestJson(std::string_view text)
         manifest.authoredHeightMillimeters[body]=static_cast<std::uint16_t>(height);
     }
     std::set<std::uint16_t> ids;
-    for(const auto& item:json.at("items")) {
+    auto readItem=[&](const nlohmann::json& item,bool feature) {
         CatalogItem entry;
         const int id=item.at("id").get<int>();
         if(id<1||id>0xffff||!ids.insert(static_cast<std::uint16_t>(id)).second)malformed("item id");
         entry.id=static_cast<std::uint16_t>(id);
-        auto slot=std::ranges::find(SlotNames,item.at("slot").get<std::string>());
-        if(slot==SlotNames.end())malformed("item slot");
-        entry.slot=static_cast<AvatarItemSlot>(slot-SlotNames.begin());
+        const auto slotName=item.at("slot").get<std::string>();
+        if(feature) {
+            if(slotName!="facialHair")malformed("feature item slot");
+            entry.slot=AvatarItemSlot::FacialHair;
+        } else {
+            auto slot=std::ranges::find(SlotNames,slotName);
+            if(slot==SlotNames.end())malformed("item slot");
+            entry.slot=static_cast<AvatarItemSlot>(slot-SlotNames.begin());
+        }
         entry.name=item.at("name").get<std::string>();
         entry.assets={listed(item.at("assets").at("female")),listed(item.at("assets").at("male"))};
-        manifest.items.push_back(std::move(entry));
+        if(item.contains("random")) {
+            for(int body=0;body<2;++body) {
+                const float weight=item["random"].at(body==0?"female":"male").get<float>();
+                if(!(weight>=0.0f&&weight<=1000.0f))malformed("item random weight");
+                entry.randomWeight[body]=weight;
+            }
+        }
+        if(item.contains("hatAssets")) {
+            if(entry.slot!=AvatarItemSlot::Hair)malformed("hat assets on a non-hair item");
+            entry.hatAssets={listed(item["hatAssets"].at("female")),listed(item["hatAssets"].at("male"))};
+        }
+        if(item.contains("coversHair")) {
+            if(entry.slot!=AvatarItemSlot::Hat)malformed("coversHair on a non-hat item");
+            entry.coversHair=item["coversHair"].get<bool>();
+        }
+        return entry;
+    };
+    for(const auto& item:json.at("items"))manifest.items.push_back(readItem(item,false));
+    if(json.contains("featureItems")) {
+        if(!json["featureItems"].is_array()||json["featureItems"].size()>256)malformed("feature items");
+        for(const auto& item:json["featureItems"])manifest.featureItems.push_back(readItem(item,true));
     }
+    if(json.contains("faceControls"))readFaceControls(json["faceControls"],manifest);
     const auto& face=json.at("face");
     manifest.faceAsset=listed(face.at("asset"));
     const auto& layout=face.at("layout");
@@ -184,19 +275,43 @@ CatalogManifest parseManifestJson(std::string_view text)
     for(std::size_t state=0;state<MouthNames.size();++state)
         manifest.face.mouths[state]=tile(layout.at("mouths").at(std::string(MouthNames[state])),tiles);
     manifest.animationsAsset=listed(json.at("animations").at("asset"));
+    // Required slots need an item to fall back to and to draw at random.
+    for(auto required:{AvatarItemSlot::Hair,AvatarItemSlot::Top,AvatarItemSlot::Bottom,AvatarItemSlot::Shoes})
+        for(int body=0;body<2;++body)
+            if(std::ranges::none_of(manifest.items,[&](const CatalogItem& item){return item.slot==required&&item.randomWeight[body]>0;}))
+                malformed("a required slot has no item");
     return manifest;
 }
 }
 
-const CatalogManifest& embeddedManifest()
+const std::vector<std::shared_ptr<const CatalogManifest>>& embeddedCatalogs()
 {
-    static const CatalogManifest manifest=[] {
-        const auto* file=embedded("catalog.json");
-        if(!file)throw std::runtime_error("the avatar catalog is not compiled into this build");
-        return parseManifest(std::string_view(reinterpret_cast<const char*>(file->data),file->size));
+    static const std::vector<std::shared_ptr<const CatalogManifest>> catalogs=[] {
+        std::vector<std::shared_ptr<const CatalogManifest>> out;
+        for(const auto& file:embeddedCatalogFiles()) {
+            const std::string_view name(file.name);
+            if(!name.starts_with("v")||!name.ends_with("/catalog.json"))continue;
+            auto manifest=std::make_shared<const CatalogManifest>(
+                parseManifest(std::string_view(reinterpret_cast<const char*>(file.data),file.size)));
+            if(name!="v"+std::to_string(manifest->version)+"/catalog.json")
+                throw std::runtime_error("avatar catalog: "+std::string(name)+" describes another version");
+            out.push_back(std::move(manifest));
+        }
+        if(out.empty())throw std::runtime_error("the avatar catalog is not compiled into this build");
+        std::ranges::sort(out,{},[](const auto& manifest){return manifest->version;});
+        return out;
     }();
-    return manifest;
+    return catalogs;
 }
+
+std::shared_ptr<const CatalogManifest> embeddedManifest(std::uint16_t version)
+{
+    const auto& catalogs=embeddedCatalogs();
+    auto found=std::ranges::find(catalogs,version,[](const auto& manifest){return manifest->version;});
+    return found==catalogs.end()?nullptr:*found;
+}
+
+const CatalogManifest& newestEmbeddedManifest(){return *embeddedCatalogs().back();}
 
 std::string sha256Hex(std::span<const std::uint8_t> bytes)
 {
@@ -208,25 +323,39 @@ std::string sha256Hex(std::span<const std::uint8_t> bytes)
     return text;
 }
 
+std::optional<std::span<const std::uint8_t>> embeddedFileByContent(const CatalogAsset& asset)
+{
+    // Each compiled-in file is hashed at most once per process.
+    for(const auto& file:embeddedCatalogFiles()) {
+        if(file.size!=asset.size)continue;
+        std::lock_guard guard(verifiedLock);
+        auto hash=embeddedHashes.find(file.data);
+        if(hash==embeddedHashes.end())hash=embeddedHashes.emplace(file.data,sha256Hex(file.bytes())).first;
+        if(hash->second==asset.sha256)return file.bytes();
+    }
+    return std::nullopt;
+}
+
+int maximumFaceTile(const FaceLayout& layout)
+{
+    int highest=0;
+    for(const auto& state:layout.eyes)for(const auto& side:state)highest=std::max({highest,side[0],side[1]});
+    for(const auto& state:layout.eyebrows)highest=std::max({highest,state[0],state[1]});
+    for(auto mouth:layout.mouths)highest=std::max(highest,mouth);
+    return highest;
+}
+
 std::optional<AssetBytes> resolveAsset(const CatalogManifest& manifest,std::string_view name)
 {
     auto listed=manifest.assets.find(name);
     if(listed==manifest.assets.end())return std::nullopt;
-    const auto& expected=listed->second;
-    if(const auto* file=embedded(name);file&&file->size==expected.size) {
-        // Embedded contents are checked against the manifest once per process.
-        std::lock_guard guard(verifiedLock);
-        if(verified.contains(expected.sha256)||sha256Hex(file->bytes())==expected.sha256) {
-            verified.insert(expected.sha256);
-            return AssetBytes{nullptr,file->bytes()};
-        }
-    }
-    // Not compiled in (a newer catalog): the service's immutable, hash-addressed copy, which the
-    // backend caches on disk and verifies; checked again here against this manifest.
-    auto bytes=onServiceExecutor<std::vector<unsigned char>>([hash=expected.sha256](IGamerServicesBackend& service) {
-        return service.asset(hash);
-    });
-    if(!bytes||bytes->size()!=expected.size||sha256Hex(*bytes)!=expected.sha256)return std::nullopt;
+    // Compiled-in contents are found by size and hash, never by name: two catalog versions may
+    // hold different files under one name.
+    if(auto embedded=embeddedFileByContent(listed->second))return AssetBytes{nullptr,*embedded};
+    // Otherwise the installed pack of exactly this version, verified again on every read. Assets
+    // are never downloaded here: a missing catalog is installed as a whole (catalogManifest).
+    auto bytes=installedCatalogFile(manifest.version,listed->second);
+    if(!bytes)return std::nullopt;
     auto owned=std::make_shared<const std::vector<std::uint8_t>>(std::move(*bytes));
     return AssetBytes{owned,std::span<const std::uint8_t>(*owned)};
 }

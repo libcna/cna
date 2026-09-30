@@ -1,20 +1,25 @@
 # Embeds data files into a target as `{name, bytes, size}` records, generated at build time with
 # CMake alone (no Python), so every platform and toolchain gets the same bytes.
 #
-#   cna_embed_binary_files(<target> <namespace> <function> <output.cpp> FILES <file>...)
+#   cna_embed_binary_files(<target> <namespace> <function> <output.cpp> [BASE <dir>] FILES <file>...)
 #
 # generates <output.cpp> defining, in <namespace>,
 #   std::span<const CNA::Internal::EmbeddedFile> <function>();
-# whose records are sorted by file name. Invoked with -P this file is the generator itself.
+# whose records are sorted by name: the file name, or with BASE the path relative to <dir>
+# ("v1/catalog.json"). Invoked with -P this file is the generator itself.
 
 if(CMAKE_SCRIPT_MODE_FILE)
-    # Script mode: OUTPUT, NAMESPACE, FUNCTION, FILES (;-list).
+    # Script mode: OUTPUT, NAMESPACE, FUNCTION, FILES (;-list), optional BASE.
     set(_body "")
     set(_table "")
     set(_index 0)
     list(SORT FILES)
     foreach(_file IN LISTS FILES)
-        get_filename_component(_name "${_file}" NAME)
+        if(BASE)
+            file(RELATIVE_PATH _name "${BASE}" "${_file}")
+        else()
+            get_filename_component(_name "${_file}" NAME)
+        endif()
         file(READ "${_file}" _hex HEX)
         string(LENGTH "${_hex}" _hex_length)
         math(EXPR _size "${_hex_length} / 2")
@@ -39,12 +44,12 @@ endif()
 set(_cna_embed_binary_files_script "${CMAKE_CURRENT_LIST_FILE}")
 
 function(cna_embed_binary_files target namespace function output)
-    cmake_parse_arguments(PARSE_ARGV 4 _embed "" "" "FILES")
+    cmake_parse_arguments(PARSE_ARGV 4 _embed "" "BASE" "FILES")
     string(REPLACE ";" "\\;" _escaped "${_embed_FILES}")
     add_custom_command(
         OUTPUT "${output}"
         COMMAND "${CMAKE_COMMAND}" "-DOUTPUT=${output}" "-DNAMESPACE=${namespace}" "-DFUNCTION=${function}"
-                "-DFILES=${_escaped}" -P "${_cna_embed_binary_files_script}"
+                "-DBASE=${_embed_BASE}" "-DFILES=${_escaped}" -P "${_cna_embed_binary_files_script}"
         DEPENDS ${_embed_FILES} "${_cna_embed_binary_files_script}"
         COMMENT "Embedding ${function} data files"
         VERBATIM)

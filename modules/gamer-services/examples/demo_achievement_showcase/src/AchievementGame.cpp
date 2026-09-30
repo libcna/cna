@@ -2,10 +2,14 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <exception>
+#include <optional>
+#include <string>
 
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AchievementCollection.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
 #include "System/DateTime.hpp"
@@ -46,8 +50,8 @@ namespace
         bool displayBeforeEarned;
     };
 
-    // Fixed demo content, not derived from GetAchievements() (which is always empty on this
-    // platform - see the header's own honest-scope note).
+    // The demo's own text for each key. An achievement GetAchievements() describes itself (from
+    // the title's catalog, or the service's) is shown as GetAchievements() returns it instead.
     constexpr TileDef kTileDefs[6] = {
         {"first_steps", "First Steps", "Complete the tutorial.", true},
         {"speed_demon", "Speed Demon", "Finish a level in under 60 seconds.", true},
@@ -73,14 +77,42 @@ void AchievementGame::Initialize()
 {
     Game::Initialize();
 
-    localGamer_ = (*Gamer::getSignedInGamersProperty())[0];
+    // Nobody is signed in yet: gamers appear at the first GamerServicesDispatcher.Update.
+    RefreshTiles();
+    flashTimers_.assign(tiles_.size(), 0.0f);
+}
 
+int AchievementGame::RefreshTiles()
+{
+    std::optional<AchievementCollection> listed;
+    if (localGamer_ != nullptr)
+    {
+        listed.emplace(localGamer_->GetAchievements());
+    }
+
+    tiles_.clear();
     for (const TileDef& def : kTileDefs)
     {
-        tiles_.push_back(Achievement::CreateInternal(def.key, def.name, def.description,
-                                                       def.displayBeforeEarned, false, System::DateTime{}));
+        const Achievement* match = nullptr;
+        for (int i = 0; listed && i < listed->getCountProperty(); ++i)
+        {
+            if ((*listed)[i].getKeyProperty() == def.key) { match = &(*listed)[i]; }
+        }
+        if (match != nullptr && !match->getNameProperty().empty())
+        {
+            tiles_.push_back(*match);
+        }
+        else
+        {
+            // Achievement is immutable; a tile for a key GetAchievements() lists without text
+            // carries the demo's text and the listed earned state and date.
+            tiles_.push_back(Achievement::CreateInternal(
+                def.key, def.name, def.description, def.displayBeforeEarned,
+                match != nullptr && match->getIsEarnedProperty(),
+                match != nullptr ? match->getEarnedDateTimeProperty() : System::DateTime{}));
+        }
     }
-    flashTimers_.assign(tiles_.size(), 0.0f);
+    return listed ? listed->getCountProperty() : 0;
 }
 
 void AchievementGame::LoadContent()
@@ -95,36 +127,52 @@ void AchievementGame::LoadContent()
 
 void AchievementGame::AwardTile(std::size_t index)
 {
-    if (index >= tiles_.size() || tiles_[index].getIsEarnedProperty())
+    if (localGamer_ == nullptr || index >= tiles_.size() || tiles_[index].getIsEarnedProperty())
     {
         return;
     }
 
-    // Task 4.5 (plans/plan_net.md Phase 4): real API call - persists to the local GamerServices store,
-    // keyed by gamertag. Real XNA's AwardAchievement only ever takes a key, no name/description/
-    // score, so GetAchievements() below reflects only key+earned+earnedDateTime for real; this
-    // demo's own tiles_ grid (with the real name/description/displayBeforeEarned this local store
-    // has no source of truth for) stays the actual source of truth for what's displayed.
-    localGamer_->AwardAchievement(tiles_[index].getKeyProperty());
+    const std::string key = tiles_[index].getKeyProperty();
+    try
+    {
+        localGamer_->AwardAchievement(key);
+    }
+    catch (const std::exception& e)
+    {
+        // A catalog (the title's, or the service's) that does not define the key refuses it, and
+        // a guest cannot earn achievements.
+        std::printf("[Achievements] AwardAchievement(\"%s\") refused: %s\n", key.c_str(), e.what());
+        return;
+    }
 
-    // Achievement has no isEarned setter (it's immutable once constructed) - "earning" a tile
-    // means constructing a brand-new value with earned=true and swapping it into our own local
-    // grid, which is the demo's actual source of truth for what's displayed.
-    const TileDef& def = kTileDefs[index];
-    tiles_[index] = Achievement::CreateInternal(def.key, def.name, def.description,
-                                                 def.displayBeforeEarned, true, System::DateTime::getNowProperty());
+    const int listedCount = RefreshTiles();
     flashTimers_[index] = 1.0f;
-
-    AchievementCollection real = localGamer_->GetAchievements();
-    std::printf("[Achievements] Awarded \"%s\" locally. Real GetAchievements() count=%d "
-                "(now real disk-backed persistence - survives across process runs for this "
-                "gamertag; Name/Description/GamerScore stay empty since AwardAchievement's real "
-                "API surface never carries them)\n",
-                def.name, real.getCountProperty());
+    std::printf("[Achievements] Awarded \"%s\" to %s; GetAchievements() now lists %d achievement(s).\n",
+                key.c_str(), localGamer_->getGamertagProperty().c_str(), listedCount);
 }
 
 void AchievementGame::Update(GameTime& gameTime)
 {
+    // Runs the GamerServicesComponent, whose GamerServicesDispatcher.Update signs gamers in.
+    Game::Update(gameTime);
+
+    const auto* signedIn = Gamer::getSignedInGamersProperty();
+    SignedInGamer* first = signedIn->getCountProperty() > 0 ? (*signedIn)[0] : nullptr;
+    if (first != localGamer_)
+    {
+        localGamer_ = first;
+        const int listedCount = RefreshTiles();
+        if (localGamer_ != nullptr)
+        {
+            std::printf("[Achievements] %s is signed in; GetAchievements() lists %d achievement(s).\n",
+                        localGamer_->getGamertagProperty().c_str(), listedCount);
+        }
+    }
+    if (localGamer_ == nullptr && !Guide::getIsVisibleProperty())
+    {
+        Guide::ShowSignIn(1, false);
+    }
+
     const float dt = static_cast<float>(gameTime.getElapsedGameTimeProperty().getTotalSecondsProperty());
 
     KeyboardState keys = Keyboard::GetState();
@@ -168,11 +216,17 @@ void AchievementGame::Update(GameTime& gameTime)
             {
                 if (tile.getIsEarnedProperty()) { ++earnedCount; }
             }
-            AchievementCollection real = localGamer_->GetAchievements();
-            std::printf("[Achievements] Smoke test complete: locallyEarned=%d/%zu "
-                        "realGetAchievementsCount=%d (now real disk-backed persistence, expected "
-                        "== locallyEarned)\n",
-                        earnedCount, tiles_.size(), real.getCountProperty());
+            if (localGamer_ == nullptr)
+            {
+                std::printf("[Achievements] Smoke test complete: nobody signed in.\n");
+            }
+            else
+            {
+                std::printf("[Achievements] Smoke test complete: %s earnedTiles=%d/%zu "
+                            "getAchievementsCount=%d\n",
+                            localGamer_->getGamertagProperty().c_str(), earnedCount, tiles_.size(),
+                            localGamer_->GetAchievements().getCountProperty());
+            }
             Exit();
         }
     }
@@ -184,8 +238,10 @@ void AchievementGame::Draw(const GameTime& /*gameTime*/)
     device.Clear(Color(18, 18, 28, 255));
 
     spriteBatch_->Begin();
-    spriteBatch_->DrawString(*font_, "Achievement Showcase (1-6 to award)", Vector2(16.0f, 16.0f),
-                              Color(255, 255, 255, 255));
+    const std::string title = localGamer_ != nullptr
+        ? "Achievements of " + localGamer_->getGamertagProperty() + " (1-6 to award)"
+        : std::string("Achievement Showcase - nobody is signed in");
+    spriteBatch_->DrawString(*font_, title, Vector2(16.0f, 16.0f), Color(255, 255, 255, 255));
 
     const float tileWidth = 120.0f;
     const float tileHeight = 64.0f;

@@ -2,6 +2,7 @@
 // Copyright (c) Robert Vokac and contributors
 #pragma once
 
+#include "CNA/Internal/Net/NetPacketCodec.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionState.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionProperties.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionType.hpp"
@@ -140,6 +141,17 @@ namespace CNA::Internal::Net
          * @param port The host's bound UDP port (see GetBoundPort()).
          */
         static void ConnectToHost(NetworkSession* session, const std::string& address, uint16_t port);
+
+                /**
+         * @brief Sends one voice frame from a local gamer to a remote gamer, unreliably on the
+         * second ENet channel; a client sends to the host, which relays it. Dropped when either
+         * end has no wire ID yet (voice is never queued).
+         *
+         * @param session The local session. @param sender The local gamer who spoke.
+         * @param target The remote gamer whose machine hears it. @param frame The frame.
+         */
+        static void SendVoice(NetworkSession* session, NetworkGamer* sender, NetworkGamer* target,
+                              const VoiceDataMessage& frame);
 
         /**
          * @brief Sends payload from sender to target over the real ENet transport, relaying
@@ -297,6 +309,13 @@ namespace CNA::Internal::Net
          * @param value The reported ready state.
          */
         static void ApplyTransportGamerReady(NetworkGamer& gamer, bool value);
+
+        /**
+         * @brief Hands the session a voice frame received for one of its local gamers.
+         *
+         * @param session The session. @param sender The remote gamer who spoke. @param frame The frame.
+         */
+        static void ApplyTransportVoice(NetworkSession* session, NetworkGamer* sender, const VoiceDataMessage& frame);
 
         /**
          * @brief Restores the canonical gamer order after the transport assigned ids.

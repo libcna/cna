@@ -1,10 +1,13 @@
 # CNA Gamer Services deployment
 
-The new CNA service has its own accounts/protocol/assets and is not Xbox LIVE compatible. The implementation is in progress: see [living plan](../plans/plan_gamer_services_server.md). Symbol coverage is not behavioral completeness.
+The CNA service has its own accounts, protocol and assets and is not Xbox LIVE compatible. What it
+does and deliberately does not do is recorded in the [final register](../plans/gamer_services_server_final_register.md);
+the plans ([server](../plans/plan_gamer_services_server.md), [Xbox fidelity](../plans/plan_gamer_services_xbox_fidelity.md))
+keep the decisions and evidence.
 
-Configure outside ported gameplay code. Precedence is complete `CNA::GamerServices::setConfigurationOverride` (deployment/test hosts only), environment fields, title manifest, user settings. User settings default to `$XDG_CONFIG_HOME/cna/gamer-services.json` or `$HOME/.config/cna/gamer-services.json`. Title manifest defaults to `cna-title.json` in launch CWD or explicit `CNA_GAMER_SERVICES_MANIFEST`. No credential fields are accepted. Endpoint is full `https://host:port/cna/v1`; `gameId` must be administrator-provisioned and stable. Optional `caBundle` configures trust, never bypasses TLS checks.
+Configure outside ported gameplay code. Precedence is complete `CNA::GamerServices::setConfigurationOverride` (deployment/test hosts only), environment fields, title manifest, user settings. User settings default to `$XDG_CONFIG_HOME/cna/gamer-services.json` or `$HOME/.config/cna/gamer-services.json`. Title manifest defaults to `cna-title.json` in launch CWD or explicit `CNA_GAMER_SERVICES_MANIFEST`. No credential fields are accepted. Endpoint is full `https://host:port/cna/v1`; `gameId` must be administrator-provisioned and stable. Optional `caBundle` configures trust, never bypasses TLS checks. Optional `titleVersion` (environment `CNA_GAME_VERSION`; one to four dot-separated numbers such as `1.2.0`) states the game's version to a service that checks it: an administrator can set the oldest version a title accepts (`title-minimum-version`), and older games are then refused at sign-in (the Guide says the game must be updated) and when a network session starts (`GameUpdateRequiredException`, as XNA threw when Xbox LIVE no longer accepted a title version). CNA installs no title updates itself, so `GamerServicesDispatcher.InstallingTitleUpdate` is never raised; `GamerServicesComponent` still exits the game on it, as XNA's does.
 
-Environment: `CNA_GAMER_SERVICES_ENDPOINT`, `CNA_GAME_ID`, `CNA_GAMER_SERVICES_CA_BUNDLE`, `CNA_GAMER_SERVICES_INSECURE_LOOPBACK=1` (explicit development only). Insecure HTTP is restricted to numeric `127.0.0.1` or `[::1]`, proxies and redirects disabled. No insecure Internet/LAN default. No endpoint means no service accounts, never fabricated Stub Gamers after backend migration. Credentials are user data, never title manifest values.
+Environment: `CNA_GAMER_SERVICES_ENDPOINT`, `CNA_GAME_ID`, `CNA_GAME_VERSION`, `CNA_GAMER_SERVICES_CA_BUNDLE`, `CNA_GAMER_SERVICES_INSECURE_LOOPBACK=1` (explicit development only). Insecure HTTP is restricted to numeric `127.0.0.1` or `[::1]`, proxies and redirects disabled. No insecure Internet/LAN default. No endpoint means no service accounts, never fabricated Stub Gamers after backend migration. Credentials are user data, never title manifest values.
 
 ```json
 {"endpoint":"https://service.example/cna/v1","gameId":"my-title"}
@@ -26,12 +29,19 @@ processes, and a store that cannot be read is never overwritten. Profiles whose 
 created when missing; for unattended runs and CI), are signed in when gamer services start and
 appear, raising `SignedIn`, at the first `Dispatcher.Update`, as XNA reports profiles already signed
 in at startup. Local profiles are never sent to a service. With an endpoint configured, sign-in uses
-accounts only. An entry may also carry `"gameDefaults"`, the profile's `GameDefaults`:
+accounts only; with `ShowSignIn(panes, onlineOnly: true)` a player may instead type Guest to play as a
+guest of the first signed-in account ("Alice (1)", `IsGuest`): nothing is sent to the service, the
+guest earns no achievements, cannot be in a PlayerMatch/Ranked session (the service admits only
+authenticated accounts), and signs out with its account (GSP-L5). An entry may also carry `"gameDefaults"`, the profile's `GameDefaults`:
 `gameDifficulty` (`Easy`/`Normal`/`Hard`), `controllerSensitivity` (`Low`/`Medium`/`High`),
 `racingCameraAngle` (`Back`/`Front`/`Inside`), `primaryColor`/`secondaryColor` (`#rrggbb`) and the
 booleans `autoAim`, `autoCenter`, `moveWithRightThumbStick`, `invertYAxis`, `manualTransmission`,
 `accelerateWithButtons`, `brakeWithButtons`. A missing or unreadable field keeps XNA's unset value,
-and the object is kept as written when the store is rewritten. Accounts have no game defaults.
+and the object is kept as written when the store is rewritten. An account keeps the same object on
+its service (`profile.gameDefaults` / `profile.setGameDefaults`, capability `game-defaults`; the
+service accepts only these keys and values), set by the player's tools or by administration
+(`cna-gamer-services-admin <db> game-defaults <user>` with the object on stdin); CNA reads it at
+sign-in into `SignedInGamer.GameDefaults` (GSP-L1).
 
 **Offline achievement catalog.** A title can ship `GamerServices/Achievements.json` in its title
 directory: a JSON array of the objects the service administration tool takes (`key`, `name`,
@@ -41,8 +51,12 @@ not, with its text, score and picture; `AwardAchievement` refuses keys the catal
 (`GamerServicesNotAvailableException`, as the service does) and keeps an achievement's first earned
 date; a local profile's `GamerScore`/`TotalAchievements` total what the catalog says was earned. A
 malformed catalog is refused with an `InvalidOperationException` naming the file and the problem.
-Without one, offline achievements are the earned keys alone, with no text or score. Profiles report
-`GamerZone.Unknown` and a reputation of 0 on every path: CNA keeps neither.
+Without one, offline achievements are the earned keys alone, with no text or score. An account's
+profile reports the `GamerZone` its member chose in the system Guide (Gamer zone) and a `Reputation`
+of 0-5 stars, in quarters, from the share of other players whose review would play with the member
+again (`prefer` against `avoid`) -- a CNA formula: XNA exposes the stars, not how Xbox LIVE computed
+them; a member nobody has reviewed, and every local profile, reports `GamerZone.Unknown` and 0,
+XNA's unset values -- no rating is invented (GSP-M1).
 
 **System Guide.** In a game that draws (a `GamerServicesComponent` with a graphics device service),
 the Home key, as in Games for Windows LIVE, or a controller's Guide button opens the Guide for that
@@ -54,7 +68,7 @@ Space chooses, Escape cancels) and to controllers (D-pad or left stick, A, B/Bac
 mouse. `CNA_GAMER_SERVICES_GUIDE_BUTTON=0` disables the Home/Guide-button shortcut for a game that
 needs the Home key.
 
-Server canonical protocol and administration commands live in sibling `cna-gamer-services-server/README.md` and `protocol/v1.md`. Desktop client depends on libcurl with TLS support and nlohmann/json. Browser/other secure platform transport integration remains unverified.
+Server canonical protocol and administration commands live in sibling `cna-gamer-services-server/README.md` and `protocol/v1.md`; its README also records the measured capacity and the 2026-09-29 production audit (GSP-O). Desktop client depends on libcurl with TLS support and nlohmann/json and keeps one connection to the service open between requests, sparing a TCP and TLS handshake per request (GSP-O6). Browser/other secure platform transport integration remains unverified.
 
 **Current state.** With a service: four local authenticated players, standard Guide sign-in,
 profiles and lookup, achievements (metadata, awards, pictures), mutual friends with joinable and
@@ -62,9 +76,38 @@ invitation state, rich presence, messages, player reviews, leaderboards (LocalWi
 PlayerMatch and Ranked with majority arbitration), standard avatars, and PlayerMatch/Ranked
 NetworkSession Create/Find/Join/JoinInvited with Guide invitations, lobby readiness, machine removal,
 traffic and round-trip statistics, over the authenticated relay (native only; browsers use the
-limitations page). Not implemented: online host migration (an online session ends when its host
-leaves), adding local gamers to an online session after create or join, voice, TrueSkill
-computation, party and marketplace services, and away/busy status. Rich presence is sent during
+limitations page). Online sessions honor `AllowHostMigration`: when the host leaves or its process
+dies, the service hands the session to the machine with the lowest remaining gamer ID and every
+machine raises `HostChanged` (see "Host migration" below). `AddLocalGamer` adds a signed-in account
+gamer to this machine's group through the service; it joins, with `GamerJoined` on every machine,
+at a later Update, as XNA's kernel reports it. Parties: an account-level party of up to eight
+friends (`SignedInGamer.PartySize` follows it at gamer-services updates, 0 without a party; the
+Guide's Party page invites friends, answers party invitations and leaves; `ShowPartySessions` lists
+party members' joinable games, or shows Friends without a party, as XNA does;
+`LocalNetworkGamer.SendPartyInvites` invites the rest of the party to the current online session).
+A friend's or party member's joinable game can be joined from their gamer card or the party pages:
+the game hears `InviteAccepted` as for an invitation. Voice is routed automatically in SystemLink
+and online sessions, as XNA routes it: the machine's microphone belongs to Player One's gamer (else
+its first local gamer), speech is detected, encoded with Opus at 16 kHz in 20 ms frames and sent
+unreliably to each remote machine allowed to hear it (the host relays, like game data); received
+speech plays through the SoundEffect path. `NetworkGamer.HasVoice`, `IsTalking` and
+`IsMutedByLocalUser` follow it, `LocalNetworkGamer.EnableSendVoice` switches one direction, and the
+Guide gamer card's Mute stops both. The microphone opens only while someone could hear it;
+`CNA_VOICE=0` turns voice off, and a build without libopus carries none (`CNA_ENABLE_VOICE`).
+The console's social notifications appear as Guide toasts: a new message, a friend request, a friend
+coming online, and invitations to games and parties. A signed-in client keeps the service's event
+channel open (capability `events`), so they arrive at once; without it the client reads every 15
+seconds (5 for invitations and parties). Not implemented: TrueSkill computation, time windows for the
+`...Recent` leaderboard keys (they keep every row), and a store.
+
+Guests (`ShowSignIn(onlineOnly)`, GSP-L5), by session type:
+
+| Session type | A guest may create, join or be added |
+|---|---|
+| Local, LocalWithLeaderboards | yes |
+| SystemLink | yes |
+| PlayerMatch, Ranked | no: a guest has no service credential, so `AllowOnlineSessions` is false | Friends see the online status (online, away,
+busy) a player chooses in the Guide (`FriendGamer.IsAway`/`IsBusy`). Rich presence is sent during
 Dispatcher.Update; friend online state reflects authenticated activity within 90 seconds; Update
 schedules an authenticated heartbeat every 30 seconds. `docs/xna-4-api-coverage.md` §8–9 lists the
 state per feature. This is not a production service release or a claim of measured Xbox
@@ -76,17 +119,21 @@ remained unfinished, a later slice (and the summary above) supersedes it.
 Achievement/profile picture streams now read immutable SHA-256 resources from the service. The
 per-user cache defaults to `$XDG_CACHE_HOME/cna/gamer-services/assets` or
 `$HOME/.cache/cna/gamer-services/assets`; CI can override `CNA_GAMER_SERVICES_CACHE_DIR`.
-Only content hashes form filenames; data is verified on download and on cache read, corrupt entries
-are replaced atomically, and each API call returns a separate read-only stream at position zero.
-Cache writes stop at 256 MiB (eviction is not implemented); a full/unwritable cache still allows
-retrieval. PNG assets are bounded to 512x512/512 KiB; larger version-2 GLB resources have a 16-MiB
+Only content hashes form filenames; data is verified on download and on every cache read (a damaged
+entry is a miss and is deleted), entries are written to a temporary and renamed into place (an
+interrupted write leaves no entry; temporaries older than ten minutes are deleted by later writes),
+and each API call returns a separate read-only stream at position zero. The cache keeps at most
+256 MiB, evicting the least recently used entries (a read counts as a use); several processes may
+share it. A full or unwritable cache still allows retrieval. PNG assets are bounded to 512x512/512 KiB; larger version-2 GLB resources have a 16-MiB
 transport ceiling. Hashes do not make malformed image/model content valid.
 
 Avatars (`avatars` capability, server schema 12): the service stores one CNA-encoded description
 per account and imports CNA's avatar catalogs (`cna-gamer-services-admin <db> avatar-catalog
-<CNA>/modules/gamer-services/assets/avatars/v1`). `AvatarDescription.BeginGetFromGamer` reads a
-gamer's description; the renderer downloads only the files of a newer catalog that the library
-does not embed, through the same verified hash cache. See `docs/avatars.md`.
+<CNA>/modules/gamer-services/assets/avatars/v1`, then `v2`). `AvatarDescription.BeginGetFromGamer` reads a
+gamer's description (negotiated: the stored avatar, or a projection onto a catalog this client has)
+and nothing else; the catalogs of this release draw it locally. A catalog the release lacks is
+installed whole as a validated pack through the binary file route and kept outside the asset
+cache (`avatar-catalog-packs`, `files`). See `docs/avatars.md`.
 
 
 Online leaderboard reads use server-provisioned title/key/game-mode definitions, sort direction and
@@ -95,9 +142,11 @@ an entire board or dropping gamers signed in on another machine. Begin/End compl
 Dispatcher update boundary; native C callbacks return completed reads. Online writer setters now
 retain transient data while Playing and flush after final write events at host EndGame;
 explicit early leave uses IsLeaving=true. Ranked rows are arbitrated by strict majority of the reporting
-machines (GS-006e); Stream columns are not stored and CNA computes no TrueSkill. Admin seed commands
-are development fixtures, not a gameplay write mechanism. Page limits and unsupported Stream/recent
-window/TrueSkill behavior are documented in the server protocol.
+machines (GS-006e); a board may define `stream` columns (XNA `GetValueStream`, at most 256 bytes: a writer's entry
+hands out a writable stream that commits with the entry, a read a read-only one; GSP-L4; offline
+local boards do not keep them) and CNA computes no TrueSkill. Admin seed commands
+are development fixtures, not a gameplay write mechanism. Page limits, Stream columns and the
+missing recent window and TrueSkill are documented in the server protocol.
 
 
 Refresh authority is user-level data. On POSIX, the private credential directory defaults to
@@ -107,7 +156,9 @@ Only rotating refresh credentials and estimated expiry are stored, bound to endp
 local slot. Passwords, access tokens and gameplay metadata are absent. Owner-only 0700 directories,
 0600 atomic files, no-follow opens, hard-link/size checks and a process lease prevent unsafe reads
 and concurrent use of the same refresh family. These are protected plaintext files, not an OS
-keychain. Windows/browser credentials remain ephemeral until a secure platform provider exists.
+keychain. Windows/browser credentials remain ephemeral until a secure platform provider exists, so
+such a client signs in afresh on every launch; past 32 live sign-ins the service signs the account's
+oldest one out instead of refusing the new one (GSP-O7).
 
 Dispatcher.Update restores up to four real service identities, refreshes access before expiry and
 maintains heartbeat. Transport loss retains the last authenticated identity and uses bounded
@@ -257,7 +308,7 @@ unknown/partial leave or end claims cannot replace authority reconciliation. Gen
 reject both a forged existing sender ID and an unknown target, while fragmented and unreliable
 application exchange still passes. The service host remains trusted to relay game payloads; this
 is membership validation, not malicious-host anti-cheat. Public Create/Join, lifecycle conversion
-and relay recovery followed; online host migration is not implemented. SystemLink keeps its existing codec and transport behavior.
+and relay recovery followed; online host migration followed later (GSP-K1). SystemLink keeps its existing codec and transport behavior.
 
 The private owned `ServiceENetSession` now consumes prepared membership and TLS/WSS/native ENet
 resources. Hosts become ready after transport preparation; joining clients become ready only after
@@ -290,3 +341,56 @@ before consumption becomes a deferred error. Callback exceptions preserve the re
 nested progress, take/destruction inside a callback and abandoned joins are covered. Thirteen
 new coordinator cases pass; the real owned probes now use this coordinator through Dispatcher.Update.
 This is the private asynchronous lifetime boundary the public NetworkSession adapter uses.
+
+## The Guide
+
+CNA draws its own system UI over the game, in one visual language of its own (not a copy of the
+console's): the standard Guide calls (`ShowSignIn`, `ShowFriends`, `ShowGamerCard`, `ShowMessages`,
+`ShowComposeMessage`, `ShowPlayers`, `ShowPlayerReview`, `ShowGameInvite`, `ShowParty`,
+`ShowPartySessions`, `ShowMarketplace`, `ShowAchievementsEXT`, the message box and the keyboard) open
+its pages, and the Home key or a pad's Guide button opens the system Guide itself
+(`CNA_GAMER_SERVICES_GUIDE_BUTTON=0` turns that off). The system Guide has the signed-in gamer's
+portrait, gamertag, score and status, and a rail of pages -- Home, Friends, Party, Messages,
+Achievements, Leaderboards, Recent players, Game content, Settings -- switched with Q/E or the
+shoulder buttons. Sign-in picks a profile for a player slot among four; gamer cards show the avatar,
+score, zone, reputation, presence and relationship, with the actions that apply (join, invite to
+the game or the party, message, review, mute, friend request). Edit avatar opens the full-screen
+avatar editor: a live preview with a camera that follows the category, rendered item cards,
+named face controls, try-on before keeping, and a save that asks. Notifications appear at
+`Guide.NotificationPosition`. A keyboard, a pad or the mouse drive every page. Motion is short;
+`CNA_GAMER_SERVICES_REDUCED_MOTION=1` removes it. Quiet system sounds, synthesized by CNA, play
+when a player drives the Guide; `CNA_GAMER_SERVICES_SOUNDS=0` turns them off.
+
+## Host migration (GSP-K1)
+
+`NetworkSession.AllowHostMigration` works for PlayerMatch and Ranked sessions as XNA describes it:
+only the host sets it, and every machine reads the host's value. The service decides: when the host
+machine leaves (`Dispose`/leave) or stops (its relay connection closes and it does not reconnect
+within 20 seconds, the relay-recovery grace), the machine holding the lowest remaining gamer ID
+becomes the host and that machine's first gamer the host gamer (CNA's choice: XNA shows only that a
+migration happened and raises `HostChanged`, not how the new host is picked). On every machine the old host's
+gamers leave (`GamerLeft`), then `HostChanged` is raised with the departed host as `OldHost`;
+the new host takes over settings, `StartGame`/`EndGame`, readiness relaying and machine removal.
+Gamer IDs, the roster and session properties carry over unchanged. A client whose host vanished
+waits up to 30 seconds for the service's decision; if the session is gone, or migration is off, it
+ends with `HostEndedSession` as before. Ranked arbitration rounds record members and machines, so
+a handover does not disturb them; the old host's missing report resolves by the round's timeout.
+Services without the `host-migration` capability never receive the setting, and their sessions end
+with their host. Evidence: `OnlineNetworkSessionTest` (a joiner becoming host, a client following
+the directory to a new remote host, the unchanged no-migration path), server directory and relay
+tests, and `service_cna_session_migration` / `service_cna_session_host_crash` (two processes over
+the TLS/WSS relay; the crash case kills the host process in its own NAT namespace).
+
+## Adding local gamers (GSP-K2)
+
+Online `NetworkSession.AddLocalGamer` validates as XNA does (null, disposed, duplicate, a game in
+progress without join-in-progress, ended, no open public slot, the session's local-gamer limit --
+4 for sessions created, found or invite-joined with a gamer list, as in the reference) and then
+asks the service to add the gamer to this machine's group (`sessions.addMembers`, capability
+`session-add-members`). The gamer arrives at a later Update: a `LocalNetworkGamer` sharing the
+machine, with its directory ID, and `GamerJoined` on every machine (the host announces a grown
+group to the others). A gamer without a service account refuses with `GamerPrivilegeException`;
+a service refusal (slots taken meanwhile, the account in another session) leaves the gamer out.
+Evidence: `OnlineNetworkSessionTest` (host and client adds, a refused add), server directory
+tests, and `service_cna_session_add_gamer` (two processes in separate NAT namespaces; the joiner
+adds its second gamer, then exchanges data and plays a Ranked round with it).

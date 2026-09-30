@@ -2,6 +2,9 @@
 #pragma once
 
 #include "Microsoft/Xna/Framework/GameComponent.hpp"
+#include "System/EventArgs.hpp"
+#include "System/EventHandler.hpp"
+#include <optional>
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
@@ -21,9 +24,12 @@ namespace Microsoft::Xna::Framework::GamerServices
          */
         explicit GamerServicesComponent(Microsoft::Xna::Framework::Game& game);
 
+        /** @brief Stops listening for title updates. */
+        ~GamerServicesComponent() override;
+
         /**
-         * @brief Initializes GamerServicesDispatcher with the owning game's window handle
-         * and service container.
+         * @brief Initializes GamerServicesDispatcher with the owning game's window handle and
+         * service container, and exits the game when a title update is being installed.
          */
         void Initialize() override;
 
@@ -33,5 +39,8 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @param gameTime Current game timing state.
          */
         void Update(Microsoft::Xna::Framework::GameTime& gameTime) override;
+
+    private:
+        std::optional<System::EventHandler<System::EventArgs>::Token> installingTitleUpdate_;
     };
 }

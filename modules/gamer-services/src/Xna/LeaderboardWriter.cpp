@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/LeaderboardWriter.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/IO/MemoryStream.hpp"
 #include "CNA/Internal/GamerServices/LocalGamerServicesStore.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
@@ -78,7 +80,7 @@ namespace Microsoft::Xna::Framework::GamerServices
     void LeaderboardWriter::BindServiceEntry(const std::string& key,LeaderboardEntry& entry) {
         const std::weak_ptr<WriteScope> weak=writeScope_;
         auto guard=[weak,key] {const auto scope=weak.lock();if(!scope||!scope->active)throw System::InvalidOperationException("Leaderboards can only be written during network gameplay.");scope->dirty.insert(key);};
-        entry.validateWrite_=guard;entry.columns_.writeGuard_=guard;
+        entry.validateWrite_=guard;entry.columns_.writeGuard_=guard;entry.columns_.createsStreams_=true;
         entry.SetOnRatingChangedHookEXT({});
     }
     void LeaderboardWriter::BeginServiceGameplay() {
@@ -108,6 +110,17 @@ namespace Microsoft::Xna::Framework::GamerServices
                 else if(auto* v=std::any_cast<System::DateTime>(&value)){column.type="datetime";column.value=v->getTicksProperty();}
                 else if(auto* v=std::any_cast<System::TimeSpan>(&value)){column.type="timespan";column.value=v->getTicksProperty();}
                 else if(auto* v=std::any_cast<LeaderboardOutcome>(&value)){column.type="outcome";column.value=static_cast<long long>(*v);}
+                else if(auto* v=std::any_cast<System::IO::Stream*>(&value)) {
+                    // A Stream column: its whole contents, as the service carries them (hex, 256 bytes at most).
+                    const auto* memory=dynamic_cast<const System::IO::MemoryStream*>(*v);
+                    if(!memory)throw System::NotSupportedException("Only a leaderboard's own column streams can be written.");
+                    const auto bytes=memory->ToArray();
+                    if(bytes.size()>CNA::Internal::GamerServices::MaxLeaderboardStreamBytes)
+                        throw System::ArgumentException("A leaderboard stream column holds at most 256 bytes.");
+                    constexpr char digits[]="0123456789abcdef";std::string hex;
+                    for(auto byte:bytes){hex+=digits[byte>>4];hex+=digits[byte&15];}
+                    column.type="stream";column.value=std::move(hex);
+                }
                 else throw System::NotSupportedException("The service leaderboard column type has no supported transport representation.");
                 row.columns.emplace(name,std::move(column));
             }

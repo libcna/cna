@@ -14,6 +14,28 @@ bool identifier(std::string_view value) {
     }
     return true;
 }
+bool validVersion(std::string_view value) {
+    if (value.empty() || value.size() > 32) return false;
+    int parts = 1, digits = 0;
+    for (char c : value) {
+        if (c == '.') { if (digits == 0 || ++parts > 4) return false; digits = 0; continue; }
+        if (c < '0' || c > '9' || ++digits > 9) return false;
+    }
+    return digits > 0;
+}
+int compareVersions(std::string_view a, std::string_view b) {
+    auto next = [](std::string_view& text) {
+        long long value = 0;
+        while (!text.empty() && text.front() != '.') { value = value * 10 + (text.front() - '0'); text.remove_prefix(1); }
+        if (!text.empty()) text.remove_prefix(1);
+        return value;
+    };
+    for (int part = 0; part < 4; ++part) {
+        const auto x = next(a), y = next(b);
+        if (x != y) return x < y ? -1 : 1;
+    }
+    return 0;
+}
 Json parse(std::string_view bytes) {
     if (bytes.empty() || bytes.size() > MaxMessageBytes) throw Error("LIMIT_EXCEEDED");
     struct Frame {bool array=false;std::size_t count=0;std::set<std::string> keys;};
@@ -45,8 +67,8 @@ std::string stringField(const Json& value, std::string_view key, std::size_t max
     return text;
 }
 void validateRequest(const Json& request) {
-    if (!request.is_object() || request.size() > 6) throw Error("MALFORMED_MESSAGE");
-    static const std::set<std::string> fields{"v","id","game","op","token","args"};
+    if (!request.is_object() || request.size() > 7) throw Error("MALFORMED_MESSAGE");
+    static const std::set<std::string> fields{"v","id","game","op","token","args","titleVersion"};
     for (auto it=request.begin(); it!=request.end(); ++it)
         if (!fields.contains(it.key())) throw Error("MALFORMED_MESSAGE");
     if (!request.contains("v") || !request["v"].is_number_integer()) throw Error("MALFORMED_MESSAGE");
@@ -55,6 +77,7 @@ void validateRequest(const Json& request) {
         if (!identifier(stringField(request,key,64))) throw Error("INVALID_ARGUMENT");
     if (!request.contains("args") || !request["args"].is_object()) throw Error("INVALID_ARGUMENT");
     if (request.contains("token")) (void)stringField(request,"token",128);
+    if (request.contains("titleVersion") && !validVersion(stringField(request,"titleVersion",32))) throw Error("INVALID_ARGUMENT");
 }
 void validateSessionProperties(const Json& properties) {
     if(!properties.is_array()||properties.size()!=SessionPropertyCount)throw Error("INVALID_ARGUMENT");

@@ -7,6 +7,8 @@
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 #include <optional>
+#include "CNA/Internal/Net/VoiceChat.hpp"
+#include <cmath>
 
 namespace {
 using namespace OnlineSessionTesting;
@@ -245,7 +247,8 @@ TEST_F(OnlineNetworkSessionTest, RankedCreateRefusesJoinInProgressAndPrivateSlot
     // No public slot is advertised until the new capacity reaches the directory.
     until([&]{const auto id=sessionId("b",1);if(id.empty())return false;
         const auto value=service->sessionDirectory().get("a",id);return value.maxGamers==5&&value.privateSlots==1;});
-    EXPECT_THROW(session->AddLocalGamer(gamer(1)),System::NotSupportedException);
+    // Created for one local gamer: the local limit refuses another, as for SystemLink.
+    EXPECT_THROW(session->AddLocalGamer(gamer(1)),System::InvalidOperationException);
 }
 
 TEST_F(OnlineNetworkSessionTest, JoinFailuresMapToReferenceExceptionFamilies) {
@@ -287,4 +290,240 @@ TEST_F(OnlineNetworkSessionTest, CallbackMayEndTheCreateAndTheSessionIsImmediate
     EXPECT_THROW((void)NetworkSession::EndCreate(result.get()),System::InvalidOperationException);
     session->Update();EXPECT_TRUE(session->getIsHostProperty());
 }
+
+namespace {
+using Microsoft::Xna::Framework::Net::HostChangedEventArgs;
+// One more private machine for three-machine sessions: its own engine over the fixture's routes.
+struct Machine {
+    std::unique_ptr<ServiceENetSession> engine;
+    std::vector<ServiceENetObservation> observed;
+};
+}
+
+TEST_F(OnlineNetworkSessionTest, AHostLeavingWithMigrationAllowedHandsTheSessionToTheJoiner) {
+    privatePeer(false);
+    Service::ServiceSessionSettings settings;settings.maxGamers=6;settings.properties[2]=5;settings.allowHostMigration=true;
+    peer->publish(settings);
+    until([&]{const auto id=sessionId("b");return !id.empty()&&service->sessionDirectory().get("a",id).allowHostMigration;});
+    auto found=NetworkSession::Find(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(1),gamer(3)},{});
+    ASSERT_EQ(1,found.getCountProperty());
+    std::unique_ptr<System::IAsyncResult> joining(NetworkSession::BeginJoin(&std::as_const(found)[0],{},{}));
+    until([&]{return joining->getIsCompletedProperty();});
+    session=NetworkSession::EndJoin(joining.get());
+    ASSERT_NE(nullptr,session);EXPECT_FALSE(session->getIsHostProperty());
+    // The host's value reaches every machine, as XNA's SessionInfo does.
+    EXPECT_TRUE(session->getAllowHostMigrationProperty());
+    auto* oldHost=session->getHostProperty();ASSERT_NE(nullptr,oldHost);EXPECT_EQ("Alice",oldHost->getGamertagProperty());
+    std::vector<std::string> left;std::optional<std::pair<NetworkGamer*,NetworkGamer*>> changed;int ended=0;
+    session->GamerLeft+=[&](auto*,const GamerLeftEventArgs& args){left.push_back(args.getGamerProperty()->getGamertagProperty());};
+    session->HostChanged+=[&](auto*,const HostChangedEventArgs& args) {
+        // The old host's gamers have left before the host changes.
+        EXPECT_EQ(2u,left.size());changed=std::pair{args.getOldHostProperty(),args.getNewHostProperty()};
+    };
+    session->SessionEnded+=[&](auto*,const NetworkSessionEndedEventArgs&){++ended;};
+
+    peer.reset();
+    until([&]{return changed.has_value();});
+    EXPECT_EQ(oldHost,changed->first);
+    const auto& locals=session->getLocalGamersProperty();
+    EXPECT_EQ(locals[0],changed->second);EXPECT_EQ(locals[0],session->getHostProperty());
+    EXPECT_TRUE(session->getIsHostProperty());EXPECT_TRUE(locals[0]->getIsHostProperty());EXPECT_FALSE(locals[1]->getIsHostProperty());
+    EXPECT_EQ((std::vector<std::string>{"Alice","Charlie"}),left);
+    EXPECT_EQ(2,session->getAllGamersProperty().getCountProperty());
+    // IDs are the directory's ordinals, so the survivors keep theirs.
+    EXPECT_EQ(3,locals[0]->getIdProperty());EXPECT_EQ(4,locals[1]->getIdProperty());
+    for(int index=0;index<20;++index)tick();
+    EXPECT_EQ(0,ended);
+    // The new host holds the host's authority: its settings reach the directory.
+    session->setMaxGamersProperty(8);
+    const auto id=service->sessionDirectory().find("a",kind,1,{},0,32).sessions.front().session;
+    until([&]{return service->sessionDirectory().get("b",id).maxGamers==8;});
+    const auto directory=service->sessionDirectory().find("a",kind,1,{},0,32);
+    ASSERT_EQ(1u,directory.sessions.size());EXPECT_EQ("b",directory.sessions.front().hostId);
+}
+
+TEST_F(OnlineNetworkSessionTest, WithoutMigrationTheHostLeavingStillEndsTheSession) {
+    privatePeer(false);
+    auto found=NetworkSession::Find(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(1),gamer(3)},{});
+    ASSERT_EQ(1,found.getCountProperty());
+    std::unique_ptr<System::IAsyncResult> joining(NetworkSession::BeginJoin(&std::as_const(found)[0],{},{}));
+    until([&]{return joining->getIsCompletedProperty();});
+    session=NetworkSession::EndJoin(joining.get());
+    EXPECT_FALSE(session->getAllowHostMigrationProperty());
+    std::optional<NetworkSessionEndReason> reason;int changes=0;
+    session->SessionEnded+=[&](auto*,const NetworkSessionEndedEventArgs& args){reason=args.getEndReasonProperty();};
+    session->HostChanged+=[&](auto*,const HostChangedEventArgs&){++changes;};
+    peer.reset();
+    until([&]{return reason.has_value();});
+    EXPECT_EQ(NetworkSessionEndReason::HostEndedSession,*reason);EXPECT_EQ(0,changes);
+}
+
+TEST_F(OnlineNetworkSessionTest, AClientFollowsTheDirectoryToANewRemoteHost) {
+    // Three machines: Alice hosts, Bob joins second, then this process's Charlie and Dana.
+    auto machine=[&](OnlineSessionRequest::Operation operation,std::vector<std::string> users,std::vector<std::string> names,const std::string& target) {
+        OnlineSessionRequest request;request.operation=operation;request.users=users;request.owner=users.front();
+        request.kind=kind;request.settings.maxGamers=6;request.settings.allowHostMigration=true;request.session=target;
+        OnlineSessionPreparation preparing(service,request,{},preparation());
+        until([&]{return preparing.complete();});
+        return std::make_unique<ServiceENetSession>(preparing.take(),names,routes());
+    };
+    Machine alice,bob;
+    alice.engine=machine(OnlineSessionRequest::Operation::Create,{"a"},{"Alice"},{});
+    const auto id=sessionId("b",1);ASSERT_FALSE(id.empty());
+    bob.engine=machine(OnlineSessionRequest::Operation::Join,{"b"},{"Bob"},id);
+    auto pump=[&]{for(auto* each:{&alice,&bob})if(each->engine)for(auto& event:each->engine->update())each->observed.push_back(std::move(event));};
+    until([&]{pump();return bob.engine->ready();});
+    auto found=NetworkSession::Find(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(2),gamer(3)},{});
+    ASSERT_EQ(1,found.getCountProperty());
+    std::unique_ptr<System::IAsyncResult> joining(NetworkSession::BeginJoin(&std::as_const(found)[0],{},{}));
+    until([&]{pump();return joining->getIsCompletedProperty();});
+    session=NetworkSession::EndJoin(joining.get());
+    until([&]{pump();return session->getAllGamersProperty().getCountProperty()==4;});
+    EXPECT_TRUE(session->getAllowHostMigrationProperty());
+    EXPECT_EQ("Alice",session->getHostProperty()->getGamertagProperty());
+    std::optional<std::pair<std::string,std::string>> changed;
+    session->HostChanged+=[&](auto*,const HostChangedEventArgs& args) {
+        changed=std::pair{args.getOldHostProperty()->getGamertagProperty(),args.getNewHostProperty()->getGamertagProperty()};
+    };
+    alice.engine.reset();
+    until([&]{pump();return changed.has_value();});
+    EXPECT_EQ((std::pair<std::string,std::string>{"Alice","Bob"}),*changed);
+    auto* host=session->getHostProperty();
+    EXPECT_EQ("Bob",host->getGamertagProperty());EXPECT_FALSE(host->getIsLocalProperty());EXPECT_TRUE(host->getIsHostProperty());
+    EXPECT_FALSE(session->getIsHostProperty());
+    EXPECT_EQ(3,session->getAllGamersProperty().getCountProperty());
+    // Data still flows both ways through the new host.
+    auto* charlie=session->getLocalGamersProperty()[0];
+    charlie->SendData(std::vector<SharpRuntime::bytecs>{7},Microsoft::Xna::Framework::Net::SendDataOptions::Reliable,host);
+    until([&]{pump();session->Update();return std::any_of(bob.observed.begin(),bob.observed.end(),[](const auto& value){return value.data.has_value();});});
+    EXPECT_TRUE(std::any_of(bob.observed.begin(),bob.observed.end(),[](const auto& value){return value.type==ServiceENetObservation::Type::HostChanged;}));
+    bob.engine->send(host->getIdProperty(),charlie->getIdProperty(),{9},Microsoft::Xna::Framework::Net::SendDataOptions::Reliable);
+    until([&]{pump();return charlie->getIsDataAvailableProperty();});
+}
+TEST_F(OnlineNetworkSessionTest, AHostsAddedLocalGamerJoinsAtUpdateOnEveryMachine) {
+    session=NetworkSession::Create(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(0)},6,0,properties());
+    privatePeer(true,sessionId("b"));
+    until([&]{return peer->ready()&&session->getAllGamersProperty().getCountProperty()==3;});
+    std::vector<std::string> joined;
+    session->GamerJoined+=[&](auto*,const GamerJoinedEventArgs& args){joined.push_back(args.getGamerProperty()->getGamertagProperty());};
+    joined.clear();
+    session->AddLocalGamer(gamer(2));
+    // As the reference: the gamer arrives later, through GamerJoined.
+    EXPECT_EQ(1,session->getLocalGamersProperty().getCountProperty());
+    EXPECT_THROW(session->AddLocalGamer(gamer(2)),System::ArgumentException);
+    until([&]{return joined.size()==1;});
+    EXPECT_EQ("Charlie",joined.front());
+    const auto& locals=session->getLocalGamersProperty();ASSERT_EQ(2,locals.getCountProperty());
+    auto* charlie=locals[1];
+    EXPECT_TRUE(charlie->getIsLocalProperty());EXPECT_FALSE(charlie->getIsHostProperty());EXPECT_FALSE(charlie->getIsPrivateSlotProperty());
+    EXPECT_EQ(4,charlie->getIdProperty());
+    EXPECT_EQ(&locals[0]->getMachineProperty(),&charlie->getMachineProperty());
+    EXPECT_EQ(charlie,session->FindGamerById(4));
+    // The other machine learns of it from the host.
+    until([&]{return std::any_of(observed.begin(),observed.end(),[](const auto& value){
+        return value.type==ServiceENetObservation::Type::Joined&&!value.gamers.empty()&&value.gamers.front().Gamertag!="Alice"
+            &&std::any_of(value.gamers.begin(),value.gamers.end(),[](const auto& entry){return entry.Gamertag=="Charlie";});});});
+    auto* bob=session->getRemoteGamersProperty()[0];
+    charlie->SendData(std::vector<SharpRuntime::bytecs>{4,2},Microsoft::Xna::Framework::Net::SendDataOptions::Reliable,bob);
+    until([&]{session->Update();return std::any_of(observed.begin(),observed.end(),[](const auto& value){return value.data&&value.data->SenderWireId==4;});});
+    peer->send(bob->getIdProperty(),4,{8},Microsoft::Xna::Framework::Net::SendDataOptions::Reliable);
+    until([&]{return charlie->getIsDataAvailableProperty();});
+    const auto directory=service->sessionDirectory().get("c",Service::activeOnlineSession()->session);
+    EXPECT_TRUE(std::any_of(directory.members.begin(),directory.members.end(),[&](const auto& row){
+        return row.userId=="c"&&row.machine==directory.hostMachine&&row.ordinal==3;}));
+}
+
+TEST_F(OnlineNetworkSessionTest, AClientsAddedLocalGamerReachesTheHost) {
+    privatePeer(false);
+    auto found=NetworkSession::Find(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(1)},{});
+    ASSERT_EQ(1,found.getCountProperty());
+    std::unique_ptr<System::IAsyncResult> joining(NetworkSession::BeginJoin(&std::as_const(found)[0],{},{}));
+    until([&]{return joining->getIsCompletedProperty();});
+    session=NetworkSession::EndJoin(joining.get());
+    until([&]{return session->getAllGamersProperty().getCountProperty()==3;});
+    int joinedEvents=0;
+    session->GamerJoined+=[&](auto*,const GamerJoinedEventArgs&){++joinedEvents;};
+    joinedEvents=0;
+    session->AddLocalGamer(gamer(3));
+    until([&]{return session->getLocalGamersProperty().getCountProperty()==2;});
+    auto* dana=session->getLocalGamersProperty()[1];
+    EXPECT_EQ("Dana",dana->getGamertagProperty());EXPECT_FALSE(session->getIsHostProperty());
+    // The host reads the grown group from the directory and announces it.
+    until([&]{return std::any_of(observed.begin(),observed.end(),[&](const auto& value){
+        return value.type==ServiceENetObservation::Type::Joined&&std::any_of(value.gamers.begin(),value.gamers.end(),
+            [&](const auto& entry){return entry.Gamertag=="Dana"&&entry.WireId==dana->getIdProperty();});});});
+    auto* host=session->getHostProperty();
+    dana->SendData(std::vector<SharpRuntime::bytecs>{3},Microsoft::Xna::Framework::Net::SendDataOptions::Reliable,host);
+    until([&]{session->Update();return std::any_of(observed.begin(),observed.end(),[&](const auto& value){
+        return value.data&&value.data->SenderWireId==dana->getIdProperty();});});
+    peer->send(host->getIdProperty(),dana->getIdProperty(),{6},Microsoft::Xna::Framework::Net::SendDataOptions::Reliable);
+    until([&]{return dana->getIsDataAvailableProperty();});
+    EXPECT_EQ(1,joinedEvents);
+}
+
+TEST_F(OnlineNetworkSessionTest, AnAddTheServiceRefusesLeavesTheGamerOut) {
+    session=NetworkSession::Create(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(0)},6,0,properties());
+    // Charlie already belongs to another session of this title.
+    Service::ServiceSessionSettings settings;settings.maxGamers=2;
+    service->sessionDirectory().create("c",{"c"},Service::ServiceSessionKind::PlayerMatch,settings);
+    int joined=0;session->GamerJoined+=[&](auto*,const GamerJoinedEventArgs&){++joined;};
+    joined=0;
+    session->AddLocalGamer(gamer(2));
+    for(int frame=0;frame<200;++frame){tick();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    EXPECT_EQ(0,joined);EXPECT_EQ(1,session->getLocalGamersProperty().getCountProperty());
+    // Nothing is left pending: the same gamer may be asked for again.
+    EXPECT_NO_THROW(session->AddLocalGamer(gamer(2)));
+}
 #endif
+
+namespace {
+// A microphone hearing a steady tone and a speaker counting what it played.
+struct OnlineVoiceProbe {int played=0;double phase=0.0;};
+class OnlineTone final : public IVoiceCapture {
+public:
+    explicit OnlineTone(std::shared_ptr<OnlineVoiceProbe> probe):probe_(std::move(probe)){}
+    bool present() override {return true;}
+    void setOpen(bool) override {}
+    void read(std::vector<std::int16_t>& out) override {
+        for(int i=0;i<2*VoiceFrameSamples;++i){out.push_back(static_cast<std::int16_t>(8000.0*std::sin(probe_->phase)));probe_->phase+=0.17;}
+    }
+private:
+    std::shared_ptr<OnlineVoiceProbe> probe_;
+};
+class OnlineSpeaker final : public IVoicePlayback {
+public:
+    explicit OnlineSpeaker(std::shared_ptr<OnlineVoiceProbe> probe):probe_(std::move(probe)){}
+    void play(std::uint8_t,std::span<const std::int16_t>) override {++probe_->played;}
+    void release(std::uint8_t) override {}
+private:
+    std::shared_ptr<OnlineVoiceProbe> probe_;
+};
+}
+
+// GSX-E1: voice crosses an online session on the unreliable channel. Alice (Player One) owns this
+// machine's microphone; one frame goes to the joined machine's first gamer, and speech from that
+// machine makes its gamer talk here.
+TEST_F(OnlineNetworkSessionTest, VoiceCrossesTheServiceSessionBothWays) {
+    if(!voiceAvailable())GTEST_SKIP()<<"built without libopus";
+    auto probe=std::make_shared<OnlineVoiceProbe>();
+    setVoiceDevicesForTesting([probe]{return std::make_unique<OnlineTone>(probe);},[probe]{return std::make_unique<OnlineSpeaker>(probe);});
+    struct Restore{~Restore(){setVoiceDevicesForTesting({},{});}}restore;
+    session=NetworkSession::Create(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(0),gamer(2)},6,0,properties());
+    privatePeer(true,sessionId("b"));
+    until([&]{return peer->ready()&&session->getAllGamersProperty().getCountProperty()==4;});
+    until([&]{return std::any_of(observed.begin(),observed.end(),[](const auto& value){return value.voice&&(value.voice->Flags&VoiceFlagTalking);});});
+    const auto speech=*std::find_if(observed.begin(),observed.end(),[](const auto& value){return value.voice&&(value.voice->Flags&VoiceFlagTalking);})->voice;
+    EXPECT_EQ(1,speech.SenderWireId);EXPECT_EQ(3,speech.TargetWireId);
+    auto* alice=session->getLocalGamersProperty()[0];auto* charlie=session->getLocalGamersProperty()[1];
+    EXPECT_TRUE(alice->getHasVoiceProperty());EXPECT_TRUE(alice->getIsTalkingProperty());
+    EXPECT_FALSE(charlie->getHasVoiceProperty());
+    auto* bob=session->getRemoteGamersProperty()[0];
+    EXPECT_FALSE(bob->getIsTalkingProperty());
+    VoiceDataMessage reply=speech;reply.SenderWireId=3;reply.TargetWireId=1;
+    peer->sendVoice(reply);
+    until([&]{return probe->played>0;});
+    EXPECT_TRUE(bob->getHasVoiceProperty());EXPECT_TRUE(bob->getIsTalkingProperty());
+    // A machine cannot speak for a gamer it does not own.
+    reply.SenderWireId=1;
+    EXPECT_THROW(peer->sendVoice(reply),Service::ServiceOperationError);
+}

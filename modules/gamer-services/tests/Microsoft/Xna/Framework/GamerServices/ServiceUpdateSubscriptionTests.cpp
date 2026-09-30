@@ -127,6 +127,8 @@ TEST_F(ServiceUpdateSubscriptionTest, EmptyCallbacksAndForeignThreadDispatchAreR
 
 TEST_F(ServiceUpdateSubscriptionTest, AutomaticPresenceSaturationStillDrainsWorkAndProgressesObservers) {
     service->signIn(0,"Alice","fixture");service->signIn(1,"Bob","fixture");GamerServicesDispatcher::Update();
+    // The social watcher reads accounts that just signed in at once; that read finishes first.
+    GamerServicesDispatcher::Update();
     service->changeFriend("a","Bob","add");service->changeFriend("b","Alice","accept");
     auto* alice=(*Gamer::getSignedInGamersProperty())[0];
     alice->getPresenceProperty().setPresenceModeProperty(GamerPresenceMode::Level);

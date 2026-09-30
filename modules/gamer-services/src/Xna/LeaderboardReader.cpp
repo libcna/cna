@@ -168,6 +168,12 @@ namespace Microsoft::Xna::Framework::GamerServices
             auto& columns=entry.getColumnsProperty();
             for(const auto& [key,column]:row.columns) {
                 if(column.type=="string")columns.SetValue(key,std::get<std::string>(column.value));
+                else if(column.type=="stream") {
+                    // Read-only, as XNA offers a Stream column only through GetValueStream.
+                    const auto& hex=std::get<std::string>(column.value);std::vector<unsigned char> bytes;
+                    for(std::size_t i=0;i+1<hex.size();i+=2)bytes.push_back(static_cast<unsigned char>(std::stoi(hex.substr(i,2),nullptr,16)));
+                    (void)columns.AddStreamInternal(key,bytes,false);
+                }
                 else if(column.type=="single")columns.SetValue(key,static_cast<float>(std::get<double>(column.value)));
                 else if(column.type=="double")columns.SetValue(key,std::get<double>(column.value));
                 else {

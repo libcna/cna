@@ -145,6 +145,8 @@ void readPrimitive(const cgltf_primitive& primitive,const std::vector<int>& skin
     if(!out.feature.empty()&&std::ranges::find(Features,out.feature)==Features.end())malformed("feature");
     out.layer=description.value("cnaLayer",0);
     if(out.layer<0||out.layer>1)malformed("layer");
+    out.specular=description.value("cnaSpecular",1.0f);
+    if(!(out.specular>=0.0f&&out.specular<=4.0f))malformed("specular");
     const auto& pbr=material->pbr_metallic_roughness;
     out.color=Vector3(std::clamp(pbr.base_color_factor[0],0.0f,1.0f),std::clamp(pbr.base_color_factor[1],0.0f,1.0f),
                       std::clamp(pbr.base_color_factor[2],0.0f,1.0f));

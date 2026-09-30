@@ -3,9 +3,11 @@
 #include "Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/NetworkException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/NetworkNotAvailableException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionJoinException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GameUpdateRequiredException.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
@@ -29,7 +31,8 @@ NetworkSessionState publicState(ServiceSessionState state) {
 }
 bool sameSettings(const ServiceSessionSettings& left,const ServiceSessionSettings& right) {
     return left.maxGamers==right.maxGamers&&left.privateSlots==right.privateSlots&&left.state==right.state
-        &&left.allowJoinInProgress==right.allowJoinInProgress&&left.properties==right.properties;
+        &&left.allowJoinInProgress==right.allowJoinInProgress&&left.allowHostMigration==right.allowHostMigration
+        &&left.properties==right.properties;
 }
 const ServiceSessionMember* member(const ServiceSessionSnapshot& snapshot,unsigned char id) {
     for(const auto& row:snapshot.members)if(row.ordinal+1==id)return &row;
@@ -61,6 +64,9 @@ void throwOnlineEndFailure(std::exception_ptr error,bool joining) {
         if(code=="NOT_AUTHORIZED"||code=="UNAUTHENTICATED")
             throw GamerPrivilegeException("A local gamer is not signed in with the privilege this network session requires.",error);
         if(code=="NOT_SUPPORTED")throw NetworkNotAvailableException("The CNA online session service is not available.",error);
+        if(code=="UPDATE_REQUIRED")
+            throw Microsoft::Xna::Framework::GamerServices::GameUpdateRequiredException(
+                "This version of the game is no longer supported by CNA Gamer Services. Install the latest version.");
         throw NetworkException("A network communication failure prevented the network session from starting.",error);
     }
 }
@@ -130,7 +136,7 @@ void OnlineSessionBinding::apply(const ServiceSessionSnapshot& value,bool initia
     // The host authors these settings; an older snapshot must not revert newer local values.
     if(host_&&!initial)return;
     session_.maxGamers_=value.maxGamers;session_.privateGamerSlots_=value.privateSlots;
-    session_.allowJoinInProgress_=value.allowJoinInProgress;
+    session_.allowJoinInProgress_=value.allowJoinInProgress;session_.allowHostMigration_=value.allowHostMigration;
     Microsoft::Xna::Framework::Net::NetworkSessionProperties properties;
     for(std::size_t index=0;index<value.properties.size();++index)properties.setItem(static_cast<int>(index),value.properties[index]);
     session_.SetSessionPropertiesFromTransport(std::move(properties));
@@ -168,6 +174,13 @@ void OnlineSessionBinding::convert(ServiceENetObservation observation) {
             event.Reliable=observation.data->Options;session_.SendNetworkEvent(std::move(event));
             break;
         }
+        case Type::Voice: {
+            if(!observation.voice)break;
+            auto sender=gamers_.find(observation.voice->SenderWireId),target=gamers_.find(observation.voice->TargetWireId);
+            if(sender==gamers_.end()||target==gamers_.end()||!target->second->getIsLocalProperty()||sender->second->getIsLocalProperty())break;
+            session_.ReceiveVoiceInternal(sender->second,*observation.voice);
+            break;
+        }
         case Type::Snapshot:
             if(observation.snapshot)apply(*observation.snapshot,false);
             break;
@@ -178,12 +191,54 @@ void OnlineSessionBinding::convert(ServiceENetObservation observation) {
                 if(found!=gamers_.end())NetworkSession::ApplyGamerReadyInternal(*found->second,entry.IsReady);
             }
             break;
+        case Type::HostChanged:
+            if(observation.snapshot)changeHost(*observation.snapshot);
+            break;
+        case Type::LocalAdded:
+            for(const auto& entry:observation.gamers) {
+                auto found=std::find_if(pending_.begin(),pending_.end(),[&](const auto& item){return item.first->getGamertagProperty()==entry.Gamertag;});
+                if(found==pending_.end()||gamers_.contains(entry.WireId)){end("INVALID_RESPONSE");return;}
+                auto* signedIn=found->first;const auto user=found->second;pending_.erase(found);
+                // As the reference: the gamer shares this machine and joins through GamerJoined.
+                auto* added=new LocalNetworkGamer(LocalNetworkGamer::CreateInternal(signedIn,&session_));
+                added->SetId(entry.WireId);added->SetIsHost(false);added->SetIsPrivateSlot(false);
+                auto shared=session_.localGamers_[0]->GetSharedMachine();added->SetSharedMachine(shared);shared->AddGamerInternal(added);
+                session_.localGamers_.Add(added);session_.allGamers_.Add(added);session_.ownedGamers_.emplace_back(added);
+                session_.OrderGamersInternal();
+                gamers_[entry.WireId]=added;users_.push_back(user);
+                NetworkSession::NetworkEvent event;event.Type=NetworkSession::NetworkEventType::GamerJoin;event.Gamer=added;
+                session_.SendNetworkEvent(std::move(event));
+            }
+            setActiveOnlineSession(ActiveOnlineSession{snapshot_.session,snapshot_.kind,users_,engine_->origin()});
+            break;
+        case Type::AddFailed:
+            // The service refused (slots taken, game started, account busy): the gamer never joins.
+            if(!pending_.empty())pending_.erase(pending_.begin());
+            break;
         case Type::Failed:
             end(observation.failure);
             break;
         case Type::Ready:
             break;
     }
+}
+void OnlineSessionBinding::changeHost(const ServiceSessionSnapshot& value) {
+    // The old host's gamers have already left (their Left observation came first); the account
+    // owning the new host machine is the host gamer, as a session's creator was.
+    snapshot_=value;host_=snapshot_.machine==snapshot_.hostMachine;
+    NetworkGamer* hostGamer=nullptr;
+    for(const auto& [id,gamer]:gamers_) {
+        const auto* row=member(snapshot_,id);
+        const bool isHost=row&&row->userId==snapshot_.hostId&&row->machine==snapshot_.hostMachine;
+        gamer->SetIsHost(isHost);
+        if(isHost)hostGamer=gamer;
+    }
+    if(!hostGamer||hostGamer->getIsLocalProperty()!=host_){end("INVALID_RESPONSE");return;}
+    session_.isHost_=host_;
+    // A new host publishes from here on, starting from what the directory holds.
+    if(host_){desiredState_=observedState_=snapshot_.state;requested_=desired();}
+    NetworkSession::NetworkEvent event;event.Type=NetworkSession::NetworkEventType::HostChange;event.Gamer=hostGamer;
+    session_.SendNetworkEvent(std::move(event));
 }
 void OnlineSessionBinding::end(const std::string& failure) {
     if(ended_)return;ended_=true;
@@ -196,7 +251,7 @@ void OnlineSessionBinding::end(const std::string& failure) {
 }
 ServiceSessionSettings OnlineSessionBinding::desired() const {
     ServiceSessionSettings value;value.maxGamers=session_.maxGamers_;value.privateSlots=session_.privateGamerSlots_;
-    value.state=desiredState_;value.allowJoinInProgress=session_.allowJoinInProgress_;
+    value.state=desiredState_;value.allowJoinInProgress=session_.allowJoinInProgress_;value.allowHostMigration=session_.allowHostMigration_;
     for(std::size_t index=0;index<value.properties.size();++index)
         value.properties[index]=session_.sessionProperties_.getItem(static_cast<int>(index));
     return value;
@@ -234,6 +289,14 @@ void OnlineSessionBinding::send(NetworkGamer* sender,NetworkGamer* target,const 
         // Any other refusal races a transport failure that the next observation reports as SessionEnded.
     }
 }
+void OnlineSessionBinding::sendVoice(NetworkGamer* sender,NetworkGamer* target,const VoiceDataMessage& frame) {
+    if(ended_||!engine_)return;
+    auto found=gamers_.find(target->getIdProperty());
+    if(found==gamers_.end()||found->second!=target||!gamers_.contains(sender->getIdProperty()))return;
+    VoiceDataMessage message=frame;message.SenderWireId=sender->getIdProperty();message.TargetWireId=target->getIdProperty();
+    // Voice is best effort: a full queue or a refusal drops the frame; a transport failure ends the session later.
+    try{engine_->sendVoice(message);}catch(const ServiceOperationError&){}
+}
 void OnlineSessionBinding::publishReady(const std::vector<NetworkGamer*>& gamers) {
     if(ended_||!engine_)return;
     std::vector<GamerReadyEntry> entries;
@@ -250,6 +313,19 @@ void OnlineSessionBinding::removeMachine(NetworkGamer* gamer) {
     if(!row||row->machine==snapshot_.machine)return;
     // A refusal races a transport failure that the next observation reports as SessionEnded.
     try{engine_->removeMachine(row->machine);}catch(const ServiceOperationError&){}
+}
+void OnlineSessionBinding::addLocal(Microsoft::Xna::Framework::GamerServices::SignedInGamer* gamer) {
+    using Microsoft::Xna::Framework::GamerServices::GamerPrivilegeException;
+    const auto& user=GamerAccess::userId(*gamer);
+    if(user.empty()||!gamer->getIsSignedInToLiveProperty())
+        throw GamerPrivilegeException("The gamer is not signed in with the privilege this network session requires.");
+    if(ended_||!engine_)throw System::InvalidOperationException("The session has ended.");
+    try{engine_->addLocal({gamer->getGamertagProperty()},{user});}
+    catch(const ServiceOperationError&){throw System::InvalidOperationException("The session has ended.");}
+    pending_.emplace_back(gamer,user);
+}
+bool OnlineSessionBinding::adding(const Microsoft::Xna::Framework::GamerServices::SignedInGamer* gamer) const {
+    return std::any_of(pending_.begin(),pending_.end(),[&](const auto& item){return item.first==gamer;});
 }
 void OnlineSessionBinding::requestState(NetworkSessionState state) {
     desiredState_=state==NetworkSessionState::Playing?ServiceSessionState::Playing:ServiceSessionState::Lobby;

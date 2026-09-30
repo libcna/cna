@@ -23,6 +23,9 @@ namespace Microsoft::Xna::Framework::Net
     class LocalNetworkGamer final : public NetworkGamer
     {
     public:
+        /** @brief .NET type name. @return Name. */
+        GetTypeNameHPP()
+
         /**
          * @brief Gets whether an incoming packet is queued and ready to receive.
          *
@@ -48,8 +51,8 @@ namespace Microsoft::Xna::Framework::Net
         [[nodiscard]] bool getIsLocalProperty() const override;
 
         /**
-         * @brief Enables or disables sending voice data to a remote gamer. CNA carries no voice, so
-         * after the checks there is nothing to switch.
+         * @brief Enables or disables sending this gamer's voice to a remote gamer; voice is enabled
+         * for every gamer at first. Only the gamer who owns the machine's microphone has voice.
          *
          * @param remoteGamer The remote gamer to configure.
          * @param enable Whether voice sending should be enabled.

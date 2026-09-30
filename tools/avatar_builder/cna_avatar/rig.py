@@ -43,21 +43,22 @@ SIDES = (("Left", 1.0), ("Right", -1.0))
 
 BODY_TYPES = ("female", "male")
 
-# Authored proportions; the renderer scales uniformly to a description's height.
+# Authored proportions (catalog v3: a head about a fifth larger on a shorter neck, the shoulders
+# and chest lowered to meet it, shorter legs, sturdier limbs and larger hands -- a friendlier
+# toy-like figure); the renderer scales uniformly to a description's height.
 PROPORTIONS = {
-    "male": dict(height=1.80, head_center=1.635, head_joint=1.475, neck=1.405, collar=(0.035, 1.37),
-                 shoulder=(0.185, 1.355), back_upper=1.15, back_lower=0.93, hip=(0.095, 0.86),
-                 knee=(0.10, 0.47), ankle=(0.10, 0.085), toe=(0.10, 0.025, 0.115), arm_angle=72.0,
-                 upper_arm=0.27, forearm=0.245, hand=1.0),
-    "female": dict(height=1.68, head_center=1.515, head_joint=1.355, neck=1.29, collar=(0.032, 1.255),
-                   shoulder=(0.165, 1.245), back_upper=1.06, back_lower=0.88, hip=(0.098, 0.815),
-                   knee=(0.095, 0.445), ankle=(0.092, 0.08), toe=(0.092, 0.022, 0.105), arm_angle=72.0,
-                   upper_arm=0.245, forearm=0.225, hand=0.92),
+    "male": dict(height=1.80, head_center=1.566, head_joint=1.369, neck=1.321, collar=(0.037, 1.290),
+                 shoulder=(0.190, 1.266), back_upper=1.078, back_lower=0.890, hip=(0.100, 0.806),
+                 knee=(0.101, 0.444), ankle=(0.100, 0.082), toe=(0.100, 0.024, 0.132), arm_angle=73.0,
+                 upper_arm=0.246, forearm=0.222, hand=1.40),
+    "female": dict(height=1.68, head_center=1.457, head_joint=1.270, neck=1.227, collar=(0.034, 1.198),
+                   shoulder=(0.170, 1.178), back_upper=1.003, back_lower=0.834, hip=(0.102, 0.760),
+                   knee=(0.096, 0.420), ankle=(0.092, 0.078), toe=(0.092, 0.021, 0.120), arm_angle=73.0,
+                   upper_arm=0.226, forearm=0.206, hand=1.28),
 }
-HEAD_RADII = (0.125, 0.165, 0.14)
 FINGER_SEGMENTS = {"Index": (0.027, 0.019, 0.014), "Middle": (0.029, 0.021, 0.015),
                    "Ring": (0.027, 0.019, 0.014), "Small": (0.022, 0.016, 0.012), "Thumb": (0.026, 0.021, 0.015)}
-FINGER_SPREAD = {"Index": 0.024, "Middle": 0.008, "Ring": -0.008, "Small": -0.023}
+FINGER_SPREAD = {"Index": 0.026, "Middle": 0.009, "Ring": -0.009, "Small": -0.025}
 
 
 def arm_direction(sign, p):

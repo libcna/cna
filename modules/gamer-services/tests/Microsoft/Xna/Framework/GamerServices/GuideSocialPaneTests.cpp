@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
+#include "../../../../../src/Internal/Guide/GuideUi.hpp"
 #include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
@@ -14,6 +15,7 @@
 #include <array>
 
 namespace Service=CNA::Internal::GamerServices;
+namespace Ui=CNA::Internal::GamerServices::GuideUi;
 using namespace Microsoft::Xna::Framework::GamerServices;
 using Microsoft::Xna::Framework::PlayerIndex;
 namespace {
@@ -38,7 +40,7 @@ protected:
         ASSERT_EQ(2,Gamer::getSignedInGamersProperty()->getCountProperty());
     }
     void TearDown() override {
-        Guide::ResetPendingMessageBoxForTestingEXT();Guide::ResetPendingKeyboardInputForTestingEXT();
+        Ui::closeAll();Guide::ResetPendingMessageBoxForTestingEXT();Guide::ResetPendingKeyboardInputForTestingEXT();
         service->signOut(0);service->signOut(1);GamerServicesDispatcher::Update();
         Service::resetInvitationsForTesting();Service::setBackendForTesting(previous_);
     }
@@ -57,14 +59,20 @@ TEST_F(GuideSocialPaneTest, ComposeSendsAndTheRecipientReadsRepliesAndDeletes) {
     auto inbox=service->messages("b",0,10);
     ASSERT_EQ(1u,inbox.messages.size());EXPECT_EQ("Alice",inbox.messages[0].sender);EXPECT_EQ("good game",inbox.messages[0].text);
     EXPECT_EQ(1,inbox.unread);
-    Guide::ShowMessages(PlayerIndex::Two);ASSERT_TRUE(Guide::getHasPendingMessageBoxEXTProperty());
+    // The inbox lists it; opening marks it read; Reply writes back to the sender.
+    Guide::ShowMessages(PlayerIndex::Two);settle();
+    ASSERT_EQ("messages",Ui::currentScreenForTesting());
+    EXPECT_EQ(std::vector<std::string>{"Alice: good game"},Ui::labelsForTesting());
+    Ui::sendForTesting(Ui::Command::Accept);settle();
+    ASSERT_EQ("message",Ui::currentScreenForTesting());
     EXPECT_EQ(0,service->messages("b",0,10).unread);
-    Guide::SimulateMessageBoxClickEXT(1);settle();
+    Ui::clickForTesting(0);settle();
     ASSERT_TRUE(Guide::getHasPendingKeyboardInputEXTProperty());type("rematch?");settle();
     ASSERT_EQ(1u,service->messages("a",0,10).messages.size());EXPECT_EQ("rematch?",service->messages("a",0,10).messages[0].text);
-    Guide::ShowMessages(PlayerIndex::Two);Guide::SimulateMessageBoxClickEXT(2);settle();
+    // Delete removes it and returns to the inbox.
+    Ui::clickForTesting(1);settle();
+    EXPECT_EQ("messages",Ui::currentScreenForTesting());
     EXPECT_EQ(0,service->messages("b",0,10).total);
-    ASSERT_TRUE(Guide::getHasPendingMessageBoxEXTProperty());Guide::SimulateMessageBoxClickEXT(0);settle();
 }
 
 TEST_F(GuideSocialPaneTest, ComposeWithoutRecipientsAsksForAGamertag) {
@@ -74,18 +82,23 @@ TEST_F(GuideSocialPaneTest, ComposeWithoutRecipientsAsksForAGamertag) {
 }
 
 TEST_F(GuideSocialPaneTest, PlayerReviewRecordsPreferAvoidAndClear) {
-    Guide::ShowPlayerReview(PlayerIndex::One,gamer(1));Guide::SimulateMessageBoxClickEXT(1);settle();
-    Guide::ShowPlayerReview(PlayerIndex::One,gamer(1));Guide::SimulateMessageBoxClickEXT(0);settle();
+    Guide::ShowPlayerReview(PlayerIndex::One,gamer(1));
+    ASSERT_EQ("review",Ui::currentScreenForTesting());
+    Ui::clickForTesting(1);settle();
+    EXPECT_FALSE(Guide::getIsVisibleProperty());
+    Guide::ShowPlayerReview(PlayerIndex::One,gamer(1));Ui::clickForTesting(0);settle();
     // The fixture keeps the latest rating; clearing withdraws it.
-    Guide::ShowPlayerReview(PlayerIndex::One,gamer(1));Guide::SimulateMessageBoxClickEXT(2);settle();
-    Guide::ShowPlayerReview(PlayerIndex::One,gamer(1));Guide::SimulateMessageBoxClickEXT(3);settle();
+    Guide::ShowPlayerReview(PlayerIndex::One,gamer(1));Ui::clickForTesting(2);settle();
+    // Back leaves without a review.
+    Guide::ShowPlayerReview(PlayerIndex::One,gamer(1));Ui::sendForTesting(Ui::Command::Back);settle();
     EXPECT_FALSE(Guide::getIsVisibleProperty());
 }
 
 TEST_F(GuideSocialPaneTest, UnavailableServicesExplainThemselvesInsteadOfDoingNothing) {
-    Guide::ShowMarketplace(PlayerIndex::One);EXPECT_TRUE(Guide::getHasPendingMessageBoxEXTProperty());Guide::SimulateMessageBoxClickEXT(0);
-    Guide::ShowParty(PlayerIndex::One);EXPECT_TRUE(Guide::getHasPendingMessageBoxEXTProperty());Guide::SimulateMessageBoxClickEXT(0);
-    Guide::ShowPartySessions(PlayerIndex::One);EXPECT_TRUE(Guide::getHasPendingMessageBoxEXTProperty());Guide::SimulateMessageBoxClickEXT(0);
+    Guide::ShowMarketplace(PlayerIndex::One);EXPECT_EQ("content",Ui::currentScreenForTesting());Ui::sendForTesting(Ui::Command::Back);
+    Guide::ShowParty(PlayerIndex::One);EXPECT_EQ("party",Ui::currentScreenForTesting());Ui::sendForTesting(Ui::Command::Back);
+    Guide::ShowPartySessions(PlayerIndex::One);EXPECT_EQ("partySessions",Ui::currentScreenForTesting());Ui::sendForTesting(Ui::Command::Back);
+    EXPECT_FALSE(Guide::getIsVisibleProperty());
     EXPECT_FALSE(Guide::getIsTrialModeProperty());
     EXPECT_THROW(Guide::ShowMarketplace(PlayerIndex::Three),GamerPrivilegeException);
 }
@@ -93,11 +106,16 @@ TEST_F(GuideSocialPaneTest, UnavailableServicesExplainThemselvesInsteadOfDoingNo
 TEST_F(GuideSocialPaneTest, PlayersAndAchievementsPanesListServiceState) {
     Service::rememberRecentPlayer("Bob");Service::rememberRecentPlayer("Carol");Service::rememberRecentPlayer("Bob");
     EXPECT_EQ((std::vector<std::string>{"Bob","Carol"}),Service::recentPlayers());
-    Guide::ShowPlayers(PlayerIndex::One);ASSERT_TRUE(Guide::getHasPendingMessageBoxEXTProperty());
-    Guide::SimulateMessageBoxClickEXT(0);settle();ASSERT_TRUE(Guide::getHasPendingKeyboardInputEXTProperty());
-    type("Bob");settle();EXPECT_TRUE(Guide::getHasPendingMessageBoxEXTProperty());
-    Guide::ResetPendingMessageBoxForTestingEXT();
-    Guide::ShowAchievementsEXT(PlayerIndex::One);EXPECT_TRUE(Guide::getHasPendingMessageBoxEXTProperty());
+    Guide::ShowPlayers(PlayerIndex::One);
+    ASSERT_EQ("players",Ui::currentScreenForTesting());
+    EXPECT_EQ((std::vector<std::string>{"Bob","Carol"}),Ui::labelsForTesting());
+    Ui::sendForTesting(Ui::Command::Accept);settle();
+    ASSERT_EQ("gamerCard",Ui::currentScreenForTesting());
+    EXPECT_EQ("Bob",Ui::labelsForTesting().at(0));
+    Ui::closeAll();
+    Guide::ShowAchievementsEXT(PlayerIndex::One);settle();
+    ASSERT_EQ("achievements",Ui::currentScreenForTesting());
+    EXPECT_EQ(std::vector<std::string>{"[ ] First steps"},Ui::labelsForTesting());
 }
 
 TEST_F(GuideSocialPaneTest, DelayNotificationsKeepsAnActiveDelayAndCapsIt) {

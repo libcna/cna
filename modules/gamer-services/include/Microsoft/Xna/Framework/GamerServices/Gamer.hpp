@@ -4,6 +4,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/LeaderboardWriter.hpp"
 #include "System/AsyncCallback.hpp"
 #include "System/IAsyncResult.hpp"
+#include "System/Object.hpp"
 #include "System/Threading/EventWaitHandle.hpp"
 #include <any>
 #include <optional>
@@ -22,11 +23,14 @@ namespace Microsoft::Xna::Framework::GamerServices
      *
      * Abstract base class for all gamer types in the XNA GamerServices API.
      */
-    class Gamer
+    class Gamer : public System::Object
     {
     public:
         /** @brief Virtual destructor for safe polymorphic destruction. */
-        virtual ~Gamer() = default;
+        ~Gamer() override = default;
+
+        /** @brief .NET type name, Microsoft.Xna.Framework.GamerServices.Gamer. @return Name. */
+        GetTypeNameHPP()
 
         /**
          * @brief Gets the display name of the gamer.
@@ -100,7 +104,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          *
          * @return The display name string.
          */
-        [[nodiscard]] virtual std::string ToString() const;
+        [[nodiscard]] std::string ToString() const override;
 
         /**
          * @brief Synchronously retrieves the profile for this gamer.

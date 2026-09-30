@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 #include "CNA/Internal/Net/ENetBackend.hpp"
 #include "CNA/Internal/Net/ENetDiscoveryService.hpp"
+#include "CNA/Internal/Net/VoiceChat.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
@@ -481,9 +482,47 @@ namespace Microsoft::Xna::Framework::Net
         ReleaseSessionResources();
     }
 
+    void NetworkSession::UpdateVoiceInternal()
+    {
+        if (!voice_)
+        {
+            if (!(CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(sessionType_) || online_)) return;
+            if (!CNA::Internal::Net::voiceAvailable()) return;
+            CNA::Internal::Net::VoiceChat::Hooks hooks;
+            hooks.gamers = [this] {
+                std::vector<NetworkGamer*> gamers;
+                for (NetworkGamer* gamer : allGamers_) gamers.push_back(gamer);
+                return gamers;
+            };
+            hooks.send = [this](NetworkGamer* sender, NetworkGamer* target, const CNA::Internal::Net::VoiceDataMessage& frame) {
+                if (online_) online_->sendVoice(sender, target, frame);
+                else CNA::Internal::Net::ENetBackend::SendVoice(this, sender, target, frame);
+            };
+            hooks.apply = [](NetworkGamer& gamer, bool hasVoice, bool talking, bool muted) {
+                gamer.hasVoice_ = hasVoice;
+                gamer.isTalking_ = talking;
+                gamer.isMutedByLocalUser_ = muted;
+            };
+            voice_ = std::make_unique<CNA::Internal::Net::VoiceChat>(std::move(hooks));
+        }
+        voice_->update(std::chrono::steady_clock::now());
+    }
+
+    void NetworkSession::ReceiveVoiceInternal(NetworkGamer* sender, const CNA::Internal::Net::VoiceDataMessage& frame)
+    {
+        if (voice_) voice_->receive(sender, frame, std::chrono::steady_clock::now());
+    }
+
+    void NetworkSession::EnableSendVoiceInternal(LocalNetworkGamer* local, NetworkGamer* remote, bool enable)
+    {
+        if (voice_) voice_->enableSend(local, remote, enable);
+    }
+
     void NetworkSession::ReleaseSessionResources()
     {
         if(isDisposed_)return;
+        // Voice first: it holds gamer pointers and a capture session.
+        voice_.reset();
         // Finalization must not invoke user callbacks or throw from a C++ destructor.
         AbandonServiceLeaderboards();
         for (LocalNetworkGamer* gamer : localGamers_)
@@ -547,6 +586,7 @@ namespace Microsoft::Xna::Framework::Net
             CNA::Internal::Net::ENetDiscoveryService::Poll();
         }
         if (online_) online_->pump();
+        UpdateVoiceInternal();
 
         while (!networkEvents_.empty())
         {
@@ -657,16 +697,21 @@ namespace Microsoft::Xna::Framework::Net
         if (sessionState_ == NetworkSessionState::Playing && !allowJoinInProgress_)
             throw System::InvalidOperationException("The session does not allow joining a game in progress.");
         if (sessionState_ == NetworkSessionState::Ended) throw System::InvalidOperationException("The session has ended.");
-        int fullPublicSlots = 0;
+        if (online_ && online_->adding(gamer)) throw System::ArgumentException("The gamer is already in the session.", "gamer");
+        int fullPublicSlots = online_ ? online_->pendingAdds() : 0;
         for (NetworkGamer* member : allGamers_) if (!member->getIsPrivateSlotProperty()) ++fullPublicSlots;
         if (maxGamers_ - privateGamerSlots_ - fullPublicSlots <= 0)
             throw System::InvalidOperationException("The session has no open public slot.");
-        // The service directory admits one complete local group per machine; extending it is not implemented yet.
-        if (online_)
-            throw System::NotSupportedException("CNA online sessions do not yet add local gamers after creation or join.");
-        if (localGamers_.getCountProperty() == maxLocalGamers_)
+        if (localGamers_.getCountProperty() + (online_ ? online_->pendingAdds() : 0) >= maxLocalGamers_)
         {
             throw System::InvalidOperationException("LocalGamer max limit!");
+        }
+        // Online, as the reference's kernel command: the service adds the gamer to this machine's
+        // group and it joins, with GamerJoined, at a later Update.
+        if (online_)
+        {
+            online_->addLocal(gamer);
+            return;
         }
         auto* adding = new LocalNetworkGamer(LocalNetworkGamer::CreateInternal(gamer, this));
         adding->SetIsHost(isHost_);
@@ -971,6 +1016,7 @@ namespace Microsoft::Xna::Framework::Net
     void NetworkSession::RemoveGamer(NetworkGamer* gamer, NetworkSessionEndReason reason)
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
+        if (voice_) voice_->forget(gamer);
         bool isLocal = false;
         for (LocalNetworkGamer* local : localGamers_)
         {
@@ -1463,6 +1509,7 @@ namespace Microsoft::Xna::Framework::Net
                     snapshot.openPrivateSlots,snapshot.openPublicSlots,std::move(properties),QualityOfService::CreateInternal(),"",0,type);
                 item.serviceSnapshot_=std::make_shared<const CNA::Internal::GamerServices::ServiceSessionSnapshot>(std::move(snapshot));
                 item.serviceLocals_=searchers;
+                item.joinMaxLocalGamers_=action->LocalGamers ? 4 : action->MaxLocalGamers;
                 available.push_back(std::move(item));
             }
             return AvailableNetworkSessionCollection::CreateInternal(std::move(available));
@@ -1527,9 +1574,11 @@ namespace Microsoft::Xna::Framework::Net
             // ObjectDisposedException; only an authenticated service search result has one here.
             if (!availableSession->serviceSnapshot_ || !availableSession->serviceLocals_)
                 throw System::ObjectDisposedException("availableSession");
+            // The joined session keeps the search's local-gamer limit (reference BeginFind passes 4 for a
+            // gamer list), which AddLocalGamer later honors.
             activeAction_ = new NetworkSessionAction(
                 NetworkSessionOperation::Join, std::move(asyncState), std::move(callback),
-                static_cast<int>(availableSession->serviceLocals_->size()), *availableSession->serviceLocals_, 0,
+                availableSession->joinMaxLocalGamers_, *availableSession->serviceLocals_, 0,
                 NetworkSessionProperties{}, availableSession->GetSessionType());
             return QueueOnlineSession(availableSession->serviceSnapshot_->session, {});
         }
@@ -1728,9 +1777,10 @@ namespace Microsoft::Xna::Framework::Net
                 if(gamer!=invitee && !gamer->getIsGuestProperty() && gamers.size()<static_cast<std::size_t>(maxLocalGamers)) gamers.push_back(gamer);
         }
         const auto type=accepted->invitation.kind==ServiceSessionKind::Ranked ? NetworkSessionType::Ranked : NetworkSessionType::PlayerMatch;
+        // Reference BeginJoinInvited(IEnumerable) passes a local-gamer limit of 4; the count overload passes its count.
         activeAction_ = new NetworkSessionAction(
             NetworkSessionOperation::JoinInvited, std::move(asyncState), std::move(callback),
-            static_cast<int>(gamers.size()), gamers, 0, NetworkSessionProperties{}, type);
+            localGamers ? 4 : maxLocalGamers, gamers, 0, NetworkSessionProperties{}, type);
         return QueueOnlineSession(accepted->invitation.session, accepted->invitation.invite);
     }
 
@@ -1750,6 +1800,8 @@ namespace Microsoft::Xna::Framework::Net
         InviteAccepted.SetReplayHook([](const System::EventHandler<GamerServices::InviteAcceptedEventArgs>::HandlerType& handler) {
             if(!pendingInviteAccepted_) return;
             const auto args=*pendingInviteAccepted_;pendingInviteAccepted_.reset();
+            // Only while its invitation is still there to join: one used or cleared since is not news.
+            if(!CNA::Internal::GamerServices::acceptedInvitation()) return;
             handler(nullptr, args);
         });
         return true;

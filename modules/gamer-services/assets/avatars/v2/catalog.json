@@ -1,0 +1,2534 @@
+{
+ "animations": {
+  "asset": "animations.glb",
+  "presets": [
+   "Stand0",
+   "Stand1",
+   "Stand2",
+   "Stand3",
+   "Stand4",
+   "Stand5",
+   "Stand6",
+   "Stand7",
+   "Clap",
+   "Wave",
+   "Celebrate",
+   "FemaleIdleCheckNails",
+   "FemaleIdleLookAround",
+   "FemaleIdleShiftWeight",
+   "FemaleIdleFixShoe",
+   "FemaleAngry",
+   "FemaleConfused",
+   "FemaleLaugh",
+   "FemaleCry",
+   "FemaleShocked",
+   "FemaleYawn",
+   "MaleIdleLookAround",
+   "MaleIdleStretch",
+   "MaleIdleShiftWeight",
+   "MaleIdleCheckHand",
+   "MaleAngry",
+   "MaleConfused",
+   "MaleLaugh",
+   "MaleCry",
+   "MaleSurprised",
+   "MaleYawn"
+  ]
+ },
+ "assets": [
+  {
+   "name": "animations.glb",
+   "sha256": "1f3f587ef32b2b56abec513c639a11ffbf162cc2da462303473660d9011bdb09",
+   "size": 710848
+  },
+  {
+   "name": "body.female.glb",
+   "sha256": "b4afa21b0c28ad0d8c01cd2252f53df9b7a3111bbae4c9b204b132616eadd784",
+   "size": 411972
+  },
+  {
+   "name": "body.male.glb",
+   "sha256": "129010e1ad562c5487701f558c067fa84c6e1d5858224dddacd4d6de27943fe9",
+   "size": 411768
+  },
+  {
+   "name": "bottom_cargo.female.glb",
+   "sha256": "5f6e41ce41087c62a08b3a5b2483666625b13f28d4fcbbc2f02c37fe179c0e89",
+   "size": 100380
+  },
+  {
+   "name": "bottom_cargo.male.glb",
+   "sha256": "0984b8d71386e42d1c42a2316e4d353b5562d24eced8919a5698992e2bafcebe",
+   "size": 100172
+  },
+  {
+   "name": "bottom_jeans.female.glb",
+   "sha256": "fe3431ce965cc8f6ef30063d4e9826b89f8eaa12ac7a4af11ef08481fa636f42",
+   "size": 101536
+  },
+  {
+   "name": "bottom_jeans.male.glb",
+   "sha256": "39c7e28978913e3cf8e141dbb32a9e41929865346841e63cff771b77e1d4ea63",
+   "size": 101328
+  },
+  {
+   "name": "bottom_joggers.female.glb",
+   "sha256": "5adf046a5535b087c2012d7f179fea31a03c974da4d49a7b4e4372ce194df762",
+   "size": 98480
+  },
+  {
+   "name": "bottom_joggers.male.glb",
+   "sha256": "2b795a1349b81f5adf7bb27aaa1d33ab000c1c60ab627c5272815bd14c48f47d",
+   "size": 98272
+  },
+  {
+   "name": "bottom_longskirt.female.glb",
+   "sha256": "2390e82850b720fedec159450ccf934574cd0e6c00117f15397e77da06fd23de",
+   "size": 83848
+  },
+  {
+   "name": "bottom_longskirt.male.glb",
+   "sha256": "6c0d1a95bf426e70eff9eb2872d7995109cd2466890b783c1ac0b2e8d627ecdb",
+   "size": 83636
+  },
+  {
+   "name": "bottom_shorts.female.glb",
+   "sha256": "3e40eaab9da04a9d17ccd6d8a17fbbc3d37c58956bec901e046efaa7cb4c02a9",
+   "size": 77376
+  },
+  {
+   "name": "bottom_shorts.male.glb",
+   "sha256": "e291fd096794a62f4394e2767c5decf5f3e7f17872af1183f108a39633664af0",
+   "size": 77156
+  },
+  {
+   "name": "bottom_skirt.female.glb",
+   "sha256": "f933a53347b4639c2e75c4355ce1ea818bc587d25ebbd8bec9c3ca90a372ba5b",
+   "size": 76812
+  },
+  {
+   "name": "bottom_skirt.male.glb",
+   "sha256": "58b4eb8f98dc92abd81b5af863e0556b752e49cfeb0c76b8c12111af2e1f1836",
+   "size": 76600
+  },
+  {
+   "name": "face_features.png",
+   "sha256": "543cf20c00505a14ee8c94d6a33f4a9dd589e8bb24a7ef8eb30722d8d6f34a86",
+   "size": 128996
+  },
+  {
+   "name": "facial_beard.female.glb",
+   "sha256": "8ff2cefe0e399695f5f5e800631473457db8f92c9d1cdecbf05ef3ab2b63cbe5",
+   "size": 136428
+  },
+  {
+   "name": "facial_beard.male.glb",
+   "sha256": "6c63cba94459c3bdaa2faa667fff2e2b05ac346ba148ad76e3165bc4e44fc731",
+   "size": 136216
+  },
+  {
+   "name": "facial_chinstrap.female.glb",
+   "sha256": "b0ec61f666e64f16ea0eaf845ce0ed5e6e9654b48b095cc1b2b749060b4d81bf",
+   "size": 95984
+  },
+  {
+   "name": "facial_chinstrap.male.glb",
+   "sha256": "f61cad0a94a31c66a13d03f4743bbc90261b0e0ae5a7d27f0a45cfaab0a2910e",
+   "size": 95772
+  },
+  {
+   "name": "facial_goatee.female.glb",
+   "sha256": "b4f55d27e3931f84b359448de84795a7b4907ab79e3e724fdad8f87cd443a635",
+   "size": 54064
+  },
+  {
+   "name": "facial_goatee.male.glb",
+   "sha256": "11426c6af1b76ca056584634397909082d7c1baed15b53f31f118e92139cae2d",
+   "size": 53856
+  },
+  {
+   "name": "facial_mustache.female.glb",
+   "sha256": "682bc622537e52792913c8b4cef9423527855f87b229ba7e3fc1224a0684bc25",
+   "size": 38512
+  },
+  {
+   "name": "facial_mustache.male.glb",
+   "sha256": "5ba71faebe0ac3f56f3d07edfc7335c1700f46bb80b520b089a6eeb213b89103",
+   "size": 38304
+  },
+  {
+   "name": "glasses_aviator.female.glb",
+   "sha256": "210ac1036a85ddaecbe2ca6511ca070f3cca43cc5db0e3d544bc138f913aef28",
+   "size": 42416
+  },
+  {
+   "name": "glasses_aviator.male.glb",
+   "sha256": "042a73290e34845816a1af09410bd46a446d05c4e523cfbbf4216d3a841a1609",
+   "size": 42200
+  },
+  {
+   "name": "glasses_browline.female.glb",
+   "sha256": "42477b907e3685507e0aac15bb98ee71dd8d60ecd189e2928d4b502b694a0dbb",
+   "size": 33548
+  },
+  {
+   "name": "glasses_browline.male.glb",
+   "sha256": "8aae272fc8d38e3eb1190b7af7bf0539f3cf3a5d63bdafd3e241e0ff9bcbcedc",
+   "size": 33336
+  },
+  {
+   "name": "glasses_round.female.glb",
+   "sha256": "764cf58bcb5640e45e3acc94388d03c626d4457a4d73b595df2db65c6ee815aa",
+   "size": 33536
+  },
+  {
+   "name": "glasses_round.male.glb",
+   "sha256": "912a8b23945c52b36d2f98a5e6ca8e1ad696f88801ae093ceefb9acd72124c38",
+   "size": 33324
+  },
+  {
+   "name": "glasses_square.female.glb",
+   "sha256": "b68a0de188d13bc149530ccc16b6cf0ac98e655c5fc380da60bcd022be11ae04",
+   "size": 33540
+  },
+  {
+   "name": "glasses_square.male.glb",
+   "sha256": "7cb0acd1e1c0ba02cc5e390ce7eeb72857517c3759b937b4cd4b7916a7f57e21",
+   "size": 33328
+  },
+  {
+   "name": "hair_bob.female.glb",
+   "sha256": "2fdec32bb68a5d4c80639c1ef82fb86249565a442e6cb8034e1c8fe6cf20b533",
+   "size": 271616
+  },
+  {
+   "name": "hair_bob.hat.female.glb",
+   "sha256": "7c44ad6e5e3cee5a2f18141197b0c329e384147f15bc8d40a27c71247fdfdc84",
+   "size": 138112
+  },
+  {
+   "name": "hair_bob.hat.male.glb",
+   "sha256": "16476c923863dd949115979f73992a4e206efc780b3520c569ee8bedbc3c3339",
+   "size": 137904
+  },
+  {
+   "name": "hair_bob.male.glb",
+   "sha256": "20d7fe86cbf30a64029ecb94cf2f7a92277b390a5c83bc7b60b079b0b017bb3d",
+   "size": 271408
+  },
+  {
+   "name": "hair_bun.female.glb",
+   "sha256": "1ac50e32b0132685413c90e0b3e72df28c556afa0db6ad158528965c069c2036",
+   "size": 149956
+  },
+  {
+   "name": "hair_bun.hat.female.glb",
+   "sha256": "da817dda2d206ed990c26b459fa997e83f34afab618ea7c98fa41298b1eecb4d",
+   "size": 33676
+  },
+  {
+   "name": "hair_bun.hat.male.glb",
+   "sha256": "a6269a678967026ed806f58f93a75e22560275f888fd0e1fd8f79d1518e206b1",
+   "size": 33464
+  },
+  {
+   "name": "hair_bun.male.glb",
+   "sha256": "3419cdcf5ffa1208c8ca0131ad471ec7c843fd7f1027823b7c207e33a8484e34",
+   "size": 149744
+  },
+  {
+   "name": "hair_buzz.female.glb",
+   "sha256": "da89ed28b2932265574d1f7b8ce2cf791b31a0c5f5d21a1e15533090033634ed",
+   "size": 61688
+  },
+  {
+   "name": "hair_buzz.hat.female.glb",
+   "sha256": "b11700263c9d45681a7eae261dfd2a8956f0b2c43f8255ff06be3fa5b4a21978",
+   "size": 33676
+  },
+  {
+   "name": "hair_buzz.hat.male.glb",
+   "sha256": "af966b67ff6464afa4a91cd7f6ccaecccb43422493d07b90b1419d841ca63ed7",
+   "size": 33472
+  },
+  {
+   "name": "hair_buzz.male.glb",
+   "sha256": "dab497f5f47eb0d25a33cf7ead0daffbc3712e98a5c9a828c3527d7352dfec93",
+   "size": 61480
+  },
+  {
+   "name": "hair_curly.female.glb",
+   "sha256": "8f8cc2fd39c428ce2409ab4e8e694c2f63043259b4484fe286aa5b069137b33c",
+   "size": 645432
+  },
+  {
+   "name": "hair_curly.hat.female.glb",
+   "sha256": "b327749724aa629c7512b061b6e5f4fa1a9d321aad836090d3e917b7bb1ab4e1",
+   "size": 175728
+  },
+  {
+   "name": "hair_curly.hat.male.glb",
+   "sha256": "0d2816a5a3c49c3a1d149bbb38ea2d95f4d3787a05977a593494f32d863c9a93",
+   "size": 175516
+  },
+  {
+   "name": "hair_curly.male.glb",
+   "sha256": "dd733c2a4d7a15e4f419c3dc3526599513173d2fd501c7cf87fe39d843a9f717",
+   "size": 645228
+  },
+  {
+   "name": "hair_long.female.glb",
+   "sha256": "7ecfe5ea1a8db3506df88442d427ede8039906f950a339cc21d0608c6da642b9",
+   "size": 294020
+  },
+  {
+   "name": "hair_long.hat.female.glb",
+   "sha256": "fa6e565d523a152c5a8f5f831adb50d150d3678cecd5897148a3dfe77c315f9f",
+   "size": 180948
+  },
+  {
+   "name": "hair_long.hat.male.glb",
+   "sha256": "49e0db5e44f05a7b6a0ac204e62028a683beebc616e35d8aacabfa4e0f8b8b14",
+   "size": 180824
+  },
+  {
+   "name": "hair_long.male.glb",
+   "sha256": "14c9d994a7cfe2621675454d9ddb8f679ad28706ee26d156723224cdfccd5aa9",
+   "size": 293808
+  },
+  {
+   "name": "hair_pigtails.female.glb",
+   "sha256": "8ccf87fa814e6875c0ca1688c02248a6bbc9db7c70f9cbc38201537d29af1cce",
+   "size": 169348
+  },
+  {
+   "name": "hair_pigtails.hat.female.glb",
+   "sha256": "72310e8dfb1abb60074f27f530e6b8dc934d60f53399234c63d5420286533887",
+   "size": 92844
+  },
+  {
+   "name": "hair_pigtails.hat.male.glb",
+   "sha256": "1cb447e8322a948345cca8661cdcc89019e84632ed874777be40df79441d8725",
+   "size": 92724
+  },
+  {
+   "name": "hair_pigtails.male.glb",
+   "sha256": "24ac8b06dc04e4e818f4762b51471225f55d667b9202b71fcd9d8ad8048c2f00",
+   "size": 169140
+  },
+  {
+   "name": "hair_ponytail.female.glb",
+   "sha256": "8e6f72b139d3fc703e49d5976dd62c61e9803b76d3c250d04d2e8f3ad9b46400",
+   "size": 173616
+  },
+  {
+   "name": "hair_ponytail.hat.female.glb",
+   "sha256": "8272d55c0345557db318aaad178021d1bdd538331f78bf5b9f581e58583e7df3",
+   "size": 78972
+  },
+  {
+   "name": "hair_ponytail.hat.male.glb",
+   "sha256": "781adfa5443d73de527f438ef0ae8067b1ec520f4d81efaa9562194c3bd15c79",
+   "size": 78516
+  },
+  {
+   "name": "hair_ponytail.male.glb",
+   "sha256": "14319d06f9e361aff1705ad115c2f6f7b55dc955842ec8b86586fc7e32515186",
+   "size": 173404
+  },
+  {
+   "name": "hair_short.female.glb",
+   "sha256": "057a0ed4cb6ab4e97d7469e3dd9b4ad0eae4426a9c8955475fbd2b8286b21645",
+   "size": 231304
+  },
+  {
+   "name": "hair_short.hat.female.glb",
+   "sha256": "bc0659448e4e01590661737526aea3e516ebb7a35dd0ede5121dd021370aff56",
+   "size": 82744
+  },
+  {
+   "name": "hair_short.hat.male.glb",
+   "sha256": "c94edbf79cec3466f86123348909178fe0ea89d39e67acc2568e0f2528820dbc",
+   "size": 82536
+  },
+  {
+   "name": "hair_short.male.glb",
+   "sha256": "07bced9c90861877db957d56b65c5613804c85957e8fc82a4b99629976762f1e",
+   "size": 231096
+  },
+  {
+   "name": "hair_sidepart.female.glb",
+   "sha256": "7e98c9c83049626b6ead910390e6d879006f7d08bf8783b84fe48f204f8735a5",
+   "size": 190996
+  },
+  {
+   "name": "hair_sidepart.hat.female.glb",
+   "sha256": "0738e8cdf677b42dc2647cf344d59131c24b657414dc006196cf2d127d0f607a",
+   "size": 74788
+  },
+  {
+   "name": "hair_sidepart.hat.male.glb",
+   "sha256": "c412a1f086968611e970fb46fe20fab55f8dfa79d1f3e61898ee9ac62098b082",
+   "size": 74584
+  },
+  {
+   "name": "hair_sidepart.male.glb",
+   "sha256": "4a6917ce3afd8624c643bc1b19b537f68e16af97e25f97f387456d42a6374c56",
+   "size": 190792
+  },
+  {
+   "name": "hair_spiky.female.glb",
+   "sha256": "e1b65856f20658cb9f27877a54a9db0da2470b2be503280bb26e0754721f4f73",
+   "size": 191472
+  },
+  {
+   "name": "hair_spiky.hat.female.glb",
+   "sha256": "96b5c847d3911156007319bf1de8309dd663002f379b05b296f43d41d0f54650",
+   "size": 33684
+  },
+  {
+   "name": "hair_spiky.hat.male.glb",
+   "sha256": "76c88ca7658b19f9a1df51491f093a9a51c20ae5290d4e27863a5907e97fe3cc",
+   "size": 33476
+  },
+  {
+   "name": "hair_spiky.male.glb",
+   "sha256": "0a4385fd17b265355199ca0a17f8f066aa29698a13ba288ca682774b38ce4b9f",
+   "size": 191264
+  },
+  {
+   "name": "hat_beanie.female.glb",
+   "sha256": "c319239b13e408b499fc128ac3dc9d96b438e5a3371f5225991d8556a0eff7c3",
+   "size": 71224
+  },
+  {
+   "name": "hat_beanie.male.glb",
+   "sha256": "3483c6ff4c05a5624c4e431e939107e2f3c85fe7411fb405f7d3ab7a8aff4a9a",
+   "size": 71020
+  },
+  {
+   "name": "hat_bucket.female.glb",
+   "sha256": "26806bcd533d13ca741ce196165751c5d31195305c822139b179e65e70fd076d",
+   "size": 60912
+  },
+  {
+   "name": "hat_bucket.male.glb",
+   "sha256": "ede40b52d3b761548ac43b71565acec10fe646ecca964910a7eb1fd593a26f67",
+   "size": 60704
+  },
+  {
+   "name": "hat_cap.female.glb",
+   "sha256": "6a32a45dcacf1a8d4a7fb72efd3ba282f2c1cf972dc396f6036321c952cd0852",
+   "size": 59988
+  },
+  {
+   "name": "hat_cap.male.glb",
+   "sha256": "935be489df578463fa5e23df5c4e094f628ef6a9c380476d9557cd50fbacc0a1",
+   "size": 59776
+  },
+  {
+   "name": "hat_fedora.female.glb",
+   "sha256": "465b7eb0774c12dea16a4799c31a643b3f54af6cc00ba3dc3a99f30d182c0071",
+   "size": 64884
+  },
+  {
+   "name": "hat_fedora.male.glb",
+   "sha256": "33cf4eb597f3a28e9957aaa07455322c8ed2ba5dc70b22575dcc255a7e4437d8",
+   "size": 64680
+  },
+  {
+   "name": "hat_headband.female.glb",
+   "sha256": "4008c196c4633bc24b4750f45d5bb53d2044e0655db7c5bdbcdb7ac346e4159c",
+   "size": 30472
+  },
+  {
+   "name": "hat_headband.male.glb",
+   "sha256": "456022f8510e82e640cf1f4657d6a0e415c9171534df9702d41f8e128ca504e7",
+   "size": 30260
+  },
+  {
+   "name": "shoes_boots.female.glb",
+   "sha256": "8a004d50769841ea75f19e30aade2924b189194cf2846736090c36b231c13cd4",
+   "size": 109580
+  },
+  {
+   "name": "shoes_boots.male.glb",
+   "sha256": "9d7a61a399b8adf5cff8493bb00fc663260cb8798f263dccba1ea3e447c3d67c",
+   "size": 109372
+  },
+  {
+   "name": "shoes_dress.female.glb",
+   "sha256": "5304c0360715590f7823ecc8ea3d08c21d6d28db8401ed1dc1eae3921bdea75a",
+   "size": 72272
+  },
+  {
+   "name": "shoes_dress.male.glb",
+   "sha256": "bca4065f689372094b9e84a9aea543c4ee0a78f78ba019e115a3eecf22fd4467",
+   "size": 72060
+  },
+  {
+   "name": "shoes_flats.female.glb",
+   "sha256": "ff4d2875cb4a36b4725caf025f6b5412a59c426e86e1a4de2b84b66d8192527f",
+   "size": 66424
+  },
+  {
+   "name": "shoes_flats.male.glb",
+   "sha256": "84cc619c3ebf3ebde8ceac2c2d6b06f7c4eaf6b5dc1ebf56a4920d986b2eb786",
+   "size": 66216
+  },
+  {
+   "name": "shoes_hightops.female.glb",
+   "sha256": "6c87d8285351162bfdcf1bf4f1bca50f1db4cd193429007f4ac9d2c684eea901",
+   "size": 84260
+  },
+  {
+   "name": "shoes_hightops.male.glb",
+   "sha256": "5578fc44dc1224570afd9b5b8c5b71153768ac46e81a3d0c7f70a8ab07b80319",
+   "size": 84048
+  },
+  {
+   "name": "shoes_sneakers.female.glb",
+   "sha256": "6a1e99e30bc9bae5afc134fc64f3687b4e24570ba6cd4102b6d1b026bf84e34b",
+   "size": 102028
+  },
+  {
+   "name": "shoes_sneakers.male.glb",
+   "sha256": "3f95ec705f7ae592e6db96d754c55f29131c49d6ef938505d5cbb49a5401c589",
+   "size": 101816
+  },
+  {
+   "name": "top_hoodie.female.glb",
+   "sha256": "2e870851b73a4e4fd07240f922ea3b9b9b231fa7fd29b658029192df862fcfee",
+   "size": 146232
+  },
+  {
+   "name": "top_hoodie.male.glb",
+   "sha256": "b6024b00e245cd2e9449b2b15edf1330d21441adef0a8de5ac0df27d52b10ddb",
+   "size": 146024
+  },
+  {
+   "name": "top_jacket.female.glb",
+   "sha256": "80e688da90c7358ec4138a5c71e3e0a532e601cee60bc09d9478c3c9194fef78",
+   "size": 141700
+  },
+  {
+   "name": "top_jacket.male.glb",
+   "sha256": "3f95e02cdff64edd82259cf9a1be0780d5765631f9a6fc1e90b5034da623ce62",
+   "size": 141488
+  },
+  {
+   "name": "top_longsleeve.female.glb",
+   "sha256": "f6b6726ba6c86038f2e0836de7b93d9841ccae8cd06dc62aa7b725c192e1c3d1",
+   "size": 117564
+  },
+  {
+   "name": "top_longsleeve.male.glb",
+   "sha256": "bade0e52d6eaced5a41398af7c52163b2d201ed8e47e644519d4bdf9a5f413cb",
+   "size": 117356
+  },
+  {
+   "name": "top_polo.female.glb",
+   "sha256": "9991e7f6a9d53605eb4c6b5ee6f50da255bcb346337045b75addf4ccd1aa7a76",
+   "size": 105152
+  },
+  {
+   "name": "top_polo.male.glb",
+   "sha256": "baa7e5c8dee25bdee00a4676c76b44cfa23ca4cb3bd28291760a5eee7da8eace",
+   "size": 104948
+  },
+  {
+   "name": "top_shirt.female.glb",
+   "sha256": "62644ff656493b17309292f07ba4e90b6612a3bd449f8b1b29c6dbbd728422a9",
+   "size": 112808
+  },
+  {
+   "name": "top_shirt.male.glb",
+   "sha256": "acaf7902a1690849522e417052de4710b71bb87283ffd72c903a7015931363d9",
+   "size": 112600
+  },
+  {
+   "name": "top_sweater.female.glb",
+   "sha256": "a0a27f73bef7c84e56256252175cc71d01b4e098a84af08bf7620c7749a3c56a",
+   "size": 122796
+  },
+  {
+   "name": "top_sweater.male.glb",
+   "sha256": "46a65951faa50cafb367d5549f39be83efc79668c7e7fdecdec0d4e17faccadf",
+   "size": 122588
+  },
+  {
+   "name": "top_tank.female.glb",
+   "sha256": "92b4fa60f02caa4f67792fdac388df1cf1d0b9e10666b252e4bdfb35a61dfc47",
+   "size": 66672
+  },
+  {
+   "name": "top_tank.male.glb",
+   "sha256": "43070b99f52b01f4563dca33ad144f677e0e5a8ce77cbe63f571cb014c79145e",
+   "size": 66480
+  },
+  {
+   "name": "top_tshirt.female.glb",
+   "sha256": "8bf7ad4dbf61d57b9c9eec85794d83aaaeb36a37c3fbb25c7dde4b4616f59b30",
+   "size": 101352
+  },
+  {
+   "name": "top_tshirt.male.glb",
+   "sha256": "fa4b9071d3093f91dc672668b049f9d15888827d0917168d877883358b17a145",
+   "size": 101144
+  },
+  {
+   "name": "top_turtleneck.female.glb",
+   "sha256": "00eae84e2915a06acbafb755002f1ccabd29156ff1f09de4a0cf2b23523a96a3",
+   "size": 112904
+  },
+  {
+   "name": "top_turtleneck.male.glb",
+   "sha256": "ffb7247cce6b746230a80f6746278eff24d622e09a409527b8740fa6424e65ce",
+   "size": 112692
+  }
+ ],
+ "bodies": {
+  "female": {
+   "asset": "body.female.glb",
+   "authoredHeightMillimeters": 1680
+  },
+  "male": {
+   "asset": "body.male.glb",
+   "authoredHeightMillimeters": 1800
+  }
+ },
+ "catalogVersion": 2,
+ "face": {
+  "asset": "face_features.png",
+  "layout": {
+   "columns": 16,
+   "eyebrows": {
+    "Angry": {
+     "left": 60,
+     "right": 61
+    },
+    "Confused": {
+     "left": 62,
+     "right": 63
+    },
+    "Neutral": {
+     "left": 56,
+     "right": 57
+    },
+    "Raised": {
+     "left": 64,
+     "right": 65
+    },
+    "Sad": {
+     "left": 58,
+     "right": 59
+    }
+   },
+   "eyes": {
+    "Angry": {
+     "left": [
+      8,
+      9
+     ],
+     "right": [
+      10,
+      11
+     ]
+    },
+    "Blink": {
+     "left": [
+      52,
+      53
+     ],
+     "right": [
+      54,
+      55
+     ]
+    },
+    "Confused": {
+     "left": [
+      12,
+      13
+     ],
+     "right": [
+      14,
+      15
+     ]
+    },
+    "Happy": {
+     "left": [
+      24,
+      25
+     ],
+     "right": [
+      26,
+      27
+     ]
+    },
+    "Laughing": {
+     "left": [
+      16,
+      17
+     ],
+     "right": [
+      18,
+      19
+     ]
+    },
+    "LookDown": {
+     "left": [
+      40,
+      41
+     ],
+     "right": [
+      42,
+      43
+     ]
+    },
+    "LookLeft": {
+     "left": [
+      44,
+      45
+     ],
+     "right": [
+      46,
+      47
+     ]
+    },
+    "LookRight": {
+     "left": [
+      48,
+      49
+     ],
+     "right": [
+      50,
+      51
+     ]
+    },
+    "LookUp": {
+     "left": [
+      36,
+      37
+     ],
+     "right": [
+      38,
+      39
+     ]
+    },
+    "Neutral": {
+     "left": [
+      0,
+      1
+     ],
+     "right": [
+      2,
+      3
+     ]
+    },
+    "Sad": {
+     "left": [
+      4,
+      5
+     ],
+     "right": [
+      6,
+      7
+     ]
+    },
+    "Shocked": {
+     "left": [
+      20,
+      21
+     ],
+     "right": [
+      22,
+      23
+     ]
+    },
+    "Sleeping": {
+     "left": [
+      32,
+      33
+     ],
+     "right": [
+      34,
+      35
+     ]
+    },
+    "Yawning": {
+     "left": [
+      28,
+      29
+     ],
+     "right": [
+      30,
+      31
+     ]
+    }
+   },
+   "height": 640,
+   "mouths": {
+    "Angry": 68,
+    "Confused": 69,
+    "Happy": 72,
+    "Laughing": 70,
+    "Neutral": 66,
+    "PhoneticAi": 74,
+    "PhoneticDth": 79,
+    "PhoneticEe": 75,
+    "PhoneticFv": 76,
+    "PhoneticL": 78,
+    "PhoneticO": 73,
+    "PhoneticW": 77,
+    "Sad": 67,
+    "Shocked": 71
+   },
+   "tileSize": 128,
+   "width": 2048
+  }
+ },
+ "faceControls": {
+  "female": [
+   {
+    "name": "headWidth",
+    "ops": [
+     {
+      "centre": [
+       0.0,
+       1.493,
+       0.0
+      ],
+      "inner": 0.8,
+      "radii": [
+       0.3502,
+       0.3502,
+       0.3502
+      ],
+      "scale": [
+       1.08,
+       1.0,
+       1.0
+      ]
+     }
+    ],
+    "parameter": 0,
+    "scope": "head"
+   },
+   {
+    "name": "headHeight",
+    "ops": [
+     {
+      "centre": [
+       0.0,
+       1.3179,
+       0.0
+      ],
+      "inner": 0.8,
+      "radii": [
+       0.3502,
+       0.3502,
+       0.3502
+      ],
+      "scale": [
+       1.0,
+       1.06,
+       1.0
+      ]
+     }
+    ],
+    "parameter": 1,
+    "scope": "head"
+   },
+   {
+    "name": "jawWidth",
+    "ops": [
+     {
+      "centre": [
+       0.0,
+       1.39,
+       0.0309
+      ],
+      "inner": 0.3,
+      "radii": [
+       0.1751,
+       0.0927,
+       0.1751
+      ],
+      "scale": [
+       1.14,
+       1.0,
+       1.02
+      ]
+     }
+    ],
+    "parameter": 2,
+    "scope": "face"
+   },
+   {
+    "name": "chinSize",
+    "ops": [
+     {
+      "centre": [
+       0.0,
+       1.3591,
+       0.11133
+      ],
+      "inner": 0.3,
+      "radii": [
+       0.0618,
+       0.0515,
+       0.0618
+      ],
+      "scale": [
+       1.18,
+       1.18,
+       1.18
+      ]
+     }
+    ],
+    "parameter": 3,
+    "scope": "face"
+   },
+   {
+    "name": "cheekFullness",
+    "ops": [
+     {
+      "centre": [
+       0.07416,
+       1.4518,
+       0.0618
+      ],
+      "inner": 0.2,
+      "move": [
+       0.00618,
+       0.0,
+       0.00412
+      ],
+      "radii": [
+       0.05665,
+       0.04635,
+       0.05665
+      ]
+     },
+     {
+      "centre": [
+       -0.07416,
+       1.4518,
+       0.0618
+      ],
+      "inner": 0.2,
+      "move": [
+       -0.00618,
+       0.0,
+       0.00412
+      ],
+      "radii": [
+       0.05665,
+       0.04635,
+       0.05665
+      ]
+     }
+    ],
+    "parameter": 4,
+    "scope": "face"
+   },
+   {
+    "name": "eyeSize",
+    "ops": [
+     {
+      "centre": [
+       0.05562,
+       1.48888,
+       0.13641
+      ],
+      "inner": 0.72,
+      "radii": [
+       0.0515,
+       0.0515,
+       0.0309
+      ],
+      "scale": [
+       1.16,
+       1.16,
+       1.0
+      ]
+     },
+     {
+      "centre": [
+       -0.05562,
+       1.48888,
+       0.13641
+      ],
+      "inner": 0.72,
+      "radii": [
+       0.0515,
+       0.0515,
+       0.0309
+      ],
+      "scale": [
+       1.16,
+       1.16,
+       1.0
+      ]
+     }
+    ],
+    "parameter": 5,
+    "scope": "face"
+   },
+   {
+    "name": "eyeSpacing",
+    "ops": [
+     {
+      "centre": [
+       0.05562,
+       1.48888,
+       0.13641
+      ],
+      "inner": 0.72,
+      "move": [
+       0.00669,
+       0.0,
+       0.0
+      ],
+      "radii": [
+       0.05356,
+       0.05356,
+       0.03296
+      ]
+     },
+     {
+      "centre": [
+       -0.05562,
+       1.48888,
+       0.13641
+      ],
+      "inner": 0.72,
+      "move": [
+       -0.00669,
+       0.0,
+       0.0
+      ],
+      "radii": [
+       0.05356,
+       0.05356,
+       0.03296
+      ]
+     }
+    ],
+    "parameter": 6,
+    "scope": "face"
+   },
+   {
+    "name": "eyeHeight",
+    "ops": [
+     {
+      "centre": [
+       0.05562,
+       1.48888,
+       0.13641
+      ],
+      "inner": 0.72,
+      "move": [
+       0.0,
+       0.00669,
+       0.0
+      ],
+      "radii": [
+       0.05356,
+       0.05974,
+       0.03296
+      ]
+     },
+     {
+      "centre": [
+       -0.05562,
+       1.48888,
+       0.13641
+      ],
+      "inner": 0.72,
+      "move": [
+       0.0,
+       0.00669,
+       0.0
+      ],
+      "radii": [
+       0.05356,
+       0.05974,
+       0.03296
+      ]
+     },
+     {
+      "centre": [
+       0.05768,
+       1.55068,
+       0.12796
+      ],
+      "inner": 0.72,
+      "move": [
+       0.0,
+       0.00669,
+       0.0
+      ],
+      "radii": [
+       0.05356,
+       0.05974,
+       0.03296
+      ]
+     },
+     {
+      "centre": [
+       -0.05768,
+       1.55068,
+       0.12796
+      ],
+      "inner": 0.72,
+      "move": [
+       0.0,
+       0.00669,
+       0.0
+      ],
+      "radii": [
+       0.05356,
+       0.05974,
+       0.03296
+      ]
+     }
+    ],
+    "parameter": 7,
+    "scope": "face"
+   },
+   {
+    "name": "eyeTilt",
+    "ops": [
+     {
+      "centre": [
+       0.05562,
+       1.48888,
+       0.13641
+      ],
+      "degrees": 9.0,
+      "inner": 0.72,
+      "radii": [
+       0.0515,
+       0.0515,
+       0.03296
+      ],
+      "rotate": [
+       0.0,
+       0.0,
+       1.0
+      ]
+     },
+     {
+      "centre": [
+       -0.05562,
+       1.48888,
+       0.13641
+      ],
+      "degrees": -9.0,
+      "inner": 0.72,
+      "radii": [
+       0.0515,
+       0.0515,
+       0.03296
+      ],
+      "rotate": [
+       0.0,
+       0.0,
+       1.0
+      ]
+     }
+    ],
+    "parameter": 8,
+    "scope": "face"
+   },
+   {
+    "name": "browHeight",
+    "ops": [
+     {
+      "centre": [
+       0.05768,
+       1.55068,
+       0.12796
+      ],
+      "inner": 0.7,
+      "move": [
+       0.0,
+       0.00669,
+       0.0
+      ],
+      "radii": [
+       0.0515,
+       0.0309,
+       0.0309
+      ]
+     },
+     {
+      "centre": [
+       -0.05768,
+       1.55068,
+       0.12796
+      ],
+      "inner": 0.7,
+      "move": [
+       0.0,
+       0.00669,
+       0.0
+      ],
+      "radii": [
+       0.0515,
+       0.0309,
+       0.0309
+      ]
+     }
+    ],
+    "parameter": 9,
+    "scope": "face"
+   },
+   {
+    "name": "noseSize",
+    "ops": [
+     {
+      "centre": [
+       0.0,
+       1.47755,
+       0.15245
+      ],
+      "inner": 0.55,
+      "radii": [
+       0.0412,
+       0.0515,
+       0.0515
+      ],
+      "scale": [
+       1.2,
+       1.2,
+       1.2
+      ]
+     }
+    ],
+    "parameter": 10,
+    "scope": "face"
+   },
+   {
+    "name": "noseWidth",
+    "ops": [
+     {
+      "centre": [
+       0.0,
+       1.47755,
+       0.15245
+      ],
+      "inner": 0.55,
+      "radii": [
+       0.0412,
+       0.0515,
+       0.0515
+      ],
+      "scale": [
+       1.25,
+       1.0,
+       1.0
+      ]
+     }
+    ],
+    "parameter": 11,
+    "scope": "face"
+   },
+   {
+    "name": "noseHeight",
+    "ops": [
+     {
+      "centre": [
+       0.0,
+       1.47755,
+       0.15245
+      ],
+      "inner": 0.55,
+      "move": [
+       0.0,
+       0.00566,
+       0.0
+      ],
+      "radii": [
+       0.03502,
+       0.0412,
+       0.0515
+      ]
+     }
+    ],
+    "parameter": 12,
+    "scope": "face"
+   },
+   {
+    "name": "mouthWidth",
+    "ops": [
+     {
+      "centre": [
+       0.0,
+       1.40854,
+       0.12436
+      ],
+      "inner": 0.7,
+      "radii": [
+       0.06592,
+       0.03502,
+       0.03296
+      ],
+      "scale": [
+       1.2,
+       1.0,
+       1.0
+      ]
+     }
+    ],
+    "parameter": 13,
+    "scope": "face"
+   },
+   {
+    "name": "mouthHeight",
+    "ops": [
+     {
+      "centre": [
+       0.0,
+       1.40854,
+       0.12436
+      ],
+      "inner": 0.7,
+      "move": [
+       0.0,
+       0.00618,
+       0.0
+      ],
+      "radii": [
+       0.06592,
+       0.03708,
+       0.03502
+      ]
+     }
+    ],
+    "parameter": 14,
+    "scope": "face"
+   },
+   {
+    "name": "earSize",
+    "ops": [
+     {
+      "centre": [
+       0.14705,
+       1.48064,
+       -0.01442
+      ],
+      "inner": 0.6,
+      "radii": [
+       0.0412,
+       0.0515,
+       0.0412
+      ],
+      "scale": [
+       1.25,
+       1.25,
+       1.25
+      ]
+     },
+     {
+      "centre": [
+       -0.14705,
+       1.48064,
+       -0.01442
+      ],
+      "inner": 0.6,
+      "radii": [
+       0.0412,
+       0.0515,
+       0.0412
+      ],
+      "scale": [
+       1.25,
+       1.25,
+       1.25
+      ]
+     }
+    ],
+    "parameter": 15,
+    "scope": "face"
+   }
+  ],
+  "male": [
+   {
+    "name": "headWidth",
+    "ops": [
+     {
+      "centre": [
+       0.0,
+       1.604,
+       0.0
+      ],
+      "inner": 0.8,
+      "radii": [
+       0.3672,
+       0.3672,
+       0.3672
+      ],
+      "scale": [
+       1.08,
+       1.0,
+       1.0
+      ]
+     }
+    ],
+    "parameter": 0,
+    "scope": "head"
+   },
+   {
+    "name": "headHeight",
+    "ops": [
+     {
+      "centre": [
+       0.0,
+       1.4204,
+       0.0
+      ],
+      "inner": 0.8,
+      "radii": [
+       0.3672,
+       0.3672,
+       0.3672
+      ],
+      "scale": [
+       1.0,
+       1.06,
+       1.0
+      ]
+     }
+    ],
+    "parameter": 1,
+    "scope": "head"
+   },
+   {
+    "name": "jawWidth",
+    "ops": [
+     {
+      "centre": [
+       0.0,
+       1.496,
+       0.0324
+      ],
+      "inner": 0.3,
+      "radii": [
+       0.1836,
+       0.0972,
+       0.1836
+      ],
+      "scale": [
+       1.14,
+       1.0,
+       1.02
+      ]
+     }
+    ],
+    "parameter": 2,
+    "scope": "face"
+   },
+   {
+    "name": "chinSize",
+    "ops": [
+     {
+      "centre": [
+       0.0,
+       1.4636,
+       0.11673
+      ],
+      "inner": 0.3,
+      "radii": [
+       0.0648,
+       0.054,
+       0.0648
+      ],
+      "scale": [
+       1.18,
+       1.18,
+       1.18
+      ]
+     }
+    ],
+    "parameter": 3,
+    "scope": "face"
+   },
+   {
+    "name": "cheekFullness",
+    "ops": [
+     {
+      "centre": [
+       0.07776,
+       1.5608,
+       0.0648
+      ],
+      "inner": 0.2,
+      "move": [
+       0.00648,
+       0.0,
+       0.00432
+      ],
+      "radii": [
+       0.0594,
+       0.0486,
+       0.0594
+      ]
+     },
+     {
+      "centre": [
+       -0.07776,
+       1.5608,
+       0.0648
+      ],
+      "inner": 0.2,
+      "move": [
+       -0.00648,
+       0.0,
+       0.00432
+      ],
+      "radii": [
+       0.0594,
+       0.0486,
+       0.0594
+      ]
+     }
+    ],
+    "parameter": 4,
+    "scope": "face"
+   },
+   {
+    "name": "eyeSize",
+    "ops": [
+     {
+      "centre": [
+       0.05832,
+       1.59968,
+       0.14304
+      ],
+      "inner": 0.72,
+      "radii": [
+       0.054,
+       0.054,
+       0.0324
+      ],
+      "scale": [
+       1.16,
+       1.16,
+       1.0
+      ]
+     },
+     {
+      "centre": [
+       -0.05832,
+       1.59968,
+       0.14304
+      ],
+      "inner": 0.72,
+      "radii": [
+       0.054,
+       0.054,
+       0.0324
+      ],
+      "scale": [
+       1.16,
+       1.16,
+       1.0
+      ]
+     }
+    ],
+    "parameter": 5,
+    "scope": "face"
+   },
+   {
+    "name": "eyeSpacing",
+    "ops": [
+     {
+      "centre": [
+       0.05832,
+       1.59968,
+       0.14304
+      ],
+      "inner": 0.72,
+      "move": [
+       0.00702,
+       0.0,
+       0.0
+      ],
+      "radii": [
+       0.05616,
+       0.05616,
+       0.03456
+      ]
+     },
+     {
+      "centre": [
+       -0.05832,
+       1.59968,
+       0.14304
+      ],
+      "inner": 0.72,
+      "move": [
+       -0.00702,
+       0.0,
+       0.0
+      ],
+      "radii": [
+       0.05616,
+       0.05616,
+       0.03456
+      ]
+     }
+    ],
+    "parameter": 6,
+    "scope": "face"
+   },
+   {
+    "name": "eyeHeight",
+    "ops": [
+     {
+      "centre": [
+       0.05832,
+       1.59968,
+       0.14304
+      ],
+      "inner": 0.72,
+      "move": [
+       0.0,
+       0.00702,
+       0.0
+      ],
+      "radii": [
+       0.05616,
+       0.06264,
+       0.03456
+      ]
+     },
+     {
+      "centre": [
+       -0.05832,
+       1.59968,
+       0.14304
+      ],
+      "inner": 0.72,
+      "move": [
+       0.0,
+       0.00702,
+       0.0
+      ],
+      "radii": [
+       0.05616,
+       0.06264,
+       0.03456
+      ]
+     },
+     {
+      "centre": [
+       0.06048,
+       1.66448,
+       0.13417
+      ],
+      "inner": 0.72,
+      "move": [
+       0.0,
+       0.00702,
+       0.0
+      ],
+      "radii": [
+       0.05616,
+       0.06264,
+       0.03456
+      ]
+     },
+     {
+      "centre": [
+       -0.06048,
+       1.66448,
+       0.13417
+      ],
+      "inner": 0.72,
+      "move": [
+       0.0,
+       0.00702,
+       0.0
+      ],
+      "radii": [
+       0.05616,
+       0.06264,
+       0.03456
+      ]
+     }
+    ],
+    "parameter": 7,
+    "scope": "face"
+   },
+   {
+    "name": "eyeTilt",
+    "ops": [
+     {
+      "centre": [
+       0.05832,
+       1.59968,
+       0.14304
+      ],
+      "degrees": 9.0,
+      "inner": 0.72,
+      "radii": [
+       0.054,
+       0.054,
+       0.03456
+      ],
+      "rotate": [
+       0.0,
+       0.0,
+       1.0
+      ]
+     },
+     {
+      "centre": [
+       -0.05832,
+       1.59968,
+       0.14304
+      ],
+      "degrees": -9.0,
+      "inner": 0.72,
+      "radii": [
+       0.054,
+       0.054,
+       0.03456
+      ],
+      "rotate": [
+       0.0,
+       0.0,
+       1.0
+      ]
+     }
+    ],
+    "parameter": 8,
+    "scope": "face"
+   },
+   {
+    "name": "browHeight",
+    "ops": [
+     {
+      "centre": [
+       0.06048,
+       1.66448,
+       0.13417
+      ],
+      "inner": 0.7,
+      "move": [
+       0.0,
+       0.00702,
+       0.0
+      ],
+      "radii": [
+       0.054,
+       0.0324,
+       0.0324
+      ]
+     },
+     {
+      "centre": [
+       -0.06048,
+       1.66448,
+       0.13417
+      ],
+      "inner": 0.7,
+      "move": [
+       0.0,
+       0.00702,
+       0.0
+      ],
+      "radii": [
+       0.054,
+       0.0324,
+       0.0324
+      ]
+     }
+    ],
+    "parameter": 9,
+    "scope": "face"
+   },
+   {
+    "name": "noseSize",
+    "ops": [
+     {
+      "centre": [
+       0.0,
+       1.5878,
+       0.15985
+      ],
+      "inner": 0.55,
+      "radii": [
+       0.0432,
+       0.054,
+       0.054
+      ],
+      "scale": [
+       1.2,
+       1.2,
+       1.2
+      ]
+     }
+    ],
+    "parameter": 10,
+    "scope": "face"
+   },
+   {
+    "name": "noseWidth",
+    "ops": [
+     {
+      "centre": [
+       0.0,
+       1.5878,
+       0.15985
+      ],
+      "inner": 0.55,
+      "radii": [
+       0.0432,
+       0.054,
+       0.054
+      ],
+      "scale": [
+       1.25,
+       1.0,
+       1.0
+      ]
+     }
+    ],
+    "parameter": 11,
+    "scope": "face"
+   },
+   {
+    "name": "noseHeight",
+    "ops": [
+     {
+      "centre": [
+       0.0,
+       1.5878,
+       0.15985
+      ],
+      "inner": 0.55,
+      "move": [
+       0.0,
+       0.00594,
+       0.0
+      ],
+      "radii": [
+       0.03672,
+       0.0432,
+       0.054
+      ]
+     }
+    ],
+    "parameter": 12,
+    "scope": "face"
+   },
+   {
+    "name": "mouthWidth",
+    "ops": [
+     {
+      "centre": [
+       0.0,
+       1.51544,
+       0.1304
+      ],
+      "inner": 0.7,
+      "radii": [
+       0.06912,
+       0.03672,
+       0.03456
+      ],
+      "scale": [
+       1.2,
+       1.0,
+       1.0
+      ]
+     }
+    ],
+    "parameter": 13,
+    "scope": "face"
+   },
+   {
+    "name": "mouthHeight",
+    "ops": [
+     {
+      "centre": [
+       0.0,
+       1.51544,
+       0.1304
+      ],
+      "inner": 0.7,
+      "move": [
+       0.0,
+       0.00648,
+       0.0
+      ],
+      "radii": [
+       0.06912,
+       0.03888,
+       0.03672
+      ]
+     }
+    ],
+    "parameter": 14,
+    "scope": "face"
+   },
+   {
+    "name": "earSize",
+    "ops": [
+     {
+      "centre": [
+       0.15441,
+       1.59104,
+       -0.01512
+      ],
+      "inner": 0.6,
+      "radii": [
+       0.0432,
+       0.054,
+       0.0432
+      ],
+      "scale": [
+       1.25,
+       1.25,
+       1.25
+      ]
+     },
+     {
+      "centre": [
+       -0.15441,
+       1.59104,
+       -0.01512
+      ],
+      "inner": 0.6,
+      "radii": [
+       0.0432,
+       0.054,
+       0.0432
+      ],
+      "scale": [
+       1.25,
+       1.25,
+       1.25
+      ]
+     }
+    ],
+    "parameter": 15,
+    "scope": "face"
+   }
+  ]
+ },
+ "featureItems": [
+  {
+   "assets": {
+    "female": "facial_mustache.female.glb",
+    "male": "facial_mustache.male.glb"
+   },
+   "id": 120,
+   "name": "facial_mustache",
+   "random": {
+    "female": 0.0,
+    "male": 1.0
+   },
+   "slot": "facialHair"
+  },
+  {
+   "assets": {
+    "female": "facial_goatee.female.glb",
+    "male": "facial_goatee.male.glb"
+   },
+   "id": 121,
+   "name": "facial_goatee",
+   "random": {
+    "female": 0.0,
+    "male": 1.0
+   },
+   "slot": "facialHair"
+  },
+  {
+   "assets": {
+    "female": "facial_beard.female.glb",
+    "male": "facial_beard.male.glb"
+   },
+   "id": 122,
+   "name": "facial_beard",
+   "random": {
+    "female": 0.0,
+    "male": 1.0
+   },
+   "slot": "facialHair"
+  },
+  {
+   "assets": {
+    "female": "facial_chinstrap.female.glb",
+    "male": "facial_chinstrap.male.glb"
+   },
+   "id": 123,
+   "name": "facial_chinstrap",
+   "random": {
+    "female": 0.0,
+    "male": 1.0
+   },
+   "slot": "facialHair"
+  }
+ ],
+ "format": 1,
+ "items": [
+  {
+   "assets": {
+    "female": "hair_short.female.glb",
+    "male": "hair_short.male.glb"
+   },
+   "hatAssets": {
+    "female": "hair_short.hat.female.glb",
+    "male": "hair_short.hat.male.glb"
+   },
+   "id": 1,
+   "name": "hair_short",
+   "random": {
+    "female": 0.6,
+    "male": 1.4
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_spiky.female.glb",
+    "male": "hair_spiky.male.glb"
+   },
+   "hatAssets": {
+    "female": "hair_spiky.hat.female.glb",
+    "male": "hair_spiky.hat.male.glb"
+   },
+   "id": 2,
+   "name": "hair_spiky",
+   "random": {
+    "female": 0.4,
+    "male": 1.0
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_bob.female.glb",
+    "male": "hair_bob.male.glb"
+   },
+   "hatAssets": {
+    "female": "hair_bob.hat.female.glb",
+    "male": "hair_bob.hat.male.glb"
+   },
+   "id": 3,
+   "name": "hair_bob",
+   "random": {
+    "female": 1.4,
+    "male": 0.4
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_ponytail.female.glb",
+    "male": "hair_ponytail.male.glb"
+   },
+   "hatAssets": {
+    "female": "hair_ponytail.hat.female.glb",
+    "male": "hair_ponytail.hat.male.glb"
+   },
+   "id": 4,
+   "name": "hair_ponytail",
+   "random": {
+    "female": 1.4,
+    "male": 0.3
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_buzz.female.glb",
+    "male": "hair_buzz.male.glb"
+   },
+   "hatAssets": {
+    "female": "hair_buzz.hat.female.glb",
+    "male": "hair_buzz.hat.male.glb"
+   },
+   "id": 5,
+   "name": "hair_buzz",
+   "random": {
+    "female": 0.3,
+    "male": 1.2
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_long.female.glb",
+    "male": "hair_long.male.glb"
+   },
+   "hatAssets": {
+    "female": "hair_long.hat.female.glb",
+    "male": "hair_long.hat.male.glb"
+   },
+   "id": 6,
+   "name": "hair_long",
+   "random": {
+    "female": 1.4,
+    "male": 0.3
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_curly.female.glb",
+    "male": "hair_curly.male.glb"
+   },
+   "hatAssets": {
+    "female": "hair_curly.hat.female.glb",
+    "male": "hair_curly.hat.male.glb"
+   },
+   "id": 7,
+   "name": "hair_curly",
+   "random": {
+    "female": 1.0,
+    "male": 1.0
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_sidepart.female.glb",
+    "male": "hair_sidepart.male.glb"
+   },
+   "hatAssets": {
+    "female": "hair_sidepart.hat.female.glb",
+    "male": "hair_sidepart.hat.male.glb"
+   },
+   "id": 8,
+   "name": "hair_sidepart",
+   "random": {
+    "female": 0.6,
+    "male": 1.2
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_bun.female.glb",
+    "male": "hair_bun.male.glb"
+   },
+   "hatAssets": {
+    "female": "hair_bun.hat.female.glb",
+    "male": "hair_bun.hat.male.glb"
+   },
+   "id": 9,
+   "name": "hair_bun",
+   "random": {
+    "female": 1.2,
+    "male": 0.2
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_pigtails.female.glb",
+    "male": "hair_pigtails.male.glb"
+   },
+   "hatAssets": {
+    "female": "hair_pigtails.hat.female.glb",
+    "male": "hair_pigtails.hat.male.glb"
+   },
+   "id": 10,
+   "name": "hair_pigtails",
+   "random": {
+    "female": 1.0,
+    "male": 0.1
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "top_tshirt.female.glb",
+    "male": "top_tshirt.male.glb"
+   },
+   "id": 20,
+   "name": "top_tshirt",
+   "random": {
+    "female": 1.0,
+    "male": 1.0
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_longsleeve.female.glb",
+    "male": "top_longsleeve.male.glb"
+   },
+   "id": 21,
+   "name": "top_longsleeve",
+   "random": {
+    "female": 1.0,
+    "male": 1.0
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_hoodie.female.glb",
+    "male": "top_hoodie.male.glb"
+   },
+   "id": 22,
+   "name": "top_hoodie",
+   "random": {
+    "female": 1.0,
+    "male": 1.0
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_tank.female.glb",
+    "male": "top_tank.male.glb"
+   },
+   "id": 23,
+   "name": "top_tank",
+   "random": {
+    "female": 1.0,
+    "male": 0.6
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_shirt.female.glb",
+    "male": "top_shirt.male.glb"
+   },
+   "id": 24,
+   "name": "top_shirt",
+   "random": {
+    "female": 0.8,
+    "male": 1.0
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_sweater.female.glb",
+    "male": "top_sweater.male.glb"
+   },
+   "id": 25,
+   "name": "top_sweater",
+   "random": {
+    "female": 1.0,
+    "male": 1.0
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_jacket.female.glb",
+    "male": "top_jacket.male.glb"
+   },
+   "id": 26,
+   "name": "top_jacket",
+   "random": {
+    "female": 1.0,
+    "male": 1.0
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_polo.female.glb",
+    "male": "top_polo.male.glb"
+   },
+   "id": 27,
+   "name": "top_polo",
+   "random": {
+    "female": 0.7,
+    "male": 1.0
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_turtleneck.female.glb",
+    "male": "top_turtleneck.male.glb"
+   },
+   "id": 28,
+   "name": "top_turtleneck",
+   "random": {
+    "female": 1.0,
+    "male": 0.7
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "bottom_jeans.female.glb",
+    "male": "bottom_jeans.male.glb"
+   },
+   "id": 40,
+   "name": "bottom_jeans",
+   "random": {
+    "female": 1.0,
+    "male": 1.4
+   },
+   "slot": "bottom"
+  },
+  {
+   "assets": {
+    "female": "bottom_shorts.female.glb",
+    "male": "bottom_shorts.male.glb"
+   },
+   "id": 41,
+   "name": "bottom_shorts",
+   "random": {
+    "female": 0.8,
+    "male": 1.0
+   },
+   "slot": "bottom"
+  },
+  {
+   "assets": {
+    "female": "bottom_skirt.female.glb",
+    "male": "bottom_skirt.male.glb"
+   },
+   "id": 42,
+   "name": "bottom_skirt",
+   "random": {
+    "female": 1.2,
+    "male": 0.05
+   },
+   "slot": "bottom"
+  },
+  {
+   "assets": {
+    "female": "bottom_cargo.female.glb",
+    "male": "bottom_cargo.male.glb"
+   },
+   "id": 43,
+   "name": "bottom_cargo",
+   "random": {
+    "female": 0.6,
+    "male": 1.2
+   },
+   "slot": "bottom"
+  },
+  {
+   "assets": {
+    "female": "bottom_joggers.female.glb",
+    "male": "bottom_joggers.male.glb"
+   },
+   "id": 44,
+   "name": "bottom_joggers",
+   "random": {
+    "female": 1.0,
+    "male": 1.0
+   },
+   "slot": "bottom"
+  },
+  {
+   "assets": {
+    "female": "bottom_longskirt.female.glb",
+    "male": "bottom_longskirt.male.glb"
+   },
+   "id": 45,
+   "name": "bottom_longskirt",
+   "random": {
+    "female": 0.8,
+    "male": 0.02
+   },
+   "slot": "bottom"
+  },
+  {
+   "assets": {
+    "female": "shoes_sneakers.female.glb",
+    "male": "shoes_sneakers.male.glb"
+   },
+   "id": 60,
+   "name": "shoes_sneakers",
+   "random": {
+    "female": 1.2,
+    "male": 1.2
+   },
+   "slot": "shoes"
+  },
+  {
+   "assets": {
+    "female": "shoes_boots.female.glb",
+    "male": "shoes_boots.male.glb"
+   },
+   "id": 61,
+   "name": "shoes_boots",
+   "random": {
+    "female": 1.0,
+    "male": 1.0
+   },
+   "slot": "shoes"
+  },
+  {
+   "assets": {
+    "female": "shoes_hightops.female.glb",
+    "male": "shoes_hightops.male.glb"
+   },
+   "id": 62,
+   "name": "shoes_hightops",
+   "random": {
+    "female": 1.0,
+    "male": 1.0
+   },
+   "slot": "shoes"
+  },
+  {
+   "assets": {
+    "female": "shoes_dress.female.glb",
+    "male": "shoes_dress.male.glb"
+   },
+   "id": 63,
+   "name": "shoes_dress",
+   "random": {
+    "female": 0.6,
+    "male": 1.0
+   },
+   "slot": "shoes"
+  },
+  {
+   "assets": {
+    "female": "shoes_flats.female.glb",
+    "male": "shoes_flats.male.glb"
+   },
+   "id": 64,
+   "name": "shoes_flats",
+   "random": {
+    "female": 1.0,
+    "male": 0.05
+   },
+   "slot": "shoes"
+  },
+  {
+   "assets": {
+    "female": "glasses_round.female.glb",
+    "male": "glasses_round.male.glb"
+   },
+   "id": 80,
+   "name": "glasses_round",
+   "random": {
+    "female": 1.0,
+    "male": 1.0
+   },
+   "slot": "glasses"
+  },
+  {
+   "assets": {
+    "female": "glasses_square.female.glb",
+    "male": "glasses_square.male.glb"
+   },
+   "id": 81,
+   "name": "glasses_square",
+   "random": {
+    "female": 1.0,
+    "male": 1.0
+   },
+   "slot": "glasses"
+  },
+  {
+   "assets": {
+    "female": "glasses_aviator.female.glb",
+    "male": "glasses_aviator.male.glb"
+   },
+   "id": 82,
+   "name": "glasses_aviator",
+   "random": {
+    "female": 1.0,
+    "male": 1.0
+   },
+   "slot": "glasses"
+  },
+  {
+   "assets": {
+    "female": "glasses_browline.female.glb",
+    "male": "glasses_browline.male.glb"
+   },
+   "id": 83,
+   "name": "glasses_browline",
+   "random": {
+    "female": 1.0,
+    "male": 1.0
+   },
+   "slot": "glasses"
+  },
+  {
+   "assets": {
+    "female": "hat_cap.female.glb",
+    "male": "hat_cap.male.glb"
+   },
+   "coversHair": true,
+   "id": 100,
+   "name": "hat_cap",
+   "random": {
+    "female": 1.0,
+    "male": 1.0
+   },
+   "slot": "hat"
+  },
+  {
+   "assets": {
+    "female": "hat_beanie.female.glb",
+    "male": "hat_beanie.male.glb"
+   },
+   "coversHair": true,
+   "id": 101,
+   "name": "hat_beanie",
+   "random": {
+    "female": 1.0,
+    "male": 1.0
+   },
+   "slot": "hat"
+  },
+  {
+   "assets": {
+    "female": "hat_bucket.female.glb",
+    "male": "hat_bucket.male.glb"
+   },
+   "coversHair": true,
+   "id": 102,
+   "name": "hat_bucket",
+   "random": {
+    "female": 1.0,
+    "male": 1.0
+   },
+   "slot": "hat"
+  },
+  {
+   "assets": {
+    "female": "hat_fedora.female.glb",
+    "male": "hat_fedora.male.glb"
+   },
+   "coversHair": true,
+   "id": 103,
+   "name": "hat_fedora",
+   "random": {
+    "female": 0.8,
+    "male": 1.0
+   },
+   "slot": "hat"
+  },
+  {
+   "assets": {
+    "female": "hat_headband.female.glb",
+    "male": "hat_headband.male.glb"
+   },
+   "id": 104,
+   "name": "hat_headband",
+   "random": {
+    "female": 1.0,
+    "male": 0.3
+   },
+   "slot": "hat"
+  }
+ ],
+ "note": "Original CNA avatar assets generated by tools/avatar_builder/generate_avatar_catalog.py.",
+ "rig": "cna-avatar-71"
+}

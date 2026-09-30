@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/MessageBoxIcon.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/NotificationPosition.hpp"
@@ -16,8 +17,8 @@
 #include "System/AsyncCallback.hpp"
 #include "System/TimeSpan.hpp"
 
-// Task 15.11: cna_demo_guide_overlay_console. The full Guide static API surface, exercised
-// through a numbered console menu: each entry triggers one real Guide call and prints its
+// Task 15.11: cna_demo_guide_overlay_console. Guide static API calls, exercised through a
+// numbered console menu: each entry triggers one real Guide call and prints its
 // result/exception. Console-only, single process, no graphics/window needed at all - confirmed
 // safe by reading TextInputEXT::StartTextInput/StopTextInput first (both null-window-guarded, so
 // calling Guide::BeginShowKeyboardInput/EndShowKeyboardInput here never touches SDL at all).
@@ -46,12 +47,20 @@ namespace
 
     void MenuShowSignIn()
     {
-        Guide::ShowSignIn(2, false);
-        std::printf("  ShowSignIn(2, false) called - no-op in this platform's implementation "
-                    "(no crash, no visible effect).\n");
+        // The sign-in panes belong to a game whose GamerServicesComponent initialized gamer
+        // services and whose graphics device draws the Guide; this console program has neither.
+        try
+        {
+            Guide::ShowSignIn(2, false);
+            std::printf("  ShowSignIn(2, false) opened the sign-in panes.\n");
+        }
+        catch (const GamerServicesNotAvailableException& e)
+        {
+            std::printf("  ShowSignIn(2, false) threw GamerServicesNotAvailableException: %s\n", e.what());
+        }
     }
 
-    // Task 3.2: BeginShowKeyboardInput no longer completes synchronously - it accumulates real
+    // Task 3.2: BeginShowKeyboardInput does not complete synchronously - it accumulates real
     // Microsoft::Xna::Framework::Input::TextInputEXT::TextInput code units and completes on Enter,
     // matching a real on-screen keyboard. This console-only demo has no real window to type into
     // (see this file's own top-of-file comment), so it drives the exact same event stream
@@ -81,8 +90,8 @@ namespace
                     typed.c_str(), text.c_str());
     }
 
-    // Task 3.1: BeginShowMessageBox/EndShowMessageBox are now a real (not NotSupportedException)
-    // implementation - but the real, mouse-driven completion path (RenderPendingMessageBoxEXT)
+    // Task 3.1: BeginShowMessageBox/EndShowMessageBox are a real implementation - but the real
+    // completion path (RenderPendingMessageBoxEXT, answering mouse, keyboard and controller)
     // needs a SpriteBatch/GraphicsDevice this console-only demo intentionally has none of (see
     // this file's own top-of-file comment). SimulateMessageBoxClickEXT is the dedicated headless
     // entry point for exactly this case - exercises the full real Begin -> completion -> End
@@ -161,8 +170,9 @@ namespace
     void MenuDelayNotifications()
     {
         Guide::DelayNotifications(System::TimeSpan::FromSeconds(5.0));
-        std::printf("  DelayNotifications(5s) called - no-op in this platform's implementation "
-                    "(no observable effect, no crash).\n");
+        std::printf("  DelayNotifications(5s) called - the Guide holds game-invitation prompts back "
+                    "for 5 s (at most 120 s); this console program is in no online session, so it "
+                    "receives none to hold back.\n");
     }
 
     struct MenuItem
@@ -186,7 +196,7 @@ int main(int argc, char* argv[])
         {"ShowSignIn", MenuShowSignIn},
         {"BeginShowKeyboardInput/EndShowKeyboardInput", MenuKeyboardInput},
         {"BeginShowMessageBox/SimulateMessageBoxClickEXT/EndShowMessageBox", MenuMessageBox},
-        {"Toggle IsTrialMode", MenuTrialMode},
+        {"IsTrialMode", MenuTrialMode},
         {"Toggle SimulateTrialMode", MenuSimulateTrialMode},
         {"Toggle IsScreenSaverEnabled", MenuScreenSaver},
         {"Cycle NotificationPosition", MenuNotificationPosition},

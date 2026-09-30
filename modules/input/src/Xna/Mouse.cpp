@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
+#include "CNA/Internal/Input/SystemInput.hpp"
+#include "../Internal/SystemInput.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/IPlatform.hpp"
@@ -141,12 +143,15 @@ namespace Microsoft::Xna::Framework::Input
             y = static_cast<int>(logicalY);
         }
 
+        // While the Guide owns the mouse buttons the game sees none, and buttons it used stay
+        // hidden until released; the pointer keeps moving.
+        const auto buttons = CNA::Internal::Input::filterGameMouseButtons(snapshot.buttons);
         return MouseState(x, y, snapshot.scrollY,
-                          Button(snapshot.buttons, 0x01),
-                          Button(snapshot.buttons, 0x02),
-                          Button(snapshot.buttons, 0x04),
-                          Button(snapshot.buttons, 0x08),
-                          Button(snapshot.buttons, 0x10),
+                          Button(buttons, 0x01),
+                          Button(buttons, 0x02),
+                          Button(buttons, 0x04),
+                          Button(buttons, 0x08),
+                          Button(buttons, 0x10),
                           snapshot.scrollX);
     }
 
@@ -281,5 +286,28 @@ namespace Microsoft::Xna::Framework::Input
         windowHandle_ = 0;
         windowId_ = 0;
         ClickedEXT    = nullptr;
+    }
+}
+
+namespace CNA::Internal::Input
+{
+    Microsoft::Xna::Framework::Input::MouseState systemMouseState()
+    {
+        using namespace Microsoft::Xna::Framework::Input;
+        CNA::Platform::IPlatformMouse* mouse = CurrentMouse();
+        if (mouse == nullptr)
+        {
+            return MouseState();
+        }
+        // Relative motion is the game's: it is consumed when read, so the system never reads it.
+        const CNA::Platform::MouseSnapshot& snapshot = mouse->GetSnapshot();
+        float x = static_cast<float>(snapshot.x), y = static_cast<float>(snapshot.y);
+        if (!mouse->IsRelativeMode())
+        {
+            window_to_logical(snapshot.window, x, y, x, y);
+        }
+        return MouseState(static_cast<int>(x), static_cast<int>(y), snapshot.scrollY,
+                          Button(snapshot.buttons, 0x01), Button(snapshot.buttons, 0x02), Button(snapshot.buttons, 0x04),
+                          Button(snapshot.buttons, 0x08), Button(snapshot.buttons, 0x10), snapshot.scrollX);
     }
 }

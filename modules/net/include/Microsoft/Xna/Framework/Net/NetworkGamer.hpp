@@ -18,6 +18,9 @@ namespace Microsoft::Xna::Framework::Net
     class NetworkGamer : public GamerServices::Gamer
     {
     public:
+        /** @brief .NET type name. @return Name. */
+        GetTypeNameHPP()
+
         /**
          * @brief Gets whether this gamer has left the session.
          *

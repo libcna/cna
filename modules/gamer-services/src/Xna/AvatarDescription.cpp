@@ -3,6 +3,7 @@
 #include "CNA/Internal/GamerServices/LocalProfiles.hpp"
 #include "CNA/Internal/GamerServices/AvatarDescriptionCodec.hpp"
 #include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
+#include "CNA/Internal/GamerServices/ServiceUpdateSubscription.hpp"
 #include "../Internal/ServiceAsyncResult.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
@@ -11,6 +12,9 @@
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "System/Threading/EventWaitHandle.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
+#include <array>
+#include <chrono>
 #include <mutex>
 
 namespace Microsoft::Xna::Framework::GamerServices
@@ -24,14 +28,19 @@ namespace Microsoft::Xna::Framework::GamerServices
         class AvatarDescriptionAsyncResult : public System::IAsyncResult
         {
         public:
-            AvatarDescriptionAsyncResult(std::any state, std::vector<unsigned char> description)
+            AvatarDescriptionAsyncResult(std::any state, std::vector<unsigned char> description, int playerIndex = -1,
+                                         std::string identity = {})
                 : asyncState_(std::move(state))
                 , asyncWaitHandle_(true, System::Threading::EventResetMode::ManualReset)
                 , description_(std::move(description))
+                , playerIndex_(playerIndex)
+                , identity_(std::move(identity))
             {
             }
 
             [[nodiscard]] const std::vector<unsigned char>& description() const { return description_; }
+            [[nodiscard]] int playerIndex() const { return playerIndex_; }
+            [[nodiscard]] const std::string& identity() const { return identity_; }
 
             [[nodiscard]] bool getIsCompletedProperty() const override { return true; }
             [[nodiscard]] bool getCompletedSynchronouslyProperty() const override { return true; }
@@ -46,7 +55,174 @@ namespace Microsoft::Xna::Framework::GamerServices
             std::any asyncState_;
             mutable System::Threading::EventWaitHandle asyncWaitHandle_;
             std::vector<unsigned char> description_;
+            int playerIndex_;
+            std::string identity_;
         };
+
+        // A service read of a signed-in gamer's avatar: the bytes, and whose slot they are for.
+        struct ServiceAvatar
+        {
+            std::vector<unsigned char> bytes;
+            long long revision = 0;
+            int playerIndex = -1;
+            std::string identity;
+        };
+
+        // XNA keeps one description per signed-in player index: EndGetFromGamer returns it until
+        // that gamer's avatar changes, when its Changed is raised and the slot is emptied
+        // (AvatarDescription.OnAvatarChanged, GamerServicesDispatcher.ReadAvatarChanged). The
+        // description's Changed is shared, so every copy handed out is that one object's event.
+        struct CachedSlot
+        {
+            std::optional<AvatarDescription> description;
+            std::string identity;
+            bool service = false;
+            long long revision = 0;
+            std::chrono::steady_clock::time_point nextCheck;
+            bool checking = false;
+        };
+        std::array<CachedSlot, 4> cache;
+        std::weak_ptr<CNA::Internal::GamerServices::IGamerServicesBackend> cacheBackend;
+        std::unique_ptr<CNA::Internal::GamerServices::ServiceUpdateSubscription> changeWatch;
+        std::chrono::milliseconds checkInterval{10000};
+
+        SignedInGamer* SignedInAt(int index)
+        {
+            const auto* gamers = Gamer::getSignedInGamersProperty();
+            return gamers ? (*gamers)[static_cast<Microsoft::Xna::Framework::PlayerIndex>(index)] : nullptr;
+        }
+
+        std::string IdentityOf(const SignedInGamer& gamer)
+        {
+            const auto userId = CNA::Internal::GamerServices::GamerAccess::userId(gamer);
+            return userId.empty() ? "local:" + gamer.getGamertagProperty() : "service:" + userId;
+        }
+
+        void RaiseChanged(int index, SignedInGamer& gamer)
+        {
+            // Empty the slot first: a handler reading the avatar again gets a new description.
+            AvatarDescription changed = *cache[static_cast<std::size_t>(index)].description;
+            cache[static_cast<std::size_t>(index)] = CachedSlot{};
+            changed.Changed.Raise(&gamer, System::EventArgs::Empty);
+        }
+
+        // Owner thread, each GamerServicesDispatcher.Update: read cached gamers' avatars again now
+        // and then, and report the ones that differ.
+        void CheckCachedAvatars()
+        {
+            namespace Service = CNA::Internal::GamerServices;
+            auto current = Service::backend();
+            if (cacheBackend.lock() != current)
+            {
+                cache = {};
+                cacheBackend = current;
+                return;
+            }
+            const auto now = std::chrono::steady_clock::now();
+            for (int index = 0; index < 4; ++index)
+            {
+                auto& slot = cache[static_cast<std::size_t>(index)];
+                if (!slot.description)
+                {
+                    continue;
+                }
+                auto* gamer = SignedInAt(index);
+                if (gamer == nullptr || IdentityOf(*gamer) != slot.identity)
+                {
+                    // Signed out, or another gamer in the slot: not a change of this avatar.
+                    slot = CachedSlot{};
+                    continue;
+                }
+                if (slot.checking || now < slot.nextCheck)
+                {
+                    continue;
+                }
+                slot.nextCheck = now + checkInterval;
+                const auto known = slot.description->getDescriptionProperty();
+                if (!slot.service)
+                {
+                    const auto stored = Service::localProfileAvatar(gamer->getGamertagProperty());
+                    if (stored.size() == known.size() && !std::equal(stored.begin(), stored.end(), known.begin()))
+                    {
+                        RaiseChanged(index, *gamer);
+                    }
+                    continue;
+                }
+                if (!current->serviceEnabled())
+                {
+                    continue;
+                }
+                slot.checking = true;
+                auto fetched = std::make_shared<std::optional<Service::ServiceAvatarRecord>>();
+                const auto userId = Service::GamerAccess::userId(*gamer);
+                const std::weak_ptr<Service::IGamerServicesBackend> origin = current;
+                current->submit(
+                    [fetched, userId, origin] {
+                        try
+                        {
+                            if (auto service = origin.lock())
+                            {
+                                *fetched = service->avatars({userId}).at(0);
+                            }
+                        }
+                        catch (...)
+                        {
+                            // Unreachable or failed: no news, ask again later.
+                        }
+                    },
+                    [fetched, index, identity = slot.identity, known, revision = slot.revision] {
+                        auto& again = cache[static_cast<std::size_t>(index)];
+                        if (!again.description || again.identity != identity)
+                        {
+                            return;
+                        }
+                        again.checking = false;
+                        auto* owner = SignedInAt(index);
+                        if (!*fetched || owner == nullptr || IdentityOf(*owner) != identity)
+                        {
+                            return;
+                        }
+                        // The stored avatar's revision says whether it changed; the bytes can differ
+                        // without a change (a catalog installed since, a projection no longer needed).
+                        const auto& bytes = (*fetched)->description;
+                        const bool same = revision != 0 && (*fetched)->revision != 0
+                            ? revision == (*fetched)->revision
+                            : bytes.empty() ? std::none_of(known.begin(), known.end(), [](auto b) { return b != 0; })
+                                            : bytes.size() == known.size() && std::equal(bytes.begin(), bytes.end(), known.begin());
+                        if (!same)
+                        {
+                            RaiseChanged(index, *owner);
+                        }
+                    });
+            }
+        }
+
+        AvatarDescription Cached(int index, const std::string& identity, bool service, std::vector<unsigned char> bytes,
+                                 long long revision = 0)
+        {
+            auto* gamer = SignedInAt(index);
+            if (index < 0 || index > 3 || gamer == nullptr || IdentityOf(*gamer) != identity)
+            {
+                return AvatarDescription(std::vector<SharpRuntime::bytecs>(bytes.begin(), bytes.end()));
+            }
+            auto& slot = cache[static_cast<std::size_t>(index)];
+            if (!slot.description || slot.identity != identity)
+            {
+                cacheBackend = CNA::Internal::GamerServices::backend();
+                slot = CachedSlot{};
+                slot.description.emplace(std::vector<SharpRuntime::bytecs>(bytes.begin(), bytes.end()));
+                slot.description->Changed.Share();
+                slot.identity = identity;
+                slot.service = service;
+                slot.revision = revision;
+                slot.nextCheck = std::chrono::steady_clock::now() + checkInterval;
+                if (!changeWatch)
+                {
+                    changeWatch = std::make_unique<CNA::Internal::GamerServices::ServiceUpdateSubscription>(CheckCachedAvatars);
+                }
+            }
+            return *slot.description;
+        }
     }
 
     AvatarDescription::AvatarDescription(const std::vector<SharpRuntime::bytecs>& data)
@@ -143,24 +319,45 @@ namespace Microsoft::Xna::Framework::GamerServices
 
         // A gamer with a service identity (signed in, or met in an online session) has its
         // avatar read from the service, and a signed-in local profile has the one stored with the
-        // profile; anyone else has none.
+        // profile; anyone else has none. A signed-in gamer's slot keeps the description it got
+        // until that avatar changes.
         const auto userId = CNA::Internal::GamerServices::GamerAccess::userId(*gamer);
         auto service = CNA::Internal::GamerServices::backend();
+        const auto* signedIn = dynamic_cast<const SignedInGamer*>(gamer);
+        const int playerIndex = signedIn != nullptr ? static_cast<int>(signedIn->getPlayerIndexProperty()) : -1;
+        const std::string identity = signedIn != nullptr ? IdentityOf(*signedIn) : std::string();
+        if (playerIndex >= 0 && playerIndex < 4)
+        {
+            const auto& slot = cache[static_cast<std::size_t>(playerIndex)];
+            if (slot.description && slot.identity == identity && cacheBackend.lock() == service)
+            {
+                const auto bytes = slot.description->getDescriptionProperty();
+                auto* result = new AvatarDescriptionAsyncResult(std::move(state), std::vector<unsigned char>(bytes.begin(), bytes.end()),
+                                                                playerIndex, identity);
+                if (callback)
+                {
+                    callback(*result);
+                }
+                return result;
+            }
+        }
         if (service->serviceEnabled() && !userId.empty())
         {
             return CNA::Internal::GamerServices::ServiceAsyncResult::begin(
                 "avatar", nullptr,
-                [userId](auto& executor) -> std::any { return executor.avatars({userId}).at(0); },
+                [userId, playerIndex, identity](auto& executor) -> std::any {
+                    auto record = executor.avatars({userId}).at(0);
+                    return ServiceAvatar{std::move(record.description), record.revision, playerIndex, identity};
+                },
                 std::move(callback), std::move(state), std::move(service));
         }
 
         std::vector<unsigned char> local;
-        if (const auto* signedIn = dynamic_cast<const SignedInGamer*>(gamer);
-            signedIn != nullptr && userId.empty() && !signedIn->getIsSignedInToLiveProperty() && !signedIn->getIsGuestProperty())
+        if (signedIn != nullptr && userId.empty() && !signedIn->getIsSignedInToLiveProperty() && !signedIn->getIsGuestProperty())
         {
             local = CNA::Internal::GamerServices::localProfileAvatar(signedIn->getGamertagProperty());
         }
-        auto* result = new AvatarDescriptionAsyncResult(std::move(state), std::move(local));
+        auto* result = new AvatarDescriptionAsyncResult(std::move(state), std::move(local), playerIndex, identity);
         if (callback)
         {
             callback(*result);
@@ -172,11 +369,10 @@ namespace Microsoft::Xna::Framework::GamerServices
     {
         if (dynamic_cast<CNA::Internal::GamerServices::ServiceAsyncResult*>(result) != nullptr)
         {
-            std::vector<unsigned char> bytes;
+            ServiceAvatar read;
             try
             {
-                bytes = std::any_cast<std::vector<unsigned char>>(
-                    CNA::Internal::GamerServices::ServiceAsyncResult::end(result, "avatar", nullptr));
+                read = std::any_cast<ServiceAvatar>(CNA::Internal::GamerServices::ServiceAsyncResult::end(result, "avatar", nullptr));
             }
             catch (const System::ArgumentException&)
             {
@@ -188,14 +384,17 @@ namespace Microsoft::Xna::Framework::GamerServices
             }
             catch (const std::exception&)
             {
-                // An unreachable service reads as "no avatar", as it would for a gamer without one.
-                bytes.clear();
+                // An unreachable service reads as "no avatar", as it would for a gamer without one;
+                // it is not kept, so the next read asks again.
+                return AvatarDescription(std::vector<SharpRuntime::bytecs>(DescriptionSize, 0), false);
             }
-            if (static_cast<int>(bytes.size()) == DescriptionSize)
+            auto bytes = static_cast<int>(read.bytes.size()) == DescriptionSize ? read.bytes
+                                                                                 : std::vector<unsigned char>(DescriptionSize, 0);
+            if (read.playerIndex >= 0)
             {
-                return AvatarDescription(std::vector<SharpRuntime::bytecs>(bytes.begin(), bytes.end()), false);
+                return Cached(read.playerIndex, read.identity, true, std::move(bytes), read.revision);
             }
-            return AvatarDescription(std::vector<SharpRuntime::bytecs>(DescriptionSize, 0), false);
+            return AvatarDescription(std::vector<SharpRuntime::bytecs>(bytes.begin(), bytes.end()), false);
         }
 
         const auto* local = dynamic_cast<AvatarDescriptionAsyncResult*>(result);
@@ -203,12 +402,21 @@ namespace Microsoft::Xna::Framework::GamerServices
         {
             throw System::ArgumentException("result was not returned by a call to BeginGetFromGamer.");
         }
-        if (static_cast<int>(local->description().size()) == DescriptionSize)
-        {
-            return AvatarDescription(std::vector<SharpRuntime::bytecs>(local->description().begin(), local->description().end()), false);
-        }
-
         // Without a service identity or local profile there is no avatar: an all-zero (invalid) description.
-        return AvatarDescription(std::vector<SharpRuntime::bytecs>(DescriptionSize, 0), false);
+        auto bytes = static_cast<int>(local->description().size()) == DescriptionSize ? local->description()
+                                                                                        : std::vector<unsigned char>(DescriptionSize, 0);
+        if (local->playerIndex() >= 0)
+        {
+            return Cached(local->playerIndex(), local->identity(), local->identity().starts_with("service:"), std::move(bytes));
+        }
+        return AvatarDescription(std::vector<SharpRuntime::bytecs>(bytes.begin(), bytes.end()), false);
+    }
+}
+
+namespace CNA::Internal::GamerServices::Avatars
+{
+    void setAvatarChangeCheckInterval(std::chrono::milliseconds interval)
+    {
+        Microsoft::Xna::Framework::GamerServices::checkInterval = interval;
     }
 }

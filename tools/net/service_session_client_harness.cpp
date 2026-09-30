@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Standard-API acceptance client: every GamerServices/Net operation below is the public XNA surface.
 // Only keyboard entry into the Guide sign-in overlay is simulated, through the CNA text-input hook.
+#include "../../modules/gamer-services/src/Internal/Guide/GuideUi.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
@@ -13,6 +14,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
+#include "Microsoft/Xna/Framework/Net/HostChangedEventArgs.hpp"
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
@@ -33,6 +35,7 @@
 
 using namespace Microsoft::Xna::Framework::GamerServices;
 using namespace Microsoft::Xna::Framework::Net;
+namespace Ui=CNA::Internal::GamerServices::GuideUi;
 namespace {
 using Clock=std::chrono::steady_clock;
 int checks=0;const char* phase="initial";std::string detail;
@@ -68,9 +71,6 @@ std::string line() {
     }
 }
 void command(){check(line()=="continue","parent boundary");}
-bool messageBoxPending() {
-    try{(void)Guide::GetPendingMessageBoxFocusButtonForTestingEXT();return true;}catch(const std::exception&){return false;}
-}
 // Payload identifies its sender and recipient so each receiver can verify the reported sender.
 std::vector<SharpRuntime::bytecs> payload(const std::string& from,const std::string& to,std::size_t size) {
     std::vector<SharpRuntime::bytecs> result(size);const auto label=from+">"+to;
@@ -81,8 +81,11 @@ std::vector<SharpRuntime::bytecs> payload(const std::string& from,const std::str
 }
 int main(int argc,char** argv) {
     try {
-        check(argc==3||(argc==4&&std::string(argv[3])=="invite"),"arguments");const std::string role=argv[1],kind=argv[2];
-        const bool invited=argc==4;
+        const std::string variant=argc==4?argv[3]:"";
+        check(argc==3||(argc==4&&(variant=="invite"||variant=="migrate"||variant=="crash"||variant=="add")),"arguments");const std::string role=argv[1],kind=argv[2];
+        // migrate: the host allows host migration and leaves first; crash: the driver kills the host instead;
+        // add: the joiner joins with its first gamer and adds the second with AddLocalGamer.
+        const bool invited=variant=="invite",migrating=variant=="migrate"||variant=="crash",adding=variant=="add";
         check(role=="host"||role=="join","role");check(kind=="player"||kind=="ranked","kind");
         const bool host=role=="host";const auto type=kind=="player"?NetworkSessionType::PlayerMatch:NetworkSessionType::Ranked;
         const std::array<std::string,2> accounts=host?std::array<std::string,2>{"alice","charlie"}:std::array<std::string,2>{"bob","dana"};
@@ -108,12 +111,19 @@ int main(int argc,char** argv) {
                 bool refused=false;try{session->setAllowJoinInProgressProperty(true);}catch(const System::NotSupportedException&){refused=true;}
                 check(refused&&!session->getAllowJoinInProgressProperty(),"Ranked refuses join-in-progress");
             }
+            if(migrating) {
+                session->setAllowHostMigrationProperty(true);
+                check(session->getAllowHostMigrationProperty(),"host allows migration");
+            }
             std::cout<<"session-created\n"<<std::flush;
             if(invited) {
                 // Standard Guide invitation: no recipients means the Guide asks for a gamertag.
                 phase="invite";Guide::ShowGameInvite(Microsoft::Xna::Framework::PlayerIndex::One,std::vector<Gamer*>{});
-                until([]{return Guide::getIsVisibleProperty();});enter("Bob");
-                until(messageBoxPending);Guide::SimulateMessageBoxClickEXT(0);
+                until([]{return Ui::currentScreenForTesting()=="invite";});
+                // X adds a gamertag, Y sends.
+                Ui::sendForTesting(Ui::Command::X);until([]{return Guide::getHasPendingKeyboardInputEXTProperty();});enter("Bob");
+                until([]{return !Ui::labelsForTesting().empty()&&Ui::labelsForTesting().back()=="[x] Bob";});
+                Ui::sendForTesting(Ui::Command::Y);
                 until([]{return !Guide::getIsVisibleProperty();});
                 std::cout<<"invite-sent\n"<<std::flush;
             }
@@ -124,7 +134,7 @@ int main(int argc,char** argv) {
                 ++raised;check(args.getGamerProperty()==gamers[0]&&!args.getIsCurrentSessionProperty(),"invitee and foreign session");
                 session=NetworkSession::JoinInvited(2);
             };
-            until(messageBoxPending,30);Guide::SimulateMessageBoxClickEXT(0);
+            until([]{return Ui::currentScreenForTesting()=="invitation";},30);Ui::clickForTesting(0);
             until([&]{return session!=nullptr;});check(raised==1,"InviteAccepted once");
             check(!session->getIsHostProperty()&&session->getAllGamersProperty().getCountProperty()==4,"invited join complete roster");
             check(session->getLocalGamersProperty()[0]->getGamertagProperty()=="Bob","invitee joins first");
@@ -133,7 +143,7 @@ int main(int argc,char** argv) {
         }else {
             phase="find";auto mismatched=properties;mismatched[7]=74;
             check(NetworkSession::Find(type,gamers,mismatched).getCountProperty()==0,"property filter excludes the session");
-            auto found=NetworkSession::Find(type,gamers,properties);
+            auto found=NetworkSession::Find(type,adding?std::vector<SignedInGamer*>{gamers[0]}:gamers,properties);
             check(found.getCountProperty()==1,"one matching online session");const auto& listing=std::as_const(found)[0];
             check(listing.getHostGamertagProperty()=="Alice"&&listing.getCurrentGamerCountProperty()==2,"listing host and count");
             check(listing.getOpenPrivateGamerSlotsProperty()==1&&listing.getOpenPublicGamerSlotsProperty()==2,"listing slots");
@@ -142,7 +152,7 @@ int main(int argc,char** argv) {
             check(!result->getCompletedSynchronouslyProperty(),"online join begins pending");
             until([&]{return result->getIsCompletedProperty();});check(callbacks==1,"join callback once");
             session=NetworkSession::EndJoin(result.get());
-            check(!session->getIsHostProperty()&&session->getAllGamersProperty().getCountProperty()==4,"joined complete roster");
+            check(!session->getIsHostProperty()&&session->getAllGamersProperty().getCountProperty()==(adding?3:4),"joined complete roster");
             auto* hostGamer=session->getHostProperty();
             check(hostGamer&&!hostGamer->getIsLocalProperty()&&hostGamer->getGamertagProperty()=="Alice"&&hostGamer->getIsHostProperty(),"remote host identity");
             check(session->getSessionPropertiesProperty().getItem(7)==73,"joined host properties");
@@ -154,6 +164,17 @@ int main(int argc,char** argv) {
         session->GameStarted+=[&](auto*,const GameStartedEventArgs&){++started;};
         session->GameEnded+=[&](auto*,const GameEndedEventArgs&){++ended;};
         session->SessionEnded+=[&](auto*,const NetworkSessionEndedEventArgs& args){reason=args.getEndReasonProperty();};
+        std::vector<std::pair<std::string,std::string>> hostChanges;
+        session->HostChanged+=[&](auto*,const HostChangedEventArgs& args) {
+            hostChanges.emplace_back(args.getOldHostProperty()->getGamertagProperty(),args.getNewHostProperty()->getGamertagProperty());
+        };
+        if(adding&&!host) {
+            // XNA AddLocalGamer online: accepted now, joined (GamerJoined) at a later Update on every machine.
+            phase="add";session->AddLocalGamer(gamers[1]);
+            check(session->getLocalGamersProperty().getCountProperty()==1,"the added gamer arrives later");
+            until([&]{return session->getLocalGamersProperty().getCountProperty()==2;});
+            check(session->getLocalGamersProperty()[1]->getGamertagProperty()=="Dana","Dana added");
+        }
         phase="roster";until([&]{return joined.size()==4;});
         check(std::set<std::string>(joined.begin(),joined.end())==std::set<std::string>{"Alice","Bob","Charlie","Dana"},"GamerJoined for every gamer once");
         const auto& locals=session->getLocalGamersProperty();const auto& remotes=session->getRemoteGamersProperty();
@@ -273,8 +294,24 @@ int main(int argc,char** argv) {
         }
 
         phase="departure";
-        const bool leaveFirst=(type==NetworkSessionType::PlayerMatch)!=host;
-        if(leaveFirst) {
+        const bool leaveFirst=migrating?host:(type==NetworkSessionType::PlayerMatch)!=host;
+        if(migrating&&!host) {
+            // XNA host migration over the service: the old host's gamers leave, this machine's
+            // first gamer becomes the host, and the session carries on.
+            check(session->getAllowHostMigrationProperty(),"the host's migration setting reached the joiner");
+            until([&]{return !hostChanges.empty()||reason.has_value();},45);
+            check(!reason.has_value(),"the session survives its host");
+            check(hostChanges.size()==1&&hostChanges[0]==std::pair<std::string,std::string>{"Alice","Bob"},"HostChanged from Alice to Bob");
+            check(std::set<std::string>(left.begin(),left.end())==std::set<std::string>{"Alice","Charlie"},"the old host's gamers left");
+            const auto& locals=session->getLocalGamersProperty();
+            check(session->getIsHostProperty()&&session->getHostProperty()==locals[0]&&locals[0]->getIsHostProperty(),"new local host");
+            check(session->getAllGamersProperty().getCountProperty()==2,"survivors only");
+            session->setMaxGamersProperty(6);check(session->getMaxGamersProperty()==6,"the new host holds host authority");
+            for(int frame=0;frame<50;++frame){GamerServicesDispatcher::Update();session->Update();std::this_thread::sleep_for(std::chrono::milliseconds(2));}
+            check(!reason.has_value(),"still running");
+            std::cout<<"session-migrated\n"<<std::flush;
+            session->Dispose();
+        }else if(leaveFirst) {
             session->Dispose();check(session->getIsDisposedProperty(),"disposed session");
         }else if(host) {
             until([&]{return left.size()==2;});

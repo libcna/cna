@@ -6,7 +6,10 @@
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "System/ObjectDisposedException.hpp"
 
+#include <algorithm>
+#include <array>
 #include <cmath>
+#include <vector>
 
 using namespace Microsoft::Xna::Framework::GamerServices;
 using Microsoft::Xna::Framework::Matrix;
@@ -195,4 +198,98 @@ TEST(AvatarAnimationTest, ImplementsIAvatarAnimationInterface) {
     EXPECT_EQ(asInterface.getLengthProperty(), animation.getLengthProperty());
     EXPECT_GT(asInterface.getLengthProperty(), System::TimeSpan::Zero);
     EXPECT_EQ(asInterface.getBoneTransformsProperty().getCountProperty(), 71);
+}
+
+namespace {
+using Microsoft::Xna::Framework::Vector3;
+
+// World positions of the 71 joints for a set of XNA avatar local bone transforms.
+std::array<Vector3, 71> JointPositions(const AvatarAnimation& animation) {
+    static const int parents[71] = {
+        -1, 0, 0, 0, 0, 1, 2, 2, 3, 3, 1, 6, 5, 6, 5, 8, 5, 8, 5, 14, 12, 11, 16, 15, 14, 20, 20, 20, 22, 22, 22,
+        25, 25, 25, 28, 28, 28, 33, 33, 33, 33, 33, 33, 33, 36, 36, 36, 36, 36, 36, 36, 37, 38, 39, 40, 43, 44,
+        45, 46, 47, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60};
+    const auto bones = animation.getBoneTransformsProperty();
+    std::array<Matrix, 71> world;
+    std::array<Vector3, 71> out;
+    for (int bone = 0; bone < 71; ++bone) {
+        world[bone] = parents[bone] < 0 ? bones[bone] : bones[bone] * world[parents[bone]];
+        out[bone] = world[bone].getTranslationProperty();
+    }
+    return out;
+}
+
+float SegmentDistance(const Vector3& p, const Vector3& a, const Vector3& b) {
+    const Vector3 ab = b - a;
+    const float t = std::clamp(Vector3::Dot(p - a, ab) / Vector3::Dot(ab, ab), 0.0f, 1.0f);
+    return Vector3::Distance(p, a + ab * t);
+}
+
+constexpr int Presets = static_cast<int>(AvatarAnimationPreset::MaleYawn) + 1;
+}
+
+TEST(AvatarAnimationTest, LoopingIdlesJoinSeamlessly) {
+    // The Stand presets loop: their last frame is their first, with no jump in motion either.
+    for (int preset = 0; preset <= static_cast<int>(AvatarAnimationPreset::Stand7); ++preset) {
+        AvatarAnimation animation(static_cast<AvatarAnimationPreset>(preset));
+        const auto length = animation.getLengthProperty();
+        const auto first = animation.getBoneTransformsProperty();
+        std::vector<Matrix> start(first.begin(), first.end());
+        animation.setCurrentPositionProperty(length);
+        for (int bone = 0; bone < 71; ++bone) {
+            EXPECT_TRUE(Near(Bone(animation, bone), start[bone], 2e-3f)) << "preset " << preset << " bone " << bone;
+        }
+        // The step across the seam is no larger than a step inside the clip.
+        const auto step = Seconds(1.0 / 60.0);
+        animation.setCurrentPositionProperty(length - step);
+        const auto before = JointPositions(animation);
+        animation.Update(Seconds(2.0 / 60.0), true);
+        const auto after = JointPositions(animation);
+        EXPECT_LT(Vector3::Distance(before[36], after[36]), 0.02f) << "preset " << preset;
+    }
+}
+
+TEST(AvatarAnimationTest, FeetStayOnTheGroundAndHandsOutOfTheBody) {
+    AvatarAnimation bind(static_cast<AvatarAnimationPreset>(Presets + 5));
+    const auto rest = JointPositions(bind);
+    constexpr int ankles[2] = {11, 15}, toes[2] = {21, 23};
+    constexpr int hands[] = {33, 36, 52, 57, 61, 66};
+    for (int preset = 0; preset < Presets; ++preset) {
+        AvatarAnimation animation(static_cast<AvatarAnimationPreset>(preset));
+        const double length = static_cast<double>(animation.getLengthProperty().getTicksProperty()) / 1.0e7;
+        float lowest = 1.0f, closest = 1.0f;
+        for (double t = 0.0; t <= length; t += 1.0 / 30.0) {
+            animation.setCurrentPositionProperty(Seconds(t));
+            const auto joints = JointPositions(animation);
+            for (int side = 0; side < 2; ++side) {
+                lowest = std::min({lowest, joints[ankles[side]].Y - rest[ankles[side]].Y, joints[toes[side]].Y - rest[toes[side]].Y});
+            }
+            for (int hand : hands) {
+                closest = std::min({closest, SegmentDistance(joints[hand], joints[1], joints[5]),
+                                    SegmentDistance(joints[hand], joints[5], joints[14])});
+            }
+        }
+        // Planted feet never sink into the floor, and no hand passes through the spine.
+        EXPECT_GT(lowest, -0.012f) << "preset " << preset;
+        EXPECT_GT(closest, 0.05f) << "preset " << preset;
+    }
+}
+
+TEST(AvatarAnimationTest, PresetsMoveWithoutPops) {
+    for (int preset = 0; preset < Presets; ++preset) {
+        AvatarAnimation animation(static_cast<AvatarAnimationPreset>(preset));
+        const double length = static_cast<double>(animation.getLengthProperty().getTicksProperty()) / 1.0e7;
+        auto previous = JointPositions(animation);
+        float fastest = 0.0f;
+        for (double t = 1.0 / 60.0; t <= length; t += 1.0 / 60.0) {
+            animation.setCurrentPositionProperty(Seconds(t));
+            const auto joints = JointPositions(animation);
+            for (int bone = 0; bone < 71; ++bone) {
+                fastest = std::max(fastest, Vector3::Distance(joints[bone], previous[bone]));
+            }
+            previous = joints;
+        }
+        // 12 cm in a sixtieth of a second is 7.2 m/s, far past anything the presets intend.
+        EXPECT_LT(fastest, 0.12f) << "preset " << preset;
+    }
 }

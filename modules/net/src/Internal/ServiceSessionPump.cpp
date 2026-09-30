@@ -17,12 +17,15 @@ std::set<std::string> localUsers(const ServiceSessionSnapshot& value) {
 }
 void validate(const ServiceSessionSnapshot& value,const ServiceSessionSnapshot& initial,int revision) {
     try {ServiceRoster authority(value);}catch(const CnaService::Error&){throw ServiceOperationError("INVALID_RESPONSE");}
-    if(value.session!=initial.session||value.machine!=initial.machine||value.kind!=initial.kind
-        ||value.revision<revision||localUsers(value)!=localUsers(initial))throw ServiceOperationError("INVALID_RESPONSE");
+    // This machine's group only ever grows, through its own AddLocalGamer.
+    const auto initialUsers=localUsers(initial),currentUsers=localUsers(value);
+    if(value.session!=initial.session||value.machine!=initial.machine||value.kind!=initial.kind||value.revision<revision
+        ||!std::includes(currentUsers.begin(),currentUsers.end(),initialUsers.begin(),initialUsers.end()))throw ServiceOperationError("INVALID_RESPONSE");
 }
 bool sameSettings(const ServiceSessionSettings& left,const ServiceSessionSettings& right) {
     return left.maxGamers==right.maxGamers&&left.privateSlots==right.privateSlots&&left.state==right.state
-        &&left.allowJoinInProgress==right.allowJoinInProgress&&left.properties==right.properties;
+        &&left.allowJoinInProgress==right.allowJoinInProgress&&left.allowHostMigration==right.allowHostMigration
+        &&left.properties==right.properties;
 }
 constexpr auto RequestSpacing=std::chrono::milliseconds(100);
 std::string safeFailure(const std::string& code) {

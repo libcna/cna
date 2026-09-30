@@ -8,6 +8,8 @@
 #include "System/IO/Stream.hpp"
 #include <any>
 #include <map>
+#include <memory>
+#include <vector>
 #include <string>
 #include <utility>
 #include <vector>
@@ -112,10 +114,12 @@ namespace Microsoft::Xna::Framework::GamerServices
         [[nodiscard]] float GetValueSingle(const std::string& key) const;
 
         /**
-         * @brief Gets the Stream pointer associated with the specified key.
+         * @brief Gets the Stream pointer associated with the specified key: a leaderboard Stream
+         * column's data, read-only for a read entry; for a leaderboard writer's entry, a writable
+         * stream (created empty on first use) whose contents are written with the entry.
          *
          * @param key The key to look up.
-         * @return Pointer to the stored Stream.
+         * @return Pointer to the stored Stream, owned by the dictionary.
          */
         [[nodiscard]] System::IO::Stream* GetValueStream(const std::string& key) const;
 
@@ -350,9 +354,19 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     private:
         friend class LeaderboardWriter;
+        friend class LeaderboardReader;
         std::function<void()> writeGuard_;
         explicit PropertyDictionary(std::map<std::string, std::any> dict);
+        // Adds a stream this dictionary owns (a leaderboard Stream column) and returns it.
+        System::IO::Stream* AddStreamInternal(const std::string& key, const std::vector<unsigned char>& bytes, bool writable) const;
 
-        std::map<std::string, std::any> dictionary_;
+        // Mutable only so a writer's GetValueStream can create the column's stream on first use.
+        mutable std::map<std::string, std::any> dictionary_;
+        // A leaderboard writer's columns: GetValueStream creates a writable stream for a new key,
+        // as XNA offers no SetValue(Stream).
+        bool createsStreams_ = false;
+        // Streams created here, shared by every copy of the dictionary.
+        std::shared_ptr<std::vector<std::shared_ptr<System::IO::Stream>>> ownedStreams_ =
+            std::make_shared<std::vector<std::shared_ptr<System::IO::Stream>>>();
     };
 }

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/GamerPrivileges.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
@@ -20,7 +21,8 @@ namespace Microsoft::Xna::Framework::GamerServices
     }
 
     GamerPrivilegeSetting GamerPrivileges::getAllowCommunicationProperty() const     { return allowCommunication_; }
-    bool GamerPrivileges::getAllowOnlineSessionsProperty() const                     { return allowOnlineSessions_; }
+    // XNA IL: a game in trial mode may not play online sessions, whatever the profile allows.
+    bool GamerPrivileges::getAllowOnlineSessionsProperty() const                     { return !Guide::getIsTrialModeProperty()&&allowOnlineSessions_; }
     bool GamerPrivileges::getAllowPremiumContentProperty() const                     { return allowPremiumContent_; }
     GamerPrivilegeSetting GamerPrivileges::getAllowProfileViewingProperty() const    { return allowProfileViewing_; }
     bool GamerPrivileges::getAllowPurchaseContentProperty() const                    { return allowPurchaseContent_; }

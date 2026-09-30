@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
+#include "CNA/Internal/Input/SystemInput.hpp"
+#include "../Internal/SystemInput.hpp"
 #include "CNA/Input/GamePadButtonLabel.hpp"
 #include "CNA/Input/GamePadConnectionState.hpp"
 #include "CNA/Input/PowerState.hpp"
@@ -183,7 +185,7 @@ namespace Microsoft::Xna::Framework::Input
         return GetState(playerIndex, GamePadDeadZone::IndependentAxes);
     }
 
-    GamePadState GamePad::GetState(PlayerIndex playerIndex, GamePadDeadZone deadZoneMode)
+    GamePadState GamePad::ReadState(PlayerIndex playerIndex, GamePadDeadZone deadZoneMode, bool game)
     {
         int slot = -1;
         CNA::Platform::IPlatformGamepad* service = GetService(playerIndex, slot);
@@ -197,8 +199,14 @@ namespace Microsoft::Xna::Framework::Input
             return {};
         }
 
-        const auto axis = [&raw](const CNA::Platform::GamepadAxis value) {
-            return raw.axes[static_cast<std::size_t>(value)];
+        // While the Guide owns the pads the game reads a connected, neutral pad, and buttons it
+        // used stay hidden until released.
+        const bool neutral = game && CNA::Internal::Input::systemOwnsInput();
+        const std::uint32_t pressed = game
+            ? CNA::Internal::Input::filterGameButtons(static_cast<int>(playerIndex), raw.buttons)
+            : raw.buttons;
+        const auto axis = [&raw, neutral](const CNA::Platform::GamepadAxis value) {
+            return neutral ? 0.0f : raw.axes[static_cast<std::size_t>(value)];
         };
 
         const GamePadThumbSticks thumbSticks(
@@ -210,13 +218,18 @@ namespace Microsoft::Xna::Framework::Input
 
         const GamePadTriggers triggers(axis(CNA::Platform::GamepadAxis::LeftTrigger),
                                        axis(CNA::Platform::GamepadAxis::RightTrigger), deadZoneMode);
-        const Buttons flags = static_cast<Buttons>(raw.buttons);
+        const Buttons flags = static_cast<Buttons>(pressed);
         const GamePadButtons buttons(flags);
         const GamePadDPad dpad = GamePadDPad::FromButtonArray({flags});
 
         GamePadState state(thumbSticks, triggers, buttons, dpad);
         state.setPacketNumberProperty(static_cast<int>(raw.packetNumber));
         return state;
+    }
+
+    GamePadState GamePad::GetState(PlayerIndex playerIndex, GamePadDeadZone deadZoneMode)
+    {
+        return ReadState(playerIndex, deadZoneMode, true);
     }
 
     bool GamePad::SetVibration(PlayerIndex playerIndex, float leftMotor, float rightMotor)
@@ -418,5 +431,24 @@ namespace Microsoft::Xna::Framework::Input
         y = value.y;
         pressure = value.pressure;
         return result;
+    }
+}
+
+namespace CNA::Internal::Input
+{
+    // The one reader of the pads that the system UI's ownership never filters.
+    class SystemInputAccess
+    {
+    public:
+        static Microsoft::Xna::Framework::Input::GamePadState read(Microsoft::Xna::Framework::PlayerIndex player)
+        {
+            return Microsoft::Xna::Framework::Input::GamePad::ReadState(player,
+                Microsoft::Xna::Framework::Input::GamePadDeadZone::IndependentAxes, false);
+        }
+    };
+
+    Microsoft::Xna::Framework::Input::GamePadState systemGamePadState(Microsoft::Xna::Framework::PlayerIndex player)
+    {
+        return SystemInputAccess::read(player);
     }
 }

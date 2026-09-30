@@ -18,12 +18,14 @@ if(NOT EMSCRIPTEN)
     find_package(CURL 7.85 REQUIRED)
     target_link_libraries(CNA_GamerServices PRIVATE CURL::libcurl)
 endif()
-# GS-009: the original base avatar catalog (tools/avatar_builder/generate_avatar_catalog.py) is
-# compiled in, so standard avatars render offline and without any service.
+# GS-009/GSP-B1: every original avatar catalog version (tools/avatar_builder) is compiled in as
+# "v<N>/<file>", so standard avatars render offline and each description resolves against exactly
+# the catalog version it names.
 include("${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/EmbedBinaryFiles.cmake")
-file(GLOB CNA_AVATAR_CATALOG_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/avatars/v1/*")
+file(GLOB CNA_AVATAR_CATALOG_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/avatars/v*/*")
 cna_embed_binary_files(CNA_GamerServices CNA::Internal::GamerServices::Avatars embeddedCatalogFiles
-    "${CMAKE_CURRENT_BINARY_DIR}/generated/EmbeddedAvatarCatalog.cpp" FILES ${CNA_AVATAR_CATALOG_FILES})
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/EmbeddedAvatarCatalog.cpp" BASE "${CMAKE_CURRENT_SOURCE_DIR}/assets/avatars"
+    FILES ${CNA_AVATAR_CATALOG_FILES})
 # The checked-in catalog must be exactly what the generator produces (tools/avatar_builder).
 if(CNA_BUILD_TESTS)
     find_package(Python3 QUIET COMPONENTS Interpreter)

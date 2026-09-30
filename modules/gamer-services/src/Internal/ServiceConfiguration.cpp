@@ -22,7 +22,8 @@ void read(Configuration& config,const std::filesystem::path& path,bool required)
     const auto j=CnaService::parse(bytes);
     if(!j.is_object())throw CnaService::Error("INVALID_CONFIGURATION");
     for(auto it=j.begin();it!=j.end();++it)
-        if(it.key()!="endpoint"&&it.key()!="gameId"&&it.key()!="caBundle"&&it.key()!="insecureLoopback")throw CnaService::Error("INVALID_CONFIGURATION");
+        if(it.key()!="endpoint"&&it.key()!="gameId"&&it.key()!="caBundle"&&it.key()!="insecureLoopback"&&
+           it.key()!="avatarCatalogUpdates"&&it.key()!="maxAvatarCatalogBytes"&&it.key()!="titleVersion")throw CnaService::Error("INVALID_CONFIGURATION");
     if(j.contains("endpoint"))config.endpoint=CnaService::stringField(j,"endpoint",2048);
     if(j.contains("gameId"))config.gameId=CnaService::stringField(j,"gameId",64);
     if(j.contains("caBundle"))config.caBundle=CnaService::stringField(j,"caBundle",4096);
@@ -30,6 +31,15 @@ void read(Configuration& config,const std::filesystem::path& path,bool required)
         if(!j["insecureLoopback"].is_boolean())throw CnaService::Error("INVALID_CONFIGURATION");
         config.insecureLoopback=j["insecureLoopback"].get<bool>();
     }
+    if(j.contains("avatarCatalogUpdates")) {
+        if(!j["avatarCatalogUpdates"].is_boolean())throw CnaService::Error("INVALID_CONFIGURATION");
+        config.avatarCatalogUpdates=j["avatarCatalogUpdates"].get<bool>();
+    }
+    if(j.contains("maxAvatarCatalogBytes")) {
+        if(!j["maxAvatarCatalogBytes"].is_number_unsigned())throw CnaService::Error("INVALID_CONFIGURATION");
+        config.maxAvatarCatalogBytes=j["maxAvatarCatalogBytes"].get<std::uint64_t>();
+    }
+    if(j.contains("titleVersion"))config.titleVersion=CnaService::stringField(j,"titleVersion",32);
 }
 #ifndef __EMSCRIPTEN__
 std::string part(CURLU* url,CURLUPart field) {
@@ -44,6 +54,7 @@ void setConfigurationOverride(std::optional<Configuration> config) {
     std::lock_guard lock(mutex);override=std::move(config);
 }
 void validateConfiguration(const Configuration& config) {
+    if(!config.titleVersion.empty()&&!CnaService::validVersion(config.titleVersion))throw CnaService::Error("INVALID_CONFIGURATION");
     if(config.endpoint.empty())return;
 #ifdef __EMSCRIPTEN__
     // Browser deployment/authentication is not implemented yet. Do not accept a
@@ -68,11 +79,14 @@ Configuration resolveConfiguration() {
     if(!base.empty())read(config,std::filesystem::path(base)/"cna/gamer-services.json",false);
     const auto manifest=env("CNA_GAMER_SERVICES_MANIFEST");
     read(config,manifest.empty()?std::filesystem::path("cna-title.json"):std::filesystem::path(manifest),!manifest.empty());
-    for(auto [name,field]:{std::pair{"CNA_GAMER_SERVICES_ENDPOINT",&config.endpoint},std::pair{"CNA_GAME_ID",&config.gameId},std::pair{"CNA_GAMER_SERVICES_CA_BUNDLE",&config.caBundle}}) {
+    for(auto [name,field]:{std::pair{"CNA_GAMER_SERVICES_ENDPOINT",&config.endpoint},std::pair{"CNA_GAME_ID",&config.gameId},
+                           std::pair{"CNA_GAMER_SERVICES_CA_BUNDLE",&config.caBundle},std::pair{"CNA_GAME_VERSION",&config.titleVersion}}) {
         const auto value=env(name);if(!value.empty())*field=value;
     }
     const auto insecure=env("CNA_GAMER_SERVICES_INSECURE_LOOPBACK");
     if(!insecure.empty()) {if(insecure!="0"&&insecure!="1")throw CnaService::Error("INVALID_CONFIGURATION");config.insecureLoopback=insecure=="1";}
+    const auto updates=env("CNA_AVATAR_CATALOG_UPDATES");
+    if(!updates.empty()) {if(updates!="0"&&updates!="1")throw CnaService::Error("INVALID_CONFIGURATION");config.avatarCatalogUpdates=updates=="1";}
     validateConfiguration(config);return config;
 }
 }

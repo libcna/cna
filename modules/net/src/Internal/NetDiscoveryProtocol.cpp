@@ -131,4 +131,86 @@ namespace CNA::Internal::Net
         message.Properties = ReadProperties(reader);
         return message;
     }
+
+    std::vector<bytecs> NetDiscoveryProtocol::Encode(const DiscoveryQosProbeMessage& message)
+    {
+        std::vector<bytecs> bytes(kQosProbeBytes, 0);
+        bytes[0] = static_cast<bytecs>(DiscoveryMessageTag::QosProbe);
+        bytes[1] = message.ProtocolVersion;
+        bytes[2] = static_cast<bytecs>(message.ConnectPort & 0xff);
+        bytes[3] = static_cast<bytecs>(message.ConnectPort >> 8);
+        bytes[4] = message.Index;
+        bytes[5] = message.Count;
+        return bytes;
+    }
+
+    std::vector<bytecs> NetDiscoveryProtocol::EncodeUpstreamProbe(const DiscoveryQosProbeMessage& message)
+    {
+        auto bytes = Encode(message);
+        bytes[0] = static_cast<bytecs>(DiscoveryMessageTag::UpstreamProbe);
+        return bytes;
+    }
+
+    std::vector<bytecs> NetDiscoveryProtocol::Encode(const DiscoveryUpstreamInviteMessage& message)
+    {
+        Microsoft::Xna::Framework::Net::PacketWriter writer;
+        writer.Write(static_cast<bytecs>(DiscoveryMessageTag::UpstreamInvite));
+        writer.Write(message.ProtocolVersion);
+        writer.Write(message.ConnectPort);
+        writer.Write(message.ResponderPort);
+        return NetPacketCodec::ExtractBytes(writer);
+    }
+
+    DiscoveryUpstreamInviteMessage NetDiscoveryProtocol::DecodeUpstreamInvite(const std::vector<bytecs>& data)
+    {
+        Microsoft::Xna::Framework::Net::PacketReader reader;
+        NetPacketCodec::FillReader(reader, data);
+        (void) reader.ReadByte();
+        DiscoveryUpstreamInviteMessage message;
+        message.ProtocolVersion = reader.ReadByte();
+        ValidateProtocolVersion(message.ProtocolVersion);
+        message.ConnectPort = reader.ReadUInt16();
+        message.ResponderPort = reader.ReadUInt16();
+        return message;
+    }
+
+    std::vector<bytecs> NetDiscoveryProtocol::Encode(const DiscoveryUpstreamReportMessage& message)
+    {
+        Microsoft::Xna::Framework::Net::PacketWriter writer;
+        writer.Write(static_cast<bytecs>(DiscoveryMessageTag::UpstreamReport));
+        writer.Write(message.ProtocolVersion);
+        writer.Write(message.ConnectPort);
+        writer.Write(message.BytesPerSecond);
+        return NetPacketCodec::ExtractBytes(writer);
+    }
+
+    DiscoveryUpstreamReportMessage NetDiscoveryProtocol::DecodeUpstreamReport(const std::vector<bytecs>& data)
+    {
+        Microsoft::Xna::Framework::Net::PacketReader reader;
+        NetPacketCodec::FillReader(reader, data);
+        (void) reader.ReadByte();
+        DiscoveryUpstreamReportMessage message;
+        message.ProtocolVersion = reader.ReadByte();
+        ValidateProtocolVersion(message.ProtocolVersion);
+        message.ConnectPort = reader.ReadUInt16();
+        message.BytesPerSecond = reader.ReadInt32();
+        if (message.BytesPerSecond < 0)
+            throw std::runtime_error("NetDiscoveryProtocol: upstream rate");
+        return message;
+    }
+
+    DiscoveryQosProbeMessage NetDiscoveryProtocol::DecodeQosProbe(const std::vector<bytecs>& data)
+    {
+        if (data.size() != kQosProbeBytes)
+            throw std::runtime_error("NetDiscoveryProtocol: QoS probe size");
+        DiscoveryQosProbeMessage message;
+        message.ProtocolVersion = data[1];
+        ValidateProtocolVersion(message.ProtocolVersion);
+        message.ConnectPort = static_cast<uint16_t>(data[2] | (data[3] << 8));
+        message.Index = data[4];
+        message.Count = data[5];
+        if (message.Count < 2 || message.Count > 32 || message.Index >= message.Count)
+            throw std::runtime_error("NetDiscoveryProtocol: QoS probe index");
+        return message;
+    }
 }

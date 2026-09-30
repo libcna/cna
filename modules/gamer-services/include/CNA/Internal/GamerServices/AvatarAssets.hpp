@@ -8,12 +8,15 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include <array>
+#include <chrono>
 #include <functional>
 #include <cstdint>
+#include <filesystem>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <random>
 #include <span>
 #include <string>
 #include <string_view>
@@ -22,6 +25,7 @@
 namespace CNA::Internal::GamerServices { class IGamerServicesBackend; }
 
 namespace CNA::Internal::GamerServices::Avatars {
+struct AvatarImage;
 /** @brief Bones in the XNA avatar skeleton. */
 inline constexpr int BoneCount = 71;
 /** @brief Parent slot of every bone (-1 for the root), exactly the XNA table. @return Parents. */
@@ -31,7 +35,8 @@ std::string_view boneName(int slot);
 /** @brief Slot for a joint name. @param name Name. @return Slot or -1. */
 int boneIndex(std::string_view name);
 
-/** @brief Every file of the base catalog compiled into the library (generated source). @return Files by name. */
+/** @brief Every file of every catalog version compiled into the library, named "v<N>/<file>"
+ * (generated source). @return Files by name. */
 std::span<const EmbeddedFile> embeddedCatalogFiles();
 
 /** @brief One file listed by a catalog manifest. */
@@ -54,6 +59,42 @@ struct CatalogItem {
     std::string name;
     /** @brief Asset per body type (female, male). */
     std::array<std::string,2> assets;
+    /** @brief Relative chance CreateRandom picks it, per body type (0 = never). */
+    std::array<float,2> randomWeight{1.0f,1.0f};
+    /** @brief Hair: the style's assets for wearing under a hat that covers hair (empty = none). */
+    std::array<std::string,2> hatAssets;
+    /** @brief Hat: it covers the hair, which then uses its hatAssets. */
+    bool coversHair=false;
+};
+
+/** @brief One deformer of a face-shape control (the catalog's faceControls). */
+struct FaceDeformer {
+    /** @brief What it does. */
+    enum class Kind : std::uint8_t { Scale, Move, Rotate };
+    /** @brief Scale about the centre, move, or rotate about an axis through the centre. */
+    Kind kind=Kind::Scale;
+    /** @brief Centre, authored model space. */
+    Microsoft::Xna::Framework::Vector3 centre;
+    /** @brief Ellipsoid radii: weight 1 within `inner` of them, fading to 0 at their surface. */
+    Microsoft::Xna::Framework::Vector3 radii;
+    /** @brief Fraction of the radii with full weight. */
+    float inner=0.0f;
+    /** @brief Scale factors at +1, a move at +1, or a rotation axis. */
+    Microsoft::Xna::Framework::Vector3 amount;
+    /** @brief Rotation at +1, degrees. */
+    float degrees=0.0f;
+};
+
+/** @brief The deformers one face-shape byte drives. */
+struct FaceControl {
+    /** @brief Index into AvatarDescriptor::face. */
+    int parameter=0;
+    /** @brief What it shapes ("jawWidth"), for editors; may be empty. */
+    std::string name;
+    /** @brief Deforms hair, hats and glasses too, not only the face. */
+    bool wholeHead=false;
+    /** @brief Deformers. */
+    std::vector<FaceDeformer> deformers;
 };
 
 /** @brief Atlas tile indices of every expression state. */
@@ -80,6 +121,10 @@ struct CatalogManifest {
     std::array<std::uint16_t,2> authoredHeightMillimeters{};
     /** @brief Wardrobe items. */
     std::vector<CatalogItem> items;
+    /** @brief Feature items (facial hair) a format 2 description can name. */
+    std::vector<CatalogItem> featureItems;
+    /** @brief Face-shape controls per body type (female, male); empty when the catalog has none. */
+    std::array<std::vector<FaceControl>,2> faceControls;
     /** @brief Face feature atlas asset. */
     std::string faceAsset;
     /** @brief Atlas layout. */
@@ -90,13 +135,26 @@ struct CatalogManifest {
     std::map<std::string,CatalogAsset,std::less<>> assets;
     /** @brief Finds an item. @param id Item id. @return Item or null. */
     const CatalogItem* item(std::uint16_t id) const;
+    /** @brief Finds a feature item. @param id Item id. @return Item or null. */
+    const CatalogItem* featureItem(std::uint16_t id) const;
 };
 
 /** @brief Parses and validates a manifest; every name, size and hash is checked. @param json Text.
  * @return Manifest. @throws std::runtime_error when malformed. */
 CatalogManifest parseManifest(std::string_view json);
-/** @brief The manifest of the embedded base catalog. @return Manifest. */
-const CatalogManifest& embeddedManifest();
+/** @brief Every catalog compiled into the library, oldest first; each "v<N>/catalog.json" must
+ * describe version N. @return Manifests. @throws std::runtime_error when an embedded manifest is malformed. */
+const std::vector<std::shared_ptr<const CatalogManifest>>& embeddedCatalogs();
+/** @brief The compiled-in manifest of exactly one catalog version. @param version Catalog version.
+ * @return Manifest, or null when this build does not embed that version. */
+std::shared_ptr<const CatalogManifest> embeddedManifest(std::uint16_t version);
+/** @brief The newest compiled-in catalog: the one CreateRandom draws from and whose preset
+ * animations AvatarAnimation plays. @return Manifest. */
+const CatalogManifest& newestEmbeddedManifest();
+/** @brief Builds a random avatar from one catalog, as CreateRandom does from the newest compiled-in
+ * one. @param catalog Catalog. @param bodyType 0/1, or empty for either. @param random Entropy
+ * source. @return Descriptor naming that catalog. */
+AvatarDescriptor randomDescriptor(const CatalogManifest& catalog,std::optional<std::uint8_t> bodyType,std::mt19937& random);
 /** @brief Lower-case hex SHA-256. @param bytes Input. @return Digest. */
 std::string sha256Hex(std::span<const std::uint8_t> bytes);
 
@@ -105,10 +163,14 @@ std::string sha256Hex(std::span<const std::uint8_t> bytes);
  * disabled, unreachable or failed. */
 template<typename T>
 std::optional<T> onServiceExecutor(std::function<T(IGamerServicesBackend&)> work);
-/** @brief The manifest describing a catalog version: the embedded one for versions it covers,
- * otherwise the service's (cached per process); falls back to the embedded manifest when the
- * service cannot provide it. @param version Catalog version a description names. @return Manifest. */
+/** @brief The manifest of exactly the catalog version a description names: compiled in, or the
+ * service's (cached per process). Never another version's. @param version Catalog version.
+ * @return Manifest, or null when neither the library nor the service has that version. */
 std::shared_ptr<const CatalogManifest> catalogManifest(std::uint16_t version);
+
+/** @brief Tests: forgets which catalog versions recently failed to install (they are otherwise
+ * not asked for again for a minute). */
+void forgetCatalogUpdateFailures();
 
 /** @brief Bytes of one asset, either static embedded data or an owned copy. */
 struct AssetBytes {
@@ -117,11 +179,99 @@ struct AssetBytes {
     /** @brief The contents. */
     std::span<const std::uint8_t> view;
 };
-/** @brief Resolves a manifest asset to verified bytes: the embedded catalog when it holds the same
- * file, otherwise the service's hash-addressed copy (cached on disk by the backend).
+/** @brief Resolves a manifest asset to verified bytes by content: any compiled-in file with the
+ * listed size and SHA-256 (whatever catalog directory holds it), otherwise the file of the
+ * installed catalog pack of the manifest's version. Never downloads. Names never identify contents.
  * @param manifest Manifest listing it. @param name Asset name. @return Bytes, or empty when
  * unavailable or when the contents do not match the manifest hash and size. */
 std::optional<AssetBytes> resolveAsset(const CatalogManifest& manifest,std::string_view name);
+
+/** @brief A compiled-in file with exactly this size and SHA-256, whatever catalog holds it.
+ * @param asset Listed file. @return Its bytes, or empty. */
+std::optional<std::span<const std::uint8_t>> embeddedFileByContent(const CatalogAsset& asset);
+/** @brief The highest atlas tile index a layout names. @param layout Layout. @return Index. */
+int maximumFaceTile(const FaceLayout& layout);
+/** @brief One file of the installed pack of a catalog version, verified against its size and
+ * SHA-256. @param version Catalog version. @param asset Listed file. @return Bytes, or empty. */
+std::optional<std::vector<std::uint8_t>> installedCatalogFile(std::uint16_t version,const CatalogAsset& asset);
+
+/** @brief The catalog contract level this build reads (GLB attributes, manifest keys). A catalog
+ * pack states the level it needs; a client never installs one it cannot read. */
+inline constexpr int CatalogReaderLevel=1;
+/** @brief The catalog pack format this build installs. */
+inline constexpr int CatalogPackFormat=1;
+
+/** @brief One catalog version as an installable unit: the service's avatars.catalogPack. */
+struct CatalogPack {
+    /** @brief Catalog version. */
+    std::uint16_t version=0;
+    /** @brief Pack format. */
+    int packFormat=0;
+    /** @brief Catalog contract level needed to read it. */
+    int reader=0;
+    /** @brief Description formats that may name it. */
+    std::vector<int> descriptionFormats;
+    /** @brief Exact manifest text (downloaded as a file); its SHA-256 is the pack's identity. */
+    std::string manifest;
+    /** @brief Lower-case hex SHA-256 of manifest. */
+    std::string manifestSha256;
+    /** @brief Size of manifest in bytes. */
+    std::size_t manifestSize=0;
+    /** @brief Sum of every listed file's size. */
+    std::uint64_t totalBytes=0;
+};
+/** @brief Parses a pack descriptor (avatars.catalogPack), without its manifest.
+ * @param json Descriptor text. @return Pack. @throws std::runtime_error when malformed. */
+CatalogPack parseCatalogPack(std::string_view json);
+/** @brief Gives a pack its manifest, checked against the descriptor (hash, size, version, total).
+ * @param pack Descriptor. @param manifest Downloaded manifest text. @throws std::runtime_error when inconsistent. */
+void attachCatalogManifest(CatalogPack& pack,std::string manifest);
+
+/** @brief Decodes an avatar PNG to premultiplied RGBA (at most 2048 x 2048). @param png Bytes.
+ * @return Image. @throws std::runtime_error when it cannot be decoded. */
+AvatarImage decodeAvatarImage(std::span<const std::uint8_t> png);
+
+/** @brief Checks a whole catalog as the renderer will use it, before it may be activated: every
+ * listed file parses (models against the 71-bone contract and bounds, images decode), bodies have
+ * geometry, every item and hat variant is fitted to its body's rig, the face atlas matches its
+ * layout, and the animations file has every preset. @param manifest Parsed manifest.
+ * @param file Verified bytes of one listed file. @throws std::runtime_error naming the defect. */
+void validateCatalog(const CatalogManifest& manifest,const std::function<std::span<const std::uint8_t>(const CatalogAsset&)>& file);
+
+/** @brief Where installed catalog packs live: `CNA_GAMER_SERVICES_CATALOGS_DIR`, else
+ * `$XDG_DATA_HOME/cna/avatar-catalogs`, else `$HOME/.local/share/cna/avatar-catalogs`.
+ * @return Directory, or empty when none is configured (no pack is then ever installed). */
+std::filesystem::path installedCatalogRoot();
+/** @brief Tests: installs into and reads from another directory (empty restores the default), and
+ * forgets every installed manifest this process loaded. @param root Directory. */
+void setInstalledCatalogRootForTesting(std::filesystem::path root);
+/** @brief An installed pack's manifest, checked against its pack record (format, version,
+ * manifest SHA-256). @param version Catalog version. @return Manifest, or null when not installed. */
+std::shared_ptr<const CatalogManifest> installedManifest(std::uint16_t version);
+/** @brief Every catalog version drawable without a download: compiled in, then installed.
+ * @return Versions, ascending. */
+std::vector<std::uint16_t> availableCatalogVersions();
+
+/** @brief Outcome of installing a catalog pack. */
+enum class CatalogInstall : std::uint8_t {
+    /** @brief Downloaded, verified, validated and activated now. */
+    Installed,
+    /** @brief Already installed (by this or another process); nothing was downloaded. */
+    AlreadyInstalled,
+    /** @brief This client cannot use it (pack format, reader level, size limit, no store). */
+    Refused,
+    /** @brief A download failed or the pack was invalid; nothing was activated. */
+    Failed
+};
+/** @brief Installs one catalog version as a unit. Files the client already has (compiled in or in
+ * another installed pack, found by content) are copied, the rest fetched by hash; every file is
+ * verified into a staging directory, the whole catalog validated (validateCatalog), then the
+ * staging directory is renamed into place in one step. An interrupted install leaves only staging
+ * files, which a retry reuses after verifying them again. @param pack Descriptor.
+ * @param maximumBytes Largest pack accepted. @param fetch Downloads one file (throws on failure).
+ * @param error Out: why it failed, if it did. @return Outcome. */
+CatalogInstall installCatalogPack(const CatalogPack& pack,std::uint64_t maximumBytes,
+    const std::function<std::vector<std::uint8_t>(const CatalogAsset&)>& fetch,std::string* error=nullptr);
 
 /** @brief Vertex of an avatar mesh in bind pose. */
 struct AvatarVertex {
@@ -151,6 +301,8 @@ struct AvatarPrimitive {
     std::string feature;
     /** @brief Decal layer (0 white/lines, 1 iris). */
     int layer=0;
+    /** @brief Scale of the renderer's specular highlight (material extra cnaSpecular, default 1). */
+    float specular=1.0f;
     /** @brief PNG of the base color texture, if any. */
     std::vector<std::uint8_t> texturePng;
 };
@@ -240,6 +392,8 @@ struct AvatarModelPart {
     AvatarFeature feature=AvatarFeature::None;
     /** @brief Decal layer (eyes: 0 white/lines, 1 iris). */
     int layer=0;
+    /** @brief Scale of the specular highlight. */
+    float specular=1.0f;
 };
 
 /** @brief An avatar assembled from a description, ready for upload. */
@@ -260,6 +414,9 @@ struct AvatarModel {
     FaceLayout face;
     /** @brief Items the catalog could not resolve and that were replaced by a default. */
     std::vector<std::uint16_t> substitutedItems;
+    /** @brief The description's catalog version was unavailable, so the newest compiled-in catalog
+     * supplied the body and every item fell back to its slot default. */
+    bool catalogUnavailable=false;
 };
 
 /** @brief Assembles an avatar from the catalog. @param descriptor Description.
@@ -281,8 +438,26 @@ struct AvatarLoad {
  * at once). @param descriptor Description. @return Progress. */
 std::shared_ptr<AvatarLoad> loadAvatarAsync(const AvatarDescriptor& descriptor);
 
+/** @brief Progress of a background catalog lookup. */
+struct CatalogLoad {
+    /** @brief Guards the fields below. */
+    std::mutex lock;
+    /** @brief The lookup finished. */
+    bool done=false;
+    /** @brief The catalog, or null when it is neither installed nor obtainable. */
+    std::shared_ptr<const CatalogManifest> manifest;
+};
+/** @brief Looks a catalog up on the avatar loader thread (catalogManifest may install a pack
+ * from the service; a compiled-in or installed catalog completes at once).
+ * @param version Catalog version. @return Progress. */
+std::shared_ptr<CatalogLoad> loadCatalogAsync(std::uint16_t version);
+
 /** @brief Samples a clip. @param clip Clip. @param seconds Time. @param rotations Out: local rotation per slot
  * (identity where the clip has no curve). @param rootTranslation Out: root offset. @return Expression key in effect. */
 AvatarExpressionKey sampleClip(const AvatarClip& clip,double seconds,
     std::array<Microsoft::Xna::Framework::Quaternion,BoneCount>& rotations,Microsoft::Xna::Framework::Vector3& rootTranslation);
+
+/** @brief How often GamerServicesDispatcher.Update reads a cached signed-in gamer's avatar again
+ * to raise AvatarDescription.Changed (10 s; tests shorten it). @param interval Interval. */
+void setAvatarChangeCheckInterval(std::chrono::milliseconds interval);
 }

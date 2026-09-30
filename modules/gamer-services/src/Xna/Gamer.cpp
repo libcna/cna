@@ -83,6 +83,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         }
     }
 
+    GetTypeNameCPP(Gamer, "Microsoft.Xna.Framework.GamerServices.Gamer")
+
     std::string Gamer::ToString() const
     {
         return displayName_;
@@ -129,6 +131,9 @@ namespace Microsoft::Xna::Framework::GamerServices
             profile->totalAchievements_ = person.totalAchievements;
             profile->titlesPlayed_ = person.titlesPlayed;
             profile->region_ = System::Globalization::RegionInfo(person.region);
+            profile->gamerZone_ = static_cast<GamerZone>(person.gamerZone);
+            // No reviews, no reputation: XNA's unset 0, never an invented rating.
+            profile->reputation_ = person.reputation.value_or(0.0f);
             return profile.release();
         }
         auto profile = std::make_unique<GamerProfile>(GamerProfile::CreateInternal());

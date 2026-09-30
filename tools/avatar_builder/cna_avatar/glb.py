@@ -6,7 +6,7 @@ import struct
 from . import rig
 from .mathutil import quantize
 
-FLOAT, UBYTE, USHORT, UINT = 5126, 5121, 5123, 5125
+FLOAT, UBYTE, SHORT, USHORT, UINT = 5126, 5121, 5122, 5123, 5125
 
 
 class GlbBuilder:
@@ -17,21 +17,25 @@ class GlbBuilder:
         self.blob = bytearray()
         self.textured_materials = set()
 
-    def _view(self, data, target=None):
+    def _view(self, data, target=None, stride=None):
         while len(self.blob) % 4:
             self.blob.append(0)
         view = {"buffer": 0, "byteOffset": len(self.blob), "byteLength": len(data)}
         if target:
             view["target"] = target
+        if stride:
+            view["byteStride"] = stride
         self.blob += data
         self.gltf["bufferViews"].append(view)
         return len(self.gltf["bufferViews"]) - 1
 
-    def accessor(self, values, kind, component, count_per=1, normalized=False, target=None, bounds=False):
-        fmt = {FLOAT: "<f", UBYTE: "<B", USHORT: "<H", UINT: "<I"}[component]
-        flat = [c for v in values for c in (v if isinstance(v, (tuple, list)) else (v,))]
-        data = b"".join(struct.pack(fmt, c) for c in flat)
-        accessor = {"bufferView": self._view(data, target), "componentType": component, "count": len(values),
+    def accessor(self, values, kind, component, count_per=1, normalized=False, target=None, bounds=False, pad=0):
+        """pad: bytes of padding after each element (keeps vertex elements 4-byte aligned)."""
+        fmt = {FLOAT: "<f", UBYTE: "<B", SHORT: "<h", USHORT: "<H", UINT: "<I"}[component]
+        rows = [v if isinstance(v, (tuple, list)) else (v,) for v in values]
+        data = b"".join(b"".join(struct.pack(fmt, c) for c in r) + b"\0" * pad for r in rows)
+        stride = len(data) // len(rows) if pad else None
+        accessor = {"bufferView": self._view(data, target, stride), "componentType": component, "count": len(values),
                     "type": kind}
         if normalized:
             accessor["normalized"] = True
@@ -72,11 +76,14 @@ class GlbBuilder:
         self.gltf.setdefault("textures", []).append({"sampler": 0, "source": len(self.gltf["images"]) - 1})
         return len(self.gltf["textures"]) - 1
 
-    def add_material(self, name, tint, color=(1.0, 1.0, 1.0), texture=None, extras=None):
+    def add_material(self, name, tint, color=(1.0, 1.0, 1.0), texture=None, extras=None, specular=None):
+        """specular scales the renderer's highlight for this material (cnaSpecular; 1 when absent)."""
         pbr = {"baseColorFactor": [color[0], color[1], color[2], 1.0], "metallicFactor": 0.0, "roughnessFactor": 0.9}
         if texture is not None:
             pbr["baseColorTexture"] = {"index": texture}
         material = {"name": name, "pbrMetallicRoughness": pbr, "extras": dict({"cnaTint": tint}, **(extras or {}))}
+        if specular is not None and specular != 1.0:
+            material["extras"]["cnaSpecular"] = specular
         self.gltf.setdefault("materials", []).append(material)
         if extras and "cnaFeature" in extras:
             # Face decals are textured at runtime with the expression's atlas tile.
@@ -92,15 +99,16 @@ class GlbBuilder:
             attributes = {
                 "POSITION": self.accessor([tuple(quantize(c) for c in p) for p in mesh.positions], "VEC3", FLOAT, 3,
                                           target=34962, bounds=True),
-                "NORMAL": self.accessor([tuple(quantize(c, 1e-4) for c in n) for n in mesh.normals], "VEC3", FLOAT,
-                                        target=34962),
+                # Normalized 16-bit normals, padded to 8 bytes per element.
+                "NORMAL": self.accessor([tuple(max(-32767, min(32767, int(round(c * 32767.0)))) for c in n)
+                                         for n in mesh.normals], "VEC3", SHORT, normalized=True, target=34962, pad=2),
                 "JOINTS_0": self.accessor([j for j, _ in mesh.skin], "VEC4", UBYTE, target=34962),
                 "WEIGHTS_0": self.accessor([w for _, w in mesh.skin], "VEC4", UBYTE, normalized=True, target=34962),
             }
             # Only textured parts carry texture coordinates; the rest are flat tinted materials.
             if textured or material in self.textured_materials:
-                attributes["TEXCOORD_0"] = self.accessor([tuple(quantize(c, 1e-4) for c in uv) for uv in mesh.uvs],
-                                                         "VEC2", FLOAT, target=34962)
+                attributes["TEXCOORD_0"] = self.accessor([tuple(max(0, min(65535, int(round(c * 65535.0)))) for c in uv)
+                                                          for uv in mesh.uvs], "VEC2", USHORT, normalized=True, target=34962)
             index_type = USHORT if len(mesh.positions) < 65536 else UINT
             indices = self.accessor(mesh.indices, "SCALAR", index_type, target=34963)
             primitives.append({"attributes": attributes, "indices": indices, "material": material, "mode": 4})
@@ -109,11 +117,11 @@ class GlbBuilder:
         self.gltf["scenes"][0]["nodes"].append(len(self.gltf["nodes"]) - 1)
 
     def add_animation(self, name, times, channels, extras):
-        """channels: list of (joint slot, path, values as (in, value, out) triples at `times`)."""
+        """channels: list of (joint slot, path, (in, value, out) triples, key times or None for `times`)."""
         animation = {"name": name, "channels": [], "samplers": [], "extras": extras}
         time_accessor = self.accessor([quantize(t, 1e-4) for t in times], "SCALAR", FLOAT, 1, bounds=True)
         still_accessor = None
-        for slot, path, triples in channels:
+        for slot, path, triples, own_times in channels:
             if len(triples) == 1:
                 # A constant channel is one key.
                 if still_accessor is None:
@@ -133,7 +141,10 @@ class GlbBuilder:
                 flat.extend(triple)
             kind = "VEC4" if path == "rotation" else "VEC3"
             size = 4 if path == "rotation" else 3
-            sampler = {"input": time_accessor,
+            # A channel may carry its own, denser key times (legs solved again between keys).
+            input_accessor = time_accessor if own_times is None else \
+                self.accessor([quantize(t, 1e-4) for t in own_times], "SCALAR", FLOAT, 1, bounds=True)
+            sampler = {"input": input_accessor,
                        "output": self.accessor([tuple(quantize(c, 1e-6) for c in v) for v in flat], kind, FLOAT, size),
                        "interpolation": "CUBICSPLINE"}
             animation["samplers"].append(sampler)

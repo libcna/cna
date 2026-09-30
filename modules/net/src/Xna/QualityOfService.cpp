@@ -27,6 +27,13 @@ namespace Microsoft::Xna::Framework::Net
         return QualityOfService(roundtripTime);
     }
 
+    QualityOfService QualityOfService::CreateInternal(System::TimeSpan roundtripTime, int bytesPerSecondDownstream)
+    {
+        QualityOfService value(roundtripTime);
+        value.bytesPerSecondDownstream_ = bytesPerSecondDownstream;
+        return value;
+    }
+
     System::TimeSpan QualityOfService::getAverageRoundtripTimeProperty() const { return averageRoundtripTime_; }
     int QualityOfService::getBytesPerSecondDownstreamProperty() const          { return bytesPerSecondDownstream_; }
     int QualityOfService::getBytesPerSecondUpstreamProperty() const            { return bytesPerSecondUpstream_; }

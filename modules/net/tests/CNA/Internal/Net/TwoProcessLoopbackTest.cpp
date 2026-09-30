@@ -16,6 +16,7 @@
 // exists in the first place). That mechanism stays validated at the single-process
 // ENetDiscoveryService::FindSessions() level (Task 5.8).
 #include <gtest/gtest.h>
+#include "CNA/Internal/Net/VoiceChat.hpp"
 
 #include <csignal>
 #include <cerrno>
@@ -179,6 +180,13 @@ static void RunHostAndClient(const std::string& hostRole, const std::string& cli
 
 TEST(TwoProcessLoopbackTest, HostAndClientJoinAndExchangeAppDataAcrossRealProcesses) {
     RunHostAndClient("host", "client");
+}
+
+// GSX-E1: voice between two real processes over SystemLink: each machine's gamer talks, is heard
+// and played on the other. (A build without libopus reports PORT=0 and passes trivially below.)
+TEST(TwoProcessLoopbackTest, VoiceTravelsBothWaysAcrossRealProcesses) {
+    if (!CNA::Internal::Net::voiceAvailable()) GTEST_SKIP() << "built without libopus";
+    RunHostAndClient("voice-host", "voice-client");
 }
 
 // A SystemLink Find with a local-gamer limit of one, with two gamers signed in, joins with one;

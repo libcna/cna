@@ -1,10 +1,12 @@
 #include "FriendsGame.hpp"
 
 #include <cstdio>
+#include <exception>
 
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/FriendCollection.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerServicesComponent.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
 #include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
@@ -57,7 +59,11 @@ namespace
     };
 }
 
-FriendsGame::FriendsGame() = default;
+FriendsGame::FriendsGame()
+{
+    // The Guide draws its panes, and signs gamers in, through the gamer services component.
+    getComponentsProperty().Add(new GamerServicesComponent(*this));
+}
 
 void FriendsGame::Log(const std::string& line)
 {
@@ -80,13 +86,12 @@ void FriendsGame::Initialize()
             def.requestingFriend, def.friendRequesting)));
         friends_.push_back(friendStorage_.back().get());
     }
-    // FriendCollection is a documented non-owning view (see its own class comment) - friends_
-    // (and friendStorage_, which actually owns the FriendGamer objects) is this demo's own
-    // registry, matching the ownership pattern GamerServicesDispatcher::Initialize() already
-    // establishes for SignedInGamer.
+    // A FriendCollection built with CreateInternal does not own its FriendGamer objects (see its
+    // own class comment) - friends_ (and friendStorage_, which actually owns the FriendGamer
+    // objects) is this demo's own registry.
     FriendCollection collection = FriendCollection::CreateInternal(friends_);
-    std::printf("[Friends] Built a local FriendCollection with %d entries via CreateInternal "
-                "(SignedInGamer::GetFriends() itself always returns an empty stub).\n",
+    std::printf("[Friends] Built a sample FriendCollection with %d entries via CreateInternal "
+                "(SignedInGamer::GetFriends() needs a gamer signed in to a CNA account).\n",
                 collection.getCountProperty());
 }
 
@@ -103,31 +108,43 @@ void FriendsGame::LoadContent()
 void FriendsGame::TriggerAction(int actionIndex)
 {
     Gamer* selected = friends_[static_cast<std::size_t>(selectedIndex_)];
-    switch (actionIndex)
+    const std::string tag = "\"" + selected->getGamertagProperty() + "\"";
+    std::string call;
+    try
     {
-        case 0:
-            Guide::ShowGamerCard(PlayerIndex::One, selected);
-            Log("ShowGamerCard(\"" + selected->getGamertagProperty() + "\") called - no-op, no real OS UI.");
-            break;
-        case 1:
-            Guide::ShowFriendRequest(PlayerIndex::One, selected);
-            Log("ShowFriendRequest(\"" + selected->getGamertagProperty() + "\") called - no-op, no real OS UI.");
-            break;
-        case 2:
-            Guide::ShowFriends(PlayerIndex::One);
-            Log("ShowFriends() called - no-op, no real OS UI.");
-            break;
-        case 3:
-            Guide::ShowComposeMessage(PlayerIndex::One, "hello", {selected});
-            Log("ShowComposeMessage(\"hello\", [\"" + selected->getGamertagProperty() + "\"]) called - no-op, no real OS UI.");
-            break;
-        default:
-            break;
+        switch (actionIndex)
+        {
+            case 0:
+                call = "ShowGamerCard(" + tag + ")";
+                Guide::ShowGamerCard(PlayerIndex::One, selected);
+                break;
+            case 1:
+                call = "ShowFriendRequest(" + tag + ")";
+                Guide::ShowFriendRequest(PlayerIndex::One, selected);
+                break;
+            case 2:
+                call = "ShowFriends()";
+                Guide::ShowFriends(PlayerIndex::One);
+                break;
+            case 3:
+                call = "ShowComposeMessage(\"hello\", [" + tag + "])";
+                Guide::ShowComposeMessage(PlayerIndex::One, "hello", {selected});
+                break;
+            default:
+                return;
+        }
+        Log(call + " opened the Guide.");
+    }
+    catch (const std::exception& e)
+    {
+        Log(call + " refused: " + e.what());
     }
 }
 
-void FriendsGame::Update(GameTime& /*gameTime*/)
+void FriendsGame::Update(GameTime& gameTime)
 {
+    Game::Update(gameTime);
+
     KeyboardState keys = Keyboard::GetState();
     if (keys.IsKeyDown(Keys::Down) && !previousKeys_.IsKeyDown(Keys::Down))
     {

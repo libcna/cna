@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/PropertyDictionary.hpp"
+#include "System/IO/MemoryStream.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -86,7 +87,23 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     System::IO::Stream* PropertyDictionary::GetValueStream(const std::string& key) const
     {
-        return std::any_cast<System::IO::Stream*>(dictionary_.at(key));
+        const auto found = dictionary_.find(key);
+        if (!createsStreams_)
+            return std::any_cast<System::IO::Stream*>(dictionary_.at(key));
+        // A writer's stream is a write the moment the game asks for it: its contents are read at commit.
+        if (writeGuard_) writeGuard_();
+        if (found != dictionary_.end()) return std::any_cast<System::IO::Stream*>(found->second);
+        return AddStreamInternal(key, {}, true);
+    }
+
+    System::IO::Stream* PropertyDictionary::AddStreamInternal(const std::string& key, const std::vector<unsigned char>& bytes, bool writable) const
+    {
+        auto stream = std::make_shared<System::IO::MemoryStream>(bytes.empty() ? nullptr : bytes.data(),
+            static_cast<SharpRuntime::intcs>(bytes.size()), writable);
+        if (bytes.empty() && writable) stream = std::make_shared<System::IO::MemoryStream>();
+        ownedStreams_->push_back(stream);
+        dictionary_[key] = static_cast<System::IO::Stream*>(stream.get());
+        return stream.get();
     }
 
     std::string PropertyDictionary::GetValueString(const std::string& key) const

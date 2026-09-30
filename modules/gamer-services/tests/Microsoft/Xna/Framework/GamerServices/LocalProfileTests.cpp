@@ -2,11 +2,15 @@
 // Offline local profiles: the store, Guide sign-in without a service, and automatic sign-in.
 // Sorted after GamerServicesServiceTests.cpp, so IsInitializedDefaultsFalse still runs first.
 #include <gtest/gtest.h>
+#include "CNA/Internal/GamerServices/AvatarAssets.hpp"
+#include "CNA/Internal/GamerServices/AvatarDescriptionCodec.hpp"
+#include <random>
 #include "CNA/GamerServices/Configuration.hpp"
 #include "CNA/Internal/GamerServices/AvatarDescriptionCodec.hpp"
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
 #include "CNA/Internal/GamerServices/LocalProfiles.hpp"
 #include "../../../../../src/Internal/Protocol/CnaService/Protocol.hpp"
+#include "../../../../../src/Internal/Guide/GuideUi.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -223,6 +227,7 @@ protected:
     }
     void TearDown() override {
         SignedInGamer::SignedIn.Remove(subscription_);
+        CNA::Internal::GamerServices::GuideUi::closeAll();
         Guide::ResetPendingMessageBoxForTestingEXT();
         Guide::ResetPendingKeyboardInputForTestingEXT();
         for (auto* gamer : *Gamer::getSignedInGamersProperty())
@@ -254,11 +259,13 @@ protected:
 
 TEST_F(LocalSignInTest, WithoutAServiceTheGuideCreatesAndSignsInALocalProfile) {
     Guide::ShowSignIn(1, false);
-    ASSERT_TRUE(Guide::getHasPendingKeyboardInputEXTProperty());
+    // The picker: no profiles yet, so only a new one; typing starts its name.
     EXPECT_TRUE(Guide::getIsVisibleProperty());
-    EXPECT_EQ("Sign in", Guide::GetPendingKeyboardInputTitleForTestingEXT());
-    EXPECT_EQ("Profile for player 1. Enter a name to create a profile.", Guide::GetPendingKeyboardInputDescriptionForTestingEXT());
+    ASSERT_EQ("signIn", CNA::Internal::GamerServices::GuideUi::currentScreenForTesting());
+    EXPECT_EQ(std::vector<std::string>{"New profile"}, CNA::Internal::GamerServices::GuideUi::labelsForTesting());
     Type(" Robin ");
+    ASSERT_TRUE(Guide::getHasPendingKeyboardInputEXTProperty());
+    EXPECT_EQ("New profile", Guide::GetPendingKeyboardInputTitleForTestingEXT());
     Enter();
     ASSERT_TRUE(Settle([] { return Count() == 1; }));
     auto* gamer = Player(0);
@@ -279,12 +286,13 @@ TEST_F(LocalSignInTest, StoredProfilesAreOfferedAndTheFirstIsSuggested) {
     (void)Service::openLocalProfile("Robin");
     (void)Service::openLocalProfile("Sam");
     Guide::ShowSignIn(2, false);
-    EXPECT_EQ("Profile for player 1: Robin, Sam, or a new name.", Guide::GetPendingKeyboardInputDescriptionForTestingEXT());
-    EXPECT_EQ("Robin", Guide::GetPendingKeyboardInputDisplayTextForTestingEXT());
+    namespace Ui = CNA::Internal::GamerServices::GuideUi;
+    EXPECT_EQ((std::vector<std::string>{"Robin", "Sam", "New profile"}), Ui::labelsForTesting());
+    EXPECT_EQ(0, Ui::focusForTesting());
     Enter();
-    ASSERT_TRUE(Settle([] { return Count() == 1 && Guide::getHasPendingKeyboardInputEXTProperty(); }));
-    // The second pane leaves out the profile already signed in.
-    EXPECT_EQ("Profile for player 2: Sam, or a new name.", Guide::GetPendingKeyboardInputDescriptionForTestingEXT());
+    ASSERT_TRUE(Settle([] { return Count() == 1 && Ui::labelsForTesting().size() == 2; }));
+    // The second slot's picker leaves out the profile already signed in.
+    EXPECT_EQ((std::vector<std::string>{"Sam", "New profile"}), Ui::labelsForTesting());
     Erase(3);
     Type("Taylor");
     Enter();
@@ -321,7 +329,11 @@ TEST_F(LocalSignInTest, AnInvalidOrDuplicateNameEndsSignInWithAMessage) {
 
 TEST_F(LocalSignInTest, CancelingStopsWithoutSigningIn) {
     Guide::ShowSignIn(4, false);
+    // Cancelling a name returns to the picker; Back there ends sign-in.
+    Type("R");
     Guide::SimulateKeyboardInputCancelEXT();
+    EXPECT_EQ("signIn", CNA::Internal::GamerServices::GuideUi::currentScreenForTesting());
+    CNA::Internal::GamerServices::GuideUi::sendForTesting(CNA::Internal::GamerServices::GuideUi::Command::Back);
     EXPECT_FALSE(Guide::getIsVisibleProperty());
     for (int i = 0; i < 3; ++i) GamerServicesDispatcher::Update();
     EXPECT_EQ(0, Count());
@@ -346,6 +358,37 @@ TEST_F(LocalSignInTest, ALocalProfilesAvatarIsItsStoredDescription) {
     ASSERT_TRUE(description.getIsValidProperty());
     const auto& bytes = description.getDescriptionProperty();
     EXPECT_TRUE(std::equal(bytes.begin(), bytes.end(), profile.avatar.begin(), profile.avatar.end()));
+}
+
+TEST_F(LocalSignInTest, SavingAnotherAvatarIntoTheProfileRaisesChanged) {
+    (void)Service::openLocalProfile("Robin");
+    Guide::ShowSignIn(1, false);
+    Enter();
+    ASSERT_TRUE(Settle([] { return Count() == 1; }));
+    CNA::Internal::GamerServices::Avatars::setAvatarChangeCheckInterval(std::chrono::milliseconds(0));
+    auto* result = AvatarDescription::BeginGetFromGamer(Player(0), {}, std::any{});
+    auto description = AvatarDescription::EndGetFromGamer(result);
+    delete result;
+    int calls = 0;
+    System::Object* sender = nullptr;
+    description.Changed += [&](System::Object* from, const System::EventArgs&) { ++calls; sender = from; };
+    for (int i = 0; i < 5; ++i) GamerServicesDispatcher::Update();
+    EXPECT_EQ(0, calls);
+    // What the CNA avatar editor does when a player saves a new avatar for this profile.
+    std::mt19937 random(7);
+    const auto saved = CNA::Internal::GamerServices::Avatars::encode(
+        CNA::Internal::GamerServices::Avatars::randomDescriptor(std::nullopt, random));
+    ASSERT_TRUE(Service::setLocalProfileAvatar("robin", saved));
+    EXPECT_TRUE(Settle([&] { return calls == 1; }));
+    EXPECT_EQ(sender, static_cast<System::Object*>(Player(0)));
+    CNA::Internal::GamerServices::Avatars::setAvatarChangeCheckInterval(std::chrono::milliseconds(10000));
+    auto* again = AvatarDescription::BeginGetFromGamer(Player(0), {}, std::any{});
+    const auto next = AvatarDescription::EndGetFromGamer(again);
+    delete again;
+    EXPECT_TRUE(std::equal(saved.begin(), saved.end(), next.getDescriptionProperty().begin()));
+    // An invalid description or an unknown profile is not stored.
+    EXPECT_FALSE(Service::setLocalProfileAvatar("robin", std::vector<unsigned char>(1021, 0)));
+    EXPECT_FALSE(Service::setLocalProfileAvatar("Nobody", saved));
 }
 
 // A local profile carries its preferred game settings (XNA GameDefaults) in its store entry. What a

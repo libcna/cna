@@ -463,6 +463,40 @@ namespace CNA::Internal::Net
         return message;
     }
 
+    // --- VoiceData ---
+
+    std::vector<bytecs> NetPacketCodec::Encode(const VoiceDataMessage& message)
+    {
+        if (message.Payload.size() > MaxVoicePayloadBytes)
+            throw std::runtime_error("NetPacketCodec: voice payload too large");
+        std::vector<bytecs> bytes;
+        bytes.reserve(6 + message.Payload.size());
+        bytes.push_back(static_cast<bytecs>(MessageTag::VoiceData));
+        bytes.push_back(message.SenderWireId);
+        bytes.push_back(message.TargetWireId);
+        bytes.push_back(message.Flags);
+        bytes.push_back(static_cast<bytecs>(message.Sequence & 0xff));
+        bytes.push_back(static_cast<bytecs>(message.Sequence >> 8));
+        bytes.insert(bytes.end(), message.Payload.begin(), message.Payload.end());
+        return bytes;
+    }
+
+    VoiceDataMessage NetPacketCodec::DecodeVoiceData(std::span<const bytecs> data)
+    {
+        if (data.size() < 6 || data[0] != static_cast<bytecs>(MessageTag::VoiceData) || data.size() > 6 + MaxVoicePayloadBytes)
+            throw std::runtime_error("NetPacketCodec: voice frame size");
+        VoiceDataMessage message;
+        message.SenderWireId = data[1];
+        message.TargetWireId = data[2];
+        message.Flags = data[3];
+        message.Sequence = static_cast<uint16_t>(data[4] | (data[5] << 8));
+        message.Payload.assign(data.begin() + 6, data.end());
+        const bool talking = (message.Flags & VoiceFlagTalking) != 0;
+        if ((message.Flags & ~VoiceFlagTalking) != 0 || talking == message.Payload.empty())
+            throw std::runtime_error("NetPacketCodec: voice frame flags");
+        return message;
+    }
+
     // --- SendDataOptions -> ENet flags ---
 
     uint32_t NetPacketCodec::SendDataOptionsToEnetFlags(SendDataOptions options)

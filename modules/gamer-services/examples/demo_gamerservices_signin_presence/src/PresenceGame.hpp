@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
@@ -17,18 +18,20 @@
 
 // Task 15.8: cna_demo_gamerservices_signin_presence. Real GamerServicesComponent registration
 // (Components.Add(new GamerServicesComponent(this)) in the constructor - the actual idiomatic XNA
-// pattern, unlike every earlier Phase 15 Net demo, which called GamerServicesDispatcher::Initialize
-// directly), the resulting population of Gamer::SignedInGamers (4 stub gamers), SignedInGamer::
-// SignedIn/SignedOut static events, and GamerPresence (PresenceMode/PresenceValue/
-// SetPresenceModeStringEXT - the last being a real, confirmed no-op EXT point on this platform,
-// matching FNA's own reference). Number keys 1/2/3/4 cycle that signed-in gamer's
+// pattern), Gamer::SignedInGamers, the SignedInGamer::SignedIn/SignedOut static events, and
+// GamerPresence (PresenceMode/PresenceValue). Number keys 1/2/3/4 cycle that signed-in gamer's
 // GamerPresenceMode forward; the HUD shows each gamer's live PresenceMode name and PresenceValue.
 //
-// Honest note on scope: neither FNA's real GamerPresence nor CNA's port expose a public getter
-// for the internal formatted presence string PresenceMode's setter computes (it's only ever
-// passed one-way into the no-op SetPresenceModeStringEXT) - so this demo's HUD shows the
-// PresenceMode's own enum name and PresenceValue directly rather than reconstructing a private
-// implementation detail that was never part of the public contract in either FNA or CNA.
+// Nobody is signed in at startup unless profiles are configured to sign in automatically
+// (CNA_GAMER_SERVICES_AUTO_SIGN_IN=<name>[,<name>...], up to four; --smoke signs in two when it is
+// unset). Those appear, raising SignedIn, at the first GamerServicesDispatcher.Update; the Guide
+// (Home key) signs gamers in and out while the demo runs.
+//
+// Setting PresenceMode also sets the gamer's presence text (the mode's display string, which
+// SetPresenceModeStringEXT can replace). A gamer signed in to a CNA account service publishes that
+// text at the next GamerServicesDispatcher.Update, and friends read it as FriendGamer.Presence; a
+// local offline profile has no service to publish to. GamerPresence has no public getter for the
+// text, in XNA as here, so the HUD shows the PresenceMode enum name and PresenceValue.
 class PresenceGame : public Microsoft::Xna::Framework::Game
 {
 public:
@@ -44,6 +47,9 @@ public:
     void SetSmokeFrames(int n) { smokeFramesLeft_ = n; }
 
 private:
+    // The Guide draws its panes and notifications through the game's graphics device service.
+    Microsoft::Xna::Framework::GraphicsDeviceManager graphics_{this};
+
     Microsoft::Xna::Framework::GamerServices::GamerServicesComponent* gamerServicesComponent_ = nullptr;
     std::vector<Microsoft::Xna::Framework::GamerServices::SignedInGamer*> gamers_;
 

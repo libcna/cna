@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
+#include "CNA/Internal/GamerServices/AssetDiskCache.hpp"
+#include "CNA/Internal/GamerServices/AvatarAssets.hpp"
 #include "CNA/Internal/GamerServices/BackendConfiguration.hpp"
 #include "CNA/GamerServices/Configuration.hpp"
 #include "CnaService/Protocol.hpp"
 #include "CredentialStore.hpp"
+#include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
 #include "ServiceSessionDirectoryClient.hpp"
 #include "ServiceSessionDirectoryFake.hpp"
 #include <chrono>
@@ -13,6 +16,7 @@
 #ifndef __EMSCRIPTEN__
 #include <curl/curl.h>
 #endif
+#include <atomic>
 #include <condition_variable>
 #include <deque>
 #include <map>
@@ -21,12 +25,9 @@
 #include <random>
 #include <thread>
 #include <algorithm>
-#include <filesystem>
-#include <fstream>
 #include <cstdlib>
 #include <cmath>
 #include <limits>
-#include "System/Security/Cryptography/SHA256.hpp"
 
 namespace CNA::Internal::GamerServices {
 using CnaService::Json;
@@ -55,7 +56,20 @@ ServiceIdentity identity(const Json& j) {
         if(!j["titlesPlayed"].is_number_integer()||j["titlesPlayed"]<0||j["titlesPlayed"]>2147483647)throw CnaService::Error("INVALID_RESPONSE");
         value.titlesPlayed=j["titlesPlayed"].get<int>();
     }
-    value.allowOnlineSessions=j["allowOnlineSessions"].get<bool>();return value;
+    value.allowOnlineSessions=j["allowOnlineSessions"].get<bool>();
+    // Servers older than these leave them out.
+    if(j.contains("gamerZone")) {
+        static const char* const zones[]={"unknown","recreation","pro","family","underground"};
+        const auto zone=CnaService::stringField(j,"gamerZone",16);
+        const auto found=std::find(std::begin(zones),std::end(zones),zone);
+        if(found==std::end(zones))throw CnaService::Error("INVALID_RESPONSE");
+        value.gamerZone=static_cast<int>(found-std::begin(zones));
+    }
+    if(j.contains("reputation")) {
+        if(!j["reputation"].is_number()||j["reputation"].get<double>()<0.0||j["reputation"].get<double>()>5.0)throw CnaService::Error("INVALID_RESPONSE");
+        value.reputation=j["reputation"].get<float>();
+    }
+    return value;
 }
 class QueuedBackend : public IGamerServicesBackend {
 public:
@@ -83,6 +97,16 @@ public:
         BackendEvent event;event.type=BackendEvent::Type::SignedIn;event.slot=slot;event.signedInToLive=false;
         event.identity.gamertag=gamertag;event.identity.displayName=gamertag;
         ready(std::move(event));
+    }
+    void signInGuest(int slot,const std::string& gamertag,int host) override {
+        slotGuard(slot);slotGuard(host);
+        if(host==slot||gamertag.empty()||gamertag.size()>36)throw Unavailable("Invalid guest.");
+        BackendEvent event;event.type=BackendEvent::Type::SignedIn;event.slot=slot;event.signedInToLive=true;event.guestOf=host;
+        event.identity.gamertag=gamertag;event.identity.displayName=gamertag;
+        ready(std::move(event));
+    }
+    void signOutGuest(int slot) override {
+        slotGuard(slot);BackendEvent event;event.type=BackendEvent::Type::SignedOut;event.slot=slot;ready(std::move(event));
     }
     std::vector<BackendEvent> pump() override {
         if(!background_) {
@@ -122,14 +146,19 @@ public:
     explicit OnlineBackend(CNA::GamerServices::Configuration config):QueuedBackend(backgroundServiceWork),config_(std::move(config)),credentials_(config_) {
         directory_=makeSessionDirectoryClient([this](const std::string& op,Json args,const std::string& actor,const std::vector<std::string>& users) {
             return request(op,std::move(args),tokenFor(actor),users);
-        });
+        },[this](const std::string& name){return capabilities_.contains(name);});
         std::set<std::string> seen;
         for(int slot=0;slot<4;++slot)if(const auto stored=credentials_.load(slot)) {
             if(!seen.insert(stored->refreshToken).second||stored->expires<=unixTime()){credentials_.remove(slot);continue;}
             {std::lock_guard lock(slotMutex_);slots_[slot].refresh=stored->refreshToken;slots_[slot].refreshExpires=stored->expires;}
         }
     }
-    ~OnlineBackend() override {stop();}
+    ~OnlineBackend() override {
+#ifndef __EMSCRIPTEN__
+        events_.request_stop();if(events_.joinable())events_.join();
+#endif
+        stop();
+    }
     bool serviceEnabled() const override {return !config_.endpoint.empty();}
     const CNA::GamerServices::Configuration& configuration() const {return config_;}
     IServiceSessionDirectory& sessionDirectory() override {return *directory_;}
@@ -143,21 +172,25 @@ public:
                 auto person=identity(result.at("identity"));issuedToken=CnaService::stringField(result,"token",128);
                 if(issuedToken.size()!=64)throw CnaService::Error("INVALID_RESPONSE");
                 std::lock_guard transport(transportMutex_);
-                std::string previous;
+                std::string previous,signedInToken;
                 {std::lock_guard lock(slotMutex_);
                  for(int i=0;i<4;++i)if(i!=slot&&slots_[i].identity.userId==person.userId)throw CnaService::Error("ALREADY_SIGNED_IN");
                  if(slots_[slot].generation!=generation)throw CnaService::Error("STALE_AUTHENTICATION");
                  previous=slots_[slot].token;
-                 auto replacement=decodeCredentials(result);replacement.generation=generation;slots_[slot]=std::move(replacement);}
+                 auto replacement=decodeCredentials(result);replacement.generation=generation;signedInToken=replacement.token;slots_[slot]=std::move(replacement);}
                 persist(slot);
                 {std::lock_guard lock(slotMutex_);slots_[slot].busy=false;}
                 issuedToken.clear();
                 if(!previous.empty()){try{(void)exchange("auth.logout",Json::object(),previous);}catch(...){}}
+                readGameDefaults(person,signedInToken);
                 event.type=BackendEvent::Type::SignedIn;event.identity=std::move(person);
-            }catch(const std::exception&){
+            }catch(const std::exception& failure){
                 if(issuedToken.size()==64){try{(void)request("auth.logout",Json::object(),issuedToken);}catch(...){}}
                 {std::lock_guard lock(slotMutex_);if(slots_[slot].generation==generation)slots_[slot].busy=false;}
                 event.type=BackendEvent::Type::Failed;event.error="Sign-in failed.";
+                // The one reason the player can act on: the service no longer accepts this game version.
+                if(const auto* refused=dynamic_cast<const ServiceError*>(&failure);refused&&refused->code=="UPDATE_REQUIRED")
+                    event.error="UPDATE_REQUIRED";
             }
             std::fill(password.begin(),password.end(),'\0');return event;
         });
@@ -175,6 +208,7 @@ public:
     }
     std::vector<BackendEvent> pump() override {
         const auto timestamp=unixTime();
+        startEvents();
         for(int slot=0;slot<4;++slot) {
             unsigned long long generation=0;bool schedule=false;
             {std::lock_guard lock(slotMutex_);auto& state=slots_[slot];
@@ -219,19 +253,25 @@ public:
             a.score=entry["score"].get<int>();a.earnedTicks=entry["earnedTicks"].get<long long>();a.displayBeforeEarned=entry["display"].get<bool>();values.push_back(std::move(a));
         }return values;
     }
-    void award(const std::string& user,const std::string& key) override {(void)request("achievements.award",{{"key",key}},tokenFor(user));}
+    std::string award(const std::string& user,const std::string& key) override {
+        const auto result=request("achievements.award",{{"key",key}},tokenFor(user));
+        // A service older than these fields answers with an empty object.
+        if(!result.is_object()||!result.contains("awarded")||!result["awarded"].is_boolean()||!result["awarded"].get<bool>())return {};
+        return CnaService::stringField(result,"name",128);
+    }
     std::vector<ServiceFriend> friends(const std::string& user) override {
         const auto result=request("friends.list",Json::object(),tokenFor(user));const auto& entries=result.at("friends");
         if(!entries.is_array()||entries.size()>256)throw Unavailable("Invalid friend response.");
         std::vector<ServiceFriend> values;for(const auto& e:entries) {
             if(!e.at("online").is_boolean())throw Unavailable("Invalid friend response.");
             ServiceFriend friendState;friendState.gamertag=CnaService::stringField(e,"gamertag",32);friendState.online=e["online"].get<bool>();
+            if(e.contains("userId"))friendState.userId=CnaService::stringField(e,"userId",64);
             for(const auto* key:{"accepted","requestSent","requestReceived"})if(!e.at(key).is_boolean())throw Unavailable("Invalid friend response.");
             friendState.accepted=e["accepted"].get<bool>();friendState.requestSent=e["requestSent"].get<bool>();friendState.requestReceived=e["requestReceived"].get<bool>();
             // A server older than these flags leaves them out; one that sends them sends booleans.
             for(auto [key,target]:{std::pair{"joinable",&friendState.joinable},std::pair{"inviteReceivedFrom",&friendState.inviteReceivedFrom},
                 std::pair{"inviteSentTo",&friendState.inviteSentTo},std::pair{"inviteAccepted",&friendState.inviteAccepted},
-                std::pair{"inviteRejected",&friendState.inviteRejected}}) {
+                std::pair{"inviteRejected",&friendState.inviteRejected},std::pair{"away",&friendState.away},std::pair{"busy",&friendState.busy}}) {
                 if(!e.contains(key))continue;
                 if(!e[key].is_boolean())throw Unavailable("Invalid friend response.");
                 *target=e[key].get<bool>();
@@ -245,6 +285,15 @@ public:
     }
     void setPresence(const std::string& user,int mode,const std::string& text) override {
         (void)request("presence.set",{{"mode",mode},{"text",text}},tokenFor(user));
+    }
+    void setGamerZone(const std::string& user,const std::string& zone) override {
+        if(!capabilities_.contains("gamer-zone"))throw Unavailable("CNA service gamer-zone capability missing.");
+        (void)request("profile.setGamerZone",{{"gamerZone",zone}},tokenFor(user));
+    }
+    void setPresenceStatus(const std::string& user,const std::string& status) override {
+        if(!capabilities_.contains("presence-status"))throw Unavailable("CNA service presence-status capability missing.");
+        if(status!="online"&&status!="away"&&status!="busy")throw Unavailable("Invalid presence status.");
+        (void)request("presence.status",{{"status",status}},tokenFor(user));
     }
     void sendMessage(const std::string& user,const std::vector<std::string>& tags,const std::string& text) override {
         (void)request("messages.send",{{"gamertags",tags},{"text",text}},tokenFor(user));
@@ -271,6 +320,64 @@ public:
         if(rating!="prefer"&&rating!="avoid"&&rating!="clear")throw Unavailable("Invalid player review.");
         (void)request("reviews.submit",{{"gamertag",tag},{"rating",rating}},tokenFor(user));
     }
+    static ServiceParty partyFrom(const Json& result) {
+        ServiceParty value;
+        const auto& party=result.at("party");
+        auto flag=[](const Json& object,const char* key){const auto& v=object.at(key);if(!v.is_boolean())throw Unavailable("Invalid party response.");return v.get<bool>();};
+        if(!party.is_null()) {
+            value.id=CnaService::stringField(party,"id",32);value.leaderId=CnaService::stringField(party,"leaderId",64);
+            const auto& members=party.at("members");
+            if(value.id.size()!=32||!members.is_array()||members.empty()||members.size()>8)throw Unavailable("Invalid party response.");
+            for(const auto& row:members) {
+                ServicePartyMember member;
+                member.userId=CnaService::stringField(row,"userId",64);member.gamertag=CnaService::stringField(row,"gamertag",32);
+                member.online=flag(row,"online");member.presence=CnaService::stringField(row,"presenceText",256);
+                member.away=flag(row,"away");member.busy=flag(row,"busy");member.joinable=flag(row,"joinable");
+                value.members.push_back(std::move(member));
+            }
+        }
+        const auto& invitations=result.at("invitations");
+        if(!invitations.is_array()||invitations.size()>16)throw Unavailable("Invalid party response.");
+        for(const auto& row:invitations) {
+            ServicePartyInvitation invitation;
+            invitation.party=CnaService::stringField(row,"party",32);invitation.senderId=CnaService::stringField(row,"senderId",64);
+            invitation.senderGamertag=CnaService::stringField(row,"senderGamertag",32);
+            const auto& members=row.at("members");
+            if(invitation.party.size()!=32||!members.is_number_integer()||members.get<long long>()<0||members.get<long long>()>8)throw Unavailable("Invalid party response.");
+            invitation.members=static_cast<int>(members.get<long long>());
+            value.invitations.push_back(std::move(invitation));
+        }
+        return value;
+    }
+    ServiceParty party(const std::string& user) override {return partyFrom(request("parties.get",Json::object(),tokenFor(user)));}
+    ServiceParty changeParty(const std::string& user,const std::string& action,const std::string& argument) override {
+        if(action=="invite")return partyFrom(request("parties.invite",{{"gamertag",argument}},tokenFor(user)));
+        if(action=="accept"||action=="decline")return partyFrom(request("parties."+action,{{"party",argument}},tokenFor(user)));
+        if(action=="leave")return partyFrom(request("parties.leave",Json::object(),tokenFor(user)));
+        throw Unavailable("Invalid party operation.");
+    }
+    std::vector<ServiceLeaderboardInfo> leaderboards() override {
+        const auto result=request("leaderboards.list",Json::object(),tokenFor({}));
+        const auto& boards=result.at("boards");
+        if(!boards.is_array()||boards.size()>256)throw Unavailable("Invalid leaderboard list.");
+        std::vector<ServiceLeaderboardInfo> list;
+        for(const auto& board:boards) {
+            ServiceLeaderboardInfo info;
+            info.key=CnaService::stringField(board,"key",64);
+            if(!CnaService::identifier(info.key))throw Unavailable("Invalid leaderboard key.");
+            const auto& mode=board.at("mode");
+            const auto& entries=board.at("entries");
+            if(!mode.is_number_integer()||mode.get<long long>()<-2147483648LL||mode.get<long long>()>2147483647LL||
+               !entries.is_number_integer()||entries.get<long long>()<0||!board.at("ascending").is_boolean()||!board.at("arbitrated").is_boolean())
+                throw Unavailable("Invalid leaderboard list.");
+            info.mode=static_cast<int>(mode.get<long long>());
+            info.entries=entries.get<long long>();
+            info.ascending=board["ascending"].get<bool>();
+            info.arbitrated=board["arbitrated"].get<bool>();
+            list.push_back(std::move(info));
+        }
+        return list;
+    }
     ServiceLeaderboardPage readLeaderboard(const std::string& key,int mode,int start,int size,const std::string& pivot,const std::optional<std::vector<std::string>>& gamers) override {
         Json args{{"key",key},{"mode",mode},{"start",start},{"size",size}};
         if(!pivot.empty())args["pivot"]=pivot;
@@ -294,6 +401,11 @@ public:
                 if(!CnaService::identifier(name)||name.size()>64||!field.is_object()||field.size()!=2)throw Unavailable("Invalid leaderboard column.");
                 ServiceLeaderboardColumn column;column.type=CnaService::stringField(field,"type",16);
                 if(column.type=="string")column.value=CnaService::stringField(field,"value",256);
+                else if(column.type=="stream") {
+                    auto hex=CnaService::stringField(field,"value",MaxLeaderboardStreamBytes*2);
+                    if(hex.size()%2||hex.find_first_not_of("0123456789abcdef")!=std::string::npos)throw Unavailable("Invalid leaderboard stream value.");
+                    column.value=std::move(hex);
+                }
                 else if(column.type=="single"||column.type=="double") {
                     if(!field.at("value").is_number())throw Unavailable("Invalid leaderboard floating value.");
                     const auto number=field["value"].get<double>();if(!std::isfinite(number)||(column.type=="single"&&std::abs(number)>std::numeric_limits<float>::max()))throw Unavailable("Invalid leaderboard floating value.");column.value=number;
@@ -334,31 +446,56 @@ public:
         if(arbitration)args["arbitration"]={{"session",arbitration->session},{"revision",arbitration->revision}};
         (void)request("leaderboards.game.commit",args,tokenFor(owner));
     }
-    std::vector<std::vector<unsigned char>> avatars(const std::vector<std::string>& ids) override {
+    std::vector<ServiceAvatarRecord> avatars(const std::vector<std::string>& ids) override {
         if(!capabilities_.contains("avatars"))throw Unavailable("CNA service avatars capability missing.");
         if(ids.empty()||ids.size()>16)throw Unavailable("Invalid avatar request.");
-        const auto result=request("avatars.get",{{"userIds",ids}},tokenFor({}));
+        // What this client can draw: the description formats it reads, the catalogs it has, and
+        // whether (and how large) it installs the one a description names. The service answers
+        // with the stored avatar when that is drawable here, else with a marked projection.
+        Json args{{"userIds",ids},{"formats",Json::array({1,2})}};
+        if(capabilities_.contains("avatar-catalog-packs")) {
+            Json catalogs=Json::array();
+            for(auto version:Avatars::availableCatalogVersions())catalogs.push_back(version);
+            const auto policy=avatarCatalogPolicy();
+            args["catalogs"]=std::move(catalogs);
+            args["catalogUpdates"]=policy.updates&&!Avatars::installedCatalogRoot().empty();
+            args["maxCatalogBytes"]=policy.maximumBytes;
+            args["reader"]=Avatars::CatalogReaderLevel;
+        }
+        const auto result=request("avatars.get",args,tokenFor({}));
         const auto& entries=result.at("avatars");
         if(!entries.is_array()||entries.size()!=ids.size())throw Unavailable("Invalid avatar response.");
-        std::vector<std::vector<unsigned char>> out;
+        std::vector<ServiceAvatarRecord> out;
         for(std::size_t index=0;index<ids.size();++index) {
             const auto& entry=entries[index];
             if(!entry.is_object()||!entry.contains("userId")||entry["userId"]!=ids[index]||!entry.contains("description"))
                 throw Unavailable("Invalid avatar response.");
+            ServiceAvatarRecord record;
+            if(entry.contains("revision")&&entry["revision"].is_number_integer())record.revision=entry["revision"].get<long long>();
+            record.projected=entry.contains("projected")&&entry["projected"].is_boolean()&&entry["projected"].get<bool>();
             const auto& text=entry["description"];
-            if(text.is_null()){out.emplace_back();continue;}
+            if(text.is_null()){out.push_back(std::move(record));continue;}
             if(!text.is_string()||text.get_ref<const std::string&>().size()!=2042)throw Unavailable("Invalid avatar response.");
-            std::vector<unsigned char> bytes;bytes.reserve(1021);
             const auto& hex=text.get_ref<const std::string&>();
             auto nibble=[](char c)->int{return c>='0'&&c<='9'?c-'0':c>='a'&&c<='f'?c-'a'+10:-1;};
+            record.description.reserve(1021);
             for(std::size_t i=0;i<hex.size();i+=2) {
                 const int high=nibble(hex[i]),low=nibble(hex[i+1]);
                 if(high<0||low<0)throw Unavailable("Invalid avatar response.");
-                bytes.push_back(static_cast<unsigned char>(high<<4|low));
+                record.description.push_back(static_cast<unsigned char>(high<<4|low));
             }
-            out.push_back(std::move(bytes));
+            out.push_back(std::move(record));
         }
         return out;
+    }
+    long long setAvatar(const std::string& userId,const std::vector<unsigned char>& description) override {
+        if(!capabilities_.contains("avatars"))throw Unavailable("CNA service avatars capability missing.");
+        if(description.size()!=1021)throw Unavailable("Invalid avatar description.");
+        constexpr char digits[]="0123456789abcdef";std::string hex;hex.reserve(2042);
+        for(auto byte:description){hex+=digits[byte>>4];hex+=digits[byte&15];}
+        const auto result=request("avatars.set",{{"description",hex}},tokenFor(userId));
+        if(!result.contains("revision")||!result["revision"].is_number_integer())throw Unavailable("Invalid avatar response.");
+        return result["revision"].get<long long>();
     }
     std::string avatarCatalog(int version) override {
         if(!capabilities_.contains("avatars"))throw Unavailable("CNA service avatars capability missing.");
@@ -373,24 +510,8 @@ public:
         if(hash.size()!=64||hash.find_first_not_of("0123456789abcdef")!=std::string::npos)throw Unavailable("Invalid service asset identifier.");
         const auto token=tokenFor({});
         std::lock_guard cacheLock(cacheMutex_);
-        std::filesystem::path root;
-        if(const auto* configured=std::getenv("CNA_GAMER_SERVICES_CACHE_DIR");configured&&*configured)root=configured;
-        else if(const auto* xdg=std::getenv("XDG_CACHE_HOME");xdg&&*xdg)root=std::filesystem::path(xdg)/"cna/gamer-services/assets";
-        else if(const auto* home=std::getenv("HOME");home&&*home)root=std::filesystem::path(home)/".cache/cna/gamer-services/assets";
-        const auto path=root/hash;
-        auto valid=[&hash](const std::vector<unsigned char>& bytes) {
-            System::Security::Cryptography::SHA256 algorithm;const auto digest=algorithm.ComputeHash(bytes);
-            constexpr char digits[]="0123456789abcdef";std::string actual;
-            for(auto byte:digest){actual+=digits[byte>>4];actual+=digits[byte&15];}return actual==hash;
-        };
-        if(!root.empty()) {
-            std::error_code error;
-            const auto size=std::filesystem::file_size(path,error);
-            if(!error&&size>0&&size<=16777216&&!std::filesystem::is_symlink(path,error)) {
-                std::ifstream stream(path,std::ios::binary);std::vector<unsigned char> bytes(static_cast<std::size_t>(size));
-                if(stream.read(reinterpret_cast<char*>(bytes.data()),bytes.size())&&valid(bytes))return bytes;
-            }
-        }
+        const AssetDiskCache cache(AssetDiskCache::defaultRoot(),prefix_);
+        if(auto cached=cache.read(hash))return std::move(*cached);
         std::vector<unsigned char> bytes;long long expected=0;std::string mime;
         while(bytes.empty()||static_cast<long long>(bytes.size())<expected) {
             const auto part=request("assets.read",{{"hash",hash},{"offset",bytes.size()},{"length",12288}},token);
@@ -406,24 +527,32 @@ public:
             auto digit=[](char c){return c<='9'?c-'0':c-'a'+10;};
             for(std::size_t i=0;i<hex.size();i+=2)bytes.push_back(static_cast<unsigned char>((digit(hex[i])<<4)|digit(hex[i+1])));
         }
-        if(!valid(bytes))throw Unavailable("Corrupt service asset.");
-        if(!root.empty()) {
-            std::error_code error;std::filesystem::create_directories(root,error);
-            if(!error) {
-                std::uintmax_t cachedBytes=0;
-                for(std::filesystem::directory_iterator entry(root,error),end;!error&&entry!=end;entry.increment(error)) {
-                    const auto name=entry->path().filename().string();
-                    if(name.size()!=64||name.find_first_not_of("0123456789abcdef")!=std::string::npos||!entry->is_regular_file(error))continue;
-                    cachedBytes+=entry->file_size(error);if(cachedBytes>268435456)return bytes;
-                }
-                if(error||bytes.size()>268435456-cachedBytes)return bytes;
-                const auto temporary=root/(hash+"."+prefix_+".tmp");
-                {std::ofstream output(temporary,std::ios::binary);output.write(reinterpret_cast<const char*>(bytes.data()),bytes.size());
-                 if(!output){std::filesystem::remove(temporary,error);return bytes;}}
-                std::filesystem::rename(temporary,path,error);if(error)std::filesystem::remove(temporary,error);
-            }
-        }
+        if(Avatars::sha256Hex(std::span<const std::uint8_t>(bytes.data(),bytes.size()))!=hash)throw Unavailable("Corrupt service asset.");
+        // A full or unwritable cache still returns the asset.
+        cache.write(hash,bytes);
         return bytes;
+    }
+    std::string avatarCatalogPack(int version) override {
+        if(version<1||version>65535)throw Unavailable("Invalid avatar catalog version.");
+        return request("avatars.catalogPack",{{"version",version}},tokenFor({})).dump();
+    }
+    std::vector<unsigned char> catalogFile(const std::string& hash,std::size_t size) override {
+        if(hash.size()!=64||hash.find_first_not_of("0123456789abcdef")!=std::string::npos||size==0||size>(16u<<20))
+            throw Unavailable("Invalid catalog file.");
+        const auto token=tokenFor({});
+        std::vector<unsigned char> bytes;
+        {
+            std::lock_guard lock(transportMutex_);
+            try {negotiateLocked();} catch(const Unavailable&) {throw;} catch(...) {throw Unavailable("CNA service negotiation failed.");}
+            if(!capabilities_.contains("files"))throw Unavailable("CNA service file capability missing.");
+            bytes=download("/files/"+hash,size,latestToken(token));
+        }
+        if(bytes.size()!=size||Avatars::sha256Hex(std::span<const std::uint8_t>(bytes.data(),bytes.size()))!=hash)
+            throw Unavailable("Corrupt catalog file.");
+        return bytes;
+    }
+    AvatarCatalogPolicy avatarCatalogPolicy() const override {
+        return AvatarCatalogPolicy{config_.avatarCatalogUpdates,config_.maxAvatarCatalogBytes};
     }
 private:
     struct Slot {
@@ -455,32 +584,81 @@ private:
         const auto id=prefix_+"-"+std::to_string(++sequence_);
         Json request{{"v",1},{"id",id},{"game",config_.gameId},{"op",op},{"args",std::move(args)}};
         if(!token.empty())request["token"]=token;
+        // Stated to a service that checks it; an older one would refuse the unknown field.
+        if(!config_.titleVersion.empty()&&capabilities_.contains("title-version"))request["titleVersion"]=config_.titleVersion;
         const auto bytes=request.dump();if(bytes.size()>CnaService::MaxMessageBytes)throw Unavailable("Service request limit exceeded.");
-        std::unique_ptr<CURL,decltype(&curl_easy_cleanup)> curl(curl_easy_init(),curl_easy_cleanup);
-        if(!curl)throw Unavailable("Service transport unavailable.");
+        // One handle for every exchange (all under transportMutex_) keeps its connection open
+        // between requests, sparing a TCP and TLS handshake each.
+        if(!curl_)curl_.reset(curl_easy_init());
+        if(!curl_)throw Unavailable("Service transport unavailable.");
+        CURL* curl=curl_.get();
         std::string output;
-        curl_easy_setopt(curl.get(),CURLOPT_URL,config_.endpoint.c_str());
-        curl_easy_setopt(curl.get(),CURLOPT_PROTOCOLS_STR,config_.insecureLoopback?"https,http":"https");
-        curl_easy_setopt(curl.get(),CURLOPT_FOLLOWLOCATION,0L);curl_easy_setopt(curl.get(),CURLOPT_PROXY,"");
-        curl_easy_setopt(curl.get(),CURLOPT_SSL_VERIFYPEER,1L);curl_easy_setopt(curl.get(),CURLOPT_SSL_VERIFYHOST,2L);
-        curl_easy_setopt(curl.get(),CURLOPT_SSLVERSION,CURL_SSLVERSION_TLSv1_2);
-        if(!config_.caBundle.empty())curl_easy_setopt(curl.get(),CURLOPT_CAINFO,config_.caBundle.c_str());
-        curl_easy_setopt(curl.get(),CURLOPT_NOSIGNAL,1L);curl_easy_setopt(curl.get(),CURLOPT_CONNECTTIMEOUT_MS,3000L);
-        curl_easy_setopt(curl.get(),CURLOPT_TIMEOUT_MS,10000L);
-        curl_easy_setopt(curl.get(),CURLOPT_POSTFIELDS,bytes.data());curl_easy_setopt(curl.get(),CURLOPT_POSTFIELDSIZE,static_cast<long>(bytes.size()));
-        curl_easy_setopt(curl.get(),CURLOPT_WRITEFUNCTION,&OnlineBackend::write);curl_easy_setopt(curl.get(),CURLOPT_WRITEDATA,&output);
+        curl_easy_setopt(curl,CURLOPT_URL,config_.endpoint.c_str());
+        curl_easy_setopt(curl,CURLOPT_PROTOCOLS_STR,config_.insecureLoopback?"https,http":"https");
+        curl_easy_setopt(curl,CURLOPT_FOLLOWLOCATION,0L);curl_easy_setopt(curl,CURLOPT_PROXY,"");
+        curl_easy_setopt(curl,CURLOPT_SSL_VERIFYPEER,1L);curl_easy_setopt(curl,CURLOPT_SSL_VERIFYHOST,2L);
+        curl_easy_setopt(curl,CURLOPT_SSLVERSION,CURL_SSLVERSION_TLSv1_2);
+        if(!config_.caBundle.empty())curl_easy_setopt(curl,CURLOPT_CAINFO,config_.caBundle.c_str());
+        curl_easy_setopt(curl,CURLOPT_NOSIGNAL,1L);curl_easy_setopt(curl,CURLOPT_CONNECTTIMEOUT_MS,3000L);
+        curl_easy_setopt(curl,CURLOPT_TIMEOUT_MS,10000L);
+        curl_easy_setopt(curl,CURLOPT_POSTFIELDS,bytes.data());curl_easy_setopt(curl,CURLOPT_POSTFIELDSIZE,static_cast<long>(bytes.size()));
+        curl_easy_setopt(curl,CURLOPT_WRITEFUNCTION,&OnlineBackend::write);curl_easy_setopt(curl,CURLOPT_WRITEDATA,&output);
         curl_slist* headers=curl_slist_append(nullptr,"Content-Type: application/json");
         std::unique_ptr<curl_slist,decltype(&curl_slist_free_all)> owned(headers,curl_slist_free_all);
         if(!headers)throw Unavailable("Service transport unavailable.");
-        curl_easy_setopt(curl.get(),CURLOPT_HTTPHEADER,headers);
-        if(curl_easy_perform(curl.get())!=CURLE_OK)throw Unavailable("CNA service connection failed.");
-        long status=0;curl_easy_getinfo(curl.get(),CURLINFO_RESPONSE_CODE,&status);if(status!=200)throw Unavailable("CNA service HTTP failure.");
+        curl_easy_setopt(curl,CURLOPT_HTTPHEADER,headers);
+        if(curl_easy_perform(curl)!=CURLE_OK)throw Unavailable("CNA service connection failed.");
+        long status=0;curl_easy_getinfo(curl,CURLINFO_RESPONSE_CODE,&status);if(status!=200)throw Unavailable("CNA service HTTP failure.");
         const auto response=CnaService::parse(output);
         if(!response.is_object()||response.size()!=4||response.at("v")!=1||CnaService::stringField(response,"id",64)!=id||!response.at("result").is_object())
             throw Unavailable("CNA service protocol mismatch.");
         const auto error=CnaService::stringField(response,"error",64);
         if(error!="OK")throw ServiceError(error);
         return response["result"];
+#endif
+    }
+    struct DownloadTarget {std::vector<unsigned char>* bytes;std::size_t limit;};
+    static std::size_t receive(char* data,std::size_t size,std::size_t count,void* context) noexcept {
+        auto& target=*static_cast<DownloadTarget*>(context);
+        if(size&&count>target.limit/size)return 0;
+        const auto bytes=size*count;if(bytes>target.limit-target.bytes->size())return 0;
+        try{target.bytes->insert(target.bytes->end(),data,data+bytes);}catch(...){return 0;}return bytes;
+    }
+    // A binary GET of one immutable file (the service's /files route), on the shared connection.
+    std::vector<unsigned char> download(const std::string& path,std::size_t size,const std::string& token) {
+#ifdef __EMSCRIPTEN__
+        (void)path; (void)size; (void)token;
+        throw Unavailable("CNA browser file transport is not implemented.");
+#else
+        if(!curl_)curl_.reset(curl_easy_init());
+        if(!curl_)throw Unavailable("Service transport unavailable.");
+        CURL* curl=curl_.get();
+        std::vector<unsigned char> bytes;bytes.reserve(size);
+        DownloadTarget target{&bytes,size};
+        const auto url=config_.endpoint+path;
+        curl_easy_setopt(curl,CURLOPT_URL,url.c_str());
+        curl_easy_setopt(curl,CURLOPT_PROTOCOLS_STR,config_.insecureLoopback?"https,http":"https");
+        curl_easy_setopt(curl,CURLOPT_FOLLOWLOCATION,0L);curl_easy_setopt(curl,CURLOPT_PROXY,"");
+        curl_easy_setopt(curl,CURLOPT_SSL_VERIFYPEER,1L);curl_easy_setopt(curl,CURLOPT_SSL_VERIFYHOST,2L);
+        curl_easy_setopt(curl,CURLOPT_SSLVERSION,CURL_SSLVERSION_TLSv1_2);
+        if(!config_.caBundle.empty())curl_easy_setopt(curl,CURLOPT_CAINFO,config_.caBundle.c_str());
+        curl_easy_setopt(curl,CURLOPT_NOSIGNAL,1L);curl_easy_setopt(curl,CURLOPT_CONNECTTIMEOUT_MS,3000L);
+        curl_easy_setopt(curl,CURLOPT_TIMEOUT_MS,60000L);
+        curl_easy_setopt(curl,CURLOPT_HTTPGET,1L);
+        curl_easy_setopt(curl,CURLOPT_WRITEFUNCTION,&OnlineBackend::receive);curl_easy_setopt(curl,CURLOPT_WRITEDATA,&target);
+        const auto authorization="Authorization: Bearer "+token, game="X-CNA-Game: "+config_.gameId;
+        curl_slist* headers=curl_slist_append(nullptr,authorization.c_str());
+        std::unique_ptr<curl_slist,decltype(&curl_slist_free_all)> owned(headers,curl_slist_free_all);
+        if(!headers||!(headers=curl_slist_append(headers,game.c_str())))throw Unavailable("Service transport unavailable.");
+        owned.release();owned.reset(headers);
+        curl_easy_setopt(curl,CURLOPT_HTTPHEADER,headers);
+        const auto result=curl_easy_perform(curl);
+        curl_easy_setopt(curl,CURLOPT_HTTPHEADER,nullptr);
+        if(result!=CURLE_OK)throw Unavailable("CNA service connection failed.");
+        long status=0;curl_easy_getinfo(curl,CURLINFO_RESPONSE_CODE,&status);
+        if(status==429)throw ServiceError("RATE_LIMITED");
+        if(status!=200)throw Unavailable("CNA service file unavailable.");
+        return bytes;
 #endif
     }
     Json request(const std::string& op,Json args,const std::string& token,const std::vector<std::string>& participants={}) {
@@ -493,8 +671,12 @@ private:
             if(op=="reviews.submit"&&!capabilities_.contains("player-reviews"))throw Unavailable("CNA service player-review capability missing.");
             if(op=="leaderboards.game.abort"&&!capabilities_.contains("leaderboard-epoch-abort"))throw Unavailable("CNA service leaderboard abort capability missing.");
             if(op.starts_with("leaderboards.game.")&&!capabilities_.contains("local-leaderboard-commit"))throw Unavailable("CNA service local leaderboard commit capability missing.");
+            if(op=="leaderboards.list"&&!capabilities_.contains("leaderboard-list"))throw Unavailable("CNA service leaderboard-list capability missing.");
+            if(op.starts_with("parties.")&&!capabilities_.contains("parties"))throw ServiceError("NOT_SUPPORTED");
+            if(op=="invites.joinFriend"&&!capabilities_.contains("join-friend"))throw ServiceError("NOT_SUPPORTED");
             if(op.starts_with("leaderboards.")&&!capabilities_.contains("leaderboard-reads"))throw Unavailable("CNA service leaderboard-read capability missing.");
             if(op=="assets.read"&&!capabilities_.contains("assets"))throw Unavailable("CNA service asset capability missing.");
+            if(op=="avatars.catalogPack"&&!capabilities_.contains("avatar-catalog-packs"))throw Unavailable("CNA service catalog pack capability missing.");
             if(op=="presence.set"&&!capabilities_.contains("presence"))throw Unavailable("CNA service presence capability missing.");
             if(op.starts_with("sessions.")&&!capabilities_.contains("session-directory"))throw Unavailable("CNA service directory capability missing.");
             if(op=="sessions.relayTicket"&&!capabilities_.contains("relay-tickets"))throw Unavailable("CNA service relay-ticket capability missing.");
@@ -541,6 +723,7 @@ private:
                     capabilities_.insert(capability.get<std::string>());
                 }
                 negotiated_=true;
+                eventsCapable_=capabilities_.contains("events");
             }
     }
     void renewParticipantsLocked(const std::vector<std::string>& users) {
@@ -607,8 +790,137 @@ private:
             if(duplicate){invalidateSlot(slot,generation);throw ServiceError("UNAUTHENTICATED");}return;
         }
         persist(slot);
-        if(previous.identity.userId.empty()){BackendEvent event;event.type=BackendEvent::Type::SignedIn;event.slot=slot;event.identity=std::move(renewed.identity);ready(std::move(event));}
+        if(previous.identity.userId.empty()) {
+            readGameDefaults(renewed.identity,renewed.token);
+            BackendEvent event;event.type=BackendEvent::Type::SignedIn;event.slot=slot;event.identity=std::move(renewed.identity);ready(std::move(event));
+        }
     }
+    // The signed-in account's game defaults; a service without them, or a failed read, leaves none.
+    // Callers hold transportMutex_ (sign-in and renewal), hence exchange rather than request.
+    void readGameDefaults(ServiceIdentity& person,const std::string& token) {
+        if(!capabilities_.contains("game-defaults"))return;
+        try {
+            const auto result=exchange("profile.gameDefaults",Json::object(),token);
+            if(result.contains("gameDefaults")&&result["gameDefaults"].is_object()){auto text=result["gameDefaults"].dump();if(text.size()<=4096)person.gameDefaults=std::move(text);}
+        }catch(...){}
+    }
+#ifndef __EMSCRIPTEN__
+    // Push hints (capability "events"): one WebSocket per signed-in account, served by a thread of its
+    // own. A hint only moves the next read of the invitation, party or social watcher forward, so a
+    // channel that is down costs nothing but that read's interval. CNA_GAMER_SERVICES_EVENTS=0 turns
+    // it off.
+    struct EventLink {
+        std::unique_ptr<CURL,decltype(&curl_easy_cleanup)> handle{nullptr,curl_easy_cleanup};
+        std::string token,partial;
+        long long retryAt=0;
+        int failures=0;
+    };
+    void startEvents() {
+        static const bool disabled=[]{const char* value=std::getenv("CNA_GAMER_SERVICES_EVENTS");return value&&std::string(value)=="0";}();
+        if(disabled||!eventsCapable_||events_.joinable())return;
+        events_=std::jthread([this](std::stop_token stop){runEvents(stop);});
+    }
+    std::string eventsUrl() const {
+        auto url=config_.endpoint;
+        if(url.starts_with("https://"))url="wss://"+url.substr(8);
+        else if(url.starts_with("http://"))url="ws://"+url.substr(7);
+        while(url.ends_with("/"))url.pop_back();
+        return url+"/events";
+    }
+    static bool sendText(CURL* curl,const std::string& text,std::stop_token stop) {
+        const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+        std::size_t offset=0;
+        while(offset<text.size()) {
+            if(stop.stop_requested()||std::chrono::steady_clock::now()>=deadline)return false;
+            std::size_t sent=0;
+            const auto code=curl_ws_send(curl,text.data()+offset,text.size()-offset,&sent,0,CURLWS_TEXT);
+            if(code!=CURLE_OK&&code!=CURLE_AGAIN)return false;
+            offset+=std::min(sent,text.size()-offset);
+            if(code==CURLE_AGAIN)std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        return true;
+    }
+    // One complete text message, or nothing yet; false when the channel is gone.
+    static bool receiveText(EventLink& link,std::optional<std::string>& message) {
+        for(int frames=0;frames<64;++frames) {
+            std::array<char,1024> scratch{};std::size_t count=0;const curl_ws_frame* metadata=nullptr;
+            const auto code=curl_ws_recv(link.handle.get(),scratch.data(),scratch.size(),&count,&metadata);
+            if(code==CURLE_AGAIN)return true;
+            if(code!=CURLE_OK||!metadata||(metadata->flags&CURLWS_CLOSE))return false;
+            if(!(metadata->flags&(CURLWS_TEXT|CURLWS_CONT)))continue;
+            if(link.partial.size()+count>4096)return false;
+            link.partial.append(scratch.data(),count);
+            if(metadata->bytesleft==0&&!(metadata->flags&CURLWS_CONT)){message=std::move(link.partial);link.partial.clear();return true;}
+        }
+        return true;
+    }
+    bool connectEvents(EventLink& link,const std::string& token,std::stop_token stop) {
+        link.handle.reset(curl_easy_init());link.partial.clear();
+        CURL* curl=link.handle.get();
+        if(!curl)return false;
+        const auto url=eventsUrl();
+        curl_easy_setopt(curl,CURLOPT_URL,url.c_str());
+        curl_easy_setopt(curl,CURLOPT_PROTOCOLS_STR,config_.insecureLoopback?"wss,ws":"wss");
+        curl_easy_setopt(curl,CURLOPT_CONNECT_ONLY,2L);curl_easy_setopt(curl,CURLOPT_HTTP_VERSION,CURL_HTTP_VERSION_1_1);
+        curl_easy_setopt(curl,CURLOPT_FOLLOWLOCATION,0L);curl_easy_setopt(curl,CURLOPT_PROXY,"");
+        curl_easy_setopt(curl,CURLOPT_SSL_VERIFYPEER,1L);curl_easy_setopt(curl,CURLOPT_SSL_VERIFYHOST,2L);
+        curl_easy_setopt(curl,CURLOPT_SSLVERSION,CURL_SSLVERSION_TLSv1_2);
+        if(!config_.caBundle.empty())curl_easy_setopt(curl,CURLOPT_CAINFO,config_.caBundle.c_str());
+        curl_easy_setopt(curl,CURLOPT_NOSIGNAL,1L);curl_easy_setopt(curl,CURLOPT_CONNECTTIMEOUT_MS,3000L);curl_easy_setopt(curl,CURLOPT_TIMEOUT_MS,5000L);
+        long status=0;
+        if(curl_easy_perform(curl)!=CURLE_OK||curl_easy_getinfo(curl,CURLINFO_RESPONSE_CODE,&status)!=CURLE_OK||status!=101){link.handle.reset();return false;}
+        Json hello{{"v",1},{"id","events"},{"game",config_.gameId},{"token",token}};
+        auto text=hello.dump();
+        const bool sent=sendText(curl,text,stop);
+        std::fill(text.begin(),text.end(),'\0');
+        if(!sent){link.handle.reset();return false;}
+        const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+        while(!stop.stop_requested()&&std::chrono::steady_clock::now()<deadline) {
+            std::optional<std::string> message;
+            if(!receiveText(link,message)){link.handle.reset();return false;}
+            if(message) {
+                try {
+                    const auto welcome=CnaService::parse(*message);
+                    if(welcome.value("error","")=="OK"){link.token=token;return true;}
+                }catch(...){}
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        link.handle.reset();return false;
+    }
+    void runEvents(std::stop_token stop) {
+        std::map<std::string,EventLink> links;
+        while(!stop.stop_requested()) {
+            std::map<std::string,std::string> tokens;
+            {std::lock_guard lock(slotMutex_);
+             for(const auto& slot:slots_)if(!slot.token.empty()&&!slot.identity.userId.empty())tokens.emplace(slot.identity.userId,slot.token);}
+            std::erase_if(links,[&](const auto& entry){return !tokens.contains(entry.first);});
+            const auto now=unixTime();
+            for(const auto& [user,token]:tokens) {
+                auto& link=links[user];
+                // A renewed token: the channel reconnects with it (the server closes one that expired).
+                if(link.handle&&link.token!=token)link.handle.reset();
+                if(!link.handle&&now>=link.retryAt) {
+                    if(connectEvents(link,token,stop))link.failures=0;
+                    else {link.failures=std::min(link.failures+1,5);link.retryAt=now+std::min(60,2<<link.failures);}
+                }
+                if(!link.handle)continue;
+                std::optional<std::string> message;
+                if(!receiveText(link,message)){link.handle.reset();link.retryAt=now+2;continue;}
+                if(!message)continue;
+                try {
+                    const auto hint=CnaService::parse(*message);
+                    if(hint.value("v",0)==1&&hint.contains("topics")&&hint["topics"].is_array())
+                        for(const auto& topic:hint["topics"])if(topic.is_string())serviceHint(topic.get<std::string>());
+                }catch(...){}
+            }
+            for(int wait=0;wait<10&&!stop.stop_requested();++wait)std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    }
+#else
+    void startEvents() {}
+#endif
     static std::string prefix() {
         std::random_device source;std::string value;constexpr char hex[]="0123456789abcdef";
         for(int i=0;i<16;++i){auto byte=source();value+=hex[(byte>>4)&15];value+=hex[byte&15];}return value;
@@ -617,15 +929,24 @@ private:
     CredentialStore credentials_;
     std::unique_ptr<IServiceSessionDirectory> directory_;
     std::mutex slotMutex_,transportMutex_,cacheMutex_;
+#ifndef __EMSCRIPTEN__
+    std::unique_ptr<CURL,decltype(&curl_easy_cleanup)> curl_{nullptr,curl_easy_cleanup};
+#endif
     std::array<Slot,4> slots_{};
     std::string prefix_=prefix();
     unsigned long long sequence_=0;
     bool negotiated_=false;
     std::set<std::string> capabilities_;
+    std::atomic<bool> eventsCapable_{false};
+#ifndef __EMSCRIPTEN__
+    // Last: stopped (in the destructor) before anything it reads.
+    std::jthread events_;
+#endif
 };
 class FakeBackend final : public QueuedBackend {
 public:
     FakeBackend(std::vector<ServiceIdentity> identities,std::vector<ServiceAchievement> catalog,std::vector<ServiceLeaderboardFixture> boards):QueuedBackend(false),identities_(std::move(identities)),catalog_(std::move(catalog)),boards_(std::move(boards)) {
+        for(const auto& person:identities_)if(!person.avatar.empty())revisions_[person.userId]=1;
         directory_=makeFakeSessionDirectory([this](const std::string& user){require(user);if(!profileById(user).allowOnlineSessions)throw ServiceError("NOT_AUTHORIZED");},
             [this](const std::string& user){return profileById(user).gamertag;},
             [this](const std::string& tag){const auto person=profile(tag);if(!person.allowOnlineSessions)throw ServiceError("NOT_AUTHORIZED");return person.userId;});
@@ -655,19 +976,27 @@ public:
     std::vector<ServiceAchievement> achievements(const std::string& user) override {
         require(user);auto values=catalog_;for(auto& entry:values)entry.earnedTicks=earned_[user][entry.key];return values;
     }
-    void award(const std::string& user,const std::string& key) override {
-        require(user);for(const auto& entry:catalog_)if(entry.key==key){if(!earned_[user][key])earned_[user][key]=638000000000000000LL;return;}
+    std::string award(const std::string& user,const std::string& key) override {
+        require(user);
+        for(const auto& entry:catalog_)if(entry.key==key) {
+            if(earned_[user][key])return {};
+            earned_[user][key]=638000000000000000LL;return entry.name;
+        }
         throw Unavailable("Achievement not found.");
     }
     std::vector<ServiceFriend> friends(const std::string& user) override {
+        {std::lock_guard guard(avatarLock_);if(avatarsUnreachable_)throw Unavailable("Fake fixture is unreachable.");}
         require(user);std::vector<ServiceFriend> result;
         for(const auto& target:identities_)if(target.userId!=user) {
             const bool sent=edges_.contains({user,target.userId}),received=edges_.contains({target.userId,user});
             if(!sent&&!received)continue;
-            ServiceFriend value;value.gamertag=target.gamertag;value.accepted=sent&&received;
+            ServiceFriend value;value.userId=target.userId;value.gamertag=target.gamertag;value.accepted=sent&&received;
             value.requestSent=sent&&!received;value.requestReceived=received&&!sent;
-            value.online=value.accepted&&std::find(slots_.begin(),slots_.end(),target.userId)!=slots_.end();
-            value.presence=value.online?presence_[target.userId]:"";result.push_back(std::move(value));
+            value.online=value.accepted&&(std::find(slots_.begin(),slots_.end(),target.userId)!=slots_.end()||remoteOnline_.contains(target.userId));
+            value.presence=value.online?presence_[target.userId]:"";
+            value.away=value.online&&status_[target.userId]=="away";value.busy=value.online&&status_[target.userId]=="busy";
+            value.joinable=value.online&&joinable_.contains(target.userId);
+            result.push_back(std::move(value));
         }return result;
     }
     void changeFriend(const std::string& user,const std::string& tag,const std::string& action) override {
@@ -678,6 +1007,17 @@ public:
         else throw Unavailable("Invalid friendship operation.");
     }
     void setPresence(const std::string& user,int,const std::string& text) override {require(user);presence_[user]=text;}
+    void setPresenceStatus(const std::string& user,const std::string& status) override {
+        require(user);if(status!="online"&&status!="away"&&status!="busy")throw ServiceOperationError("INVALID_ARGUMENT");
+        status_[user]=status;
+    }
+    void setGamerZone(const std::string& user,const std::string& zone) override {
+        require(user);
+        static const char* const zones[]={"unknown","recreation","pro","family","underground"};
+        const auto found=std::find(std::begin(zones),std::end(zones),zone);
+        if(found==std::end(zones))throw ServiceOperationError("INVALID_ARGUMENT");
+        for(auto& person:identities_)if(person.userId==user)person.gamerZone=static_cast<int>(found-std::begin(zones));
+    }
     void sendMessage(const std::string& user,const std::vector<std::string>& tags,const std::string& text) override {
         require(user);if(tags.empty()||tags.size()>100||text.size()>256)throw ServiceOperationError("INVALID_ARGUMENT");
         for(const auto& tag:tags){const auto target=profile(tag).userId;if(target==user)throw ServiceOperationError("INVALID_ARGUMENT");
@@ -704,6 +1044,77 @@ public:
     }
     /** @brief Deterministic view of recorded reviews for tests. */
     const std::map<std::pair<std::string,std::string>,std::string>& reviews()const{return reviews_;}
+    ServiceParty party(const std::string& user) override {
+        require(user);
+        ServiceParty value;
+        if(const auto found=partyOf_.find(user);found!=partyOf_.end()) {
+            const auto& party=parties_.at(found->second);
+            value.id=found->second;value.leaderId=party.leader;
+            for(const auto& id:party.members) {
+                const auto person=std::find_if(identities_.begin(),identities_.end(),[&](const auto& p){return p.userId==id;});
+                ServicePartyMember member;member.userId=id;member.gamertag=person==identities_.end()?id:person->gamertag;
+                member.online=std::find(slots_.begin(),slots_.end(),id)!=slots_.end()||remoteOnline_.contains(id);
+                member.presence=member.online?presence_[id]:"";
+                member.away=member.online&&status_[id]=="away";member.busy=member.online&&status_[id]=="busy";
+                member.joinable=member.online&&joinable_.contains(id);
+                value.members.push_back(std::move(member));
+            }
+        }
+        for(const auto& [id,party]:parties_)
+            if(const auto invited=party.invitations.find(user);invited!=party.invitations.end()) {
+                const auto sender=std::find_if(identities_.begin(),identities_.end(),[&](const auto& p){return p.userId==invited->second;});
+                value.invitations.push_back({id,invited->second,sender==identities_.end()?invited->second:sender->gamertag,static_cast<int>(party.members.size())});
+            }
+        return value;
+    }
+    ServiceParty changeParty(const std::string& user,const std::string& action,const std::string& argument) override {
+        require(user);
+        auto leave=[&](const std::string& party) {
+            auto& value=parties_.at(party);
+            std::erase(value.members,user);partyOf_.erase(user);
+            if(value.members.empty()){parties_.erase(party);return;}
+            if(value.leader==user)value.leader=value.members.front();
+        };
+        if(action=="invite") {
+            const auto target=profile(argument).userId;
+            if(target==user)throw ServiceOperationError("INVALID_ARGUMENT");
+            if(!edges_.contains({user,target})||!edges_.contains({target,user}))throw ServiceOperationError("NOT_AUTHORIZED");
+            if(!partyOf_.contains(user)) {
+                const auto id=std::string(28,'0')+std::to_string(1000+(++partySequence_)).substr(0,4);
+                parties_[id]=FakeParty{user,{user},{}};partyOf_[user]=id;
+            }
+            auto& party=parties_.at(partyOf_.at(user));
+            if(std::find(party.members.begin(),party.members.end(),target)!=party.members.end())throw ServiceOperationError("CONFLICT");
+            if(party.members.size()+party.invitations.size()>=8&&!party.invitations.contains(target))throw ServiceOperationError("LIMIT_EXCEEDED");
+            party.invitations[target]=user;
+        } else if(action=="accept") {
+            const auto found=parties_.find(argument);
+            if(found==parties_.end()||!found->second.invitations.contains(user))throw ServiceOperationError("NOT_FOUND");
+            if(partyOf_[user]!=argument) {
+                if(found->second.members.size()>=8)throw ServiceOperationError("LIMIT_EXCEEDED");
+                if(const auto previous=partyOf_.find(user);previous!=partyOf_.end()&&!previous->second.empty())leave(previous->second);
+                parties_.at(argument).members.push_back(user);partyOf_[user]=argument;
+            }
+            parties_.at(argument).invitations.erase(user);
+        } else if(action=="decline") {
+            if(const auto found=parties_.find(argument);found!=parties_.end())found->second.invitations.erase(user);
+        } else if(action=="leave") {
+            if(const auto found=partyOf_.find(user);found!=partyOf_.end())leave(found->second);
+        } else {
+            throw ServiceOperationError("INVALID_ARGUMENT");
+        }
+        std::erase_if(partyOf_,[](const auto& entry){return entry.second.empty();});
+        return party(user);
+    }
+    /** @brief Fixture: whether an account is in a joinable game (friends and party members see it). */
+    void setJoinable(const std::string& user,bool joinable){if(joinable)joinable_.insert(user);else joinable_.erase(user);}
+    std::vector<ServiceLeaderboardInfo> leaderboards() override {
+        if(std::all_of(slots_.begin(),slots_.end(),[](const auto& id){return id.empty();}))throw Unavailable("No authenticated fixture gamer.");
+        std::vector<ServiceLeaderboardInfo> list;
+        for(const auto& board:boards_)list.push_back({board.key,board.mode,board.ascending,board.arbitrated,static_cast<long long>(board.entries.size())});
+        std::ranges::sort(list,[](const auto& a,const auto& b){return std::tie(a.key,a.mode)<std::tie(b.key,b.mode);});
+        return list;
+    }
     ServiceLeaderboardPage readLeaderboard(const std::string& key,int mode,int start,int size,const std::string& pivot,const std::optional<std::vector<std::string>>& gamers) override {
         if(std::all_of(slots_.begin(),slots_.end(),[](const auto& id){return id.empty();}))throw Unavailable("No authenticated fixture gamer.");
         const auto board=std::find_if(boards_.begin(),boards_.end(),[&](const auto& value){return value.key==key&&value.mode==mode;});
@@ -770,25 +1181,78 @@ public:
         }
         games_.erase(gameplay);
     }
-    std::vector<std::vector<unsigned char>> avatars(const std::vector<std::string>& ids) override {
-        std::vector<std::vector<unsigned char>> out;
+    std::vector<ServiceAvatarRecord> avatars(const std::vector<std::string>& ids) override {
+        std::lock_guard guard(avatarLock_);
+        if(avatarsUnreachable_)throw Unavailable("Fake fixture is unreachable.");
+        ++traffic_.avatarReads;
+        std::vector<ServiceAvatarRecord> out;
         for(const auto& id:ids) {
             auto person=std::find_if(identities_.begin(),identities_.end(),[&](const auto& value){return value.userId==id;});
-            out.push_back(person==identities_.end()?std::vector<unsigned char>{}:person->avatar);
+            ServiceAvatarRecord record;
+            if(person!=identities_.end()&&!person->avatar.empty()) {
+                record.description=person->avatar;
+                record.revision=revisions_[id];
+            }
+            out.push_back(std::move(record));
         }
         return out;
     }
+    long long setAvatar(const std::string& userId,const std::vector<unsigned char>& description) override {
+        std::lock_guard guard(avatarLock_);
+        if(avatarsUnreachable_)throw Unavailable("Fake fixture is unreachable.");
+        for(auto& person:identities_)if(person.userId==userId){person.avatar=description;return ++revisions_[userId];}
+        throw ServiceError("NOT_FOUND");
+    }
+    void replaceAvatar(const std::string& userId,std::vector<unsigned char> description,bool newRevision) {
+        std::lock_guard guard(avatarLock_);
+        for(auto& person:identities_)if(person.userId==userId){person.avatar=std::move(description);if(newRevision)++revisions_[userId];}
+    }
+    void setAvatarsUnreachable(bool failing){std::lock_guard guard(avatarLock_);avatarsUnreachable_=failing;}
     std::string avatarCatalog(int) override {
+        std::lock_guard guard(avatarLock_);
         if(avatarCatalog_.empty())throw Unavailable("Fake fixture has no avatar catalog.");
         return avatarCatalog_;
     }
     std::vector<unsigned char> asset(const std::string& hash) override {
+        return catalogFile(hash,0);
+    }
+    std::string avatarCatalogPack(int version) override {
+        std::lock_guard guard(avatarLock_);
+        ++traffic_.packReads;
+        if(avatarCatalog_.empty())throw Unavailable("Fake fixture has no avatar catalog.");
+        // The descriptor the service derives from an imported catalog.
+        const auto manifest=Json::parse(avatarCatalog_,nullptr,false);
+        if(manifest.is_discarded()||!manifest.is_object()||manifest.value("catalogVersion",0)!=version)throw ServiceError("NOT_FOUND");
+        unsigned long long total=0;
+        for(const auto& asset:manifest.at("assets"))total+=asset.value("size",0ull);
+        return Json{{"version",version},{"packFormat",1},{"reader",1},{"descriptionFormats",Json::array({1,2})},
+                    {"manifestSha256",manifestHash()},{"manifestSize",avatarCatalog_.size()},{"totalBytes",total}}.dump();
+    }
+    std::vector<unsigned char> catalogFile(const std::string& hash,std::size_t) override {
+        std::lock_guard guard(avatarLock_);
+        if(fileSuccesses_==0)throw Unavailable("Fake fixture's file endpoint is off.");
+        if(fileSuccesses_>0)--fileSuccesses_;
+        ++traffic_.fileDownloads;
+        // The manifest is a file too, found by its hash like every other.
+        if(!avatarCatalog_.empty()&&hash==manifestHash())return {avatarCatalog_.begin(),avatarCatalog_.end()};
         auto found=avatarAssets_.find(hash);
         if(found==avatarAssets_.end())throw Unavailable("Fake fixture has no such asset.");
         return found->second;
     }
+    std::string manifestHash() const {
+        return Avatars::sha256Hex(std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(avatarCatalog_.data()),avatarCatalog_.size()));
+    }
+    AvatarCatalogPolicy avatarCatalogPolicy() const override {std::lock_guard guard(avatarLock_);return policy_;}
     void setAvatarCatalog(std::string manifest,std::map<std::string,std::vector<unsigned char>> assets) {
+        std::lock_guard guard(avatarLock_);
         avatarCatalog_=std::move(manifest);avatarAssets_=std::move(assets);
+    }
+    FakeAvatarTraffic traffic() const {std::lock_guard guard(avatarLock_);return traffic_;}
+    void setFileSuccesses(int successes) {std::lock_guard guard(avatarLock_);fileSuccesses_=successes;}
+    void setPolicy(AvatarCatalogPolicy policy) {std::lock_guard guard(avatarLock_);policy_=policy;}
+    void setRemotePresence(const std::string& user,bool online,const std::string& presence,const std::string& status) {
+        if(online)remoteOnline_.insert(user);else remoteOnline_.erase(user);
+        presence_[user]=presence;status_[user]=status;
     }
 private:
     ServiceIdentity profileById(const std::string& id) {for(const auto& person:identities_)if(person.userId==id)return person;throw Unavailable("Unknown fixture gamer.");}
@@ -800,6 +1264,12 @@ private:
         entry->rating=row.rating;entry->columns=row.columns;
     }
     std::string avatarCatalog_;
+    mutable std::mutex avatarLock_;
+    bool avatarsUnreachable_=false;
+    std::map<std::string,long long> revisions_;
+    FakeAvatarTraffic traffic_;
+    int fileSuccesses_=-1;
+    AvatarCatalogPolicy policy_;
     std::map<std::string,std::vector<unsigned char>> avatarAssets_;
     std::map<std::string,std::vector<ServiceMessage>> inbox_;
     std::map<std::pair<std::string,std::string>,std::string> reviews_;
@@ -809,14 +1279,21 @@ private:
     std::map<std::string,std::vector<std::string>> games_;
     int gameSequence_=0;
     std::unique_ptr<IServiceSessionDirectory> directory_;
-    void require(const std::string& user) {if(user.empty()||std::find(slots_.begin(),slots_.end(),user)==slots_.end())throw Unavailable("Gamer signed out.");}
+    // Signed in here, or (setFakeRemotePresence) online elsewhere.
+    void require(const std::string& user) {if(user.empty()||(std::find(slots_.begin(),slots_.end(),user)==slots_.end()&&!remoteOnline_.contains(user)))throw Unavailable("Gamer signed out.");}
     std::vector<ServiceIdentity> identities_;
     std::vector<ServiceAchievement> catalog_;
     std::vector<ServiceLeaderboardFixture> boards_;
     std::array<std::string,4> slots_{};
     std::map<std::string,std::map<std::string,long long>> earned_;
     std::set<std::pair<std::string,std::string>> edges_;
-    std::map<std::string,std::string> presence_;
+    std::map<std::string,std::string> presence_,status_;
+    std::set<std::string> remoteOnline_;
+    struct FakeParty {std::string leader;std::vector<std::string> members;std::map<std::string,std::string> invitations;};
+    std::map<std::string,FakeParty> parties_;
+    std::map<std::string,std::string> partyOf_;
+    std::set<std::string> joinable_;
+    int partySequence_=0;
 };
 thread_local int serviceRestrictionDepth=0;
 std::mutex registryMutex;
@@ -836,10 +1313,45 @@ CNA::GamerServices::Configuration configurationForBackend(const IGamerServicesBa
     return online->configuration();
 }
 void setBackendForTesting(std::shared_ptr<IGamerServicesBackend> value) {std::lock_guard lock(registryMutex);current=std::move(value);}
+void setFakeAvatar(IGamerServicesBackend& fake,const std::string& userId,std::vector<unsigned char> description,bool newRevision) {
+    auto* backend=dynamic_cast<FakeBackend*>(&fake);
+    if(!backend)throw System::InvalidOperationException("Not a fake Gamer Services backend.");
+    backend->replaceAvatar(userId,std::move(description),newRevision);
+}
+void setFakeAvatarsUnreachable(IGamerServicesBackend& fake,bool failing) {
+    auto* backend=dynamic_cast<FakeBackend*>(&fake);
+    if(!backend)throw System::InvalidOperationException("Not a fake Gamer Services backend.");
+    backend->setAvatarsUnreachable(failing);
+}
 void setFakeAvatarCatalog(IGamerServicesBackend& fake,std::string manifest,std::map<std::string,std::vector<unsigned char>> assets) {
     auto* backend=dynamic_cast<FakeBackend*>(&fake);
     if(!backend)throw System::InvalidOperationException("Not a fake Gamer Services backend.");
     backend->setAvatarCatalog(std::move(manifest),std::move(assets));
+}
+FakeAvatarTraffic fakeAvatarTraffic(IGamerServicesBackend& fake) {
+    auto* backend=dynamic_cast<FakeBackend*>(&fake);
+    if(!backend)throw System::InvalidOperationException("Not a fake Gamer Services backend.");
+    return backend->traffic();
+}
+void setFakeCatalogFileFailures(IGamerServicesBackend& fake,int successes) {
+    auto* backend=dynamic_cast<FakeBackend*>(&fake);
+    if(!backend)throw System::InvalidOperationException("Not a fake Gamer Services backend.");
+    backend->setFileSuccesses(successes);
+}
+void setFakeRemotePresence(IGamerServicesBackend& fake,const std::string& userId,bool online,const std::string& presence,const std::string& status) {
+    auto* backend=dynamic_cast<FakeBackend*>(&fake);
+    if(!backend)throw System::InvalidOperationException("Not a fake Gamer Services backend.");
+    backend->setRemotePresence(userId,online,presence,status);
+}
+void setFakeJoinable(IGamerServicesBackend& fake,const std::string& userId,bool joinable) {
+    auto* backend=dynamic_cast<FakeBackend*>(&fake);
+    if(!backend)throw System::InvalidOperationException("Not a fake Gamer Services backend.");
+    backend->setJoinable(userId,joinable);
+}
+void setFakeAvatarCatalogPolicy(IGamerServicesBackend& fake,AvatarCatalogPolicy policy) {
+    auto* backend=dynamic_cast<FakeBackend*>(&fake);
+    if(!backend)throw System::InvalidOperationException("Not a fake Gamer Services backend.");
+    backend->setPolicy(policy);
 }
 std::shared_ptr<IGamerServicesBackend> makeFakeBackend(std::vector<ServiceIdentity> people,std::vector<ServiceAchievement> catalog,std::vector<ServiceLeaderboardFixture> boards) {
     return std::make_shared<FakeBackend>(std::move(people),std::move(catalog),std::move(boards));

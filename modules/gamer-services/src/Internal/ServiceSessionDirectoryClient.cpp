@@ -53,11 +53,18 @@ void usersGuard(const std::string& actor,const std::vector<std::string>& users) 
     argument(seen.contains(actor));
 }
 ServiceSessionSnapshot snapshot(const Json& value,bool roster) {
-    if(roster)fields(value,{"session","kind","state","maxGamers","privateSlots","properties","allowJoinInProgress",
+    // A member snapshot names allowHostMigration only while it is set (host-migration).
+    const bool migrating=roster&&value.is_object()&&value.contains("allowHostMigration");
+    if(roster&&migrating)fields(value,{"session","kind","state","maxGamers","privateSlots","properties","allowJoinInProgress",
+        "revision","hostId","hostGamertag","hostMachine","currentGamers","openPublicSlots","openPrivateSlots","members","machine",
+        "allowHostMigration"});
+    else if(roster)fields(value,{"session","kind","state","maxGamers","privateSlots","properties","allowJoinInProgress",
         "revision","hostId","hostGamertag","hostMachine","currentGamers","openPublicSlots","openPrivateSlots","members","machine"});
     else fields(value,{"session","kind","state","maxGamers","privateSlots","properties","allowJoinInProgress",
         "revision","hostId","hostGamertag","hostMachine","currentGamers","openPublicSlots","openPrivateSlots"});
     ServiceSessionSnapshot result;
+    if(migrating&&!boolean(value,"allowHostMigration"))invalid();
+    result.allowHostMigration=migrating;
     result.session=id(value,"session");result.hostMachine=id(value,"hostMachine");result.hostId=text(value,"hostId",64);
     result.hostGamertag=text(value,"hostGamertag",32);result.kind=kind(value);
     const auto state=text(value,"state",16);
@@ -123,7 +130,8 @@ ServiceInvitation invitation(const Json& value) {
     }
 class SessionDirectoryClient final : public IServiceSessionDirectory {
 public:
-    explicit SessionDirectoryClient(DirectoryRequest request):request_(std::move(request)){}
+    SessionDirectoryClient(DirectoryRequest request,std::function<bool(const std::string&)> capability)
+        :request_(std::move(request)),capability_(std::move(capability)){}
     ServiceSessionSnapshot create(const std::string& actor,const std::vector<std::string>& users,
         ServiceSessionKind category,const ServiceSessionSettings& settings) override {
         usersGuard(actor,users);settingsGuard(settings);argument(settings.state==ServiceSessionState::Lobby&&users.size()<=static_cast<std::size_t>(settings.maxGamers));
@@ -133,7 +141,8 @@ public:
         groupGuard(value,actor,users);
         if(value.hostId!=actor||value.hostMachine!=value.machine||value.kind!=category||value.state!=ServiceSessionState::Lobby||
             value.maxGamers!=settings.maxGamers||value.privateSlots!=settings.privateSlots||value.properties!=settings.properties||
-            value.allowJoinInProgress!=settings.allowJoinInProgress||value.currentGamers!=static_cast<int>(users.size())||value.revision!=1)invalid();
+            value.allowJoinInProgress!=settings.allowJoinInProgress||value.currentGamers!=static_cast<int>(users.size())||value.revision!=1||
+            value.allowHostMigration!=(migration()&&settings.allowHostMigration))invalid();
         return value;
     }
     ServiceSessionPage find(const std::string& actor,ServiceSessionKind category,int locals,
@@ -167,7 +176,8 @@ public:
         auto value=decode([&]{return snapshot(request_("sessions.update",args,actor,{}),true);});memberGuard(value,actor);
         if(value.session!=session||value.hostId!=actor||value.hostMachine!=value.machine||value.revision!=revision+1||
             value.state!=settings.state||value.maxGamers!=settings.maxGamers||value.privateSlots!=settings.privateSlots||
-            value.properties!=settings.properties||value.allowJoinInProgress!=settings.allowJoinInProgress)invalid();return value;
+            value.properties!=settings.properties||value.allowJoinInProgress!=settings.allowJoinInProgress||
+            (migration()&&value.allowHostMigration!=settings.allowHostMigration))invalid();return value;
     }
     ServiceSessionSnapshot remove(const std::string& actor,const std::string& session,const std::string& machine) override {
         actorGuard(actor);argument(opaque(session)&&opaque(machine));
@@ -175,6 +185,16 @@ public:
         memberGuard(value,actor);
         if(value.session!=session||value.hostId!=actor||value.hostMachine!=value.machine||machine==value.machine)invalid();
         for(const auto& row:value.members)if(row.machine==machine)invalid();
+        return value;
+    }
+    ServiceSessionSnapshot addMembers(const std::string& actor,const std::vector<std::string>& users,const std::string& session) override {
+        actorGuard(actor);argument(opaque(session)&&!users.empty()&&users.size()<=3);
+        std::set<std::string> seen;for(const auto& user:users)argument(!user.empty()&&user.size()<=64&&user!=actor&&seen.insert(user).second);
+        if(!capability_||!capability_("session-add-members"))throw ServiceOperationError("NOT_SUPPORTED");
+        auto value=decode([&]{return snapshot(request_("sessions.addMembers",{{"session",session}},actor,users),true);});
+        if(value.session!=session)invalid();memberGuard(value,actor);
+        for(const auto& user:users)
+            if(std::none_of(value.members.begin(),value.members.end(),[&](const auto& row){return row.userId==user&&row.machine==value.machine;}))invalid();
         return value;
     }
     bool leave(const std::string& actor,const std::string& session) override {
@@ -200,6 +220,11 @@ public:
         auto value=decode([&]{return invitation(request_("invites.send",{{"session",session},{"gamertag",gamertag}},actor,{}));});
         if(value.session!=session||value.senderId!=actor||(value.state!=ServiceInvitationState::Pending&&value.state!=ServiceInvitationState::Accepted))invalid();return value;
     }
+    ServiceInvitation requestJoin(const std::string& actor,const std::string& gamertag) override {
+        actorGuard(actor);argument(!gamertag.empty()&&gamertag.size()<=32);
+        auto value=decode([&]{return invitation(request_("invites.joinFriend",{{"gamertag",gamertag}},actor,{}));});
+        if(value.senderId==actor||value.state!=ServiceInvitationState::Pending&&value.state!=ServiceInvitationState::Accepted)invalid();return value;
+    }
     ServiceInvitationPage listInvites(const std::string& actor,int start,int limit) override {
         actorGuard(actor);argument(start>=0&&start<=CnaService::MaxIncomingInvites&&limit>=1&&limit<=32);
         return decode([&]{const auto data=request_("invites.list",{{"start",start},{"limit",limit}},actor,{});
@@ -219,10 +244,14 @@ public:
         auto value=inviteRequest("invites.dismiss",actor,invite);if(value.state!=ServiceInvitationState::Dismissed)invalid();return value;
     }
 private:
-    static Json settingsArgs(const ServiceSessionSettings& settings) {
-        return Json{{"maxGamers",settings.maxGamers},{"privateSlots",settings.privateSlots},
+    bool migration() const {return capability_&&capability_("host-migration");}
+    Json settingsArgs(const ServiceSessionSettings& settings) const {
+        Json args{{"maxGamers",settings.maxGamers},{"privateSlots",settings.privateSlots},
             {"state",settings.state==ServiceSessionState::Lobby?"lobby":"playing"},
             {"allowJoinInProgress",settings.allowJoinInProgress},{"properties",properties(settings.properties)}};
+        // A service without host migration refuses the field; its sessions end with their host.
+        if(migration())args["allowHostMigration"]=settings.allowHostMigration;
+        return args;
     }
     ServiceSessionSnapshot memberRequest(const char* op,const std::string& actor,const std::string& session) {
         actorGuard(actor);argument(opaque(session));auto value=decode([&]{return snapshot(request_(op,{{"session",session}},actor,{}),true);});
@@ -233,9 +262,11 @@ private:
         if(value.invite!=invite||value.senderId==actor)invalid();return value;
     }
     DirectoryRequest request_;
+    std::function<bool(const std::string&)> capability_;
 };
 }
-std::unique_ptr<IServiceSessionDirectory> makeSessionDirectoryClient(DirectoryRequest request) {
-    if(!request)throw ServiceOperationError("INVALID_ARGUMENT");return std::make_unique<SessionDirectoryClient>(std::move(request));
+std::unique_ptr<IServiceSessionDirectory> makeSessionDirectoryClient(DirectoryRequest request,std::function<bool(const std::string&)> capability) {
+    if(!request)throw ServiceOperationError("INVALID_ARGUMENT");
+    return std::make_unique<SessionDirectoryClient>(std::move(request),std::move(capability));
 }
 }

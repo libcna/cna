@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
+#include "../Internal/GuideOverlay.hpp"
+#include "../Internal/Guide/GuideUi.hpp"
 #include "CNA/Internal/GamerServices/LocalGamerServicesStore.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/Audio/Microphone.hpp"
@@ -17,6 +19,8 @@
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
+    GetTypeNameCPP(SignedInGamer, "Microsoft.Xna.Framework.GamerServices.SignedInGamer")
+
     System::EventHandler<SignedInEventArgs> SignedInGamer::SignedIn;
     System::EventHandler<SignedOutEventArgs> SignedInGamer::SignedOut;
 
@@ -45,7 +49,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         , gameDefaults_(GameDefaults::CreateInternal())
         , presence_(GamerPresence::CreateInternal())
         , privileges_(GamerPrivileges::CreateInternal())
-        , partySize_(1)
+        , partySize_(0)
     {
     }
 
@@ -62,7 +66,6 @@ namespace Microsoft::Xna::Framework::GamerServices
     bool SignedInGamer::getIsGuestProperty() const                        { return isGuest_; }
     bool SignedInGamer::getIsSignedInToLiveProperty() const               { return isSignedInToLive_; }
     int SignedInGamer::getPartySizeProperty() const                       { return partySize_; }
-    void SignedInGamer::setPartySizeProperty(int value)                  { partySize_ = value; }
 
     Microsoft::Xna::Framework::PlayerIndex SignedInGamer::getPlayerIndexProperty() const
     {
@@ -100,9 +103,9 @@ namespace Microsoft::Xna::Framework::GamerServices
             std::vector<std::shared_ptr<FriendGamer>> owned;
             std::vector<FriendGamer*> friends;
             for (const auto& entry : CNA::Internal::GamerServices::backend()->friends(serviceUserId_)) {
-                // CNA has no away/busy status and carries no voice, so those flags stay false; an
-                // online CNA account is always in a game, so it is playing.
-                auto friendGamer = std::shared_ptr<FriendGamer>(new FriendGamer(entry.gamertag, entry.gamertag, entry.online, entry.online, false, false, entry.requestSent, entry.requestReceived));
+                // Away/busy is the status the friend chose (the Guide's Online status); an online
+                // CNA account is always in a game, so it is playing.
+                auto friendGamer = std::shared_ptr<FriendGamer>(new FriendGamer(entry.gamertag, entry.gamertag, entry.online, entry.online, entry.away, entry.busy, entry.requestSent, entry.requestReceived));
                 friendGamer->presence_ = entry.presence;
                 friendGamer->isJoinable_ = entry.joinable;
                 friendGamer->inviteReceivedFrom_ = entry.inviteReceivedFrom;
@@ -119,8 +122,11 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void SignedInGamer::AwardAchievement(const std::string& achievementKey)
     {
+        // A guest has no profile of its own to keep achievements in.
+        if (isGuest_) throw GamerPrivilegeException("A guest cannot earn achievements.");
         if (!serviceUserId_.empty()) {
-            CNA::Internal::GamerServices::backend()->award(serviceUserId_, achievementKey);
+            const auto name = CNA::Internal::GamerServices::backend()->award(serviceUserId_, achievementKey);
+            if (!name.empty()) CNA::Internal::GamerServices::GuideUi::notify({CNA::Internal::GamerServices::GuideUi::Notification::Kind::Achievement, "Achievement unlocked", name, {}});
             return;
         }
         // Offline, a title that ships an achievement catalog awards only what it defines, as the
@@ -133,6 +139,10 @@ namespace Microsoft::Xna::Framework::GamerServices
         CNA::Internal::GamerServices::SaveEarnedAchievementEXT(
             getGamertagProperty(), achievementKey, System::DateTime::getNowProperty().getTicksProperty()
         );
+        std::string name = achievementKey;
+        if (catalog)
+            for (const auto& entry : *catalog) if (entry.Key == achievementKey && !entry.Name.empty()) name = entry.Name;
+        CNA::Internal::GamerServices::GuideUi::notify({CNA::Internal::GamerServices::GuideUi::Notification::Kind::Achievement, "Achievement unlocked", name, {}});
     }
 
     System::IAsyncResult* SignedInGamer::BeginAwardAchievement(
@@ -143,7 +153,11 @@ namespace Microsoft::Xna::Framework::GamerServices
         if (!serviceUserId_.empty()) {
             auto service = CNA::Internal::GamerServices::backend(); const auto user = serviceUserId_;
             return CNA::Internal::GamerServices::ServiceAsyncResult::begin("award", this,
-                [user, achievementKey](auto& executor) -> std::any { executor.award(user, achievementKey); return {}; }, std::move(callback), std::move(state),std::move(service));
+                [user, achievementKey](auto& executor) -> std::any {
+                    const auto name = executor.award(user, achievementKey);
+                    if (!name.empty()) CNA::Internal::GamerServices::GuideUi::notify({CNA::Internal::GamerServices::GuideUi::Notification::Kind::Achievement, "Achievement unlocked", name, {}});
+                    return {};
+                }, std::move(callback), std::move(state),std::move(service));
         }
         AwardAchievement(achievementKey);
         // FNA: the overlap check on statStoreAction is intentionally a no-op — the
@@ -271,6 +285,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void SignedInGamer::OnSignIn(SignedInGamer* gamer)
     {
+        CNA::Internal::GamerServices::GuideUi::notify({CNA::Internal::GamerServices::GuideUi::Notification::Kind::SignIn, gamer->getGamertagProperty() + " signed in", {}, {}});
         if (!SignedIn.Empty())
         {
             SignedIn.Raise(nullptr, SignedInEventArgs(gamer));
@@ -279,6 +294,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void SignedInGamer::OnSignOut(SignedInGamer* gamer)
     {
+        CNA::Internal::GamerServices::GuideUi::notify({CNA::Internal::GamerServices::GuideUi::Notification::Kind::SignOut, gamer->getGamertagProperty() + " signed out", {}, {}});
         if (!SignedOut.Empty())
         {
             SignedOut.Raise(nullptr, SignedOutEventArgs(gamer));

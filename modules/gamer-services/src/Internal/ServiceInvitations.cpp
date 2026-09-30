@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
+#include "Guide/GuideScreen.hpp"
 #include "GuideOverlay.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <deque>
+#include <map>
 #include <set>
 
 namespace CNA::Internal::GamerServices {
@@ -36,6 +39,11 @@ struct State {
     std::deque<std::string> recent;
 };
 State& state(){static State value;return value;}
+// Push hints from the service's event channel arrive on its thread; the watchers take them at Update.
+enum Hint : unsigned {HintInvitations=1,HintParty=2,HintSocial=4};
+std::atomic<unsigned>& hints(){static std::atomic<unsigned> value{0};return value;}
+bool takeHint(Hint hint){return (hints().fetch_and(~static_cast<unsigned>(hint))&hint)!=0;}
+
 SignedInGamer* published(const std::string& user) {
     for(auto* gamer:*Gamer::getSignedInGamersProperty())
         if(gamer&&!gamer->getIsGuestProperty()&&gamer->getIsSignedInToLiveProperty()&&GamerAccess::userId(*gamer)==user)return gamer;
@@ -59,10 +67,7 @@ void accept(Pending pending) {
         auto& now=state();if(now.origin!=origin)return;now.accepting=false;
         auto* gamer=published(pending.user);
         if(!*result||!gamer) {
-            if(gamer)(void)showGuideMessageBox(gamer->getPlayerIndexProperty(),"Game invitation",
-                "The invitation is no longer available.",{"OK"},0,MessageBoxIcon::None,[](System::IAsyncResult& value) {
-                    std::unique_ptr<System::IAsyncResult> owned(&value);(void)Guide::EndShowMessageBox(&value);
-                },{});
+            if(gamer)GuideUi::inform(gamer->getPlayerIndexProperty(),"Game invitation","The invitation is no longer available.");
             return;
         }
         now.accepted=AcceptedInvitation{**result,pending.user,gamer,weak};
@@ -75,23 +80,21 @@ void prompt() {
     if(current.queue.empty())return;
     auto pending=std::move(current.queue.front());current.queue.pop_front();
     auto* gamer=published(pending.user);
-    const auto text=pending.invitation.senderGamertag+" invited "+gamer->getGamertagProperty()+" to join a "
-        +category(pending.invitation.kind)+" game.\nAccepting leaves any game you are playing.";
+    const auto player=gamer->getPlayerIndexProperty();
+    const auto detail="A "+category(pending.invitation.kind)+" game. Accepting leaves any game you are playing.";
     current.prompting=true;
     try {
-        (void)showGuideMessageBox(gamer->getPlayerIndexProperty(),"Game invitation",text,{"Accept","Decline"},0,
-            MessageBoxIcon::None,[pending](System::IAsyncResult& value) {
-                std::unique_ptr<System::IAsyncResult> owned(&value);const auto answer=Guide::EndShowMessageBox(&value);
-                auto& now=state();now.prompting=false;
-                auto service=backend();
-                if(now.origin!=service.get())return;
-                if(answer&&*answer==0){accept(pending);return;}
-                if(answer&&*answer==1) {
-                    auto* executor=service.get();
-                    service->submit([executor,pending]{try{(void)executor->sessionDirectory().dismissInvite(pending.user,pending.invitation.invite);}catch(...){}},[]{});
-                }
-                // Closing the prompt leaves the invitation pending in the service inbox.
-            },{});
+        // A system event: a notification, then the invitation card; closing it without an answer
+        // leaves the invitation pending in the service inbox.
+        GuideUi::notify({GuideUi::Notification::Kind::Invitation,pending.invitation.senderGamertag+" invited you",category(pending.invitation.kind),{}});
+        GuideUi::open(GuideUi::invitationScreen(player,pending.invitation.senderGamertag,pending.invitation.senderId,detail,[pending](std::optional<bool> yes) {
+            auto& now=state();now.prompting=false;
+            auto service=backend();
+            if(now.origin!=service.get()||!yes)return;
+            if(*yes){accept(pending);return;}
+            auto* executor=service.get();
+            service->submit([executor,pending]{try{(void)executor->sessionDirectory().dismissInvite(pending.user,pending.invitation.invite);}catch(...){}},[]{});
+        }),player);
     }catch(...) {current.prompting=false;current.queue.push_front(std::move(pending));}
 }
 void poll() {
@@ -125,6 +128,184 @@ void poll() {
     }catch(...){current.polling=false;current.nextPoll=Clock::now()+FailureInterval;}
 }
 }
+void joinFriendGame(const std::string& user,const std::string& gamertag,std::function<void(std::string)> failed) {
+    auto& current=state();auto service=backend();auto* executor=service.get();
+    auto result=std::make_shared<std::optional<ServiceInvitation>>();
+    auto reason=std::make_shared<std::string>();
+    current.accepting=true;
+    const std::weak_ptr<IGamerServicesBackend> weak=service;
+    service->submit([executor,user,gamertag,result,reason] {
+        try {
+            const auto granted=executor->sessionDirectory().requestJoin(user,gamertag);
+            *result=executor->sessionDirectory().acceptInvite(user,granted.invite);
+        } catch(const ServiceOperationError& error) {
+            *reason=error.code=="NOT_FOUND"?gamertag+" is not in a game you can join right now.":
+                    error.code=="NOT_SUPPORTED"?"This CNA Gamer Services server cannot join friends' games.":
+                    error.code=="INVALID_STATE"?"You are already in that game.":"The game could not be joined.";
+        } catch(...) {*reason="CNA Gamer Services could not be reached.";}
+    },[user,result,reason,weak,failed,origin=executor] {
+        auto& now=state();if(now.origin!=origin)return;now.accepting=false;
+        auto* gamer=published(user);
+        if(!*result||!gamer){if(failed)failed(reason->empty()?std::string("The game could not be joined."):*reason);return;}
+        // As if the friend had invited: the game joins through NetworkSession.JoinInvited.
+        remember((*result)->invite);
+        now.accepted=AcceptedInvitation{**result,user,gamer,weak};
+        if(now.sink)now.sink(*now.accepted);
+    });
+}
+
+namespace {
+struct PartyState {
+    const IGamerServicesBackend* origin=nullptr;
+    Clock::time_point nextPoll{};
+    bool polling=false;
+    std::map<std::string,ServiceParty> parties;
+    std::set<std::pair<std::string,std::string>> announced;
+};
+PartyState& parties(){static PartyState value;return value;}
+void setPartySize(const std::string& user,const ServiceParty& party) {
+    if(auto* gamer=published(user))GamerAccess::setPartySize(*gamer,static_cast<int>(party.members.size()));
+}
+}
+
+void GamerAccess::setPartySize(Microsoft::Xna::Framework::GamerServices::SignedInGamer& gamer,int size){gamer.partySize_=size;}
+
+void applyParty(const std::string& user,ServiceParty party)
+{
+    auto& current=parties();
+    if(current.origin!=backend().get()){current=PartyState{};current.origin=backend().get();}
+    setPartySize(user,party);
+    parties().parties[user]=std::move(party);
+}
+
+std::optional<ServiceParty> knownParty(const std::string& user)
+{
+    if(parties().origin!=backend().get())return std::nullopt;
+    const auto& known=parties().parties;
+    const auto found=known.find(user);
+    if(found==known.end())return std::nullopt;
+    return found->second;
+}
+
+void pollPartiesNowForTesting(){parties().nextPoll={};}
+
+void pumpParties()
+{
+    auto& current=parties();auto service=backend();
+    if(current.origin!=service.get()){current=PartyState{};current.origin=service.get();}
+    if(takeHint(HintParty))current.nextPoll={};
+    if(!service||!service->serviceEnabled()||current.polling||Clock::now()<current.nextPoll)return;
+    std::vector<std::string> users;
+    for(auto* gamer:*Gamer::getSignedInGamersProperty())
+        if(gamer&&!gamer->getIsGuestProperty()&&gamer->getIsSignedInToLiveProperty()&&!GamerAccess::userId(*gamer).empty())
+            users.push_back(GamerAccess::userId(*gamer));
+    current.nextPoll=Clock::now()+PollInterval;
+    if(users.empty())return;
+    auto results=std::make_shared<std::vector<std::pair<std::string,ServiceParty>>>();
+    auto* executor=service.get();current.polling=true;
+    try {
+        service->submit([executor,users,results] {
+            for(const auto& user:users) {
+                try{results->emplace_back(user,executor->party(user));}catch(...){}
+            }
+        },[results,origin=executor] {
+            auto& now=parties();if(now.origin!=origin)return;now.polling=false;
+            for(auto& [user,party]:*results) {
+                // A party invitation is a system event: announced once, answered in the Guide's party page.
+                for(const auto& invitation:party.invitations)
+                    if(now.announced.insert({user,invitation.party+invitation.senderId}).second)
+                        GuideUi::notify({GuideUi::Notification::Kind::Party,invitation.senderGamertag+" invited you to a party","Open the Guide to join",{}});
+                applyParty(user,std::move(party));
+            }
+        });
+    }catch(...){current.polling=false;current.nextPoll=Clock::now()+FailureInterval;}
+}
+
+namespace {
+constexpr auto SocialInterval=std::chrono::seconds(15);
+struct Social {
+    bool known=false;
+    std::set<std::string> messages,requests,online;
+};
+struct SocialState {
+    const IGamerServicesBackend* origin=nullptr;
+    Clock::time_point nextPoll{};
+    bool polling=false;
+    std::map<std::string,Social> accounts;
+};
+SocialState& social(){static SocialState value;return value;}
+struct SocialRead {std::string user;bool ok=false;std::vector<ServiceFriend> friends;ServiceMessagePage inbox;};
+std::string excerpt(const std::string& text) {
+    if(text.size()<=48)return text;
+    std::size_t cut=45;while(cut>0&&(static_cast<unsigned char>(text[cut])&0xC0)==0x80)--cut;
+    return text.substr(0,cut)+"...";
+}
+}
+
+void serviceHint(const std::string& topic)
+{
+    if(topic=="invitations")hints()|=HintInvitations;
+    else if(topic=="party")hints()|=HintParty;
+    else if(topic=="messages"||topic=="friends")hints()|=HintSocial;
+}
+
+void pollSocialNowForTesting(){social().nextPoll={};}
+
+void pumpSocial()
+{
+    auto& current=social();auto service=backend();
+    if(current.origin!=service.get()){current=SocialState{};current.origin=service.get();}
+    if(takeHint(HintSocial))current.nextPoll={};
+    if(!service||!service->serviceEnabled())return;
+    std::vector<std::string> users;
+    for(auto* gamer:*Gamer::getSignedInGamersProperty())
+        if(gamer&&!gamer->getIsGuestProperty()&&gamer->getIsSignedInToLiveProperty()&&!GamerAccess::userId(*gamer).empty())
+            users.push_back(GamerAccess::userId(*gamer));
+    // Accounts that signed out start over when they return; one that just signed in is read at once,
+    // so what it already has is known before anything new arrives.
+    std::erase_if(current.accounts,[&](const auto& entry){return std::find(users.begin(),users.end(),entry.first)==users.end();});
+    for(const auto& user:users)if(current.accounts.try_emplace(user).second)current.nextPoll={};
+    if(current.polling||Clock::now()<current.nextPoll)return;
+    current.nextPoll=Clock::now()+SocialInterval;
+    if(users.empty())return;
+    auto reads=std::make_shared<std::vector<SocialRead>>();
+    auto* executor=service.get();current.polling=true;
+    try {
+        service->submit([executor,users,reads] {
+            for(const auto& user:users) {
+                SocialRead read;read.user=user;
+                try{read.friends=executor->friends(user);read.inbox=executor->messages(user,0,10);read.ok=true;}catch(...){}
+                reads->push_back(std::move(read));
+            }
+        },[reads,origin=executor] {
+            auto& now=social();if(now.origin!=origin)return;now.polling=false;
+            for(auto& read:*reads) {
+                if(!read.ok||!published(read.user))continue;
+                auto& account=now.accounts[read.user];
+                Social next;next.known=true;
+                for(const auto& message:read.inbox.messages)if(!message.read)next.messages.insert(message.id);
+                for(const auto& entry:read.friends) {
+                    if(entry.requestReceived)next.requests.insert(entry.gamertag);
+                    if(entry.accepted&&entry.online)next.online.insert(entry.gamertag);
+                }
+                // The console's social notifications, for what changed since the last read.
+                if(account.known) {
+                    for(const auto& message:read.inbox.messages)
+                        if(!message.read&&!account.messages.contains(message.id))
+                            GuideUi::notify({GuideUi::Notification::Kind::Message,"Message from "+message.sender,excerpt(message.text),{}});
+                    for(const auto& tag:next.requests)
+                        if(!account.requests.contains(tag))
+                            GuideUi::notify({GuideUi::Notification::Kind::FriendRequest,"Friend request from "+tag,"Open their gamer card to answer",{}});
+                    for(const auto& tag:next.online)
+                        if(!account.online.contains(tag))
+                            GuideUi::notify({GuideUi::Notification::Kind::FriendOnline,tag+" is now online","",{}});
+                }
+                account=std::move(next);
+            }
+        });
+    }catch(...){current.polling=false;current.nextPoll=Clock::now()+FailureInterval;}
+}
+
 void setActiveOnlineSession(std::optional<ActiveOnlineSession> value){state().active=std::move(value);}
 const std::optional<ActiveOnlineSession>& activeOnlineSession(){return state().active;}
 std::optional<AcceptedInvitation>& acceptedInvitation(){return state().accepted;}
@@ -137,6 +318,7 @@ void pumpInvitations() {
         current.seen.clear();current.seenOrder.clear();current.queue.clear();current.accepted.reset();
     }
     if(!service||!service->serviceEnabled())return;
+    if(takeHint(HintInvitations))current.nextPoll={};
     if(!current.polling&&Clock::now()>=current.nextPoll)poll();
     if(!current.prompting&&!current.accepting&&!guideIsVisible()&&Clock::now()>=current.quietUntil)prompt();
 }
@@ -167,5 +349,7 @@ void resetInvitationsForTesting() {
     auto& current=state();current.origin=nullptr;current.nextPoll={};current.polling=current.prompting=current.accepting=false;
     current.seen.clear();current.seenOrder.clear();current.queue.clear();current.accepted.reset();
     current.quietUntil={};current.recent.clear();
+    parties()=PartyState{};
+    social()=SocialState{};hints()=0;
 }
 }

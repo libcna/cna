@@ -15,6 +15,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/LeaderboardIdentity.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerPresence.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerPrivileges.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GameDefaults.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Achievement.hpp"
 
@@ -279,7 +280,8 @@ TEST(GamerPresenceTest, SetPresenceValue) {
 TEST(GamerPrivilegesTest, DefaultsAllPermissive) {
     auto priv = GamerPrivileges::CreateInternal();
     EXPECT_EQ(GamerPrivilegeSetting::Everyone, priv.getAllowCommunicationProperty());
-    EXPECT_TRUE(priv.getAllowOnlineSessionsProperty());
+    // XNA IL: a trial never plays online sessions (IsTrialMode is true until gamer services update).
+    EXPECT_EQ(!Guide::getIsTrialModeProperty(), priv.getAllowOnlineSessionsProperty());
     EXPECT_TRUE(priv.getAllowPremiumContentProperty());
     EXPECT_EQ(GamerPrivilegeSetting::Everyone, priv.getAllowProfileViewingProperty());
     EXPECT_TRUE(priv.getAllowPurchaseContentProperty());

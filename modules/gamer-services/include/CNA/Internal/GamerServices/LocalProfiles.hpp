@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace CNA::Internal::GamerServices {
@@ -40,6 +41,14 @@ struct LocalProfile {
      * store never loses what a player wrote. */
     std::string gameDefaultsJson;
 };
+
+/**
+ * @brief Reads game defaults in the profile store's `gameDefaults` form (also what a CNA service
+ * keeps for an account).
+ * @param json A JSON object; a missing, invalid or malformed field keeps its default.
+ * @return The defaults.
+ */
+LocalGameDefaults parseGameDefaultsJson(std::string_view json);
 
 /** @brief Most profiles a store keeps. */
 inline constexpr std::size_t MaxLocalProfiles = 32;
@@ -98,4 +107,13 @@ std::optional<LocalProfile> findLocalProfile(const std::string& gamertag);
  * @return The 1021-byte description, or empty when the profile or its avatar is missing.
  */
 std::vector<unsigned char> localProfileAvatar(const std::string& gamertag);
+
+/**
+ * @brief Replaces the avatar of a stored profile (the CNA avatar editor's save).
+ * @param gamertag Profile name, ignoring case.
+ * @param description A valid 1021-byte CNA description.
+ * @return True when the store now holds it; false for an invalid description, an unknown
+ * profile or a store that cannot be written.
+ */
+bool setLocalProfileAvatar(const std::string& gamertag,const std::vector<unsigned char>& description);
 }

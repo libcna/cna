@@ -44,6 +44,9 @@ struct ServiceSessionSnapshot {
     int revision=1;
     /** @brief Whether a playing session permits joins. */
     bool allowJoinInProgress=false;
+    /** @brief Whether the service hands the session to another machine when its host leaves
+     * (member snapshots only; false in advertisements). */
+    bool allowHostMigration=false;
     /** @brief Search metadata. */
     ServiceSessionProperties properties{};
     /** @brief Roster for authenticated membership reads; absent from advertisements. */
@@ -57,6 +60,8 @@ struct ServiceSessionSettings {
     ServiceSessionState state=ServiceSessionState::Lobby;
     /** @brief Join-in-progress policy. */
     bool allowJoinInProgress=false;
+    /** @brief Host migration policy (sent only to a service with the host-migration capability). */
+    bool allowHostMigration=false;
     /** @brief Fixed metadata. */
     ServiceSessionProperties properties{};
 };
@@ -134,6 +139,12 @@ public:
      * Its users are then answered REMOVED_BY_HOST. @param owner Host identity. @param session ID.
      * @param machine The machine to remove. @return The host's updated snapshot. */
     virtual ServiceSessionSnapshot remove(const std::string& owner,const std::string& session,const std::string& machine)=0;
+    /** @brief Adds signed-in local accounts to the owner's machine (XNA NetworkSession.AddLocalGamer),
+     * in public slots, when the session admits joiners. @param owner Machine owner.
+     * @param users One to three new accounts, not the owner. @param session ID.
+     * @return The updated snapshot. @throws ServiceOperationError NOT_SUPPORTED without the
+     * service's session-add-members capability. */
+    virtual ServiceSessionSnapshot addMembers(const std::string& owner,const std::vector<std::string>& users,const std::string& session)=0;
     /** @brief Issues one-use secure relay authority for the exact authenticated local group.
      * @param actor Machine owner. @param users Local identities. @param session ID.
      * @return Ephemeral authority; issuance alone does not establish a data connection. */
@@ -154,5 +165,11 @@ public:
     /** @brief Dismisses an unconsumed invite. @param actor Recipient. @param invite ID.
      * @return Dismissed invitation. */
     virtual ServiceInvitation dismissInvite(const std::string& actor,const std::string& invite)=0;
+    /** @brief Asks to join a friend's or party member's joinable game (invites.joinFriend): the
+     * invitation that game grants the actor, to accept and join as any invitation; never listed.
+     * @param actor Requesting identity. @param gamertag Whose game. @return Pending invitation.
+     * @throws ServiceOperationError NOT_FOUND when nothing is joinable, NOT_AUTHORIZED for a
+     * stranger, NOT_SUPPORTED without the service's join-friend capability. */
+    virtual ServiceInvitation requestJoin(const std::string& actor,const std::string& gamertag)=0;
 };
 }

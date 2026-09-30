@@ -20,11 +20,12 @@
 
 // Task 15.10 (re-scoped by plans/plan_net.md Task 4.3/4.4, 2026-07-16): cna_demo_leaderboard_viewer.
 // LeaderboardWriter::GetLeaderboard/LeaderboardEntry::setRatingProperty and
-// LeaderboardReader::Read/PageUp/PageDown are now real, local-disk-backed implementations (no
-// longer the always-NotSupportedException stubs this demo originally had to work around) -
-// publishes several synthetic SignedInGamer objects as "signed in" (LeaderboardReader::Read only
-// attaches to currently signed-in gamers - see its own doc comment), gives each a real rating via
-// LeaderboardWriter, then pages through them with the real PageUp()/PageDown().
+// LeaderboardReader::Read/PageUp/PageDown over the offline, local-disk leaderboard store -
+// publishes several synthetic SignedInGamer objects as "signed in" (an offline
+// LeaderboardReader::Read lists only stored entries whose gamertag is signed in on this machine),
+// gives each a rating via LeaderboardWriter, then pages through them with PageUp()/PageDown().
+// The demo expects no CNA account service to be configured: with one, Read pages the service's
+// leaderboard instead of the local store these synthetic gamers write to.
 class LeaderboardGame : public Microsoft::Xna::Framework::Game
 {
 public:

@@ -21,19 +21,13 @@
 // Task 15.3: cna_demo_qos_probe. Two real processes over real ENet, extending
 // net_two_process_harness's host/client split. Prints a live-refreshing line every ~200ms.
 //
-// This demo honestly reflects the *actual, current* scope of Task 4.1/4.2's real QoS wiring
-// rather than pretending both sides are symmetric:
-//   - The HOST measures a real, live, continuously-updating NetworkGamer::RoundtripTime for each
-//     of its directly-connected remote (client) gamers every ENet pump (Task 4.1) - this demo's
-//     host side prints that live value.
-//   - The CLIENT has only a one-shot QualityOfService sample from NetworkSession::Find()'s
-//     discovery reply (Task 4.2) - a real measured wall-clock query/reply RTT, but not a live,
-//     continuously-refreshing value. A client's own live view of the host's RTT is a documented,
-//     known gap (see plans/plan_net.md Task 4.1's own scope decision: the star-topology client side has
-//     no direct ENetPeer to read a live RTT from without further plumbing) - this demo's client
-//     side prints the one-shot discovery QoS once, then honestly labels the live-refresh column
-//     as "not tracked from the client side (Task 4.1 documented gap)" rather than showing a
-//     fabricated moving number.
+// What it shows:
+//   - The joiner's one-shot QualityOfService from NetworkSession::Find(): the discovery round trip
+//     and a downstream bandwidth estimate timed from the host's probe train (GSP-L6). Upstream is
+//     0: a host answers discovery at frame boundaries and cannot time what arrives.
+//   - Every machine's live NetworkGamer::RoundtripTime: the host reads ENet's per-peer round trip,
+//     a client its round trip to the host (plus the host's to a gamer on another client). The
+//     value includes how often each side pumps ENet: this demo pumps every 200ms.
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Net;
@@ -142,8 +136,7 @@ int main(int argc, char* argv[])
             for (int i = 0; i < remotes.getCountProperty(); ++i)
             {
                 NetworkGamer* gamer = remotes[i];
-                std::printf("[QoSProbe] live RTT to \"%s\": not tracked from the client side "
-                            "(Task 4.1 documented gap) - reported value stays %.1fms\n",
+                std::printf("[QoSProbe] live RTT to \"%s\": %.1fms\n",
                             gamer->getGamertagProperty().c_str(),
                             gamer->getRoundtripTimeProperty().getTotalMillisecondsProperty());
             }

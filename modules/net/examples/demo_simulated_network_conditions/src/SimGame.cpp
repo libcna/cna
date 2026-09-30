@@ -196,14 +196,13 @@ void SimGame::Update(GameTime& gameTime)
     if (keys.IsKeyDown(Keys::Down)) { localPaddlePos_.Y += speed * dt; }
     localPaddlePos_.Y = std::clamp(localPaddlePos_.Y, 0.0f, kScreenHeight - kPaddleHeight);
 
-    // 1/2 lower/raise simulated latency by 100ms per press; 3/4 lower/raise simulated packet loss
-    // by 10 percentage points per press. Task 6.1-6.5 (plans/plan_net.md Phase 6): both now drive a
-    // real receive-side delayed-delivery queue and probabilistic drop in ENetBackend - raising
-    // either one now visibly stutters/drops the remote paddle and (on the client) the
-    // host-authoritative ball position. The HUD's "Real measured RTT" column still won't move in
-    // response to these (ENet's own per-peer RTT measurement happens below this simulated-delivery
-    // layer, at the raw transport level, and is unaffected by it - an honest, separate limitation,
-    // not a regression of this task).
+    // 1/2 lower/raise simulated latency by 100ms per frame while held; 3/4 lower/raise simulated
+    // packet loss by 10 percentage points per frame while held. Task 6.1-6.5 (plans/plan_net.md
+    // Phase 6): both drive the receive-side delayed-delivery queue and probabilistic drop in
+    // ENetBackend - raising either one visibly stutters/drops the remote paddle and (on the client)
+    // the host-authoritative ball position. The real measured RTT the console prints does not move
+    // in response: ENet measures it per peer at the transport level, below this simulated-delivery
+    // layer.
     if (keys.IsKeyDown(Keys::D1))
     {
         simulatedLatency_ = System::TimeSpan::FromMilliseconds(
@@ -286,9 +285,8 @@ void SimGame::Update(GameTime& gameTime)
             realRttMs = remotes[0]->getRoundtripTimeProperty().getTotalMillisecondsProperty();
         }
         std::printf("[SimNet] simulatedLatency=%.0fms simulatedPacketLoss=%.0f%% realMeasuredRTT=%.1fms "
-                    "(simulated values now have a real effect on remote-paddle/ball AppData "
-                    "delivery - realMeasuredRTT stays unaffected, ENet's own RTT tracking is a "
-                    "lower transport layer)\n",
+                    "(the simulated values delay/drop the remote-paddle/ball AppData; "
+                    "realMeasuredRTT is ENet's transport-level RTT, which they do not affect)\n",
                     simulatedLatency_.getTotalMillisecondsProperty(), simulatedPacketLoss_ * 100.0f, realRttMs);
     }
 
@@ -327,7 +325,7 @@ void SimGame::Draw(const GameTime& /*gameTime*/)
     spriteBatch_->Draw(*whitePixel_, ballRect, Color(240, 220, 80, 255));
 
     char hud[256];
-    std::snprintf(hud, sizeof(hud), "SimLatency:%.0fms SimPacketLoss:%.0f%% (1/2/3/4 to adjust - now a real effect)",
+    std::snprintf(hud, sizeof(hud), "SimLatency:%.0fms SimPacketLoss:%.0f%% (1/2/3/4 to adjust)",
                   simulatedLatency_.getTotalMillisecondsProperty(), simulatedPacketLoss_ * 100.0f);
     spriteBatch_->DrawString(*font_, hud, Vector2(16.0f, 8.0f), Color(255, 255, 255, 255));
 

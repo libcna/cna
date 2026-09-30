@@ -31,7 +31,7 @@ Vector4 evaluate(const AvatarTrack& track,double seconds)
 const AvatarClipLibrary& clipLibrary()
 {
     static const AvatarClipLibrary library=[] {
-        const auto& manifest=embeddedManifest();
+        const auto& manifest=newestEmbeddedManifest();
         const auto bytes=resolveAsset(manifest,manifest.animationsAsset);
         if(!bytes)throw std::runtime_error("avatar animations are unavailable");
         auto glb=parseAvatarGlb(bytes->view);

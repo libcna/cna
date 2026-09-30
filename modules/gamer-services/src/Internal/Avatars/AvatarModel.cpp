@@ -3,6 +3,7 @@
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <condition_variable>
 #include <deque>
@@ -12,10 +13,7 @@
 #include <thread>
 
 namespace CNA::Internal::GamerServices::Avatars {
-namespace {
-using Microsoft::Xna::Framework::Vector3;
-
-AvatarImage decodePng(std::span<const std::uint8_t> png)
+AvatarImage decodeAvatarImage(std::span<const std::uint8_t> png)
 {
     const auto image=CNA::Internal::Graphics::ImageLoader::LoadFromMemory(png.data(),png.size());
     if(image.width<=0||image.height<=0||image.width>2048||image.height>2048||
@@ -29,6 +27,9 @@ AvatarImage decodePng(std::span<const std::uint8_t> png)
     return out;
 }
 
+namespace {
+using Microsoft::Xna::Framework::Vector3;
+
 // Namespace scope (not function statics): they must outlive the loader thread at exit.
 std::mutex faceLock;
 std::map<std::string,std::shared_ptr<const std::vector<AvatarImage>>,std::less<>> cachedTiles;
@@ -41,9 +42,10 @@ std::shared_ptr<const std::vector<AvatarImage>> faceTiles(const CatalogManifest&
     if(auto found=cachedTiles.find(hash);found!=cachedTiles.end())return found->second;
     const auto bytes=resolveAsset(manifest,manifest.faceAsset);
     if(!bytes)throw std::runtime_error("avatar face atlas is unavailable");
-    const auto atlas=decodePng(bytes->view);
+    const auto atlas=decodeAvatarImage(bytes->view);
     const int size=manifest.face.tileSize;
-    if(atlas.width!=manifest.face.columns*size||atlas.height%size)throw std::runtime_error("avatar face atlas size");
+    if(atlas.width!=manifest.face.columns*size||atlas.height%size||maximumFaceTile(manifest.face)>=manifest.face.columns*(atlas.height/size))
+        throw std::runtime_error("avatar face atlas size");
     auto tiles=std::make_shared<std::vector<AvatarImage>>();
     for(int ty=0;ty<atlas.height/size;++ty)
         for(int tx=0;tx<manifest.face.columns;++tx) {
@@ -77,6 +79,51 @@ AvatarFeature featureOf(const std::string& name)
     return found==features.end()?AvatarFeature::None:found->second;
 }
 
+// A format 2 description's face shape (catalog faceControls): every deformer's displacement is
+// taken from the undeformed position, summed, and applied in proportion to the Head weight.
+void applyFaceControls(std::vector<AvatarVertex>& vertices,const std::vector<FaceControl>& controls,
+    const std::array<std::uint8_t,FaceParameterCount>& face,bool faceScope)
+{
+    static const int head=boneIndex("Head");
+    for(auto& vertex:vertices) {
+        float weight=0.0f;
+        const std::array<float,4> weights{vertex.weights.X,vertex.weights.Y,vertex.weights.Z,vertex.weights.W};
+        for(int k=0;k<4;++k)
+            if(vertex.joints[k]==head)weight+=weights[k];
+        if(weight<=0.0f)continue;
+        Vector3 displacement=Vector3::Zero;
+        for(const auto& control:controls) {
+            const float t=std::clamp((static_cast<float>(face[static_cast<std::size_t>(control.parameter)])-128.0f)/127.0f,-1.0f,1.0f);
+            if(t==0.0f||(!control.wholeHead&&!faceScope))continue;
+            for(const auto& deformer:control.deformers) {
+                const Vector3 q=vertex.position-deformer.centre;
+                const Vector3 n(q.X/deformer.radii.X,q.Y/deformer.radii.Y,q.Z/deformer.radii.Z);
+                const float x=std::clamp((n.Length()-deformer.inner)/(1.0f-deformer.inner),0.0f,1.0f);
+                const float w=1.0f-x*x*(3.0f-2.0f*x);
+                if(w<=0.0f)continue;
+                switch(deformer.kind) {
+                case FaceDeformer::Kind::Scale:
+                    displacement+=Vector3(q.X*(std::pow(deformer.amount.X,t)-1.0f),q.Y*(std::pow(deformer.amount.Y,t)-1.0f),
+                                          q.Z*(std::pow(deformer.amount.Z,t)-1.0f))*w;
+                    break;
+                case FaceDeformer::Kind::Move:
+                    displacement+=deformer.amount*(t*w);
+                    break;
+                case FaceDeformer::Kind::Rotate: {
+                    const float angle=deformer.degrees*t*3.14159265f/180.0f;
+                    const Vector3& axis=deformer.amount;
+                    const Vector3 rotated=q*std::cos(angle)+Vector3::Cross(axis,q)*std::sin(angle)+
+                        axis*(Vector3::Dot(q,axis)*(1.0f-std::cos(angle)));
+                    displacement+=(rotated-q)*w;
+                    break;
+                }
+                }
+            }
+        }
+        vertex.position+=displacement*weight;
+    }
+}
+
 // Bones whose flesh thickens with the build, and the joint their thickness is measured from.
 struct BuildAxis {int bone; int toward;};
 constexpr BuildAxis BuildAxes[]={{1,5},{5,14},{2,6},{3,8},{6,11},{8,15},{12,20},{16,22},{20,25},{22,28},{25,33},{28,36}};
@@ -103,48 +150,90 @@ void applyBuild(std::vector<AvatarVertex>& vertices,const std::array<Vector3,Bon
 }
 
 namespace {
+// A version whose pack could not be installed is not asked for again for a minute, so a crowd of
+// renderers of one unavailable avatar does not become a crowd of requests.
 std::mutex catalogLock;
-std::map<std::uint16_t,std::shared_ptr<const CatalogManifest>> serviceCatalogs;
+std::map<std::uint16_t,std::chrono::steady_clock::time_point> failedUpdates;
+constexpr auto UpdateRetryDelay=std::chrono::seconds(60);
 }
 
 std::shared_ptr<const CatalogManifest> catalogManifest(std::uint16_t version)
 {
-    const auto& embedded=embeddedManifest();
-    const std::shared_ptr<const CatalogManifest> builtIn(std::shared_ptr<const CatalogManifest>{},&embedded);
-    if(version<=embedded.version)return builtIn;
+    // Layer A: the catalogs of this release, then the packs installed before.
+    if(auto embedded=embeddedManifest(version))return embedded;
+    if(auto installed=installedManifest(version))return installed;
+    // Layer B: install exactly this version as one pack from the service, if this client accepts it.
     {
         std::lock_guard guard(catalogLock);
-        if(auto found=serviceCatalogs.find(version);found!=serviceCatalogs.end())return found->second;
+        if(auto failed=failedUpdates.find(version);failed!=failedUpdates.end()&&std::chrono::steady_clock::now()<failed->second)
+            return nullptr;
     }
-    const auto text=onServiceExecutor<std::string>([version](IGamerServicesBackend& service){return service.avatarCatalog(version);});
-    if(!text)return builtIn;
-    try {
-        auto manifest=std::make_shared<const CatalogManifest>(parseManifest(*text));
-        if(manifest->version!=version)return builtIn;
-        std::lock_guard guard(catalogLock);
-        return serviceCatalogs.emplace(version,std::move(manifest)).first->second;
-    } catch(const std::runtime_error&) {
-        return builtIn;
+    auto service=[&]()->std::shared_ptr<IGamerServicesBackend>{try{return backend();}catch(...){return nullptr;}}();
+    if(!service||!service->serviceEnabled())return nullptr;
+    const auto policy=service->avatarCatalogPolicy();
+    if(!policy.updates||installedCatalogRoot().empty())return nullptr;
+    auto outcome=CatalogInstall::Failed;
+    if(const auto text=onServiceExecutor<std::string>([version](IGamerServicesBackend& s){return s.avatarCatalogPack(version);})) {
+        try {
+            auto download=[](const std::string& hash,std::size_t size) {
+                auto bytes=onServiceExecutor<std::vector<unsigned char>>([&](IGamerServicesBackend& s){return s.catalogFile(hash,size);});
+                if(!bytes)throw std::runtime_error("avatar catalog file could not be downloaded");
+                return std::move(*bytes);
+            };
+            auto pack=parseCatalogPack(*text);
+            // Refused before anything is downloaded: a pack this client could not read or keep.
+            if(pack.version==version&&pack.totalBytes<=policy.maximumBytes&&pack.reader<=CatalogReaderLevel) {
+                const auto manifest=download(pack.manifestSha256,pack.manifestSize);
+                attachCatalogManifest(pack,std::string(manifest.begin(),manifest.end()));
+                outcome=installCatalogPack(pack,policy.maximumBytes,[&](const CatalogAsset& asset){return download(asset.sha256,asset.size);});
+            }
+        } catch(const std::runtime_error&) {
+            outcome=CatalogInstall::Failed;
+        }
     }
+    if(outcome==CatalogInstall::Installed||outcome==CatalogInstall::AlreadyInstalled)
+        if(auto installed=installedManifest(version))return installed;
+    std::lock_guard guard(catalogLock);
+    failedUpdates[version]=std::chrono::steady_clock::now()+UpdateRetryDelay;
+    return nullptr;
+}
+
+void forgetCatalogUpdateFailures()
+{
+    std::lock_guard guard(catalogLock);
+    failedUpdates.clear();
 }
 
 std::shared_ptr<const AvatarModel> buildAvatarModel(const AvatarDescriptor& descriptor)
 {
-    const auto catalog=catalogManifest(descriptor.catalogVersion);
+    auto catalog=catalogManifest(descriptor.catalogVersion);
+    auto model=std::make_shared<AvatarModel>();
+    if(!catalog) {
+        // The named catalog is neither compiled in nor obtainable: draw the newest compiled-in body
+        // with every item's slot default rather than reading the ids against another version.
+        model->catalogUnavailable=true;
+        catalog=embeddedCatalogs().back();
+    }
     const auto& manifest=*catalog;
     const int body=descriptor.bodyType==1?1:0;
-    auto model=std::make_shared<AvatarModel>();
     const auto bodyBytes=resolveAsset(manifest,manifest.bodies[body]);
     if(!bodyBytes)throw std::runtime_error("avatar body asset is unavailable");
     auto bodyGlb=parseAvatarGlb(bodyBytes->view);
+    // (asset, part of the face: the body and facial hair take every face control, other items
+    // only the whole-head ones)
     std::vector<std::pair<AvatarGlb,bool>> assets;
     assets.emplace_back(std::move(bodyGlb),true);
+    const auto* hat=descriptor.items[static_cast<std::size_t>(AvatarItemSlot::Hat)]&&!model->catalogUnavailable
+        ?manifest.item(descriptor.items[static_cast<std::size_t>(AvatarItemSlot::Hat)]):nullptr;
+    const bool underHat=hat&&hat->slot==AvatarItemSlot::Hat&&hat->coversHair;
     for(std::size_t slot=0;slot<AvatarItemSlotCount;++slot) {
         const auto id=descriptor.items[slot];
-        const auto* item=id?manifest.item(id):nullptr;
+        const auto* item=id&&!model->catalogUnavailable?manifest.item(id):nullptr;
         std::optional<AvatarGlb> glb;
         if(item&&item->slot==static_cast<AvatarItemSlot>(slot)) {
-            if(auto bytes=resolveAsset(manifest,item->assets[body])) {
+            // Hair under a hat that covers it is the style's hat variant, when the catalog has one.
+            const auto& files=underHat&&!item->hatAssets[body].empty()?item->hatAssets:item->assets;
+            if(auto bytes=resolveAsset(manifest,files[body])) {
                 try {glb=parseAvatarGlb(bytes->view);} catch(const std::runtime_error&) {}
             }
         }
@@ -161,6 +250,22 @@ std::shared_ptr<const AvatarModel> buildAvatarModel(const AvatarDescriptor& desc
                 if(Vector3::Distance(glb->bindTranslations[bone],assets.front().first.bindTranslations[bone])>1e-3f)
                     throw std::runtime_error("avatar item is not fitted to this body");
             assets.emplace_back(std::move(*glb),false);
+        }
+    }
+    if(descriptor.facialHair) {
+        const auto* feature=model->catalogUnavailable?nullptr:manifest.featureItem(descriptor.facialHair);
+        std::optional<AvatarGlb> glb;
+        if(feature)
+            if(auto bytes=resolveAsset(manifest,feature->assets[body])) {
+                try {glb=parseAvatarGlb(bytes->view);} catch(const std::runtime_error&) {}
+            }
+        if(glb) {
+            for(int bone=0;bone<BoneCount;++bone)
+                if(Vector3::Distance(glb->bindTranslations[bone],assets.front().first.bindTranslations[bone])>1e-3f)
+                    throw std::runtime_error("avatar item is not fitted to this body");
+            assets.emplace_back(std::move(*glb),true);
+        } else {
+            model->substitutedItems.push_back(descriptor.facialHair);
         }
     }
     const float authored=manifest.authoredHeightMillimeters[body]/1000.0f;
@@ -180,10 +285,13 @@ std::shared_ptr<const AvatarModel> buildAvatarModel(const AvatarDescriptor& desc
     }
     const float build=1.0f+(static_cast<float>(descriptor.build)-128.0f)/127.0f*0.18f;
     std::vector<AvatarModelPart> decals;
-    for(auto& [glb,isBody]:assets) {
+    const auto& controls=manifest.faceControls[body];
+    const bool shaped=descriptor.usesFaceFormat()&&!controls.empty();
+    for(auto& [glb,faceScope]:assets) {
         for(auto& primitive:glb.primitives) {
             AvatarModelPart part;
             part.vertices=std::move(primitive.vertices);
+            if(shaped)applyFaceControls(part.vertices,controls,descriptor.face,faceScope);
             applyBuild(part.vertices,authoredPositions,build);
             for(auto& vertex:part.vertices)vertex.position*=scale;
             part.indices=std::move(primitive.indices);
@@ -191,8 +299,9 @@ std::shared_ptr<const AvatarModel> buildAvatarModel(const AvatarDescriptor& desc
             part.color=primitive.color*tintColor(descriptor,primitive.tint);
             part.feature=featureOf(primitive.feature);
             part.layer=primitive.layer;
+            part.specular=primitive.specular;
             if(!primitive.texturePng.empty()) {
-                model->images.push_back(decodePng(primitive.texturePng));
+                model->images.push_back(decodeAvatarImage(primitive.texturePng));
                 part.image=static_cast<int>(model->images.size())-1;
             }
             (part.feature==AvatarFeature::None?model->parts:decals).push_back(std::move(part));
@@ -213,7 +322,7 @@ public:
     Loader()
     {
         // Constructed first, so these outlive the worker at exit.
-        (void)embeddedManifest();
+        (void)embeddedCatalogs();
         worker_=std::thread([this]{run();});
     }
     ~Loader()
@@ -251,6 +360,29 @@ private:
 
 std::mutex cacheLock;
 std::map<std::vector<std::uint8_t>,std::weak_ptr<const AvatarModel>> cache;
+
+Loader& loader()
+{
+    static Loader shared;
+    return shared;
+}
+}
+
+std::shared_ptr<CatalogLoad> loadCatalogAsync(std::uint16_t version)
+{
+    auto load=std::make_shared<CatalogLoad>();
+    if(auto local=embeddedManifest(version)) {
+        load->manifest=std::move(local);
+        load->done=true;
+        return load;
+    }
+    loader().submit([load,version] {
+        auto manifest=catalogManifest(version);
+        std::lock_guard guard(load->lock);
+        load->manifest=std::move(manifest);
+        load->done=true;
+    });
+    return load;
 }
 
 std::shared_ptr<AvatarLoad> loadAvatarAsync(const AvatarDescriptor& descriptor)
@@ -259,20 +391,22 @@ std::shared_ptr<AvatarLoad> loadAvatarAsync(const AvatarDescriptor& descriptor)
     const auto key=encode(descriptor);
     {
         std::lock_guard guard(cacheLock);
-        if(auto model=cache[key].lock()) {
+        const auto found=cache.find(key);
+        if(auto model=found!=cache.end()?found->second.lock():nullptr) {
             load->model=std::move(model);
             load->done=true;
             return load;
         }
     }
-    static Loader loader;
-    loader.submit([load,descriptor,key] {
+    loader().submit([load,descriptor,key] {
         std::shared_ptr<const AvatarModel> model;
         std::string error;
         try {model=buildAvatarModel(descriptor);}
         catch(const std::exception& failure) {error=failure.what();}
         if(model) {
             std::lock_guard guard(cacheLock);
+            // Keys of avatars nobody draws any more would otherwise pile up for the whole run.
+            std::erase_if(cache,[](const auto& entry){return entry.second.expired();});
             cache[key]=model;
         }
         std::lock_guard guard(load->lock);

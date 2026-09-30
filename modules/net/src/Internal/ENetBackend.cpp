@@ -38,6 +38,8 @@ namespace CNA::Internal::Net
         constexpr size_t kMaxPeers = static_cast<size_t>(NetworkSession::MaxSupportedGamers);
         constexpr size_t kChannelLimit = 2;
         constexpr uint8_t kControlChannel = 0;
+        // Voice travels unreliably on its own channel, so it never waits behind reliable traffic.
+        constexpr uint8_t kVoiceChannel = 1;
 
         // audit_net.md remediation (2026-07-18): bound on SessionState::PendingPreHandshakeAppData
         // below. The real handshake this queue bridges (ConnectToHost() -> ClientHello ->
@@ -947,6 +949,34 @@ namespace CNA::Internal::Net
             // hosting for — shouldn't happen in this star topology; drop defensively.
         }
 
+        // A voice frame: the host accepts one only from the peer that owns its sender and relays it
+        // to the target's peer; a client accepts one only from the host. Never delayed or queued.
+        void HandleVoice(NetworkSession* session, SessionState& state, ENetPeer* fromPeer, const VoiceDataMessage& msg)
+        {
+            if (state.HostPeer != nullptr ? fromPeer != state.HostPeer : false) return;
+            if (state.HostPeer == nullptr)
+            {
+                const auto owner = state.WireIdToPeer.find(msg.SenderWireId);
+                if (owner == state.WireIdToPeer.end() || owner->second != fromPeer) return;
+            }
+            const auto senderIt = state.WireIdToGamer.find(msg.SenderWireId);
+            const auto targetIt = state.WireIdToGamer.find(msg.TargetWireId);
+            if (senderIt == state.WireIdToGamer.end() || targetIt == state.WireIdToGamer.end()) return;
+            if (senderIt->second->getIsLocalProperty()) return;
+            if (targetIt->second->getIsLocalProperty())
+            {
+                if (ShouldDropForSimulatedLoss(session->getSimulatedPacketLossProperty())) return;
+                ENetBackend::ApplyTransportVoice(session, senderIt->second, msg);
+                return;
+            }
+            if (state.HostPeer == nullptr)
+            {
+                auto peerIt = state.WireIdToPeer.find(msg.TargetWireId);
+                if (peerIt != state.WireIdToPeer.end() && peerIt->second != fromPeer)
+                    SendTo(state, peerIt->second, NetPacketCodec::Encode(msg), SendDataOptions::None, kVoiceChannel);
+            }
+        }
+
         // Task 6.2: delivers every pending delayed AppData whose ReleaseTime has passed - called
         // once per PumpSession, so a packet queued by SimulatedLatency is handed to game code on
         // whichever later Update() call first observes Now() >= ReleaseTime, not necessarily the
@@ -1403,6 +1433,9 @@ namespace CNA::Internal::Net
                     case MessageTag::AppData:
                         HandleAppData(session, state, peer, NetPacketCodec::DecodeAppData(data));
                         break;
+                    case MessageTag::VoiceData:
+                        HandleVoice(session, state, peer, NetPacketCodec::DecodeVoiceData(data));
+                        break;
                     default:
                         break;
                 }
@@ -1450,6 +1483,11 @@ namespace CNA::Internal::Net
     void ENetBackend::ApplyTransportGamerReady(NetworkGamer& gamer, bool value)
     {
         NetworkSession::ApplyGamerReadyInternal(gamer, value);
+    }
+
+    void ENetBackend::ApplyTransportVoice(NetworkSession* session, NetworkGamer* sender, const VoiceDataMessage& frame)
+    {
+        session->ReceiveVoiceInternal(sender, frame);
     }
 
     void ENetBackend::RemoveMachine(NetworkSession* session, NetworkGamer* gamer)
@@ -1768,6 +1806,28 @@ namespace CNA::Internal::Net
         }
 
         DeliverAppData(state, senderIt->second, targetIt->second, payload, options);
+    }
+
+    void ENetBackend::SendVoice(NetworkSession* session, NetworkGamer* sender, NetworkGamer* target, const VoiceDataMessage& frame)
+    {
+        if (!RealNetworkingEnabled(session->getSessionTypeProperty())) return;
+        auto it = Sessions().find(session);
+        if (it == Sessions().end()) return;
+        SessionState& state = *it->second;
+        const auto senderIt = state.GamerToWireId.find(sender);
+        const auto targetIt = state.GamerToWireId.find(target);
+        if (senderIt == state.GamerToWireId.end() || targetIt == state.GamerToWireId.end()) return;
+        VoiceDataMessage message = frame;
+        message.SenderWireId = senderIt->second;
+        message.TargetWireId = targetIt->second;
+        ENetPeer* peer = state.HostPeer;
+        if (peer == nullptr)
+        {
+            const auto owner = state.WireIdToPeer.find(message.TargetWireId);
+            if (owner == state.WireIdToPeer.end()) return;
+            peer = owner->second;
+        }
+        SendTo(state, peer, NetPacketCodec::Encode(message), SendDataOptions::None, kVoiceChannel);
     }
 
     void ENetBackend::PublishGamerReady(NetworkSession* session, const std::vector<NetworkGamer*>& gamers)

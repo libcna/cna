@@ -16,8 +16,12 @@ struct ServiceENetObservation {
         /** @brief A complete authenticated remote group connected. */ Joined,
         /** @brief An admitted remote group disconnected or lost authority. */ Left,
         /** @brief An admitted game packet targets this local group. */ Data,
+        /** @brief An admitted voice frame targets this local group. */ Voice,
         /** @brief Authenticated directory metadata changed. */ Snapshot,
         /** @brief Gamers' lobby ready state changed. */ Readiness,
+        /** @brief The directory handed the host role to another machine (snapshot names it). */ HostChanged,
+        /** @brief Local gamers added to this machine's group (ids and gamers name them). */ LocalAdded,
+        /** @brief The service refused adding local gamers (failure names why). */ AddFailed,
         /** @brief Authority or transport became unavailable. */ Failed
     };
     /** @brief Observation category. */
@@ -28,6 +32,8 @@ struct ServiceENetObservation {
     std::vector<unsigned char> ids;
     /** @brief Owned local-target game data. */
     std::optional<AppDataMessage> data;
+    /** @brief Owned local-target voice frame. */
+    std::optional<VoiceDataMessage> voice;
     /** @brief Owned directory metadata. */
     std::optional<GamerServices::ServiceSessionSnapshot> snapshot;
     /** @brief Lobby ready states for a Readiness observation. */
@@ -65,6 +71,10 @@ public:
      * @param sender Local source. @param target Known connected target. @param payload Game bytes.
      * @param options Delivery semantics. */
     void send(unsigned char sender,unsigned char target,const std::vector<unsigned char>& payload,SendDataOptions options);
+    /** @brief Sends a voice frame from a local ID to an admitted remote target on the unreliable
+     * channel (a client through the host); best effort, never queued locally.
+     * @param frame Frame naming sender and target. */
+    void sendVoice(const VoiceDataMessage& frame);
     /** @brief Sends local gamers' lobby ready state (a client to the host, the host to every
      * client); the host also reports any gamer, as ResetReady does.
      * @param entries Changed ready states. */
@@ -76,6 +86,10 @@ public:
     /** @brief Publishes host-owned directory settings; clients observe them through authority.
      * @param settings Complete desired state, capacity, join-in-progress and properties. */
     void publish(const GamerServices::ServiceSessionSettings& settings);
+    /** @brief Asks the service to add signed-in local accounts to this machine's group
+     * (XNA AddLocalGamer); the outcome is a later LocalAdded or AddFailed observation.
+     * @param names Gamertags, in order. @param users Their accounts. */
+    void addLocal(std::vector<std::string> names,std::vector<std::string> users);
     /** @brief Gets whether host resources/client welcome are established. @return Ready flag. */
     bool ready() const;
     /** @brief Gets current authenticated metadata. @return Owner-thread snapshot. */

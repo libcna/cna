@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
@@ -16,15 +17,18 @@
 #include "Microsoft/Xna/Framework/Input/KeyboardState.hpp"
 
 // Task 15.13: cna_demo_gamer_profile_privileges. GamerProfile (GamerScore, GamerZone, Motto,
-// Region, Reputation, TitlesPlayed, TotalAchievements, via Gamer::GetProfile() -> CreateInternal)
-// and GamerPrivileges. Left/Right cycles through the 4 stub SignedInGamers, showing each one's
-// profile card and privilege flags.
+// Region, Reputation, TitlesPlayed, TotalAchievements, via Gamer::GetProfile()) and
+// GamerPrivileges. Left/Right cycles through the signed-in gamers, showing each one's profile card
+// and privilege flags.
 //
-// Honest scope note: GamerProfile::CreateInternal() and GamerPrivileges::CreateInternal() both
-// build fixed, hardcoded default values with no per-gamer configuration anywhere in either
-// class (confirmed by reading both .cpp constructors before writing this demo) - so all 4 stub
-// gamers show identical profile/privilege values. This demo displays that real, current behavior
-// honestly instead of fabricating per-gamer variation the real API has no way to produce.
+// Without a CNA account service the gamers are local offline profiles: GetProfile() reports the
+// GamerScore, TotalAchievements and TitlesPlayed of the achievements that profile earned in this
+// title's local store, GamerZone Unknown, Reputation 0 and an empty Motto, and the privileges deny
+// online sessions and content purchases. A gamer signed in to a CNA account gets its profile and
+// its online-session privilege from the service.
+//
+// Nobody is signed in at startup unless CNA_GAMER_SERVICES_AUTO_SIGN_IN names profiles (up to
+// four; --smoke signs in two when it is unset); otherwise the demo opens the Guide's sign-in pane.
 class ProfileGame : public Microsoft::Xna::Framework::Game
 {
 public:
@@ -40,6 +44,9 @@ public:
     void SetSmokeFrames(int n) { smokeFramesLeft_ = n; }
 
 private:
+    // The Guide draws its panes and notifications through the game's graphics device service.
+    Microsoft::Xna::Framework::GraphicsDeviceManager graphics_{this};
+
     void SelectGamer(int index);
 
     Microsoft::Xna::Framework::GamerServices::GamerServicesComponent* gamerServicesComponent_ = nullptr;

@@ -1231,7 +1231,9 @@ CNA_C_API CNA_Result cna_local_network_gamer_get_signed_in_gamer(
  * `CNA_RESULT_INVALID_HANDLE` when the handle does not name a local gamer, or a documented thread
  * failure.
  *
- * The canonical checks run; CNA carries no voice, so there is nothing further to switch.
+ * After the canonical checks, the gamer's voice stops or resumes going to that remote gamer; voice
+ * is enabled for every gamer at first. Only the local gamer who owns the machine's microphone has
+ * voice, and a build without libopus carries none.
  */
 CNA_C_API CNA_Result cna_local_network_gamer_enable_send_voice(
     CNA_NetworkGamerHandle gamer,
@@ -1242,12 +1244,11 @@ CNA_C_API CNA_Result cna_local_network_gamer_enable_send_voice(
  * @brief Sends party invites to nearby gamers.
  *
  * @param gamer Gamer handle naming a local gamer.
- * @return `CNA_RESULT_INVALID_STATE` when the gamer has left the session or is alone in its party,
- * `CNA_RESULT_INVALID_HANDLE` when the handle does not name a local gamer, or a documented thread
- * failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the gamer has left the session or
+ * its party has fewer than two people, `CNA_RESULT_INVALID_HANDLE` when the handle does not name a
+ * local gamer, or a documented thread failure.
  *
- * CNA has no party service, so every profile is alone in its party and the canonical refusal
- * always applies.
+ * The rest of the gamer's CNA service party is invited to the current online session.
  */
 CNA_C_API CNA_Result cna_local_network_gamer_send_party_invites(CNA_NetworkGamerHandle gamer);
 

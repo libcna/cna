@@ -46,11 +46,13 @@ class Pose:
         self.root = (0.0, 0.0, 0.0)
         self.translations = rig.local_translations(body)
         self.bind = rig.joint_positions(body)
+        self.feet = (None, None)
 
     def copy(self):
         p = Pose(self.body)
         p.local = list(self.local)
         p.root = self.root
+        p.feet = self.feet
         return p
 
     # ----- forward kinematics ------------------------------------------------------------------
@@ -107,9 +109,11 @@ class Pose:
         return self
 
     def relaxed_arms(self):
-        for side, _ in rig.SIDES:
-            self.arm(side, shoulder=(-4.0, 0.0, -9.0), elbow=(-12.0, 0.0, 0.0))
-            self.fingers(side, 0.3)
+        # Not a mirror image: one arm hangs a little further forward and more bent.
+        self.arm("Left", shoulder=(-6.0, 0.0, -8.0), elbow=(-17.0, 0.0, 0.0))
+        self.fingers("Left", 0.36)
+        self.arm("Right", shoulder=(-2.5, 0.0, -10.5), elbow=(-10.0, 0.0, 0.0))
+        self.fingers("Right", 0.26)
         return self
 
     def fingers(self, side, curl, thumb=None, spread=0.0):
@@ -172,7 +176,8 @@ class Pose:
 
     def plant_feet(self, lift=None, forward=None, knee_out=0.0):
         """Solve both legs so ankles return to their bind positions (plus optional per-side offsets)
-        and feet stay level."""
+        and feet stay level. The targets are kept, so frames between keys can be solved again."""
+        self.feet = (lift, forward)
         for side, sign in rig.SIDES:
             target = self.bind[I["Ankle" + side]]
             if lift and side in lift:
@@ -194,9 +199,23 @@ class Pose:
         rot, pos = self.world()
         return add(pos[I["BackUpper"]], quat_rotate(rot[I["BackUpper"]], add((0.0, 0.08, 0.13), offset)))
 
-    def face(self, offset=(0.0, 0.0, 0.0)):
-        """A point just in front of the face, following the head."""
+    def face(self, x=0.0, y=0.0, out=0.03):
+        """A point `out` metres in front of the face at head-local (x, y) (catalog head units,
+        scaled to this body's head), following the head."""
+        from . import head
+        s = head.SCALE[self.body]
+        on_face = add(head.front_point(self.body, x * s, y * s)[0], (0.0, 0.0, out))
+        return self._on_head(on_face)
+
+    def beside_head(self, side, y=0.0, z=0.0, out=0.05):
+        """A point `out` metres off the side of the head (`side` "Left"/"Right") at head-local
+        (y, z), following the head."""
+        from . import head
+        s = head.SCALE[self.body]
+        sign = 1.0 if side == "Left" else -1.0
+        point = add(head.side_point(self.body, sign, y * s, z * s)[0], (sign * out, 0.0, 0.0))
+        return self._on_head(point)
+
+    def _on_head(self, bind_point):
         rot, pos = self.world()
-        p = rig.PROPORTIONS[self.body]
-        rel = (0.0, p["head_center"] - p["head_joint"] - 0.02, 0.2)
-        return add(pos[I["Head"]], quat_rotate(rot[I["Head"]], add(rel, offset)))
+        return add(pos[I["Head"]], quat_rotate(rot[I["Head"]], sub(bind_point, self.bind[I["Head"]])))

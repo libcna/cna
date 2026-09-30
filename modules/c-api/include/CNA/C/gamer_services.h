@@ -1238,7 +1238,8 @@ CNA_C_API CNA_Result cna_signed_in_gamer_get_party_size(
     int32_t* out_party_size);
 
 /**
- * @brief Sets a signed-in gamer's party size.
+ * @brief Sets a signed-in gamer's party size (XNA's setter is internal: a host without a party
+ * service may drive it; the CNA party service overwrites it at the next gamer-services update).
  *
  * @param gamer Owned signed-in gamer handle.
  * @param party_size New party size.
@@ -1822,8 +1823,10 @@ CNA_C_API CNA_Result cna_guide_get_is_screen_saver_enabled(CNA_Bool* out_is_enab
 CNA_C_API CNA_Result cna_guide_set_is_screen_saver_enabled(CNA_Bool is_enabled);
 
 /**
- * @brief Reports whether the title is running in trial mode: only while trial mode is simulated
- * (`cna_guide_set_simulate_trial_mode`), since CNA titles are fully licensed.
+ * @brief Reports whether the title is running in trial mode. As in XNA it is non-zero until gamer
+ * services first update, and each gamer-services update then latches it from the license state:
+ * CNA titles are fully licensed, so it follows `cna_guide_set_simulate_trial_mode` as it was at
+ * that update.
  *
  * @param out_is_trial_mode Receives non-zero in trial mode.
  * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
@@ -2049,7 +2052,8 @@ CNA_C_API CNA_Result cna_guide_render_pending_keyboard_input_ext(
     CNA_Handle white_pixel);
 
 /**
- * @brief Cancels the pending keyboard input as though the user had.
+ * @brief Cancels the pending keyboard input as though the user had; with no keyboard input
+ * pending, Escape on the sign-in screen ends the sign-in.
  *
  * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_STATE` when nothing is pending.
  *

@@ -43,7 +43,8 @@ public:
             bool match=true;for(std::size_t i=0;i<filters.size();++i)if(filters[i]&&value.properties[i]!=filters[i])match=false;
             if(!match||skipped++<start)continue;
             if(page.sessions.size()==static_cast<std::size_t>(limit)){page.more=true;break;}
-            auto advertisement=value;advertisement.members.clear();advertisement.machine.clear();page.sessions.push_back(std::move(advertisement));
+            auto advertisement=value;advertisement.members.clear();advertisement.machine.clear();advertisement.allowHostMigration=false;
+            page.sessions.push_back(std::move(advertisement));
         }return page;
     }
     ServiceSessionSnapshot join(const std::string& actor,const std::vector<std::string>& users,
@@ -90,7 +91,7 @@ public:
     }
     bool leave(const std::string& actor,const std::string& id) override {
         authorize_(actor);prune();auto& session=lookup(id);const auto machine=ownedMachine(session,actor);
-        if(machine==session.value.hostMachine){close(id);return true;}
+        if(machine==session.value.hostMachine&&!(session.value.allowHostMigration&&migrate(session,machine))){close(id);return true;}
         removeMachine(session,machine);return false;
     }
     ServiceSessionSnapshot remove(const std::string& actor,const std::string& id,const std::string& machine) override {
@@ -99,6 +100,21 @@ public:
         require(machine!=own);require(session.owners.contains(machine),"NOT_FOUND");
         for(const auto& row:session.value.members)if(row.machine==machine)session.removed.insert(row.userId);
         removeMachine(session,machine);return view(session,own);
+    }
+    ServiceSessionSnapshot addMembers(const std::string& actor,const std::vector<std::string>& users,const std::string& id) override {
+        authorize_(actor);prune();require(!users.empty()&&users.size()<=3);
+        std::set<std::string> seen;for(const auto& user:users){require(user!=actor&&seen.insert(user).second);authorize_(user);}
+        auto& session=lookup(id);const auto machine=ownedMachine(session,actor);auto& value=session.value;
+        const auto group=std::count_if(value.members.begin(),value.members.end(),[&](const auto& row){return row.machine==machine;});
+        require(group+static_cast<long>(users.size())<=4,"LIMIT_EXCEEDED");
+        require(value.state!=ServiceSessionState::Playing||(value.kind==ServiceSessionKind::PlayerMatch&&value.allowJoinInProgress),"INVALID_STATE");
+        require(users.size()<=static_cast<std::size_t>(value.openPublicSlots),"SESSION_FULL");unoccupied(users);
+        std::set<int> ordinals;for(const auto& row:value.members)ordinals.insert(row.ordinal);
+        for(const auto& user:users) {
+            int ordinal=0;while(ordinals.contains(ordinal))++ordinal;ordinals.insert(ordinal);
+            value.members.push_back({user,tag_(user),machine,false,ordinal});
+        }
+        ++value.revision;recount(value);return view(session,machine);
     }
     ServiceRelayTicket issueRelayTicket(const std::string& actor,const std::vector<std::string>& users,const std::string& id) override {
         prune();participants(actor,users);auto& session=lookup(id);const auto machine=ownedMachine(session,actor);
@@ -122,11 +138,29 @@ public:
         value.senderId=actor;value.senderGamertag=tag_(actor);value.kind=session.value.kind;value.created=now();value.expires=now()+CnaService::InviteLifetimeSeconds;
         const auto key=value.invite;auto result=value;invitations_.emplace(key,std::move(invitation));++quota.second;return result;
     }
+    ServiceInvitation requestJoin(const std::string& actor,const std::string& tag) override {
+        // The fixture has no friends list: any account's joinable player-match game may be asked for.
+        authorize_(actor);prune();require(!tag.empty()&&tag.size()<=32);const auto host=user_(tag);require(host!=actor);
+        for(auto& [id,session]:sessions_) {
+            const auto& value=session.value;
+            if(!hasMember(value,host)||value.kind!=ServiceSessionKind::PlayerMatch)continue;
+            require(!hasMember(value,actor),"INVALID_STATE");
+            if((value.state!=ServiceSessionState::Lobby&&!value.allowJoinInProgress)||value.openPublicSlots<=0)continue;
+            for(const auto& [key,invitation]:invitations_) {
+                (void)key;if(live(invitation)&&invitation.recipient==actor&&invitation.value.session==id&&invitation.value.senderId==host)return invitation.value;
+            }
+            Invitation invitation;invitation.recipient=actor;auto& result=invitation.value;result.invite=nextId();result.session=id;
+            result.senderId=host;result.senderGamertag=tag_(host);result.kind=value.kind;result.created=now();result.expires=now()+CnaService::InviteLifetimeSeconds;
+            invitation.requested=true;
+            const auto key=result.invite;auto copy=result;invitations_.emplace(key,std::move(invitation));return copy;
+        }
+        throw ServiceOperationError("NOT_FOUND");
+    }
     ServiceInvitationPage listInvites(const std::string& actor,int start,int limit) override {
         authorize_(actor);prune();require(start>=0&&start<=CnaService::MaxIncomingInvites&&limit>=1&&limit<=32);
         ServiceInvitationPage page;page.start=start;int skipped=0;
         for(const auto& [key,invitation]:invitations_) {
-            (void)key;if(invitation.recipient!=actor||!live(invitation))continue;
+            (void)key;if(invitation.recipient!=actor||!live(invitation)||invitation.requested)continue;
             if(skipped++<start)continue;
             if(page.invites.size()==static_cast<std::size_t>(limit)){page.more=true;break;}page.invites.push_back(invitation.value);
         }return page;
@@ -143,7 +177,7 @@ public:
     }
 private:
     struct Session {ServiceSessionSnapshot value;std::map<std::string,std::string> owners;std::map<std::string,long long> leases;std::set<std::string> removed;};
-    struct Invitation {ServiceInvitation value;std::string recipient,usedMachine;};
+    struct Invitation {ServiceInvitation value;std::string recipient,usedMachine;bool requested=false;};
     long long now() const{return clock_();}
     std::string nextId(){std::ostringstream stream;stream<<std::hex<<std::setfill('0')<<std::setw(32)<<++sequence_;return stream.str();}
     static void kindGuard(ServiceSessionKind kind){require(kind==ServiceSessionKind::PlayerMatch||kind==ServiceSessionKind::Ranked);}
@@ -163,7 +197,17 @@ private:
     }
     static void apply(ServiceSessionSnapshot& value,const ServiceSessionSettings& settings) {
         value.maxGamers=settings.maxGamers;value.privateSlots=settings.privateSlots;value.state=settings.state;
-        value.allowJoinInProgress=settings.allowJoinInProgress;value.properties=settings.properties;
+        value.allowJoinInProgress=settings.allowJoinInProgress;value.allowHostMigration=settings.allowHostMigration;
+        value.properties=settings.properties;
+    }
+    // As the service: the machine holding the lowest remaining ordinal hosts, its owner the host account.
+    bool migrate(Session& session,const std::string& departing) {
+        const ServiceSessionMember* next=nullptr;
+        for(const auto& row:session.value.members)
+            if(row.machine!=departing&&session.leases.at(row.machine)>now()&&(!next||row.ordinal<next->ordinal))next=&row;
+        if(!next)return false;
+        session.value.hostMachine=next->machine;session.value.hostId=session.owners.at(next->machine);
+        session.value.hostGamertag=tag_(session.value.hostId);++session.value.revision;return true;
     }
     static void recount(ServiceSessionSnapshot& value) {
         value.currentGamers=static_cast<int>(value.members.size());int privateCount=0;for(const auto& row:value.members)if(row.privateSlot)++privateCount;
@@ -186,6 +230,8 @@ private:
     void prune() {
         std::vector<std::string> closed;
         for(auto& [id,session]:sessions_) {
+            if(session.value.allowHostMigration&&session.value.revision<2147483646&&session.leases.at(session.value.hostMachine)<=now())
+                (void)migrate(session,session.value.hostMachine);
             if(session.leases.at(session.value.hostMachine)<=now()||session.value.revision>=2147483647){closed.push_back(id);continue;}
             std::vector<std::string> expired;for(const auto& [machine,deadline]:session.leases)if(deadline<=now())expired.push_back(machine);
             for(const auto& machine:expired)removeMachine(session,machine,false);

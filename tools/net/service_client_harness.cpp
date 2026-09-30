@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
+#include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
 #include "CNA/GamerServices/Configuration.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
@@ -10,6 +11,9 @@
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
+#include "../../modules/gamer-services/src/Internal/GuideOverlay.hpp"
+#include "../../modules/gamer-services/src/Internal/Guide/GuideUi.hpp"
+#include "../../modules/gamer-services/src/Internal/Guide/GuideSystem.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GuideAlreadyVisibleException.hpp"
@@ -18,6 +22,7 @@
 #include "System/IServiceProvider.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include <algorithm>
 #include <chrono>
 #include <array>
 #include <cstdlib>
@@ -25,6 +30,40 @@
 #include <thread>
 using namespace Microsoft::Xna::Framework::GamerServices;
 namespace Service=CNA::Internal::GamerServices;
+namespace Ui=CNA::Internal::GamerServices::GuideUi;
+namespace {
+// Waits for a Guide screen with at least this many items (its service reads are asynchronous).
+bool uiItems(const std::string& screen,std::size_t minimum) {
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(12);
+    while(Ui::currentScreenForTesting()!=screen||Ui::labelsForTesting().size()<minimum) {
+        if(std::chrono::steady_clock::now()>deadline)return false;
+        GamerServicesDispatcher::Update();std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return true;
+}
+// Waits for a Guide screen whose item shows a label.
+// The action index of a card action once it is offered, or -1 (the first label is the gamertag).
+int uiAction(const std::string& screen,const std::string& label) {
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(12);
+    for(;;) {
+        const auto labels=Ui::labelsForTesting();
+        const auto found=std::find(labels.begin(),labels.end(),label);
+        if(Ui::currentScreenForTesting()==screen&&found!=labels.end()&&found!=labels.begin())return static_cast<int>(found-labels.begin())-1;
+        if(std::chrono::steady_clock::now()>deadline)return -1;
+        GamerServicesDispatcher::Update();std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+}
+bool uiLabel(const std::string& screen,std::size_t index,const std::string& label) {
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(12);
+    for(;;) {
+        const auto labels=Ui::labelsForTesting();
+        if(Ui::currentScreenForTesting()==screen&&labels.size()>index&&labels[index]==label)return true;
+        if(std::chrono::steady_clock::now()>deadline)return false;
+        GamerServicesDispatcher::Update();std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+}
+void settle(){for(int i=0;i<100;++i){GamerServicesDispatcher::Update();std::this_thread::sleep_for(std::chrono::milliseconds(2));}}
+}
 int checks=0;
 void check(bool condition,const char* reason){++checks;if(!condition)throw std::runtime_error(reason);}
 LeaderboardEntry firstEntry(const LeaderboardReader& reader) {const auto entries=reader.getEntriesProperty();return entries[0];}
@@ -135,7 +174,8 @@ int main(int argc,char** argv) {
             waitFor(localCount);check((*collection)[0]->getGamertagProperty()=="Alice","restored service identity");
         }else {
         Guide::ShowSignIn(localCount,true);
-        check(Guide::getIsVisibleProperty()&&Guide::getHasPendingKeyboardInputEXTProperty(),"Guide username pane");
+        // The sign-in picker; typing the account name starts it.
+        check(Guide::getIsVisibleProperty()&&Ui::currentScreenForTesting()=="signIn","Guide sign-in picker");
         bool busy=false;try{Guide::ShowSignIn(1,true);}catch(const GuideAlreadyVisibleException&){busy=true;}check(busy,"Guide overlapping sign-in");
         for(int i=0;i<localCount;++i) {
             const std::array<std::string,4> accounts{"alice","bob","charlie","dana"};
@@ -146,7 +186,7 @@ int main(int argc,char** argv) {
             check(Guide::GetPendingKeyboardInputDisplayTextForTestingEXT()==std::string(secret.size(),'*'),"password masking");
             Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextInput(u'\r');
             check(collection->getCountProperty()==i,"authentication published before Update");
-            if(real&&std::string(argv[4])=="reject") {
+            if(real&&(action=="reject"||action=="update-required")) {
                 const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(15);
                 while(!Guide::getHasPendingMessageBoxEXTProperty()) {
                     GamerServicesDispatcher::Update();
@@ -154,6 +194,10 @@ int main(int argc,char** argv) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 }
                 check(collection->getCountProperty()==0&&signedIn==0,"rejected identity published");
+                // A version the title no longer accepts says so (XNA LIVEnTitleUpdateRequired).
+                const auto box=CNA::Internal::GamerServices::GuideUi::pendingMessageBox();
+                const bool updateText=box&&box->text.find("no longer supported")!=std::string::npos;
+                check(updateText==(action=="update-required"),"update-required explanation");
                 Guide::SimulateMessageBoxClickEXT(0);check(!Guide::getIsVisibleProperty(),"error pane cleanup");
                 std::cout<<checks<<" rejection checks passed\n";return 0;
             }
@@ -163,6 +207,11 @@ int main(int argc,char** argv) {
         check(!Guide::getIsVisibleProperty(),"Guide sign-in completed");
         check(collection==Gamer::getSignedInGamersProperty(),"collection lifetime changed");check(signedIn==localCount,"sign-in count");
         auto* gamer=(*collection)[0];
+        // GSP-L1: an account's GameDefaults come from the service (the driver stores Alice's).
+        if(real&&localCount==1&&std::string(argv[2])=="alice") {
+            const auto& defaults=gamer->getGameDefaultsProperty();
+            check(defaults.getGameDifficultyProperty()==GameDifficulty::Hard&&defaults.getInvertYAxisProperty(),"account game defaults");
+        }
         if(!real)for(int i=0;i<4;++i)check((*collection)[i]->getPlayerIndexProperty()==static_cast<Microsoft::Xna::Framework::PlayerIndex>(i),"local slot mapping");
         bool callback=false;
         std::unique_ptr<System::IAsyncResult> result(gamer->BeginGetAchievements([&](System::IAsyncResult& action){callback=true;check(action.getIsCompletedProperty(),"callback completion");check(!action.getCompletedSynchronouslyProperty(),"queued work synchronous flag");},42));
@@ -270,40 +319,54 @@ int main(int argc,char** argv) {
         }
         if(!real) {
             auto* other=(*collection)[1];
+            // The friend request is the gamer card's first action.
             Guide::ShowFriendRequest(Microsoft::Xna::Framework::PlayerIndex::One,other);
-            check(Guide::getHasPendingMessageBoxEXTProperty(),"friend confirmation UI");Guide::SimulateMessageBoxClickEXT(0);
-            check(Guide::getIsVisibleProperty()&&!Guide::getHasPendingMessageBoxEXTProperty(),"pending social request");
-            GamerServicesDispatcher::Update();check(Guide::getHasPendingMessageBoxEXTProperty(),"friends UI after request");
+            check(uiLabel("gamerCard",1,"Send friend request"),"friend request UI");
+            Ui::clickForTesting(0);check(Guide::getIsVisibleProperty(),"pending social request");
+            check(uiLabel("gamerCard",1,"Cancel friend request"),"card after request");
             check(!gamer->IsFriend(other)&&gamer->GetFriends()[0]->getFriendRequestSentToProperty(),"pending not accepted");
             check(other->GetFriends()[0]->getFriendRequestReceivedFromProperty(),"incoming friend request");
-            Guide::SimulateMessageBoxClickEXT(2);
-            Guide::ShowGamerCard(Microsoft::Xna::Framework::PlayerIndex::Two,gamer);Guide::SimulateMessageBoxClickEXT(0);
-            GamerServicesDispatcher::Update();check(gamer->IsFriend(other)&&other->IsFriend(gamer),"mutual accepted friendship");
-            Guide::SimulateMessageBoxClickEXT(2);
+            Ui::closeAll();
+            Guide::ShowGamerCard(Microsoft::Xna::Framework::PlayerIndex::Two,gamer);
+            check(uiLabel("gamerCard",1,"Accept friend request"),"incoming request on the card");Ui::clickForTesting(0);
+            check(uiAction("gamerCard","Remove friend")>=0,"card after accepting");
+            check(gamer->IsFriend(other)&&other->IsFriend(gamer),"mutual accepted friendship");
+            Ui::closeAll();
             other->getPresenceProperty().setPresenceModeProperty(GamerPresenceMode::Level);
             other->getPresenceProperty().setPresenceValueProperty(12);
             check(gamer->GetFriends()[0]->getPresenceProperty().empty(),"presence changed before Update");
             GamerServicesDispatcher::Update();check(gamer->GetFriends()[0]->getPresenceProperty()=="Level 12","presence mode ordinal/value");
             auto snapshot=gamer->GetFriends();snapshot.Dispose();check(snapshot.getIsDisposedProperty(),"owned friend snapshot disposal");
-            Guide::ShowFriends(Microsoft::Xna::Framework::PlayerIndex::One);Guide::SimulateMessageBoxClickEXT(0);
-            enterText("missing");check(Guide::getHasPendingMessageBoxEXTProperty(),"missing profile error UI");Guide::SimulateMessageBoxClickEXT(0);
-            Guide::ShowGamerCard(Microsoft::Xna::Framework::PlayerIndex::One,other);Guide::SimulateMessageBoxClickEXT(0);
-            GamerServicesDispatcher::Update();check(!gamer->IsFriend(other)&&other->GetFriends().getCountProperty()==0,"mutual friend removal");Guide::SimulateMessageBoxClickEXT(2);
+            // Y finds a gamer by gamertag; an unknown one gets the card's "not found".
+            Guide::ShowFriends(Microsoft::Xna::Framework::PlayerIndex::One);check(uiItems("friends",1),"friends list");
+            Ui::sendForTesting(Ui::Command::Y);enterText("missing");
+            check(Ui::currentScreenForTesting()=="gamerCard","missing profile card");settle();check(Ui::labelsForTesting().empty(),"missing profile error UI");
+            Ui::closeAll();
+            Guide::ShowGamerCard(Microsoft::Xna::Framework::PlayerIndex::One,other);
+            const int remove=uiAction("gamerCard","Remove friend");check(remove>=0,"remove offered");Ui::clickForTesting(remove);
+            check(uiLabel("gamerCard",1,"Send friend request"),"card after removal");
+            check(!gamer->IsFriend(other)&&other->GetFriends().getCountProperty()==0,"mutual friend removal");Ui::closeAll();
         }
         if(real&&(std::string(argv[4])=="request"||std::string(argv[4])=="presence-wait")) {
             std::unique_ptr<Gamer> target(Gamer::GetFromGamertag(std::string(argv[4])=="request"?"Bob":"Alice"));
             if(std::string(argv[4])=="request")Guide::ShowFriendRequest(Microsoft::Xna::Framework::PlayerIndex::One,target.get());
             else Guide::ShowGamerCard(Microsoft::Xna::Framework::PlayerIndex::One,target.get());
-            Guide::SimulateMessageBoxClickEXT(0);
+            check(uiItems("gamerCard",2),"real gamer card");
+            const auto before=Ui::labelsForTesting()[1];
+            Ui::clickForTesting(0);
+            // The card reads the friendship again once the service answered.
             const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(12);
-            while(!Guide::getHasPendingMessageBoxEXTProperty()) {
+            while(Ui::labelsForTesting().size()<2||Ui::labelsForTesting()[1]==before) {
                 GamerServicesDispatcher::Update();if(std::chrono::steady_clock::now()>deadline)throw std::runtime_error("social completion timeout");
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
-            Guide::SimulateMessageBoxClickEXT(2);
+            Ui::closeAll();
             if(std::string(argv[4])=="presence-wait") {
                 check(gamer->IsFriend(target.get()),"real mutual friendship");
                 gamer->getPresenceProperty().setPresenceModeProperty(GamerPresenceMode::Level);gamer->getPresenceProperty().setPresenceValueProperty(12);
+                // GSP-L2: the account-wide status the Guide's Online status sets.
+                const auto self=Service::GamerAccess::userId(*gamer);auto* executor=Service::backend().get();
+                Service::backend()->submit([executor,self]{executor->setPresenceStatus(self,"busy");},[]{});
                 GamerServicesDispatcher::Update();bool barrier=false;Service::backend()->submit([]{},[&]{barrier=true;});
                 while(!barrier){GamerServicesDispatcher::Update();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
                 std::cout<<"READY_PRESENCE"<<std::endl;std::string command;std::getline(std::cin,command);
@@ -315,7 +378,40 @@ int main(int argc,char** argv) {
             check(friends[0]->getPresenceProperty()=="Level 12","real rich presence/value");
             check(friends[0]->getIsPlayingProperty()&&!friends[0]->getIsJoinableProperty()&&!friends[0]->getInviteReceivedFromProperty()
                 &&!friends[0]->getInviteSentToProperty()&&!friends[0]->getIsAwayProperty(),"real friend state flags");
-            Guide::ShowFriends(Microsoft::Xna::Framework::PlayerIndex::One);Guide::SimulateMessageBoxClickEXT(2);
+            check(friends[0]->getIsBusyProperty(),"real friend chose busy");
+            Guide::ShowFriends(Microsoft::Xna::Framework::PlayerIndex::One);check(uiItems("friends",1),"real friends list");
+            check(Ui::labelsForTesting()[0].starts_with("Bob - Busy"),"the list shows the chosen status");Ui::sendForTesting(Ui::Command::Back);
+            // GSX-E2: a party through the Guide against the real service, then left again.
+            Guide::ShowParty(Microsoft::Xna::Framework::PlayerIndex::One);
+            check(uiLabel("party",0,"Invite friends"),"no party yet");
+            Ui::clickForTesting(0);check(uiItems("partyInvite",1)&&Ui::labelsForTesting()[0]=="Bob","friends to invite");
+            Ui::clickForTesting(0);Ui::sendForTesting(Ui::Command::Back);
+            check(uiLabel("party",0,"Alice (leader)")&&gamer->getPartySizeProperty()==1,"inviting started a party");
+            const auto self=Service::GamerAccess::userId(*gamer);
+            const auto known=Service::knownParty(self);
+            check(known&&known->members.size()==1&&known->leaderId==self,"real party read back");
+            bool joinless=false;
+            try{(void)Service::backend()->sessionDirectory().requestJoin(self,"Bob");}
+            catch(const Service::ServiceOperationError& error){joinless=error.code=="NOT_FOUND";}
+            check(joinless,"no game of Bob's to join");
+            Ui::clickForTesting(2);check(uiLabel("party",0,"Invite friends")&&gamer->getPartySizeProperty()==0,"left the party");
+            Ui::closeAll();
+        }
+        if(real&&std::string(argv[4])=="push-wait") {
+            // GSX-E6: the social watcher's first read after sign-in only learns what is there; the
+            // message sent next must reach the Guide through the event channel, well inside the 15 s
+            // interval of the next read.
+            const auto settle=std::chrono::steady_clock::now()+std::chrono::seconds(3);
+            while(std::chrono::steady_clock::now()<settle){GamerServicesDispatcher::Update();std::this_thread::sleep_for(std::chrono::milliseconds(10));}
+            std::cout<<"READY_PUSH"<<std::endl;std::string command;std::getline(std::cin,command);
+            const auto sent=std::chrono::steady_clock::now();bool shown=false;
+            while(!shown&&std::chrono::steady_clock::now()-sent<std::chrono::seconds(5)) {
+                GamerServicesDispatcher::Update();
+                for(const auto& toast:Service::guideNotifications())shown=shown||toast=="Message from Bob: pushed";
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            check(shown,"a message reaches the Guide through the event channel");
+            std::cout<<checks<<" push checks passed\n";return 0;
         }
         if(real&&std::string(argv[4])=="revoke-wait") {
             std::cout<<"READY_REVOKE"<<std::endl;std::string command;std::getline(std::cin,command);
@@ -348,10 +444,12 @@ int main(int argc,char** argv) {
         // XNA disposes a signed-out gamer and leaves IsSignedInToLive as it was.
         check(signedOut==1&&retired->getIsDisposedProperty()&&retired->getIsSignedInToLiveProperty(),"retired identity/event lifetime");
         if(!real) {
-            Guide::ShowSignIn(1,true);Guide::SimulateKeyboardInputCancelEXT();
-            check(!Guide::getIsVisibleProperty()&&collection->getCountProperty()==3,"Guide username cancellation");
+            // Back on the picker cancels; cancelling the password returns to the picker.
+            Guide::ShowSignIn(1,true);Ui::sendForTesting(Ui::Command::Back);
+            check(!Guide::getIsVisibleProperty()&&collection->getCountProperty()==3,"Guide sign-in cancellation");
             Guide::ShowSignIn(1,true);enterText("Player0");Guide::SimulateKeyboardInputCancelEXT();
-            check(!Guide::getIsVisibleProperty(),"Guide password cancellation");
+            check(Ui::currentScreenForTesting()=="signIn"&&!Guide::getHasPendingKeyboardInputEXTProperty(),"Guide password cancellation");
+            Ui::sendForTesting(Ui::Command::Back);check(!Guide::getIsVisibleProperty(),"Guide sign-in closed");
         }
         SignedInGamer::SignedIn.Remove(in);SignedInGamer::SignedOut.Remove(out);
         std::fill(password.begin(),password.end(),'\0');std::cout<<checks<<" client checks passed\n";return 0;

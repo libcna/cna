@@ -10,6 +10,7 @@
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
 #include <cstdint>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -45,8 +46,16 @@ namespace CNA::Internal::Net
         AddLocalGamerRequest = 0x0B,
         // The host's round-trip time to each gamer on a client machine, for the gamers' RoundtripTime.
         NetworkStatsBroadcast = 0x0C,
+        // One gamer's voice to one remote gamer, unreliable, routed like AppData. Older builds
+        // ignore it (SystemLink) or count it rejected (online).
+        VoiceData = 0x0D,
         AppData = 0x10,
     };
+
+    /** @brief Largest encoded voice payload a VoiceData message may carry. */
+    inline constexpr std::size_t MaxVoicePayloadBytes = 400;
+    /** @brief VoiceData flag: the frame carries speech (otherwise it only says the sender has voice). */
+    inline constexpr uint8_t VoiceFlagTalking = 0x01;
 
     /** @brief A wire-id/gamertag/host-flag triple describing one gamer in a roster snapshot. */
     struct RosterEntry
@@ -154,6 +163,16 @@ namespace CNA::Internal::Net
         std::vector<RoundtripEntry> Entries;
     };
     /** @brief Carries application SendData/ReceiveData payloads between peers, relayed by the host. */
+    /** @brief One voice frame: [tag][sender][target][flags][sequence, little-endian][payload]. */
+    struct VoiceDataMessage
+    {
+        uint8_t SenderWireId{0};
+        uint8_t TargetWireId{0};
+        uint8_t Flags{0};
+        uint16_t Sequence{0};
+        std::vector<SharpRuntime::bytecs> Payload;
+    };
+
     struct AppDataMessage
     {
         uint8_t SenderWireId{0};
@@ -216,6 +235,12 @@ namespace CNA::Internal::Net
         static std::vector<SharpRuntime::bytecs> Encode(const AddLocalGamerMessage& message);
         static std::vector<SharpRuntime::bytecs> Encode(const NetworkStatsMessage& message);
         static std::vector<SharpRuntime::bytecs> Encode(const AppDataMessage& message);
+        /** @brief Encodes a voice frame. @param message Frame; its payload is at most MaxVoicePayloadBytes.
+         * @return Wire bytes. */
+        static std::vector<SharpRuntime::bytecs> Encode(const VoiceDataMessage& message);
+        /** @brief Decodes a voice frame, refusing unknown flags, a talking frame without speech, silence
+         * with a payload, and an oversized payload. @param data Wire bytes. @return The frame. */
+        static VoiceDataMessage DecodeVoiceData(std::span<const SharpRuntime::bytecs> data);
 
         /** @brief Reads the leading MessageTag byte without needing a full decode. */
         static MessageTag PeekTag(const std::vector<SharpRuntime::bytecs>& data);

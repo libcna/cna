@@ -290,3 +290,34 @@ TEST(NetPacketCodecTest, SendDataOptionsToEnetFlagsMapping) {
     EXPECT_EQ(NetPacketCodec::SendDataOptionsToEnetFlags(SendDataOptions::ReliableInOrder), static_cast<uint32_t>(ENET_PACKET_FLAG_RELIABLE));
     EXPECT_EQ(NetPacketCodec::SendDataOptionsToEnetFlags(SendDataOptions::Chat), static_cast<uint32_t>(ENET_PACKET_FLAG_RELIABLE));
 }
+
+TEST(NetPacketCodecTest, VoiceFramesRoundTripAndMalformedOnesAreRefused) {
+    VoiceDataMessage frame;
+    frame.SenderWireId = 3;
+    frame.TargetWireId = 9;
+    frame.Flags = VoiceFlagTalking;
+    frame.Sequence = 0xBEEF;
+    frame.Payload = {1, 2, 3, 4};
+    const auto bytes = NetPacketCodec::Encode(frame);
+    EXPECT_EQ(NetPacketCodec::PeekTag(bytes), MessageTag::VoiceData);
+    const auto decoded = NetPacketCodec::DecodeVoiceData(bytes);
+    EXPECT_EQ(decoded.SenderWireId, 3);
+    EXPECT_EQ(decoded.TargetWireId, 9);
+    EXPECT_EQ(decoded.Flags, VoiceFlagTalking);
+    EXPECT_EQ(decoded.Sequence, 0xBEEF);
+    EXPECT_EQ(decoded.Payload, frame.Payload);
+    // Presence alone carries nothing.
+    VoiceDataMessage presence;
+    EXPECT_TRUE(NetPacketCodec::DecodeVoiceData(NetPacketCodec::Encode(presence)).Payload.empty());
+    auto unknownFlag = bytes;
+    unknownFlag[3] = 0x03;
+    EXPECT_THROW((void)NetPacketCodec::DecodeVoiceData(unknownFlag), std::runtime_error);
+    auto silentWithSpeech = bytes;
+    silentWithSpeech[3] = 0;
+    EXPECT_THROW((void)NetPacketCodec::DecodeVoiceData(silentWithSpeech), std::runtime_error);
+    std::vector<SharpRuntime::bytecs> talkingWithout(bytes.begin(), bytes.begin() + 6);
+    EXPECT_THROW((void)NetPacketCodec::DecodeVoiceData(talkingWithout), std::runtime_error);
+    EXPECT_THROW((void)NetPacketCodec::DecodeVoiceData(std::vector<SharpRuntime::bytecs>(bytes.begin(), bytes.begin() + 5)), std::runtime_error);
+    frame.Payload.assign(MaxVoicePayloadBytes + 1, 7);
+    EXPECT_THROW((void)NetPacketCodec::Encode(frame), std::runtime_error);
+}

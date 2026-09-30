@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) Robert Vokac and contributors
 #pragma once
+#include "Microsoft/Xna/Framework/Net/QualityOfService.hpp"
 
 #include "Microsoft/Xna/Framework/Net/AvailableNetworkSession.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionType.hpp"
@@ -100,5 +101,9 @@ namespace CNA::Internal::Net
          */
         static std::vector<AvailableNetworkSession> Matching(std::vector<AvailableNetworkSession> found, int localGamers,
             const Microsoft::Xna::Framework::Net::NetworkSessionProperties& search);
+
+    private:
+        // A found host's QualityOfService: round trip and both bandwidth estimates.
+        static Microsoft::Xna::Framework::Net::QualityOfService Measured(double roundtripMs, int downstream, int upstream);
     };
 }

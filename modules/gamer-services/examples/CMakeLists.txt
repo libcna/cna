@@ -114,7 +114,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
     endif()
 
     # Task 15.10: cna_demo_leaderboard_viewer - LeaderboardReader (CanPageUp/Down, Entries,
-    # PageStart) plus LeaderboardWriter::GetLeaderboard's always-throws boundary. Needs
+    # PageStart) over ratings written through LeaderboardWriter::GetLeaderboard. Needs
     # CNA_GamerServices and windowing (SpriteBatch/SpriteFont HUD) - same gating as
     # cna_demo_avatar above.
     if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
@@ -143,7 +143,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         endif()
     endif()
 
-    # Task 15.11: cna_demo_guide_overlay_console - the full Guide static API surface via a
+    # Task 15.11: cna_demo_guide_overlay_console - Guide static API calls via a
     # numbered console menu. Console-only, single process, no graphics/window needed - needs only
     # CNA_GamerServices.
     if(CNA_ENABLE_NET)
@@ -213,8 +213,9 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
     endif()
 
     # Task 15.14: cna_demo_friends_and_gamercard - FriendCollection (via CreateInternal) and the
-    # no-op Guide::ShowGamerCard/ShowFriendRequest/ShowFriends/ShowComposeMessage calls. Needs
-    # CNA_GamerServices and windowing - same gating as cna_demo_avatar above.
+    # Guide::ShowGamerCard/ShowFriendRequest/ShowFriends/ShowComposeMessage service panes, which
+    # refuse without a CNA account service. Needs CNA_GamerServices and windowing - same gating as
+    # cna_demo_avatar above.
     if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
         add_executable(cna_demo_friends_and_gamercard
             demo_friends_and_gamercard/src/Main.cpp
@@ -325,6 +326,32 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         if(WIN32)
             cna_windows_gui_executable(cna_demo_avatar_bone_state_boundary)
             cna_copy_sdl_runtime(cna_demo_avatar_bone_state_boundary)
+        endif()
+    endif()
+
+    # GSP-A2: cna_avatar_review renders tools/avatar_builder/avatar_review.py job lists through the
+    # standard avatar API, for deterministic before/after review sheets.
+    if(CNA_ENABLE_NET AND NOT EMSCRIPTEN)
+        add_executable(cna_avatar_review avatar_review/AvatarReview.cpp)
+        target_link_libraries(cna_avatar_review PRIVATE CNA CNA_GamerServices SHARP_RUNTIME)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_avatar_review PRIVATE SDL3::SDL3main)
+        endif()
+        # GSX-U0: deterministic captures of every system UI surface over a stand-in game.
+        add_executable(cna_guide_review guide_review/GuideReview.cpp)
+        target_link_libraries(cna_guide_review PRIVATE CNA CNA_GamerServices SHARP_RUNTIME)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_guide_review PRIVATE SDL3::SDL3main)
+        endif()
+        # GSP-I1: the CNA avatar editor, a program of its own so no game needs customization code.
+        add_executable(cna_avatar_editor avatar_editor/AvatarEditor.cpp)
+        target_link_libraries(cna_avatar_editor PRIVATE CNA CNA_GamerServices SHARP_RUNTIME)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_avatar_editor PRIVATE SDL3::SDL3main)
+        endif()
+        if(WIN32)
+            cna_windows_gui_executable(cna_avatar_editor)
+            cna_copy_sdl_runtime(cna_avatar_editor)
         endif()
     endif()
 endif()

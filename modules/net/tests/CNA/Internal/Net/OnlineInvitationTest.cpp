@@ -1,18 +1,22 @@
 // SPDX-License-Identifier: MS-PL
 #ifndef __EMSCRIPTEN__
 #include "OnlineSessionTestFixture.hpp"
+#include "../../../../../gamer-services/src/Internal/Guide/GuideUi.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GuideAlreadyVisibleException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/InviteAcceptedEventArgs.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include <algorithm>
 
 namespace {
 using namespace OnlineSessionTesting;
 using Microsoft::Xna::Framework::PlayerIndex;
 using Microsoft::Xna::Framework::Net::NetworkSessionType;
+namespace Ui=CNA::Internal::GamerServices::GuideUi;
 class OnlineInvitationTest : public OnlineSessionTest {
 protected:
     void TearDown() override {
+        Ui::closeAll();
         for(auto token:tokens)NetworkSession::InviteAccepted.Remove(token);
         joining.reset();OnlineSessionTest::TearDown();
     }
@@ -20,9 +24,10 @@ protected:
     Service::ServiceInvitation invite(const std::string& recipient="Bob") {
         privatePeer(false);return service->sessionDirectory().sendInvite("a",peer->snapshot().session,recipient);
     }
+    // The invitation card: Accept, Decline, View gamer card.
     void prompted() {
         Service::pollInvitationsNowForTesting();
-        until([&]{return Guide::getIsVisibleProperty();});
+        until([&]{return Ui::currentScreenForTesting()=="invitation";});
     }
     void subscribe(std::function<void(const InviteAcceptedEventArgs&)> handler) {
         tokens.push_back(NetworkSession::InviteAccepted.Add([handler=std::move(handler)](auto*,const InviteAcceptedEventArgs& args){handler(args);}));
@@ -43,7 +48,7 @@ TEST_F(OnlineInvitationTest, GuideAcceptanceRaisesInviteAcceptedAndTheInvitedJoi
         joining.reset(NetworkSession::BeginJoinInvited(std::vector<SignedInGamer*>{gamer(3),gamer(1)},{}, {}));
     });
     prompted();EXPECT_EQ(Service::ServiceInvitationState::Pending,stateOf("b",sent.invite));
-    Guide::SimulateMessageBoxClickEXT(0);
+    Ui::clickForTesting(0);
     until([&]{return raised==1&&joining&&joining->getIsCompletedProperty();});
     EXPECT_EQ(gamer(1),who);EXPECT_FALSE(current);EXPECT_FALSE(joining->getCompletedSynchronouslyProperty());
     EXPECT_THROW((void)NetworkSession::EndJoin(joining.get()),System::ArgumentException);
@@ -60,8 +65,19 @@ TEST_F(OnlineInvitationTest, GuideAcceptanceRaisesInviteAcceptedAndTheInvitedJoi
     for(int index=0;index<5;++index)tick();EXPECT_EQ(1,raised);
 }
 
+TEST_F(OnlineInvitationTest, APendingAcceptanceWhoseInvitationIsGoneIsNotReplayed) {
+    invite();prompted();Ui::clickForTesting(0);
+    until([&]{return Service::acceptedInvitation().has_value();});
+    // Nobody was subscribed; the accepted invitation is then cleared (as a sign-out would).
+    Service::acceptedInvitation().reset();
+    int raised=0;
+    subscribe([&](const InviteAcceptedEventArgs&){++raised;});
+    for(int index=0;index<3;++index)tick();
+    EXPECT_EQ(0,raised);
+}
+
 TEST_F(OnlineInvitationTest, AnAcceptanceWithoutSubscribersIsDeliveredOnceToTheFirstSubscriber) {
-    invite();prompted();Guide::SimulateMessageBoxClickEXT(0);
+    invite();prompted();Ui::clickForTesting(0);
     until([&]{return Service::acceptedInvitation().has_value();});
     for(int index=0;index<3;++index)tick();
     int first=0,second=0;SignedInGamer* who=nullptr;
@@ -80,7 +96,7 @@ TEST_F(OnlineInvitationTest, AnAcceptanceWithoutSubscribersIsDeliveredOnceToTheF
 
 TEST_F(OnlineInvitationTest, DecliningDismissesTheInvitationWithoutInviteAccepted) {
     const auto sent=invite();int raised=0;subscribe([&](const InviteAcceptedEventArgs&){++raised;});
-    prompted();Guide::SimulateMessageBoxClickEXT(1);
+    prompted();Ui::clickForTesting(1);
     until([&]{return stateOf("b",sent.invite)==Service::ServiceInvitationState::Dismissed;});
     Service::pollInvitationsNowForTesting();for(int index=0;index<10;++index)tick();
     EXPECT_EQ(0,raised);EXPECT_FALSE(Guide::getIsVisibleProperty());EXPECT_FALSE(Service::acceptedInvitation().has_value());
@@ -92,7 +108,7 @@ TEST_F(OnlineInvitationTest, JoinInvitedValidatesTheAcceptedInviteeBeforeAnyServ
     EXPECT_THROW((void)NetworkSession::BeginJoinInvited(std::vector<SignedInGamer*>{},{}, {}),System::ArgumentException);
     EXPECT_THROW((void)NetworkSession::BeginJoinInvited(std::vector<SignedInGamer*>{nullptr},{}, {}),System::ArgumentException);
     invite();subscribe([](const InviteAcceptedEventArgs&){});
-    prompted();Guide::SimulateMessageBoxClickEXT(0);
+    prompted();Ui::clickForTesting(0);
     until([&]{return Service::acceptedInvitation().has_value();});
     EXPECT_THROW((void)NetworkSession::BeginJoinInvited(std::vector<SignedInGamer*>{gamer(3)},{}, {}),System::InvalidOperationException);
     EXPECT_EQ(0,NetworkSession::GetActiveActionInstanceCountForTesting());
@@ -104,19 +120,28 @@ TEST_F(OnlineInvitationTest, ShowGameInviteAndTheGamerCardInviteToTheActiveOnlin
     EXPECT_THROW(Guide::ShowGameInvite(PlayerIndex::One,std::vector<Gamer*>(101,gamer(1))),System::ArgumentException);
     session=NetworkSession::Create(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(0),gamer(2)},6,0,{});
     Guide::ShowGameInvite(PlayerIndex::One,std::vector<Gamer*>{gamer(1)});
-    ASSERT_TRUE(Guide::getIsVisibleProperty());
+    ASSERT_EQ("invite",Ui::currentScreenForTesting());
     EXPECT_THROW(Guide::ShowGameInvite(PlayerIndex::One,std::vector<Gamer*>{gamer(1)}),GuideAlreadyVisibleException);
-    Guide::SimulateMessageBoxClickEXT(0);
+    // The recipients arrive chosen; Y sends.
+    Ui::sendForTesting(Ui::Command::Y);
+    EXPECT_FALSE(Guide::getIsVisibleProperty());
     until([&]{return service->sessionDirectory().listInvites("b",0,32).invites.size()==1;});
     const auto sent=service->sessionDirectory().listInvites("b",0,32).invites.front();
     EXPECT_EQ("Alice",sent.senderGamertag);EXPECT_EQ(Service::ServiceInvitationState::Pending,sent.state);
     // Bob is signed in here too: his invitation prompt appears; closing it leaves it pending.
-    prompted();Guide::SimulateMessageBoxClickEXT(1);
+    prompted();Ui::clickForTesting(1);
     until([&]{return stateOf("b",sent.invite)==Service::ServiceInvitationState::Dismissed;});
-    // Gamer card for Dana offers "Invite to game" after the friendship action while in a session.
-    Guide::ShowGamerCard(PlayerIndex::One,gamer(3));ASSERT_TRUE(Guide::getIsVisibleProperty());
-    Guide::SimulateMessageBoxClickEXT(1);
+    // Gamer card for Dana offers "Invite to game" while in a session.
+    Guide::ShowGamerCard(PlayerIndex::One,gamer(3));ASSERT_EQ("gamerCard",Ui::currentScreenForTesting());
+    until([&]{return Ui::labelsForTesting().size()>2;});
+    const auto labels=Ui::labelsForTesting();
+    const auto invite=std::find(labels.begin(),labels.end(),"Invite to game");
+    ASSERT_NE(labels.end(),invite);
+    Ui::clickForTesting(static_cast<int>(invite-labels.begin())-1);
     until([&]{return service->sessionDirectory().listInvites("d",0,32).invites.size()==1;});
+    // The card stays up (a notification confirms the invitation); Back closes the Guide.
+    Ui::sendForTesting(Ui::Command::Back);
+    EXPECT_FALSE(Guide::getIsVisibleProperty());
     session->Dispose();
     EXPECT_THROW(Guide::ShowGameInvite(PlayerIndex::One,std::vector<Gamer*>{gamer(1)}),System::InvalidOperationException);
 }

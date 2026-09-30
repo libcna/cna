@@ -105,18 +105,13 @@ TEST(GamerServicesDispatcherTest, UpdateAsyncReturnsIsInitialized) {
 
 // --- Guide ---
 
-// XNA's IsTrialMode setter is internal (the platform's licensing sets it); CNA titles are fully
-// licensed, so only SimulateTrialMode makes a trial.
-TEST(GuideTest, IsTrialModeIsFalseUnlessSimulated) {
-    Guide::setSimulateTrialModeProperty(false);
-    EXPECT_FALSE(Guide::getIsTrialModeProperty());
-}
-
+// XNA's IsTrialMode setter is internal: each dispatcher update latches it (SystemGuideTest covers
+// that); setting SimulateTrialMode alone changes only the request.
 TEST(GuideTest, SimulateTrialModeGetSet) {
+    const bool trial = Guide::getIsTrialModeProperty();
     Guide::setSimulateTrialModeProperty(true);
     EXPECT_TRUE(Guide::getSimulateTrialModeProperty());
-    // Reference: simulating trial mode forces IsTrialMode to report true.
-    EXPECT_TRUE(Guide::getIsTrialModeProperty());
+    EXPECT_EQ(trial, Guide::getIsTrialModeProperty());
     Guide::setSimulateTrialModeProperty(false);
     EXPECT_FALSE(Guide::getSimulateTrialModeProperty());
 }

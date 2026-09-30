@@ -78,6 +78,8 @@ void GamerServicesDispatcher::Update() {
         return;
     }
     struct Guard {Guard(){updating=true;}~Guard(){updating=false;}} guard;
+    // XNA IL: every Update reads the Guide state, trial mode included, before sign-in changes.
+    Guide::isTrialMode_=Guide::simulateTrialMode_;
     auto service=CNA::Internal::GamerServices::backend();
     for(auto* gamer:slots)if(gamer&&!gamer->serviceUserId_.empty()&&gamer->presence_.changed_&&!gamer->presence_.pending_) {
         auto& presence=gamer->presence_;const auto revision=presence.revision_;auto text=presence.presence_;
@@ -103,22 +105,32 @@ void GamerServicesDispatcher::Update() {
             using Type=CNA::Internal::GamerServices::BackendEvent::Type;
             if(event.type==Type::Completion){if(event.completion)event.completion();continue;}
             if(event.slot<0||event.slot>3)continue;
-            if(event.type==Type::Failed) { Guide::OnSignInResult(event.slot, false); continue; }
+            if(event.type==Type::Failed) { Guide::OnSignInResult(event.slot, false, event.error); continue; }
             if(event.type!=Type::SignedIn&&event.type!=Type::SignedOut)continue;
             if(auto* previous=slots[event.slot]) {
                 // Reference HandlePlayerSignInChanged: the old gamer is disposed, then SignedOut is raised.
                 slots[event.slot]=nullptr;previous->isDisposed_=true;publish();SignedInGamer::OnSignOut(previous);
+                // Guests leave with the account they are guests of.
+                if(!previous->isGuest_)for(int guest=0;guest<4;++guest)
+                    if(auto* other=slots[guest];other&&other->isGuest_&&other->guestHost_==event.slot) {
+                        slots[guest]=nullptr;other->isDisposed_=true;publish();SignedInGamer::OnSignOut(other);
+                    }
             }
             if(event.type==Type::SignedIn) {
-                auto gamer=std::unique_ptr<SignedInGamer>(new SignedInGamer(event.identity.gamertag,event.signedInToLive,false,static_cast<PlayerIndex>(event.slot)));
-                gamer->serviceUserId_=event.identity.userId;gamer->displayName_=event.identity.displayName;
-                // A local profile has no service: no online sessions and no purchases.
-                gamer->privileges_.allowOnlineSessions_=event.signedInToLive&&event.identity.allowOnlineSessions;
+                const bool guest=event.guestOf>=0;
+                if(guest&&(!slots[event.guestOf]||slots[event.guestOf]->isGuest_)){Guide::OnSignInResult(event.slot,false);continue;}
+                auto gamer=std::unique_ptr<SignedInGamer>(new SignedInGamer(event.identity.gamertag,event.signedInToLive,guest,static_cast<PlayerIndex>(event.slot)));
+                gamer->serviceUserId_=event.identity.userId;gamer->displayName_=event.identity.displayName;gamer->guestHost_=event.guestOf;
+                // A local profile has no service: no online sessions and no purchases. A guest has no
+                // account the service could admit to an online session.
+                gamer->privileges_.allowOnlineSessions_=event.signedInToLive&&!guest&&event.identity.allowOnlineSessions;
                 if(!event.signedInToLive)gamer->privileges_.allowPurchaseContent_=false;
-                // A local profile carries its own preferred game settings.
-                if(!event.signedInToLive)
+                // A local profile carries its own preferred game settings; an account's come from the service.
+                if(!event.signedInToLive) {
                     if(const auto profile=CNA::Internal::GamerServices::findLocalProfile(event.identity.gamertag))
                         ApplyLocalGameDefaults(gamer->gameDefaults_,profile->gameDefaults);
+                } else if(!event.identity.gameDefaults.empty())
+                    ApplyLocalGameDefaults(gamer->gameDefaults_,CNA::Internal::GamerServices::parseGameDefaultsJson(event.identity.gameDefaults));
                 auto* pointer=gamer.get();ownedGamers.push_back(std::move(gamer));slots[event.slot]=pointer;publish();SignedInGamer::OnSignIn(pointer);Guide::OnSignInResult(event.slot, true);
             }
         }catch(...){if(!firstError)firstError=std::current_exception();}
@@ -128,6 +140,12 @@ void GamerServicesDispatcher::Update() {
     // Invitation prompts and InviteAccepted belong to the outer update, never a nested End pump.
     try {CNA::Internal::GamerServices::pumpInvitations();}
     catch(...) {if(!firstError)firstError=std::current_exception();}
+    try {CNA::Internal::GamerServices::pumpParties();}
+    catch(...) {if(!firstError)firstError=std::current_exception();}
+    try {CNA::Internal::GamerServices::pumpSocial();}
+    catch(...) {if(!firstError)firstError=std::current_exception();}
+    // A Guide closed from code, not by a player, hands input back here.
+    CNA::Internal::GamerServices::syncSystemInputOwnership();
     // The Guide button belongs to games that draw the Guide.
     if(CNA::Internal::GamerServices::guideOverlayAttached()) {
         try {CNA::Internal::GamerServices::pollSystemGuideButton();}

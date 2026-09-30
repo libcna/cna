@@ -6646,6 +6646,7 @@
         "CPP-98A70207EAEA",
         "CPP-B9E5137F3893",
         "CPP-C69B9B84148E",
+        "CPP-D83BDD9EB960",
         "CPP-D9B36A62F813"
       ]
     },
@@ -9595,6 +9596,34 @@
       "task": "CBIND-037C2",
       "approved_symbols": [
         "CPP-CAD049B9139C"
+      ]
+    },
+    {
+      "id": "gamepad-friend-system-input",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePad::SystemInputAccess$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: this is a friendship declaration that lets the system UI read a pad unfiltered while it owns input, not a callable public member",
+      "tests": "Doxygen declaration inventory; no callable native operation exists",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-E6C970486DBD"
+      ]
+    },
+    {
+      "id": "quality-of-service-friend-discovery",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::QualityOfService::ENetDiscoveryService$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: this is a friendship declaration that lets SystemLink discovery record the upstream bandwidth its search measured, not a callable public member",
+      "tests": "Doxygen declaration inventory; no callable native operation exists",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-6F0550570B2A"
       ]
     },
     {
@@ -12740,6 +12769,7 @@
       "status": "implemented",
       "task": "CBIND-037G4",
       "approved_symbols": [
+        "CPP-03273597CE64",
         "CPP-0668C408D9A0",
         "CPP-12BDCD21736E",
         "CPP-1A50CFE9B785",
@@ -12748,12 +12778,11 @@
         "CPP-615BD378242E",
         "CPP-7B6CFBC3FD97",
         "CPP-91063CCB51DB",
-        "CPP-A62C30856C67",
         "CPP-AA3D79273EAA",
-        "CPP-AFEF09A9D3E8",
         "CPP-B30286E08CA1",
         "CPP-D0E291881B5F",
         "CPP-D10BE00CE8C9",
+        "CPP-DE36E4B7DD95",
         "CPP-E4A34190D903",
         "CPP-EF6479EF2584",
         "CPP-F7F60FF8C6B7"
