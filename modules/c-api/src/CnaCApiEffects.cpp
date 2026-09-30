@@ -1233,11 +1233,10 @@ template<typename TSetter>
 
 namespace CNA::C::Detail {
 
-std::shared_ptr<void> CreateEffectAdapterState(
-    const std::shared_ptr<Effect>& effect,
-    const CNA_Handle parentGame)
+std::shared_ptr<void> CreateEffectAdapterState(const std::shared_ptr<Effect>& effect)
 {
-    return MakeEffectState(effect, parentGame);
+    // No counted owner: the content that loaded the effect owns it, not the game's C children.
+    return MakeEffectState(effect, CNA_INVALID_HANDLE);
 }
 
 CNA_Result CreateBorrowedEffect(

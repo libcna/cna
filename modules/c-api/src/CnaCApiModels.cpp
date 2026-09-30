@@ -7426,7 +7426,7 @@ template <typename TResource, typename TValue>
                     effect->disposeAllowed = false;
                     if (effect->adapterState == nullptr) {
                         effect->adapterState =
-                            CNA::C::Detail::CreateEffectAdapterState(effect->value, parentGame);
+                            CNA::C::Detail::CreateEffectAdapterState(effect->value);
                     }
                 }
                 if (const CNA_Result result = SetPartEffect(part, handle);

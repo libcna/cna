@@ -616,8 +616,11 @@ first.
 - **BINDFIX-040** — `cna-ruby` A8: `cna_effect_get_parameters`, `_get_techniques` and
   `_get_current_technique` segfaulted on the effect a content-loaded `Model` publishes, on every
   renderer. The model mirror published it as an `EffectResource` without the adapter state all 24
-  generic Effect routes read; it now gets the same state `CreateEffectHandle` builds. Pinned by
-  `CApi_ContentModelEffectSmoke` (loads `tests/assets/xnb/.../BlenderDefaultCube.xnb`).
+  generic Effect routes read; it now gets the same state `CreateEffectHandle` builds, minus the
+  game-child count: the loading content owns that effect, and counting it (the first version did)
+  left the game undestroyable once a model had been loaded. Pinned by
+  `CApi_ContentModelEffectSmoke` (loads `tests/assets/xnb/.../BlenderDefaultCube.xnb`, leaves the
+  model to its content manager, then destroys the game).
 
 ---
 

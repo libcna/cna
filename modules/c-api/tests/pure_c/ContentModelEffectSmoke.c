@@ -5,7 +5,8 @@
  * generic Effect route has to work on it. It was published without the C-side state those routes
  * read, and cna_effect_get_parameters, _get_techniques and _get_current_technique dereferenced
  * null -- a segfault on every renderer (reported by cna-ruby). The model still owns the effect:
- * disposing it stays refused, and tearing the model down must leave the game destroyable.
+ * disposing it stays refused. The model handle is deliberately left to its content manager, the
+ * way a game that never unloads its models does, and the game must still be destroyable after it.
  */
 
 #include <CNA/C/cna.h>
@@ -98,8 +99,6 @@ static int validate_loaded_model(const CNA_Handle graphics_device)
             CNA_TEST_STAGE(cna_model_mesh_destroy(mesh) == CNA_RESULT_SUCCESS)) &&
         (meshes == CNA_INVALID_HANDLE ||
             CNA_TEST_STAGE(cna_model_mesh_collection_destroy(meshes) == CNA_RESULT_SUCCESS)) &&
-        (model == CNA_INVALID_HANDLE ||
-            CNA_TEST_STAGE(cna_model_destroy(model) == CNA_RESULT_SUCCESS)) &&
         (manager == CNA_INVALID_HANDLE ||
             CNA_TEST_STAGE(cna_content_manager_destroy(manager) == CNA_RESULT_SUCCESS));
     return ok && torn_down;
