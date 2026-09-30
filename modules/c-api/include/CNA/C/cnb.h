@@ -3941,7 +3941,7 @@ typedef uint32_t CNA_CnbAudioFormat;
 #define CNA_CNB_AUDIO_FORMAT_UNKNOWN UINT32_C(0)
 /** @brief Signed 16-bit little-endian PCM: the portable baseline and CNA's native form. */
 #define CNA_CNB_AUDIO_FORMAT_PCM16 UINT32_C(1)
-/** @brief Unsigned 8-bit PCM. Identifier reserved; no v1 codec. */
+/** @brief Unsigned 8-bit PCM, stored from schema 2. */
 #define CNA_CNB_AUDIO_FORMAT_PCM8 UINT32_C(2)
 /** @brief 32-bit float PCM. Identifier reserved; no v1 codec. */
 #define CNA_CNB_AUDIO_FORMAT_PCM_FLOAT32 UINT32_C(3)
@@ -3985,8 +3985,8 @@ typedef uint32_t CNA_CnbAudioFormat;
 #define CNA_CNB_SOUND_EFFECT_CHUNK_HEADER UINT32_C(0x48445541)
 /** @brief `AUDD` -- the sample bytes. */
 #define CNA_CNB_SOUND_EFFECT_CHUNK_DATA UINT32_C(0x44445541)
-/** @brief Highest `SoundEffect` schema version this build understands. */
-#define CNA_CNB_SOUND_EFFECT_SCHEMA_VERSION UINT32_C(1)
+/** @brief Highest `SoundEffect` schema version this build understands (2 adds 8-bit PCM). */
+#define CNA_CNB_SOUND_EFFECT_SCHEMA_VERSION UINT32_C(2)
 /** @brief Bytes the `AUDH` chunk occupies. */
 #define CNA_CNB_SOUND_EFFECT_HEADER_STRIDE UINT32_C(28)
 /** @brief Highest sample rate a file may declare, in Hz. */
@@ -5032,12 +5032,11 @@ CNA_C_API CNA_Result cna_cnb_decode_dds_as_texture_cube(
  * @brief Decodes WAV bytes already in memory into a `SoundEffect` description.
  *
  * A pure-data RIFF/WAVE parser. The runtime's WAV path decodes through the mixer engine, which
- * needs an audio device a build machine cannot have, so this reads the container directly. It is
- * deliberately narrow rather than a second general decoder: it accepts the uncompressed formats
- * that convert to `CNA_CNB_AUDIO_FORMAT_PCM16` **exactly** -- 16-bit PCM stored as-is and 8-bit
- * unsigned PCM widened exactly -- and **refuses everything else by name** instead of resampling or
- * truncating someone's audio silently. 24-bit, 32-bit, IEEE float and ADPCM are each an authoring
- * decision rather than a compiler's.
+ * needs an audio device a build machine cannot have, so this reads the container directly. It reads
+ * the two uncompressed families a recording tool writes -- PCM at 8, 16, 24 or 32 bits and 32-bit
+ * IEEE float -- and **refuses every compressed format by name** (ADPCM and the codec tags) instead of
+ * guessing a decoder. 8-bit PCM keeps its width as `CNA_CNB_AUDIO_FORMAT_PCM8` (schema 2); every
+ * other width is stored as `CNA_CNB_AUDIO_FORMAT_PCM16`.
  *
  * A `smpl` chunk's first loop entry becomes the sound's loop region, using the runtime's own rules,
  * so a looping WAV compiles to a looping `.cnb`.

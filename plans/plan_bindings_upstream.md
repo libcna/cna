@@ -662,6 +662,11 @@ first.
   remote gamer's gamertag and display name were unreachable, though `NetworkGamer` is a `Gamer`.
   `BorrowGamerBase` now also resolves network gamers; `cna_gamer_destroy` is unchanged. Pinned by
   `CApi_NetSmoke`.
+- **BINDFIX-048** — `cna-python`: `cnb.h` said `CNA_CNB_SOUND_EFFECT_SCHEMA_VERSION` is `1` and that
+  the WAV importer refuses 24/32-bit and float, while the library has written schema 2 (8-bit PCM)
+  since XNASWEEP-197 and narrows those widths to 16-bit. Constant and text corrected within 0.35.0;
+  the baseline change is recorded in `ABI_VERSIONING.md` for owner review. Pinned by
+  `AbiHeaderC.c` and `CApiAbiBaseline`.
 
 ---
 
