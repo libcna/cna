@@ -607,7 +607,16 @@ private:
         std::unique_ptr<curl_slist,decltype(&curl_slist_free_all)> owned(headers,curl_slist_free_all);
         if(!headers)throw Unavailable("Service transport unavailable.");
         curl_easy_setopt(curl,CURLOPT_HTTPHEADER,headers);
-        if(curl_easy_perform(curl)!=CURLE_OK)throw Unavailable("CNA service connection failed.");
+        auto performed=curl_easy_perform(curl);
+        // A connection lost after the request left may have lost only the response. A service that
+        // keeps request outcomes commits an ID with its change, so asking once more with the same ID
+        // either runs a request that never committed or answers from the record; it never runs one
+        // twice. Results carrying a secret are not kept, so those are not asked again.
+        if((performed==CURLE_GOT_NOTHING||performed==CURLE_SEND_ERROR||performed==CURLE_RECV_ERROR)&&
+           capabilities_.contains("request-outcomes")&&op!="auth.login"&&op!="auth.refresh"&&op!="sessions.relayTicket") {
+            output.clear();performed=curl_easy_perform(curl);
+        }
+        if(performed!=CURLE_OK)throw Unavailable("CNA service connection failed.");
         long status=0;curl_easy_getinfo(curl,CURLINFO_RESPONSE_CODE,&status);if(status!=200)throw Unavailable("CNA service HTTP failure.");
         const auto response=CnaService::parse(output);
         if(!response.is_object()||response.size()!=4||response.at("v")!=1||CnaService::stringField(response,"id",64)!=id||!response.at("result").is_object())
