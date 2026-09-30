@@ -3,10 +3,12 @@
 #include "Microsoft/Xna/Framework/GameComponentCollection.hpp"
 
 #include <algorithm>
-#include <stdexcept>
 #include <utility>
 
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/NotSupportedException.hpp"
 
 namespace Microsoft::Xna::Framework
 {
@@ -41,8 +43,7 @@ namespace Microsoft::Xna::Framework
         if (raw != nullptr)
         {
             // Taken before the insert so a ComponentAdded handler that removes the component
-            // again already finds the reference to release; put back on failure so a rejected
-            // add leaves no ownership behind.
+            // again already finds the reference to release.
             owned_.insert_or_assign(raw, std::move(item));
         }
 
@@ -52,7 +53,11 @@ namespace Microsoft::Xna::Framework
         }
         catch (...)
         {
-            if (raw != nullptr)
+            // Released only if the collection does not hold the component: a duplicate add is
+            // refused while the first one is still in it, and a throwing ComponentAdded handler
+            // leaves the component inserted. Releasing either would destroy a component the
+            // collection still lists.
+            if (raw != nullptr && IndexOf(raw) == -1)
             {
                 owned_.erase(raw);
             }
@@ -97,7 +102,7 @@ namespace Microsoft::Xna::Framework
     {
         if (index >= items_.size())
         {
-            throw std::out_of_range("index");
+            throw System::ArgumentOutOfRangeException("index");
         }
 
         return items_[index];
@@ -147,12 +152,13 @@ namespace Microsoft::Xna::Framework
     {
         if (IndexOf(item) != -1)
         {
-            throw std::invalid_argument("Cannot Add Same Component Multiple Times");
+            throw System::ArgumentException(
+                "Cannot add the same game component to a game component collection multiple times.");
         }
 
         if (index > items_.size())
         {
-            throw std::out_of_range("index");
+            throw System::ArgumentOutOfRangeException("index");
         }
 
         items_.insert(items_.begin() + static_cast<std::ptrdiff_t>(index), item);
@@ -167,7 +173,7 @@ namespace Microsoft::Xna::Framework
     {
         if (index >= items_.size())
         {
-            throw std::out_of_range("index");
+            throw System::ArgumentOutOfRangeException("index");
         }
 
         IGameComponent* gameComponent = items_[index];
@@ -186,8 +192,8 @@ namespace Microsoft::Xna::Framework
     {
         (void)index;
         (void)item;
-        // FNA throws NotSupportedException; C++ uses std::logic_error (no System::NotSupportedException yet).
-        throw std::logic_error("SetItem is not supported.");
+        throw System::NotSupportedException(
+            "Cannot set a value using operator[] on GameComponentCollection.  Use Add/Remove instead.");
     }
 
     void GameComponentCollection::OnComponentAdded(const GameComponentCollectionEventArgs& eventArgs)

@@ -7,6 +7,8 @@
 #include "Microsoft/Xna/Framework/GameComponentCollection.hpp"
 #include "Microsoft/Xna/Framework/GameComponentCollectionEventArgs.hpp"
 #include "Microsoft/Xna/Framework/IGameComponent.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/Object.hpp"
 
 using Microsoft::Xna::Framework::GameComponentCollection;
@@ -95,11 +97,41 @@ TEST(GameComponentCollectionTest, ARejectedSharedAddLeavesNoOwnershipBehind)
     c.Add(component);
 
     // The same component twice is the raw overload's error and must stay so here.
-    EXPECT_THROW(c.Add(component), std::invalid_argument);
+    EXPECT_THROW(c.Add(component), System::ArgumentException);
 
     EXPECT_TRUE(c.Remove(component.get()));
     component.reset();
     EXPECT_FALSE(alive) << "the rejected add must not have left a second reference behind";
+}
+
+TEST(GameComponentCollectionTest, ARejectedDuplicateSharedAddKeepsTheFirstAddsOwnership)
+{
+    // The rejected second add used to release the reference the first add took, leaving the
+    // collection listing a component nothing kept alive.
+    bool alive = false;
+    GameComponentCollection c;
+    {
+        auto component = std::make_shared<TracedComponent>(alive);
+        c.Add(component);
+        EXPECT_THROW(c.Add(component), System::ArgumentException);
+    }
+    EXPECT_TRUE(alive) << "the collection still lists the component, so it must still own it";
+    EXPECT_EQ(c.getCountProperty(), 1u);
+}
+
+TEST(GameComponentCollectionTest, AThrowingComponentAddedHandlerLeavesTheSharedComponentOwned)
+{
+    // XNA inserts before raising ComponentAdded, so a handler that throws leaves the component in
+    // the collection -- and the collection must still own what it lists.
+    bool alive = false;
+    GameComponentCollection c;
+    c.ComponentAdded += [](System::Object*, const GameComponentCollectionEventArgs&)
+    {
+        throw std::runtime_error("handler");
+    };
+    EXPECT_THROW(c.Add(std::make_shared<TracedComponent>(alive)), std::runtime_error);
+    EXPECT_EQ(c.getCountProperty(), 1u);
+    EXPECT_TRUE(alive);
 }
 
 TEST(GameComponentCollectionTest, TheCollectionReleasesWhatItStillOwnsWhenItGoesAway)
@@ -132,7 +164,7 @@ TEST(GameComponentCollectionTest, AddDuplicateThrows)
     GameComponentCollection c;
     StubComponent comp;
     c.Add(&comp);
-    EXPECT_THROW(c.Add(&comp), std::invalid_argument);
+    EXPECT_THROW(c.Add(&comp), System::ArgumentException);
 }
 
 TEST(GameComponentCollectionTest, AddFiresComponentAddedEvent)
@@ -190,7 +222,7 @@ TEST(GameComponentCollectionTest, RemoveAtDecreasesCount)
 TEST(GameComponentCollectionTest, RemoveAtOutOfRangeThrows)
 {
     GameComponentCollection c;
-    EXPECT_THROW(c.RemoveAt(0), std::out_of_range);
+    EXPECT_THROW(c.RemoveAt(0), System::ArgumentOutOfRangeException);
 }
 
 TEST(GameComponentCollectionTest, ClearRemovesAll)
@@ -258,7 +290,7 @@ TEST(GameComponentCollectionTest, OperatorIndexReturnsComponent)
 TEST(GameComponentCollectionTest, OperatorIndexOutOfRangeThrows)
 {
     GameComponentCollection c;
-    EXPECT_THROW((void)c[0], std::out_of_range);
+    EXPECT_THROW((void)c[0], System::ArgumentOutOfRangeException);
 }
 
 TEST(GameComponentCollectionTest, InsertAtIndexFiresAdded)
@@ -281,7 +313,7 @@ TEST(GameComponentCollectionTest, InsertOutOfRangeThrows)
 {
     GameComponentCollection c;
     StubComponent comp;
-    EXPECT_THROW(c.Insert(5, &comp), std::out_of_range);
+    EXPECT_THROW(c.Insert(5, &comp), System::ArgumentOutOfRangeException);
 }
 
 TEST(GameComponentCollectionTest, RangeForIteratesAllComponents)
