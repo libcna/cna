@@ -5,6 +5,8 @@
 #include "CNA/Internal/Audio/AudioMixer.hpp"
 
 #include <atomic>
+#include <cstdint>
+#include <cstring>
 #include <limits>
 #include <mutex>
 #include <new>
@@ -348,9 +350,46 @@ namespace CNA::Internal::Audio
         return FinalizeAudioLoad(std::move(audio));
     }
 
+    namespace
+    {
+        // SDL_mixer's WAVE decoder divides by the frame size it derives from the "fmt " chunk
+        // without checking the channel count, so a file declaring zero channels ends the process
+        // with SIGFPE (cna-killer, a corrupted WAVE through SoundEffect.FromStream). A RIFF WAVE
+        // whose format chunk cannot describe a frame is refused here; anything else is left to
+        // SDL_mixer, which recognises its own formats.
+        bool IsUndecodableWave(const std::span<const std::byte> data)
+        {
+            const auto bytes = reinterpret_cast<const unsigned char*>(data.data());
+            const auto u16 = [bytes](std::size_t at) { return unsigned(bytes[at]) | unsigned(bytes[at + 1]) << 8; };
+            const auto u32 = [&](std::size_t at) { return u16(at) | std::uint32_t(u16(at + 2)) << 16; };
+            if (data.size() < 12 || std::memcmp(bytes, "RIFF", 4) != 0 || std::memcmp(bytes + 8, "WAVE", 4) != 0)
+                return false;
+            for (std::size_t at = 12; at + 8 <= data.size();)
+            {
+                const std::uint32_t size = u32(at + 4);
+                if (std::memcmp(bytes + at, "fmt ", 4) == 0)
+                {
+                    if (size < 16 || at + 8 + 16 > data.size())
+                        return true;
+                    const unsigned channels = u16(at + 10);
+                    const std::uint32_t sampleRate = u32(at + 12);
+                    const unsigned blockAlign = u16(at + 20);
+                    return channels == 0 || sampleRate == 0 || blockAlign == 0;
+                }
+                at += 8 + std::size_t{size} + (size & 1u);
+            }
+            return false;
+        }
+    }
+
     MixerAudioPtr LoadMixerAudioMemory(const std::span<const std::byte> encodedData)
     {
         if (encodedData.empty()) return {};
+        if (IsUndecodableWave(encodedData))
+        {
+            SDL_SetError("WAV: the format chunk declares no channels, no sample rate or no block size");
+            return {};
+        }
         auto audio = std::make_shared<MixerAudio>();
         audio->source = MixerAudioSource::EncodedMemory;
         audio->data.assign(encodedData.begin(), encodedData.end());

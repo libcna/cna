@@ -537,6 +537,31 @@ TEST(SoundEffectTest, FromStreamGarbageThrowsNotSupported)
     }
 }
 
+TEST(SoundEffectTest, FromStreamWaveWithoutChannelsIsRefusedInsteadOfEndingTheProcess)
+{
+    // A corrupted WAVE (cna-killer) declaring zero channels made SDL_mixer divide by a zero frame
+    // size: SIGFPE, the whole process gone.
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    auto bytes = BuildMinimalWavBytes();
+    bytes[22] = 0; // "fmt " channels
+    bytes[23] = 0;
+    std::istringstream stream(std::string(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+    try
+    {
+        SoundEffect* loaded = SoundEffect::FromStream(stream);
+        delete loaded;
+        FAIL() << "a WAVE file without channels loaded";
+    }
+    catch (const System::NotSupportedException& error)
+    {
+        EXPECT_NE(std::string(error.what()).find("no channels"), std::string::npos) << error.what();
+    }
+    catch (const Microsoft::Xna::Framework::Audio::NoAudioHardwareException&)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+}
+
 TEST(SoundEffectTest, FromStreamValidWavSucceedsAndReportsNonzeroDuration)
 {
     System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
