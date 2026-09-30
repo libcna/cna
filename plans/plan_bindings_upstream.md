@@ -642,6 +642,11 @@ first.
   the larger ratio -- identical wherever the old crop fitted. The non-zoom (fit) path is unchanged;
   whether XNA's native decoder can exceed the requested height there (SW-05's second half) has no
   IL to settle it. Pinned by `ImageLoaderTests.ZoomFillsWideAndTallTargetsByCroppingTheOverflow`.
+- **BINDFIX-044** — `System::InvalidCastException` (a compiled effect parameter read or written in a
+  shape it does not have, FX-089/FX-105) fell through the exception barrier to
+  `CNA_RESULT_INTERNAL`, which `docs/c-api/ERRORS.md` reserves for native failures with no public
+  category; it is the caller's argument and now maps to `CNA_RESULT_INVALID_ARGUMENT` (reported by
+  `cna-ruby`). Pinned by `CApi_BoundaryDetail`.
 
 ---
 
