@@ -93,9 +93,16 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Destructor. */
         CNAEXT ~Texture2D() override;
 
-        /** @brief Copy-constructs a value wrapper that shares the underlying texture resource. */
+        /**
+         * @brief Copy-constructs a second handle to the same texture.
+         *
+         * The handles share one texture until a full-level SetData through either of them: that
+         * gives the writing handle a texture of its own and leaves the other with the pixels it
+         * had, so a ContentManager's cached texture is not changed through a loaded copy
+         * (REMED-GFX-223). A SetData of a rectangle updates the shared texture in place.
+         */
         CNAEXT Texture2D(const Texture2D&) = default;
-        /** @brief Copy-assigns a value wrapper that shares the underlying texture resource. */
+        /** @brief Copy-assigns a second handle to the same texture, with the copy constructor's semantics. */
         CNAEXT Texture2D& operator=(const Texture2D&) = default;
         /** @brief Move-constructs a wrapper and transfers ownership of its renderer resource. */
         CNAEXT Texture2D(Texture2D&& other) noexcept;
