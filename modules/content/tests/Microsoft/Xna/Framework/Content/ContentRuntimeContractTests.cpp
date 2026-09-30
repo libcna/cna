@@ -251,10 +251,10 @@ TEST(ContentLoadExceptionContractTest, TheParameterlessConstructorNamesItsOwnTyp
         << "XNA leaves the message to System.Exception's parameterless constructor, whose .NET "
            "fallback text names the exception's own type";
 
-    // Still the same exception type as the message-taking constructors, and still catchable the
-    // way every content throw site is caught.
+    // Still the same exception type as the message-taking constructors, and catchable as the
+    // System.Exception XNA derives it from.
     EXPECT_THROW({ throw ContentLoadException(); }, ContentLoadException);
-    EXPECT_THROW({ throw ContentLoadException(); }, std::runtime_error);
+    EXPECT_THROW({ throw ContentLoadException(); }, System::Exception);
     EXPECT_NE(std::string(ContentLoadException("explicit").what()), message);
 }
 
@@ -630,15 +630,15 @@ TEST(ContentLoadExceptionSerializationTest, AnEmptyStoreStillConstructs)
 
 TEST(ContentLoadExceptionSerializationTest, TheRestoredExceptionIsStillCatchableAsBefore)
 {
-    // The base is still std::runtime_error, which is what the 221 catch sites around content loads
-    // depend on -- a round trip must not change that.
+    // XNA derives ContentLoadException from System.Exception -- a round trip must not change what
+    // a handler catches.
     System::Runtime::Serialization::SerializationInfo info;
     const System::Runtime::Serialization::StreamingContext context;
     ContentLoadException("typed").GetObjectData(info, context);
 
     const TestableContentLoadException restored(info, context);
     EXPECT_THROW({ throw restored; }, ContentLoadException);
-    EXPECT_THROW({ throw restored; }, std::runtime_error);
+    EXPECT_THROW({ throw restored; }, System::Exception);
 }
 
 TEST(ContentLoadExceptionSerializationTest, GetObjectDataWritesBothBaseStateNames)
