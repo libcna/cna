@@ -481,7 +481,9 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
   `next` then advanced again (e6d562454, BINDFIX-042..046, including an avatar-loader shutdown fix)
   and was merged too (829bb5c7f, no conflict); rerun (`cleanup/after-merge2/`): GS 604 + 1, Net 518/518,
   Runtime 192 + 2, C API 112/115 (the same three smokes), 18 demos, SAMPLE-087 and SAMPLE-096, and the
-  server's `service_tls_e2e`, `service_cna_session` and `service_cna_avatars`.
+  server's `service_tls_e2e`, `service_cna_session` and `service_cna_avatars`. Then 4a31b3b7d
+  (BINDFIX-047, C API gamer routes accept a network gamer) was merged too; C API 112/115 and
+  `service_tls_e2e` (the C harness) pass.
 
 ## Acceptance matrix (GSX-Q1, 2026-09-30)
 

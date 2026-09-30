@@ -98,7 +98,7 @@ Final truth cleanup, 2026-09-30 (`plan_gamer_services_xbox_fidelity.md` GSX-Q2):
   catalog v3 avatars with shadows; SAMPLE-096 Invites and SAMPLE-075 (SystemLink and online) pass;
   the achievements/leaderboards program passes.
 - Demos: 18 GamerServices and Net demos exit 0 on the private display.
-- After merging committed `next` (0f7166cd8, then e6d562454) into the branch, the suites, C API
+- After merging committed `next` (0f7166cd8, e6d562454, then 4a31b3b7d) into the branch, the suites, C API
   gates (112/115: `next` added five C API tests, which pass), demos, samples and server tests again
   with the same results.
 
