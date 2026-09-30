@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Audio/XactTypes.hpp"
+#include "Internal/AudioLog.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
 
 #include <algorithm>
@@ -7,7 +8,6 @@
 #include <cmath>
 #include <cstring>
 #include <fstream>
-#include <iostream>
 #include <stdexcept>
 #include <vector>
 
@@ -382,7 +382,7 @@ namespace CNA::Internal::Audio
 
         uint16_t contentVersion = ctx.u16();
         if (contentVersion != 46)
-            std::cerr << "[XGS] Warning: unexpected contentVersion " << contentVersion << "\n";
+            LogAudio(LogLevel::WARN, "[XGS] Warning: unexpected contentVersion ", contentVersion);
 
         ctx.u16(); // toolVersion
         ctx.u16(); // unknown
@@ -520,7 +520,8 @@ namespace CNA::Internal::Audio
 
             uint32_t version = ctx.u32();
             if (version > 46)
-                std::cerr << "[XWB] Warning: version " << version << " may not be fully supported\n";
+                LogAudio(LogLevel::WARN,
+                    "[XWB] Warning: version ", version, " may not be fully supported");
 
             if (version > 43)
                 ctx.u32(); // headerVersion
@@ -869,7 +870,7 @@ namespace CNA::Internal::Audio
 
         uint16_t contentVersion = ctx.u16();
         if (contentVersion != 46)
-            std::cerr << "[XSB] Warning: contentVersion " << contentVersion << "\n";
+            LogAudio(LogLevel::WARN, "[XSB] Warning: contentVersion ", contentVersion);
 
         ctx.u16(); // toolVersion
         ctx.u16(); // CRC

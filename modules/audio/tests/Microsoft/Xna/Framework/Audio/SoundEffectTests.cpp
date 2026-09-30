@@ -10,6 +10,9 @@
 #include <optional>
 #include <random>
 #include <sstream>
+#include <string>
+#include <string_view>
+#include <utility>
 #include <type_traits>
 #include <vector>
 
@@ -24,6 +27,7 @@
 #include "System/TimeSpan.hpp"
 #include "SoundEffectInstanceTestAccess.hpp"
 #include "CNA/Internal/Audio/AudioMixer.hpp"
+#include "CNA/Logger.hpp"
 
 #include <SDL3_mixer/SDL_mixer.h>
 #include "System/Environment.hpp"
@@ -1056,6 +1060,35 @@ TEST(SoundEffectTest, RawBufferStartingWithXnbSignatureEmitsDiagnosticWithoutThr
 
     ASSERT_NE(fx, nullptr);
     EXPECT_NE(captured.find("XNB"), std::string::npos) << "captured stderr: " << captured;
+}
+
+// The diagnostic is a CNA log line, not a raw stderr write: a consumer that installed a sink
+// (cna_logger_set_sink_ext) receives it there, and nothing reaches stderr behind the sink.
+TEST(SoundEffectTest, RawBufferDiagnosticReachesAnInstalledLoggerSinkAndNotStderr)
+{
+    auto opened = makeEffect(); // open the mixer first, so only the diagnostic is observed
+    if (!opened) GTEST_SKIP() << "no audio device";
+
+    std::vector<unsigned char> pcm;
+    const char riff[] = "RIFF\x24\x08\x00\x00WAVEfmt ";
+    pcm.insert(pcm.end(), riff, riff + sizeof(riff) - 1);
+    pcm.resize(pcm.size() + 4 * 256, 0);
+
+    std::vector<std::pair<CNA::LogLevel, std::string>> audioLines;
+    CNA::Logger::SetSink([&audioLines](const CNA::LogLevel level, const CNA::LogCategory category,
+                                       const std::string_view message) {
+        if (category == CNA::LogCategory::AUDIO)
+            audioLines.emplace_back(level, std::string(message));
+    });
+    testing::internal::CaptureStderr();
+    auto fx = std::make_unique<SoundEffect>(pcm, 44100, AudioChannels::Stereo);
+    const std::string captured = testing::internal::GetCapturedStderr();
+    CNA::Logger::ResetSink();
+
+    EXPECT_TRUE(captured.empty()) << "captured stderr: " << captured;
+    EXPECT_TRUE(std::ranges::any_of(audioLines, [](const auto& line) {
+        return line.first == CNA::LogLevel::WARN && line.second.find("RIFF") != std::string::npos;
+    }));
 }
 
 TEST(SoundEffectTest, RawBufferWithoutKnownSignatureEmitsNoDiagnostic)

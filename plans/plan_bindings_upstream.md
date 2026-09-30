@@ -679,6 +679,13 @@ first.
 - **BINDFIX-049** — `net.h` still described `cna_packet_reader_read_color` as reading four floats and
   the pair as deliberately asymmetric; BINDFIX-022 had made them inverses. Documentation only
   (reported by `cna-python`).
+- **BINDFIX-051** — `cna-ts` finding 2: the audio module wrote its diagnostics straight to stderr
+  (28 sites, one of them a format line on every successful mixer open), and `ShaderEffect` its
+  compile error, past `CNA::Logger` -- so a consumer that had replaced the destination with
+  `cna_logger_set_sink_ext` still got them on stderr. They are now log lines in the `AUDIO` and
+  `RENDER` categories: the mixer's negotiated-format announcement at INFO (as the renderer
+  banner), load confirmations at DEBUG, advisories at WARN, failures at ERROR. Pinned by
+  `SoundEffectTest.RawBufferDiagnosticReachesAnInstalledLoggerSinkAndNotStderr`.
 - **BINDFIX-052** — `cna-ts` finding 32: on WebAssembly a caller-created `GraphicsDevice` made and
   destroyed while a Game was alive left the Game undestroyable -- `cna_game_destroy` threw
   Emscripten's `ErrnoError` (ENOENT) instead of returning. Each device is an SDL window on the same

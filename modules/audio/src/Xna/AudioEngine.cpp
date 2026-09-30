@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
+#include "Internal/AudioLog.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioCategory.hpp"
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundBank.hpp"
@@ -12,7 +13,6 @@
 
 #include <algorithm>
 #include <exception>
-#include <iostream>
 #include <utility>
 #include <vector>
 
@@ -134,13 +134,14 @@ namespace Microsoft::Xna::Framework::Audio
             for (auto& v : xactImpl_->xgs.variables)
                 xactImpl_->globalVariables[v.name] = v.initialValue;
 
-            std::cerr << "[AudioEngine] Loaded XGS: " << settingsFile
-                      << " (" << n << " categories, "
-                      << xactImpl_->xgs.variables.size() << " variables)\n";
+            CNA::Internal::Audio::LogAudio(CNA::LogLevel::DEBUG,
+                "[AudioEngine] Loaded XGS: ", settingsFile, " (", n, " categories, ",
+                xactImpl_->xgs.variables.size(), " variables)");
         }
         catch (const std::exception& ex)
         {
-            std::cerr << "[AudioEngine] XGS parse error: " << ex.what() << "\n";
+            CNA::Internal::Audio::LogAudio(CNA::LogLevel::ERROR,
+                "[AudioEngine] XGS parse error: ", ex.what());
             throw System::InvalidOperationException("Engine initialization failed!");
         }
     }

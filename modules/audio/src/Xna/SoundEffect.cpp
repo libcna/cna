@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
+#include "Internal/AudioLog.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 
 #include <algorithm>
@@ -8,7 +9,6 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
-#include <iostream>
 #include <istream>
 #include <vector>
 
@@ -346,19 +346,21 @@ namespace Microsoft::Xna::Framework::Audio
 #ifdef SOUND_ENABLED
         if (const char* sig = DetectLikelyContainerSignature(buffer.data() + off, cnt))
         {
-            std::cerr << "[SoundEffect] Warning: raw PCM buffer starts with a " << sig
-                      << " signature, not raw PCM16LE sample data -- passing whole-file bytes "
-                      << "to this constructor decodes the container's header as audio samples, "
-                      << "producing garbage output. Use SoundEffect(const std::string&) to load "
-                      << "a file instead.\n";
+            CNA::Internal::Audio::LogAudio(CNA::LogLevel::WARN,
+                "[SoundEffect] Warning: raw PCM buffer starts with a ", sig,
+                " signature, not raw PCM16LE sample data -- passing whole-file bytes "
+                "to this constructor decodes the container's header as audio samples, "
+                "producing garbage output. Use SoundEffect(const std::string&) to load "
+                "a file instead.");
         }
         else if (LooksImplausiblyHighEntropyForPcm16(buffer.data() + off, cnt))
         {
-            std::cerr << "[SoundEffect] Warning: raw PCM buffer has implausibly high byte-level "
-                      << "entropy for real 16-bit audio -- this often indicates compressed "
-                      << "(Ogg/MP3, without a recognizable header) or otherwise non-PCM16 data "
-                      << "(e.g. float32 samples byte-reinterpreted as PCM16) was passed to this "
-                      << "constructor instead of raw PCM16LE samples.\n";
+            CNA::Internal::Audio::LogAudio(CNA::LogLevel::WARN,
+                "[SoundEffect] Warning: raw PCM buffer has implausibly high byte-level "
+                "entropy for real 16-bit audio -- this often indicates compressed "
+                "(Ogg/MP3, without a recognizable header) or otherwise non-PCM16 data "
+                "(e.g. float32 samples byte-reinterpreted as PCM16) was passed to this "
+                "constructor instead of raw PCM16LE samples.");
         }
 
         EnsureMixerOrThrowXna();

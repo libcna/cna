@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/DynamicSoundEffectInstance.hpp"
+#include "Internal/AudioLog.hpp"
 
 #include <algorithm>
 
@@ -10,7 +11,6 @@
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
-#include <iostream>
 
 #ifdef SOUND_ENABLED
 #include "CNA/Internal/Audio/MixerEngine.hpp"
@@ -174,8 +174,9 @@ namespace Microsoft::Xna::Framework::Audio
         // downstream return-value check.
         if (!audioStream_)
         {
-            std::cerr << "[DynamicSoundEffectInstance] queued stream creation failed: "
-                      << CNA::Internal::Audio::GetMixerError() << "\n";
+            CNA::Internal::Audio::LogAudio(CNA::LogLevel::ERROR,
+                "[DynamicSoundEffectInstance] queued stream creation failed: ",
+                CNA::Internal::Audio::GetMixerError());
             return;
         }
 
@@ -186,8 +187,9 @@ namespace Microsoft::Xna::Framework::Audio
             track = CNA::Internal::Audio::CreateMixerTrack();
             if (!track)
             {
-                std::cerr << "[DynamicSoundEffectInstance] track creation failed: "
-                          << CNA::Internal::Audio::GetMixerError() << "\n";
+                CNA::Internal::Audio::LogAudio(CNA::LogLevel::ERROR,
+                    "[DynamicSoundEffectInstance] track creation failed: ",
+                    CNA::Internal::Audio::GetMixerError());
                 return;
             }
             // AUD-15-006: track_/trackMixerGeneration_ are also read (via getStateProperty())
@@ -207,8 +209,9 @@ namespace Microsoft::Xna::Framework::Audio
 
         if (!CNA::Internal::Audio::SetMixerTrackStream(track, AsStream(audioStream_)))
         {
-            std::cerr << "[DynamicSoundEffectInstance] stream attachment failed: "
-                      << CNA::Internal::Audio::GetMixerError() << "\n";
+            CNA::Internal::Audio::LogAudio(CNA::LogLevel::ERROR,
+                "[DynamicSoundEffectInstance] stream attachment failed: ",
+                CNA::Internal::Audio::GetMixerError());
             return;
         }
 
@@ -233,8 +236,9 @@ namespace Microsoft::Xna::Framework::Audio
         // and be registered with FrameworkDispatcher::Streams as if audio were flowing.
         if (!played)
         {
-            std::cerr << "[DynamicSoundEffectInstance] track playback failed: "
-                      << CNA::Internal::Audio::GetMixerError() << "\n";
+            CNA::Internal::Audio::LogAudio(CNA::LogLevel::ERROR,
+                "[DynamicSoundEffectInstance] track playback failed: ",
+                CNA::Internal::Audio::GetMixerError());
             return;
         }
 
@@ -630,9 +634,9 @@ namespace Microsoft::Xna::Framework::Audio
             if (!CNA::Internal::Audio::PutMixerStreamData(
                 stream, std::span<const std::byte>(first, chunk.size())))
             {
-                std::cerr << "[DynamicSoundEffectInstance] stream submit failed ("
-                          << chunk.size() << " bytes dropped): "
-                          << CNA::Internal::Audio::GetMixerError() << "\n";
+                CNA::Internal::Audio::LogAudio(CNA::LogLevel::ERROR,
+                    "[DynamicSoundEffectInstance] stream submit failed (", chunk.size(),
+                    " bytes dropped): ", CNA::Internal::Audio::GetMixerError());
                 continue;
             }
 
