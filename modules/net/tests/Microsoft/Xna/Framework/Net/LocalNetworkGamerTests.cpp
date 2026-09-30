@@ -216,8 +216,8 @@ TEST(LocalNetworkGamerTest, ReceiveDataIntoPacketReaderReturnsZero) {
     EXPECT_EQ(fixture.gamer->ReceiveData(reader, sender), 0);
 }
 
-// Reference EnableSendVoice checks (CNA carries no voice), and SendPartyInvites refusing a profile
-// alone in its party (CNA has no party service, so every profile is).
+// Reference EnableSendVoice argument checks, and SendPartyInvites refusing a gamer whose party has
+// fewer than two members (a profile without a service party has none).
 TEST(LocalNetworkGamerTest, EnableSendVoiceAndSendPartyInvitesFollowTheReferenceChecks) {
     LocalGamerFixture fixture;
     fixture.gamer->EnableSendVoice(fixture.gamer, true);
@@ -227,6 +227,23 @@ TEST(LocalNetworkGamerTest, EnableSendVoiceAndSendPartyInvitesFollowTheReference
     stranger.SetHasLeftSession(true);
     EXPECT_THROW(fixture.gamer->EnableSendVoice(&stranger, true), System::InvalidOperationException);
     EXPECT_THROW(fixture.gamer->SendPartyInvites(), System::InvalidOperationException);
+}
+
+// XNA's NetworkGamer.IsGuest is the gamer's guest state: a local gamer reports its profile's,
+// whether it joined with the session or through AddLocalGamer.
+TEST(LocalNetworkGamerTest, IsGuestFollowsTheSignedInProfile) {
+    auto account = SignedInGamer::CreateInternal("Alice", true, false, Microsoft::Xna::Framework::PlayerIndex::One);
+    auto guest = SignedInGamer::CreateInternal("Alice (1)", true, true, Microsoft::Xna::Framework::PlayerIndex::Two);
+    auto second = SignedInGamer::CreateInternal("Alice (2)", true, true, Microsoft::Xna::Framework::PlayerIndex::Three);
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&account, &guest}, 8, 0, NetworkSessionProperties{});
+    session->AddLocalGamer(&second);
+    auto& locals = session->getLocalGamersProperty();
+    ASSERT_EQ(locals.getCountProperty(), 3);
+    EXPECT_FALSE(locals[0]->getIsGuestProperty());
+    EXPECT_TRUE(locals[1]->getIsGuestProperty());
+    EXPECT_TRUE(locals[2]->getIsGuestProperty());
+    session->Dispose();
 }
 
 TEST(LocalNetworkGamerTest, ClearPacketQueueLeavesNoDataAvailable) {

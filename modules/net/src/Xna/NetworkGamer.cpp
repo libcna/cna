@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Net/NetworkGamer.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
+#include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionState.hpp"
 #include "System/InvalidOperationException.hpp"
@@ -27,7 +29,14 @@ namespace Microsoft::Xna::Framework::Net
     bool NetworkGamer::getHasVoiceProperty() const            { return hasVoice_; }
     SharpRuntime::bytecs NetworkGamer::getIdProperty() const  { return id_; }
     void NetworkGamer::SetId(SharpRuntime::bytecs value)      { id_ = value; }
-    bool NetworkGamer::getIsGuestProperty() const             { return isGuest_; }
+    bool NetworkGamer::getIsGuestProperty() const
+    {
+        // XNA reads IsGuest from the gamer's state; a local gamer's is its signed-in profile's. The
+        // SystemLink roster does not carry it, so a remote gamer reports false.
+        if (const auto* local = dynamic_cast<const LocalNetworkGamer*>(this))
+            return local->getSignedInGamerProperty() != nullptr && local->getSignedInGamerProperty()->getIsGuestProperty();
+        return isGuest_;
+    }
     bool NetworkGamer::getIsHostProperty() const              { return isHost_; }
     void NetworkGamer::SetIsHost(bool value)                  { isHost_ = value; }
     bool NetworkGamer::getIsLocalProperty() const             { return false; }

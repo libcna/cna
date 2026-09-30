@@ -595,11 +595,9 @@ namespace Microsoft::Xna::Framework::Net
 
             if (evt.Type == NetworkEventType::PacketSend)
             {
-                // Gated behind RealNetworkingEnabled so non-SystemLink session types keep their
-                // pre-Phase-5 behavior byte-for-byte: PacketSend stays a complete no-op for them
-                // (see Task 5.9's planned regression pass), matching that no remote gamer can
-                // exist on a non-SystemLink session anyway (AddRemoteGamer is only ever called
-                // from ENetBackend's own RealNetworkingEnabled-gated handshake code).
+                // Only a networked session (SystemLink, or an online session) delivers packets;
+                // for Local and LocalWithLeaderboards, which have no remote gamers, PacketSend
+                // stays a no-op.
                 if (CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(sessionType_) || online_)
                 {
                     if (auto* localTarget = dynamic_cast<LocalNetworkGamer*>(evt.Gamer))
@@ -839,9 +837,14 @@ namespace Microsoft::Xna::Framework::Net
         if (sessionState_ != NetworkSessionState::Lobby) throw System::InvalidOperationException("NetworkSession is not Lobby");
         if(leaderboardTransitionPending_)throw System::InvalidOperationException("A gameplay transition is already pending.");
         if(sessionType_==NetworkSessionType::LocalWithLeaderboards&&CNA::Internal::GamerServices::backend()->serviceEnabled()) {
-            std::vector<std::string> users;for(auto* gamer:localGamers_)users.push_back(gamer->serviceUserId_);
-            leaderboardGameplay_=CNA::Internal::GamerServices::backend()->beginLeaderboardGame(users);
-            leaderboardOwner_=users.front();leaderboardTransitionPending_=true;
+            // XNA admits guests here. Only accounts write the service's boards: a guest has no service
+            // identity, and its writer keeps the local store, as outside a session.
+            std::vector<std::string> users;
+            for(auto* gamer:localGamers_)if(!gamer->serviceUserId_.empty())users.push_back(gamer->serviceUserId_);
+            if(!users.empty()) {
+                leaderboardGameplay_=CNA::Internal::GamerServices::backend()->beginLeaderboardGame(users);
+                leaderboardOwner_=users.front();leaderboardTransitionPending_=true;
+            }
         }
 
 
@@ -1534,8 +1537,8 @@ namespace Microsoft::Xna::Framework::Net
             return AvailableNetworkSessionCollection::CreateInternal(std::move(matching));
         }
 
-        // Non-SystemLink types stay fully synthetic: FNA never actually populates a
-        // discovered-sessions list in this stub.
+        // LocalWithLeaderboards is a single-machine session no search can find (Local is refused
+        // by BeginFind; PlayerMatch/Ranked were answered from the service above).
         return AvailableNetworkSessionCollection::CreateInternal({});
     }
 
