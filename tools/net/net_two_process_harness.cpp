@@ -25,9 +25,12 @@
 // cross-process discovery-port sharing this file's own host/client roles avoid.
 #include "CNA/Internal/Net/ENetBackend.hpp"
 #include "CNA/Internal/Net/VoiceChat.hpp"
+#include "../../modules/gamer-services/src/Internal/Guide/GuideScreen.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
+#include "Microsoft/Xna/Framework/Audio/DynamicSoundEffectInstance.hpp"
+#include "Microsoft/Xna/Framework/FrameworkDispatcher.hpp"
 #include "Microsoft/Xna/Framework/Net/AvailableNetworkSession.hpp"
 #include "Microsoft/Xna/Framework/Net/AvailableNetworkSessionCollection.hpp"
 #include "System/InvalidOperationException.hpp"
@@ -44,6 +47,8 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <mutex>
 #include <set>
 #include <string>
 #include <thread>
@@ -807,6 +812,133 @@ namespace {
         void play(std::uint8_t, std::span<const std::int16_t>) override { ++voicePlayed; }
         void release(std::uint8_t) override {}
     };
+    // GSH-16: voice through the machine's real devices, driven by tools/net/voice_physical_check.sh
+    // (never part of a test suite). CNA_VOICE_PHYSICAL=capture: the host hears the room through the
+    // real microphone and the client measures a 1 kHz tone in what it decodes. =playback: the host
+    // talks with a 433 Hz tone and the client plays it through the real speaker, for the script to
+    // record. =guide: one process plays the Guide's system sounds on the real speaker.
+    class SilentMicrophone final : public IVoiceCapture {
+    public:
+        bool present() override { return true; }
+        void setOpen(bool) override {}
+        void read(std::vector<std::int16_t>&) override {}
+    };
+    std::mutex decodedMutex;
+    std::vector<std::int16_t> decoded;
+    class AnalyzingSpeaker final : public IVoicePlayback {
+    public:
+        void play(std::uint8_t, std::span<const std::int16_t> pcm) override {
+            std::lock_guard lock(decodedMutex);
+            decoded.insert(decoded.end(), pcm.begin(), pcm.end());
+            ++voicePlayed;
+        }
+        void release(std::uint8_t) override {}
+    };
+    // Share of the signal's power at one frequency (Goertzel): about 1 for a pure tone, near 0 for noise.
+    double ToneShare(const std::vector<std::int16_t>& samples, double frequency, double rate) {
+        if (samples.empty()) return 0.0;
+        const double k = 2.0 * std::cos(2.0 * 3.14159265358979 * frequency / rate);
+        double s1 = 0.0, s2 = 0.0, energy = 0.0;
+        for (const auto sample : samples) {
+            const double x = sample, s0 = x + k * s1 - s2;
+            s2 = s1; s1 = s0; energy += x * x;
+        }
+        const double power = s1 * s1 + s2 * s2 - k * s1 * s2;
+        return energy > 0.0 ? 2.0 * power / (static_cast<double>(samples.size()) * energy) : 0.0;
+    }
+    int RunVoicePhysical(bool hosting, uint16_t port, int timeoutSeconds) {
+        const auto* mode = std::getenv("CNA_VOICE_PHYSICAL");
+        const std::string kind = mode ? mode : "";
+        if (!voiceAvailable() || (kind != "capture" && kind != "playback")) {
+            std::fprintf(stderr, "voice-physical: voice unavailable or CNA_VOICE_PHYSICAL not capture/playback\n");
+            return 64;
+        }
+        // Only the device under test is real; the other side is silent or synthetic.
+        if (kind == "capture") {
+            if (hosting) setVoiceDevicesForTesting({}, [] { return std::make_unique<CountingSpeaker>(); });
+            else setVoiceDevicesForTesting([] { return std::make_unique<SilentMicrophone>(); }, [] { return std::make_unique<AnalyzingSpeaker>(); });
+        } else {
+            if (hosting) setVoiceDevicesForTesting([] { return std::make_unique<ToneMicrophone>(); }, [] { return std::make_unique<CountingSpeaker>(); });
+            else setVoiceDevicesForTesting([] { return std::make_unique<SilentMicrophone>(); }, {});
+        }
+        auto gamer = SignedInGamer::CreateInternal(hosting ? "HostPlayer" : "ClientPlayer");
+        using Microsoft::Xna::Framework::GamerServices::Gamer;
+        using Microsoft::Xna::Framework::GamerServices::SignedInGamerCollection;
+        Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({&gamer})));
+        struct RestoreSignedIn {
+            ~RestoreSignedIn() { Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({}))); }
+        } restore;
+        NetworkSession* session = nullptr;
+        if (hosting) {
+            session = NetworkSession::Create(NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{});
+            std::printf("PORT=%u\n", static_cast<unsigned>(ENetBackend::GetBoundPort(session)));
+            std::fflush(stdout);
+        } else {
+            auto available = AvailableNetworkSession::CreateInternal(1, "HostPlayer", 0, 7, NetworkSessionProperties{},
+                QualityOfService::CreateInternal(), "127.0.0.1", port, NetworkSessionType::SystemLink);
+            session = NetworkSession::Join(&available);
+        }
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(timeoutSeconds);
+        int result = 0;
+        // Audio advances in FrameworkDispatcher.Update, which a Game calls every frame; XNA requires
+        // a program without a Game to call it.
+        if (hosting) {
+            // Serve until the client has gone.
+            bool joined = false;
+            PumpUntil(session, deadline, [&] {
+                Microsoft::Xna::Framework::FrameworkDispatcher::Update();
+                const int count = session->getAllGamersProperty().getCountProperty();
+                joined = joined || count == 2;
+                return joined && count == 1;
+            });
+            std::printf("HOST talking-observed=%d\n", session->getLocalGamersProperty()[0]->getIsTalkingProperty() ? 1 : 0);
+        } else {
+            std::printf("JOINED\n");
+            std::fflush(stdout);
+            NetworkGamer* host = nullptr;
+            bool talking = false;
+            // Listen for six seconds of the host's voice (or until the deadline).
+            PumpUntil(session, deadline, [&] {
+                Microsoft::Xna::Framework::FrameworkDispatcher::Update();
+                host = FindRemoteGamer(session);
+                talking = talking || (host != nullptr && host->getIsTalkingProperty());
+                std::lock_guard lock(decodedMutex);
+                return kind == "capture" ? decoded.size() >= static_cast<std::size_t>(VoiceSampleRate * 3)
+                                         : voicePlayed > 0 && false;
+            });
+            if (kind == "capture") {
+                std::lock_guard lock(decodedMutex);
+                const double tone = ToneShare(decoded, 1000.0, VoiceSampleRate), other = ToneShare(decoded, 700.0, VoiceSampleRate);
+                std::printf("CAPTURE decoded-seconds=%.2f talking=%d share1000=%.3f share700=%.3f hasVoice=%d\n",
+                    decoded.size() / static_cast<double>(VoiceSampleRate), talking ? 1 : 0, tone, other,
+                    host != nullptr && host->getHasVoiceProperty() ? 1 : 0);
+                result = talking && tone > 0.2 && tone > 10.0 * other ? 0 : 1;
+            } else {
+                std::printf("PLAYBACK talking=%d\n", talking ? 1 : 0);
+                result = talking ? 0 : 1;
+            }
+        }
+        std::fflush(stdout);
+        session->Dispose();
+        setVoiceDevicesForTesting({}, {});
+        return result;
+    }
+
+    // GSH-16: the Guide's system sounds on the machine's real output device, for the script to tap.
+    int RunGuideSounds() {
+        using CNA::Internal::GamerServices::GuideUi::Sound;
+        for (const auto sound : {Sound::Open, Sound::Move, Sound::Accept, Sound::Notify, Sound::Back, Sound::Error}) {
+            CNA::Internal::GamerServices::GuideUi::play(sound);
+            for (int tick = 0; tick < 20; ++tick) {
+                Microsoft::Xna::Framework::FrameworkDispatcher::Update();
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(400));
+        CNA::Internal::GamerServices::GuideUi::releaseSounds();
+        std::printf("GUIDE_SOUNDS played\n");
+        return 0;
+    }
     int RunVoice(bool hosting, uint16_t port, int timeoutSeconds) {
         if (!voiceAvailable()) {
             std::printf("PORT=0\nVOICE_UNAVAILABLE\n");
@@ -972,6 +1104,15 @@ int main(int argc, char** argv) {
         }
         if (role == "guest-client") {
             return RunGuestClient(port, timeoutSeconds);
+        }
+        if (role == "guide-sounds") {
+            return RunGuideSounds();
+        }
+        if (role == "voice-physical-host") {
+            return RunVoicePhysical(true, 0, timeoutSeconds);
+        }
+        if (role == "voice-physical-client") {
+            return RunVoicePhysical(false, port, timeoutSeconds);
         }
         if (role == "voice-host") {
             return RunVoice(true, 0, timeoutSeconds);

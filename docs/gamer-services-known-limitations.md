@@ -74,8 +74,8 @@ avatar catalogs and versioned catalog-pack updates.
 | 26 | Browser (WebAssembly) multiplayer and services | Platform limitation | Blocks online/LAN play in browsers | Yes (owner scope) | Yes, with new adapters |
 | 27 | Voice availability by build and device | Platform limitation | Minor | Yes | Partly |
 | 28 | Non-Linux clients and server hosts | Unverified | Unknown | No | Yes |
-| 29 | Real microphone and speakers | Unverified | Unknown | No | Yes, with hardware |
-| 30 | Guide system sounds heard | Unverified | None | No | Yes, with hardware |
+| 29 | Voice heard through the air (microphone and speaker exercised; the loop between them not) | Hardware-unverified | Unknown | No | Yes, with an unmuted speaker |
+| 30 | Guide system sounds heard by a person | Hardware-unverified | None | No | Yes, with a listener |
 | 31 | Public Internet deployment | Unverified | None for a LAN/NAT test; unknown in production | No | Yes |
 | 32 | Console-only rules read from Windows IL | Unverified | Unknown, believed minor | No | Only with console traces |
 | 33 | `AvatarRenderer` on renderers other than OpenGL 3.3/Vulkan | Unverified | Unknown | No | Yes |
@@ -574,26 +574,33 @@ claim about how Xbox LIVE decided.
 
 ## Not independently validated
 
-### 29. Real microphone and speakers
+### 29. Voice through real devices
 
-- **Status:** not independently validated.
-- **CNA now:** voice is implemented and tested in software: codec, routing, host relaying,
-  concealment, muting, `EnableSendVoice`, two real processes both ways, SystemLink and online.
-  Real microphone and speaker end-to-end audio was **not physically heard** on the test machine
-  (no audio devices); capture and playback use the platform recording provider and the SoundEffect
-  path the rest of CNA uses.
-- **Reason:** the test machine has no microphone or speakers.
-- **Observable impact:** unknown until heard: audio quality, latency and echo are unmeasured.
+- **Status:** not independently validated end to end (hardware-unverified).
+- **CNA now:** voice is tested in software (codec, routing, relaying, concealment, muting,
+  `EnableSendVoice`, two processes, SystemLink and online). On 2026-09-30 the real devices of the
+  test machine (PipeWire; built-in microphone and speaker) were used with
+  `tools/net/voice_physical_check.sh`:
+  - **capture:** the real microphone -> speech detection -> Opus -> SystemLink -> the other process's
+    decoder: the room's sound was detected as talking and arrived decoded;
+  - **playback:** a synthetic voice -> SystemLink -> Opus decode -> `DynamicSoundEffectInstance` ->
+    the real output device: the tone arrives intact at the device's input (0.999 of its power in
+    the tone's band).
+  The loop through the air could not be closed: the machine's speaker was muted by its owner and
+  was not unmuted. So what a person hears -- quality, latency, echo -- and the content of what the
+  microphone hears were not measured. Mute, `EnableSendVoice` and reconnection are device-independent
+  logic, tested in software only. Voice playback advances in `FrameworkDispatcher.Update`, which a
+  `Game` calls every frame and which XNA requires of a program without one.
+- **Observable impact:** unknown until heard.
 - **Porting impact:** unknown.
-- **Future work:** a listening test on a machine with a headset.
+- **Future work:** run `tools/net/voice_physical_check.sh` with the speaker unmuted, and listen.
 
 ### 30. Guide system sounds
 
-- **Status:** not independently validated.
-- **CNA now:** the Guide's synthesized sounds play through `SoundEffect` and are exercised by tests
-  (silently without a device; `CNA_GAMER_SERVICES_SOUNDS=0` turns them off); they were never heard on
-  the test machine.
-- **Reason:** no audio output on the test machine.
+- **Status:** not independently validated (hardware-unverified).
+- **CNA now:** the Guide's synthesized sounds play through `SoundEffect`; on 2026-09-30 all six reached
+  the machine's real output device (`tools/net/voice_physical_check.sh`), but its speaker was muted by
+  its owner, so nobody heard them. `CNA_GAMER_SERVICES_SOUNDS=0` turns them off.
 - **Observable impact:** none on function; how they sound is unverified.
 - **Porting impact:** none.
 - **Future work:** listen once on a machine with speakers.
