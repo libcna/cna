@@ -109,7 +109,6 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         CNAEXT [[nodiscard]] CNA::ShaderLanguageEXT GetSelectedShaderLanguageEXT() const noexcept;
 
-        /** @brief Sets a column-major 4×4 matrix uniform by name. */
         /**
          * @brief Declares the std140 uniform block this effect's parameters live in. CNAEXT.
          *
@@ -129,6 +128,7 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT void DeclareUniformBlockEXT(int blockSizeBytes, const char* const* names,
                                            const int* offsets, int count);
 
+        /** @brief Sets a mat4 uniform from an XNA Matrix's fields M11..M44 in order (`&m.M11`). */
         CNAEXT void SetUniformMat4(const char* name, const float* matrix);
         /** @brief Sets a vec4 uniform by name (x, y, z, w). */
         CNAEXT void SetUniformVec4(const char* name, float x, float y, float z, float w);
@@ -171,7 +171,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param name     The uniform's name in the shader; the `[0]` spelling GLSL uses for the
          *                 first element is tried too, so either form works.
-         * @param matrices Pointer to @p count * 16 floats, column-major.
+         * @param matrices Pointer to @p count matrices, each laid out as for SetUniformMat4.
          * @param count    Number of matrices.
          */
         CNAEXT void SetUniformMat4Array(const char* name, const float* matrices, int count);

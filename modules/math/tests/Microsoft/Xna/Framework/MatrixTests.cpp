@@ -865,6 +865,22 @@ TEST(MatrixTest, ToColumnMajorIdentity)
     EXPECT_NEAR(data[1], 0.0f, kEps);  // M12
 }
 
+// living-room-simulator R-34: the elements come out in field order, not transposed -- a shader
+// reading them as a column-major mat4 finds the translation in its fourth column.
+TEST(MatrixTest, ToColumnMajorKeepsFieldOrderSoTranslationIsElementsTwelveToFourteen)
+{
+    Matrix m = Matrix::CreateTranslation(1.0f, 2.0f, 3.0f);
+    m.M12 = 5.0f;
+    float data[16];
+    m.ToColumnMajor(data);
+    EXPECT_NEAR(data[12], 1.0f, kEps); // M41
+    EXPECT_NEAR(data[13], 2.0f, kEps); // M42
+    EXPECT_NEAR(data[14], 3.0f, kEps); // M43
+    EXPECT_NEAR(data[1], 5.0f, kEps);  // M12, not M21
+    EXPECT_NEAR(data[4], 0.0f, kEps);  // M21
+    EXPECT_NEAR(data[3], 0.0f, kEps);  // M14, not M41
+}
+
 // --- operator*= (CNAEXT) ---
 //
 // C# synthesises `*=` from op_Multiply, so XNA game code writes `world *= rotation` without

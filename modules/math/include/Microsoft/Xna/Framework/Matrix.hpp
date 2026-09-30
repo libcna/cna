@@ -1007,9 +1007,9 @@ namespace Microsoft::Xna::Framework
         friend Matrix operator-(Matrix matrix);
 
         /**
-         * @brief Returns this matrix in the transposed column-major form expected by OpenGL-style uniform uploads.
-         *
-         * @param out Array of 16 floats that receives the column-major matrix data.
+         * @brief Copies the elements in field order (M11, M12, ..., M44) for a shader uniform upload:
+         * GLSL reads them as a column-major mat4, the transpose, so `mat * v` equals XNA's `v * M`.
+         * @param out Array of 16 floats that receives the elements; the translation is 12..14.
          */
         CNAEXT void ToColumnMajor(float out[16]) const;
 
