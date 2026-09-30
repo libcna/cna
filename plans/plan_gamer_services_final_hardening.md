@@ -229,6 +229,8 @@ measures half.
 | `CnaGamerServicesTests` | 627: 626 pass, 1 skip (`GuideTest.IsScreenSaverEnabledGetSet`), 0 fail |
 | `CnaNetTests` | 523/523 pass |
 | `CnaRuntimeTests` | 196: 194 pass, 2 skip (platform-window tests), 0 fail |
+| The three together in one `CnaTests` process (cross-module state) | 1,346: 1,343 pass, 3 skip (the same three), 0 fail |
+| `CnaGamerServicesTests` / `CnaNetTests` in the SDL3 tree (OpenGL 3.3, private display) | 627/627 and 523/523 |
 | C API gates (`-R '^CApi'`) | 116: 113 pass; 3 known environment failures of this HEADLESS/NULL-audio tree (Content, Audio, AudioUnavailable smokes), as in the previous baseline |
 | Protocol drift (`check_service_protocol.py`) | match |
 | SDL/platform boundary gates (5) | pass |
