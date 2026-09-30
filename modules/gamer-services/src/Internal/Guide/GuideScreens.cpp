@@ -751,7 +751,7 @@ void drawKeyboard(Ui& ui,const KeyboardView& view)
 std::deque<Command> injected;
 std::optional<int> injectedClick;
 
-void apply(Screen& screen,InputContext& ui)
+void applyInput(Screen& screen,InputContext& ui)
 {
     auto& s=state();
     const auto before=s.stack.size();
@@ -835,7 +835,7 @@ void draw(Xna::Graphics::GraphicsDevice& device)
     // Input goes to whatever is on top: the game's dialog, else the top screen.
     if(!dialogs&&!s.stack.empty()) {
         auto top=s.stack.back();
-        apply(*top,ui);
+        applyInput(*top,ui);
         noteTop();
     }
     // Under the top: the nearest full-screen screen, or else the nearest shell screen.
@@ -915,7 +915,7 @@ void frameWith(std::optional<Command> command)
     context.input.mouse=Xna::Vector2(-1,-1);
     context.player=s.player;
     auto top=s.stack.back();
-    apply(*top,context);
+    applyInput(*top,context);
     noteTop();
 }
 }

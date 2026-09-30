@@ -606,6 +606,13 @@ first.
   ordinary `CNA_RESULT_INVALID_STATE`, and it keeps refusing instead of being consumed by the first
   query and quietly replaced by the default. Pinned by `CApi_RendererEnvironment_{unknown,absent}`
   and `GraphicsRendererSelectionTest.ARefusedEnvironmentVariableKeepsRefusingUntilARendererIsSet`.
+- **BINDFIX-039** — `next` no longer built the WebAssembly C ABI (`cna_c_api_wasm`) that `cna-ts`
+  runs in the browser. Three breaks landed since the last Emscripten C API build: an unqualified
+  `apply(*top, ui)` in `GuideScreens.cpp` that ADL resolved to `std::apply` (`Screen` derives from
+  `enable_shared_from_this`; libc++ hard-errors where libstdc++ quietly falls back), a missing
+  `override` on `DisplayMode::ToString` that clang's `-Werror` in the C API target refuses, and
+  `ENetDiscoveryService::Matching` defined only inside the native-only block. Proven by building
+  `cna_c_api_wasm` (WEBGL2) and running `CApi_WasmModuleSmoke` and the browser probe (11/11).
 
 ---
 
