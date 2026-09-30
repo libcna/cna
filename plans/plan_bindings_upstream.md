@@ -695,6 +695,16 @@ first.
   (`cmake/patches/sdl-cbe3fbe9-0003-emscripten-filedrop-rmdir.patch`; SDL `main` still has the
   bug). Pinned by the twelfth check of `modules/c-api/wasm/browser_probe.html`
   (`CApi_WasmBrowserProbe`), which fails 11/12 against the previous module.
+- **BINDFIX-053** — `cna-ts` finding 30: on WEBGL2 a `BasicEffect` draw into two bound render
+  targets painted neither and left `INVALID_OPERATION` pending. WebGL 2 refuses a draw that leaves
+  an enabled draw buffer without a fragment output ("Active draw buffers with missing fragment
+  shader outputs"); GLES 3.0 only leaves such a buffer undefined, which is why native OPENGLES3
+  (Mesa) drew correctly all along. Every stock EasyGL program writes one output, so EasyGL now
+  enables, for the length of each draw, only the draw buffers the program writes -- the stock
+  programs' one, a compiled effect's `oCn` outputs from its pixel-shader reflection, a custom
+  `ShaderEffect`'s whole set -- and restores the full set afterwards, so `Clear` still reaches every
+  target. The untouched target stays unchanged, as in XNA. Pinned by the thirteenth check of
+  `modules/c-api/wasm/browser_probe.html`, which fails 12/13 against the unfixed renderer.
 
 ---
 

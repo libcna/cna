@@ -20,7 +20,7 @@
 // Reports in the same shape as every other CNA browser page, so
 // scripts/run_browser_tests.mjs runs it unchanged.
 const requestedFrames = Number(new URLSearchParams(location.search).get('frames') || 5);
-const EXPECTED = 12;
+const EXPECTED = 13;
 let passed = 0;
 const out = document.getElementById('out');
 const canvas = document.getElementById('canvas');
@@ -261,6 +261,131 @@ try {
         cna._free(secondInfo);
         cna._free(secondCallbacks);
         cna.removeFunction(loadContent);
+    }
+
+    // BINDFIX-053: a BasicEffect draw into two bound render targets. BasicEffect writes one colour
+    // output, and WebGL 2 refuses a draw that leaves an enabled draw buffer without one -- so the
+    // draw reached neither target and left INVALID_OPERATION pending, which the next multi-target
+    // bind then refused on. XNA draws into the first target and leaves the second unchanged.
+    const SIZE = 8;
+    const mrt = {};
+    const mrtDraw = cna.addFunction((game, gameTime, context, outError) => {
+        void gameTime; void context; void outError;
+        if (mrt.drawn !== undefined) return 0;
+        mrt.drawn = false;
+        const deviceOut = cna._malloc(8);
+        const createInfo = cna._malloc(40);
+        const targetOut = cna._malloc(8);
+        const bindings = cna._malloc(48);
+        const vertices = cna._malloc(96);
+        const primitives = cna._malloc(48);
+        const effectOut = cna._malloc(8);
+        const pixels = cna._malloc(SIZE * SIZE * 4);
+        const pixelsOut = cna._malloc(8);
+        const targets = [];
+        try {
+            cna._cna_game_get_graphics_device(game, deviceOut);
+            const device = cna.getValue(deviceOut, 'i64');
+            cna.HEAPU8.fill(0, createInfo, createInfo + 40);
+            cna.HEAPU32[createInfo >> 2] = 40;
+            cna.HEAPU32[(createInfo >> 2) + 1] = 1;
+            cna.HEAPU32[(createInfo >> 2) + 2] = SIZE;
+            cna.HEAPU32[(createInfo >> 2) + 3] = SIZE;
+            cna.HEAPU32[(createInfo >> 2) + 8] = 1; // CNA_RENDER_TARGET_USAGE_PRESERVE_CONTENTS
+            for (let i = 0; i < 2; i += 1) {
+                cna.setValue(targetOut, 0n, 'i64');
+                mrt[`create${i}`] = cna._cna_render_target2d_create(device, createInfo, targetOut);
+                targets.push(cna.getValue(targetOut, 'i64'));
+            }
+            cna.HEAPU8.fill(0, bindings, bindings + 48);
+            for (let i = 0; i < 2; i += 1) {
+                const binding = bindings + 24 * i;
+                cna.HEAPU32[binding >> 2] = 24;
+                cna.HEAPU32[(binding >> 2) + 1] = 1;
+                cna.setValue(binding + 8, targets[i], 'i64');
+            }
+            mrt.bind = cna._cna_graphics_device_set_render_targets(device, bindings, 2n);
+            mrt.clear = cna._cna_graphics_device_clear_rgba(device, 0, 0, 1, 1);
+            cna.setValue(effectOut, 0n, 'i64');
+            mrt.effect = cna._cna_basic_effect_create(device, effectOut);
+            const effect = cna.getValue(effectOut, 'i64');
+            mrt.vertexColor = cna._cna_basic_effect_set_vertex_color_enabled(effect, 1);
+            mrt.apply = cna._cna_effect_apply(effect);
+            // A clip-space triangle over the centre (identity matrices), every vertex opaque red, in
+            // both windings: a render target's row order reverses what the default cull removes.
+            const corners = [[-0.9, -0.9], [0.9, -0.9], [0.0, 0.9], [-0.9, -0.9], [0.0, 0.9], [0.9, -0.9]];
+            corners.forEach(([x, y], i) => {
+                cna.HEAPF32[(vertices >> 2) + 4 * i] = x;
+                cna.HEAPF32[(vertices >> 2) + 4 * i + 1] = y;
+                cna.HEAPF32[(vertices >> 2) + 4 * i + 2] = 0;
+                cna.HEAPU8.set([255, 0, 0, 255], vertices + 16 * i + 12);
+            });
+            cna.HEAPU8.fill(0, primitives, primitives + 48);
+            cna.HEAPU32[primitives >> 2] = 48;
+            cna.HEAPU32[(primitives >> 2) + 1] = 1;
+            cna.HEAPU32[(primitives >> 2) + 2] = 0; // CNA_PRIMITIVE_TRIANGLE_LIST
+            cna.HEAPU32[(primitives >> 2) + 3] = 1; // CNA_USER_VERTEX_SOURCE_POSITION_COLOR
+            cna.HEAPU32[(primitives >> 2) + 4] = vertices;
+            cna.HEAP32[(primitives >> 2) + 9] = 6;
+            cna.HEAP32[(primitives >> 2) + 10] = 2;
+            mrt.draw = cna._cna_graphics_device_draw_user_primitives(device, primitives);
+            // Binding the pair again refuses while a native GL error is still pending.
+            mrt.rebind = cna._cna_graphics_device_set_render_targets(device, bindings, 2n);
+            mrt.unbind = cna._cna_graphics_device_set_render_target2d(device, 0n);
+            mrt.painted = targets.map((target) => {
+                const result = cna._cna_texture2d_get_data_rgba8(
+                    target, pixels, BigInt(SIZE * SIZE), pixelsOut);
+                if (result !== 0) return `read=${result}`;
+                let changed = 0; // pixels that are no longer the opaque-blue clear
+                for (let p = 0; p < SIZE * SIZE; p += 1) {
+                    const [r, g, b, a] = cna.HEAPU8.subarray(pixels + 4 * p, pixels + 4 * p + 4);
+                    if (r !== 0 || g !== 0 || b !== 255 || a !== 255) changed += 1;
+                }
+                return changed;
+            });
+            cna._cna_effect_destroy(effect);
+            mrt.drawn = true;
+        } finally {
+            targets.forEach((target) => { if (target !== 0n) cna._cna_render_target_destroy(target); });
+            [deviceOut, createInfo, targetOut, bindings, vertices, primitives, effectOut, pixels,
+             pixelsOut].forEach((pointer) => cna._free(pointer));
+        }
+        return 0;
+    }, 'ijiii');
+    const mrtCallbacks = cna._malloc(32);
+    const mrtInfo = cna._malloc(48);
+    const mrtGameOut = cna._malloc(8);
+    const managerOut = cna._malloc(8);
+    try {
+        cna.HEAPU8.fill(0, mrtCallbacks, mrtCallbacks + 32);
+        cna.HEAPU32[mrtCallbacks >> 2] = 32;
+        cna.HEAPU32[(mrtCallbacks >> 2) + 1] = 1;
+        cna.HEAPU32[(mrtCallbacks >> 2) + 4] = mrtDraw;
+        cna.HEAPU8.fill(0, mrtInfo, mrtInfo + 48);
+        cna.HEAPU32[mrtInfo >> 2] = 48;
+        cna.HEAPU32[(mrtInfo >> 2) + 1] = 1;
+        cna.setValue(mrtInfo + 16, 166667n, 'i64');
+        cna.HEAPU32[(mrtInfo + 40) >> 2] = mrtCallbacks;
+        cna.setValue(mrtGameOut, 0n, 'i64');
+        mrt.gameCreate = cna._cna_game_create(mrtInfo, mrtGameOut);
+        const mrtGame = cna.getValue(mrtGameOut, 'i64');
+        // Two bound targets need HiDef: XNA's Reach, which CNA enforces, allows one.
+        mrt.manager = cna._cna_graphics_device_manager_create(mrtGame, managerOut);
+        mrt.profile = cna._cna_graphics_device_manager_set_graphics_profile(
+            cna.getValue(managerOut, 'i64'), 1);
+        mrt.frame = cna._cna_game_run_one_frame(mrtGame);
+        mrt.managerDestroy = cna._cna_graphics_device_manager_destroy(cna.getValue(managerOut, 'i64'));
+        mrt.gameDestroy = cna._cna_game_destroy(mrtGame);
+        check('a BasicEffect draw into two render targets paints the first and leaves the second',
+              mrt.drawn === true && mrt.bind === 0 && mrt.draw === 0 && mrt.rebind === 0 &&
+                  mrt.painted?.[0] > 0 && mrt.painted?.[1] === 0 && mrt.gameDestroy === 0,
+              JSON.stringify(mrt, (key, value) => typeof value === 'bigint' ? `${value}` : value));
+    } finally {
+        cna._free(managerOut);
+        cna._free(mrtGameOut);
+        cna._free(mrtInfo);
+        cna._free(mrtCallbacks);
+        cna.removeFunction(mrtDraw);
     }
 } catch (error) {
     say(`[FAIL] the probe threw: ${error && error.stack ? error.stack : error}`);

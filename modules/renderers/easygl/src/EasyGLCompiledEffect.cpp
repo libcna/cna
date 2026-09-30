@@ -925,6 +925,17 @@ namespace CNA::Internal::Renderers::EasyGL
             throw std::runtime_error(
                 "EasyGL compiled effect: the applied pass's shaders have no reflection.");
         }
+        // Which of oC0..oC3 the pixel shader writes; a draw into a multi-target set enables only
+        // those (BINDFIX-053). oC0 is assumed when the reflection lists no colour output at all.
+        compiledEffectColorOutputMask_ = 0;
+        for (int output = 0; output < pixelParseData->output_count; ++output)
+        {
+            const MOJOSHADER_attribute& written = pixelParseData->outputs[output];
+            if (written.usage == MOJOSHADER_USAGE_COLOR && written.index >= 0 && written.index < 4)
+                compiledEffectColorOutputMask_ |= 1u << written.index;
+        }
+        if (compiledEffectColorOutputMask_ == 0)
+            compiledEffectColorOutputMask_ = 1u;
 
         // Vertex attributes: MOJOSHADER_glSetVertexAttribute no-ops for an attribute the bound
         // program's vertex shader does not use, so every declared element could be bound

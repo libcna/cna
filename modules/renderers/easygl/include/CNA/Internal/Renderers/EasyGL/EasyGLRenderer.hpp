@@ -1263,6 +1263,10 @@ namespace CNA::Internal::Renderers::EasyGL
         // compiled-effect draw (ordinary, indexed, instanced and SpriteBatch alike).
         ::easygl::VertexArray compiledEffectVao_;
         bool compiledEffectVaoCreated_ = false;
+        /// BINDFIX-053: which colour outputs (bit i = oCi) the pixel shader of the pass that
+        /// BindCompiledEffectForDrawEXT last bound writes, so a draw into a multi-target set leaves
+        /// the other targets untouched instead of enabling draw buffers it has no output for.
+        unsigned int compiledEffectColorOutputMask_ = 1u;
         /**
          * @brief One slot's row-order-corrected copy of a render target being sampled. CNAEXT.
          *

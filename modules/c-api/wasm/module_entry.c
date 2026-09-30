@@ -12,7 +12,7 @@
  * consumer needs first is already public as cna_get_abi_version().
  */
 
-#include <CNA/C/runtime.h>
+#include <CNA/C/cna.h>
 
 #include <stddef.h>
 
@@ -32,3 +32,23 @@ _Static_assert(offsetof(CNA_GameCreateInfo, window_title) == 24U,
     "Unexpected wasm32 CNA_GameCreateInfo::window_title offset.");
 _Static_assert(offsetof(CNA_GameCreateInfo, callbacks) == 40U,
     "Unexpected wasm32 CNA_GameCreateInfo::callbacks offset.");
+_Static_assert(offsetof(CNA_GameCallbacks, load_content) == 8U,
+    "Unexpected wasm32 CNA_GameCallbacks::load_content offset.");
+_Static_assert(sizeof(CNA_PresentationParameters) == 44U,
+    "Unexpected wasm32 CNA_PresentationParameters size.");
+_Static_assert(sizeof(CNA_RenderTarget2DCreateInfo) == 40U,
+    "Unexpected wasm32 CNA_RenderTarget2DCreateInfo size.");
+_Static_assert(offsetof(CNA_RenderTarget2DCreateInfo, format) == 20U &&
+        offsetof(CNA_RenderTarget2DCreateInfo, usage) == 32U,
+    "Unexpected wasm32 CNA_RenderTarget2DCreateInfo field offsets.");
+_Static_assert(sizeof(CNA_RenderTargetBinding) == 24U &&
+        offsetof(CNA_RenderTargetBinding, render_target) == 8U &&
+        offsetof(CNA_RenderTargetBinding, array_slice) == 16U,
+    "Unexpected wasm32 CNA_RenderTargetBinding layout.");
+_Static_assert(sizeof(CNA_UserPrimitives) == 48U &&
+        offsetof(CNA_UserPrimitives, vertex_data) == 16U &&
+        offsetof(CNA_UserPrimitives, vertex_declaration) == 24U &&
+        offsetof(CNA_UserPrimitives, vertex_offset) == 32U,
+    "Unexpected wasm32 CNA_UserPrimitives layout.");
+_Static_assert(sizeof(CNA_VertexPositionColor) == 16U,
+    "Unexpected wasm32 CNA_VertexPositionColor size.");
