@@ -18,6 +18,7 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/TimeSpan.hpp"
 
 #include <cstdint>
@@ -111,6 +112,30 @@ TEST(GamePlatformTimingTest, AFixedTimestepFrameAdvancesGameTime)
     ASSERT_NO_THROW(game.RunOneFrame());
 
     EXPECT_GE(game.updateCalls, 1);
+}
+
+TEST(GamePlatformTimingTest, TargetElapsedTimeRefusesZeroAndNegativeAsXnaDoes)
+{
+    // cna-killer KF-15: XNA's setter throws ArgumentOutOfRangeException("value", ...), which a
+    // game catches as ArgumentException; CNA threw std::out_of_range.
+    TimingGame game;
+    const System::TimeSpan before = game.getTargetElapsedTimeProperty();
+    EXPECT_THROW(game.setTargetElapsedTimeProperty(System::TimeSpan::Zero),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(game.setTargetElapsedTimeProperty(System::TimeSpan::FromMilliseconds(-1.0)),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_EQ(game.getTargetElapsedTimeProperty(), before);
+    game.setTargetElapsedTimeProperty(System::TimeSpan::FromTicks(1));
+    EXPECT_EQ(game.getTargetElapsedTimeProperty(), System::TimeSpan::FromTicks(1));
+}
+
+TEST(GamePlatformTimingTest, InactiveSleepTimeRefusesNegativeButAcceptsZeroAsXnaDoes)
+{
+    TimingGame game;
+    EXPECT_THROW(game.setInactiveSleepTimeProperty(System::TimeSpan::FromTicks(-1)),
+                 System::ArgumentOutOfRangeException);
+    game.setInactiveSleepTimeProperty(System::TimeSpan::Zero);
+    EXPECT_EQ(game.getInactiveSleepTimeProperty(), System::TimeSpan::Zero);
 }
 
 TEST(GamePlatformTimingTest, AVariableTimestepFrameAlsoRuns)

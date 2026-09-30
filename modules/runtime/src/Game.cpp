@@ -14,6 +14,7 @@
 #include "CNA/Platform/PlatformEvent.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
 #include "CNA/TargetPlatform.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/Globalization/CultureInfo.hpp"
 #include "System/AppContext.hpp"
 
@@ -480,7 +481,9 @@ namespace Microsoft::Xna::Framework
     {
         if (TimeSpanLess(value, System::TimeSpan::Zero))
         {
-            throw std::out_of_range("InactiveSleepTime must be positive.");
+            throw System::ArgumentOutOfRangeException(
+                "value",
+                "The inactive sleep time must be greater than or equal to zero.  Specify zero or a positive value.");
         }
 
         InactiveSleepTime_ = value;
@@ -568,7 +571,8 @@ namespace Microsoft::Xna::Framework
     {
         if (TimeSpanLessOrEqual(value, System::TimeSpan::Zero))
         {
-            throw std::out_of_range("TargetElapsedTime must be positive and non-zero.");
+            throw System::ArgumentOutOfRangeException(
+                "value", "The target elapsed time must be greater than zero.  Specify a non-zero positive value.");
         }
 
         TargetElapsedTime_ = value;
