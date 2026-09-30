@@ -412,6 +412,13 @@ namespace Microsoft::Xna::Framework::Graphics
                 renderer_->SetCustomEffect(nullptr);
                 // Deferred renderers may submit their final texture group only from End(). Retain
                 // every queued texture renderer through that call, then release the queue.
+                //
+                // A texture disposed between Draw and End is therefore still drawn, where XNA's End
+                // throws ObjectDisposedException from the Textures[0] setter (cna-killer KF-11).
+                // Deliberate: the queue holds the texture's renderer, not the Texture2D, which a
+                // C++ caller may destroy -- a temporary drawn and gone before End -- as legitimately
+                // as dispose it. Refusing would need a per-texture disposal token on every queued
+                // sprite; drawing what was queued is not undefined and costs nothing.
                 spriteQueue_.clear();
             }
             customEffect_ = nullptr;
