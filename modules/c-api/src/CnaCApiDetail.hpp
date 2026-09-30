@@ -33,6 +33,7 @@
 #include "Microsoft/Xna/Framework/Storage/StorageDeviceNotConnectedException.hpp"
 
 #include "System/ArgumentException.hpp"
+#include "System/InvalidCastException.hpp"
 #include "System/IO/IOException.hpp"
 #include "System/NotImplementedException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -351,6 +352,10 @@ template<typename TCallable>
     } catch (const CNA::CNAException& exception) {
         return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
     } catch (const System::ArgumentException& exception) {
+        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, exception.what());
+    } catch (const System::InvalidCastException& exception) {
+        // The caller asked for a value in a shape the object does not have -- a compiled effect
+        // parameter read as the wrong class, say. That is their argument, not a CNA failure.
         return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, exception.what());
     } catch (const System::NotImplementedException& exception) {
         return Fail(CNA_RESULT_NOT_SUPPORTED, CNA_ERROR_CATEGORY_NOT_SUPPORTED, exception.what());

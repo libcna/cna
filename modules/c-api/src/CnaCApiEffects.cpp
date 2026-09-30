@@ -3316,7 +3316,10 @@ CNA_Result cna_effect_technique_collection_add_default(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        collection->state->value->Add(EffectTechnique());
+        // Owned by the collection's effect, so Effect::setCurrentTechniqueProperty accepts it
+        // (RUST-UPSTREAM-030); a standalone collection has no owner and passes null.
+        collection->state->value->Add(
+            EffectTechnique(collection->state->owner, std::string(), 0U, false));
         // Non-null by construction: Add() above left the collection holding at least this element.
         EffectTechnique* const technique = (*collection->state->value)[
             collection->state->value->getCountProperty() - 1];
@@ -3347,7 +3350,7 @@ CNA_Result cna_effect_technique_collection_add_named(
             return result;
         }
         collection->state->value->Add(
-            EffectTechnique(nullptr, std::move(copiedName)));
+            EffectTechnique(collection->state->owner, std::move(copiedName)));
         // Non-null by construction: Add() above left the collection holding at least this element.
         EffectTechnique* const technique = (*collection->state->value)[
             collection->state->value->getCountProperty() - 1];

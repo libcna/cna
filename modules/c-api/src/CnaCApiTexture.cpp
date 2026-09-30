@@ -134,6 +134,31 @@ struct TransferView final {
     return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
 }
 
+/// Bytes in one caller element of @p dataType -- the `sizeof(T)` of XNA's `SetData<T>`.
+[[nodiscard]] uint64_t ElementSize(const CNA_TextureDataType dataType) noexcept
+{
+    switch (dataType) {
+        case CNA_TEXTURE_DATA_BYTE:
+        case CNA_TEXTURE_DATA_ALPHA8:
+            return 1U;
+        case CNA_TEXTURE_DATA_BGR565:
+        case CNA_TEXTURE_DATA_BGRA5551:
+        case CNA_TEXTURE_DATA_BGRA4444:
+        case CNA_TEXTURE_DATA_NORMALIZED_BYTE2:
+        case CNA_TEXTURE_DATA_HALF_SINGLE:
+        case CNA_TEXTURE_DATA_USHORT:
+            return 2U;
+        case CNA_TEXTURE_DATA_RGBA64:
+        case CNA_TEXTURE_DATA_VECTOR2:
+        case CNA_TEXTURE_DATA_HALF_VECTOR4:
+            return 8U;
+        case CNA_TEXTURE_DATA_VECTOR4:
+            return 16U;
+        default:
+            return 4U;
+    }
+}
+
 [[nodiscard]] CNA_Result ValidateDimensions(
     const uint32_t width,
     const uint32_t height,
@@ -201,8 +226,19 @@ struct TransferView final {
         required = blockColumns * blockRows * static_cast<uint64_t>(
             Texture::GetFormatSizeEXT(texture.getFormatProperty()));
     } else {
+        // XNA's GetAndValidateSizes: an element smaller than a texel is a view of it, so a Color
+        // region read as bytes is four elements per texel. Uploading or reading back only one
+        // element per texel zero-filled or dropped the rest while reporting success.
         required = static_cast<uint64_t>(rectangle.Width) * rectangle.Height;
+        const uint64_t formatSize = static_cast<uint64_t>(
+            Texture::GetFormatSizeEXT(texture.getFormatProperty()));
+        const uint64_t elementSize = ElementSize(dataType);
+        if (formatSize > elementSize && formatSize % elementSize == 0U) {
+            required *= formatSize / elementSize;
+        }
     }
+    // Reported even when the count is too small: that is when a caller needs the number.
+    outView->requiredElements = required;
     if (transfer->element_count < required) {
         return InvalidArgument("The Texture2D element count is smaller than the requested region.");
     }
@@ -974,12 +1010,13 @@ CNA_Result cna_texture2d_get_data(
             return result;
         }
         TransferView view{};
-        if (const CNA_Result result = ValidateTransfer(
-                *texture->value, dataType, transfer, &view);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
+        const CNA_Result validated = ValidateTransfer(*texture->value, dataType, transfer, &view);
+        if (view.requiredElements != 0U) {
+            *outRequiredElements = view.requiredElements;
         }
-        *outRequiredElements = view.requiredElements;
+        if (validated != CNA_RESULT_SUCCESS) {
+            return validated;
+        }
         if (const CNA_Result result = ValidateArrayWindow(
                 destination,
                 destinationCapacity,

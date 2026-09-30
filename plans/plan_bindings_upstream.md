@@ -628,6 +628,35 @@ first.
   leaves objects created by another thread to the operating system. Pinned by
   `CApi_ExitWithForeignThreadGameSmoke` (a game and a dynamic vertex buffer made on a thread that
   ends first; the process must exit 0 -- it aborted with 134 on OPENGLES3 before).
+- **BINDFIX-042** — `cna_texture2d_set_data`/`_get_data` sized every transfer as one element per
+  texel. XNA's `GetAndValidateSizes` lets an element narrower than the texel view it (a Color
+  texture read as bytes is four elements per texel), and the canonical overload accepted that
+  count, so a 16-byte read of a 2x2 Color texture returned 4 bytes and a 16-byte write stored 4 and
+  zeroed the other three texels -- both reporting success (reported by `cna-ruby`). The region is
+  now measured in the caller's elements, and `out_required_elements` reports it even when the
+  count is too small. Pinned by `CApi_TextureSmoke` (byte-view round trip; per-width counts).
+- **BINDFIX-043** — `cna-ruby` A3 / `cna-swift` SW-05: `cna_texture2d_create_from_encoded_memory`
+  with `zoom` refused a target wider than tall over a square or tall image ("crop rectangle lies
+  outside the source image"). The ported FNA3D rule picks the scale axis from the source's
+  orientation; where its crop overflows, FNA3D's blit clips it and CNA threw. Zooming now scales by
+  the larger ratio -- identical wherever the old crop fitted. The non-zoom (fit) path is unchanged;
+  whether XNA's native decoder can exceed the requested height there (SW-05's second half) has no
+  IL to settle it. Pinned by `ImageLoaderTests.ZoomFillsWideAndTallTargetsByCroppingTheOverflow`.
+- **BINDFIX-044** — `System::InvalidCastException` (a compiled effect parameter read or written in a
+  shape it does not have, FX-089/FX-105) fell through the exception barrier to
+  `CNA_RESULT_INTERNAL`, which `docs/c-api/ERRORS.md` reserves for native failures with no public
+  category; it is the caller's argument and now maps to `CNA_RESULT_INVALID_ARGUMENT` (reported by
+  `cna-ruby`). Pinned by `CApi_BoundaryDetail`.
+- **BINDFIX-045** — `RUST-UPSTREAM-030`: a technique added through
+  `cna_effect_technique_collection_add_named`/`_add_default` to an effect's own collection was built
+  with no owning `Effect`, so `cna_effect_set_current_technique` refused it as foreign
+  (SOFTWARE-257's owner check) and a reflection-built effect could never select its technique. The
+  add routes now pass the collection's owner. Pinned by `CApi_EffectSmoke`.
+- **BINDFIX-046** — `RUST-UPSTREAM-031`: ending a process while the shared avatar loader thread was
+  still assembling models segfaulted (28 of 30 runs) or hung for good. The first finished job built
+  function-local lookup maps after the `Loader`, so `exit()` destroyed them before `~Loader` joined
+  the worker still reading them. The two tables are now constant arrays that are never constructed
+  or destroyed. Pinned by `CApi_AvatarExitWhileLoadingSmoke` (fails 16 of 20 runs before).
 
 ---
 

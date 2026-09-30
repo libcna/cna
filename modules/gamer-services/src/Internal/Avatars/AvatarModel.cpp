@@ -10,7 +10,9 @@
 #include <functional>
 #include <map>
 #include <stdexcept>
+#include <string_view>
 #include <thread>
+#include <utility>
 
 namespace CNA::Internal::GamerServices::Avatars {
 AvatarImage decodeAvatarImage(std::span<const std::uint8_t> png)
@@ -61,22 +63,27 @@ std::shared_ptr<const std::vector<AvatarImage>> faceTiles(const CatalogManifest&
 
 Vector3 toVector(const AvatarColor& color){return Vector3(color.r/255.0f,color.g/255.0f,color.b/255.0f);}
 
+// Constant tables, never constructed or destroyed. The shared loader thread reads them while exit()
+// runs static destructors; a function-local map built by the first avatar job was destroyed before
+// ~Loader joined that job, which then faulted or walked freed nodes forever (RUST-UPSTREAM-031).
 Vector3 tintColor(const AvatarDescriptor& descriptor,const std::string& tint)
 {
-    static const std::map<std::string,AvatarColorSlot,std::less<>> slots{{"skin",AvatarColorSlot::Skin},
+    static constexpr std::pair<std::string_view,AvatarColorSlot> slots[]{{"skin",AvatarColorSlot::Skin},
         {"hair",AvatarColorSlot::Hair},{"eyes",AvatarColorSlot::Eyes},{"top",AvatarColorSlot::Top},
         {"bottom",AvatarColorSlot::Bottom},{"shoes",AvatarColorSlot::Shoes},{"accessory",AvatarColorSlot::Accessory}};
-    auto found=slots.find(tint);
-    return found==slots.end()?Vector3(1,1,1):toVector(descriptor.colors[static_cast<std::size_t>(found->second)]);
+    for(const auto& [name,slot]:slots)
+        if(name==tint)return toVector(descriptor.colors[static_cast<std::size_t>(slot)]);
+    return Vector3(1,1,1);
 }
 
 AvatarFeature featureOf(const std::string& name)
 {
-    static const std::map<std::string,AvatarFeature,std::less<>> features{{"eyeLeft",AvatarFeature::EyeLeft},
+    static constexpr std::pair<std::string_view,AvatarFeature> features[]{{"eyeLeft",AvatarFeature::EyeLeft},
         {"eyeRight",AvatarFeature::EyeRight},{"eyebrowLeft",AvatarFeature::EyebrowLeft},
         {"eyebrowRight",AvatarFeature::EyebrowRight},{"mouth",AvatarFeature::Mouth}};
-    auto found=features.find(name);
-    return found==features.end()?AvatarFeature::None:found->second;
+    for(const auto& [feature,value]:features)
+        if(feature==name)return value;
+    return AvatarFeature::None;
 }
 
 // A format 2 description's face shape (catalog faceControls): every deformer's displacement is

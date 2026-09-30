@@ -187,13 +187,18 @@ static int validate_transfer_failures(const CNA_Handle texture)
         const int exact = (ColorTexelBytes % width) == 0U &&
             (uint64_t)width * RegionTexels == RegionTexels * ColorTexelBytes;
         const CNA_Result expected = exact ? CNA_RESULT_SUCCESS : CNA_RESULT_INVALID_ARGUMENT;
+        /* The region measured in this type's elements (BINDFIX-042): a width that divides the
+           texel views it as several elements; any other width is refused, and reports texels. */
+        const uint64_t region_elements = (ColorTexelBytes % width) == 0U
+            ? RegionTexels * (ColorTexelBytes / width)
+            : RegionTexels;
         uint8_t before[sizeof(destination)];
         memcpy(before, destination, sizeof(before));
         required = UINT64_C(999);
         if (cna_texture2d_set_data(texture, type, &transfer, raw, 17U) != expected ||
             cna_texture2d_get_data(
                 texture, type, &transfer, destination, 17U, &required) != expected ||
-            required != 16U) {
+            required != region_elements) {
             return 0;
         }
         /* A refused read must leave the destination exactly as it was. */
@@ -497,6 +502,51 @@ static int validate_mip_transfer(const CNA_Handle texture)
     return 1;
 }
 
+/*
+ * BINDFIX-042: XNA's SetData<byte>/GetData<byte> view a Color texture as four elements per texel.
+ * The transfer used to size itself as one element per texel, so a 64-byte read of these 16 texels
+ * returned 16 bytes and a 64-byte write stored 16 of them and zeroed the rest -- both reporting
+ * success.
+ */
+static int validate_byte_view_transfer(const CNA_Handle texture)
+{
+    CNA_Texture2DTransfer transfer = make_transfer(0, 0U, 16U);
+    uint8_t bytes[64];
+    CNA_Color pixels[16];
+    CNA_Color colors[16];
+    uint64_t required = 0U;
+    for (uint32_t index = 0U; index < 16U; ++index) {
+        pixels[index] = (CNA_Color){
+            (uint8_t)(index * 3U), (uint8_t)(index * 5U), (uint8_t)(index * 7U), UINT8_C(255)
+        };
+    }
+    if (cna_texture2d_set_data(texture, CNA_TEXTURE_DATA_COLOR, &transfer, pixels, 16U) !=
+        CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    transfer = make_transfer(0, 0U, 64U);
+    memset(bytes, 0xA5, sizeof(bytes));
+    if (cna_texture2d_get_data(
+            texture, CNA_TEXTURE_DATA_BYTE, &transfer, bytes, 64U, &required) !=
+            CNA_RESULT_SUCCESS ||
+        required != 64U || memcmp(bytes, pixels, sizeof(bytes)) != 0) {
+        return 0;
+    }
+    for (uint32_t index = 0U; index < 64U; ++index) {
+        bytes[index] = (uint8_t)(200U - index);
+    }
+    if (cna_texture2d_set_data(texture, CNA_TEXTURE_DATA_BYTE, &transfer, bytes, 64U) !=
+        CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    transfer = make_transfer(0, 0U, 16U);
+    memset(colors, 0, sizeof(colors));
+    return cna_texture2d_get_data(
+               texture, CNA_TEXTURE_DATA_COLOR, &transfer, colors, 16U, &required) ==
+            CNA_RESULT_SUCCESS &&
+        required == 16U && memcmp(colors, bytes, sizeof(bytes)) == 0;
+}
+
 static int validate_level_zero_transfer(const CNA_Handle texture)
 {
     CNA_TextureInfo info = {sizeof(CNA_TextureInfo), UINT32_C(1), 0U, 0U};
@@ -581,9 +631,10 @@ static CNA_Result on_load(
     const CNA_Result mip_create_result =
         cna_texture2d_create(device, &create_info, &mip_texture);
     /* Mip-level upload above level zero is a backend limitation, not a renderer identity. */
-    const int transfer_valid = supports_mip_upload(mip_texture)
+    const int transfer_valid = (supports_mip_upload(mip_texture)
         ? validate_mip_transfer(mip_texture)
-        : validate_unsupported_mip_transfer(mip_texture);
+        : validate_unsupported_mip_transfer(mip_texture)) &&
+        validate_byte_view_transfer(mip_texture);
     if (mip_create_result != CNA_RESULT_SUCCESS || !transfer_valid) {
         (void)fprintf(stderr, "Mip texture create result: %u\n", mip_create_result);
         return CNA_RESULT_INVALID_STATE;

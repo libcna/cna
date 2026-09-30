@@ -10,6 +10,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/NetworkNotAvailableException.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionJoinException.hpp"
 #include "System/IO/FileNotFoundException.hpp"
+#include "System/InvalidCastException.hpp"
 
 #include <cstdint>
 #include <filesystem>
@@ -63,6 +64,17 @@ int main()
             CNA_ERROR_CATEGORY_NOT_SUPPORTED,
             "unsupported operation")) {
         return 3;
+    }
+
+    // BINDFIX-044: a value asked for in a shape the object does not have is the caller's argument.
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw System::InvalidCastException("wrong value shape");
+        }) != CNA_RESULT_INVALID_ARGUMENT ||
+        !HasLastError(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "wrong value shape")) {
+        return 26;
     }
 
     SetLastError(
