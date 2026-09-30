@@ -5977,6 +5977,15 @@ if (ProfileUsesGlslEs100())
         msaaFbo_.destroy();
         msaaColorRbo_.destroy();
         msaaDepthRbo_.destroy();
+        msaaW_ = 0;
+        msaaH_ = 0;
+
+        // A minimized window has a 0x0 drawable, and 0x0 multisample storage is an incomplete
+        // framebuffer. Nothing can be presented from it anyway: leave the multisample buffers
+        // absent until BindDefaultFramebuffer() sees a real drawable again (cna-killer KF-2).
+        if (w <= 0 || h <= 0)
+            return;
+
         msaaFbo_.create();
         msaaColorRbo_.create();
 
@@ -6082,7 +6091,7 @@ if (ProfileUsesGlslEs100())
 
     void EasyGLRenderer::ResolveMsaa()
     {
-        if (sampleCount_ <= 1) return;
+        if (sampleCount_ <= 1 || !msaaFbo_.is_created()) return;
         // Blit colour attachment from MSAA FBO to default framebuffer (FBO 0).
         msaaFbo_.bind(::easygl::FramebufferTarget::ReadFramebuffer);
         ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::DrawFramebuffer);

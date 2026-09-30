@@ -452,6 +452,15 @@ namespace Microsoft::Xna::Framework
 
         void AssertNotDisposed() const;
         void DoInitialize();
+        /**
+         * @brief Holds the renderer's context on the game thread for one phase of the game loop.
+         *
+         * Initialize, BeginRun, each Tick and EndRun run under it, so every GL call the game
+         * thread makes -- Update's as well as Draw's -- has the context, and a loading thread
+         * that also leases it runs between them, never inside them.
+         */
+        [[nodiscard]] std::unique_ptr<CNA::Internal::Renderers::IRendererThreadContextLease>
+            AcquireGameThreadContextLease();
         void CategorizeComponent(IGameComponent* component);
         void SortUpdateable(IUpdateable* updateable);
         void SortDrawable(IDrawable* drawable);

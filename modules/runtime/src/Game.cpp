@@ -645,13 +645,19 @@ namespace Microsoft::Xna::Framework
                 hasInitialized_ = true;
             }
 
-            BeginRun();
+            {
+                const auto contextLease = AcquireGameThreadContextLease();
+                BeginRun();
+            }
             BeforeLoop();
 
             previousPerformanceCounter_ = platform_->GetPerformanceCounter();
             RunLoop();
 
-            EndRun();
+            {
+                const auto contextLease = AcquireGameThreadContextLease();
+                EndRun();
+            }
             AfterLoop();
         }
         catch (const std::exception& exception)
@@ -697,6 +703,14 @@ namespace Microsoft::Xna::Framework
                 AdvanceElapsedTime();
             }
         }
+
+        // cna-killer KF-16: the frame lease used to cover only BeginDraw..EndDraw and to hand the
+        // context back at EndDraw, so the next Update's GL work -- a SetRenderTarget, a Clear, an
+        // ApplyChanges -- ran on a thread with no current context and was silently dropped unless
+        // something earlier in that Update happened to create a resource. The whole frame holds
+        // the context now; the time spent waiting above stays outside it, which is when a loading
+        // thread gets its turn.
+        const auto contextLease = AcquireGameThreadContextLease();
 
         PollEvents();
 
@@ -1028,6 +1042,14 @@ namespace Microsoft::Xna::Framework
         }
     }
 
+    std::unique_ptr<CNA::Internal::Renderers::IRendererThreadContextLease>
+    Game::AcquireGameThreadContextLease()
+    {
+        // ReleaseRendererBinding: when the phase ends the game thread lets go of the context, so a
+        // thread loading content between frames can make it current.
+        return getGraphicsDeviceProperty().AcquireRendererThreadContextLeaseForFrame();
+    }
+
     void Game::DoInitialize()
     {
         AssertNotDisposed();
@@ -1037,6 +1059,7 @@ namespace Microsoft::Xna::Framework
         {
             graphicsDeviceManager_->CreateDevice();
         }
+        const auto contextLease = AcquireGameThreadContextLease();
 
         // No controller subsystem is acquired here. plans/plan_platform.md PLAT-83 did, to make
         // already-connected pads visible in frame one, and the cost turned out to be a full udev

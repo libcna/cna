@@ -1166,6 +1166,16 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                         easygl_spritebatch_rendertarget_size_test.cpp)
         cna_register_renderer_test(NAME EasyGL_SpriteBatch_RenderTargetSize COMMAND cna_test_easygl_spritebatch_rendertarget_size
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        # cna-killer KF-16: GL work issued from Update() must reach the device.
+        cna_easygl_test(cna_test_easygl_update_time_gl_work
+                        easygl_update_time_gl_work_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_UpdateTimeGlWork COMMAND cna_test_easygl_update_time_gl_work
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        # cna-killer KF-2: a resize while minimized must not fail over the MSAA back buffer.
+        cna_easygl_test(cna_test_easygl_msaa_backbuffer_minimized_resize
+                        easygl_msaa_backbuffer_minimized_resize_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_MsaaBackBuffer_MinimizedResize COMMAND cna_test_easygl_msaa_backbuffer_minimized_resize
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         # cna-killer KF-5: an MSAA resolve must not be clipped by the game's scissor rectangle.
         cna_easygl_test(cna_test_easygl_msaa_resolve_ignores_scissor
                         easygl_msaa_resolve_ignores_scissor_test.cpp)
