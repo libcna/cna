@@ -69,7 +69,7 @@ avatar catalogs and versioned catalog-pack updates.
 | 21 | Profile editing, account self-service | Partial | None | Partly | Yes |
 | 22 | Leaderboard Stream columns, unmeasured Xbox rules | Partial | Minor | Yes | Partly |
 | 23 | No service configured (offline profiles) | Platform limitation | Minor | Yes | n/a |
-| 24 | Credential persistence off POSIX | Platform limitation | None (sign-in every launch) | No | Yes |
+| 24 | Credentials at rest: plaintext files without a keyring; no macOS Keychain | Platform limitation | None | Partly | Yes |
 | 25 | Relay-only online transport over TCP | Differs by design | Minor latency | Yes | Yes (direct path) |
 | 26 | Browser (WebAssembly) multiplayer and services | Platform limitation | Blocks online/LAN play in browsers | Yes (owner scope) | Yes, with new adapters |
 | 27 | Voice availability by build and device | Platform limitation | Minor | Yes | Partly |
@@ -491,17 +491,25 @@ claim about how Xbox LIVE decided.
 - **Porting impact:** minor.
 - **Future work:** none needed.
 
-### 24. Credential persistence off POSIX
+### 24. Credentials at rest
 
 - **Status:** platform limitation.
 - **XNA / Xbox:** the console remembered a signed-in profile.
-- **CNA now:** on POSIX, rotating refresh credentials are kept in an owner-only directory
-  (`CNA_GAMER_SERVICES_CREDENTIALS_DIR`, `0` disables). Windows and browser clients keep none and
-  sign in on every launch; past 32 live sign-ins the service signs the account's oldest one out.
-- **Reason:** no secure credential store is implemented for those platforms.
-- **Observable impact:** a Windows player types the password at each launch.
+- **CNA now:** a signed-in player's rotating refresh credential (never the password) is kept so
+  the next launch signs in without one:
+  - on Linux in the desktop keyring (freedesktop Secret Service) when one answers;
+  - otherwise, and on macOS, in owner-only 0600 files;
+  - on Windows in files sealed to the user with DPAPI.
+  See [`gamer-services-server.md`](gamer-services-server.md). Browsers keep nothing, and past 32
+  live sign-ins the service signs the account's oldest one out.
+- **Reason:** the operating system's own protection is used where CNA can use it without a build
+  dependency; the file store needs no desktop session.
+- **Observable impact:** without a keyring (headless Linux, macOS) the credential is protected by
+  file permissions only, not encrypted at rest. The Windows store was exercised under Wine, not on
+  Windows.
 - **Porting impact:** none.
-- **Future work:** feasible with the platform's credential store.
+- **Future work:** the macOS Keychain; a native Windows run of
+  `tools/gamer-services/windows-credential-probe`.
 
 ### 25. Online transport
 
@@ -801,7 +809,7 @@ parties and the other console-only services.
 
 **Normally irrelevant to ordinary XNA games:** Xbox LIVE compatibility (1), title-update
 installation (5), Microsoft avatar assets (6), the CNA backend policies (8-13, 15, 18, 20), push scope (19),
-profile self-service (21), credential persistence (24), the server's single process, SQLite,
+profile self-service (21), credentials at rest (24), the server's single process, SQLite,
 cluster and flood limits (34-37), public Internet qualification (31), avatar shading and likeness
 (39, 40), host-language differences (42-44).
 

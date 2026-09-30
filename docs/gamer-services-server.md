@@ -170,16 +170,22 @@ are development fixtures, not a gameplay write mechanism. Page limits, Stream co
 missing recent window and TrueSkill are documented in the server protocol.
 
 
-Refresh authority is user-level data. On POSIX, the private credential directory defaults to
-`$XDG_STATE_HOME/cna/gamer-services/credentials` or `$HOME/.local/state/cna/gamer-services/credentials`.
-`CNA_GAMER_SERVICES_CREDENTIALS_DIR` chooses a CI/deployment directory; `0` disables persistence.
-Only rotating refresh credentials and estimated expiry are stored, bound to endpoint, title and
-local slot. Passwords, access tokens and gameplay metadata are absent. Owner-only 0700 directories,
-0600 atomic files, no-follow opens, hard-link/size checks and a process lease prevent unsafe reads
-and concurrent use of the same refresh family. These are protected plaintext files, not an OS
-keychain. Windows/browser credentials remain ephemeral until a secure platform provider exists, so
-such a client signs in afresh on every launch; past 32 live sign-ins the service signs the account's
-oldest one out instead of refusing the new one (GSP-O7).
+Refresh authority is user-level data: only rotating refresh credentials and their estimated
+expiry are stored, bound to endpoint, title and local slot; passwords, access tokens and gameplay
+metadata never are, and nothing is logged. A process lease (one per endpoint and title) prevents
+concurrent use of one refresh family. Where it is kept:
+
+| Host | Store |
+|---|---|
+| Linux, default location, a desktop keyring answering | The freedesktop Secret Service (GNOME Keyring, KWallet, ...), loaded at run time (libsecret-1.so.0; no build dependency). A record left in a file by an older CNA moves into it. A keyring that refuses a write (locked) leaves the record in the private file below; one that does not answer within two seconds counts as absent for the run |
+| Linux without a keyring (headless, no session bus), macOS, other POSIX | Owner-only 0700 directory, 0600 atomic files, no-follow opens, hard-link and size checks: protected plaintext, not encrypted at rest. macOS does not use the Keychain (not integrated) |
+| Windows | `%LOCALAPPDATA%\cna\gamer-services\credentials`, each record sealed to the Windows user with DPAPI (the endpoint/title binding as entropy); checked under Wine, never on Windows itself |
+| Browser | Nothing is kept |
+
+`$XDG_STATE_HOME/cna/gamer-services/credentials` or `$HOME/.local/state/cna/gamer-services/credentials`
+is the POSIX default directory. `CNA_GAMER_SERVICES_CREDENTIALS_DIR` names another directory, which
+then always holds private files (CI, tests, deployments), or `0` disables persistence;
+`CNA_GAMER_SERVICES_KEYRING=0` keeps Linux on files.
 
 Dispatcher.Update restores up to four real service identities, refreshes access before expiry and
 maintains heartbeat. Transport loss retains the last authenticated identity and uses bounded
