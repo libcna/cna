@@ -4,6 +4,14 @@ Task ids `GSP-*`. Continues `plan_gamer_services_server.md` (GS-001..GS-011, clo
 register `gamer_services_server_final_register.md`. This file is updated as work lands; the
 historical plan is not.
 
+> **Current state (2026-09-30): closed; this file is history.** Every GSP task is done and merged into
+> `next`; the Xbox-fidelity pass (`plan_gamer_services_xbox_fidelity.md`, GSX) continued it. The audit
+> tables below record the state at the start of this pass (2026-09-29), not today's: online host
+> migration, online AddLocalGamer, away/busy, GamerZone, Reputation, Stream columns, guests and
+> `AvatarDescription.Changed` were done here; voice, parties, the store-equivalent content page,
+> upstream QoS, push and catalog packs followed in GSX. Current limitations:
+> `docs/gamer-services-known-limitations.md`.
+
 ## Verified starting point (2026-09-29, from the repositories, not the prompt)
 
 | Repository | Branch / worktree | Commit | Note |
@@ -28,6 +36,9 @@ Baseline rerun today, `cmake-build-debug` (HEADLESS), every gtest case in its ow
 - CnaNetTests 495/495 (serial; discovery uses UDP 61190).
 
 ## Audit of the starting inventory
+
+HISTORICAL CHECKPOINT (2026-09-29, before this pass) -- superseded by the task table and evidence
+below. "G", "N" and "U" rows were gaps or decisions at that time, not now.
 
 Categories: **X** confirmed XNA behaviour · **C** confirmed CNA behaviour · **G** implementation
 gap · **V** visual/art-quality gap · **D** stale documentation only · **N** deliberate non-goal ·
@@ -141,7 +152,8 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   encoded as format 1. Public XNA API unchanged (`DescriptionSize` 1021, byte 0 non-zero).
 - **Format negotiation (GSP-G1).** `avatars.get` takes `formats`; a caller that does not list 2
   (every build before this pass) gets the format 1 copy of a format 2 avatar — same body, colours
-  and items, no facial hair or face shape — which it can render, fetching v2+ items by hash. This
+  and items, no facial hair or face shape — which it can render, fetching v2+ items by hash (the
+  per-item path of builds before catalog packs, GSX-A). This
   build sends `formats: [1, 2]`. Descriptions exchanged directly between games (bytes over a
   NetworkSession) cannot be negotiated: an older build reads a format 2 description as XNA's
   "results are undefined" case (IsValid by byte 0, renderer Unavailable).
@@ -218,7 +230,7 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
 | GSP-J1 | `AvatarDescription.Changed` | done |
 | GSP-K1 | Online host migration | done |
 | GSP-K2 | Online `AddLocalGamer` | done |
-| GSP-L1..L6 | Account GameDefaults, away/busy, toasts, Stream columns, guests, QoS bandwidth | done (L6: downstream only) |
+| GSP-L1..L6 | Account GameDefaults, away/busy, toasts, Stream columns, guests, QoS bandwidth | done (L6 measured downstream; upstream followed in GSX-E3) |
 | GSP-M1 | GamerZone / Reputation | done |
 | GSP-O1 | Server concurrency benchmark (`tests/service_benchmark.py`, smoke in CTest) | done |
 | GSP-O2..O8 | Production audit fixes: worker pools and scrypt outside the lock, accept survives EMFILE (O2); durability classes and request-ID rules (O3); sign-in pool (O4); per-address admission, 1024 relays (O5); keep-alive and CNA connection reuse (O6); oldest-family sign-out (O7); statistics line (O8); 5 s keep-alive idle so NAT-shared addresses keep their connection share (O9) | done |
@@ -265,7 +277,8 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   `AssetDiskCache` (internal) evicts least recently used entries within 256 MiB (reads refresh
   recency), deletes damaged entries and temporaries older than ten minutes, and has 10 tests
   (damage, truncation, interruption, LRU order, oversize, links, six concurrent writers); the model
-  cache prunes expired keys. Load times (Debug, loopback TLS service, `service_cna_avatars`):
+  cache prunes expired keys. Load times (Debug, loopback TLS service, `service_cna_avatars`; the
+  per-item download measured here was replaced by whole catalog packs in GSX-A):
   embedded avatar first in the process 70-72 ms, another 40-44 ms, the same again 0.1 ms (model
   cache); an avatar with a service-only item 339 ms on first use (manifest + download) and 89 ms
   from the disk cache (manifest request + verified read).
@@ -333,7 +346,8 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
 - GSP-L6 (QoS bandwidth). A SystemLink host now follows each discovery announce with eight 1200-byte
   probes sent back to back; the searcher, which waits on the socket during its 150 ms window,
   times their arrivals and reports (probes - 1) x 1200 bytes over the spread as
-  `BytesPerSecondDownstream` (two processes on loopback: about 231 MB/s). Upstream stays 0: the host
+  `BytesPerSecondDownstream` (two processes on loopback: about 231 MB/s). Upstream stayed 0 in this
+  pass (superseded: GSX-E3 measures it with a responder thread): the host
   answers discovery from its frame-driven `Poll()`, so datagrams queued between frames are read back
   to back and their arrival spacing is lost; a discovery thread would fix that and was judged not
   worth the risk to the SystemLink corpus now. Old CNA builds drop the new tag (unknown tags were
@@ -365,7 +379,7 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   200,000 IDs 1,964 req/s; descriptor exhaustion survived. Avatar e2e service item 339 -> 308 ms
   cold, 89 -> 81 ms cached on loopback. Retained (README audit table): one process and SQLite
   writer, many-address floods need a firewall/proxy, in-memory account budget, certificate reload
-  by restart, polling. Tests: server unit +3 (repeated read/heartbeat IDs, account budget, family
+  by restart, polling (push hints followed in GSX-E6). Tests: server unit +3 (repeated read/heartbeat IDs, account budget, family
   eviction), `service_benchmark_smoke`; full corpus 28/28 with the CNA harnesses. O9 (server
   4ba7f95): the 15 s keep-alive idle window let a client hold its connection half of its 30 s
   heartbeat period, so more than about 64 active players behind one NAT address would meet the

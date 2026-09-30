@@ -1,5 +1,12 @@
 # CNA XNA 4.0 API Audit
 
+> **Reading the GamerServices/Net entries (2026-09-30).** The dated `GS-*` quotes below are
+> checkpoints of 2026-09-28/29, kept as history: each describes the state on its date, and its
+> "remains unfinished" lists were closed later (GS-011, then the avatar-polish and Xbox-fidelity
+> passes, merged into `next` as 7d7141c6b). Current state: `docs/xna-4-api-coverage.md` §9 and
+> `docs/gamer-services-known-limitations.md`; the GamerServices and Net class tables further down
+> are current.
+
 > **FULLSCREEN-002 DirectX9 motion/presentation (2026-09-28):** Successful native resize
 > resets invalidate retained blend/depth/rasterizer state without another public Reset event.
 > Logical viewport/projection is independent of physical presentation; Letterbox/input and
@@ -1946,16 +1953,16 @@ never reached `GestureDetector`) to real and gesture-tested (`plans/plan_input.m
 
 | Class | Status | Notes |
 |---|---|---|
-| GamerServicesNotAvailableException | ✅ | Stub added |
+| GamerServicesNotAvailableException | ✅ | Complete; thrown where a CNA service or a signed-in account is required and absent |
 | Gamer | ✅ | Full port; abstract base, tests via FriendGamer subclass |
 | GamerProfile | ✅ | Full port; tests complete |
 | LeaderboardEntry | ✅ | Full port; tests complete; `operator==`/`operator!=` added (NOXNA — required by `ReadOnlyCollection<T>`, not present in FNA) |
-| LeaderboardWriter | ✅ | Full port; `GetLeaderboard` always throws (matches FNA stub) |
+| LeaderboardWriter | ✅ | Full port; `GetLeaderboard` answers the gamer's entry: for a service account a draft written only during network gameplay and committed at EndGame (Ranked through arbitration), offline a local-store entry |
 | LeaderboardReader | ✅ | Full port; tests complete |
 | SignedInGamer | ✅ | Full port; tests complete |
-| GamerServicesDispatcher | ✅ | Full port: `IsInitialized`, `WindowHandle`, `InstallingTitleUpdate` event, `Initialize()` (creates 4 stub `SignedInGamer`s, fires `OnSignIn`), `Update()`, `UpdateAsync()`. `Initialize()` deliberately not exercised by the automated test suite (sets process-lifetime static state) |
+| GamerServicesDispatcher | ✅ | Full port: `IsInitialized`, `WindowHandle`, `InstallingTitleUpdate` event (never raised: CNA installs no title updates), `Initialize()` (starts with no signed-in gamer; service and local-profile sign-ins arrive at `Update`), `Update()`, `UpdateAsync()`. Tested through the dispatcher harness and the service fixtures |
 | GamerServicesComponent | ✅ | Full port — wires `Initialize()`/`Update()` to `GamerServicesDispatcher`; no tests (requires a live `Game`, same as `GameComponent`) |
-| Guide | ✅ | Full port — replaced the old `DEF_PROP`-based stub (which had an invented, non-FNA `Show(PlayerIndex)` method); tests complete except the always-empty `Show*` no-ops verified only for non-throw |
+| Guide | ✅ | Full port; every `Show*` opens the CNA Guide's page after XNA's checks (console-style system UI, keyboard/pad/mouse, notifications at `NotificationPosition`); semantic Guide UI and input tests |
 | AvatarBodyType (enum) | ✅ | Complete |
 | AvatarRendererState (enum) | ✅ | Complete |
 | AvatarMouth (enum) | ✅ | Complete |
@@ -1965,11 +1972,9 @@ never reached `GestureDetector`) to real and gesture-tested (`plans/plan_input.m
 | AvatarBone (enum) | ✅ | Complete; explicit numeric values with gaps (0-70 range, 55 named values), verified byte-for-byte against the real reference assembly, not guessed |
 | AvatarExpression | ✅ | Full port; plain get/set struct |
 | IAvatarAnimation | ✅ | Full port; interface |
-| AvatarAnimation | ✅ | Full port. **Note: FNA has zero Avatar implementation** (Avatar required real Xbox Live cloud services FNA never built) — ported from the real, genuine Microsoft `Microsoft.Xna.Framework.Avatar.dll` reference assembly (v4.0.20823.0), decompiled via `monodis` for this port, since FNA's own tree has nothing to verify line-by-line against. Preserves real, verified quirks faithfully: the constructor never reads its `animationPreset` argument for any faithful field (every instance gets identical zero-valued bones and zero `Length`); `Update()` has real clamp logic, not a no-op, though `Length` being permanently zero makes every call collapse `CurrentPosition` back to zero regardless of the `loop` argument. **NOXNA extension added**: `SetRealClipNameEXT`/`GetRealClipNameEXT` (defaults to `AvatarAnimationPresetToClipNameEXT(preset)` — the one place `animationPreset` is now read, only for this new field) |
-| AvatarDescription | ✅ | Full port from the decompiled reference assembly (see AvatarAnimation's note — same FNA gap). Preserves a genuinely surprising, verified quirk: `CreateRandom()`/`CreateRandom(AvatarBodyType)`/`EndGetFromGamer()` never actually randomize or populate anything — all three always return an all-zero, invalid (1021-byte) description. `BeginGetFromGamer` invokes its callback synchronously before returning (a real behavior, not present as the actual "fake-async" pattern used elsewhere in this codebase's other Begin/End stubs). The disposed-`Gamer` branch of `BeginGetFromGamer` is not covered by a test — `Gamer` has no publicly/NOXNA-accessible way to become disposed anywhere in this codebase currently |
-| AvatarRenderer | ✅ | Full port from the decompiled reference assembly (see AvatarAnimation's note — same FNA gap). Preserves a genuinely surprising, verified quirk: `get_State()` unconditionally forces itself to `Unavailable` on *every single read* (not just an initial value) — nothing anywhere in the class ever sets it to `Ready` or `Loading`, so `BindPose`'s `state != Ready` guard always throws in practice. `ParentBones`' 71 real values decoded byte-for-byte from the assembly's static-array-init blob, not guessed. Both constructors ignore all of their arguments. **NOXNA extension added**: `EnableRealRenderingEXT`/`IsRealRenderingEnabledEXT`/`SetAppearanceEXT`/`DrawRealEXT` opt a game into real GPU-skinned rendering via a `Graphics::SkinnedModelEXT`, fully decoupled from the faithful 71-bone arrays above and from the always-no-op `Draw()` overloads (unaffected, still tested unchanged). See `docs/avatar-real-rendering-ext.md` |
-| AvatarAnimationPresetNamesEXT (free function) | ✅ | NOXNA — not part of the XNA 4.0 API. `AvatarAnimationPresetToClipNameEXT` maps each of the 31 `AvatarAnimationPreset` values to its enumerator name, used to look up `SkinnedModelEXT` clips |
-| AvatarAppearanceEXT | ✅ | NOXNA — not part of the XNA 4.0 API. CNA-invented skin/hair tint struct used only by the real-rendering extension; explicitly not a reconstruction of the real, undocumented, proprietary 1021-byte `AvatarDescription` format. No clothing customization in this phase |
+| AvatarAnimation | ✅ | Real (GS-009): each of the 31 presets is an original CNA clip on XNA's 71-bone skeleton with keyed expressions; `Update` follows the reference's wrap/clamp rules. FNA has no Avatar implementation; the Windows reference assembly only stubbed it, and CNA implements the Xbox 360 behaviour (`docs/avatars.md`) |
+| AvatarDescription | ✅ | Real (GS-009, GSP, GSX-A): CNA's 1021-byte encoding (formats 1 and 2), `CreateRandom` from the newest catalog, `BeginGetFromGamer` from the CNA service or the local profile (completing at `Update`), `Changed` raised on a signed-in player's kept description |
+| AvatarRenderer | ✅ | Real (GS-009): `Loading`/`Ready`/`Unavailable`, XNA's `ParentBones`, bind pose scaled to the description, skinned Draw with XNA's lighting inputs, from the locally installed exact catalog; the former real-rendering EXT surface was removed (GS-009f, ABI 0.33.0) |
 
 ---
 
@@ -2158,13 +2163,13 @@ code path in this namespace.
 | NetworkSessionJoinError (enum) | ✅ | Complete |
 | SendDataOptions (enum) | ✅ | Complete; FNA marks `[Flags]` but values are sequential (0-4), not real bit flags — ported plain, no bitwise operators added |
 | NetworkSessionProperties | ✅ | GS-007b: eight fixed nullable integers, slots 0..7, structural mutation unsupported, IsReadOnly false per managed reference. Host-only writes and advertised read-only snapshots enforced before mutation, including retained indexed proxies; transport updates preserve guards. Tests cover all slots, enumeration/copy/bounds and host/disposal permission. Xbox console event details remain unmeasured |
-| NetworkSession | ✅ | Full XNA property surface plus CNA's real SystemLink transport. `SessionProperties` exposes the mutable get-only XNA collection; the ENet host includes the current complete sparse collection in `ServerWelcome` and reliably publishes later changes during `Update()`. Clients accept replacements only from their authoritative host. |
-| QualityOfService | ✅ | Full port; all-defaults data class |
+| NetworkSession | ✅ | Full XNA property surface: SystemLink over ENet, PlayerMatch/Ranked through the CNA service directory and relay (invitations, host migration, AddLocalGamer, Ranked arbitration), voice where libopus exists. `SessionProperties` exposes the mutable get-only XNA collection; the host includes the current complete sparse collection in its welcome and reliably publishes later changes during `Update()`. Clients accept replacements only from their authoritative host. |
+| QualityOfService | ✅ | Full port; SystemLink search results measure the round trip and both bandwidths, service search results are unmeasured (`IsAvailable` false) |
 | AvailableNetworkSession | ✅ | Full port; `operator==`/`operator!=` added (NOXNA — required by `ReadOnlyCollection<T>`, not present in FNA; compares only scalar fields, excludes non-equatable `QualityOfService`/`NetworkSessionProperties` members) |
 | AvailableNetworkSessionCollection | ✅ | Full port; `Dispose()` only flips `IsDisposed` — sharp-runtime's `ReadOnlyCollection<T>` copies into private storage with no derived-class mutator, unlike FNA's reference-wrapping `ReadOnlyCollection<T>` whose `Dispose()` empties the underlying shared list too |
 | GameEndedEventArgs | ✅ | Full port |
 | GameStartedEventArgs | ✅ | Full port |
-| GamerJoinedEventArgs | ✅ | Full port; `NetworkGamer*` stored as forward-declared pointer (`NetworkGamer` not yet ported) |
+| GamerJoinedEventArgs | ✅ | Full port; `NetworkGamer*` stored as a forward-declared pointer |
 | GamerLeftEventArgs | ✅ | Full port; `NetworkGamer*` forward-declared |
 | HostChangedEventArgs | ✅ | Full port; `NetworkGamer*` forward-declared (OldHost/NewHost) |
 | NetworkSessionEndedEventArgs | ✅ | Full port |

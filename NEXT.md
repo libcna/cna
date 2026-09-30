@@ -1,5 +1,14 @@
 # NEXT.md
 
+> **GamerServices / Net / Avatar -- current state (2026-09-30).** GS-001..011, the avatar-polish
+> pass (GSP) and the Xbox-fidelity pass (GSX) are complete and merged into `next` (7d7141c6b):
+> service accounts and the console-style Guide, social features and push hints, achievements,
+> leaderboards and Ranked arbitration, PlayerMatch/Ranked with invitations, host migration,
+> AddLocalGamer and parties over the authenticated relay, network voice, and the standard avatars
+> on locally installed catalogs. What remains is in `docs/gamer-services-known-limitations.md`.
+> The dated `GS-*` and SAMPLE-100 quotes below (2026-09-28) are historical checkpoints; the
+> "remain unfinished" lists in them were all closed later.
+
 > **RRC-014..RRC-017 renderer retirement (2026-09-28):** `GDI`, `HTML_DOM`, `SVG_DOM` and
 > `OPENGL4` are retired by owner decision, not replaced: **18 public renderer identities over 14
 > implementation families** remain, C ABI `0.33.0`, values 18/33/40/44 permanently reserved,

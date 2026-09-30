@@ -3,9 +3,9 @@
 > **Current mission supersession (2026-09-28):** This historical hardening plan is retained as
 > evidence. Its SystemLink-only PlayerMatch/Ranked/invite refusal and public Avatar EXT split are
 > superseded by [plan_gamer_services_server.md](plan_gamer_services_server.md). Xbox 360 remains
-> the behavioral target; proprietary/third-party avatar assets remain prohibited. Current service
-> foundation is implemented in the dedicated feature worktree; matchmaking/invites/relay and
-> standard Avatar migration are active incomplete requirements, not intentional exclusions.
+> the behavioral target; proprietary/third-party avatar assets remain prohibited. Matchmaking,
+> invitations, the relay and the standard Avatar API were completed there (GS-007..GS-009) and in
+> the passes after it; current limitations: `docs/gamer-services-known-limitations.md`.
 
 
 This is a fresh, second-pass hardening plan. The prior plan (`plan_net_20260707.md`, formerly

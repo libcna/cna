@@ -1,5 +1,10 @@
 # AUDIT_SCOPE.md — Inventory and Classification Rules
 
+> **Predates the CNA Gamer Services work (2026-09-28/30).** Its GamerServices, Net and Avatar
+> records describe the FNA-derived stubs of that time (four fabricated "Stub Gamer"s, empty friend
+> lists, no-op Guide screens, inert avatars), all since replaced; current state:
+> [`docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md).
+
 > **Predates the 2026-09-17 renderer curation.** This archive was written when CNA had many more
 > renderer identities than it has now, and it names renderers that **no longer exist**: bgfx,
 > Magnum, Wicked, Sokol, Diligent, Glide, LLGL, IGL, rlgl, TinyGL, NanoVG, PixiJS, OpenVG, Blend2D,

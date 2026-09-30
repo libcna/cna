@@ -4,7 +4,9 @@ The GS-001 inventory (`gamer_services_server_initial_inventory.md`) listed every
 GamerServices and Net at baseline b2fd47a45. This register records what remains after the project:
 each refusal, constant or never-raised member still in `modules/gamer-services` and `modules/net`,
 why it is there, and the evidence. A behaviour listed here is deliberate; anything else that refuses
-or does nothing is a defect.
+or does nothing is a defect. The explained, current list of every limitation (including the ones
+that are policies, platform limits or unverified behaviour rather than refusals in the code) is
+[`docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md).
 
 Sweep: every `NotSupportedException`/`NotImplementedException` throw, empty body, "never raised",
 constant-valued property and CNAEXT in `modules/gamer-services/{src,include}` and
@@ -32,11 +34,12 @@ Each is documented where it is declared (C++ and C) and in `docs/xna-4-api-cover
 | `FriendGamer.HasVoice` | false | The service does not know a friend's audio hardware; in a session `NetworkGamer.HasVoice` reports it (GSX-E1). |
 | `Guide.ShowMarketplace` | the Guide's Game content page after XNA's privilege checks: the title's licence, with a Test Purchase while `SimulateTrialMode` is set, and the avatar catalogs installed | CNA has no store to sell from (GSX-E1). `IsTrialMode` itself behaves as XNA's (below). |
 | `GamerProfile.GamerZone`/`Reputation` of local profiles and unreviewed accounts | `Unknown` / 0 | XNA's unset values; nothing is invented. An account's chosen zone and review-based stars are reported (GSP-M1). |
-| Service search results' `QualityOfService` | `IsAvailable` false | A service listing has no path to its host before a join. SystemLink results measure the round trip and both bandwidths: downstream from the host's probe train (GSP-L6), upstream from the searcher's train timed by the host's responder thread (GSX-E). |
+| PlayerMatch/Ranked search results' `QualityOfService` | `IsAvailable` false | A service listing has no path to its host before a join. SystemLink results measure the round trip and both bandwidths: downstream from the host's probe train (GSP-L6), upstream from the searcher's train timed by the host's responder thread (GSX-E). |
 | `GamerServicesDispatcher.InstallingTitleUpdate` | never raised (`GamerServicesComponent` still exits on it, as XNA's does) | CNA installs no title updates; a title that stops accepting old versions refuses them with `GameUpdateRequiredException` instead (GSX-E4). |
 | `WriteTrueSkill` | raised; no skill is computed | Skill boards are ordinary arbitrated boards (GS-006e). |
 | `LeaderboardKey.BestScoreRecent`/`BestTimeRecent` | no time window: every row is kept, as for the lifetime keys | The XNA documentation says only "best recent scores/times"; neither it nor the IL gives a window, and the service would have to invent one. |
 | Guests in PlayerMatch/Ranked sessions | refused (not authorized for CNA online sessions) | A guest has no service credential for the service to authenticate; guests play Local, LocalWithLeaderboards and SystemLink sessions (GSP-L5). |
+| `NetworkGamer.IsGuest` of a remote SystemLink gamer | false | The SystemLink roster does not carry it; a local gamer reports its profile's (GSX-Q2). |
 | Browser multiplayer | limitations page | Owner scope: native plus a browser limitations page. |
 
 ## Service limits a game can meet
@@ -81,20 +84,19 @@ hints (GSX-E6).
 
 ## Evidence
 
-Final validation of the Xbox-fidelity pass, 2026-09-30 (`plan_gamer_services_xbox_fidelity.md`,
-acceptance matrix): CNA branch `feature/gamer-services-server`, server 2c974d1, cna-samples 378483b.
+Final truth cleanup, 2026-09-30 (`plan_gamer_services_xbox_fidelity.md` GSX-Q2): CNA
+`feature/gamer-services-server`, server `feature/gamer-services-server`, cna-samples
+`feature/gamer-services-samples`; evidence `/rv/tmp/xbox-fidelity/cleanup/`.
 
-- Server corpus with every CNA harness: **28/28**, including the WSS event channel and the CNA
-  client hearing a message through it; capacity re-run in the server README.
-- CNA, one process per test: CnaGamerServicesTests **603 + 1 known skip**, CnaNetTests **515/515**,
-  CnaRuntimeTests **192 + 2 environment skips**; `CApi_*` **107/110** (the three standing
+- Server corpus with every CNA harness: **28/28**, no skips.
+- CNA, one process per test: CnaGamerServicesTests **604 + 1 known skip**, CnaNetTests **518/518**,
+  CnaRuntimeTests **192 + 2 environment skips**; CnaTests in one process 9,024 pass with the 10
+  standing HEADLESS graphics/content failures; `CApi_*` **107/110** (the three standing
   environment smokes) with the coverage, limitations and release-gate records current and the ABI
-  baseline current (3,202 exports).
-- Samples (Release/OPENGLES3, private Xvfb, `*-20260930-xbox-fidelity`): SAMPLE-087 AvatarShadows
-  draws 16 catalog v3 avatars with shadows; SAMPLE-096 Invites and SAMPLE-075 (SystemLink and
-  online) sign in through the Guide's picker and invite through a gamer card; the
-  achievements/leaderboards program passes.
-- Avatars: the real renderer draws the 257-job catalog v3 review with 0 failures.
+  baseline current (3,202 exports); protocol drift clean.
+- Samples (Release/OPENGLES3, private Xvfb, `*-20260930-cleanup`): SAMPLE-087 AvatarShadows draws 16
+  catalog v3 avatars with shadows; SAMPLE-096 Invites and SAMPLE-075 (SystemLink and online) pass;
+  the achievements/leaderboards program passes.
 - Demos: 18 GamerServices and Net demos exit 0 on the private display.
 
-The previous pass's validation (2026-09-29, GSP) is in Git history.
+The Xbox-fidelity pass's own validation (GSX-Q1) and the earlier passes' are in Git history.

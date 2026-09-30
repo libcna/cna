@@ -1,5 +1,12 @@
 # NEXT.md
 
+> **Historical (2026-07-18 plan_net handoff).** Everything below describes the Net/GamerServices
+> work as of July 2026, before the CNA account service existed; its "current phase", "do not do
+> yet" rules, stub descriptions and resume prompt are superseded by
+> `plans/plan_gamer_services_server.md`, `plans/plan_gamer_services_avatar_polish.md` and
+> `plans/plan_gamer_services_xbox_fidelity.md`. Current state: `docs/xna-4-api-coverage.md` §9 and
+> `docs/gamer-services-known-limitations.md`.
+
 ## 1. Project summary
 
 **CNA** is a C++23 reimplementation of the XNA 4.0 programming model
