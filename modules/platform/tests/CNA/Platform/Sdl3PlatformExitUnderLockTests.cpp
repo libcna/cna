@@ -15,12 +15,19 @@
 // the hazard underneath it, which outlives that route -- any future `exit()` from inside a
 // platform call reaches the same shape.
 //
-// Why a forked child
-// ------------------
+// Why a re-executed child
+// ------------------------
 // The subject is a process that ends. A test cannot assert on `exit()` from inside the process it
-// is running in, and the failure mode is a HANG rather than a crash, so the parent waits with a
-// deadline and reports a failure itself instead of leaving `ctest`'s TIMEOUT to kill the whole
-// binary with no verdict.
+// is running in, so each child is a death test in gtest's "threadsafe" style: a fresh execution of
+// this binary that runs only its own statement. A plain fork() is not enough -- the child would
+// inherit a copy of everything the earlier tests left in this process, and `exit()` would run their
+// static destructors too. Run once in a single CnaTests process, the avatar loader's worker thread
+// (gamer-services) did exactly that: its destructor joined a thread that does not exist in a
+// forked child, and both children hung for a reason that had nothing to do with the lock.
+//
+// The failure mode is a HANG rather than a crash, so the child arms alarm() first: a hang becomes
+// SIGALRM, which the death test reports as a verdict, instead of a test that never returns and a
+// `ctest` TIMEOUT that kills the whole binary with none.
 //
 // Two children, because one proves nothing
 // ----------------------------------------
@@ -39,12 +46,9 @@
 #include <string>
 
 #if defined(__linux__) || defined(__unix__)
-#include <sys/types.h>
-#include <sys/wait.h>
 #include <unistd.h>
 
 #include <cstdlib>
-#include <ctime>
 
 namespace {
 
@@ -52,78 +56,52 @@ using CNA::Platform::IPlatform;
 using CNA::Platform::PlatformFactory;
 using CNA::Platform::Sdl3::SdlGlobalStateLock;
 
-/// Runs one child to completion, or gives up after @p seconds. Returns true when it exited on its
-/// own, and reports the exit status through @p exitCode.
-[[nodiscard]] bool RunChild(bool holdGlobalStateLock, int seconds, int& exitCode)
+constexpr unsigned kChildDeadlineSeconds = 20;
+
+/// The child's whole life: construct a platform, optionally hold the global-state lock, exit().
+[[noreturn]] void ExitWithAPlatform(bool holdGlobalStateLock)
 {
-    const pid_t pid = ::fork();
-    if (pid == -1) return false;
+    ::alarm(kChildDeadlineSeconds);
 
-    if (pid == 0)
+    // A function-local static, because `exit()` runs static destructors and skips locals -- and
+    // the destructor is the entire subject of this test.
+    static std::unique_ptr<IPlatform> platform;
+    platform = PlatformFactory::Create("SDL3");
+
+    if (holdGlobalStateLock)
     {
-        // A function-local static, because `exit()` runs static destructors and skips locals --
-        // and the destructor is the entire subject of this test.
-        static std::unique_ptr<IPlatform> platform;
-        platform = PlatformFactory::Create("SDL3");
-
-        if (holdGlobalStateLock)
-        {
-            // A PLAIN LOCAL, and `exit()` is called from inside its scope. `exit()` does not
-            // unwind, so this guard is never released -- exactly as an error handler reached from
-            // inside a platform call never releases the lock that call was holding. The static
-            // destructors exit() then runs therefore execute on a thread that still owns the mutex,
-            // which is the whole point of this child.
-            //
-            // A `static` guard here looks equivalent and is NOT: statics are destroyed in reverse
-            // order of construction, so it would be released BEFORE `~Sdl3Platform` ran and the
-            // test would pass against the very defect it exists to catch. Measured, not reasoned:
-            // the first draft did exactly that and survived the mutation.
-            SdlGlobalStateLock held;
-            (void)held;
-            std::exit(0);
-        }
+        // A PLAIN LOCAL, and `exit()` is called from inside its scope. `exit()` does not unwind,
+        // so this guard is never released -- exactly as an error handler reached from inside a
+        // platform call never releases the lock that call was holding. The static destructors
+        // exit() then runs therefore execute on a thread that still owns the mutex, which is the
+        // whole point of this child.
+        //
+        // A `static` guard here looks equivalent and is NOT: statics are destroyed in reverse
+        // order of construction, so it would be released BEFORE `~Sdl3Platform` ran and the test
+        // would pass against the very defect it exists to catch. Measured, not reasoned: the
+        // first draft did exactly that and survived the mutation.
+        SdlGlobalStateLock held;
+        (void)held;
         std::exit(0);
     }
-
-    // Parent.
-    const std::time_t deadline = std::time(nullptr) + seconds;
-    for (;;)
-    {
-        int status = 0;
-        const pid_t r = ::waitpid(pid, &status, WNOHANG);
-        if (r == pid)
-        {
-            exitCode = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
-            return true;
-        }
-        if (r == -1) return false;
-        if (std::time(nullptr) >= deadline)
-        {
-            ::kill(pid, SIGKILL);
-            int discard = 0;
-            (void)::waitpid(pid, &discard, 0);
-            return false;
-        }
-        ::usleep(20 * 1000);
-    }
+    std::exit(0);
 }
 
 TEST(Sdl3PlatformExitUnderLockTest, ControlChildWithoutTheLockExitsPromptly)
 {
-    int code = -1;
-    ASSERT_TRUE(RunChild(/*holdGlobalStateLock=*/false, /*seconds=*/20, code))
-        << "the control child did not finish: the harness itself is broken, so the subject "
-           "child's result below would mean nothing";
-    EXPECT_EQ(code, 0);
+    GTEST_FLAG_SET(death_test_style, "threadsafe");
+    EXPECT_EXIT(ExitWithAPlatform(/*holdGlobalStateLock=*/false), ::testing::ExitedWithCode(0), "")
+        << "the control child did not exit cleanly (SIGALRM means it hung): the harness itself is "
+           "broken, so the subject child's result below would mean nothing";
 }
 
 TEST(Sdl3PlatformExitUnderLockTest, DestructorSurvivesExitReachedFromInsideItsOwnLock)
 {
-    int code = -1;
-    ASSERT_TRUE(RunChild(/*holdGlobalStateLock=*/true, /*seconds=*/20, code))
-        << "the child hung: ~Sdl3Platform re-locked SdlGlobalStateMutex() on the thread that "
-           "already owned it (finding F-28). The control test above shows the harness works.";
-    EXPECT_EQ(code, 0);
+    GTEST_FLAG_SET(death_test_style, "threadsafe");
+    EXPECT_EXIT(ExitWithAPlatform(/*holdGlobalStateLock=*/true), ::testing::ExitedWithCode(0), "")
+        << "the child hung (SIGALRM) or failed: ~Sdl3Platform re-locked SdlGlobalStateMutex() on "
+           "the thread that already owned it (finding F-28). The control test above shows the "
+           "harness works.";
 }
 
 TEST(Sdl3PlatformExitUnderLockTest, OwnershipQueryIsFalseWhenNothingIsHeld)
