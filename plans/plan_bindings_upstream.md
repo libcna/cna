@@ -628,6 +628,13 @@ first.
   leaves objects created by another thread to the operating system. Pinned by
   `CApi_ExitWithForeignThreadGameSmoke` (a game and a dynamic vertex buffer made on a thread that
   ends first; the process must exit 0 -- it aborted with 134 on OPENGLES3 before).
+- **BINDFIX-042** — `cna_texture2d_set_data`/`_get_data` sized every transfer as one element per
+  texel. XNA's `GetAndValidateSizes` lets an element narrower than the texel view it (a Color
+  texture read as bytes is four elements per texel), and the canonical overload accepted that
+  count, so a 16-byte read of a 2x2 Color texture returned 4 bytes and a 16-byte write stored 4 and
+  zeroed the other three texels -- both reporting success (reported by `cna-ruby`). The region is
+  now measured in the caller's elements, and `out_required_elements` reports it even when the
+  count is too small. Pinned by `CApi_TextureSmoke` (byte-view round trip; per-width counts).
 
 ---
 
