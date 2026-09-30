@@ -31,8 +31,10 @@ endif()
 # tried to apply an already-applied patch, failed, and stopped the configure with a message
 # blaming the pinned revisions. What is asked instead is the question that actually matters: is
 # this tree the series' final state?
-set(CNA_FNA3D_MOJOSHADER_COMBINED
-    "${CMAKE_CURRENT_BINARY_DIR}/cna-mojoshader-patch-series.patch")
+#
+# The series is hashed in memory. The FNA3D checkout is usually a shared one under ~/deps, and an
+# already-patched tree must not be written at all -- a read-only one then configures fine (House
+# Simulator's BL-17 hit the write of a combined patch file into it).
 set(CNA_FNA3D_MOJOSHADER_COMBINED_TEXT "")
 foreach(CNA_FNA3D_MOJOSHADER_PATCH IN LISTS CNA_FNA3D_MOJOSHADER_PATCH_FILE)
     if(NOT EXISTS "${CNA_FNA3D_MOJOSHADER_PATCH}")
@@ -41,12 +43,11 @@ foreach(CNA_FNA3D_MOJOSHADER_PATCH IN LISTS CNA_FNA3D_MOJOSHADER_PATCH_FILE)
     file(READ "${CNA_FNA3D_MOJOSHADER_PATCH}" CNA_FNA3D_MOJOSHADER_PATCH_TEXT)
     string(APPEND CNA_FNA3D_MOJOSHADER_COMBINED_TEXT "${CNA_FNA3D_MOJOSHADER_PATCH_TEXT}")
 endforeach()
-file(WRITE "${CNA_FNA3D_MOJOSHADER_COMBINED}" "${CNA_FNA3D_MOJOSHADER_COMBINED_TEXT}")
 
 # The patch series overlaps itself, so neither a forward nor a reverse check of the concatenated
 # diff can identify its final state. Keep the hash of both the patch inputs and the resulting
 # tracked-file diff. FetchContent can restore the submodule while leaving an untracked stamp.
-file(SHA256 "${CNA_FNA3D_MOJOSHADER_COMBINED}" CNA_FNA3D_MOJOSHADER_SERIES_HASH)
+string(SHA256 CNA_FNA3D_MOJOSHADER_SERIES_HASH "${CNA_FNA3D_MOJOSHADER_COMBINED_TEXT}")
 set(CNA_FNA3D_MOJOSHADER_STAMP
     "${CNA_FNA3D_MOJOSHADER_SOURCE_DIR}/.cna-mojoshader-patch-series.sha256")
 
