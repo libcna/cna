@@ -161,6 +161,7 @@ namespace Microsoft::Xna::Framework::Graphics
         , depth_(depth)
         , renderer_(nullptr)
     {
+        const auto contextLease = LeaseRendererContext();
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(width, "width");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(height, "height");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(depth, "depth");
@@ -188,6 +189,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture3D::Dispose(bool disposing)
     {
+        const auto contextLease = TryLeaseRendererContext();
         renderer_.reset();
         Texture::Dispose(disposing);
     }
@@ -252,6 +254,7 @@ namespace Microsoft::Xna::Framework::Graphics
         int level, int left, int top, int right, int bottom, int front, int back,
         const std::uint8_t* data)
     {
+        const auto contextLease = LeaseRendererContext();
         if (!renderer_)
             throw System::NotSupportedException(
                 "Texture3D::SetData: this renderer creates no volume texture resource");
@@ -271,6 +274,7 @@ namespace Microsoft::Xna::Framework::Graphics
         int level, int left, int top, int right, int bottom, int front, int back,
         std::uint8_t* data) const
     {
+        const auto contextLease = LeaseRendererContext();
         if (!renderer_)
             throw System::NotSupportedException(
                 "Texture3D::GetData: this renderer creates no volume texture resource");
@@ -340,6 +344,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture3D::SetDataPointerEXT(int level, int left, int top, int right, int bottom, int front, int back,
                                       const void* data, int dataLength)
     {
+        const auto contextLease = LeaseRendererContext();
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("Texture3D");
         if (!data)
@@ -387,6 +392,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture3D::GetData(int level, int left, int top, int right, int bottom, int front, int back,
                             Color* data, int startIndex, int elementCount) const
     {
+        const auto contextLease = LeaseRendererContext();
         const int requiredColorElements = ValidateTypedTransferEXT(
             "Texture3D::GetData", false, level, left, top, right, bottom, front, back,
             data, startIndex, elementCount, 4);

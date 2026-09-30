@@ -347,6 +347,7 @@ namespace Microsoft::Xna::Framework::Graphics
     Texture2D::Texture2D(const std::string& assetName, GraphicsDevice& graphicsDevice)
         : Texture(&graphicsDevice)
     {
+        const auto contextLease = LeaseRendererContext();
         ImageData data = ImageLoader::Load(assetName);
         width    = data.width;
         height   = data.height;
@@ -378,6 +379,7 @@ namespace Microsoft::Xna::Framework::Graphics
     Texture2D::Texture2D(GraphicsDevice& graphicsDevice, int w, int h)
         : Texture(&graphicsDevice), width(w), height(h)
     {
+        const auto contextLease = LeaseRendererContext();
         ValidateTextureSizeForProfileEXT(graphicsDevice, w, h);
         ValidateTextureDimensionEXT(graphicsDevice, w, h);
         ImageData data;
@@ -406,6 +408,7 @@ namespace Microsoft::Xna::Framework::Graphics
                          bool mipMap, SurfaceFormat format)
         : Texture(&graphicsDevice), width(w), height(h)
     {
+        const auto contextLease = LeaseRendererContext();
         ValidateTextureSizeForProfileEXT(graphicsDevice, w, h);
         ValidateTextureDimensionEXT(graphicsDevice, w, h);
         ValidateTexture2DFormatEXT(&graphicsDevice, format);
@@ -521,6 +524,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture2D::Dispose(bool disposing)
     {
+        const auto contextLease = TryLeaseRendererContext();
         // DX12-0023: a RenderTarget2D destroyed while bound is detached first, while its backend exists.
         if (!isDisposed_ && graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
             graphicsDevice_->DetachDestroyedRenderTarget(this);
@@ -576,6 +580,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture2D::SetData(const Color* data, int elementCount)
     {
+        const auto contextLease = LeaseRendererContext();
         ValidateCopyArgumentsEXT(0, data, 0, elementCount);
         if (Texture::GetFormatSizeEXT(format_) != 4)
         {
@@ -627,6 +632,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect,
                             const Color* data, int startIndex, int elementCount)
     {
+        const auto contextLease = LeaseRendererContext();
         ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         if (Texture::GetFormatSizeEXT(format_) != 4)
         {
@@ -773,6 +779,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetDataBytes(int level, const Rectangle* rect, const std::uint8_t* data,
                                  int startIndex, int elementCount, int elementBytes)
     {
+        const auto contextLease = LeaseRendererContext();
         if (isDisposed_)
             throw System::ObjectDisposedException("Texture2D");
         ValidateCopyArguments(data, startIndex, elementCount);
@@ -896,6 +903,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                            const std::uint8_t* data, int startIndex,
                                            int elementCount)
     {
+        const auto contextLease = LeaseRendererContext();
         if (isDisposed_)
             throw System::ObjectDisposedException("Texture2D");
         ValidateCopyArguments(data, startIndex, elementCount);
@@ -1480,6 +1488,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture2D::SetDataRGBA(const uint8_t* data, int pixelCount)
     {
+        const auto contextLease = LeaseRendererContext();
         if (isDisposed_)
             throw System::ObjectDisposedException("Texture2D");
         if (format_ != SurfaceFormat::Color)
@@ -1557,6 +1566,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture2D::GetData(Color* data, int startIndex, int elementCount) const
     {
+        const auto contextLease = LeaseRendererContext();
         ValidateCopyArgumentsEXT(0, data, startIndex, elementCount);
         if (Texture::GetFormatSizeEXT(format_) != 4)
         {
@@ -1645,6 +1655,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect,
                             Color* data, int startIndex, int elementCount) const
     {
+        const auto contextLease = LeaseRendererContext();
         ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         if (Texture::GetFormatSizeEXT(format_) != 4)
         {
@@ -1765,6 +1776,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetDataBytes(int level, const Rectangle* rect, std::uint8_t* data,
                                  int startIndex, int elementCount, int elementBytes) const
     {
+        const auto contextLease = LeaseRendererContext();
         if (isDisposed_)
             throw System::ObjectDisposedException("Texture2D");
         ValidateCopyArguments(data, startIndex, elementCount);
@@ -1841,6 +1853,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetCompressedDataBytes(int level, const Rectangle* rect, std::uint8_t* data,
                                            int startIndex, int elementCount) const
     {
+        const auto contextLease = LeaseRendererContext();
         if (isDisposed_)
             throw System::ObjectDisposedException("Texture2D");
         ValidateCopyArguments(data, startIndex, elementCount);
@@ -2558,6 +2571,7 @@ namespace Microsoft::Xna::Framework::Graphics
         GraphicsDevice& device, int w, int h,
         std::vector<std::vector<std::uint8_t>>&& rgbaLevels)
     {
+        const auto contextLease = LeaseRendererContext(&device);
         ValidateTextureSizeForProfileEXT(device, w, h);
         ValidateTextureDimensionEXT(device, w, h);
         const int maximumLevels = CalculateMipLevels(w, h);
@@ -2826,6 +2840,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                           int w, int h,
                                           const std::vector<std::uint8_t>& rgba)
     {
+        const auto contextLease = LeaseRendererContext(&device);
         ImageData data;
         data.width  = w;
         data.height = h;

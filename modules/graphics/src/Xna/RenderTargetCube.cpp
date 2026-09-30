@@ -97,11 +97,12 @@ namespace Microsoft::Xna::Framework::Graphics
         : TextureCube(device, size, SelectRenderTargetFormatEXT(device, preferredFormat),
                       // IRenderTargetCubeRenderer : ITextureCubeRenderer — pass single renderer
                       // to TextureCube so sampling and rendering share the same GPU image.
-                      std::shared_ptr<ITextureCubeRenderer>(
-                          CreateValidatedRenderTargetCubeRenderer(
+                      std::shared_ptr<ITextureCubeRenderer>(WithRendererContext(device, [&] {
+                          return CreateValidatedRenderTargetCubeRenderer(
                               device, size, preferredDepthFormat, usage, mipMap,
                               preferredMultiSampleCount,
-                              SelectRenderTargetFormatEXT(device, preferredFormat)).release()),
+                              SelectRenderTargetFormatEXT(device, preferredFormat));
+                      }).release()),
                       mipMap ? CalculateMipLevels(size) : 1)
         , size_(size)
         , depthFormat_(preferredDepthFormat)

@@ -170,6 +170,7 @@ namespace Microsoft::Xna::Framework::Graphics
         , size_(size)
         , renderer_(nullptr)
     {
+        const auto contextLease = LeaseRendererContext();
         ValidateCubeSizeForProfileEXT(device, size);
         ValidateTextureCubeFormatEXT(device, format);
         ValidateTextureCubeCreationShapeEXT(device, size, format);
@@ -190,6 +191,7 @@ namespace Microsoft::Xna::Framework::Graphics
         , size_(size)
         , renderer_(std::move(renderer))
     {
+        const auto contextLease = LeaseRendererContext();
         // Task 774 finding: this constructor (used exclusively by RenderTargetCube) previously
         // skipped ValidateFormat entirely, silently accepting any SurfaceFormat even though
         // CreateTextureCube's own renderer call never actually forwards it -- a RenderTargetCube
@@ -235,6 +237,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void TextureCube::Dispose(bool disposing)
     {
+        const auto contextLease = TryLeaseRendererContext();
         // DX12-0023: a RenderTargetCube destroyed while bound is detached first, while its backend exists.
         if (!isDisposed_ && graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
             graphicsDevice_->DetachDestroyedRenderTarget(this);
@@ -406,6 +409,7 @@ namespace Microsoft::Xna::Framework::Graphics
         CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
         const std::uint8_t* data, int /*elementBytes*/)
     {
+        const auto contextLease = LeaseRendererContext();
         ThrowIfDataTransferResourceInUseEXT(true);
         if (!renderer_)
             throw System::NotSupportedException(
@@ -450,6 +454,7 @@ namespace Microsoft::Xna::Framework::Graphics
         CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
         std::uint8_t* data, int /*elementBytes*/) const
     {
+        const auto contextLease = LeaseRendererContext();
         ThrowIfDataTransferResourceInUseEXT(false);
         if (!renderer_)
             throw System::NotSupportedException(
@@ -472,6 +477,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void TextureCube::SetData(CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
                               const Color* data, int startIndex, int elementCount)
     {
+        const auto contextLease = LeaseRendererContext();
         const int required = ValidateTypedTransferEXT(
             "TextureCube::SetData", true, face, level, rect, data,
             startIndex, elementCount, 4);
@@ -543,6 +549,7 @@ namespace Microsoft::Xna::Framework::Graphics
                               const Microsoft::Xna::Framework::Rectangle* rect,
                               const std::uint8_t* data, int startIndex, int elementCount)
     {
+        const auto contextLease = LeaseRendererContext();
         if (Texture::GetBlockSizeSquaredEXT(format_) == 1)
         {
             (void)ValidateTypedTransferEXT(
@@ -593,6 +600,7 @@ namespace Microsoft::Xna::Framework::Graphics
                               const Microsoft::Xna::Framework::Rectangle* rect,
                               std::uint8_t* data, int startIndex, int elementCount) const
     {
+        const auto contextLease = LeaseRendererContext();
         if (Texture::GetBlockSizeSquaredEXT(format_) == 1)
         {
             (void)ValidateTypedTransferEXT(
@@ -637,6 +645,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void TextureCube::GetData(CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
                               Color* data, int startIndex, int elementCount) const
     {
+        const auto contextLease = LeaseRendererContext();
         const int required = ValidateTypedTransferEXT(
             "TextureCube::GetData", false, face, level, rect, data,
             startIndex, elementCount, 4);

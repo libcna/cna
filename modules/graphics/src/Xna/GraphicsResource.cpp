@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 #include <algorithm>
 #include <mutex>
@@ -427,6 +428,34 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             alias->graphicsDevice_ = device;
             alias->graphicsDeviceLifetime_ = identity->graphicsDeviceLifetime;
+        }
+    }
+
+    std::unique_ptr<CNA::Internal::Renderers::IRendererThreadContextLease>
+    GraphicsResource::LeaseRendererContext(GraphicsDevice* device)
+    {
+        return device != nullptr ? device->AcquireRendererThreadContextLease() : nullptr;
+    }
+
+    std::unique_ptr<CNA::Internal::Renderers::IRendererThreadContextLease>
+    GraphicsResource::LeaseRendererContext() const
+    {
+        // A resource can outlive its device; its destructor then has nothing left to lease.
+        if (graphicsDevice_ == nullptr || graphicsDeviceLifetime_.expired())
+            return nullptr;
+        return LeaseRendererContext(graphicsDevice_);
+    }
+
+    std::unique_ptr<CNA::Internal::Renderers::IRendererThreadContextLease>
+    GraphicsResource::TryLeaseRendererContext() const noexcept
+    {
+        try
+        {
+            return LeaseRendererContext();
+        }
+        catch (...)
+        {
+            return nullptr;
         }
     }
 }

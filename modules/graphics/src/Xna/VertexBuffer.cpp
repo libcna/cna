@@ -167,6 +167,7 @@ namespace Microsoft::Xna::Framework::Graphics
         , bufferUsage_(bufferUsage)
         , vertexCount_(vertexCount)
     {
+        const auto contextLease = LeaseRendererContext();
         vertexDeclaration_.BindToDevice(device);
         const int stride = vertexDeclaration_.getVertexStrideProperty();
         if (stride > 0)
@@ -191,6 +192,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                  const VertexDeclaration& vertexDeclaration,
                                  int vertexCount)
     {
+        const auto contextLease = LeaseRendererContext(&device);
         if (vertexCount <= 0)
         {
             throw System::ArgumentOutOfRangeException(
@@ -212,6 +214,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     VertexBuffer::~VertexBuffer()
     {
+        const auto contextLease = TryLeaseRendererContext();
         if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
             graphicsDevice_->DetachDestroyedVertexBuffer(this);
         Dispose(false);
@@ -255,6 +258,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void VertexBuffer::Dispose(bool disposing)
     {
+        const auto contextLease = TryLeaseRendererContext();
         renderer_.reset();
         GraphicsResource::Dispose(disposing);
     }
@@ -345,6 +349,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                            SetDataOptions options,
                                            bool useOptions)
     {
+        const auto contextLease = LeaseRendererContext();
         options = CanonicalizeSetDataOptions(options);
         ThrowIfSetDataResourceInUse(options, useOptions);
         const int declarationStride = vertexDeclaration_.getVertexStrideProperty();
@@ -1102,6 +1107,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                             const int count, const int stride,
                                             SetDataOptions options, bool useOptions)
     {
+        const auto contextLease = LeaseRendererContext();
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("VertexBuffer");
         if (stride <= 0)
@@ -1169,6 +1175,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                                  SetDataOptions options,
                                                  const bool useOptions)
     {
+        const auto contextLease = LeaseRendererContext();
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("VertexBuffer");
         if (data == nullptr)

@@ -78,3 +78,17 @@ Emscripten; `WEBGL1` (GLES 2.0 / Emscripten) has a real GLSL ES 1.00 shader rewr
 verified as far as this sandbox can go, including `SkinnedEffect`/`SkinnedPbrEffect` (see
 `docs/webgl1-renderer.md`) — no real browser-level driver verification exists for any of the 4
 profiles in this sandbox.
+
+## Graphics resources on other threads (all GL profiles)
+
+One GL context serves the device, and it can be current on one thread at a time. The game thread
+holds it for the whole of `Initialize`, `BeginRun`, every `Tick` (Update and Draw) and `EndRun`,
+and lets go of it between frames. Constructing a texture, buffer or render target, `SetData`,
+`GetData` and `Dispose` take the same lease on whatever thread they run on (`ContentReader` holds it
+for a whole asset), so a loading thread works in the gaps between frames while the game keeps
+drawing — XNA's loading-screen pattern.
+
+The one thing that does not work is the game thread waiting, inside `LoadContent`, `Update` or
+`Draw`, for another thread that is creating graphics resources: it still holds the context, so the
+two wait for each other. XNA 4.0 allows that, and FNA and MonoGame deadlock on it the same way.
+Start the work, keep running frames, and pick the results up once the thread says it is done.

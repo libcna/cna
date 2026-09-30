@@ -171,11 +171,14 @@ namespace Microsoft::Xna::Framework::Graphics
                              BufferUsage bufferUsage,
                              bool /*dynamic*/)
         : GraphicsResource(&device)
-        , renderer_(CreateIndexBufferRenderer(device, indexElementSize, indexCount))
+        , renderer_(WithRendererContext(device, [&] {
+              return CreateIndexBufferRenderer(device, indexElementSize, indexCount);
+          }))
         , indexElementSize_(CanonicalizeIndexElementSize(indexElementSize))
         , bufferUsage_(bufferUsage)
         , indexCount_(indexCount)
     {
+        const auto contextLease = LeaseRendererContext();
         const std::size_t elementSize =
             indexElementSize_ == IndexElementSize::ThirtyTwoBits
                 ? sizeof(std::uint32_t)
@@ -196,6 +199,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     IndexBuffer::~IndexBuffer()
     {
+        const auto contextLease = TryLeaseRendererContext();
         if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
             graphicsDevice_->DetachDestroyedIndexBuffer(this);
         Dispose(false);
@@ -239,6 +243,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void IndexBuffer::Dispose(bool disposing)
     {
+        const auto contextLease = TryLeaseRendererContext();
         renderer_.reset();
         GraphicsResource::Dispose(disposing);
     }
@@ -339,6 +344,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                              SetDataOptions options,
                                              const bool useOptions)
     {
+        const auto contextLease = LeaseRendererContext();
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("IndexBuffer");
         if (data == nullptr)

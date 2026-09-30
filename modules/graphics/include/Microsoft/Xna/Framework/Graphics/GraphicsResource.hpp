@@ -14,6 +14,11 @@
 #include "System/IDisposable.hpp"
 #include "System/Object.hpp"
 
+namespace CNA::Internal::Renderers
+{
+    class IRendererThreadContextLease;
+}
+
 namespace Microsoft::Xna::Framework::Graphics
 {
     class GraphicsDevice;
@@ -96,6 +101,51 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param device New owning device, or nullptr to detach it.
          */
         void BindSharedResourceIdentityToDevice(GraphicsDevice* device) const;
+
+        /**
+         * @brief Holds @p device's renderer context for one resource operation, on any thread.
+         *
+         * XNA lets a game create resources and move their data on any thread. On the game thread
+         * inside a frame this only nests in the frame's own lease; on another thread it waits until
+         * the game thread is between frames, makes the context current there for the operation,
+         * and lets go of it again (cna-killer KF-1).
+         *
+         * @param device The owning device, or null.
+         * @return A lifetime token, or null when there is no device or its renderer needs none.
+         */
+        [[nodiscard]] static std::unique_ptr<CNA::Internal::Renderers::IRendererThreadContextLease>
+            LeaseRendererContext(GraphicsDevice* device);
+
+        /**
+         * @brief The static LeaseRendererContext() for this resource's device, while it exists.
+         * @return A lifetime token, or null.
+         */
+        [[nodiscard]] std::unique_ptr<CNA::Internal::Renderers::IRendererThreadContextLease>
+            LeaseRendererContext() const;
+
+        /**
+         * @brief LeaseRendererContext() for a destructor or Dispose(bool): null instead of throwing.
+         * @return A lifetime token, or null.
+         */
+        [[nodiscard]] std::unique_ptr<CNA::Internal::Renderers::IRendererThreadContextLease>
+            TryLeaseRendererContext() const noexcept;
+
+        /**
+         * @brief Runs @p make under @p device's renderer context and returns its result.
+         *
+         * For a renderer object created in a constructor's initializer list, before the resource's
+         * own device pointer exists.
+         *
+         * @param device The owning device.
+         * @param make Creates and returns the renderer object.
+         * @return What @p make returned.
+         */
+        template <typename Make>
+        static auto WithRendererContext(GraphicsDevice& device, Make&& make)
+        {
+            const auto contextLease = LeaseRendererContext(&device);
+            return make();
+        }
 
         /**
          * @brief Releases managed and native resources.

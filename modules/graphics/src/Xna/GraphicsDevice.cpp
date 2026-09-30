@@ -1126,8 +1126,12 @@ namespace Microsoft::Xna::Framework::Graphics
         // Copy and clear the resource list before iterating.
         // This makes RemoveResourceReference a no-op when called re-entrantly
         // from within the resources' own Dispose() methods (matches FNA pattern).
-        std::vector<GraphicsResource*> toDispose = std::move(resources_);
-        resources_.clear();
+        std::vector<GraphicsResource*> toDispose;
+        {
+            const std::scoped_lock lock(resourcesMutex_);
+            toDispose = std::move(resources_);
+            resources_.clear();
+        }
 
         for (GraphicsResource* res : toDispose)
             static_cast<System::IDisposable*>(res)->Dispose();
@@ -1153,7 +1157,10 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         // A copy, because a subscriber is free to dispose the resource it is told about and that
         // would rewrite resources_ underneath this loop.
-        const std::vector<GraphicsResource*> snapshot = resources_;
+        const std::vector<GraphicsResource*> snapshot = [this] {
+            const std::scoped_lock lock(resourcesMutex_);
+            return resources_;
+        }();
         for (GraphicsResource* const resource : snapshot)
         {
             if (auto* const losable =
@@ -1166,11 +1173,13 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::AddResourceReference(GraphicsResource* resource)
     {
+        const std::scoped_lock lock(resourcesMutex_);
         resources_.push_back(resource);
     }
 
     void GraphicsDevice::RemoveResourceReference(GraphicsResource* resource)
     {
+        const std::scoped_lock lock(resourcesMutex_);
         for (std::size_t i = 0; i < resources_.size(); ++i)
         {
             if (resources_[i] == resource)
@@ -1544,6 +1553,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::TransferResourceReference(
         GraphicsResource* source, GraphicsResource* destination) noexcept
     {
+        const std::scoped_lock lock(resourcesMutex_);
         auto sourceIt = resources_.end();
         auto destinationIt = resources_.end();
         for (auto it = resources_.begin(); it != resources_.end(); ++it)

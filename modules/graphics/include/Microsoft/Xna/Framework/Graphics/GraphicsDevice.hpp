@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -1482,7 +1483,11 @@ namespace Microsoft::Xna::Framework::Graphics
          * Intended for debug and test use only.
          * @return Count of registered, not-yet-disposed resources.
          */
-        CNAEXT [[nodiscard]] std::size_t GetTrackedResourceCount() const { return resources_.size(); }
+        CNAEXT [[nodiscard]] std::size_t GetTrackedResourceCount() const
+        {
+            const std::scoped_lock lock(resourcesMutex_);
+            return resources_.size();
+        }
 
         /** @brief Enables or disables depth testing. */
         CNAEXT void SetDepthTestEnabled(bool enabled);
@@ -1958,6 +1963,10 @@ namespace Microsoft::Xna::Framework::Graphics
         bool boundRenderTargetDestroyed_ = false;
         std::vector<VertexBufferBinding> currentVertexBuffers_;
         std::vector<GraphicsResource*> resources_;
+        /// Every GraphicsResource registers here as it is constructed and leaves as it is destroyed,
+        /// on whatever thread that happens -- XNA allows resources on any thread. Unguarded, two
+        /// threads constructing resources at once corrupted the vector (cna-killer KF-1a).
+        mutable std::mutex resourcesMutex_;
 
         // Reusable byte buffers for DrawUserPrimitives / DrawUserIndexedPrimitives staging,
         // avoiding a heap allocation on every draw call once capacity has grown to fit.

@@ -1166,6 +1166,11 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                         easygl_spritebatch_rendertarget_size_test.cpp)
         cna_register_renderer_test(NAME EasyGL_SpriteBatch_RenderTargetSize COMMAND cna_test_easygl_spritebatch_rendertarget_size
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        # cna-killer KF-1: resources created on worker threads while the game keeps running.
+        cna_easygl_test(cna_test_easygl_worker_thread_resources
+                        easygl_worker_thread_resources_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_WorkerThreadResources COMMAND cna_test_easygl_worker_thread_resources
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         # cna-killer KF-16: GL work issued from Update() must reach the device.
         cna_easygl_test(cna_test_easygl_update_time_gl_work
                         easygl_update_time_gl_work_test.cpp)

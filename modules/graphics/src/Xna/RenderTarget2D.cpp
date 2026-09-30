@@ -133,7 +133,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                    RenderTargetUsage usage)
         : Texture2D(device, width, height, SelectRenderTargetFormatEXT(device, preferredFormat),
                     mipMap ? CalculateMipLevels(width, height) : 1,
-                    CreateValidatedRenderTargetRenderer(
+                    WithRendererContext(device, [&] { return CreateValidatedRenderTargetRenderer(
                             device, width, height,
                             SelectRenderTargetFormatEXT(device, preferredFormat),
                             preferredDepthFormat,
@@ -143,7 +143,7 @@ namespace Microsoft::Xna::Framework::Graphics
                             // DiscardContents target, so PlatformContents was preserved by the
                             // shared layer and discarded by the renderer at the same time.
                             RenderTargetUsagePreservesContentsEXT(usage), mipMap,
-                            preferredMultiSampleCount))
+                            preferredMultiSampleCount); }))
         , depthFormat_(preferredDepthFormat)
         , multiSampleCount_(preferredMultiSampleCount)
         , usage_(usage)
