@@ -478,6 +478,10 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
   again with the same results (`cleanup/after-merge/`, samples `*-20260930-cleanup-merged`): GS
   604 + 1, Net 518/518, Runtime 192 + 2, CnaTests 9,026 with the same 10 failures, C API 111/114
   (next's four new tests pass; the same three smokes fail), server 28/28, 18 demos, four samples.
+  `next` then advanced again (e6d562454, BINDFIX-042..046, including an avatar-loader shutdown fix)
+  and was merged too (829bb5c7f, no conflict); rerun (`cleanup/after-merge2/`): GS 604 + 1, Net 518/518,
+  Runtime 192 + 2, C API 112/115 (the same three smokes), 18 demos, SAMPLE-087 and SAMPLE-096, and the
+  server's `service_tls_e2e`, `service_cna_session` and `service_cna_avatars`.
 
 ## Acceptance matrix (GSX-Q1, 2026-09-30)
 

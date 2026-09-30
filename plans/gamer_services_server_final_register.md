@@ -98,7 +98,8 @@ Final truth cleanup, 2026-09-30 (`plan_gamer_services_xbox_fidelity.md` GSX-Q2):
   catalog v3 avatars with shadows; SAMPLE-096 Invites and SAMPLE-075 (SystemLink and online) pass;
   the achievements/leaderboards program passes.
 - Demos: 18 GamerServices and Net demos exit 0 on the private display.
-- After merging committed `next` (0f7166cd8) into the branch, all of the above again with the same
-  results; C API 111/114 then (`next` added four C API tests, which pass).
+- After merging committed `next` (0f7166cd8, then e6d562454) into the branch, the suites, C API
+  gates (112/115: `next` added five C API tests, which pass), demos, samples and server tests again
+  with the same results.
 
 The Xbox-fidelity pass's own validation (GSX-Q1) and the earlier passes' are in Git history.
