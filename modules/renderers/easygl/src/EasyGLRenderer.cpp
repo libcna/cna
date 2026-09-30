@@ -13,6 +13,37 @@ namespace CNA::Internal::Renderers::EasyGL
 {
     namespace
     {
+        /**
+         * @brief Switches GL_SCISSOR_TEST off for one internal framebuffer blit.
+         *
+         * glBlitFramebuffer obeys the scissor test, and a game's active scissor rectangle has
+         * nothing to do with an MSAA resolve: resolving under it copied only the rectangle and
+         * left the rest of the target stale (cna-killer KF-5). The state is put back as found, so
+         * the device's cached scissor state stays true.
+         */
+        class ScissorOffForBlit
+        {
+        public:
+            ScissorOffForBlit()
+                : wasEnabled_(::metagl::glIsEnabled(::metagl::Capability::ScissorTest) != 0)
+            {
+                if (wasEnabled_)
+                    ::metagl::glDisable(::metagl::Capability::ScissorTest);
+            }
+
+            ~ScissorOffForBlit()
+            {
+                if (wasEnabled_)
+                    ::metagl::glEnable(::metagl::Capability::ScissorTest);
+            }
+
+            ScissorOffForBlit(const ScissorOffForBlit&) = delete;
+            ScissorOffForBlit& operator=(const ScissorOffForBlit&) = delete;
+
+        private:
+            bool wasEnabled_;
+        };
+
         // plans/plan_runtimerenderer.md phase P11: the runtime replacements for this file's former
         // CNA_GL_PROFILE_* preprocessor guards. Argument-less on purpose -- they read the active
         // profile themselves, so a guard converts to a one-line condition with no plumbing through
@@ -4119,6 +4150,7 @@ else
         TargetTrace(traceEvent, this, TraceNativeDetailEXT());
         fbo_.bind(::easygl::FramebufferTarget::ReadFramebuffer);
         resolveFbo_.bind(::easygl::FramebufferTarget::DrawFramebuffer);
+        const ScissorOffForBlit wholeTarget;
         ::easygl::Framebuffer::blit(0, 0, width_, height_,
                                     0, 0, width_, height_,
                                     ::metagl::ClearBufferBit::Color,
@@ -4682,6 +4714,7 @@ else
             faceTarget, cubeTex_, 0);
         fbo_.bind(::easygl::FramebufferTarget::ReadFramebuffer);
         resolveFbo_.bind(::easygl::FramebufferTarget::DrawFramebuffer);
+        const ScissorOffForBlit wholeFace;
         ::easygl::Framebuffer::blit(0, 0, size_, size_,
                                     0, 0, size_, size_,
                                     ::metagl::ClearBufferBit::Color,
@@ -6053,6 +6086,7 @@ if (ProfileUsesGlslEs100())
         // Blit colour attachment from MSAA FBO to default framebuffer (FBO 0).
         msaaFbo_.bind(::easygl::FramebufferTarget::ReadFramebuffer);
         ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::DrawFramebuffer);
+        const ScissorOffForBlit wholeBackBuffer;
         ::easygl::Framebuffer::blit(0, 0, msaaW_, msaaH_,
                                      0, 0, msaaW_, msaaH_,
                                      ::metagl::ClearBufferBit::Color,

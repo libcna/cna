@@ -1166,6 +1166,11 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                         easygl_spritebatch_rendertarget_size_test.cpp)
         cna_register_renderer_test(NAME EasyGL_SpriteBatch_RenderTargetSize COMMAND cna_test_easygl_spritebatch_rendertarget_size
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        # cna-killer KF-5: an MSAA resolve must not be clipped by the game's scissor rectangle.
+        cna_easygl_test(cna_test_easygl_msaa_resolve_ignores_scissor
+                        easygl_msaa_resolve_ignores_scissor_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_MsaaResolve_IgnoresScissor COMMAND cna_test_easygl_msaa_resolve_ignores_scissor
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         # cna-car-simulator stencil triage: Clear(Target|Stencil) must put StencilWriteMask back.
         cna_easygl_test(cna_test_easygl_clear_restores_stencil_write_mask
                         easygl_clear_restores_stencil_write_mask_test.cpp)
