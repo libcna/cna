@@ -25,10 +25,16 @@ namespace Microsoft::Xna::Framework::GamerServices
     void LeaderboardEntry::setRatingProperty(long long value)
     {
         if(validateWrite_)validateWrite_();
+        const auto previous = rating_;
         rating_ = value;
-        if (onRatingChangedEXT_)
+        try
         {
-            onRatingChangedEXT_();
+            if (onRatingChangedEXT_) onRatingChangedEXT_();
+        }
+        catch (...)
+        {
+            rating_ = previous;
+            throw;
         }
     }
 

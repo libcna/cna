@@ -65,29 +65,31 @@ namespace CNA::Internal::GamerServices
 
         void WriteJsonFile(const fs::path& path, const CNA::Internal::JsonValue& value)
         {
-            std::error_code ec;
-            fs::create_directories(path.parent_path(), ec);
-            // Write to a temp file then rename, so a crash/power-loss mid-write can never leave
-            // a half-written, unparseable store file behind - a fresh process would otherwise
-            // permanently lose every previously-earned achievement/leaderboard entry to a single
-            // torn write, not just the one being written at the time.
-            // concat on the path, not on a narrowed copy of it: path.string() + ".tmp" narrowed through
-        // the ANSI code page purely to append four ASCII characters, so the atomic-write temp file
-        // landed somewhere else (or threw) and the rename below then fell back to a non-atomic
-        // write. The path is already in hand.
-        fs::path tmp = path;
-        tmp += ".tmp";
+            fs::create_directories(path.parent_path());
+            fs::path tmp = path;
+            tmp += ".tmp";
+            bool opened = false;
+            try
             {
-                std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+                std::ofstream out;
+                out.exceptions(std::ios::failbit | std::ios::badbit);
+                out.open(tmp, std::ios::binary | std::ios::trunc);
+                opened = true;
                 out << CNA::Internal::WriteJson(value);
+                out.flush();
+                out.close();
+                // Never truncate the previous record if replacement fails. This is an atomic
+                // replacement on supported filesystems, not a power-loss durability guarantee.
+                fs::rename(tmp, path);
             }
-            fs::rename(tmp, path, ec);
-            if (ec)
+            catch (...)
             {
-                // Cross-filesystem temp dirs can make rename() fail; fall back to a direct write
-                // rather than silently losing the update.
-                std::ofstream out(path, std::ios::binary | std::ios::trunc);
-                out << CNA::Internal::WriteJson(value);
+                if (opened)
+                {
+                    std::error_code ignored;
+                    fs::remove(tmp, ignored);
+                }
+                throw;
             }
         }
     }

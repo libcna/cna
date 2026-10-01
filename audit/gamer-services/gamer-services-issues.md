@@ -6,7 +6,9 @@ Audit GS-AUDIT, 2026-10-01. Paths are relative to CNA unless prefixed `server/` 
 
 ### GS-AUDIT-001 — Offline saves can return success without saving; durability claim is false
 
-**VERIFIED** for silent failure; **STRONG EVIDENCE** for concurrency/durability risk.
+**Phase 2: PARTIALLY FIXED (GS-AUDIT-001).** Four deterministic native regressions reproduced directory creation, temp open, rename and actual write/flush failures. Failed offline BeginAwardAchievement previously invoked its success callback; failed rating changes retained the new value. Checked stream/rename failures now propagate, temp files are cleaned after failed writes, the unsafe direct-truncate fallback is removed, and the entry restores its previous rating. All four regression tests pass. Atomic replacement on Windows, concurrent writers and power-loss durability remain unqualified/unfixed; this is not a full durability fix. See `evidence/phase2/gs-phase2-offline-before.log` and `gs-phase2-offline-after.log`.
+
+**Phase 1: VERIFIED** for silent failure; **STRONG EVIDENCE** for concurrency/durability risk.
 
 - Path: `SignedInGamer::BeginAwardAchievement` / offline `LeaderboardWriter` rating hook → `LocalGamerServicesStore` → `WriteJsonFile`.
 - Evidence: `modules/gamer-services/src/Internal/LocalGamerServicesStore.cpp:66–92` ignores directory creation and stream failure, writes a fixed `<target>.tmp`, then falls back to truncating the destination if rename fails. There is no fsync or read-modify-write lock. Missing/corrupt reads silently return empty (`:46–63`). `SaveLeaderboardEntryEXT` reads and replaces the whole board (`:346–403`).
@@ -65,7 +67,9 @@ Impact: offline columns do not have the service's stream/content persistence sem
 
 ### GS-AUDIT-007 — Known-hash account pictures bypass profile-view and block rules
 
-**STRONG EVIDENCE; source-only, no exploitation performed.** `server/src/Privacy.cpp:30–40` and `Service.cpp:307–312` gate profile reads with `mayView(viewer,target)`. Binary `Service::file` (`Service.cpp:97–99`) and JSON `assets.read` (`:408–411`) instead authorize a picture if **any** user's `picture` equals the hash. Neither invokes `mayView` for that account. Native `GamerProfile::GetGamerPicture` eventually uses the asset path.
+**Phase 2: FIXED.** Server regression reproduced denial of profile.get while both picture routes returned bytes. Commit `f8c1491` applies existing mayView to picture-only asset ownership on both routes, maps HTTP denial to 403, and preserves explicit public title/catalog grants. New service_picture_privacy passes 42 checks; existing privacy test passes 66. Authenticated/anonymous/self/friend/pending/blocked/multi-owner cases are covered, with real SQLite and request serialization. Cached bytes cannot be revoked.
+
+**Phase 1: STRONG EVIDENCE; source-only, no exploitation performed.** `server/src/Privacy.cpp:30–40` and `Service.cpp:307–312` gate profile reads with `mayView(viewer,target)`. Binary `Service::file` (`Service.cpp:97–99`) and JSON `assets.read` (`:408–411`) instead authorize a picture if **any** user's `picture` equals the hash. Neither invokes `mayView` for that account. Native `GamerProfile::GetGamerPicture` eventually uses the asset path.
 
 Impact: an authenticated account knowing a picture hash can retrieve it even when fresh profile lookup would be blocked; this includes parental profile-view restrictions. Hash guessing is not assumed, and already cached/downloaded pictures cannot be retroactively erased. This is a narrower privacy gap than arbitrary profile/account disclosure. Images also shared as public title/catalog assets complicate policy.
 
@@ -81,7 +85,9 @@ Impact: many distinct connecting sources can grow address bookkeeping within the
 
 ### GS-AUDIT-009 — Session acceptance gate requires delivery of an unreliable packet
 
-**VERIFIED.** Fresh server CTest failed `service_cna_session` and `service_cna_session_migration` with `('session-exchanged 5', 'session-exchanged 6')`. Serial rerun passed the ordinary case and failed migration again at the same assertion.
+**Phase 2: FIXED (test oracle), commit `d8e4fea`.** Local XNA reference `../xna4-spec/Microsoft.Xna.Framework.Net/SendDataOptions.xml` explicitly permits loss with InOrder. Native packet mapping uses ENet flags 0 (unreliable sequenced). The native harness still requires all five reliable payloads with identities/bytes/duplicates checked. Python now accepts five or six in every mode. Rebuilt server suite: **26 passed, 0 failed, 7 skipped**; ordinary and migration acceptance both pass. No production delivery fix was indicated.
+
+**Phase 1: VERIFIED.** Fresh server CTest failed `service_cna_session` and `service_cna_session_migration` with `('session-exchanged 5', 'session-exchanged 6')`. Serial rerun passed the ordinary case and failed migration again at the same assertion.
 
 `tools/net/service_session_client_harness.cpp:210–240` sends five reliable payloads and one `SendDataOptions::InOrder` payload (ordered but unreliable); its own completion condition explicitly permits five reliable deliveries after a grace period. `server/tests/cna_session_e2e.py:133–136` only permits five in restart mode. An unreliable send has no unconditional delivery guarantee in ordinary mode either.
 

@@ -1,0 +1,24 @@
+run_gpu_tests_private: DISPLAY=:2 (private Xwayland), WAYLAND_DISPLAY=cna-weston-1672983 (private Weston)
+Running main() from ../../../../vendor/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = SignedInGamerTest.FailedOffline*:LeaderboardWriterTest.FailedOffline*:LeaderboardWriterTest.OfflineSave*:LeaderboardWriterTest.OfflineWrite*
+[==========] Running 4 tests from 2 test suites.
+[----------] Global test environment set-up.
+[----------] 3 tests from LeaderboardWriterTest
+[ RUN      ] LeaderboardWriterTest.FailedOfflineReplacementPreservesDiskAndInMemoryRating
+[       OK ] LeaderboardWriterTest.FailedOfflineReplacementPreservesDiskAndInMemoryRating (9 ms)
+[ RUN      ] LeaderboardWriterTest.OfflineSaveRefusesAnUncreatableParentDirectory
+[       OK ] LeaderboardWriterTest.OfflineSaveRefusesAnUncreatableParentDirectory (0 ms)
+[ RUN      ] LeaderboardWriterTest.OfflineWriteFailurePreservesPreviousRecord
+[       OK ] LeaderboardWriterTest.OfflineWriteFailurePreservesPreviousRecord (0 ms)
+[----------] 3 tests from LeaderboardWriterTest (10 ms total)
+
+[----------] 1 test from SignedInGamerTest
+[ RUN      ] SignedInGamerTest.FailedOfflineAwardDoesNotCompleteSuccessfullyAndCanBeRetried
+[INFO][APPLICATION] [TitleContainer] OpenStream requested: GamerServices/Achievements.json
+[INFO][APPLICATION] [TitleContainer] Resolved path: /rv/data/development/github.com/libcna/cnawork/cmake-build-debug/GamerServices/Achievements.json
+[       OK ] SignedInGamerTest.FailedOfflineAwardDoesNotCompleteSuccessfullyAndCanBeRetried (1 ms)
+[----------] 1 test from SignedInGamerTest (1 ms total)
+
+[----------] Global test environment tear-down
+[==========] 4 tests from 2 test suites ran. (11 ms total)
+[  PASSED  ] 4 tests.

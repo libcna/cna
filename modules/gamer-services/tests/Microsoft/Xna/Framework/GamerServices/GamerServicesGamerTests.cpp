@@ -1147,3 +1147,69 @@ TEST(GamerProfileTest, PictureRejectsDisposedProfile) {
     auto profile=GamerProfile::CreateInternal();profile.Dispose();
     EXPECT_THROW((void)profile.GetGamerPicture(),System::ObjectDisposedException);
 }
+
+TEST(SignedInGamerTest, FailedOfflineAwardDoesNotCompleteSuccessfullyAndCanBeRetried) {
+    GamerServicesStoreGuard guard;
+    CNA::Internal::GamerServices::ResetOfflineAchievementCatalogForTestingEXT();
+    const auto target = std::filesystem::path(CNA::Internal::GamerServices::GetGamerServicesStoreRootEXT()) /
+        "achievements" / "save_failure.json";
+    std::filesystem::create_directories(target);
+    auto gamer = SignedInGamer::CreateInternal("save_failure");
+    bool completed = false;
+    EXPECT_THROW({
+        std::unique_ptr<System::IAsyncResult> result(gamer.BeginAwardAchievement("first", [&](auto&) { completed = true; }, {}));
+    }, std::runtime_error);
+    EXPECT_FALSE(completed);
+    EXPECT_TRUE(CNA::Internal::GamerServices::LoadEarnedAchievementsEXT("save_failure").empty());
+    EXPECT_FALSE(std::filesystem::exists(target.string() + ".tmp"));
+    std::filesystem::remove(target);
+    std::unique_ptr<System::IAsyncResult> result(gamer.BeginAwardAchievement("first", [&](auto&) { completed = true; }, {}));
+    gamer.EndAwardAchievement(result.get());
+    EXPECT_TRUE(completed);
+    EXPECT_EQ(1u, CNA::Internal::GamerServices::LoadEarnedAchievementsEXT("save_failure").size());
+}
+
+TEST(LeaderboardWriterTest, FailedOfflineReplacementPreservesDiskAndInMemoryRating) {
+    GamerServicesStoreGuard guard;
+    const auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
+    auto gamer = SignedInGamer::CreateInternal("save_failure");
+    auto* entry = gamer.getLeaderboardWriterProperty().GetLeaderboard(id);
+    entry->setRatingProperty(17);
+    const auto target = std::filesystem::path(CNA::Internal::GamerServices::GetGamerServicesStoreRootEXT()) /
+        "leaderboards" / "BestScoreLifeTime_0.json";
+    std::filesystem::create_directory(target.string() + ".tmp");
+    EXPECT_THROW(entry->setRatingProperty(99), std::runtime_error);
+    EXPECT_EQ(17, entry->getRatingProperty());
+    auto fresh = SignedInGamer::CreateInternal("save_failure");
+    EXPECT_EQ(17, fresh.getLeaderboardWriterProperty().GetLeaderboard(id)->getRatingProperty());
+    std::filesystem::remove(target.string() + ".tmp");
+    EXPECT_NO_THROW(entry->setRatingProperty(99));
+    auto retried = SignedInGamer::CreateInternal("save_failure");
+    EXPECT_EQ(99, retried.getLeaderboardWriterProperty().GetLeaderboard(id)->getRatingProperty());
+}
+
+TEST(LeaderboardWriterTest, OfflineSaveRefusesAnUncreatableParentDirectory) {
+    GamerServicesStoreGuard guard;
+    const auto parent = std::filesystem::path(CNA::Internal::GamerServices::GetGamerServicesStoreRootEXT()) / "leaderboards";
+    { std::ofstream obstacle(parent); obstacle << "not a directory"; }
+    auto gamer = SignedInGamer::CreateInternal("save_failure");
+    auto* entry = gamer.getLeaderboardWriterProperty().GetLeaderboard(LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime));
+    EXPECT_THROW(entry->setRatingProperty(99), std::runtime_error);
+    EXPECT_EQ(0, entry->getRatingProperty());
+}
+
+TEST(LeaderboardWriterTest, OfflineWriteFailurePreservesPreviousRecord) {
+    if (!std::filesystem::exists("/dev/full")) GTEST_SKIP() << "requires /dev/full";
+    GamerServicesStoreGuard guard;
+    using namespace CNA::Internal::GamerServices;
+    SaveLeaderboardEntryEXT("full", {"Alice", 17}, nullptr);
+    const auto target = std::filesystem::path(GetGamerServicesStoreRootEXT()) / "leaderboards" / "full.json";
+    std::filesystem::create_symlink("/dev/full", target.string() + ".tmp");
+    EXPECT_THROW(SaveLeaderboardEntryEXT("full", {"Alice", 99}, nullptr), std::runtime_error);
+    // The previous implementation can rename the failed-write symlink over the destination.
+    // Do not attempt to read /dev/full, which is an endless source of zero bytes.
+    ASSERT_FALSE(std::filesystem::is_symlink(target));
+    ASSERT_EQ(1u, LoadLeaderboardEntriesEXT("full").size());
+    EXPECT_EQ(17, LoadLeaderboardEntriesEXT("full")[0].Rating);
+    EXPECT_FALSE(std::filesystem::exists(target.string() + ".tmp"));
+}
