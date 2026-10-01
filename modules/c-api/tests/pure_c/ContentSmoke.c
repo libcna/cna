@@ -227,17 +227,29 @@ static int destroy_root_fixture(const RootFixture* const fixture)
         cna_storage_device_destroy(fixture->device) == CNA_RESULT_SUCCESS;
 }
 
-static int validate_paths_and_device(const CNA_Handle manager, const CNA_Handle graphics_device)
+static int validate_paths_and_device(
+    const CNA_Handle game,
+    const CNA_Handle manager,
+    const CNA_Handle graphics_device)
 {
-    char buffer[64];
+    char buffer[1024];
+    char title[1024];
+    uint64_t title_bytes = 0U;
     uint64_t bytes = 0U;
     CNA_Bool has_service_provider = CNA_TRUE;
     CNA_Handle device = CNA_INVALID_HANDLE;
 
-    /* The root is "." here, so the joined path is exactly root + separator + asset name. */
+    /* The root is ".", which names the title's own directory (CBIND-140): the resolved root is the
+       title path as TitleLocation reports it, separator included, and an asset's path is that root
+       followed by the asset name. */
+    if (cna_title_location_copy_path(game, title, (uint64_t)sizeof(title), &title_bytes) !=
+            CNA_RESULT_SUCCESS ||
+        title_bytes == 0U || title_bytes + 5U >= sizeof(buffer) || title[title_bytes - 1U] != '/') {
+        return 0;
+    }
     if (cna_content_manager_get_asset_path_size(manager, view("a.bmp"), &bytes) !=
             CNA_RESULT_SUCCESS ||
-        bytes != UINT64_C(7)) {
+        bytes != title_bytes + 5U) {
         return 0;
     }
     memset(buffer, 0, sizeof(buffer));
@@ -247,18 +259,19 @@ static int validate_paths_and_device(const CNA_Handle manager, const CNA_Handle 
             buffer,
             (uint64_t)sizeof(buffer),
             &bytes) != CNA_RESULT_SUCCESS ||
-        bytes != UINT64_C(7) || buffer[0] != '.' || memcmp(buffer + 2, "a.bmp", 5U) != 0) {
+        bytes != title_bytes + 5U || memcmp(buffer, title, (size_t)title_bytes) != 0 ||
+        memcmp(buffer + title_bytes, "a.bmp", 5U) != 0) {
         return 0;
     }
     if (cna_content_manager_copy_asset_path(manager, view("a.bmp"), buffer, UINT64_C(2), &bytes) !=
             CNA_RESULT_BUFFER_TOO_SMALL ||
-        bytes != UINT64_C(7)) {
+        bytes != title_bytes + 5U) {
         return 0;
     }
     /* An empty asset name resolves to the root itself. */
     if (cna_content_manager_get_asset_path_size(manager, (CNA_StringView){0, 0U}, &bytes) !=
             CNA_RESULT_SUCCESS ||
-        bytes != UINT64_C(1)) {
+        bytes != title_bytes) {
         return 0;
     }
 
@@ -2387,7 +2400,7 @@ static CNA_Result on_load(
         return CNA_RESULT_INVALID_STATE;
     }
 
-    CONTENT_VALIDATE(validate_paths_and_device(state->content_manager, graphics_device));
+    CONTENT_VALIDATE(validate_paths_and_device(game, state->content_manager, graphics_device));
     CONTENT_VALIDATE(validate_resource_manager(graphics_device));
     CONTENT_VALIDATE(validate_font_load(state->content_manager));
     CONTENT_VALIDATE(validate_normalized_byte2_load(state->content_manager, graphics_device));
