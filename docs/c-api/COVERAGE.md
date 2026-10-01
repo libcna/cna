@@ -12,7 +12,7 @@ or renamed module stops this gate rather than inheriting a default. Paths whose 
 are `Internal` or `Detail` in any capitalization are excluded as implementation detail.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **469 headers**, **8141 symbols**, **7030 implemented**, **15 partial**, **656 planned**, **440 not applicable**. Explicitly excluded headers: **468**.
+Snapshot: **469 headers**, **8141 symbols**, **7030 implemented**, **15 partial**, **656 planned**, **440 not applicable**. Explicitly excluded headers: **470**.
 
 ## Out of runtime C API scope
 
@@ -30,8 +30,8 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/platform` | 28 | CBIND-047, owner decision 2026-08-16: the platform abstraction is the substrate the C ABI is built on, not a surface it exposes. Its public headers are its internal contract -- the renderers and the runtime are its consumers, not applications -- and IPlatform deals in C++ interfaces, unique_ptr ownership and virtual dispatch that have no C form |
 | `modules/renderers/**` | 137 | renderer implementations are hidden behind `IGraphicsRenderer` by project policy; a C caller selects a renderer by identity (`CNA_GraphicsRendererType`) and never names an implementation |
 | `modules/audio` internal/detail paths | 10 | implementation detail: a path segment is `Internal` or `Detail` |
-| `modules/content` internal/detail paths | 43 | implementation detail: a path segment is `Internal` or `Detail` |
-| `modules/core` internal/detail paths | 8 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/content` internal/detail paths | 44 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/core` internal/detail paths | 9 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/devices` internal/detail paths | 13 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/devices-ext` internal/detail paths | 1 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/gamer-services` internal/detail paths | 13 | implementation detail: a path segment is `Internal` or `Detail` |
@@ -44,7 +44,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `a676cc65c6ee06a53571af56b178fc0f45928781a9fcabf13e69b63c05a0134e`.
+Full inventory SHA-256: `dc4e0b94f7a455a7ea6887f1f0c2ad6ad4d6405b241880b761f30f68870fda51`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:

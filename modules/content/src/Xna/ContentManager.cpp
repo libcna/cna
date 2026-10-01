@@ -2,6 +2,8 @@
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "CNA/Internal/CaseInsensitivePath.hpp"
 #include "CNA/Internal/ContentPath.hpp"
+#include "CNA/Internal/ContentRoot.hpp"
+#include "CNA/Internal/TitlePath.hpp"
 #include "CNA/Internal/GltfImport/CgltfFileCallbacks.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
 #include "System/IServiceProvider.hpp"
@@ -404,7 +406,7 @@ namespace Microsoft::Xna::Framework::Content
         // not exist: the manifest came back EMPTY, every asset's real extension went undiscovered,
         // and Load<T>() then failed with "cannot open file" naming an extension-less path -- a
         // symptom several steps away from its cause.
-        const std::optional<fs::path> root = CNA::Internal::TryPathFromUtf8(rootDirectory_);
+        const std::optional<fs::path> root = CNA::Internal::TryPathFromUtf8(TitleRootedDirectory());
 
         std::error_code ec;
         if (!root || !fs::exists(*root, ec) || ec)
@@ -502,9 +504,28 @@ namespace Microsoft::Xna::Framework::Content
     // Path helpers
     // ---------------------------------------------------------------------------
 
+    std::string ContentManager::TitleRootedDirectory() const
+    {
+#if defined(__ANDROID__)
+        // Relative content is SDL's packaged-asset namespace there (ResolveExistingAssetPath).
+        return rootDirectory_;
+#else
+        // XNA's ContentManager opens a relative content path through TitleContainer, under
+        // TitleLocation.Path (XNA IL), not the working directory; a game started from anywhere
+        // else found none of its content. ResolveContentRoot keeps the working directory as the
+        // fallback.
+        std::string title = CNA::Internal::TryGetTitlePath().value_or(std::string{});
+        if (title.empty() && CNA::Platform::HasCurrentPlatform())
+        {
+            title = CNA::Platform::GetCurrentPlatform().GetFileSystem()->GetBasePath();
+        }
+        return CNA::Internal::ResolveContentRoot(rootDirectory_, title);
+#endif
+    }
+
     std::string ContentManager::BuildAssetPath(const std::string& assetName) const
     {
-        std::string normalizedRootDirectory = rootDirectory_;
+        std::string normalizedRootDirectory = TitleRootedDirectory();
         std::replace(
             normalizedRootDirectory.begin(), normalizedRootDirectory.end(), '\\', '/');
         std::string normalizedAssetName = assetName;

@@ -596,6 +596,9 @@ namespace Microsoft::Xna::Framework::Content
         }
 
     private:
+        /// The directory RootDirectory names: under the title when it exists there (ResolveContentRoot).
+        [[nodiscard]] std::string TitleRootedDirectory() const;
+
         // Generic reader for game-registered .cnj "type" values that don't have a dedicated
         // LooseFileContentTypeReader<T>. Looks up the .cnj envelope's "type" field in cnjNamedLoaders_
         // and invokes whichever RegisterCnjLoader<T>()-registered factory matches (cnj.md's

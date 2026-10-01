@@ -5,6 +5,7 @@
 #include <filesystem>
 
 #include "CNA/Internal/PathUtf8.hpp"
+#include "CNA/Internal/TitlePath.hpp"
 
 #include "CNA/Platform/CurrentPlatform.hpp"
 
@@ -23,6 +24,8 @@ namespace Microsoft::Xna::Framework
     {
         path_ = value;
         initialized_ = true;
+        // The content manager sits below this module and resolves a relative root against it.
+        CNA::Internal::SetTitlePath(path_);
     }
 
     const std::string& TitleLocation::Path()
@@ -36,6 +39,7 @@ namespace Microsoft::Xna::Framework
         {
             path_ = DetectBasePath();
             initialized_ = true;
+            CNA::Internal::SetTitlePath(path_);
         }
     }
 
