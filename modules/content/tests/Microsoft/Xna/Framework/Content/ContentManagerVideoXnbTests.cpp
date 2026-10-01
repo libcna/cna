@@ -204,6 +204,6 @@ TEST_F(ContentManagerVideoXnbTest, TheObjectReferencedFormLoadsToTheSameValuesAs
     EXPECT_EQ(video.getVideoSoundtrackTypeProperty(), VideoSoundtrackType::Music);
     EXPECT_EQ(video.getDurationProperty(), System::TimeSpan::FromMilliseconds(2000));
     ASSERT_TRUE(std::filesystem::exists(video.getFileNameProperty()));
-
-    std::filesystem::remove(path);
+    // The file is the committed fixture, rewritten byte for byte above; removing it left every
+    // run with a deleted tracked file.
 }
