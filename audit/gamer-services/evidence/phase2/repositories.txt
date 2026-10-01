@@ -1,0 +1,44 @@
+/rv/data/development/github.com/libcna/cnawork
+work
+38287637d85ad8bd3ca782eaa289b1f1c6cf2125
+M audit/gamer-services/gamer-services-architecture.md
+ M audit/gamer-services/gamer-services-audit.md
+ M audit/gamer-services/gamer-services-compatibility-matrix.md
+?? audit/gamer-services/evidence/phase2/gs-phase2-net-tests.log
+?? audit/gamer-services/evidence/phase2/gs-phase2-numeric-server.log
+?? audit/gamer-services/evidence/phase2/gs-phase2-offset-before.log
+?? audit/gamer-services/evidence/phase2/gs-phase2-offset-qualified.log
+?? audit/gamer-services/evidence/phase2/gs-phase2-protocol.log
+?? audit/gamer-services/evidence/phase2/gs-phase2-server-final.log
+?? audit/gamer-services/evidence/phase2/gs-phase2-session-add-loopback.log
+?? audit/gamer-services/evidence/phase2/gs-phase2-session-crash-loopback.log
+?? audit/gamer-services/evidence/phase2/native-results.json
+/rv/data/development/github.com/libcna/cna-gamer-services-server
+feature/gamer-services-server
+477fe6926026c0afa067bacbd82724a2b583bee6
+
+/rv/data/development/github.com/libcna/cna
+next
+9976f4909a72a79e8d64ca4b3d15756f4696f5c9
+
+/rv/data/development/github.com/libcna/sharp-runtime
+next
+db86514c5bb86a5886d8015b8e2916d49be04ae8
+
+/rv/data/development/github.com/libcna/xna4-spec
+develop
+fedc17aa48eb3ddec884e004c52eedb5f969985c
+
+/rv/data/development/github.com/libcna/xna4-decomp
+develop
+bb5eb888053aca8009197552fe6c29add2c2ae2e
+
+/rv/data/development/github.com/libcna/libcna.com
+develop
+f4b2212d56ba57533564443ed2b34526ad0b5426
+
+/rv/data/library/github.com/FNA-XNA/FNA
+master
+b35512475ed7980169574d2c40927381c1764d5a
+?? .idea/
+?? .junie/

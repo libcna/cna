@@ -1,0 +1,1308 @@
+{
+  "GamerServices": {
+    "totals": {
+      "tests": "633",
+      "failures": "0",
+      "disabled": "0",
+      "errors": "0",
+      "time": "21.437",
+      "timestamp": "2026-10-01T21:53:57.013",
+      "name": "AllTests"
+    },
+    "suites": [
+      {
+        "name": "AssetDiskCacheTest",
+        "tests": "10",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.059",
+        "timestamp": "2026-10-01T21:53:57.013"
+      },
+      {
+        "name": "AvatarAnimationTest",
+        "tests": "19",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.526",
+        "timestamp": "2026-10-01T21:53:57.073"
+      },
+      {
+        "name": "AvatarCatalogTest",
+        "tests": "17",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "2.204",
+        "timestamp": "2026-10-01T21:53:57.599"
+      },
+      {
+        "name": "AvatarDescriptionCodecTest",
+        "tests": "11",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.04",
+        "timestamp": "2026-10-01T21:53:59.803"
+      },
+      {
+        "name": "AvatarDescriptionTest",
+        "tests": "22",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.007",
+        "timestamp": "2026-10-01T21:53:59.843"
+      },
+      {
+        "name": "AvatarEditorTest",
+        "tests": "18",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.061",
+        "timestamp": "2026-10-01T21:53:59.851"
+      },
+      {
+        "name": "AvatarExpressionTest",
+        "tests": "7",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:53:59.912"
+      },
+      {
+        "name": "AvatarRendererTest",
+        "tests": "28",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.376",
+        "timestamp": "2026-10-01T21:53:59.912"
+      },
+      {
+        "name": "CredentialStoreTest",
+        "tests": "8",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.128",
+        "timestamp": "2026-10-01T21:54:00.289"
+      },
+      {
+        "name": "CredentialStoreKeyringTest",
+        "tests": "3",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "2.371",
+        "timestamp": "2026-10-01T21:54:00.417"
+      },
+      {
+        "name": "AchievementCollectionTest",
+        "tests": "22",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.788"
+      },
+      {
+        "name": "AchievementTest",
+        "tests": "3",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.788"
+      },
+      {
+        "name": "FriendGamerTest",
+        "tests": "4",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.788"
+      },
+      {
+        "name": "FriendCollectionTest",
+        "tests": "4",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.789"
+      },
+      {
+        "name": "SignedInGamerCollectionTest",
+        "tests": "11",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.789"
+      },
+      {
+        "name": "GamerCollectionEnumeratorTest",
+        "tests": "4",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.789"
+      },
+      {
+        "name": "LeaderboardEntryTest",
+        "tests": "8",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.789"
+      },
+      {
+        "name": "PropertyDictionaryTest",
+        "tests": "36",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.789"
+      },
+      {
+        "name": "LeaderboardIdentityTest",
+        "tests": "3",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.789"
+      },
+      {
+        "name": "GamerPresenceTest",
+        "tests": "3",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "GamerPrivilegesTest",
+        "tests": "1",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "GameDefaultsTest",
+        "tests": "1",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "ControllerSensitivityTest",
+        "tests": "2",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "GameDifficultyTest",
+        "tests": "2",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "GamerPresenceModeTest",
+        "tests": "3",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "GamerPrivilegeSettingTest",
+        "tests": "2",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "GamerZoneTest",
+        "tests": "2",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "LeaderboardKeyTest",
+        "tests": "2",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "LeaderboardOutcomeTest",
+        "tests": "2",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "MessageBoxIconTest",
+        "tests": "1",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "NotificationPositionTest",
+        "tests": "1",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "RacingCameraAngleTest",
+        "tests": "1",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "AvatarBodyTypeTest",
+        "tests": "1",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "AvatarRendererStateTest",
+        "tests": "1",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "AvatarMouthTest",
+        "tests": "1",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "AvatarEyeTest",
+        "tests": "1",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "AvatarEyebrowTest",
+        "tests": "1",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "AvatarAnimationPresetTest",
+        "tests": "2",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "AvatarBoneTest",
+        "tests": "3",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "SignedInEventArgsTest",
+        "tests": "2",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "SignedOutEventArgsTest",
+        "tests": "2",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "InviteAcceptedEventArgsTest",
+        "tests": "3",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "NetworkExceptionTest",
+        "tests": "4",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "NetworkNotAvailableExceptionTest",
+        "tests": "4",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "GamerPrivilegeExceptionTest",
+        "tests": "3",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "GamerServicesNotAvailableExceptionTest",
+        "tests": "3",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "GameUpdateRequiredExceptionTest",
+        "tests": "3",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "GuideAlreadyVisibleExceptionTest",
+        "tests": "3",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "GamerTest",
+        "tests": "19",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.790"
+      },
+      {
+        "name": "GamerProfileTest",
+        "tests": "5",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.791"
+      },
+      {
+        "name": "LeaderboardWriterTest",
+        "tests": "10",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.007",
+        "timestamp": "2026-10-01T21:54:02.791"
+      },
+      {
+        "name": "LeaderboardReaderTest",
+        "tests": "26",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.004",
+        "timestamp": "2026-10-01T21:54:02.798"
+      },
+      {
+        "name": "SignedInGamerTest",
+        "tests": "28",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.007",
+        "timestamp": "2026-10-01T21:54:02.803"
+      },
+      {
+        "name": "GamerServicesDispatcherTest",
+        "tests": "5",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:02.811"
+      },
+      {
+        "name": "GuideTest",
+        "tests": "52",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "7.243",
+        "timestamp": "2026-10-01T21:54:02.811"
+      },
+      {
+        "name": "GuideAvatarEditorTest",
+        "tests": "9",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.107",
+        "timestamp": "2026-10-01T21:54:10.054"
+      },
+      {
+        "name": "GuideInputTest",
+        "tests": "3",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "2.373",
+        "timestamp": "2026-10-01T21:54:10.162"
+      },
+      {
+        "name": "GuideLeaderboardTest",
+        "tests": "3",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.026",
+        "timestamp": "2026-10-01T21:54:12.535"
+      },
+      {
+        "name": "GuideNotificationTest",
+        "tests": "3",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:12.562"
+      },
+      {
+        "name": "GuidePartyTest",
+        "tests": "5",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.034",
+        "timestamp": "2026-10-01T21:54:12.562"
+      },
+      {
+        "name": "GuidePrivilegeTest",
+        "tests": "4",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.011",
+        "timestamp": "2026-10-01T21:54:12.596"
+      },
+      {
+        "name": "GuideSocialPaneTest",
+        "tests": "6",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.001",
+        "timestamp": "2026-10-01T21:54:12.608"
+      },
+      {
+        "name": "GuideUiTest",
+        "tests": "12",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.046",
+        "timestamp": "2026-10-01T21:54:12.609"
+      },
+      {
+        "name": "LocalProfileStoreTest",
+        "tests": "7",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.036",
+        "timestamp": "2026-10-01T21:54:12.656"
+      },
+      {
+        "name": "LocalSignInTest",
+        "tests": "8",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.059",
+        "timestamp": "2026-10-01T21:54:12.692"
+      },
+      {
+        "name": "LocalAutoSignInTest",
+        "tests": "1",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.036",
+        "timestamp": "2026-10-01T21:54:12.752"
+      },
+      {
+        "name": "ServiceReadLifetimeTest",
+        "tests": "8",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.001",
+        "timestamp": "2026-10-01T21:54:12.788"
+      },
+      {
+        "name": "AvatarServiceTest",
+        "tests": "21",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "2.176",
+        "timestamp": "2026-10-01T21:54:12.790"
+      },
+      {
+        "name": "AvatarChangedTest",
+        "tests": "7",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.812",
+        "timestamp": "2026-10-01T21:54:14.966"
+      },
+      {
+        "name": "AvatarCatalogProcessTest",
+        "tests": "1",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.255",
+        "timestamp": "2026-10-01T21:54:15.779"
+      },
+      {
+        "name": "ServiceBackendAuthorityTest",
+        "tests": "4",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.003",
+        "timestamp": "2026-10-01T21:54:16.034"
+      },
+      {
+        "name": "ServiceConfigurationTest",
+        "tests": "7",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:16.037"
+      },
+      {
+        "name": "ServiceProtocolTest",
+        "tests": "2",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:54:16.037"
+      },
+      {
+        "name": "ServiceRequestRetryTest",
+        "tests": "6",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "1.978",
+        "timestamp": "2026-10-01T21:54:16.038"
+      },
+      {
+        "name": "ServiceSessionDirectoryTest",
+        "tests": "16",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.007",
+        "timestamp": "2026-10-01T21:54:18.016"
+      },
+      {
+        "name": "ServiceUpdateSubscriptionTest",
+        "tests": "12",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.001",
+        "timestamp": "2026-10-01T21:54:18.023"
+      },
+      {
+        "name": "SocialNotificationTest",
+        "tests": "3",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.329",
+        "timestamp": "2026-10-01T21:54:18.025"
+      },
+      {
+        "name": "SystemGuideTest",
+        "tests": "16",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.06",
+        "timestamp": "2026-10-01T21:54:18.355"
+      },
+      {
+        "name": "GuideVisibilityTest",
+        "tests": "1",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.029",
+        "timestamp": "2026-10-01T21:54:18.416"
+      },
+      {
+        "name": "ServiceFamilies/ServiceAsyncLifetimeTest",
+        "tests": "25",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.005",
+        "timestamp": "2026-10-01T21:54:18.445"
+      }
+    ]
+  },
+  "Net": {
+    "totals": {
+      "tests": "523",
+      "failures": "0",
+      "disabled": "0",
+      "errors": "0",
+      "time": "43.121",
+      "timestamp": "2026-10-01T21:57:07.631",
+      "name": "AllTests"
+    },
+    "suites": [
+      {
+        "name": "ENetBackendTest",
+        "tests": "60",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "6.585",
+        "timestamp": "2026-10-01T21:57:07.631"
+      },
+      {
+        "name": "ENetDiscoveryServiceTest",
+        "tests": "13",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "4.073",
+        "timestamp": "2026-10-01T21:57:14.217"
+      },
+      {
+        "name": "ENetHostHandleTest",
+        "tests": "10",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.048",
+        "timestamp": "2026-10-01T21:57:18.291"
+      },
+      {
+        "name": "ENetLibraryTest",
+        "tests": "2",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:57:18.339"
+      },
+      {
+        "name": "GamerServicesDispatcherHangRegressionTest",
+        "tests": "4",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.202",
+        "timestamp": "2026-10-01T21:57:18.339"
+      },
+      {
+        "name": "NetDiscoveryProtocolTest",
+        "tests": "14",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:57:18.541"
+      },
+      {
+        "name": "NetPacketCodecTest",
+        "tests": "31",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:57:18.542"
+      },
+      {
+        "name": "NetworkSessionTypePolicyTest",
+        "tests": "11",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:57:18.542"
+      },
+      {
+        "name": "OnlineInvitationTest",
+        "tests": "7",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "1.101",
+        "timestamp": "2026-10-01T21:57:18.543"
+      },
+      {
+        "name": "OnlineLeaderboardTest",
+        "tests": "8",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "2.594",
+        "timestamp": "2026-10-01T21:57:19.645"
+      },
+      {
+        "name": "OnlineNetworkSessionTest",
+        "tests": "18",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "6.991",
+        "timestamp": "2026-10-01T21:57:22.239"
+      },
+      {
+        "name": "OnlineSessionPreparationTest",
+        "tests": "18",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "10.005",
+        "timestamp": "2026-10-01T21:57:29.230"
+      },
+      {
+        "name": "RelayEnetPolicyTest",
+        "tests": "5",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.003",
+        "timestamp": "2026-10-01T21:57:39.236"
+      },
+      {
+        "name": "ServiceENetSessionTest",
+        "tests": "17",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "4.695",
+        "timestamp": "2026-10-01T21:57:39.239"
+      },
+      {
+        "name": "OnlineSessionOperationTest",
+        "tests": "13",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.223",
+        "timestamp": "2026-10-01T21:57:43.934"
+      },
+      {
+        "name": "ServiceGamePacketPolicyTest",
+        "tests": "18",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.131",
+        "timestamp": "2026-10-01T21:57:44.158"
+      },
+      {
+        "name": "ServiceSessionPumpTest",
+        "tests": "13",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.002",
+        "timestamp": "2026-10-01T21:57:44.289"
+      },
+      {
+        "name": "TrafficRateTest",
+        "tests": "2",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:57:44.292"
+      },
+      {
+        "name": "TwoProcessLoopbackTest",
+        "tests": "8",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "5.494",
+        "timestamp": "2026-10-01T21:57:44.292"
+      },
+      {
+        "name": "QualityOfServiceTest",
+        "tests": "2",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:57:49.786"
+      },
+      {
+        "name": "AvailableNetworkSessionTest",
+        "tests": "6",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:57:49.787"
+      },
+      {
+        "name": "AvailableNetworkSessionCollectionTest",
+        "tests": "7",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:57:49.787"
+      },
+      {
+        "name": "LocalNetworkGamerTest",
+        "tests": "21",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.042",
+        "timestamp": "2026-10-01T21:57:49.787"
+      },
+      {
+        "name": "NetworkSessionTypeTest",
+        "tests": "2",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:57:49.829"
+      },
+      {
+        "name": "NetworkSessionStateTest",
+        "tests": "1",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:57:49.829"
+      },
+      {
+        "name": "NetworkSessionEndReasonTest",
+        "tests": "1",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:57:49.829"
+      },
+      {
+        "name": "NetworkSessionJoinErrorTest",
+        "tests": "1",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:57:49.829"
+      },
+      {
+        "name": "SendDataOptionsTest",
+        "tests": "2",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:57:49.830"
+      },
+      {
+        "name": "GameEndedEventArgsTest",
+        "tests": "1",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:57:49.830"
+      },
+      {
+        "name": "GameStartedEventArgsTest",
+        "tests": "1",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:57:49.830"
+      },
+      {
+        "name": "GamerJoinedEventArgsTest",
+        "tests": "2",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:57:49.830"
+      },
+      {
+        "name": "GamerLeftEventArgsTest",
+        "tests": "2",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:57:49.830"
+      },
+      {
+        "name": "HostChangedEventArgsTest",
+        "tests": "2",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:57:49.830"
+      },
+      {
+        "name": "NetworkSessionEndedEventArgsTest",
+        "tests": "2",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:57:49.830"
+      },
+      {
+        "name": "WriteLeaderboardsEventArgsTest",
+        "tests": "3",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:57:49.830"
+      },
+      {
+        "name": "NetworkMachineTest",
+        "tests": "2",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:57:49.830"
+      },
+      {
+        "name": "NetworkGamerTest",
+        "tests": "9",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:57:49.830"
+      },
+      {
+        "name": "NetworkSessionJoinExceptionTest",
+        "tests": "14",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:57:49.830"
+      },
+      {
+        "name": "NetworkSessionPropertiesTest",
+        "tests": "30",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:57:49.831"
+      },
+      {
+        "name": "ServiceSearchTest",
+        "tests": "13",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.009",
+        "timestamp": "2026-10-01T21:57:49.832"
+      },
+      {
+        "name": "NetworkSessionTest",
+        "tests": "69",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.687",
+        "timestamp": "2026-10-01T21:57:49.841"
+      },
+      {
+        "name": "PacketReaderTest",
+        "tests": "10",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:57:50.529"
+      },
+      {
+        "name": "PacketWriterTest",
+        "tests": "9",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:57:50.529"
+      },
+      {
+        "name": "PacketReaderWriterTest",
+        "tests": "17",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.",
+        "timestamp": "2026-10-01T21:57:50.529"
+      },
+      {
+        "name": "RelayMessageAssemblerTest",
+        "tests": "8",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.093",
+        "timestamp": "2026-10-01T21:57:50.529"
+      },
+      {
+        "name": "RelayProtocolTest",
+        "tests": "3",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.017",
+        "timestamp": "2026-10-01T21:57:50.623"
+      },
+      {
+        "name": "RelayTransportTest",
+        "tests": "4",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.003",
+        "timestamp": "2026-10-01T21:57:50.640"
+      },
+      {
+        "name": "ServiceRosterTest",
+        "tests": "7",
+        "failures": "0",
+        "disabled": "0",
+        "skipped": "0",
+        "errors": "0",
+        "time": "0.107",
+        "timestamp": "2026-10-01T21:57:50.644"
+      }
+    ]
+  }
+}

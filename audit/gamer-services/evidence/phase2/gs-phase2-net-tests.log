@@ -1,0 +1,1206 @@
+run_gpu_tests_private: DISPLAY=:2 (private Xwayland), WAYLAND_DISPLAY=cna-weston-1682805 (private Weston)
+Running main() from ../../../../vendor/googletest/googletest/src/gtest_main.cc
+[==========] Running 523 tests from 48 test suites.
+[----------] Global test environment set-up.
+[----------] 60 tests from ENetBackendTest
+[ RUN      ] ENetBackendTest.RealNetworkingEnabledOnlyForSystemLink
+[       OK ] ENetBackendTest.RealNetworkingEnabledOnlyForSystemLink (0 ms)
+[ RUN      ] ENetBackendTest.TeardownAndPumpOnUnregisteredSessionAreSafeNoOps
+[       OK ] ENetBackendTest.TeardownAndPumpOnUnregisteredSessionAreSafeNoOps (0 ms)
+[ RUN      ] ENetBackendTest.StartHostingIsIdempotent
+[       OK ] ENetBackendTest.StartHostingIsIdempotent (20 ms)
+[ RUN      ] ENetBackendTest.StartHostingIsNoOpForNonSystemLinkTypes
+[       OK ] ENetBackendTest.StartHostingIsNoOpForNonSystemLinkTypes (0 ms)
+[ RUN      ] ENetBackendTest.ConnectToHostIsNoOpForNonSystemLinkTypes
+[       OK ] ENetBackendTest.ConnectToHostIsNoOpForNonSystemLinkTypes (0 ms)
+[ RUN      ] ENetBackendTest.HostRespondsToClientHelloWithServerWelcomeAndAddsRemoteGamer
+[       OK ] ENetBackendTest.HostRespondsToClientHelloWithServerWelcomeAndAddsRemoteGamer (120 ms)
+[ RUN      ] ENetBackendTest.ClientSendsClientHelloAndProcessesServerWelcome
+[       OK ] ENetBackendTest.ClientSendsClientHelloAndProcessesServerWelcome (20 ms)
+[ RUN      ] ENetBackendTest.HostLocalGamerAddedMidSessionIsAnnouncedAndSendsAtOnce
+[       OK ] ENetBackendTest.HostLocalGamerAddedMidSessionIsAnnouncedAndSendsAtOnce (20 ms)
+[ RUN      ] ENetBackendTest.ClientLocalGamerIsNumberedByTheHostAndItsEarlierSendsArriveInOrder
+[       OK ] ENetBackendTest.ClientLocalGamerIsNumberedByTheHostAndItsEarlierSendsArriveInOrder (20 ms)
+[ RUN      ] ENetBackendTest.ClientLocalGamerAddedWhileJoiningIsRequestedOnceWelcomed
+[       OK ] ENetBackendTest.ClientLocalGamerAddedWhileJoiningIsRequestedOnceWelcomed (20 ms)
+[ RUN      ] ENetBackendTest.PendingAppDataQueueEvictsOldestOnceBoundIsReached
+[       OK ] ENetBackendTest.PendingAppDataQueueEvictsOldestOnceBoundIsReached (20 ms)
+[ RUN      ] ENetBackendTest.GamerLeaveBroadcastPurgesPendingAppDataNamingTheDepartedGamer
+[       OK ] ENetBackendTest.GamerLeaveBroadcastPurgesPendingAppDataNamingTheDepartedGamer (20 ms)
+[ RUN      ] ENetBackendTest.HostMeasuresTrafficAndPublishesItsRoundTripsToClientGamers
+[       OK ] ENetBackendTest.HostMeasuresTrafficAndPublishesItsRoundTripsToClientGamers (1004 ms)
+[ RUN      ] ENetBackendTest.ClientAddsTheHostsRoundTripForAGamerOnAnotherClient
+[       OK ] ENetBackendTest.ClientAddsTheHostsRoundTripForAGamerOnAnotherClient (20 ms)
+[ RUN      ] ENetBackendTest.HostAdmitsAClientsAddedGamerOntoThatClientsMachine
+[       OK ] ENetBackendTest.HostAdmitsAClientsAddedGamerOntoThatClientsMachine (20 ms)
+[ RUN      ] ENetBackendTest.ClientSessionEndedOnHostDisconnectDropsAndCountsEveryPendingSend
+[       OK ] ENetBackendTest.ClientSessionEndedOnHostDisconnectDropsAndCountsEveryPendingSend (21 ms)
+[ RUN      ] ENetBackendTest.HostMigrationResetDropsAndCountsEveryPendingSend
+[       OK ] ENetBackendTest.HostMigrationResetDropsAndCountsEveryPendingSend (45 ms)
+[ RUN      ] ENetBackendTest.DisposeWithPendingAppDataInQueueIsSafe
+[       OK ] ENetBackendTest.DisposeWithPendingAppDataInQueueIsSafe (20 ms)
+[ RUN      ] ENetBackendTest.HostDeliversAppDataFromRemoteGamerIntoLocalPacketQueue
+[       OK ] ENetBackendTest.HostDeliversAppDataFromRemoteGamerIntoLocalPacketQueue (20 ms)
+[ RUN      ] ENetBackendTest.HostRelaysAppDataBetweenTwoNonLocalPeers
+[       OK ] ENetBackendTest.HostRelaysAppDataBetweenTwoNonLocalPeers (24 ms)
+[ RUN      ] ENetBackendTest.ZeroSimulatedLatencyAndPacketLossDeliverAppDataImmediately
+[       OK ] ENetBackendTest.ZeroSimulatedLatencyAndPacketLossDeliverAppDataImmediately (23 ms)
+[ RUN      ] ENetBackendTest.SimulatedPacketLossOfOneDropsAllAppDataDeterministically
+[       OK ] ENetBackendTest.SimulatedPacketLossOfOneDropsAllAppDataDeterministically (22 ms)
+[ RUN      ] ENetBackendTest.SimulatedPacketLossOfZeroDropsNoAppData
+[       OK ] ENetBackendTest.SimulatedPacketLossOfZeroDropsNoAppData (21 ms)
+[ RUN      ] ENetBackendTest.SimulatedLatencyDelaysAppDataDeliveryUntilTheClockAdvances
+[       OK ] ENetBackendTest.SimulatedLatencyDelaysAppDataDeliveryUntilTheClockAdvances (22 ms)
+[ RUN      ] ENetBackendTest.ClientSendDataTransmitsAppDataToHost
+[       OK ] ENetBackendTest.ClientSendDataTransmitsAppDataToHost (20 ms)
+[ RUN      ] ENetBackendTest.HostRemovesGamerAndFiresGamerLeftOnClientDisconnect
+[       OK ] ENetBackendTest.HostRemovesGamerAndFiresGamerLeftOnClientDisconnect (21 ms)
+[ RUN      ] ENetBackendTest.ClientRaisesSessionEndedOnHostDisconnect
+[       OK ] ENetBackendTest.ClientRaisesSessionEndedOnHostDisconnect (23 ms)
+[ RUN      ] ENetBackendTest.AllowHostMigrationFalseStillEndsSessionImmediatelyWithARealSurvivorKnown
+[       OK ] ENetBackendTest.AllowHostMigrationFalseStillEndsSessionImmediatelyWithARealSurvivorKnown (24 ms)
+[ RUN      ] ENetBackendTest.ClientPromotesItselfWhenItIsTheOnlyKnownSurvivor
+[       OK ] ENetBackendTest.ClientPromotesItselfWhenItIsTheOnlyKnownSurvivor (322 ms)
+[ RUN      ] ENetBackendTest.ClientTargetsTheLowestSurvivingWireIdInsteadOfPromotingItself
+[       OK ] ENetBackendTest.ClientTargetsTheLowestSurvivingWireIdInsteadOfPromotingItself (468 ms)
+[ RUN      ] ENetBackendTest.HostRejectsClientHelloWhenPlayingAndJoinInProgressDisallowed
+[       OK ] ENetBackendTest.HostRejectsClientHelloWhenPlayingAndJoinInProgressDisallowed (20 ms)
+[ RUN      ] ENetBackendTest.ClientProcessesGamerLeaveBroadcast
+[       OK ] ENetBackendTest.ClientProcessesGamerLeaveBroadcast (20 ms)
+[ RUN      ] ENetBackendTest.HostBroadcastsStateChangeOnStartAndEndGame
+[       OK ] ENetBackendTest.HostBroadcastsStateChangeOnStartAndEndGame (20 ms)
+[ RUN      ] ENetBackendTest.LobbyReadinessTravelsBetweenHostAndClient
+[       OK ] ENetBackendTest.LobbyReadinessTravelsBetweenHostAndClient (20 ms)
+[ RUN      ] ENetBackendTest.HostRemovesAClientMachineWhichIsToldWhy
+[       OK ] ENetBackendTest.HostRemovesAClientMachineWhichIsToldWhy (20 ms)
+[ RUN      ] ENetBackendTest.AClientTheHostRemovedEndsWithRemovedByHost
+[       OK ] ENetBackendTest.AClientTheHostRemovedEndsWithRemovedByHost (20 ms)
+[ RUN      ] ENetBackendTest.HostSendsItsSettingsAndMachineGroupingAndRepublishesChanges
+[       OK ] ENetBackendTest.HostSendsItsSettingsAndMachineGroupingAndRepublishesChanges (20 ms)
+[ RUN      ] ENetBackendTest.AClientReportsTheHostsSettingsAndMachines
+[       OK ] ENetBackendTest.AClientReportsTheHostsSettingsAndMachines (20 ms)
+[ RUN      ] ENetBackendTest.AJoiningMachineLearnsWhoIsAlreadyReady
+[       OK ] ENetBackendTest.AJoiningMachineLearnsWhoIsAlreadyReady (20 ms)
+[ RUN      ] ENetBackendTest.ClientAppliesTheHostsReadinessReportsOnly
+[       OK ] ENetBackendTest.ClientAppliesTheHostsReadinessReportsOnly (20 ms)
+[ RUN      ] ENetBackendTest.ClientProcessesStateChangeBroadcast
+[       OK ] ENetBackendTest.ClientProcessesStateChangeBroadcast (20 ms)
+[ RUN      ] ENetBackendTest.HostWelcomeAndLaterBroadcastPreserveCurrentSessionProperties
+[       OK ] ENetBackendTest.HostWelcomeAndLaterBroadcastPreserveCurrentSessionProperties (20 ms)
+[ RUN      ] ENetBackendTest.ClientAppliesWelcomeAndLaterAuthoritativeSessionPropertiesBroadcast
+[       OK ] ENetBackendTest.ClientAppliesWelcomeAndLaterAuthoritativeSessionPropertiesBroadcast (20 ms)
+[ RUN      ] ENetBackendTest.HostRejectsForgedSessionPropertiesBroadcastFromClient
+[WARN][APPLICATION] [ENetBackend] Rejected host-only SessionPropertiesBroadcast from a non-host peer (forged or misbehaving client) - disconnecting the peer.
+[       OK ] ENetBackendTest.HostRejectsForgedSessionPropertiesBroadcastFromClient (20 ms)
+[ RUN      ] ENetBackendTest.HostSurvivesTruncatedClientHelloAndContinuesFunctioningAfterward
+[       OK ] ENetBackendTest.HostSurvivesTruncatedClientHelloAndContinuesFunctioningAfterward (20 ms)
+[ RUN      ] ENetBackendTest.DisconnectedPeerWireIdIsReclaimedAndReusedByTheNextJoiner
+[       OK ] ENetBackendTest.DisconnectedPeerWireIdIsReclaimedAndReusedByTheNextJoiner (20 ms)
+[ RUN      ] ENetBackendTest.DisposeDisconnectsConnectedPeersPromptlyInsteadOfWaitingForTimeout
+[       OK ] ENetBackendTest.DisposeDisconnectsConnectedPeersPromptlyInsteadOfWaitingForTimeout (20 ms)
+[ RUN      ] ENetBackendTest.HostFreesOwnedRemoteGamerOnDispose
+[       OK ] ENetBackendTest.HostFreesOwnedRemoteGamerOnDispose (20 ms)
+[ RUN      ] ENetBackendTest.HostMeasuresRealRoundtripTimeForRemoteGamer
+[       OK ] ENetBackendTest.HostMeasuresRealRoundtripTimeForRemoteGamer (20 ms)
+[ RUN      ] ENetBackendTest.HostRejectsForgedServerWelcomeFromNonHostPeer
+[WARN][APPLICATION] [ENetBackend] Rejected host-only ServerWelcome from a non-host peer (forged or misbehaving client) - disconnecting the peer.
+[       OK ] ENetBackendTest.HostRejectsForgedServerWelcomeFromNonHostPeer (20 ms)
+[ RUN      ] ENetBackendTest.HostRejectsForgedGamerJoinBroadcastFromNonHostPeer
+[WARN][APPLICATION] [ENetBackend] Rejected host-only GamerJoinBroadcast from a non-host peer (forged or misbehaving client) - disconnecting the peer.
+[       OK ] ENetBackendTest.HostRejectsForgedGamerJoinBroadcastFromNonHostPeer (20 ms)
+[ RUN      ] ENetBackendTest.HostRejectsForgedGamerLeaveBroadcastFromNonHostPeer
+[WARN][APPLICATION] [ENetBackend] Rejected host-only GamerLeaveBroadcast from a non-host peer (forged or misbehaving client) - disconnecting the peer.
+[       OK ] ENetBackendTest.HostRejectsForgedGamerLeaveBroadcastFromNonHostPeer (20 ms)
+[ RUN      ] ENetBackendTest.HostRejectsForgedStateChangeBroadcastFromNonHostPeer
+[WARN][APPLICATION] [ENetBackend] Rejected host-only StateChangeBroadcast from a non-host peer (forged or misbehaving client) - disconnecting the peer.
+[       OK ] ENetBackendTest.HostRejectsForgedStateChangeBroadcastFromNonHostPeer (20 ms)
+[ RUN      ] ENetBackendTest.ClientRejectsForgedGamerLeaveBroadcastFromRogueThirdPartyPeer
+[WARN][APPLICATION] [ENetBackend] Rejected host-only GamerLeaveBroadcast from a non-host peer (forged or misbehaving client) - disconnecting the peer.
+[       OK ] ENetBackendTest.ClientRejectsForgedGamerLeaveBroadcastFromRogueThirdPartyPeer (20 ms)
+[ RUN      ] ENetBackendTest.HostRejectsDuplicateClientHelloFromAlreadyHandshakedPeer
+[WARN][APPLICATION] [ENetBackend] Rejected duplicate ClientHello from an already-handshaked peer - disconnecting the peer.
+[       OK ] ENetBackendTest.HostRejectsDuplicateClientHelloFromAlreadyHandshakedPeer (20 ms)
+[ RUN      ] ENetBackendTest.HostAcceptsFreshClientHelloAfterALegitimateDisconnectAndReconnect
+[       OK ] ENetBackendTest.HostAcceptsFreshClientHelloAfterALegitimateDisconnectAndReconnect (20 ms)
+[ RUN      ] ENetBackendTest.VoiceFromTheMicrophoneOwnerReachesTheRemoteMachine
+[       OK ] ENetBackendTest.VoiceFromTheMicrophoneOwnerReachesTheRemoteMachine (60 ms)
+[ RUN      ] ENetBackendTest.RemoteVoiceMakesItsGamerTalkAndIsPlayed
+[       OK ] ENetBackendTest.RemoteVoiceMakesItsGamerTalkAndIsPlayed (361 ms)
+[ RUN      ] ENetBackendTest.EnableSendVoiceAndMuteStopSpeechButNotPresence
+[       OK ] ENetBackendTest.EnableSendVoiceAndMuteStopSpeechButNotPresence (3192 ms)
+[ RUN      ] ENetBackendTest.TheHostTakesVoiceOnlyFromItsSendersMachineAndRelaysIt
+[       OK ] ENetBackendTest.TheHostTakesVoiceOnlyFromItsSendersMachineAndRelaysIt (20 ms)
+[----------] 60 tests from ENetBackendTest (6585 ms total)
+
+[----------] 13 tests from ENetDiscoveryServiceTest
+[ RUN      ] ENetDiscoveryServiceTest.FindSessionsReturnsEmptyImmediatelyForNonSystemLinkTypes
+[       OK ] ENetDiscoveryServiceTest.FindSessionsReturnsEmptyImmediatelyForNonSystemLinkTypes (0 ms)
+[ RUN      ] ENetDiscoveryServiceTest.FindSessionsReturnsEmptyWhenNoHostIsRegistered
+[       OK ] ENetDiscoveryServiceTest.FindSessionsReturnsEmptyWhenNoHostIsRegistered (150 ms)
+[ RUN      ] ENetDiscoveryServiceTest.FindSessionsDiscoversRegisteredHost
+[       OK ] ENetDiscoveryServiceTest.FindSessionsDiscoversRegisteredHost (161 ms)
+[ RUN      ] ENetDiscoveryServiceTest.FindSessionsEstimatesBothDirectionsOfTheHostsPath
+[       OK ] ENetDiscoveryServiceTest.FindSessionsEstimatesBothDirectionsOfTheHostsPath (161 ms)
+[ RUN      ] ENetDiscoveryServiceTest.UpstreamInvitationsAndReportsRoundTripAndRefuseNegativeRates
+[       OK ] ENetDiscoveryServiceTest.UpstreamInvitationsAndReportsRoundTripAndRefuseNegativeRates (0 ms)
+[ RUN      ] ENetDiscoveryServiceTest.QosProbesAreFixedSizeAndValidated
+[       OK ] ENetDiscoveryServiceTest.QosProbesAreFixedSizeAndValidated (0 ms)
+[ RUN      ] ENetDiscoveryServiceTest.UnregisterHostStopsAnsweringQueries
+[       OK ] ENetDiscoveryServiceTest.UnregisterHostStopsAnsweringQueries (170 ms)
+[ RUN      ] ENetDiscoveryServiceTest.UnregisterHostIsSafeForAnUnregisteredOrMismatchedSession
+[       OK ] ENetDiscoveryServiceTest.UnregisterHostIsSafeForAnUnregisteredOrMismatchedSession (161 ms)
+[ RUN      ] ENetDiscoveryServiceTest.MalformedAnnounceDuringSearchIsIgnoredAndDoesNotLeaveADanglingResultsPointer
+[       OK ] ENetDiscoveryServiceTest.MalformedAnnounceDuringSearchIsIgnoredAndDoesNotLeaveADanglingResultsPointer (311 ms)
+[ RUN      ] ENetDiscoveryServiceTest.PollIgnoresMalformedAnnounceWhileIdlingAndDiscoveryKeepsWorking
+[       OK ] ENetDiscoveryServiceTest.PollIgnoresMalformedAnnounceWhileIdlingAndDiscoveryKeepsWorking (365 ms)
+[ RUN      ] ENetDiscoveryServiceTest.ReplyToQueryOnlyAnswersWhenSessionTypeFilterMatchesTheHost
+[       OK ] ENetDiscoveryServiceTest.ReplyToQueryOnlyAnswersWhenSessionTypeFilterMatchesTheHost (321 ms)
+[ RUN      ] ENetDiscoveryServiceTest.MatchingKeepsSessionsWithTheSearchedPropertiesAndRoom
+[       OK ] ENetDiscoveryServiceTest.MatchingKeepsSessionsWithTheSearchedPropertiesAndRoom (0 ms)
+[ RUN      ] ENetDiscoveryServiceTest.APartialUpstreamTrainIsMeasuredFromWhatArrived
+[       OK ] ENetDiscoveryServiceTest.APartialUpstreamTrainIsMeasuredFromWhatArrived (2269 ms)
+[----------] 13 tests from ENetDiscoveryServiceTest (4073 ms total)
+
+[----------] 10 tests from ENetHostHandleTest
+[ RUN      ] ENetHostHandleTest.CreateHostBindsToEphemeralPort
+[       OK ] ENetHostHandleTest.CreateHostBindsToEphemeralPort (0 ms)
+[ RUN      ] ENetHostHandleTest.CreateClientHasNoBoundPort
+[       OK ] ENetHostHandleTest.CreateClientHasNoBoundPort (0 ms)
+[ RUN      ] ENetHostHandleTest.MoveConstructionTransfersOwnership
+[       OK ] ENetHostHandleTest.MoveConstructionTransfersOwnership (0 ms)
+[ RUN      ] ENetHostHandleTest.MoveAssignmentTransfersOwnership
+[       OK ] ENetHostHandleTest.MoveAssignmentTransfersOwnership (0 ms)
+[ RUN      ] ENetHostHandleTest.LoopbackConnectAndExchangeOnePacket
+[       OK ] ENetHostHandleTest.LoopbackConnectAndExchangeOnePacket (0 ms)
+[ RUN      ] ENetHostHandleTest.ConnectWithUnresolvableHostnameThrows
+[       OK ] ENetHostHandleTest.ConnectWithUnresolvableHostnameThrows (41 ms)
+[ RUN      ] ENetHostHandleTest.SendToNotYetConnectedPeerDoesNotThrowOrLeak
+[       OK ] ENetHostHandleTest.SendToNotYetConnectedPeerDoesNotThrowOrLeak (0 ms)
+[ RUN      ] ENetHostHandleTest.BroadcastWithZeroConnectedPeersDoesNotThrow
+[       OK ] ENetHostHandleTest.BroadcastWithZeroConnectedPeersDoesNotThrow (0 ms)
+[ RUN      ] ENetHostHandleTest.RelayHostBindsOnlyLoopbackWithPrivateAllocationLimits
+[       OK ] ENetHostHandleTest.RelayHostBindsOnlyLoopbackWithPrivateAllocationLimits (0 ms)
+[ RUN      ] ENetHostHandleTest.RelayHostExchangesFragmentsAndRefusesOversizedOutgoingPackets
+[       OK ] ENetHostHandleTest.RelayHostExchangesFragmentsAndRefusesOversizedOutgoingPackets (5 ms)
+[----------] 10 tests from ENetHostHandleTest (48 ms total)
+
+[----------] 2 tests from ENetLibraryTest
+[ RUN      ] ENetLibraryTest.EnsureInitializedDoesNotThrow
+[       OK ] ENetLibraryTest.EnsureInitializedDoesNotThrow (0 ms)
+[ RUN      ] ENetLibraryTest.EnsureInitializedIsIdempotentAcrossManyCalls
+[       OK ] ENetLibraryTest.EnsureInitializedIsIdempotentAcrossManyCalls (0 ms)
+[----------] 2 tests from ENetLibraryTest (0 ms total)
+
+[----------] 4 tests from GamerServicesDispatcherHangRegressionTest
+[ RUN      ] GamerServicesDispatcherHangRegressionTest.CreateDoesNotHangWhenGamerServicesIsInitialized
+[       OK ] GamerServicesDispatcherHangRegressionTest.CreateDoesNotHangWhenGamerServicesIsInitialized (50 ms)
+[ RUN      ] GamerServicesDispatcherHangRegressionTest.GetAchievementsDoesNotHangWhenGamerServicesIsInitialized
+[INFO][APPLICATION] [TitleContainer] OpenStream requested: GamerServices/Achievements.json
+[INFO][APPLICATION] [TitleContainer] Resolved path: /rv/data/development/github.com/libcna/cnawork/cmake-build-debug/GamerServices/Achievements.json
+[       OK ] GamerServicesDispatcherHangRegressionTest.GetAchievementsDoesNotHangWhenGamerServicesIsInitialized (50 ms)
+[ RUN      ] GamerServicesDispatcherHangRegressionTest.SecondInitializeDoesNotLeakThePreviousFourGamers
+[       OK ] GamerServicesDispatcherHangRegressionTest.SecondInitializeDoesNotLeakThePreviousFourGamers (50 ms)
+[ RUN      ] GamerServicesDispatcherHangRegressionTest.InitializeWithoutAServiceSignsInNobody
+[       OK ] GamerServicesDispatcherHangRegressionTest.InitializeWithoutAServiceSignsInNobody (50 ms)
+[----------] 4 tests from GamerServicesDispatcherHangRegressionTest (202 ms total)
+
+[----------] 14 tests from NetDiscoveryProtocolTest
+[ RUN      ] NetDiscoveryProtocolTest.PeekTagOnEmptyBufferThrows
+[       OK ] NetDiscoveryProtocolTest.PeekTagOnEmptyBufferThrows (0 ms)
+[ RUN      ] NetDiscoveryProtocolTest.QueryRoundtrip
+[       OK ] NetDiscoveryProtocolTest.QueryRoundtrip (0 ms)
+[ RUN      ] NetDiscoveryProtocolTest.AnnounceRoundtripWithNoProperties
+[       OK ] NetDiscoveryProtocolTest.AnnounceRoundtripWithNoProperties (0 ms)
+[ RUN      ] NetDiscoveryProtocolTest.AnnounceRoundtripWithSparseProperties
+[       OK ] NetDiscoveryProtocolTest.AnnounceRoundtripWithSparseProperties (0 ms)
+[ RUN      ] NetDiscoveryProtocolTest.DecodeAnnounceRejectsNegativePropertyIndex
+[       OK ] NetDiscoveryProtocolTest.DecodeAnnounceRejectsNegativePropertyIndex (0 ms)
+[ RUN      ] NetDiscoveryProtocolTest.DecodeAnnounceRejectsHugePropertyIndex
+[       OK ] NetDiscoveryProtocolTest.DecodeAnnounceRejectsHugePropertyIndex (0 ms)
+[ RUN      ] NetDiscoveryProtocolTest.DecodeQueryRejectsMismatchedProtocolVersion
+[       OK ] NetDiscoveryProtocolTest.DecodeQueryRejectsMismatchedProtocolVersion (0 ms)
+[ RUN      ] NetDiscoveryProtocolTest.DecodeAnnounceRejectsMismatchedProtocolVersion
+[       OK ] NetDiscoveryProtocolTest.DecodeAnnounceRejectsMismatchedProtocolVersion (0 ms)
+[ RUN      ] NetDiscoveryProtocolTest.DecodeQueryThrowsOnTruncatedBuffer
+[       OK ] NetDiscoveryProtocolTest.DecodeQueryThrowsOnTruncatedBuffer (0 ms)
+[ RUN      ] NetDiscoveryProtocolTest.DecodeAnnounceThrowsOnTruncatedBuffer
+[       OK ] NetDiscoveryProtocolTest.DecodeAnnounceThrowsOnTruncatedBuffer (0 ms)
+[ RUN      ] NetDiscoveryProtocolTest.DecodeAnnounceRejectsNinthPropertySlot
+[       OK ] NetDiscoveryProtocolTest.DecodeAnnounceRejectsNinthPropertySlot (0 ms)
+[ RUN      ] NetDiscoveryProtocolTest.DecodeAnnounceRejectsInvalidCountBeforeReadingEntries
+[       OK ] NetDiscoveryProtocolTest.DecodeAnnounceRejectsInvalidCountBeforeReadingEntries (0 ms)
+[ RUN      ] NetDiscoveryProtocolTest.DecodeAnnounceRejectsDuplicateSlot
+[       OK ] NetDiscoveryProtocolTest.DecodeAnnounceRejectsDuplicateSlot (0 ms)
+[ RUN      ] NetDiscoveryProtocolTest.EveryPropertySlotRoundTripsIncludingNullableEnds
+[       OK ] NetDiscoveryProtocolTest.EveryPropertySlotRoundTripsIncludingNullableEnds (0 ms)
+[----------] 14 tests from NetDiscoveryProtocolTest (0 ms total)
+
+[----------] 31 tests from NetPacketCodecTest
+[ RUN      ] NetPacketCodecTest.PeekTagOnEmptyBufferThrows
+[       OK ] NetPacketCodecTest.PeekTagOnEmptyBufferThrows (0 ms)
+[ RUN      ] NetPacketCodecTest.ClientHelloRoundtrip
+[       OK ] NetPacketCodecTest.ClientHelloRoundtrip (0 ms)
+[ RUN      ] NetPacketCodecTest.ClientHelloRoundtripEmpty
+[       OK ] NetPacketCodecTest.ClientHelloRoundtripEmpty (0 ms)
+[ RUN      ] NetPacketCodecTest.ClientHelloEncodeThrowsWhenLocalGamertagsExceeds255
+[       OK ] NetPacketCodecTest.ClientHelloEncodeThrowsWhenLocalGamertagsExceeds255 (0 ms)
+[ RUN      ] NetPacketCodecTest.ServerWelcomeRoundtrip
+[       OK ] NetPacketCodecTest.ServerWelcomeRoundtrip (0 ms)
+[ RUN      ] NetPacketCodecTest.ServerWelcomeEncodeThrowsWhenAssignedWireIdsExceeds255
+[       OK ] NetPacketCodecTest.ServerWelcomeEncodeThrowsWhenAssignedWireIdsExceeds255 (0 ms)
+[ RUN      ] NetPacketCodecTest.ServerWelcomeEncodeThrowsWhenExistingRosterExceeds255
+[       OK ] NetPacketCodecTest.ServerWelcomeEncodeThrowsWhenExistingRosterExceeds255 (0 ms)
+[ RUN      ] NetPacketCodecTest.GamerJoinBroadcastRoundtrip
+[       OK ] NetPacketCodecTest.GamerJoinBroadcastRoundtrip (0 ms)
+[ RUN      ] NetPacketCodecTest.GamerJoinBroadcastEncodeThrowsWhenNewGamersExceeds255
+[       OK ] NetPacketCodecTest.GamerJoinBroadcastEncodeThrowsWhenNewGamersExceeds255 (0 ms)
+[ RUN      ] NetPacketCodecTest.GamerLeaveBroadcastRoundtrip
+[       OK ] NetPacketCodecTest.GamerLeaveBroadcastRoundtrip (0 ms)
+[ RUN      ] NetPacketCodecTest.GamerLeaveBroadcastEncodeThrowsWhenWireIdsExceeds255
+[       OK ] NetPacketCodecTest.GamerLeaveBroadcastEncodeThrowsWhenWireIdsExceeds255 (0 ms)
+[ RUN      ] NetPacketCodecTest.StateChangeBroadcastRoundtrip
+[       OK ] NetPacketCodecTest.StateChangeBroadcastRoundtrip (0 ms)
+[ RUN      ] NetPacketCodecTest.SessionPropertiesBroadcastRoundtripPreservesSparseValues
+[       OK ] NetPacketCodecTest.SessionPropertiesBroadcastRoundtripPreservesSparseValues (0 ms)
+[ RUN      ] NetPacketCodecTest.SessionPropertiesBroadcastRoundtripPreservesEmptyCollection
+[       OK ] NetPacketCodecTest.SessionPropertiesBroadcastRoundtripPreservesEmptyCollection (0 ms)
+[ RUN      ] NetPacketCodecTest.SessionPropertiesBroadcastDecodeRejectsMoreThanEightValues
+[       OK ] NetPacketCodecTest.SessionPropertiesBroadcastDecodeRejectsMoreThanEightValues (0 ms)
+[ RUN      ] NetPacketCodecTest.LegacyShortPropertyFramesPadUnspecifiedSlots
+[       OK ] NetPacketCodecTest.LegacyShortPropertyFramesPadUnspecifiedSlots (0 ms)
+[ RUN      ] NetPacketCodecTest.AppDataRoundtrip
+[       OK ] NetPacketCodecTest.AppDataRoundtrip (0 ms)
+[ RUN      ] NetPacketCodecTest.AppDataRoundtripEmptyPayload
+[       OK ] NetPacketCodecTest.AppDataRoundtripEmptyPayload (0 ms)
+[ RUN      ] NetPacketCodecTest.DecodeClientHelloThrowsOnTruncatedBuffer
+[       OK ] NetPacketCodecTest.DecodeClientHelloThrowsOnTruncatedBuffer (0 ms)
+[ RUN      ] NetPacketCodecTest.DecodeServerWelcomeThrowsOnTruncatedBuffer
+[       OK ] NetPacketCodecTest.DecodeServerWelcomeThrowsOnTruncatedBuffer (0 ms)
+[ RUN      ] NetPacketCodecTest.DecodeGamerJoinBroadcastThrowsOnTruncatedBuffer
+[       OK ] NetPacketCodecTest.DecodeGamerJoinBroadcastThrowsOnTruncatedBuffer (0 ms)
+[ RUN      ] NetPacketCodecTest.DecodeGamerLeaveBroadcastThrowsOnTruncatedBuffer
+[       OK ] NetPacketCodecTest.DecodeGamerLeaveBroadcastThrowsOnTruncatedBuffer (0 ms)
+[ RUN      ] NetPacketCodecTest.DecodeStateChangeBroadcastThrowsOnTruncatedBuffer
+[       OK ] NetPacketCodecTest.DecodeStateChangeBroadcastThrowsOnTruncatedBuffer (0 ms)
+[ RUN      ] NetPacketCodecTest.DecodeSessionPropertiesBroadcastThrowsOnTruncatedBuffer
+[       OK ] NetPacketCodecTest.DecodeSessionPropertiesBroadcastThrowsOnTruncatedBuffer (0 ms)
+[ RUN      ] NetPacketCodecTest.DecodeAppDataThrowsOnTruncatedBuffer
+[       OK ] NetPacketCodecTest.DecodeAppDataThrowsOnTruncatedBuffer (0 ms)
+[ RUN      ] NetPacketCodecTest.SendDataOptionsToEnetFlagsMapping
+[       OK ] NetPacketCodecTest.SendDataOptionsToEnetFlagsMapping (0 ms)
+[ RUN      ] NetPacketCodecTest.VoiceFramesRoundTripAndMalformedOnesAreRefused
+[       OK ] NetPacketCodecTest.VoiceFramesRoundTripAndMalformedOnesAreRefused (0 ms)
+[ RUN      ] NetPacketCodecTest.GuestFlagsTravelInEveryMessageThatListsGamers
+[       OK ] NetPacketCodecTest.GuestFlagsTravelInEveryMessageThatListsGamers (0 ms)
+[ RUN      ] NetPacketCodecTest.APeerThatPredatesGuestFlagsExchangesTheSameMessages
+[       OK ] NetPacketCodecTest.APeerThatPredatesGuestFlagsExchangesTheSameMessages (0 ms)
+[ RUN      ] NetPacketCodecTest.AMessageWithoutGuestsIsTheOriginalFormatByteForByte
+[       OK ] NetPacketCodecTest.AMessageWithoutGuestsIsTheOriginalFormatByteForByte (0 ms)
+[ RUN      ] NetPacketCodecTest.ALaterTrailingBlockIsSkippedAndAMalformedGuestBlockIsRefused
+[       OK ] NetPacketCodecTest.ALaterTrailingBlockIsSkippedAndAMalformedGuestBlockIsRefused (0 ms)
+[----------] 31 tests from NetPacketCodecTest (0 ms total)
+
+[----------] 11 tests from NetworkSessionTypePolicyTest
+[ RUN      ] NetworkSessionTypePolicyTest.RealNetworkingEnabledIsFalseForEverySyntheticType
+[       OK ] NetworkSessionTypePolicyTest.RealNetworkingEnabledIsFalseForEverySyntheticType (0 ms)
+[ RUN      ] NetworkSessionTypePolicyTest.CreatingASessionNeverBindsARealPortForSyntheticTypes
+[       OK ] NetworkSessionTypePolicyTest.CreatingASessionNeverBindsARealPortForSyntheticTypes (0 ms)
+[ RUN      ] NetworkSessionTypePolicyTest.UpdateNeverBindsAPortOrThrowsForSyntheticTypes
+[       OK ] NetworkSessionTypePolicyTest.UpdateNeverBindsAPortOrThrowsForSyntheticTypes (0 ms)
+[ RUN      ] NetworkSessionTypePolicyTest.ConnectToHostIsNoOpForEverySyntheticType
+[       OK ] NetworkSessionTypePolicyTest.ConnectToHostIsNoOpForEverySyntheticType (0 ms)
+[ RUN      ] NetworkSessionTypePolicyTest.SendDataStaysFullySyntheticForEverySyntheticType
+[       OK ] NetworkSessionTypePolicyTest.SendDataStaysFullySyntheticForEverySyntheticType (0 ms)
+[ RUN      ] NetworkSessionTypePolicyTest.StartGameEndGameWorkLocallyButNeverBindAPortForSyntheticTypes
+[       OK ] NetworkSessionTypePolicyTest.StartGameEndGameWorkLocallyButNeverBindAPortForSyntheticTypes (0 ms)
+[ RUN      ] NetworkSessionTypePolicyTest.FindReturnsEmptyImmediatelyForEverySyntheticType
+[       OK ] NetworkSessionTypePolicyTest.FindReturnsEmptyImmediatelyForEverySyntheticType (0 ms)
+[ RUN      ] NetworkSessionTypePolicyTest.CreateRefusesEveryMatchmakingType
+[       OK ] NetworkSessionTypePolicyTest.CreateRefusesEveryMatchmakingType (0 ms)
+[ RUN      ] NetworkSessionTypePolicyTest.FindRefusesEveryMatchmakingType
+[       OK ] NetworkSessionTypePolicyTest.FindRefusesEveryMatchmakingType (0 ms)
+[ RUN      ] NetworkSessionTypePolicyTest.ARefusedTypeLeavesNoPendingActionBehind
+[       OK ] NetworkSessionTypePolicyTest.ARefusedTypeLeavesNoPendingActionBehind (0 ms)
+[ RUN      ] NetworkSessionTypePolicyTest.JoinInvitedRefusesBecauseNoInvitationCanBePending
+[       OK ] NetworkSessionTypePolicyTest.JoinInvitedRefusesBecauseNoInvitationCanBePending (0 ms)
+[----------] 11 tests from NetworkSessionTypePolicyTest (0 ms total)
+
+[----------] 7 tests from OnlineInvitationTest
+[ RUN      ] OnlineInvitationTest.GuideAcceptanceRaisesInviteAcceptedAndTheInvitedJoinCompletes
+[       OK ] OnlineInvitationTest.GuideAcceptanceRaisesInviteAcceptedAndTheInvitedJoinCompletes (557 ms)
+[ RUN      ] OnlineInvitationTest.APendingAcceptanceWhoseInvitationIsGoneIsNotReplayed
+[       OK ] OnlineInvitationTest.APendingAcceptanceWhoseInvitationIsGoneIsNotReplayed (5 ms)
+[ RUN      ] OnlineInvitationTest.AnInvitationRevokedWhileItsCardIsOpenIsNeverAccepted
+[       OK ] OnlineInvitationTest.AnInvitationRevokedWhileItsCardIsOpenIsNeverAccepted (5 ms)
+[ RUN      ] OnlineInvitationTest.AnAcceptanceWithoutSubscribersIsDeliveredOnceToTheFirstSubscriber
+[       OK ] OnlineInvitationTest.AnAcceptanceWithoutSubscribersIsDeliveredOnceToTheFirstSubscriber (514 ms)
+[ RUN      ] OnlineInvitationTest.DecliningDismissesTheInvitationWithoutInviteAccepted
+[       OK ] OnlineInvitationTest.DecliningDismissesTheInvitationWithoutInviteAccepted (5 ms)
+[ RUN      ] OnlineInvitationTest.JoinInvitedValidatesTheAcceptedInviteeBeforeAnyServiceWork
+[       OK ] OnlineInvitationTest.JoinInvitedValidatesTheAcceptedInviteeBeforeAnyServiceWork (5 ms)
+[ RUN      ] OnlineInvitationTest.ShowGameInviteAndTheGamerCardInviteToTheActiveOnlineSession
+[       OK ] OnlineInvitationTest.ShowGameInviteAndTheGamerCardInviteToTheActiveOnlineSession (8 ms)
+[----------] 7 tests from OnlineInvitationTest (1101 ms total)
+
+[----------] 8 tests from OnlineLeaderboardTest
+[ RUN      ] OnlineLeaderboardTest.HostMachineWritesItsLocalGamersAtEndGameAndPublishesAfterItsTransition
+[       OK ] OnlineLeaderboardTest.HostMachineWritesItsLocalGamersAtEndGameAndPublishesAfterItsTransition (618 ms)
+[ RUN      ] OnlineLeaderboardTest.AGuestInALocalWithLeaderboardsGameLeavesTheAccountsRowsToTheService
+[       OK ] OnlineLeaderboardTest.AGuestInALocalWithLeaderboardsGameLeavesTheAccountsRowsToTheService (2 ms)
+[ RUN      ] OnlineLeaderboardTest.ClientMachineCommitsItsOwnGamersWhenTheHostEndsTheGame
+[       OK ] OnlineLeaderboardTest.ClientMachineCommitsItsOwnGamersWhenTheHostEndsTheGame (310 ms)
+[ RUN      ] OnlineLeaderboardTest.LosingTheHostWhilePlayingOffersLeavingWritesBeforeSessionEnded
+[       OK ] OnlineLeaderboardTest.LosingTheHostWhilePlayingOffersLeavingWritesBeforeSessionEnded (110 ms)
+[ RUN      ] OnlineLeaderboardTest.RankedMachinesReportArbitratedAndTrueSkillForEveryGamerAndAgreementCommits
+[       OK ] OnlineLeaderboardTest.RankedMachinesReportArbitratedAndTrueSkillForEveryGamerAndAgreementCommits (518 ms)
+[ RUN      ] OnlineLeaderboardTest.RankedDepartureRaisesLeavingEventsAndTheDepartedGamerStaysInTheReport
+[       OK ] OnlineLeaderboardTest.RankedDepartureRaisesLeavingEventsAndTheDepartedGamerStaysInTheReport (517 ms)
+[ RUN      ] OnlineLeaderboardTest.OutsideRankedOnlyTheHostReportsTrueSkillAndRemoteRowsAreNotSubmitted
+[       OK ] OnlineLeaderboardTest.OutsideRankedOnlyTheHostReportsTrueSkillAndRemoteRowsAreNotSubmitted (513 ms)
+[ RUN      ] OnlineLeaderboardTest.AStreamColumnIsWrittenThroughItsStreamAndReadBack
+[       OK ] OnlineLeaderboardTest.AStreamColumnIsWrittenThroughItsStreamAndReadBack (0 ms)
+[----------] 8 tests from OnlineLeaderboardTest (2594 ms total)
+
+[----------] 18 tests from OnlineNetworkSessionTest
+[ RUN      ] OnlineNetworkSessionTest.PublicCreateCompletesAtUpdateAndProjectsTheLocalGroup
+[       OK ] OnlineNetworkSessionTest.PublicCreateCompletesAtUpdateAndProjectsTheLocalGroup (1 ms)
+[ RUN      ] OnlineNetworkSessionTest.HostProjectsRemoteGroupsDataStateAndDepartureAtUpdate
+[       OK ] OnlineNetworkSessionTest.HostProjectsRemoteGroupsDataStateAndDepartureAtUpdate (621 ms)
+[ RUN      ] OnlineNetworkSessionTest.LobbyReadinessCrossesTheServiceSessionAndClearsWhenTheGameEnds
+[       OK ] OnlineNetworkSessionTest.LobbyReadinessCrossesTheServiceSessionAndClearsWhenTheGameEnds (528 ms)
+[ RUN      ] OnlineNetworkSessionTest.TheHostRemovesAMachineWhoseGamersLeave
+[       OK ] OnlineNetworkSessionTest.TheHostRemovesAMachineWhoseGamersLeave (516 ms)
+[ RUN      ] OnlineNetworkSessionTest.TrafficAndRoundTripsReachTheSession
+[       OK ] OnlineNetworkSessionTest.TrafficAndRoundTripsReachTheSession (1002 ms)
+[ RUN      ] OnlineNetworkSessionTest.AMachineTheHostRemovesEndsWithRemovedByHost
+[       OK ] OnlineNetworkSessionTest.AMachineTheHostRemovesEndsWithRemovedByHost (107 ms)
+[ RUN      ] OnlineNetworkSessionTest.PublicJoinUsesTheFindGroupAndFollowsDirectoryAuthority
+[       OK ] OnlineNetworkSessionTest.PublicJoinUsesTheFindGroupAndFollowsDirectoryAuthority (210 ms)
+[ RUN      ] OnlineNetworkSessionTest.RankedCreateRefusesJoinInProgressAndPrivateSlotsFollowReferenceBounds
+[       OK ] OnlineNetworkSessionTest.RankedCreateRefusesJoinInProgressAndPrivateSlotsFollowReferenceBounds (103 ms)
+[ RUN      ] OnlineNetworkSessionTest.JoinFailuresMapToReferenceExceptionFamilies
+[       OK ] OnlineNetworkSessionTest.JoinFailuresMapToReferenceExceptionFamilies (0 ms)
+[ RUN      ] OnlineNetworkSessionTest.AbandonedPendingCreateRollsBackMembershipAndReleasesTheSingleton
+[       OK ] OnlineNetworkSessionTest.AbandonedPendingCreateRollsBackMembershipAndReleasesTheSingleton (0 ms)
+[ RUN      ] OnlineNetworkSessionTest.CallbackMayEndTheCreateAndTheSessionIsImmediatelyUsable
+[       OK ] OnlineNetworkSessionTest.CallbackMayEndTheCreateAndTheSessionIsImmediatelyUsable (1 ms)
+[ RUN      ] OnlineNetworkSessionTest.AHostLeavingWithMigrationAllowedHandsTheSessionToTheJoiner
+[       OK ] OnlineNetworkSessionTest.AHostLeavingWithMigrationAllowedHandsTheSessionToTheJoiner (619 ms)
+[ RUN      ] OnlineNetworkSessionTest.WithoutMigrationTheHostLeavingStillEndsTheSession
+[       OK ] OnlineNetworkSessionTest.WithoutMigrationTheHostLeavingStillEndsTheSession (11 ms)
+[ RUN      ] OnlineNetworkSessionTest.AClientFollowsTheDirectoryToANewRemoteHost
+[       OK ] OnlineNetworkSessionTest.AClientFollowsTheDirectoryToANewRemoteHost (522 ms)
+[ RUN      ] OnlineNetworkSessionTest.AHostsAddedLocalGamerJoinsAtUpdateOnEveryMachine
+[       OK ] OnlineNetworkSessionTest.AHostsAddedLocalGamerJoinsAtUpdateOnEveryMachine (1009 ms)
+[ RUN      ] OnlineNetworkSessionTest.AClientsAddedLocalGamerReachesTheHost
+[       OK ] OnlineNetworkSessionTest.AClientsAddedLocalGamerReachesTheHost (1007 ms)
+[ RUN      ] OnlineNetworkSessionTest.AnAddTheServiceRefusesLeavesTheGamerOut
+[       OK ] OnlineNetworkSessionTest.AnAddTheServiceRefusesLeavesTheGamerOut (217 ms)
+[ RUN      ] OnlineNetworkSessionTest.VoiceCrossesTheServiceSessionBothWays
+[       OK ] OnlineNetworkSessionTest.VoiceCrossesTheServiceSessionBothWays (509 ms)
+[----------] 18 tests from OnlineNetworkSessionTest (6991 ms total)
+
+[----------] 18 tests from OnlineSessionPreparationTest
+[ RUN      ] OnlineSessionPreparationTest.NativeDefaultsRefuseFakeNetworkAuthorityBeforeMutation
+[       OK ] OnlineSessionPreparationTest.NativeDefaultsRefuseFakeNetworkAuthorityBeforeMutation (0 ms)
+[ RUN      ] OnlineSessionPreparationTest.InvalidLocalRequestsFailBeforeQueueOrMembership
+[       OK ] OnlineSessionPreparationTest.InvalidLocalRequestsFailBeforeQueueOrMembership (0 ms)
+[ RUN      ] OnlineSessionPreparationTest.CompletionPublishesOnlyAtOwnerPumpAndTakeConsumesOnce
+[       OK ] OnlineSessionPreparationTest.CompletionPublishesOnlyAtOwnerPumpAndTakeConsumesOnce (0 ms)
+[ RUN      ] OnlineSessionPreparationTest.MalformedJoinAndUnusedCreateIdentifiersNeverReachMembership
+[       OK ] OnlineSessionPreparationTest.MalformedJoinAndUnusedCreateIdentifiersNeverReachMembership (0 ms)
+[ RUN      ] OnlineSessionPreparationTest.CompletionReplayCannotInvokeTheOwnerTwice
+[       OK ] OnlineSessionPreparationTest.CompletionReplayCannotInvokeTheOwnerTwice (0 ms)
+[ RUN      ] OnlineSessionPreparationTest.UnpublishedReadyValueDoesNotKeepItsLastBackendOwnerAlive
+[       OK ] OnlineSessionPreparationTest.UnpublishedReadyValueDoesNotKeepItsLastBackendOwnerAlive (0 ms)
+[ RUN      ] OnlineSessionPreparationTest.ConsumedLeaseRetainsOriginAfterResultAndExternalOwnerDrop
+[       OK ] OnlineSessionPreparationTest.ConsumedLeaseRetainsOriginAfterResultAndExternalOwnerDrop (0 ms)
+[ RUN      ] OnlineSessionPreparationTest.DroppingQueuedResultCreatesNoMembershipAndNoBackendCycle
+[       OK ] OnlineSessionPreparationTest.DroppingQueuedResultCreatesNoMembershipAndNoBackendCycle (0 ms)
+[ RUN      ] OnlineSessionPreparationTest.DroppingReadyUnpublishedResultClosesAndRollsBackBeforeCallback
+[       OK ] OnlineSessionPreparationTest.DroppingReadyUnpublishedResultClosesAndRollsBackBeforeCallback (0 ms)
+[ RUN      ] OnlineSessionPreparationTest.DroppingCompletedUnconsumedResultRollsBackMembership
+[       OK ] OnlineSessionPreparationTest.DroppingCompletedUnconsumedResultRollsBackMembership (0 ms)
+[ RUN      ] OnlineSessionPreparationTest.FactoryFailureRollsBackAndPreservesOriginalError
+[       OK ] OnlineSessionPreparationTest.FactoryFailureRollsBackAndPreservesOriginalError (0 ms)
+[ RUN      ] OnlineSessionPreparationTest.FailedRelayClosesResourcesAndRollsBackBeforeCompletion
+[       OK ] OnlineSessionPreparationTest.FailedRelayClosesResourcesAndRollsBackBeforeCompletion (0 ms)
+[ RUN      ] OnlineSessionPreparationTest.ReadinessTimeoutClosesResourcesAndRollsBackMembership
+[       OK ] OnlineSessionPreparationTest.ReadinessTimeoutClosesResourcesAndRollsBackMembership (10002 ms)
+[ RUN      ] OnlineSessionPreparationTest.CancellationDuringReadinessCannotPublishOrCallTarget
+[       OK ] OnlineSessionPreparationTest.CancellationDuringReadinessCannotPublishOrCallTarget (0 ms)
+[ RUN      ] OnlineSessionPreparationTest.OwnerCancellationRacesActiveWorkerWithoutDanglingTarget
+[       OK ] OnlineSessionPreparationTest.OwnerCancellationRacesActiveWorkerWithoutDanglingTarget (0 ms)
+[ RUN      ] OnlineSessionPreparationTest.JoinedLeaseReleaseRemovesOnlyItsOwnLocalMachine
+[       OK ] OnlineSessionPreparationTest.JoinedLeaseReleaseRemovesOnlyItsOwnLocalMachine (0 ms)
+[ RUN      ] OnlineSessionPreparationTest.LostAuthenticationStillClosesTransportAndReportsFailedLeave
+[       OK ] OnlineSessionPreparationTest.LostAuthenticationStillClosesTransportAndReportsFailedLeave (0 ms)
+[ RUN      ] OnlineSessionPreparationTest.ThrowingOwnerCallbackDoesNotLosePreparedOwnership
+[       OK ] OnlineSessionPreparationTest.ThrowingOwnerCallbackDoesNotLosePreparedOwnership (0 ms)
+[----------] 18 tests from OnlineSessionPreparationTest (10005 ms total)
+
+[----------] 5 tests from RelayEnetPolicyTest
+[ RUN      ] RelayEnetPolicyTest.BoundedReliableAndUnreliableFragmentsAndEveryTruncation
+[       OK ] RelayEnetPolicyTest.BoundedReliableAndUnreliableFragmentsAndEveryTruncation (0 ms)
+[ RUN      ] RelayEnetPolicyTest.FragmentBitmapAndLogicalPacketCannotEscapeByteLimits
+[       OK ] RelayEnetPolicyTest.FragmentBitmapAndLogicalPacketCannotEscapeByteLimits (0 ms)
+[ RUN      ] RelayEnetPolicyTest.RejectsUnconfiguredCompressionUnknownTagsAndCommandOverflow
+[       OK ] RelayEnetPolicyTest.RejectsUnconfiguredCompressionUnknownTagsAndCommandOverflow (0 ms)
+[ RUN      ] RelayEnetPolicyTest.LengthMutationsNeverPermitUnboundedFragments
+[       OK ] RelayEnetPolicyTest.LengthMutationsNeverPermitUnboundedFragments (3 ms)
+[ RUN      ] RelayEnetPolicyTest.MaximumPacketFitsMinimumNegotiatedEnetMtu
+[       OK ] RelayEnetPolicyTest.MaximumPacketFitsMinimumNegotiatedEnetMtu (0 ms)
+[----------] 5 tests from RelayEnetPolicyTest (3 ms total)
+
+[----------] 17 tests from ServiceENetSessionTest
+[ RUN      ] ServiceENetSessionTest.ExactWelcomeProducesStableIdsForTwoLocalGroupsOnTheOwner
+[       OK ] ServiceENetSessionTest.ExactWelcomeProducesStableIdsForTwoLocalGroupsOnTheOwner (5 ms)
+[ RUN      ] ServiceENetSessionTest.ReliableFragmentedAndUnreliableDataReachBothLocalAccountSlots
+[       OK ] ServiceENetSessionTest.ReliableFragmentedAndUnreliableDataReachBothLocalAccountSlots (5 ms)
+[ RUN      ] ServiceENetSessionTest.LocalDeliveryIsQueuedUntilUpdateAndBoundedByCountAndBytes
+[       OK ] ServiceENetSessionTest.LocalDeliveryIsQueuedUntilUpdateAndBoundedByCountAndBytes (5 ms)
+[ RUN      ] ServiceENetSessionTest.ForeignSenderUnknownTargetAndInvalidPayloadAreRefusedBeforeSending
+[       OK ] ServiceENetSessionTest.ForeignSenderUnknownTargetAndInvalidPayloadAreRefusedBeforeSending (4 ms)
+[ RUN      ] ServiceENetSessionTest.DestroyedRemoteLeaseRaisesOneCompleteGroupLeaveAndReleasesMembership
+[       OK ] ServiceENetSessionTest.DestroyedRemoteLeaseRaisesOneCompleteGroupLeaveAndReleasesMembership (5 ms)
+[ RUN      ] ServiceENetSessionTest.HostClosureProducesOneFailureAndStopsFurtherDelivery
+[       OK ] ServiceENetSessionTest.HostClosureProducesOneFailureAndStopsFurtherDelivery (5 ms)
+[ RUN      ] ServiceENetSessionTest.RelayFailureIsObservedOnceWithNoRawDiagnosticAndRetainedOriginReleases
+[       OK ] ServiceENetSessionTest.RelayFailureIsObservedOnceWithNoRawDiagnosticAndRetainedOriginReleases (7 ms)
+[ RUN      ] ServiceENetSessionTest.InvalidConstructorClaimsRollBackOwnedHostPreparation
+[       OK ] ServiceENetSessionTest.InvalidConstructorClaimsRollBackOwnedHostPreparation (0 ms)
+[ RUN      ] ServiceENetSessionTest.FakeRoutesAreExplicitAndForeignThreadWorkIsRefused
+[       OK ] ServiceENetSessionTest.FakeRoutesAreExplicitAndForeignThreadWorkIsRefused (4 ms)
+[ RUN      ] ServiceENetSessionTest.ClientCannotCompleteWithoutWelcomeAndTimeoutIsObservedOnce
+[       OK ] ServiceENetSessionTest.ClientCannotCompleteWithoutWelcomeAndTimeoutIsObservedOnce (0 ms)
+[ RUN      ] ServiceENetSessionTest.AuthenticatedRemovalPrecedesAnyFurtherDeliveryToTheDepartedGroup
+[       OK ] ServiceENetSessionTest.AuthenticatedRemovalPrecedesAnyFurtherDeliveryToTheDepartedGroup (1003 ms)
+[ RUN      ] ServiceENetSessionTest.ReliableOutgoingDataIsBoundedUntilAcknowledgedAndCleanupReleasesIt
+[       OK ] ServiceENetSessionTest.ReliableOutgoingDataIsBoundedUntilAcknowledgedAndCleanupReleasesIt (10 ms)
+[ RUN      ] ServiceENetSessionTest.ThreeMachinesRelayBetweenClientsAndPublishEachFullGroupOnce
+[       OK ] ServiceENetSessionTest.ThreeMachinesRelayBetweenClientsAndPublishEachFullGroupOnce (1009 ms)
+[ RUN      ] ServiceENetSessionTest.LobbyReadinessIsRelayedOwnedAndReplayedToALateJoiner
+[       OK ] ServiceENetSessionTest.LobbyReadinessIsRelayedOwnedAndReplayedToALateJoiner (1005 ms)
+[ RUN      ] ServiceENetSessionTest.RoundTripsCoverEveryRemoteGamerAndARelayedOneAddsTheHosts
+[       OK ] ServiceENetSessionTest.RoundTripsCoverEveryRemoteGamerAndARelayedOneAddsTheHosts (1509 ms)
+[ RUN      ] ServiceENetSessionTest.TheHostRemovesAMachineWhichFailsWithRemovedByHost
+[       OK ] ServiceENetSessionTest.TheHostRemovesAMachineWhichFailsWithRemovedByHost (103 ms)
+[ RUN      ] ServiceENetSessionTest.ARelayOutageInsideTheWindowReconnectsWithFreshAuthorityAndKeepsPeers
+[       OK ] ServiceENetSessionTest.ARelayOutageInsideTheWindowReconnectsWithFreshAuthorityAndKeepsPeers (8 ms)
+[----------] 17 tests from ServiceENetSessionTest (4695 ms total)
+
+[----------] 13 tests from OnlineSessionOperationTest
+[ RUN      ] OnlineSessionOperationTest.HostReadinessAndConsumptionArePublishedOnceOnOwnerSubscription
+[       OK ] OnlineSessionOperationTest.HostReadinessAndConsumptionArePublishedOnceOnOwnerSubscription (0 ms)
+[ RUN      ] OnlineSessionOperationTest.JoiningOperationRemainsPendingUntilAnExactNativeWelcome
+[       OK ] OnlineSessionOperationTest.JoiningOperationRemainsPendingUntilAnExactNativeWelcome (3 ms)
+[ RUN      ] OnlineSessionOperationTest.AbandoningBeforeWorkCannotRetainItsOwnExecutorOrPublishCallback
+[       OK ] OnlineSessionOperationTest.AbandoningBeforeWorkCannotRetainItsOwnExecutorOrPublishCallback (0 ms)
+[ RUN      ] OnlineSessionOperationTest.UnconsumedReadinessReleasesMembershipAndTransportOnAbandonment
+[       OK ] OnlineSessionOperationTest.UnconsumedReadinessReleasesMembershipAndTransportOnAbandonment (0 ms)
+[ RUN      ] OnlineSessionOperationTest.DeferredOperationFailureSurvivesAThrowingCallbackAndConsumesOnce
+[       OK ] OnlineSessionOperationTest.DeferredOperationFailureSurvivesAThrowingCallbackAndConsumesOnce (0 ms)
+[ RUN      ] OnlineSessionOperationTest.CallbackMayTakeAndDestroyCoordinatorWithoutDestroyingEstablishedSession
+[       OK ] OnlineSessionOperationTest.CallbackMayTakeAndDestroyCoordinatorWithoutDestroyingEstablishedSession (0 ms)
+[ RUN      ] OnlineSessionOperationTest.NestedProgressAndThrowingReadinessCallbackDoNotReplaceSuccess
+[       OK ] OnlineSessionOperationTest.NestedProgressAndThrowingReadinessCallbackDoNotReplaceSuccess (0 ms)
+[ RUN      ] OnlineSessionOperationTest.RetainedOriginCompletesAfterGlobalBackendReplacementWithoutIdentityPublication
+[       OK ] OnlineSessionOperationTest.RetainedOriginCompletesAfterGlobalBackendReplacementWithoutIdentityPublication (0 ms)
+[ RUN      ] OnlineSessionOperationTest.FailureAfterReadinessBeforeConsumptionIsDeferredAndNotNotifiedAgain
+[       OK ] OnlineSessionOperationTest.FailureAfterReadinessBeforeConsumptionIsDeferredAndNotNotifiedAgain (0 ms)
+[ RUN      ] OnlineSessionOperationTest.CancellationIsIdempotentAndSuppressesPendingNotification
+[       OK ] OnlineSessionOperationTest.CancellationIsIdempotentAndSuppressesPendingNotification (0 ms)
+[ RUN      ] OnlineSessionOperationTest.InvalidNameGroupsAndForeignThreadProgressAreRefused
+[       OK ] OnlineSessionOperationTest.InvalidNameGroupsAndForeignThreadProgressAreRefused (0 ms)
+[ RUN      ] OnlineSessionOperationTest.AbandoningJoinBeforeWelcomeReleasesOnlyTheJoiningGroup
+[       OK ] OnlineSessionOperationTest.AbandoningJoinBeforeWelcomeReleasesOnlyTheJoiningGroup (0 ms)
+[ RUN      ] OnlineSessionOperationTest.UnconsumedResultRetainsBoundedDataWhilePreservingInitialRoster
+[       OK ] OnlineSessionOperationTest.UnconsumedResultRetainsBoundedDataWhilePreservingInitialRoster (215 ms)
+[----------] 13 tests from OnlineSessionOperationTest (223 ms total)
+
+[----------] 18 tests from ServiceGamePacketPolicyTest
+[ RUN      ] ServiceGamePacketPolicyTest.HostAcceptsOnlyExactSourceLocalHelloBeforeHandshakeMutation
+[       OK ] ServiceGamePacketPolicyTest.HostAcceptsOnlyExactSourceLocalHelloBeforeHandshakeMutation (0 ms)
+[ RUN      ] ServiceGamePacketPolicyTest.ClientWelcomeRequiresAuthenticatedHostAndItsExactLocalAssignments
+[       OK ] ServiceGamePacketPolicyTest.ClientWelcomeRequiresAuthenticatedHostAndItsExactLocalAssignments (0 ms)
+[ RUN      ] ServiceGamePacketPolicyTest.SourceAndControlDirectionCannotBeChosenByThePacket
+[       OK ] ServiceGamePacketPolicyTest.SourceAndControlDirectionCannotBeChosenByThePacket (0 ms)
+[ RUN      ] ServiceGamePacketPolicyTest.CompleteServiceGroupsAreRequiredInHostBroadcasts
+[       OK ] ServiceGamePacketPolicyTest.CompleteServiceGroupsAreRequiredInHostBroadcasts (0 ms)
+[ RUN      ] ServiceGamePacketPolicyTest.StateChangesMustMatchTheAuthenticatedDirectory
+[       OK ] ServiceGamePacketPolicyTest.StateChangesMustMatchTheAuthenticatedDirectory (0 ms)
+[ RUN      ] ServiceGamePacketPolicyTest.PropertiesMustMatchTheCompleteNullableDirectorySnapshot
+[       OK ] ServiceGamePacketPolicyTest.PropertiesMustMatchTheCompleteNullableDirectorySnapshot (0 ms)
+[ RUN      ] ServiceGamePacketPolicyTest.LeaveRequiresACompleteAdmittedGroupAndEndedCannotOverrideDirectory
+[       OK ] ServiceGamePacketPolicyTest.LeaveRequiresACompleteAdmittedGroupAndEndedCannotOverrideDirectory (0 ms)
+[ RUN      ] ServiceGamePacketPolicyTest.HostApplicationRequiresSenderOwnershipAndAdmittedTarget
+[       OK ] ServiceGamePacketPolicyTest.HostApplicationRequiresSenderOwnershipAndAdmittedTarget (0 ms)
+[ RUN      ] ServiceGamePacketPolicyTest.DirectoryReservationWithoutRealtimeAdmissionIsNotAConnectedSource
+[       OK ] ServiceGamePacketPolicyTest.DirectoryReservationWithoutRealtimeAdmissionIsNotAConnectedSource (0 ms)
+[ RUN      ] ServiceGamePacketPolicyTest.ClientsAcceptHostRelayOnlyForRemoteSendersAndTheirOwnTargets
+[       OK ] ServiceGamePacketPolicyTest.ClientsAcceptHostRelayOnlyForRemoteSendersAndTheirOwnTargets (0 ms)
+[ RUN      ] ServiceGamePacketPolicyTest.ApplicationHeaderLengthOptionsAndChannelsAreBoundedBeforePayloadCopy
+[       OK ] ServiceGamePacketPolicyTest.ApplicationHeaderLengthOptionsAndChannelsAreBoundedBeforePayloadCopy (1 ms)
+[ RUN      ] ServiceGamePacketPolicyTest.EmptyPayloadAndEveryDeliveryOptionRoundTripWithoutInventedFlags
+[       OK ] ServiceGamePacketPolicyTest.EmptyPayloadAndEveryDeliveryOptionRoundTripWithoutInventedFlags (0 ms)
+[ RUN      ] ServiceGamePacketPolicyTest.RemovingAuthorityMakesStaleGroupAndIdsUnusable
+[       OK ] ServiceGamePacketPolicyTest.RemovingAuthorityMakesStaleGroupAndIdsUnusable (0 ms)
+[ RUN      ] ServiceGamePacketPolicyTest.TenThousandMutationsRejectSafelyOrRoundTripAdmittedApplicationBytes
+[       OK ] ServiceGamePacketPolicyTest.TenThousandMutationsRejectSafelyOrRoundTripAdmittedApplicationBytes (33 ms)
+[ RUN      ] ServiceGamePacketPolicyTest.AllThirtyOneIdsRemainUsableAndOversizedAdmissionSetsAreRefused
+[       OK ] ServiceGamePacketPolicyTest.AllThirtyOneIdsRemainUsableAndOversizedAdmissionSetsAreRefused (0 ms)
+[ RUN      ] ServiceGamePacketPolicyTest.TenThousandControlMutationsPreserveCanonicalAdmittedBytes
+[       OK ] ServiceGamePacketPolicyTest.TenThousandControlMutationsPreserveCanonicalAdmittedBytes (93 ms)
+[ RUN      ] ServiceGamePacketPolicyTest.HostLeaveBroadcastRemovesOnlyCompleteAdmittedRemoteGroups
+[       OK ] ServiceGamePacketPolicyTest.HostLeaveBroadcastRemovesOnlyCompleteAdmittedRemoteGroups (0 ms)
+[ RUN      ] ServiceGamePacketPolicyTest.VoiceFramesFollowGameDataAuthorityOnTheUnreliableChannelOnly
+[       OK ] ServiceGamePacketPolicyTest.VoiceFramesFollowGameDataAuthorityOnTheUnreliableChannelOnly (0 ms)
+[----------] 18 tests from ServiceGamePacketPolicyTest (131 ms total)
+
+[----------] 13 tests from ServiceSessionPumpTest
+[ RUN      ] ServiceSessionPumpTest.InitialAuthorityAndOwnerMustBeValid
+[       OK ] ServiceSessionPumpTest.InitialAuthorityAndOwnerMustBeValid (0 ms)
+[ RUN      ] ServiceSessionPumpTest.AtMostOneRequestAndOwnerUpdatePublication
+[       OK ] ServiceSessionPumpTest.AtMostOneRequestAndOwnerUpdatePublication (0 ms)
+[ RUN      ] ServiceSessionPumpTest.MembershipAndGameplayChangesArriveThroughOwnedObservations
+[       OK ] ServiceSessionPumpTest.MembershipAndGameplayChangesArriveThroughOwnedObservations (0 ms)
+[ RUN      ] ServiceSessionPumpTest.LeaseRenewalIsIndependentOfOrdinaryPolling
+[       OK ] ServiceSessionPumpTest.LeaseRenewalIsIndependentOfOrdinaryPolling (0 ms)
+[ RUN      ] ServiceSessionPumpTest.FailurePublishesOnceAndRetryRenewsAtTheSameOrigin
+[       OK ] ServiceSessionPumpTest.FailurePublishesOnceAndRetryRenewsAtTheSameOrigin (0 ms)
+[ RUN      ] ServiceSessionPumpTest.HostClosureIsAStableFailureAndDoesNotScheduleForever
+[       OK ] ServiceSessionPumpTest.HostClosureIsAStableFailureAndDoesNotScheduleForever (0 ms)
+[ RUN      ] ServiceSessionPumpTest.CancellationSuppressesQueuedAndReadyWorkWithoutReleasingMembership
+[       OK ] ServiceSessionPumpTest.CancellationSuppressesQueuedAndReadyWorkWithoutReleasingMembership (0 ms)
+[ RUN      ] ServiceSessionPumpTest.OriginRetentionDoesNotBecomeAQueuedOwnershipCycle
+[       OK ] ServiceSessionPumpTest.OriginRetentionDoesNotBecomeAQueuedOwnershipCycle (0 ms)
+[ RUN      ] ServiceSessionPumpTest.BusyRetryAndQueueSaturationFailDeterministically
+[       OK ] ServiceSessionPumpTest.BusyRetryAndQueueSaturationFailDeterministically (0 ms)
+[ RUN      ] ServiceSessionPumpTest.HostPublicationRetriesAStaleRevisionAndRenewsTheLease
+[       OK ] ServiceSessionPumpTest.HostPublicationRetriesAStaleRevisionAndRenewsTheLease (0 ms)
+[ RUN      ] ServiceSessionPumpTest.LatestDesireWinsAndANewerDesireSurvivesAnInFlightPublication
+[       OK ] ServiceSessionPumpTest.LatestDesireWinsAndANewerDesireSurvivesAnInFlightPublication (0 ms)
+[ RUN      ] ServiceSessionPumpTest.ExpeditedReadsAreCoalescedAndSpacedButNeverRequirePolling
+[       OK ] ServiceSessionPumpTest.ExpeditedReadsAreCoalescedAndSpacedButNeverRequirePolling (0 ms)
+[ RUN      ] ServiceSessionPumpTest.ACanceledPumpRefusesPublicationAndAStoppedPumpIgnoresHints
+[       OK ] ServiceSessionPumpTest.ACanceledPumpRefusesPublicationAndAStoppedPumpIgnoresHints (0 ms)
+[----------] 13 tests from ServiceSessionPumpTest (2 ms total)
+
+[----------] 2 tests from TrafficRateTest
+[ RUN      ] TrafficRateTest.RatesAreBytesPerSecondOverEachCompletedSecond
+[       OK ] TrafficRateTest.RatesAreBytesPerSecondOverEachCompletedSecond (0 ms)
+[ RUN      ] TrafficRateTest.ATotalThatWrapsPastTwoToTheThirtySecondStaysCorrect
+[       OK ] TrafficRateTest.ATotalThatWrapsPastTwoToTheThirtySecondStaysCorrect (0 ms)
+[----------] 2 tests from TrafficRateTest (0 ms total)
+
+[----------] 8 tests from TwoProcessLoopbackTest
+[ RUN      ] TwoProcessLoopbackTest.HostAndClientJoinAndExchangeAppDataAcrossRealProcesses
+[       OK ] TwoProcessLoopbackTest.HostAndClientJoinAndExchangeAppDataAcrossRealProcesses (612 ms)
+[ RUN      ] TwoProcessLoopbackTest.VoiceTravelsBothWaysAcrossRealProcesses
+[       OK ] TwoProcessLoopbackTest.VoiceTravelsBothWaysAcrossRealProcesses (860 ms)
+[ RUN      ] TwoProcessLoopbackTest.JoinKeepsTheLocalGamerLimitOfTheFindAcrossRealProcesses
+[       OK ] TwoProcessLoopbackTest.JoinKeepsTheLocalGamerLimitOfTheFindAcrossRealProcesses (761 ms)
+[ RUN      ] TwoProcessLoopbackTest.JoinUsesTheGamersTheFindWasGivenAcrossRealProcesses
+[       OK ] TwoProcessLoopbackTest.JoinUsesTheGamersTheFindWasGivenAcrossRealProcesses (759 ms)
+[ RUN      ] TwoProcessLoopbackTest.ClientAddLocalGamerJoinsTheClientsMachineAcrossRealProcesses
+[       OK ] TwoProcessLoopbackTest.ClientAddLocalGamerJoinsTheClientsMachineAcrossRealProcesses (610 ms)
+[ RUN      ] TwoProcessLoopbackTest.GuestsAreGuestsOnEveryMachineAcrossRealProcesses
+[       OK ] TwoProcessLoopbackTest.GuestsAreGuestsOnEveryMachineAcrossRealProcesses (963 ms)
+[ RUN      ] TwoProcessLoopbackTest.StartHostingRollsBackCleanlyOnDiscoveryRegistrationFailure
+[       OK ] TwoProcessLoopbackTest.StartHostingRollsBackCleanlyOnDiscoveryRegistrationFailure (50 ms)
+[ RUN      ] TwoProcessLoopbackTest.HostMigrationPromotesOneSurvivorAndTheOtherReconnectsAcrossRealProcesses
+[       OK ] TwoProcessLoopbackTest.HostMigrationPromotesOneSurvivorAndTheOtherReconnectsAcrossRealProcesses (875 ms)
+[----------] 8 tests from TwoProcessLoopbackTest (5494 ms total)
+
+[----------] 2 tests from QualityOfServiceTest
+[ RUN      ] QualityOfServiceTest.DefaultValues
+[       OK ] QualityOfServiceTest.DefaultValues (0 ms)
+[ RUN      ] QualityOfServiceTest.MeasuredOverloadReflectsRealRoundtripTime
+[       OK ] QualityOfServiceTest.MeasuredOverloadReflectsRealRoundtripTime (0 ms)
+[----------] 2 tests from QualityOfServiceTest (0 ms total)
+
+[----------] 6 tests from AvailableNetworkSessionTest
+[ RUN      ] AvailableNetworkSessionTest.PropertiesFromCtor
+[       OK ] AvailableNetworkSessionTest.PropertiesFromCtor (0 ms)
+[ RUN      ] AvailableNetworkSessionTest.EqualityAndInequality
+[       OK ] AvailableNetworkSessionTest.EqualityAndInequality (0 ms)
+[ RUN      ] AvailableNetworkSessionTest.DefaultConnectAddressAndPortAreEmpty
+[       OK ] AvailableNetworkSessionTest.DefaultConnectAddressAndPortAreEmpty (0 ms)
+[ RUN      ] AvailableNetworkSessionTest.ConnectAddressAndPortFromCreateInternal
+[       OK ] AvailableNetworkSessionTest.ConnectAddressAndPortFromCreateInternal (0 ms)
+[ RUN      ] AvailableNetworkSessionTest.EqualityConsidersConnectAddressAndPort
+[       OK ] AvailableNetworkSessionTest.EqualityConsidersConnectAddressAndPort (0 ms)
+[ RUN      ] AvailableNetworkSessionTest.EqualityExcludesQualityOfServiceAndSessionProperties
+[       OK ] AvailableNetworkSessionTest.EqualityExcludesQualityOfServiceAndSessionProperties (0 ms)
+[----------] 6 tests from AvailableNetworkSessionTest (0 ms total)
+
+[----------] 7 tests from AvailableNetworkSessionCollectionTest
+[ RUN      ] AvailableNetworkSessionCollectionTest.EmptyCollection
+[       OK ] AvailableNetworkSessionCollectionTest.EmptyCollection (0 ms)
+[ RUN      ] AvailableNetworkSessionCollectionTest.IndexOfAndContainsUseValueEquality
+[       OK ] AvailableNetworkSessionCollectionTest.IndexOfAndContainsUseValueEquality (0 ms)
+[ RUN      ] AvailableNetworkSessionCollectionTest.IndexingAndCount
+[       OK ] AvailableNetworkSessionCollectionTest.IndexingAndCount (0 ms)
+[ RUN      ] AvailableNetworkSessionCollectionTest.Dispose
+[       OK ] AvailableNetworkSessionCollectionTest.Dispose (0 ms)
+[ RUN      ] AvailableNetworkSessionCollectionTest.DisposeDoesNotClearContentsUnlikeFNA
+[       OK ] AvailableNetworkSessionCollectionTest.DisposeDoesNotClearContentsUnlikeFNA (0 ms)
+[ RUN      ] AvailableNetworkSessionCollectionTest.RangeFor
+[       OK ] AvailableNetworkSessionCollectionTest.RangeFor (0 ms)
+[ RUN      ] AvailableNetworkSessionCollectionTest.DisposingTheCollectionMakesItsListingsUnjoinable
+[       OK ] AvailableNetworkSessionCollectionTest.DisposingTheCollectionMakesItsListingsUnjoinable (0 ms)
+[----------] 7 tests from AvailableNetworkSessionCollectionTest (0 ms total)
+
+[----------] 21 tests from LocalNetworkGamerTest
+[ RUN      ] LocalNetworkGamerTest.IsLocalIsTrue
+[       OK ] LocalNetworkGamerTest.IsLocalIsTrue (0 ms)
+[ RUN      ] LocalNetworkGamerTest.SignedInGamerPropertyMatchesConstructorArgument
+[       OK ] LocalNetworkGamerTest.SignedInGamerPropertyMatchesConstructorArgument (0 ms)
+[ RUN      ] LocalNetworkGamerTest.NoDataAvailableByDefault
+[       OK ] LocalNetworkGamerTest.NoDataAvailableByDefault (0 ms)
+[ RUN      ] LocalNetworkGamerTest.ReceiveDataReturnsZeroWhenQueueEmpty
+[       OK ] LocalNetworkGamerTest.ReceiveDataReturnsZeroWhenQueueEmpty (0 ms)
+[ RUN      ] LocalNetworkGamerTest.ReceiveDataWithOffsetThrowsInsteadOfWritingPastBufferEnd
+[       OK ] LocalNetworkGamerTest.ReceiveDataWithOffsetThrowsInsteadOfWritingPastBufferEnd (0 ms)
+[ RUN      ] LocalNetworkGamerTest.SendDataThenReceiveDataRoundtrip
+[       OK ] LocalNetworkGamerTest.SendDataThenReceiveDataRoundtrip (0 ms)
+[ RUN      ] LocalNetworkGamerTest.SendDataWithOffsetAndCount
+[       OK ] LocalNetworkGamerTest.SendDataWithOffsetAndCount (0 ms)
+[ RUN      ] LocalNetworkGamerTest.SendDataThrowsWhenOffsetPlusCountExceedsBuffer
+[       OK ] LocalNetworkGamerTest.SendDataThrowsWhenOffsetPlusCountExceedsBuffer (0 ms)
+[ RUN      ] LocalNetworkGamerTest.SendDataToRecipientThrowsWhenOffsetPlusCountExceedsBuffer
+[       OK ] LocalNetworkGamerTest.SendDataToRecipientThrowsWhenOffsetPlusCountExceedsBuffer (0 ms)
+[ RUN      ] LocalNetworkGamerTest.SendDataToRecipient
+[       OK ] LocalNetworkGamerTest.SendDataToRecipient (0 ms)
+[ RUN      ] LocalNetworkGamerTest.SendDataWithOffsetAndCountToRecipient
+[       OK ] LocalNetworkGamerTest.SendDataWithOffsetAndCountToRecipient (0 ms)
+[ RUN      ] LocalNetworkGamerTest.SendDataFromPacketWriter
+[       OK ] LocalNetworkGamerTest.SendDataFromPacketWriter (0 ms)
+[ RUN      ] LocalNetworkGamerTest.SendDataFromPacketWriterToRecipient
+[       OK ] LocalNetworkGamerTest.SendDataFromPacketWriterToRecipient (0 ms)
+[ RUN      ] LocalNetworkGamerTest.ReusedPacketWriterBroadcastDoesNotSendStaleTrailingBytes
+[       OK ] LocalNetworkGamerTest.ReusedPacketWriterBroadcastDoesNotSendStaleTrailingBytes (20 ms)
+[ RUN      ] LocalNetworkGamerTest.ReusedPacketWriterRecipientSendDoesNotSendStaleTrailingBytes
+[       OK ] LocalNetworkGamerTest.ReusedPacketWriterRecipientSendDoesNotSendStaleTrailingBytes (20 ms)
+[ RUN      ] LocalNetworkGamerTest.ReceiveDataReturnsThePacketSizeAndRefusesWithoutDequeuing
+[       OK ] LocalNetworkGamerTest.ReceiveDataReturnsThePacketSizeAndRefusesWithoutDequeuing (0 ms)
+[ RUN      ] LocalNetworkGamerTest.ReceiveDataIntoPacketReaderReturnsZero
+[       OK ] LocalNetworkGamerTest.ReceiveDataIntoPacketReaderReturnsZero (0 ms)
+[ RUN      ] LocalNetworkGamerTest.EnableSendVoiceAndSendPartyInvitesFollowTheReferenceChecks
+[       OK ] LocalNetworkGamerTest.EnableSendVoiceAndSendPartyInvitesFollowTheReferenceChecks (0 ms)
+[ RUN      ] LocalNetworkGamerTest.IsGuestFollowsTheSignedInProfile
+[       OK ] LocalNetworkGamerTest.IsGuestFollowsTheSignedInProfile (0 ms)
+[ RUN      ] LocalNetworkGamerTest.ClearPacketQueueLeavesNoDataAvailable
+[       OK ] LocalNetworkGamerTest.ClearPacketQueueLeavesNoDataAvailable (0 ms)
+[ RUN      ] LocalNetworkGamerTest.PreservesSignedInProfileGamertagAndDisplayName
+[       OK ] LocalNetworkGamerTest.PreservesSignedInProfileGamertagAndDisplayName (0 ms)
+[----------] 21 tests from LocalNetworkGamerTest (42 ms total)
+
+[----------] 2 tests from NetworkSessionTypeTest
+[ RUN      ] NetworkSessionTypeTest.ValuesExist
+[       OK ] NetworkSessionTypeTest.ValuesExist (0 ms)
+[ RUN      ] NetworkSessionTypeTest.OrdinalValuesMatchFNAAndAreWireStable
+[       OK ] NetworkSessionTypeTest.OrdinalValuesMatchFNAAndAreWireStable (0 ms)
+[----------] 2 tests from NetworkSessionTypeTest (0 ms total)
+
+[----------] 1 test from NetworkSessionStateTest
+[ RUN      ] NetworkSessionStateTest.ValuesExist
+[       OK ] NetworkSessionStateTest.ValuesExist (0 ms)
+[----------] 1 test from NetworkSessionStateTest (0 ms total)
+
+[----------] 1 test from NetworkSessionEndReasonTest
+[ RUN      ] NetworkSessionEndReasonTest.ValuesExist
+[       OK ] NetworkSessionEndReasonTest.ValuesExist (0 ms)
+[----------] 1 test from NetworkSessionEndReasonTest (0 ms total)
+
+[----------] 1 test from NetworkSessionJoinErrorTest
+[ RUN      ] NetworkSessionJoinErrorTest.ValuesExist
+[       OK ] NetworkSessionJoinErrorTest.ValuesExist (0 ms)
+[----------] 1 test from NetworkSessionJoinErrorTest (0 ms total)
+
+[----------] 2 tests from SendDataOptionsTest
+[ RUN      ] SendDataOptionsTest.ValuesExist
+[       OK ] SendDataOptionsTest.ValuesExist (0 ms)
+[ RUN      ] SendDataOptionsTest.OrdinalValuesMatchFNAAndAreWireStable
+[       OK ] SendDataOptionsTest.OrdinalValuesMatchFNAAndAreWireStable (0 ms)
+[----------] 2 tests from SendDataOptionsTest (0 ms total)
+
+[----------] 1 test from GameEndedEventArgsTest
+[ RUN      ] GameEndedEventArgsTest.InheritsEventArgs
+[       OK ] GameEndedEventArgsTest.InheritsEventArgs (0 ms)
+[----------] 1 test from GameEndedEventArgsTest (0 ms total)
+
+[----------] 1 test from GameStartedEventArgsTest
+[ RUN      ] GameStartedEventArgsTest.InheritsEventArgs
+[       OK ] GameStartedEventArgsTest.InheritsEventArgs (0 ms)
+[----------] 1 test from GameStartedEventArgsTest (0 ms total)
+
+[----------] 2 tests from GamerJoinedEventArgsTest
+[ RUN      ] GamerJoinedEventArgsTest.StoresGamer
+[       OK ] GamerJoinedEventArgsTest.StoresGamer (0 ms)
+[ RUN      ] GamerJoinedEventArgsTest.InheritsEventArgs
+[       OK ] GamerJoinedEventArgsTest.InheritsEventArgs (0 ms)
+[----------] 2 tests from GamerJoinedEventArgsTest (0 ms total)
+
+[----------] 2 tests from GamerLeftEventArgsTest
+[ RUN      ] GamerLeftEventArgsTest.StoresGamer
+[       OK ] GamerLeftEventArgsTest.StoresGamer (0 ms)
+[ RUN      ] GamerLeftEventArgsTest.InheritsEventArgs
+[       OK ] GamerLeftEventArgsTest.InheritsEventArgs (0 ms)
+[----------] 2 tests from GamerLeftEventArgsTest (0 ms total)
+
+[----------] 2 tests from HostChangedEventArgsTest
+[ RUN      ] HostChangedEventArgsTest.StoresOldAndNewHost
+[       OK ] HostChangedEventArgsTest.StoresOldAndNewHost (0 ms)
+[ RUN      ] HostChangedEventArgsTest.InheritsEventArgs
+[       OK ] HostChangedEventArgsTest.InheritsEventArgs (0 ms)
+[----------] 2 tests from HostChangedEventArgsTest (0 ms total)
+
+[----------] 2 tests from NetworkSessionEndedEventArgsTest
+[ RUN      ] NetworkSessionEndedEventArgsTest.StoresEndReason
+[       OK ] NetworkSessionEndedEventArgsTest.StoresEndReason (0 ms)
+[ RUN      ] NetworkSessionEndedEventArgsTest.InheritsEventArgs
+[       OK ] NetworkSessionEndedEventArgsTest.InheritsEventArgs (0 ms)
+[----------] 2 tests from NetworkSessionEndedEventArgsTest (0 ms total)
+
+[----------] 3 tests from WriteLeaderboardsEventArgsTest
+[ RUN      ] WriteLeaderboardsEventArgsTest.StoresGamerAndFlag
+[       OK ] WriteLeaderboardsEventArgsTest.StoresGamerAndFlag (0 ms)
+[ RUN      ] WriteLeaderboardsEventArgsTest.FlagFalse
+[       OK ] WriteLeaderboardsEventArgsTest.FlagFalse (0 ms)
+[ RUN      ] WriteLeaderboardsEventArgsTest.InheritsEventArgs
+[       OK ] WriteLeaderboardsEventArgsTest.InheritsEventArgs (0 ms)
+[----------] 3 tests from WriteLeaderboardsEventArgsTest (0 ms total)
+
+[----------] 2 tests from NetworkMachineTest
+[ RUN      ] NetworkMachineTest.DefaultGamersCollectionIsEmpty
+[       OK ] NetworkMachineTest.DefaultGamersCollectionIsEmpty (0 ms)
+[ RUN      ] NetworkMachineTest.RemoveFromSessionFollowsTheReferenceChecks
+[       OK ] NetworkMachineTest.RemoveFromSessionFollowsTheReferenceChecks (0 ms)
+[----------] 2 tests from NetworkMachineTest (0 ms total)
+
+[----------] 9 tests from NetworkGamerTest
+[ RUN      ] NetworkGamerTest.ConstructedWithStubGamertag
+[       OK ] NetworkGamerTest.ConstructedWithStubGamertag (0 ms)
+[ RUN      ] NetworkGamerTest.DefaultPropertyValues
+[       OK ] NetworkGamerTest.DefaultPropertyValues (0 ms)
+[ RUN      ] NetworkGamerTest.SetIdUpdatesProperty
+[       OK ] NetworkGamerTest.SetIdUpdatesProperty (0 ms)
+[ RUN      ] NetworkGamerTest.SetIsHostUpdatesProperty
+[       OK ] NetworkGamerTest.SetIsHostUpdatesProperty (0 ms)
+[ RUN      ] NetworkGamerTest.SetIsReadyPropertyRefusesAGamerThatIsNotLocal
+[       OK ] NetworkGamerTest.SetIsReadyPropertyRefusesAGamerThatIsNotLocal (0 ms)
+[ RUN      ] NetworkGamerTest.GetSetMachineProperty
+[       OK ] NetworkGamerTest.GetSetMachineProperty (0 ms)
+[ RUN      ] NetworkGamerTest.SessionPointerStored
+[       OK ] NetworkGamerTest.SessionPointerStored (0 ms)
+[ RUN      ] NetworkGamerTest.CreateInternalWithCustomGamertag
+[       OK ] NetworkGamerTest.CreateInternalWithCustomGamertag (0 ms)
+[ RUN      ] NetworkGamerTest.SetHasLeftSessionUpdatesProperty
+[       OK ] NetworkGamerTest.SetHasLeftSessionUpdatesProperty (0 ms)
+[----------] 9 tests from NetworkGamerTest (0 ms total)
+
+[----------] 14 tests from NetworkSessionJoinExceptionTest
+[ RUN      ] NetworkSessionJoinExceptionTest.SerializationConstructorIsCallableByDerivedTypesAndDefaultInitializes
+[       OK ] NetworkSessionJoinExceptionTest.SerializationConstructorIsCallableByDerivedTypesAndDefaultInitializes (0 ms)
+[ RUN      ] NetworkSessionJoinExceptionTest.DefaultCtor
+[       OK ] NetworkSessionJoinExceptionTest.DefaultCtor (0 ms)
+[ RUN      ] NetworkSessionJoinExceptionTest.MessageCtor
+[       OK ] NetworkSessionJoinExceptionTest.MessageCtor (0 ms)
+[ RUN      ] NetworkSessionJoinExceptionTest.MessageAndJoinErrorCtor
+[       OK ] NetworkSessionJoinExceptionTest.MessageAndJoinErrorCtor (0 ms)
+[ RUN      ] NetworkSessionJoinExceptionTest.MessageAndInnerCtor
+[       OK ] NetworkSessionJoinExceptionTest.MessageAndInnerCtor (0 ms)
+[ RUN      ] NetworkSessionJoinExceptionTest.JoinErrorGetSet
+[       OK ] NetworkSessionJoinExceptionTest.JoinErrorGetSet (0 ms)
+[ RUN      ] NetworkSessionJoinExceptionTest.IsCatchableAsNetworkException
+[       OK ] NetworkSessionJoinExceptionTest.IsCatchableAsNetworkException (0 ms)
+[ RUN      ] NetworkSessionJoinExceptionTest.IsCatchableAsSystemException
+[       OK ] NetworkSessionJoinExceptionTest.IsCatchableAsSystemException (0 ms)
+[ RUN      ] NetworkSessionJoinExceptionTest.GetObjectDataAndTheSerializationConstructorRoundTripEveryField
+[       OK ] NetworkSessionJoinExceptionTest.GetObjectDataAndTheSerializationConstructorRoundTripEveryField (0 ms)
+[ RUN      ] NetworkSessionJoinExceptionTest.EveryJoinErrorValueSurvivesTheRoundTrip
+[       OK ] NetworkSessionJoinExceptionTest.EveryJoinErrorValueSurvivesTheRoundTrip (0 ms)
+[ RUN      ] NetworkSessionJoinExceptionTest.GetObjectDataWritesTheBaseStateBeforeTheJoinError
+[       OK ] NetworkSessionJoinExceptionTest.GetObjectDataWritesTheBaseStateBeforeTheJoinError (0 ms)
+[ RUN      ] NetworkSessionJoinExceptionTest.TheInnerCauseTravelsWithTheException
+[       OK ] NetworkSessionJoinExceptionTest.TheInnerCauseTravelsWithTheException (0 ms)
+[ RUN      ] NetworkSessionJoinExceptionTest.AnEmptyStoreStillConstructs
+[       OK ] NetworkSessionJoinExceptionTest.AnEmptyStoreStillConstructs (0 ms)
+[ RUN      ] NetworkSessionJoinExceptionTest.GetObjectDataIsReachedThroughTheBaseException
+[       OK ] NetworkSessionJoinExceptionTest.GetObjectDataIsReachedThroughTheBaseException (0 ms)
+[----------] 14 tests from NetworkSessionJoinExceptionTest (0 ms total)
+
+[----------] 30 tests from NetworkSessionPropertiesTest
+[ RUN      ] NetworkSessionPropertiesTest.DefaultConstructedHasEightUnspecifiedSlots
+[       OK ] NetworkSessionPropertiesTest.DefaultConstructedHasEightUnspecifiedSlots (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.AddAlwaysRejectsStructuralGrowth
+[       OK ] NetworkSessionPropertiesTest.AddAlwaysRejectsStructuralGrowth (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.ConstIndexerReadsValues
+[       OK ] NetworkSessionPropertiesTest.ConstIndexerReadsValues (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.ConstIndexerOutOfRangeThrows
+[       OK ] NetworkSessionPropertiesTest.ConstIndexerOutOfRangeThrows (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.MutableIndexerOverwritesInPlace
+[       OK ] NetworkSessionPropertiesTest.MutableIndexerOverwritesInPlace (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.MutableIndexerOutOfRangeNeverGrows
+[       OK ] NetworkSessionPropertiesTest.MutableIndexerOutOfRangeNeverGrows (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.BareMutableReadsDoNotAppend
+[       OK ] NetworkSessionPropertiesTest.BareMutableReadsDoNotAppend (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.IndexOfFoundAndNotFound
+[       OK ] NetworkSessionPropertiesTest.IndexOfFoundAndNotFound (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.InsertAlwaysRejectsStructuralChange
+[       OK ] NetworkSessionPropertiesTest.InsertAlwaysRejectsStructuralChange (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.RemoveAtAlwaysRejectsStructuralChange
+[       OK ] NetworkSessionPropertiesTest.RemoveAtAlwaysRejectsStructuralChange (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.CollectionInterfaceReportsNotReadOnly
+[       OK ] NetworkSessionPropertiesTest.CollectionInterfaceReportsNotReadOnly (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.RemoveExistingValueThrows
+[       OK ] NetworkSessionPropertiesTest.RemoveExistingValueThrows (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.RemoveMissingValueAlsoThrows
+[       OK ] NetworkSessionPropertiesTest.RemoveMissingValueAlsoThrows (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.ContainsChecksValuesIncludingNull
+[       OK ] NetworkSessionPropertiesTest.ContainsChecksValuesIncludingNull (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.ClearRejectsAndRetainsValues
+[       OK ] NetworkSessionPropertiesTest.ClearRejectsAndRetainsValues (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.CopyToCopiesAllEightSlotsWithOffset
+[       OK ] NetworkSessionPropertiesTest.CopyToCopiesAllEightSlotsWithOffset (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.CopyToRejectsNegativeOffset
+[       OK ] NetworkSessionPropertiesTest.CopyToRejectsNegativeOffset (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.CopyToRejectsShortOrOverflowingDestination
+[       OK ] NetworkSessionPropertiesTest.CopyToRejectsShortOrOverflowingDestination (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.EnumeratorVisitsAllEightValues
+[       OK ] NetworkSessionPropertiesTest.EnumeratorVisitsAllEightValues (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.EnumeratorResetRestartsAtFirstSlot
+[       OK ] NetworkSessionPropertiesTest.EnumeratorResetRestartsAtFirstSlot (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.EnumeratorCurrentGuardsBothInvalidPositions
+[       OK ] NetworkSessionPropertiesTest.EnumeratorCurrentGuardsBothInvalidPositions (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.EnumerationObservesInPlaceWritesWithoutStructuralInvalidation
+[       OK ] NetworkSessionPropertiesTest.EnumerationObservesInPlaceWritesWithoutStructuralInvalidation (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.RangeIteratorsAreReadOnlyAndCoverEightSlots
+[       OK ] NetworkSessionPropertiesTest.RangeIteratorsAreReadOnlyAndCoverEightSlots (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.ProxyAssignThroughCopiesTheValue
+[       OK ] NetworkSessionPropertiesTest.ProxyAssignThroughCopiesTheValue (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.EverySlotAcceptsSignedIntegerBoundsAndNull
+[       OK ] NetworkSessionPropertiesTest.EverySlotAcceptsSignedIntegerBoundsAndNull (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.GetItemOutOfRangeThrowsWithoutChangingCount
+[       OK ] NetworkSessionPropertiesTest.GetItemOutOfRangeThrowsWithoutChangingCount (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.SetItemReplacesInRange
+[       OK ] NetworkSessionPropertiesTest.SetItemReplacesInRange (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.SetItemOutOfRangeRejectsInsteadOfAppending
+[       OK ] NetworkSessionPropertiesTest.SetItemOutOfRangeRejectsInsteadOfAppending (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.ValueCopiesAndMovesRetainTheFixedShapeAndIndependentData
+[       OK ] NetworkSessionPropertiesTest.ValueCopiesAndMovesRetainTheFixedShapeAndIndependentData (0 ms)
+[ RUN      ] NetworkSessionPropertiesTest.AdvertisedSnapshotCopiesRemainReadOnly
+[       OK ] NetworkSessionPropertiesTest.AdvertisedSnapshotCopiesRemainReadOnly (0 ms)
+[----------] 30 tests from NetworkSessionPropertiesTest (0 ms total)
+
+[----------] 13 tests from ServiceSearchTest
+[ RUN      ] ServiceSearchTest.SearchIsPendingUntilUpdateAndMetadataSurvivesEnd
+[       OK ] ServiceSearchTest.SearchIsPendingUntilUpdateAndMetadataSurvivesEnd (0 ms)
+[ RUN      ] ServiceSearchTest.EndWaitsByPumpingAndCallbackCanConsumeWithoutFreeingMetadata
+[       OK ] ServiceSearchTest.EndWaitsByPumpingAndCallbackCanConsumeWithoutFreeingMetadata (0 ms)
+[ RUN      ] ServiceSearchTest.NullableFiltersCategoryCapacityAndPlayingPolicyComeFromService
+[       OK ] ServiceSearchTest.NullableFiltersCategoryCapacityAndPlayingPolicyComeFromService (0 ms)
+[ RUN      ] ServiceSearchTest.InvalidExplicitAccountsDoNotStrandTheSingleton
+[       OK ] ServiceSearchTest.InvalidExplicitAccountsDoNotStrandTheSingleton (0 ms)
+[ RUN      ] ServiceSearchTest.DroppedPendingResultSuppressesCallbackAndReleasesBusyState
+[       OK ] ServiceSearchTest.DroppedPendingResultSuppressesCallbackAndReleasesBusyState (0 ms)
+[ RUN      ] ServiceSearchTest.AuthenticationLossIsDeferredToEndAndDoesNotStrandBusyState
+[       OK ] ServiceSearchTest.AuthenticationLossIsDeferredToEndAndDoesNotStrandBusyState (0 ms)
+[ RUN      ] ServiceSearchTest.EndClaimsConsumptionBeforePumpingReentrantCallback
+[       OK ] ServiceSearchTest.EndClaimsConsumptionBeforePumpingReentrantCallback (0 ms)
+[ RUN      ] ServiceSearchTest.ThrowingUpdateCallbackLeavesCompletionConsumableExactlyOnce
+[       OK ] ServiceSearchTest.ThrowingUpdateCallbackLeavesCompletionConsumableExactlyOnce (0 ms)
+[ RUN      ] ServiceSearchTest.QueueSaturationRefusesBeginWithoutLeakingOrStrandingBusyState
+[       OK ] ServiceSearchTest.QueueSaturationRefusesBeginWithoutLeakingOrStrandingBusyState (1 ms)
+[ RUN      ] ServiceSearchTest.ImplicitSearchHonorsRequestedCapacityWithOneSignedInGamer
+[       OK ] ServiceSearchTest.ImplicitSearchHonorsRequestedCapacityWithOneSignedInGamer (0 ms)
+[ RUN      ] ServiceSearchTest.ResultOwnsExecutorWithoutAQueuedSelfRetentionCycle
+[       OK ] ServiceSearchTest.ResultOwnsExecutorWithoutAQueuedSelfRetentionCycle (0 ms)
+[ RUN      ] ServiceSearchTest.PendingEndRetainsSearchAuthorityAfterReplacementAndDiscardsOldSignOut
+[       OK ] ServiceSearchTest.PendingEndRetainsSearchAuthorityAfterReplacementAndDiscardsOldSignOut (0 ms)
+[ RUN      ] ServiceSearchTest.RetainedOriginFailureIsConsumedOnceAndReleasesBusyState
+[       OK ] ServiceSearchTest.RetainedOriginFailureIsConsumedOnceAndReleasesBusyState (0 ms)
+[----------] 13 tests from ServiceSearchTest (9 ms total)
+
+[----------] 69 tests from NetworkSessionTest
+[ RUN      ] NetworkSessionTest.CreateWithExplicitLocalGamers
+[       OK ] NetworkSessionTest.CreateWithExplicitLocalGamers (0 ms)
+[ RUN      ] NetworkSessionTest.SessionPropertiesGetterExposesMutableXnaIndexerCollection
+[       OK ] NetworkSessionTest.SessionPropertiesGetterExposesMutableXnaIndexerCollection (0 ms)
+[ RUN      ] NetworkSessionTest.RetainedPropertyProxyChecksCurrentHostRoleBeforeEachWrite
+[       OK ] NetworkSessionTest.RetainedPropertyProxyChecksCurrentHostRoleBeforeEachWrite (0 ms)
+[ RUN      ] NetworkSessionTest.CreateDoesNotLeakNetworkSessionAction
+[       OK ] NetworkSessionTest.CreateDoesNotLeakNetworkSessionAction (0 ms)
+[ RUN      ] NetworkSessionTest.BeginCreateInvokesCallbackExactlyOnceWithCorrectIdentity
+[       OK ] NetworkSessionTest.BeginCreateInvokesCallbackExactlyOnceWithCorrectIdentity (0 ms)
+[ RUN      ] NetworkSessionTest.BeginCreateCallbackCanReentrantlyCallEndCreate
+[       OK ] NetworkSessionTest.BeginCreateCallbackCanReentrantlyCallEndCreate (0 ms)
+[ RUN      ] NetworkSessionTest.DeletingAfterDisposeLeavesNoLeak
+[       OK ] NetworkSessionTest.DeletingAfterDisposeLeavesNoLeak (0 ms)
+[ RUN      ] NetworkSessionTest.DeletingWithoutDisposeStillAllowsCreatingANewSession
+[       OK ] NetworkSessionTest.DeletingWithoutDisposeStillAllowsCreatingANewSession (0 ms)
+[ RUN      ] NetworkSessionTest.DeletingWithoutDisposeTearsDownRealTransport
+[       OK ] NetworkSessionTest.DeletingWithoutDisposeTearsDownRealTransport (20 ms)
+[ RUN      ] NetworkSessionTest.AllowHostMigrationAndJoinInProgressGetSet
+[       OK ] NetworkSessionTest.AllowHostMigrationAndJoinInProgressGetSet (0 ms)
+[ RUN      ] NetworkSessionTest.MaxGamersAndPrivateGamerSlotsGetSet
+[       OK ] NetworkSessionTest.MaxGamersAndPrivateGamerSlotsGetSet (0 ms)
+[ RUN      ] NetworkSessionTest.SimulatedLatencyAndPacketLossGetSet
+[       OK ] NetworkSessionTest.SimulatedLatencyAndPacketLossGetSet (0 ms)
+[ RUN      ] NetworkSessionTest.IsEveryoneReadyReflectsLocalGamers
+[       OK ] NetworkSessionTest.IsEveryoneReadyReflectsLocalGamers (0 ms)
+[ RUN      ] NetworkSessionTest.IsReadyIsSetOnlyInTheLobbyAndClearsWhenTheGameEnds
+[       OK ] NetworkSessionTest.IsReadyIsSetOnlyInTheLobbyAndClearsWhenTheGameEnds (0 ms)
+[ RUN      ] NetworkSessionTest.ResetReadySetsAllGamersNotReady
+[       OK ] NetworkSessionTest.ResetReadySetsAllGamersNotReady (0 ms)
+[ RUN      ] NetworkSessionTest.StartGameThenEndGameTransitionsState
+[       OK ] NetworkSessionTest.StartGameThenEndGameTransitionsState (0 ms)
+[ RUN      ] NetworkSessionTest.WriteLeaderboardAndTrueSkillEventsAreNeverRaised
+[       OK ] NetworkSessionTest.WriteLeaderboardAndTrueSkillEventsAreNeverRaised (0 ms)
+[ RUN      ] NetworkSessionTest.StartGameWhileNotInLobbyThrows
+[       OK ] NetworkSessionTest.StartGameWhileNotInLobbyThrows (0 ms)
+[ RUN      ] NetworkSessionTest.EndGameWhileNotPlayingThrows
+[       OK ] NetworkSessionTest.EndGameWhileNotPlayingThrows (0 ms)
+[ RUN      ] NetworkSessionTest.AddLocalGamerThrowsAtMaxLimit
+[       OK ] NetworkSessionTest.AddLocalGamerThrowsAtMaxLimit (0 ms)
+[ RUN      ] NetworkSessionTest.ExplicitLocalGamerListsAreCheckedFirst
+[       OK ] NetworkSessionTest.ExplicitLocalGamerListsAreCheckedFirst (0 ms)
+[ RUN      ] NetworkSessionTest.FindGamerByIdMatchesSoleLocalGamer
+[       OK ] NetworkSessionTest.FindGamerByIdMatchesSoleLocalGamer (0 ms)
+[ RUN      ] NetworkSessionTest.MultipleLocalGamersGetDistinctIdsAndFindGamerByIdRoutesCorrectly
+[       OK ] NetworkSessionTest.MultipleLocalGamersGetDistinctIdsAndFindGamerByIdRoutesCorrectly (0 ms)
+[ RUN      ] NetworkSessionTest.CreateMakesLocalGamersReportIsHostTrue
+[       OK ] NetworkSessionTest.CreateMakesLocalGamersReportIsHostTrue (0 ms)
+[ RUN      ] NetworkSessionTest.AJoinedSessionMakesLocalGamersReportIsHostFalse
+[       OK ] NetworkSessionTest.AJoinedSessionMakesLocalGamersReportIsHostFalse (0 ms)
+[ RUN      ] NetworkSessionTest.FailedCreateDoesNotPermanentlyStrandActiveAction
+[       OK ] NetworkSessionTest.FailedCreateDoesNotPermanentlyStrandActiveAction (0 ms)
+[ RUN      ] NetworkSessionTest.GameStartedReplaysForAHandlerAddedWhilePlaying
+[       OK ] NetworkSessionTest.GameStartedReplaysForAHandlerAddedWhilePlaying (0 ms)
+[ RUN      ] NetworkSessionTest.AddLocalGamerFollowsTheReferenceChecks
+[       OK ] NetworkSessionTest.AddLocalGamerFollowsTheReferenceChecks (0 ms)
+[ RUN      ] NetworkSessionTest.AddLocalGamerRaisesGamerJoinedForAnAlreadySubscribedHandler
+[       OK ] NetworkSessionTest.AddLocalGamerRaisesGamerJoinedForAnAlreadySubscribedHandler (0 ms)
+[ RUN      ] NetworkSessionTest.RemoveThenAddLocalGamerChurnNeverProducesAnIdCollision
+[       OK ] NetworkSessionTest.RemoveThenAddLocalGamerChurnNeverProducesAnIdCollision (0 ms)
+[ RUN      ] NetworkSessionTest.UpdateAfterDisposeThrows
+[       OK ] NetworkSessionTest.UpdateAfterDisposeThrows (0 ms)
+[ RUN      ] NetworkSessionTest.ResetReadyAfterDisposeThrows
+[       OK ] NetworkSessionTest.ResetReadyAfterDisposeThrows (0 ms)
+[ RUN      ] NetworkSessionTest.StartAndEndGameAfterDisposeThrow
+[       OK ] NetworkSessionTest.StartAndEndGameAfterDisposeThrow (0 ms)
+[ RUN      ] NetworkSessionTest.GamerJoinedReplaysImmediatelyOnSubscriptionForConstructionTimeGamers
+[       OK ] NetworkSessionTest.GamerJoinedReplaysImmediatelyOnSubscriptionForConstructionTimeGamers (0 ms)
+[ RUN      ] NetworkSessionTest.GamerJoinedReplaysForALateSubscriber
+[       OK ] NetworkSessionTest.GamerJoinedReplaysForALateSubscriber (0 ms)
+[ RUN      ] NetworkSessionTest.BeginCreateSimpleOverloadValidatesMaxLocalGamers
+[       OK ] NetworkSessionTest.BeginCreateSimpleOverloadValidatesMaxLocalGamers (0 ms)
+[ RUN      ] NetworkSessionTest.BeginCreateOverloadsValidateMaxGamers
+[       OK ] NetworkSessionTest.BeginCreateOverloadsValidateMaxGamers (0 ms)
+[ RUN      ] NetworkSessionTest.BeginCreatePropertiesOverloadValidatesPrivateGamerSlots
+[       OK ] NetworkSessionTest.BeginCreatePropertiesOverloadValidatesPrivateGamerSlots (0 ms)
+[ RUN      ] NetworkSessionTest.BeginCreateLocalGamersOverloadValidatesPrivateGamerSlots
+[       OK ] NetworkSessionTest.BeginCreateLocalGamersOverloadValidatesPrivateGamerSlots (0 ms)
+[ RUN      ] NetworkSessionTest.BeginCreateWhileActionPendingThrows
+[       OK ] NetworkSessionTest.BeginCreateWhileActionPendingThrows (0 ms)
+[ RUN      ] NetworkSessionTest.EndCreateWithMismatchedResultThrows
+[       OK ] NetworkSessionTest.EndCreateWithMismatchedResultThrows (0 ms)
+[ RUN      ] NetworkSessionTest.FindReturnsEmptyCollection
+[       OK ] NetworkSessionTest.FindReturnsEmptyCollection (300 ms)
+[ RUN      ] NetworkSessionTest.BeginFindRejectsLocalSessionType
+[       OK ] NetworkSessionTest.BeginFindRejectsLocalSessionType (0 ms)
+[ RUN      ] NetworkSessionTest.BeginFindValidatesMaxLocalGamers
+[       OK ] NetworkSessionTest.BeginFindValidatesMaxLocalGamers (0 ms)
+[ RUN      ] NetworkSessionTest.EndFindWithMismatchedResultThrows
+[       OK ] NetworkSessionTest.EndFindWithMismatchedResultThrows (150 ms)
+[ RUN      ] NetworkSessionTest.BeginJoinRejectsNullAvailableSession
+[       OK ] NetworkSessionTest.BeginJoinRejectsNullAvailableSession (0 ms)
+[ RUN      ] NetworkSessionTest.JoinActivatesRealNetworkingForTheCorrectSessionType
+[       OK ] NetworkSessionTest.JoinActivatesRealNetworkingForTheCorrectSessionType (21 ms)
+[ RUN      ] NetworkSessionTest.SyntheticPlayerMatchListingCannotBypassServiceMembership
+[       OK ] NetworkSessionTest.SyntheticPlayerMatchListingCannotBypassServiceMembership (0 ms)
+[ RUN      ] NetworkSessionTest.BeginJoinInvitedValidatesMaxLocalGamers
+[       OK ] NetworkSessionTest.BeginJoinInvitedValidatesMaxLocalGamers (0 ms)
+[ RUN      ] NetworkSessionTest.JoinInvitedWithExplicitLocalGamersRefuses
+[       OK ] NetworkSessionTest.JoinInvitedWithExplicitLocalGamersRefuses (0 ms)
+[ RUN      ] NetworkSessionTest.EndJoinInvitedRefusesAnyResultBecauseNoBeginCanProduceOne
+[       OK ] NetworkSessionTest.EndJoinInvitedRefusesAnyResultBecauseNoBeginCanProduceOne (0 ms)
+[ RUN      ] NetworkSessionTest.EndJoinInvitedWithMismatchedResultThrows
+[       OK ] NetworkSessionTest.EndJoinInvitedWithMismatchedResultThrows (0 ms)
+[ RUN      ] NetworkSessionTest.SystemLinkSessionHostsRealNetworkingAndUpdatesCleanly
+[       OK ] NetworkSessionTest.SystemLinkSessionHostsRealNetworkingAndUpdatesCleanly (20 ms)
+[ RUN      ] NetworkSessionTest.LocalSessionTypeDoesNotStartRealNetworking
+[       OK ] NetworkSessionTest.LocalSessionTypeDoesNotStartRealNetworking (0 ms)
+[ RUN      ] NetworkSessionTest.SystemLinkSessionGetsARealBoundPort
+[       OK ] NetworkSessionTest.SystemLinkSessionGetsARealBoundPort (20 ms)
+[ RUN      ] NetworkSessionTest.AddRemoteGamerJoinsRostersAndRaisesGamerJoined
+[       OK ] NetworkSessionTest.AddRemoteGamerJoinsRostersAndRaisesGamerJoined (0 ms)
+[ RUN      ] NetworkSessionTest.AddRemoteGamerThrowsWhenSessionIsAlreadyAtMaxGamers
+[       OK ] NetworkSessionTest.AddRemoteGamerThrowsWhenSessionIsAlreadyAtMaxGamers (0 ms)
+[ RUN      ] NetworkSessionTest.RemoveGamerOnRemoteGamerRaisesGamerLeftAndMigratesToPrevious
+[       OK ] NetworkSessionTest.RemoveGamerOnRemoteGamerRaisesGamerLeftAndMigratesToPrevious (0 ms)
+[ RUN      ] NetworkSessionTest.RemoveGamerOnLocalGamerRaisesSessionEndedWithReason
+[       OK ] NetworkSessionTest.RemoveGamerOnLocalGamerRaisesSessionEndedWithReason (0 ms)
+[ RUN      ] NetworkSessionTest.DisposeFreesEveryGamerTheSessionEverOwned
+[       OK ] NetworkSessionTest.DisposeFreesEveryGamerTheSessionEverOwned (0 ms)
+[ RUN      ] NetworkSessionTest.DisposeCalledTwiceDirectlyIsSafeAndIdempotent
+[       OK ] NetworkSessionTest.DisposeCalledTwiceDirectlyIsSafeAndIdempotent (0 ms)
+[ RUN      ] NetworkSessionTest.DisposeClearsPreviousGamersSoNoDanglingPointerIsObservable
+[       OK ] NetworkSessionTest.DisposeClearsPreviousGamersSoNoDanglingPointerIsObservable (0 ms)
+[ RUN      ] NetworkSessionTest.DisposeClearsHostProperty
+[       OK ] NetworkSessionTest.DisposeClearsHostProperty (0 ms)
+[ RUN      ] NetworkSessionTest.EndFamiliesRejectNullAndForeignResultsWithoutAnAction
+[       OK ] NetworkSessionTest.EndFamiliesRejectNullAndForeignResultsWithoutAnAction (0 ms)
+[ RUN      ] NetworkSessionTest.WrongEndFamilyPreservesPendingCreate
+[       OK ] NetworkSessionTest.WrongEndFamilyPreservesPendingCreate (0 ms)
+[ RUN      ] NetworkSessionTest.WrongEndFamilyPreservesPendingFind
+[       OK ] NetworkSessionTest.WrongEndFamilyPreservesPendingFind (150 ms)
+[ RUN      ] NetworkSessionTest.WrongEndFamilyPreservesPendingJoin
+[       OK ] NetworkSessionTest.WrongEndFamilyPreservesPendingJoin (0 ms)
+[ RUN      ] NetworkSessionTest.DroppingAnUnconsumedResultReleasesBusyState
+[       OK ] NetworkSessionTest.DroppingAnUnconsumedResultReleasesBusyState (0 ms)
+[ RUN      ] NetworkSessionTest.ThrowingImmediateCallbackDoesNotLeakOrStrandTheResult
+[       OK ] NetworkSessionTest.ThrowingImmediateCallbackDoesNotLeakOrStrandTheResult (0 ms)
+[----------] 69 tests from NetworkSessionTest (687 ms total)
+
+[----------] 10 tests from PacketReaderTest
+[ RUN      ] PacketReaderTest.DefaultCtorIsEmpty
+[       OK ] PacketReaderTest.DefaultCtorIsEmpty (0 ms)
+[ RUN      ] PacketReaderTest.CapacityCtorIsEmpty
+[       OK ] PacketReaderTest.CapacityCtorIsEmpty (0 ms)
+[ RUN      ] PacketReaderTest.NegativeCapacityThrowsArgumentOutOfRangeException
+[       OK ] PacketReaderTest.NegativeCapacityThrowsArgumentOutOfRangeException (0 ms)
+[ RUN      ] PacketReaderTest.SetPositionSeeks
+[       OK ] PacketReaderTest.SetPositionSeeks (0 ms)
+[ RUN      ] PacketReaderTest.ReadSingleForwardsToBase
+[       OK ] PacketReaderTest.ReadSingleForwardsToBase (0 ms)
+[ RUN      ] PacketReaderTest.ReadDoubleForwardsToBase
+[       OK ] PacketReaderTest.ReadDoubleForwardsToBase (0 ms)
+[ RUN      ] PacketReaderTest.InheritedReadInt32Works
+[       OK ] PacketReaderTest.InheritedReadInt32Works (0 ms)
+[ RUN      ] PacketReaderTest.ReadColorReadsFourBytesAndInvertsWriteColor
+[       OK ] PacketReaderTest.ReadColorReadsFourBytesAndInvertsWriteColor (0 ms)
+[ RUN      ] PacketReaderTest.ReadingPastEndOfBufferThrows
+[       OK ] PacketReaderTest.ReadingPastEndOfBufferThrows (0 ms)
+[ RUN      ] PacketReaderTest.ReadingPartialValueAtEndOfBufferThrows
+[       OK ] PacketReaderTest.ReadingPartialValueAtEndOfBufferThrows (0 ms)
+[----------] 10 tests from PacketReaderTest (0 ms total)
+
+[----------] 9 tests from PacketWriterTest
+[ RUN      ] PacketWriterTest.DefaultCtorIsEmpty
+[       OK ] PacketWriterTest.DefaultCtorIsEmpty (0 ms)
+[ RUN      ] PacketWriterTest.CapacityCtorIsEmpty
+[       OK ] PacketWriterTest.CapacityCtorIsEmpty (0 ms)
+[ RUN      ] PacketWriterTest.NegativeCapacityThrowsArgumentOutOfRangeException
+[       OK ] PacketWriterTest.NegativeCapacityThrowsArgumentOutOfRangeException (0 ms)
+[ RUN      ] PacketWriterTest.SetPositionSeeksForRewrite
+[       OK ] PacketWriterTest.SetPositionSeeksForRewrite (0 ms)
+[ RUN      ] PacketWriterTest.WriteFloatForwardsToBase
+[       OK ] PacketWriterTest.WriteFloatForwardsToBase (0 ms)
+[ RUN      ] PacketWriterTest.WriteDoubleForwardsToBase
+[       OK ] PacketWriterTest.WriteDoubleForwardsToBase (0 ms)
+[ RUN      ] PacketWriterTest.InheritedWriteInt32Works
+[       OK ] PacketWriterTest.InheritedWriteInt32Works (0 ms)
+[ RUN      ] PacketWriterTest.InheritedWriteBoolWorks
+[       OK ] PacketWriterTest.InheritedWriteBoolWorks (0 ms)
+[ RUN      ] PacketWriterTest.WriteColorWritesFourBytes
+[       OK ] PacketWriterTest.WriteColorWritesFourBytes (0 ms)
+[----------] 9 tests from PacketWriterTest (0 ms total)
+
+[----------] 17 tests from PacketReaderWriterTest
+[ RUN      ] PacketReaderWriterTest.MatrixRoundtrip
+[       OK ] PacketReaderWriterTest.MatrixRoundtrip (0 ms)
+[ RUN      ] PacketReaderWriterTest.QuaternionRoundtrip
+[       OK ] PacketReaderWriterTest.QuaternionRoundtrip (0 ms)
+[ RUN      ] PacketReaderWriterTest.Vector2Roundtrip
+[       OK ] PacketReaderWriterTest.Vector2Roundtrip (0 ms)
+[ RUN      ] PacketReaderWriterTest.Vector3Roundtrip
+[       OK ] PacketReaderWriterTest.Vector3Roundtrip (0 ms)
+[ RUN      ] PacketReaderWriterTest.Vector4Roundtrip
+[       OK ] PacketReaderWriterTest.Vector4Roundtrip (0 ms)
+[ RUN      ] PacketReaderWriterTest.ByteRoundtrip
+[       OK ] PacketReaderWriterTest.ByteRoundtrip (0 ms)
+[ RUN      ] PacketReaderWriterTest.SByteRoundtrip
+[       OK ] PacketReaderWriterTest.SByteRoundtrip (0 ms)
+[ RUN      ] PacketReaderWriterTest.Int16Roundtrip
+[       OK ] PacketReaderWriterTest.Int16Roundtrip (0 ms)
+[ RUN      ] PacketReaderWriterTest.UInt16Roundtrip
+[       OK ] PacketReaderWriterTest.UInt16Roundtrip (0 ms)
+[ RUN      ] PacketReaderWriterTest.UInt32Roundtrip
+[       OK ] PacketReaderWriterTest.UInt32Roundtrip (0 ms)
+[ RUN      ] PacketReaderWriterTest.Int64RoundtripBoundaryValues
+[       OK ] PacketReaderWriterTest.Int64RoundtripBoundaryValues (0 ms)
+[ RUN      ] PacketReaderWriterTest.UInt64Roundtrip
+[       OK ] PacketReaderWriterTest.UInt64Roundtrip (0 ms)
+[ RUN      ] PacketReaderWriterTest.StringRoundtripAscii
+[       OK ] PacketReaderWriterTest.StringRoundtripAscii (0 ms)
+[ RUN      ] PacketReaderWriterTest.StringRoundtripEmpty
+[       OK ] PacketReaderWriterTest.StringRoundtripEmpty (0 ms)
+[ RUN      ] PacketReaderWriterTest.StringRoundtripMultiByteUnicodeContent
+[       OK ] PacketReaderWriterTest.StringRoundtripMultiByteUnicodeContent (0 ms)
+[ RUN      ] PacketReaderWriterTest.ReadBytesReturnsExactCountRequested
+[       OK ] PacketReaderWriterTest.ReadBytesReturnsExactCountRequested (0 ms)
+[ RUN      ] PacketReaderWriterTest.ReadBytesTrimsResultAtEndOfStreamWithoutThrowing
+[       OK ] PacketReaderWriterTest.ReadBytesTrimsResultAtEndOfStreamWithoutThrowing (0 ms)
+[----------] 17 tests from PacketReaderWriterTest (0 ms total)
+
+[----------] 8 tests from RelayMessageAssemblerTest
+[ RUN      ] RelayMessageAssemblerTest.CompleteMessagesOwnInputAndResetBetweenMessages
+[       OK ] RelayMessageAssemblerTest.CompleteMessagesOwnInputAndResetBetweenMessages (0 ms)
+[ RUN      ] RelayMessageAssemblerTest.ExactLimitChunksFragmentsAndEmptyFinalAreAccepted
+[       OK ] RelayMessageAssemblerTest.ExactLimitChunksFragmentsAndEmptyFinalAreAccepted (0 ms)
+[ RUN      ] RelayMessageAssemblerTest.ControlMessagesCanInterleaveOnlyBetweenDataFrames
+[       OK ] RelayMessageAssemblerTest.ControlMessagesCanInterleaveOnlyBetweenDataFrames (0 ms)
+[ RUN      ] RelayMessageAssemblerTest.InvalidMetadataAndOverflowAreRefusedBeforeCopyAndClearPartialState
+[       OK ] RelayMessageAssemblerTest.InvalidMetadataAndOverflowAreRefusedBeforeCopyAndClearPartialState (0 ms)
+[ RUN      ] RelayMessageAssemblerTest.AggregateSizeKnownRemaindersAndEmptyFragmentCountsAreBounded
+[       OK ] RelayMessageAssemblerTest.AggregateSizeKnownRemaindersAndEmptyFragmentCountsAreBounded (0 ms)
+[ RUN      ] RelayMessageAssemblerTest.WelcomeCorrelatesAuthorityAndCapabilitiesBeforeReadiness
+[       OK ] RelayMessageAssemblerTest.WelcomeCorrelatesAuthorityAndCapabilitiesBeforeReadiness (0 ms)
+[ RUN      ] RelayMessageAssemblerTest.MalformedWelcomeNeverLeaksServerInput
+[       OK ] RelayMessageAssemblerTest.MalformedWelcomeNeverLeaksServerInput (3 ms)
+[ RUN      ] RelayMessageAssemblerTest.ThousandDeterministicValidFragmentChunkLayoutsRoundTrip
+[       OK ] RelayMessageAssemblerTest.ThousandDeterministicValidFragmentChunkLayoutsRoundTrip (88 ms)
+[----------] 8 tests from RelayMessageAssemblerTest (93 ms total)
+
+[----------] 3 tests from RelayProtocolTest
+[ RUN      ] RelayProtocolTest.CanonicalGoldenMessagesMatchServerAndBorrowPayload
+[       OK ] RelayProtocolTest.CanonicalGoldenMessagesMatchServerAndBorrowPayload (0 ms)
+[ RUN      ] RelayProtocolTest.LimitsCoverEnetMtuAndRejectInvalidIdsBeforeAllocation
+[       OK ] RelayProtocolTest.LimitsCoverEnetMtuAndRejectInvalidIdsBeforeAllocation (0 ms)
+[ RUN      ] RelayProtocolTest.TenThousandMutationsEitherRejectSafelyOrRoundTripExactly
+[       OK ] RelayProtocolTest.TenThousandMutationsEitherRejectSafelyOrRoundTripExactly (17 ms)
+[----------] 3 tests from RelayProtocolTest (17 ms total)
+
+[----------] 4 tests from RelayTransportTest
+[ RUN      ] RelayTransportTest.DerivesOnlyConfiguredValidatedAuthority
+[       OK ] RelayTransportTest.DerivesOnlyConfiguredValidatedAuthority (0 ms)
+[ RUN      ] RelayTransportTest.ValidatesRouteAuthorityAndPortBeforeWorkerCreation
+[       OK ] RelayTransportTest.ValidatesRouteAuthorityAndPortBeforeWorkerCreation (0 ms)
+[ RUN      ] RelayTransportTest.RoutesAreStableAtomicBoundedAndStopIsIdempotent
+[       OK ] RelayTransportTest.RoutesAreStableAtomicBoundedAndStopIsIdempotent (1 ms)
+[ RUN      ] RelayTransportTest.ConnectionFailureIsObservedWithoutCallbackOrDetachedWorker
+[       OK ] RelayTransportTest.ConnectionFailureIsObservedWithoutCallbackOrDetachedWorker (2 ms)
+[----------] 4 tests from RelayTransportTest (3 ms total)
+
+[----------] 7 tests from ServiceRosterTest
+[ RUN      ] ServiceRosterTest.ExactMachineGroupsOwnStableIdsAndOnlyOwnerHostFlag
+[       OK ] ServiceRosterTest.ExactMachineGroupsOwnStableIdsAndOnlyOwnerHostFlag (0 ms)
+[ RUN      ] ServiceRosterTest.RankedAuthorityNeverPermitsJoinInProgress
+[       OK ] ServiceRosterTest.RankedAuthorityNeverPermitsJoinInProgress (0 ms)
+[ RUN      ] ServiceRosterTest.AllThirtyOneSlotsAndFourLocalAccountsRoundTripWithoutReducedIds
+[       OK ] ServiceRosterTest.AllThirtyOneSlotsAndFourLocalAccountsRoundTripWithoutReducedIds (0 ms)
+[ RUN      ] ServiceRosterTest.MalformedAuthorityCannotCreateAnIdentityIndex
+[       OK ] ServiceRosterTest.MalformedAuthorityCannotCreateAnIdentityIndex (0 ms)
+[ RUN      ] ServiceRosterTest.WelcomeRejectsSpoofedAssignmentsFlagsPartialGroupsAndProperties
+[       OK ] ServiceRosterTest.WelcomeRejectsSpoofedAssignmentsFlagsPartialGroupsAndProperties (0 ms)
+[ RUN      ] ServiceRosterTest.ControlPreflightBoundsEveryFieldBeforeExistingDecoder
+[       OK ] ServiceRosterTest.ControlPreflightBoundsEveryFieldBeforeExistingDecoder (0 ms)
+[ RUN      ] ServiceRosterTest.TenThousandMutationsRejectSafelyOrCanonicalDecodeRoundTrip
+[       OK ] ServiceRosterTest.TenThousandMutationsRejectSafelyOrCanonicalDecodeRoundTrip (104 ms)
+[----------] 7 tests from ServiceRosterTest (107 ms total)
+
+[----------] Global test environment tear-down
+[==========] 523 tests from 48 test suites ran. (43121 ms total)
+[  PASSED  ] 523 tests.

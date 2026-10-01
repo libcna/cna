@@ -167,3 +167,65 @@ Migration execution found no fresh-schema order failure or dangling FK. That res
 Native service config is read from user config, title manifest and environment (`CNA_GAMER_SERVICES_ENDPOINT`, `CNA_GAME_ID`, `CNA_GAME_VERSION`, CA bundle and explicit insecure-loopback flag). Avatar update/download limits are configured separately. Client title-version comparison and capabilities are real negotiation, not Microsoft title-update installation.
 
 Server CLI accepts database/listen/port/cert/key and insecure-loopback. Default bind is loopback. A database ownership lock prevents two server instances owning the same file. Admin is a local executable; possession of OS/database access is its authorization boundary. No general remote admin HTTP API was found. Periodic log counters report outcomes, refused/open connections and relay/event counts without bodies/tokens. There is no independently qualified production deployment, backup/restore, certificate rotation, tracing or distributed operations story in this audit; the repository contains a runnable service and smoke benchmark, not evidence of those production properties.
+
+## Phase 2: qualified paths and remaining breaks
+
+Snapshot delta: native `33e08899f` / `38287637d`; server `f8c1491` / `d8e4fea` / `477fe69`. Phase 1 inventory above is unchanged. Exact runtime commands and provenance are in [Phase 2 handoff](gamer-services-handoff-phase2.md).
+
+### Request, transaction and completion boundaries
+
+```mermaid
+flowchart LR
+  API[Public API / Guide] --> Slot[Account slot + generation]
+  Slot --> Q[Backend worker / request ID]
+  Q --> JSON[Integer-preserving JSON v1]
+  JSON --> TLS[TLS HTTP or WSS]
+  TLS --> Auth[Token to user + title]
+  Auth --> Tx[Service mutex + SQLite transaction]
+  Tx --> Policy[Operation policy / mutation]
+  Policy --> Commit[Commit mutation + recorded outcome]
+  Commit --> Reply[Bounded response / error]
+  Reply --> Pump[Completion pump / Update]
+  Pump --> Observable[State + callback / End result]
+```
+
+`Service::handle` serializes shared Store access. Dispatch wraps request-id accounting and mutations together; `transaction.commit()` precedes response publication. `DurableScope` requests synchronous FULL for durable operations; leases, directory reads/mutations and repeated heartbeats use NORMAL. Not every request is recorded, and secret-bearing results are not replayed. Authentication can release the mutex for expensive password verification; do not infer one universal lock around all CPU work. Main's database ownership lock excludes a second production server.
+
+| Operation chain | Actual handlers / state publication | Phase 2 evidence and exact boundary |
+|---|---|---|
+| Guide sign-in → backend authenticate → auth.login/refresh → credentials/identity | Authentication.cpp; user/title-scoped tokens → slot generation → Dispatcher.Update SignedIn | fresh public session harness signs in four accounts; restart succeeds. No Xbox identities or online guest credentials |
+| Gamer.GetProfile → backend profile → profile.get | Service.cpp mayView → users/earned/board aggregates → GamerProfile | existing service privacy tests pass; viewer privileges and either block direction apply. No generic profile.update endpoint: game-default/zone setters and admin profile edits are distinct |
+| GamerProfile.GetGamerPicture → asset(hash) → assets.read; catalog binary fetch → /files | Service.cpp + new Privacy.cpp mayReadAsset → content row → bytes; native hashes/verifies chunk lengths | new actual Service/SQLite tests deny both routes consistently; cached bytes avoid a new server query; HTTP 403 mapping inspected but new denial test directly calls Service::file |
+| Guide friends/block → friends.add/accept/remove, privacy.block/unblock/list | server resolves target tag; authenticated user supplies owning relation → transactional rows → hints/refetch | pending vs reciprocal friend policy, both block directions tested; target IDs are not accepted as caller identity |
+| SignedInGamer.AwardAchievement → achievements.award/list | key catalog check + INSERT OR IGNORE owner/title/key/ticks → awarded result → notification/completion | eight simultaneous awards/restart pass; supplied userId ignored; gameplay truth trusted |
+| LeaderboardWriter session scope → game.begin/commit/abort → read | schema/epoch/membership/arbitration → SQLite ratings/typed JSON columns → native reader | public paired sessions commit/read normal scores; new storage/restart/response tests exact extrema; **not** all extreme values through public client write APIs |
+| NetworkSession.Create/Find/Join/Leave | ServiceLocalGamers → participant tokens → sessions.* → directory roster/revision → relay/ENet preparation → public completion/events | fresh client/server ordinary, invite, restart, graceful migration pass; extra loopback crash/add pass. Admission failures covered by DirectoryTests; simultaneous join-full race not newly reproduced |
+| Guide invite → invites.send/list/accept → JoinInvited | owner/recipient/title/session/expiry → consumed invitation → joined membership | actual CNA invite test passes; NAT variant skipped; cross-title Xbox launch semantics unknown |
+| GamerPresence → presence.set/status + auth.ping | account/title rows + last_seen → friends visibility / hints | ServiceTests and privacy tests exercise service rules; no separate new public presence end-to-end probe |
+| session packets / voice → relay ticket → WSS/ENet | participant tickets, machine/roster authority, channel checks → relay hub → native decode | actual relay/session tests pass; synthetic-device voice tests pass. Physical voice + Internet NAT not certified |
+| AvatarDescription/Guide editor → avatars.get/set/catalog → bytes | server validates CNA codec/catalog + own account → avatar row/revision → native decode/render state | fresh paired avatar integration passes; no Xbox asset/description format interoperability |
+
+### Version and schema qualification
+
+`check_service_protocol.py` compares **six** source/header/golden-vector files (control and relay), not merely op names: PASS. Fresh protocol harness: **5,068 checks**. Control requests carry `v=1`; mismatches are refused. `hello` negotiates required identity/authentication/achievements capabilities; optional features have capability gates. `titleVersion` separately enforces a configured minimum game version. This is real version detection, not a claim of absent negotiation. It is not automatic schema migration or proof of interoperability with every historical client advertising version 1.
+
+Known fields: session properties are exactly eight nullable int32 values; account/machine/session IDs are strings; NetworkGamer ID is a session byte ordinal. JSON parse bounds include 64 KiB message size, depth 16 and 256 fields/array items, duplicate key/UTF-8 refusal. Leaderboard integral columns are checked for signed width before conversion. Floats for geometry, animation fractions and measured throughput are intentional; they are not identity/tick encodings. Avatar descriptors and relay frames have their own validated binary encodings. Local offline JSON type tag `dateTime` differs from wire `datetime` intentionally in separate serializers, not a wire mismatch.
+
+The unsigned asset-offset suspicion was disproved at the current JSON comparison guard; explicit errors are retained in evidence. Three Phase 1 server-only operations still have no literal native caller. All endpoint-field branches, all historical version combinations, and limits under adversarial concurrency remain beyond these tests.
+
+### Persistent entities: CRUD and qualification depth
+
+| Entity | Actual create/read/update/delete behavior | Restart / concurrency / failure evidence |
+|---|---|---|
+| Accounts / identities / metadata | operator Store/Admin provisions; login/read; operator policies/profile/password and limited game-default/zone setters; no general self-service delete/reset API | SQLite; existing service/token restart tests. No concurrent admin-write campaign |
+| Profiles / pictures | users fields, picture hash references assets; admin imports/sets; profile.get/file/assets.read; picture replaced via admin | fresh picture test provisions then opens Service; no HTTP picture-upload endpoint; policy tests cover both data routes |
+| Friends / blocks | reciprocal/pending friendship rows; insert/accept/remove; block/unblock/list | transaction + constraints, existing privacy/service tests; new picture test traverses changes. Exhaustive conflicting add/remove races not tested |
+| Achievements | admin catalog; token-scoped insert/read; repeated award idempotent; no player revoke operation | new eight-thread no-lost-update test and restart; existing crash/retry tests; gameplay truth unvalidated |
+| Leaderboard entries | provisioned definitions; eligible commits/seed; reads/paging; best/latest update; epoch abort separate from entry deletion | fresh paired commits; new exact integer restart/JSON test; existing arbitration tests. No old populated migration corpus |
+| Avatars | own-account set/read/clear and operator provisioning; catalog/assets imports | real paired avatar/restart tests, server validation; no concurrent editor conflict/merge guarantee |
+| Invitations | send/list/get/accept/dismiss; expiry/consumption/cleanup | existing real invite and service tests; recipient scope is enforced; no durable push replay guarantee |
+| Directory sessions / membership | create/find/join/add/update/leave; expiry, removal and migration | real restart/migration and loopback crash/add; leases remain ephemeral despite SQLite rows; NAT skips remain |
+| Presence / voice metadata | repeated account heartbeat/status writes; visible while authenticated and fresh; expiry cleanup | soft state, not voice recordings. Relay queues/event subscribers and device state live only in memory |
+| Offline achievements / boards | whole-file read/modify/replace; tests reset only | write errors and exact integer data fixed; fixed temp name, no interprocess lock/fsync, corrupt-read-as-empty remain. Stream omission/column-only durability unchanged |
+
+No database migrations changed. The new concurrency test uses the supported single Service instance, not several independent service processes. It cannot be extrapolated to clustered deployment.

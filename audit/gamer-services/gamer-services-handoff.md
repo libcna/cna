@@ -1,5 +1,7 @@
 # GamerServices audit handoff
 
+**Phase 1 historical handoff. Continue with [Phase 2 handoff](gamer-services-handoff-phase2.md) for fixes, fresh builds and current results.**
+
 Task **GS-AUDIT**, 2026-10-01. Audit only; no implementation fixes or redesign. Start with [executive answers](gamer-services-audit.md), [issues](gamer-services-issues.md), [matrix](gamer-services-compatibility-matrix.md), then [architecture](gamer-services-architecture.md).
 
 ## Repository snapshots

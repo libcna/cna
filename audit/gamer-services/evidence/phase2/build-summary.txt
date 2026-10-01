@@ -1,0 +1,53 @@
+gs-phase2-configure.log
+-- CNA: focused unit-test targets: CnaAudioTests;CnaContentTests;CnaContentPipelineTests;CnaCoreTests;CnaDesignTests;CnaDevicesTests;CnaDevicesExtTests;CnaDiagnosticsTests;CnaGamerServicesTests;CnaGraphicsTests;CnaGraphicsExtTests;CnaInputModuleTests;CnaIntegrationTests;CnaMathTests;CnaMediaTests;CnaNetTests;CnaPhoneTests;CnaPlatformModuleTests;CnaRendererTests;CnaRuntimeTests;CnaStorageTests
+-- CNA: applied private compiler/linker support to 166 owned targets
+-- CNA: 2 GPU/window tests inherit the caller's DISPLAY (CNA_TEST_DISPLAY is empty; run them privately with tools/platform/run_gpu_tests_private.sh)
+-- CNA: 219 configure-time tests never fall back to the default Wayland socket (WAYLAND_DISPLAY unset -> empty; an exported value is kept)
+-- CNA: runtime linked as libcna.so -- 15 module archives inside, 23 external link items passed to consumers
+-- Configuring done (16.6s)
+-- Generating done (0.8s)
+-- Build files have been written to: /rv/data/development/github.com/libcna/cnawork/cmake-build-debug
+
+gs-phase2-integer-build.log
+ 1116 |     gamer.EndGetAchievements(result2);
+      |     ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~
+../modules/gamer-services/include/Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp:179:45: note: declared here
+  179 |         [[nodiscard]] AchievementCollection EndGetAchievements(System::IAsyncResult* result);
+      |                                             ^~~~~~~~~~~~~~~~~~
+[ 97%] Built target cna_gamer_services_test_objects
+[100%] Linking CXX executable CnaGamerServicesTests
+[100%] Built target CnaGamerServicesTests
+
+gs-phase2-net-build.log
+ 1182 |         NetworkSession::JoinInvited(std::vector<SignedInGamer*>{&gamer}),
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+../modules/net/include/Microsoft/Xna/Framework/Net/NetworkSession.hpp:794:46: note: declared here
+  794 |         [[nodiscard]] static NetworkSession* JoinInvited(const std::vector<GamerServices::SignedInGamer*>& localGamers);
+      |                                              ^~~~~~~~~~~
+[100%] Built target cna_net_test_objects
+[100%] Linking CXX executable CnaNetTests
+[100%] Built target CnaNetTests
+
+gs-phase2-harness-build.log
+[ 72%] Built target cna_media
+[ 77%] Built target cna_audio
+[ 88%] Built target cna_content
+[ 91%] Built target cna_runtime
+[100%] Built target CNA_GamerServices
+[100%] Building CXX object CMakeFiles/cna_service_protocol_harness.dir/tools/net/service_protocol_harness.cpp.o
+[100%] Linking CXX executable cna_service_protocol_harness
+[100%] Built target cna_service_protocol_harness
+
+gs-phase2-server-build.log
+[20/27] Linking CXX executable arbitration_tests
+[21/27] Linking CXX executable avatar_tests
+[22/27] Linking CXX executable avatar_validation_tests
+[23/27] Linking CXX executable social_tests
+[24/27] Linking CXX executable relay_protocol_tests
+[25/27] Linking CXX executable invitation_tests
+[26/27] Linking CXX executable relay_flow_tests
+[27/27] Linking CXX executable relay_authorization_tests
+
+gs-phase2-numeric-server-build.log
+[1/2] Building CXX object CMakeFiles/numeric_persistence_tests.dir/tests/NumericPersistenceTests.cpp.o
+[2/2] Linking CXX executable numeric_persistence_tests

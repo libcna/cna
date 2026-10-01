@@ -1,0 +1,2 @@
+input offset=9223372036854775808 reply={"error":"INVALID_ARGUMENT","id":"unit-36","result":{},"v":1}
+unsigned asset offset must not wrap negative

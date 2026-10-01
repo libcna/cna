@@ -1,0 +1,4 @@
+input offset=9007199254740993 error="LIMIT_EXCEEDED"
+input offset=9223372036854775808 error="INVALID_ARGUMENT"
+input offset=18446744073709551615 error="INVALID_ARGUMENT"
+5302 assertions passed

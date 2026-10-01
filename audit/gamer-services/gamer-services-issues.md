@@ -2,6 +2,30 @@
 
 Audit GS-AUDIT, 2026-10-01. Paths are relative to CNA unless prefixed `server/` (`../cna-gamer-services-server`) or another sibling. Findings are ordered by severity, then subsystem. Unsupported product capabilities are explicitly distinguished from defects. No CRITICAL issue was established. Estimates cover a narrowly scoped correction/feature, not full Xbox equivalence.
 
+## Phase 2 dispositions
+
+These labels apply to the original findings; the historical evidence is retained below. “Confirmed source boundary” does not mean independently reproduced on every platform.
+
+| Finding | Phase 2 disposition | Stronger evidence / remaining scope |
+|---|---|---|
+| 001 | PARTIALLY FIXED | four real filesystem red→green regressions; concurrent fixed-temp/read-modify-write and power-loss durability unresolved |
+| 002 | CONFIRMED | eight concurrent authenticated self-awards need no gameplay proof; extra userId cannot override account; existing score commits remain client assertions |
+| 003 | CONFIRMED source boundary | no browser service transport added/tested |
+| 004 | CONFIRMED source boundary | no Xbox infrastructure/TrueSkill solver/Recent retention added; console semantics not runtime-certified |
+| 005 | FIXED for new writes | five integer/tick paths and extrema reproduced; safe legacy reader; server exact restart tests pass |
+| 006 | CONFIRMED source boundary | stream omission/column-only save trigger unchanged; intended offline contract needs decision |
+| 007 | FIXED server routes | 42 checks cover both picture routes; public grants preserved; cached-content policy remains unqualified |
+| 008 | NEEDS FURTHER QUALIFICATION | address-map growth source evidence retained; no admission pressure reproducer/fix |
+| 009 | FIXED test oracle | documented unreliable semantics; fresh ordinary/migration tests pass; no production transport fix indicated |
+| 010 | CONFIRMED, narrowed | seven NAT skips remain; separate non-isolated crash/add variants now pass; fresh client binaries remove Phase 1 provenance limitation |
+| 011 | CONFIRMED | online guest rejection before wire; LAN QoS measurements + synthetic/real-process voice pass; online candidate QoS/physical voice unknown |
+| 012 | NEEDS FURTHER QUALIFICATION | retained ownership vector unchanged; no quantitative account-churn probe |
+| 013 | CONFIRMED | exact website source and replacement wording added to main audit; website unchanged |
+| 014 | CONFIRMED | fresh codec/animation/paired avatar tests; Xbox format boundary unchanged |
+| 015 | CONFIRMED source boundary | supported single-server mutex/SQLite path qualified, not multi-node/general cloud storage |
+
+Additional suspected unsigned asset-offset bypass: **DISPROVED** for the tested boundary values; all refused before storage access. A first test's demand for LIMIT_EXCEEDED specifically was too strict; no production change. Evidence records both error codes. No original Phase 1 defect was disproved; GS-AUDIT-009 correctly identified a test defect rather than a production failure.
+
 ## HIGH — persistence
 
 ### GS-AUDIT-001 — Offline saves can return success without saving; durability claim is false
@@ -21,7 +45,9 @@ Audit GS-AUDIT, 2026-10-01. Paths are relative to CNA unless prefixed `server/` 
 
 ### GS-AUDIT-002 — Achievement and score authority remains with the client
 
-**STRONG EVIDENCE; trust-model limitation, not an authentication bypass.**
+**Phase 2: CONFIRMED**, with real concurrent `Service::handle` requests and restart survival (`service_numeric_persistence`, 47 checks). The token owner earns all eight provisioned keys with no gameplay proof; an extra supplied userId cannot award Bob. Leaderboard trust remains source/paired commit evidence, not anti-cheat qualification.
+
+**Phase 1: STRONG EVIDENCE; trust-model limitation, not an authentication bypass.**
 
 - `server/src/Service.cpp:505–512` accepts `achievements.award(key)` from a valid account/title token, checks only that the key is provisioned, then inserts `earned`.
 - `server/src/Leaderboards.cpp` validates schema, int64 ratings, eligible users/game epochs and arbitration reports; it does not observe gameplay or validate that a claimed score was earned. Ranked agreement is stronger than a single arbitrary cross-user write but colluding participants still supply the truth.
@@ -110,6 +136,14 @@ Impact: “tests pass” without prerequisites is misleading. **1–2 weeks or m
 **STRONG EVIDENCE.** `NetworkSession.cpp:1375–1387` filters/rejects guests on the authenticated service path, despite local Guide guest support. `:1512` constructs service search results with unmeasured QoS; `QualityOfService.cpp` initializes unavailable/zero measurements. `VoiceChat.cpp` selects one local talker per machine, using optional Opus and a recording provider; absent dependencies/devices mean no voice.
 
 Impact: split-screen guest titles, games selecting lobbies by measured QoS and per-controller voice expectations can require adaptation. Four separately authenticated local accounts are a different feature and have tests. **Online guests 1–2 weeks; pre-join QoS 2–5 days; multi-device voice 1–2 weeks or more**, high uncertainty for device/platform behavior.
+
+## MEDIUM — newly qualified compatibility boundary (not a production fix)
+
+### GS-AUDIT-016 — Combined Chat send flags need XNA semantic qualification
+
+**NEEDS FURTHER QUALIFICATION / STRONG SOURCE EVIDENCE.** `../xna4-spec/Microsoft.Xna.Framework.Net/SendDataOptions.xml` declares a Flags enum and explicitly permits Chat combined with Reliable/InOrder and separately ordered chat traffic. CNA `SendDataOptions.hpp` describes non-flags values 0–4; `NetPacketCodec.cpp:562–575` maps Chat and unknown combinations to ENET_PACKET_FLAG_RELIABLE. The service's channel choice distinguishes None/InOrder from the remaining values, without establishing separate ordered chat traffic. Existing tests establish the individual options, not this reference contract.
+
+Impact: ports combining flag values may get different reliability/channel ordering/resource behavior. Extra reliability alone does not prove a game-breaking failure. No failing public packet reproducer was added, so no production fix is justified yet. **4–16 hours** for focused reference/differential cases; implementation effort uncertain until the intended CNA plaintext/TLS/chat boundary is agreed.
 
 ## LOW — lifetime / documentation
 
