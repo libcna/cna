@@ -218,6 +218,23 @@ CNA_C_API CNA_Result cna_game_create(
 CNA_C_API CNA_Result cna_game_run_one_frame(CNA_Handle game);
 
 /**
+ * @brief Advances a run whose loop belongs to the host, one frame per call.
+ *
+ * The shape of @ref cna_game_run for a host that cannot block in it -- a browser page, which calls
+ * this from each animation frame. The first call initializes the game and begins the run
+ * (`initialize`, `load_content`, `begin_run`), every call runs one frame, and the call that finds the
+ * game has exited -- through @ref cna_game_request_exit or a failed callback -- ends the run as
+ * @ref cna_game_run does (`exiting`, then `end_run`) and reports @p out_running false. Later calls
+ * report false and run nothing.
+ *
+ * @param game Owned game handle.
+ * @param out_running Receives `CNA_TRUE` while the run continues and `CNA_FALSE` once it has ended.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_CALLBACK` when a callback failed (the run has then
+ * ended), or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_game_run_frame_ext(CNA_Handle game, CNA_Bool* out_running);
+
+/**
  * @brief Runs native frames until @ref cna_game_request_exit is called or a callback fails.
  *
  * @param game Owned game handle.

@@ -713,20 +713,21 @@
     },
     {
       "id": "game-lifecycle-members",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::Game::(?:Game|~Game|RunOneFrame|Run|Exit|Dispose)$",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Game::(?:Game|~Game|RunOneFrame|RunFrameEXT|Run|Exit|Dispose)$",
       "kinds": [
         "constructor",
         "destructor",
         "method"
       ],
-      "mapping": "`cna_game_create/run_one_frame/run/request_exit/destroy`",
-      "tests": "`LifecycleSmoke.c` success, reentrancy, callback failure and teardown",
+      "mapping": "`cna_game_create/run_one_frame/run_frame_ext/run/request_exit/destroy`",
+      "tests": "`LifecycleSmoke.c` success, reentrancy, callback failure and teardown; `HostDrivenRunSmoke.c` the host-driven run",
       "status": "implemented",
       "task": "CBIND-017",
       "approved_symbols": [
         "CPP-100FE5D5CADD",
         "CPP-4DA7FE96D9CF",
         "CPP-5FDBD2CCCFB6",
+        "CPP-7BEEFD7F722E",
         "CPP-90CD23068289",
         "CPP-9F57D9782C74",
         "CPP-A31F53EC81A0",

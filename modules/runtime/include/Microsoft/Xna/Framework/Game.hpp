@@ -215,6 +215,18 @@ namespace Microsoft::Xna::Framework
          */
         void Run();
 
+        /**
+         * @brief Advances a run whose loop belongs to the host, one frame per call.
+         *
+         * A browser page cannot block in Run(), so its host calls this from each animation frame
+         * instead. The first call initializes the game and begins the run, every call runs one
+         * frame, and the call that finds the game has exited ends the run as Run() does --
+         * Exiting, then EndRun -- and returns false. Later calls return false and do nothing.
+         *
+         * @return True while the run continues; false once it has ended.
+         */
+        CNAEXT bool RunFrameEXT();
+
         /** @brief Advances one game tick. */
         void Tick();
 
@@ -415,6 +427,15 @@ namespace Microsoft::Xna::Framework
 
         bool hasInitialized_;
         bool suppressDraw_;
+
+        // RunFrameEXT's progress through a host-driven run.
+        enum class HostRunState
+        {
+            NotStarted,
+            Running,
+            Ended
+        };
+        HostRunState hostRunState_ = HostRunState::NotStarted;
 
         // XNA runs the game's FIRST update with a zero ElapsedGameTime; every later one gets the
         // real step. See Game::Tick().

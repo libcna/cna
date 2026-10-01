@@ -738,6 +738,24 @@ CNA_Result cna_game_run_one_frame(const CNA_Handle gameHandle)
     });
 }
 
+CNA_Result cna_game_run_frame_ext(const CNA_Handle gameHandle, CNA_Bool* const outRunning)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outRunning == nullptr) {
+            return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                        "The running output is null.");
+        }
+        *outRunning = CNA_FALSE;
+        std::shared_ptr<CGame> game;
+        if (const CNA_Result result = GetCallableGame(gameHandle, &game);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outRunning = game->RunFrameEXT() ? CNA_TRUE : CNA_FALSE;
+        return game->GetCallbackFailure();
+    });
+}
+
 CNA_Result cna_game_run(const CNA_Handle gameHandle)
 {
     return CallWithExceptionBarrier([&]() {

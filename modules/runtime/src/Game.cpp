@@ -678,6 +678,66 @@ namespace Microsoft::Xna::Framework
         }
     }
 
+    bool Game::RunFrameEXT()
+    {
+        AssertNotDisposed();
+        if (hostRunState_ == HostRunState::Ended)
+        {
+            return false;
+        }
+
+        if (hostRunState_ == HostRunState::NotStarted)
+        {
+            if (!hasInitialized_)
+            {
+                DoInitialize();
+                hasInitialized_ = true;
+            }
+            {
+                const auto contextLease = AcquireGameThreadContextLease();
+                BeginRun();
+            }
+            BeforeLoop();
+            previousPerformanceCounter_ = platform_->GetPerformanceCounter();
+#if defined(__EMSCRIPTEN__)
+            s_emLoopState = {};
+            s_emLoopState.game = this;
+            s_emLoopState.gameTime = gameTime_;
+#endif
+            hostRunState_ = HostRunState::Running;
+        }
+
+        // The frame body is Run()'s own: on the web the one that steps fixed updates from the
+        // animation-frame clock without sleeping (and raises Exiting itself when the game has
+        // exited), elsewhere Tick().
+#if defined(__EMSCRIPTEN__)
+        if (s_emLoopState.game == this)
+        {
+            EmscriptenMainLoopCallback();
+        }
+        const bool ended = s_emLoopState.game != this;
+#else
+        Tick();
+        const bool ended = !RunApplication;
+        if (ended)
+        {
+            OnExiting(this, System::EventArgs::Empty);
+        }
+#endif
+        if (!ended)
+        {
+            return true;
+        }
+
+        {
+            const auto contextLease = AcquireGameThreadContextLease();
+            EndRun();
+        }
+        AfterLoop();
+        hostRunState_ = HostRunState::Ended;
+        return false;
+    }
+
     void Game::Tick()
     {
         // XNA's Tick() begins with `if (ShouldExit) return;`: after Exit() a frame neither
