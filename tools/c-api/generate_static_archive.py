@@ -31,12 +31,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Relative to the *module's* binary directory, not the top-level one. Those are the same
-# directory only when CNA is the top-level project; a consumer that does
-# add_subdirectory(<cna> CNA) puts it at <build>/CNA/modules/c-api instead, which is why the
-# module binary directory is passed in rather than reconstructed from the build root.
-LINK_LINE = Path("CMakeFiles/cna_c_api.dir/link.txt")
-
 
 def require(tool: str) -> str:
     found = shutil.which(tool)
@@ -52,7 +46,8 @@ def run(command: list[str], description: str) -> str:
     return completed.stdout
 
 
-def link_line_tokens(module_dir: Path, build_dir: Path) -> tuple[list[str], Path]:
+def link_line_tokens(module_dir: Path, build_dir: Path,
+                     target: str = "cna_c_api") -> tuple[list[str], Path]:
     """The link command for cna_c_api, plus the directory its relative paths are based on.
 
     Only the Makefile generator writes `link.txt`. Under Ninja the link command lives in
@@ -62,7 +57,9 @@ def link_line_tokens(module_dir: Path, build_dir: Path) -> tuple[list[str], Path
     differ in what their relative paths are relative to: link.txt's are relative to the module's
     binary directory, build.ninja's to the build root, so the base is returned alongside.
     """
-    path = module_dir / LINK_LINE
+    # Relative to the *module's* binary directory, not the top-level one: they differ when CNA is
+    # consumed with add_subdirectory(<cna> CNA), which is why the module directory is passed in.
+    path = module_dir / "CMakeFiles" / f"{target}.dir" / "link.txt"
     if path.exists():
         return path.read_text(encoding="utf-8").split(), module_dir.resolve()
 
@@ -76,17 +73,18 @@ def link_line_tokens(module_dir: Path, build_dir: Path) -> tuple[list[str], Path
             "this is a Ninja build tree, so the link line comes from build.ninja, but no ninja "
             "executable was found to read it.")
     # The link is the last command Ninja reports for the target; CMake wraps it as ": && <cmd> && :".
-    output = run([ninja, "-C", str(build_dir), "-t", "commands", "cna_c_api"],
-                 "reading the cna_c_api link command from build.ninja")
+    output = run([ninja, "-C", str(build_dir), "-t", "commands", target],
+                 f"reading the {target} link command from build.ninja")
     lines = [line for line in output.splitlines() if line.strip()]
     if not lines:
-        raise SystemExit("ninja reported no commands for cna_c_api; build it first.")
+        raise SystemExit(f"ninja reported no commands for {target}; build it first.")
     return lines[-1].split(), build_dir.resolve()
 
 
-def read_link_line(module_dir: Path, build_dir: Path) -> tuple[list[str], list[str], list[str]]:
+def read_link_line(module_dir: Path, build_dir: Path,
+                   target: str = "cna_c_api") -> tuple[list[str], list[str], list[str]]:
     """Split CMake's own link line into objects, archives and external libraries."""
-    tokens, working = link_line_tokens(module_dir, build_dir)
+    tokens, working = link_line_tokens(module_dir, build_dir, target)
     objects: list[str] = []
     archives: list[str] = []
     external: list[str] = []
@@ -97,7 +95,8 @@ def read_link_line(module_dir: Path, build_dir: Path) -> tuple[list[str], list[s
             continue
         # Shell punctuation and the compiler driver itself are not inputs. Ninja's form is
         # ": && /usr/bin/c++ ... && :", and neither generator names an input this way.
-        if token in {":", "&&", "cd"} or token.endswith("/c++") or token.endswith("/cc"):
+        if (token in {":", "&&", "cd"} or token.endswith("/c++") or token.endswith("/cc")
+                or token.endswith("/em++") or token.endswith("/emcc")):
             continue
         resolved = token if Path(token).is_absolute() else str((working / token).resolve())
         if token.endswith(".o"):
@@ -125,6 +124,29 @@ def global_symbols(nm: str, path: Path) -> list[tuple[str, str]]:
     return symbols
 
 
+def merge_archives(module_dir: Path, build_dir: Path, target: str, archiver: str,
+                   output: Path) -> int:
+    """Emscripten's static archive: the closure merged into one archive, nothing partially linked.
+
+    Under Emscripten `cna_c_api` is itself a static library, so its "link" is an `ar` of its own
+    objects; the closure is on the link line of the module that consumes it. Its objects are
+    WebAssembly, which the host `ld -r` and `objcopy` cannot read, and neither step is needed there:
+    what a wasm binary exports is decided when the final module links. So this collects that
+    module's archives and merges them with the archiver's MRI script, which keeps members with the
+    same name apart.
+    """
+    _, archives, _ = read_link_line(module_dir, build_dir, target)
+    if output.exists():
+        output.unlink()
+    script = "".join([f"CREATE {output}\n", *(f"ADDLIB {archive}\n" for archive in archives),
+                      "SAVE\nEND\n"])
+    completed = subprocess.run([archiver, "-M"], input=script, text=True, capture_output=True)
+    if completed.returncode != 0:
+        raise SystemExit(f"merging the archives failed:\n{completed.stderr}")
+    print(f"wrote {output.name}: {len(archives)} archives merged from the {target} link line")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build-dir", required=True)
@@ -135,6 +157,11 @@ def main() -> int:
     parser.add_argument("--output", required=True, help="the static archive to produce")
     parser.add_argument("--targets-file", help="a CMake file describing how to consume it")
     parser.add_argument("--work-dir", help="where the intermediate object goes")
+    parser.add_argument(
+        "--merge-from",
+        help="Emscripten: merge the archives on this target's link line instead of partially "
+             "linking the C API's own")
+    parser.add_argument("--archiver", help="the archiver to merge with (Emscripten's llvm-ar)")
     arguments = parser.parse_args()
 
     build_dir = Path(arguments.build_dir).resolve()
@@ -144,6 +171,30 @@ def main() -> int:
     output = Path(arguments.output).resolve()
     work = Path(arguments.work_dir).resolve() if arguments.work_dir else output.parent
     work.mkdir(parents=True, exist_ok=True)
+
+    if arguments.merge_from:
+        if not arguments.archiver:
+            raise SystemExit("--merge-from needs --archiver")
+        result = merge_archives(module_dir, build_dir, arguments.merge_from, arguments.archiver,
+                                output)
+        if arguments.targets_file:
+            Path(arguments.targets_file).write_text("\n".join([
+                "# SPDX-License-Identifier: MS-PL",
+                "# Generated by tools/c-api/generate_static_archive.py. Do not edit.",
+                "#",
+                "# Emscripten's static half: the C API and its whole closure in one archive.",
+                "",
+                "if(NOT TARGET CNA::CApiStatic)",
+                "    add_library(CNA::CApiStatic STATIC IMPORTED)",
+                "    set_target_properties(CNA::CApiStatic PROPERTIES",
+                f"        IMPORTED_LOCATION \"${{_cna_package_lib_dir}}/{output.name}\"",
+                "        INTERFACE_INCLUDE_DIRECTORIES \"${_cna_package_include_dir}\"",
+                "        INTERFACE_COMPILE_DEFINITIONS \"CNA_C_API_STATIC\"",
+                "    )",
+                "endif()",
+                "",
+            ]), encoding="utf-8")
+        return result
 
     linker, objcopy, archiver, nm = (require(tool) for tool in ("ld", "objcopy", "ar", "nm"))
     objects, archives, external = read_link_line(module_dir, build_dir)

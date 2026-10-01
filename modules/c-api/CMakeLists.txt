@@ -344,10 +344,20 @@ option(CNA_C_API_BUILD_STATIC "Build and install the static C API archive" ON)
 if(CNA_C_API_BUILD_STATIC AND UNIX AND NOT APPLE AND Python3_Interpreter_FOUND)
     set(CNA_C_API_STATIC_ARCHIVE "${CMAKE_CURRENT_BINARY_DIR}/libcna_c_api_static.a")
     set(CNA_C_API_STATIC_TARGETS "${CMAKE_CURRENT_BINARY_DIR}/CNACStaticTargets.cmake")
+    # Under Emscripten cna_c_api is itself static and its objects are WebAssembly, which the host
+    # partial link cannot read: the archive is merged from the wasm module's closure instead.
+    if(EMSCRIPTEN)
+        set(_cna_c_api_static_mode --merge-from cna_c_api_wasm --archiver "${CMAKE_AR}")
+        set(_cna_c_api_static_input cna_c_api_wasm)
+    else()
+        set(_cna_c_api_static_mode)
+        set(_cna_c_api_static_input cna_c_api)
+    endif()
     add_custom_command(
         OUTPUT "${CNA_C_API_STATIC_ARCHIVE}" "${CNA_C_API_STATIC_TARGETS}"
         COMMAND Python3::Interpreter
             "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/c-api/generate_static_archive.py"
+            ${_cna_c_api_static_mode}
             --build-dir "${CMAKE_BINARY_DIR}"
             # The module's own binary directory, because CMAKE_BINARY_DIR is the *consumer's*
             # root when CNA is consumed with add_subdirectory() -- the C API then lives at
@@ -356,7 +366,7 @@ if(CNA_C_API_BUILD_STATIC AND UNIX AND NOT APPLE AND Python3_Interpreter_FOUND)
             --output "${CNA_C_API_STATIC_ARCHIVE}"
             --targets-file "${CNA_C_API_STATIC_TARGETS}"
             --work-dir "${CMAKE_CURRENT_BINARY_DIR}/static-archive"
-        DEPENDS cna_c_api "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/c-api/generate_static_archive.py"
+        DEPENDS ${_cna_c_api_static_input} "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/c-api/generate_static_archive.py"
         COMMENT "Combining the C API and its closure into a single static archive"
         VERBATIM)
     add_custom_target(cna_c_api_static ALL
