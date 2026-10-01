@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 8960,
+  "encoded": 9216,
   "major": 0,
-  "minor": 35,
+  "minor": 36,
   "patch": 0,
-  "runtime": 8960
+  "runtime": 9216
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -3110,6 +3110,7 @@
   "cna_packed_vector_not_equals",
   "cna_packed_vector_pack",
   "cna_packed_vector_unpack",
+  "cna_packet_reader_copy_data_ext",
   "cna_packet_reader_create",
   "cna_packet_reader_destroy",
   "cna_packet_reader_get_length",
@@ -4059,9 +4060,9 @@
   "cna_write_leaderboards_event_info_init"
  ],
  "integers": {
-  "CNA_ABI_VERSION": 8960,
+  "CNA_ABI_VERSION": 9216,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 35,
+  "CNA_ABI_VERSION_MINOR": 36,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,

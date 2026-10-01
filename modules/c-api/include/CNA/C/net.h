@@ -601,6 +601,28 @@ CNA_C_API CNA_Result cna_packet_reader_set_data_ext(
     uint64_t count);
 
 /**
+ * @brief Copies the bytes a packet reader holds.
+ *
+ * @param reader Owned packet-reader handle.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the buffer length in bytes.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, or a documented
+ * argument/handle/thread failure. No partial copy is written.
+ *
+ * The whole buffer is copied whatever the reader's position, and the position does not move.
+ * CNAEXT, the inverse of `cna_packet_reader_set_data_ext` as `cna_packet_writer_copy_data_ext` is
+ * of writing: `cna_local_network_gamer_receive_data_into_packet_reader` sizes a reader to a packet
+ * no other route reports the size of, so this is how a consumer whose own reader type is not this
+ * handle -- a managed `BinaryReader` -- receives a packet of any length.
+ */
+CNA_C_API CNA_Result cna_packet_reader_copy_data_ext(
+    CNA_PacketReaderHandle reader,
+    uint8_t* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
  * @brief Gets the length of a packet read buffer.
  *
  * @param reader Owned packet-reader handle.

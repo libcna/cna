@@ -67,17 +67,21 @@ floats do read back into a color through the canonical float constructor.
 A negative capacity is refused exactly as the canonical constructor refuses it. A non-negative
 capacity is a hint the canonical backing buffer does not act on.
 
-### Two documented extensions
+### Three documented extensions
 
 The canonical API hands a writer straight to a send operation and fills a reader through a receive
 operation, and never exposes either buffer. That leaves a C consumer with no way to move a packet
-across a transport the C API does not own, and no way to observe packet contents at all, so two
+across a transport the C API does not own, and no way to observe packet contents at all, so three
 extension routes exist:
 
 - `cna_packet_writer_copy_data_ext` copies out the bytes a writer has produced;
-- `cna_packet_reader_set_data_ext` replaces a reader's contents and rewinds it.
+- `cna_packet_reader_set_data_ext` replaces a reader's contents and rewinds it;
+- `cna_packet_reader_copy_data_ext` copies out the bytes a reader holds, whatever its position and
+  without moving it -- after `cna_local_network_gamer_receive_data_into_packet_reader`, the whole
+  received packet, so a consumer with a reader type of its own (a managed `BinaryReader`) receives
+  packets of any length (ABI 0.36.0, `CBIND-130`).
 
-Both are marked `_ext` because they have no canonical counterpart. Neither exposes a native stream.
+All three are marked `_ext` because they have no canonical counterpart. None exposes a native stream.
 
 ## Join failures
 

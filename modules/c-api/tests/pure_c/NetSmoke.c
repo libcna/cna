@@ -371,6 +371,22 @@ static int validate_packets(void)
         cna_packet_reader_read_single(reader, &single) != CNA_RESULT_IO) {
         return 0;
     }
+    /* Copying a reader's bytes neither depends on nor moves its position. */
+    memset(buffer + 128, 0, 128U);
+    if (cna_packet_reader_copy_data_ext(reader, buffer + 128, UINT64_C(127), &bytes) !=
+            CNA_RESULT_BUFFER_TOO_SMALL ||
+        bytes != UINT64_C(128) ||
+        cna_packet_reader_copy_data_ext(reader, buffer + 128, UINT64_C(128), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        bytes != UINT64_C(128) || memcmp(buffer, buffer + 128, 128U) != 0 ||
+        cna_packet_reader_get_position(reader, &position) != CNA_RESULT_SUCCESS ||
+        position != 128 ||
+        cna_packet_reader_copy_data_ext(reader, 0, UINT64_C(1), &bytes) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_packet_reader_copy_data_ext(reader, buffer, UINT64_C(0), 0) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
     if (cna_packet_reader_set_position(reader, 0) != CNA_RESULT_SUCCESS ||
         cna_packet_reader_read_single(reader, &single) != CNA_RESULT_SUCCESS ||
         cna_packet_reader_set_data_ext(reader, 0, UINT64_C(4)) != CNA_RESULT_INVALID_ARGUMENT ||
@@ -1416,12 +1432,24 @@ static int validate_local_gamer_packets(const CNA_NetworkGamerHandle local)
         return 0;
     }
 
-    /* The packet-reader overload reports the packet size, as the canonical one does. */
+    /* The packet-reader overload reports the packet size, as the canonical one does, and the
+       reader then holds exactly the packet: a consumer with a reader type of its own copies it out
+       without being told the size first. */
     if (cna_packet_reader_create(0, &reader) != CNA_RESULT_SUCCESS ||
         cna_local_network_gamer_enqueue_packet_ext(local, &event) != CNA_RESULT_SUCCESS ||
         cna_local_network_gamer_receive_data_into_packet_reader(
             local, reader, &sender, &received) != CNA_RESULT_SUCCESS ||
         received != UINT64_C(4)) {
+        (void)cna_packet_reader_destroy(reader);
+        return 0;
+    }
+    memset(buffer, 0, sizeof(buffer));
+    if (cna_packet_reader_copy_data_ext(reader, buffer, UINT64_C(0), &received) !=
+            CNA_RESULT_BUFFER_TOO_SMALL ||
+        received != UINT64_C(4) ||
+        cna_packet_reader_copy_data_ext(reader, buffer, (uint64_t)sizeof(buffer), &received) !=
+            CNA_RESULT_SUCCESS ||
+        received != UINT64_C(4) || memcmp(buffer, payload, 4U) != 0) {
         (void)cna_packet_reader_destroy(reader);
         return 0;
     }

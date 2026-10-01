@@ -1120,6 +1120,43 @@ CNA_Result cna_packet_reader_set_data_ext(
     });
 }
 
+CNA_Result cna_packet_reader_copy_data_ext(
+    const CNA_PacketReaderHandle readerHandle,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("The packet copy destination is invalid.");
+        }
+        std::shared_ptr<PacketReaderResource> reader;
+        if (const CNA_Result result = GetReader(readerHandle, &reader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        System::IO::MemoryStream* buffer = nullptr;
+        if (const CNA_Result result = GetPacketBuffer(
+                reader->value->getBaseStreamProperty(),
+                &buffer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::vector<SharpRuntime::bytecs>& data = buffer->GetBuffer();
+        *outBytes = data.size();
+        if (capacity < data.size()) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The packet copy destination is too small.");
+        }
+        if (!data.empty()) {
+            std::memcpy(destination, data.data(), data.size());
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_packet_reader_get_length(
     const CNA_PacketReaderHandle readerHandle,
     int32_t* const outLength)

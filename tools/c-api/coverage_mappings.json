@@ -6749,7 +6749,7 @@
         "constructor",
         "method"
       ],
-      "mapping": "an owned `CNA_PacketReaderHandle` with length and position access and one route per canonical read, including the color read that consumes four floats while the writer emits four bytes -- the canonical asymmetry is preserved rather than corrected. `cna_packet_reader_set_data_ext` is a documented C-side extension for supplying a packet that arrived over a transport the C API does not own",
+      "mapping": "an owned `CNA_PacketReaderHandle` with length and position access and one route per canonical read, including the color read that consumes four floats while the writer emits four bytes -- the canonical asymmetry is preserved rather than corrected. `cna_packet_reader_set_data_ext` is a documented C-side extension for supplying a packet that arrived over a transport the C API does not own, and `cna_packet_reader_copy_data_ext` (CBIND-130) its inverse, for reading out a received packet whose size no other route reports",
       "tests": "`NetSmoke.c` negative-capacity refusals, length and position round trips, byte-exact write-then-read of vector2/3/4, quaternion, matrix, single and double through a copied payload, the deliberate color asymmetry proved in both directions, the end-of-buffer I/O failure, and stale-handle refusals",
       "status": "implemented",
       "task": "CBIND-036C",

@@ -2,10 +2,25 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.35.0**: `next` at 0.33.0 (`RRC-015`) merged into
+The current experimental ABI is **0.36.0** (`CBIND-130`). It adds one route,
+`cna_packet_reader_copy_data_ext`, which copies the bytes a packet reader holds -- the inverse of
+`cna_packet_reader_set_data_ext`, as `cna_packet_writer_copy_data_ext` is of writing -- and exports
+3,203 routes. The change is purely additive: no existing route, constant, structure field or error
+rule moves.
+
+It closes a gap the C# binding hit while putting XNA's `LocalNetworkGamer.ReceiveData(PacketReader,
+out NetworkGamer)` on the ABI. XNA's `PacketReader` is a `BinaryReader`, so the binding's reader is a
+managed object, not a native handle. `cna_local_network_gamer_receive_data_into_packet_reader` sizes a
+native reader to the next packet, but nothing could read those bytes back out, and
+`cna_local_network_gamer_receive_data` refuses a buffer too small for a packet whose size no route
+reports. A consumer could receive a packet of a length it already knew, and no other.
+
+### Previous ABI 0.35.0
+
+The ABI was **0.35.0**: `next` at 0.33.0 (`RRC-015`) merged into
 `feature/gamer-services-server`, whose own line had reached 0.34.0 (`GS-009f`, `GS-011b`). The two
 lines had each used 0.33.0 for a different change, so the merged ABI takes a number neither used. It
-holds all three changes described below and exports 3,202 routes; nothing else changes. A binding
+holds all three changes described below, one route fewer than 0.36.0; nothing else changes. A binding
 built against either earlier 0.33.0 or against 0.34.0 must rebuild against these headers.
 
 ### A correction within 0.35.0 (BINDFIX-048)
@@ -21,7 +36,7 @@ approved break; the owner approved it on 2026-09-30 as a correction within 0.35.
 The ABI was **0.34.0** (`GS-011b`) on this line. It removed the two Guide setters that XNA
 keeps internal: `cna_guide_set_is_visible` (a no-op, since the Guide is visible exactly while one of
 its screens is up) and `cna_guide_set_is_trial_mode` (CNA titles are fully licensed, so trial mode
-follows `cna_guide_set_simulate_trial_mode` alone). Two fewer exports (3,202); no structure,
+follows `cna_guide_set_simulate_trial_mode` alone). Two fewer exports than 0.33.0; no structure,
 constant or other route changes. A binding that calls either route no longer links.
 
 ### 0.33.0 on `feature/gamer-services-server`
@@ -519,7 +534,7 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-The current baseline records 3,202 exports; build configurations must export the same surface.
+The current baseline records 3,203 exports; build configurations must export the same surface.
 That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose backend or layer is absent exists and refuses, rather than
