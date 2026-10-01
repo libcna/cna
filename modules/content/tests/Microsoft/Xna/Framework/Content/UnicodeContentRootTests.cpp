@@ -18,6 +18,7 @@
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
+#include <random>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -51,9 +52,11 @@ namespace
         UnicodeContentRoot()
         {
             std::error_code ec;
+            // ctest runs each case as its own process, where counter_ starts again at zero, so
+            // the process's own random part keeps parallel cases out of each other's directory.
             dir_ = fs::temp_directory_path()
                    / PathFromUtf8(std::string("cna-uniroot-") + kCzech + "-"
-                                  + std::to_string(counter_++));
+                                  + std::to_string(processTag_) + "-" + std::to_string(counter_++));
             fs::remove_all(dir_, ec);
             fs::create_directories(dir_, ec);
         }
@@ -87,6 +90,7 @@ namespace
     private:
         fs::path dir_;
         static inline int counter_ = 0;
+        static inline const unsigned int processTag_ = std::random_device{}();
     };
 
     /// A game-defined type with no CNA reader, so these tests assert about paths rather than
