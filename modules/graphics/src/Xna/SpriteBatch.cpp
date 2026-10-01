@@ -9,6 +9,17 @@
 #include <stdexcept>
 
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IEffectMatrices.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectPassCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
@@ -152,6 +163,7 @@ namespace Microsoft::Xna::Framework::Graphics
             renderer_.reset();
             spriteQueue_.clear();
             customEffect_ = nullptr;
+            stockEffect_ = false;
             begun = false;
         }
         GraphicsResource::Dispose(disposing);
@@ -294,6 +306,16 @@ namespace Microsoft::Xna::Framework::Graphics
         rasterizerState_ =
             rasterizerState ? *rasterizerState : RasterizerState::CullCounterClockwise;
         customEffect_ = effect;
+        // XNA applies a custom effect's pass after its own SpriteEffect's, so a stock effect's vertex
+        // shader replaces the sprite projection: World*View*Projection place each sprite at
+        // (x, y, layerDepth) and the transform matrix goes unused. That is how XNA 4.0 draws
+        // sprites in a 3D world (3D text, DPSF's billboard particles).
+        stockEffect_ = graphicsDevice_ != nullptr &&
+                       (dynamic_cast<const BasicEffect*>(effect) != nullptr ||
+                        dynamic_cast<const AlphaTestEffect*>(effect) != nullptr ||
+                        dynamic_cast<const DualTextureEffect*>(effect) != nullptr ||
+                        dynamic_cast<const EnvironmentMapEffect*>(effect) != nullptr ||
+                        dynamic_cast<const SkinnedEffect*>(effect) != nullptr);
         transformMatrix_ = transformMatrix;
         sortMode_ = sortMode;
         spriteQueue_.clear();
@@ -327,7 +349,10 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             try
             {
-                renderer_->SetCustomEffect(customEffect_);
+                if (stockEffect_)
+                    graphicsDevice_->GetRenderer().Ensure3DSupported(
+                        "SpriteBatch.Begin with a stock effect");
+                renderer_->SetCustomEffect(stockEffect_ ? nullptr : customEffect_);
                 renderer_->SetTransformMatrix(transformMatrix_);
                 // Matches FNA: a null samplerState defaults to SamplerState.LinearClamp, and the
                 // resolved state is always (re-)applied — never left over from a previous Begin().
@@ -365,6 +390,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 try { renderer_->SetCustomEffect(nullptr); }
                 catch (...) {}
                 customEffect_ = nullptr;
+                stockEffect_ = false;
                 spriteQueue_.clear();
                 begun = false;
                 throw;
@@ -422,6 +448,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 spriteQueue_.clear();
             }
             customEffect_ = nullptr;
+            stockEffect_ = false;
         }
         catch (...)
         {
@@ -439,6 +466,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 catch (...) {}
             }
             customEffect_ = nullptr;
+            stockEffect_ = false;
             begun = false;
             releaseDeviceAccounting();
             throw;
@@ -528,6 +556,11 @@ namespace Microsoft::Xna::Framework::Graphics
     void SpriteBatch::flushSingle(const SpriteInfo& s)
     {
         if (!renderer_ || !s.texture) return;
+        if (stockEffect_)
+        {
+            drawThroughStockEffect(&s, 1);
+            return;
+        }
         if (graphicsDevice_ != nullptr)
         {
             GpuDrawParams params;
@@ -574,8 +607,105 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         // Deferred: no sort, submission order.
 
+        if (stockEffect_ && renderer_)
+        {
+            // One draw per run of sprites sharing a texture, at most XNA's 2,048 per draw.
+            constexpr std::size_t maxBatchSize = 2048;
+            std::size_t start = 0;
+            while (start < spriteQueue_.size())
+            {
+                std::size_t end = start + 1;
+                while (end < spriteQueue_.size() && end - start < maxBatchSize &&
+                       spriteQueue_[end].texture == spriteQueue_[start].texture)
+                    ++end;
+                drawThroughStockEffect(&spriteQueue_[start], end - start);
+                start = end;
+            }
+            return;
+        }
+
         for (const SpriteInfo& s : spriteQueue_)
             flushSingle(s);
+    }
+
+    void SpriteBatch::drawThroughStockEffect(const SpriteInfo* sprites, const std::size_t count)
+    {
+        const ITextureRenderer& texture = *sprites[0].texture;
+        GpuDrawParams params;
+        params.texture0 = &texture;
+        graphicsDevice_->validateDrawState(&params);
+
+        const float textureWidth = static_cast<float>(texture.GetWidth());
+        const float textureHeight = static_cast<float>(texture.GetHeight());
+        std::vector<VertexPositionColorTexture> vertices;
+        std::vector<std::uint16_t> indices;
+        vertices.reserve(count * 4);
+        indices.reserve(count * 6);
+        for (std::size_t i = 0; i < count; ++i)
+        {
+            const SpriteInfo& s = sprites[i];
+            const float sourceWidth = static_cast<float>(s.srcRect.Width);
+            const float sourceHeight = static_cast<float>(s.srcRect.Height);
+            float u1 = static_cast<float>(s.srcRect.X) / textureWidth;
+            float v1 = static_cast<float>(s.srcRect.Y) / textureHeight;
+            float u2 = u1 + sourceWidth / textureWidth;
+            float v2 = v1 + sourceHeight / textureHeight;
+            if ((static_cast<int>(s.effects) & static_cast<int>(SpriteEffects::FlipHorizontally)) != 0)
+                std::swap(u1, u2);
+            if ((static_cast<int>(s.effects) & static_cast<int>(SpriteEffects::FlipVertically)) != 0)
+                std::swap(v1, v2);
+
+            const float scaleX = sourceWidth != 0.0f ? s.destWidth / sourceWidth : 0.0f;
+            const float scaleY = sourceHeight != 0.0f ? s.destHeight / sourceHeight : 0.0f;
+            const float cosR = std::cos(s.rotation);
+            const float sinR = std::sin(s.rotation);
+            const auto corner = [&](float cornerX, float cornerY, float u, float v)
+            {
+                const float px = (cornerX - s.origin.X) * scaleX;
+                const float py = (cornerY - s.origin.Y) * scaleY;
+                vertices.emplace_back(
+                    Vector3(s.destX + px * cosR - py * sinR, s.destY + px * sinR + py * cosR,
+                            s.layerDepth),
+                    s.color, Vector2(u, v));
+            };
+            const auto base = static_cast<std::uint16_t>(i * 4);
+            corner(0.0f, 0.0f, u1, v1);
+            corner(sourceWidth, 0.0f, u2, v1);
+            corner(0.0f, sourceHeight, u1, v2);
+            corner(sourceWidth, sourceHeight, u2, v2);
+            for (const int offset : {0, 1, 2, 1, 3, 2})
+                indices.push_back(static_cast<std::uint16_t>(base + offset));
+        }
+
+        // Drawn as XNA's own SpriteBatch draws: user-indexed primitives, once per pass, with the
+        // sprite texture in unit 0 because XNA assigns Textures[0] after the pass and so overrides
+        // the effect's own Texture parameter.
+        using CNA::Internal::Graphics::PositionColorTextureStream;
+        std::vector<PositionColorTextureStream> packed(vertices.size());
+        for (std::size_t i = 0; i < vertices.size(); ++i)
+            packed[i] = CNA::Internal::Graphics::Pack(vertices[i]);
+        IGraphicsRenderer& device = graphicsDevice_->GetRenderer();
+        auto vertexBuffer = device.CreateVertexBuffer(static_cast<int>(packed.size()));
+        vertexBuffer->SetVertexDeclaration(VertexPositionColorTexture::getVertexDeclarationStatic());
+        vertexBuffer->SetData(packed.data(), static_cast<int>(packed.size()),
+                              sizeof(PositionColorTextureStream));
+        auto indexBuffer = device.CreateIndexBuffer16(static_cast<int>(indices.size()));
+        indexBuffer->SetData16(indices.data(), static_cast<int>(indices.size()));
+
+        const auto& matrices = dynamic_cast<const IEffectMatrices&>(*customEffect_);
+        EffectPassCollection& passes = customEffect_->getCurrentTechniqueProperty()->getPassesProperty();
+        for (int pass = 0; pass < passes.getCountProperty(); ++pass)
+        {
+            passes[pass]->Apply();
+            GpuDrawParams drawParams;
+            customEffect_->FillGpuDrawParams(drawParams);
+            drawParams.texture0 = &texture;
+            graphicsDevice_->applySamplerStatesToRenderer();
+            device.DrawIndexedPrimitivesEx(
+                *vertexBuffer, *indexBuffer, matrices.getWorldProperty(), matrices.getViewProperty(),
+                matrices.getProjectionProperty(), PrimitiveType::TriangleList,
+                static_cast<int>(count * 2), drawParams);
+        }
     }
 
     // -----------------------------------------------------------------------

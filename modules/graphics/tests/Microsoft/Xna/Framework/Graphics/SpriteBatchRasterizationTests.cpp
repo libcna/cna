@@ -26,7 +26,9 @@
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
@@ -331,4 +333,60 @@ TEST(SpriteBatchRasterizationTest, APlainPrimitiveStillReachesTheBackBufferAfter
 
     EXPECT_EQ(ReadPixel(device, kSize / 2, kSize / 2), Color::Red)
         << "a plain primitive after a Present does not reach the back buffer either";
+}
+
+// A stock effect named in SpriteBatch.Begin places the sprites: XNA applies its pass after the
+// sprite effect's, so its vertex shader transforms each sprite at (x, y, layerDepth) and the sprite
+// projection goes unused. That is XNA 4.0's way to draw sprites in a 3D world -- DPSF's billboard
+// particles (AlphaTestEffect) and 3D text (BasicEffect) -- and the 2D sprite path clipped them away.
+// Through an orthographic projection over [-1, 1], a one-unit sprite at the origin covers the
+// top-right quadrant.
+TEST(SpriteBatchRasterizationTest, AStockEffectInBeginPlacesTheSpritesByItsMatrices)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
+
+    GraphicsDevice device = MakeDevice();
+    Texture2D texture = MakeWhiteTexture(device);
+    AlphaTestEffect effect(device);
+    effect.setProjectionProperty(Matrix::CreateOrthographicOffCenter(-1.0f, 1.0f, -1.0f, 1.0f, 0.0f, 10.0f));
+    effect.setVertexColorEnabledProperty(true);
+
+    device.Clear(Color::Black);
+    SpriteBatch spriteBatch(device);
+    spriteBatch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque, nullptr, &DepthStencilState::None,
+                      &RasterizerState::CullNone, &effect);
+    spriteBatch.Draw(texture, Vector2(0.0f, 0.0f), std::nullopt, Color::Red, 0.0f, Vector2(0.0f, 0.0f),
+                     1.0f / 8.0f, SpriteEffects::None, -1.0f);
+    spriteBatch.End();
+
+    EXPECT_EQ(ReadPixel(device, kSize * 3 / 4, kSize / 4), Color::Red) << "the effect's quadrant";
+    EXPECT_EQ(ReadPixel(device, kSize / 4, kSize / 4), Color::Black);
+    EXPECT_EQ(ReadPixel(device, kSize * 3 / 4, kSize * 3 / 4), Color::Black);
+    EXPECT_EQ(ReadPixel(device, 0, 0), Color::Black) << "drawn in pixel space instead";
+}
+
+// The 3D-text form: BasicEffect with a World that flips Y, Immediate mode. The flip moves the same
+// sprite into the bottom-right quadrant, so World is applied and not only Projection.
+TEST(SpriteBatchRasterizationTest, AStockBasicEffectAppliesItsWorldToTheSprites)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
+
+    GraphicsDevice device = MakeDevice();
+    Texture2D texture = MakeWhiteTexture(device);
+    BasicEffect effect(device);
+    effect.setTextureEnabledProperty(true);
+    effect.setVertexColorEnabledProperty(true);
+    effect.setWorldProperty(Matrix::CreateScale(1.0f, -1.0f, 1.0f));
+    effect.setProjectionProperty(Matrix::CreateOrthographicOffCenter(-1.0f, 1.0f, -1.0f, 1.0f, 0.0f, 10.0f));
+
+    device.Clear(Color::Black);
+    SpriteBatch spriteBatch(device);
+    spriteBatch.Begin(SpriteSortMode::Immediate, &BlendState::Opaque, nullptr, &DepthStencilState::None,
+                      &RasterizerState::CullNone, &effect);
+    spriteBatch.Draw(texture, Vector2(0.0f, 0.0f), std::nullopt, Color::Red, 0.0f, Vector2(0.0f, 0.0f),
+                     1.0f / 8.0f, SpriteEffects::None, -1.0f);
+    spriteBatch.End();
+
+    EXPECT_EQ(ReadPixel(device, kSize * 3 / 4, kSize * 3 / 4), Color::Red) << "the flipped quadrant";
+    EXPECT_EQ(ReadPixel(device, kSize * 3 / 4, kSize / 4), Color::Black);
 }

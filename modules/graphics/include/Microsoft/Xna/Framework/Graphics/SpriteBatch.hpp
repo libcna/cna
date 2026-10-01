@@ -62,6 +62,9 @@ namespace Microsoft::Xna::Framework::Graphics
         SpriteSortMode sortMode_    = SpriteSortMode::Deferred;
         Matrix transformMatrix_     = Matrix::getIdentityProperty();
         Effect* customEffect_       = nullptr;
+        // customEffect_ is one of XNA's stock effects: its own vertex shader places the sprites, so
+        // the batch is drawn through the device rather than the renderer's 2D sprite path.
+        bool stockEffect_           = false;
         BlendState blendState_;
         // The batch's resolved sampler is retained because XNA publishes it into
         // GraphicsDevice.SamplerStates[0] at the flush rather than at deferred Begin().
@@ -81,6 +84,7 @@ namespace Microsoft::Xna::Framework::Graphics
                         SpriteEffects effects, float layerDepth);
         void flushBatch();
         void flushSingle(const SpriteInfo& s);
+        void drawThroughStockEffect(const SpriteInfo* sprites, std::size_t count);
         void applyRenderState();
         void throwIfDisposed() const;
 
