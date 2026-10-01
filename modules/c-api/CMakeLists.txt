@@ -1867,6 +1867,23 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    add_executable(cna_c_api_runtime_component_device_borrow
+        tests/pure_c/RuntimeComponentDeviceBorrow.c
+    )
+    set_target_properties(cna_c_api_runtime_component_device_borrow PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_runtime_component_device_borrow PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_runtime_component_device_borrow)
+    add_test(NAME CApi_RuntimeComponentDeviceBorrow COMMAND cna_c_api_runtime_component_device_borrow)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_RuntimeComponentDeviceBorrow PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        )
+    endif()
+
     add_executable(cna_c_api_devices_smoke
         tests/pure_c/DevicesSmoke.c
     )

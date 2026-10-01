@@ -49,6 +49,14 @@ struct OwnedGraphicsDevice final {
     CNA_Handle game,
     CNA_Handle* outGraphicsDevice);
 
+// CBIND-128: CNA calls a component's C handlers on its game's behalf, so each runs inside that game's
+// lifecycle-callback scope and may borrow the game's device. Inside a lifecycle step the scope nests;
+// for a component driven directly from outside any callback it is the outermost one, which releases
+// the borrowed device when it closes. A game this ABI did not create has no scope and is ignored.
+void EnterGameCallbackScope(Microsoft::Xna::Framework::Game& game) noexcept;
+
+void LeaveGameCallbackScope(Microsoft::Xna::Framework::Game& game) noexcept;
+
 // CBIND-111: a callback-scoped borrowed content-manager handle over a canonical manager the C layer
 // does not own. A `.cnb` loader receives the manager performing the load so it can resolve the
 // file's external references through the normal cache, and that manager may be one no C handle

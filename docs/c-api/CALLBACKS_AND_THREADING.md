@@ -8,7 +8,10 @@ pointers and context remain caller-owned and must remain valid until `cna_game_d
 The game handle supplied to a lifecycle callback is borrowed for that callback duration; it may be
 used with callback-safe operations but must not be retained or destroyed. A callback may derive a
 borrowed graphics-device handle with `cna_game_get_graphics_device`; CNA generation-invalidates
-that child handle before returning to the native game loop.
+that child handle before returning to the native game loop. A game component's C handlers are
+lifecycle callbacks too: they run inside the scope of the lifecycle step that drives them (or open
+their own when a component is driven directly), so they may borrow the device and may not drive the
+game.
 
 Each game lifecycle callback receives a CNA-initialized `CNA_CallbackError`. If the callback returns
 anything other than `CNA_RESULT_SUCCESS`, it may fill the versioned `message` string view. CNA

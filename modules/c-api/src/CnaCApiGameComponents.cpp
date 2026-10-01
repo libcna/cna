@@ -108,6 +108,7 @@ public:
     ForwardingComponent(Game& game, const CNA_GameComponentCallbacks& callbacks)
         : TBase(game)
         , callbacks_(callbacks)
+        , owner_(game)
     {
     }
 
@@ -115,6 +116,7 @@ public:
     {
         TBase::Initialize();
         if (callbacks_.initialize != nullptr) {
+            const HandlerScope scope(owner_);
             callbacks_.initialize(callbacks_.context);
         }
     }
@@ -123,11 +125,33 @@ public:
     {
         if (callbacks_.update != nullptr) {
             const CNA_GameTime mapped = MakeCGameTime(gameTime);
+            const HandlerScope scope(owner_);
             callbacks_.update(&mapped, callbacks_.context);
         }
     }
 
 protected:
+    // CBIND-128: every C handler runs inside its game's callback scope (see EnterGameCallbackScope).
+    class HandlerScope final {
+    public:
+        explicit HandlerScope(Game& game) noexcept
+            : game_(game)
+        {
+            CNA::C::Detail::EnterGameCallbackScope(game_);
+        }
+
+        ~HandlerScope()
+        {
+            CNA::C::Detail::LeaveGameCallbackScope(game_);
+        }
+
+        HandlerScope(const HandlerScope&) = delete;
+        HandlerScope& operator=(const HandlerScope&) = delete;
+
+    private:
+        Game& game_;
+    };
+
     // The canonical disposal is idempotent, so the forwarded one must be too: without this a second
     // disposal would call the C handler again while the canonical event stayed silent.
     void ForwardDisposeOnce()
@@ -136,10 +160,12 @@ protected:
             return;
         }
         disposeForwarded_ = true;
+        const HandlerScope scope(owner_);
         callbacks_.dispose(callbacks_.context);
     }
 
     CNA_GameComponentCallbacks callbacks_;
+    Game& owner_;
 
 private:
     bool disposeForwarded_ = false;
@@ -167,6 +193,7 @@ public:
     {
         if (callbacks_.draw != nullptr) {
             const CNA_GameTime mapped = MakeCGameTime(gameTime);
+            const HandlerScope scope(owner_);
             callbacks_.draw(&mapped, callbacks_.context);
         }
     }
@@ -175,6 +202,7 @@ protected:
     void LoadContent() override
     {
         if (callbacks_.load_content != nullptr) {
+            const HandlerScope scope(owner_);
             callbacks_.load_content(callbacks_.context);
         }
     }
@@ -182,6 +210,7 @@ protected:
     void UnloadContent() override
     {
         if (callbacks_.unload_content != nullptr) {
+            const HandlerScope scope(owner_);
             callbacks_.unload_content(callbacks_.context);
         }
     }

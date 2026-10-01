@@ -11,6 +11,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "System/TimeSpan.hpp"
 
+#include <cstdint>
 #include <cstring>
 #include <memory>
 #include <mutex>
@@ -81,7 +82,7 @@ class CGame final : public Game {
 public:
     explicit CGame(const CNA_GameCallbacks* const callbacks)
         : callbacks_{}, handle_(CNA_INVALID_HANDLE), callbackFailure_(CNA_RESULT_SUCCESS),
-          isInsideCallback_(false), hasLoadedContent_(false), hasExited_(false), isShutDown_(false)
+          hasLoadedContent_(false), hasExited_(false), isShutDown_(false)
     {
         if (callbacks != nullptr) {
             callbacks_ = *callbacks;
@@ -107,7 +108,23 @@ public:
 
     [[nodiscard]] bool IsInsideCallback() const noexcept
     {
-        return isInsideCallback_;
+        return callbackDepth_ != 0U;
+    }
+
+    // CBIND-128: the callback scope is a depth, not a flag. A lifecycle step opens it around the
+    // consumer's callback *and* the base pass that walks the components, and CNA opens it again
+    // around each component handler it calls; nested scopes share one borrowed device, and only
+    // the outermost one invalidates it before control returns to the native loop or the caller.
+    void EnterCallbackScope() noexcept
+    {
+        ++callbackDepth_;
+    }
+
+    void LeaveCallbackScope() noexcept
+    {
+        if (callbackDepth_ != 0U && --callbackDepth_ == 0U) {
+            InvalidateBorrowedGraphicsDevice();
+        }
     }
 
     [[nodiscard]] CNA_Result GetCallbackFailure() const noexcept
@@ -140,7 +157,7 @@ public:
                 "The graphics-device output handle is null.");
         }
         *outGraphicsDevice = CNA_INVALID_HANDLE;
-        if (!isInsideCallback_) {
+        if (callbackDepth_ == 0U) {
             return Fail(
                 CNA_RESULT_INVALID_STATE,
                 CNA_ERROR_CATEGORY_STATE,
@@ -174,6 +191,7 @@ public:
         }
         isShutDown_ = true;
 
+        const CallbackScope scope(*this);
         NotifyExit();
         if (hasLoadedContent_) {
             Invoke(callbacks_.unload_content, nullptr);
@@ -200,6 +218,8 @@ protected:
 
     void Update(GameTime& gameTime) override
     {
+        // One scope for the step, so the components the base pass updates run inside it too.
+        const CallbackScope scope(*this);
         const CNA_GameTime cGameTime = MakeCGameTime(gameTime);
         Invoke(callbacks_.update, &cGameTime);
         // The base pass is not optional and was missing: `Game::Update` is what walks the
@@ -220,6 +240,7 @@ protected:
 
     void Draw(const GameTime& gameTime) override
     {
+        const CallbackScope scope(*this);
         const CNA_GameTime cGameTime = MakeCGameTime(gameTime);
         Invoke(callbacks_.draw, &cGameTime);
         // Same omission and same ordering: `Game::Draw` draws the visible drawable components,
@@ -243,7 +264,9 @@ protected:
         // header promises ("invoked once while the game initializes, before content loads") and of
         // what a ported game expects, since most touch fields in LoadContent that Initialize set.
         // This mirrors the canonical C++ shape, where a subclass does its own work and *then* calls
-        // base.Initialize().
+        // base.Initialize(). The base initializes the components and loads their content, so the
+        // scope covers it as well as the hook.
+        const CallbackScope scope(*this);
         Invoke(frameHooks_.initialize, nullptr, frameHooks_.context);
         Game::Initialize();
     }
@@ -274,17 +297,18 @@ protected:
             .message = {nullptr, 0U}
         };
         CNA_Bool shouldDraw = CNA_TRUE;
-        isInsideCallback_ = true;
-        const CNA_Result result = CallWithExceptionBarrier([&]() {
-            return frameHooks_.begin_draw(
-                handle_,
-                nullptr,
-                frameHooks_.context,
-                &shouldDraw,
-                &callbackError);
-        });
-        isInsideCallback_ = false;
-        InvalidateBorrowedGraphicsDevice();
+        CNA_Result result = CNA_RESULT_SUCCESS;
+        {
+            const CallbackScope scope(*this);
+            result = CallWithExceptionBarrier([&]() {
+                return frameHooks_.begin_draw(
+                    handle_,
+                    nullptr,
+                    frameHooks_.context,
+                    &shouldDraw,
+                    &callbackError);
+            });
+        }
         if (result != CNA_RESULT_SUCCESS) {
             RecordCallbackFailure(callbackError);
             return false;
@@ -299,6 +323,26 @@ protected:
     }
 
 private:
+    class CallbackScope final {
+    public:
+        explicit CallbackScope(CGame& game) noexcept
+            : game_(game)
+        {
+            game_.EnterCallbackScope();
+        }
+
+        ~CallbackScope()
+        {
+            game_.LeaveCallbackScope();
+        }
+
+        CallbackScope(const CallbackScope&) = delete;
+        CallbackScope& operator=(const CallbackScope&) = delete;
+
+    private:
+        CGame& game_;
+    };
+
     void NotifyExit()
     {
         if (hasExited_) {
@@ -329,12 +373,13 @@ private:
             .struct_version = StructureVersion,
             .message = {nullptr, 0U}
         };
-        isInsideCallback_ = true;
-        const CNA_Result result = CallWithExceptionBarrier([&]() {
-            return callback(handle_, gameTime, context, &callbackError);
-        });
-        isInsideCallback_ = false;
-        InvalidateBorrowedGraphicsDevice();
+        CNA_Result result = CNA_RESULT_SUCCESS;
+        {
+            const CallbackScope scope(*this);
+            result = CallWithExceptionBarrier([&]() {
+                return callback(handle_, gameTime, context, &callbackError);
+            });
+        }
         if (result == CNA_RESULT_SUCCESS) {
             return;
         }
@@ -374,7 +419,7 @@ private:
     CNA_GameFrameHooks frameHooks_{};
     CNA_Handle handle_;
     CNA_Result callbackFailure_;
-    bool isInsideCallback_;
+    std::uint32_t callbackDepth_ = 0U;
     bool hasLoadedContent_;
     bool hasExited_;
     bool isShutDown_;
@@ -498,6 +543,20 @@ void RemoveOwnedGraphicsResourceFor(const CNA_Handle owner) noexcept
 {
     if (IsGameOwnedResource(owner)) {
         RemoveOwnedGraphicsResource();
+    }
+}
+
+void EnterGameCallbackScope(Microsoft::Xna::Framework::Game& game) noexcept
+{
+    if (auto* const cGame = dynamic_cast<CGame*>(&game); cGame != nullptr) {
+        cGame->EnterCallbackScope();
+    }
+}
+
+void LeaveGameCallbackScope(Microsoft::Xna::Framework::Game& game) noexcept
+{
+    if (auto* const cGame = dynamic_cast<CGame*>(&game); cGame != nullptr) {
+        cGame->LeaveCallbackScope();
     }
 }
 
