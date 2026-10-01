@@ -126,6 +126,7 @@ namespace CNA::Internal::Renderers::EasyGL
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "System/NotSupportedException.hpp"
+#include <atomic>
 #include <bit>
 #include <cstddef>
 #include <cstdint>
@@ -135,6 +136,7 @@ namespace CNA::Internal::Renderers::EasyGL
 #include <iostream>
 #include <limits>
 #include <span>
+#include <thread>
 #include <unordered_map>
 
 #include "CNA/TargetPlatform.hpp"
@@ -386,6 +388,18 @@ namespace CNA::Internal::Renderers::EasyGL
 
         std::shared_ptr<EasyGLPlatformContext> platformContext;
         std::recursive_mutex mutex;
+
+        // The lease state of the thread holding `mutex`, read and written only by that thread (one
+        // thread at a time can have a non-zero depth). It lives here, not in thread-local storage:
+        // a lease is also taken during exit-time static destruction -- the C API's handle registry
+        // disposing a game it still owns -- and by then the main thread's thread_local objects
+        // have already been destroyed ([basic.start.term]), which made that teardown read a dead
+        // map and crash intermittently (CApi_TeardownLifetime_cycles).
+        std::size_t depth = 0;
+        std::atomic<std::thread::id> owner{};
+        CNA::Platform::GlContextBinding previousBinding;
+        RendererThreadContextLeaseRelease release =
+            RendererThreadContextLeaseRelease::RestorePreviousBinding;
     };
 
     namespace
@@ -407,28 +421,10 @@ namespace CNA::Internal::Renderers::EasyGL
             std::function<void()> release_;
         };
 
-        struct EasyGLThreadContextLeaseState
-        {
-            std::size_t depth = 0;
-            CNA::Platform::GlContextBinding previousBinding;
-            RendererThreadContextLeaseRelease release =
-                RendererThreadContextLeaseRelease::RestorePreviousBinding;
-        };
-
-        std::unordered_map<const EasyGLThreadContextLeaseControl*, EasyGLThreadContextLeaseState>&
-        ThreadContextLeaseStates()
-        {
-            static thread_local std::unordered_map<const EasyGLThreadContextLeaseControl*,
-                                                   EasyGLThreadContextLeaseState> states;
-            return states;
-        }
-
         void ReleaseThreadContextLease(
             const std::shared_ptr<EasyGLThreadContextLeaseControl>& control) noexcept
         {
-            auto& states = ThreadContextLeaseStates();
-            const auto it = states.find(control.get());
-            if (it == states.end() || it->second.depth == 0)
+            if (control->owner.load() != std::this_thread::get_id() || control->depth == 0)
             {
                 CNA::Logger::Error(
                     "EasyGL renderer context lease released without matching acquisition",
@@ -436,8 +432,8 @@ namespace CNA::Internal::Renderers::EasyGL
                 return;
             }
 
-            --it->second.depth;
-            if (it->second.depth == 0)
+            --control->depth;
+            if (control->depth == 0)
             {
 #if !defined(__EMSCRIPTEN__)
                 // Web: nothing to restore. The context is current on the browser thread for every
@@ -447,7 +443,7 @@ namespace CNA::Internal::Renderers::EasyGL
                 try
                 {
                     control->platformContext->RestoreBinding(
-                        it->second.previousBinding, it->second.release);
+                        control->previousBinding, control->release);
                 }
                 catch (const std::exception& error)
                 {
@@ -456,7 +452,7 @@ namespace CNA::Internal::Renderers::EasyGL
                         CNA::LogCategory::RENDER);
                 }
 #endif
-                states.erase(it);
+                control->owner.store(std::thread::id{});
             }
             control->mutex.unlock();
         }
@@ -6754,22 +6750,21 @@ if (!ProfileIsEs2ApiGeneration())
         control->mutex.lock();
         try
         {
-            auto& state = ThreadContextLeaseStates()[control.get()];
-            if (state.depth == 0)
+            if (control->depth == 0)
             {
 #if !defined(__EMSCRIPTEN__)
-                state.previousBinding = control->platformContext->GetCurrentBinding();
-                state.release = release;
+                control->previousBinding = control->platformContext->GetCurrentBinding();
+                control->release = release;
 #else
                 (void)release;
 #endif
                 EnsureCallingThreadContext();
+                control->owner.store(std::this_thread::get_id());
             }
-            ++state.depth;
+            ++control->depth;
         }
         catch (...)
         {
-            ThreadContextLeaseStates().erase(control.get());
             control->mutex.unlock();
             throw;
         }
