@@ -125,13 +125,27 @@ namespace Microsoft::Xna::Framework
         if (keyboardOrientationChanged_) keyboardOrientationChanged_();
     }
 
+    DisplayOrientation GameWindow::resolveSupportedOrientations(
+        DisplayOrientation supported, int preferredWidth, int preferredHeight)
+    {
+        if (supported != DisplayOrientation::Default) return supported;
+        return preferredWidth < preferredHeight ? DisplayOrientation::Portrait
+            : DisplayOrientation::LandscapeLeft | DisplayOrientation::LandscapeRight;
+    }
+
     DisplayOrientation GameWindow::selectKeyboardOrientation(
         DisplayOrientation supported, int preferredWidth, int preferredHeight) const
     {
-        if (supported == DisplayOrientation::Default)
-            supported = preferredWidth < preferredHeight ? DisplayOrientation::Portrait
-                : DisplayOrientation::LandscapeLeft | DisplayOrientation::LandscapeRight;
-        if (hasFlag(supported, requestedKeyboardOrientation_)) return requestedKeyboardOrientation_;
+        if (hasFlag(resolveSupportedOrientations(supported, preferredWidth, preferredHeight),
+                    requestedKeyboardOrientation_))
+            return requestedKeyboardOrientation_;
+        return selectDeviceOrientation(supported, preferredWidth, preferredHeight);
+    }
+
+    DisplayOrientation GameWindow::selectDeviceOrientation(
+        DisplayOrientation supported, int preferredWidth, int preferredHeight) const
+    {
+        supported = resolveSupportedOrientations(supported, preferredWidth, preferredHeight);
         if (hasFlag(supported, currentOrientation_)) return currentOrientation_;
         const auto preferred = preferredWidth < preferredHeight ? DisplayOrientation::Portrait
                                                                : DisplayOrientation::LandscapeLeft;

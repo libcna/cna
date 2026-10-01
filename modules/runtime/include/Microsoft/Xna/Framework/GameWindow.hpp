@@ -287,6 +287,14 @@ namespace Microsoft::Xna::Framework
         void updateKeyboardOrientation(const CNA::Platform::KeyboardSnapshot& keyboard, bool focused);
         [[nodiscard]] DisplayOrientation selectKeyboardOrientation(
             DisplayOrientation supported, int preferredWidth, int preferredHeight) const;
+        /// The orientation a device is created in on a platform that rotates: the window's current
+        /// one when the game supports it, otherwise the one its back buffer's shape implies.
+        [[nodiscard]] DisplayOrientation selectDeviceOrientation(
+            DisplayOrientation supported, int preferredWidth, int preferredHeight) const;
+        /// XNA's Default as a concrete set: Portrait for a back buffer taller than it is wide,
+        /// both landscapes otherwise. Any other set is returned unchanged.
+        [[nodiscard]] static DisplayOrientation resolveSupportedOrientations(
+            DisplayOrientation supported, int preferredWidth, int preferredHeight);
         std::vector<String> droppedFiles_;
         std::vector<String> droppedTexts_;
 

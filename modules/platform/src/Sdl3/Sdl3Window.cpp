@@ -575,6 +575,13 @@ namespace CNA::Platform::Sdl3 {
 
 #if defined(CNA_TARGET_IOS)
             RequestAppleOrientationUpdate(window_);
+#elif defined(__ANDROID__)
+            // SDL's Android backend reads the hint only when the window is created and when its
+            // resizable flag changes, and the window exists long before the game has chosen.
+            // Changing the flag and changing it back is the public way to have it asked again.
+            const bool resizable = (SDL_GetWindowFlags(window_) & SDL_WINDOW_RESIZABLE) != 0;
+            SDL_SetWindowResizable(window_, !resizable);
+            SDL_SetWindowResizable(window_, resizable);
 #endif
         }
     }

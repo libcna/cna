@@ -253,7 +253,9 @@ namespace Microsoft::Xna::Framework
         {
             if (supportsOrientations())
             {
-                game_->getWindowProperty().SetSupportedOrientations(supportedOrientations_);
+                game_->getWindowProperty().SetSupportedOrientations(
+                    GameWindow::resolveSupportedOrientations(supportedOrientations_,
+                        preferredBackBufferWidth_, preferredBackBufferHeight_));
             }
 
             auto& parameters = gdi.getPresentationParametersProperty();
@@ -326,7 +328,9 @@ namespace Microsoft::Xna::Framework
 
             if (supportsOrientations())
             {
-                game_->getWindowProperty().SetSupportedOrientations(supportedOrientations_);
+                game_->getWindowProperty().SetSupportedOrientations(
+                    GameWindow::resolveSupportedOrientations(supportedOrientations_,
+                        preferredBackBufferWidth_, preferredBackBufferHeight_));
             }
 
             game_->getWindowProperty().BeginScreenDeviceChange(pp.getIsFullScreenProperty());
@@ -569,6 +573,12 @@ namespace Microsoft::Xna::Framework
             auto& window = game_->getWindowProperty();
             if (window.keyboardOrientationEnabled_)
                 pp.setDisplayOrientationProperty(window.selectKeyboardOrientation(
+                    supportedOrientations_, preferredBackBufferWidth_, preferredBackBufferHeight_));
+            // A device that rotates is created in an orientation the game supports, so the swap
+            // below gives a portrait game its portrait back buffer; left Default, every game got
+            // a landscape one.
+            else if (supportsOrientations_)
+                pp.setDisplayOrientationProperty(window.selectDeviceOrientation(
                     supportedOrientations_, preferredBackBufferWidth_, preferredBackBufferHeight_));
             else if (window.keyboardOrientationResetPending_)
                 pp.setDisplayOrientationProperty(DisplayOrientation::Default);
