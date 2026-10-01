@@ -1653,6 +1653,8 @@ namespace CNA::Internal::Renderers::EasyGL
         void BindNegativeBaseVertexIndices(
             const EasyGLIndexBufferRenderer& ib, int startIndex, int indexCount, int baseVertex);
 
+        void BindRebasedIndices32(
+            const EasyGLIndexBufferRenderer& ib, int startIndex, int indexCount, int baseVertex);
         void DrawIndexedWithBaseVertexFallback(
             const EasyGLIndexBufferRenderer& ib,
             ::easygl::PrimitiveType primitive,
@@ -1665,6 +1667,12 @@ namespace CNA::Internal::Renderers::EasyGL
             int instanceCount);
 
         void DetectNativeWireframeApi();
+        // Whether the vertex attribute state queries describe the bound VAO. A profile without
+        // glDrawElementsBaseVertex moves the attribute pointers by the base vertex and reads them
+        // to do it; the Android emulator's GLES encoder answers from stale state, so there the
+        // indices are rebased on the CPU instead (BindRebasedIndices32). Decided per context.
+        bool attribPointerQueriesReliable_ = true;
+        void DetectAttribPointerQueries();
         void SetNativePolygonMode(bool wireframe);
         void RequireSupportedFillModeEXT(PrimitiveType primitive) const;
         [[nodiscard]] bool CanDrawStockWireframeAsLineLoops(

@@ -561,6 +561,101 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsPositiveBaseVertexWithSixtee
         "positive baseVertex with 16-bit indices");
 }
 
+namespace
+{
+    // EasyGL on a driver whose vertex attribute queries cannot be trusted -- the Android emulator --
+    // rebases a base-vertex draw's indices on the CPU, widened to 32 bits. The switch makes every
+    // driver take that path; it is read when the device's context is set up, so it is set first.
+    struct CpuBaseVertexSwitch
+    {
+        CpuBaseVertexSwitch() { ::setenv("CNA_EASYGL_CPU_BASE_VERTEX", "1", 1); }
+        ~CpuBaseVertexSwitch() { ::unsetenv("CNA_EASYGL_CPU_BASE_VERTEX"); }
+    };
+
+    class CpuRebasedBaseVertexTest : public ::testing::Test
+    {
+    protected:
+        CpuBaseVertexSwitch cpuBaseVertex;
+        GraphicsDevice device;
+
+        void SetUp() override
+        {
+            device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+            if (!device.SupportsCapability(GraphicsCapability::ThreeD))
+                GTEST_SKIP() << "Renderer explicitly does not support indexed rendering";
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+        }
+    };
+}
+
+TEST_F(CpuRebasedBaseVertexTest, SixteenBitIndicesWidenPastTheirRangeAndHonorStartIndex)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, WebGL1, WebGL2);
+
+    // 70 000 vertices: the selected triangle sits past what a 16-bit index can name, so only a
+    // rebase widened to 32 bits reaches it. The index prefix selects nothing drawn.
+    constexpr int VertexCount = 70000;
+    constexpr int Base = VertexCount - 3;
+    std::vector<VertexPositionColor> vertices(
+        VertexCount, VertexPositionColor(Vector3(-2.0f, -2.0f, 0.0f), Color::Red));
+    const auto blue = CenterTriangle(Color::Blue);
+    std::copy(blue.begin(), blue.end(), vertices.end() - 3);
+    const std::array<std::uint16_t, 6> indices{2, 1, 0, 0, 1, 2};
+
+    VertexBuffer vertexBuffer(device, PositionColorDeclaration(), VertexCount, BufferUsage::None);
+    IndexBuffer indexBuffer(device, IndexElementSize::SixteenBits, 6, BufferUsage::None);
+    vertexBuffer.SetData(vertices.data(), VertexCount);
+    indexBuffer.SetData(indices.data(), 6);
+
+    BasicEffect effect(device);
+    effect.VertexColorEnabled = true;
+    effect.Apply();
+    device.Clear(Color::Black);
+    device.SetVertexBuffer(&vertexBuffer);
+    device.SetIndexBuffer(&indexBuffer);
+    device.DrawIndexedPrimitives(PrimitiveType::TriangleList, Base, 0, 3, 3, 1);
+
+    ExpectExactColor(ReadCenter(device), Color::Blue, "CPU-rebased 16-bit indices past 65535");
+}
+
+TEST_F(CpuRebasedBaseVertexTest, ConsecutiveDrawsWithDifferentBasesEachReachTheirOwnVertices)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, WebGL1, WebGL2);
+
+    // One buffer, three triangles, drawn by base: what a Model's mesh parts do, and what the
+    // emulator broke by moving the attribute pointers.
+    const auto left = TriangleAt(-0.65f, Color::Red);
+    const auto middle = TriangleAt(0.0f, Color::Lime);
+    const auto right = TriangleAt(0.65f, Color::Blue);
+    std::array<VertexPositionColor, 9> vertices{};
+    std::copy(left.begin(), left.end(), vertices.begin());
+    std::copy(middle.begin(), middle.end(), vertices.begin() + 3);
+    std::copy(right.begin(), right.end(), vertices.begin() + 6);
+    const std::array<std::uint16_t, 3> indices{0, 1, 2};
+
+    VertexBuffer vertexBuffer(device, PositionColorDeclaration(), 9, BufferUsage::None);
+    IndexBuffer indexBuffer(device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+    vertexBuffer.SetData(vertices.data(), 9);
+    indexBuffer.SetData(indices.data(), 3);
+
+    BasicEffect effect(device);
+    effect.VertexColorEnabled = true;
+    effect.Apply();
+    device.Clear(Color::Black);
+    device.SetVertexBuffer(&vertexBuffer);
+    device.SetIndexBuffer(&indexBuffer);
+    for (const int base : {6, 0, 3})
+    {
+        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, base, 0, 3, 0, 1);
+    }
+
+    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
+    ExpectExactColor(pixels.AtNdc(-0.65f), Color::Red, "base 0");
+    ExpectExactColor(pixels.AtNdc(0.0f), Color::Lime, "base 3");
+    ExpectExactColor(pixels.AtNdc(0.65f), Color::Blue, "base 6");
+}
+
 TEST_F(IndexedDrawDeferredTest, PersistentDynamicDrawCombinesStartBaseCountAndHints)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,

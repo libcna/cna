@@ -1,4 +1,7 @@
 #include "CNA/Internal/Renderers/EasyGL/EasyGLRenderer.hpp"
+#if defined(__ANDROID__)
+#include <sys/system_properties.h>
+#endif
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "CNA/Internal/Graphics/SrgbTransfer.hpp"
 #include "CNA/Internal/Renderers/EasyGL/GlStockShaderSources.hpp"
@@ -126,6 +129,7 @@ namespace CNA::Internal::Renderers::EasyGL
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "System/NotSupportedException.hpp"
+#include <array>
 #include <atomic>
 #include <bit>
 #include <cstddef>
@@ -1312,15 +1316,61 @@ if (ProfileIsEs2ApiGeneration())
             }
         }
 
+        /// The attribute pointers ShiftEnabledPerVertexAttribPointers moved, exactly as it found them.
+        struct ShiftedAttribPointers
+        {
+            struct Pointer
+            {
+                GLuint location = 0;
+                GLint size = 4;
+                GLint type = GL_FLOAT;
+                GLint normalized = 0;
+                GLint integer = 0;
+                GLint stride = 0;
+                GLint buffer = 0;
+                void* pointer = nullptr;
+            };
+
+            std::array<Pointer, 16> pointers{};
+            int count = 0;
+        };
+
+        void SetAttribPointer(const ShiftedAttribPointers::Pointer& attribute, std::intptr_t delta)
+        {
+            const ::metagl::AttribLocation location{attribute.location};
+            const void* pointer = static_cast<const std::uint8_t*>(attribute.pointer) + delta;
+            ::metagl::glBindBuffer(::metagl::BufferTarget::Array,
+                                   ::metagl::BufferId{static_cast<GLuint>(attribute.buffer)});
+            if (attribute.integer != 0)
+            {
+                ::metagl::glVertexAttribIPointer(
+                    location, attribute.size, static_cast<::metagl::DataType>(attribute.type),
+                    attribute.stride, pointer);
+            }
+            else
+            {
+                ::metagl::glVertexAttribPointer(
+                    location, attribute.size, static_cast<::metagl::DataType>(attribute.type),
+                    attribute.normalized != 0 ? 1 : 0, attribute.stride, pointer);
+            }
+        }
+
         /// Re-offsets every enabled per-vertex attribute pointer by @p baseVertex elements of its
-        /// own stride, in @p direction (+1 applies the shift, -1 restores it). Must run while the
+        /// own stride and returns what it moved, for RestoreAttribPointers. Must run while the
         /// draw's VAO is bound. This is FNA3D's no-base-vertex fallback shape and serves every CNA
         /// profile whose guaranteed API floor lacks glDrawElementsBaseVertex: GLES 2/3 and both
         /// WebGL generations. ES 3-class profiles can also have per-instance attributes enabled;
         /// those are identified by a nonzero divisor and deliberately left unchanged.
-        void ShiftEnabledPerVertexAttribPointers(int baseVertex, int direction)
+        ///
+        /// The restore writes back what was read here instead of reading the shifted pointers
+        /// again. The Android emulator's GLES encoder answers glGetVertexAttribPointerv with the
+        /// pointer as it was before the shift, so a restore computed from a second read moved every
+        /// attribute to "offset minus delta" and the following draws read garbage (cna-cs CSX-071:
+        /// every Model on Android rendered as scattered triangles). It also halves the queries.
+        ShiftedAttribPointers ShiftEnabledPerVertexAttribPointers(int baseVertex)
         {
-            if (baseVertex == 0) return;
+            ShiftedAttribPointers shifted;
+            if (baseVertex == 0) return shifted;
 
             GLint maxAttribs = 0;
             ::metagl::glGetIntegerv(::metagl::GetParameter::MaxVertexAttribs, &maxAttribs);
@@ -1345,51 +1395,51 @@ if (ProfileIsEs2ApiGeneration())
                     if (divisor != 0) continue;
                 }
 
-                GLint size = 4, type = GL_FLOAT, normalized = 0, integer = 0;
-                GLint stride = 0, bufferBinding = 0;
+                ShiftedAttribPointers::Pointer saved;
+                saved.location = static_cast<GLuint>(i);
                 ::metagl::glGetVertexAttribiv(location,
-                                              ::metagl::VertexAttribParameter::ArraySize, &size);
+                                              ::metagl::VertexAttribParameter::ArraySize, &saved.size);
                 ::metagl::glGetVertexAttribiv(location,
-                                              ::metagl::VertexAttribParameter::ArrayType, &type);
+                                              ::metagl::VertexAttribParameter::ArrayType, &saved.type);
                 ::metagl::glGetVertexAttribiv(location,
-                                              ::metagl::VertexAttribParameter::ArrayNormalized, &normalized);
+                                              ::metagl::VertexAttribParameter::ArrayNormalized, &saved.normalized);
                 if (!ProfileIsEs2ApiGeneration())
                     ::metagl::glGetVertexAttribiv(
-                        location, ::metagl::VertexAttribParameter::ArrayInteger, &integer);
+                        location, ::metagl::VertexAttribParameter::ArrayInteger, &saved.integer);
                 ::metagl::glGetVertexAttribiv(location,
-                                              ::metagl::VertexAttribParameter::ArrayStride, &stride);
+                                              ::metagl::VertexAttribParameter::ArrayStride, &saved.stride);
                 ::metagl::glGetVertexAttribiv(location,
-                                              ::metagl::VertexAttribParameter::ArrayBufferBinding, &bufferBinding);
-                if (bufferBinding == 0) continue;  // no client-side arrays are used in this file
+                                              ::metagl::VertexAttribParameter::ArrayBufferBinding, &saved.buffer);
+                if (saved.buffer == 0) continue;  // no client-side arrays are used in this file
 
-                void* pointer = nullptr;
                 ::metagl::glGetVertexAttribPointerv(location,
-                                                    ::metagl::VertexAttribParameter::ArrayPointer, &pointer);
+                                                    ::metagl::VertexAttribParameter::ArrayPointer, &saved.pointer);
 
                 const std::intptr_t effectiveStride =
-                    stride != 0 ? stride
-                                : static_cast<std::intptr_t>(size) *
-                                      Es2AttribComponentBytes(static_cast<GLenum>(type));
-                const std::intptr_t delta =
-                    static_cast<std::intptr_t>(baseVertex) * effectiveStride * direction;
-
-                ::metagl::glBindBuffer(::metagl::BufferTarget::Array,
-                                       ::metagl::BufferId{static_cast<GLuint>(bufferBinding)});
-                if (integer != 0)
-                {
-                    ::metagl::glVertexAttribIPointer(
-                        location, size, static_cast<::metagl::DataType>(type), stride,
-                        static_cast<const std::uint8_t*>(pointer) + delta);
-                }
-                else
-                {
-                    ::metagl::glVertexAttribPointer(
-                        location, size, static_cast<::metagl::DataType>(type),
-                        normalized != 0 ? 1 : 0, stride,
-                        static_cast<const std::uint8_t*>(pointer) + delta);
-                }
+                    saved.stride != 0 ? saved.stride
+                                      : static_cast<std::intptr_t>(saved.size) *
+                                            Es2AttribComponentBytes(static_cast<GLenum>(saved.type));
+                SetAttribPointer(saved, static_cast<std::intptr_t>(baseVertex) * effectiveStride);
+                shifted.pointers[static_cast<std::size_t>(shifted.count++)] = saved;
             }
 
+            ::metagl::glBindBuffer(::metagl::BufferTarget::Array,
+                                   ::metagl::BufferId{static_cast<GLuint>(previousArrayBuffer)});
+            return shifted;
+        }
+
+        /// Puts back the pointers ShiftEnabledPerVertexAttribPointers moved. Must run while the same
+        /// VAO is bound.
+        void RestoreAttribPointers(const ShiftedAttribPointers& shifted)
+        {
+            if (shifted.count == 0) return;
+
+            GLint previousArrayBuffer = 0;
+            ::metagl::glGetIntegerv(::metagl::GetParameter::ArrayBufferBinding, &previousArrayBuffer);
+            for (int i = 0; i < shifted.count; ++i)
+            {
+                SetAttribPointer(shifted.pointers[static_cast<std::size_t>(i)], 0);
+            }
             ::metagl::glBindBuffer(::metagl::BufferTarget::Array,
                                    ::metagl::BufferId{static_cast<GLuint>(previousArrayBuffer)});
         }
@@ -5860,6 +5910,7 @@ if (ProfileUsesGlslEs100())
 
         device.initialize(glProcAddressLoader);
         DetectNativeWireframeApi();
+        DetectAttribPointerQueries();
         // WebGL commonly exposes only four rasterizer subpixel bits. Wine's usual 63/128-pixel
         // displacement rounds back to exactly half a pixel at that precision, putting XNA's 1x1
         // right triangles on an excluded fill edge again. Use the closest representable value
@@ -6370,6 +6421,7 @@ else
         if (ProfileIsDesktopCore())
             EnableVertexProgramPointSize();
         DetectNativeWireframeApi();
+        DetectAttribPointerQueries();
         SetNativePolygonMode(fillModeWireframe_);
         ApplyCurrentDepthBias();
 
@@ -8142,6 +8194,31 @@ if (!ProfileIsEs2ApiGeneration())
                 metagl::glDisable(polygonOffsetLine);
         }
         device.set_polygon_offset(slopeScaleDepthBias_, depthBias_ * depthScale);
+    }
+
+    void EasyGLRenderer::DetectAttribPointerQueries()
+    {
+        attribPointerQueriesReliable_ = true;
+        // CNA_EASYGL_CPU_BASE_VERTEX=1 takes the CPU path on any driver, so it is tested off the
+        // emulator too (IndexedDrawDeferredTests' CpuRebasedBaseVertexTest).
+        if (const char* forced = std::getenv("CNA_EASYGL_CPU_BASE_VERTEX");
+            forced != nullptr && forced[0] == '1')
+        {
+            attribPointerQueriesReliable_ = false;
+            return;
+        }
+#if defined(__ANDROID__)
+        // The Android emulator's GLES encoder answers glGetVertexAttribiv and
+        // glGetVertexAttribPointerv from a client-side copy of the vertex array state that does
+        // not follow the bound VAO: the pointer rebase saw one enabled attribute of three per draw
+        // and drew every Model as scattered triangles (cna-cs CSX-071). Probes of the pattern did
+        // not reproduce it, so the emulator is recognised rather than detected.
+        char value[PROP_VALUE_MAX] = {};
+        const bool emulator =
+            (__system_property_get("ro.boot.qemu", value) > 0 && value[0] == '1') ||
+            (__system_property_get("ro.kernel.qemu", value) > 0 && value[0] == '1');
+        attribPointerQueriesReliable_ = !emulator;
+#endif
     }
 
     void EasyGLRenderer::DetectNativeWireframeApi()
@@ -11904,6 +11981,53 @@ if (ProfileIsEs2ApiGeneration())
             ::easygl::BufferUsage::DynamicDraw);
     }
 
+    void EasyGLRenderer::BindRebasedIndices32(
+        const EasyGLIndexBufferRenderer& ib, int startIndex, int indexCount, int baseVertex)
+    {
+        // 32-bit whatever the source width: a 16-bit index plus the base can pass 65535.
+        const std::size_t indexSize = ib.thirtyTwoBit ? sizeof(std::uint32_t) : sizeof(std::uint16_t);
+        const auto& source = ib.GetCpuBytes();
+        negativeBaseVertexScratch_.assign(static_cast<std::size_t>(indexCount) * sizeof(std::uint32_t), 0);
+        for (int i = 0; i < indexCount; ++i)
+        {
+            const std::int64_t sourceElement = static_cast<std::int64_t>(startIndex) + i;
+            if (sourceElement < 0 || sourceElement >= ib.GetIndexCount())
+                continue;
+            const std::size_t sourceOffset = static_cast<std::size_t>(sourceElement) * indexSize;
+            if (sourceOffset > source.size() || indexSize > source.size() - sourceOffset)
+                continue;
+            std::uint32_t sourceIndex = 0;
+            if (ib.thirtyTwoBit)
+            {
+                std::memcpy(&sourceIndex, source.data() + sourceOffset, sizeof(std::uint32_t));
+            }
+            else
+            {
+                std::uint16_t narrow = 0;
+                std::memcpy(&narrow, source.data() + sourceOffset, sizeof(std::uint16_t));
+                sourceIndex = narrow;
+            }
+            const std::int64_t effective = static_cast<std::int64_t>(sourceIndex) + baseVertex;
+            if (effective < 0 || effective > (std::numeric_limits<std::uint32_t>::max)())
+                continue;
+            const auto rebased = static_cast<std::uint32_t>(effective);
+            std::memcpy(negativeBaseVertexScratch_.data() + static_cast<std::size_t>(i) * sizeof(std::uint32_t),
+                        &rebased, sizeof(std::uint32_t));
+        }
+
+        if (!negativeBaseVertexIboCreated_)
+        {
+            negativeBaseVertexIbo_.create();
+            negativeBaseVertexIboCreated_ = true;
+        }
+        negativeBaseVertexIbo_.bind(::easygl::BufferTarget::ElementArray);
+        negativeBaseVertexIbo_.set_data(
+            ::easygl::BufferTarget::ElementArray,
+            negativeBaseVertexScratch_.data(),
+            negativeBaseVertexScratch_.size(),
+            ::easygl::BufferUsage::DynamicDraw);
+    }
+
     void EasyGLRenderer::DrawIndexedWithBaseVertexFallback(
         const EasyGLIndexBufferRenderer& ib,
         ::easygl::PrimitiveType primitive,
@@ -11942,11 +12066,24 @@ if (ProfileIsEs2ApiGeneration())
         {
             draw();
         }
+        else if (ProfileRequiresBaseVertexPointerRebase() && !attribPointerQueriesReliable_)
+        {
+            BindRebasedIndices32(ib, startIndex, indexCount, effectiveBaseVertex);
+            if (instanced)
+            {
+                device.draw_elements_instanced(
+                    primitive, indexCount, ::easygl::DataType::UnsignedInt, nullptr, instanceCount);
+            }
+            else
+            {
+                device.draw_elements(primitive, indexCount, ::easygl::DataType::UnsignedInt, nullptr);
+            }
+        }
         else if (ProfileRequiresBaseVertexPointerRebase())
         {
-            ShiftEnabledPerVertexAttribPointers(effectiveBaseVertex, +1);
+            const ShiftedAttribPointers shifted = ShiftEnabledPerVertexAttribPointers(effectiveBaseVertex);
             draw();
-            ShiftEnabledPerVertexAttribPointers(effectiveBaseVertex, -1);
+            RestoreAttribPointers(shifted);
         }
         else if (instanced)
         {
