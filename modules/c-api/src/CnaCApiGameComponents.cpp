@@ -112,13 +112,18 @@ public:
     {
     }
 
+    // CBIND-129: the handler first, then the base -- the canonical shape, where an override does its
+    // own work and then calls base.Initialize(). For a drawable component the base is what loads
+    // content, so the reverse order ran load-content before the consumer's initialize had set up
+    // what it loads (XNA's ParticleSample sets its texture name in Initialize). CGame::Initialize
+    // orders its hook the same way for the same reason.
     void Initialize() override
     {
-        TBase::Initialize();
         if (callbacks_.initialize != nullptr) {
             const HandlerScope scope(owner_);
             callbacks_.initialize(callbacks_.context);
         }
+        TBase::Initialize();
     }
 
     void Update(GameTime& gameTime) override

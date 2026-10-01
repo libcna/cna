@@ -18,6 +18,9 @@ typedef struct BehaviorState {
     int unload_calls;
     int dispose_calls;
     int64_t last_elapsed_ticks;
+    int sequence;
+    int initialized_at;
+    int loaded_at;
 } BehaviorState;
 
 typedef struct EventState {
@@ -33,7 +36,9 @@ typedef struct CollectionState {
 
 static void on_initialize(void* const context)
 {
-    ++((BehaviorState*)context)->initialize_calls;
+    BehaviorState* const state = (BehaviorState*)context;
+    ++state->initialize_calls;
+    state->initialized_at = ++state->sequence;
 }
 
 static void on_update_component(const CNA_GameTime* const game_time, void* const context)
@@ -51,7 +56,9 @@ static void on_draw_component(const CNA_GameTime* const game_time, void* const c
 
 static void on_load_content(void* const context)
 {
-    ++((BehaviorState*)context)->load_calls;
+    BehaviorState* const state = (BehaviorState*)context;
+    ++state->load_calls;
+    state->loaded_at = ++state->sequence;
 }
 
 static void on_unload_content(void* const context)
@@ -199,9 +206,19 @@ static int validate_component_behavior(const CNA_Handle game)
     /* Initializing a drawable component loads its content once, which is the canonical behavior
        rather than a separate step a caller has to trigger. */
     if (cna_game_component_initialize(drawable) != CNA_RESULT_SUCCESS ||
-        drawn.load_calls != 1 || drawn.initialize_calls != 1 ||
-        cna_game_component_initialize(drawable) != CNA_RESULT_SUCCESS ||
-        drawn.load_calls != 1) {
+        drawn.load_calls != 1 || drawn.initialize_calls != 1) {
+        return 0;
+    }
+    /* CBIND-129: the component's own initialize runs before the base loads its content, as an
+       override that calls base.Initialize() last does. Content set up in initialize must exist by
+       the time load-content asks for it. */
+    if (drawn.initialized_at == 0 || drawn.loaded_at <= drawn.initialized_at) {
+        return 0;
+    }
+    /* Initializing again runs the handler again -- an override is ordinary code -- but the base
+       loads content only once. */
+    if (cna_game_component_initialize(drawable) != CNA_RESULT_SUCCESS ||
+        drawn.initialize_calls != 2 || drawn.load_calls != 1) {
         return 0;
     }
     if (cna_drawable_game_component_get_visible(drawable, &flag) != CNA_RESULT_SUCCESS ||
@@ -554,7 +571,7 @@ int main(void)
      * report initialized=true and updated 0 times across six frames.
      */
     {
-        BehaviorState ticker = {0, 0, 0, 0, 0, 0, 0};
+        BehaviorState ticker = {0};
         CNA_GameComponentCallbacks ticker_callbacks;
         CNA_GameComponentHandle component = CNA_INVALID_HANDLE;
         int frame = 0;
