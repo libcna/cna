@@ -50,7 +50,14 @@ are not identical.
   (`IsoLayoutExtraScancodesAreDroppedNotMarkedNone`).
 - **DEC-17 (accepted):** `SDLK_AC_BACK` → `Keys::Escape` (Android/browser Back button) — a CNA-only
   convenience not in FNA, so "back" acts as cancel/exit on those platforms. Tested
-  (`AndroidBackButtonMapsToEscape`).
+  (`AndroidBackButtonMapsToEscape`). The SDL3 pump latches each press (CBIND-137): Android's back
+  gesture delivers down and up together, between two updates, so a key-array poll never saw it. The
+  next keyboard update reports Escape once, and on Android the next gamepad update reports
+  `GamePad(PlayerIndex.One).Buttons.Back` once -- the one button Windows Phone XNA gave that index,
+  and the only exit most phone samples check. An empty first slot reads as a connected pad holding
+  only Back for that frame (MonoGame's Android behaviour), a pad there gets Back added; capabilities
+  are unchanged. Tested (`Sdl3SystemBackTest.*`, `APadInTheFirstSlotHasBackAddedForOneFrame`,
+  `ASystemBackPressIsLatchedForTheNextKeyboardUpdate`).
 - **DEC-19 (accepted — matches FNA):** text-synthesis on key-down re-emits control chars gated on SDL's
   `repeat` flag — **the same gate FNA uses** (`else if (evt.key.repeat)`, `SDL3_FNAPlatform.cs:923`), so
   this is not a deviation. Tested (`KeyRepeatReemitsControlCharacter`).

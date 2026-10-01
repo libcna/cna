@@ -157,6 +157,9 @@ namespace CNA::Platform::Sdl3 {
         /// not done up front.
         void EnsureControllerSubsystem();
 
+        /// Hands one press of the system Back key to the services that report it (DEC-17).
+        void ObserveSystemBack();
+
         /// Per-subsystem acquisition count owned by THIS instance. SDL keeps its own global
         /// refcount; this one exists so the destructor can release exactly what it acquired and
         /// no more, which matters when the host application holds subsystems of its own.

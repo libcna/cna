@@ -41,9 +41,15 @@ namespace CNA::Platform::Sdl3 {
         [[nodiscard]] std::string GetKeyName(Scancode scancode) const override;
         /** @brief Resolves SDL's active-layout key name. */
         [[nodiscard]] KeyCode GetKeyFromName(const std::string& name) const override;
+        /**
+         * @brief Records a press of the system Back key, so that the next Update() reports Escape
+         * (DEC-17) even when the key was released again before it ran.
+         */
+        void ObserveSystemBack();
 
     private:
         KeyboardSnapshot snapshot_;
+        bool systemBackPending_ = false;
     };
 
     /** @brief SDL3-backed mouse state and cursor control. */
@@ -175,6 +181,15 @@ namespace CNA::Platform::Sdl3 {
         /** @brief Reads one touchpad contact. */
         [[nodiscard]] bool TryGetTouchpadFinger(int index, int touchpad, int fingerIndex,
                                                 GamepadTouchpadFinger& finger) const override;
+        /**
+         * @brief Records a press of the phone's Back button, so that the next Update() reports it
+         * as player one's Back button for one frame.
+         *
+         * Windows Phone XNA gave PlayerIndex.One exactly that button. A pad in the first slot gets
+         * it added to what it reports; an empty first slot reads as a connected pad holding only
+         * Back, and as empty again from the following Update().
+         */
+        void ObserveSystemBack();
 
     private:
         void CloseAll();
@@ -186,6 +201,8 @@ namespace CNA::Platform::Sdl3 {
         std::array<GamepadSnapshot, GamepadSlotCount> snapshots_{};
         std::array<GamepadCapabilities, GamepadSlotCount> capabilities_{};
         std::array<GamepadInfo, GamepadSlotCount> infos_{};
+        bool systemBackPending_ = false;
+        bool systemBackShown_ = false;
     };
 
     /** @brief SDL3-backed raw, unmapped joystick snapshots. */

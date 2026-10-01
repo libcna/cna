@@ -253,6 +253,97 @@ TEST_F(Sdl3InputTest, RepeatedUpdatesDoNotLeakGamepadHandles)
 
 // --- raw joystick -------------------------------------------------------------------------------
 
+// DEC-17: the system Back key is latched as it arrives. Android's back gesture delivers its down
+// and up together, between two updates, where the key array never shows it.
+
+TEST(Sdl3SystemBackTest, ABackPressReleasedBeforeTheUpdateReadsAsEscapeForOneFrame)
+{
+    CNA::Platform::Sdl3::Sdl3Keyboard keyboard;
+    const auto escapes = [&keyboard] {
+        const std::vector<KeyCode>& pressed = keyboard.GetSnapshot().pressedKeys;
+        return std::count(pressed.begin(), pressed.end(), KeyCode::Escape);
+    };
+
+    keyboard.ObserveSystemBack();
+    keyboard.Update();
+    EXPECT_EQ(escapes(), 1);
+    keyboard.Update();
+    EXPECT_EQ(escapes(), 0);
+}
+
+TEST(Sdl3SystemBackTest, AnEmptyFirstSlotReadsAsAPadHoldingOnlyBackForOneFrame)
+{
+    CNA::Platform::Sdl3::Sdl3Gamepad gamepad;
+    gamepad.Update();
+    if (gamepad.GetSnapshot(0).connected)
+    {
+        GTEST_SKIP() << "a real pad occupies the first slot";
+    }
+
+    gamepad.ObserveSystemBack();
+    gamepad.Update();
+    const GamepadSnapshot& first = gamepad.GetSnapshot(0);
+    EXPECT_TRUE(first.connected);
+    EXPECT_EQ(first.buttons, static_cast<std::uint32_t>(GamepadButton::Back));
+    EXPECT_NE(first.packetNumber, 0u);
+    for (const float axis : first.axes)
+    {
+        EXPECT_EQ(axis, 0.0f);
+    }
+    for (int index = 1; index < GamepadSlotCount; ++index)
+    {
+        EXPECT_FALSE(gamepad.GetSnapshot(index).connected) << "slot " << index;
+    }
+
+    gamepad.Update();
+    EXPECT_FALSE(gamepad.GetSnapshot(0).connected);
+    EXPECT_EQ(gamepad.GetSnapshot(0).buttons, 0u);
+    EXPECT_EQ(gamepad.GetSnapshot(0).packetNumber, 0u);
+}
+
+TEST_F(Sdl3InputTest, APadInTheFirstSlotHasBackAddedForOneFrame)
+{
+    platform_->AcquireSubsystem(PlatformSubsystem::Gamepad);
+    gamepadSubsystemAcquired_ = true;
+    auto* gamepad = dynamic_cast<CNA::Platform::Sdl3::Sdl3Gamepad*>(platform_->GetGamepad());
+    ASSERT_NE(gamepad, nullptr);
+    gamepad->Update();
+    if (gamepad->GetSnapshot(0).connected)
+    {
+        GTEST_SKIP() << "a real pad occupies the first slot";
+    }
+
+    SDL_VirtualJoystickDesc description;
+    SDL_INIT_INTERFACE(&description);
+    description.type = SDL_JOYSTICK_TYPE_GAMEPAD;
+    description.naxes = SDL_GAMEPAD_AXIS_COUNT;
+    description.nbuttons = SDL_GAMEPAD_BUTTON_COUNT;
+    description.name = "CNA virtual gamepad";
+    virtualJoystick_ = SDL_AttachVirtualJoystick(&description);
+    ASSERT_NE(virtualJoystick_, 0u) << SDL_GetError();
+    gamepad->Update();
+    ASSERT_TRUE(gamepad->GetSnapshot(0).connected);
+
+    SDL_Joystick* native = SDL_GetJoystickFromID(virtualJoystick_);
+    ASSERT_NE(native, nullptr);
+    ASSERT_TRUE(SDL_SetJoystickVirtualButton(native, SDL_GAMEPAD_BUTTON_SOUTH, true));
+    SDL_UpdateJoysticks();
+    gamepad->Update();
+    const std::uint32_t held = gamepad->GetSnapshot(0).buttons;
+    const std::uint32_t packetNumber = gamepad->GetSnapshot(0).packetNumber;
+    EXPECT_EQ(held, static_cast<std::uint32_t>(GamepadButton::A));
+
+    gamepad->ObserveSystemBack();
+    gamepad->Update();
+    EXPECT_TRUE(gamepad->GetSnapshot(0).connected);
+    EXPECT_EQ(gamepad->GetSnapshot(0).buttons, held | static_cast<std::uint32_t>(GamepadButton::Back));
+    EXPECT_NE(gamepad->GetSnapshot(0).packetNumber, packetNumber);
+
+    gamepad->Update();
+    EXPECT_TRUE(gamepad->GetSnapshot(0).connected);
+    EXPECT_EQ(gamepad->GetSnapshot(0).buttons, held);
+}
+
 TEST_F(Sdl3InputTest, RawJoystickUpdateAndUnknownQueriesAreSafeWithoutHardware)
 {
     IPlatformJoystick* joystick = platform_->GetJoystick();

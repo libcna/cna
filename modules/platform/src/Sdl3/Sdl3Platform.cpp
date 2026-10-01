@@ -577,6 +577,10 @@ namespace CNA::Platform::Sdl3 {
             {
                 continue;
             }
+            if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_AC_BACK && !event.key.repeat)
+            {
+                ObserveSystemBack();
+            }
             if (MapSdlEvent(event, translated))
             {
                 mouse_.ObserveEvent(translated);
@@ -591,6 +595,21 @@ namespace CNA::Platform::Sdl3 {
         const std::lock_guard lock(lifecycleMutex_);
         destination.insert(destination.end(), pendingLifecycle_.begin(), pendingLifecycle_.end());
         pendingLifecycle_.clear();
+    }
+
+    void Sdl3Platform::ObserveSystemBack()
+    {
+        // Latched rather than read from the key array at the next update: Android's back gesture
+        // delivers its down and up together, between two updates, where no state poll sees it.
+        keyboard_.ObserveSystemBack();
+#ifdef __ANDROID__
+        // The phone's Back is also player one's Back button, as on Windows Phone, for a game that
+        // has asked for pads; one that has not would otherwise be handed the press much later.
+        if (IsSubsystemInitialized(PlatformSubsystem::Gamepad))
+        {
+            gamepad_.ObserveSystemBack();
+        }
+#endif
     }
 
     std::uint64_t Sdl3Platform::GetPerformanceCounter() const

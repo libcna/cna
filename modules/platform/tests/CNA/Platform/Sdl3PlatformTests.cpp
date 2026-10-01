@@ -449,6 +449,44 @@ TEST_F(Sdl3PlatformTest, APushedLifecycleEventArrivesExactlyOnce)
     EXPECT_EQ(CountLifecycle(batch, AppLifecycleKind::DidEnterForeground), 0u);
 }
 
+TEST_F(Sdl3PlatformTest, ASystemBackPressIsLatchedForTheNextKeyboardUpdate)
+{
+    // DEC-17. A pushed key event never reaches SDL's key array, exactly like a press released
+    // before the next update, so Escape here can only come from the pump's latch.
+    const EventQueue queue;
+    ASSERT_TRUE(queue.Up());
+    std::vector<PlatformEvent> batch;
+    platform_->PollEvents(batch);
+    IPlatformKeyboard* keyboard = platform_->GetKeyboard();
+    ASSERT_NE(keyboard, nullptr);
+    const auto escapes = [keyboard] {
+        const std::vector<KeyCode>& pressed = keyboard->GetSnapshot().pressedKeys;
+        return std::count(pressed.begin(), pressed.end(), KeyCode::Escape);
+    };
+
+    SDL_Event down{};
+    down.type = SDL_EVENT_KEY_DOWN;
+    down.key.key = SDLK_AC_BACK;
+    down.key.down = true;
+    SDL_Event up = down;
+    up.type = SDL_EVENT_KEY_UP;
+    up.key.down = false;
+    ASSERT_TRUE(SDL_PushEvent(&down));
+    ASSERT_TRUE(SDL_PushEvent(&up));
+    platform_->PollEvents(batch);
+    keyboard->Update();
+    EXPECT_EQ(escapes(), 1);
+    keyboard->Update();
+    EXPECT_EQ(escapes(), 0);
+
+    // An auto-repeat is not another press.
+    down.key.repeat = true;
+    ASSERT_TRUE(SDL_PushEvent(&down));
+    platform_->PollEvents(batch);
+    keyboard->Update();
+    EXPECT_EQ(escapes(), 0);
+}
+
 // --- not-yet-implemented surfaces refuse rather than returning something broken ---------------------
 
 TEST_F(Sdl3PlatformTest, NotYetImplementedSurfacesRefuseInsteadOfReturningSomethingBroken)

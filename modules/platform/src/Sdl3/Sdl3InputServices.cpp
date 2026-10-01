@@ -17,6 +17,7 @@
 #include <array>
 #include <limits>
 #include <string>
+#include <utility>
 
 namespace CNA::Platform::Sdl3 {
 
@@ -73,6 +74,15 @@ namespace CNA::Platform::Sdl3 {
         snapshot_.modifiers = ToPlatformModifiers(SDL_GetModState());
         std::array<bool, 256> seen{};
 
+        // A Back press that began and ended between two updates -- Android's back gesture delivers
+        // its down and up together -- is in no key array; the latch keeps it for one frame.
+        const bool systemBack = std::exchange(systemBackPending_, false);
+        if (systemBack)
+        {
+            seen[static_cast<std::uint32_t>(KeyCode::Escape)] = true;
+            snapshot_.pressedKeys.push_back(KeyCode::Escape);
+        }
+
         int count = 0;
         const bool* keys = SDL_GetKeyboardState(&count);
         if (keys == nullptr)
@@ -109,6 +119,8 @@ namespace CNA::Platform::Sdl3 {
     }
 
     const KeyboardSnapshot& Sdl3Keyboard::GetSnapshot() const { return snapshot_; }
+
+    void Sdl3Keyboard::ObserveSystemBack() { systemBackPending_ = true; }
 
     bool Sdl3Keyboard::HasKeyboard() const { return SDL_HasKeyboard(); }
 
@@ -436,6 +448,12 @@ namespace CNA::Platform::Sdl3 {
 
     void Sdl3Gamepad::Update()
     {
+        // The pad ObserveSystemBack() put in an empty first slot lasts one frame.
+        if (std::exchange(systemBackShown_, false) && handles_[0] == nullptr)
+        {
+            snapshots_[0] = {};
+        }
+
         int count = 0;
         SDL_JoystickID* ids = SDL_GetGamepads(&count);
 
@@ -576,7 +594,28 @@ namespace CNA::Platform::Sdl3 {
             infos_[slot].connectionState =
                 ToGamepadConnectionState(SDL_GetGamepadConnectionState(gamepad));
         }
+
+        if (std::exchange(systemBackPending_, false))
+        {
+            GamepadSnapshot& first = snapshots_[0];
+            const auto back = static_cast<std::uint32_t>(GamepadButton::Back);
+            if (handles_[0] == nullptr)
+            {
+                const std::uint32_t packetNumber = first.packetNumber;
+                first = {};
+                first.connected = true;
+                first.packetNumber = packetNumber;
+                systemBackShown_ = true;
+            }
+            if ((first.buttons & back) == 0)
+            {
+                first.buttons |= back;
+                ++first.packetNumber;
+            }
+        }
     }
+
+    void Sdl3Gamepad::ObserveSystemBack() { systemBackPending_ = true; }
 
     int Sdl3Gamepad::GetCount() const { return GamepadSlotCount; }
 
