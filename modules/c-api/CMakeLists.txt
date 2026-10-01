@@ -1877,6 +1877,24 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    add_executable(cna_c_api_foreign_thread_calls_smoke
+        tests/pure_c/ForeignThreadCallsSmoke.c
+    )
+    set_target_properties(cna_c_api_foreign_thread_calls_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_foreign_thread_calls_smoke PRIVATE cna_c_api Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_foreign_thread_calls_smoke)
+    add_test(NAME CApi_ForeignThreadCallsSmoke COMMAND cna_c_api_foreign_thread_calls_smoke)
+    set_tests_properties(CApi_ForeignThreadCallsSmoke PROPERTIES TIMEOUT 120)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_ForeignThreadCallsSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        )
+    endif()
+
     add_executable(cna_c_api_runtime_components_smoke
         tests/pure_c/RuntimeComponentsSmoke.c
     )

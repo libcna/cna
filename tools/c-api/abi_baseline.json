@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 9728,
+  "encoded": 9984,
   "major": 0,
-  "minor": 38,
+  "minor": 39,
   "patch": 0,
-  "runtime": 9728
+  "runtime": 9984
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -1955,6 +1955,7 @@
   "cna_game_services_contains_ext",
   "cna_game_services_remove_ext",
   "cna_game_set_content_manager_ext",
+  "cna_game_set_foreign_thread_calls_ext",
   "cna_game_set_frame_hooks_ext",
   "cna_game_set_inactive_sleep_time_ticks",
   "cna_game_set_is_fixed_time_step",
@@ -4065,9 +4066,9 @@
   "cna_write_leaderboards_event_info_init"
  ],
  "integers": {
-  "CNA_ABI_VERSION": 9728,
+  "CNA_ABI_VERSION": 9984,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 38,
+  "CNA_ABI_VERSION_MINOR": 39,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,

@@ -4,7 +4,11 @@
 
 #include "System/ArgumentException.hpp"
 
+#include <chrono>
+#include <condition_variable>
+#include <deque>
 #include <limits>
+#include <mutex>
 #include <thread>
 #include <typeinfo>
 #include <vector>
@@ -28,6 +32,33 @@ struct PendingException {
 };
 
 thread_local PendingException pendingException;
+
+thread_local bool foreignThreadRefusal = false;
+
+struct ForeignCall final {
+    CNA_Result (*run)(void*) = nullptr;
+    void* context = nullptr;
+    CNA_Result result = CNA_RESULT_INTERNAL;
+    LastError error;
+    bool done = false;
+};
+
+// One game exists at a time, so one queue serves it. Never destroyed: a worker may still be waiting
+// in it while static destructors run at exit.
+struct ForeignThreadCallQueue final {
+    std::mutex mutex;
+    std::condition_variable arrived;
+    std::condition_variable finished;
+    std::deque<ForeignCall*> calls;
+    std::thread::id gameThread;
+    bool enabled = false;
+};
+
+[[nodiscard]] ForeignThreadCallQueue& ForeignCalls() noexcept
+{
+    static auto* const queue = new ForeignThreadCallQueue();
+    return *queue;
+}
 
 /**
  * The exception's canonical .NET type name. CNA's C++ namespaces are the .NET ones
@@ -132,6 +163,130 @@ void NoteTranslatedException(const std::exception& exception) noexcept
     } catch (...) {
         pendingException = PendingException{};
     }
+}
+
+void NoteForeignThreadRefusal() noexcept
+{
+    foreignThreadRefusal = true;
+}
+
+void ClearForeignThreadRefusal() noexcept
+{
+    foreignThreadRefusal = false;
+}
+
+bool TakeForeignThreadRefusal() noexcept
+{
+    const bool refused = foreignThreadRefusal;
+    foreignThreadRefusal = false;
+    return refused;
+}
+
+bool ShouldServeOnGameThread() noexcept
+{
+    ForeignThreadCallQueue& queue = ForeignCalls();
+    std::lock_guard lock(queue.mutex);
+    return queue.enabled && queue.gameThread != std::this_thread::get_id();
+}
+
+CNA_Result ServeOnGameThread(CNA_Result (*const run)(void*), void* const context) noexcept
+{
+    ForeignThreadCallQueue& queue = ForeignCalls();
+    ForeignCall call;
+    call.run = run;
+    call.context = context;
+    {
+        std::unique_lock lock(queue.mutex);
+        if (!queue.enabled || queue.gameThread == std::this_thread::get_id()) {
+            return CNA_RESULT_THREAD;
+        }
+        try {
+            queue.calls.push_back(&call);
+        } catch (...) {
+            return Fail(CNA_RESULT_OUT_OF_MEMORY, CNA_ERROR_CATEGORY_MEMORY, "Native allocation failed.");
+        }
+        queue.arrived.notify_all();
+        queue.finished.wait(lock, [&call] { return call.done; });
+    }
+
+    try {
+        lastError = call.result == CNA_RESULT_SUCCESS ? LastError{} : std::move(call.error);
+    } catch (...) {
+        lastError = LastError{};
+        lastError.result = call.result;
+        lastError.category = ErrorCategoryForResult(call.result);
+    }
+    return call.result;
+}
+
+void SetForeignThreadCalls(const bool enabled) noexcept
+{
+    if (!enabled) {
+        EndForeignThreadCalls();
+        return;
+    }
+    ForeignThreadCallQueue& queue = ForeignCalls();
+    std::lock_guard lock(queue.mutex);
+    queue.gameThread = std::this_thread::get_id();
+    queue.enabled = true;
+}
+
+void RunForeignThreadCalls() noexcept
+{
+    ForeignThreadCallQueue& queue = ForeignCalls();
+    std::unique_lock lock(queue.mutex);
+    if (!queue.enabled || queue.gameThread != std::this_thread::get_id()) {
+        return;
+    }
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(8);
+    bool served = false;
+    while (true) {
+        if (queue.calls.empty()) {
+            if (!served
+                || !queue.arrived.wait_until(lock, deadline, [&queue] { return !queue.calls.empty(); })) {
+                return;
+            }
+        }
+
+        ForeignCall* const call = queue.calls.front();
+        queue.calls.pop_front();
+        lock.unlock();
+        call->result = call->run(call->context);
+        if (call->result != CNA_RESULT_SUCCESS) {
+            try {
+                call->error = GetLastError();
+            } catch (...) {
+                call->error.result = call->result;
+            }
+        }
+        lock.lock();
+        call->done = true;
+        queue.finished.notify_all();
+        served = true;
+        if (std::chrono::steady_clock::now() >= deadline) {
+            return;
+        }
+    }
+}
+
+void EndForeignThreadCalls() noexcept
+{
+    ForeignThreadCallQueue& queue = ForeignCalls();
+    std::lock_guard lock(queue.mutex);
+    queue.enabled = false;
+    for (ForeignCall* const call : queue.calls) {
+        call->result = CNA_RESULT_INVALID_STATE;
+        call->error.result = CNA_RESULT_INVALID_STATE;
+        call->error.category = CNA_ERROR_CATEGORY_STATE;
+        try {
+            call->error.message = "The game ended before its thread could run this call.";
+        } catch (...) {
+        }
+        call->done = true;
+    }
+    queue.calls.clear();
+    queue.finished.notify_all();
 }
 
 void SetLastError(
@@ -381,6 +536,7 @@ CNA_Result HandleRegistry::GetUserTag(
         return result;
     }
     if (slot->creationThread != std::this_thread::get_id()) {
+        NoteForeignThreadRefusal();
         return CNA_RESULT_THREAD;
     }
     *outTag = slot->userTag;
@@ -398,6 +554,7 @@ CNA_Result HandleRegistry::SetUserTag(
         return result;
     }
     if (slot->creationThread != std::this_thread::get_id()) {
+        NoteForeignThreadRefusal();
         return CNA_RESULT_THREAD;
     }
     slot->userTag = tag;
@@ -415,6 +572,7 @@ CNA_Result HandleRegistry::Release(const CNA_Handle handle)
             return result;
         }
         if (slot->creationThread != std::this_thread::get_id()) {
+            NoteForeignThreadRefusal();
             return CNA_RESULT_THREAD;
         }
 

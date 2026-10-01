@@ -2,13 +2,24 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.38.0** (`CBIND-134`). It adds one route,
+The current experimental ABI is **0.39.0** (`CBIND-141`). It adds one route,
+`cna_game_set_foreign_thread_calls_ext`: another thread's calls on the game thread's handles run on
+the game thread. Every handle belongs to the thread that created it, and any other thread is refused
+with `CNA_RESULT_THREAD` -- which stays the default. XNA let a game create resources, move their data
+and load content on a thread of its own, so a binding that offers that turns this on: a call that a
+handle refused only because another thread created it is queued, and the game thread runs it at the
+start of its next update or draw, inside the lifecycle callback scope, and hands back the result
+and, for a failure, the error record. 3,209 exports; purely additive.
+
+### Previous ABI 0.38.0
+
+The ABI was **0.38.0** (`CBIND-134`). It adds one route,
 `cna_game_run_frame_ext`: the run a host drives one frame at a time. A browser page cannot block in
 `cna_game_run`, so it calls this from each animation frame instead; the first call initializes the
 game and begins the run, every call runs one frame, and the call that finds the game exited ends
 the run as `cna_game_run` does -- `exiting`, then `end_run` -- and reports it. `cna_game_run_one_frame`
 steps frames too, but never begins or ends a run, so a host built on it never delivered `begin_run`,
-`end_run` or `exiting`. 3,208 exports; purely additive.
+`end_run` or `exiting`, one route more than 0.37.0; purely additive.
 
 ### Previous ABI 0.37.0
 
@@ -564,7 +575,7 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-The current baseline records 3,208 exports; build configurations must export the same surface.
+The current baseline records 3,209 exports; build configurations must export the same surface.
 That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose backend or layer is absent exists and refuses, rather than

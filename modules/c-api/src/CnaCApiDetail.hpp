@@ -273,8 +273,45 @@ void SetLastSensorErrorId(int32_t sensorErrorId) noexcept;
  */
 void NoteTranslatedException(const std::exception& exception) noexcept;
 
+/**
+ * @brief Notes that a handle lookup refused this thread because another thread created the handle.
+ *
+ * Read by `CallWithExceptionBarrier`, which can then run the call on the game thread instead
+ * (`cna_game_set_foreign_thread_calls_ext`, CBIND-141). Any other `CNA_RESULT_THREAD` -- a route
+ * that must itself run on the game thread -- is not noted, and stays a refusal.
+ */
+void NoteForeignThreadRefusal() noexcept;
+
+void ClearForeignThreadRefusal() noexcept;
+
+[[nodiscard]] bool TakeForeignThreadRefusal() noexcept;
+
+/** @brief Whether foreign-thread calls are on and this thread is not the game thread. */
+[[nodiscard]] bool ShouldServeOnGameThread() noexcept;
+
+/**
+ * @brief Queues a call for the game thread and blocks until it has run there.
+ *
+ * Returns the call's result; a failure's error record is the one the call left on the game thread.
+ */
+[[nodiscard]] CNA_Result ServeOnGameThread(CNA_Result (*run)(void*), void* context) noexcept;
+
+/** @brief Turns foreign-thread calls on for the calling thread as the game thread, or off. */
+void SetForeignThreadCalls(bool enabled) noexcept;
+
+/**
+ * @brief Runs the calls other threads queued, from the game thread inside a callback scope.
+ *
+ * Keeps serving while calls keep arriving, for up to 8 ms: a worker usually asks again as soon as
+ * its previous call returns.
+ */
+void RunForeignThreadCalls() noexcept;
+
+/** @brief Turns foreign-thread calls off and fails every call still waiting. */
+void EndForeignThreadCalls() noexcept;
+
 template<typename TCallable>
-[[nodiscard]] CNA_Result CallWithExceptionBarrier(TCallable&& callable) noexcept
+[[nodiscard]] CNA_Result CallHereWithExceptionBarrier(TCallable&& callable) noexcept
 {
     try {
         try {
@@ -401,6 +438,29 @@ template<typename TCallable>
 }
 
 /**
+ * @brief Runs a route's body, translating every exception into a result and an error record.
+ *
+ * With foreign-thread calls on (CBIND-141), a call that another thread's handle refused -- and
+ * nothing else -- is run again on the game thread, and this thread waits for it there.
+ */
+template<typename TCallable>
+[[nodiscard]] CNA_Result CallWithExceptionBarrier(TCallable&& callable) noexcept
+{
+    ClearForeignThreadRefusal();
+    const CNA_Result result = CallHereWithExceptionBarrier(callable);
+    if (result != CNA_RESULT_THREAD || !TakeForeignThreadRefusal() || !ShouldServeOnGameThread()) {
+        return result;
+    }
+
+    auto again = [&callable]() noexcept -> CNA_Result {
+        return CallHereWithExceptionBarrier(callable);
+    };
+    return ServeOnGameThread(
+        [](void* context) noexcept -> CNA_Result { return (*static_cast<decltype(again)*>(context))(); },
+        &again);
+}
+
+/**
  * @brief Reports whether a caller-supplied `CNA_Bool` is one of the two values the ABI defines.
  *
  * CBIND-067: `docs/c-api/ABI_VERSIONING.md` has always said only `CNA_FALSE` and `CNA_TRUE` are
@@ -486,6 +546,7 @@ public:
             return CNA_RESULT_INVALID_HANDLE;
         }
         if (slot->creationThread != std::this_thread::get_id()) {
+            NoteForeignThreadRefusal();
             return CNA_RESULT_THREAD;
         }
 

@@ -235,6 +235,30 @@ CNA_C_API CNA_Result cna_game_run_one_frame(CNA_Handle game);
 CNA_C_API CNA_Result cna_game_run_frame_ext(CNA_Handle game, CNA_Bool* out_running);
 
 /**
+ * @brief Lets other threads use the game thread's handles: their calls run on the game thread.
+ *
+ * Every handle belongs to the thread that created it, and a call from any other thread is refused
+ * with `CNA_RESULT_THREAD`. XNA let a game create resources, move their data and load content on a
+ * thread of its own while the game thread drew; a binding that offers that turns this on. A call
+ * that a handle refused only because another thread created it is then queued instead: the caller
+ * blocks, and the game thread runs the call at the start of its next update or draw, inside the
+ * lifecycle callback scope -- for up to 8 ms per step while calls keep arriving -- and the caller
+ * receives its result and, for a failure, the error record it left. Calls that do not involve
+ * another thread's handle run where they are made, as before, and a route that must itself run on
+ * the game thread (driving or destroying the game) still refuses.
+ *
+ * Call it on the game's thread, which becomes the thread that serves the calls. Calls still
+ * waiting when the feature is turned off or the game is destroyed fail with
+ * `CNA_RESULT_INVALID_STATE`. A game thread that waits for such a thread while it waits for a call
+ * deadlocks.
+ *
+ * @param game Owned game handle.
+ * @param enabled `CNA_TRUE` to serve other threads' calls, `CNA_FALSE` (the default) to refuse them.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_game_set_foreign_thread_calls_ext(CNA_Handle game, CNA_Bool enabled);
+
+/**
  * @brief Runs native frames until @ref cna_game_request_exit is called or a callback fails.
  *
  * @param game Owned game handle.

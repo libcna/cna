@@ -220,6 +220,9 @@ protected:
     {
         // One scope for the step, so the components the base pass updates run inside it too.
         const CallbackScope scope(*this);
+        // Inside the scope, where the borrowed device is valid: what other threads queued
+        // (CBIND-141) runs before this frame's update.
+        CNA::C::Detail::RunForeignThreadCalls();
         const CNA_GameTime cGameTime = MakeCGameTime(gameTime);
         Invoke(callbacks_.update, &cGameTime);
         // The base pass is not optional and was missing: `Game::Update` is what walks the
@@ -241,6 +244,7 @@ protected:
     void Draw(const GameTime& gameTime) override
     {
         const CallbackScope scope(*this);
+        CNA::C::Detail::RunForeignThreadCalls();
         const CNA_GameTime cGameTime = MakeCGameTime(gameTime);
         Invoke(callbacks_.draw, &cGameTime);
         // Same omission and same ordering: `Game::Draw` draws the visible drawable components,
@@ -756,6 +760,22 @@ CNA_Result cna_game_run_frame_ext(const CNA_Handle gameHandle, CNA_Bool* const o
     });
 }
 
+CNA_Result cna_game_set_foreign_thread_calls_ext(const CNA_Handle gameHandle, const CNA_Bool enabled)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = CNA::C::Detail::ValidateCanonicalBool(enabled, "enabled");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<CGame> game;
+        if (const CNA_Result result = GetGame(gameHandle, &game); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        CNA::C::Detail::SetForeignThreadCalls(enabled == CNA_TRUE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_game_run(const CNA_Handle gameHandle)
 {
     return CallWithExceptionBarrier([&]() {
@@ -867,6 +887,7 @@ CNA_Result cna_game_destroy(const CNA_Handle gameHandle)
                 CNA_ERROR_CATEGORY_STATE,
                 "All owned C child resources must be destroyed before the game.");
         }
+        CNA::C::Detail::EndForeignThreadCalls();
 
         game->Shutdown();
         // Shutdown has already disposed the canonical graphics device, so any C subscriber has
