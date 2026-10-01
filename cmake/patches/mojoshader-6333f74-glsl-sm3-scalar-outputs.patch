@@ -1,0 +1,40 @@
+diff --git a/profiles/mojoshader_profile_glsl.c b/profiles/mojoshader_profile_glsl.c
+--- a/profiles/mojoshader_profile_glsl.c
++++ b/profiles/mojoshader_profile_glsl.c
+@@ -116,6 +116,18 @@
+ } // get_GLSL_srcarg_varname
+ 
+ 
++// Under Shader Model 3 semantic packing a vertex output is a vec4 temporary, copied to its
++// semantic at the end of the shader (gl_PointSize as its .x). isscalar() still names a point-size
++// or fog output a scalar, which it is only below 3.0, and a write to it then lost its mask: the
++// XNA effect compiler writes a PSIZE output's x alone, emitted as a float assigned to a vec4.
++static int isscalar_GLSL(Context *ctx, const RegisterType rtype, const int rnum)
++{
++    if (shader_version_atleast(ctx, 3, 0) && shader_is_vertex(ctx) &&
++        (rtype == REG_TYPE_OUTPUT))
++        return 0;
++    return isscalar(ctx, ctx->shader_type, rtype, rnum);
++} // isscalar_GLSL
++
+ const char *make_GLSL_destarg_assign(Context *, char *, const size_t,
+                                      const char *, ...) ISPRINTF(4,5);
+ char *make_GLSL_swizzle_string(char *, const size_t, const int, const int);
+@@ -185,7 +197,7 @@
+                                                        sizeof (regnum_str));
+     char writemask_str[6];
+     size_t i = 0;
+-    const int scalar = isscalar(ctx, ctx->shader_type, arg->regtype, arg->regnum);
++    const int scalar = isscalar_GLSL(ctx, arg->regtype, arg->regnum);
+     if (!scalar && !writemask_xyzw(arg->writemask))
+     {
+         writemask_str[i++] = '.';
+@@ -466,7 +478,7 @@
+     } // if
+ 
+     char swiz_str[6] = { '\0' };
+-    if (!isscalar(ctx, ctx->shader_type, arg->regtype, arg->regnum))
++    if (!isscalar_GLSL(ctx, arg->regtype, arg->regnum))
+     {
+         make_GLSL_swizzle_string(swiz_str, sizeof (swiz_str),
+                                  arg->swizzle, writemask);

@@ -1973,6 +1973,11 @@ namespace CNA::TestSupport
         VertexPositionPartialMask,
         /** @brief Apply a partial write mask to a POINTSIZE0 vertex output declaration. */
         VertexPointSizePartialMask,
+        /**
+         * @brief Declare POINTSIZE0 on o1 with its full mask and write only o1.x, the shape the
+         *        XNA effect compiler gives a PSIZE output.
+         */
+        VertexPointSizeScalarWrite,
     };
 
     /** @brief D3D9 declaration destination-modifier rule exercised by a forged program. */
@@ -7619,6 +7624,13 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, 0x80000000u | 4u);
                 AppendUInt32(shader, destination(regTexCoordOut, 1, 0x1u));
             }
+            if (semanticDeclarationProbe ==
+                SyntheticSemanticDeclarationProbe::VertexPointSizeScalarWrite)
+            {
+                AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_psize0 o1
+                AppendUInt32(shader, 0x80000000u | 4u);
+                AppendUInt32(shader, destination(regTexCoordOut, 1));
+            }
             if (probesVertex30Output)
             {
                 const bool maximum =
@@ -9031,6 +9043,13 @@ namespace CNA::TestSupport
                                SyntheticInvalidShaderModel3MixedConstantAbsolute::VertexAllAbsolute
                            ? 11u
                            : 0u));
+        }
+        if (semanticDeclarationProbe ==
+            SyntheticSemanticDeclarationProbe::VertexPointSizeScalarWrite)
+        {
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov o1.x, c240.x
+            AppendUInt32(shader, destination(regTexCoordOut, 1, 0x1u));
+            AppendUInt32(shader, source(regConst, 240u, 0x00u));
         }
         if (semanticDeclarationProbe == SyntheticSemanticDeclarationProbe::PackedDisjoint ||
             semanticDeclarationProbe ==

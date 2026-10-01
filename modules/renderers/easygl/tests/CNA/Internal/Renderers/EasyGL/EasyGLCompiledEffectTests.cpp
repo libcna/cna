@@ -3730,6 +3730,23 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticDeclarationModifierProbe::
             Pixel30InputPartialPrecisionCentroid));
 
+// A Shader Model 3 vertex output is a vec4 temporary under semantic packing, copied to its
+// semantic at the end -- gl_PointSize as `.x`. The XNA effect compiler writes a PSIZE output's
+// x alone, which MojoShader emitted without its mask as a float assigned to that vec4, and the
+// GLSL compiler refused the program (resonance-game's Default.fx).
+TEST(EasyGLCompiledEffectDrawTest, ShaderModel3PointSizeOutputTakesAScalarWrite)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.semanticDeclarationProbe =
+        CNA::TestSupport::SyntheticSemanticDeclarationProbe::VertexPointSizeScalarWrite;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
 TEST(EasyGLCompiledEffectDrawTest, ShaderModel3PacksDisjointSemanticsIntoOneRegister)
 {
     GraphicsDevice device;
