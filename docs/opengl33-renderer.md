@@ -93,15 +93,14 @@ The one thing that does not work is the game thread waiting, inside `LoadContent
 two wait for each other. XNA 4.0 allows that, and FNA and MonoGame deadlock on it the same way.
 Start the work, keep running frames, and pick the results up once the thread says it is done.
 
-`GetBackBufferData` reads the back buffer at its own size: when the window's drawable is not that
-size (Letterbox bars, Stretch, a display scale of 2), each back-buffer pixel is read from the
-drawable pixel it is presented on. The back buffer is still the window's surface, though, not a
-separate image as in XNA, so a read is only as good as that surface. On Wayland (SDL's Wayland
-driver, Mesa's EGL) the surface can lag the size CNA reports for a frame: a loading thread that
-takes the context between frames binds the window's surface, EGL fetches the next buffer at the
-size the window has then, and a resize processed before the next frame misses it; a window being
-minimized, restored or toggled out of fullscreen can show the same one-frame lag. `Clear` then covers
-only part of what `GetBackBufferData` addresses, which reads zeros or the previous frame there. A
-surfaceless binding on the loading thread would remove the first case, but SDL's Wayland driver turns
-it into an unbind; an offscreen back buffer, as the multisampled path already has, would remove all
-of them (cna-killer KF-6). X11 is not affected by the first case.
+The back buffer is an offscreen framebuffer of the drawable size CNA reports, not the window's
+surface: everything drawn to the back buffer, `Clear` and `GetBackBufferData` use it, and `Present`
+blits it to the window. XNA's back buffer is an image of its own in the same way, and the window
+surface is not a dependable one -- on Wayland (SDL's Wayland driver, Mesa's EGL) it lags the size CNA
+reports for a frame after a resize, a minimize or a fullscreen change, or when a loading thread
+binds it between frames (cna-killer KF-6). With multisampling on the offscreen buffer is
+multisampled and the blit resolves it. `GetBackBufferData` reads it at the back buffer's own size:
+when the presentation rectangle is not the logical size (Letterbox bars, Stretch, a display scale
+of 2), each back-buffer pixel is read from the pixel it is presented on. The ES 2.0 generation
+(OPENGLES2, WEBGL1) has no framebuffer blit and keeps drawing into the window's surface, and so
+does the web, whose canvas CNA sizes itself.

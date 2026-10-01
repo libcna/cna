@@ -66,6 +66,48 @@ namespace CNA::Internal::Renderers::EasyGL
             return RequiresBaseVertexPointerRebase(ActiveGlProfile());
         }
         [[nodiscard]] inline bool ProfileIs(GlProfile expected) { return ActiveGlProfile() == expected; }
+
+        // cna-killer KF-6: the back buffer is an offscreen framebuffer of the drawable size CNA
+        // reports, and the window's surface only receives it at Present -- XNA's back buffer is an
+        // image of its own, not the window. Drawing straight into the window's surface made Clear,
+        // drawing and GetBackBufferData depend on a buffer the windowing system sizes: on Wayland it
+        // lags CNA's size for a frame after a resize, minimize or fullscreen change, or when a
+        // loading thread binds the surface between frames. Multisampling always worked this way
+        // (msaaFbo_); this makes it the rule wherever the profile can blit to the window. The ES 2.0
+        // generation cannot, and the web canvas is sized by CNA itself, so both keep drawing into
+        // framebuffer 0.
+        [[nodiscard]] inline bool OffscreenBackBuffer(int sampleCount)
+        {
+#if defined(__EMSCRIPTEN__)
+            return sampleCount > 1;
+#else
+            return sampleCount > 1 || !ProfileIsEs2ApiGeneration();
+#endif
+        }
+
+        // Restores the framebuffer binding a resource found when it set itself up. Binding
+        // framebuffer 0 at the end instead sent everything drawn afterwards past the offscreen back
+        // buffer, straight to the window's surface (cna-killer KF-6).
+        class FramebufferBindingPreserved
+        {
+        public:
+            FramebufferBindingPreserved()
+            {
+                ::metagl::glGetIntegerv(::metagl::GetParameter::FramebufferBinding, &previous_);
+            }
+
+            ~FramebufferBindingPreserved()
+            {
+                ::metagl::glBindFramebuffer(::metagl::FramebufferTarget::Framebuffer,
+                                            ::metagl::FramebufferId{static_cast<unsigned int>(previous_)});
+            }
+
+            FramebufferBindingPreserved(const FramebufferBindingPreserved&) = delete;
+            FramebufferBindingPreserved& operator=(const FramebufferBindingPreserved&) = delete;
+
+        private:
+            GLint previous_ = 0;
+        };
     }
 }
 
@@ -3961,6 +4003,7 @@ if (ProfileIsEs2ApiGeneration())
 
     void EasyGLRenderTargetRenderer::CreateResources()
     {
+        const FramebufferBindingPreserved restoreBinding;
 if (ProfileIsEs2ApiGeneration())
 {
         // GLES 2.0 has no multisample renderbuffers and no blit to resolve them
@@ -4499,6 +4542,7 @@ if (ProfileIsEs2ApiGeneration())
 
     void EasyGLRenderTargetCubeRenderer::CreateResources()
     {
+        const FramebufferBindingPreserved restoreBinding;
 if (ProfileIsEs2ApiGeneration())
 {
         // See EasyGLRenderTargetRenderer::CreateResources -- GLES 2.0 has no multisample
@@ -5944,7 +5988,7 @@ if (ProfileUsesGlslEs100())
         registry_->add(this);
         registry_->register_with_meta_gl();
 
-        if (sampleCount_ > 1)
+        if (OffscreenBackBuffer(sampleCount_))
         {
             int physW, physH;
             surfaceState_.GetDrawableSize(physW, physH);
@@ -5989,8 +6033,11 @@ if (ProfileUsesGlslEs100())
         msaaFbo_.create();
         msaaColorRbo_.create();
 
+        // The offscreen back buffer (see OffscreenBackBuffer): multisampled when MSAA is on, plain
+        // storage otherwise -- 0 samples, since a request for 1 may legally return more.
+        const int storageSamples = sampleCount_ > 1 ? sampleCount_ : 0;
         msaaColorRbo_.bind();
-        msaaColorRbo_.set_storage_multisample(sampleCount_,
+        msaaColorRbo_.set_storage_multisample(storageSamples,
                                                ::metagl::InternalFormat::Rgba8, w, h);
 
         msaaFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
@@ -6004,14 +6051,14 @@ if (ProfileUsesGlslEs100())
         {
             msaaDepthRbo_.create();
             msaaDepthRbo_.bind();
-            msaaDepthRbo_.set_storage_multisample(sampleCount_, depthStorage, w, h);
+            msaaDepthRbo_.set_storage_multisample(storageSamples, depthStorage, w, h);
             msaaFbo_.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
                                           depthAttachment, msaaDepthRbo_);
         }
 
         if (!msaaFbo_.is_complete())
             throw std::runtime_error(
-                "EasyGL: multisample backbuffer is incomplete for DepthFormat ordinal "
+                "EasyGL: offscreen backbuffer is incomplete for DepthFormat ordinal "
                 + std::to_string(backBufferDepthFormat_));
 
         msaaW_ = w;
@@ -6050,20 +6097,7 @@ if (ProfileUsesGlslEs100())
         msaaStorageDepthFormat_ = -1;
 
         if (bound_->height == 0)
-        {
-            if (sampleCount_ > 1)
-            {
-                int physW = 0;
-                int physH = 0;
-                surfaceState_.GetDrawableSize(physW, physH);
-                CreateMsaaBuffers(physW, physH);
-                msaaFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
-            }
-            else
-            {
-                ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
-            }
-        }
+            BindDefaultFramebuffer();
 
         ApplyCurrentDepthStencilAvailability();
         return GetMultiSampleCount();
@@ -6071,15 +6105,21 @@ if (ProfileUsesGlslEs100())
 
     void EasyGLRenderer::BindDefaultFramebuffer()
     {
-        if (sampleCount_ > 1)
+        if (OffscreenBackBuffer(sampleCount_))
         {
-            // Recreate MSAA FBO if the window was resized.
+            // Recreate the offscreen back buffer if the window was resized.
             int physW, physH;
             surfaceState_.GetDrawableSize(physW, physH);
             if (!msaaFbo_.is_created()
                 || physW != msaaW_ || physH != msaaH_
                 || msaaStorageDepthFormat_ != backBufferDepthFormat_)
+            {
+                // Building the buffers needs the context on this thread; nested in a frame or a
+                // resource operation, this costs a counter.
+                const auto contextLease = AcquireThreadContextLeaseEXT(
+                    RendererThreadContextLeaseRelease::RestorePreviousBinding);
                 CreateMsaaBuffers(physW, physH);
+            }
 
             msaaFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
         }
@@ -6091,8 +6131,9 @@ if (ProfileUsesGlslEs100())
 
     void EasyGLRenderer::ResolveMsaa()
     {
-        if (sampleCount_ <= 1 || !msaaFbo_.is_created()) return;
-        // Blit colour attachment from MSAA FBO to default framebuffer (FBO 0).
+        if (!OffscreenBackBuffer(sampleCount_) || !msaaFbo_.is_created()) return;
+        // Blit the offscreen back buffer's colour to the window's framebuffer (FBO 0): a resolve
+        // when it is multisampled, a copy when it is not.
         msaaFbo_.bind(::easygl::FramebufferTarget::ReadFramebuffer);
         ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::DrawFramebuffer);
         const ScissorOffForBlit wholeBackBuffer;
@@ -6434,20 +6475,47 @@ else
         // the read buffer pointing at GL_NONE and glReadPixels returns zeros.
         // When a render-target FBO is bound, the read buffer is already
         // GL_COLOR_ATTACHMENT0, so no explicit call is needed there.
-        if (bound_->height == 0)
+        // The back buffer is read where it is drawn: the offscreen back buffer (see
+        // OffscreenBackBuffer), never the window's surface, which the windowing system may still
+        // be sizing (cna-killer KF-6). A multisampled one is resolved into a single-sample copy of
+        // its own size first; these hold that copy for the read.
+        ::easygl::Framebuffer resolvedFbo;
+        ::easygl::Renderbuffer resolvedColor;
+        const bool offscreen =
+            bound_->height == 0 && OffscreenBackBuffer(sampleCount_) && msaaFbo_.is_created();
+        if (offscreen)
         {
             if (sampleCount_ > 1)
             {
-                // Resolve MSAA FBO to FBO 0 so glReadPixels can sample the single-sample copy.
-                ResolveMsaa();
-                // Bind FBO 0 as the read source and select GL_BACK.
-                ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::ReadFramebuffer);
+                resolvedFbo.create();
+                resolvedColor.create();
+                resolvedColor.bind();
+                resolvedColor.set_storage_multisample(0, ::metagl::InternalFormat::Rgba8, msaaW_, msaaH_);
+                resolvedFbo.bind(::easygl::FramebufferTarget::DrawFramebuffer);
+                resolvedFbo.attach_renderbuffer(::easygl::FramebufferTarget::DrawFramebuffer,
+                                                ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
+                                                resolvedColor);
+                msaaFbo_.bind(::easygl::FramebufferTarget::ReadFramebuffer);
+                const ScissorOffForBlit wholeBackBuffer;
+                ::easygl::Framebuffer::blit(0, 0, msaaW_, msaaH_, 0, 0, msaaW_, msaaH_,
+                                             ::metagl::ClearBufferBit::Color,
+                                             ::metagl::BlitFilter::Nearest);
+                resolvedFbo.bind(::easygl::FramebufferTarget::ReadFramebuffer);
             }
+            else
+            {
+                msaaFbo_.bind(::easygl::FramebufferTarget::ReadFramebuffer);
+            }
+            ::metagl::glReadBuffer(::metagl::to_read_buffer(::metagl::ColorAttachment::Color0));
+        }
+        else if (bound_->height == 0)
+        {
 if (!ProfileIsEs2ApiGeneration())
 {
             // GLES 2.0 has no glReadBuffer at all -- there the default framebuffer's color buffer
             // is the one and only read source, so the explicit GL_BACK selection this comment
             // block describes for EGL/GLES3 contexts neither exists nor is needed.
+            ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::ReadFramebuffer);
             device.set_read_buffer(::easygl::ReadBuffer::Back);
 }
         }
@@ -6460,6 +6528,11 @@ if (!ProfileIsEs2ApiGeneration())
         {
             int physicalWidth = 0;
             getPhysicalSize(physicalWidth, fbH);
+            if (offscreen)
+            {
+                physicalWidth = msaaW_;
+                fbH = msaaH_;
+            }
             int logicalWidth = 0;
             int logicalHeight = 0;
             getLogicalSize(logicalWidth, logicalHeight);
@@ -6477,7 +6550,7 @@ if (!ProfileIsEs2ApiGeneration())
                                         presentWidth, presentHeight, physicalWidth, fbH, pixels,
                                         readPhysical))
             {
-                if (sampleCount_ > 1)
+                if (offscreen)
                     msaaFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
                 return;
             }
@@ -6501,8 +6574,8 @@ if (!ProfileIsEs2ApiGeneration())
             std::copy(tmp.begin(), tmp.end(), bot);
         }
 
-        // After reading from FBO 0, restore the MSAA FBO as the draw target.
-        if (sampleCount_ > 1 && bound_->height == 0)
+        // The offscreen back buffer stays the draw target after the read.
+        if (offscreen)
             msaaFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
     }
 
@@ -6533,11 +6606,14 @@ if (!ProfileIsEs2ApiGeneration())
     void EasyGLRenderer::Present()
     {
         if (metagl::IsContextLost()) return;
-        if (sampleCount_ > 1)
+        const bool offscreen = OffscreenBackBuffer(sampleCount_);
+        if (offscreen)
             ResolveMsaa();
         platformContext_->SwapBuffers();
-        if (sampleCount_ > 1)
-            msaaFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
+        // Through BindDefaultFramebuffer rather than a plain bind: it also (re)creates the offscreen
+        // back buffer for the next frame when the drawable changed size or a lost context took it.
+        if (offscreen && bound_->height == 0)
+            BindDefaultFramebuffer();
     }
 
     void EasyGLRenderer::SetVirtualResolution(int width, int height)
@@ -6586,6 +6662,10 @@ if (!ProfileIsEs2ApiGeneration())
                 "a renderer's platform window identity cannot change");
         }
         surfaceState_.Update(surface);
+        // The offscreen back buffer follows the drawable size CNA now reports. With a render target
+        // bound, SetRenderTarget(null) rebuilds it on the way back.
+        if (bound_->height == 0 && OffscreenBackBuffer(sampleCount_) && !metagl::IsContextLost())
+            BindDefaultFramebuffer();
     }
 
     void EasyGLRenderer::getLogicalSize(int& width, int& height) const

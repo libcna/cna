@@ -1171,6 +1171,18 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                         easygl_worker_thread_resources_test.cpp)
         cna_register_renderer_test(NAME EasyGL_WorkerThreadResources COMMAND cna_test_easygl_worker_thread_resources
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        # cna-killer KF-6: the back buffer is offscreen, so a loading thread binding the window's
+        # surface between frames cannot leave a frame drawn at the previous size. No SDL_VIDEODRIVER:
+        # the race is Mesa's EGL on Wayland, which SDL picks when a compositor is there.
+        cna_easygl_test(cna_test_easygl_worker_resize_backbuffer
+                        easygl_worker_resize_backbuffer_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_WorkerResizeBackBuffer COMMAND cna_test_easygl_worker_resize_backbuffer
+            TIMEOUT 60 ENVIRONMENT "DISPLAY=${CNA_TEST_DISPLAY}")
+        # cna-killer KF-6: creating render targets mid-frame must leave the offscreen back buffer bound.
+        cna_easygl_test(cna_test_easygl_backbuffer_survives_resource_creation
+                        easygl_backbuffer_survives_resource_creation_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_BackBuffer_SurvivesResourceCreation COMMAND cna_test_easygl_backbuffer_survives_resource_creation
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         # cna-killer KF-6: GetBackBufferData reads the back buffer, not the scaled window drawable.
         cna_easygl_test(cna_test_easygl_backbuffer_read_letterboxed
                         easygl_backbuffer_read_letterboxed_test.cpp)

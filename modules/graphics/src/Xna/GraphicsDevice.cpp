@@ -995,6 +995,10 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::Reset(const PresentationParameters& presentationParameters, GraphicsAdapter* adapter)
     {
         ThrowIfDisposed();
+        // Like Clear and Present: an ApplyChanges outside a frame (a game's constructor-time
+        // settings, a test) otherwise rebuilt the back buffer with no current context, and a
+        // renderer that made the context current for it left it held on this thread.
+        const auto contextLease = AcquireRendererThreadContextLease();
         const PresentationParameters previousPresentationParameters =
             presentationParameters_.Clone();
         GraphicsAdapter* const previousAdapter = adapter_;

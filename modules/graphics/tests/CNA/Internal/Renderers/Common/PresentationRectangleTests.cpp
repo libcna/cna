@@ -419,11 +419,11 @@ TEST(PresentationRectangleTest, ALetterboxedDefaultViewportIsNotACustomSubViewpo
     // WINCLOSE-0032: DirectX11's GetBackBufferData returns the LOGICAL back buffer, sampled through
     // the presentation rectangle (WINCLOSE-0012) -- the game's own pixels, which is what XNA's
     // GetBackBufferData means for a letterboxed game -- where the renderers above read raw physical
-    // drawable pixels. So probe it through its own contract. A sprite covering the whole logical
-    // area must read back as ink at the logical centre AND at the far logical corner: the corner
-    // placement this test exists to catch leaves that corner at the clear colour. The bars have no
-    // logical pixels, so they are not readable here.
-    if (CNA_RENDERER_IS(DirectX11, DirectX12))
+    // drawable pixels. DirectX12 does too, and EasyGL since cna-killer KF-6. So probe them through
+    // that contract. A sprite covering the whole logical area must read back as ink at the logical
+    // centre AND at the far logical corner: the corner placement this test exists to catch leaves
+    // that corner at the clear colour. The bars have no logical pixels, so they are not readable here.
+    if (CNA_RENDERER_IS(DirectX11, DirectX12, OpenGL33, OpenGLES2, OpenGLES3, WebGL1, WebGL2))
     {
         for (const auto& [x, y] : {std::pair{virtualSize / 2, virtualSize / 2},
                                    std::pair{virtualSize - 1, virtualSize - 1}})

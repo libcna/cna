@@ -1376,7 +1376,9 @@ namespace CNA::Internal::Renderers::EasyGL
         /// Clip-space multiplier for XNA's slightly-less-than-half-pixel center correction.
         float xnaPixelCenterScale_ = 63.0f / 64.0f;
 
-        // MSAA — multisampled render buffer resolved to FBO 0 on Present().
+        // The offscreen back buffer (EasyGLRenderer.cpp OffscreenBackBuffer): multisampled when
+        // MSAA is on, single-sample otherwise, blitted to FBO 0 on Present(). The msaa* names
+        // predate the single-sample case.
         int sampleCount_ = 1;
         int backBufferDepthFormat_ = 3;
         int msaaStorageDepthFormat_ = -1;
