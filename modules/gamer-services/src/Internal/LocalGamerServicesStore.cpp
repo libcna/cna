@@ -12,6 +12,9 @@
 #include "System/TimeSpan.hpp"
 
 #include <any>
+#include <nlohmann/json.hpp>
+#include <cmath>
+#include <limits>
 #include <memory>
 #include <algorithm>
 #include <cctype>
@@ -23,11 +26,39 @@
 namespace CNA::Internal::GamerServices
 {
     namespace fs = std::filesystem;
+    using StoreJson = nlohmann::json;
     using Microsoft::Xna::Framework::GamerServices::LeaderboardOutcome;
     using Microsoft::Xna::Framework::GamerServices::PropertyDictionary;
 
     namespace
     {
+        const StoreJson* Find(const StoreJson& object, const char* key)
+        {
+            const auto it = object.find(key);
+            return it == object.end() ? nullptr : &*it;
+        }
+
+        // Accept legacy integral floating-point numbers without an out-of-range cast.
+        // Already-rounded legacy data cannot recover its original integer value.
+        std::optional<long long> Integer(const StoreJson* value)
+        {
+            if (!value) return std::nullopt;
+            if (value->is_number_unsigned())
+            {
+                const auto number = value->get<unsigned long long>();
+                if (number > static_cast<unsigned long long>(std::numeric_limits<long long>::max())) return std::nullopt;
+                return static_cast<long long>(number);
+            }
+            if (value->is_number_integer()) return value->get<long long>();
+            if (value->is_number_float())
+            {
+                const double number = value->get<double>();
+                if (std::isfinite(number) && std::trunc(number) == number &&
+                    number >= -0x1p63 && number < 0x1p63) return static_cast<long long>(number);
+            }
+            return std::nullopt;
+        }
+
         // Task 4.2: reuses this codebase's existing user-data-directory convention
         // (StorageDevice::GetStorageRootEXT(), platform user-data-directory backed) rather than inventing a
         // new one - a plain "GamerServices" subdirectory under it.
@@ -44,7 +75,7 @@ namespace CNA::Internal::GamerServices
         // Best-effort read - a missing or corrupt file starts empty rather than throwing
         // (plans/plan_net.md Task 4.7's explicit requirement), since "no local record yet" and "record
         // is unreadable" both mean the same thing to a caller: nothing usable was persisted.
-        std::optional<CNA::Internal::JsonValue> TryReadJsonFile(const fs::path& path)
+        std::optional<StoreJson> TryReadJsonFile(const fs::path& path)
         {
             std::ifstream in(path, std::ios::binary);
             if (!in)
@@ -55,15 +86,15 @@ namespace CNA::Internal::GamerServices
             buffer << in.rdbuf();
             try
             {
-                return CNA::Internal::ParseJson(buffer.str());
+                return StoreJson::parse(buffer.str());
             }
-            catch (const CNA::Internal::JsonParseException&)
+            catch (const StoreJson::exception&)
             {
                 return std::nullopt;
             }
         }
 
-        void WriteJsonFile(const fs::path& path, const CNA::Internal::JsonValue& value)
+        void WriteJsonFile(const fs::path& path, const StoreJson& value)
         {
             fs::create_directories(path.parent_path());
             fs::path tmp = path;
@@ -75,7 +106,7 @@ namespace CNA::Internal::GamerServices
                 out.exceptions(std::ios::failbit | std::ios::badbit);
                 out.open(tmp, std::ios::binary | std::ios::trunc);
                 opened = true;
-                out << CNA::Internal::WriteJson(value);
+                out << value.dump();
                 out.flush();
                 out.close();
                 // Never truncate the previous record if replacement fails. This is an atomic
@@ -137,22 +168,24 @@ namespace CNA::Internal::GamerServices
         {
             return result;
         }
-        const CNA::Internal::JsonValue* achievements = doc->FindMember("achievements");
-        if (achievements == nullptr || achievements->type != CNA::Internal::JsonType::Array)
+        const StoreJson* achievements = Find(*doc, "achievements");
+        if (achievements == nullptr || !achievements->is_array())
         {
             return result;
         }
-        for (const CNA::Internal::JsonValue& entry : achievements->arrayValue)
+        for (const StoreJson& entry : *achievements)
         {
-            const CNA::Internal::JsonValue* key = entry.FindMember("key");
-            const CNA::Internal::JsonValue* earnedTicks = entry.FindMember("earnedTicks");
-            if (key == nullptr || !key->IsString() || earnedTicks == nullptr || !earnedTicks->IsNumber())
+            const StoreJson* key = Find(entry, "key");
+            const StoreJson* earnedTicks = Find(entry, "earnedTicks");
+            if (key == nullptr || !key->is_string() || earnedTicks == nullptr || !earnedTicks->is_number())
             {
                 continue;
             }
             PersistedAchievement record;
-            record.Key = key->stringValue;
-            record.EarnedTicks = static_cast<long long>(earnedTicks->numberValue);
+            record.Key = key->get_ref<const std::string&>();
+            const auto ticks = Integer(earnedTicks);
+            if (!ticks || *ticks < 0 || *ticks > 3155378975999999999LL) continue;
+            record.EarnedTicks = *ticks;
             result.push_back(std::move(record));
         }
         return result;
@@ -177,16 +210,16 @@ namespace CNA::Internal::GamerServices
             current.push_back(PersistedAchievement{key, earnedTicks});
         }
 
-        CNA::Internal::JsonValue achievementsArray = CNA::Internal::JsonValue::MakeArray();
+        StoreJson achievementsArray = StoreJson::array();
         for (const PersistedAchievement& record : current)
         {
-            CNA::Internal::JsonValue entry = CNA::Internal::JsonValue::MakeObject();
-            entry.Set("key", CNA::Internal::JsonValue::MakeString(record.Key));
-            entry.Set("earnedTicks", CNA::Internal::JsonValue::MakeNumber(static_cast<double>(record.EarnedTicks)));
-            achievementsArray.arrayValue.push_back(std::move(entry));
+            StoreJson entry = StoreJson::object();
+            entry["key"] = record.Key;
+            entry["earnedTicks"] = record.EarnedTicks;
+            achievementsArray.push_back(std::move(entry));
         }
-        CNA::Internal::JsonValue root = CNA::Internal::JsonValue::MakeObject();
-        root.Set("achievements", std::move(achievementsArray));
+        StoreJson root = StoreJson::object();
+        root["achievements"] = std::move(achievementsArray);
 
         WriteJsonFile(AchievementsDir() / (SanitizeStoreFileNameComponent(gamertag) + ".json"), root);
     }
@@ -200,114 +233,118 @@ namespace CNA::Internal::GamerServices
         // persisted form.
         enum class ColumnType { Int32, Int64, Double, Single, StringValue, DateTimeTicks, TimeSpanTicks, Outcome };
 
-        CNA::Internal::JsonValue ColumnsToJson(const PropertyDictionary& columns)
+        StoreJson ColumnsToJson(const PropertyDictionary& columns)
         {
-            CNA::Internal::JsonValue array = CNA::Internal::JsonValue::MakeArray();
+            StoreJson array = StoreJson::array();
             for (const auto& [key, value] : columns)
             {
-                CNA::Internal::JsonValue entry = CNA::Internal::JsonValue::MakeObject();
-                entry.Set("key", CNA::Internal::JsonValue::MakeString(key));
+                StoreJson entry = StoreJson::object();
+                entry["key"] = key;
 
                 if (value.type() == typeid(int))
                 {
-                    entry.Set("type", CNA::Internal::JsonValue::MakeString("int32"));
-                    entry.Set("value", CNA::Internal::JsonValue::MakeNumber(std::any_cast<int>(value)));
+                    entry["type"] = "int32";
+                    entry["value"] = std::any_cast<int>(value);
                 }
                 else if (value.type() == typeid(long long))
                 {
-                    entry.Set("type", CNA::Internal::JsonValue::MakeString("int64"));
-                    entry.Set("value", CNA::Internal::JsonValue::MakeNumber(static_cast<double>(std::any_cast<long long>(value))));
+                    entry["type"] = "int64";
+                    entry["value"] = std::any_cast<long long>(value);
                 }
                 else if (value.type() == typeid(double))
                 {
-                    entry.Set("type", CNA::Internal::JsonValue::MakeString("double"));
-                    entry.Set("value", CNA::Internal::JsonValue::MakeNumber(std::any_cast<double>(value)));
+                    entry["type"] = "double";
+                    entry["value"] = std::any_cast<double>(value);
                 }
                 else if (value.type() == typeid(float))
                 {
-                    entry.Set("type", CNA::Internal::JsonValue::MakeString("single"));
-                    entry.Set("value", CNA::Internal::JsonValue::MakeNumber(static_cast<double>(std::any_cast<float>(value))));
+                    entry["type"] = "single";
+                    entry["value"] = static_cast<double>(std::any_cast<float>(value));
                 }
                 else if (value.type() == typeid(std::string))
                 {
-                    entry.Set("type", CNA::Internal::JsonValue::MakeString("string"));
-                    entry.Set("value", CNA::Internal::JsonValue::MakeString(std::any_cast<std::string>(value)));
+                    entry["type"] = "string";
+                    entry["value"] = std::any_cast<std::string>(value);
                 }
                 else if (value.type() == typeid(System::DateTime))
                 {
-                    entry.Set("type", CNA::Internal::JsonValue::MakeString("dateTime"));
-                    entry.Set("value", CNA::Internal::JsonValue::MakeNumber(
-                        static_cast<double>(std::any_cast<System::DateTime>(value).getTicksProperty())));
+                    entry["type"] = "dateTime";
+                    entry["value"] = std::any_cast<System::DateTime>(value).getTicksProperty();
                 }
                 else if (value.type() == typeid(System::TimeSpan))
                 {
-                    entry.Set("type", CNA::Internal::JsonValue::MakeString("timeSpan"));
-                    entry.Set("value", CNA::Internal::JsonValue::MakeNumber(
-                        static_cast<double>(std::any_cast<System::TimeSpan>(value).getTicksProperty())));
+                    entry["type"] = "timeSpan";
+                    entry["value"] = std::any_cast<System::TimeSpan>(value).getTicksProperty();
                 }
                 else if (value.type() == typeid(LeaderboardOutcome))
                 {
-                    entry.Set("type", CNA::Internal::JsonValue::MakeString("outcome"));
-                    entry.Set("value", CNA::Internal::JsonValue::MakeNumber(
-                        static_cast<double>(std::any_cast<LeaderboardOutcome>(value))));
+                    entry["type"] = "outcome";
+                    entry["value"] = static_cast<int>(std::any_cast<LeaderboardOutcome>(value));
                 }
                 else
                 {
                     // Stream* (or any future unsupported type) - skip, not an error.
                     continue;
                 }
-                array.arrayValue.push_back(std::move(entry));
+                array.push_back(std::move(entry));
             }
             return array;
         }
 
-        void JsonToColumns(const CNA::Internal::JsonValue& array, PropertyDictionary& outColumns)
+        void JsonToColumns(const StoreJson& array, PropertyDictionary& outColumns)
         {
-            if (array.type != CNA::Internal::JsonType::Array)
+            if (!array.is_array())
             {
                 return;
             }
-            for (const CNA::Internal::JsonValue& entry : array.arrayValue)
+            for (const StoreJson& entry : array)
             {
-                const CNA::Internal::JsonValue* key = entry.FindMember("key");
-                const CNA::Internal::JsonValue* type = entry.FindMember("type");
-                const CNA::Internal::JsonValue* value = entry.FindMember("value");
-                if (key == nullptr || !key->IsString() || type == nullptr || !type->IsString() || value == nullptr)
+                const StoreJson* key = Find(entry, "key");
+                const StoreJson* type = Find(entry, "type");
+                const StoreJson* value = Find(entry, "value");
+                if (key == nullptr || !key->is_string() || type == nullptr || !type->is_string() || value == nullptr)
                 {
                     continue;
                 }
-                const std::string& t = type->stringValue;
+                const std::string& t = type->get_ref<const std::string&>();
+                const auto integer = Integer(value);
+                if ((t == "int32" || t == "int64" || t == "dateTime" || t == "timeSpan" || t == "outcome") && !integer) continue;
+                if (t == "int32" && (*integer < -2147483648LL || *integer > 2147483647LL)) continue;
+                if (t == "dateTime" && (*integer < 0 || *integer > 3155378975999999999LL)) continue;
+                if (t == "outcome" && (*integer < 0 || *integer > 3)) continue;
+                if ((t == "single" || t == "double") && !value->is_number()) continue;
+                if (t == "string" && !value->is_string()) continue;
                 if (t == "int32")
                 {
-                    outColumns.SetValue(key->stringValue, static_cast<int>(value->numberValue));
+                    outColumns.SetValue(key->get_ref<const std::string&>(), static_cast<int>(*integer));
                 }
                 else if (t == "int64")
                 {
-                    outColumns.SetValue(key->stringValue, static_cast<long long>(value->numberValue));
+                    outColumns.SetValue(key->get_ref<const std::string&>(), *integer);
                 }
                 else if (t == "double")
                 {
-                    outColumns.SetValue(key->stringValue, value->numberValue);
+                    outColumns.SetValue(key->get_ref<const std::string&>(), value->get<double>());
                 }
                 else if (t == "single")
                 {
-                    outColumns.SetValue(key->stringValue, static_cast<float>(value->numberValue));
+                    outColumns.SetValue(key->get_ref<const std::string&>(), static_cast<float>(value->get<double>()));
                 }
                 else if (t == "string")
                 {
-                    outColumns.SetValue(key->stringValue, value->stringValue);
+                    outColumns.SetValue(key->get_ref<const std::string&>(), value->get_ref<const std::string&>());
                 }
                 else if (t == "dateTime")
                 {
-                    outColumns.SetValue(key->stringValue, System::DateTime(static_cast<SharpRuntime::longcs>(value->numberValue)));
+                    outColumns.SetValue(key->get_ref<const std::string&>(), System::DateTime(static_cast<SharpRuntime::longcs>(*integer)));
                 }
                 else if (t == "timeSpan")
                 {
-                    outColumns.SetValue(key->stringValue, System::TimeSpan(static_cast<SharpRuntime::longcs>(value->numberValue)));
+                    outColumns.SetValue(key->get_ref<const std::string&>(), System::TimeSpan(static_cast<SharpRuntime::longcs>(*integer)));
                 }
                 else if (t == "outcome")
                 {
-                    outColumns.SetValue(key->stringValue, static_cast<LeaderboardOutcome>(static_cast<int>(value->numberValue)));
+                    outColumns.SetValue(key->get_ref<const std::string&>(), static_cast<LeaderboardOutcome>(static_cast<int>(*integer)));
                 }
                 // Unrecognized type tag (e.g. from a future version): skip rather than throw -
                 // matches the "corrupt/missing store never crashes" requirement.
@@ -324,22 +361,24 @@ namespace CNA::Internal::GamerServices
         {
             return result;
         }
-        const CNA::Internal::JsonValue* entries = doc->FindMember("entries");
-        if (entries == nullptr || entries->type != CNA::Internal::JsonType::Array)
+        const StoreJson* entries = Find(*doc, "entries");
+        if (entries == nullptr || !entries->is_array())
         {
             return result;
         }
-        for (const CNA::Internal::JsonValue& entry : entries->arrayValue)
+        for (const StoreJson& entry : *entries)
         {
-            const CNA::Internal::JsonValue* gamertag = entry.FindMember("gamertag");
-            const CNA::Internal::JsonValue* rating = entry.FindMember("rating");
-            if (gamertag == nullptr || !gamertag->IsString() || rating == nullptr || !rating->IsNumber())
+            const StoreJson* gamertag = Find(entry, "gamertag");
+            const StoreJson* rating = Find(entry, "rating");
+            if (gamertag == nullptr || !gamertag->is_string() || rating == nullptr || !rating->is_number())
             {
                 continue;
             }
             PersistedLeaderboardEntry record;
-            record.Gamertag = gamertag->stringValue;
-            record.Rating = static_cast<long long>(rating->numberValue);
+            record.Gamertag = gamertag->get_ref<const std::string&>();
+            const auto number = Integer(rating);
+            if (!number) continue;
+            record.Rating = *number;
             result.push_back(std::move(record));
         }
         return result;
@@ -352,43 +391,38 @@ namespace CNA::Internal::GamerServices
     ) {
         const fs::path path = LeaderboardsDir() / (leaderboardFileKey + ".json");
         auto doc = TryReadJsonFile(path);
-        CNA::Internal::JsonValue root = doc.value_or(CNA::Internal::JsonValue::MakeObject());
-        if (root.type != CNA::Internal::JsonType::Object)
+        StoreJson root = doc.value_or(StoreJson::object());
+        if (!root.is_object())
         {
-            root = CNA::Internal::JsonValue::MakeObject();
+            root = StoreJson::object();
         }
 
-        CNA::Internal::JsonValue* existingEntries = nullptr;
-        for (auto& [memberKey, memberValue] : root.objectValue)
-        {
-            if (memberKey == "entries") { existingEntries = &memberValue; break; }
-        }
-        CNA::Internal::JsonValue entriesArray = (existingEntries != nullptr && existingEntries->type == CNA::Internal::JsonType::Array)
-            ? *existingEntries
-            : CNA::Internal::JsonValue::MakeArray();
+        const auto* existingEntries = Find(root, "entries");
+        StoreJson entriesArray = existingEntries && existingEntries->is_array()
+            ? *existingEntries : StoreJson::array();
 
         bool updated = false;
-        for (CNA::Internal::JsonValue& existing : entriesArray.arrayValue)
+        for (StoreJson& existing : entriesArray)
         {
-            const CNA::Internal::JsonValue* gamertag = existing.FindMember("gamertag");
-            if (gamertag != nullptr && gamertag->IsString() && gamertag->stringValue == entry.Gamertag)
+            const StoreJson* gamertag = Find(existing, "gamertag");
+            if (gamertag != nullptr && gamertag->is_string() && gamertag->get_ref<const std::string&>() == entry.Gamertag)
             {
-                existing.Set("rating", CNA::Internal::JsonValue::MakeNumber(static_cast<double>(entry.Rating)));
-                existing.Set("columns", columns != nullptr ? ColumnsToJson(*columns) : CNA::Internal::JsonValue::MakeArray());
+                existing["rating"] = entry.Rating;
+                existing["columns"] = columns != nullptr ? ColumnsToJson(*columns) : StoreJson::array();
                 updated = true;
                 break;
             }
         }
         if (!updated)
         {
-            CNA::Internal::JsonValue newEntry = CNA::Internal::JsonValue::MakeObject();
-            newEntry.Set("gamertag", CNA::Internal::JsonValue::MakeString(entry.Gamertag));
-            newEntry.Set("rating", CNA::Internal::JsonValue::MakeNumber(static_cast<double>(entry.Rating)));
-            newEntry.Set("columns", columns != nullptr ? ColumnsToJson(*columns) : CNA::Internal::JsonValue::MakeArray());
-            entriesArray.arrayValue.push_back(std::move(newEntry));
+            StoreJson newEntry = StoreJson::object();
+            newEntry["gamertag"] = entry.Gamertag;
+            newEntry["rating"] = entry.Rating;
+            newEntry["columns"] = columns != nullptr ? ColumnsToJson(*columns) : StoreJson::array();
+            entriesArray.push_back(std::move(newEntry));
         }
 
-        root.Set("entries", std::move(entriesArray));
+        root["entries"] = std::move(entriesArray);
         WriteJsonFile(path, root);
     }
 
@@ -403,19 +437,19 @@ namespace CNA::Internal::GamerServices
         {
             return;
         }
-        const CNA::Internal::JsonValue* entries = doc->FindMember("entries");
-        if (entries == nullptr || entries->type != CNA::Internal::JsonType::Array)
+        const StoreJson* entries = Find(*doc, "entries");
+        if (entries == nullptr || !entries->is_array())
         {
             return;
         }
-        for (const CNA::Internal::JsonValue& entry : entries->arrayValue)
+        for (const StoreJson& entry : *entries)
         {
-            const CNA::Internal::JsonValue* entryGamertag = entry.FindMember("gamertag");
-            if (entryGamertag == nullptr || !entryGamertag->IsString() || entryGamertag->stringValue != gamertag)
+            const StoreJson* entryGamertag = Find(entry, "gamertag");
+            if (entryGamertag == nullptr || !entryGamertag->is_string() || entryGamertag->get_ref<const std::string&>() != gamertag)
             {
                 continue;
             }
-            const CNA::Internal::JsonValue* columns = entry.FindMember("columns");
+            const StoreJson* columns = Find(entry, "columns");
             if (columns != nullptr)
             {
                 JsonToColumns(*columns, outColumns);

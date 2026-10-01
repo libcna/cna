@@ -49,7 +49,9 @@ Effort: Recent retention policy **2–5 days**; skill-based service **2–4 week
 
 ### GS-AUDIT-005 — Offline int64 and timestamp round trips lose precision
 
-**VERIFIED.** `LocalGamerServicesStore.cpp:183`, `:216–241`, `:380–392` convert ticks, Int64 columns and ratings to `double`; decode casts back. Native probe result:
+**Phase 2: FIXED for new writes.** A fresh native regression reproduced all five affected data paths (rating, Int64 column, TimeSpan, DateTime, achievement ticks). INT64_MAX loaded as INT64_MIN on this build; rounded DateTime.MaxValue threw. The offline serializer now uses the module's existing integer-preserving nlohmann JSON dependency, retaining the same fields/type tags and JSON number schema. Valid integral legacy scientific/decimal encodings remain readable; out-of-range/fractional/wrong-type integer records are skipped instead of cast unsafely. New tests cover 2^53−1/2^53/2^53+1, INT64_MIN/MAX and DateTime.MaxValue. Fresh complete GamerServices suite: **633/633 passed**. Old rounded values are unrecoverable; old executables still round when reading/re-writing large numbers. No wire/server migration was made or needed. Source scan isolates these floating conversions to offline progress, not the nlohmann/SQLite int64 service path.
+
+**Phase 1: VERIFIED.** `LocalGamerServicesStore.cpp:183`, `:216–241`, `:380–392` convert ticks, Int64 columns and ratings to `double`; decode casts back. Native probe result:
 
 ```text
 input=9007199254740993 rating=9007199254740992 column=9007199254740992

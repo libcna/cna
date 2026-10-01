@@ -1213,3 +1213,57 @@ TEST(LeaderboardWriterTest, OfflineWriteFailurePreservesPreviousRecord) {
     EXPECT_EQ(17, LoadLeaderboardEntriesEXT("full")[0].Rating);
     EXPECT_FALSE(std::filesystem::exists(target.string() + ".tmp"));
 }
+
+TEST(LeaderboardWriterTest, OfflineIntegerBoundariesRoundTripExactly) {
+    GamerServicesStoreGuard guard;
+    using namespace CNA::Internal::GamerServices;
+    for (const long long value : {9007199254740991LL, 9007199254740992LL, 9007199254740993LL,
+                                 9223372036854775807LL, (-9223372036854775807LL - 1)}) {
+        SCOPED_TRACE(value);
+        auto columns = PropertyDictionary::CreateInternal({});
+        columns.SetValue("integer", value);
+        columns.SetValue("duration", System::TimeSpan(static_cast<SharpRuntime::longcs>(value)));
+        const auto ticks = value > 0 && value < 3155378975999999999LL ? value : 3155378975999999999LL;
+        columns.SetValue("date", System::DateTime(static_cast<SharpRuntime::longcs>(ticks)));
+        SaveLeaderboardEntryEXT("exact", {"Alice", value}, &columns);
+        const auto entries = LoadLeaderboardEntriesEXT("exact");
+        ASSERT_EQ(1u, entries.size());
+        EXPECT_EQ(value, entries[0].Rating);
+        auto loaded = PropertyDictionary::CreateInternal({});
+        LoadLeaderboardEntryColumnsEXT("exact", "Alice", loaded);
+        EXPECT_EQ(value, loaded.GetValueInt64("integer"));
+        EXPECT_EQ(value, loaded.GetValueTimeSpan("duration").getTicksProperty());
+        EXPECT_EQ(ticks, loaded.GetValueDateTime("date").getTicksProperty());
+        SaveEarnedAchievementEXT("Alice", "first", ticks);
+        ASSERT_EQ(1u, LoadEarnedAchievementsEXT("Alice").size());
+        EXPECT_EQ(ticks, LoadEarnedAchievementsEXT("Alice")[0].EarnedTicks);
+    }
+}
+
+TEST(LeaderboardWriterTest, OfflineLegacyNumbersRemainReadableAndInvalidIntegersAreSkipped) {
+    GamerServicesStoreGuard guard;
+    using namespace CNA::Internal::GamerServices;
+    const auto dir = std::filesystem::path(GetGamerServicesStoreRootEXT()) / "leaderboards";
+    std::filesystem::create_directories(dir);
+    { std::ofstream file(dir / "legacy.json"); file << R"({"entries":[
+        {"gamertag":"Alice","rating":9.007199254740992e15,"columns":[
+          {"key":"integer","type":"int64","value":4.2e1},
+          {"key":"bad","type":"int64","value":9.223372036854776e18},
+          {"key":"date","type":"dateTime","value":3155378976000000000},
+          {"key":"wrong","type":"int64","value":"42"}]},
+        {"gamertag":"overflow","rating":18446744073709551615},
+        {"gamertag":"fraction","rating":1.5},
+        {"gamertag":"floatOverflow","rating":9.223372036854776e18}]})"; }
+    const auto rows = LoadLeaderboardEntriesEXT("legacy");
+    ASSERT_EQ(1u, rows.size());
+    EXPECT_EQ(9007199254740992LL, rows[0].Rating);
+    auto columns = PropertyDictionary::CreateInternal({});
+    EXPECT_NO_THROW(LoadLeaderboardEntryColumnsEXT("legacy", "Alice", columns));
+    EXPECT_EQ(42, columns.GetValueInt64("integer"));
+    EXPECT_EQ(1, columns.getCountProperty());
+    SaveLeaderboardEntryEXT("legacy", {"Bob", 9007199254740993LL}, nullptr);
+    const auto updated = LoadLeaderboardEntriesEXT("legacy");
+    ASSERT_EQ(2u, updated.size());
+    EXPECT_EQ(9007199254740992LL, updated[0].Rating);
+    EXPECT_EQ(9007199254740993LL, updated[1].Rating);
+}
