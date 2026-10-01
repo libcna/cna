@@ -238,6 +238,12 @@ struct LastError final {
     // out, recorded here for the same reason.
     bool hasSensorErrorId = false;
     int32_t sensorErrorId = 0;
+    // The canonical .NET type of the exception the failure was raised by ("System.
+    // ArgumentOutOfRangeException", "Microsoft.Xna.Framework.Content.ContentLoadException"), and an
+    // argument exception's parameter name. Empty when the failure was not an exception -- the C
+    // layer's own checks -- so a consumer keeps its result/category mapping for those (CBIND-132).
+    std::string exceptionType;
+    std::string exceptionParamName;
 };
 
 [[nodiscard]] const LastError& GetLastError() noexcept;
@@ -258,11 +264,25 @@ void SetLastJoinError(uint32_t joinError) noexcept;
 
 void SetLastSensorErrorId(int32_t sensorErrorId) noexcept;
 
+/**
+ * @brief Notes the exception the barrier is about to translate, for the next `SetLastError`.
+ *
+ * The barrier's arms decide the result and category; this records what they cannot carry -- the
+ * exception's canonical type and parameter name -- without touching any arm. Every arm then calls
+ * `Fail`, whose `SetLastError` attaches the note to the failure it records.
+ */
+void NoteTranslatedException(const std::exception& exception) noexcept;
+
 template<typename TCallable>
 [[nodiscard]] CNA_Result CallWithExceptionBarrier(TCallable&& callable) noexcept
 {
     try {
-        return callable();
+        try {
+            return callable();
+        } catch (const std::exception& exception) {
+            NoteTranslatedException(exception);
+            throw;
+        }
     } catch (const std::bad_alloc&) {
         return Fail(
             CNA_RESULT_OUT_OF_MEMORY,

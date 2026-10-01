@@ -2,10 +2,30 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.36.0** (`CBIND-130`). It adds one route,
+The current experimental ABI is **0.37.0** (`CBIND-132`). It adds four routes that report the
+canonical exception behind the most recent failure on a thread:
+`cna_error_get_last_exception_type_size_ext`/`cna_error_copy_last_exception_type_ext` give its .NET
+type name (`System.ArgumentOutOfRangeException`,
+`Microsoft.Xna.Framework.GamerServices.GamerPrivilegeException`), and
+`cna_error_get_last_exception_param_name_size_ext`/`cna_error_copy_last_exception_param_name_ext`
+an argument exception's parameter name. 3,207 exports; purely additive -- no existing route,
+constant, structure, field or error rule moves.
+
+A result and a category say what kind of failure happened, but a managed binding re-raising it
+needs the exception the canonical call threw, and neither can name it: `GamerPrivilegeException`,
+`GuideAlreadyVisibleException` and `InvalidOperationException` are all `CNA_RESULT_INVALID_STATE`, an
+`ArgumentOutOfRangeException` is `CNA_RESULT_INVALID_ARGUMENT` like its base, and a
+`ContentLoadException` is `CNA_RESULT_IO` like any I/O error. The exception barrier notes the
+dynamic type of the exception it translates -- CNA's C++ namespaces are the .NET ones, so the
+demangled name is the canonical one -- and `SetLastError` attaches it to the failure it records; a
+failure the C layer raises itself names none.
+
+### Previous ABI 0.36.0
+
+The ABI was **0.36.0** (`CBIND-130`). It adds one route,
 `cna_packet_reader_copy_data_ext`, which copies the bytes a packet reader holds -- the inverse of
-`cna_packet_reader_set_data_ext`, as `cna_packet_writer_copy_data_ext` is of writing -- and exports
-3,203 routes. The change is purely additive: no existing route, constant, structure field or error
+`cna_packet_reader_set_data_ext`, as `cna_packet_writer_copy_data_ext` is of writing -- one route
+more than 0.35.0. The change is purely additive: no existing route, constant, structure field or error
 rule moves.
 
 It closes a gap the C# binding hit while putting XNA's `LocalNetworkGamer.ReceiveData(PacketReader,
@@ -534,7 +554,7 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-The current baseline records 3,203 exports; build configurations must export the same surface.
+The current baseline records 3,207 exports; build configurations must export the same surface.
 That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose backend or layer is absent exists and refuses, rather than

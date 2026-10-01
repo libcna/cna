@@ -53,6 +53,26 @@ small it returns `CNA_RESULT_BUFFER_TOO_SMALL`, performs no partial UTF-8 charac
 leaves the required count available. Error text is diagnostic only; programs must branch on
 `CNA_Result` and documented output state.
 
+### The canonical exception behind a failure (0.37.0)
+
+```text
+CNA_Result cna_error_get_last_exception_type_size_ext(uint64_t* out_bytes);
+CNA_Result cna_error_copy_last_exception_type_ext(char* destination, uint64_t capacity,
+                                                  uint64_t* out_bytes);
+CNA_Result cna_error_get_last_exception_param_name_size_ext(uint64_t* out_bytes);
+CNA_Result cna_error_copy_last_exception_param_name_ext(char* destination, uint64_t capacity,
+                                                        uint64_t* out_bytes);
+```
+
+A failure the exception barrier translated also records the .NET type name of the canonical
+exception it caught -- `System.ArgumentOutOfRangeException`,
+`Microsoft.Xna.Framework.Content.ContentLoadException` -- and, for an argument exception, its
+parameter name. A failure the C layer raised itself (a null output, a stale handle) records none:
+both sizes are zero. These are for a binding that re-raises a failure as the exception the
+canonical call would have thrown; a C program keeps branching on `CNA_Result`. Like the other
+`cna_error_*` queries they never overwrite the diagnostic they report, and they follow the same
+size-then-copy protocol.
+
 ## Callback failures
 
 A callback returning a non-success result stops the enclosing operation at its documented safe

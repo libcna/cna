@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 9216,
+  "encoded": 9472,
   "major": 0,
-  "minor": 36,
+  "minor": 37,
   "patch": 0,
-  "runtime": 9216
+  "runtime": 9472
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -1872,7 +1872,11 @@
   "cna_environment_map_effect_set_fresnel_factor",
   "cna_environment_map_effect_set_specular",
   "cna_environment_map_effect_set_texture",
+  "cna_error_copy_last_exception_param_name_ext",
+  "cna_error_copy_last_exception_type_ext",
   "cna_error_copy_last_message",
+  "cna_error_get_last_exception_param_name_size_ext",
+  "cna_error_get_last_exception_type_size_ext",
   "cna_error_get_last_info",
   "cna_error_get_last_message_size",
   "cna_file_dialog_get_is_supported_ext",
@@ -4060,9 +4064,9 @@
   "cna_write_leaderboards_event_info_init"
  ],
  "integers": {
-  "CNA_ABI_VERSION": 9216,
+  "CNA_ABI_VERSION": 9472,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 36,
+  "CNA_ABI_VERSION_MINOR": 37,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,

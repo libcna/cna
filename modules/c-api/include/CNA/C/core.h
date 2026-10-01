@@ -177,6 +177,66 @@ CNA_C_API CNA_Result cna_error_copy_last_message(
     uint64_t capacity,
     uint64_t* out_bytes);
 
+/**
+ * @brief Gets the UTF-8 byte count of the canonical exception type behind the most recent error.
+ *
+ * @param out_bytes Receives the byte count without a terminator: zero when the most recent failure
+ * on this thread was not raised by a canonical exception -- the C layer's own argument and handle
+ * checks are not.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output. Error-query
+ * calls never overwrite the prior thread-local diagnostic.
+ *
+ * CNAEXT. The result and category say what kind of failure it was; a managed binding re-raising the
+ * failure needs the exception the canonical call threw, which neither can name: a
+ * `GamerPrivilegeException` and an `InvalidOperationException` are both `CNA_RESULT_INVALID_STATE`,
+ * and an `ArgumentOutOfRangeException` is `CNA_RESULT_INVALID_ARGUMENT` like its base. The name is
+ * the .NET one, namespace included (`System.ArgumentOutOfRangeException`,
+ * `Microsoft.Xna.Framework.Content.ContentLoadException`); CNA's own internal exceptions name
+ * `CNA.` types, which no canonical caller expects.
+ */
+CNA_C_API CNA_Result cna_error_get_last_exception_type_size_ext(uint64_t* out_bytes);
+
+/**
+ * @brief Copies the canonical exception type behind the most recent error, without a terminator.
+ *
+ * @param destination Caller-owned destination bytes, or null only when @p capacity is zero.
+ * @param capacity Capacity of @p destination in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with nothing written, or an argument
+ * error. Error-query calls never overwrite the prior thread-local diagnostic.
+ */
+CNA_C_API CNA_Result cna_error_copy_last_exception_type_ext(
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Gets the UTF-8 byte count of the parameter name an argument exception carried.
+ *
+ * @param out_bytes Receives the byte count without a terminator: zero unless the most recent
+ * failure on this thread was an argument exception naming its parameter.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output. Error-query
+ * calls never overwrite the prior thread-local diagnostic.
+ *
+ * CNAEXT, for the canonical `ArgumentException.ParamName`, which the message does not reliably
+ * spell out.
+ */
+CNA_C_API CNA_Result cna_error_get_last_exception_param_name_size_ext(uint64_t* out_bytes);
+
+/**
+ * @brief Copies the parameter name an argument exception carried, without a terminator.
+ *
+ * @param destination Caller-owned destination bytes, or null only when @p capacity is zero.
+ * @param capacity Capacity of @p destination in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with nothing written, or an argument
+ * error. Error-query calls never overwrite the prior thread-local diagnostic.
+ */
+CNA_C_API CNA_Result cna_error_copy_last_exception_param_name_ext(
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
 #ifdef __cplusplus
 }
 #endif

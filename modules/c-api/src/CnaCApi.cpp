@@ -64,3 +64,60 @@ CNA_Result cna_error_copy_last_message(
     }
     return CNA_RESULT_SUCCESS;
 }
+
+namespace {
+
+[[nodiscard]] CNA_Result CopyErrorText(
+    const std::string& text,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes) noexcept
+{
+    if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
+        return CNA_RESULT_INVALID_ARGUMENT;
+    }
+    *outBytes = text.size();
+    if (capacity < text.size()) {
+        return CNA_RESULT_BUFFER_TOO_SMALL;
+    }
+    if (!text.empty()) {
+        std::memcpy(destination, text.data(), text.size());
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_error_get_last_exception_type_size_ext(uint64_t* const outBytes)
+{
+    if (outBytes == nullptr) {
+        return CNA_RESULT_INVALID_ARGUMENT;
+    }
+    *outBytes = CNA::C::Detail::GetLastError().exceptionType.size();
+    return CNA_RESULT_SUCCESS;
+}
+
+CNA_Result cna_error_copy_last_exception_type_ext(
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CopyErrorText(CNA::C::Detail::GetLastError().exceptionType, destination, capacity, outBytes);
+}
+
+CNA_Result cna_error_get_last_exception_param_name_size_ext(uint64_t* const outBytes)
+{
+    if (outBytes == nullptr) {
+        return CNA_RESULT_INVALID_ARGUMENT;
+    }
+    *outBytes = CNA::C::Detail::GetLastError().exceptionParamName.size();
+    return CNA_RESULT_SUCCESS;
+}
+
+CNA_Result cna_error_copy_last_exception_param_name_ext(
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CopyErrorText(CNA::C::Detail::GetLastError().exceptionParamName, destination, capacity, outBytes);
+}

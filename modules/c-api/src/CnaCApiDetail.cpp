@@ -2,15 +2,60 @@
 
 #include "CnaCApiDetail.hpp"
 
+#include "System/ArgumentException.hpp"
+
 #include <limits>
 #include <thread>
+#include <typeinfo>
 #include <vector>
+
+#if defined(__GNUG__)
+#include <cxxabi.h>
+#include <cstdlib>
+#include <memory>
+#endif
 
 namespace CNA::C::Detail {
 
 namespace {
 
 thread_local LastError lastError;
+
+struct PendingException {
+    bool noted = false;
+    std::string type;
+    std::string paramName;
+};
+
+thread_local PendingException pendingException;
+
+/**
+ * The exception's canonical .NET type name. CNA's C++ namespaces are the .NET ones
+ * (`System::IO::IOException`, `Microsoft::Xna::Framework::Content::ContentLoadException`), so the
+ * dynamic type, demangled and with `::` read as `.`, is the name a managed consumer throws.
+ */
+[[nodiscard]] std::string CanonicalTypeName(const std::exception& exception)
+{
+    const char* raw = typeid(exception).name();
+    std::string name;
+#if defined(__GNUG__)
+    int status = 0;
+    const std::unique_ptr<char, void (*)(void*)> demangled(
+        abi::__cxa_demangle(raw, nullptr, nullptr, &status), std::free);
+    name = status == 0 && demangled ? demangled.get() : raw;
+#else
+    name = raw;
+    for (const std::string_view prefix : {std::string_view("class "), std::string_view("struct ")}) {
+        if (name.rfind(prefix, 0) == 0) {
+            name.erase(0, prefix.size());
+        }
+    }
+#endif
+    for (std::size_t at = name.find("::"); at != std::string::npos; at = name.find("::", at)) {
+        name.replace(at, 2, ".");
+    }
+    return name;
+}
 
 [[nodiscard]] uint32_t NextGeneration(const uint32_t current) noexcept
 {
@@ -77,6 +122,18 @@ void SetLastSensorErrorId(const int32_t sensorErrorId) noexcept
     lastError.sensorErrorId = sensorErrorId;
 }
 
+void NoteTranslatedException(const std::exception& exception) noexcept
+{
+    try {
+        pendingException.type = CanonicalTypeName(exception);
+        const auto* const argument = dynamic_cast<const System::ArgumentException*>(&exception);
+        pendingException.paramName = argument != nullptr ? argument->getParamNameProperty() : std::string();
+        pendingException.noted = true;
+    } catch (...) {
+        pendingException = PendingException{};
+    }
+}
+
 void SetLastError(
     const CNA_Result result,
     const CNA_ErrorCategory category,
@@ -88,6 +145,14 @@ void SetLastError(
     lastError.joinError = 0U;
     lastError.hasSensorErrorId = false;
     lastError.sensorErrorId = 0;
+    if (pendingException.noted) {
+        lastError.exceptionType.swap(pendingException.type);
+        lastError.exceptionParamName.swap(pendingException.paramName);
+        pendingException = PendingException{};
+    } else {
+        lastError.exceptionType.clear();
+        lastError.exceptionParamName.clear();
+    }
     try {
         if (message.empty()) {
             lastError.message.clear();

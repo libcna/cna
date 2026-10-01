@@ -1711,6 +1711,53 @@ static int validate_session_discovery(const CNA_SignedInGamerHandle signed_in)
         cna_network_session_join_invited(1, 0) == CNA_RESULT_INVALID_ARGUMENT;
 }
 
+/* The canonical exception type and parameter name behind the most recent failure (CBIND-132). */
+static int last_exception_is(const char* expected_type, const char* expected_param)
+{
+    char type[128];
+    char param[64];
+    uint64_t type_bytes = UINT64_C(0);
+    uint64_t param_bytes = UINT64_C(0);
+    uint64_t size = UINT64_C(0);
+
+    if (cna_error_get_last_exception_type_size_ext(&size) != CNA_RESULT_SUCCESS ||
+        cna_error_copy_last_exception_type_ext(type, (uint64_t)sizeof(type), &type_bytes) !=
+            CNA_RESULT_SUCCESS ||
+        type_bytes != size || type_bytes != (uint64_t)strlen(expected_type) ||
+        memcmp(type, expected_type, (size_t)type_bytes) != 0) {
+        return 0;
+    }
+    return cna_error_get_last_exception_param_name_size_ext(&size) == CNA_RESULT_SUCCESS &&
+        cna_error_copy_last_exception_param_name_ext(param, (uint64_t)sizeof(param), &param_bytes) ==
+            CNA_RESULT_SUCCESS &&
+        param_bytes == size && param_bytes == (uint64_t)strlen(expected_param) &&
+        memcmp(param, expected_param, (size_t)param_bytes) == 0;
+}
+
+/* Run straight after a System.ArgumentOutOfRangeException("maxGamers"): the size-then-copy
+   protocol, and refusals that leave the diagnostic they report untouched. */
+static int validate_exception_queries(void)
+{
+    char small[4];
+    uint64_t bytes = UINT64_C(0);
+
+    if (cna_error_copy_last_exception_type_ext(small, (uint64_t)sizeof(small), &bytes) !=
+            CNA_RESULT_BUFFER_TOO_SMALL ||
+        bytes != (uint64_t)strlen("System.ArgumentOutOfRangeException") ||
+        cna_error_copy_last_exception_param_name_ext(small, (uint64_t)sizeof(small), &bytes) !=
+            CNA_RESULT_BUFFER_TOO_SMALL ||
+        bytes != UINT64_C(9) ||
+        cna_error_get_last_exception_type_size_ext(0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_error_copy_last_exception_type_ext(0, UINT64_C(1), &bytes) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_error_get_last_exception_param_name_size_ext(0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_error_copy_last_exception_param_name_ext(small, UINT64_C(4), 0) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    return last_exception_is("System.ArgumentOutOfRangeException", "maxGamers");
+}
+
+
 static int validate_sessions(void)
 {
     CNA_NetworkSessionHandle session = CNA_INVALID_HANDLE;
@@ -1756,6 +1803,8 @@ static int validate_sessions(void)
     if (cna_network_session_create(CNA_NETWORK_SESSION_TYPE_LOCAL, 1, 1, &rejected) !=
             CNA_RESULT_INVALID_ARGUMENT ||
         rejected != CNA_INVALID_HANDLE ||
+        !last_exception_is("System.ArgumentOutOfRangeException", "maxGamers") ||
+        !validate_exception_queries() ||
         cna_network_session_create(CNA_NETWORK_SESSION_TYPE_LOCAL, 1, 32, &rejected) !=
             CNA_RESULT_INVALID_ARGUMENT ||
         rejected != CNA_INVALID_HANDLE) {
@@ -1806,8 +1855,10 @@ static int validate_join_error(void)
     CNA_NetworkSessionJoinError join_error = CNA_NETWORK_SESSION_JOIN_ERROR_SESSION_FULL;
     CNA_Bool has_join_error = CNA_TRUE;
 
-    /* The most recent failure on this thread was an ordinary handle failure, not a join failure. */
-    if (cna_packet_writer_destroy(CNA_INVALID_HANDLE) != CNA_RESULT_INVALID_HANDLE) {
+    /* The most recent failure on this thread was an ordinary handle failure, not a join failure --
+       and not an exception at all, so it names no canonical exception type either. */
+    if (cna_packet_writer_destroy(CNA_INVALID_HANDLE) != CNA_RESULT_INVALID_HANDLE ||
+        !last_exception_is("", "")) {
         return 0;
     }
     if (cna_net_get_last_join_error(&join_error, &has_join_error) != CNA_RESULT_SUCCESS ||
