@@ -9,15 +9,11 @@
 #include "CNA/Diagnostics/Diagnostics.hpp"
 #endif
 
+#include "CNA/Internal/Renderers/Common/RendererThreadContextLease.hpp"
 #include "System/EventArgs.hpp"
 #include "System/EventHandler.hpp"
 #include "System/IDisposable.hpp"
 #include "System/Object.hpp"
-
-namespace CNA::Internal::Renderers
-{
-    class IRendererThreadContextLease;
-}
 
 namespace Microsoft::Xna::Framework::Graphics
 {
