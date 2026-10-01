@@ -46,6 +46,25 @@ TEST_F(OnlineLeaderboardTest, HostMachineWritesItsLocalGamersAtEndGameAndPublish
     until([&]{return peer->snapshot().state==Service::ServiceSessionState::Lobby;});
 }
 
+// XNA: LocalWithLeaderboards "allows guests ... to join". A guest has no service identity, so the
+// game starts and ends normally and only the account's row reaches the service's board.
+TEST_F(OnlineLeaderboardTest, AGuestInALocalWithLeaderboardsGameLeavesTheAccountsRowsToTheService) {
+    const auto fourth=[]{return (*Gamer::getSignedInGamersProperty())[Microsoft::Xna::Framework::PlayerIndex::Four];};
+    service->signOut(3);until([&]{return fourth()==nullptr;});
+    service->signInGuest(3,"Alice (1)",0);until([&]{return fourth()!=nullptr&&fourth()->getIsGuestProperty();});
+    session=NetworkSession::Create(NetworkSessionType::LocalWithLeaderboards,std::vector<SignedInGamer*>{gamer(0),fourth()},4,0,{});
+    auto* alice=session->getLocalGamersProperty()[0];auto* guest=session->getLocalGamersProperty()[1];
+    EXPECT_TRUE(guest->getIsGuestProperty());
+    session->WriteUnarbitratedLeaderboard+=[&](auto*,const WriteLeaderboardsEventArgs& args) {
+        if(args.getGamerProperty()==alice)write(alice,700);
+    };
+    ASSERT_NO_THROW(session->StartGame());
+    session->Update();ASSERT_EQ(NetworkSessionState::Playing,session->getSessionStateProperty());
+    session->EndGame();session->Update();
+    EXPECT_EQ(NetworkSessionState::Lobby,session->getSessionStateProperty());
+    EXPECT_EQ(700,rating("Alice"));EXPECT_EQ(-1,rating("Alice (1)"));
+}
+
 TEST_F(OnlineLeaderboardTest, ClientMachineCommitsItsOwnGamersWhenTheHostEndsTheGame) {
     privatePeer(false);
     auto found=NetworkSession::Find(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(1),gamer(3)},{});

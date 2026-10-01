@@ -1,5 +1,17 @@
 # NEXT.md
 
+> **HISTORICAL CHECKPOINT.** This document describes CNA GamerServices/Net as of the July 2026
+> `plans/plan_net.md` handoff (2026-07-04 to 2026-07-18, last content commit 4943bc86f), before the
+> CNA account service existed. It is not current capability documentation: several statements
+> below (for example that the standard `AvatarRenderer` is "a no-op-by-design" with real drawing
+> only through `DrawRealEXT`, and that "`PlayerMatch`/`Ranked`, session invites remain documented
+> stubs") no longer hold. Its "current phase", "do not do yet" rules and resume prompt are
+> superseded by `plans/plan_gamer_services_server.md`, `plans/plan_gamer_services_avatar_polish.md`
+> and `plans/plan_gamer_services_xbox_fidelity.md`. For the current implementation and every
+> remaining limitation see
+> [`docs/gamer-services-known-limitations.md`](docs/gamer-services-known-limitations.md)
+> (per-member status: `docs/xna-4-api-coverage.md` §9).
+
 ## 1. Project summary
 
 **CNA** is a C++23 reimplementation of the XNA 4.0 programming model

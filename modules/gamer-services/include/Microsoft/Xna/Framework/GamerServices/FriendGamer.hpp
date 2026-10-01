@@ -72,14 +72,14 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Gets whether this friend is currently away.
          *
-         * @return Always false: CNA accounts have no away status.
+         * @return Whether the friend chose Away as their online status in the Guide (CNA service).
          */
         [[nodiscard]] bool getIsAwayProperty() const;
 
         /**
          * @brief Gets whether this friend is currently busy.
          *
-         * @return Always false: CNA accounts have no busy status.
+         * @return Whether the friend chose Busy as their online status in the Guide (CNA service).
          */
         [[nodiscard]] bool getIsBusyProperty() const;
 

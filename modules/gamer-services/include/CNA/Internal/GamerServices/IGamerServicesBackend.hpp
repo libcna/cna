@@ -41,6 +41,21 @@ struct ServiceIdentity {
     int gamerZone = 0;
     /** @brief Stars (0..5) from other players' reviews; empty when nobody has reviewed the member. */
     std::optional<float> reputation;
+    /** @brief XNA GamerPrivileges.AllowCommunication as the account's policy states it:
+     * "everyone", "friends" or "blocked". Only a signed-in account learns its own. */
+    std::string communication = "everyone";
+    /** @brief GamerPrivileges.AllowProfileViewing: "everyone", "friends" or "blocked". */
+    std::string profileViewing = "everyone";
+    /** @brief GamerPrivileges.AllowUserCreatedContent: "everyone", "friends" or "blocked". */
+    std::string userContent = "everyone";
+    /** @brief GamerPrivileges.AllowTradeContent. */
+    bool tradeContent = true;
+    /** @brief GamerPrivileges.AllowPurchaseContent. */
+    bool purchaseContent = true;
+    /** @brief GamerPrivileges.AllowPremiumContent. */
+    bool premiumContent = true;
+    /** @brief Gamertags the signed-in account has blocked, as read at sign-in. */
+    std::vector<std::string> blocked;
 };
 /** @brief One account's avatar as the service returns it to this client. */
 struct ServiceAvatarRecord {
@@ -92,6 +107,9 @@ struct ServiceFriend {
     std::string presence;
     /** @brief The online friend's account status is away or busy (never both). */
     bool away = false, busy = false;
+    /** @brief XNA FriendGamer.HasVoice: the friend's live client can currently talk (voice built
+     * and on, a capture device present, communication allowed); false while the friend is offline. */
+    bool hasVoice = false;
 };
 /** @brief Most bytes a leaderboard Stream column carries (CNA's bound; hex on the wire). */
 inline constexpr std::size_t MaxLeaderboardStreamBytes = 256;
@@ -289,6 +307,12 @@ public:
     /** @brief Records prefer/avoid feedback, or clears it. @param userId Reviewer.
      * @param gamertag Subject. @param rating "prefer", "avoid" or "clear". */
     virtual void reviewPlayer(const std::string& userId,const std::string& gamertag,const std::string& rating) = 0;
+    /** @brief Reads the gamertags an account has blocked. @param userId Account. @return Gamertags. */
+    virtual std::vector<std::string> blockedPlayers(const std::string& userId) = 0;
+    /** @brief Blocks or unblocks another member: while blocked, neither can message, invite or
+     * befriend the other, see the other's profile or find the other's sessions, and blocking ends
+     * a friendship. @param userId Account. @param gamertag Other member. @param blocked Wanted state. */
+    virtual void setBlocked(const std::string& userId,const std::string& gamertag,bool blocked) = 0;
     /** @brief Publishes rich presence. @param userId Actor. @param mode Stable mode. @param text Display text. */
     virtual void setPresence(const std::string& userId,int mode,const std::string& text) = 0;
     /** @brief Sets the account-wide status friends see. @param userId Actor.
@@ -396,6 +420,11 @@ void setFakeAvatarCatalogPolicy(IGamerServicesBackend& fake,AvatarCatalogPolicy 
 /** @brief Tests: whether an account is in a joinable game, as friends and party members see it.
  * @param fake Backend from makeFakeBackend. @param userId Account. @param joinable Joinable. */
 void setFakeJoinable(IGamerServicesBackend& fake,const std::string& userId,bool joinable);
+/** @brief Tests: whether an account's client reports it can talk, as friends see it while online.
+ * @param fake Backend from makeFakeBackend. @param userId Account. @param voice Can talk. */
+void setFakeVoice(IGamerServicesBackend& fake,const std::string& userId,bool voice);
+/** @brief Tests: seconds between a signed-in account's heartbeats (30 normally). @param seconds Interval. */
+void setHeartbeatIntervalForTesting(int seconds);
 /** @brief Creates deterministic fake with explicitly supplied identities and catalog.
  * @param identities Accounts. @param catalog Title catalog. @param boards Explicit test boards.
  * @return Fake backend. */

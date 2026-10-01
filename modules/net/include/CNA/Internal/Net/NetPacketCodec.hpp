@@ -34,7 +34,8 @@ namespace CNA::Internal::Net
         ServerWelcome = 0x02,
         GamerJoinBroadcast = 0x03,
         GamerLeaveBroadcast = 0x04,
-        // 0x05 is reserved for a future HostChangeBroadcast (host migration); not implemented.
+        // 0x05 is unused (once reserved for a HostChangeBroadcast): host migration works without
+        // one, by reconnecting to the new host.
         StateChangeBroadcast = 0x06,
         SessionPropertiesBroadcast = 0x07,
         GamerReadyBroadcast = 0x08,
@@ -71,12 +72,21 @@ namespace CNA::Internal::Net
          * so a client's own view of the host's gamer always reported IsHost == false.
          */
         bool IsHost{false};
+        /**
+         * @brief Whether this gamer is a guest of a signed-in profile (XNA NetworkGamer.IsGuest).
+         *
+         * Carried in the gamer-flags block after the roster (see NetPacketCodec.cpp); a message
+         * from a peer that predates the block reads as no guests.
+         */
+        bool IsGuest{false};
     };
 
     /** @brief Sent by a client immediately after connecting, announcing its local gamers. */
     struct ClientHelloMessage
     {
         std::vector<std::string> LocalGamertags;
+        /** @brief Whether each gamer of LocalGamertags, in order, is a guest; empty means none is. */
+        std::vector<bool> LocalGuests;
     };
 
     /** @brief Sent by the host in reply to ClientHello: assigned wire-ids and the current roster. */
@@ -150,6 +160,8 @@ namespace CNA::Internal::Net
     struct AddLocalGamerMessage
     {
         std::string Gamertag;
+        /** @brief Whether the added gamer is a guest. */
+        bool IsGuest{false};
     };
     /** @brief The host's measured round trip to one gamer, in milliseconds. */
     struct RoundtripEntry

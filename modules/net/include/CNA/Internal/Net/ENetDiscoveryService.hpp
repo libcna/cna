@@ -82,8 +82,8 @@ namespace CNA::Internal::Net
          *
          * Broadcasts a DiscoveryQuery (plus a unicast copy to 127.0.0.1) and blocks for a short,
          * fixed discovery window collecting DiscoveryAnnounce replies. Returns an empty list
-         * immediately for any sessionTypeFilter other than SystemLink, matching the
-         * NetworkSessionType policy that only SystemLink is backed by real networking.
+         * immediately for any sessionTypeFilter other than SystemLink, the only type found by LAN
+         * discovery (PlayerMatch/Ranked are searched in the CNA service directory).
          *
          * @param sessionTypeFilter The session type being searched for.
          * @return The discovered sessions, each carrying its real connect address/port.

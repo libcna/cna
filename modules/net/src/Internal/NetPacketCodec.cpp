@@ -4,6 +4,7 @@
 #include "System/IO/MemoryStream.hpp"
 
 #include <enet/enet.h>
+#include <algorithm>
 #include <limits>
 #include <stdexcept>
 
@@ -29,6 +30,53 @@ namespace CNA::Internal::Net
             writer.Write(entry.WireId);
             writer.Write(entry.Gamertag);
             writer.Write(entry.IsHost);
+        }
+
+        // Per-gamer flags after a message's original payload, in the order the payload lists its
+        // gamers: [0x47][u8 count][u8 flags]*count, bit 0 = guest. Written only when a gamer is a
+        // guest, so a message without guests is byte for byte what it always was -- which keeps
+        // the online relay path, whose strict parser admits no trailing bytes and whose sessions
+        // admit no guests, unchanged. The SystemLink decoders stop reading at the end of the
+        // original payload, so a peer that predates the block ignores it, and a message from such
+        // a peer has none: every gamer reads as no guest. A block of another tag is a later
+        // extension and is skipped; one of this tag with the wrong count is malformed.
+        constexpr bytecs GamerFlagsBlock = 0x47;
+        constexpr bytecs GamerFlagGuest = 0x01;
+
+        void WriteGamerFlags(PacketWriter& writer, const std::vector<bool>& guests)
+        {
+            if (std::find(guests.begin(), guests.end(), true) == guests.end()) return;
+            writer.Write(GamerFlagsBlock);
+            writer.Write(EncodeCount(guests.size(), "gamer flags"));
+            for (const bool guest : guests)
+            {
+                writer.Write(static_cast<bytecs>(guest ? GamerFlagGuest : 0));
+            }
+        }
+
+        std::vector<bool> ReadGamerFlags(PacketReader& reader, std::size_t count)
+        {
+            std::vector<bool> guests(count, false);
+            if (reader.getLengthProperty() - reader.getPositionProperty() < 2 || reader.ReadByte() != GamerFlagsBlock)
+            {
+                return guests;
+            }
+            if (reader.ReadByte() != count || reader.getLengthProperty() - reader.getPositionProperty() < static_cast<int>(count))
+            {
+                throw std::runtime_error("NetPacketCodec: malformed gamer flags");
+            }
+            for (std::size_t i = 0; i < count; ++i)
+            {
+                guests[i] = (reader.ReadByte() & GamerFlagGuest) != 0;
+            }
+            return guests;
+        }
+
+        std::vector<bool> GuestsOf(const std::vector<RosterEntry>& entries)
+        {
+            std::vector<bool> guests;
+            for (const auto& entry : entries) guests.push_back(entry.IsGuest);
+            return guests;
         }
 
         void WriteSessionProperties(PacketWriter& writer, const NetworkSessionProperties& properties)
@@ -113,6 +161,9 @@ namespace CNA::Internal::Net
         {
             writer.Write(gamertag);
         }
+        auto guests = message.LocalGuests;
+        guests.resize(message.LocalGamertags.size(), false);
+        WriteGamerFlags(writer, guests);
         return ExtractBytes(writer);
     }
 
@@ -129,6 +180,7 @@ namespace CNA::Internal::Net
         {
             message.LocalGamertags.push_back(reader.ReadString());
         }
+        message.LocalGuests = ReadGamerFlags(reader, count);
         return message;
     }
 
@@ -152,6 +204,7 @@ namespace CNA::Internal::Net
         }
 
         WriteSessionProperties(writer, message.SessionProperties);
+        WriteGamerFlags(writer, GuestsOf(message.ExistingRoster));
 
         return ExtractBytes(writer);
     }
@@ -179,6 +232,8 @@ namespace CNA::Internal::Net
         }
 
         message.SessionProperties = ReadSessionProperties(reader);
+        const auto guests = ReadGamerFlags(reader, message.ExistingRoster.size());
+        for (std::size_t i = 0; i < guests.size(); ++i) message.ExistingRoster[i].IsGuest = guests[i];
 
         return message;
     }
@@ -194,6 +249,7 @@ namespace CNA::Internal::Net
         {
             WriteRosterEntry(writer, entry);
         }
+        WriteGamerFlags(writer, GuestsOf(message.NewGamers));
         return ExtractBytes(writer);
     }
 
@@ -210,6 +266,8 @@ namespace CNA::Internal::Net
         {
             message.NewGamers.push_back(ReadRosterEntry(reader));
         }
+        const auto guests = ReadGamerFlags(reader, count);
+        for (std::size_t i = 0; i < guests.size(); ++i) message.NewGamers[i].IsGuest = guests[i];
         return message;
     }
 
@@ -360,6 +418,7 @@ namespace CNA::Internal::Net
         PacketWriter writer;
         writer.Write(static_cast<bytecs>(MessageTag::AddLocalGamerRequest));
         writer.Write(message.Gamertag);
+        WriteGamerFlags(writer, {message.IsGuest});
         return ExtractBytes(writer);
     }
 
@@ -370,6 +429,7 @@ namespace CNA::Internal::Net
         (void) reader.ReadByte();
         AddLocalGamerMessage message;
         message.Gamertag = reader.ReadString();
+        message.IsGuest = ReadGamerFlags(reader, 1).front();
         return message;
     }
 

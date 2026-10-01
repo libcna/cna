@@ -23,8 +23,8 @@
 //
 // What it shows:
 //   - The joiner's one-shot QualityOfService from NetworkSession::Find(): the discovery round trip
-//     and a downstream bandwidth estimate timed from the host's probe train (GSP-L6). Upstream is
-//     0: a host answers discovery at frame boundaries and cannot time what arrives.
+//     and both bandwidth estimates: downstream timed from the host's probe train (GSP-L6),
+//     upstream from this machine's train as the host's responder timed it (GSX-E3).
 //   - Every machine's live NetworkGamer::RoundtripTime: the host reads ENet's per-peer round trip,
 //     a client its round trip to the host (plus the host's to a gamer on another client). The
 //     value includes how often each side pumps ENet: this demo pumps every 200ms.

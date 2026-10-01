@@ -1,5 +1,13 @@
 # Initial implementation candidates (GS-001)
 
+> **HISTORICAL CHECKPOINT.** This document describes CNA GamerServices/Net as of baseline
+> b2fd47a45 (2026-09-28, before the GamerServices server work). It is not current capability
+> documentation: several statements below (for example the `AvatarRenderer` note that "the faithful
+> Draw() overloads above remain permanent no-ops" with only `DrawRealEXT()` rendering, and the
+> `NetworkGamer` default gamertag "Stub Gamer") no longer hold. For the current implementation and
+> every remaining limitation see
+> [`docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md).
+
 Baseline b2fd47a45. Every candidate needs individual Xbox-target review; this is not a defect count. Re-run rg after migrations; retain this baseline as evidence.
 
 This is the historical GS-001 baseline, not an open list: `gamer_services_server_final_register.md` records what every candidate became.

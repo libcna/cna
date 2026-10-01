@@ -95,8 +95,9 @@ TEST(GamerServicesDispatcherHangRegressionTest, GetAchievementsDoesNotHangWhenGa
 // static needs the same process isolation either way). A second Initialize() call used to leak
 // the first call's 4 SignedInGamer objects permanently (GamerCollection<T> holds non-owning raw
 // pointers, and Gamer::setSignedInGamersProperty() only deletes the previous
-// SignedInGamerCollection wrapper, not its contents). The harness's own
-// GamerServicesDispatcher::GetFreedGamerCountForTesting() check does the real verification;
+// SignedInGamerCollection wrapper, not its contents). Initialize() no longer creates gamers and a
+// second call is refused (XNA); the harness checks that refusal and that
+// GamerServicesDispatcher::GetFreedGamerCountForTesting() stays 0;
 // this test only confirms the harness process actually completes and reports success.
 TEST(GamerServicesDispatcherHangRegressionTest, SecondInitializeDoesNotLeakThePreviousFourGamers) {
     pid_t pid = -1;
@@ -117,12 +118,10 @@ TEST(GamerServicesDispatcherHangRegressionTest, SecondInitializeDoesNotLeakThePr
                             << " — the second Initialize() call likely leaked or freed the wrong count";
 }
 
-// Task 9.8: verifies Initialize()'s actual gamer-population behavior end to end - exact stub
-// gamertags/PlayerIndex values, Gamer::getSignedInGamersProperty() ending up with exactly 4
-// entries, and SignedInGamer::OnSignIn firing exactly once per gamer - then exercises Task 7.1's
-// GetAchievements() fix in the same process, once real initialization has actually happened.
-// Needs the exact same process isolation as the tests above, for the same reason.
-TEST(GamerServicesDispatcherHangRegressionTest, InitializePopulatesFourStubGamersCorrectly) {
+// Initialize() without a configured service and without auto sign-in fabricates no gamer: the
+// signed-in collection stays empty and SignedIn never fires. Needs the exact same process
+// isolation as the tests above, for the same reason.
+TEST(GamerServicesDispatcherHangRegressionTest, InitializeWithoutAServiceSignsInNobody) {
     pid_t pid = -1;
     char* argv[] = {
         const_cast<char*>(CNA_NET_GAMERSERVICES_HANG_HARNESS_PATH),
@@ -138,6 +137,5 @@ TEST(GamerServicesDispatcherHangRegressionTest, InitializePopulatesFourStubGamer
 
     EXPECT_TRUE(finished) << "harness did not exit before the watchdog deadline and was killed";
     EXPECT_EQ(exitCode, 0) << "harness exited with unexpected code " << exitCode
-                            << " — Initialize()'s gamer population, naming, PlayerIndex "
-                               "assignment, or SignedIn firing diverged from what's expected";
+                            << " — Initialize() signed a gamer in or raised SignedIn without a service";
 }

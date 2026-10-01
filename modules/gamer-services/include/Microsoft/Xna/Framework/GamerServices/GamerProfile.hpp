@@ -26,7 +26,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Gets the gaming zone the gamer has selected.
          *
-         * @return GamerZone::Unknown: CNA has no gamer zones.
+         * @return The zone an account chose in the Guide (CNA service); GamerZone::Unknown for a
+         *         local offline profile or an account that never chose one.
          */
         [[nodiscard]] GamerZone getGamerZoneProperty() const;
 
@@ -47,7 +48,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Gets the gamer's reputation, as a number of stars ranging 0 to 5.
          *
-         * @return 0: CNA keeps no reputation (player reviews do not rate gamers).
+         * @return With a CNA service, stars in quarters from other players' reviews (a CNA formula:
+         *         5 x prefer / (prefer + avoid)); 0 for an unreviewed account or a local profile.
          */
         [[nodiscard]] float getReputationProperty() const;
 

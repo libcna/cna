@@ -2,13 +2,14 @@
 // Copyright (c) Robert Vokac and contributors
 //
 // Task 5.9: final NetworkSessionType policy regression pass. Systematically sweeps every
-// NetworkSessionType other than SystemLink, proving each is provably unaffected by all of Phase
-// 5's real-networking machinery (Tasks 5.1-5.8) — no real ENet host, no discovery, no wire
-// traffic, and no wall-clock cost paid searching a network that only SystemLink ever talks to.
+// NetworkSessionType other than SystemLink, proving each is unaffected by Phase 5's LAN ENet
+// machinery (Tasks 5.1-5.8) — no LAN ENet host, no discovery, no wire traffic, and no wall-clock
+// cost paid searching a network that only SystemLink ever talks to. (PlayerMatch/Ranked reach their
+// peers through the CNA service and its relay instead; the online session tests cover them.)
 // This is a verification pass, not new functionality: no production code changes are expected
 // from this task, only test coverage that was previously scattered across individual tasks'
 // spot-checks (e.g. ENetBackendTests.cpp's *IsNoOpForNonSystemLinkTypes tests, each covering only
-// NetworkSessionType::Local) becoming a single systematic sweep over all four synthetic types.
+// NetworkSessionType::Local) becoming a single systematic sweep over all four non-LAN types.
 #include <gtest/gtest.h>
 
 #include "CNA/Internal/Net/ENetBackend.hpp"
@@ -35,8 +36,8 @@ using Microsoft::Xna::Framework::Net::NetworkSessionType;
 using Microsoft::Xna::Framework::Net::SendDataOptions;
 
 namespace {
-    // Every NetworkSessionType this project treats as fully synthetic (no real ENet networking).
-    // SystemLink is deliberately excluded — that's the one type Phase 5 makes real.
+    // Every NetworkSessionType that never uses the LAN ENet layer. SystemLink is deliberately
+    // excluded — the one type that does.
     constexpr NetworkSessionType kSyntheticTypes[] = {
         NetworkSessionType::Local,
         NetworkSessionType::LocalWithLeaderboards,
@@ -44,16 +45,16 @@ namespace {
         NetworkSessionType::Ranked,
     };
 
-    // The two synthetic types a game can still CREATE. Both are offline session types in XNA too,
-    // so a single machine really is the whole session and there is nothing missing about them.
+    // The two single-machine types. Both are offline session types in XNA too, so a single machine
+    // really is the whole session and there is nothing missing about them.
     constexpr NetworkSessionType kOfflineSyntheticTypes[] = {
         NetworkSessionType::Local,
         NetworkSessionType::LocalWithLeaderboards,
     };
 
-    // The two that are refused (SAMPLE-096, misc/known_gaps.md). They are Xbox LIVE matchmaking
-    // types: the service finds the peers. With no service, a created session is a room no peer can
-    // reach, so create/find refuse instead of handing one back.
+    // The two that are refused without a configured CNA service (SAMPLE-096, misc/known_gaps.md).
+    // They are matchmaking types: the service finds the peers. With no service, a created session
+    // would be a room no peer can reach, so create/find refuse instead of handing one back.
     constexpr NetworkSessionType kMatchmakingTypes[] = {
         NetworkSessionType::PlayerMatch,
         NetworkSessionType::Ranked,

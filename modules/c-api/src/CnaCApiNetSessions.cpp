@@ -2185,8 +2185,9 @@ using SignedInGamerList = std::vector<Microsoft::Xna::Framework::GamerServices::
     return CNA_RESULT_SUCCESS;
 }
 
-// CNA completes every canonical Begin/End pair before Begin returns, so the C route stays one
-// synchronous call and simply invokes the completion delegate the canonical API already accepts.
+// The C route drives each canonical Begin/End pair to completion (an online operation's End pumps
+// Dispatcher updates until the service answers), so it stays one synchronous call and simply
+// invokes the completion delegate the canonical API already accepts.
 [[nodiscard]] System::AsyncCallback CompletionDelegate(
     const CNA_NetworkSessionAsyncCallback callback,
     void* const context)

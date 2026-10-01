@@ -133,8 +133,8 @@ The XNA-compatible graphics core, renderer backends, custom shaders, `PbrEffect`
   with MinGW-w64 and verified running under Wine.
 - Linux support via `OPENGLES3`/`OPENGL33` (OpenGL) or `SDL_RENDERER`.
 - **Web (Emscripten) and Android (NDK) targets are implemented and verified**, not just
-  architecturally planned — see section 7 (Networking, Services & Avatar) below for real
-  cross-platform `Net` verification on both.
+  architecturally planned — see section 7 (Networking, Services & Avatar) below for what `Net`
+  does on each (browsers have no multiplayer through the XNA API).
 - **macOS** has a native CI build/test gate; **iOS/iPadOS** is experimental platform support.
   The Apple workflow final-links an actual `.app` for device and simulator and launches a
   one-frame `Game` smoke application in the simulator. There is still no physical-device,
@@ -261,42 +261,58 @@ effect, `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`), usabl
 ## 7. 🌐 Networking, Services & Avatar
 
 Beyond graphics, CNA ports the XNA 4.0 `GamerServices` and `Net` namespaces (and, within
-`GamerServices`, the Avatar subsystem), with real cross-platform networking behind them.
+`GamerServices`, the Avatar subsystem), backed by CNA's own account service
+([`cna-gamer-services-server`](https://github.com/libcna/cna-gamer-services-server)).
 
 ### GamerServices
 
-- Complete XNA-shaped port of the Xbox LIVE-era gamer services API surface: `Gamer`,
-  `SignedInGamer`, `GamerProfile`, `FriendGamer`/`FriendCollection`, leaderboards
-  (`LeaderboardReader`/`LeaderboardWriter`/`LeaderboardEntry`), `Guide`, achievements, and more.
-- **Not** binary-compatible with real Xbox Live — reimplements the public API shape with
-  local/synthetic semantics, matching how FNA itself already handles this namespace.
+- The XNA gamer services API with real behaviour: with a configured CNA service, accounts and Guide
+  sign-in, profiles, friends and presence, messages and player reviews, achievements, leaderboards
+  (including Ranked arbitration), invitations, parties and social notifications; without one, local
+  offline profiles, as on a console without Xbox LIVE. An Xbox 360-inspired Guide (sign-in picker,
+  gamer cards, friends, party, avatar editor) is drawn by CNA over the game, in CNA's own look.
+- A **CNA-owned, XNA/Xbox-like** implementation with its own protocol, accounts and backend
+  policies — **not** Xbox LIVE compatible. See [`docs/gamer-services-server.md`](docs/gamer-services-server.md)
+  and, for everything that is not done or done differently,
+  [`docs/gamer-services-known-limitations.md`](docs/gamer-services-known-limitations.md).
+- What "Xbox-like" does and does not claim: the **public API is XNA-compatible** (names, types,
+  exceptions and event order read from the XNA 4.0 assemblies and documentation); the **workflow is
+  Xbox-like** (sign in, Guide, friends, invitations, parties, as XNA games expected); how the backend
+  decides what XNA only reports -- the Reputation formula, host election, party rules, presence
+  timeouts, invitation lifetime, Ranked arbitration, privilege policy -- is **CNA policy**, not a
+  claim about Xbox LIVE; console behaviour was **never traced** on an Xbox 360, so exact historical
+  equivalence is claimed nowhere; and the Guide and avatars **resemble** the Xbox 360 era in
+  original CNA art only.
 
 ### Net (`Microsoft::Xna::Framework::Net`)
 
 - Complete `NetworkSession` API surface (5 enums + 18 classes).
-- **Real networking** for `NetworkSessionType::SystemLink`, backed by
-  [ENet](http://enet.bespin.org/) (reliable UDP, vendored directly under `third_party/enet`) —
-  hosting, joining, LAN discovery, `AppData` relay, disconnect handling, and `StartGame`/`EndGame`
-  state broadcast all run over a genuine transport, not a stub. Every other `NetworkSessionType`
-  remains a synthetic (non-networked) stub, matching upstream XNA/FNA behavior.
-- **Verified real networking across four platforms:**
+- **`SystemLink`** runs over [ENet](http://enet.bespin.org/) (reliable UDP, vendored under
+  `third_party/enet`): hosting, joining, LAN discovery with measured QoS, data relay, host
+  migration, disconnect handling and `StartGame`/`EndGame` state broadcast.
+- **`PlayerMatch` and `Ranked`** run through the CNA service's session directory, with every datagram
+  carried by its authenticated TLS/WSS relay: create, find, join, invitations, online host migration,
+  `AddLocalGamer` and Ranked arbitration. `Local` and `LocalWithLeaderboards` need no transport.
+- **Voice** is routed automatically in SystemLink and online sessions (microphone capture, Opus,
+  realtime session packets, playback) where libopus is available (`CNA_ENABLE_VOICE`).
+- **Networking by platform:**
   - **Linux** — native ENet/UDP, including a genuine two-OS-process loopback test.
   - **Windows** — native ENet/UDP via WinSock2; cross-compiled with MinGW-w64 and verified running
     under Wine.
-  - **Web (Emscripten)** — real ENet traffic carried over actual WebSocket connections. A browser
-    tab can only ever be a network *client* (browsers cannot open listening sockets at all); real
-    hosting requires a Node.js-run process.
+  - **Web (Emscripten)** — ENet runs over Emscripten's WebSocket-emulated sockets as a client of a
+    Node.js-run host, but a browser has no LAN discovery, no service transport and no relay, so a
+    browser game cannot find or join sessions through the XNA API: browser multiplayer is outside
+    the current scope ([`docs/browser-network-readiness.md`](docs/browser-network-readiness.md)).
   - **Android (NDK)** — native ENet/UDP via bionic libc's genuine POSIX sockets, verified on a real
     x86_64 emulator — no platform-specific transport workarounds needed at all, unlike Web.
 
 ### Avatar
 
-- `AvatarAnimation`, `AvatarDescription`, `AvatarRenderer`, and their supporting enums/types (all
-  within `Microsoft::Xna::Framework::GamerServices`) are ported from a decompiled real Microsoft
-  XNA 4.0 reference assembly — FNA itself never implemented Avatar, since real avatar rendering
-  required Xbox Live's cloud avatar-editor service. The API shape is complete, with the real
-  (occasionally surprising, always-inert) stubbed behavior of the original assembly preserved
-  faithfully rather than "improved."
+- `AvatarAnimation`, `AvatarDescription` and `AvatarRenderer` work as XNA's documentation describes
+  them on the Xbox 360 (the Windows assembly only stubbed them): real rendering on XNA's 71-bone skeleton, the 31 animation
+  presets, expressions and `AvatarDescription.Changed`, drawn from original CNA avatar catalogs
+  compiled into the runtime. The service stores each account's description; a catalog a client
+  lacks is installed as a verified pack. See [`docs/avatars.md`](docs/avatars.md).
 
 ## 8. 🧰 Technology Stack
 
@@ -306,7 +322,9 @@ Beyond graphics, CNA ports the XNA 4.0 `GamerServices` and `Net` namespaces (and
 - **Graphics dependency:** `easy-gl` (for the `OPENGLES2`/`OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2` renderers),
   resolved from the canonical `../easy-gl` sibling; EasyGL in turn resolves `../meta-gl`
 - **Networking:** [ENet](http://enet.bespin.org/) (vendored directly at `third_party/enet`) —
-  reliable-UDP transport backing `Microsoft::Xna::Framework::Net`'s `SystemLink` sessions
+  the realtime transport of every `Microsoft::Xna::Framework::Net` session (UDP on the LAN, carried
+  through the service relay online); libcurl (TLS HTTPS and WebSockets to the CNA service);
+  optional libopus for network voice
 - **Utility/runtime layer:** `sharp-runtime`
 - **Build system:** CMake
 - **Tests:** GoogleTest (`CnaTests` target)

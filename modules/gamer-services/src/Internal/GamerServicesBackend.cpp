@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
+#include "CNA/Internal/GamerServices/VoiceMutes.hpp"
 #include "CNA/Internal/GamerServices/AssetDiskCache.hpp"
 #include "CNA/Internal/GamerServices/AvatarAssets.hpp"
 #include "CNA/Internal/GamerServices/BackendConfiguration.hpp"
@@ -40,6 +41,7 @@ constexpr bool backgroundServiceWork = false;
 #else
 constexpr bool backgroundServiceWork = true;
 #endif
+std::atomic<int> heartbeatSeconds{30};
 long long unixTime(){return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();}
 void slotGuard(int slot) {if(slot<0||slot>3)throw System::ArgumentOutOfRangeException("slot");}
 ServiceIdentity identity(const Json& j) {
@@ -170,6 +172,7 @@ public:
             try {
                 const auto result=request("auth.login",{{"username",username},{"password",password}},{});
                 auto person=identity(result.at("identity"));issuedToken=CnaService::stringField(result,"token",128);
+                applyPrivileges(person,result);
                 if(issuedToken.size()!=64)throw CnaService::Error("INVALID_RESPONSE");
                 std::lock_guard transport(transportMutex_);
                 std::string previous,signedInToken;
@@ -183,6 +186,7 @@ public:
                 issuedToken.clear();
                 if(!previous.empty()){try{(void)exchange("auth.logout",Json::object(),previous);}catch(...){}}
                 readGameDefaults(person,signedInToken);
+                readBlocked(person,signedInToken);
                 event.type=BackendEvent::Type::SignedIn;event.identity=std::move(person);
             }catch(const std::exception& failure){
                 if(issuedToken.size()==64){try{(void)request("auth.logout",Json::object(),issuedToken);}catch(...){}}
@@ -223,7 +227,12 @@ public:
                         if(state.generation==generation) {
                             if(state.expires<=unixTime()+300&&!state.refresh.empty())renewLocked(slot,generation);
                             else if(capabilities_.contains("heartbeat")&&!state.token.empty()) {
-                                try{(void)exchange("auth.ping",Json::object(),state.token);}
+                                // With the heartbeat the client says whether it can talk now (XNA
+                                // FriendGamer.HasVoice as friends see it); one boolean, no device detail.
+                                Json ping=Json::object();
+                                if(capabilities_.contains("friend-voice"))
+                                    ping["voice"]=localVoiceCapable()&&state.identity.communication!="blocked";
+                                try{(void)exchange("auth.ping",ping,state.token);}
                                 catch(const ServiceError& error){if(error.code!="UNAUTHENTICATED")throw;renewLocked(slot,generation);}
                             }
                             succeeded=true;
@@ -231,7 +240,7 @@ public:
                     }catch(const ServiceError& error) {if(error.code=="UNAUTHENTICATED")invalidateSlot(slot,generation);}
                      catch(...) {}
                     {std::lock_guard lock(slotMutex_);auto& state=slots_[slot];if(state.generation==generation){state.busy=false;
-                        if(succeeded){state.failures=0;state.retryAt=0;state.heartbeatAt=unixTime()+30;}
+                        if(succeeded){state.failures=0;state.retryAt=0;state.heartbeatAt=unixTime()+heartbeatSeconds;}
                         else {state.failures=std::min(state.failures+1,6);state.retryAt=unixTime()+std::min(300,10*(1<<state.failures));}}}
                     BackendEvent event;event.type=BackendEvent::Type::Completion;return event;
                 });
@@ -271,7 +280,8 @@ public:
             // A server older than these flags leaves them out; one that sends them sends booleans.
             for(auto [key,target]:{std::pair{"joinable",&friendState.joinable},std::pair{"inviteReceivedFrom",&friendState.inviteReceivedFrom},
                 std::pair{"inviteSentTo",&friendState.inviteSentTo},std::pair{"inviteAccepted",&friendState.inviteAccepted},
-                std::pair{"inviteRejected",&friendState.inviteRejected},std::pair{"away",&friendState.away},std::pair{"busy",&friendState.busy}}) {
+                std::pair{"inviteRejected",&friendState.inviteRejected},std::pair{"away",&friendState.away},std::pair{"busy",&friendState.busy},
+                std::pair{"hasVoice",&friendState.hasVoice}}) {
                 if(!e.contains(key))continue;
                 if(!e[key].is_boolean())throw Unavailable("Invalid friend response.");
                 *target=e[key].get<bool>();
@@ -297,6 +307,12 @@ public:
     }
     void sendMessage(const std::string& user,const std::vector<std::string>& tags,const std::string& text) override {
         (void)request("messages.send",{{"gamertags",tags},{"text",text}},tokenFor(user));
+    }
+    std::vector<std::string> blockedPlayers(const std::string& user) override {
+        return parseBlocked(request("privacy.list",Json::object(),tokenFor(user)));
+    }
+    void setBlocked(const std::string& user,const std::string& tag,bool blocked) override {
+        (void)request(blocked?"privacy.block":"privacy.unblock",{{"gamertag",tag}},tokenFor(user));
     }
     ServiceMessagePage messages(const std::string& user,int start,int limit) override {
         const auto result=request("messages.list",{{"start",start},{"limit",limit}},tokenFor(user));
@@ -607,7 +623,16 @@ private:
         std::unique_ptr<curl_slist,decltype(&curl_slist_free_all)> owned(headers,curl_slist_free_all);
         if(!headers)throw Unavailable("Service transport unavailable.");
         curl_easy_setopt(curl,CURLOPT_HTTPHEADER,headers);
-        if(curl_easy_perform(curl)!=CURLE_OK)throw Unavailable("CNA service connection failed.");
+        auto performed=curl_easy_perform(curl);
+        // A connection lost after the request left may have lost only the response. A service that
+        // keeps request outcomes commits an ID with its change, so asking once more with the same ID
+        // either runs a request that never committed or answers from the record; it never runs one
+        // twice. Results carrying a secret are not kept, so those are not asked again.
+        if((performed==CURLE_GOT_NOTHING||performed==CURLE_SEND_ERROR||performed==CURLE_RECV_ERROR)&&
+           capabilities_.contains("request-outcomes")&&op!="auth.login"&&op!="auth.refresh"&&op!="sessions.relayTicket") {
+            output.clear();performed=curl_easy_perform(curl);
+        }
+        if(performed!=CURLE_OK)throw Unavailable("CNA service connection failed.");
         long status=0;curl_easy_getinfo(curl,CURLINFO_RESPONSE_CODE,&status);if(status!=200)throw Unavailable("CNA service HTTP failure.");
         const auto response=CnaService::parse(output);
         if(!response.is_object()||response.size()!=4||response.at("v")!=1||CnaService::stringField(response,"id",64)!=id||!response.at("result").is_object())
@@ -673,6 +698,7 @@ private:
             if(op.starts_with("leaderboards.game.")&&!capabilities_.contains("local-leaderboard-commit"))throw Unavailable("CNA service local leaderboard commit capability missing.");
             if(op=="leaderboards.list"&&!capabilities_.contains("leaderboard-list"))throw Unavailable("CNA service leaderboard-list capability missing.");
             if(op.starts_with("parties.")&&!capabilities_.contains("parties"))throw ServiceError("NOT_SUPPORTED");
+            if(op.starts_with("privacy.")&&!capabilities_.contains("privacy"))throw ServiceError("NOT_SUPPORTED");
             if(op=="invites.joinFriend"&&!capabilities_.contains("join-friend"))throw ServiceError("NOT_SUPPORTED");
             if(op.starts_with("leaderboards.")&&!capabilities_.contains("leaderboard-reads"))throw Unavailable("CNA service leaderboard-read capability missing.");
             if(op=="assets.read"&&!capabilities_.contains("assets"))throw Unavailable("CNA service asset capability missing.");
@@ -750,7 +776,7 @@ private:
             serverNow=result["serverTime"].get<long long>();
         }
         if(!result.contains("expires")||!result["expires"].is_number_integer()||result["expires"]<=serverNow||result["expires"]>serverNow+3600)throw Unavailable("Invalid credential expiry.");
-        state.expires=localNow+(result["expires"].get<long long>()-serverNow);state.heartbeatAt=localNow+30;
+        state.expires=localNow+(result["expires"].get<long long>()-serverNow);state.heartbeatAt=localNow+heartbeatSeconds;
         if(capabilities_.contains("session-refresh")) {
             state.refresh=CnaService::stringField(result,"refreshToken",64);
             if(state.refresh.size()!=64||state.refresh.find_first_not_of("0123456789abcdef")!=std::string::npos||!result.contains("refreshExpires")||!result["refreshExpires"].is_number_integer()||result["refreshExpires"]<result["expires"]||result["refreshExpires"]>serverNow+30LL*86400)throw Unavailable("Invalid refresh credential.");
@@ -794,6 +820,35 @@ private:
             readGameDefaults(renewed.identity,renewed.token);
             BackendEvent event;event.type=BackendEvent::Type::SignedIn;event.slot=slot;event.identity=std::move(renewed.identity);ready(std::move(event));
         }
+    }
+    // The signed-in account's own privileges (XNA GamerPrivileges); a service older than them
+    // sends none, and every privilege stays allowed.
+    static void applyPrivileges(ServiceIdentity& person,const Json& result) {
+        if(!result.contains("privileges"))return;
+        const auto& p=result["privileges"];
+        auto setting=[&](const char* key,std::string& out) {
+            const auto value=CnaService::stringField(p,key,16);
+            if(value!="everyone"&&value!="friends"&&value!="blocked")throw CnaService::Error("INVALID_RESPONSE");
+            out=value;
+        };
+        auto allowed=[&](const char* key,bool& out) {
+            if(!p.contains(key)||!p[key].is_boolean())throw CnaService::Error("INVALID_RESPONSE");
+            out=p[key].get<bool>();
+        };
+        setting("communication",person.communication);setting("profileViewing",person.profileViewing);setting("userContent",person.userContent);
+        allowed("trade",person.tradeContent);allowed("purchase",person.purchaseContent);allowed("premium",person.premiumContent);
+    }
+    // The signed-in account's block list; a service without one, or a failed read, leaves none.
+    // Callers hold transportMutex_, hence exchange rather than request.
+    void readBlocked(ServiceIdentity& person,const std::string& token) {
+        if(!capabilities_.contains("privacy"))return;
+        try{person.blocked=parseBlocked(exchange("privacy.list",Json::object(),token));}catch(...){}
+    }
+    static std::vector<std::string> parseBlocked(const Json& result) {
+        const auto& rows=result.at("blocked");
+        if(!rows.is_array()||rows.size()>1024)throw Unavailable("Invalid block list.");
+        std::vector<std::string> tags;for(const auto& row:rows)tags.push_back(row.get<std::string>());
+        return tags;
     }
     // The signed-in account's game defaults; a service without them, or a failed read, leaves none.
     // Callers hold transportMutex_ (sign-in and renewal), hence exchange rather than request.
@@ -959,7 +1014,8 @@ public:
             BackendEvent event;event.slot=slot;
             for(const auto& person:identities_)if(person.gamertag==username) {
                 for(int i=0;i<4;++i)if(i!=slot&&slots_[i]==person.userId){event.error="Already signed in.";return event;}
-                slots_[slot]=person.userId;event.type=BackendEvent::Type::SignedIn;event.identity=person;return event;
+                slots_[slot]=person.userId;event.type=BackendEvent::Type::SignedIn;event.identity=person;
+                event.identity.blocked=blockedTags(person.userId);return event;
             }event.error="Sign-in failed.";return event;
         });
     }
@@ -996,11 +1052,13 @@ public:
             value.presence=value.online?presence_[target.userId]:"";
             value.away=value.online&&status_[target.userId]=="away";value.busy=value.online&&status_[target.userId]=="busy";
             value.joinable=value.online&&joinable_.contains(target.userId);
+            value.hasVoice=value.online&&voice_.contains(target.userId);
             result.push_back(std::move(value));
         }return result;
     }
     void changeFriend(const std::string& user,const std::string& tag,const std::string& action) override {
         require(user);auto target=profile(tag).userId;if(target==user)throw Unavailable("Self friendship.");
+        if(action!="remove"&&blockedBetween(user,target))throw ServiceOperationError("NOT_AUTHORIZED");
         if(action=="accept"&&!edges_.contains({target,user}))throw Unavailable("No incoming request.");
         if(action=="remove"){edges_.erase({target,user});edges_.erase({user,target});}
         else if(action=="add"||action=="accept")edges_.insert({user,target});
@@ -1018,8 +1076,19 @@ public:
         if(found==std::end(zones))throw ServiceOperationError("INVALID_ARGUMENT");
         for(auto& person:identities_)if(person.userId==user)person.gamerZone=static_cast<int>(found-std::begin(zones));
     }
+    std::vector<std::string> blockedTags(const std::string& user) {
+        std::vector<std::string> tags;for(const auto& id:blocks_[user])tags.push_back(profileById(id).gamertag);return tags;
+    }
+    bool blockedBetween(const std::string& a,const std::string& b) {return blocks_[a].contains(b)||blocks_[b].contains(a);}
+    std::vector<std::string> blockedPlayers(const std::string& user) override {require(user);return blockedTags(user);}
+    void setBlocked(const std::string& user,const std::string& tag,bool blocked) override {
+        require(user);const auto target=profile(tag).userId;if(target==user)throw ServiceOperationError("INVALID_ARGUMENT");
+        if(!blocked){blocks_[user].erase(target);return;}
+        blocks_[user].insert(target);edges_.erase({target,user});edges_.erase({user,target});
+    }
     void sendMessage(const std::string& user,const std::vector<std::string>& tags,const std::string& text) override {
         require(user);if(tags.empty()||tags.size()>100||text.size()>256)throw ServiceOperationError("INVALID_ARGUMENT");
+        for(const auto& tag:tags)if(blockedBetween(user,profile(tag).userId))throw ServiceOperationError("NOT_AUTHORIZED");
         for(const auto& tag:tags){const auto target=profile(tag).userId;if(target==user)throw ServiceOperationError("INVALID_ARGUMENT");
             ServiceMessage message;message.id=std::string(28,'0')+std::to_string(1000+(++messageSequence_%9000));message.sender=profileById(user).gamertag;
             message.text=text;message.created=messageSequence_;inbox_[target].insert(inbox_[target].begin(),std::move(message));}
@@ -1108,6 +1177,7 @@ public:
     }
     /** @brief Fixture: whether an account is in a joinable game (friends and party members see it). */
     void setJoinable(const std::string& user,bool joinable){if(joinable)joinable_.insert(user);else joinable_.erase(user);}
+    void setVoice(const std::string& user,bool voice){if(voice)voice_.insert(user);else voice_.erase(user);}
     std::vector<ServiceLeaderboardInfo> leaderboards() override {
         if(std::all_of(slots_.begin(),slots_.end(),[](const auto& id){return id.empty();}))throw Unavailable("No authenticated fixture gamer.");
         std::vector<ServiceLeaderboardInfo> list;
@@ -1287,12 +1357,14 @@ private:
     std::array<std::string,4> slots_{};
     std::map<std::string,std::map<std::string,long long>> earned_;
     std::set<std::pair<std::string,std::string>> edges_;
+    std::map<std::string,std::set<std::string>> blocks_;
     std::map<std::string,std::string> presence_,status_;
     std::set<std::string> remoteOnline_;
     struct FakeParty {std::string leader;std::vector<std::string> members;std::map<std::string,std::string> invitations;};
     std::map<std::string,FakeParty> parties_;
     std::map<std::string,std::string> partyOf_;
     std::set<std::string> joinable_;
+    std::set<std::string> voice_;
     int partySequence_=0;
 };
 thread_local int serviceRestrictionDepth=0;
@@ -1347,6 +1419,12 @@ void setFakeJoinable(IGamerServicesBackend& fake,const std::string& userId,bool 
     auto* backend=dynamic_cast<FakeBackend*>(&fake);
     if(!backend)throw System::InvalidOperationException("Not a fake Gamer Services backend.");
     backend->setJoinable(userId,joinable);
+}
+void setHeartbeatIntervalForTesting(int seconds){heartbeatSeconds=seconds;}
+void setFakeVoice(IGamerServicesBackend& fake,const std::string& userId,bool voice) {
+    auto* backend=dynamic_cast<FakeBackend*>(&fake);
+    if(!backend)throw System::InvalidOperationException("Not a fake Gamer Services backend.");
+    backend->setVoice(userId,voice);
 }
 void setFakeAvatarCatalogPolicy(IGamerServicesBackend& fake,AvatarCatalogPolicy policy) {
     auto* backend=dynamic_cast<FakeBackend*>(&fake);

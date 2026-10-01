@@ -63,10 +63,10 @@ namespace Microsoft::Xna::Framework::Net
         void EnableSendVoice(NetworkGamer* remoteGamer, bool enable);
 
         /**
-         * @brief Sends game invitations to the gamer's party members.
+         * @brief Invites the rest of the gamer's CNA service party to this online session.
          *
-         * @throws System::InvalidOperationException if the gamer has left the session or is alone in
-         *         its party, which is always the case: CNA has no party service.
+         * @throws System::InvalidOperationException if the gamer has left the session, has fewer than
+         *         two members in its party (PartySize), or is not in an online network session.
          */
         void SendPartyInvites();
 

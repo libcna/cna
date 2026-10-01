@@ -205,6 +205,13 @@ TEST(TwoProcessLoopbackTest, ClientAddLocalGamerJoinsTheClientsMachineAcrossReal
     RunHostAndClient("added-gamer-host", "added-gamer-client");
 }
 
+// GSH-02: a SystemLink guest is a guest on every machine. The host's guest reaches the client in
+// the welcome, the client's in its hello (joined through a Find given both gamers), again after
+// the client leaves and rejoins, and a second guest added later in AddLocalGamer.
+TEST(TwoProcessLoopbackTest, GuestsAreGuestsOnEveryMachineAcrossRealProcesses) {
+    RunHostAndClient("guest-host", "guest-client");
+}
+
 // Task 6.3: ENetBackend::StartHosting used to commit a new session into its Sessions() map
 // *before* ENetDiscoveryService::RegisterHost() (which can throw a bind/socket-create failure) -
 // leaving a stale, undiscoverable entry with no rollback. This can only be forced deterministically

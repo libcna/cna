@@ -19,9 +19,13 @@
 #include <chrono>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <future>
 #include <nlohmann/json.hpp>
 #include <thread>
+#if defined(__unix__) || defined(__APPLE__)
+#include <unistd.h>
+#endif
 
 namespace Service = CNA::Internal::GamerServices;
 namespace Avatars = CNA::Internal::GamerServices::Avatars;
@@ -571,3 +575,195 @@ TEST_F(AvatarChangedTest, GamersWhoAreNotSignedInAreReadFreshAndNeverRaise) {
     EXPECT_EQ(calls, 0);
     EXPECT_FLOAT_EQ(ReadAvatar(alice.get()).getHeightProperty(), 1.6f);
 }
+
+// ---- GSH-09: adversarial catalog updates -------------------------------------------------------
+namespace {
+// Everything that decides how an avatar looks: every part's geometry, colour, image and layer.
+std::uint64_t Fingerprint(const Avatars::AvatarModel& model) {
+    std::uint64_t hash = 1469598103934665603ull;
+    auto mix = [&](const void* data, std::size_t size) {
+        for (std::size_t i = 0; i < size; ++i) hash = (hash ^ static_cast<const unsigned char*>(data)[i]) * 1099511628211ull;
+    };
+    mix(&model.height, sizeof(model.height));
+    for (const auto& part : model.parts) {
+        for (const auto& vertex : part.vertices) mix(&vertex.position, sizeof(vertex.position));
+        mix(part.indices.data(), part.indices.size() * sizeof(part.indices[0]));
+        mix(&part.color, sizeof(part.color));
+        mix(&part.image, sizeof(part.image));
+        mix(&part.layer, sizeof(part.layer));
+    }
+    return hash;
+}
+}
+
+// Two accounts' avatars need the same missing catalog at once, on several threads: it is
+// installed exactly once, every caller gets it, and no staging is left behind.
+TEST_F(AvatarServiceTest, ConcurrentRequestsForOnePackInstallItOnce) {
+    const auto catalog = MakeNewerCatalog();
+    Service::setFakeAvatarCatalog(*service_, catalog.manifest(), catalog.assets);
+    std::vector<std::future<std::shared_ptr<const Avatars::CatalogManifest>>> callers;
+    for (int i = 0; i < 4; ++i) callers.push_back(std::async(std::launch::async, [] { return Avatars::catalogManifest(Newer); }));
+    for (auto& caller : callers) {
+        while (caller.wait_for(std::chrono::milliseconds(1)) != std::future_status::ready) GamerServicesDispatcher::Update();
+    }
+    for (auto& caller : callers) {
+        const auto manifest = caller.get();
+        ASSERT_NE(manifest, nullptr);
+        EXPECT_EQ(manifest->version, Newer);
+    }
+    EXPECT_TRUE(Installed(root_));
+    EXPECT_FALSE(Staged(root_));
+    int versions = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(root_)) versions += entry.path().filename().string().starts_with("v");
+    EXPECT_EQ(1, versions);
+    const auto model = Avatars::buildAvatarModel(*Avatars::decode(Encoded(0, 1650, Newer, 102)));
+    EXPECT_FALSE(model->catalogUnavailable);
+    EXPECT_TRUE(model->substitutedItems.empty());
+}
+
+// A client that stops in the middle of an install (its process ends) starts again: it keeps the
+// files it verified, activates nothing partial, and a week-old staging directory of anything else
+// is removed.
+TEST_F(AvatarServiceTest, ARestartedClientResumesItsStagingAndClearsAbandonedStaging) {
+    const auto catalog = MakeNewerCatalog();
+    Service::setFakeAvatarCatalog(*service_, catalog.manifest(), catalog.assets);
+    Service::setFakeCatalogFileFailures(*service_, 2);
+    EXPECT_EQ(WhilePumping([] { return Avatars::catalogManifest(Newer); }), nullptr);
+    ASSERT_TRUE(Staged(root_));
+    const auto abandoned = root_ / ".staging-v99-0000000000000000-abandoned";
+    std::filesystem::create_directories(abandoned);
+    std::filesystem::last_write_time(abandoned, std::filesystem::file_time_type::clock::now() - std::chrono::hours(24 * 8));
+    // The restart: this process forgets every manifest it loaded; nothing partial was activated.
+    Avatars::setInstalledCatalogRootForTesting(root_);
+    ExpectNotActivated(root_);
+    // The service answers again, and the new process has no memory of the failures.
+    Service::setFakeCatalogFileFailures(*service_, -1);
+    Avatars::forgetCatalogUpdateFailures();
+    ASSERT_NE(WhilePumping([] { return Avatars::catalogManifest(Newer); }), nullptr);
+    EXPECT_TRUE(Installed(root_));
+    EXPECT_FALSE(Staged(root_));
+    EXPECT_FALSE(std::filesystem::exists(abandoned));
+    EXPECT_EQ(Service::fakeAvatarTraffic(*service_).fileDownloads, 4);
+}
+
+// No update exists for the version an avatar names: the default avatar is drawn, ids are never
+// read against another catalog, and the service is not asked again at once.
+TEST_F(AvatarServiceTest, AnUnavailableUpdateDrawsTheDefaultAvatarAndIsNotAskedAgainAtOnce) {
+    Service::setFakeAvatarCatalog(*service_, MakeNewerCatalog().manifest(), {});
+    const auto missing = static_cast<std::uint16_t>(Newer + 1);
+    EXPECT_EQ(WhilePumping([&] { return Avatars::catalogManifest(missing); }), nullptr);
+    const auto model = WhilePumping([&] { return Avatars::buildAvatarModel(*Avatars::decode(Encoded(0, 1650, missing, 102))); });
+    EXPECT_TRUE(model->catalogUnavailable);
+    EXPECT_EQ(Service::fakeAvatarTraffic(*service_).packReads, 1);
+    EXPECT_EQ(WhilePumping([&] { return Avatars::catalogManifest(missing); }), nullptr);
+    EXPECT_EQ(Service::fakeAvatarTraffic(*service_).packReads, 1);
+    EXPECT_FALSE(Staged(root_));
+}
+
+// A pack whose manifest is another version than its descriptor names is refused: a wrong version
+// is never substituted for the one asked for.
+TEST_F(AvatarServiceTest, APackClaimingAnotherVersionIsNeverSubstituted) {
+    auto catalog = MakeNewerCatalog();
+    catalog.json["catalogVersion"] = Newer + 1;
+    const auto manifest = catalog.manifest();
+    Avatars::CatalogPack pack;
+    pack.version = Newer;
+    pack.packFormat = 1;
+    pack.reader = 1;
+    pack.descriptionFormats = {1, 2};
+    pack.manifestSha256 = Avatars::sha256Hex(std::vector<unsigned char>(manifest.begin(), manifest.end()));
+    pack.manifestSize = manifest.size();
+    for (const auto& asset : catalog.json["assets"]) pack.totalBytes += asset["size"].get<std::uint64_t>();
+    EXPECT_THROW(Avatars::attachCatalogManifest(pack, manifest), std::runtime_error);
+    ExpectNotActivated(root_);
+}
+
+// An installed newer catalog does not change how a description of an older, frozen catalog looks:
+// v1, v2 and v3 descriptions build exactly the same avatar before and after.
+TEST_F(AvatarServiceTest, InstallingANewCatalogDoesNotChangeOlderDescriptions) {
+    std::vector<std::vector<unsigned char>> older;
+    for (std::uint16_t version = Avatars::BaseCatalogVersion; version < Newer; ++version) {
+        older.push_back(Encoded(0, 1650, version));
+        older.push_back(Encoded(1, 1830, version));
+    }
+    ASSERT_GE(older.size(), 6u) << "catalogs v1, v2 and v3 are compiled in";
+    std::vector<std::uint64_t> before;
+    for (const auto& bytes : older) {
+        const auto model = Avatars::buildAvatarModel(*Avatars::decode(bytes));
+        ASSERT_FALSE(model->catalogUnavailable);
+        before.push_back(Fingerprint(*model));
+    }
+    const auto catalog = MakeNewerCatalog();
+    Service::setFakeAvatarCatalog(*service_, catalog.manifest(), catalog.assets);
+    ASSERT_NE(WhilePumping([] { return Avatars::catalogManifest(Newer); }), nullptr);
+    Avatars::setInstalledCatalogRootForTesting(root_);
+    for (std::size_t i = 0; i < older.size(); ++i) {
+        const auto model = Avatars::buildAvatarModel(*Avatars::decode(older[i]));
+        EXPECT_FALSE(model->catalogUnavailable);
+        EXPECT_EQ(before[i], Fingerprint(*model)) << "description " << i;
+    }
+}
+
+// A description in a format newer than this client knows is not an avatar it can draw: XNA's
+// "undefined" case, answered with height 0 and the female body, never a guess.
+TEST_F(AvatarServiceTest, ADescriptionInAnUnknownFormatIsNotDrawnAsAnything) {
+    auto bytes = Encoded(1, 1830);
+    bytes[0] = 3;
+    EXPECT_FALSE(Avatars::decode(bytes));
+    const AvatarDescription description(std::vector<SharpRuntime::bytecs>(bytes.begin(), bytes.end()));
+    EXPECT_FLOAT_EQ(0.0f, description.getHeightProperty());
+    EXPECT_EQ(AvatarBodyType::Female, description.getBodyTypeProperty());
+}
+
+#if defined(__unix__) || defined(__APPLE__)
+// Two processes install the same pack into one directory at the same moment (two games of one
+// player starting together): the version is activated once, both succeed, nothing is staged.
+TEST(AvatarCatalogProcessTest, TwoProcessesInstallingOnePackActivateItOnce) {
+    if (const auto* child = std::getenv("CNA_TEST_CATALOG_CHILD")) {
+        const auto catalog = MakeNewerCatalog();
+        const auto manifest = catalog.manifest();
+        Avatars::CatalogPack pack;
+        pack.version = Newer;
+        pack.packFormat = 1;
+        pack.reader = 1;
+        pack.descriptionFormats = {1, 2};
+        pack.manifestSha256 = Avatars::sha256Hex(std::vector<unsigned char>(manifest.begin(), manifest.end()));
+        pack.manifestSize = manifest.size();
+        for (const auto& asset : catalog.json["assets"]) pack.totalBytes += asset["size"].get<std::uint64_t>();
+        Avatars::attachCatalogManifest(pack, manifest);
+        Avatars::setInstalledCatalogRootForTesting(std::filesystem::path(child) / "catalogs");
+        const auto outcome = Avatars::installCatalogPack(pack, std::uint64_t{64} << 20, [&](const Avatars::CatalogAsset& asset) {
+            // Slow enough that the two installs overlap.
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            return catalog.assets.at(asset.sha256);
+        });
+        const bool ok = outcome == Avatars::CatalogInstall::Installed || outcome == Avatars::CatalogInstall::AlreadyInstalled;
+        if (ok) std::ofstream(std::filesystem::path(child) / ("done-" + std::to_string(getpid()))) << static_cast<int>(outcome);
+        std::_Exit(ok ? 0 : 1);
+    }
+    const auto root = std::filesystem::temp_directory_path() / ("cna-catalog-processes-" + std::to_string(getpid()));
+    std::filesystem::remove_all(root);
+    std::filesystem::create_directories(root);
+    const auto self = std::filesystem::read_symlink("/proc/self/exe").string();
+    const auto one = "CNA_TEST_CATALOG_CHILD='" + root.string() + "' '" + self + "' --gtest_filter=AvatarCatalogProcessTest.* >/dev/null 2>&1";
+    EXPECT_EQ(0, std::system(("(" + one + ") & (" + one + ") & wait").c_str()));
+    int finished = 0, installed = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(root)) {
+        if (!entry.path().filename().string().starts_with("done-")) continue;
+        ++finished;
+        std::ifstream in(entry.path());
+        int outcome = -1;
+        in >> outcome;
+        installed += outcome == static_cast<int>(Avatars::CatalogInstall::Installed);
+    }
+    EXPECT_EQ(2, finished) << "both processes succeed";
+    EXPECT_EQ(1, installed) << "exactly one of them activates the pack";
+    EXPECT_TRUE(Installed(root / "catalogs"));
+    EXPECT_FALSE(Staged(root / "catalogs"));
+    Avatars::setInstalledCatalogRootForTesting(root / "catalogs");
+    const auto model = Avatars::buildAvatarModel(*Avatars::decode(Encoded(0, 1650, Newer, 102)));
+    EXPECT_FALSE(model->catalogUnavailable);
+    Avatars::setInstalledCatalogRootForTesting({});
+    std::filesystem::remove_all(root);
+}
+#endif

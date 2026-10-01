@@ -95,6 +95,13 @@ namespace Microsoft::Xna::Framework::Net
         CNAEXT void SetIsHost(bool value);
 
         /**
+         * @brief Sets whether a remote gamer is a guest, as its machine announced it.
+         *
+         * @param value Whether the gamer is a guest.
+         */
+        CNAEXT void SetIsGuest(bool value);
+
+        /**
          * @brief Gets whether this gamer is a local gamer.
          *
          * FNA implements this as a `this is LocalNetworkGamer` runtime type check.
@@ -211,9 +218,10 @@ namespace Microsoft::Xna::Framework::Net
          * @brief Creates a NetworkGamer for CNA internal use.
          *
          * @param session The owning NetworkSession.
-         * @param gamertag The gamer's gamertag. Defaults to "Stub Gamer", matching FNA's stub
-         *                 behavior for gamers with no known real identity; ENetBackend passes a
-         *                 real gamertag received over the wire when constructing remote gamers.
+         * @param gamertag The gamer's gamertag. "Stub Gamer" (FNA's placeholder) is only the
+         *                 fallback for a gamer built without an identity (this factory, the C
+         *                 route); session gamers carry their signed-in profile's gamertag or the
+         *                 one received over the wire.
          */
         CNAEXT static NetworkGamer CreateInternal(NetworkSession* session, const std::string& gamertag = "Stub Gamer");
 
@@ -222,7 +230,8 @@ namespace Microsoft::Xna::Framework::Net
          * @brief Constructs a NetworkGamer bound to the given session.
          *
          * @param session The owning NetworkSession.
-         * @param gamertag The gamer's gamertag. Defaults to "Stub Gamer", matching FNA's stub.
+         * @param gamertag The gamer's gamertag; "Stub Gamer" (FNA's placeholder) only for a gamer
+         *                 built without an identity.
          */
         explicit NetworkGamer(NetworkSession* session, const std::string& gamertag = "Stub Gamer");
 

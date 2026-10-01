@@ -6,7 +6,9 @@
 session-property list and both packet buffers. `CNA/C/net_gamers.h` adds gamers, machines and the
 event descriptions, and `CNA/C/net_sessions.h` adds discovered sessions, their
 collection, the session object itself and its local gamers. Nothing here opens a socket unless a
-`SystemLink` session is created; a `Local` session touches no transport at all.
+`SystemLink` session (direct ENet on the LAN) or a `PlayerMatch`/`Ranked` session (the configured
+CNA service and its authenticated relay) is created or searched for; a `Local` session touches no
+transport at all.
 
 ## Identities
 
@@ -92,8 +94,8 @@ the rest of the per-thread error information.
 
 `CNA_NetworkGamerHandle` owns a canonical gamer. Every canonical flag, the session-local
 identifier, the round-trip time as 100-nanosecond ticks and the owning session handle are exposed.
-`cna_network_gamer_create` takes a session handle so its shape is already final; session handles
-arrive with the session slice, so for now only `CNA_INVALID_HANDLE` is accepted.
+`cna_network_gamer_create` takes an optional session handle (`CNA_INVALID_HANDLE` for none); an
+empty gamertag gives the canonical factory's placeholder name, which no session gamer reports.
 
 The CNA extension setters keep an `_ext` suffix — `set_has_left_session_ext`, `set_id_ext`,
 `set_is_host_ext`, `set_roundtrip_ticks_ext` — so a consumer can see at a glance which state the
@@ -106,8 +108,9 @@ so a copy is observationally identical to the reference the canonical getter ret
 `CNA_NetworkMachineHandle` owns a machine. Its roster is exposed as a count plus indexed access
 returning a borrowed gamer view; a view keeps its machine alive and blocks the machine's release.
 Only a session populates a roster, so a machine created from C reports none.
-`cna_network_machine_remove_from_session` reports the canonical always-throwing placeholder as
-`CNA_RESULT_NOT_SUPPORTED` rather than pretending it succeeded.
+`cna_network_machine_remove_from_session` is the canonical `RemoveFromSession`: only the host may
+remove another machine, and the canonical refusals (the local machine, a machine that left, a
+caller that is not the host) come back as documented failures.
 
 The seven canonical event-argument types become fixed `CNA_*EventInfo` descriptions with `_init`
 routines, delivered by value exactly as every other C API event payload is. A payload gamer is a
@@ -125,7 +128,8 @@ Both equality operators become explicit routes, because C has no operator overlo
 One canonical limit shapes creation: the quality-of-service type offers exactly two constructions —
 unmeasured, and one built from a single round-trip sample. Only that sample can be carried in, so
 `cna_available_network_session_create_ext` reads `average_roundtrip_ticks` and ignores the
-throughput fields, which the canonical type leaves at zero anyway.
+throughput fields. A description a `SystemLink` search publishes carries measured downstream and
+upstream bandwidth as well; one from a `PlayerMatch`/`Ranked` search is unmeasured.
 
 `CNA_AvailableNetworkSessionCollectionHandle` owns the read-only collection. An element is **copied
 out** rather than aliased, so it survives the collection it came from; the canonical factory copies
@@ -140,9 +144,8 @@ a canonical process-wide restriction, not a C one.
 
 A session cannot exist without at least one **signed-in gamer**: the canonical constructor selects
 its host from its local gamers and fails while that list is empty. `CNA/C/gamer_services.h`
-therefore carries the minimum needed — create a signed-in gamer, read its gamertag, publish or
-clear the process-wide collection, and read that collection's count. The rest of gamer services is
-a later coverage task.
+provides the signed-in gamers (see `GAMER_SERVICES.md`); a C host can also create one and publish or
+clear the process-wide collection itself.
 
 That shapes the three creation routes:
 
@@ -170,8 +173,9 @@ Two lifetime rules follow from the canonical contract rather than from the bindi
 - `cna_network_session_start_game` and `_end_game` only **queue** a state change. The state moves
   when `cna_network_session_update` pumps the queue, exactly as the canonical implementation does.
 
-A packet event queued on a non-`SystemLink` session is a deliberate no-op in the canonical pump, so
-`cna_network_session_send_network_event_ext` succeeds and delivers nothing there.
+A packet event queued on a `Local` session is a deliberate no-op in the canonical pump, so
+`cna_network_session_send_network_event_ext` succeeds and delivers nothing there; `SystemLink` and
+online sessions deliver it.
 
 ## Session events
 
@@ -191,19 +195,22 @@ belongs to the process and takes no session handle.
 already in the session the instant a handler subscribes, so the callback fires before
 `cna_network_session_subscribe_gamer_joined` returns whenever the session is not empty.
 
-Nothing in the canonical implementation raises the three leaderboard events or `InviteAccepted`;
-their subscriptions are real and released normally, but no delivery happens. For `InviteAccepted`
-that is permanent rather than pending: there is no invitation service, which is also why the
-`join_invited` routes answer `CNA_RESULT_NOT_SUPPORTED` instead of returning a session assembled
-from fixed values. A `PlayerMatch` or `Ranked` create/find answers the same way, for the same
-reason. See `misc/known_gaps.md`.
+The three leaderboard events are raised at `EndGame` and when a gamer leaves a
+`LocalWithLeaderboards`, `PlayerMatch` or `Ranked` game, as in XNA. `InviteAccepted` is raised when a
+player accepts a CNA service invitation in the Guide (or joins a friend's game from it); an
+acceptance nobody is subscribed to reaches the first subscriber once, and only while its invitation
+can still be joined. Without a configured service there are no invitations, and the `join_invited`
+routes, like a `PlayerMatch` or `Ranked` create or find, answer `CNA_RESULT_NOT_SUPPORTED`
+(`GamerServicesNotAvailableException`). See `docs/gamer-services-known-limitations.md`.
 
 ## Discovery, join and the fake-async pairs
 
-Every canonical `Begin`/`End` pair collapses into one synchronous C route, because CNA completes
-the pair before `Begin` returns. Each `*_async` route still takes the canonical completion callback
-and invokes it before returning; the callback receives only the caller's own context, because no
-operation object may cross the ABI, and no `std::any` state is exposed.
+Every canonical `Begin`/`End` pair collapses into one synchronous C route: offline operations
+complete before `Begin` returns, and an online one (`PlayerMatch`/`Ranked` create, find, join,
+invited join) completes at a later `GamerServicesDispatcher.Update`, which the canonical `End` wait
+pumps. Each `*_async` route still takes the canonical completion callback and invokes it before
+returning; the callback receives only the caller's own context, because no operation object may
+cross the ABI, and no `std::any` state is exposed.
 
 The three `cna_network_session_create_*_async` routes preserve the requested `max_gamers`, exactly
 like their synchronous counterparts. CNA retains the value through its internal Begin/End action
@@ -211,10 +218,9 @@ instead of inheriting FNA's stubbed hardcoded value; the resulting limit drives 
 the functional session-capacity behavior.
 
 `cna_network_session_find` refuses a local-only session type outright, matching the canonical
-search, and only a `SystemLink` search reaches real discovery — every other type returns an empty
-collection by design. `cna_network_session_join` produces a session that reports the discovered
-session's type and no host role, and the invited-join routes build a session from the canonical
-fixed values rather than from any live invite state.
+search; a `SystemLink` search runs LAN discovery and a `PlayerMatch`/`Ranked` search reads the CNA
+service directory. `cna_network_session_join` joins the discovered session, and the invited-join
+routes join the invitation the player accepted in the Guide.
 
 Only one session exists at a time, so a caller releases one before creating or joining the next.
 

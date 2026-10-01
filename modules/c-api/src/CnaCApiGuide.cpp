@@ -189,8 +189,8 @@ private:
     return CNA_RESULT_SUCCESS;
 }
 
-// A guide screen takes a player index and does nothing with it on this runtime; validating it here
-// is still the boundary's job, so a caller learns about a bad identity rather than having it ignored.
+// Validating a guide screen's player index is the boundary's job, so a caller learns about a bad
+// identity as an argument failure before the canonical screen sees it.
 [[nodiscard]] CNA_Result ValidatePlayer(const CNA_PlayerIndex player, PlayerIndex* const outPlayer)
 {
     if (!TryMapPlayerIndex(player, outPlayer)) {

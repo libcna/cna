@@ -202,8 +202,9 @@ TEST(AvatarDescriptionTest, EndGetFromGamerRejectsResultNotFromBegin) {
 // description of the player whose avatar changed
 // (xna4-decomp/.../Microsoft.Xna.Framework.GamerServices/AvatarDescription.cs, OnAvatarChanged).
 // CNA previously had it as a static member, so subscribers of any one description heard every
-// notification. Nothing in this runtime raises the event; what is asserted here is the ownership
-// and delivery contract.
+// notification. What is asserted here is the ownership and delivery contract; the dispatcher raising
+// it for a signed-in player whose avatar changed is tested in LocalProfileTests and
+// ServiceAvatarTests.
 // ---------------------------------------------------------------------------
 
 namespace {

@@ -321,3 +321,90 @@ TEST(NetPacketCodecTest, VoiceFramesRoundTripAndMalformedOnesAreRefused) {
     frame.Payload.assign(MaxVoicePayloadBytes + 1, 7);
     EXPECT_THROW((void)NetPacketCodec::Encode(frame), std::runtime_error);
 }
+
+// GSH-02: IsGuest travels in a gamer-flags block after each message's original payload.
+namespace {
+// A peer built before the block sends exactly the bytes before it: [0x47][count][flags]*count.
+std::vector<uint8_t> WithoutGamerFlags(std::vector<uint8_t> bytes, std::size_t count) {
+    EXPECT_GE(bytes.size(), count + 2);
+    const auto block = bytes.end() - static_cast<std::ptrdiff_t>(count + 2);
+    EXPECT_EQ(0x47, block[0]);
+    EXPECT_EQ(count, block[1]);
+    bytes.erase(block, bytes.end());
+    return bytes;
+}
+}
+
+TEST(NetPacketCodecTest, GuestFlagsTravelInEveryMessageThatListsGamers) {
+    const auto hello = NetPacketCodec::DecodeClientHello(NetPacketCodec::Encode(ClientHelloMessage{{"Ann", "Ann (1)"}, {false, true}}));
+    EXPECT_EQ((std::vector<bool>{false, true}), hello.LocalGuests);
+
+    ServerWelcomeMessage welcome;
+    welcome.AssignedWireIds = {3};
+    welcome.ExistingRoster = {{1, "Host", true, false}, {2, "Host (1)", false, true}};
+    const auto decodedWelcome = NetPacketCodec::DecodeServerWelcome(NetPacketCodec::Encode(welcome));
+    ASSERT_EQ(2u, decodedWelcome.ExistingRoster.size());
+    EXPECT_FALSE(decodedWelcome.ExistingRoster[0].IsGuest);
+    EXPECT_TRUE(decodedWelcome.ExistingRoster[1].IsGuest);
+    EXPECT_TRUE(decodedWelcome.ExistingRoster[0].IsHost);
+
+    const auto join = NetPacketCodec::DecodeGamerJoinBroadcast(
+        NetPacketCodec::Encode(GamerJoinBroadcastMessage{{{4, "Bo", false, false}, {5, "Bo (1)", false, true}}}));
+    ASSERT_EQ(2u, join.NewGamers.size());
+    EXPECT_FALSE(join.NewGamers[0].IsGuest);
+    EXPECT_TRUE(join.NewGamers[1].IsGuest);
+
+    EXPECT_TRUE(NetPacketCodec::DecodeAddLocalGamer(NetPacketCodec::Encode(AddLocalGamerMessage{"Bo (2)", true})).IsGuest);
+    EXPECT_FALSE(NetPacketCodec::DecodeAddLocalGamer(NetPacketCodec::Encode(AddLocalGamerMessage{"Bo", false})).IsGuest);
+}
+
+TEST(NetPacketCodecTest, APeerThatPredatesGuestFlagsExchangesTheSameMessages) {
+    // New bytes are the old bytes plus the block, so an older peer, which stops reading at the end
+    // of the original payload, reads exactly what it always did; and what an older peer sends
+    // (no block) reads here as no guests.
+    const auto hello = WithoutGamerFlags(NetPacketCodec::Encode(ClientHelloMessage{{"Ann", "Ann (1)"}, {false, true}}), 2);
+    const auto oldHello = NetPacketCodec::DecodeClientHello(hello);
+    EXPECT_EQ((std::vector<std::string>{"Ann", "Ann (1)"}), oldHello.LocalGamertags);
+    EXPECT_EQ((std::vector<bool>{false, false}), oldHello.LocalGuests);
+
+    ServerWelcomeMessage welcome;
+    welcome.AssignedWireIds = {3};
+    welcome.ExistingRoster = {{1, "Host", true, true}};
+    welcome.SessionProperties.setItem(0, 7);
+    const auto oldWelcome = NetPacketCodec::DecodeServerWelcome(WithoutGamerFlags(NetPacketCodec::Encode(welcome), 1));
+    ASSERT_EQ(1u, oldWelcome.ExistingRoster.size());
+    EXPECT_EQ("Host", oldWelcome.ExistingRoster[0].Gamertag);
+    EXPECT_TRUE(oldWelcome.ExistingRoster[0].IsHost);
+    EXPECT_FALSE(oldWelcome.ExistingRoster[0].IsGuest);
+    EXPECT_EQ(7, oldWelcome.SessionProperties.getItem(0));
+
+    const auto oldJoin = NetPacketCodec::DecodeGamerJoinBroadcast(
+        WithoutGamerFlags(NetPacketCodec::Encode(GamerJoinBroadcastMessage{{{4, "Bo (1)", false, true}}}), 1));
+    ASSERT_EQ(1u, oldJoin.NewGamers.size());
+    EXPECT_FALSE(oldJoin.NewGamers[0].IsGuest);
+
+    const auto oldAdd = NetPacketCodec::DecodeAddLocalGamer(WithoutGamerFlags(NetPacketCodec::Encode(AddLocalGamerMessage{"Bo (2)", true}), 1));
+    EXPECT_EQ("Bo (2)", oldAdd.Gamertag);
+    EXPECT_FALSE(oldAdd.IsGuest);
+}
+
+TEST(NetPacketCodecTest, AMessageWithoutGuestsIsTheOriginalFormatByteForByte) {
+    // Tag, count, then one length-prefixed name: no block follows.
+    EXPECT_EQ((std::vector<uint8_t>{0x01, 0x01, 0x03, 'A', 'n', 'n'}), NetPacketCodec::Encode(ClientHelloMessage{{"Ann"}, {false}}));
+    EXPECT_EQ(NetPacketCodec::Encode(GamerJoinBroadcastMessage{{{4, "Bo", false}}}),
+              NetPacketCodec::Encode(GamerJoinBroadcastMessage{{{4, "Bo", false, false}}}));
+    EXPECT_EQ((std::vector<uint8_t>{0x0B, 0x02, 'B', 'o'}), NetPacketCodec::Encode(AddLocalGamerMessage{"Bo", false}));
+}
+
+TEST(NetPacketCodecTest, ALaterTrailingBlockIsSkippedAndAMalformedGuestBlockIsRefused) {
+    auto hello = WithoutGamerFlags(NetPacketCodec::Encode(ClientHelloMessage{{"Ann"}, {true}}), 1);
+    auto later = hello;
+    later.insert(later.end(), {0x99, 0x01, 0xff});
+    EXPECT_EQ((std::vector<bool>{false}), NetPacketCodec::DecodeClientHello(later).LocalGuests);
+    auto wrongCount = hello;
+    wrongCount.insert(wrongCount.end(), {0x47, 0x02, 0x01, 0x01});
+    EXPECT_THROW((void)NetPacketCodec::DecodeClientHello(wrongCount), std::runtime_error);
+    auto truncated = hello;
+    truncated.insert(truncated.end(), {0x47, 0x01});
+    EXPECT_THROW((void)NetPacketCodec::DecodeClientHello(truncated), std::runtime_error);
+}

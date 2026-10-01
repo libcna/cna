@@ -5,6 +5,7 @@
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
@@ -12,6 +13,19 @@
 #include <mutex>
 #include <random>
 #include <stdexcept>
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <sys/file.h>
+#include <unistd.h>
+#endif
 
 namespace CNA::Internal::GamerServices::Avatars {
 namespace {
@@ -28,6 +42,42 @@ fs::path rootOverride;
 std::map<std::uint16_t,std::shared_ptr<const CatalogManifest>> loaded;
 
 [[noreturn]] void invalid(const std::string& what){throw std::runtime_error("avatar catalog pack: "+what);}
+
+// One installer per catalog version at a time, across threads and processes: without it, the
+// installer that activates a pack removes the staging of another still writing the same pack.
+// The operating system releases the lock when its holder ends. Best effort: a lock file that
+// cannot be opened leaves the install unserialized.
+class InstallLock {
+public:
+    InstallLock(const fs::path& root,std::uint16_t version) {
+        const auto path=root/(".install-v"+std::to_string(version)+".lock");
+#if defined(_WIN32)
+        handle_=CreateFileW(path.wstring().c_str(),GENERIC_READ|GENERIC_WRITE,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
+        OVERLAPPED whole{};
+        if(handle_!=INVALID_HANDLE_VALUE&&!LockFileEx(handle_,LOCKFILE_EXCLUSIVE_LOCK,0,1,0,&whole)){CloseHandle(handle_);handle_=INVALID_HANDLE_VALUE;}
+#else
+        descriptor_=::open(path.c_str(),O_RDWR|O_CREAT|O_CLOEXEC,0600);
+        while(descriptor_>=0&&::flock(descriptor_,LOCK_EX)!=0) {
+            if(errno!=EINTR){::close(descriptor_);descriptor_=-1;}
+        }
+#endif
+    }
+    ~InstallLock() {
+#if defined(_WIN32)
+        if(handle_!=INVALID_HANDLE_VALUE){OVERLAPPED whole{};UnlockFileEx(handle_,0,1,0,&whole);CloseHandle(handle_);}
+#else
+        if(descriptor_>=0)::close(descriptor_);
+#endif
+    }
+    InstallLock(const InstallLock&)=delete;
+    InstallLock& operator=(const InstallLock&)=delete;
+private:
+#if defined(_WIN32)
+    HANDLE handle_=INVALID_HANDLE_VALUE;
+#else
+    int descriptor_=-1;
+#endif
+};
 
 bool isHash(std::string_view text)
 {
@@ -272,6 +322,11 @@ CatalogInstall installCatalogPack(const CatalogPack& pack,std::uint64_t maximumB
     if(embeddedManifest(pack.version))return CatalogInstall::AlreadyInstalled;
     const auto final=versionDirectory(root,pack.version);
     std::error_code fsError;
+    fs::create_directories(root,fsError);
+    if(fsError)return fail(CatalogInstall::Failed,"the catalog directory cannot be created");
+    const InstallLock lock(root,pack.version);
+    // Whether a pack of this version is there is decided under the lock: an installer that waited
+    // finds the one another installer just activated.
     if(fs::exists(final,fsError)) {
         // Catalog versions are CNA-wide identities: the pack installed first is that version.
         const auto installed=installedManifest(pack.version);
@@ -279,8 +334,6 @@ CatalogInstall installCatalogPack(const CatalogPack& pack,std::uint64_t maximumB
             return CatalogInstall::AlreadyInstalled;
         return fail(CatalogInstall::Failed,installed?"another catalog is installed as this version":"the installed pack is damaged");
     }
-    fs::create_directories(root,fsError);
-    if(fsError)return fail(CatalogInstall::Failed,"the catalog directory cannot be created");
 
     // Earlier interrupted attempts at this exact pack are reused (every file verified again);
     // abandoned staging of anything else is removed.

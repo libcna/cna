@@ -1,10 +1,17 @@
 # CNA Gamer Services server implementation — living plan
 
-> **Status: complete (2026-09-29).** The historical checkpoint checkboxes below are not the current
-> task list; the items that were left open at a checkpoint are marked with the later milestone that
-> closed them. The authoritative final status is the GS-001..GS-011 checklist plus
-> [`gamer_services_server_final_register.md`](gamer_services_server_final_register.md), which also
-> lists the deliberate remaining limits.
+> **HISTORICAL CHECKPOINT.** This document describes CNA GamerServices/Net as of the GS pass,
+> 2026-09-28 to 2026-09-29 (b8eb9c2b9..6abdfa4e8; the GS plan was complete on 2026-09-29). It is not
+> current capability documentation: several statements below (for example "Full account
+> privacy/block/voice/invite state and social push remain unfinished" and C API wrappers that
+> "expose ... avatar EXT entry points") no longer hold. Its "remain unfinished", "still refused"
+> and "not yet" statements describe that moment and were closed later -- by later GS slices, then
+> by the avatar-polish pass ([`plan_gamer_services_avatar_polish.md`](plan_gamer_services_avatar_polish.md),
+> GSP) and the Xbox-fidelity pass ([`plan_gamer_services_xbox_fidelity.md`](plan_gamer_services_xbox_fidelity.md),
+> GSX), all merged into `next`. For the current implementation and every remaining limitation see
+> [`docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md);
+> [`gamer_services_server_final_register.md`](gamer_services_server_final_register.md) keeps each
+> refusal's evidence as of 2026-09-30.
 
 Mission authorized 2026-09-28. Xbox 360 XNA behavior is the target; Windows/FNA service and avatar stubs are **not** behavioral evidence for Xbox 360. CNA protocol, accounts and original avatar assets have no Xbox LIVE compatibility. This plan supersedes plan_net.md's refusal of PlayerMatch/Ranked/invites and its standard-avatar/EXT split. Prohibition on proprietary/third-party avatar assets remains.
 
@@ -56,8 +63,8 @@ Avatars: CNA-owned versioned envelope within exact 1021-byte public buffer; fixe
 - [x] GS-003: endpoint/title configuration and TLS client transport; fake/backend abstraction; remove fabricated profiles; deterministic event pump and async ownership tests.
 - [x] GS-004: real server auth/revocation/restart, separate local slots, Guide sign-in overlay, user credential/refresh persistence, identity/profile/privilege/lookup tests. (POSIX credential persistence; Windows/browser credentials stay per-run, documented. Local offline profiles GS-004l-r.)
 - [x] GS-005: friends/presence/pictures/social Guide; service achievements metadata/award/pictures/cache across users/titles/restarts.
-- [x] GS-006: session-scoped leaderboard writes, EndGame/leave events/flush, Ranked arbitration and reads/paging/social filters. (No TrueSkill computation or Stream columns, documented.)
-- [x] GS-007: PlayerMatch/Ranked directory, properties/create/find/join, invited joins/InviteAccepted and coherent failure/event order; preserve full SystemLink corpus. (Online host migration and online AddLocalGamer are documented limits: GS-007h, GS-007j.)
+- [x] GS-006: session-scoped leaderboard writes, EndGame/leave events/flush, Ranked arbitration and reads/paging/social filters. (No TrueSkill computation, documented; Stream columns followed in GSP-L4.)
+- [x] GS-007: PlayerMatch/Ranked directory, properties/create/find/join, invited joins/InviteAccepted and coherent failure/event order; preserve full SystemLink corpus. (Online host migration and online AddLocalGamer were documented limits at the time, GS-007h/GS-007j; both were implemented later, GSP-K1/GSP-K2.)
 - [x] GS-008: authenticated relay fallback with untrusted packet limits; prove connectivity across NAT-like isolation, membership revocation, failure/reconnect.
 - [x] GS-009: description encoding/random/service retrieval/cache; original 71-slot rig/presets/expressions; standard renderer Draw/ready/loading/disposal, pixel regression migration; only then retire redundant avatar EXT.
 - [x] GS-010: C ABI synchronization, standard-API-only demos, representative original XNA compatibility samples. (C ABI 0.34.0; Priority 9 samples.)
@@ -77,7 +84,7 @@ Initial source set: CNA b2fd47a45757c32326cbbb5c2b39afffdb7392c5; sharp-runtime 
 
 ## Genuine blockers / uncertainties
 
-No blocking repository modifications found. Server initially empty, no established build conventions beyond CNA style/license. Console-only validation order/event/Ranked semantics are not fully measured; do not label Windows IL evidence as Xbox confirmation. Full Internet/relay, Guide credential flow, asset cache and standard rendering are unfinished, not blocked by absence of Xbox LIVE. This mission is not complete at an initial working demo.
+At the start (2026-09-28): no blocking repository modifications found. Server initially empty, no established build conventions beyond CNA style/license. Console-only validation order/event/Ranked semantics are not fully measured; do not label Windows IL evidence as Xbox confirmation. Full Internet/relay, Guide credential flow, asset cache and standard rendering are unfinished, not blocked by absence of Xbox LIVE. This mission is not complete at an initial working demo.
 
 ### 2026-09-28 foundation checkpoint (GS-002a, GS-003a/004a in validation)
 
@@ -270,7 +277,7 @@ callback before Lobby and atomic/idempotent server commit. Ranked arbitration fo
   invalid-row atomicity, duplicate rows and identical commit retry across server restart tested.
 - [x] LocalNetworkGamer publishes the real signed-in gamertag/display name; the previous test
   asserting Stub Gamer was corrected. SystemLink wire identity remains its real account identity.
-- [x] *(Closed by the GS-006c checkpoint and GS-006d/GS-006e; Stream columns are a documented limit in the final register.)* GS-006c: leaving/disposal write events/submission, explicit epoch abort, transport-loss retry
+- [x] *(Closed by the GS-006c checkpoint and GS-006d/GS-006e; Stream columns were a documented limit then; GSP-L4 implemented them.)* GS-006c: leaving/disposal write events/submission, explicit epoch abort, transport-loss retry
   policy; Stream columns, catalog validation timing and full event restriction audit.
 - [x] *(Closed by GS-006e for arbitration; TrueSkill computation is a documented limit in the final register.)* Ranked/all-machine arbitration and TrueSkill require GS-007 session directory integration.
 
@@ -2492,7 +2499,7 @@ presents as local, which is what a player reads. The service path now converts w
 `TimeZone` component. Test: `ServiceReadLifetimeTest.EarnedDateTimeIsTheServiceTimeInLocalTime`;
 the C struct field documents local ticks. CnaGamerServicesTests 485 + 1 skip.
 
-### Priority 10: final GamerServices/Net behavioral audit (in progress)
+### Priority 10: final GamerServices/Net behavioral audit (complete)
 
 - [x] GS-005f `Guide.BeginShowMessageBox` argument rules. Reference `ValidateShowMessageBoxArgs`:
   title and text non-empty and under 256 characters (UTF-16 units), one to three buttons each
@@ -2616,7 +2623,8 @@ the C struct field documents local ticks. CnaGamerServicesTests 485 + 1 skip.
   tests that relied on the gap (queue-until-a-second-hello, its ordering twin and the
   host-disconnect purge) became unreachable and were replaced; the host-side purge stays as
   defensive code. CnaNetTests 486/486, CApi_NetSmoke, protocol drift check clean. Online
-  `AddLocalGamer` is still refused (the directory admits one local group per machine).
+  `AddLocalGamer` was still refused then (the directory admitted one local group per machine); GSP-K2
+  implemented it.
 - [x] GS-007p Explicit local-gamer lists and the Find -> Join local limit (XNA over FNA; row in
   `plans/plan_bindings_upstream.md`). The explicit-list `Create`/`JoinInvited` constructor sized the
   local-gamer limit to the list, so a session created for one gamer refused `AddLocalGamer`; a gamer
@@ -2764,7 +2772,10 @@ Known-good cross-repo set: CNA (this commit), cna-samples feature/gamer-services
 server ce8ff32, sharp-runtime 007280bd. (Previous: CNA 45c17d1d8 / cna-samples 378483b / server
 bbfe2d5.)
 
-Open, documented limits (not claimed): online host migration (GS-007h) and online AddLocalGamer
-(GS-007j); voice; TrueSkill computation; party, marketplace and partner-token services; away/busy
-status; guest sign-in; Windows/browser credential persistence; browser multiplayer (owner scope:
-limitations page); public Internet deployment acceptance.
+HISTORICAL CHECKPOINT (GS-011, 2026-09-29) -- superseded. The limits open at that point were: online
+host migration (GS-007h) and online AddLocalGamer (GS-007j), both implemented in GSP-K1/K2; voice,
+implemented in GSX-E1; TrueSkill computation, still deliberate; party (GSX-E2), marketplace (the Game
+content page and test purchase, GSX-E1) and partner tokens (still refused); away/busy (GSP-L2) and
+guest sign-in (GSP-L5); Windows/browser credential persistence, browser multiplayer and public
+Internet qualification, still open. The current list is
+`docs/gamer-services-known-limitations.md`.

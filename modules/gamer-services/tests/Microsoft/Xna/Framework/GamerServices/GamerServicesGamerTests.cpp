@@ -246,7 +246,8 @@ TEST(GamerTest, EndGetPartnerTokenThrows) {
 
 // --- GamerProfile ---
 
-// CNA has no gamer zones or reputation, so a profile reports none instead of inventing values.
+// A profile without an account behind it reports XNA's unset zone and reputation, never invented
+// values (a service profile carries its account's).
 TEST(GamerProfileTest, DefaultValues) {
     auto p = GamerProfile::CreateInternal();
     EXPECT_EQ(0, p.getGamerScoreProperty());

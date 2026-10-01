@@ -112,6 +112,7 @@ namespace Microsoft::Xna::Framework::GamerServices
                 friendGamer->inviteSentTo_ = entry.inviteSentTo;
                 friendGamer->inviteAccepted_ = entry.inviteAccepted;
                 friendGamer->inviteRejected_ = entry.inviteRejected;
+                friendGamer->hasVoice_ = entry.hasVoice;
                 friends.push_back(friendGamer.get()); owned.push_back(std::move(friendGamer));
             }
             auto collection = FriendCollection::CreateInternal(std::move(friends));

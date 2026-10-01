@@ -76,6 +76,18 @@ TEST_F(OnlineInvitationTest, APendingAcceptanceWhoseInvitationIsGoneIsNotReplaye
     EXPECT_EQ(0,raised);
 }
 
+TEST_F(OnlineInvitationTest, AnInvitationRevokedWhileItsCardIsOpenIsNeverAccepted) {
+    invite();int raised=0;subscribe([&](const InviteAcceptedEventArgs&){++raised;});
+    prompted();
+    // The host ends its session, which revokes the invitation, while the card awaits an answer.
+    ASSERT_TRUE(service->sessionDirectory().leave("a",peer->snapshot().session));
+    Ui::clickForTesting(0);
+    until([&]{return Ui::currentScreenForTesting()=="info";});
+    for(int index=0;index<5;++index)tick();
+    EXPECT_EQ(0,raised);EXPECT_FALSE(Service::acceptedInvitation().has_value());
+    EXPECT_THROW((void)NetworkSession::BeginJoinInvited(1,{}, {}),System::InvalidOperationException);
+}
+
 TEST_F(OnlineInvitationTest, AnAcceptanceWithoutSubscribersIsDeliveredOnceToTheFirstSubscriber) {
     invite();prompted();Ui::clickForTesting(0);
     until([&]{return Service::acceptedInvitation().has_value();});

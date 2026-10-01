@@ -12,7 +12,7 @@ or renamed module stops this gate rather than inheriting a default. Paths whose 
 are `Internal` or `Detail` in any capitalization are excluded as implementation detail.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **469 headers**, **8132 symbols**, **7029 implemented**, **15 partial**, **650 planned**, **438 not applicable**. Explicitly excluded headers: **467**.
+Snapshot: **469 headers**, **8140 symbols**, **7029 implemented**, **15 partial**, **656 planned**, **440 not applicable**. Explicitly excluded headers: **467**.
 
 ## Out of runtime C API scope
 
@@ -44,7 +44,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `c47189e2cf8040a3513a301eb510a4774ffbcda4b782e50ccd9160ae6ddea09f`.
+Full inventory SHA-256: `a29ba8a3fa1ba960c78ab1fa577b7b2a5271b592992e080f6d9847f0330d76a2`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:
@@ -64,17 +64,17 @@ owner, hashes the complete matrix, and compares this summary. The CTest
 | Module | Headers | Symbols | Implemented | Partial | Planned | N/A |
 |---|---:|---:|---:|---:|---:|---:|
 | `audio` | 22 | 320 | 217 | 0 | 10 | 93 |
-| `content` | 41 | 802 | 561 | 10 | 207 | 24 |
+| `content` | 41 | 801 | 561 | 10 | 206 | 24 |
 | `core` | 15 | 136 | 130 | 0 | 0 | 6 |
 | `devices` | 20 | 217 | 187 | 0 | 2 | 28 |
 | `devices-ext` | 17 | 84 | 79 | 0 | 0 | 5 |
 | `gamer-services` | 52 | 689 | 615 | 0 | 29 | 45 |
-| `graphics` | 143 | 2938 | 2606 | 0 | 269 | 63 |
+| `graphics` | 143 | 2946 | 2606 | 0 | 275 | 65 |
 | `graphics-ext` | 11 | 110 | 68 | 0 | 40 | 2 |
 | `input` | 51 | 895 | 836 | 0 | 30 | 29 |
 | `math` | 24 | 954 | 926 | 0 | 27 | 1 |
 | `media` | 24 | 338 | 285 | 0 | 1 | 52 |
-| `net` | 23 | 284 | 252 | 1 | 14 | 17 |
+| `net` | 23 | 285 | 252 | 1 | 15 | 17 |
 | `runtime` | 23 | 321 | 225 | 4 | 19 | 73 |
 | `storage` | 3 | 44 | 42 | 0 | 2 | 0 |
 

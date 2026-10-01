@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: MS-PL
 #include "../../../../../src/Internal/CredentialStore.hpp"
 #include <gtest/gtest.h>
+#include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #if defined(__unix__) || defined(__APPLE__)
+#include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/un.h>
 #include <unistd.h>
 
 namespace {
@@ -78,6 +82,129 @@ TEST_F(CredentialStoreTest, RefusesCorruptionAndMalformedAuthorityWithoutLogging
     auto bad=fixture_;bad.refreshToken="malformed";EXPECT_FALSE(store.save(0,bad));
     bad=fixture_;bad.expires=-1;EXPECT_FALSE(store.save(0,bad));
 }
+TEST_F(CredentialStoreTest, ANamedDirectoryIsPrivateFilesNeverTheKeyring) {
+    CredentialStore store(config_);
+    EXPECT_STREQ("private-file",store.protection());
+    ASSERT_TRUE(store.save(0,fixture_));EXPECT_FALSE(record().empty());
+}
+#if defined(__linux__)
+// GSH-07: in the default location, and with a desktop keyring answering, a record lives in the
+// freedesktop Secret Service rather than a file; a file from before moves into it. The test runs
+// itself again inside a private D-Bus session with a throwaway gnome-keyring, so the owner's
+// keyring is never touched.
+namespace {
+// Runs one keyring case of this binary in a private D-Bus session: with a gnome-keyring unlocked
+// before the test ("unlocked"), or one D-Bus starts on demand with no unlocked collection
+// ("locked"), or on a bus that never answers ("silent"). Reports whether the case left its marker.
+bool RunInPrivateKeyringSession(const std::string& test,const std::string& mode) {
+    const auto root=std::filesystem::temp_directory_path()/("cna-keyring-unit-"+std::to_string(getpid()));
+    std::filesystem::remove_all(root);
+    const auto runtime=root/"run";
+    for(const auto& sub:{root/"data",root/"home",root/"state",runtime})std::filesystem::create_directories(sub);
+    std::filesystem::permissions(runtime,std::filesystem::perms::owner_all,std::filesystem::perm_options::replace);
+    const auto self=std::filesystem::read_symlink("/proc/self/exe").string();
+    const auto start=mode=="unlocked"?"printf fixture | gnome-keyring-daemon --unlock --components=secrets >/dev/null 2>&1; ":"";
+    const auto environment="env -u DISPLAY -u WAYLAND_DISPLAY -u DBUS_SESSION_BUS_ADDRESS -u CNA_GAMER_SERVICES_CREDENTIALS_DIR "
+        "-u CNA_GAMER_SERVICES_KEYRING HOME='"+(root/"home").string()+"' XDG_DATA_HOME='"+(root/"data").string()+
+        "' XDG_RUNTIME_DIR='"+runtime.string()+"' XDG_STATE_HOME='"+(root/"state").string()+"' CNA_TEST_PRIVATE_KEYRING='"+
+        (root/"passed").string()+"' ";
+    std::string command;int silent=-1;
+    if(mode=="silent") {
+        // A bus that accepts the connection and never says anything.
+        silent=socket(AF_UNIX,SOCK_STREAM,0);sockaddr_un address{};address.sun_family=AF_UNIX;
+        const auto path=(root/"bus").string();std::snprintf(address.sun_path,sizeof(address.sun_path),"%s",path.c_str());
+        if(bind(silent,reinterpret_cast<sockaddr*>(&address),sizeof(address))!=0||listen(silent,4)!=0)return false;
+        command=environment+"DBUS_SESSION_BUS_ADDRESS='unix:path="+path+"' timeout 90 '"+self+"' --gtest_filter="+test+" >/dev/null 2>&1";
+    } else {
+        command=environment+"timeout 90 dbus-run-session -- sh -c '"+start+"exec \"$0\" --gtest_filter="+test+"' '"+self+"' >/dev/null 2>&1";
+    }
+    const int status=std::system(command.c_str());
+    if(silent>=0)close(silent);
+    const bool passed=status==0&&std::filesystem::exists(root/"passed");
+    std::filesystem::remove_all(root);
+    return passed;
+}
+bool KeyringToolsPresent() {
+    return std::filesystem::exists("/usr/bin/dbus-run-session")&&std::filesystem::exists("/usr/bin/gnome-keyring-daemon");
+}
+void MarkPassed() {std::ofstream(std::getenv("CNA_TEST_PRIVATE_KEYRING"))<<"passed";}
+}
+// GSH-07: in the default location, and with a desktop keyring answering, a record lives in the
+// freedesktop Secret Service rather than a file; a file from before moves into it. The test runs
+// itself again inside a private D-Bus session with a throwaway gnome-keyring, so the owner's
+// keyring is never touched.
+TEST(CredentialStoreKeyringTest, KeepsRecordsInTheSecretServiceAndMovesOldFilesIntoIt) {
+    if(!std::getenv("CNA_TEST_PRIVATE_KEYRING")) {
+        if(!KeyringToolsPresent())GTEST_SKIP()<<"no dbus-run-session or gnome-keyring-daemon";
+        EXPECT_TRUE(RunInPrivateKeyringSession("CredentialStoreKeyringTest.KeepsRecordsInTheSecretServiceAndMovesOldFilesIntoIt","unlocked"));
+        return;
+    }
+    const CNA::GamerServices::Configuration config{"https://keyring.test/cna/v1","one","",false};
+    const StoredCredential first{std::string(64,'b'),2000000000},second{std::string(64,'c'),2000000001};
+    const std::filesystem::path directory=std::filesystem::path(std::getenv("XDG_STATE_HOME"))/"cna/gamer-services/credentials";
+    auto files=[&]{int count=0;for(const auto& entry:std::filesystem::directory_iterator(directory))count+=entry.path().extension()==".json";return count;};
+    {
+        // Before the keyring: a private file.
+        setenv("CNA_GAMER_SERVICES_KEYRING","0",1);
+        CredentialStore store(config);
+        EXPECT_STREQ("private-file",store.protection());
+        ASSERT_TRUE(store.save(2,second));
+        EXPECT_EQ(1,files());
+        unsetenv("CNA_GAMER_SERVICES_KEYRING");
+    }
+    CredentialStore store(config);
+    ASSERT_STREQ("secret-service",store.protection());
+    const auto moved=store.load(2);
+    ASSERT_TRUE(moved);EXPECT_EQ(second.refreshToken,moved->refreshToken);
+    EXPECT_EQ(0,files())<<"the old file moved into the keyring";
+    EXPECT_EQ(second.expires,store.load(2)->expires);
+    ASSERT_TRUE(store.save(0,first));
+    EXPECT_EQ(0,files());
+    EXPECT_EQ(first.refreshToken,store.load(0)->refreshToken);
+    const CNA::GamerServices::Configuration other{"https://keyring.test/cna/v1","two","",false};
+    {CredentialStore another(other);EXPECT_FALSE(another.load(0))<<"records are per endpoint and title";}
+    store.remove(0);store.remove(2);
+    EXPECT_FALSE(store.load(0));EXPECT_FALSE(store.load(2));
+    if(!testing::Test::HasFailure())MarkPassed();
+}
+// A keyring that refuses to store (locked, no collection to unlock without a prompt) leaves the
+// record in a private file, where the next run finds it.
+TEST(CredentialStoreKeyringTest, AKeyringThatRefusesWritesLeavesPrivateFiles) {
+    if(!std::getenv("CNA_TEST_PRIVATE_KEYRING")) {
+        if(!KeyringToolsPresent())GTEST_SKIP()<<"no dbus-run-session or gnome-keyring-daemon";
+        EXPECT_TRUE(RunInPrivateKeyringSession("CredentialStoreKeyringTest.AKeyringThatRefusesWritesLeavesPrivateFiles","locked"));
+        return;
+    }
+    const CNA::GamerServices::Configuration config{"https://keyring.test/cna/v1","one","",false};
+    const StoredCredential value{std::string(64,'e'),2000000000};
+    {CredentialStore store(config);EXPECT_STREQ("secret-service",store.protection());EXPECT_TRUE(store.save(1,value));}
+    const std::filesystem::path directory=std::filesystem::path(std::getenv("XDG_STATE_HOME"))/"cna/gamer-services/credentials";
+    int files=0;for(const auto& entry:std::filesystem::directory_iterator(directory))files+=entry.path().extension()==".json";
+    EXPECT_EQ(1,files)<<"the refused record is in a private file";
+    CredentialStore store(config);
+    ASSERT_TRUE(store.load(1));EXPECT_EQ(value.refreshToken,store.load(1)->refreshToken);
+    if(!testing::Test::HasFailure())MarkPassed();
+}
+// A keyring that never answers is given two seconds, then the store keeps private files: a broken
+// desktop keyring never holds a game for the bus timeout.
+TEST(CredentialStoreKeyringTest, AKeyringThatDoesNotAnswerIsGivenTwoSeconds) {
+    if(!std::getenv("CNA_TEST_PRIVATE_KEYRING")) {
+        EXPECT_TRUE(RunInPrivateKeyringSession("CredentialStoreKeyringTest.AKeyringThatDoesNotAnswerIsGivenTwoSeconds","silent"));
+        return;
+    }
+    const CNA::GamerServices::Configuration config{"https://keyring.test/cna/v1","one","",false};
+    const auto started=std::chrono::steady_clock::now();
+    CredentialStore store(config);
+    EXPECT_LT(std::chrono::steady_clock::now()-started,std::chrono::seconds(5));
+    EXPECT_STREQ("private-file",store.protection());
+    const StoredCredential value{std::string(64,'d'),2000000000};
+    EXPECT_TRUE(store.save(1,value));
+    EXPECT_EQ(value.refreshToken,store.load(1)->refreshToken);
+    if(!testing::Test::HasFailure())MarkPassed();
+    // The probe thread is still waiting on the silent bus; end without unwinding it.
+    std::_Exit(testing::Test::HasFailure()?1:0);
+}
+#endif
 TEST_F(CredentialStoreTest, ExplicitDisableCreatesNoUserFiles) {
     setenv("CNA_GAMER_SERVICES_CREDENTIALS_DIR","0",1);CredentialStore store(config_);
     EXPECT_FALSE(store.save(0,fixture_));EXPECT_FALSE(store.load(0));EXPECT_FALSE(std::filesystem::exists(root_));

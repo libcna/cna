@@ -1,5 +1,16 @@
 # GamerServices / Avatar Xbox-fidelity pass (living plan)
 
+> **HISTORICAL CHECKPOINT.** This document describes CNA GamerServices/Net as of the GSX pass,
+> 2026-09-29 to 2026-09-30 (e46db9822..943a34617; GSX-000..GSX-Q1 merged into `next` as 7d7141c6b,
+> GSX-Q2 the final truth cleanup). It is not current capability documentation: several statements
+> below (for example "`FriendGamer.HasVoice` stays false" and "`GamerPrivileges.AllowCommunication`
+> is honoured (Everyone today)") no longer hold. The "Audit" and "System UI inventory" sections
+> record the state at the start of this pass (e46db9822), not even the end of it. For the current
+> implementation and every remaining limitation -- what is still not implemented, partial,
+> platform-limited, unverified or decided differently from Xbox -- see
+> [`docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md); it
+> supersedes every "open" or "gap" wording below.
+
 Task ids `GSX-*`. Continues `plan_gamer_services_avatar_polish.md` (GSP-*, closed) and
 `plan_gamer_services_server.md` (GS-*, closed). This file is the authoritative plan for this pass
 and is updated as work lands.
@@ -68,6 +79,9 @@ CNA client (runtime) --> installed canonical CNA avatar catalogs --> AvatarRende
   another catalog's ids.
 
 ## Audit
+
+HISTORICAL CHECKPOINT (at e46db9822, the start of this pass) -- superseded by the task table and
+evidence log below.
 
 ### Avatars (at e46db9822)
 
@@ -173,6 +187,7 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
 | GSX-E* | Remaining register gaps, one decision each | done: trial/test purchase (E1), voice (E1), parties (E2), upstream QoS (E3), title versions (E4), single process and connection rate (E5), social notifications and push (E6), browser multiplayer kept out of scope by the owner (E7); partner tokens, TrueSkill and Recent windows kept with their evidence |
 | GSX-P1 | Documentation and register | done |
 | GSX-Q1 | Final acceptance | done (acceptance matrix below) |
+| GSX-Q2 | Final truth cleanup: documentation reconciled with the code (push, voice, guests, policies, avatar ownership, capabilities), `docs/gamer-services-known-limitations.md`, and the small defects found on the way | done (entry below) |
 
 ## Evidence log
 
@@ -292,8 +307,9 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
   heads read larger and friendlier, eyes almond rather than round, lips visible, hair as masses,
   every preset still plants its feet and keeps hands out of the body. The editor's head view and the
   Guide's head portraits frame in proportion to the head (v3's larger head was cropped).
-  Open: clothing re-sculpt (folds, thicker garments), hand re-sculpt (finger separation), baked
-  occlusion/material pass. GS 588 + 1 skip.
+  Open at this point: clothing re-sculpt (folds, thicker garments), hand re-sculpt (finger
+  separation), baked occlusion/material pass; the hands and the hoodie pocket were done in the next
+  GSX-B entry, folds and baked occlusion remain. GS 588 + 1 skip.
 - GSX-E4 (title updates, **XNA** + **POL**). `GamerServicesComponent.Initialize` subscribes
   `InstallingTitleUpdate` and exits the game (XNA IL); the event is still never raised because CNA
   installs no title updates (**NO**, reason stated). **POL** version gate: a title may set the oldest
@@ -428,6 +444,51 @@ dot-matrix system font at 1x, buttons in a row, no dimming of the game, no avata
   `SystemGuideTest.TheGuideButtonClosesTheGuideItOpened`. The Invites acceptance driver
   (`/rv/tmp/samples/SAMPLE-096-InvitesSample_4_0/scripts/capture-cna-invites-gs.py`) now signs in
   through the picker and invites through Friends -> Find gamer -> the gamer card -> Invite to game.
+
+- GSX-Q2 (final truth cleanup, 2026-09-30). Documentation reconciled with the code across CNA, the
+  server and the samples branch, from three read-only sweeps (code comments, Markdown, server and
+  samples) and checks against the source. Corrected: server push described as missing (server
+  README, `protocol/v1.md` twice, the invitation section); "there is no voice"/"CNA carries no
+  voice" (server README, protocol, C header, a test) -- voice is NetworkSession realtime traffic,
+  not a control-plane service; the C API documents (`docs/c-api/GAMER_SERVICES.md`, `NET.md`,
+  `FEATURE_MATRIX.md`) and about ninety C/C++ comments still describing the pre-service runtime
+  (no friends, no-op Guide screens, inert avatars, always-zero zone/reputation/away/busy/upstream
+  QoS, SystemLink-only networking); `README.md`'s GamerServices/Net/Avatar sections; the broken
+  guest table and the "System Guide" paragraph in `docs/gamer-services-server.md`, whose slice
+  history is now under a "historical" heading; the avatar docs (explicit ownership model, formats
+  1-2, catalog v3 released); `docs/coverage.md`, `misc/known_gaps.md`, the browser page; the
+  `SystemInput.hpp` comment that said pad sticks keep moving under the Guide (they are centred).
+  Labelled historical: `AUDIT.md`/`NEXT.md` checkpoint quotes, `NEXTnet.md`, the `audit/` archive's
+  GamerServices records, `plan_net.md`, the acceptance-sources queue, the GS-011 open-limit list,
+  this plan's and the polish plan's opening audits. New: `docs/gamer-services-known-limitations.md`,
+  44 entries, linked from the README, the service and avatar docs, the register and the plans.
+  Defects found and fixed: `NetworkGamer.IsGuest` was always false (a local gamer now reports its
+  profile's; a remote SystemLink guest still reads false, documented); a guest in a
+  LocalWithLeaderboards game made `StartGame` throw with a service configured (the epoch now names
+  only accounts). Tests: `LocalNetworkGamerTest.IsGuestFollowsTheSignedInProfile`,
+  `OnlineLeaderboardTest.AGuestInALocalWithLeaderboardsGameLeavesTheAccountsRowsToTheService` (fails
+  without the fix), `OnlineInvitationTest.AnInvitationRevokedWhileItsCardIsOpenIsNeverAccepted`,
+  `AvatarCatalogTest.CatalogV3IsFrozen` (v3 shipped in `next`; a service refuses a changed import).
+  Results (`/rv/tmp/xbox-fidelity/cleanup/`): one process per test, CnaGamerServicesTests 604 + 1
+  known skip, CnaNetTests 518/518, CnaRuntimeTests 192 + 2 environment skips; CnaTests in one
+  process (less the content-pipeline differential) 9,024 pass with the same 10 HEADLESS
+  graphics/content failures; `CApi_*` 107/110 (the three standing audio/content smokes), coverage
+  inventory regenerated (header comments), ABI baseline current (3,202 exports); protocol drift and
+  platform gates clean; `GamerServices_AvatarCatalogUpToDate` passes; server corpus 28/28 with every
+  CNA harness, no skips; the 18 GamerServices/Net demos exit 0 on the private display; SAMPLE-096,
+  SAMPLE-075 (SystemLink and online), SAMPLE-087 (16 catalog v3 avatars with shadows) and the
+  achievements/leaderboards program pass (`*-20260930-cleanup`). Committed `next` had advanced by
+  six commits (0f7166cd8, BINDFIX-037..041, local and not pushed); it was merged into the branch
+  (65c1d21e3; only the coverage-inventory hash conflicted, regenerated) and everything above was run
+  again with the same results (`cleanup/after-merge/`, samples `*-20260930-cleanup-merged`): GS
+  604 + 1, Net 518/518, Runtime 192 + 2, CnaTests 9,026 with the same 10 failures, C API 111/114
+  (next's four new tests pass; the same three smokes fail), server 28/28, 18 demos, four samples.
+  `next` then advanced again (e6d562454, BINDFIX-042..046, including an avatar-loader shutdown fix)
+  and was merged too (829bb5c7f, no conflict); rerun (`cleanup/after-merge2/`): GS 604 + 1, Net 518/518,
+  Runtime 192 + 2, C API 112/115 (the same three smokes), 18 demos, SAMPLE-087 and SAMPLE-096, and the
+  server's `service_tls_e2e`, `service_cna_session` and `service_cna_avatars`. Then 4a31b3b7d
+  (BINDFIX-047, C API gamer routes accept a network gamer) was merged too; C API 112/115 and
+  `service_tls_e2e` (the C harness) pass.
 
 ## Acceptance matrix (GSX-Q1, 2026-09-30)
 

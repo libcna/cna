@@ -17,6 +17,7 @@
 #endif
 
 #include <algorithm>
+#include <mutex>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -329,6 +330,31 @@ namespace CNA::Internal::Net
     {
         captureFactory() = std::move(capture);
         playbackFactory() = std::move(playback);
+    }
+
+    namespace
+    {
+        // What friends see as FriendGamer.HasVoice for this machine: voice built and on, and a
+        // recording device. The device list is read at most every two seconds.
+        bool captureDevicePresent()
+        {
+            static std::mutex mutex;
+            static Clock::time_point next{};
+            static bool present = false;
+            std::lock_guard lock(mutex);
+            if (Clock::now() >= next)
+            {
+                next = Clock::now() + std::chrono::seconds(2);
+                auto* provider = CNA::Internal::Audio::RecordingProvider();
+                try { present = provider != nullptr && !provider->GetDevices().empty(); }
+                catch (...) { present = false; }
+            }
+            return present;
+        }
+        const bool capabilityInstalled = [] {
+            (void)GamerServices::setLocalVoiceCapabilityProvider([] { return voiceAvailable() && captureDevicePresent(); });
+            return true;
+        }();
     }
 
     bool voiceAvailable()

@@ -399,12 +399,11 @@ TEST(NetworkSessionTest, StartGameThenEndGameTransitionsState) {
     session->Dispose();
 }
 
-// Task 5.19: WriteArbitratedLeaderboard/WriteUnarbitratedLeaderboard/WriteTrueSkill had zero test
-// coverage, not even a subscribe-smoke-test - even though they're correctly never raised (matching
-// FNA, where leaderboards/TrueSkill are unimplemented upstream). Subscribing to all three and
-// exercising a full Create -> StartGame -> EndGame -> Dispose lifecycle both proves each event
-// exists under its exact FNA name/spelling (a rename/typo here would fail to compile) and locks in
-// that none of them ever actually fires.
+// Task 5.19: WriteArbitratedLeaderboard/WriteUnarbitratedLeaderboard/WriteTrueSkill on a Local
+// session, which writes no leaderboards (with a CNA service, LocalWithLeaderboards, PlayerMatch and
+// Ranked raise them: OnlineLeaderboardTest and the service client harness). Subscribing to all three and exercising a full Create ->
+// StartGame -> EndGame -> Dispose lifecycle proves each event exists under its exact name and that
+// a Local session never raises them.
 TEST(NetworkSessionTest, WriteLeaderboardAndTrueSkillEventsAreNeverRaised) {
     auto gamer = MakeSignedInGamer();
     NetworkSession* session = NetworkSession::Create(
@@ -1150,9 +1149,9 @@ TEST(NetworkSessionTest, JoinActivatesRealNetworkingForTheCorrectSessionType) {
 }
 
 // A C binding can construct an AvailableNetworkSession description directly. Host metadata on a
-// synthetic PlayerMatch entry is descriptive only: CNA has no PlayerMatch transport, so Join must
-// not interpret that address as a SystemLink endpoint and wait for a ServerWelcome that can never
-// arrive. The SAMPLE-091 handshake wait originally missed this session-type gate.
+// synthetic PlayerMatch entry is descriptive only: a PlayerMatch session is joined through the CNA
+// service and its relay, never at a listed address, so Join must not interpret that address as a
+// SystemLink endpoint and wait for a ServerWelcome that can never arrive. The SAMPLE-091 handshake wait originally missed this session-type gate.
 // A listing that no authenticated search produced has no live search parent; the reference
 // BeginJoin reports that as ObjectDisposedException before any service or transport work.
 TEST(NetworkSessionTest, SyntheticPlayerMatchListingCannotBypassServiceMembership) {

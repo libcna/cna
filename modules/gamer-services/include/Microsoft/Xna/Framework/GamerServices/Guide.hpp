@@ -67,8 +67,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         [[nodiscard]] static bool getIsVisibleProperty();
 
         /**
-         * @brief Gets the screen position used for gamer notification toasts (default BottomCenter;
-         * CNA draws no toasts, so the value is stored only).
+         * @brief Gets the screen position used for gamer notification toasts (default BottomCenter),
+         * where the Guide draws its notifications.
          *
          * @return The current NotificationPosition.
          */
@@ -526,8 +526,9 @@ namespace Microsoft::Xna::Framework::GamerServices
         static void ShowGamerCard(Microsoft::Xna::Framework::PlayerIndex player, Gamer* gamer);
 
         /**
-         * @brief Shows the marketplace. CNA runs no store, so the Guide explains that the title is
-         * fully licensed.
+         * @brief Shows the marketplace. CNA runs no store: the Guide opens its Game content page
+         * (the title's licence and the installed avatar catalogs), with XNA's Test Purchase while
+         * SimulateTrialMode is set.
          *
          * @param player The player viewing the marketplace.
          * @throws GamerPrivilegeException if the player has no account signed in or may not purchase
@@ -548,17 +549,25 @@ namespace Microsoft::Xna::Framework::GamerServices
         static void ShowMessages(Microsoft::Xna::Framework::PlayerIndex player);
 
         /**
-         * @brief Shows the party. CNA has no party service, so the Guide says so.
+         * @brief Shows the player's CNA service party: members, invitations, inviting friends and
+         * leaving.
          *
          * @param player The player viewing their party.
+         * @throws System::ArgumentOutOfRangeException if player is not One to Four.
+         * @throws GamerServicesNotAvailableException if no CNA account service is configured or the
+         *         player has no account signed in.
          * @throws GuideAlreadyVisibleException if a Guide screen is already up.
          */
         static void ShowParty(Microsoft::Xna::Framework::PlayerIndex player);
 
         /**
-         * @brief Shows the party's sessions. CNA has no party service, so the Guide says so.
+         * @brief Shows the joinable games of the player's party members, or Friends when the player
+         * has no party (as XNA does).
          *
          * @param player The player viewing party sessions.
+         * @throws System::ArgumentOutOfRangeException if player is not One to Four.
+         * @throws GamerServicesNotAvailableException if no CNA account service is configured or the
+         *         player has no account signed in.
          * @throws GuideAlreadyVisibleException if a Guide screen is already up.
          */
         static void ShowPartySessions(Microsoft::Xna::Framework::PlayerIndex player);
