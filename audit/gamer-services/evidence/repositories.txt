@@ -1,0 +1,63 @@
+cnawork
+  branch: work
+  HEAD: 9976f4909a72a79e8d64ca4b3d15756f4696f5c9
+  initial status: clean
+
+cna
+  branch: next
+  HEAD: 9976f4909a72a79e8d64ca4b3d15756f4696f5c9
+  initial status: clean
+
+cna-gamer-services-server
+  branch: feature/gamer-services-server
+  HEAD: e45049abcbefcc8b31875c24b0f16c55f96def80
+  initial status: clean
+
+cna-samples-gamer-services
+  branch: feature/gamer-services-samples
+  HEAD: e7723c0f893bbf9ea2c2dabe988f3077b9939ac0
+  initial status: clean
+
+cna-examples
+  branch: develop
+  HEAD: 2dcf6a6b30ee9049841aa519d85c0a44ab7455b9
+  initial status: clean
+
+cna-samples
+  branch: develop
+  HEAD: 053ab42b26f5b230dae52ed2502172f81345c810
+  initial status: clean
+
+cna-cs
+  branch: develop
+  HEAD: c68a246cb821518e2879b7ba55395d47fe75e688
+  initial status: clean
+
+cna-cs-samples
+  branch: develop
+  HEAD: 7f233987427b19207d14a021fd1005dc5e5e8755
+  initial status: clean
+
+xna4-decomp
+  branch: develop
+  HEAD: bb5eb888053aca8009197552fe6c29add2c2ae2e
+  initial status: clean
+
+xna4-spec
+  branch: develop
+  HEAD: fedc17aa48eb3ddec884e004c52eedb5f969985c
+  initial status: clean
+
+sharp-runtime
+  branch: next
+  HEAD: db86514c5bb86a5886d8015b8e2916d49be04ae8
+  initial status: clean
+
+libcna.com
+  branch: develop
+  HEAD: f4b2212d56ba57533564443ed2b34526ad0b5426
+  initial status: clean
+
+FNA
+  branch: master
+  HEAD: b35512475ed7980169574d2c40927381c1764d5a

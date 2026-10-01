@@ -1,0 +1,23 @@
+Internal ctest changing into directory: /tmp/cna-gs-audit-build
+Test project /tmp/cna-gs-audit-build
+    Start 23: service_cna_session
+1/2 Test #23: service_cna_session ..............   Passed    8.24 sec
+    Start 30: service_cna_session_migration
+2/2 Test #30: service_cna_session_migration ....***Failed    6.27 sec
+Traceback (most recent call last):
+  File "/rv/data/development/github.com/libcna/cna-gamer-services-server/tests/cna_session_e2e.py", line 177, in <module>
+    if __name__=="__main__":sys.exit(main())
+                                     ~~~~^^
+  File "/rv/data/development/github.com/libcna/cna-gamer-services-server/tests/cna_session_e2e.py", line 136, in main
+    assert set(exchanged)<=allowed,"verified deliveries each way: "+str(exchanged)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: verified deliveries each way: ('session-exchanged 5', 'session-exchanged 6')
+
+
+50% tests passed, 1 tests failed out of 2
+
+Total Test time (real) =  14.52 sec
+
+The following tests FAILED:
+	 30 - service_cna_session_migration (Failed)
+Errors while running CTest
