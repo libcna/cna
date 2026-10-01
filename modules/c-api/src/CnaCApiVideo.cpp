@@ -18,7 +18,7 @@
 
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
-using CNA::C::Detail::CreateStandaloneTexture2D;
+using CNA::C::Detail::CreateGameFrameTexture2D;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
@@ -75,6 +75,8 @@ struct VideoPlayerResource final {
     std::shared_ptr<VideoResource> video;
     CNA_Handle playingVideoHandle = CNA_INVALID_HANDLE;
     CNA_Handle frameTexture = CNA_INVALID_HANDLE;
+    // The game the player was created for: its frames are that game's to draw.
+    CNA_Handle parentGame = CNA_INVALID_HANDLE;
 };
 
 [[nodiscard]] CNA_Result BorrowVideo(
@@ -533,6 +535,7 @@ CNA_Result cna_video_player_create(
         }
         auto resource = std::make_shared<VideoPlayerResource>();
         resource->value = std::make_unique<VideoPlayer>();
+        resource->parentGame = gameHandle;
         const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
             ObjectKind::VideoPlayer,
             std::move(resource),
@@ -765,7 +768,7 @@ CNA_Result cna_video_player_get_frame_ext(
         // Same borrow as cna_video_player_get_texture: the player owns the texture and this keeps
         // it alive while the handle exists; the next call on the player releases it.
         const std::shared_ptr<Texture2D> borrowed(resource, frame);
-        if (const CNA_Result result = CreateStandaloneTexture2D(borrowed, &outFrame->texture);
+        if (const CNA_Result result = CreateGameFrameTexture2D(borrowed, resource->parentGame, &outFrame->texture);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -800,7 +803,7 @@ CNA_Result cna_video_player_get_texture(
         // resource alive for as long as the handle exists. The handle is released again by the
         // next call on this player, before anything can replace the frame.
         const std::shared_ptr<Texture2D> borrowed(resource, frame);
-        if (const CNA_Result result = CreateStandaloneTexture2D(borrowed, outTexture);
+        if (const CNA_Result result = CreateGameFrameTexture2D(borrowed, resource->parentGame, outTexture);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }

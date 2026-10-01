@@ -116,6 +116,14 @@ struct TextureCubeResourceView final {
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture2D> texture,
     CNA_Handle* outTexture);
 
+/// A Texture2D another object owns -- a video player's current frame -- published for the game
+/// that object belongs to, so the game's SpriteBatch and effects accept it. Not one of the game's
+/// C children: its owner releases the handle.
+[[nodiscard]] CNA_Result CreateGameFrameTexture2D(
+    std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture2D> texture,
+    CNA_Handle parentGame,
+    CNA_Handle* outTexture);
+
 [[nodiscard]] CNA_Result CreateOwnedRenderTarget2D(
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture2D> texture,
     CNA_Handle parentGame,

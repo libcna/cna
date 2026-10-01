@@ -419,7 +419,8 @@ CNA_C_API CNA_Result cna_video_player_set_volume(CNA_VideoPlayerHandle player, f
  * **The returned handle is valid only until the next call on this player.** The player owns and
  * replaces its frame texture, so any later call — including another `get_texture` — invalidates the
  * handle it handed out, and using it afterwards fails with `CNA_RESULT_INVALID_HANDLE` rather than
- * touching freed memory. Draw with it or copy its pixels before calling anything else.
+ * touching freed memory. Draw with it or copy its pixels before calling anything else. It belongs
+ * to the game the player was created for, so that game's SpriteBatch and effects accept it.
  *
  * Asking before playback has produced a frame is an ordinary answer of `CNA_FALSE`, not a failure:
  * the canonical implementation deliberately returns null there where the original API would fault.

@@ -330,6 +330,38 @@ static void frame_init(CNA_VideoFrameEXT* const frame)
     frame->struct_version = CNA_VIDEO_FRAME_EXT_STRUCT_VERSION;
 }
 
+/* A frame is the game's to draw, as XNA's VideoPlayer.GetTexture() is: a SpriteBatch on the game the
+   player was created for accepts it. It used to be published for no game, and the batch refused it
+   as a texture of a different game (found with debreuil/PlayingInTrafficGame's splash video). */
+static int draw_frame(const CNA_Handle device, const CNA_Handle texture)
+{
+    const CNA_SpriteBatchBeginInfo begin_info = {
+        sizeof(CNA_SpriteBatchBeginInfo), UINT32_C(1), CNA_SPRITE_SORT_MODE_DEFERRED, 0U};
+    CNA_SpriteCommand command;
+    CNA_Handle batch = CNA_INVALID_HANDLE;
+    CNA_Result begun;
+    int ok;
+
+    memset(&command, 0, sizeof command);
+    command.struct_size = (uint32_t)sizeof(CNA_SpriteCommand);
+    command.struct_version = UINT32_C(1);
+    command.texture = texture;
+    command.destination.width = 16;
+    command.destination.height = 16;
+    command.source.width = 16;
+    command.source.height = 16;
+    command.color.r = command.color.g = command.color.b = command.color.a = 255U;
+    if (cna_sprite_batch_create(device, &batch) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    begun = cna_sprite_batch_begin(batch, &begin_info);
+    ok = begun == CNA_RESULT_NOT_SUPPORTED ||
+        (begun == CNA_RESULT_SUCCESS &&
+         cna_sprite_batch_submit_many(batch, &command, 1U) == CNA_RESULT_SUCCESS &&
+         cna_sprite_batch_end(batch) == CNA_RESULT_SUCCESS);
+    return cna_sprite_batch_destroy(batch) == CNA_RESULT_SUCCESS && ok;
+}
+
 static int validate_real_frame_identity(
     const CNA_Handle game, const CNA_Handle device, int* const out_exercised)
 {
@@ -373,6 +405,9 @@ static int validate_real_frame_identity(
     }
     borrowed = first.texture;
     if (cna_texture2d_get_type_name_byte_count(borrowed, &name_bytes) != CNA_RESULT_SUCCESS) {
+        goto failed;
+    }
+    if (!draw_frame(device, borrowed)) {
         goto failed;
     }
 

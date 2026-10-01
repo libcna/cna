@@ -511,6 +511,31 @@ CNA_Result CreateStandaloneTexture2D(
         std::move(texture), CNA_INVALID_HANDLE, ObjectKind::Texture2D, outTexture);
 }
 
+CNA_Result CreateGameFrameTexture2D(
+    std::shared_ptr<Texture2D> texture,
+    const CNA_Handle parentGame,
+    CNA_Handle* const outTexture)
+{
+    if (texture == nullptr || outTexture == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The frame Texture2D view is invalid.");
+    }
+    *outTexture = CNA_INVALID_HANDLE;
+    auto resource = std::make_shared<Texture2DResource>(
+        Texture2DResource{std::move(texture), parentGame, 0U, 0U, 0U, 0U});
+    resource->ownedResource = false;
+    const CNA_Result result = GetRuntimeHandles().Create(ObjectKind::Texture2D, resource, outTexture);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        "The frame Texture2D handle could not be created.");
+}
+
 CNA_Result CreateOwnedRenderTarget2D(
     std::shared_ptr<Texture2D> texture,
     const CNA_Handle parentGame,
