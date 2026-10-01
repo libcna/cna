@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: MS-PL
 include_guard(GLOBAL)
 
-# Emscripten can consume the host's JSON headers, but never its libc include root.
+# Emscripten and the Android NDK can consume the host's JSON headers, but never its libc include
+# root -- and their toolchains confine package lookup to their own sysroot, where none is installed.
 function(cna_link_json_headers target)
-    if(EMSCRIPTEN)
+    if(EMSCRIPTEN OR ANDROID)
         if(NOT TARGET CNA_JsonHeaders)
             find_package(nlohmann_json 3.11 REQUIRED NO_CMAKE_FIND_ROOT_PATH)
             get_target_property(_json_roots nlohmann_json::nlohmann_json INTERFACE_INCLUDE_DIRECTORIES)

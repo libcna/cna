@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/GamerServices/Configuration.hpp"
 #include "CnaService/Protocol.hpp"
-#ifndef __EMSCRIPTEN__
+#ifdef CNA_SERVICE_TLS_TRANSPORT
 #include <curl/curl.h>
 #endif
 #include <cstdlib>
@@ -41,7 +41,7 @@ void read(Configuration& config,const std::filesystem::path& path,bool required)
     }
     if(j.contains("titleVersion"))config.titleVersion=CnaService::stringField(j,"titleVersion",32);
 }
-#ifndef __EMSCRIPTEN__
+#ifdef CNA_SERVICE_TLS_TRANSPORT
 std::string part(CURLU* url,CURLUPart field) {
     char* value=nullptr;
     if(curl_url_get(url,field,&value,0)!=CURLUE_OK)return {};
@@ -56,10 +56,14 @@ void setConfigurationOverride(std::optional<Configuration> config) {
 void validateConfiguration(const Configuration& config) {
     if(!config.titleVersion.empty()&&!CnaService::validVersion(config.titleVersion))throw CnaService::Error("INVALID_CONFIGURATION");
     if(config.endpoint.empty())return;
+#ifndef CNA_SERVICE_TLS_TRANSPORT
+    // No transport to use it with -- a browser, or a native build without libcurl. Do not accept a
+    // configuration this target cannot use, or weaken the URL validation the transport relies on.
 #ifdef __EMSCRIPTEN__
-    // Browser deployment/authentication is not implemented yet. Do not accept a
-    // configuration that this target cannot use or weaken native URL validation.
     throw CnaService::Error("BROWSER_SERVICE_TRANSPORT_UNAVAILABLE");
+#else
+    throw CnaService::Error("SERVICE_TRANSPORT_UNAVAILABLE");
+#endif
 #else
     if(!CnaService::identifier(config.gameId)||config.endpoint.size()>2048)throw CnaService::Error("INVALID_CONFIGURATION");
     std::unique_ptr<CURLU,decltype(&curl_url_cleanup)> url(curl_url(),curl_url_cleanup);

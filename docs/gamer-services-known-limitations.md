@@ -560,7 +560,7 @@ claim about how Xbox LIVE decided.
 - **XNA / Xbox:** voice needed a headset; without one `HasVoice` was false.
 - **CNA now:** `CNA_ENABLE_VOICE` (`AUTO` default: voice when pkg-config finds libopus >= 1.3;
   `ON` fails configuration without it; `OFF` never). libopus is not vendored: Windows builds carry
-  voice only when one is provided, Emscripten never. At run time `CNA_VOICE=0` turns it off. Without
+  voice only when one is provided, Emscripten and Android never. At run time `CNA_VOICE=0` turns it off. Without
   voice (compiled out or turned off) every `HasVoice`/`IsTalking` is false, `EnableSendVoice` still
   checks its arguments, and the session works as before; a host without voice still relays other
   machines' voice frames. With no capture device the machine's gamer reports `HasVoice` false and
@@ -581,7 +581,10 @@ claim about how Xbox LIVE decided.
   Windows. Nothing ran on Windows itself or on macOS: the Windows 10 VM this project used is gone
   and no macOS host exists. CNA builds for Windows, but its GamerServices online paths, TLS, Guide
   input, SystemLink, voice and `AvatarRenderer` were not exercised there; Windows and macOS server
-  builds are unvalidated (the server has not been built on either).
+  builds are unvalidated (the server has not been built on either). The Android NDK has no libcurl,
+  so an Android build links none unless one is found for the target, and then refuses a configured
+  service (`SERVICE_TRANSPORT_UNAVAILABLE`) and the relay (`RELAY_TRANSPORT_UNAVAILABLE`) as a
+  browser does; local profiles and SystemLink are unaffected.
 - **Reason:** the only test host is Linux.
 - **Observable impact:** none known; defects there would be undiscovered.
 - **Porting impact:** unknown.

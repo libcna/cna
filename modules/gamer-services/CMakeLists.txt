@@ -13,10 +13,22 @@ cna_link_sharp_runtime(CNA_GamerServices PUBLIC Core.Base IO Collections.Core Gl
 # inside examples/CMakeLists.txt unchanged.
 add_subdirectory(examples)
 
-# GS-003: control traffic uses mature TLS rather than sharp-runtime's HTTP-only transport.
+# GS-003: control traffic uses mature TLS rather than sharp-runtime's HTTP-only transport. The
+# Android NDK ships no libcurl, so there it is linked only when one is found; without it the
+# service refuses (SERVICE_TRANSPORT_UNAVAILABLE), as it does in a browser. Desktop builds still
+# require it.
 if(NOT EMSCRIPTEN)
-    find_package(CURL 7.85 REQUIRED)
-    target_link_libraries(CNA_GamerServices PRIVATE CURL::libcurl)
+    if(ANDROID)
+        find_package(CURL 7.85)
+    else()
+        find_package(CURL 7.85 REQUIRED)
+    endif()
+    if(CURL_FOUND)
+        target_link_libraries(CNA_GamerServices PRIVATE CURL::libcurl)
+        target_compile_definitions(CNA_GamerServices PRIVATE CNA_SERVICE_TLS_TRANSPORT)
+    else()
+        message(STATUS "CNA: no libcurl for ${CMAKE_SYSTEM_NAME}; the CNA service transport refuses (SERVICE_TRANSPORT_UNAVAILABLE)")
+    endif()
 endif()
 # GS-009/GSP-B1: every original avatar catalog version (tools/avatar_builder) is compiled in as
 # "v<N>/<file>", so standard avatars render offline and each description resolves against exactly

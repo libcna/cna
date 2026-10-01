@@ -23,17 +23,25 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/HeaderOnlyJson.cmake")
 cna_link_json_headers(CNA_Net)
 
 # Network voice encodes with Opus. AUTO carries voice when the system has libopus (pkg-config);
-# without it NetworkGamer.HasVoice stays false. Not vendored, so Windows and Emscripten builds
-# carry voice only when a libopus is provided.
+# without it NetworkGamer.HasVoice stays false. Not vendored, so Windows, Emscripten and Android
+# builds carry voice only when a libopus is provided. The pkg-config probe is the host's, which is
+# why it is not asked on Emscripten or Android: it answered with the host's libopus, and the Android
+# link then failed on -lopus.
 set(CNA_ENABLE_VOICE "AUTO" CACHE STRING "Network voice through libopus: AUTO, ON or OFF")
 set_property(CACHE CNA_ENABLE_VOICE PROPERTY STRINGS AUTO ON OFF)
-if(NOT CNA_ENABLE_VOICE STREQUAL "OFF" AND NOT EMSCRIPTEN)
+# Decided by this configure's probe, not by CNA_OPUS_FOUND alone: pkg_check_modules caches that, so
+# a tree configured once with the probe would otherwise keep linking a target no longer defined.
+set(_cna_voice_opus FALSE)
+if(NOT CNA_ENABLE_VOICE STREQUAL "OFF" AND NOT EMSCRIPTEN AND NOT ANDROID)
     find_package(PkgConfig QUIET)
     if(PKG_CONFIG_FOUND)
         pkg_check_modules(CNA_OPUS QUIET IMPORTED_TARGET opus>=1.3)
+        if(CNA_OPUS_FOUND AND TARGET PkgConfig::CNA_OPUS)
+            set(_cna_voice_opus TRUE)
+        endif()
     endif()
 endif()
-if(CNA_OPUS_FOUND)
+if(_cna_voice_opus)
     target_link_libraries(CNA_Net PRIVATE PkgConfig::CNA_OPUS)
     target_compile_definitions(CNA_Net PRIVATE CNA_VOICE_OPUS=1)
     message(STATUS "CNA: network voice with Opus ${CNA_OPUS_VERSION}")
@@ -43,8 +51,16 @@ else()
     message(STATUS "CNA: network voice off (libopus not found or CNA_ENABLE_VOICE=OFF)")
 endif()
 
-# Mature secure WebSocket primitives are transport-only; XNA/control policy stays in CNA.
+# Mature secure WebSocket primitives are transport-only; XNA/control policy stays in CNA. Optional on
+# Android for the reason modules/gamer-services/CMakeLists.txt gives; the relay then refuses.
 if(NOT EMSCRIPTEN)
-    find_package(CURL 7.86 REQUIRED)
-    target_link_libraries(CNA_Net PRIVATE CURL::libcurl)
+    if(ANDROID)
+        find_package(CURL 7.86)
+    else()
+        find_package(CURL 7.86 REQUIRED)
+    endif()
+    if(CURL_FOUND)
+        target_link_libraries(CNA_Net PRIVATE CURL::libcurl)
+        target_compile_definitions(CNA_Net PRIVATE CNA_SERVICE_TLS_TRANSPORT)
+    endif()
 endif()

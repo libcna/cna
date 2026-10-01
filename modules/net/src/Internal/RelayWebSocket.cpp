@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "RelayWebSocket.hpp"
 #include "CnaService/Protocol.hpp"
-#ifndef __EMSCRIPTEN__
+#ifdef CNA_SERVICE_TLS_TRANSPORT
 #include <curl/curl.h>
 #endif
 #include <array>
@@ -9,7 +9,7 @@
 #include <mutex>
 #include <thread>
 
-#ifndef __EMSCRIPTEN__
+#ifdef CNA_SERVICE_TLS_TRANSPORT
 namespace CNA::Internal::Net {
 namespace {
 using Clock=std::chrono::steady_clock;
@@ -161,24 +161,29 @@ bool RelayWebSocket::send(std::span<const unsigned char> frame,std::size_t& offs
 }
 
 #else
-// Preserve the private transport contract while refusing unsupported browser I/O.
-// No peer, welcome, packet or connection is fabricated.
+// Preserve the private transport contract while refusing I/O this build cannot do -- a browser, or
+// a native build without libcurl. No peer, welcome, packet or connection is fabricated.
 namespace CNA::Internal::Net {
+#ifdef __EMSCRIPTEN__
+constexpr const char* NoRelayTransport = "BROWSER_RELAY_TRANSPORT_UNAVAILABLE";
+#else
+constexpr const char* NoRelayTransport = "RELAY_TRANSPORT_UNAVAILABLE";
+#endif
 struct RelayWebSocket::Impl {};
 std::string relayEndpoint(const CNA::GamerServices::Configuration&) {
-    throw CnaService::RelayError("BROWSER_RELAY_TRANSPORT_UNAVAILABLE");
+    throw CnaService::RelayError(NoRelayTransport);
 }
 RelayWebSocket::RelayWebSocket(const CNA::GamerServices::Configuration&,
     GamerServices::ServiceRelayTicket, std::stop_token) {
-    throw CnaService::RelayError("BROWSER_RELAY_TRANSPORT_UNAVAILABLE");
+    throw CnaService::RelayError(NoRelayTransport);
 }
 RelayWebSocket::~RelayWebSocket() = default;
 std::optional<std::vector<unsigned char>> RelayWebSocket::receive(bool& progressed) {
     progressed = false;
-    throw CnaService::RelayError("BROWSER_RELAY_TRANSPORT_UNAVAILABLE");
+    throw CnaService::RelayError(NoRelayTransport);
 }
 bool RelayWebSocket::send(std::span<const unsigned char>, std::size_t&) {
-    throw CnaService::RelayError("BROWSER_RELAY_TRANSPORT_UNAVAILABLE");
+    throw CnaService::RelayError(NoRelayTransport);
 }
 }
 #endif

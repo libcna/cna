@@ -14,7 +14,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
-#ifndef __EMSCRIPTEN__
+#ifdef CNA_SERVICE_TLS_TRANSPORT
 #include <curl/curl.h>
 #endif
 #include <atomic>
@@ -40,6 +40,14 @@ using ServiceError=ServiceOperationError;
 constexpr bool backgroundServiceWork = false;
 #else
 constexpr bool backgroundServiceWork = true;
+#endif
+// The CNA service's transport is libcurl's TLS. A build without it -- a browser, or an Android NDK
+// build with no libcurl -- refuses the service instead of pretending to reach it.
+#ifdef __EMSCRIPTEN__
+constexpr const char* NoServiceTransport = "CNA browser service transport is not implemented.";
+#else
+constexpr const char* NoServiceTransport =
+    "This build of CNA has no TLS transport for the CNA service: libcurl was not found when it was configured.";
 #endif
 std::atomic<int> heartbeatSeconds{30};
 long long unixTime(){return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();}
@@ -156,7 +164,7 @@ public:
         }
     }
     ~OnlineBackend() override {
-#ifndef __EMSCRIPTEN__
+#ifdef CNA_SERVICE_TLS_TRANSPORT
         events_.request_stop();if(events_.joinable())events_.join();
 #endif
         stop();
@@ -589,9 +597,9 @@ private:
         try{text.append(data,bytes);}catch(...){return 0;}return bytes;
     }
     Json exchange(const std::string& op,Json args,const std::string& token) {
-#ifdef __EMSCRIPTEN__
+#ifndef CNA_SERVICE_TLS_TRANSPORT
         (void)op; (void)args; (void)token;
-        throw Unavailable("CNA browser account transport is not implemented.");
+        throw Unavailable(NoServiceTransport);
 #else
         static std::once_flag initialized;
         std::call_once(initialized,[]{if(curl_global_init(CURL_GLOBAL_DEFAULT)!=CURLE_OK)throw Unavailable("Secure transport initialization failed.");});
@@ -651,9 +659,9 @@ private:
     }
     // A binary GET of one immutable file (the service's /files route), on the shared connection.
     std::vector<unsigned char> download(const std::string& path,std::size_t size,const std::string& token) {
-#ifdef __EMSCRIPTEN__
+#ifndef CNA_SERVICE_TLS_TRANSPORT
         (void)path; (void)size; (void)token;
-        throw Unavailable("CNA browser file transport is not implemented.");
+        throw Unavailable(NoServiceTransport);
 #else
         if(!curl_)curl_.reset(curl_easy_init());
         if(!curl_)throw Unavailable("Service transport unavailable.");
@@ -859,7 +867,7 @@ private:
             if(result.contains("gameDefaults")&&result["gameDefaults"].is_object()){auto text=result["gameDefaults"].dump();if(text.size()<=4096)person.gameDefaults=std::move(text);}
         }catch(...){}
     }
-#ifndef __EMSCRIPTEN__
+#ifdef CNA_SERVICE_TLS_TRANSPORT
     // Push hints (capability "events"): one WebSocket per signed-in account, served by a thread of its
     // own. A hint only moves the next read of the invitation, party or social watcher forward, so a
     // channel that is down costs nothing but that read's interval. CNA_GAMER_SERVICES_EVENTS=0 turns
@@ -984,7 +992,7 @@ private:
     CredentialStore credentials_;
     std::unique_ptr<IServiceSessionDirectory> directory_;
     std::mutex slotMutex_,transportMutex_,cacheMutex_;
-#ifndef __EMSCRIPTEN__
+#ifdef CNA_SERVICE_TLS_TRANSPORT
     std::unique_ptr<CURL,decltype(&curl_easy_cleanup)> curl_{nullptr,curl_easy_cleanup};
 #endif
     std::array<Slot,4> slots_{};
@@ -993,7 +1001,7 @@ private:
     bool negotiated_=false;
     std::set<std::string> capabilities_;
     std::atomic<bool> eventsCapable_{false};
-#ifndef __EMSCRIPTEN__
+#ifdef CNA_SERVICE_TLS_TRANSPORT
     // Last: stopped (in the destructor) before anything it reads.
     std::jthread events_;
 #endif
