@@ -1,0 +1,41 @@
+diff --git a/mojoshader_opengl.c b/mojoshader_opengl.c
+--- a/mojoshader_opengl.c
++++ b/mojoshader_opengl.c
+@@ -848,10 +848,16 @@
+ } // glsl_input_is_unmatched
+ 
+ 
+-static int glsl_attribute_uses_centroid(const MOJOSHADER_attribute *attribute)
++static int glsl_attribute_uses_centroid(const MOJOSHADER_parseData *ppd,
++                                        const MOJOSHADER_attribute *attribute)
+ {
+-    return ((attribute->flags & 0x4) != 0) ||
+-           (attribute->usage == MOJOSHADER_USAGE_COLOR);
++    /* The pixel-shader emitter declares an input centroid only from Shader Model 2.0 up
++     * (shader_version_atleast(ctx, 2, 0)): a 1.x pixel shader reads its colour as the plain
++     * io_<usage>_<index>, so its vertex shader must keep writing that name. Deciding by usage
++     * alone renamed the vertex output and the pair failed to link. -CNA */
++    return (ppd->major_ver >= 2) &&
++           (((attribute->flags & 0x4) != 0) ||
++            (attribute->usage == MOJOSHADER_USAGE_COLOR));
+ } // glsl_attribute_uses_centroid
+ 
+ 
+@@ -871,7 +877,7 @@
+ 
+     for (i = 0; i < ppd->attribute_count; i++)
+     {
+-        if (glsl_attribute_uses_centroid(&ppd->attributes[i]) &&
++        if (glsl_attribute_uses_centroid(ppd, &ppd->attributes[i]) &&
+             !glsl_input_is_unmatched(vpd, &ppd->attributes[i]))
+             count++;
+     } // for
+@@ -894,7 +900,7 @@
+     for (i = 0; i < ppd->attribute_count; i++)
+     {
+         const MOJOSHADER_attribute *attribute = &ppd->attributes[i];
+-        if (!glsl_attribute_uses_centroid(attribute) ||
++        if (!glsl_attribute_uses_centroid(ppd, attribute) ||
+             glsl_input_is_unmatched(vpd, attribute))
+             continue;
+         dst += snprintf(dst, 64, "#define CNA_CENTROID_%i_%i 1\n",
