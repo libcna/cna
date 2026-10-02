@@ -95,6 +95,16 @@ namespace CNA::Internal::GamerServices
             }
         }
 
+        // Tolerant retrieval must not turn an unreadable existing history into an empty update.
+        std::optional<StoreJson> ReadForUpdate(const fs::path& path, const char* arrayName)
+        {
+            if (!fs::exists(path)) return std::nullopt;
+            const auto value = TryReadJsonFile(path);
+            if (!value || !value->is_object() || !value->contains(arrayName) || !(*value)[arrayName].is_array())
+                throw std::runtime_error("Cannot update unreadable GamerServices progress.");
+            return value;
+        }
+
         void WriteJsonFile(const fs::path& path, const StoreJson& value)
         {
             fs::create_directories(path.parent_path());
@@ -192,11 +202,12 @@ namespace CNA::Internal::GamerServices
         return result;
     }
 
-    void SaveEarnedAchievementEXT(const std::string& gamertag, const std::string& key, long long earnedTicks)
+    bool SaveEarnedAchievementEXT(const std::string& gamertag, const std::string& key, long long earnedTicks, bool onlyIfUnearned)
     {
         const fs::path path = AchievementsDir() / (SanitizeStoreFileNameComponent(gamertag) + ".json");
         fs::create_directories(path.parent_path());
         const LocalStoreLock lock(path);
+        (void)ReadForUpdate(path, "achievements");
         std::vector<PersistedAchievement> current = LoadEarnedAchievementsEXT(gamertag);
 
         bool updated = false;
@@ -204,6 +215,7 @@ namespace CNA::Internal::GamerServices
         {
             if (record.Key == key)
             {
+                if (onlyIfUnearned) return false;
                 record.EarnedTicks = earnedTicks;
                 updated = true;
                 break;
@@ -225,7 +237,8 @@ namespace CNA::Internal::GamerServices
         StoreJson root = StoreJson::object();
         root["achievements"] = std::move(achievementsArray);
 
-        WriteJsonFile(AchievementsDir() / (SanitizeStoreFileNameComponent(gamertag) + ".json"), root);
+        WriteJsonFile(path, root);
+        return true;
     }
 
     namespace
@@ -396,7 +409,7 @@ namespace CNA::Internal::GamerServices
         const fs::path path = LeaderboardsDir() / (leaderboardFileKey + ".json");
         fs::create_directories(path.parent_path());
         const LocalStoreLock lock(path);
-        auto doc = TryReadJsonFile(path);
+        auto doc = ReadForUpdate(path, "entries");
         StoreJson root = doc.value_or(StoreJson::object());
         if (!root.is_object())
         {

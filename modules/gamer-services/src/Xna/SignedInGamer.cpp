@@ -137,9 +137,9 @@ namespace Microsoft::Xna::Framework::GamerServices
             throw GamerServicesNotAvailableException("The title defines no achievement \"" + achievementKey + "\".");
         for (const auto& record : CNA::Internal::GamerServices::LoadEarnedAchievementsEXT(getGamertagProperty()))
             if (record.Key == achievementKey) return;
-        CNA::Internal::GamerServices::SaveEarnedAchievementEXT(
-            getGamertagProperty(), achievementKey, System::DateTime::getNowProperty().getTicksProperty()
-        );
+        if (!CNA::Internal::GamerServices::SaveEarnedAchievementEXT(
+            getGamertagProperty(), achievementKey, System::DateTime::getNowProperty().getTicksProperty(), true
+        )) return;
         std::string name = achievementKey;
         if (catalog)
             for (const auto& entry : *catalog) if (entry.Key == achievementKey && !entry.Name.empty()) name = entry.Name;
