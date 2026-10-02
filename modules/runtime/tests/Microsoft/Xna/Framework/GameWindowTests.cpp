@@ -188,6 +188,23 @@ TEST(GameWindowTest, MinimizeAndRestoreEXTUsingPlatformWindow)
     EXPECT_FALSE(fixture.platformWindow->IsMinimized());
 }
 
+TEST(GameWindowTest, ClientBoundsCarryTheClientAreasDesktopPosition)
+{
+    // XNA's WindowsGameForm.ClientBounds is PointToScreen(Point.Empty) and ClientSize. A game
+    // that places the cursor or a second window relative to its own reads the position here.
+    std::unique_ptr<CNA::Platform::IPlatform> platform =
+        CNA::Platform::PlatformFactory::Create("Headless");
+    CNA::Platform::WindowDescription description = MakeDescription("client-bounds-position");
+    description.centered = false;
+    description.x = 123;
+    description.y = 45;
+    std::unique_ptr<CNA::Platform::IPlatformWindow> platformWindow =
+        platform->CreateWindow(description);
+
+    GameWindow window(platformWindow.get());
+    EXPECT_EQ(window.getClientBoundsProperty(), Rectangle(123, 45, 64, 64));
+}
+
 TEST(GameWindowTest, NullWindow_EndScreenDeviceChangeOneArgIsSafe)
 {
     GameWindow window;
@@ -371,7 +388,10 @@ TEST(GameWindowPlatformTest, DelegatesStateAndGeometryToTheSelectedPlatformWindo
     // window that way (SAMPLE-152). This line still expected the WindowDescription default of true
     // it replaced, on every platform.
     EXPECT_FALSE(window.getAllowUserResizingProperty());
-    EXPECT_EQ(window.getClientBoundsProperty(), Rectangle(0, 0, 800, 480));
+    // The position is the window's place on the desktop, which the platform chooses
+    // (ClientBoundsCarryTheClientAreasDesktopPosition pins it); the size is the game's.
+    EXPECT_EQ(window.getClientBoundsProperty().Width, 800);
+    EXPECT_EQ(window.getClientBoundsProperty().Height, 480);
 
     window.setTitleProperty("platform-window");
     EXPECT_EQ(window.getTitleProperty(), "platform-window");
@@ -384,7 +404,8 @@ TEST(GameWindowPlatformTest, DelegatesStateAndGeometryToTheSelectedPlatformWindo
 
     window.BeginScreenDeviceChange(false);
     window.EndScreenDeviceChange("virtual-display", 320, 240);
-    EXPECT_EQ(window.getClientBoundsProperty(), Rectangle(0, 0, 320, 240));
+    EXPECT_EQ(window.getClientBoundsProperty().Width, 320);
+    EXPECT_EQ(window.getClientBoundsProperty().Height, 240);
     EXPECT_NO_THROW(window.MinimizeEXT());
     EXPECT_NO_THROW(window.RestoreEXT());
 }

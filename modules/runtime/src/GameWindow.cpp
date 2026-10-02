@@ -470,9 +470,10 @@ namespace Microsoft::Xna::Framework
         }
 
         const CNA::Platform::WindowBounds bounds = window_->GetClientBounds();
-        // XNA's ClientBounds is client-local. The platform also carries desktop placement in the
-        // same value for window managers that expose it; that position must not leak into XNA.
-        return Rectangle(0, 0, bounds.width, bounds.height);
+        // XNA's ClientBounds is the client area's place on the desktop: WindowsGameForm reads
+        // PointToScreen(Point.Empty) and ClientSize. A platform with no desktop placement to
+        // report (Wayland, a browser canvas) answers zero there, as FNA's does.
+        return Rectangle(bounds.x, bounds.y, bounds.width, bounds.height);
     }
 
     GameWindow::String GameWindow::queryScreenDeviceNameFromPlatform() const

@@ -56,7 +56,8 @@ CNA_C_API CNA_Result cna_game_window_set_allow_user_resizing(CNA_Handle game, CN
  * @param out_bounds Receives the client rectangle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * A session with no native window answers the bounds the window object was last given, which in a
+ * As in XNA, `x` and `y` are the client area's position on the desktop; a platform with no desktop
+ * placement to report (Wayland, a browser canvas) answers zero. A session with no native window answers the bounds the window object was last given, which in a
  * headless tree is the empty rectangle it started with.
  */
 CNA_C_API CNA_Result cna_game_window_get_client_bounds(CNA_Handle game, CNA_Rectangle* out_bounds);
