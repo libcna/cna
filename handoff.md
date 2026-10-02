@@ -46,7 +46,7 @@ state it reached and how to continue. Nothing is pushed.
 - CNA.WindowsFormsCompat: `Opacity`/`FormBorderStyle` are kept, not applied.
 
 **Investigated only / open**
-- 7 `EasyGLCompiledEffect*` ctests fail on OPENGLES3 independent of this session's changes (§8).
+- 2 `EasyGLCompiledEffect*` ctests still fail on OPENGLES3 (§6); five more were fixed by FX-143.
 - CSX-044 (remaining C API routes for GamerServices/Net extras) is `doing`, low priority.
 
 **Not proven (hypotheses)**
@@ -57,9 +57,9 @@ state it reached and how to continue. Nothing is pushed.
 
 | Repo | Path | Branch | HEAD | Working tree | Unpushed |
 |---|---|---|---|---|---|
-| cna | `/rv/data/development/github.com/libcna/cna` | `next` | the handoff commit (`docs: handoff ...`), parent `fb5cb3ba20b04f3f050620296e728846fec6e5b5` | clean | 30 (`origin/next..next`): 29 campaign commits + the handoff |
+| cna | `/rv/data/development/github.com/libcna/cna` | `next` | the handoff commit (`docs: handoff ...`), parent `d9d599263` (FX-143) | clean | 32 (`origin/next..next`): 30 fix/feature commits (CBIND-128 … FX-143) + 2 handoff commits |
 | sharp-runtime | `../sharp-runtime` | `next` | `db86514c5bb86a5886d8015b8e2916d49be04ae8` | clean | none (untouched this campaign) |
-| cna-cs | `../cna-cs` | `develop` | `faf7470f4dd763276e9a1b6163ea967c508d7afb` | clean | 74 (`origin/develop..develop`) |
+| cna-cs | `../cna-cs` | `develop` | `324acacba979340c8ea8ac7a384e89df89ed3350` | clean | 75 (`origin/develop..develop`) |
 | cna-cs-template | `../cna-cs-template` | `develop` | `2a763886cf7660ac10557163d680783dde5c01f3` | clean | 2 |
 | cna-cs-samples | `../cna-cs-samples` | `develop` | `409415ef2542ba7c67e2768acc5789505a82eded` | clean | 80 |
 | samples.libcna.com | `../samples.libcna.com` | `main` | `8e48825c003368dbc24bebd8f024d392379700d6` | clean | none (untouched) |
@@ -133,15 +133,14 @@ The important ones:
 | CBIND-147 | `e6f9d5384` | `GameWindow.ClientBounds` X/Y are the client area's desktop position (XNA IL: `PointToScreen(Point.Empty)`); were forced to 0. |
 | CBIND-148 | `6e273cd89`, `836b796ae` | SDL3 mouse on x11/windows/cocoa reads `SDL_GetGlobalMouseState` minus window position (XNA: `GetCursorPos`+`ScreenToClient`, `GetAsyncKeyState`; FNA does the same); was stale after a window move and clamped at the edge. Follow-up keeps the test inside the PLAT-123 non-production SDL budget (74). |
 | FX-142 | `fb5cb3ba2` | MojoShader link-time centroid rule now requires pixel SM ≥ 2.0, matching the emitter; a ps_1_x COLOR0 input no longer meets a vertex shader writing `cna_centroid_10_0` (Racing Game normal-mapping effect failed to link on GLSL ES). |
+| FX-143 | `d9d599263` | MojoShader GLSL ES 3 preamble declares `precision highp sampler3D;` (ES 3.00 has no default for it), so shaders with volume samplers compile on OPENGLES3/WEBGL2; five failing compiled-effect tests pass. Static effect gallery rows pixel-identical; SpriteEffects moves ≤2/255 in one quadrant. |
 
 Unresolved native items (confirmed, pre-existing, not introduced here):
-- OPENGLES3 `EasyGLCompiledEffect*`: 7 of 686 fail with and without FX-142 — 5 MojoShader GLSL ES
-  `sampler3D` declarations without a precision qualifier (`D3D9DependentTemporaryCubeAndVolume…`,
-  `D3D9LegacySampledTextureMatrix3`, `D3D9LegacyDependentTextureOperations`,
-  `Texld20OperandTest.AcceptsExactlyInitializedTemporaryCoordinates`, and the shader under the
-  shared vertex-sampler contracts), `SharedVertexSampler(Dimensions)Contract`, and
-  `FlippedSourceRetainsFormatAndFullFloatPrecision` aborting ("terminate called without an active
-  exception"). Confirmed defects, root cause not investigated.
+- OPENGLES3 `EasyGLCompiledEffect*` after FX-143: 2 of 686 fail —
+  `SharedVertexSamplerContract` at its vertex LOD-bias step ("vertex LOD-bias transition did not
+  select mip one"; OpenGL ES 3 has no sampler LOD bias, so this needs emulation in the shader or a
+  recorded capability refusal) and `FlippedSourceRetainsFormatAndFullFloatPrecision` aborting
+  ("terminate called without an active exception"). Root causes not investigated.
 - Timing-sensitive C smoke tests under `-j8`: each run lost one to three *different* tests that pass
   alone (`RuntimeComponentsSmoke` stage 8 asserts one Update per fixed-timestep frame; audio smokes;
   one `DevicesSmoke` SIGSEGV). Suspected load flakiness, not reproduced in isolation (stress of 10
@@ -203,7 +202,7 @@ Native library: `cna/build-probe/modules/c-api/libcna_c_api.so` (Release, OPENGL
 | CNA doc gates | `ctest --test-dir build-probe -R '^CApi(CoverageMatrix\|Limitations\|ReleaseGate\|DocExportCounts\|AbiBaseline)$'` | 5/5 |
 | CNA runtime | `run_gpu_tests_private.sh --exec build-probe/CnaRuntimeTests` | 206 pass, 2 skipped (Headless/Terminal golden: platform cannot back this tree's GL renderer) |
 | CNA platform/mouse/window groups | `run_gpu_tests_private.sh build-probe -R '^(Sdl3\|Mouse\|GameWindow\|GameEventSemantics\|GameTest\|InputParity\|Platform)' -j8` and `-R 'Mouse\|ClientBounds\|Window\|Cursor\|^CApi'` | 417/417 (4 skips), 476/476 after rebuilding one stale example |
-| CNA compiled effects | `run_gpu_tests_private.sh build-probe -R 'EasyGLCompiledEffect' -j8` | 679/686; the 7 failures are pre-existing (identical with FX-142 removed; §6) |
+| CNA compiled effects | `run_gpu_tests_private.sh build-probe -R 'EasyGLCompiledEffect' -j8` | **684/686** after FX-143 (was 679/686; the 7 were identical with FX-142 removed); the 2 left are §6 |
 | CNA SDL boundary gates | `python3 tools/platform/{sdl_inventory,sdl_classify,renderer_sdl_audit,sdl_ratchet}.py --check`, `hot_path_lint.py`, `nonproduction_sdl_audit.py --repo . --check` | all pass |
 
 Parallel-only flakiness: `^CApi` at `-j8` lost 1–3 different smokes per run (all pass alone and at
@@ -438,8 +437,8 @@ CNA desktop C API tree `cna/build-probe`: Release, `CNA_GRAPHICS_RENDERER=OPENGL
 ## 19. Remaining work (by value/risk)
 
 Genuine compatibility defects
-1. OPENGLES3 MojoShader `sampler3D` precision (5 failing compiled-effect tests) and the
-   `FlippedSource…` abort — real CNA defects that a game with volume textures will hit on GLES/WebGL.
+1. The two remaining OPENGLES3 compiled-effect failures (§6): vertex-texture LOD bias on GLES 3 and
+   the `FlippedSource…` abort.
 2. CSX-114 completeness: apply `FormBorderStyle.None` through CNA's existing
    `cna_game_window_set_is_borderless_ext` and `MessageBox` through `cna_message_box_show_ext`
    (new cna-cs imports; update import inventory/abi-verify).
@@ -459,23 +458,23 @@ External / not actionable
 
 # Exact next action
 
-Fix the OPENGLES3/WebGL2 compiled-effect failure "No precision specified in this scope for type
-`sampler3D`" in CNA. GLSL ES 3.00 gives `sampler3D` (unlike `sampler2D`/`samplerCube`) no default
-precision, so every MojoShader GLSL ES 3 shader that declares one fails to compile — any HiDef XNA
-game with a volume texture on GLES or in the browser. Reproduce with
-`tools/platform/run_gpu_tests_private.sh build-probe -R 'D3D9LegacySampledTextureMatrix3|Texld20OperandTest.AcceptsExactlyInitializedTemporaryCoordinates' --output-on-failure`
-(both fail today), find where MojoShader's GLSL profile writes the ES precision preamble
-(`~/deps/FNA3D/MojoShader/profiles/mojoshader_profile_glsl.c`, `support_glsles3`), and add a final
-pinned patch at the end of the list in `cmake/ThirdPartyFNA3D.cmake` that declares a precision for
-`sampler3D` (and any other no-default sampler type it emits) in both stages — never edit a middle
-patch. Then rerun `-R EasyGLCompiledEffect` (expect fewer than today's 7 failures, none new), the
-`^CApi` suite, and a desktop requalification row that uses a volume texture if one exists; record it
-as FX-143 in `plans/plan_fx.md`, commit, and add a ledger line to `cna-cs/CAMPAIGN.md`. After that,
-take §19 item 4 (the 9 newest games in the browser and on Android).
+Run the 9 newest games (Escape From Enceladus, __Defense, Missile Command, Super Mario World, the
+Zelda clone, Bubble Bound, Spineless, Mahjong, the Racing Game Kit) in the browser and on Android —
+the broadest evidence still missing for real games, now that FX-142/FX-143 fixed the GLSL ES shader
+failures they would have hit there. For each, in `cna-cs-samples`:
+`scripts/browser-sample.sh games/<Game> --seconds 60` (headless Chromium, SwiftShader; build output in
+`build-consumer/browser/<Game>/`, evidence in `/rv/tmp/cs-samples/browser/games/<Game>`), then
+`scripts/android-sample.sh games/<Game> --seconds 60` (emulator `Medium_Phone`, x86_64). Start with
+Missile Command (small, 2D) to confirm the pipeline after this session's native changes, rebuild the
+browser archive first if `cna/cmake-build-webgl2` predates `d9d599263`
+(`../cna-cs/scripts/Build-BrowserNative.sh`) and the Android library likewise
+(`../cna-cs/scripts/Build-AndroidNative.sh`). Fix each failure in its layer with a test, as before;
+record per-game results in `games/README.md` and `cna-cs/CAMPAIGN.md`. Keyboard-driven games need
+key holds longer than one frame under software rendering (§15).
 
 ## Appendix — campaign commits (oldest first)
 
-### cna (29 commits on `next`, `bdf239360`..`fb5cb3ba2`, first parent after `8b55f7f4d`)
+### cna (campaign commits on `next`, first parent after `8b55f7f4d`; the last one adds this handoff)
 
 ```
 bdf239360 fix(CBIND-128): a component's C handlers run inside the game's callback scope
@@ -507,9 +506,12 @@ e6f9d5384 fix(CBIND-147): GameWindow.ClientBounds carries the client area's desk
 6e273cd89 fix(CBIND-148): the SDL3 mouse reads the pointer where it is, as XNA's Mouse.GetState does
 836b796ae fix(CBIND-148): the desktop-pointer test stays within a recorded SDL budget
 fb5cb3ba2 fix(FX-142): a Shader Model 1 pixel shader's colour input stays a plain varying at link time
+809f3004f docs: handoff for the CNA C# compatibility campaign (2026-10-01 to 2026-10-02)
+d9d599263 fix(FX-143): a GLSL ES 3 shader may declare a volume sampler
+(+ this handoff commit, `docs: handoff ...`, on top of d9d599263)
 ```
 
-### cna-cs (74 commits)
+### cna-cs (75 commits)
 
 ```
 9e30519 feat(CSX-010..014): migrate the binding from CNA C ABI 0.21.0 to 0.35.0
@@ -586,6 +588,7 @@ bc7674b docs(CSX-104): 22 real games run; 19 recorded with the reason they do no
 ff08b93 feat(CSX-114): CNA.WindowsFormsCompat, the Windows Forms an XNA game uses on its own window
 b999ff1 docs(CSX-104): the Racing Game Kit to its attract mode, CSX-113/114 and CNA FX-142 recorded
 faf7470 docs(CSX-104): the Racing Game Kit races; its lost input was the capture harness's short key press
+324acac docs: CNA FX-143 (volume samplers on GLSL ES 3) recorded
 ```
 
 ### cna-cs-samples (80 commits)
