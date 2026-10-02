@@ -14,8 +14,10 @@
 #endif
 
 namespace CNA::Internal::GamerServices {
+#if !defined(_WIN32) && !defined(__unix__) && !defined(__APPLE__)
 namespace { std::mutex writerMutex; }
-LocalStoreLock::LocalStoreLock(const std::filesystem::path& path) : processLock_(writerMutex) {
+#endif
+LocalStoreLock::LocalStoreLock(const std::filesystem::path& path) {
     auto lockPath = path;
     lockPath += ".lock";
 #if defined(_WIN32)
@@ -50,6 +52,7 @@ LocalStoreLock::LocalStoreLock(const std::filesystem::path& path) : processLock_
     }
 #else
     // Platforms without independent native processes retain process-local serialization.
+    processLock_ = std::unique_lock<std::mutex>(writerMutex);
     (void)lockPath;
 #endif
 }
