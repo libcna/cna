@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <memory>
 #include <string>
 #include <vector>
@@ -512,6 +513,79 @@ TEST_F(Sdl3InputTest, TextInputLifecycleAndAreaReachALivePlatformWindow)
     EXPECT_NO_THROW(input->SetInputArea(id, TextInputArea{4, 5, 32, 16, 3}));
     EXPECT_NO_THROW(input->Stop(id));
     EXPECT_FALSE(input->IsActive(id));
+
+    window.reset();
+    platform_->ReleaseSubsystem(PlatformSubsystem::Video);
+}
+
+TEST_F(Sdl3InputTest, MouseReadsThePointerBesideTheWindowAsXnaDoes)
+{
+    // XNA's Mouse.GetState is GetCursorPos made client-relative, so a pointer beside the window
+    // reads as a position past its edge, and a window that moves under a still pointer reads the
+    // new relative position. SDL's window state keeps the last position it saw inside: a game
+    // whose window moved after it started read the stale one (Jomata/Mahjong's menu).
+    SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "x11");
+    try
+    {
+        platform_->AcquireSubsystem(PlatformSubsystem::Video);
+    }
+    catch (const std::exception& error)
+    {
+        SDL_ResetHint(SDL_HINT_VIDEO_DRIVER);
+        GTEST_SKIP() << "no X11 video subsystem (no X display): " << error.what();
+    }
+    SDL_ResetHint(SDL_HINT_VIDEO_DRIVER);
+    const char* driver = SDL_GetCurrentVideoDriver();
+    if (driver == nullptr || std::strcmp(driver, "x11") != 0)
+    {
+        platform_->ReleaseSubsystem(PlatformSubsystem::Video);
+        GTEST_SKIP() << "video is already up on another driver in this process";
+    }
+
+    WindowDescription description;
+    description.title = "Sdl3MouseDesktopTest";
+    description.centered = false;
+    description.x = 40;
+    description.y = 50;
+    description.width = 64;
+    description.height = 64;
+    std::unique_ptr<IPlatformWindow> window;
+    try
+    {
+        window = platform_->CreateWindow(description);
+    }
+    catch (const std::exception& error)
+    {
+        platform_->ReleaseSubsystem(PlatformSubsystem::Video);
+        GTEST_SKIP() << "no X11 window: " << error.what();
+    }
+
+    IPlatformMouse* mouse = platform_->GetMouse();
+    std::vector<PlatformEvent> events;
+    const auto settle = [&](const auto& done) {
+        for (int attempt = 0; attempt < 100 && !done(); ++attempt)
+        {
+            SDL_Delay(10);
+            events.clear();
+            platform_->PollEvents(events);
+            mouse->Update();
+        }
+    };
+
+    window->Sync();  // the requested placement, not the centred one SDL starts from
+    const WindowBounds bounds = window->GetClientBounds();
+    ASSERT_TRUE(SDL_WarpMouseGlobal(static_cast<float>(bounds.x + 10),
+                                    static_cast<float>(bounds.y + 10)));
+    settle([&] { return mouse->GetSnapshot().window == window->GetId(); });
+    ASSERT_EQ(mouse->GetSnapshot().window, window->GetId()) << "the pointer never entered";
+
+    const int besideX = bounds.width + 30;
+    ASSERT_TRUE(SDL_WarpMouseGlobal(static_cast<float>(bounds.x + besideX),
+                                    static_cast<float>(bounds.y + 20)));
+    settle([&] { return mouse->GetSnapshot().x == besideX; });
+    EXPECT_EQ(mouse->GetSnapshot().window, window->GetId());
+    EXPECT_EQ(mouse->GetSnapshot().x, besideX);
+    EXPECT_EQ(mouse->GetSnapshot().y, 20);
 
     window.reset();
     platform_->ReleaseSubsystem(PlatformSubsystem::Video);

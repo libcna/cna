@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <limits>
 #include <string>
 #include <utility>
@@ -31,6 +32,19 @@ namespace CNA::Platform::Sdl3 {
                 throw PlatformException(operation, "window id does not identify a live SDL3 window");
             }
             return nativeWindow;
+        }
+
+        // XNA reads the cursor where it is -- GetCursorPos made client-relative, the buttons from
+        // GetAsyncKeyState -- even outside the window and after the window moved under a still
+        // pointer. SDL's window-relative state is only as fresh as its last pointer event, so where
+        // the driver can answer for the whole desktop (Windows, macOS, X11; FNA's rule too) the
+        // snapshot is read from that instead.
+        bool ReportsTheDesktopPointer()
+        {
+            const char* driver = SDL_GetCurrentVideoDriver();
+            return driver != nullptr &&
+                   (std::strcmp(driver, "x11") == 0 || std::strcmp(driver, "windows") == 0 ||
+                    std::strcmp(driver, "cocoa") == 0);
         }
 
         SDL_SystemCursor ToSdlCursor(const SystemCursor cursor)
@@ -168,11 +182,34 @@ namespace CNA::Platform::Sdl3 {
     {
         float x = 0.0f;
         float y = 0.0f;
-        const SDL_MouseButtonFlags buttons = SDL_GetMouseState(&x, &y);
+        SDL_MouseButtonFlags buttons = SDL_GetMouseState(&x, &y);
 
-        if (SDL_Window* focused = SDL_GetMouseFocus())
+        // The window the position is relative to: the one under the pointer, else the one it was
+        // last over, else the one with the keyboard.
+        SDL_Window* window = SDL_GetMouseFocus();
+        if (window == nullptr && snapshot_.window != 0)
         {
-            snapshot_.window = SDL_GetWindowID(focused);
+            window = SDL_GetWindowFromID(snapshot_.window);
+        }
+        if (window == nullptr)
+        {
+            window = SDL_GetKeyboardFocus();
+        }
+        if (window != nullptr)
+        {
+            snapshot_.window = SDL_GetWindowID(window);
+        }
+
+        int windowX = 0;
+        int windowY = 0;
+        if (window != nullptr && ReportsTheDesktopPointer() &&
+            SDL_GetWindowPosition(window, &windowX, &windowY))
+        {
+            float desktopX = 0.0f;
+            float desktopY = 0.0f;
+            buttons = SDL_GetGlobalMouseState(&desktopX, &desktopY);
+            x = desktopX - static_cast<float>(windowX);
+            y = desktopY - static_cast<float>(windowY);
         }
 
         snapshot_.x = static_cast<int>(x);
