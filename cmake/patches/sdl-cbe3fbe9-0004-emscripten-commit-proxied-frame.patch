@@ -1,0 +1,41 @@
+From: Robert Vokac <robertvokac@robertvokac.com>
+Date: Fri, 2 Oct 2026 16:00:00 +0200
+Subject: [PATCH] emscripten: commit the frame of a GL context proxied from a
+ pthread
+
+With -pthread and -sOFFSCREEN_FRAMEBUFFER a WebGL context created on a worker
+is proxied to the page's thread and renders into an offscreen framebuffer; the
+browser's implicit swap never presents it, so the canvas stays black.
+SDL_GL_SwapWindow now calls emscripten_webgl_commit_frame() off the main
+browser thread. A threaded .NET browser bundle runs its game on such a worker
+(.NET's deputy thread). Not an upstream commit.
+
+---
+diff --git a/src/video/emscripten/SDL_emscriptenopengles.c b/src/video/emscripten/SDL_emscriptenopengles.c
+--- a/src/video/emscripten/SDL_emscriptenopengles.c
++++ b/src/video/emscripten/SDL_emscriptenopengles.c
+@@ -24,6 +24,9 @@
+ 
+ #include <emscripten/emscripten.h>
+ #include <emscripten/html5_webgl.h>
++#ifdef __EMSCRIPTEN_SHARED_MEMORY__
++#include <emscripten/threading.h>
++#endif
+ #include <GLES2/gl2.h>
+ 
+ #include "SDL_emscriptenvideo.h"
+@@ -140,6 +143,14 @@
+ 
+ bool Emscripten_GLES_SwapWindow(SDL_VideoDevice *_this, SDL_Window *window)
+ {
++#ifdef __EMSCRIPTEN_SHARED_MEMORY__
++    /* A context created on a pthread is proxied to the page's thread and draws into an offscreen
++       framebuffer (-sOFFSCREEN_FRAMEBUFFER): nothing reaches the canvas until the frame is
++       committed. On the page's own thread the browser still swaps implicitly. */
++    if (!emscripten_is_main_browser_thread()) {
++        emscripten_webgl_commit_frame();
++    }
++#endif
+     if (emscripten_has_asyncify() && SDL_GetHintBoolean(SDL_HINT_EMSCRIPTEN_ASYNCIFY, true)) {
+         // give back control to browser for screen refresh
+         emscripten_sleep(0);

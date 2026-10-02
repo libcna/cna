@@ -171,6 +171,13 @@ if(EMSCRIPTEN)
         "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','lengthBytesUTF8','HEAPU8','HEAP8','HEAP16','HEAPU16','HEAP32','HEAPU32','HEAPF32','HEAPF64','getValue','setValue','addFunction','removeFunction','FS']"
         "SHELL:-sEXPORTED_FUNCTIONS=@${CNA_C_API_WASM_EXPORTS}"
     )
+    if(CNA_ENABLE_EMSCRIPTEN_THREADS)
+        # A shared-memory (pthread) module fixes its initial memory at link time, and wasm-ld
+        # refuses one smaller than the static data -- CNA's is about 32 MB, past Emscripten's 16 MB
+        # default: "initial memory too small, 32265232 bytes needed". A single-threaded link sizes
+        # it itself. 64 MB is the heap the .NET browser targets give the same CNA.
+        target_link_options(cna_c_api_wasm PRIVATE "-sINITIAL_MEMORY=67108864")
+    endif()
 
     # CABI-37: the browser probe is a hand-written page, not one Emscripten emits, so nothing put
     # it beside the module it imports. It was being copied by hand, which is exactly the kind of

@@ -205,13 +205,16 @@ EM_JS(void, CNA_DebugRestoreWebGLContext, (), {
     ext.restoreContext();
 });
 
+// A context created from a pthread is proxied to the page's thread (OFFSCREEN_FRAMEBUFFER, a
+// threaded .NET bundle): the worker's GLctx is then a stand-in with no getExtension, so the
+// extension is reported absent and wireframe takes its fallback.
 EM_JS(int, CNA_HasWebGLPolygonMode, (), {
-    if (typeof GLctx === 'undefined' || !GLctx) return 0;
+    if (typeof GLctx === 'undefined' || !GLctx || typeof GLctx.getExtension !== 'function') return 0;
     return GLctx.getExtension('WEBGL_polygon_mode') ? 1 : 0;
 });
 
 EM_JS(void, CNA_SetWebGLPolygonMode, (int wireframe), {
-    if (typeof GLctx === 'undefined' || !GLctx) return;
+    if (typeof GLctx === 'undefined' || !GLctx || typeof GLctx.getExtension !== 'function') return;
     const ext = GLctx.getExtension('WEBGL_polygon_mode');
     if (!ext) return;
     ext.polygonModeWEBGL(GLctx.FRONT_AND_BACK,

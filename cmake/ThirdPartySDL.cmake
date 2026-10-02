@@ -44,6 +44,10 @@ set(CNA_SDL3_PATCHES
 if(EMSCRIPTEN)
     list(APPEND CNA_SDL3_PATCHES
         "${CMAKE_CURRENT_LIST_DIR}/patches/sdl-cbe3fbe9-0003-emscripten-filedrop-rmdir.patch")
+    # Also CNA's: a GL context proxied from a pthread (-sOFFSCREEN_FRAMEBUFFER, a threaded .NET
+    # bundle's deputy thread) is presented only by emscripten_webgl_commit_frame().
+    list(APPEND CNA_SDL3_PATCHES
+        "${CMAKE_CURRENT_LIST_DIR}/patches/sdl-cbe3fbe9-0004-emscripten-commit-proxied-frame.patch")
 endif()
 set(_cna_sdl_wayland_build_capable OFF)
 if(EMSCRIPTEN)

@@ -16,9 +16,12 @@
 #  include <emscripten.h>
 // The storage module's preRun hook sets this only after IDBFS has populated
 // /cna-storage from IndexedDB. Refuse an in-memory-only save if that failed.
-EM_JS(int, CnaBrowserStorageReady, (), {
-    return Module.cnaStorageReady === true ? 1 : 0;
-});
+// The hook runs on the page's thread and sets the flag on that thread's Module: a threaded
+// build asks there, from whichever worker the game runs on (a .NET bundle's deputy thread).
+static int CnaBrowserStorageReady()
+{
+    return MAIN_THREAD_EM_ASM_INT({ return Module.cnaStorageReady === true ? 1 : 0; });
+}
 #endif
 
 #if defined(_WIN32)
