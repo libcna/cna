@@ -314,11 +314,28 @@ namespace Microsoft::Xna::Framework::Audio
         AudioChannels channels,
         SharpRuntime::intcs loopStart,
         SharpRuntime::intcs loopLength)
+        : SoundEffect(buffer, offset, count, sampleRate, channels, loopStart, loopLength, RateRange::FromBuffer)
+    {
+    }
+
+    SoundEffect::SoundEffect(
+        const std::vector<SharpRuntime::bytecs>& buffer,
+        SharpRuntime::intcs offset,
+        SharpRuntime::intcs count,
+        SharpRuntime::intcs sampleRate,
+        AudioChannels channels,
+        SharpRuntime::intcs loopStart,
+        SharpRuntime::intcs loopLength,
+        const RateRange rateRange)
         : impl_(std::make_shared<Impl>())
     {
         // XNA's SoundEffect.FromBuffer, in its order (cna-killer KF-12). FNA validated only the
-        // window, and a negative loop value wrapped to a huge unsigned one.
-        if (sampleRate < 8000 || sampleRate > 48000)
+        // window, and a negative loop value wrapped to a huge unsigned one. XNA's content reader
+        // builds through an internal constructor that hands the asset's format to XAudio2, whose
+        // range is wider: XNA's own ADPCM encoder writes rates such as 48056 Hz (escape-from-
+        // enceladus's and Spineless's sounds).
+        const bool content = rateRange == RateRange::Content;
+        if (sampleRate < (content ? 1000 : 8000) || sampleRate > (content ? 200000 : 48000))
             throw System::ArgumentOutOfRangeException("sampleRate");
         if (channels != AudioChannels::Mono && channels != AudioChannels::Stereo)
             throw System::ArgumentOutOfRangeException("channels");

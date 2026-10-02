@@ -9600,6 +9600,20 @@
       ]
     },
     {
+      "id": "sound-effect-friend-xnb-reader",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::SoundEffect::SoundEffectReader$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: this is a friendship declaration that lets the XNB SoundEffect reader construct with the content sample-rate range XNA's content reader uses, not a callable public member",
+      "tests": "Doxygen declaration inventory; no callable native operation exists",
+      "status": "not-applicable",
+      "task": "CBIND-146",
+      "approved_symbols": [
+        "CPP-F4DFB59FD5BB"
+      ]
+    },
+    {
       "id": "gamepad-friend-system-input",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePad::SystemInputAccess$",
       "kinds": [

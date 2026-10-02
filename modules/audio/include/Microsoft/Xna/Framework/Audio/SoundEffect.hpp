@@ -15,6 +15,11 @@
 #include "System/TimeSpan.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
+namespace CNA::Internal::Xnb
+{
+    class SoundEffectReader;
+}
+
 namespace Microsoft::Xna::Framework::Audio
 {
     /** @brief Represents a loaded sound effect asset. */
@@ -41,6 +46,23 @@ namespace Microsoft::Xna::Framework::Audio
 
         /** @brief Internal constructor that wraps a preloaded Impl. */
         explicit SoundEffect(std::shared_ptr<Impl> impl, std::string name = {});
+
+        /** @brief The sample rates a construction accepts: FromBuffer's 8000-48000 Hz, or XAudio2's
+            1000-200000 Hz, which XNA's content reader passes through (XNA's ADPCM encoder writes
+            rates such as 48056 Hz). */
+        enum class RateRange { FromBuffer, Content };
+
+        /** @brief The constructors' shared body, with the rate range of the route. */
+        SoundEffect(const std::vector<SharpRuntime::bytecs>& buffer,
+                    SharpRuntime::intcs offset,
+                    SharpRuntime::intcs count,
+                    SharpRuntime::intcs sampleRate,
+                    AudioChannels channels,
+                    SharpRuntime::intcs loopStart,
+                    SharpRuntime::intcs loopLength,
+                    RateRange rateRange);
+
+        friend class CNA::Internal::Xnb::SoundEffectReader;
 
         // Instance-tracking + Dispose cascade (T-3G, matches FNA's SoundEffect.Instances):
         // SoundEffectInstance registers itself here on construction against the type-erased

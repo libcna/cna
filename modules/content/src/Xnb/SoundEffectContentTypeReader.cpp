@@ -58,7 +58,8 @@ namespace CNA::Internal::Xnb
                 static_cast<std::int32_t>(sound.sampleRate),
                 static_cast<AudioChannels>(sound.channels),
                 static_cast<std::int32_t>(sound.loopStart),
-                static_cast<std::int32_t>(sound.loopLength));
+                static_cast<std::int32_t>(sound.loopLength),
+                SoundEffect::RateRange::Content);
             result.setNameProperty(input.getAssetNameProperty());
             return result;
         }

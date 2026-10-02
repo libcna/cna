@@ -42,6 +42,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/IO/EndOfStreamException.hpp"
 #include "System/IO/MemoryStream.hpp"
 
@@ -338,6 +339,56 @@ TEST_F(SoundEffectContentTypeReaderTest, XboxPlatformByteSwapsWaveFormatFieldsCo
     auto effect = reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>();
 
     EXPECT_NEAR(effect.getDurationProperty().getTotalSecondsProperty(), 1024.0 / 44100.0, 1e-6);
+}
+#endif  // SOUND_ENABLED
+
+#ifdef SOUND_ENABLED
+// Needs the decoder: see this file's SOUND_ENABLED note above.
+// XNA's own SoundEffectProcessor writes MS-ADPCM at rates its encoder nudges to fit a block --
+// 48056 Hz, 48084 Hz (escape-from-enceladus's and gnomicstudios/GGJ13's sounds) -- and XNA's
+// content reader takes the asset's format as XAudio2 does, without FromBuffer's 8000-48000 Hz
+// range. The reader refused them as FromBuffer would.
+TEST_F(SoundEffectContentTypeReaderTest, AContentSampleRateAboveFromBuffersRangeLoads)
+{
+    std::vector<uint8_t> bytes;
+    auto w16 = [&bytes](uint16_t v) { bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8)); };
+    auto w32 = [&bytes](uint32_t v) {
+        bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8));
+        bytes.push_back(static_cast<uint8_t>(v >> 16)); bytes.push_back(static_cast<uint8_t>(v >> 24));
+    };
+
+    const std::string readerName = "Microsoft.Xna.Framework.Content.SoundEffectReader";
+    bytes.push_back(1);
+    bytes.push_back(static_cast<uint8_t>(readerName.size()));
+    bytes.insert(bytes.end(), readerName.begin(), readerName.end());
+    w32(0);
+    bytes.push_back(0);
+    bytes.push_back(1);
+
+    constexpr uint32_t rate = 48056;
+    w32(16);       // formatLength
+    w16(1);        // wFormatTag: PCM
+    w16(1);        // nChannels: mono
+    w32(rate);     // nSamplesPerSec
+    w32(rate * 2); // nAvgBytesPerSec
+    w16(2);        // nBlockAlign
+    w16(16);       // wBitsPerSample
+    std::vector<uint8_t> pcm(2 * 1024, 0);
+    w32(static_cast<uint32_t>(pcm.size()));
+    bytes.insert(bytes.end(), pcm.begin(), pcm.end());
+    w32(0); // loopStart
+    w32(0); // loopLength
+    w32(0); // duration
+
+    body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
+    reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
+    auto effect = reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>();
+
+    EXPECT_NEAR(effect.getDurationProperty().getTotalSecondsProperty(), 1024.0 / rate, 1e-6);
+    EXPECT_THROW(Microsoft::Xna::Framework::Audio::SoundEffect(pcm, static_cast<int32_t>(rate),
+                     Microsoft::Xna::Framework::Audio::AudioChannels::Mono),
+                 System::ArgumentOutOfRangeException)
+        << "FromBuffer keeps its own range";
 }
 #endif  // SOUND_ENABLED
 
