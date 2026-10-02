@@ -2,7 +2,17 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.43.0** (`CBIND-154`). No route, constant or structure
+The current experimental ABI is **0.44.0** (`CBIND-155`). No route, constant or structure
+changes; one rule does. The activated and deactivated handlers (`cna_game_subscribe`) run inside a
+callback scope, so they can borrow the game's device, and the activation that begins every run
+holds the game thread's context. They were raised as the run began and while a frame pumped window
+events, outside every scope: a handler's `cna_game_get_graphics_device` was refused. XNA's
+`OnActivated` ran on the game thread with the device at hand -- Charles Petzold's PhreeCell deals
+and sizes its table there and drew nothing. The export set did not change.
+
+### Previous ABI 0.43.0
+
+The ABI was **0.43.0** (`CBIND-154`). No route, constant or structure
 changes; one rule does. `cna_sound_effect_play` and `cna_sound_effect_play_with_settings` answer on
 any thread, not only the one that created the effect, as XNA's `SoundEffect.Play` did: games play
 sounds from threads of their own (stpettersens/21's dealer plays its shuffle sound on the thread

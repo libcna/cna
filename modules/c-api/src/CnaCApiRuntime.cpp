@@ -258,6 +258,22 @@ protected:
         }
     }
 
+    // CBIND-155: Activated and Deactivated reach their handlers inside a callback scope, so a
+    // handler can borrow the game's device -- XNA's OnActivated ran on the game thread with the
+    // device at hand, and Charles Petzold's PhreeCell deals and sizes its table there. They are
+    // raised as the run begins and while the frame pumps window events, outside every other scope.
+    void OnActivated(System::Object* sender, const System::EventArgs& args) override
+    {
+        const CallbackScope scope(*this);
+        Game::OnActivated(sender, args);
+    }
+
+    void OnDeactivated(System::Object* sender, const System::EventArgs& args) override
+    {
+        const CallbackScope scope(*this);
+        Game::OnDeactivated(sender, args);
+    }
+
     void OnExiting(System::Object* sender, const System::EventArgs& args) override
     {
         NotifyExit();

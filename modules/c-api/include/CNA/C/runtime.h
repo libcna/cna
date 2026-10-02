@@ -556,7 +556,9 @@ CNA_C_API CNA_Result cna_game_copy_type_name(
  * context. The exiting event is declared with the plain event-argument type even though a named
  * `ExitingEventArgs` exists, so nothing is lost here. The exiting **callback** in
  * `CNA_GameCallbacks` is a different thing: it can stop the game by failing, while these handlers
- * only observe.
+ * only observe. The activated and deactivated handlers run as lifecycle callbacks do: on the game
+ * thread, inside a callback scope, so they can borrow the game's device (ABI 0.44.0). The game is
+ * activated as its run begins.
  */
 CNA_C_API CNA_Result cna_game_subscribe(
     CNA_Handle game,

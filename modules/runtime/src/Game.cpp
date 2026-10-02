@@ -1348,6 +1348,10 @@ namespace Microsoft::Xna::Framework
 
     void Game::BeforeLoop()
     {
+        // CBIND-155: XNA activated the game as its form was shown, on the game thread with its
+        // device usable; a handler that reads the viewport or creates a resource here needs the
+        // context, as the frames' handlers have it.
+        const auto contextLease = AcquireGameThreadContextLease();
         setIsActiveProperty(true);
     }
 

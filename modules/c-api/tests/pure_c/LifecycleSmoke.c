@@ -25,6 +25,28 @@ typedef struct LifecycleState {
     int readback_validated;
 } LifecycleState;
 
+/* CBIND-155: the game is activated as its run begins, and its handler can use the device there. */
+typedef struct ActivationState {
+    CNA_Handle game;
+    int calls;
+    CNA_Result borrow;
+    CNA_Result viewport;
+} ActivationState;
+
+static void on_activated(void* const context)
+{
+    ActivationState* const state = (ActivationState*)context;
+    CNA_Handle device = CNA_INVALID_HANDLE;
+    CNA_Viewport viewport;
+    memset(&viewport, 0, sizeof(viewport));
+    state->calls++;
+    state->borrow = cna_game_get_graphics_device(state->game, &device);
+    state->viewport = cna_graphics_device_get_viewport(device, &viewport);
+    if (viewport.width <= 0) {
+        state->viewport = CNA_RESULT_INTERNAL;
+    }
+}
+
 typedef struct WrongThreadState {
     CNA_Handle game;
     CNA_Result result;
@@ -770,8 +792,20 @@ int main(void)
     callbacks.unload_content = on_unload;
     callbacks.exiting = on_exit;
     create_info = make_create_info(&callbacks, "", 0U);
-    if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
-        cna_game_run(game) != CNA_RESULT_SUCCESS || state.texture == CNA_INVALID_HANDLE ||
+    ActivationState activation = {CNA_INVALID_HANDLE, 0, CNA_RESULT_INTERNAL, CNA_RESULT_INTERNAL};
+    CNA_GameEventRegistrationHandle activated = CNA_INVALID_HANDLE;
+    if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS) {
+        return CNA_TEST_FAIL(13);
+    }
+    activation.game = game;
+    if (cna_game_subscribe(game, CNA_GAME_EVENT_ACTIVATED, on_activated, &activation, &activated) !=
+            CNA_RESULT_SUCCESS ||
+        cna_game_run(game) != CNA_RESULT_SUCCESS || activation.calls < 1 ||
+        activation.borrow != CNA_RESULT_SUCCESS || activation.viewport != CNA_RESULT_SUCCESS ||
+        cna_game_unsubscribe(activated) != CNA_RESULT_SUCCESS) {
+        return CNA_TEST_FAIL(14);
+    }
+    if (state.texture == CNA_INVALID_HANDLE ||
         state.sprite_batch == CNA_INVALID_HANDLE ||
         cna_sprite_batch_destroy(state.sprite_batch) != CNA_RESULT_SUCCESS ||
         cna_texture2d_destroy(state.texture) != CNA_RESULT_SUCCESS ||
