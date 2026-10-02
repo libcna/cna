@@ -12,7 +12,7 @@ or renamed module stops this gate rather than inheriting a default. Paths whose 
 are `Internal` or `Detail` in any capitalization are excluded as implementation detail.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **469 headers**, **8142 symbols**, **7030 implemented**, **15 partial**, **656 planned**, **441 not applicable**. Explicitly excluded headers: **470**.
+Snapshot: **469 headers**, **8142 symbols**, **7030 implemented**, **15 partial**, **656 planned**, **441 not applicable**. Explicitly excluded headers: **471**.
 
 ## Out of runtime C API scope
 
@@ -34,7 +34,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/core` internal/detail paths | 9 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/devices` internal/detail paths | 13 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/devices-ext` internal/detail paths | 1 | implementation detail: a path segment is `Internal` or `Detail` |
-| `modules/gamer-services` internal/detail paths | 13 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/gamer-services` internal/detail paths | 14 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/graphics` internal/detail paths | 35 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/graphics-ext` internal/detail paths | 2 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/input` internal/detail paths | 5 | implementation detail: a path segment is `Internal` or `Detail` |
@@ -44,7 +44,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `c3fa0fccf960bb719c6fa29b10ca39b1da4cbbb889680fab78af7980fc61b6a6`.
+Full inventory SHA-256: `c6847c3240c06a400c073af153c98fe7490aa702380357a5418a0c587ef859b4`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:

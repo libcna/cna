@@ -776,6 +776,18 @@ CNA_Result cna_game_set_foreign_thread_calls_ext(const CNA_Handle gameHandle, co
     });
 }
 
+CNA_Result cna_game_run_foreign_thread_calls_ext(const CNA_Handle gameHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CGame> game;
+        if (const CNA_Result result = GetGame(gameHandle, &game); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        CNA::C::Detail::RunForeignThreadCalls();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_game_run(const CNA_Handle gameHandle)
 {
     return CallWithExceptionBarrier([&]() {

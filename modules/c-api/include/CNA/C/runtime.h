@@ -259,6 +259,23 @@ CNA_C_API CNA_Result cna_game_run_frame_ext(CNA_Handle game, CNA_Bool* out_runni
 CNA_C_API CNA_Result cna_game_set_foreign_thread_calls_ext(CNA_Handle game, CNA_Bool enabled);
 
 /**
+ * @brief Runs the calls other threads have queued for the game thread, now.
+ *
+ * With @ref cna_game_set_foreign_thread_calls_ext on, the queued calls run at the start of each
+ * update and draw. A game thread that waits for such a thread inside a callback -- XNA's loading
+ * screens start a thread that draws the loading animation and then join it from `Update` --
+ * would otherwise wait for a call only it can run. A binding calls this from the game thread while
+ * it waits; each call runs as it would at the start of an update, inside whatever callback is in
+ * progress. It returns at once when nothing is queued; having run a call, it goes on running the
+ * calls that arrive within 8 ms of its start, as the update does. It does nothing when the feature
+ * is off.
+ *
+ * @param game Owned game handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_game_run_foreign_thread_calls_ext(CNA_Handle game);
+
+/**
  * @brief Runs native frames until @ref cna_game_request_exit is called or a callback fails.
  *
  * @param game Owned game handle.

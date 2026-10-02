@@ -2,14 +2,24 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.40.0** (`CBIND-145`). No route, constant or structure
+The current experimental ABI is **0.41.0** (`CBIND-152`). It adds one route,
+`cna_game_run_foreign_thread_calls_ext`: the game thread runs the calls other threads queued for it
+(`cna_game_set_foreign_thread_calls_ext`) now, rather than at the start of its next update or draw.
+XNA's loading screens start a thread that draws the loading animation and join it from `Update`
+(Microsoft's Network Game State Management sample); with the queue served only between updates,
+that thread waited for the game thread and the game thread for it. A binding calls the route while
+its game thread waits. Additive: nothing existing changes. 3,210 exports.
+
+### Previous ABI 0.40.0
+
+The ABI was **0.40.0** (`CBIND-145`). No route, constant or structure
 changes; one rule does. The twelve `cna_graphics_adapter_*` routes also accept the active game's own
 handle as their `graphics_device`, on the thread that created it (`cna_graphics_adapters_refresh`,
 which always refuses, is unchanged). The adapters are the system's, not a device's, and XNA reads
 `GraphicsAdapter.DefaultAdapter` anywhere -- most often in a game's constructor, to size the back
 buffer, before any lifecycle callback can lend a device; there a game had no handle these routes
 would take. A callback-scoped device is still accepted, and every other handle is refused as
-before. 3,209 exports.
+before; the export set did not change.
 
 ### Previous ABI 0.39.0
 
@@ -20,7 +30,7 @@ with `CNA_RESULT_THREAD` -- which stays the default. XNA let a game create resou
 and load content on a thread of its own, so a binding that offers that turns this on: a call that a
 handle refused only because another thread created it is queued, and the game thread runs it at the
 start of its next update or draw, inside the lifecycle callback scope, and hands back the result
-and, for a failure, the error record. 3,209 exports; purely additive.
+and, for a failure, the error record. Purely additive.
 
 ### Previous ABI 0.38.0
 
@@ -586,7 +596,7 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-The current baseline records 3,209 exports; build configurations must export the same surface.
+The current baseline records 3,210 exports; build configurations must export the same surface.
 That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose backend or layer is absent exists and refuses, rather than

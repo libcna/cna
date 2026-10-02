@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // CBIND-141: cna_game_set_foreign_thread_calls_ext, another thread's calls on the game thread's
-// handles run on the game thread.
+// handles run on the game thread. CBIND-152: cna_game_run_foreign_thread_calls_ext runs them while
+// the game thread waits for that thread inside a callback.
 
 #include <CNA/C/cna.h>
 
@@ -23,6 +24,8 @@ typedef struct Shared {
     CNA_Color pixels[4];
     CNA_Result too_small;
     CNA_ErrorInfo too_small_info;
+    CNA_Result pumped_read;
+    CNA_Color pumped_pixels[4];
     int failed;
 } Shared;
 
@@ -75,6 +78,34 @@ static int served_worker(void* const argument)
     }
     atomic_store(&shared->worker_done, 1);
     return 0;
+}
+
+/* The loading-screen shape: the game thread joins this one from its update. */
+static int pumped_worker(void* const argument)
+{
+    Shared* const shared = (Shared*)argument;
+    uint64_t count = 0U;
+    shared->pumped_read = cna_texture2d_get_data_rgba8(shared->texture, shared->pumped_pixels, 4U, &count);
+    if (shared->pumped_read == CNA_RESULT_SUCCESS && count != 4U) {
+        shared->pumped_read = CNA_RESULT_INTERNAL;
+    }
+    atomic_store(&shared->worker_done, 1);
+    return 0;
+}
+
+/* Waits for the worker as a binding's game thread does, running its calls meanwhile. Without
+   cna_game_run_foreign_thread_calls_ext this wait never ends: the worker's call waits for the game
+   thread's next update, and the game thread waits for the worker. */
+static int join_while_running_calls(Shared* const shared)
+{
+    const struct timespec millisecond = {0, 1000000L};
+    for (int waited = 0; !atomic_load(&shared->worker_done); ++waited) {
+        if (waited > 10000 || cna_game_run_foreign_thread_calls_ext(shared->game) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        thrd_sleep(&millisecond, NULL);
+    }
+    return thrd_join(shared->worker, 0) == thrd_success;
 }
 
 static CNA_Result on_load_content(const CNA_Handle game, const CNA_GameTime* const game_time,
@@ -134,6 +165,12 @@ static CNA_Result on_update(const CNA_Handle game, const CNA_GameTime* const gam
                be waited for until it is done. */
             if (atomic_load(&shared->worker_done)) {
                 (void)thrd_join(shared->worker, 0);
+                atomic_store(&shared->worker_done, 0);
+                if (thrd_create(&shared->worker, pumped_worker, shared) != thrd_success ||
+                    !join_while_running_calls(shared)) {
+                    shared->failed = 1;
+                    break;
+                }
                 shared->phase = 2;
                 return cna_game_request_exit(game);
             }
@@ -170,7 +207,8 @@ int main(void)
         return CNA_TEST_FAIL(1);
     }
     shared.game = game;
-    if (cna_game_set_foreign_thread_calls_ext(game, (CNA_Bool)2) != CNA_RESULT_INVALID_ARGUMENT) {
+    if (cna_game_set_foreign_thread_calls_ext(game, (CNA_Bool)2) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_game_run_foreign_thread_calls_ext(CNA_INVALID_HANDLE) == CNA_RESULT_SUCCESS) {
         return CNA_TEST_FAIL(2);
     }
 
@@ -193,8 +231,16 @@ int main(void)
         return CNA_TEST_FAIL(6);
     }
 
-    /* Off again: the game thread's handles refuse other threads, as by default. */
-    if (cna_game_set_foreign_thread_calls_ext(game, CNA_FALSE) != CNA_RESULT_SUCCESS) {
+    if (shared.pumped_read != CNA_RESULT_SUCCESS ||
+        memcmp(shared.pumped_pixels, Expected, sizeof(Expected)) != 0) {
+        fprintf(stderr, "pumped_read=%u\n", (unsigned)shared.pumped_read);
+        return CNA_TEST_FAIL(11);
+    }
+
+    /* Off again: the game thread's handles refuse other threads, as by default, and running the
+       queue does nothing. */
+    if (cna_game_set_foreign_thread_calls_ext(game, CNA_FALSE) != CNA_RESULT_SUCCESS ||
+        cna_game_run_foreign_thread_calls_ext(game) != CNA_RESULT_SUCCESS) {
         return CNA_TEST_FAIL(7);
     }
     atomic_store(&shared.worker_done, 0);
