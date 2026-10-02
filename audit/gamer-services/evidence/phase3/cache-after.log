@@ -1,0 +1,21 @@
+[----------] 9 tests from ServiceRequestRetryTest
+[ RUN      ] ServiceRequestRetryTest.ALostResponseIsAskedForOnceMoreUnderTheSameRequestId
+[       OK ] ServiceRequestRetryTest.ALostResponseIsAskedForOnceMoreUnderTheSameRequestId (16 ms)
+[ RUN      ] ServiceRequestRetryTest.OnlyOnceThenTheServiceIsUnavailable
+[       OK ] ServiceRequestRetryTest.OnlyOnceThenTheServiceIsUnavailable (13 ms)
+[ RUN      ] ServiceRequestRetryTest.AServiceThatKeepsNoOutcomesIsNotAskedAgain
+[       OK ] ServiceRequestRetryTest.AServiceThatKeepsNoOutcomesIsNotAskedAgain (12 ms)
+[ RUN      ] ServiceRequestRetryTest.ASignInWhoseResultIsASecretIsNotAskedAgain
+[       OK ] ServiceRequestRetryTest.ASignInWhoseResultIsASecretIsNotAskedAgain (26 ms)
+[ RUN      ] ServiceRequestRetryTest.SignInCarriesTheAccountsPrivilegesAndBlockList
+[       OK ] ServiceRequestRetryTest.SignInCarriesTheAccountsPrivilegesAndBlockList (11 ms)
+[ RUN      ] ServiceRequestRetryTest.TheHeartbeatSaysWhetherThisMachineCanTalk
+[       OK ] ServiceRequestRetryTest.TheHeartbeatSaysWhetherThisMachineCanTalk (1669 ms)
+[ RUN      ] ServiceRequestRetryTest.CachedPictureRechecksPolicyAndDoesNotCacheDenial
+[       OK ] ServiceRequestRetryTest.CachedPictureRechecksPolicyAndDoesNotCacheDenial (19 ms)
+[ RUN      ] ServiceRequestRetryTest.AnotherBackendCannotUseCachedPictureWithoutCurrentAuthorization
+[       OK ] ServiceRequestRetryTest.AnotherBackendCannotUseCachedPictureWithoutCurrentAuthorization (29 ms)
+[ RUN      ] ServiceRequestRetryTest.InvalidatedTokenCannotReadCachedPicture
+[       OK ] ServiceRequestRetryTest.InvalidatedTokenCannotReadCachedPicture (14 ms)
+[----------] 9 tests from ServiceRequestRetryTest (1813 ms total)
+9/9 transport and cache tests passed; independently introduced avatar-lock regression still failed before its fix.

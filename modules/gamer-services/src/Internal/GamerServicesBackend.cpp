@@ -535,7 +535,18 @@ public:
         const auto token=tokenFor({});
         std::lock_guard cacheLock(cacheMutex_);
         const AssetDiskCache cache(AssetDiskCache::defaultRoot(),prefix_);
-        if(auto cached=cache.read(hash))return std::move(*cached);
+        if(auto cached=cache.read(hash)) {
+            // Cached content is immutable; the requester's authority is not. A one-byte read
+            // applies the same current token/title/picture policy as an uncached download.
+            const auto grant=request("assets.read",{{"hash",hash},{"offset",0},{"length",1}},token);
+            if(CnaService::stringField(grant,"hash",64)!=hash||!grant.at("size").is_number_integer()||grant["size"]!=cached->size()||
+               !grant.at("offset").is_number_integer()||grant["offset"]!=0)throw Unavailable("Invalid cached asset authorization response.");
+            const auto mime=CnaService::stringField(grant,"mime",64),hex=CnaService::stringField(grant,"hex",2);
+            constexpr char digits[]="0123456789abcdef";
+            if((mime!="image/png"&&mime!="image/jpeg"&&mime!="model/gltf-binary")||hex.size()!=2||
+               hex[0]!=digits[cached->front()>>4]||hex[1]!=digits[cached->front()&15])throw Unavailable("Invalid cached asset authorization response.");
+            return std::move(*cached);
+        }
         std::vector<unsigned char> bytes;long long expected=0;std::string mime;
         while(bytes.empty()||static_cast<long long>(bytes.size())<expected) {
             const auto part=request("assets.read",{{"hash",hash},{"offset",bytes.size()},{"length",12288}},token);
