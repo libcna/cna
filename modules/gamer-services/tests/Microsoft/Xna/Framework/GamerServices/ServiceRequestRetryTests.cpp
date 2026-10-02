@@ -5,6 +5,10 @@
 // connection after one exchange: libcurl itself re-sends a request, once, when a reused keep-alive
 // connection dies before any answer, and that would hide which attempt is whose.
 #include <gtest/gtest.h>
+#include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
+#include "System/IServiceProvider.hpp"
 #if defined(__unix__) || defined(__APPLE__)
 #include "CNA/Internal/GamerServices/BackendConfiguration.hpp"
 #include "CNA/Internal/GamerServices/AvatarAssets.hpp"
@@ -35,7 +39,7 @@ using Unavailable=Microsoft::Xna::Framework::GamerServices::GamerServicesNotAvai
 
 class LoopbackService {
 public:
-    explicit LoopbackService(bool outcomes,bool privacy=false):outcomes_(outcomes),privacy_(privacy) {
+    explicit LoopbackService(bool outcomes,bool privacy=false,bool refresh=false):outcomes_(outcomes),privacy_(privacy),refresh_(refresh) {
         listener_=socket(AF_INET,SOCK_STREAM,0);
         sockaddr_in address{};address.sin_family=AF_INET;address.sin_addr.s_addr=htonl(INADDR_LOOPBACK);
         EXPECT_EQ(0,bind(listener_,reinterpret_cast<sockaddr*>(&address),sizeof(address)));
@@ -49,7 +53,9 @@ public:
         thread_.join();close(listener_);
     }
     std::string endpoint() const {return "http://127.0.0.1:"+std::to_string(port_)+"/cna/v1";}
+    void revokeNextPing() { std::lock_guard lock(mutex_); revokePing_=true; }
     void assetPolicy(const std::string& code) {std::lock_guard lock(mutex_);assetCode_=code;}
+    void policy(std::string communication, Json blocked) { std::lock_guard lock(mutex_); communication_=std::move(communication); blocked_=std::move(blocked); }
     // The next `count` requests of `op` are read, then their connection closes without an answer.
     void drop(const std::string& op,int count) {std::lock_guard lock(mutex_);drops_[op]=count;}
     std::vector<std::string> ids(const std::string& op) {std::lock_guard lock(mutex_);return seen_[op];}
@@ -71,7 +77,7 @@ private:
                  if(drops_[op]>0){--drops_[op];dropped=true;}}
                 if(dropped)break;
                 std::string code="OK";
-                {std::lock_guard lock(mutex_);if(op=="assets.read")code=assetCode_;}
+                {std::lock_guard lock(mutex_);if(op=="assets.read")code=assetCode_;if(op=="auth.ping"&&revokePing_){code="UNAUTHENTICATED";revokePing_=false;}}
                 const auto text=Json{{"v",1},{"id",body.at("id")},{"error",code},{"result",code=="OK"?result(op,body.at("args")):Json::object()}}.dump();
                 const auto reply="HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: "+
                     std::to_string(text.size())+"\r\n\r\n"+text;
@@ -97,20 +103,25 @@ private:
             buffer.append(chunk,static_cast<std::size_t>(count));
         }
     }
-    Json result(const std::string& op,const Json& args) const {
+    Json result(const std::string& op,const Json& args) {
         const auto now=std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
         if(op=="hello") {
             Json capabilities=Json::array({"identity","authentication","achievements","assets"});
             if(outcomes_)capabilities.push_back("request-outcomes");
-            if(privacy_)for(const auto* name:{"privacy","friend-voice","heartbeat"})capabilities.push_back(name);
+            if(refresh_)capabilities.push_back("session-refresh");
+            if(privacy_)for(const auto* name:{"privacy","friend-voice","heartbeat","policy-refresh"})capabilities.push_back(name);
             return {{"version",1},{"capabilities",capabilities},{"maxMessageBytes",65536}};
         }
-        if(op=="auth.login")
-            return {{"identity",{{"userId","u1"},{"gamertag","Alice"},{"displayName","Alice"},{"motto",""},{"region","US"},
+        if(op=="auth.login"||op=="auth.refresh") {
+            std::lock_guard lock(mutex_);
+            Json credentials= {{"identity",{{"userId","u1"},{"gamertag","Alice"},{"displayName","Alice"},{"motto",""},{"region","US"},
                 {"picture",""},{"gamerScore",0},{"totalAchievements",0},{"allowOnlineSessions",true}}},
-                {"token",std::string(64,'a')},{"expires",now+3600},{"serverTime",now},
-                {"privileges",{{"communication","friends"},{"profileViewing","blocked"},{"userContent","everyone"},
+                {"token",std::string(64,op=="auth.refresh"?'b':'a')},{"expires",now+3600},{"serverTime",now},
+                {"privileges",{{"communication",communication_},{"profileViewing","blocked"},{"userContent","everyone"},
                     {"trade",false},{"purchase",true},{"premium",false}}}};
+            if(refresh_) {credentials["refreshToken"]=std::string(64,'c');credentials["refreshExpires"]=now+86400;}
+            return credentials;
+        }
         if(op=="assets.read") {
             const std::string bytes="private-picture";
             const auto offset=args.at("offset").get<std::size_t>(),length=args.at("length").get<std::size_t>();
@@ -118,12 +129,18 @@ private:
             for(unsigned char byte:bytes.substr(offset,length)){hex+=digits[byte>>4];hex+=digits[byte&15];}
             return {{"hash",args.at("hash")},{"size",bytes.size()},{"mime","image/png"},{"offset",offset},{"hex",hex}};
         }
-        if(op=="privacy.list")return {{"blocked",Json::array({"Bob","Carol"})}};
+        if(op=="auth.ping" || op=="privacy.list") {
+            std::lock_guard lock(mutex_);
+            if(op=="privacy.list")return {{"blocked",blocked_}};
+            return {{"privileges",{{"communication",communication_},{"profileViewing","blocked"},{"userContent","everyone"},
+                {"trade",false},{"purchase",true},{"premium",false}}},{"blocked",blocked_}};
+        }
         if(op=="achievements.award")return {{"awarded",true},{"name","First"}};
         return Json::object();
     }
-    bool outcomes_,privacy_;int listener_=-1;unsigned short port_=0;std::atomic<bool> stop_{false};std::atomic<int> connection_{-1};std::thread thread_;
-    std::string assetCode_="OK";
+    bool outcomes_,privacy_,refresh_,revokePing_=false;int listener_=-1;unsigned short port_=0;std::atomic<bool> stop_{false};std::atomic<int> connection_{-1};std::thread thread_;
+    std::string assetCode_="OK", communication_="friends";
+    Json blocked_=Json::array({"Bob","Carol"});
     std::mutex mutex_;std::map<std::string,int> drops_;std::map<std::string,std::vector<std::string>> seen_;std::map<std::string,std::vector<Json>> args_;
 };
 
@@ -291,5 +308,71 @@ TEST_F(ServiceRequestRetryTest, InvalidatedTokenCannotReadCachedPicture) {
     EXPECT_EQ(2u,service.ids("assets.read").size());
     EXPECT_THROW((void)backend->asset(PictureHash()),Unavailable);
     EXPECT_EQ(2u,service.ids("assets.read").size());
+}
+#endif
+
+#if defined(__unix__) || defined(__APPLE__)
+TEST_F(ServiceRequestRetryTest, HeartbeatRefreshesPublishedPolicyWithoutReplacingTheGamer) {
+    using namespace Microsoft::Xna::Framework::GamerServices;
+    struct Provider : System::IServiceProvider { void* GetService(const std::type_info&) const override { return nullptr; } } provider;
+    LoopbackService service(true,true);
+    Service::setHeartbeatIntervalForTesting(1);
+    struct Restore { ~Restore(){Service::setHeartbeatIntervalForTesting(30);} } restore;
+    Deployment::setConfigurationOverride(Deployment::Configuration{service.endpoint(),"retry",{},true});
+    Service::setBackendForTesting({});
+    auto backend=Service::backend();
+    if(!GamerServicesDispatcher::getIsInitializedProperty()) GamerServicesDispatcher::Initialize(provider);
+    auto await=[&](auto condition) {
+        for(int i=0;i<500;++i) { GamerServicesDispatcher::Update(); if(condition())return true; std::this_thread::sleep_for(std::chrono::milliseconds(10)); }
+        return false;
+    };
+    backend->signIn(0,"alice","alice-password");
+    ASSERT_TRUE(await([&]{return Gamer::getSignedInGamersProperty()->getCountProperty()==1;}));
+    auto* gamer=(*Gamer::getSignedInGamersProperty())[0];
+    EXPECT_EQ(GamerPrivilegeSetting::FriendsOnly,gamer->getPrivilegesProperty().getAllowCommunicationProperty());
+    Service::setVoiceMuted("Alice","Dave",true);
+    service.policy("blocked",Json::array({"Dave"}));
+    EXPECT_TRUE(await([&]{return gamer->getPrivilegesProperty().getAllowCommunicationProperty()==GamerPrivilegeSetting::Blocked && Service::playerBlocked("Alice","Dave");}));
+    EXPECT_FALSE(Service::playerBlocked("Alice","Bob"));
+    EXPECT_EQ(gamer,(*Gamer::getSignedInGamersProperty())[0]);
+    EXPECT_FALSE(gamer->getIsDisposedProperty());
+    service.policy("everyone",Json::array());
+    EXPECT_TRUE(await([&]{return gamer->getPrivilegesProperty().getAllowCommunicationProperty()==GamerPrivilegeSetting::Everyone && !Service::playerBlocked("Alice","Dave");}));
+    EXPECT_TRUE(Service::voiceMuted("Alice","Dave")) << "policy refresh must preserve the local mute";
+    backend->signOut(0);
+    EXPECT_TRUE(await([&]{return Gamer::getSignedInGamersProperty()->getCountProperty()==0;}));
+    Service::resetVoiceMutesForTesting();
+}
+#endif
+
+#if defined(__unix__) || defined(__APPLE__)
+TEST_F(ServiceRequestRetryTest, CredentialRenewalPublishesCurrentPrivilegesAndBlocks) {
+    LoopbackService service(true,true,true);
+    Service::setHeartbeatIntervalForTesting(1);
+    struct Restore { ~Restore(){Service::setHeartbeatIntervalForTesting(30);} } restore;
+    auto backend=signedIn(service);
+    service.policy("blocked",Json::array({"Dave"}));service.revokeNextPing();
+    bool changed=false;
+    for(int n=0;n<500&&!changed;++n) {
+        for(const auto& event:backend->pump())
+            if(event.identity.userId=="u1" && event.identity.communication=="blocked" && event.identity.blocked==std::vector<std::string>{"Dave"})changed=true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    EXPECT_TRUE(changed);
+    EXPECT_EQ(1u,service.ids("auth.refresh").size());
+}
+#endif
+
+#if defined(__unix__) || defined(__APPLE__)
+TEST_F(ServiceRequestRetryTest, AFullServiceBlockListIsNotSilentlyDroppedAtSignIn) {
+    LoopbackService service(true,true);
+    Json blocked=Json::array();
+    for(int n=0;n<1024;++n)blocked.push_back("Blocked-"+std::to_string(n));
+    service.policy("friends",blocked);
+    Service::ServiceIdentity person;
+    (void)signedIn(service,&person);
+    ASSERT_EQ(1024u,person.blocked.size());
+    EXPECT_EQ("Blocked-0",person.blocked.front());
+    EXPECT_EQ("Blocked-1023",person.blocked.back());
 }
 #endif

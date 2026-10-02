@@ -107,6 +107,22 @@ void GamerServicesDispatcher::Update() {
             if(event.type==Type::Completion){if(event.completion)event.completion();continue;}
             if(event.slot<0||event.slot>3)continue;
             if(event.type==Type::Failed) { Guide::OnSignInResult(event.slot, false, event.error); continue; }
+            if(event.type==Type::PolicyChanged) {
+                auto* gamer=slots[event.slot];
+                if(!gamer||gamer->isGuest_||gamer->serviceUserId_!=event.identity.userId)continue;
+                auto setting=[](const std::string& value) {
+                    return value=="blocked"?GamerPrivilegeSetting::Blocked:value=="friends"?GamerPrivilegeSetting::FriendsOnly:GamerPrivilegeSetting::Everyone;
+                };
+                auto& privileges=gamer->privileges_;
+                privileges.allowCommunication_=setting(event.identity.communication);
+                privileges.allowProfileViewing_=setting(event.identity.profileViewing);
+                privileges.allowUserCreatedContent_=setting(event.identity.userContent);
+                privileges.allowTradeContent_=event.identity.tradeContent;
+                privileges.allowPurchaseContent_=event.identity.purchaseContent;
+                privileges.allowPremiumContent_=event.identity.premiumContent;
+                CNA::Internal::GamerServices::setBlockedPlayers(event.identity.gamertag,event.identity.blocked);
+                continue;
+            }
             if(event.type!=Type::SignedIn&&event.type!=Type::SignedOut)continue;
             if(auto* previous=slots[event.slot]) {
                 // Reference HandlePlayerSignInChanged: the old gamer is disposed, then SignedOut is raised.

@@ -34,8 +34,10 @@ private:
     std::string code_;
 };
 /** @brief Parses bounded UTF-8 JSON, rejecting duplicate keys and excessive nesting.
- * @param bytes Encoded envelope. @return Valid JSON value. */
-Json parse(std::string_view bytes);
+ * @param bytes Encoded envelope.
+ * @param maximumArrayItems Per-array limit; requests use 256, full policy responses use 1024.
+ * @return Valid JSON value. */
+Json parse(std::string_view bytes, std::size_t maximumArrayItems = 256);
 /** @brief Validates a v1 request before dispatch. @param request Parsed envelope. */
 void validateRequest(const Json& request);
 /** @brief Validates an identifier. @param value Identifier bytes. @return Whether accepted. */
