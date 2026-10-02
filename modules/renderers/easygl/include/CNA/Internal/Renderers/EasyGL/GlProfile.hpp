@@ -169,6 +169,21 @@ namespace CNA::Internal::Renderers::EasyGL
     }
 
     /**
+     * @brief Reports whether the profile can swizzle a texture's channels (GL_TEXTURE_SWIZZLE_*).
+     *
+     * Core in desktop OpenGL 3.3 and OpenGL ES 3.0, absent from OpenGL ES 2.0 and from both WebGL
+     * generations: WebGL 2 rejects the parameter with INVALID_ENUM, which then fails the next
+     * render-target bind that checks for pending errors.
+     *
+     * @param profile The profile to test.
+     * @return true for OpenGL33 and OpenGLES3.
+     */
+    [[nodiscard]] constexpr bool HasTextureSwizzle(GlProfile profile)
+    {
+        return profile == GlProfile::OpenGL33 || profile == GlProfile::OpenGLES3;
+    }
+
+    /**
      * @brief Reports whether indexed base-vertex draws require pointer rebasing.
      *
      * `glDrawElementsBaseVertex` is core in desktop OpenGL 3.2, but only in OpenGL ES 3.2

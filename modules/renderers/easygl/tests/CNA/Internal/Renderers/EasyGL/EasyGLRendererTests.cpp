@@ -31,6 +31,7 @@ using CNA::Internal::Renderers::IGraphicsRenderer;
 using CNA::Internal::Renderers::RendererSurfaceInfo;
 using CNA::Internal::Renderers::EasyGL::EasyGLRenderer;
 using CNA::Internal::Renderers::EasyGL::EasyGLSurfaceState;
+using CNA::Internal::Renderers::EasyGL::HasTextureSwizzle;
 using CNA::Internal::Renderers::EasyGL::RequiresBaseVertexPointerRebase;
 using CNA::Internal::Renderers::EasyGL::UsesEs2ApiGeneration;
 using EasyGlProfile = CNA::Internal::Renderers::EasyGL::GlProfile;
@@ -111,6 +112,17 @@ TEST(EasyGLProfile, Es2ApiGenerationIncludesWebGl1)
     EXPECT_FALSE(UsesEs2ApiGeneration(EasyGlProfile::OpenGLES3));
     EXPECT_FALSE(UsesEs2ApiGeneration(EasyGlProfile::OpenGL33));
     EXPECT_FALSE(UsesEs2ApiGeneration(EasyGlProfile::WebGL2));
+}
+
+TEST(EasyGLProfile, OnlyDesktopGlAndGles3SwizzleTextures)
+{
+    // WebGL 2 rejects GL_TEXTURE_SWIZZLE_* with INVALID_ENUM; setting it for a Single render
+    // target left that error pending and the next MRT bind failed (Bubble Bound in a browser).
+    EXPECT_TRUE(HasTextureSwizzle(EasyGlProfile::OpenGL33));
+    EXPECT_TRUE(HasTextureSwizzle(EasyGlProfile::OpenGLES3));
+    EXPECT_FALSE(HasTextureSwizzle(EasyGlProfile::WebGL2));
+    EXPECT_FALSE(HasTextureSwizzle(EasyGlProfile::WebGL1));
+    EXPECT_FALSE(HasTextureSwizzle(EasyGlProfile::OpenGLES2));
 }
 
 TEST(EasyGLProfile, BaseVertexEntryPointIsUsedOnlyByDesktopCore)

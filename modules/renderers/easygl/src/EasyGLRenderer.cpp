@@ -3790,6 +3790,12 @@ else
                                 format == SurfaceFormat::Rg32;
         if (!oneChannel && !twoChannel)
             return;
+        // WebGL (and GLES 2.0) cannot swizzle: there the channels a one- or two-channel target does
+        // not store read as GL's 0 rather than Direct3D's 1 -- a recorded divergence, where setting
+        // the parameter anyway left INVALID_ENUM pending and failed the next MRT bind (Bubble Bound
+        // in a browser).
+        if (!HasTextureSwizzle(ActiveGlProfile()))
+            return;
 
         const int one = static_cast<int>(::metagl::TextureSwizzle::One);
         if (oneChannel)
