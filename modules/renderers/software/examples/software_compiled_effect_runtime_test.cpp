@@ -4423,36 +4423,19 @@ namespace
 
     void CheckCompiledShaderModel3MixedConstantAbsoluteValidation(SoftwareRenderer& renderer)
     {
+        // FX-141: Microsoft's HLSL compiler (9.26.952.2844, XNA 4.0's) emits Shader Model 3
+        // programs that mix abs and plain float-constant reads, so every mix is accepted, as are
+        // the all-abs programs. The fixture keeps its SOFTWARE-410 name.
         using Source = CNA::TestSupport::SyntheticInvalidShaderModel3MixedConstantAbsolute;
-        constexpr std::array invalidSources{
+        constexpr std::array sources{
             Source::PixelPlainThenAbsolute,
             Source::PixelAbsoluteThenPlain,
             Source::VertexPlainThenAbsolute,
             Source::VertexAbsoluteThenPlain,
-        };
-        for (const Source source : invalidSources)
-        {
-            CNA::TestSupport::SyntheticEffectOptions options;
-            options.includeDrawableProgram = true;
-            options.invalidShaderModel3MixedConstantAbsolute = source;
-            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-            bool rejected = false;
-            try
-            {
-                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
-            }
-            catch (const std::runtime_error&)
-            {
-                rejected = true;
-            }
-            Check(rejected,
-                  "compiled Shader Model 3 Effect mixed absolute and ordinary constant reads");
-        }
-        constexpr std::array validSources{
             Source::PixelAllAbsolute,
             Source::VertexAllAbsolute,
         };
-        for (const Source source : validSources)
+        for (const Source source : sources)
         {
             CNA::TestSupport::SyntheticEffectOptions options;
             options.includeDrawableProgram = true;
@@ -4468,7 +4451,7 @@ namespace
                 accepted = false;
             }
             Check(accepted,
-                  "compiled Shader Model 3 Effect rejected consistent absolute constant reads");
+                  "compiled Shader Model 3 Effect rejected absolute float-constant reads");
         }
     }
 

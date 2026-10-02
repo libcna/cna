@@ -2529,8 +2529,12 @@ class EasyGLCompiledEffectShaderModel3MixedConstantAbsoluteTest :
 {
 };
 
+// FX-141: Microsoft's HLSL compiler 9.26.952.2844, the one XNA 4.0's EffectProcessor runs, emits
+// Shader Model 3 programs that read one float constant through abs and others plainly
+// (escape-from-enceladus's Wave.fx: `add r0.yz, r0.x, c12_abs.xzw` beside plain c0..c12 reads),
+// and that game loads the effect at startup on Windows. The fixture keeps its SOFTWARE-410 name.
 TEST_P(EasyGLCompiledEffectShaderModel3MixedConstantAbsoluteTest,
-       RejectsMixedAbsoluteAndOrdinaryFloatConstantReads)
+       AcceptsMixedAbsoluteAndOrdinaryFloatConstantReads)
 {
     GraphicsDevice device;
     EasyGLRenderer* renderer = RendererOf(device);
@@ -2539,7 +2543,7 @@ TEST_P(EasyGLCompiledEffectShaderModel3MixedConstantAbsoluteTest,
     options.includeDrawableProgram = true;
     options.invalidShaderModel3MixedConstantAbsolute = GetParam();
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
 }
 
 INSTANTIATE_TEST_SUITE_P(
