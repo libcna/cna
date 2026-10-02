@@ -174,7 +174,9 @@ CNA_C_API CNA_Result cna_display_mode_equals(
 /**
  * @brief Gets the number of currently enumerated graphics adapters.
  *
- * @param graphics_device Callback-scoped device proving active runtime/thread context.
+ * @param graphics_device A callback-scoped graphics-device handle, or the active game's own handle on
+ *        the thread that created it (ABI 0.40.0): the adapters are the system's, and XNA reads
+ *        them before a game's first callback.
  * @param out_count Receives the adapter count.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
  */
@@ -185,7 +187,8 @@ CNA_C_API CNA_Result cna_graphics_adapter_get_count(
 /**
  * @brief Gets the current metadata for one adapter index.
  *
- * @param graphics_device Callback-scoped graphics-device handle.
+ * @param graphics_device A callback-scoped graphics-device handle, or the active game's own handle on
+ *        its thread (ABI 0.40.0).
  * @param adapter_index Zero-based adapter index.
  * @param out_info Caller-initialized versioned output structure.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
@@ -198,7 +201,8 @@ CNA_C_API CNA_Result cna_graphics_adapter_get_info(
 /**
  * @brief Copies an adapter's UTF-8 description without a terminator.
  *
- * @param graphics_device Callback-scoped graphics-device handle.
+ * @param graphics_device A callback-scoped graphics-device handle, or the active game's own handle on
+ *        its thread (ABI 0.40.0).
  * @param adapter_index Zero-based adapter index.
  * @param destination Caller-owned bytes, or null only when @p capacity is zero.
  * @param capacity Destination capacity in bytes.
@@ -215,7 +219,8 @@ CNA_C_API CNA_Result cna_graphics_adapter_copy_description(
 /**
  * @brief Copies an adapter's UTF-8 device/display name without a terminator.
  *
- * @param graphics_device Callback-scoped graphics-device handle.
+ * @param graphics_device A callback-scoped graphics-device handle, or the active game's own handle on
+ *        its thread (ABI 0.40.0).
  * @param adapter_index Zero-based adapter index.
  * @param destination Caller-owned bytes, or null only when @p capacity is zero.
  * @param capacity Destination capacity in bytes.
@@ -232,7 +237,8 @@ CNA_C_API CNA_Result cna_graphics_adapter_copy_device_name(
 /**
  * @brief Gets one adapter's current display mode.
  *
- * @param graphics_device Callback-scoped graphics-device handle.
+ * @param graphics_device A callback-scoped graphics-device handle, or the active game's own handle on
+ *        its thread (ABI 0.40.0).
  * @param adapter_index Zero-based adapter index.
  * @param out_mode Caller-initialized versioned output structure.
  * @return `CNA_RESULT_SUCCESS` or a documented failure.
@@ -245,7 +251,8 @@ CNA_C_API CNA_Result cna_graphics_adapter_get_current_display_mode(
 /**
  * @brief Gets one adapter's supported display-mode count, optionally filtered by format.
  *
- * @param graphics_device Callback-scoped graphics-device handle.
+ * @param graphics_device A callback-scoped graphics-device handle, or the active game's own handle on
+ *        its thread (ABI 0.40.0).
  * @param adapter_index Zero-based adapter index.
  * @param filter_by_format Whether to apply @p format.
  * @param format Surface format used when filtering.
@@ -262,7 +269,8 @@ CNA_C_API CNA_Result cna_graphics_adapter_get_display_mode_count(
 /**
  * @brief Copies one adapter's supported display modes, optionally filtered by format.
  *
- * @param graphics_device Callback-scoped graphics-device handle.
+ * @param graphics_device A callback-scoped graphics-device handle, or the active game's own handle on
+ *        its thread (ABI 0.40.0).
  * @param adapter_index Zero-based adapter index.
  * @param filter_by_format Whether to apply @p format.
  * @param format Surface format used when filtering.
@@ -283,7 +291,8 @@ CNA_C_API CNA_Result cna_graphics_adapter_copy_display_modes(
 /**
  * @brief Gets or changes the adapter's null/reference device flags.
  *
- * @param graphics_device Callback-scoped graphics-device handle.
+ * @param graphics_device A callback-scoped graphics-device handle, or the active game's own handle on
+ *        its thread (ABI 0.40.0).
  * @param adapter_index Zero-based adapter index.
  * @param use_null_device New null-device flag.
  * @param use_reference_device New reference-device flag.
@@ -298,7 +307,8 @@ CNA_C_API CNA_Result cna_graphics_adapter_set_device_preferences(
 /**
  * @brief Queries graphics-profile support for one adapter.
  *
- * @param graphics_device Callback-scoped graphics-device handle.
+ * @param graphics_device A callback-scoped graphics-device handle, or the active game's own handle on
+ *        its thread (ABI 0.40.0).
  * @param adapter_index Zero-based adapter index.
  * @param profile Requested profile.
  * @param out_supported Receives true when supported.
@@ -313,7 +323,8 @@ CNA_C_API CNA_Result cna_graphics_adapter_is_profile_supported(
 /**
  * @brief Negotiates a render-target format through the native adapter.
  *
- * @param graphics_device Callback-scoped graphics-device handle.
+ * @param graphics_device A callback-scoped graphics-device handle, or the active game's own handle on
+ *        its thread (ABI 0.40.0).
  * @param adapter_index Zero-based adapter index.
  * @param profile Requested graphics profile.
  * @param format Requested color format.
@@ -334,7 +345,8 @@ CNA_C_API CNA_Result cna_graphics_adapter_query_render_target_format(
 /**
  * @brief Negotiates a backbuffer format through the native adapter.
  *
- * @param graphics_device Callback-scoped graphics-device handle.
+ * @param graphics_device A callback-scoped graphics-device handle, or the active game's own handle on
+ *        its thread (ABI 0.40.0).
  * @param adapter_index Zero-based adapter index.
  * @param profile Requested graphics profile.
  * @param format Requested color format.
@@ -355,7 +367,8 @@ CNA_C_API CNA_Result cna_graphics_adapter_query_backbuffer_format(
 /**
  * @brief Reports the native-monitor-handle mapping as unavailable at the stable C boundary.
  *
- * @param graphics_device Callback-scoped graphics-device handle.
+ * @param graphics_device A callback-scoped graphics-device handle, or the active game's own handle on
+ *        its thread (ABI 0.40.0).
  * @param adapter_index Zero-based adapter index.
  * @param out_value Receives zero.
  * @return `CNA_RESULT_NOT_SUPPORTED` after validating context and adapter index.

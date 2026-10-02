@@ -2,7 +2,18 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.39.0** (`CBIND-141`). It adds one route,
+The current experimental ABI is **0.40.0** (`CBIND-145`). No route, constant or structure
+changes; one rule does. The twelve `cna_graphics_adapter_*` routes also accept the active game's own
+handle as their `graphics_device`, on the thread that created it (`cna_graphics_adapters_refresh`,
+which always refuses, is unchanged). The adapters are the system's, not a device's, and XNA reads
+`GraphicsAdapter.DefaultAdapter` anywhere -- most often in a game's constructor, to size the back
+buffer, before any lifecycle callback can lend a device; there a game had no handle these routes
+would take. A callback-scoped device is still accepted, and every other handle is refused as
+before. 3,209 exports.
+
+### Previous ABI 0.39.0
+
+The ABI was **0.39.0** (`CBIND-141`). It adds one route,
 `cna_game_set_foreign_thread_calls_ext`: another thread's calls on the game thread's handles run on
 the game thread. Every handle belongs to the thread that created it, and any other thread is refused
 with `CNA_RESULT_THREAD` -- which stays the default. XNA let a game create resources, move their data

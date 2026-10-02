@@ -696,8 +696,23 @@ int main(void)
         &callbacks
     };
     CNA_Handle game = CNA_INVALID_HANDLE;
-    if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
-        cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS || state.validated != 1 ||
+    if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS) {
+        return CNA_TEST_FAIL(1);
+    }
+
+    /* CBIND-145: the adapters are the system's, and XNA games read them in their constructors,
+       before any callback can lend a device -- so the game's own handle answers too. */
+    uint64_t count_before_run = 0U;
+    CNA_DisplayMode mode_before_run = {sizeof(CNA_DisplayMode), UINT32_C(1), 0, 0, 0.0f, 0U};
+    if (cna_graphics_adapter_get_count(game, &count_before_run) != CNA_RESULT_SUCCESS ||
+        count_before_run == 0U ||
+        cna_graphics_adapter_get_current_display_mode(game, 0U, &mode_before_run) !=
+            CNA_RESULT_SUCCESS ||
+        mode_before_run.width <= 0 || mode_before_run.height <= 0) {
+        return CNA_TEST_FAIL(13);
+    }
+
+    if (cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS || state.validated != 1 ||
         state.texture == CNA_INVALID_HANDLE || state.sprite_font == CNA_INVALID_HANDLE ||
         state.render_target_2d == CNA_INVALID_HANDLE ||
         state.render_target_cube == CNA_INVALID_HANDLE ||

@@ -112,17 +112,41 @@ void ToCDisplayMode(const DisplayMode& source, CNA_DisplayMode* const destinatio
         mode->struct_version == StructureVersion && IsSurfaceFormat(mode->format);
 }
 
+[[nodiscard]] CNA_Result GetAdapterContext(
+    const CNA_Handle handle,
+    std::shared_ptr<void>* const outContext)
+{
+    // The adapters belong to the system, not to a device, and XNA reads GraphicsAdapter.Adapters
+    // anywhere -- most often in a game's constructor, before a lifecycle callback can lend a
+    // device. So the handle proving the runtime and thread may also be the active game's own,
+    // which its creating thread holds from construction on (CBIND-145, ABI 0.40.0).
+    using CNA::C::Detail::ObjectKind;
+    ObjectKind kind = ObjectKind::Unknown;
+    if (GetRuntimeHandles().GetKind(handle, &kind) == CNA_RESULT_SUCCESS && kind == ObjectKind::Game) {
+        const CNA_Result result = GetRuntimeHandles().Get(handle, ObjectKind::Game, outContext);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(result, ErrorCategoryForResult(result), "The game handle is invalid for this call.");
+        }
+        return CNA_RESULT_SUCCESS;
+    }
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    const CNA_Result result = GetBorrowedGraphicsDevice(handle, &graphicsDevice);
+    if (result == CNA_RESULT_SUCCESS) {
+        *outContext = std::move(graphicsDevice);
+    }
+    return result;
+}
+
 [[nodiscard]] CNA_Result GetAdapter(
     const CNA_Handle graphicsDeviceHandle,
     const uint32_t adapterIndex,
-    std::shared_ptr<BorrowedGraphicsDevice>* const outGraphicsDevice,
+    std::shared_ptr<void>* const outContext,
     GraphicsAdapter** const outAdapter)
 {
-    if (outGraphicsDevice == nullptr || outAdapter == nullptr) {
+    if (outContext == nullptr || outAdapter == nullptr) {
         return InvalidArgument("The graphics-adapter query outputs are invalid.");
     }
-    if (const CNA_Result result = GetBorrowedGraphicsDevice(
-            graphicsDeviceHandle, outGraphicsDevice);
+    if (const CNA_Result result = GetAdapterContext(graphicsDeviceHandle, outContext);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
@@ -148,10 +172,10 @@ void ToCDisplayMode(const DisplayMode& source, CNA_DisplayMode* const destinatio
     if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
         return InvalidArgument("The graphics-adapter string output buffer is invalid.");
     }
-    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    std::shared_ptr<void> context;
     GraphicsAdapter* adapter = nullptr;
     if (const CNA_Result result = GetAdapter(
-            graphicsDeviceHandle, adapterIndex, &graphicsDevice, &adapter);
+            graphicsDeviceHandle, adapterIndex, &context, &adapter);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
@@ -265,10 +289,10 @@ void ToCPresentationParameters(
         !IsDepthFormat(depthFormat) || multiSampleCount < 0) {
         return InvalidArgument("The graphics-format query is invalid.");
     }
-    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    std::shared_ptr<void> context;
     GraphicsAdapter* adapter = nullptr;
     if (const CNA_Result result = GetAdapter(
-            graphicsDeviceHandle, adapterIndex, &graphicsDevice, &adapter);
+            graphicsDeviceHandle, adapterIndex, &context, &adapter);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
@@ -345,9 +369,8 @@ CNA_Result cna_graphics_adapter_get_count(
         if (outCount == nullptr) {
             return InvalidArgument("The graphics-adapter count output is null.");
         }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetBorrowedGraphicsDevice(
-                graphicsDeviceHandle, &graphicsDevice);
+        std::shared_ptr<void> context;
+        if (const CNA_Result result = GetAdapterContext(graphicsDeviceHandle, &context);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -365,10 +388,10 @@ CNA_Result cna_graphics_adapter_get_info(
         if (!HasOutputHeader(outInfo)) {
             return InvalidArgument("The graphics-adapter output structure is invalid.");
         }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        std::shared_ptr<void> context;
         GraphicsAdapter* adapter = nullptr;
         if (const CNA_Result result = GetAdapter(
-                graphicsDeviceHandle, adapterIndex, &graphicsDevice, &adapter);
+                graphicsDeviceHandle, adapterIndex, &context, &adapter);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -426,10 +449,10 @@ CNA_Result cna_graphics_adapter_get_current_display_mode(
         if (!HasOutputHeader(outMode)) {
             return InvalidArgument("The DisplayMode output structure is invalid.");
         }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        std::shared_ptr<void> context;
         GraphicsAdapter* adapter = nullptr;
         if (const CNA_Result result = GetAdapter(
-                graphicsDeviceHandle, adapterIndex, &graphicsDevice, &adapter);
+                graphicsDeviceHandle, adapterIndex, &context, &adapter);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -453,10 +476,10 @@ CNA_Result cna_graphics_adapter_get_display_mode_count(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        std::shared_ptr<void> context;
         GraphicsAdapter* adapter = nullptr;
         if (const CNA_Result result = GetAdapter(
-                graphicsDeviceHandle, adapterIndex, &graphicsDevice, &adapter);
+                graphicsDeviceHandle, adapterIndex, &context, &adapter);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -488,10 +511,10 @@ CNA_Result cna_graphics_adapter_copy_display_modes(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        std::shared_ptr<void> context;
         GraphicsAdapter* adapter = nullptr;
         if (const CNA_Result result = GetAdapter(
-                graphicsDeviceHandle, adapterIndex, &graphicsDevice, &adapter);
+                graphicsDeviceHandle, adapterIndex, &context, &adapter);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -525,10 +548,10 @@ CNA_Result cna_graphics_adapter_set_device_preferences(
         if (!IsBool(useNullDevice) || !IsBool(useReferenceDevice)) {
             return InvalidArgument("The graphics-adapter device preference is invalid.");
         }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        std::shared_ptr<void> context;
         GraphicsAdapter* adapter = nullptr;
         if (const CNA_Result result = GetAdapter(
-                graphicsDeviceHandle, adapterIndex, &graphicsDevice, &adapter);
+                graphicsDeviceHandle, adapterIndex, &context, &adapter);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -548,10 +571,10 @@ CNA_Result cna_graphics_adapter_is_profile_supported(
         if (outSupported == nullptr || !IsProfile(profile)) {
             return InvalidArgument("The graphics-profile query is invalid.");
         }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        std::shared_ptr<void> context;
         GraphicsAdapter* adapter = nullptr;
         if (const CNA_Result result = GetAdapter(
-                graphicsDeviceHandle, adapterIndex, &graphicsDevice, &adapter);
+                graphicsDeviceHandle, adapterIndex, &context, &adapter);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -615,10 +638,10 @@ CNA_Result cna_graphics_adapter_get_native_monitor_handle(
             return InvalidArgument("The native monitor-handle output is null.");
         }
         *outValue = UINT64_C(0);
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        std::shared_ptr<void> context;
         GraphicsAdapter* adapter = nullptr;
         if (const CNA_Result result = GetAdapter(
-                graphicsDeviceHandle, adapterIndex, &graphicsDevice, &adapter);
+                graphicsDeviceHandle, adapterIndex, &context, &adapter);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
