@@ -2,9 +2,11 @@
 
 Written 2026-10-02 at the end of a ~30-hour session; updated the same evening after games that start
 threads were made to run in a browser (§10) and five more Microsoft samples ran (§13, CBIND-152,
-CSX-118/119). `/goal` remains authoritative; this file is the state it
-reached and how to continue. The owner pushed cna `next` up to `0c79486cc` (13:22) and then asked for everything to be pushed:
-all four campaign branches are pushed, this handoff included.
+CSX-118/119), and late that night after a batch of real games from GitHub (§13b: CBIND-153, ABI
+0.42.0; CSX-120..123). `/goal` remains authoritative; this file is the state it reached and how to
+continue. Everything up to `fb89c451a` (cna) was pushed on the owner's word; **the late-night
+commits are not pushed** (cna 1 + this handoff, cna-cs 5, cna-cs-samples 8, and the two
+`zelda-oracle*` side branches).
 
 ## 1. Campaign identity
 
@@ -30,7 +32,7 @@ all four campaign branches are pushed, this handoff included.
 ## 2. Executive status
 
 **Completed and validated**
-- cna-cs binds CNA C ABI **0.40.0** (exact point policy; 0.39.0 retired). ABI verification,
+- cna-cs binds CNA C ABI **0.42.0** (exact point policy; 0.41.0 retired). ABI verification,
   api-compat (0 diagnostics vs XNA 4.0 Windows runtime metadata) and all managed suites green.
 - Desktop Linux (OPENGLES3, compiled effects ON): every checked-in gallery row builds Debug+Release,
   runs, captures and exits by its own exit path; 82 of the 84 gallery entries are covered
@@ -386,6 +388,26 @@ Not running, each for a reason outside cna-cs (details and SHAs in `games/README
   re-checked after CSX-114, none unblocked.
 - .NET change, not XNA: Minor Destruction (`BitConverter.GetBytes(sbyte)` ambiguous since .NET 7).
 
+## 13b. Real games from GitHub (late 2026-10-02)
+
+A code search for XNA 4.0 project files listed 195 repositories; the games among the most-starred
+were cloned under `/rv/tmp/xna-games/` and triaged by read-only agents. Now running unchanged
+(38 games in all, `cna-cs-samples/games/README.md`): SKraft (instanced cubes; needed CNA
+CBIND-153 + CSX-121: `ApplyChanges` in a constructor creates the device it reads), the Forge
+engine's sample (CSX-122: `Assembly.LoadFile` loads a file once, as .NET Framework did --
+measured on .NET Framework 4 under Wine), Sonic 3 at its 2014 state, HauntedHouse (Krypton
+lighting; Game Studio's content pipeline as a compile-time reference for its TiledLib) and
+Disentanglement (CSX-123: XNA's input classes answer before a game exists). Zelda Oracle compiles
+with a Windows Forms surface (CSX-120) kept on branches `zelda-oracle-forms` (cna-cs) and
+`zelda-oracle` (samples) and stops at a `user32` window-procedure hook that only works in an x86
+process; AutonomousCar has the same hook. Blocked and recorded: Design Patterns Game (21 `Game`
+objects at once; CNA runs one game per process), Kodu Game Lab (Windows Forms host), Voxeliq and
+five more on Windows sprite fonts, Jxqy HD and Tactile Engine on data/repositories they do not ship.
+Run recipes that are not obvious: SKraft reads its world from `<cwd>\Maps\Test` (copies under
+`/rv/tmp/cs-samples/skraft/`), the Forge sample runs from its output copied five levels below its
+`Assets` (`/rv/tmp/cs-samples/forge/1/2/3/4/5`). Browser and Android bundles still carry the 0.41.0
+native archives: rebuild CNA's archives before their next run.
+
 ## 14. Mahjong
 
 Runs (cna-cs-samples `347cc68`, games/Mahjong): 850×700 menu over its tile table; a held click on
@@ -519,13 +541,12 @@ External / not actionable
 
 # Exact next action
 
-Keep adding real XNA 4.0 software, which is what finds the remaining behaviour gaps. Next in line,
-all with original trees under `/rv/tmp/samples/SAMPLE-*/xna4-original` and no C++ port: the Level
-Starter Kit (SAMPLE-128; its content must first be built with `cna-cs-samples/scripts/build-xna-content.sh`
-under Wine), then a two-process SystemLink run of Network Prediction / Peer to Peer (host in one
-private-display process, join from another), then the five new samples in a browser and on the
-Android emulator (`browser-sample.sh games/<Game>`, `android-sample.sh games/<Game>`; stop the
-emulator afterwards). Record each in `cna-cs-samples/games/README.md` and `cna-cs/CAMPAIGN.md`.
+Keep adding real XNA 4.0 software. The GitHub search results are in the session's job directory
+only; rerun `gh search code 'XnaFrameworkVersion>v4.0<' --extension csproj` (and
+`'XnaPlatform>Windows< XnaProfile>HiDef<'`) and take the next most-starred games not yet in
+`cna-cs-samples/games/README.md` (candidates seen but not cloned: Jamedjo/BeatShift, ~1 GB;
+Bacon41/PantheonPrototype; andrecarlucci/gta2net, which needs GTA2's freeware data). Record each in
+`games/README.md` and `cna-cs/CAMPAIGN.md`. Push only on the owner's word.
 
 ## Appendix — campaign commits (oldest first)
 
