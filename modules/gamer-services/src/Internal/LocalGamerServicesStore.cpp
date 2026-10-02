@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/GamerServices/LocalGamerServicesStore.hpp"
+#include "CNA/Internal/GamerServices/LocalStoreLock.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
 
 #include "CNA/Internal/Json.hpp"
@@ -193,6 +194,9 @@ namespace CNA::Internal::GamerServices
 
     void SaveEarnedAchievementEXT(const std::string& gamertag, const std::string& key, long long earnedTicks)
     {
+        const fs::path path = AchievementsDir() / (SanitizeStoreFileNameComponent(gamertag) + ".json");
+        fs::create_directories(path.parent_path());
+        const LocalStoreLock lock(path);
         std::vector<PersistedAchievement> current = LoadEarnedAchievementsEXT(gamertag);
 
         bool updated = false;
@@ -390,6 +394,8 @@ namespace CNA::Internal::GamerServices
         const PropertyDictionary* columns
     ) {
         const fs::path path = LeaderboardsDir() / (leaderboardFileKey + ".json");
+        fs::create_directories(path.parent_path());
+        const LocalStoreLock lock(path);
         auto doc = TryReadJsonFile(path);
         StoreJson root = doc.value_or(StoreJson::object());
         if (!root.is_object())

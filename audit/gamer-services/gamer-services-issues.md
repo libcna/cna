@@ -2,6 +2,11 @@
 
 Audit GS-AUDIT, 2026-10-01. Paths are relative to CNA unless prefixed `server/` (`../cna-gamer-services-server`) or another sibling. Findings are ordered by severity, then subsystem. Unsupported product capabilities are explicitly distinguished from defects. No CRITICAL issue was established. Estimates cover a narrowly scoped correction/feature, not full Xbox equivalence.
 
+## Phase 3 dispositions (GS-AUDIT-P3, 2026-10-02)
+
+- **001 concurrency FIXED on tested Linux paths:** four barrier/pipe-coordinated regressions first failed with missing rows, timestamp/column loss and rename failures, then passed with a scoped process/interprocess lock around the entire read-modify-replace. Both threads and separate processes keep all intended keys. Fixed `.tmp` names are safe among cooperating locked writers. No file schema or public XNA API changed. Locks are released on exceptions/process death; stable sibling `.lock` files are never removed by production code. Reads observe atomic replacement without holding writer locks. Successful return follows checked flush/close/rename, not fsync. Power-loss durability, corrupt-read-as-empty and Windows filesystem replacement remain **DEFERRED**.
+- **017 FIXED:** `LocalProfiles::StoreLock` silently continued after open/flock failure. A directory at `profiles.json.lock` deterministically demonstrated unlocked profile creation and avatar writes. The shared scoped lock now refuses the operation; best-effort profile creation retains only its existing in-memory fallback and avatar save returns false. Previous persisted contents survive. Evidence: [red](evidence/phase3/offline-before.log), [green](evidence/phase3/offline-after.log), **18/18** nearby tests passed, including Phase 2 failure cases.
+
 ## Phase 2 dispositions
 
 These labels apply to the original findings; the historical evidence is retained below. “Confirmed source boundary” does not mean independently reproduced on every platform.

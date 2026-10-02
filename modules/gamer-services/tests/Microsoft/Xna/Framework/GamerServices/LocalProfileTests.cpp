@@ -464,3 +464,19 @@ TEST(LocalAutoSignInTest, ConfiguredProfilesAppearAtTheFirstUpdate) {
     EXPECT_EQ(2u, Service::loadLocalProfiles().size());
 }
 #endif
+
+
+TEST(LocalProfileStoreTest, FailedLockNeverWritesAnUnlockedProfileStore) {
+    ProfileEnvironment environment;
+    (void)Service::openLocalProfile("Lock Owner");
+    const auto previous = environment.Read();
+    const auto lock = environment.Store().string() + ".lock";
+    std::filesystem::remove(lock);
+    std::filesystem::create_directory(lock);
+    (void)Service::openLocalProfile("Lock Other");
+    EXPECT_EQ(previous, environment.Read());
+    std::mt19937 random(31);
+    const auto avatar = Avatars::encode(Avatars::randomDescriptor(std::nullopt, random));
+    EXPECT_FALSE(Service::setLocalProfileAvatar("Lock Owner", avatar));
+    EXPECT_EQ(previous, environment.Read());
+}

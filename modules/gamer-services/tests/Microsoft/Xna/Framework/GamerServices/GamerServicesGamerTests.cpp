@@ -2,6 +2,13 @@
 #include <gtest/gtest.h>
 #include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
 #include <any>
+#include <atomic>
+#include <barrier>
+#include <thread>
+#if defined(__unix__) || defined(__APPLE__)
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
 #include <filesystem>
 #include <fstream>
 
@@ -1267,3 +1274,113 @@ TEST(LeaderboardWriterTest, OfflineLegacyNumbersRemainReadableAndInvalidIntegers
     EXPECT_EQ(9007199254740992LL, updated[0].Rating);
     EXPECT_EQ(9007199254740993LL, updated[1].Rating);
 }
+
+
+namespace {
+// Start each batch together; distinct keys must survive regardless of serialization order.
+// The prefilled file widens the read/modify/write overlap without a sleep or production hook.
+void SeedConcurrentStore(bool achievements) {
+    using namespace CNA::Internal::GamerServices;
+    const auto path = std::filesystem::path(GetGamerServicesStoreRootEXT()) /
+        (achievements ? "achievements/Alice.json" : "leaderboards/concurrent.json");
+    std::filesystem::create_directories(path.parent_path());
+    std::ofstream file(path);
+    file << (achievements ? "{\"achievements\":[" : "{\"entries\":[");
+    for (int i = 0; i < 256; ++i) {
+        if (i) file << ',';
+        if (achievements) file << "{\"key\":\"seed" << i << "\",\"earnedTicks\":1}";
+        else file << "{\"gamertag\":\"seed" << i << "\",\"rating\":1,\"columns\":[]}";
+    }
+    file << "]}";
+}
+void ConcurrentStoreUpdate(bool achievements, int index) {
+    using namespace CNA::Internal::GamerServices;
+    const auto key = "writer" + std::to_string(index);
+    if (achievements) SaveEarnedAchievementEXT("Alice", key, index + 2);
+    else {
+        auto columns = PropertyDictionary::CreateInternal({});
+        columns.SetValue("owner", index);
+        SaveLeaderboardEntryEXT("concurrent", {key, index + 2}, &columns);
+    }
+}
+void VerifyConcurrentStore(bool achievements, int count) {
+    using namespace CNA::Internal::GamerServices;
+    if (achievements) {
+        const auto rows = LoadEarnedAchievementsEXT("Alice");
+        EXPECT_EQ(256u + count, rows.size());
+        for (int i = 0; i < count; ++i) {
+            const auto found = std::find_if(rows.begin(), rows.end(), [&](const auto& row) { return row.Key == "writer" + std::to_string(i); });
+            ASSERT_NE(rows.end(), found);
+            EXPECT_EQ(i + 2, found->EarnedTicks);
+        }
+    } else {
+        const auto rows = LoadLeaderboardEntriesEXT("concurrent");
+        EXPECT_EQ(256u + count, rows.size());
+        for (int i = 0; i < count; ++i) {
+            const auto key = "writer" + std::to_string(i);
+            const auto found = std::find_if(rows.begin(), rows.end(), [&](const auto& row) { return row.Gamertag == key; });
+            ASSERT_NE(rows.end(), found);
+            EXPECT_EQ(i + 2, found->Rating);
+            auto columns = PropertyDictionary::CreateInternal({});
+            LoadLeaderboardEntryColumnsEXT("concurrent", key, columns);
+            EXPECT_EQ(i, columns.GetValueInt32("owner"));
+        }
+    }
+}
+void ThreadedStoreUpdates(bool achievements) {
+    GamerServicesStoreGuard guard;
+    constexpr int Writers = 12, Rounds = 4;
+    SeedConcurrentStore(achievements);
+    std::barrier start(Writers);
+    std::atomic<int> failures = 0;
+    std::vector<std::jthread> threads;
+    for (int i = 0; i < Writers; ++i) threads.emplace_back([&, i] {
+        for (int round = 0; round < Rounds; ++round) {
+            start.arrive_and_wait();
+            try { ConcurrentStoreUpdate(achievements, round * Writers + i); }
+            catch (...) { ++failures; }
+        }
+    });
+    threads.clear();
+    EXPECT_EQ(0, failures);
+    VerifyConcurrentStore(achievements, Writers * Rounds);
+}
+#if defined(__unix__) || defined(__APPLE__)
+void ProcessStoreUpdates(bool achievements) {
+    GamerServicesStoreGuard guard;
+    SeedConcurrentStore(achievements);
+    int gate[2];
+    ASSERT_EQ(0, pipe(gate));
+    std::vector<pid_t> children;
+    for (int i = 0; i < 8; ++i) {
+        const auto child = fork();
+        ASSERT_GE(child, 0);
+        if (child == 0) {
+            close(gate[1]);
+            char byte;
+            if (read(gate[0], &byte, 1) != 1) _exit(2);
+            close(gate[0]);
+            try { ConcurrentStoreUpdate(achievements, i); }
+            catch (...) { _exit(1); }
+            _exit(0);
+        }
+        children.push_back(child);
+    }
+    close(gate[0]);
+    EXPECT_EQ(8, write(gate[1], "xxxxxxxx", 8));
+    close(gate[1]);
+    for (const auto child : children) {
+        int status = 0;
+        ASSERT_EQ(child, waitpid(child, &status, 0));
+        EXPECT_TRUE(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+    }
+    VerifyConcurrentStore(achievements, 8);
+}
+#endif
+}
+TEST(OfflineConcurrencyTest, AchievementThreadUpdatesKeepEveryKeyAndTimestamp) { ThreadedStoreUpdates(true); }
+TEST(OfflineConcurrencyTest, LeaderboardThreadUpdatesKeepEveryGamerAndColumns) { ThreadedStoreUpdates(false); }
+#if defined(__unix__) || defined(__APPLE__)
+TEST(OfflineConcurrencyTest, AchievementProcessUpdatesKeepEveryKeyAndTimestamp) { ProcessStoreUpdates(true); }
+TEST(OfflineConcurrencyTest, LeaderboardProcessUpdatesKeepEveryGamerAndColumns) { ProcessStoreUpdates(false); }
+#endif
