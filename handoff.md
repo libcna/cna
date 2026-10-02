@@ -41,8 +41,9 @@ state it reached and how to continue. Nothing is pushed.
   (CNA `ffb82bc0d`, 2026-10-02). Not interactive Chrome, not a hardware GPU, no browser audio (§10).
 - Android: all 84 rows build, run and draw on an **x86_64 emulator** (API 35) with touch, Back,
   pause/resume, relaunch. No physical device, no ARM, no audible audio (§11).
-- Real games: 16 of the 25 tried in the browser (14 reach title/play) and on Android (15 run);
-  the 9 newest games were not tried there.
+- Real games: all 25 tried in the browser (21 reach title/play; HeliumBiker, Escape From Enceladus
+  and the Racing Game Kit start threads, Playing in Traffic plays a video) and on the Android
+  emulator (24 run; Playing in Traffic refuses its video).
 - CNA.WindowsFormsCompat: `Opacity`/`FormBorderStyle` are kept, not applied.
 
 **Investigated only / open**
@@ -57,11 +58,11 @@ state it reached and how to continue. Nothing is pushed.
 
 | Repo | Path | Branch | HEAD | Working tree | Unpushed |
 |---|---|---|---|---|---|
-| cna | `/rv/data/development/github.com/libcna/cna` | `next` | the handoff commit (`docs: handoff ...`), parent `d9d599263` (FX-143) | clean | 32 (`origin/next..next`): 30 fix/feature commits (CBIND-128 … FX-143) + 2 handoff commits |
+| cna | `/rv/data/development/github.com/libcna/cna` | `next` | the handoff commit (`docs: handoff ...`), parent `3c72165e6` (CBIND-150) | clean | 35 (`origin/next..next`): 32 fix/feature commits (CBIND-128 … CBIND-150) + 3 handoff commits |
 | sharp-runtime | `../sharp-runtime` | `next` | `db86514c5bb86a5886d8015b8e2916d49be04ae8` | clean | none (untouched this campaign) |
-| cna-cs | `../cna-cs` | `develop` | `324acacba979340c8ea8ac7a384e89df89ed3350` | clean | 75 (`origin/develop..develop`) |
+| cna-cs | `../cna-cs` | `develop` | `74b74f7d4b698a4d7faa4b4c2f2d402c2b64a243` | clean | 76 (`origin/develop..develop`) |
 | cna-cs-template | `../cna-cs-template` | `develop` | `2a763886cf7660ac10557163d680783dde5c01f3` | clean | 2 |
-| cna-cs-samples | `../cna-cs-samples` | `develop` | `409415ef2542ba7c67e2768acc5789505a82eded` | clean | 80 |
+| cna-cs-samples | `../cna-cs-samples` | `develop` | `671df07a36709f0555f364bea4c202fbf4510431` | clean | 82 |
 | samples.libcna.com | `../samples.libcna.com` | `main` | `8e48825c003368dbc24bebd8f024d392379700d6` | clean | none (untouched) |
 
 There are no intentional uncommitted changes anywhere. In cna, `handoff.md` is committed by the
@@ -134,6 +135,8 @@ The important ones:
 | CBIND-148 | `6e273cd89`, `836b796ae` | SDL3 mouse on x11/windows/cocoa reads `SDL_GetGlobalMouseState` minus window position (XNA: `GetCursorPos`+`ScreenToClient`, `GetAsyncKeyState`; FNA does the same); was stale after a window move and clamped at the edge. Follow-up keeps the test inside the PLAT-123 non-production SDL budget (74). |
 | FX-142 | `fb5cb3ba2` | MojoShader link-time centroid rule now requires pixel SM ≥ 2.0, matching the emitter; a ps_1_x COLOR0 input no longer meets a vertex shader writing `cna_centroid_10_0` (Racing Game normal-mapping effect failed to link on GLSL ES). |
 | FX-143 | `d9d599263` | MojoShader GLSL ES 3 preamble declares `precision highp sampler3D;` (ES 3.00 has no default for it), so shaders with volume samplers compile on OPENGLES3/WEBGL2; five failing compiled-effect tests pass. Static effect gallery rows pixel-identical; SpriteEffects moves ≤2/255 in one quadrant. |
+| CBIND-149 | `d459f42aa` | EasyGL enables `GL_SAMPLE_MASK`/`glSampleMaski` only on desktop GL 3.2+ / GLES 3.1+ (decided from the context, not from a resolving entry point); fixes a pending INVALID_ENUM on ES 3.0/WebGL 2. Test `EasyGL_Es30SampleMask` (forced ES 3.0). |
+| CBIND-150 | `3c72165e6` | EasyGL skips `GL_TEXTURE_SWIZZLE_*` on one-/two-channel render targets where the profile has none (WebGL, GLES 2); those channels read 0 there instead of D3D's 1 (recorded divergence). Test `EasyGLProfile.OnlyDesktopGlAndGles3SwizzleTextures`. |
 
 Unresolved native items (confirmed, pre-existing, not introduced here):
 - OPENGLES3 `EasyGLCompiledEffect*` after FX-143: 2 of 686 fail —
@@ -253,8 +256,11 @@ checked-in `gallery-inventory.md` dates from 2026-10-01 and still shows the olde
   `cna-cs-samples/build-consumer/browser/<Row>/`. Last full pass CNA `ffb82bc0d` (2026-10-02):
   77 on the first pass, 7 after CSX-108/CBIND-143/generator fixes; evidence
   `/rv/tmp/cs-samples/browser-requal-csx102-{a,b}`, `browser-requal-csx108`.
-- Games: 14 of the first 16 reach title or play; HeliumBiker starts a thread (single-threaded wasm),
-  Playing in Traffic plays a video (no browser video backend). The 9 newest games: not tried.
+- Games: 21 of 25 reach title or play. HeliumBiker, Escape From Enceladus and the Racing Game Kit
+  start threads (`new Thread(...).Start()` → `PlatformNotSupportedException` in single-threaded wasm);
+  Playing in Traffic plays a video (no browser video backend). The newest nine were measured on CNA
+  `3c72165e6` after CBIND-149/150 (WebGL 2 sample mask and texture swizzle) and the generator fix
+  for NuGet packages and `<CnaWindowsFormsCompat>` (cna-cs-samples `4994508`).
 - **Not qualified**: interactive desktop Chrome, a hardware GPU, browser audio, other browsers,
   the template's browser head beyond its own CSX-031 run, anything after CNA `ffb82bc0d`.
 
@@ -268,7 +274,9 @@ checked-in `gallery-inventory.md` dates from 2026-10-01 and still shows the olde
   `cna-cs-samples/build-consumer/android/<Row>/`. Run: `scripts/android-requalify.sh` or
   `scripts/android-sample.sh <Row|games/Game> [--then 'input keyevent KEYCODE_BACK']`. Last full pass
   CNA `ffb82bc0d`; evidence `/rv/tmp/cs-samples/android-requal-20261002{,-fix}`.
-- Games: 15 of the first 16 run (Playing in Traffic stops at the refused video); 9 newest not tried.
+- Games: 24 of 25 run (Playing in Traffic stops at the refused video); the newest nine on CNA
+  `3c72165e6`, including the threaded Enceladus and Racing Game Kit. The emulator must be stopped
+  after the runs (`adb -s emulator-5554 emu kill`): a leftover one used ~12 cores.
 - **Not qualified**: any physical device, arm64/armv7 (an arm64 CNA build exists only for the C++
   Racing port), audible audio, GPU drivers other than the emulator's.
 
@@ -302,15 +310,15 @@ Web/Android columns: "—" = not tried.
 | My Big Head… | level with Box2D | yes | yes | — |
 | Playing in Traffic | splash video, menu | no: video | stops at video | see README |
 | Resonance | plays (threaded load) | menu only | yes | see README |
-| Escape From Enceladus | first room | — | — | FX-141, CSX-109, CSX-110, CBIND-146 |
-| __Defense | menu, wave 1 | — | — | CBIND-145, CSX-111, CSX-112 |
-| Missile Command | plays | — | — | — |
-| Super Mario World (Sprint 4) | level 1 | — | — | — |
-| Zelda clone | first screen | — | — | — |
-| Bubble Bound | plays | — | — | — |
-| Spineless (GGJ13) | plays | — | — | CBIND-146 |
-| Mahjong (Jomata) | deals on click | — | — | CBIND-147, CBIND-148 |
-| XNA 4.0 Racing Game Kit | menu, a race on the Advanced track (§15) | — | — | CSX-113, CSX-114, FX-142 |
+| Escape From Enceladus | first room | no: threads | title, save slots | FX-141, CSX-109, CSX-110, CBIND-146 |
+| __Defense | menu, wave 1 | menu | menu | CBIND-145, CSX-111, CSX-112 |
+| Missile Command | plays | title | title | — |
+| Super Mario World (Sprint 4) | level 1 | title menu | title menu | — |
+| Zelda clone | first screen | title | title | — |
+| Bubble Bound | plays | title (after CBIND-149/150) | title | CBIND-149, CBIND-150 (browser) |
+| Spineless (GGJ13) | plays | plays | plays | CBIND-146 |
+| Mahjong (Jomata) | deals on click | menu | menu | CBIND-147, CBIND-148 |
+| XNA 4.0 Racing Game Kit | menu, a race on the Advanced track (§15) | no: threads | attract mode | CSX-113, CSX-114, FX-142 |
 
 (The first 16 rows' Web/Android results are from CNA `ffb82bc0d`; per-row detail is in
 `games/README.md`. "yes" means reaches title or play. "see README": the fixes the first 16 games
@@ -444,8 +452,7 @@ Genuine compatibility defects
    (new cna-cs imports; update import inventory/abi-verify).
 Qualification
 3. Racing Game Kit: compare with the C++ port / the XNA exe under Wine; finish a race.
-4. The 9 newest games (incl. Racing) in the browser and on Android (`browser-sample.sh games/<Game>`,
-   `android-sample.sh games/<Game>`).
+4. Multithreaded WebAssembly (§20) so threaded games run in a browser.
 5. Re-try Mannux/infinecraft/Flux now that CSX-114 exists (only if they need nothing beyond it).
 Platform
 6. Interactive Chrome with a GPU, browser audio; a physical Android device / arm64.
@@ -458,19 +465,19 @@ External / not actionable
 
 # Exact next action
 
-Run the 9 newest games (Escape From Enceladus, __Defense, Missile Command, Super Mario World, the
-Zelda clone, Bubble Bound, Spineless, Mahjong, the Racing Game Kit) in the browser and on Android —
-the broadest evidence still missing for real games, now that FX-142/FX-143 fixed the GLSL ES shader
-failures they would have hit there. For each, in `cna-cs-samples`:
-`scripts/browser-sample.sh games/<Game> --seconds 60` (headless Chromium, SwiftShader; build output in
-`build-consumer/browser/<Game>/`, evidence in `/rv/tmp/cs-samples/browser/games/<Game>`), then
-`scripts/android-sample.sh games/<Game> --seconds 60` (emulator `Medium_Phone`, x86_64). Start with
-Missile Command (small, 2D) to confirm the pipeline after this session's native changes, rebuild the
-browser archive first if `cna/cmake-build-webgl2` predates `d9d599263`
-(`../cna-cs/scripts/Build-BrowserNative.sh`) and the Android library likewise
-(`../cna-cs/scripts/Build-AndroidNative.sh`). Fix each failure in its layer with a test, as before;
-record per-game results in `games/README.md` and `cna-cs/CAMPAIGN.md`. Keyboard-driven games need
-key holds longer than one frame under software rendering (§15).
+Make threaded XNA games run in a browser: a multithreaded WebAssembly build of CNA and CNA.NET.
+Three real games stop there today on `new Thread(...).Start()` (HeliumBiker, Escape From Enceladus,
+the Racing Game Kit; Resonance loads its levels on a thread too), and all of them run on the desktop
+and on Android. Steps: (1) check what .NET 11's browser runtime needs for threads
+(`<WasmEnableThreads>true</WasmEnableThreads>`, a `-pthread` Emscripten link, COOP/COEP headers so
+`SharedArrayBuffer` exists — the headless runner `cna-cs/scripts/Run-BrowserPage.mjs` must serve them);
+(2) build CNA's WebGL2 C API with `-pthread` in a separate build directory only if
+`cmake-build-webgl2` cannot carry both (prefer a configure option on the existing tree; never a new
+ad-hoc directory name), staged by `cna-cs/scripts/Build-BrowserNative.sh`; (3) verify CNA's
+game-thread rule still holds — WebGL contexts live on one thread and CBIND-141 already serves other
+threads' calls on the game thread; (4) run `scripts/browser-sample.sh games/RacingGame --seconds 180`
+and `games/Enceladus`, then the full `scripts/browser-requalify.sh` to show the threaded build
+breaks none of the 84 rows. Record it as a CSX task in `cna-cs/CAMPAIGN.md`.
 
 ## Appendix — campaign commits (oldest first)
 
@@ -508,10 +515,13 @@ e6f9d5384 fix(CBIND-147): GameWindow.ClientBounds carries the client area's desk
 fb5cb3ba2 fix(FX-142): a Shader Model 1 pixel shader's colour input stays a plain varying at link time
 809f3004f docs: handoff for the CNA C# compatibility campaign (2026-10-01 to 2026-10-02)
 d9d599263 fix(FX-143): a GLSL ES 3 shader may declare a volume sampler
-(+ this handoff commit, `docs: handoff ...`, on top of d9d599263)
+9265c6ca9 docs: handoff updated after FX-143 and the Racing Game Kit's race
+d459f42aa fix(CBIND-149): EasyGL applies the multisample mask only where the context has it
+3c72165e6 fix(CBIND-150): EasyGL swizzles a one- or two-channel render target only where the profile can
+(+ this handoff commit on top of 3c72165e6)
 ```
 
-### cna-cs (75 commits)
+### cna-cs (76 commits)
 
 ```
 9e30519 feat(CSX-010..014): migrate the binding from CNA C ABI 0.21.0 to 0.35.0
@@ -589,9 +599,10 @@ ff08b93 feat(CSX-114): CNA.WindowsFormsCompat, the Windows Forms an XNA game use
 b999ff1 docs(CSX-104): the Racing Game Kit to its attract mode, CSX-113/114 and CNA FX-142 recorded
 faf7470 docs(CSX-104): the Racing Game Kit races; its lost input was the capture harness's short key press
 324acac docs: CNA FX-143 (volume samplers on GLSL ES 3) recorded
+74b74f7 docs(CSX-104): the nine newest games in a browser and on Android, CNA CBIND-149/150 recorded
 ```
 
-### cna-cs-samples (80 commits)
+### cna-cs-samples (82 commits)
 
 ```
 26d06c1 chore(CSX-052): point the samples at the current tree and the current rules
@@ -674,6 +685,8 @@ eb005a4 scripts: capture-sample repeats its window move until it holds
 2c3058c games(CSX-104): the XNA 4.0 Racing Game Kit runs unchanged to its attract mode
 39e6fef docs(CSX-104): the Racing Game Kit leaves the not-running list; CSX-114 gave it its Windows Forms
 409415e docs(CSX-104): the Racing Game Kit plays -- its menu and a race on the Advanced track
+4994508 scripts: the browser and Android generators carry a game's opt-in Windows Forms and its NuGet packages
+671df07 docs(CSX-104): the nine newest games in a browser and on Android
 ```
 
 ### cna-cs-template (2 commits)
