@@ -240,7 +240,7 @@ public:
                                 Json ping=Json::object();
                                 if(capabilities_.contains("friend-voice"))
                                     ping["voice"]=localVoiceCapable()&&state.identity.communication!="blocked";
-                                try{(void)exchange("auth.ping",ping,state.token);}
+                                try{publishPolicyLocked(slot,generation,exchange("auth.ping",ping,state.token));}
                                 catch(const ServiceError& error){if(error.code!="UNAUTHENTICATED")throw;renewLocked(slot,generation);}
                             }
                             succeeded=true;
@@ -535,7 +535,18 @@ public:
         const auto token=tokenFor({});
         std::lock_guard cacheLock(cacheMutex_);
         const AssetDiskCache cache(AssetDiskCache::defaultRoot(),prefix_);
-        if(auto cached=cache.read(hash))return std::move(*cached);
+        if(auto cached=cache.read(hash)) {
+            // Cached content is immutable; the requester's authority is not. A one-byte read
+            // applies the same current token/title/picture policy as an uncached download.
+            const auto grant=request("assets.read",{{"hash",hash},{"offset",0},{"length",1}},token);
+            if(CnaService::stringField(grant,"hash",64)!=hash||!grant.at("size").is_number_integer()||grant["size"]!=cached->size()||
+               !grant.at("offset").is_number_integer()||grant["offset"]!=0)throw Unavailable("Invalid cached asset authorization response.");
+            const auto mime=CnaService::stringField(grant,"mime",64),hex=CnaService::stringField(grant,"hex",2);
+            constexpr char digits[]="0123456789abcdef";
+            if((mime!="image/png"&&mime!="image/jpeg"&&mime!="model/gltf-binary")||hex.size()!=2||
+               hex[0]!=digits[cached->front()>>4]||hex[1]!=digits[cached->front()&15])throw Unavailable("Invalid cached asset authorization response.");
+            return std::move(*cached);
+        }
         std::vector<unsigned char> bytes;long long expected=0;std::string mime;
         while(bytes.empty()||static_cast<long long>(bytes.size())<expected) {
             const auto part=request("assets.read",{{"hash",hash},{"offset",bytes.size()},{"length",12288}},token);
@@ -642,7 +653,7 @@ private:
         }
         if(performed!=CURLE_OK)throw Unavailable("CNA service connection failed.");
         long status=0;curl_easy_getinfo(curl,CURLINFO_RESPONSE_CODE,&status);if(status!=200)throw Unavailable("CNA service HTTP failure.");
-        const auto response=CnaService::parse(output);
+        const auto response=CnaService::parse(output,(op=="privacy.list"||op=="auth.ping")?1024:256);
         if(!response.is_object()||response.size()!=4||response.at("v")!=1||CnaService::stringField(response,"id",64)!=id||!response.at("result").is_object())
             throw Unavailable("CNA service protocol mismatch.");
         const auto error=CnaService::stringField(response,"error",64);
@@ -776,7 +787,7 @@ private:
         }
     }
     Slot decodeCredentials(const Json& result) {
-        Slot state;state.identity=identity(result.at("identity"));state.token=CnaService::stringField(result,"token",64);
+        Slot state;state.identity=identity(result.at("identity"));applyPrivileges(state.identity,result);state.token=CnaService::stringField(result,"token",64);
         if(state.token.size()!=64||state.token.find_first_not_of("0123456789abcdef")!=std::string::npos)throw Unavailable("Invalid access credential.");
         const auto localNow=unixTime();long long serverNow=localNow;
         if(result.contains("serverTime")) {
@@ -806,6 +817,16 @@ private:
          event.identity=slots_[slot].identity;slots_[slot]={};slots_[slot].generation=generation+1;}
         credentials_.remove(slot);if(!event.identity.userId.empty())ready(std::move(event));
     }
+    void publishPolicyLocked(int slot,unsigned long long generation,const Json& result) {
+        if(!capabilities_.contains("policy-refresh"))return;
+        Slot previous;{std::lock_guard lock(slotMutex_);previous=slots_[slot];}
+        if(previous.generation!=generation||previous.token.empty())return;
+        auto person=previous.identity;
+        if(!result.contains("privileges"))throw Unavailable("Missing current policy.");
+        applyPrivileges(person,result);person.blocked=parseBlocked(result);
+        {std::lock_guard lock(slotMutex_);if(slots_[slot].generation!=generation)return;slots_[slot].identity=person;}
+        BackendEvent event;event.type=BackendEvent::Type::PolicyChanged;event.slot=slot;event.identity=std::move(person);ready(std::move(event));
+    }
     void renewLocked(int slot,unsigned long long generation) {
         Slot previous;{std::lock_guard lock(slotMutex_);previous=slots_[slot];}
         if(previous.generation!=generation)return;
@@ -813,6 +834,8 @@ private:
         const auto result=exchange("auth.refresh",{{"refreshToken",previous.refresh}},{});
         auto renewed=decodeCredentials(result);
         if(!previous.identity.userId.empty()&&renewed.identity.userId!=previous.identity.userId)throw Unavailable("Refresh identity mismatch.");
+        renewed.identity.blocked=previous.identity.blocked;
+        readBlocked(renewed.identity,renewed.token);
         renewed.previousToken=previous.token;renewed.generation=generation;
         bool stale=false,duplicate=false;
         {std::lock_guard lock(slotMutex_);
@@ -827,6 +850,8 @@ private:
         if(previous.identity.userId.empty()) {
             readGameDefaults(renewed.identity,renewed.token);
             BackendEvent event;event.type=BackendEvent::Type::SignedIn;event.slot=slot;event.identity=std::move(renewed.identity);ready(std::move(event));
+        } else {
+            BackendEvent event;event.type=BackendEvent::Type::PolicyChanged;event.slot=slot;event.identity=std::move(renewed.identity);ready(std::move(event));
         }
     }
     // The signed-in account's own privileges (XNA GamerPrivileges); a service older than them

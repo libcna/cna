@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/rv/data/development/github.com/libcna/cnawork/../cna-gamer-services-server/tests/cache_authorization_e2e.py", line 94, in <module>
+    main()
+    ~~~~^^
+  File "/rv/data/development/github.com/libcna/cnawork/../cna-gamer-services-server/tests/cache_authorization_e2e.py", line 61, in main
+    profile("OK")
+    ~~~~~~~^^^^^^
+  File "/rv/data/development/github.com/libcna/cnawork/../cna-gamer-services-server/tests/cache_authorization_e2e.py", line 59, in profile
+    binary(bob, 200 if expected == "OK" else 403 if expected == "NOT_AUTHORIZED" else 401)
+    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rv/data/development/github.com/libcna/cnawork/../cna-gamer-services-server/tests/cache_authorization_e2e.py", line 50, in binary
+    assert response.headers["Cache-Control"] == "no-store", "authorization-gated responses must not advertise reusable HTTP grants"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: authorization-gated responses must not advertise reusable HTTP grants

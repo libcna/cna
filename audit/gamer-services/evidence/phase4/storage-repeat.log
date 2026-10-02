@@ -1,0 +1,274 @@
+run_gpu_tests_private: DISPLAY=:2 (private Xwayland), WAYLAND_DISPLAY=cna-weston-2718797 (private Weston)
+Running main() from ../../../../vendor/googletest/googletest/src/gtest_main.cc
+
+Repeating all tests (iteration 1) . . .
+
+Note: Google Test filter = OfflineConcurrencyTest.*:OfflineDurabilityTest.*
+[==========] Running 7 tests from 2 test suites.
+[----------] Global test environment set-up.
+[----------] 5 tests from OfflineConcurrencyTest
+[ RUN      ] OfflineConcurrencyTest.AchievementThreadUpdatesKeepEveryKeyAndTimestamp
+[       OK ] OfflineConcurrencyTest.AchievementThreadUpdatesKeepEveryKeyAndTimestamp (1050 ms)
+[ RUN      ] OfflineConcurrencyTest.LeaderboardThreadUpdatesKeepEveryGamerAndColumns
+[       OK ] OfflineConcurrencyTest.LeaderboardThreadUpdatesKeepEveryGamerAndColumns (1323 ms)
+[ RUN      ] OfflineConcurrencyTest.AchievementProcessUpdatesKeepEveryKeyAndTimestamp
+[       OK ] OfflineConcurrencyTest.AchievementProcessUpdatesKeepEveryKeyAndTimestamp (263 ms)
+[ RUN      ] OfflineConcurrencyTest.LeaderboardProcessUpdatesKeepEveryGamerAndColumns
+[       OK ] OfflineConcurrencyTest.LeaderboardProcessUpdatesKeepEveryGamerAndColumns (248 ms)
+[ RUN      ] OfflineConcurrencyTest.CompetingDuplicateAwardsPreserveTheFirstCompletionAndOnlyOneSuccess
+[       OK ] OfflineConcurrencyTest.CompetingDuplicateAwardsPreserveTheFirstCompletionAndOnlyOneSuccess (7 ms)
+[----------] 5 tests from OfflineConcurrencyTest (2894 ms total)
+
+[----------] 2 tests from OfflineDurabilityTest
+[ RUN      ] OfflineDurabilityTest.CorruptProgressIsReadableAsEmptyButNeverOverwrittenByAnUpdate
+[       OK ] OfflineDurabilityTest.CorruptProgressIsReadableAsEmptyButNeverOverwrittenByAnUpdate (11 ms)
+[ RUN      ] OfflineDurabilityTest.InterruptedTemporaryFileIsIgnoredAndNextUpdateReplacesIt
+[       OK ] OfflineDurabilityTest.InterruptedTemporaryFileIsIgnoredAndNextUpdateReplacesIt (2 ms)
+[----------] 2 tests from OfflineDurabilityTest (15 ms total)
+
+[==========] 7 tests from 2 test suites ran. (2910 ms total)
+[  PASSED  ] 7 tests.
+
+Repeating all tests (iteration 2) . . .
+
+Note: Google Test filter = OfflineConcurrencyTest.*:OfflineDurabilityTest.*
+[==========] Running 7 tests from 2 test suites.
+[----------] 5 tests from OfflineConcurrencyTest
+[ RUN      ] OfflineConcurrencyTest.AchievementThreadUpdatesKeepEveryKeyAndTimestamp
+[       OK ] OfflineConcurrencyTest.AchievementThreadUpdatesKeepEveryKeyAndTimestamp (979 ms)
+[ RUN      ] OfflineConcurrencyTest.LeaderboardThreadUpdatesKeepEveryGamerAndColumns
+[       OK ] OfflineConcurrencyTest.LeaderboardThreadUpdatesKeepEveryGamerAndColumns (1446 ms)
+[ RUN      ] OfflineConcurrencyTest.AchievementProcessUpdatesKeepEveryKeyAndTimestamp
+[       OK ] OfflineConcurrencyTest.AchievementProcessUpdatesKeepEveryKeyAndTimestamp (192 ms)
+[ RUN      ] OfflineConcurrencyTest.LeaderboardProcessUpdatesKeepEveryGamerAndColumns
+[       OK ] OfflineConcurrencyTest.LeaderboardProcessUpdatesKeepEveryGamerAndColumns (307 ms)
+[ RUN      ] OfflineConcurrencyTest.CompetingDuplicateAwardsPreserveTheFirstCompletionAndOnlyOneSuccess
+[       OK ] OfflineConcurrencyTest.CompetingDuplicateAwardsPreserveTheFirstCompletionAndOnlyOneSuccess (13 ms)
+[----------] 5 tests from OfflineConcurrencyTest (2939 ms total)
+
+[----------] 2 tests from OfflineDurabilityTest
+[ RUN      ] OfflineDurabilityTest.CorruptProgressIsReadableAsEmptyButNeverOverwrittenByAnUpdate
+[       OK ] OfflineDurabilityTest.CorruptProgressIsReadableAsEmptyButNeverOverwrittenByAnUpdate (3 ms)
+[ RUN      ] OfflineDurabilityTest.InterruptedTemporaryFileIsIgnoredAndNextUpdateReplacesIt
+[       OK ] OfflineDurabilityTest.InterruptedTemporaryFileIsIgnoredAndNextUpdateReplacesIt (2 ms)
+[----------] 2 tests from OfflineDurabilityTest (6 ms total)
+
+[==========] 7 tests from 2 test suites ran. (2945 ms total)
+[  PASSED  ] 7 tests.
+
+Repeating all tests (iteration 3) . . .
+
+Note: Google Test filter = OfflineConcurrencyTest.*:OfflineDurabilityTest.*
+[==========] Running 7 tests from 2 test suites.
+[----------] 5 tests from OfflineConcurrencyTest
+[ RUN      ] OfflineConcurrencyTest.AchievementThreadUpdatesKeepEveryKeyAndTimestamp
+[       OK ] OfflineConcurrencyTest.AchievementThreadUpdatesKeepEveryKeyAndTimestamp (937 ms)
+[ RUN      ] OfflineConcurrencyTest.LeaderboardThreadUpdatesKeepEveryGamerAndColumns
+[       OK ] OfflineConcurrencyTest.LeaderboardThreadUpdatesKeepEveryGamerAndColumns (1239 ms)
+[ RUN      ] OfflineConcurrencyTest.AchievementProcessUpdatesKeepEveryKeyAndTimestamp
+[       OK ] OfflineConcurrencyTest.AchievementProcessUpdatesKeepEveryKeyAndTimestamp (196 ms)
+[ RUN      ] OfflineConcurrencyTest.LeaderboardProcessUpdatesKeepEveryGamerAndColumns
+[       OK ] OfflineConcurrencyTest.LeaderboardProcessUpdatesKeepEveryGamerAndColumns (254 ms)
+[ RUN      ] OfflineConcurrencyTest.CompetingDuplicateAwardsPreserveTheFirstCompletionAndOnlyOneSuccess
+[       OK ] OfflineConcurrencyTest.CompetingDuplicateAwardsPreserveTheFirstCompletionAndOnlyOneSuccess (12 ms)
+[----------] 5 tests from OfflineConcurrencyTest (2642 ms total)
+
+[----------] 2 tests from OfflineDurabilityTest
+[ RUN      ] OfflineDurabilityTest.CorruptProgressIsReadableAsEmptyButNeverOverwrittenByAnUpdate
+[       OK ] OfflineDurabilityTest.CorruptProgressIsReadableAsEmptyButNeverOverwrittenByAnUpdate (3 ms)
+[ RUN      ] OfflineDurabilityTest.InterruptedTemporaryFileIsIgnoredAndNextUpdateReplacesIt
+[       OK ] OfflineDurabilityTest.InterruptedTemporaryFileIsIgnoredAndNextUpdateReplacesIt (9 ms)
+[----------] 2 tests from OfflineDurabilityTest (13 ms total)
+
+[==========] 7 tests from 2 test suites ran. (2656 ms total)
+[  PASSED  ] 7 tests.
+
+Repeating all tests (iteration 4) . . .
+
+Note: Google Test filter = OfflineConcurrencyTest.*:OfflineDurabilityTest.*
+[==========] Running 7 tests from 2 test suites.
+[----------] 5 tests from OfflineConcurrencyTest
+[ RUN      ] OfflineConcurrencyTest.AchievementThreadUpdatesKeepEveryKeyAndTimestamp
+[       OK ] OfflineConcurrencyTest.AchievementThreadUpdatesKeepEveryKeyAndTimestamp (932 ms)
+[ RUN      ] OfflineConcurrencyTest.LeaderboardThreadUpdatesKeepEveryGamerAndColumns
+[       OK ] OfflineConcurrencyTest.LeaderboardThreadUpdatesKeepEveryGamerAndColumns (1327 ms)
+[ RUN      ] OfflineConcurrencyTest.AchievementProcessUpdatesKeepEveryKeyAndTimestamp
+[       OK ] OfflineConcurrencyTest.AchievementProcessUpdatesKeepEveryKeyAndTimestamp (180 ms)
+[ RUN      ] OfflineConcurrencyTest.LeaderboardProcessUpdatesKeepEveryGamerAndColumns
+[       OK ] OfflineConcurrencyTest.LeaderboardProcessUpdatesKeepEveryGamerAndColumns (230 ms)
+[ RUN      ] OfflineConcurrencyTest.CompetingDuplicateAwardsPreserveTheFirstCompletionAndOnlyOneSuccess
+[       OK ] OfflineConcurrencyTest.CompetingDuplicateAwardsPreserveTheFirstCompletionAndOnlyOneSuccess (9 ms)
+[----------] 5 tests from OfflineConcurrencyTest (2686 ms total)
+
+[----------] 2 tests from OfflineDurabilityTest
+[ RUN      ] OfflineDurabilityTest.CorruptProgressIsReadableAsEmptyButNeverOverwrittenByAnUpdate
+[       OK ] OfflineDurabilityTest.CorruptProgressIsReadableAsEmptyButNeverOverwrittenByAnUpdate (4 ms)
+[ RUN      ] OfflineDurabilityTest.InterruptedTemporaryFileIsIgnoredAndNextUpdateReplacesIt
+[       OK ] OfflineDurabilityTest.InterruptedTemporaryFileIsIgnoredAndNextUpdateReplacesIt (2 ms)
+[----------] 2 tests from OfflineDurabilityTest (6 ms total)
+
+[==========] 7 tests from 2 test suites ran. (2693 ms total)
+[  PASSED  ] 7 tests.
+
+Repeating all tests (iteration 5) . . .
+
+Note: Google Test filter = OfflineConcurrencyTest.*:OfflineDurabilityTest.*
+[==========] Running 7 tests from 2 test suites.
+[----------] 5 tests from OfflineConcurrencyTest
+[ RUN      ] OfflineConcurrencyTest.AchievementThreadUpdatesKeepEveryKeyAndTimestamp
+[       OK ] OfflineConcurrencyTest.AchievementThreadUpdatesKeepEveryKeyAndTimestamp (865 ms)
+[ RUN      ] OfflineConcurrencyTest.LeaderboardThreadUpdatesKeepEveryGamerAndColumns
+[       OK ] OfflineConcurrencyTest.LeaderboardThreadUpdatesKeepEveryGamerAndColumns (1549 ms)
+[ RUN      ] OfflineConcurrencyTest.AchievementProcessUpdatesKeepEveryKeyAndTimestamp
+[       OK ] OfflineConcurrencyTest.AchievementProcessUpdatesKeepEveryKeyAndTimestamp (161 ms)
+[ RUN      ] OfflineConcurrencyTest.LeaderboardProcessUpdatesKeepEveryGamerAndColumns
+[       OK ] OfflineConcurrencyTest.LeaderboardProcessUpdatesKeepEveryGamerAndColumns (227 ms)
+[ RUN      ] OfflineConcurrencyTest.CompetingDuplicateAwardsPreserveTheFirstCompletionAndOnlyOneSuccess
+[       OK ] OfflineConcurrencyTest.CompetingDuplicateAwardsPreserveTheFirstCompletionAndOnlyOneSuccess (8 ms)
+[----------] 5 tests from OfflineConcurrencyTest (2812 ms total)
+
+[----------] 2 tests from OfflineDurabilityTest
+[ RUN      ] OfflineDurabilityTest.CorruptProgressIsReadableAsEmptyButNeverOverwrittenByAnUpdate
+[       OK ] OfflineDurabilityTest.CorruptProgressIsReadableAsEmptyButNeverOverwrittenByAnUpdate (2 ms)
+[ RUN      ] OfflineDurabilityTest.InterruptedTemporaryFileIsIgnoredAndNextUpdateReplacesIt
+[       OK ] OfflineDurabilityTest.InterruptedTemporaryFileIsIgnoredAndNextUpdateReplacesIt (2 ms)
+[----------] 2 tests from OfflineDurabilityTest (4 ms total)
+
+[==========] 7 tests from 2 test suites ran. (2817 ms total)
+[  PASSED  ] 7 tests.
+
+Repeating all tests (iteration 6) . . .
+
+Note: Google Test filter = OfflineConcurrencyTest.*:OfflineDurabilityTest.*
+[==========] Running 7 tests from 2 test suites.
+[----------] 5 tests from OfflineConcurrencyTest
+[ RUN      ] OfflineConcurrencyTest.AchievementThreadUpdatesKeepEveryKeyAndTimestamp
+[       OK ] OfflineConcurrencyTest.AchievementThreadUpdatesKeepEveryKeyAndTimestamp (955 ms)
+[ RUN      ] OfflineConcurrencyTest.LeaderboardThreadUpdatesKeepEveryGamerAndColumns
+[       OK ] OfflineConcurrencyTest.LeaderboardThreadUpdatesKeepEveryGamerAndColumns (1515 ms)
+[ RUN      ] OfflineConcurrencyTest.AchievementProcessUpdatesKeepEveryKeyAndTimestamp
+[       OK ] OfflineConcurrencyTest.AchievementProcessUpdatesKeepEveryKeyAndTimestamp (139 ms)
+[ RUN      ] OfflineConcurrencyTest.LeaderboardProcessUpdatesKeepEveryGamerAndColumns
+[       OK ] OfflineConcurrencyTest.LeaderboardProcessUpdatesKeepEveryGamerAndColumns (218 ms)
+[ RUN      ] OfflineConcurrencyTest.CompetingDuplicateAwardsPreserveTheFirstCompletionAndOnlyOneSuccess
+[       OK ] OfflineConcurrencyTest.CompetingDuplicateAwardsPreserveTheFirstCompletionAndOnlyOneSuccess (6 ms)
+[----------] 5 tests from OfflineConcurrencyTest (2835 ms total)
+
+[----------] 2 tests from OfflineDurabilityTest
+[ RUN      ] OfflineDurabilityTest.CorruptProgressIsReadableAsEmptyButNeverOverwrittenByAnUpdate
+[       OK ] OfflineDurabilityTest.CorruptProgressIsReadableAsEmptyButNeverOverwrittenByAnUpdate (7 ms)
+[ RUN      ] OfflineDurabilityTest.InterruptedTemporaryFileIsIgnoredAndNextUpdateReplacesIt
+[       OK ] OfflineDurabilityTest.InterruptedTemporaryFileIsIgnoredAndNextUpdateReplacesIt (2 ms)
+[----------] 2 tests from OfflineDurabilityTest (10 ms total)
+
+[==========] 7 tests from 2 test suites ran. (2846 ms total)
+[  PASSED  ] 7 tests.
+
+Repeating all tests (iteration 7) . . .
+
+Note: Google Test filter = OfflineConcurrencyTest.*:OfflineDurabilityTest.*
+[==========] Running 7 tests from 2 test suites.
+[----------] 5 tests from OfflineConcurrencyTest
+[ RUN      ] OfflineConcurrencyTest.AchievementThreadUpdatesKeepEveryKeyAndTimestamp
+[       OK ] OfflineConcurrencyTest.AchievementThreadUpdatesKeepEveryKeyAndTimestamp (901 ms)
+[ RUN      ] OfflineConcurrencyTest.LeaderboardThreadUpdatesKeepEveryGamerAndColumns
+[       OK ] OfflineConcurrencyTest.LeaderboardThreadUpdatesKeepEveryGamerAndColumns (1323 ms)
+[ RUN      ] OfflineConcurrencyTest.AchievementProcessUpdatesKeepEveryKeyAndTimestamp
+[       OK ] OfflineConcurrencyTest.AchievementProcessUpdatesKeepEveryKeyAndTimestamp (155 ms)
+[ RUN      ] OfflineConcurrencyTest.LeaderboardProcessUpdatesKeepEveryGamerAndColumns
+[       OK ] OfflineConcurrencyTest.LeaderboardProcessUpdatesKeepEveryGamerAndColumns (242 ms)
+[ RUN      ] OfflineConcurrencyTest.CompetingDuplicateAwardsPreserveTheFirstCompletionAndOnlyOneSuccess
+[       OK ] OfflineConcurrencyTest.CompetingDuplicateAwardsPreserveTheFirstCompletionAndOnlyOneSuccess (12 ms)
+[----------] 5 tests from OfflineConcurrencyTest (2635 ms total)
+
+[----------] 2 tests from OfflineDurabilityTest
+[ RUN      ] OfflineDurabilityTest.CorruptProgressIsReadableAsEmptyButNeverOverwrittenByAnUpdate
+[       OK ] OfflineDurabilityTest.CorruptProgressIsReadableAsEmptyButNeverOverwrittenByAnUpdate (4 ms)
+[ RUN      ] OfflineDurabilityTest.InterruptedTemporaryFileIsIgnoredAndNextUpdateReplacesIt
+[       OK ] OfflineDurabilityTest.InterruptedTemporaryFileIsIgnoredAndNextUpdateReplacesIt (6 ms)
+[----------] 2 tests from OfflineDurabilityTest (11 ms total)
+
+[==========] 7 tests from 2 test suites ran. (2647 ms total)
+[  PASSED  ] 7 tests.
+
+Repeating all tests (iteration 8) . . .
+
+Note: Google Test filter = OfflineConcurrencyTest.*:OfflineDurabilityTest.*
+[==========] Running 7 tests from 2 test suites.
+[----------] 5 tests from OfflineConcurrencyTest
+[ RUN      ] OfflineConcurrencyTest.AchievementThreadUpdatesKeepEveryKeyAndTimestamp
+[       OK ] OfflineConcurrencyTest.AchievementThreadUpdatesKeepEveryKeyAndTimestamp (894 ms)
+[ RUN      ] OfflineConcurrencyTest.LeaderboardThreadUpdatesKeepEveryGamerAndColumns
+[       OK ] OfflineConcurrencyTest.LeaderboardThreadUpdatesKeepEveryGamerAndColumns (1315 ms)
+[ RUN      ] OfflineConcurrencyTest.AchievementProcessUpdatesKeepEveryKeyAndTimestamp
+[       OK ] OfflineConcurrencyTest.AchievementProcessUpdatesKeepEveryKeyAndTimestamp (159 ms)
+[ RUN      ] OfflineConcurrencyTest.LeaderboardProcessUpdatesKeepEveryGamerAndColumns
+[       OK ] OfflineConcurrencyTest.LeaderboardProcessUpdatesKeepEveryGamerAndColumns (198 ms)
+[ RUN      ] OfflineConcurrencyTest.CompetingDuplicateAwardsPreserveTheFirstCompletionAndOnlyOneSuccess
+[       OK ] OfflineConcurrencyTest.CompetingDuplicateAwardsPreserveTheFirstCompletionAndOnlyOneSuccess (10 ms)
+[----------] 5 tests from OfflineConcurrencyTest (2579 ms total)
+
+[----------] 2 tests from OfflineDurabilityTest
+[ RUN      ] OfflineDurabilityTest.CorruptProgressIsReadableAsEmptyButNeverOverwrittenByAnUpdate
+[       OK ] OfflineDurabilityTest.CorruptProgressIsReadableAsEmptyButNeverOverwrittenByAnUpdate (2 ms)
+[ RUN      ] OfflineDurabilityTest.InterruptedTemporaryFileIsIgnoredAndNextUpdateReplacesIt
+[       OK ] OfflineDurabilityTest.InterruptedTemporaryFileIsIgnoredAndNextUpdateReplacesIt (2 ms)
+[----------] 2 tests from OfflineDurabilityTest (5 ms total)
+
+[==========] 7 tests from 2 test suites ran. (2584 ms total)
+[  PASSED  ] 7 tests.
+
+Repeating all tests (iteration 9) . . .
+
+Note: Google Test filter = OfflineConcurrencyTest.*:OfflineDurabilityTest.*
+[==========] Running 7 tests from 2 test suites.
+[----------] 5 tests from OfflineConcurrencyTest
+[ RUN      ] OfflineConcurrencyTest.AchievementThreadUpdatesKeepEveryKeyAndTimestamp
+[       OK ] OfflineConcurrencyTest.AchievementThreadUpdatesKeepEveryKeyAndTimestamp (875 ms)
+[ RUN      ] OfflineConcurrencyTest.LeaderboardThreadUpdatesKeepEveryGamerAndColumns
+[       OK ] OfflineConcurrencyTest.LeaderboardThreadUpdatesKeepEveryGamerAndColumns (1316 ms)
+[ RUN      ] OfflineConcurrencyTest.AchievementProcessUpdatesKeepEveryKeyAndTimestamp
+[       OK ] OfflineConcurrencyTest.AchievementProcessUpdatesKeepEveryKeyAndTimestamp (139 ms)
+[ RUN      ] OfflineConcurrencyTest.LeaderboardProcessUpdatesKeepEveryGamerAndColumns
+[       OK ] OfflineConcurrencyTest.LeaderboardProcessUpdatesKeepEveryGamerAndColumns (218 ms)
+[ RUN      ] OfflineConcurrencyTest.CompetingDuplicateAwardsPreserveTheFirstCompletionAndOnlyOneSuccess
+[       OK ] OfflineConcurrencyTest.CompetingDuplicateAwardsPreserveTheFirstCompletionAndOnlyOneSuccess (14 ms)
+[----------] 5 tests from OfflineConcurrencyTest (2568 ms total)
+
+[----------] 2 tests from OfflineDurabilityTest
+[ RUN      ] OfflineDurabilityTest.CorruptProgressIsReadableAsEmptyButNeverOverwrittenByAnUpdate
+[       OK ] OfflineDurabilityTest.CorruptProgressIsReadableAsEmptyButNeverOverwrittenByAnUpdate (8 ms)
+[ RUN      ] OfflineDurabilityTest.InterruptedTemporaryFileIsIgnoredAndNextUpdateReplacesIt
+[       OK ] OfflineDurabilityTest.InterruptedTemporaryFileIsIgnoredAndNextUpdateReplacesIt (7 ms)
+[----------] 2 tests from OfflineDurabilityTest (17 ms total)
+
+[==========] 7 tests from 2 test suites ran. (2585 ms total)
+[  PASSED  ] 7 tests.
+
+Repeating all tests (iteration 10) . . .
+
+Note: Google Test filter = OfflineConcurrencyTest.*:OfflineDurabilityTest.*
+[==========] Running 7 tests from 2 test suites.
+[----------] 5 tests from OfflineConcurrencyTest
+[ RUN      ] OfflineConcurrencyTest.AchievementThreadUpdatesKeepEveryKeyAndTimestamp
+[       OK ] OfflineConcurrencyTest.AchievementThreadUpdatesKeepEveryKeyAndTimestamp (904 ms)
+[ RUN      ] OfflineConcurrencyTest.LeaderboardThreadUpdatesKeepEveryGamerAndColumns
+[       OK ] OfflineConcurrencyTest.LeaderboardThreadUpdatesKeepEveryGamerAndColumns (1306 ms)
+[ RUN      ] OfflineConcurrencyTest.AchievementProcessUpdatesKeepEveryKeyAndTimestamp
+[       OK ] OfflineConcurrencyTest.AchievementProcessUpdatesKeepEveryKeyAndTimestamp (150 ms)
+[ RUN      ] OfflineConcurrencyTest.LeaderboardProcessUpdatesKeepEveryGamerAndColumns
+[       OK ] OfflineConcurrencyTest.LeaderboardProcessUpdatesKeepEveryGamerAndColumns (219 ms)
+[ RUN      ] OfflineConcurrencyTest.CompetingDuplicateAwardsPreserveTheFirstCompletionAndOnlyOneSuccess
+[       OK ] OfflineConcurrencyTest.CompetingDuplicateAwardsPreserveTheFirstCompletionAndOnlyOneSuccess (8 ms)
+[----------] 5 tests from OfflineConcurrencyTest (2590 ms total)
+
+[----------] 2 tests from OfflineDurabilityTest
+[ RUN      ] OfflineDurabilityTest.CorruptProgressIsReadableAsEmptyButNeverOverwrittenByAnUpdate
+[       OK ] OfflineDurabilityTest.CorruptProgressIsReadableAsEmptyButNeverOverwrittenByAnUpdate (2 ms)
+[ RUN      ] OfflineDurabilityTest.InterruptedTemporaryFileIsIgnoredAndNextUpdateReplacesIt
+[       OK ] OfflineDurabilityTest.InterruptedTemporaryFileIsIgnoredAndNextUpdateReplacesIt (3 ms)
+[----------] 2 tests from OfflineDurabilityTest (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 7 tests from 2 test suites ran. (2596 ms total)
+[  PASSED  ] 7 tests.

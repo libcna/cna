@@ -24,3 +24,17 @@ TEST(ServiceProtocolTest, PropertySchemaRejectsWidthsOverflowBooleansAndFloats) 
         EXPECT_THROW(CnaService::validateSessionProperties(invalid),CnaService::Error);
     }
 }
+
+TEST(ServiceProtocolTest, FullPolicyResponsesRetainRequestSizeDepthAndDuplicateGuards) {
+    using namespace CnaService;
+    auto rows=Json::array();for(int i=0;i<1024;++i)rows.push_back("Blocked");
+    const auto response=Json{{"blocked",rows}}.dump();
+    EXPECT_THROW((void)parse(response),Error);
+    EXPECT_EQ(1024u,parse(response,1024)["blocked"].size());
+    rows.push_back("Overflow");EXPECT_THROW((void)parse(Json{{"blocked",rows}}.dump(),1024),Error);
+    EXPECT_THROW((void)parse("{\"blocked\":[],\"blocked\":[]}",1024),Error);
+    EXPECT_THROW((void)parse(std::string(MaxMessageBytes+1,' '),1024),Error);
+    EXPECT_THROW((void)parse(std::string(18,'[')+"0"+std::string(18,']'),1024),Error);
+    auto fields=Json::object();for(int i=0;i<257;++i)fields[std::to_string(i)]=0;
+    EXPECT_THROW((void)parse(fields.dump(),1024),Error);
+}

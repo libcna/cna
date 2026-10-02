@@ -2,6 +2,13 @@
 #include <gtest/gtest.h>
 #include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
 #include <any>
+#include <atomic>
+#include <barrier>
+#include <thread>
+#if defined(__unix__) || defined(__APPLE__)
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
 #include <filesystem>
 #include <fstream>
 
@@ -1146,4 +1153,297 @@ TEST(SignedInGamerTest, SignedOutEventFires) {
 TEST(GamerProfileTest, PictureRejectsDisposedProfile) {
     auto profile=GamerProfile::CreateInternal();profile.Dispose();
     EXPECT_THROW((void)profile.GetGamerPicture(),System::ObjectDisposedException);
+}
+
+TEST(SignedInGamerTest, FailedOfflineAwardDoesNotCompleteSuccessfullyAndCanBeRetried) {
+    GamerServicesStoreGuard guard;
+    CNA::Internal::GamerServices::ResetOfflineAchievementCatalogForTestingEXT();
+    const auto target = std::filesystem::path(CNA::Internal::GamerServices::GetGamerServicesStoreRootEXT()) /
+        "achievements" / "save_failure.json";
+    std::filesystem::create_directories(target);
+    auto gamer = SignedInGamer::CreateInternal("save_failure");
+    bool completed = false;
+    EXPECT_THROW({
+        std::unique_ptr<System::IAsyncResult> result(gamer.BeginAwardAchievement("first", [&](auto&) { completed = true; }, {}));
+    }, std::runtime_error);
+    EXPECT_FALSE(completed);
+    EXPECT_TRUE(CNA::Internal::GamerServices::LoadEarnedAchievementsEXT("save_failure").empty());
+    EXPECT_FALSE(std::filesystem::exists(target.string() + ".tmp"));
+    std::filesystem::remove(target);
+    std::unique_ptr<System::IAsyncResult> result(gamer.BeginAwardAchievement("first", [&](auto&) { completed = true; }, {}));
+    gamer.EndAwardAchievement(result.get());
+    EXPECT_TRUE(completed);
+    EXPECT_EQ(1u, CNA::Internal::GamerServices::LoadEarnedAchievementsEXT("save_failure").size());
+}
+
+TEST(LeaderboardWriterTest, FailedOfflineReplacementPreservesDiskAndInMemoryRating) {
+    GamerServicesStoreGuard guard;
+    const auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
+    auto gamer = SignedInGamer::CreateInternal("save_failure");
+    auto* entry = gamer.getLeaderboardWriterProperty().GetLeaderboard(id);
+    entry->setRatingProperty(17);
+    const auto target = std::filesystem::path(CNA::Internal::GamerServices::GetGamerServicesStoreRootEXT()) /
+        "leaderboards" / "BestScoreLifeTime_0.json";
+    std::filesystem::create_directory(target.string() + ".tmp");
+    EXPECT_THROW(entry->setRatingProperty(99), std::runtime_error);
+    EXPECT_EQ(17, entry->getRatingProperty());
+    auto fresh = SignedInGamer::CreateInternal("save_failure");
+    EXPECT_EQ(17, fresh.getLeaderboardWriterProperty().GetLeaderboard(id)->getRatingProperty());
+    std::filesystem::remove(target.string() + ".tmp");
+    EXPECT_NO_THROW(entry->setRatingProperty(99));
+    auto retried = SignedInGamer::CreateInternal("save_failure");
+    EXPECT_EQ(99, retried.getLeaderboardWriterProperty().GetLeaderboard(id)->getRatingProperty());
+}
+
+TEST(LeaderboardWriterTest, OfflineSaveRefusesAnUncreatableParentDirectory) {
+    GamerServicesStoreGuard guard;
+    const auto parent = std::filesystem::path(CNA::Internal::GamerServices::GetGamerServicesStoreRootEXT()) / "leaderboards";
+    { std::ofstream obstacle(parent); obstacle << "not a directory"; }
+    auto gamer = SignedInGamer::CreateInternal("save_failure");
+    auto* entry = gamer.getLeaderboardWriterProperty().GetLeaderboard(LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime));
+    EXPECT_THROW(entry->setRatingProperty(99), std::runtime_error);
+    EXPECT_EQ(0, entry->getRatingProperty());
+}
+
+TEST(LeaderboardWriterTest, OfflineWriteFailurePreservesPreviousRecord) {
+    if (!std::filesystem::exists("/dev/full")) GTEST_SKIP() << "requires /dev/full";
+    GamerServicesStoreGuard guard;
+    using namespace CNA::Internal::GamerServices;
+    SaveLeaderboardEntryEXT("full", {"Alice", 17}, nullptr);
+    const auto target = std::filesystem::path(GetGamerServicesStoreRootEXT()) / "leaderboards" / "full.json";
+    std::filesystem::create_symlink("/dev/full", target.string() + ".tmp");
+    EXPECT_THROW(SaveLeaderboardEntryEXT("full", {"Alice", 99}, nullptr), std::runtime_error);
+    // The previous implementation can rename the failed-write symlink over the destination.
+    // Do not attempt to read /dev/full, which is an endless source of zero bytes.
+    ASSERT_FALSE(std::filesystem::is_symlink(target));
+    ASSERT_EQ(1u, LoadLeaderboardEntriesEXT("full").size());
+    EXPECT_EQ(17, LoadLeaderboardEntriesEXT("full")[0].Rating);
+    EXPECT_FALSE(std::filesystem::exists(target.string() + ".tmp"));
+}
+
+TEST(LeaderboardWriterTest, OfflineIntegerBoundariesRoundTripExactly) {
+    GamerServicesStoreGuard guard;
+    using namespace CNA::Internal::GamerServices;
+    for (const long long value : {9007199254740991LL, 9007199254740992LL, 9007199254740993LL,
+                                 9223372036854775807LL, (-9223372036854775807LL - 1)}) {
+        SCOPED_TRACE(value);
+        auto columns = PropertyDictionary::CreateInternal({});
+        columns.SetValue("integer", value);
+        columns.SetValue("duration", System::TimeSpan(static_cast<SharpRuntime::longcs>(value)));
+        const auto ticks = value > 0 && value < 3155378975999999999LL ? value : 3155378975999999999LL;
+        columns.SetValue("date", System::DateTime(static_cast<SharpRuntime::longcs>(ticks)));
+        SaveLeaderboardEntryEXT("exact", {"Alice", value}, &columns);
+        const auto entries = LoadLeaderboardEntriesEXT("exact");
+        ASSERT_EQ(1u, entries.size());
+        EXPECT_EQ(value, entries[0].Rating);
+        auto loaded = PropertyDictionary::CreateInternal({});
+        LoadLeaderboardEntryColumnsEXT("exact", "Alice", loaded);
+        EXPECT_EQ(value, loaded.GetValueInt64("integer"));
+        EXPECT_EQ(value, loaded.GetValueTimeSpan("duration").getTicksProperty());
+        EXPECT_EQ(ticks, loaded.GetValueDateTime("date").getTicksProperty());
+        SaveEarnedAchievementEXT("Alice", "first", ticks);
+        ASSERT_EQ(1u, LoadEarnedAchievementsEXT("Alice").size());
+        EXPECT_EQ(ticks, LoadEarnedAchievementsEXT("Alice")[0].EarnedTicks);
+    }
+}
+
+TEST(LeaderboardWriterTest, OfflineLegacyNumbersRemainReadableAndInvalidIntegersAreSkipped) {
+    GamerServicesStoreGuard guard;
+    using namespace CNA::Internal::GamerServices;
+    const auto dir = std::filesystem::path(GetGamerServicesStoreRootEXT()) / "leaderboards";
+    std::filesystem::create_directories(dir);
+    { std::ofstream file(dir / "legacy.json"); file << R"({"entries":[
+        {"gamertag":"Alice","rating":9.007199254740992e15,"columns":[
+          {"key":"integer","type":"int64","value":4.2e1},
+          {"key":"bad","type":"int64","value":9.223372036854776e18},
+          {"key":"date","type":"dateTime","value":3155378976000000000},
+          {"key":"wrong","type":"int64","value":"42"}]},
+        {"gamertag":"overflow","rating":18446744073709551615},
+        {"gamertag":"fraction","rating":1.5},
+        {"gamertag":"floatOverflow","rating":9.223372036854776e18}]})"; }
+    const auto rows = LoadLeaderboardEntriesEXT("legacy");
+    ASSERT_EQ(1u, rows.size());
+    EXPECT_EQ(9007199254740992LL, rows[0].Rating);
+    auto columns = PropertyDictionary::CreateInternal({});
+    EXPECT_NO_THROW(LoadLeaderboardEntryColumnsEXT("legacy", "Alice", columns));
+    EXPECT_EQ(42, columns.GetValueInt64("integer"));
+    EXPECT_EQ(1, columns.getCountProperty());
+    SaveLeaderboardEntryEXT("legacy", {"Bob", 9007199254740993LL}, nullptr);
+    const auto updated = LoadLeaderboardEntriesEXT("legacy");
+    ASSERT_EQ(2u, updated.size());
+    EXPECT_EQ(9007199254740992LL, updated[0].Rating);
+    EXPECT_EQ(9007199254740993LL, updated[1].Rating);
+}
+
+
+namespace {
+// Start each batch together; distinct keys must survive regardless of serialization order.
+// The prefilled file widens the read/modify/write overlap without a sleep or production hook.
+void SeedConcurrentStore(bool achievements) {
+    using namespace CNA::Internal::GamerServices;
+    const auto path = std::filesystem::path(GetGamerServicesStoreRootEXT()) /
+        (achievements ? "achievements/Alice.json" : "leaderboards/concurrent.json");
+    std::filesystem::create_directories(path.parent_path());
+    std::ofstream file(path);
+    file << (achievements ? "{\"achievements\":[" : "{\"entries\":[");
+    for (int i = 0; i < 256; ++i) {
+        if (i) file << ',';
+        if (achievements) file << "{\"key\":\"seed" << i << "\",\"earnedTicks\":1}";
+        else file << "{\"gamertag\":\"seed" << i << "\",\"rating\":1,\"columns\":[]}";
+    }
+    file << "]}";
+}
+void ConcurrentStoreUpdate(bool achievements, int index) {
+    using namespace CNA::Internal::GamerServices;
+    const auto key = "writer" + std::to_string(index);
+    if (achievements) SaveEarnedAchievementEXT("Alice", key, index + 2);
+    else {
+        auto columns = PropertyDictionary::CreateInternal({});
+        columns.SetValue("owner", index);
+        SaveLeaderboardEntryEXT("concurrent", {key, index + 2}, &columns);
+    }
+}
+void VerifyConcurrentStore(bool achievements, int count) {
+    using namespace CNA::Internal::GamerServices;
+    if (achievements) {
+        const auto rows = LoadEarnedAchievementsEXT("Alice");
+        EXPECT_EQ(256u + count, rows.size());
+        for (int i = 0; i < count; ++i) {
+            const auto found = std::find_if(rows.begin(), rows.end(), [&](const auto& row) { return row.Key == "writer" + std::to_string(i); });
+            ASSERT_NE(rows.end(), found);
+            EXPECT_EQ(i + 2, found->EarnedTicks);
+        }
+    } else {
+        const auto rows = LoadLeaderboardEntriesEXT("concurrent");
+        EXPECT_EQ(256u + count, rows.size());
+        for (int i = 0; i < count; ++i) {
+            const auto key = "writer" + std::to_string(i);
+            const auto found = std::find_if(rows.begin(), rows.end(), [&](const auto& row) { return row.Gamertag == key; });
+            ASSERT_NE(rows.end(), found);
+            EXPECT_EQ(i + 2, found->Rating);
+            auto columns = PropertyDictionary::CreateInternal({});
+            LoadLeaderboardEntryColumnsEXT("concurrent", key, columns);
+            EXPECT_EQ(i, columns.GetValueInt32("owner"));
+        }
+    }
+}
+void ThreadedStoreUpdates(bool achievements) {
+    GamerServicesStoreGuard guard;
+    constexpr int Writers = 12, Rounds = 4;
+    SeedConcurrentStore(achievements);
+    std::barrier start(Writers);
+    std::atomic<int> failures = 0;
+    std::vector<std::jthread> threads;
+    for (int i = 0; i < Writers; ++i) threads.emplace_back([&, i] {
+        for (int round = 0; round < Rounds; ++round) {
+            start.arrive_and_wait();
+            try { ConcurrentStoreUpdate(achievements, round * Writers + i); }
+            catch (...) { ++failures; }
+        }
+    });
+    threads.clear();
+    EXPECT_EQ(0, failures);
+    VerifyConcurrentStore(achievements, Writers * Rounds);
+}
+#if defined(__unix__) || defined(__APPLE__)
+void ProcessStoreUpdates(bool achievements) {
+    GamerServicesStoreGuard guard;
+    SeedConcurrentStore(achievements);
+    int gate[2];
+    ASSERT_EQ(0, pipe(gate));
+    std::vector<pid_t> children;
+    for (int i = 0; i < 8; ++i) {
+        const auto child = fork();
+        ASSERT_GE(child, 0);
+        if (child == 0) {
+            close(gate[1]);
+            char byte;
+            if (read(gate[0], &byte, 1) != 1) _exit(2);
+            close(gate[0]);
+            try { ConcurrentStoreUpdate(achievements, i); }
+            catch (...) { _exit(1); }
+            _exit(0);
+        }
+        children.push_back(child);
+    }
+    close(gate[0]);
+    EXPECT_EQ(8, write(gate[1], "xxxxxxxx", 8));
+    close(gate[1]);
+    for (const auto child : children) {
+        int status = 0;
+        ASSERT_EQ(child, waitpid(child, &status, 0));
+        EXPECT_TRUE(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+    }
+    VerifyConcurrentStore(achievements, 8);
+}
+#endif
+}
+TEST(OfflineConcurrencyTest, AchievementThreadUpdatesKeepEveryKeyAndTimestamp) { ThreadedStoreUpdates(true); }
+TEST(OfflineConcurrencyTest, LeaderboardThreadUpdatesKeepEveryGamerAndColumns) { ThreadedStoreUpdates(false); }
+#if defined(__unix__) || defined(__APPLE__)
+TEST(OfflineConcurrencyTest, AchievementProcessUpdatesKeepEveryKeyAndTimestamp) { ProcessStoreUpdates(true); }
+TEST(OfflineConcurrencyTest, LeaderboardProcessUpdatesKeepEveryGamerAndColumns) { ProcessStoreUpdates(false); }
+#endif
+
+TEST(OfflineDurabilityTest, CorruptProgressIsReadableAsEmptyButNeverOverwrittenByAnUpdate) {
+    GamerServicesStoreGuard guard;
+    using namespace CNA::Internal::GamerServices;
+    const auto root = std::filesystem::path(GetGamerServicesStoreRootEXT());
+    for (const auto& folder : {"achievements", "leaderboards"}) {
+        const auto target = root / folder / "broken.json";
+        std::filesystem::create_directories(target.parent_path());
+        for (const std::string bytes : {"{interrupted", "null", "{}", "{\"achievements\":0,\"entries\":0}"}) {
+            { std::ofstream file(target); file << bytes; }
+            if (std::string(folder) == "achievements") {
+                EXPECT_TRUE(LoadEarnedAchievementsEXT("broken").empty());
+                EXPECT_THROW(SaveEarnedAchievementEXT("broken", "first", 1), std::runtime_error);
+            } else {
+                EXPECT_TRUE(LoadLeaderboardEntriesEXT("broken").empty());
+                EXPECT_THROW(SaveLeaderboardEntryEXT("broken", {"Alice", 17}, nullptr), std::runtime_error);
+            }
+            std::ifstream file(target);
+            EXPECT_EQ(bytes, std::string(std::istreambuf_iterator<char>(file), {}));
+            EXPECT_FALSE(std::filesystem::exists(target.string() + ".tmp"));
+        }
+    }
+}
+
+TEST(OfflineDurabilityTest, InterruptedTemporaryFileIsIgnoredAndNextUpdateReplacesIt) {
+    GamerServicesStoreGuard guard;
+    using namespace CNA::Internal::GamerServices;
+    SaveEarnedAchievementEXT("Alice", "first", 17);
+    SaveLeaderboardEntryEXT("Score", {"Alice", 17}, nullptr);
+    const auto root = std::filesystem::path(GetGamerServicesStoreRootEXT());
+    const auto award = root / "achievements" / "Alice.json";
+    const auto board = root / "leaderboards" / "Score.json";
+    for (const auto& target : {award, board}) { std::ofstream file(target.string() + ".tmp"); file << "{interrupted"; }
+    ASSERT_EQ(1u, LoadEarnedAchievementsEXT("Alice").size());
+    EXPECT_EQ(17, LoadEarnedAchievementsEXT("Alice")[0].EarnedTicks);
+    ASSERT_EQ(1u, LoadLeaderboardEntriesEXT("Score").size());
+    EXPECT_EQ(17, LoadLeaderboardEntriesEXT("Score")[0].Rating);
+    SaveEarnedAchievementEXT("Alice", "second", 29);
+    SaveLeaderboardEntryEXT("Score", {"Bob", 29}, nullptr);
+    EXPECT_EQ(2u, LoadEarnedAchievementsEXT("Alice").size());
+    EXPECT_EQ(2u, LoadLeaderboardEntriesEXT("Score").size());
+    for (const auto& target : {award, board}) EXPECT_FALSE(std::filesystem::exists(target.string() + ".tmp"));
+}
+
+TEST(OfflineConcurrencyTest, CompetingDuplicateAwardsPreserveTheFirstCompletionAndOnlyOneSuccess) {
+    GamerServicesStoreGuard guard;
+    using namespace CNA::Internal::GamerServices;
+    std::barrier ready(8);
+    std::atomic<int> written=0;
+    std::atomic<long long> winningTicks=0;
+    std::vector<std::thread> workers;
+    for(int n=0;n<8;++n)workers.emplace_back([&,n] {
+        // Every caller sees the same unearned state before entering the save's writer lock.
+        EXPECT_TRUE(LoadEarnedAchievementsEXT("Alice").empty());
+        ready.arrive_and_wait();
+        if(SaveEarnedAchievementEXT("Alice","first",17+n,true)) {++written;winningTicks=17+n;}
+    });
+    for(auto& worker:workers)worker.join();
+    EXPECT_EQ(1,written);
+    const auto stored=LoadEarnedAchievementsEXT("Alice");
+    ASSERT_EQ(1u,stored.size());
+    EXPECT_EQ(winningTicks,stored[0].EarnedTicks);
 }

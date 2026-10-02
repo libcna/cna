@@ -1,0 +1,63 @@
+run_gpu_tests_private: DISPLAY=:2 (private Xwayland), WAYLAND_DISPLAY=cna-weston-2440509 (private Weston)
+Running main() from ../../../../vendor/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = ServiceRequestRetryTest.*CachedPicture*:ServiceRequestRetryTest.CachedPicture*
+[==========] Running 3 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 3 tests from ServiceRequestRetryTest
+[ RUN      ] ServiceRequestRetryTest.CachedPictureRechecksPolicyAndDoesNotCacheDenial
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/ServiceRequestRetryTests.cpp:264: Failure
+Expected equality of these values:
+  2u
+    Which is: 2
+  service.ids("assets.read").size()
+    Which is: 1
+
+[  FAILED  ] ServiceRequestRetryTest.CachedPictureRechecksPolicyAndDoesNotCacheDenial (20 ms)
+[ RUN      ] ServiceRequestRetryTest.AnotherBackendCannotUseCachedPictureWithoutCurrentAuthorization
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/ServiceRequestRetryTests.cpp:281: Failure
+Expected: (void)second->asset(PictureHash()) throws an exception of type Unavailable.
+  Actual: it throws nothing.
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/ServiceRequestRetryTests.cpp:282: Failure
+Expected equality of these values:
+  1u
+    Which is: 1
+  denied.ids("assets.read").size()
+    Which is: 0
+
+[  FAILED  ] ServiceRequestRetryTest.AnotherBackendCannotUseCachedPictureWithoutCurrentAuthorization (23 ms)
+[ RUN      ] ServiceRequestRetryTest.InvalidatedTokenCannotReadCachedPicture
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/ServiceRequestRetryTests.cpp:290: Failure
+Expected: (void)backend->asset(PictureHash()) throws an exception of type Unavailable.
+  Actual: it throws nothing.
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/ServiceRequestRetryTests.cpp:291: Failure
+Expected equality of these values:
+  2u
+    Which is: 2
+  service.ids("assets.read").size()
+    Which is: 1
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/ServiceRequestRetryTests.cpp:292: Failure
+Expected: (void)backend->asset(PictureHash()) throws an exception of type Unavailable.
+  Actual: it throws nothing.
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/ServiceRequestRetryTests.cpp:293: Failure
+Expected equality of these values:
+  2u
+    Which is: 2
+  service.ids("assets.read").size()
+    Which is: 1
+
+[  FAILED  ] ServiceRequestRetryTest.InvalidatedTokenCannotReadCachedPicture (17 ms)
+[----------] 3 tests from ServiceRequestRetryTest (62 ms total)
+
+[----------] Global test environment tear-down
+[==========] 3 tests from 1 test suite ran. (62 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 3 tests, listed below:
+[  FAILED  ] ServiceRequestRetryTest.CachedPictureRechecksPolicyAndDoesNotCacheDenial
+[  FAILED  ] ServiceRequestRetryTest.AnotherBackendCannotUseCachedPictureWithoutCurrentAuthorization
+[  FAILED  ] ServiceRequestRetryTest.InvalidatedTokenCannotReadCachedPicture
+
+ 3 FAILED TESTS

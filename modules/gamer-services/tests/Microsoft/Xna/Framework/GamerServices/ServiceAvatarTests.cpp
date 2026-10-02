@@ -767,3 +767,29 @@ TEST(AvatarCatalogProcessTest, TwoProcessesInstallingOnePackActivateItOnce) {
     std::filesystem::remove_all(root);
 }
 #endif
+
+TEST_F(AvatarServiceTest, AFailedInstallLockCannotActivateOrDeleteStaging) {
+    const auto catalog = MakeNewerCatalog();
+    const auto manifest = catalog.manifest();
+    Avatars::CatalogPack pack;
+    pack.version = Newer;
+    pack.packFormat = 1;
+    pack.reader = 1;
+    pack.descriptionFormats = {1, 2};
+    pack.manifestSha256 = Avatars::sha256Hex(std::vector<unsigned char>(manifest.begin(), manifest.end()));
+    pack.manifestSize = manifest.size();
+    for (const auto& asset : catalog.json["assets"]) pack.totalBytes += asset["size"].get<std::uint64_t>();
+    Avatars::attachCatalogManifest(pack, manifest);
+    std::filesystem::create_directories(root_ / (".install-v" + std::to_string(Newer) + ".lock"));
+    const auto staging = root_ / (".staging-v" + std::to_string(Newer) + "-" + pack.manifestSha256 + "-other");
+    std::filesystem::create_directory(staging);
+    int fetched = 0;
+    const auto outcome = Avatars::installCatalogPack(pack, std::uint64_t{64} << 20, [&](const Avatars::CatalogAsset& asset) {
+        ++fetched;
+        return catalog.assets.at(asset.sha256);
+    });
+    EXPECT_EQ(Avatars::CatalogInstall::Failed, outcome);
+    EXPECT_EQ(0, fetched);
+    EXPECT_FALSE(Installed(root_));
+    EXPECT_TRUE(std::filesystem::exists(staging));
+}

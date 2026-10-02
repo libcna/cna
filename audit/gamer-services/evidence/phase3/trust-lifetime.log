@@ -1,0 +1,10 @@
+Internal ctest changing into directory: /rv/data/development/github.com/libcna/cna-gamer-services-server/build
+Test project /rv/data/development/github.com/libcna/cna-gamer-services-server/build
+    Start 37: service_progress_trust
+1/2 Test #37: service_progress_trust ...........   Passed    2.58 sec
+    Start 38: service_concurrency_lifetime
+2/2 Test #38: service_concurrency_lifetime .....   Passed    3.01 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =   5.61 sec

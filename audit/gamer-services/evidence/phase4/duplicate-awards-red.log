@@ -1,0 +1,23 @@
+run_gpu_tests_private: DISPLAY=:2 (private Xwayland), WAYLAND_DISPLAY=cna-weston-2699996 (private Weston)
+Running main() from ../../../../vendor/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = OfflineConcurrencyTest.CompetingDuplicateAwardsPreserveTheFirstCompletionAndOnlyOneSuccess
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from OfflineConcurrencyTest
+[ RUN      ] OfflineConcurrencyTest.CompetingDuplicateAwardsPreserveTheFirstCompletionAndOnlyOneSuccess
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1445: Failure
+Expected equality of these values:
+  1
+  written
+    Which is: 8
+
+[  FAILED  ] OfflineConcurrencyTest.CompetingDuplicateAwardsPreserveTheFirstCompletionAndOnlyOneSuccess (19 ms)
+[----------] 1 test from OfflineConcurrencyTest (19 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (19 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] OfflineConcurrencyTest.CompetingDuplicateAwardsPreserveTheFirstCompletionAndOnlyOneSuccess
+
+ 1 FAILED TEST

@@ -1,0 +1,159 @@
+run_gpu_tests_private: DISPLAY=:2 (private Xwayland), WAYLAND_DISPLAY=cna-weston-1669029 (private Weston)
+Running main() from ../../../../vendor/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = SignedInGamerTest.FailedOffline*:LeaderboardWriterTest.FailedOffline*:LeaderboardWriterTest.Offline*
+[==========] Running 4 tests from 2 test suites.
+[----------] Global test environment set-up.
+[----------] 3 tests from LeaderboardWriterTest
+[ RUN      ] LeaderboardWriterTest.FailedOfflineReplacementPreservesDiskAndInMemoryRating
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1181: Failure
+Expected: entry->setRatingProperty(99) throws an exception of type std::runtime_error.
+  Actual: it throws nothing.
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1182: Failure
+Expected equality of these values:
+  17
+  entry->getRatingProperty()
+    Which is: 99
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1184: Failure
+Expected equality of these values:
+  17
+  fresh.getLeaderboardWriterProperty().GetLeaderboard(id)->getRatingProperty()
+    Which is: 99
+
+[  FAILED  ] LeaderboardWriterTest.FailedOfflineReplacementPreservesDiskAndInMemoryRating (0 ms)
+[ RUN      ] LeaderboardWriterTest.OfflineSaveRefusesAnUncreatableParentDirectory
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1197: Failure
+Expected: entry->setRatingProperty(99) throws an exception of type std::runtime_error.
+  Actual: it throws nothing.
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1198: Failure
+Expected equality of these values:
+  0
+  entry->getRatingProperty()
+    Which is: 99
+
+[  FAILED  ] LeaderboardWriterTest.OfflineSaveRefusesAnUncreatableParentDirectory (0 ms)
+[ RUN      ] LeaderboardWriterTest.OfflineIntegerBoundariesRoundTripExactly
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1215: Failure
+Expected equality of these values:
+  value
+    Which is: 9007199254740993
+  entries[0].Rating
+    Which is: 9007199254740992
+Google Test trace:
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1206: 9007199254740993
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1218: Failure
+Expected equality of these values:
+  value
+    Which is: 9007199254740993
+  loaded.GetValueInt64("integer")
+    Which is: 9007199254740992
+Google Test trace:
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1206: 9007199254740993
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1219: Failure
+Expected equality of these values:
+  value
+    Which is: 9007199254740993
+  loaded.GetValueTimeSpan("duration").getTicksProperty()
+    Which is: 9007199254740992
+Google Test trace:
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1206: 9007199254740993
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1220: Failure
+Expected equality of these values:
+  ticks
+    Which is: 9007199254740993
+  loaded.GetValueDateTime("date").getTicksProperty()
+    Which is: 9007199254740992
+Google Test trace:
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1206: 9007199254740993
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1223: Failure
+Expected equality of these values:
+  ticks
+    Which is: 9007199254740993
+  LoadEarnedAchievementsEXT("Alice")[0].EarnedTicks
+    Which is: 9007199254740992
+Google Test trace:
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1206: 9007199254740993
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1215: Failure
+Expected equality of these values:
+  value
+    Which is: 9223372036854775807
+  entries[0].Rating
+    Which is: -9223372036854775808
+Google Test trace:
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1206: 9223372036854775807
+
+unknown file: Failure
+C++ exception with description "Ticks must be between DateTime.MinValue.Ticks and DateTime.MaxValue.Ticks. (Parameter 'ticks')" thrown in the test body.
+
+[  FAILED  ] LeaderboardWriterTest.OfflineIntegerBoundariesRoundTripExactly (1 ms)
+[----------] 3 tests from LeaderboardWriterTest (3 ms total)
+
+[----------] 1 test from SignedInGamerTest
+[ RUN      ] SignedInGamerTest.FailedOfflineAwardDoesNotCompleteSuccessfullyAndCanBeRetried
+[INFO][APPLICATION] [TitleContainer] OpenStream requested: GamerServices/Achievements.json
+[INFO][APPLICATION] [TitleContainer] Resolved path: /rv/data/development/github.com/libcna/cnawork/cmake-build-debug/GamerServices/Achievements.json
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1159: Failure
+Expected: { std::unique_ptr<System::IAsyncResult> result(gamer.BeginAwardAchievement("first", [&](auto&) { completed = true; }, {})); } throws an exception of type std::runtime_error.
+  Actual: it throws nothing.
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1162: Failure
+Value of: completed
+  Actual: true
+Expected: false
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1164: Failure
+Value of: std::filesystem::exists(target.string() + ".tmp")
+  Actual: true
+Expected: false
+
+[  FAILED  ] SignedInGamerTest.FailedOfflineAwardDoesNotCompleteSuccessfullyAndCanBeRetried (2 ms)
+[----------] 1 test from SignedInGamerTest (2 ms total)
+
+[----------] Global test environment tear-down
+[==========] 4 tests from 2 test suites ran. (5 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 4 tests, listed below:
+[  FAILED  ] LeaderboardWriterTest.FailedOfflineReplacementPreservesDiskAndInMemoryRating
+[  FAILED  ] LeaderboardWriterTest.OfflineSaveRefusesAnUncreatableParentDirectory
+[  FAILED  ] LeaderboardWriterTest.OfflineIntegerBoundariesRoundTripExactly
+[  FAILED  ] SignedInGamerTest.FailedOfflineAwardDoesNotCompleteSuccessfullyAndCanBeRetried
+
+ 4 FAILED TESTS
+--- weston log (last 30 lines) ---
+[21:48:54.195] GL ES 3.2 - renderer features:
+               read-back format: ARGB8888
+               glReadPixels supports y-flip: yes
+               glReadPixels supports PBO: yes
+               wl_shm 10 bpc formats: yes
+               wl_shm 16 bpc formats: yes
+               wl_shm half-float formats: yes
+               internal R and RG formats: yes
+               OES_EGL_image_external: yes
+[21:48:54.195] Using GL renderer
+[21:48:54.195] Registered plugin API 'weston_windowed_output_api_headless_v2' of size 16
+[21:48:54.195] Color manager: no-op
+                 protocol support: no
+[21:48:54.196] Output 'headless' attempts EOTF mode SDR and colorimetry mode default.
+[21:48:54.196] Output 'headless' using color profile: stock sRGB color profile
+[21:48:54.211] Output 'headless' enabled with head(s) headless
+[21:48:54.211] Compositor capabilities:
+               arbitrary surface rotation: yes
+               screen capture uses y-flip: yes
+               cursor planes: no
+               arbitrary resolutions: no
+               view mask clipping: yes
+               explicit sync: yes
+               color operations: yes
+               presentation clock: CLOCK_MONOTONIC_RAW, id 4
+               presentation clock resolution: 0.000000001 s
+[21:48:54.211] Loading module '/home/robertvokac/deps/weston/usr/lib/x86_64-linux-gnu/weston/desktop-shell.so'
+[21:48:54.212] launching '/home/robertvokac/deps/weston/usr/libexec/weston-desktop-shell'
+could not load cursor 'dnd-copy'
+could not load cursor 'dnd-none'

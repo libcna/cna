@@ -1,0 +1,8 @@
+run_gpu_tests_private: DISPLAY=:2 (private Xwayland), WAYLAND_DISPLAY=cna-weston-1618699 (private Weston)
+Running main() from ../../../../vendor/googletest/googletest/src/gtest_main.cc
+[       OK ] ServiceFamilies/ServiceAsyncLifetimeTest.EndClaimsConsumptionBeforePumpingReentrantCompletion/4 (0 ms)
+[----------] 25 tests from ServiceFamilies/ServiceAsyncLifetimeTest (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 627 tests from 80 test suites ran. (25066 ms total)
+[  PASSED  ] 627 tests.

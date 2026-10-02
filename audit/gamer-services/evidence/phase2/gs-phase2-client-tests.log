@@ -1,0 +1,1561 @@
+run_gpu_tests_private: DISPLAY=:2 (private Xwayland), WAYLAND_DISPLAY=cna-weston-1676610 (private Weston)
+Running main() from ../../../../vendor/googletest/googletest/src/gtest_main.cc
+[==========] Running 633 tests from 80 test suites.
+[----------] Global test environment set-up.
+[----------] 10 tests from AssetDiskCacheTest
+[ RUN      ] AssetDiskCacheTest.StoresAndReadsAnEntryByItsHash
+[       OK ] AssetDiskCacheTest.StoresAndReadsAnEntryByItsHash (0 ms)
+[ RUN      ] AssetDiskCacheTest.ADamagedEntryIsAMissAndIsRemoved
+[       OK ] AssetDiskCacheTest.ADamagedEntryIsAMissAndIsRemoved (0 ms)
+[ RUN      ] AssetDiskCacheTest.ATruncatedEntryFromAnotherWriterIsAMiss
+[       OK ] AssetDiskCacheTest.ATruncatedEntryFromAnotherWriterIsAMiss (0 ms)
+[ RUN      ] AssetDiskCacheTest.InterruptedWritesLeaveNoEntryAndOldTemporariesAreRemoved
+[       OK ] AssetDiskCacheTest.InterruptedWritesLeaveNoEntryAndOldTemporariesAreRemoved (0 ms)
+[ RUN      ] AssetDiskCacheTest.AFullCacheEvictsTheLeastRecentlyUsedEntries
+[       OK ] AssetDiskCacheTest.AFullCacheEvictsTheLeastRecentlyUsedEntries (0 ms)
+[ RUN      ] AssetDiskCacheTest.EntriesLargerThanTheCacheAreNotStored
+[       OK ] AssetDiskCacheTest.EntriesLargerThanTheCacheAreNotStored (0 ms)
+[ RUN      ] AssetDiskCacheTest.NoRootMeansNoCache
+[       OK ] AssetDiskCacheTest.NoRootMeansNoCache (0 ms)
+[ RUN      ] AssetDiskCacheTest.ALinkIsNeverFollowed
+[       OK ] AssetDiskCacheTest.ALinkIsNeverFollowed (0 ms)
+[ RUN      ] AssetDiskCacheTest.ConcurrentWritersOfOneEntryLeaveItWhole
+[       OK ] AssetDiskCacheTest.ConcurrentWritersOfOneEntryLeaveItWhole (57 ms)
+[ RUN      ] AssetDiskCacheTest.TheConfiguredLocationComesFromTheEnvironment
+[       OK ] AssetDiskCacheTest.TheConfiguredLocationComesFromTheEnvironment (0 ms)
+[----------] 10 tests from AssetDiskCacheTest (59 ms total)
+
+[----------] 19 tests from AvatarAnimationTest
+[ RUN      ] AvatarAnimationTest.EveryPresetHasARealLengthAndDecomposableBones
+[       OK ] AvatarAnimationTest.EveryPresetHasARealLengthAndDecomposableBones (42 ms)
+[ RUN      ] AvatarAnimationTest.PresetsAreDistinctMotions
+[       OK ] AvatarAnimationTest.PresetsAreDistinctMotions (0 ms)
+[ RUN      ] AvatarAnimationTest.BonesMoveOverTime
+[       OK ] AvatarAnimationTest.BonesMoveOverTime (0 ms)
+[ RUN      ] AvatarAnimationTest.BoneTransformsAreLocalToTheParent
+[       OK ] AvatarAnimationTest.BoneTransformsAreLocalToTheParent (0 ms)
+[ RUN      ] AvatarAnimationTest.CurrentPositionIsClampedIntoTheLength
+[       OK ] AvatarAnimationTest.CurrentPositionIsClampedIntoTheLength (0 ms)
+[ RUN      ] AvatarAnimationTest.UpdateAdvancesAndClampsWithoutLoop
+[       OK ] AvatarAnimationTest.UpdateAdvancesAndClampsWithoutLoop (0 ms)
+[ RUN      ] AvatarAnimationTest.LoopingWrapsByTheRemainderOfTheLength
+[       OK ] AvatarAnimationTest.LoopingWrapsByTheRemainderOfTheLength (0 ms)
+[ RUN      ] AvatarAnimationTest.OverflowingUpdateClampsToTheEnd
+[       OK ] AvatarAnimationTest.OverflowingUpdateClampsToTheEnd (0 ms)
+[ RUN      ] AvatarAnimationTest.IdlesLoopSeamlessly
+[       OK ] AvatarAnimationTest.IdlesLoopSeamlessly (0 ms)
+[ RUN      ] AvatarAnimationTest.ExpressionFollowsTheClip
+[       OK ] AvatarAnimationTest.ExpressionFollowsTheClip (0 ms)
+[ RUN      ] AvatarAnimationTest.AnUndefinedPresetIsAZeroLengthBindPose
+[       OK ] AvatarAnimationTest.AnUndefinedPresetIsAZeroLengthBindPose (0 ms)
+[ RUN      ] AvatarAnimationTest.IsDisposedDefaultsFalse
+[       OK ] AvatarAnimationTest.IsDisposedDefaultsFalse (0 ms)
+[ RUN      ] AvatarAnimationTest.DisposeSetsIsDisposed
+[       OK ] AvatarAnimationTest.DisposeSetsIsDisposed (0 ms)
+[ RUN      ] AvatarAnimationTest.DisposeIsIdempotent
+[       OK ] AvatarAnimationTest.DisposeIsIdempotent (0 ms)
+[ RUN      ] AvatarAnimationTest.UpdateThrowsAfterDispose
+[       OK ] AvatarAnimationTest.UpdateThrowsAfterDispose (0 ms)
+[ RUN      ] AvatarAnimationTest.ImplementsIAvatarAnimationInterface
+[       OK ] AvatarAnimationTest.ImplementsIAvatarAnimationInterface (0 ms)
+[ RUN      ] AvatarAnimationTest.LoopingIdlesJoinSeamlessly
+[       OK ] AvatarAnimationTest.LoopingIdlesJoinSeamlessly (1 ms)
+[ RUN      ] AvatarAnimationTest.FeetStayOnTheGroundAndHandsOutOfTheBody
+[       OK ] AvatarAnimationTest.FeetStayOnTheGroundAndHandsOutOfTheBody (164 ms)
+[ RUN      ] AvatarAnimationTest.PresetsMoveWithoutPops
+[       OK ] AvatarAnimationTest.PresetsMoveWithoutPops (315 ms)
+[----------] 19 tests from AvatarAnimationTest (526 ms total)
+
+[----------] 17 tests from AvatarCatalogTest
+[ RUN      ] AvatarCatalogTest.TheSkeletonIsTheXnaTable
+[       OK ] AvatarCatalogTest.TheSkeletonIsTheXnaTable (0 ms)
+[ RUN      ] AvatarCatalogTest.EveryEmbeddedCatalogResolvesToExactlyItsVersion
+[       OK ] AvatarCatalogTest.EveryEmbeddedCatalogResolvesToExactlyItsVersion (0 ms)
+[ RUN      ] AvatarCatalogTest.CatalogV1IsFrozen
+[       OK ] AvatarCatalogTest.CatalogV1IsFrozen (0 ms)
+[ RUN      ] AvatarCatalogTest.CatalogV2IsFrozen
+[       OK ] AvatarCatalogTest.CatalogV2IsFrozen (0 ms)
+[ RUN      ] AvatarCatalogTest.CatalogV3IsFrozen
+[       OK ] AvatarCatalogTest.CatalogV3IsFrozen (0 ms)
+[ RUN      ] AvatarCatalogTest.EmbeddedAssetsResolveByContentNotByName
+[       OK ] AvatarCatalogTest.EmbeddedAssetsResolveByContentNotByName (5 ms)
+[ RUN      ] AvatarCatalogTest.AnUnavailableCatalogNeverReadsItsIdsAgainstAnotherVersion
+[       OK ] AvatarCatalogTest.AnUnavailableCatalogNeverReadsItsIdsAgainstAnotherVersion (78 ms)
+[ RUN      ] AvatarCatalogTest.V1DescriptionsAssembleExactlyAsReleased
+[       OK ] AvatarCatalogTest.V1DescriptionsAssembleExactlyAsReleased (286 ms)
+[ RUN      ] AvatarCatalogTest.EveryEmbeddedAssetMatchesItsHashAndParses
+[       OK ] AvatarCatalogTest.EveryEmbeddedAssetMatchesItsHashAndParses (892 ms)
+[ RUN      ] AvatarCatalogTest.ItemsAreFittedToTheirBody
+[       OK ] AvatarCatalogTest.ItemsAreFittedToTheirBody (319 ms)
+[ RUN      ] AvatarCatalogTest.EveryPresetIsAnimatedOnNamedBonesOnly
+[       OK ] AvatarCatalogTest.EveryPresetIsAnimatedOnNamedBonesOnly (0 ms)
+[ RUN      ] AvatarCatalogTest.MalformedAssetsAreRejected
+[       OK ] AvatarCatalogTest.MalformedAssetsAreRejected (0 ms)
+[ RUN      ] AvatarCatalogTest.MalformedManifestsAreRejected
+[       OK ] AvatarCatalogTest.MalformedManifestsAreRejected (0 ms)
+[ RUN      ] AvatarCatalogTest.AnAssembledAvatarUsesItsDescription
+[       OK ] AvatarCatalogTest.AnAssembledAvatarUsesItsDescription (13 ms)
+[ RUN      ] AvatarCatalogTest.CatalogV2DescribesFeaturesFaceControlsAndHatHair
+[       OK ] AvatarCatalogTest.CatalogV2DescribesFeaturesFaceControlsAndHatHair (0 ms)
+[ RUN      ] AvatarCatalogTest.FacialHairAndFaceShapeChangeOnlyTheHead
+[       OK ] AvatarCatalogTest.FacialHairAndFaceShapeChangeOnlyTheHead (548 ms)
+[ RUN      ] AvatarCatalogTest.HairUnderACoveringHatUsesItsHatVariant
+[       OK ] AvatarCatalogTest.HairUnderACoveringHatUsesItsHatVariant (56 ms)
+[----------] 17 tests from AvatarCatalogTest (2204 ms total)
+
+[----------] 11 tests from AvatarDescriptionCodecTest
+[ RUN      ] AvatarDescriptionCodecTest.RoundTripsEveryField
+[       OK ] AvatarDescriptionCodecTest.RoundTripsEveryField (0 ms)
+[ RUN      ] AvatarDescriptionCodecTest.ChecksumIsIeeeCrc32
+[       OK ] AvatarDescriptionCodecTest.ChecksumIsIeeeCrc32 (0 ms)
+[ RUN      ] AvatarDescriptionCodecTest.AnyFlippedBitIsRejected
+[       OK ] AvatarDescriptionCodecTest.AnyFlippedBitIsRejected (1 ms)
+[ RUN      ] AvatarDescriptionCodecTest.RejectsForeignVersionsAndReservedData
+[       OK ] AvatarDescriptionCodecTest.RejectsForeignVersionsAndReservedData (0 ms)
+[ RUN      ] AvatarDescriptionCodecTest.RefusesUnencodableDescriptors
+[       OK ] AvatarDescriptionCodecTest.RefusesUnencodableDescriptors (0 ms)
+[ RUN      ] AvatarDescriptionCodecTest.NewerCatalogItemsAreCarriedForTheResolver
+[       OK ] AvatarDescriptionCodecTest.NewerCatalogItemsAreCarriedForTheResolver (0 ms)
+[ RUN      ] AvatarDescriptionCodecTest.ItemsAreCheckedAgainstTheCatalogVersionTheyName
+[       OK ] AvatarDescriptionCodecTest.ItemsAreCheckedAgainstTheCatalogVersionTheyName (0 ms)
+[ RUN      ] AvatarDescriptionCodecTest.RandomDescriptorsAreAlwaysEncodable
+[       OK ] AvatarDescriptionCodecTest.RandomDescriptorsAreAlwaysEncodable (22 ms)
+[ RUN      ] AvatarDescriptionCodecTest.AShapedFaceOrFacialHairIsFormat2AndRoundTrips
+[       OK ] AvatarDescriptionCodecTest.AShapedFaceOrFacialHairIsFormat2AndRoundTrips (0 ms)
+[ RUN      ] AvatarDescriptionCodecTest.Format2RefusesWhatItCannotMean
+[       OK ] AvatarDescriptionCodecTest.Format2RefusesWhatItCannotMean (0 ms)
+[ RUN      ] AvatarDescriptionCodecTest.RandomAvatarsHaveIndividualFaces
+[       OK ] AvatarDescriptionCodecTest.RandomAvatarsHaveIndividualFaces (15 ms)
+[----------] 11 tests from AvatarDescriptionCodecTest (40 ms total)
+
+[----------] 22 tests from AvatarDescriptionTest
+[ RUN      ] AvatarDescriptionTest.ConstructorRejectsWrongSize
+[       OK ] AvatarDescriptionTest.ConstructorRejectsWrongSize (0 ms)
+[ RUN      ] AvatarDescriptionTest.ConstructorAcceptsCorrectSize
+[       OK ] AvatarDescriptionTest.ConstructorAcceptsCorrectSize (0 ms)
+[ RUN      ] AvatarDescriptionTest.IsValidFalseWhenFirstByteIsZero
+[       OK ] AvatarDescriptionTest.IsValidFalseWhenFirstByteIsZero (0 ms)
+[ RUN      ] AvatarDescriptionTest.IsValidTrueWhenFirstByteIsNonzero
+[       OK ] AvatarDescriptionTest.IsValidTrueWhenFirstByteIsNonzero (0 ms)
+[ RUN      ] AvatarDescriptionTest.DescriptionReturnsDefensiveCopy
+[       OK ] AvatarDescriptionTest.DescriptionReturnsDefensiveCopy (0 ms)
+[ RUN      ] AvatarDescriptionTest.HeightOfANonCnaBufferIsZero
+[       OK ] AvatarDescriptionTest.HeightOfANonCnaBufferIsZero (0 ms)
+[ RUN      ] AvatarDescriptionTest.BodyTypeOfANonCnaBufferIsFemale
+[       OK ] AvatarDescriptionTest.BodyTypeOfANonCnaBufferIsFemale (0 ms)
+[ RUN      ] AvatarDescriptionTest.CreateRandomReturnsAValidMeasuredAvatar
+[       OK ] AvatarDescriptionTest.CreateRandomReturnsAValidMeasuredAvatar (4 ms)
+[ RUN      ] AvatarDescriptionTest.CreateRandomWithBodyTypeHonoursTheBodyType
+[       OK ] AvatarDescriptionTest.CreateRandomWithBodyTypeHonoursTheBodyType (1 ms)
+[ RUN      ] AvatarDescriptionTest.CreateRandomProducesDifferentAvatars
+[       OK ] AvatarDescriptionTest.CreateRandomProducesDifferentAvatars (0 ms)
+[ RUN      ] AvatarDescriptionTest.RoundTripThroughTheDescriptionBufferKeepsTheAvatar
+[       OK ] AvatarDescriptionTest.RoundTripThroughTheDescriptionBufferKeepsTheAvatar (0 ms)
+[ RUN      ] AvatarDescriptionTest.DamagedDescriptionKeepsTheReferenceDefaults
+[       OK ] AvatarDescriptionTest.DamagedDescriptionKeepsTheReferenceDefaults (0 ms)
+[ RUN      ] AvatarDescriptionTest.CreateRandomWithInvalidBodyTypeThrows
+[       OK ] AvatarDescriptionTest.CreateRandomWithInvalidBodyTypeThrows (0 ms)
+[ RUN      ] AvatarDescriptionTest.BeginGetFromGamerRejectsNullGamer
+[       OK ] AvatarDescriptionTest.BeginGetFromGamerRejectsNullGamer (0 ms)
+[ RUN      ] AvatarDescriptionTest.BeginGetFromGamerInvokesCallbackSynchronously
+[       OK ] AvatarDescriptionTest.BeginGetFromGamerInvokesCallbackSynchronously (0 ms)
+[ RUN      ] AvatarDescriptionTest.EndGetFromGamerReturnsInvalidDescription
+[       OK ] AvatarDescriptionTest.EndGetFromGamerReturnsInvalidDescription (0 ms)
+[ RUN      ] AvatarDescriptionTest.EndGetFromGamerRejectsResultNotFromBegin
+[       OK ] AvatarDescriptionTest.EndGetFromGamerRejectsResultNotFromBegin (0 ms)
+[ RUN      ] AvatarDescriptionTest.ChangedIsPerInstanceNotShared
+[       OK ] AvatarDescriptionTest.ChangedIsPerInstanceNotShared (0 ms)
+[ RUN      ] AvatarDescriptionTest.ChangedDeliversTheSenderAndArguments
+[       OK ] AvatarDescriptionTest.ChangedDeliversTheSenderAndArguments (0 ms)
+[ RUN      ] AvatarDescriptionTest.ChangedSubscribersRunInSubscriptionOrder
+[       OK ] AvatarDescriptionTest.ChangedSubscribersRunInSubscriptionOrder (0 ms)
+[ RUN      ] AvatarDescriptionTest.ChangedSubscriptionCanBeRemoved
+[       OK ] AvatarDescriptionTest.ChangedSubscriptionCanBeRemoved (0 ms)
+[ RUN      ] AvatarDescriptionTest.ANewDescriptionHasNoSubscribers
+[       OK ] AvatarDescriptionTest.ANewDescriptionHasNoSubscribers (0 ms)
+[----------] 22 tests from AvatarDescriptionTest (7 ms total)
+
+[----------] 18 tests from AvatarEditorTest
+[ RUN      ] AvatarEditorTest.StartsFromTheStoredAvatarInTheCatalogItEdits
+[       OK ] AvatarEditorTest.StartsFromTheStoredAvatarInTheCatalogItEdits (0 ms)
+[ RUN      ] AvatarEditorTest.AnOlderCatalogsAvatarIsCarriedIntoTheEditedCatalog
+[       OK ] AvatarEditorTest.AnOlderCatalogsAvatarIsCarriedIntoTheEditedCatalog (0 ms)
+[ RUN      ] AvatarEditorTest.WithoutAStoredAvatarItStartsFromARandomOne
+[       OK ] AvatarEditorTest.WithoutAStoredAvatarItStartsFromARandomOne (0 ms)
+[ RUN      ] AvatarEditorTest.CategoriesOfferWhatTheirNameSays
+[       OK ] AvatarEditorTest.CategoriesOfferWhatTheirNameSays (0 ms)
+[ RUN      ] AvatarEditorTest.RowsSayHowTheyAreShown
+[       OK ] AvatarEditorTest.RowsSayHowTheyAreShown (0 ms)
+[ RUN      ] AvatarEditorTest.CatalogOneOffersNoFaceShapeOrFacialHair
+[       OK ] AvatarEditorTest.CatalogOneOffersNoFaceShapeOrFacialHair (0 ms)
+[ RUN      ] AvatarEditorTest.HeightAndBuildStepWithinTheirRanges
+[       OK ] AvatarEditorTest.HeightAndBuildStepWithinTheirRanges (0 ms)
+[ RUN      ] AvatarEditorTest.ChangingBodyTypeKeepsTheRelativeHeight
+[       OK ] AvatarEditorTest.ChangingBodyTypeKeepsTheRelativeHeight (0 ms)
+[ RUN      ] AvatarEditorTest.ItemsCycleThroughTheCatalogAndOptionalSlotsOfferNone
+[       OK ] AvatarEditorTest.ItemsCycleThroughTheCatalogAndOptionalSlotsOfferNone (0 ms)
+[ RUN      ] AvatarEditorTest.ColorsStepThroughThePaletteAndACustomColorJoinsIt
+[       OK ] AvatarEditorTest.ColorsStepThroughThePaletteAndACustomColorJoinsIt (0 ms)
+[ RUN      ] AvatarEditorTest.FaceFeaturesAndFacialHairUseFormatTwo
+[       OK ] AvatarEditorTest.FaceFeaturesAndFacialHairUseFormatTwo (0 ms)
+[ RUN      ] AvatarEditorTest.PresetsMoveSeveralFeaturesAndBalancedResetsThem
+[       OK ] AvatarEditorTest.PresetsMoveSeveralFeaturesAndBalancedResetsThem (0 ms)
+[ RUN      ] AvatarEditorTest.EveryReachableValueEncodes
+[       OK ] AvatarEditorTest.EveryReachableValueEncodes (48 ms)
+[ RUN      ] AvatarEditorTest.RandomizeKeepsTheBodyAndRevertAndSaveTrackTheStoredAvatar
+[       OK ] AvatarEditorTest.RandomizeKeepsTheBodyAndRevertAndSaveTrackTheStoredAvatar (0 ms)
+[ RUN      ] AvatarEditorTest.RandomAvatarsAreCoherent
+[       OK ] AvatarEditorTest.RandomAvatarsAreCoherent (7 ms)
+[ RUN      ] AvatarEditorTest.RandomizingACategoryChangesOnlyIt
+[       OK ] AvatarEditorTest.RandomizingACategoryChangesOnlyIt (0 ms)
+[ RUN      ] AvatarEditorTest.SelectionStopsAtTheEndsAndResetsOnACategoryChange
+[       OK ] AvatarEditorTest.SelectionStopsAtTheEndsAndResetsOnACategoryChange (0 ms)
+[ RUN      ] AvatarEditorTest.TheFakeServiceStoresASavedAvatar
+[       OK ] AvatarEditorTest.TheFakeServiceStoresASavedAvatar (0 ms)
+[----------] 18 tests from AvatarEditorTest (61 ms total)
+
+[----------] 7 tests from AvatarExpressionTest
+[ RUN      ] AvatarExpressionTest.DefaultsToNeutral
+[       OK ] AvatarExpressionTest.DefaultsToNeutral (0 ms)
+[ RUN      ] AvatarExpressionTest.MouthGetSet
+[       OK ] AvatarExpressionTest.MouthGetSet (0 ms)
+[ RUN      ] AvatarExpressionTest.LeftEyeGetSet
+[       OK ] AvatarExpressionTest.LeftEyeGetSet (0 ms)
+[ RUN      ] AvatarExpressionTest.RightEyeGetSet
+[       OK ] AvatarExpressionTest.RightEyeGetSet (0 ms)
+[ RUN      ] AvatarExpressionTest.LeftEyebrowGetSet
+[       OK ] AvatarExpressionTest.LeftEyebrowGetSet (0 ms)
+[ RUN      ] AvatarExpressionTest.RightEyebrowGetSet
+[       OK ] AvatarExpressionTest.RightEyebrowGetSet (0 ms)
+[ RUN      ] AvatarExpressionTest.PropertiesAreIndependent
+[       OK ] AvatarExpressionTest.PropertiesAreIndependent (0 ms)
+[----------] 7 tests from AvatarExpressionTest (0 ms total)
+
+[----------] 28 tests from AvatarRendererTest
+[ RUN      ] AvatarRendererTest.BoneCountIs71
+[       OK ] AvatarRendererTest.BoneCountIs71 (0 ms)
+[ RUN      ] AvatarRendererTest.ConstructorRejectsANullDescription
+[       OK ] AvatarRendererTest.ConstructorRejectsANullDescription (0 ms)
+[ RUN      ] AvatarRendererTest.ParentBonesHas71Entries
+[       OK ] AvatarRendererTest.ParentBonesHas71Entries (0 ms)
+[ RUN      ] AvatarRendererTest.ParentBonesRootHasNoParent
+[       OK ] AvatarRendererTest.ParentBonesRootHasNoParent (0 ms)
+[ RUN      ] AvatarRendererTest.ParentBonesExactValuesMatchReferenceAssembly
+[       OK ] AvatarRendererTest.ParentBonesExactValuesMatchReferenceAssembly (0 ms)
+[ RUN      ] AvatarRendererTest.ADescriptionWithoutAnAvatarIsUnavailable
+[       OK ] AvatarRendererTest.ADescriptionWithoutAnAvatarIsUnavailable (0 ms)
+[ RUN      ] AvatarRendererTest.AnUnreadableDescriptionIsUnavailable
+[       OK ] AvatarRendererTest.AnUnreadableDescriptionIsUnavailable (0 ms)
+[ RUN      ] AvatarRendererTest.AValidDescriptionLoadsAndBecomesReady
+[       OK ] AvatarRendererTest.AValidDescriptionLoadsAndBecomesReady (45 ms)
+[ RUN      ] AvatarRendererTest.TheBindPoseFollowsTheDescriptionHeight
+[       OK ] AvatarRendererTest.TheBindPoseFollowsTheDescriptionHeight (81 ms)
+[ RUN      ] AvatarRendererTest.DrawRejectsANonDecomposableBoneOnceReady
+[       OK ] AvatarRendererTest.DrawRejectsANonDecomposableBoneOnceReady (66 ms)
+[ RUN      ] AvatarRendererTest.DrawingNeedsInitializedGamerServices
+[       OK ] AvatarRendererTest.DrawingNeedsInitializedGamerServices (56 ms)
+[ RUN      ] AvatarRendererTest.DrawsEveryPresetAndExpressionOnTheDispatcherDevice
+[INFO][RENDER] CNA: graphics renderer: HEADLESS
+[       OK ] AvatarRendererTest.DrawsEveryPresetAndExpressionOnTheDispatcherDevice (125 ms)
+[ RUN      ] AvatarRendererTest.DisposeWhileLoadingIsSafe
+[       OK ] AvatarRendererTest.DisposeWhileLoadingIsSafe (0 ms)
+[ RUN      ] AvatarRendererTest.WorldViewProjectionDefaultToIdentity
+[       OK ] AvatarRendererTest.WorldViewProjectionDefaultToIdentity (0 ms)
+[ RUN      ] AvatarRendererTest.WorldGetSet
+[       OK ] AvatarRendererTest.WorldGetSet (0 ms)
+[ RUN      ] AvatarRendererTest.ViewGetSet
+[       OK ] AvatarRendererTest.ViewGetSet (0 ms)
+[ RUN      ] AvatarRendererTest.ProjectionGetSet
+[       OK ] AvatarRendererTest.ProjectionGetSet (0 ms)
+[ RUN      ] AvatarRendererTest.LightColorGetSet
+[       OK ] AvatarRendererTest.LightColorGetSet (0 ms)
+[ RUN      ] AvatarRendererTest.LightDirectionGetSet
+[       OK ] AvatarRendererTest.LightDirectionGetSet (0 ms)
+[ RUN      ] AvatarRendererTest.AmbientLightColorGetSet
+[       OK ] AvatarRendererTest.AmbientLightColorGetSet (0 ms)
+[ RUN      ] AvatarRendererTest.IsDisposedDefaultsFalse
+[       OK ] AvatarRendererTest.IsDisposedDefaultsFalse (0 ms)
+[ RUN      ] AvatarRendererTest.DrawWithWrongBoneCountThrows
+[       OK ] AvatarRendererTest.DrawWithWrongBoneCountThrows (0 ms)
+[ RUN      ] AvatarRendererTest.DrawWithNullAnimationThrowsArgumentNull
+[       OK ] AvatarRendererTest.DrawWithNullAnimationThrowsArgumentNull (0 ms)
+[ RUN      ] AvatarRendererTest.DisposeSetsIsDisposed
+[       OK ] AvatarRendererTest.DisposeSetsIsDisposed (0 ms)
+[ RUN      ] AvatarRendererTest.DisposeIsIdempotent
+[       OK ] AvatarRendererTest.DisposeIsIdempotent (0 ms)
+[ RUN      ] AvatarRendererTest.StateThrowsAfterDispose
+[       OK ] AvatarRendererTest.StateThrowsAfterDispose (0 ms)
+[ RUN      ] AvatarRendererTest.BindPoseThrowsAfterDispose
+[       OK ] AvatarRendererTest.BindPoseThrowsAfterDispose (0 ms)
+[ RUN      ] AvatarRendererTest.DrawThrowsAfterDispose
+[       OK ] AvatarRendererTest.DrawThrowsAfterDispose (0 ms)
+[----------] 28 tests from AvatarRendererTest (376 ms total)
+
+[----------] 8 tests from CredentialStoreTest
+[ RUN      ] CredentialStoreTest.AtomicPrivateRoundTripAndRemoval
+[       OK ] CredentialStoreTest.AtomicPrivateRoundTripAndRemoval (27 ms)
+[ RUN      ] CredentialStoreTest.IsolatesEndpointTitleAndAllFourSlots
+[       OK ] CredentialStoreTest.IsolatesEndpointTitleAndAllFourSlots (42 ms)
+[ RUN      ] CredentialStoreTest.ConcurrentLeaseUsesEphemeralBehavior
+[       OK ] CredentialStoreTest.ConcurrentLeaseUsesEphemeralBehavior (10 ms)
+[ RUN      ] CredentialStoreTest.RefusesPublicPermissionsAndLinkedFiles
+[       OK ] CredentialStoreTest.RefusesPublicPermissionsAndLinkedFiles (21 ms)
+[ RUN      ] CredentialStoreTest.RefusesInsecureOrSymlinkStorageDirectories
+[       OK ] CredentialStoreTest.RefusesInsecureOrSymlinkStorageDirectories (0 ms)
+[ RUN      ] CredentialStoreTest.RefusesCorruptionAndMalformedAuthorityWithoutLoggingIt
+[       OK ] CredentialStoreTest.RefusesCorruptionAndMalformedAuthorityWithoutLoggingIt (11 ms)
+[ RUN      ] CredentialStoreTest.ANamedDirectoryIsPrivateFilesNeverTheKeyring
+[       OK ] CredentialStoreTest.ANamedDirectoryIsPrivateFilesNeverTheKeyring (13 ms)
+[ RUN      ] CredentialStoreTest.ExplicitDisableCreatesNoUserFiles
+[       OK ] CredentialStoreTest.ExplicitDisableCreatesNoUserFiles (0 ms)
+[----------] 8 tests from CredentialStoreTest (128 ms total)
+
+[----------] 3 tests from CredentialStoreKeyringTest
+[ RUN      ] CredentialStoreKeyringTest.KeepsRecordsInTheSecretServiceAndMovesOldFilesIntoIt
+[       OK ] CredentialStoreKeyringTest.KeepsRecordsInTheSecretServiceAndMovesOldFilesIntoIt (164 ms)
+[ RUN      ] CredentialStoreKeyringTest.AKeyringThatRefusesWritesLeavesPrivateFiles
+[       OK ] CredentialStoreKeyringTest.AKeyringThatRefusesWritesLeavesPrivateFiles (144 ms)
+[ RUN      ] CredentialStoreKeyringTest.AKeyringThatDoesNotAnswerIsGivenTwoSeconds
+[       OK ] CredentialStoreKeyringTest.AKeyringThatDoesNotAnswerIsGivenTwoSeconds (2061 ms)
+[----------] 3 tests from CredentialStoreKeyringTest (2371 ms total)
+
+[----------] 22 tests from AchievementCollectionTest
+[ RUN      ] AchievementCollectionTest.EmptyCollection
+[       OK ] AchievementCollectionTest.EmptyCollection (0 ms)
+[ RUN      ] AchievementCollectionTest.IndexByInt
+[       OK ] AchievementCollectionTest.IndexByInt (0 ms)
+[ RUN      ] AchievementCollectionTest.IndexByKey
+[       OK ] AchievementCollectionTest.IndexByKey (0 ms)
+[ RUN      ] AchievementCollectionTest.IndexByKeyNotFound
+[       OK ] AchievementCollectionTest.IndexByKeyNotFound (0 ms)
+[ RUN      ] AchievementCollectionTest.IndexByIntOutOfRangeThrowsArgumentOutOfRangeException
+[       OK ] AchievementCollectionTest.IndexByIntOutOfRangeThrowsArgumentOutOfRangeException (0 ms)
+[ RUN      ] AchievementCollectionTest.IndexByIntOutOfRangeOnPopulatedCollectionThrowsArgumentOutOfRangeException
+[       OK ] AchievementCollectionTest.IndexByIntOutOfRangeOnPopulatedCollectionThrowsArgumentOutOfRangeException (0 ms)
+[ RUN      ] AchievementCollectionTest.Dispose
+[       OK ] AchievementCollectionTest.Dispose (0 ms)
+[ RUN      ] AchievementCollectionTest.RangeFor
+[       OK ] AchievementCollectionTest.RangeFor (0 ms)
+[ RUN      ] AchievementCollectionTest.IndexOfFindsAndReportsNotFound
+[       OK ] AchievementCollectionTest.IndexOfFindsAndReportsNotFound (0 ms)
+[ RUN      ] AchievementCollectionTest.InsertAtIndexShiftsLaterElements
+[       OK ] AchievementCollectionTest.InsertAtIndexShiftsLaterElements (0 ms)
+[ RUN      ] AchievementCollectionTest.InsertAtCountAppends
+[       OK ] AchievementCollectionTest.InsertAtCountAppends (0 ms)
+[ RUN      ] AchievementCollectionTest.InsertOutOfRangeThrows
+[       OK ] AchievementCollectionTest.InsertOutOfRangeThrows (0 ms)
+[ RUN      ] AchievementCollectionTest.RemoveAtDeletesTheRightElement
+[       OK ] AchievementCollectionTest.RemoveAtDeletesTheRightElement (0 ms)
+[ RUN      ] AchievementCollectionTest.RemoveAtOutOfRangeThrows
+[       OK ] AchievementCollectionTest.RemoveAtOutOfRangeThrows (0 ms)
+[ RUN      ] AchievementCollectionTest.AddAppendsToTheEnd
+[       OK ] AchievementCollectionTest.AddAppendsToTheEnd (0 ms)
+[ RUN      ] AchievementCollectionTest.RemoveDeletesMatchingElementAndReportsNotFound
+[       OK ] AchievementCollectionTest.RemoveDeletesMatchingElementAndReportsNotFound (0 ms)
+[ RUN      ] AchievementCollectionTest.ClearRemovesEverythingWithoutDisposing
+[       OK ] AchievementCollectionTest.ClearRemovesEverythingWithoutDisposing (0 ms)
+[ RUN      ] AchievementCollectionTest.ContainsFindsAndReportsNotFound
+[       OK ] AchievementCollectionTest.ContainsFindsAndReportsNotFound (0 ms)
+[ RUN      ] AchievementCollectionTest.CopyToCopiesStartingAtArrayIndex
+[       OK ] AchievementCollectionTest.CopyToCopiesStartingAtArrayIndex (0 ms)
+[ RUN      ] AchievementCollectionTest.CopyToThrowsWhenDestinationTooSmall
+[       OK ] AchievementCollectionTest.CopyToThrowsWhenDestinationTooSmall (0 ms)
+[ RUN      ] AchievementCollectionTest.CopyToThrowsForNegativeArrayIndex
+[       OK ] AchievementCollectionTest.CopyToThrowsForNegativeArrayIndex (0 ms)
+[ RUN      ] AchievementCollectionTest.IsReadOnlyIsAlwaysTrue
+[       OK ] AchievementCollectionTest.IsReadOnlyIsAlwaysTrue (0 ms)
+[----------] 22 tests from AchievementCollectionTest (0 ms total)
+
+[----------] 3 tests from AchievementTest
+[ RUN      ] AchievementTest.EqualityIsStructural
+[       OK ] AchievementTest.EqualityIsStructural (0 ms)
+[ RUN      ] AchievementTest.PropertiesFromCtor
+[       OK ] AchievementTest.PropertiesFromCtor (0 ms)
+[ RUN      ] AchievementTest.GetPictureThrows
+[       OK ] AchievementTest.GetPictureThrows (0 ms)
+[----------] 3 tests from AchievementTest (0 ms total)
+
+[----------] 4 tests from FriendGamerTest
+[ RUN      ] FriendGamerTest.BasicProperties
+[       OK ] FriendGamerTest.BasicProperties (0 ms)
+[ RUN      ] FriendGamerTest.RequestFlags
+[       OK ] FriendGamerTest.RequestFlags (0 ms)
+[ RUN      ] FriendGamerTest.DefaultStubFlags
+[       OK ] FriendGamerTest.DefaultStubFlags (0 ms)
+[ RUN      ] FriendGamerTest.InheritsGamer
+[       OK ] FriendGamerTest.InheritsGamer (0 ms)
+[----------] 4 tests from FriendGamerTest (0 ms total)
+
+[----------] 4 tests from FriendCollectionTest
+[ RUN      ] FriendCollectionTest.EmptyCollection
+[       OK ] FriendCollectionTest.EmptyCollection (0 ms)
+[ RUN      ] FriendCollectionTest.Dispose
+[       OK ] FriendCollectionTest.Dispose (0 ms)
+[ RUN      ] FriendCollectionTest.DisposeDoesNotOwnOrFreeFriendGamerPointers
+[       OK ] FriendCollectionTest.DisposeDoesNotOwnOrFreeFriendGamerPointers (0 ms)
+[ RUN      ] FriendCollectionTest.AddAppendsAndRemoveDeletesTheRightElement
+[       OK ] FriendCollectionTest.AddAppendsAndRemoveDeletesTheRightElement (0 ms)
+[----------] 4 tests from FriendCollectionTest (0 ms total)
+
+[----------] 11 tests from SignedInGamerCollectionTest
+[ RUN      ] SignedInGamerCollectionTest.EmptyCollection
+[       OK ] SignedInGamerCollectionTest.EmptyCollection (0 ms)
+[ RUN      ] SignedInGamerCollectionTest.IntIndexOutOfRangeThrowsArgumentOutOfRangeException
+[       OK ] SignedInGamerCollectionTest.IntIndexOutOfRangeThrowsArgumentOutOfRangeException (0 ms)
+[ RUN      ] SignedInGamerCollectionTest.PlayerIndexOutOfBounds
+[       OK ] SignedInGamerCollectionTest.PlayerIndexOutOfBounds (0 ms)
+[ RUN      ] SignedInGamerCollectionTest.PlayerIndexOperatorOnPopulatedCollection
+[       OK ] SignedInGamerCollectionTest.PlayerIndexOperatorOnPopulatedCollection (0 ms)
+[ RUN      ] SignedInGamerCollectionTest.PlayerIndexOperatorFindsThePlayerNotThePosition
+[       OK ] SignedInGamerCollectionTest.PlayerIndexOperatorFindsThePlayerNotThePosition (0 ms)
+[ RUN      ] SignedInGamerCollectionTest.IndexOfFindsAndReportsNotFound
+[       OK ] SignedInGamerCollectionTest.IndexOfFindsAndReportsNotFound (0 ms)
+[ RUN      ] SignedInGamerCollectionTest.ContainsFindsAndReportsNotFound
+[       OK ] SignedInGamerCollectionTest.ContainsFindsAndReportsNotFound (0 ms)
+[ RUN      ] SignedInGamerCollectionTest.CopyToCopiesStartingAtIndex
+[       OK ] SignedInGamerCollectionTest.CopyToCopiesStartingAtIndex (0 ms)
+[ RUN      ] SignedInGamerCollectionTest.CopyToThrowsWhenDestinationTooSmall
+[       OK ] SignedInGamerCollectionTest.CopyToThrowsWhenDestinationTooSmall (0 ms)
+[ RUN      ] SignedInGamerCollectionTest.CopyToThrowsForNegativeIndex
+[       OK ] SignedInGamerCollectionTest.CopyToThrowsForNegativeIndex (0 ms)
+[ RUN      ] SignedInGamerCollectionTest.AddAppendsAndRemoveDeletesTheRightElement
+[       OK ] SignedInGamerCollectionTest.AddAppendsAndRemoveDeletesTheRightElement (0 ms)
+[----------] 11 tests from SignedInGamerCollectionTest (0 ms total)
+
+[----------] 4 tests from GamerCollectionEnumeratorTest
+[ RUN      ] GamerCollectionEnumeratorTest.EmptyAndOneElementStates
+[       OK ] GamerCollectionEnumeratorTest.EmptyAndOneElementStates (0 ms)
+[ RUN      ] GamerCollectionEnumeratorTest.MultipleIndependentCopyResetAndCppIteration
+[       OK ] GamerCollectionEnumeratorTest.MultipleIndependentCopyResetAndCppIteration (0 ms)
+[ RUN      ] GamerCollectionEnumeratorTest.MutationInvalidatesMoveNextAndReset
+[       OK ] GamerCollectionEnumeratorTest.MutationInvalidatesMoveNextAndReset (0 ms)
+[ RUN      ] GamerCollectionEnumeratorTest.FriendCollectionUsesTheSameGenericShape
+[       OK ] GamerCollectionEnumeratorTest.FriendCollectionUsesTheSameGenericShape (0 ms)
+[----------] 4 tests from GamerCollectionEnumeratorTest (0 ms total)
+
+[----------] 8 tests from LeaderboardEntryTest
+[ RUN      ] LeaderboardEntryTest.EqualityIsStructural
+[       OK ] LeaderboardEntryTest.EqualityIsStructural (0 ms)
+[ RUN      ] LeaderboardEntryTest.DifferingGamerIsNotEqual
+[       OK ] LeaderboardEntryTest.DifferingGamerIsNotEqual (0 ms)
+[ RUN      ] LeaderboardEntryTest.DifferingRatingIsNotEqual
+[       OK ] LeaderboardEntryTest.DifferingRatingIsNotEqual (0 ms)
+[ RUN      ] LeaderboardEntryTest.DifferingRankingIsNotEqual
+[       OK ] LeaderboardEntryTest.DifferingRankingIsNotEqual (0 ms)
+[ RUN      ] LeaderboardEntryTest.PropertiesFromCtor
+[       OK ] LeaderboardEntryTest.PropertiesFromCtor (0 ms)
+[ RUN      ] LeaderboardEntryTest.SetRating
+[       OK ] LeaderboardEntryTest.SetRating (0 ms)
+[ RUN      ] LeaderboardEntryTest.ColumnsAreMutable
+[       OK ] LeaderboardEntryTest.ColumnsAreMutable (0 ms)
+[ RUN      ] LeaderboardEntryTest.GamerPointerRoundTrips
+[       OK ] LeaderboardEntryTest.GamerPointerRoundTrips (0 ms)
+[----------] 8 tests from LeaderboardEntryTest (0 ms total)
+
+[----------] 36 tests from PropertyDictionaryTest
+[ RUN      ] PropertyDictionaryTest.CreateEmpty
+[       OK ] PropertyDictionaryTest.CreateEmpty (0 ms)
+[ RUN      ] PropertyDictionaryTest.SetAndGetInt
+[       OK ] PropertyDictionaryTest.SetAndGetInt (0 ms)
+[ RUN      ] PropertyDictionaryTest.SetAndGetFloat
+[       OK ] PropertyDictionaryTest.SetAndGetFloat (0 ms)
+[ RUN      ] PropertyDictionaryTest.SetAndGetDouble
+[       OK ] PropertyDictionaryTest.SetAndGetDouble (0 ms)
+[ RUN      ] PropertyDictionaryTest.SetAndGetLong
+[       OK ] PropertyDictionaryTest.SetAndGetLong (0 ms)
+[ RUN      ] PropertyDictionaryTest.SetAndGetString
+[       OK ] PropertyDictionaryTest.SetAndGetString (0 ms)
+[ RUN      ] PropertyDictionaryTest.SetAndGetOutcome
+[       OK ] PropertyDictionaryTest.SetAndGetOutcome (0 ms)
+[ RUN      ] PropertyDictionaryTest.SetAndGetDateTime
+[       OK ] PropertyDictionaryTest.SetAndGetDateTime (0 ms)
+[ RUN      ] PropertyDictionaryTest.SetAndGetTimeSpan
+[       OK ] PropertyDictionaryTest.SetAndGetTimeSpan (0 ms)
+[ RUN      ] PropertyDictionaryTest.SetAndGetStream
+[       OK ] PropertyDictionaryTest.SetAndGetStream (0 ms)
+[ RUN      ] PropertyDictionaryTest.ContainsKey
+[       OK ] PropertyDictionaryTest.ContainsKey (0 ms)
+[ RUN      ] PropertyDictionaryTest.TryGetValueFound
+[       OK ] PropertyDictionaryTest.TryGetValueFound (0 ms)
+[ RUN      ] PropertyDictionaryTest.TryGetValueNotFound
+[       OK ] PropertyDictionaryTest.TryGetValueNotFound (0 ms)
+[ RUN      ] PropertyDictionaryTest.CountIncrementsOnSet
+[       OK ] PropertyDictionaryTest.CountIncrementsOnSet (0 ms)
+[ RUN      ] PropertyDictionaryTest.MutableIndexerThrowsOnMissingKeyInsteadOfAutoVivifying
+[       OK ] PropertyDictionaryTest.MutableIndexerThrowsOnMissingKeyInsteadOfAutoVivifying (0 ms)
+[ RUN      ] PropertyDictionaryTest.MutableIndexerReadsAndOverwritesExistingKey
+[       OK ] PropertyDictionaryTest.MutableIndexerReadsAndOverwritesExistingKey (0 ms)
+[ RUN      ] PropertyDictionaryTest.ConstIndexerReadsExistingKey
+[       OK ] PropertyDictionaryTest.ConstIndexerReadsExistingKey (0 ms)
+[ RUN      ] PropertyDictionaryTest.ConstIndexerThrowsOnMissingKey
+[       OK ] PropertyDictionaryTest.ConstIndexerThrowsOnMissingKey (0 ms)
+[ RUN      ] PropertyDictionaryTest.AddInsertsNewKey
+[       OK ] PropertyDictionaryTest.AddInsertsNewKey (0 ms)
+[ RUN      ] PropertyDictionaryTest.AddThrowsOnDuplicateKey
+[       OK ] PropertyDictionaryTest.AddThrowsOnDuplicateKey (0 ms)
+[ RUN      ] PropertyDictionaryTest.RemoveReturnsTrueAndDeletesExistingKey
+[       OK ] PropertyDictionaryTest.RemoveReturnsTrueAndDeletesExistingKey (0 ms)
+[ RUN      ] PropertyDictionaryTest.RemoveReturnsFalseForMissingKey
+[       OK ] PropertyDictionaryTest.RemoveReturnsFalseForMissingKey (0 ms)
+[ RUN      ] PropertyDictionaryTest.ClearRemovesEverything
+[       OK ] PropertyDictionaryTest.ClearRemovesEverything (0 ms)
+[ RUN      ] PropertyDictionaryTest.KeysReturnsEveryKey
+[       OK ] PropertyDictionaryTest.KeysReturnsEveryKey (0 ms)
+[ RUN      ] PropertyDictionaryTest.ValuesReturnsEveryValue
+[       OK ] PropertyDictionaryTest.ValuesReturnsEveryValue (0 ms)
+[ RUN      ] PropertyDictionaryTest.IsReadOnlyIsAlwaysTrue
+[       OK ] PropertyDictionaryTest.IsReadOnlyIsAlwaysTrue (0 ms)
+[ RUN      ] PropertyDictionaryTest.CopyToCopiesEveryPairFromTheIndex
+[       OK ] PropertyDictionaryTest.CopyToCopiesEveryPairFromTheIndex (0 ms)
+[ RUN      ] PropertyDictionaryTest.PairAddInsertsTheKeyAndValue
+[       OK ] PropertyDictionaryTest.PairAddInsertsTheKeyAndValue (0 ms)
+[ RUN      ] PropertyDictionaryTest.PairAddRejectsADuplicateKey
+[       OK ] PropertyDictionaryTest.PairAddRejectsADuplicateKey (0 ms)
+[ RUN      ] PropertyDictionaryTest.PairContainsMatchesKeyAndValue
+[       OK ] PropertyDictionaryTest.PairContainsMatchesKeyAndValue (0 ms)
+[ RUN      ] PropertyDictionaryTest.PairContainsSeparatesValueTypes
+[       OK ] PropertyDictionaryTest.PairContainsSeparatesValueTypes (0 ms)
+[ RUN      ] PropertyDictionaryTest.PairContainsHandlesEveryDefinedValueType
+[       OK ] PropertyDictionaryTest.PairContainsHandlesEveryDefinedValueType (0 ms)
+[ RUN      ] PropertyDictionaryTest.PairContainsRefusesAnUncomparableBoxedType
+[       OK ] PropertyDictionaryTest.PairContainsRefusesAnUncomparableBoxedType (0 ms)
+[ RUN      ] PropertyDictionaryTest.PairContainsTreatsEmptyValuesAsNullReferences
+[       OK ] PropertyDictionaryTest.PairContainsTreatsEmptyValuesAsNullReferences (0 ms)
+[ RUN      ] PropertyDictionaryTest.PairRemoveOnlyRemovesAFullMatch
+[       OK ] PropertyDictionaryTest.PairRemoveOnlyRemovesAFullMatch (0 ms)
+[ RUN      ] PropertyDictionaryTest.PairOperationsRoundTrip
+[       OK ] PropertyDictionaryTest.PairOperationsRoundTrip (0 ms)
+[----------] 36 tests from PropertyDictionaryTest (0 ms total)
+
+[----------] 3 tests from LeaderboardIdentityTest
+[ RUN      ] LeaderboardIdentityTest.CreateWithKey
+[       OK ] LeaderboardIdentityTest.CreateWithKey (0 ms)
+[ RUN      ] LeaderboardIdentityTest.CreateWithKeyAndGameMode
+[       OK ] LeaderboardIdentityTest.CreateWithKeyAndGameMode (0 ms)
+[ RUN      ] LeaderboardIdentityTest.SettersWork
+[       OK ] LeaderboardIdentityTest.SettersWork (0 ms)
+[----------] 3 tests from LeaderboardIdentityTest (0 ms total)
+
+[----------] 3 tests from GamerPresenceTest
+[ RUN      ] GamerPresenceTest.DefaultMode
+[       OK ] GamerPresenceTest.DefaultMode (0 ms)
+[ RUN      ] GamerPresenceTest.SetPresenceMode
+[       OK ] GamerPresenceTest.SetPresenceMode (0 ms)
+[ RUN      ] GamerPresenceTest.SetPresenceValue
+[       OK ] GamerPresenceTest.SetPresenceValue (0 ms)
+[----------] 3 tests from GamerPresenceTest (0 ms total)
+
+[----------] 1 test from GamerPrivilegesTest
+[ RUN      ] GamerPrivilegesTest.DefaultsAllPermissive
+[       OK ] GamerPrivilegesTest.DefaultsAllPermissive (0 ms)
+[----------] 1 test from GamerPrivilegesTest (0 ms total)
+
+[----------] 1 test from GameDefaultsTest
+[ RUN      ] GameDefaultsTest.DefaultValues
+[       OK ] GameDefaultsTest.DefaultValues (0 ms)
+[----------] 1 test from GameDefaultsTest (0 ms total)
+
+[----------] 2 tests from ControllerSensitivityTest
+[ RUN      ] ControllerSensitivityTest.ValuesExist
+[       OK ] ControllerSensitivityTest.ValuesExist (0 ms)
+[ RUN      ] ControllerSensitivityTest.OrdinalValuesMatchXna
+[       OK ] ControllerSensitivityTest.OrdinalValuesMatchXna (0 ms)
+[----------] 2 tests from ControllerSensitivityTest (0 ms total)
+
+[----------] 2 tests from GameDifficultyTest
+[ RUN      ] GameDifficultyTest.ValuesExist
+[       OK ] GameDifficultyTest.ValuesExist (0 ms)
+[ RUN      ] GameDifficultyTest.OrdinalValuesMatchXna
+[       OK ] GameDifficultyTest.OrdinalValuesMatchXna (0 ms)
+[----------] 2 tests from GameDifficultyTest (0 ms total)
+
+[----------] 3 tests from GamerPresenceModeTest
+[ RUN      ] GamerPresenceModeTest.FirstAndLastValue
+[       OK ] GamerPresenceModeTest.FirstAndLastValue (0 ms)
+[ RUN      ] GamerPresenceModeTest.RepresentativeValues
+[       OK ] GamerPresenceModeTest.RepresentativeValues (0 ms)
+[ RUN      ] GamerPresenceModeTest.OrdinalValuesMatchXna
+[       OK ] GamerPresenceModeTest.OrdinalValuesMatchXna (0 ms)
+[----------] 3 tests from GamerPresenceModeTest (0 ms total)
+
+[----------] 2 tests from GamerPrivilegeSettingTest
+[ RUN      ] GamerPrivilegeSettingTest.ValuesExist
+[       OK ] GamerPrivilegeSettingTest.ValuesExist (0 ms)
+[ RUN      ] GamerPrivilegeSettingTest.OrdinalValuesMatchXna
+[       OK ] GamerPrivilegeSettingTest.OrdinalValuesMatchXna (0 ms)
+[----------] 2 tests from GamerPrivilegeSettingTest (0 ms total)
+
+[----------] 2 tests from GamerZoneTest
+[ RUN      ] GamerZoneTest.ValuesExist
+[       OK ] GamerZoneTest.ValuesExist (0 ms)
+[ RUN      ] GamerZoneTest.OrdinalValuesMatchXna
+[       OK ] GamerZoneTest.OrdinalValuesMatchXna (0 ms)
+[----------] 2 tests from GamerZoneTest (0 ms total)
+
+[----------] 2 tests from LeaderboardKeyTest
+[ RUN      ] LeaderboardKeyTest.ValuesExist
+[       OK ] LeaderboardKeyTest.ValuesExist (0 ms)
+[ RUN      ] LeaderboardKeyTest.OrdinalValuesMatchXna
+[       OK ] LeaderboardKeyTest.OrdinalValuesMatchXna (0 ms)
+[----------] 2 tests from LeaderboardKeyTest (0 ms total)
+
+[----------] 2 tests from LeaderboardOutcomeTest
+[ RUN      ] LeaderboardOutcomeTest.ValuesExist
+[       OK ] LeaderboardOutcomeTest.ValuesExist (0 ms)
+[ RUN      ] LeaderboardOutcomeTest.OrdinalValuesMatchXna
+[       OK ] LeaderboardOutcomeTest.OrdinalValuesMatchXna (0 ms)
+[----------] 2 tests from LeaderboardOutcomeTest (0 ms total)
+
+[----------] 1 test from MessageBoxIconTest
+[ RUN      ] MessageBoxIconTest.ValuesExist
+[       OK ] MessageBoxIconTest.ValuesExist (0 ms)
+[----------] 1 test from MessageBoxIconTest (0 ms total)
+
+[----------] 1 test from NotificationPositionTest
+[ RUN      ] NotificationPositionTest.ValuesExist
+[       OK ] NotificationPositionTest.ValuesExist (0 ms)
+[----------] 1 test from NotificationPositionTest (0 ms total)
+
+[----------] 1 test from RacingCameraAngleTest
+[ RUN      ] RacingCameraAngleTest.ValuesExist
+[       OK ] RacingCameraAngleTest.ValuesExist (0 ms)
+[----------] 1 test from RacingCameraAngleTest (0 ms total)
+
+[----------] 1 test from AvatarBodyTypeTest
+[ RUN      ] AvatarBodyTypeTest.ValuesExist
+[       OK ] AvatarBodyTypeTest.ValuesExist (0 ms)
+[----------] 1 test from AvatarBodyTypeTest (0 ms total)
+
+[----------] 1 test from AvatarRendererStateTest
+[ RUN      ] AvatarRendererStateTest.ValuesExist
+[       OK ] AvatarRendererStateTest.ValuesExist (0 ms)
+[----------] 1 test from AvatarRendererStateTest (0 ms total)
+
+[----------] 1 test from AvatarMouthTest
+[ RUN      ] AvatarMouthTest.ValuesExist
+[       OK ] AvatarMouthTest.ValuesExist (0 ms)
+[----------] 1 test from AvatarMouthTest (0 ms total)
+
+[----------] 1 test from AvatarEyeTest
+[ RUN      ] AvatarEyeTest.ValuesExist
+[       OK ] AvatarEyeTest.ValuesExist (0 ms)
+[----------] 1 test from AvatarEyeTest (0 ms total)
+
+[----------] 1 test from AvatarEyebrowTest
+[ RUN      ] AvatarEyebrowTest.ValuesExist
+[       OK ] AvatarEyebrowTest.ValuesExist (0 ms)
+[----------] 1 test from AvatarEyebrowTest (0 ms total)
+
+[----------] 2 tests from AvatarAnimationPresetTest
+[ RUN      ] AvatarAnimationPresetTest.FirstAndLastValue
+[       OK ] AvatarAnimationPresetTest.FirstAndLastValue (0 ms)
+[ RUN      ] AvatarAnimationPresetTest.RepresentativeValues
+[       OK ] AvatarAnimationPresetTest.RepresentativeValues (0 ms)
+[----------] 2 tests from AvatarAnimationPresetTest (0 ms total)
+
+[----------] 3 tests from AvatarBoneTest
+[ RUN      ] AvatarBoneTest.RootAndFirstFewValues
+[       OK ] AvatarBoneTest.RootAndFirstFewValues (0 ms)
+[ RUN      ] AvatarBoneTest.GapsArePreservedExactly
+[       OK ] AvatarBoneTest.GapsArePreservedExactly (0 ms)
+[ RUN      ] AvatarBoneTest.LastValue
+[       OK ] AvatarBoneTest.LastValue (0 ms)
+[----------] 3 tests from AvatarBoneTest (0 ms total)
+
+[----------] 2 tests from SignedInEventArgsTest
+[ RUN      ] SignedInEventArgsTest.StoresGamer
+[       OK ] SignedInEventArgsTest.StoresGamer (0 ms)
+[ RUN      ] SignedInEventArgsTest.InheritsEventArgs
+[       OK ] SignedInEventArgsTest.InheritsEventArgs (0 ms)
+[----------] 2 tests from SignedInEventArgsTest (0 ms total)
+
+[----------] 2 tests from SignedOutEventArgsTest
+[ RUN      ] SignedOutEventArgsTest.StoresGamer
+[       OK ] SignedOutEventArgsTest.StoresGamer (0 ms)
+[ RUN      ] SignedOutEventArgsTest.InheritsEventArgs
+[       OK ] SignedOutEventArgsTest.InheritsEventArgs (0 ms)
+[----------] 2 tests from SignedOutEventArgsTest (0 ms total)
+
+[----------] 3 tests from InviteAcceptedEventArgsTest
+[ RUN      ] InviteAcceptedEventArgsTest.StoresGamerAndFlag
+[       OK ] InviteAcceptedEventArgsTest.StoresGamerAndFlag (0 ms)
+[ RUN      ] InviteAcceptedEventArgsTest.FlagFalse
+[       OK ] InviteAcceptedEventArgsTest.FlagFalse (0 ms)
+[ RUN      ] InviteAcceptedEventArgsTest.InheritsEventArgs
+[       OK ] InviteAcceptedEventArgsTest.InheritsEventArgs (0 ms)
+[----------] 3 tests from InviteAcceptedEventArgsTest (0 ms total)
+
+[----------] 4 tests from NetworkExceptionTest
+[ RUN      ] NetworkExceptionTest.DefaultCtor
+[       OK ] NetworkExceptionTest.DefaultCtor (0 ms)
+[ RUN      ] NetworkExceptionTest.MessageCtor
+[       OK ] NetworkExceptionTest.MessageCtor (0 ms)
+[ RUN      ] NetworkExceptionTest.MessageAndInnerCtor
+[       OK ] NetworkExceptionTest.MessageAndInnerCtor (0 ms)
+[ RUN      ] NetworkExceptionTest.IsCatchableAsSystemException
+[       OK ] NetworkExceptionTest.IsCatchableAsSystemException (0 ms)
+[----------] 4 tests from NetworkExceptionTest (0 ms total)
+
+[----------] 4 tests from NetworkNotAvailableExceptionTest
+[ RUN      ] NetworkNotAvailableExceptionTest.DefaultCtor
+[       OK ] NetworkNotAvailableExceptionTest.DefaultCtor (0 ms)
+[ RUN      ] NetworkNotAvailableExceptionTest.MessageCtor
+[       OK ] NetworkNotAvailableExceptionTest.MessageCtor (0 ms)
+[ RUN      ] NetworkNotAvailableExceptionTest.MessageAndInnerCtor
+[       OK ] NetworkNotAvailableExceptionTest.MessageAndInnerCtor (0 ms)
+[ RUN      ] NetworkNotAvailableExceptionTest.IsCatchableAsNetworkException
+[       OK ] NetworkNotAvailableExceptionTest.IsCatchableAsNetworkException (0 ms)
+[----------] 4 tests from NetworkNotAvailableExceptionTest (0 ms total)
+
+[----------] 3 tests from GamerPrivilegeExceptionTest
+[ RUN      ] GamerPrivilegeExceptionTest.DefaultCtor
+[       OK ] GamerPrivilegeExceptionTest.DefaultCtor (0 ms)
+[ RUN      ] GamerPrivilegeExceptionTest.MessageCtor
+[       OK ] GamerPrivilegeExceptionTest.MessageCtor (0 ms)
+[ RUN      ] GamerPrivilegeExceptionTest.MessageAndInnerCtor
+[       OK ] GamerPrivilegeExceptionTest.MessageAndInnerCtor (0 ms)
+[----------] 3 tests from GamerPrivilegeExceptionTest (0 ms total)
+
+[----------] 3 tests from GamerServicesNotAvailableExceptionTest
+[ RUN      ] GamerServicesNotAvailableExceptionTest.DefaultCtor
+[       OK ] GamerServicesNotAvailableExceptionTest.DefaultCtor (0 ms)
+[ RUN      ] GamerServicesNotAvailableExceptionTest.MessageCtor
+[       OK ] GamerServicesNotAvailableExceptionTest.MessageCtor (0 ms)
+[ RUN      ] GamerServicesNotAvailableExceptionTest.MessageAndInnerCtor
+[       OK ] GamerServicesNotAvailableExceptionTest.MessageAndInnerCtor (0 ms)
+[----------] 3 tests from GamerServicesNotAvailableExceptionTest (0 ms total)
+
+[----------] 3 tests from GameUpdateRequiredExceptionTest
+[ RUN      ] GameUpdateRequiredExceptionTest.DefaultCtor
+[       OK ] GameUpdateRequiredExceptionTest.DefaultCtor (0 ms)
+[ RUN      ] GameUpdateRequiredExceptionTest.MessageCtor
+[       OK ] GameUpdateRequiredExceptionTest.MessageCtor (0 ms)
+[ RUN      ] GameUpdateRequiredExceptionTest.MessageAndInnerCtor
+[       OK ] GameUpdateRequiredExceptionTest.MessageAndInnerCtor (0 ms)
+[----------] 3 tests from GameUpdateRequiredExceptionTest (0 ms total)
+
+[----------] 3 tests from GuideAlreadyVisibleExceptionTest
+[ RUN      ] GuideAlreadyVisibleExceptionTest.DefaultCtor
+[       OK ] GuideAlreadyVisibleExceptionTest.DefaultCtor (0 ms)
+[ RUN      ] GuideAlreadyVisibleExceptionTest.MessageCtor
+[       OK ] GuideAlreadyVisibleExceptionTest.MessageCtor (0 ms)
+[ RUN      ] GuideAlreadyVisibleExceptionTest.MessageAndInnerCtor
+[       OK ] GuideAlreadyVisibleExceptionTest.MessageAndInnerCtor (0 ms)
+[----------] 3 tests from GuideAlreadyVisibleExceptionTest (0 ms total)
+
+[----------] 19 tests from GamerTest
+[ RUN      ] GamerTest.DisplayNameGetSet
+[       OK ] GamerTest.DisplayNameGetSet (0 ms)
+[ RUN      ] GamerTest.DisplayNameStaysEmptyWhenExplicitlyEmpty
+[       OK ] GamerTest.DisplayNameStaysEmptyWhenExplicitlyEmpty (0 ms)
+[ RUN      ] GamerTest.DisplayNameFallsBackToGamertagWhenOmitted
+[       OK ] GamerTest.DisplayNameFallsBackToGamertagWhenOmitted (0 ms)
+[ RUN      ] GamerTest.GamertagIsReadOnly
+[       OK ] GamerTest.GamertagIsReadOnly (0 ms)
+[ RUN      ] GamerTest.IsDisposedDefaultsFalse
+[       OK ] GamerTest.IsDisposedDefaultsFalse (0 ms)
+[ RUN      ] GamerTest.TagGetSet
+[       OK ] GamerTest.TagGetSet (0 ms)
+[ RUN      ] GamerTest.LeaderboardWriterGetLeaderboardReturnsRealEntry
+[       OK ] GamerTest.LeaderboardWriterGetLeaderboardReturnsRealEntry (0 ms)
+[ RUN      ] GamerTest.ToStringReturnsDisplayName
+[       OK ] GamerTest.ToStringReturnsDisplayName (0 ms)
+[ RUN      ] GamerTest.SignedInGamersStaticNotNull
+[       OK ] GamerTest.SignedInGamersStaticNotNull (0 ms)
+[ RUN      ] GamerTest.SetSignedInGamersPropertyReplacesThePreviousCollection
+[       OK ] GamerTest.SetSignedInGamersPropertyReplacesThePreviousCollection (0 ms)
+[ RUN      ] GamerTest.GetProfileReturnsUsableProfile
+[       OK ] GamerTest.GetProfileReturnsUsableProfile (0 ms)
+[ RUN      ] GamerTest.BeginEndGetProfile
+[       OK ] GamerTest.BeginEndGetProfile (0 ms)
+[ RUN      ] GamerTest.BeginGetProfileInvokesCallbackExactlyOnceWithCorrectIdentity
+[       OK ] GamerTest.BeginGetProfileInvokesCallbackExactlyOnceWithCorrectIdentity (0 ms)
+[ RUN      ] GamerTest.GetFromGamertagThrows
+[       OK ] GamerTest.GetFromGamertagThrows (0 ms)
+[ RUN      ] GamerTest.BeginGetFromGamertagThrows
+[       OK ] GamerTest.BeginGetFromGamertagThrows (0 ms)
+[ RUN      ] GamerTest.EndGetFromGamertagThrows
+[       OK ] GamerTest.EndGetFromGamertagThrows (0 ms)
+[ RUN      ] GamerTest.GetPartnerTokenThrows
+[       OK ] GamerTest.GetPartnerTokenThrows (0 ms)
+[ RUN      ] GamerTest.BeginGetPartnerTokenThrows
+[       OK ] GamerTest.BeginGetPartnerTokenThrows (0 ms)
+[ RUN      ] GamerTest.EndGetPartnerTokenThrows
+[       OK ] GamerTest.EndGetPartnerTokenThrows (0 ms)
+[----------] 19 tests from GamerTest (0 ms total)
+
+[----------] 5 tests from GamerProfileTest
+[ RUN      ] GamerProfileTest.DefaultValues
+[       OK ] GamerProfileTest.DefaultValues (0 ms)
+[ RUN      ] GamerProfileTest.RegionDefaultsToCurrentRegion
+[       OK ] GamerProfileTest.RegionDefaultsToCurrentRegion (0 ms)
+[ RUN      ] GamerProfileTest.Dispose
+[       OK ] GamerProfileTest.Dispose (0 ms)
+[ RUN      ] GamerProfileTest.GetGamerPictureReturnsNull
+[       OK ] GamerProfileTest.GetGamerPictureReturnsNull (0 ms)
+[ RUN      ] GamerProfileTest.PictureRejectsDisposedProfile
+[       OK ] GamerProfileTest.PictureRejectsDisposedProfile (0 ms)
+[----------] 5 tests from GamerProfileTest (0 ms total)
+
+[----------] 10 tests from LeaderboardWriterTest
+[ RUN      ] LeaderboardWriterTest.GetLeaderboardReturnsRealEntryForOwningGamer
+[       OK ] LeaderboardWriterTest.GetLeaderboardReturnsRealEntryForOwningGamer (0 ms)
+[ RUN      ] LeaderboardWriterTest.GetLeaderboardReturnsTheSameEntryOnRepeatedCalls
+[       OK ] LeaderboardWriterTest.GetLeaderboardReturnsTheSameEntryOnRepeatedCalls (0 ms)
+[ RUN      ] LeaderboardWriterTest.SettingRatingPersistsAndSurvivesAcrossFreshObjects
+[       OK ] LeaderboardWriterTest.SettingRatingPersistsAndSurvivesAcrossFreshObjects (0 ms)
+[ RUN      ] LeaderboardWriterTest.ColumnsPersistAlongsideRating
+[       OK ] LeaderboardWriterTest.ColumnsPersistAlongsideRating (0 ms)
+[ RUN      ] LeaderboardWriterTest.EntriesAreIsolatedPerLeaderboardIdentity
+[       OK ] LeaderboardWriterTest.EntriesAreIsolatedPerLeaderboardIdentity (0 ms)
+[ RUN      ] LeaderboardWriterTest.FailedOfflineReplacementPreservesDiskAndInMemoryRating
+[       OK ] LeaderboardWriterTest.FailedOfflineReplacementPreservesDiskAndInMemoryRating (0 ms)
+[ RUN      ] LeaderboardWriterTest.OfflineSaveRefusesAnUncreatableParentDirectory
+[       OK ] LeaderboardWriterTest.OfflineSaveRefusesAnUncreatableParentDirectory (0 ms)
+[ RUN      ] LeaderboardWriterTest.OfflineWriteFailurePreservesPreviousRecord
+[       OK ] LeaderboardWriterTest.OfflineWriteFailurePreservesPreviousRecord (0 ms)
+[ RUN      ] LeaderboardWriterTest.OfflineIntegerBoundariesRoundTripExactly
+[       OK ] LeaderboardWriterTest.OfflineIntegerBoundariesRoundTripExactly (3 ms)
+[ RUN      ] LeaderboardWriterTest.OfflineLegacyNumbersRemainReadableAndInvalidIntegersAreSkipped
+[       OK ] LeaderboardWriterTest.OfflineLegacyNumbersRemainReadableAndInvalidIntegersAreSkipped (0 ms)
+[----------] 10 tests from LeaderboardWriterTest (7 ms total)
+
+[----------] 26 tests from LeaderboardReaderTest
+[ RUN      ] LeaderboardReaderTest.PropertiesFromCtor
+[       OK ] LeaderboardReaderTest.PropertiesFromCtor (0 ms)
+[ RUN      ] LeaderboardReaderTest.EntriesLoopBoundMatchesFNAExactly
+[       OK ] LeaderboardReaderTest.EntriesLoopBoundMatchesFNAExactly (0 ms)
+[ RUN      ] LeaderboardReaderTest.CanPageDownUpEmptyCache
+[       OK ] LeaderboardReaderTest.CanPageDownUpEmptyCache (0 ms)
+[ RUN      ] LeaderboardReaderTest.CanPageDownFriendBoard
+[       OK ] LeaderboardReaderTest.CanPageDownFriendBoard (0 ms)
+[ RUN      ] LeaderboardReaderTest.CanPageUpFriendBoard
+[       OK ] LeaderboardReaderTest.CanPageUpFriendBoard (0 ms)
+[ RUN      ] LeaderboardReaderTest.CanPageDownNonFriendBoardByPageStart
+[       OK ] LeaderboardReaderTest.CanPageDownNonFriendBoardByPageStart (0 ms)
+[ RUN      ] LeaderboardReaderTest.CanPageDownReflectsTotalLeaderboardSize
+[       OK ] LeaderboardReaderTest.CanPageDownReflectsTotalLeaderboardSize (0 ms)
+[ RUN      ] LeaderboardReaderTest.CanPageDownNonFriendBoardFalse
+[       OK ] LeaderboardReaderTest.CanPageDownNonFriendBoardFalse (0 ms)
+[ RUN      ] LeaderboardReaderTest.CanPageUpNonFriendBoardByPageStart
+[       OK ] LeaderboardReaderTest.CanPageUpNonFriendBoardByPageStart (0 ms)
+[ RUN      ] LeaderboardReaderTest.CanPageUpNonFriendBoardFalse
+[       OK ] LeaderboardReaderTest.CanPageUpNonFriendBoardFalse (0 ms)
+[ RUN      ] LeaderboardReaderTest.Dispose
+[       OK ] LeaderboardReaderTest.Dispose (0 ms)
+[ RUN      ] LeaderboardReaderTest.PageDownThrowsWhenCannotPageDown
+[       OK ] LeaderboardReaderTest.PageDownThrowsWhenCannotPageDown (0 ms)
+[ RUN      ] LeaderboardReaderTest.BeginPageDownThrowsWhenCannotPageDown
+[       OK ] LeaderboardReaderTest.BeginPageDownThrowsWhenCannotPageDown (0 ms)
+[ RUN      ] LeaderboardReaderTest.EndPageDownThrowsForMismatchedResult
+[       OK ] LeaderboardReaderTest.EndPageDownThrowsForMismatchedResult (0 ms)
+[ RUN      ] LeaderboardReaderTest.PageDownAdvancesToTheNextPage
+[       OK ] LeaderboardReaderTest.PageDownAdvancesToTheNextPage (0 ms)
+[ RUN      ] LeaderboardReaderTest.PageUpThrowsWhenCannotPageUp
+[       OK ] LeaderboardReaderTest.PageUpThrowsWhenCannotPageUp (0 ms)
+[ RUN      ] LeaderboardReaderTest.BeginPageUpThrowsWhenCannotPageUp
+[       OK ] LeaderboardReaderTest.BeginPageUpThrowsWhenCannotPageUp (0 ms)
+[ RUN      ] LeaderboardReaderTest.EndPageUpThrowsForMismatchedResult
+[       OK ] LeaderboardReaderTest.EndPageUpThrowsForMismatchedResult (0 ms)
+[ RUN      ] LeaderboardReaderTest.PageUpMovesToThePreviousPage
+[       OK ] LeaderboardReaderTest.PageUpMovesToThePreviousPage (0 ms)
+[ RUN      ] LeaderboardReaderTest.ReadReturnsEntriesSortedByRatingDescending
+[       OK ] LeaderboardReaderTest.ReadReturnsEntriesSortedByRatingDescending (0 ms)
+[ RUN      ] LeaderboardReaderTest.ReadSkipsPersistedEntriesWithNoCurrentlySignedInGamer
+[       OK ] LeaderboardReaderTest.ReadSkipsPersistedEntriesWithNoCurrentlySignedInGamer (0 ms)
+[ RUN      ] LeaderboardReaderTest.ReadCentersOnPivotGamer
+[       OK ] LeaderboardReaderTest.ReadCentersOnPivotGamer (1 ms)
+[ RUN      ] LeaderboardReaderTest.ReadRestrictsToGivenGamersList
+[       OK ] LeaderboardReaderTest.ReadRestrictsToGivenGamersList (1 ms)
+[ RUN      ] LeaderboardReaderTest.BeginReadOverloadsReturnRealResults
+[       OK ] LeaderboardReaderTest.BeginReadOverloadsReturnRealResults (0 ms)
+[ RUN      ] LeaderboardReaderTest.BeginReadInvokesCallbackExactlyOnce
+[       OK ] LeaderboardReaderTest.BeginReadInvokesCallbackExactlyOnce (0 ms)
+[ RUN      ] LeaderboardReaderTest.EndReadThrowsForMismatchedResult
+[       OK ] LeaderboardReaderTest.EndReadThrowsForMismatchedResult (0 ms)
+[----------] 26 tests from LeaderboardReaderTest (4 ms total)
+
+[----------] 28 tests from SignedInGamerTest
+[ RUN      ] SignedInGamerTest.DefaultsFromCreateInternal
+[       OK ] SignedInGamerTest.DefaultsFromCreateInternal (0 ms)
+[ RUN      ] SignedInGamerTest.CustomParameters
+[       OK ] SignedInGamerTest.CustomParameters (0 ms)
+[ RUN      ] SignedInGamerTest.PartySizeFollowsTheInternalSetter
+[       OK ] SignedInGamerTest.PartySizeFollowsTheInternalSetter (0 ms)
+[ RUN      ] SignedInGamerTest.PresencePropertyNonConstOverloadMutatesLiveObject
+[       OK ] SignedInGamerTest.PresencePropertyNonConstOverloadMutatesLiveObject (0 ms)
+[ RUN      ] SignedInGamerTest.GameDefaultsPresencePrivilegesDefaults
+[       OK ] SignedInGamerTest.GameDefaultsPresencePrivilegesDefaults (0 ms)
+[ RUN      ] SignedInGamerTest.InheritsGamer
+[       OK ] SignedInGamerTest.InheritsGamer (0 ms)
+[ RUN      ] SignedInGamerTest.IsFriendFollowsTheReferenceChecks
+[       OK ] SignedInGamerTest.IsFriendFollowsTheReferenceChecks (0 ms)
+[ RUN      ] SignedInGamerTest.GetFriendsFollowsTheReferenceChecks
+[       OK ] SignedInGamerTest.GetFriendsFollowsTheReferenceChecks (0 ms)
+[ RUN      ] SignedInGamerTest.AwardAchievementDoesNotThrow
+[INFO][APPLICATION] [TitleContainer] OpenStream requested: GamerServices/Achievements.json
+[INFO][APPLICATION] [TitleContainer] Resolved path: /rv/data/development/github.com/libcna/cnawork/cmake-build-debug/GamerServices/Achievements.json
+[       OK ] SignedInGamerTest.AwardAchievementDoesNotThrow (0 ms)
+[ RUN      ] SignedInGamerTest.BeginEndAwardAchievement
+[       OK ] SignedInGamerTest.BeginEndAwardAchievement (0 ms)
+[ RUN      ] SignedInGamerTest.BeginAwardAchievementInvokesCallbackExactlyOnceWithCorrectIdentity
+[       OK ] SignedInGamerTest.BeginAwardAchievementInvokesCallbackExactlyOnceWithCorrectIdentity (0 ms)
+[ RUN      ] SignedInGamerTest.BeginAwardAchievementCallbackCanReentrantlyCallEndAwardAchievement
+[       OK ] SignedInGamerTest.BeginAwardAchievementCallbackCanReentrantlyCallEndAwardAchievement (0 ms)
+[ RUN      ] SignedInGamerTest.GetAchievementsReturnsEmptyCollectionWhenNoneEarned
+[       OK ] SignedInGamerTest.GetAchievementsReturnsEmptyCollectionWhenNoneEarned (0 ms)
+[ RUN      ] SignedInGamerTest.AwardAchievementPersistsAndGetAchievementsReflectsIt
+[       OK ] SignedInGamerTest.AwardAchievementPersistsAndGetAchievementsReflectsIt (0 ms)
+[ RUN      ] SignedInGamerTest.AwardedAchievementSurvivesAcrossFreshObjects
+[       OK ] SignedInGamerTest.AwardedAchievementSurvivesAcrossFreshObjects (0 ms)
+[ RUN      ] SignedInGamerTest.BeginAwardAchievementPersistsToo
+[       OK ] SignedInGamerTest.BeginAwardAchievementPersistsToo (0 ms)
+[ RUN      ] SignedInGamerTest.AwardingTheSameAchievementTwiceDoesNotDuplicate
+[       OK ] SignedInGamerTest.AwardingTheSameAchievementTwiceDoesNotDuplicate (0 ms)
+[ RUN      ] SignedInGamerTest.AchievementsAreIsolatedPerGamertag
+[       OK ] SignedInGamerTest.AchievementsAreIsolatedPerGamertag (0 ms)
+[ RUN      ] SignedInGamerTest.AnOfflineCatalogListsEveryDefinedAchievementWithItsEarnedState
+[INFO][APPLICATION] [TitleContainer] OpenStream requested: GamerServices/Achievements.json
+[INFO][APPLICATION] [TitleContainer] Resolved path: /rv/data/development/github.com/libcna/cnawork/modules/gamer-services/tests/fixtures/offline-title/GamerServices/Achievements.json
+[INFO][APPLICATION] [TitleContainer] OpenStream requested: GamerServices/first-steps.png
+[INFO][APPLICATION] [TitleContainer] Resolved path: /rv/data/development/github.com/libcna/cnawork/modules/gamer-services/tests/fixtures/offline-title/GamerServices/first-steps.png
+[       OK ] SignedInGamerTest.AnOfflineCatalogListsEveryDefinedAchievementWithItsEarnedState (0 ms)
+[ RUN      ] SignedInGamerTest.AMalformedOfflineCatalogIsRefusedNamingTheFile
+[INFO][APPLICATION] [TitleContainer] OpenStream requested: GamerServices/Achievements.json
+[INFO][APPLICATION] [TitleContainer] Resolved path: /rv/data/development/github.com/libcna/cnawork/modules/gamer-services/tests/fixtures/offline-title-invalid/GamerServices/Achievements.json
+[       OK ] SignedInGamerTest.AMalformedOfflineCatalogIsRefusedNamingTheFile (0 ms)
+[ RUN      ] SignedInGamerTest.AnOfflineProfileWithoutACatalogCountsEarnedAchievements
+[INFO][APPLICATION] [TitleContainer] OpenStream requested: GamerServices/Achievements.json
+[INFO][APPLICATION] [TitleContainer] Resolved path: /rv/data/development/github.com/libcna/cnawork/modules/gamer-services/tests/fixtures/offline-title-absent/GamerServices/Achievements.json
+[       OK ] SignedInGamerTest.AnOfflineProfileWithoutACatalogCountsEarnedAchievements (0 ms)
+[ RUN      ] SignedInGamerTest.GetAchievementsHandlesMissingOrCorruptStoreFileGracefully
+[INFO][APPLICATION] [TitleContainer] OpenStream requested: GamerServices/Achievements.json
+[INFO][APPLICATION] [TitleContainer] Resolved path: /rv/data/development/github.com/libcna/cnawork/cmake-build-debug/GamerServices/Achievements.json
+[       OK ] SignedInGamerTest.GetAchievementsHandlesMissingOrCorruptStoreFileGracefully (0 ms)
+[ RUN      ] SignedInGamerTest.BeginGetAchievementsTwiceThrows
+[       OK ] SignedInGamerTest.BeginGetAchievementsTwiceThrows (0 ms)
+[ RUN      ] SignedInGamerTest.BeginGetAchievementsInvokesCallbackExactlyOnceWithCorrectIdentity
+[       OK ] SignedInGamerTest.BeginGetAchievementsInvokesCallbackExactlyOnceWithCorrectIdentity (0 ms)
+[ RUN      ] SignedInGamerTest.BeginGetAchievementsCallbackCanReentrantlyCallEndGetAchievements
+[       OK ] SignedInGamerTest.BeginGetAchievementsCallbackCanReentrantlyCallEndGetAchievements (0 ms)
+[ RUN      ] SignedInGamerTest.SignedInEventFires
+[       OK ] SignedInGamerTest.SignedInEventFires (0 ms)
+[ RUN      ] SignedInGamerTest.SignedOutEventFires
+[       OK ] SignedInGamerTest.SignedOutEventFires (0 ms)
+[ RUN      ] SignedInGamerTest.FailedOfflineAwardDoesNotCompleteSuccessfullyAndCanBeRetried
+[INFO][APPLICATION] [TitleContainer] OpenStream requested: GamerServices/Achievements.json
+[INFO][APPLICATION] [TitleContainer] Resolved path: /rv/data/development/github.com/libcna/cnawork/cmake-build-debug/GamerServices/Achievements.json
+[       OK ] SignedInGamerTest.FailedOfflineAwardDoesNotCompleteSuccessfullyAndCanBeRetried (0 ms)
+[----------] 28 tests from SignedInGamerTest (7 ms total)
+
+[----------] 5 tests from GamerServicesDispatcherTest
+[ RUN      ] GamerServicesDispatcherTest.IsInitializedDefaultsFalse
+[       OK ] GamerServicesDispatcherTest.IsInitializedDefaultsFalse (0 ms)
+[ RUN      ] GamerServicesDispatcherTest.WindowHandleGetSet
+[       OK ] GamerServicesDispatcherTest.WindowHandleGetSet (0 ms)
+[ RUN      ] GamerServicesDispatcherTest.InstallingTitleUpdateNeverFiresAutomatically
+[       OK ] GamerServicesDispatcherTest.InstallingTitleUpdateNeverFiresAutomatically (0 ms)
+[ RUN      ] GamerServicesDispatcherTest.UpdateDoesNotThrow
+[       OK ] GamerServicesDispatcherTest.UpdateDoesNotThrow (0 ms)
+[ RUN      ] GamerServicesDispatcherTest.UpdateAsyncReturnsIsInitialized
+[       OK ] GamerServicesDispatcherTest.UpdateAsyncReturnsIsInitialized (0 ms)
+[----------] 5 tests from GamerServicesDispatcherTest (0 ms total)
+
+[----------] 52 tests from GuideTest
+[ RUN      ] GuideTest.SimulateTrialModeGetSet
+[       OK ] GuideTest.SimulateTrialModeGetSet (0 ms)
+[ RUN      ] GuideTest.IsVisibleFalseWithNothingPending
+[       OK ] GuideTest.IsVisibleFalseWithNothingPending (0 ms)
+[ RUN      ] GuideTest.NotificationPositionDefaultAndSet
+[       OK ] GuideTest.NotificationPositionDefaultAndSet (0 ms)
+[ RUN      ] GuideTest.IsScreenSaverEnabledGetSet
+[       OK ] GuideTest.IsScreenSaverEnabledGetSet (0 ms)
+[ RUN      ] GuideTest.BeginShowKeyboardInputDoesNotCompleteSynchronously
+[       OK ] GuideTest.BeginShowKeyboardInputDoesNotCompleteSynchronously (71 ms)
+[ RUN      ] GuideTest.TypedTextIsReturnedExactlyAfterEnter
+[       OK ] GuideTest.TypedTextIsReturnedExactlyAfterEnter (0 ms)
+[ RUN      ] GuideTest.PasswordModeOverloadCompletesTheSameWayAsNonPasswordOverload
+[       OK ] GuideTest.PasswordModeOverloadCompletesTheSameWayAsNonPasswordOverload (0 ms)
+[ RUN      ] GuideTest.DefaultTextPreSeedsAndIsReturnedIfEnterPressedImmediately
+[       OK ] GuideTest.DefaultTextPreSeedsAndIsReturnedIfEnterPressedImmediately (0 ms)
+[ RUN      ] GuideTest.DefaultTextIsEditableBeforeConfirming
+[       OK ] GuideTest.DefaultTextIsEditableBeforeConfirming (0 ms)
+[ RUN      ] GuideTest.SurrogatePairEmojiRoundTripsCorrectly
+[       OK ] GuideTest.SurrogatePairEmojiRoundTripsCorrectly (0 ms)
+[ RUN      ] GuideTest.BackspaceAfterEmojiRemovesTheWholeSurrogatePair
+[       OK ] GuideTest.BackspaceAfterEmojiRemovesTheWholeSurrogatePair (0 ms)
+[ RUN      ] GuideTest.BackspaceRemovesLastTypedCharacter
+[       OK ] GuideTest.BackspaceRemovesLastTypedCharacter (0 ms)
+[ RUN      ] GuideTest.EndShowKeyboardInputThrowsIfCalledTooEarly
+[       OK ] GuideTest.EndShowKeyboardInputThrowsIfCalledTooEarly (0 ms)
+[ RUN      ] GuideTest.EndShowKeyboardInputThrowsForMismatchedResult
+[       OK ] GuideTest.EndShowKeyboardInputThrowsForMismatchedResult (0 ms)
+[ RUN      ] GuideTest.BeginShowKeyboardInputThrowsWhileAnotherIsPending
+[       OK ] GuideTest.BeginShowKeyboardInputThrowsWhileAnotherIsPending (0 ms)
+[ RUN      ] GuideTest.BeginShowKeyboardInputValidatesArgumentsLikeTheReference
+[       OK ] GuideTest.BeginShowKeyboardInputValidatesArgumentsLikeTheReference (0 ms)
+[ RUN      ] GuideTest.BeginShowKeyboardInputInvokesCallbackExactlyOnceOnEnterWithCorrectIdentity
+[       OK ] GuideTest.BeginShowKeyboardInputInvokesCallbackExactlyOnceOnEnterWithCorrectIdentity (0 ms)
+[ RUN      ] GuideTest.TitleAndDescriptionAreStoredForRendering
+[       OK ] GuideTest.TitleAndDescriptionAreStoredForRendering (0 ms)
+[ RUN      ] GuideTest.GetPendingKeyboardInputTitleThrowsWhenNothingPending
+[       OK ] GuideTest.GetPendingKeyboardInputTitleThrowsWhenNothingPending (0 ms)
+[ RUN      ] GuideTest.HasPendingKeyboardInputEXTReflectsRealState
+[       OK ] GuideTest.HasPendingKeyboardInputEXTReflectsRealState (0 ms)
+[ RUN      ] GuideTest.AVisibleKeyboardPromptWithholdsTouchInputFromTheGame
+[       OK ] GuideTest.AVisibleKeyboardPromptWithholdsTouchInputFromTheGame (0 ms)
+[ RUN      ] GuideTest.IsVisibleReflectsPendingKeyboardInput
+[       OK ] GuideTest.IsVisibleReflectsPendingKeyboardInput (0 ms)
+[ RUN      ] GuideTest.WasKeyboardInputCanceledEXTFalseAfterNormalConfirm
+[       OK ] GuideTest.WasKeyboardInputCanceledEXTFalseAfterNormalConfirm (0 ms)
+[ RUN      ] GuideTest.SimulateKeyboardInputCancelEXTCancelsAndClearsBuffer
+[       OK ] GuideTest.SimulateKeyboardInputCancelEXTCancelsAndClearsBuffer (0 ms)
+[ RUN      ] GuideTest.SimulateKeyboardInputCancelEXTThrowsWhenNothingPending
+[       OK ] GuideTest.SimulateKeyboardInputCancelEXTThrowsWhenNothingPending (0 ms)
+[ RUN      ] GuideTest.WasKeyboardInputCanceledEXTThrowsForMismatchedResult
+[       OK ] GuideTest.WasKeyboardInputCanceledEXTThrowsForMismatchedResult (0 ms)
+[ RUN      ] GuideTest.RenderPendingKeyboardInputDoesNotAutoCompleteAndSupportsPasswordMasking
+[INFO][RENDER] CNA: graphics renderer: HEADLESS
+[       OK ] GuideTest.RenderPendingKeyboardInputDoesNotAutoCompleteAndSupportsPasswordMasking (1009 ms)
+[ RUN      ] GuideTest.RenderPendingKeyboardInputDisplaysRealTextWhenPasswordModeIsOff
+[       OK ] GuideTest.RenderPendingKeyboardInputDisplaysRealTextWhenPasswordModeIsOff (0 ms)
+[ RUN      ] GuideTest.RenderPendingKeyboardInputIsNoOpWhenNothingPending
+[INFO][RENDER] CNA: graphics renderer: HEADLESS
+[       OK ] GuideTest.RenderPendingKeyboardInputIsNoOpWhenNothingPending (0 ms)
+[ RUN      ] GuideTest.AVisibleMessageBoxWithholdsTouchInputFromTheGame
+[       OK ] GuideTest.AVisibleMessageBoxWithholdsTouchInputFromTheGame (0 ms)
+[ RUN      ] GuideTest.ARaisedOverlayDiscardsGesturesAlreadyQueued
+[       OK ] GuideTest.ARaisedOverlayDiscardsGesturesAlreadyQueued (0 ms)
+[ RUN      ] GuideTest.HasPendingMessageBoxDefaultsFalse
+[       OK ] GuideTest.HasPendingMessageBoxDefaultsFalse (0 ms)
+[ RUN      ] GuideTest.BeginShowMessageBoxDoesNotThrowAndReturnsValidResult
+[       OK ] GuideTest.BeginShowMessageBoxDoesNotThrowAndReturnsValidResult (0 ms)
+[ RUN      ] GuideTest.BeginShowMessageBoxPlayerOverloadDoesNotThrowAndReturnsValidResult
+[       OK ] GuideTest.BeginShowMessageBoxPlayerOverloadDoesNotThrowAndReturnsValidResult (0 ms)
+[ RUN      ] GuideTest.BeginShowMessageBoxRejectsEmptyButtons
+[       OK ] GuideTest.BeginShowMessageBoxRejectsEmptyButtons (0 ms)
+[ RUN      ] GuideTest.BeginShowMessageBoxThrowsWhileAnotherIsPending
+[       OK ] GuideTest.BeginShowMessageBoxThrowsWhileAnotherIsPending (0 ms)
+[ RUN      ] GuideTest.BeginShowMessageBoxValidatesArgumentsLikeTheReference
+[       OK ] GuideTest.BeginShowMessageBoxValidatesArgumentsLikeTheReference (0 ms)
+[ RUN      ] GuideTest.EndFollowsTheReferenceChecks
+[       OK ] GuideTest.EndFollowsTheReferenceChecks (0 ms)
+[ RUN      ] GuideTest.EndWaitsForTheAnswerWhileTheGamesModalFramesRun
+[       OK ] GuideTest.EndWaitsForTheAnswerWhileTheGamesModalFramesRun (0 ms)
+[ RUN      ] GuideTest.EndWithoutARunningGameRefusesAndCanBeCalledAgainOnceAnswered
+[       OK ] GuideTest.EndWithoutARunningGameRefusesAndCanBeCalledAgainOnceAnswered (0 ms)
+[ RUN      ] GuideTest.EndShowMessageBoxThrowsIfCalledTooEarly
+[       OK ] GuideTest.EndShowMessageBoxThrowsIfCalledTooEarly (0 ms)
+[ RUN      ] GuideTest.EndShowMessageBoxThrowsForMismatchedResult
+[       OK ] GuideTest.EndShowMessageBoxThrowsForMismatchedResult (0 ms)
+[ RUN      ] GuideTest.RenderSimulateClickEndCycleReturnsCorrectButtonIndex
+[INFO][RENDER] CNA: graphics renderer: HEADLESS
+[       OK ] GuideTest.RenderSimulateClickEndCycleReturnsCorrectButtonIndex (954 ms)
+[ RUN      ] GuideTest.TheClickThatAnswersAMessageBoxDoesNotAlsoReachTheGame
+[INFO][RENDER] CNA: graphics renderer: HEADLESS
+[       OK ] GuideTest.TheClickThatAnswersAMessageBoxDoesNotAlsoReachTheGame (4457 ms)
+[ RUN      ] GuideTest.RenderPendingMessageBoxIsNoOpWhenNothingPending
+[INFO][RENDER] CNA: graphics renderer: HEADLESS
+[       OK ] GuideTest.RenderPendingMessageBoxIsNoOpWhenNothingPending (0 ms)
+[ RUN      ] GuideTest.MessageBoxesAnswerToTheKeyboard
+[INFO][RENDER] CNA: graphics renderer: HEADLESS
+[       OK ] GuideTest.MessageBoxesAnswerToTheKeyboard (749 ms)
+[ RUN      ] GuideTest.FocusButtonRoundTripsToPendingMessageBox
+[       OK ] GuideTest.FocusButtonRoundTripsToPendingMessageBox (0 ms)
+[ RUN      ] GuideTest.SimulateMessageBoxClickThrowsWhenNothingPending
+[       OK ] GuideTest.SimulateMessageBoxClickThrowsWhenNothingPending (0 ms)
+[ RUN      ] GuideTest.SimulateMessageBoxClickThrowsForOutOfRangeIndex
+[       OK ] GuideTest.SimulateMessageBoxClickThrowsForOutOfRangeIndex (0 ms)
+[ RUN      ] GuideTest.CallbackCanReentrantlyBeginANewMessageBox
+[       OK ] GuideTest.CallbackCanReentrantlyBeginANewMessageBox (0 ms)
+[ RUN      ] GuideTest.DelayNotificationsDoesNotThrow
+[       OK ] GuideTest.DelayNotificationsDoesNotThrow (0 ms)
+[ RUN      ] GuideTest.ShowMethodsValidateThenRequireTheService
+[       OK ] GuideTest.ShowMethodsValidateThenRequireTheService (0 ms)
+[----------] 52 tests from GuideTest (7243 ms total)
+
+[----------] 9 tests from GuideAvatarEditorTest
+[ RUN      ] GuideAvatarEditorTest.OpensFromHomeOnTheCategories
+[       OK ] GuideAvatarEditorTest.OpensFromHomeOnTheCategories (10 ms)
+[ RUN      ] GuideAvatarEditorTest.CategoriesWrapAndChoicesAreTriedOnBeforeTheyAreKept
+[       OK ] GuideAvatarEditorTest.CategoriesWrapAndChoicesAreTriedOnBeforeTheyAreKept (10 ms)
+[ RUN      ] GuideAvatarEditorTest.SlidersMoveWithLeftAndRight
+[       OK ] GuideAvatarEditorTest.SlidersMoveWithLeftAndRight (10 ms)
+[ RUN      ] GuideAvatarEditorTest.SavingStoresTheAvatarOnTheServiceAndLeaves
+[       OK ] GuideAvatarEditorTest.SavingStoresTheAvatarOnTheServiceAndLeaves (11 ms)
+[ RUN      ] GuideAvatarEditorTest.DiscardingAndKeepingEditingLeaveTheStoredAvatarAlone
+[       OK ] GuideAvatarEditorTest.DiscardingAndKeepingEditingLeaveTheStoredAvatarAlone (10 ms)
+[ RUN      ] GuideAvatarEditorTest.AFailedSaveSaysWhyAndKeepsTheEdits
+[       OK ] GuideAvatarEditorTest.AFailedSaveSaysWhyAndKeepsTheEdits (12 ms)
+[ RUN      ] GuideAvatarEditorTest.AnAvatarChangedElsewhereWhileOpenIsShown
+[       OK ] GuideAvatarEditorTest.AnAvatarChangedElsewhereWhileOpenIsShown (12 ms)
+[ RUN      ] GuideAvatarEditorTest.ALocalProfileSavesToThisComputer
+[       OK ] GuideAvatarEditorTest.ALocalProfileSavesToThisComputer (14 ms)
+[ RUN      ] GuideAvatarEditorTest.WithoutAProfileOrACatalogItExplains
+[       OK ] GuideAvatarEditorTest.WithoutAProfileOrACatalogItExplains (13 ms)
+[----------] 9 tests from GuideAvatarEditorTest (107 ms total)
+
+[----------] 3 tests from GuideInputTest
+[ RUN      ] GuideInputTest.AKeyboardDrivesTheGuideFrame
+[INFO][RENDER] CNA: graphics renderer: HEADLESS
+[       OK ] GuideInputTest.AKeyboardDrivesTheGuideFrame (812 ms)
+[ RUN      ] GuideInputTest.AControllerDrivesTheGuideFrame
+[INFO][RENDER] CNA: graphics renderer: HEADLESS
+[       OK ] GuideInputTest.AControllerDrivesTheGuideFrame (824 ms)
+[ RUN      ] GuideInputTest.TheSignInPickerTurnsTextInputOnWhileItIsUp
+[INFO][RENDER] CNA: graphics renderer: HEADLESS
+[       OK ] GuideInputTest.TheSignInPickerTurnsTextInputOnWhileItIsUp (736 ms)
+[----------] 3 tests from GuideInputTest (2373 ms total)
+
+[----------] 3 tests from GuideLeaderboardTest
+[ RUN      ] GuideLeaderboardTest.TheRailReachesTheTitlesBoards
+[       OK ] GuideLeaderboardTest.TheRailReachesTheTitlesBoards (3 ms)
+[ RUN      ] GuideLeaderboardTest.ABoardShowsTheTopPlayersThoseAroundYouAndYourFriends
+[       OK ] GuideLeaderboardTest.ABoardShowsTheTopPlayersThoseAroundYouAndYourFriends (9 ms)
+[ RUN      ] GuideLeaderboardTest.AnAchievementOpensWithItsPictureAndWhenItWasEarned
+[       OK ] GuideLeaderboardTest.AnAchievementOpensWithItsPictureAndWhenItWasEarned (13 ms)
+[----------] 3 tests from GuideLeaderboardTest (26 ms total)
+
+[----------] 3 tests from GuideNotificationTest
+[ RUN      ] GuideNotificationTest.EveryPositionSitsInsideTheTitleSafeArea
+[       OK ] GuideNotificationTest.EveryPositionSitsInsideTheTitleSafeArea (0 ms)
+[ RUN      ] GuideNotificationTest.ToastsShowOneAtATimeForTheirDuration
+[       OK ] GuideNotificationTest.ToastsShowOneAtATimeForTheirDuration (0 ms)
+[ RUN      ] GuideNotificationTest.SigningInAndUnlockingAnAchievementNotify
+[       OK ] GuideNotificationTest.SigningInAndUnlockingAnAchievementNotify (0 ms)
+[----------] 3 tests from GuideNotificationTest (0 ms total)
+
+[----------] 5 tests from GuidePartyTest
+[ RUN      ] GuidePartyTest.PartySizeFollowsThePartyService
+[       OK ] GuidePartyTest.PartySizeFollowsThePartyService (4 ms)
+[ RUN      ] GuidePartyTest.ThePartyPageInvitesFriendsAndLeaves
+[       OK ] GuidePartyTest.ThePartyPageInvitesFriendsAndLeaves (9 ms)
+[ RUN      ] GuidePartyTest.APartyInvitationIsAnsweredOnThePartyPage
+[       OK ] GuidePartyTest.APartyInvitationIsAnsweredOnThePartyPage (7 ms)
+[ RUN      ] GuidePartyTest.PartySessionsListJoinableMembersAndWithoutAPartyShowFriends
+[       OK ] GuidePartyTest.PartySessionsListJoinableMembersAndWithoutAPartyShowFriends (6 ms)
+[ RUN      ] GuidePartyTest.AJoinableFriendsCardOffersJoinGameAndAPartyInvitation
+[       OK ] GuidePartyTest.AJoinableFriendsCardOffersJoinGameAndAPartyInvitation (5 ms)
+[----------] 5 tests from GuidePartyTest (34 ms total)
+
+[----------] 4 tests from GuidePrivilegeTest
+[ RUN      ] GuidePrivilegeTest.TheAccountsPolicyBecomesItsGamerPrivileges
+[       OK ] GuidePrivilegeTest.TheAccountsPolicyBecomesItsGamerPrivileges (3 ms)
+[ RUN      ] GuidePrivilegeTest.BlockedPrivilegesRefuseTheGuideCallsXnaRefuses
+[       OK ] GuidePrivilegeTest.BlockedPrivilegesRefuseTheGuideCallsXnaRefuses (3 ms)
+[ RUN      ] GuidePrivilegeTest.TheBlockListReadAtSignInMutesVoice
+[       OK ] GuidePrivilegeTest.TheBlockListReadAtSignInMutesVoice (2 ms)
+[ RUN      ] GuidePrivilegeTest.AFriendHasVoiceWhileOnlineWithAClientThatCanTalk
+[       OK ] GuidePrivilegeTest.AFriendHasVoiceWhileOnlineWithAClientThatCanTalk (2 ms)
+[----------] 4 tests from GuidePrivilegeTest (11 ms total)
+
+[----------] 6 tests from GuideSocialPaneTest
+[ RUN      ] GuideSocialPaneTest.ComposeSendsAndTheRecipientReadsRepliesAndDeletes
+[       OK ] GuideSocialPaneTest.ComposeSendsAndTheRecipientReadsRepliesAndDeletes (0 ms)
+[ RUN      ] GuideSocialPaneTest.ComposeWithoutRecipientsAsksForAGamertag
+[       OK ] GuideSocialPaneTest.ComposeWithoutRecipientsAsksForAGamertag (0 ms)
+[ RUN      ] GuideSocialPaneTest.PlayerReviewRecordsPreferAvoidAndClear
+[       OK ] GuideSocialPaneTest.PlayerReviewRecordsPreferAvoidAndClear (0 ms)
+[ RUN      ] GuideSocialPaneTest.UnavailableServicesExplainThemselvesInsteadOfDoingNothing
+[       OK ] GuideSocialPaneTest.UnavailableServicesExplainThemselvesInsteadOfDoingNothing (0 ms)
+[ RUN      ] GuideSocialPaneTest.PlayersAndAchievementsPanesListServiceState
+[       OK ] GuideSocialPaneTest.PlayersAndAchievementsPanesListServiceState (0 ms)
+[ RUN      ] GuideSocialPaneTest.DelayNotificationsKeepsAnActiveDelayAndCapsIt
+[       OK ] GuideSocialPaneTest.DelayNotificationsKeepsAnActiveDelayAndCapsIt (0 ms)
+[----------] 6 tests from GuideSocialPaneTest (1 ms total)
+
+[----------] 12 tests from GuideUiTest
+[ RUN      ] GuideUiTest.FriendsListRequestsFirstThenWhoIsOnlineWithTheirPresence
+[       OK ] GuideUiTest.FriendsListRequestsFirstThenWhoIsOnlineWithTheirPresence (3 ms)
+[ RUN      ] GuideUiTest.TheFocusMovesAndStopsAtTheEndsAndAcceptOpensTheGamerCard
+[       OK ] GuideUiTest.TheFocusMovesAndStopsAtTheEndsAndAcceptOpensTheGamerCard (4 ms)
+[ RUN      ] GuideUiTest.TheRailSwitchesCategoriesAndWrapsAround
+[       OK ] GuideUiTest.TheRailSwitchesCategoriesAndWrapsAround (2 ms)
+[ RUN      ] GuideUiTest.TheGamerCardAcceptsAFriendRequestAndReflectsIt
+[       OK ] GuideUiTest.TheGamerCardAcceptsAFriendRequestAndReflectsIt (5 ms)
+[ RUN      ] GuideUiTest.TheGamerCardMutesAndUnmutesVoice
+[       OK ] GuideUiTest.TheGamerCardMutesAndUnmutesVoice (3 ms)
+[ RUN      ] GuideUiTest.TheGamerCardBlocksAndUnblocksAMember
+[       OK ] GuideUiTest.TheGamerCardBlocksAndUnblocksAMember (6 ms)
+[ RUN      ] GuideUiTest.YourOwnCardHasNoActions
+[       OK ] GuideUiTest.YourOwnCardHasNoActions (3 ms)
+[ RUN      ] GuideUiTest.AnUnreachableServiceShowsAnErrorInsteadOfAnEmptyList
+[       OK ] GuideUiTest.AnUnreachableServiceShowsAnErrorInsteadOfAnEmptyList (2 ms)
+[ RUN      ] GuideUiTest.FindGamerOpensTheirCardFromTheirGamertag
+[       OK ] GuideUiTest.FindGamerOpensTheirCardFromTheirGamertag (3 ms)
+[ RUN      ] GuideUiTest.TheRailShowsWhoIsSignedInAndTheirUnreadMessages
+[       OK ] GuideUiTest.TheRailShowsWhoIsSignedInAndTheirUnreadMessages (4 ms)
+[ RUN      ] GuideUiTest.AnInvitationClosedWithoutAnAnswerStaysPendingAndIsAnsweredOnce
+[       OK ] GuideUiTest.AnInvitationClosedWithoutAnAnswerStaysPendingAndIsAnsweredOnce (2 ms)
+[ RUN      ] GuideUiTest.SystemSoundsPlayOrStaySilentWithoutFailing
+[       OK ] GuideUiTest.SystemSoundsPlayOrStaySilentWithoutFailing (2 ms)
+[----------] 12 tests from GuideUiTest (46 ms total)
+
+[----------] 7 tests from LocalProfileStoreTest
+[ RUN      ] LocalProfileStoreTest.NamesFollowGamertagRules
+[       OK ] LocalProfileStoreTest.NamesFollowGamertagRules (0 ms)
+[ RUN      ] LocalProfileStoreTest.OpeningCreatesAStoredProfileAndReusesItIgnoringCase
+[       OK ] LocalProfileStoreTest.OpeningCreatesAStoredProfileAndReusesItIgnoringCase (2 ms)
+[ RUN      ] LocalProfileStoreTest.AStoreThatCannotBeReadIsNeverOverwritten
+[       OK ] LocalProfileStoreTest.AStoreThatCannotBeReadIsNeverOverwritten (0 ms)
+[ RUN      ] LocalProfileStoreTest.MalformedEntriesAreSkippedAndALostAvatarIsReplaced
+[       OK ] LocalProfileStoreTest.MalformedEntriesAreSkippedAndALostAvatarIsReplaced (10 ms)
+[ RUN      ] LocalProfileStoreTest.AutomaticSignInNamesComeFromTheEnvironment
+[       OK ] LocalProfileStoreTest.AutomaticSignInNamesComeFromTheEnvironment (2 ms)
+[ RUN      ] LocalProfileStoreTest.AutomaticSignInOtherwiseUsesTheStoredFlags
+[       OK ] LocalProfileStoreTest.AutomaticSignInOtherwiseUsesTheStoredFlags (0 ms)
+[ RUN      ] LocalProfileStoreTest.ProcessesCreatingProfilesAtOnceKeepEveryProfile
+[       OK ] LocalProfileStoreTest.ProcessesCreatingProfilesAtOnceKeepEveryProfile (19 ms)
+[----------] 7 tests from LocalProfileStoreTest (36 ms total)
+
+[----------] 8 tests from LocalSignInTest
+[ RUN      ] LocalSignInTest.WithoutAServiceTheGuideCreatesAndSignsInALocalProfile
+[       OK ] LocalSignInTest.WithoutAServiceTheGuideCreatesAndSignsInALocalProfile (5 ms)
+[ RUN      ] LocalSignInTest.StoredProfilesAreOfferedAndTheFirstIsSuggested
+[       OK ] LocalSignInTest.StoredProfilesAreOfferedAndTheFirstIsSuggested (16 ms)
+[ RUN      ] LocalSignInTest.AnInvalidOrDuplicateNameEndsSignInWithAMessage
+[       OK ] LocalSignInTest.AnInvalidOrDuplicateNameEndsSignInWithAMessage (5 ms)
+[ RUN      ] LocalSignInTest.CancelingStopsWithoutSigningIn
+[       OK ] LocalSignInTest.CancelingStopsWithoutSigningIn (0 ms)
+[ RUN      ] LocalSignInTest.AnOnlineOnlySignInNeedsAService
+[       OK ] LocalSignInTest.AnOnlineOnlySignInNeedsAService (0 ms)
+[ RUN      ] LocalSignInTest.ALocalProfilesAvatarIsItsStoredDescription
+[       OK ] LocalSignInTest.ALocalProfilesAvatarIsItsStoredDescription (6 ms)
+[ RUN      ] LocalSignInTest.SavingAnotherAvatarIntoTheProfileRaisesChanged
+[       OK ] LocalSignInTest.SavingAnotherAvatarIntoTheProfileRaisesChanged (15 ms)
+[ RUN      ] LocalSignInTest.ALocalProfileCarriesItsStoredGameDefaults
+[       OK ] LocalSignInTest.ALocalProfileCarriesItsStoredGameDefaults (8 ms)
+[----------] 8 tests from LocalSignInTest (59 ms total)
+
+[----------] 1 test from LocalAutoSignInTest
+[ RUN      ] LocalAutoSignInTest.ConfiguredProfilesAppearAtTheFirstUpdate
+Running main() from ../../../../vendor/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = LocalAutoSignInTest.ConfiguredProfilesAppearAtTheFirstUpdate
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from LocalAutoSignInTest
+[ RUN      ] LocalAutoSignInTest.ConfiguredProfilesAppearAtTheFirstUpdate
+[       OK ] LocalAutoSignInTest.ConfiguredProfilesAppearAtTheFirstUpdate (3 ms)
+[----------] 1 test from LocalAutoSignInTest (3 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (3 ms total)
+[  PASSED  ] 1 test.
+[       OK ] LocalAutoSignInTest.ConfiguredProfilesAppearAtTheFirstUpdate (36 ms)
+[----------] 1 test from LocalAutoSignInTest (36 ms total)
+
+[----------] 8 tests from ServiceReadLifetimeTest
+[ RUN      ] ServiceReadLifetimeTest.ReaderPagingRetainsOriginalContextAndDisposeReleasesIt
+[       OK ] ServiceReadLifetimeTest.ReaderPagingRetainsOriginalContextAndDisposeReleasesIt (0 ms)
+[ RUN      ] ServiceReadLifetimeTest.DisposedReaderAndAbandonedPageCannotUseReleasedContext
+[       OK ] ServiceReadLifetimeTest.DisposedReaderAndAbandonedPageCannotUseReleasedContext (0 ms)
+[ RUN      ] ServiceReadLifetimeTest.DisposedEmptyServiceReaderKeepsItsDisposalContractAfterReleasingQuery
+[       OK ] ServiceReadLifetimeTest.DisposedEmptyServiceReaderKeepsItsDisposalContractAfterReleasingQuery (0 ms)
+[ RUN      ] ServiceReadLifetimeTest.AbandonedQueuedPresenceDoesNotRetainItsExecutor
+[       OK ] ServiceReadLifetimeTest.AbandonedQueuedPresenceDoesNotRetainItsExecutor (0 ms)
+[ RUN      ] ServiceReadLifetimeTest.PresenceChangedWhilePendingPublishesTheNewRevisionOnFollowingUpdate
+[       OK ] ServiceReadLifetimeTest.PresenceChangedWhilePendingPublishesTheNewRevisionOnFollowingUpdate (0 ms)
+[ RUN      ] ServiceReadLifetimeTest.SupersededPumpDrainsEveryCompletionBeforeRethrowingAndDiscardsIdentity
+[       OK ] ServiceReadLifetimeTest.SupersededPumpDrainsEveryCompletionBeforeRethrowingAndDiscardsIdentity (0 ms)
+[ RUN      ] ServiceReadLifetimeTest.ActiveBackendIsNotDrainedBySupersededPump
+[       OK ] ServiceReadLifetimeTest.ActiveBackendIsNotDrainedBySupersededPump (0 ms)
+[ RUN      ] ServiceReadLifetimeTest.EarnedDateTimeIsTheServiceTimeInLocalTime
+[       OK ] ServiceReadLifetimeTest.EarnedDateTimeIsTheServiceTimeInLocalTime (0 ms)
+[----------] 8 tests from ServiceReadLifetimeTest (1 ms total)
+
+[----------] 21 tests from AvatarServiceTest
+[ RUN      ] AvatarServiceTest.ASignedInGamersAvatarComesFromTheService
+[       OK ] AvatarServiceTest.ASignedInGamersAvatarComesFromTheService (0 ms)
+[ RUN      ] AvatarServiceTest.AGamerWithoutAnAvatarGetsAnInvalidDescription
+[       OK ] AvatarServiceTest.AGamerWithoutAnAvatarGetsAnInvalidDescription (0 ms)
+[ RUN      ] AvatarServiceTest.AGamerLookedUpByGamertagHasTheirAvatar
+[       OK ] AvatarServiceTest.AGamerLookedUpByGamertagHasTheirAvatar (0 ms)
+[ RUN      ] AvatarServiceTest.TheServiceAvatarRendersThroughTheStandardApi
+[       OK ] AvatarServiceTest.TheServiceAvatarRendersThroughTheStandardApi (10 ms)
+[ RUN      ] AvatarServiceTest.AWarmInstallationDrawsAServiceAvatarWithTheFileEndpointOff
+[       OK ] AvatarServiceTest.AWarmInstallationDrawsAServiceAvatarWithTheFileEndpointOff (17 ms)
+[ RUN      ] AvatarServiceTest.AMissingCatalogIsInstalledOnceAsOneValidatedPack
+[       OK ] AvatarServiceTest.AMissingCatalogIsInstalledOnceAsOneValidatedPack (147 ms)
+[ RUN      ] AvatarServiceTest.AnInterruptedInstallActivatesNothingAndARetryResumesIt
+[       OK ] AvatarServiceTest.AnInterruptedInstallActivatesNothingAndARetryResumesIt (156 ms)
+[ RUN      ] AvatarServiceTest.AMalformedManifestIsNeverActivated
+[       OK ] AvatarServiceTest.AMalformedManifestIsNeverActivated (37 ms)
+[ RUN      ] AvatarServiceTest.AFileWhoseBytesDoNotMatchTheManifestIsNeverActivated
+[       OK ] AvatarServiceTest.AFileWhoseBytesDoNotMatchTheManifestIsNeverActivated (45 ms)
+[ RUN      ] AvatarServiceTest.AnUnreadableModelIsNeverActivated
+[       OK ] AvatarServiceTest.AnUnreadableModelIsNeverActivated (119 ms)
+[ RUN      ] AvatarServiceTest.AModelOnAnotherSkeletonIsNeverActivated
+[       OK ] AvatarServiceTest.AModelOnAnotherSkeletonIsNeverActivated (123 ms)
+[ RUN      ] AvatarServiceTest.AnimationsWithoutEveryPresetAreNeverActivated
+[       OK ] AvatarServiceTest.AnimationsWithoutEveryPresetAreNeverActivated (131 ms)
+[ RUN      ] AvatarServiceTest.AnOversizedCatalogIsRefusedBeforeAnyDownload
+[       OK ] AvatarServiceTest.AnOversizedCatalogIsRefusedBeforeAnyDownload (42 ms)
+[ RUN      ] AvatarServiceTest.AClientThatDeclinesUpdatesDrawsTheDefaultAvatarAndReadsNoIds
+[       OK ] AvatarServiceTest.AClientThatDeclinesUpdatesDrawsTheDefaultAvatarAndReadsNoIds (214 ms)
+[ RUN      ] AvatarServiceTest.TwoClientsWithTheSameCatalogAndDescriptionBuildTheSameAvatar
+[       OK ] AvatarServiceTest.TwoClientsWithTheSameCatalogAndDescriptionBuildTheSameAvatar (404 ms)
+[ RUN      ] AvatarServiceTest.ConcurrentRequestsForOnePackInstallItOnce
+[       OK ] AvatarServiceTest.ConcurrentRequestsForOnePackInstallItOnce (162 ms)
+[ RUN      ] AvatarServiceTest.ARestartedClientResumesItsStagingAndClearsAbandonedStaging
+[       OK ] AvatarServiceTest.ARestartedClientResumesItsStagingAndClearsAbandonedStaging (178 ms)
+[ RUN      ] AvatarServiceTest.AnUnavailableUpdateDrawsTheDefaultAvatarAndIsNotAskedAgainAtOnce
+[       OK ] AvatarServiceTest.AnUnavailableUpdateDrawsTheDefaultAvatarAndIsNotAskedAgainAtOnce (26 ms)
+[ RUN      ] AvatarServiceTest.APackClaimingAnotherVersionIsNeverSubstituted
+[       OK ] AvatarServiceTest.APackClaimingAnotherVersionIsNeverSubstituted (33 ms)
+[ RUN      ] AvatarServiceTest.InstallingANewCatalogDoesNotChangeOlderDescriptions
+[       OK ] AvatarServiceTest.InstallingANewCatalogDoesNotChangeOlderDescriptions (320 ms)
+[ RUN      ] AvatarServiceTest.ADescriptionInAnUnknownFormatIsNotDrawnAsAnything
+[       OK ] AvatarServiceTest.ADescriptionInAnUnknownFormatIsNotDrawnAsAnything (0 ms)
+[----------] 21 tests from AvatarServiceTest (2176 ms total)
+
+[----------] 7 tests from AvatarChangedTest
+[ RUN      ] AvatarChangedTest.TheSameAvatarRaisesNothingAndTheSlotKeepsItsDescription
+[       OK ] AvatarChangedTest.TheSameAvatarRaisesNothingAndTheSlotKeepsItsDescription (164 ms)
+[ RUN      ] AvatarChangedTest.ANewServiceAvatarRaisesChangedOnceWithTheGamerOnTheDispatcherThread
+[       OK ] AvatarChangedTest.ANewServiceAvatarRaisesChangedOnceWithTheGamerOnTheDispatcherThread (81 ms)
+[ RUN      ] AvatarChangedTest.OtherBytesForTheSameStoredAvatarAreNotAChange
+[       OK ] AvatarChangedTest.OtherBytesForTheSameStoredAvatarAreNotAChange (121 ms)
+[ RUN      ] AvatarChangedTest.UnsubscribingThroughAnyCopyStopsTheHandler
+[       OK ] AvatarChangedTest.UnsubscribingThroughAnyCopyStopsTheHandler (120 ms)
+[ RUN      ] AvatarChangedTest.AnUnreachableServiceRaisesNothingUntilItAnswersAgain
+[       OK ] AvatarChangedTest.AnUnreachableServiceRaisesNothingUntilItAnswersAgain (120 ms)
+[ RUN      ] AvatarChangedTest.SigningOutDropsTheSlotWithoutAnEvent
+[       OK ] AvatarChangedTest.SigningOutDropsTheSlotWithoutAnEvent (121 ms)
+[ RUN      ] AvatarChangedTest.GamersWhoAreNotSignedInAreReadFreshAndNeverRaise
+[       OK ] AvatarChangedTest.GamersWhoAreNotSignedInAreReadFreshAndNeverRaise (81 ms)
+[----------] 7 tests from AvatarChangedTest (812 ms total)
+
+[----------] 1 test from AvatarCatalogProcessTest
+[ RUN      ] AvatarCatalogProcessTest.TwoProcessesInstallingOnePackActivateItOnce
+[       OK ] AvatarCatalogProcessTest.TwoProcessesInstallingOnePackActivateItOnce (255 ms)
+[----------] 1 test from AvatarCatalogProcessTest (255 ms total)
+
+[----------] 4 tests from ServiceBackendAuthorityTest
+[ RUN      ] ServiceBackendAuthorityTest.LaterDeploymentOverrideCannotRedirectAnExistingBackend
+[       OK ] ServiceBackendAuthorityTest.LaterDeploymentOverrideCannotRedirectAnExistingBackend (0 ms)
+[ RUN      ] ServiceBackendAuthorityTest.ReplacementAndReturnedCopyDoNotMutateOriginalTitleAuthority
+[       OK ] ServiceBackendAuthorityTest.ReplacementAndReturnedCopyDoNotMutateOriginalTitleAuthority (1 ms)
+[ RUN      ] ServiceBackendAuthorityTest.FakeAndUnconfiguredBackendsHaveNoImplicitNetworkAuthority
+[       OK ] ServiceBackendAuthorityTest.FakeAndUnconfiguredBackendsHaveNoImplicitNetworkAuthority (0 ms)
+[ RUN      ] ServiceBackendAuthorityTest.ExplicitLoopbackDevelopmentChoiceIsBoundToItsOrigin
+[       OK ] ServiceBackendAuthorityTest.ExplicitLoopbackDevelopmentChoiceIsBoundToItsOrigin (0 ms)
+[----------] 4 tests from ServiceBackendAuthorityTest (3 ms total)
+
+[----------] 7 tests from ServiceConfigurationTest
+[ RUN      ] ServiceConfigurationTest.AbsentEndpointIsValidOfflineConfiguration
+[       OK ] ServiceConfigurationTest.AbsentEndpointIsValidOfflineConfiguration (0 ms)
+[ RUN      ] ServiceConfigurationTest.RequiresStableTitleAndSecureEndpoint
+[       OK ] ServiceConfigurationTest.RequiresStableTitleAndSecureEndpoint (0 ms)
+[ RUN      ] ServiceConfigurationTest.InsecureModeIsExplicitAndNumericLoopbackOnly
+[       OK ] ServiceConfigurationTest.InsecureModeIsExplicitAndNumericLoopbackOnly (0 ms)
+[ RUN      ] ServiceConfigurationTest.RejectsCredentialUrlsAndUnexpectedPaths
+[       OK ] ServiceConfigurationTest.RejectsCredentialUrlsAndUnexpectedPaths (0 ms)
+[ RUN      ] ServiceConfigurationTest.ProgrammaticOverrideIsCompleteAndReversible
+[       OK ] ServiceConfigurationTest.ProgrammaticOverrideIsCompleteAndReversible (0 ms)
+[ RUN      ] ServiceConfigurationTest.AvatarCatalogUpdatesAreOnByDefaultAndCanBeTurnedOff
+[       OK ] ServiceConfigurationTest.AvatarCatalogUpdatesAreOnByDefaultAndCanBeTurnedOff (0 ms)
+[ RUN      ] ServiceConfigurationTest.TheGameVersionIsStatedWhenConfiguredAndMustBeWellFormed
+[       OK ] ServiceConfigurationTest.TheGameVersionIsStatedWhenConfiguredAndMustBeWellFormed (0 ms)
+[----------] 7 tests from ServiceConfigurationTest (0 ms total)
+
+[----------] 2 tests from ServiceProtocolTest
+[ RUN      ] ServiceProtocolTest.AllEightNullableSignedPropertySlotsValidate
+[       OK ] ServiceProtocolTest.AllEightNullableSignedPropertySlotsValidate (0 ms)
+[ RUN      ] ServiceProtocolTest.PropertySchemaRejectsWidthsOverflowBooleansAndFloats
+[       OK ] ServiceProtocolTest.PropertySchemaRejectsWidthsOverflowBooleansAndFloats (0 ms)
+[----------] 2 tests from ServiceProtocolTest (0 ms total)
+
+[----------] 6 tests from ServiceRequestRetryTest
+[ RUN      ] ServiceRequestRetryTest.ALostResponseIsAskedForOnceMoreUnderTheSameRequestId
+[       OK ] ServiceRequestRetryTest.ALostResponseIsAskedForOnceMoreUnderTheSameRequestId (11 ms)
+[ RUN      ] ServiceRequestRetryTest.OnlyOnceThenTheServiceIsUnavailable
+[       OK ] ServiceRequestRetryTest.OnlyOnceThenTheServiceIsUnavailable (11 ms)
+[ RUN      ] ServiceRequestRetryTest.AServiceThatKeepsNoOutcomesIsNotAskedAgain
+[       OK ] ServiceRequestRetryTest.AServiceThatKeepsNoOutcomesIsNotAskedAgain (11 ms)
+[ RUN      ] ServiceRequestRetryTest.ASignInWhoseResultIsASecretIsNotAskedAgain
+[       OK ] ServiceRequestRetryTest.ASignInWhoseResultIsASecretIsNotAskedAgain (20 ms)
+[ RUN      ] ServiceRequestRetryTest.SignInCarriesTheAccountsPrivilegesAndBlockList
+[       OK ] ServiceRequestRetryTest.SignInCarriesTheAccountsPrivilegesAndBlockList (10 ms)
+[ RUN      ] ServiceRequestRetryTest.TheHeartbeatSaysWhetherThisMachineCanTalk
+[       OK ] ServiceRequestRetryTest.TheHeartbeatSaysWhetherThisMachineCanTalk (1911 ms)
+[----------] 6 tests from ServiceRequestRetryTest (1978 ms total)
+
+[----------] 16 tests from ServiceSessionDirectoryTest
+[ RUN      ] ServiceSessionDirectoryTest.TypedClientSerializesLogicalValuesWithoutSupplyingCredentials
+[       OK ] ServiceSessionDirectoryTest.TypedClientSerializesLogicalValuesWithoutSupplyingCredentials (0 ms)
+[ RUN      ] ServiceSessionDirectoryTest.RejectsMalformedAndInconsistentRosterBeforeReturningAnyMember
+[       OK ] ServiceSessionDirectoryTest.RejectsMalformedAndInconsistentRosterBeforeReturningAnyMember (1 ms)
+[ RUN      ] ServiceSessionDirectoryTest.SearchValidatesCorrelationFiltersPagingAndDuplicateIds
+[       OK ] ServiceSessionDirectoryTest.SearchValidatesCorrelationFiltersPagingAndDuplicateIds (0 ms)
+[ RUN      ] ServiceSessionDirectoryTest.InvitedJoinUsesExplicitIdentifierAndChecksReturnedLocalGroup
+[       OK ] ServiceSessionDirectoryTest.InvitedJoinUsesExplicitIdentifierAndChecksReturnedLocalGroup (0 ms)
+[ RUN      ] ServiceSessionDirectoryTest.InvitationsValidateAuthorityStateTimestampsAndBoundedInbox
+[       OK ] ServiceSessionDirectoryTest.InvitationsValidateAuthorityStateTimestampsAndBoundedInbox (0 ms)
+[ RUN      ] ServiceSessionDirectoryTest.HostUpdateAndLeaveValidateExpectedRevisionAndShape
+[       OK ] ServiceSessionDirectoryTest.HostUpdateAndLeaveValidateExpectedRevisionAndShape (0 ms)
+[ RUN      ] ServiceSessionDirectoryTest.RelayTicketChecksExactGroupCorrelationSecretBoundsAndNegotiatedFrameLimits
+[       OK ] ServiceSessionDirectoryTest.RelayTicketChecksExactGroupCorrelationSecretBoundsAndNegotiatedFrameLimits (0 ms)
+[ RUN      ] ServiceSessionDirectoryTest.FakeModelsBothKindsFourLocalsFilteringAndPrivateInvitationAtomicity
+[       OK ] ServiceSessionDirectoryTest.FakeModelsBothKindsFourLocalsFilteringAndPrivateInvitationAtomicity (0 ms)
+[ RUN      ] ServiceSessionDirectoryTest.RankedCreateCannotEnableJoinInProgressBeforeDispatch
+[       OK ] ServiceSessionDirectoryTest.RankedCreateCannotEnableJoinInProgressBeforeDispatch (0 ms)
+[ RUN      ] ServiceSessionDirectoryTest.RankedJoinInProgressSnapshotsAreInvalidAuthority
+[       OK ] ServiceSessionDirectoryTest.RankedJoinInProgressSnapshotsAreInvalidAuthority (0 ms)
+[ RUN      ] ServiceSessionDirectoryTest.FakeRankedGameplayCannotAdmitOrdinaryOrInvitedNewGroups
+[       OK ] ServiceSessionDirectoryTest.FakeRankedGameplayCannotAdmitOrdinaryOrInvitedNewGroups (0 ms)
+[ RUN      ] ServiceSessionDirectoryTest.FakeCapacityFailureKeepsAcceptedInviteAndAllMembersUntouched
+[       OK ] ServiceSessionDirectoryTest.FakeCapacityFailureKeepsAcceptedInviteAndAllMembersUntouched (0 ms)
+[ RUN      ] ServiceSessionDirectoryTest.FakeHostRevisionsPlayingPolicyExpiryAndAuthentication
+[       OK ] ServiceSessionDirectoryTest.FakeHostRevisionsPlayingPolicyExpiryAndAuthentication (0 ms)
+[ RUN      ] ServiceSessionDirectoryTest.FakeInvitationExpiryAndQuotaSurviveSessionCloseRecreate
+[       OK ] ServiceSessionDirectoryTest.FakeInvitationExpiryAndQuotaSurviveSessionCloseRecreate (0 ms)
+[ RUN      ] ServiceSessionDirectoryTest.ExplicitFakeBackendUsesSignedInIdentityPrivilegesAndTypedDirectory
+[       OK ] ServiceSessionDirectoryTest.ExplicitFakeBackendUsesSignedInIdentityPrivilegesAndTypedDirectory (0 ms)
+[ RUN      ] ServiceSessionDirectoryTest.TheHostRemovesAnotherMachineWhoseUsersAreToldWhy
+[       OK ] ServiceSessionDirectoryTest.TheHostRemovesAnotherMachineWhoseUsersAreToldWhy (0 ms)
+[----------] 16 tests from ServiceSessionDirectoryTest (7 ms total)
+
+[----------] 12 tests from ServiceUpdateSubscriptionTest
+[ RUN      ] ServiceUpdateSubscriptionTest.DispatchRunsOnOwnerAfterBackendCompletions
+[       OK ] ServiceUpdateSubscriptionTest.DispatchRunsOnOwnerAfterBackendCompletions (0 ms)
+[ RUN      ] ServiceUpdateSubscriptionTest.CancelAndDestructionReleaseCallbackOwnershipWithoutRegistryCycle
+[       OK ] ServiceUpdateSubscriptionTest.CancelAndDestructionReleaseCallbackOwnershipWithoutRegistryCycle (0 ms)
+[ RUN      ] ServiceUpdateSubscriptionTest.CancellationSuppressesAnObserverInTheCurrentSnapshot
+[       OK ] ServiceUpdateSubscriptionTest.CancellationSuppressesAnObserverInTheCurrentSnapshot (0 ms)
+[ RUN      ] ServiceUpdateSubscriptionTest.SelfDestructionKeepsTheExecutingCallbackAliveUntilReturn
+[       OK ] ServiceUpdateSubscriptionTest.SelfDestructionKeepsTheExecutingCallbackAliveUntilReturn (0 ms)
+[ RUN      ] ServiceUpdateSubscriptionTest.RegistrationDuringDispatchStartsAtTheFollowingBoundary
+[       OK ] ServiceUpdateSubscriptionTest.RegistrationDuringDispatchStartsAtTheFollowingBoundary (0 ms)
+[ RUN      ] ServiceUpdateSubscriptionTest.NestedUpdateSkipsTheExecutingObserverAndProgressesAnotherOperation
+[       OK ] ServiceUpdateSubscriptionTest.NestedUpdateSkipsTheExecutingObserverAndProgressesAnotherOperation (0 ms)
+[ RUN      ] ServiceUpdateSubscriptionTest.NestedIdentityPublicationWaitsForTheNextOuterBoundary
+[       OK ] ServiceUpdateSubscriptionTest.NestedIdentityPublicationWaitsForTheNextOuterBoundary (0 ms)
+[ RUN      ] ServiceUpdateSubscriptionTest.ObserverErrorDoesNotStarveTheBatchAndExecutionGuardResets
+[       OK ] ServiceUpdateSubscriptionTest.ObserverErrorDoesNotStarveTheBatchAndExecutionGuardResets (0 ms)
+[ RUN      ] ServiceUpdateSubscriptionTest.BackendCallbackErrorDoesNotStarveUpdateObservers
+[       OK ] ServiceUpdateSubscriptionTest.BackendCallbackErrorDoesNotStarveUpdateObservers (0 ms)
+[ RUN      ] ServiceUpdateSubscriptionTest.NestedCallbackErrorStillDrainsOtherCompletionsAndObservers
+[       OK ] ServiceUpdateSubscriptionTest.NestedCallbackErrorStillDrainsOtherCompletionsAndObservers (0 ms)
+[ RUN      ] ServiceUpdateSubscriptionTest.EmptyCallbacksAndForeignThreadDispatchAreRefusedBeforeDelivery
+[       OK ] ServiceUpdateSubscriptionTest.EmptyCallbacksAndForeignThreadDispatchAreRefusedBeforeDelivery (0 ms)
+[ RUN      ] ServiceUpdateSubscriptionTest.AutomaticPresenceSaturationStillDrainsWorkAndProgressesObservers
+[       OK ] ServiceUpdateSubscriptionTest.AutomaticPresenceSaturationStillDrainsWorkAndProgressesObservers (0 ms)
+[----------] 12 tests from ServiceUpdateSubscriptionTest (1 ms total)
+
+[----------] 3 tests from SocialNotificationTest
+[ RUN      ] SocialNotificationTest.WhatChangedSinceTheLastReadIsAnnounced
+[       OK ] SocialNotificationTest.WhatChangedSinceTheLastReadIsAnnounced (162 ms)
+[ RUN      ] SocialNotificationTest.APushHintReadsAtOnceInsteadOfAtTheInterval
+[       OK ] SocialNotificationTest.APushHintReadsAtOnceInsteadOfAtTheInterval (58 ms)
+[ RUN      ] SocialNotificationTest.ALongMessageIsShortenedOnAWholeCharacter
+[       OK ] SocialNotificationTest.ALongMessageIsShortenedOnAWholeCharacter (109 ms)
+[----------] 3 tests from SocialNotificationTest (329 ms total)
+
+[----------] 16 tests from SystemGuideTest
+[ RUN      ] SystemGuideTest.WithNobodySignedInItOffersSignIn
+[       OK ] SystemGuideTest.WithNobodySignedInItOffersSignIn (5 ms)
+[ RUN      ] SystemGuideTest.TheGuideButtonClosesTheGuideItOpened
+[       OK ] SystemGuideTest.TheGuideButtonClosesTheGuideItOpened (2 ms)
+[ RUN      ] SystemGuideTest.APlayersButtonSignsInThatPlayersSlot
+[       OK ] SystemGuideTest.APlayersButtonSignsInThatPlayersSlot (12 ms)
+[ RUN      ] SystemGuideTest.ALocalProfileCanSignOutFromTheGuide
+[       OK ] SystemGuideTest.ALocalProfileCanSignOutFromTheGuide (3 ms)
+[ RUN      ] SystemGuideTest.AServicePlayerReachesFriendsAndInvitations
+[       OK ] SystemGuideTest.AServicePlayerReachesFriendsAndInvitations (2 ms)
+[ RUN      ] SystemGuideTest.OnlineStatusIsWhatFriendsSeeAsAwayOrBusy
+[       OK ] SystemGuideTest.OnlineStatusIsWhatFriendsSeeAsAwayOrBusy (7 ms)
+[ RUN      ] SystemGuideTest.AnAccountCarriesItsServiceGameDefaults
+[       OK ] SystemGuideTest.AnAccountCarriesItsServiceGameDefaults (2 ms)
+[ RUN      ] SystemGuideTest.AGuestSignsInWithItsAccountAndLeavesWithIt
+[       OK ] SystemGuideTest.AGuestSignsInWithItsAccountAndLeavesWithIt (3 ms)
+[ RUN      ] SystemGuideTest.WithoutOnlineOnlyGuestIsAnOrdinaryUsername
+[       OK ] SystemGuideTest.WithoutOnlineOnlyGuestIsAnOrdinaryUsername (2 ms)
+[ RUN      ] SystemGuideTest.AGuestSignsItselfOutFromTheGuide
+[       OK ] SystemGuideTest.AGuestSignsItselfOutFromTheGuide (4 ms)
+[ RUN      ] SystemGuideTest.GamerZoneIsChosenInTheGuideAndReputationComesFromReviews
+[       OK ] SystemGuideTest.GamerZoneIsChosenInTheGuideAndReputationComesFromReviews (5 ms)
+[ RUN      ] SystemGuideTest.NothingOpensWhileTheGuideIsVisible
+[       OK ] SystemGuideTest.NothingOpensWhileTheGuideIsVisible (0 ms)
+[ RUN      ] SystemGuideTest.SignedInReplaysOnSubscribeAndSigningOutDisposesTheGamer
+[       OK ] SystemGuideTest.SignedInReplaysOnSubscribeAndSigningOutDisposesTheGamer (2 ms)
+[ RUN      ] SystemGuideTest.IsVisibleIsThePublicViewOfTheGuidePanes
+[       OK ] SystemGuideTest.IsVisibleIsThePublicViewOfTheGuidePanes (0 ms)
+[ RUN      ] SystemGuideTest.TrialModeIsLatchedAtEachUpdateAndClosesOnlineSessions
+[       OK ] SystemGuideTest.TrialModeIsLatchedAtEachUpdateAndClosesOnlineSessions (2 ms)
+[ RUN      ] SystemGuideTest.TheMarketplaceOffersATestPurchaseToASimulatedTrial
+[       OK ] SystemGuideTest.TheMarketplaceOffersATestPurchaseToASimulatedTrial (2 ms)
+[----------] 16 tests from SystemGuideTest (60 ms total)
+
+[----------] 1 test from GuideVisibilityTest
+[ RUN      ] GuideVisibilityTest.IsVisibleRequiresInitializedGamerServices
+Running main() from ../../../../vendor/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = GuideVisibilityTest.IsVisibleRequiresInitializedGamerServices
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from GuideVisibilityTest
+[ RUN      ] GuideVisibilityTest.IsVisibleRequiresInitializedGamerServices
+[       OK ] GuideVisibilityTest.IsVisibleRequiresInitializedGamerServices (0 ms)
+[----------] 1 test from GuideVisibilityTest (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (0 ms total)
+[  PASSED  ] 1 test.
+[       OK ] GuideVisibilityTest.IsVisibleRequiresInitializedGamerServices (29 ms)
+[----------] 1 test from GuideVisibilityTest (29 ms total)
+
+[----------] 25 tests from ServiceFamilies/ServiceAsyncLifetimeTest
+[ RUN      ] ServiceFamilies/ServiceAsyncLifetimeTest.PendingResultRetainsOriginWithoutAQueuedSelfCycle/0
+[       OK ] ServiceFamilies/ServiceAsyncLifetimeTest.PendingResultRetainsOriginWithoutAQueuedSelfCycle/0 (0 ms)
+[ RUN      ] ServiceFamilies/ServiceAsyncLifetimeTest.PendingResultRetainsOriginWithoutAQueuedSelfCycle/1
+[       OK ] ServiceFamilies/ServiceAsyncLifetimeTest.PendingResultRetainsOriginWithoutAQueuedSelfCycle/1 (0 ms)
+[ RUN      ] ServiceFamilies/ServiceAsyncLifetimeTest.PendingResultRetainsOriginWithoutAQueuedSelfCycle/2
+[       OK ] ServiceFamilies/ServiceAsyncLifetimeTest.PendingResultRetainsOriginWithoutAQueuedSelfCycle/2 (0 ms)
+[ RUN      ] ServiceFamilies/ServiceAsyncLifetimeTest.PendingResultRetainsOriginWithoutAQueuedSelfCycle/3
+[       OK ] ServiceFamilies/ServiceAsyncLifetimeTest.PendingResultRetainsOriginWithoutAQueuedSelfCycle/3 (0 ms)
+[ RUN      ] ServiceFamilies/ServiceAsyncLifetimeTest.PendingResultRetainsOriginWithoutAQueuedSelfCycle/4
+[       OK ] ServiceFamilies/ServiceAsyncLifetimeTest.PendingResultRetainsOriginWithoutAQueuedSelfCycle/4 (0 ms)
+[ RUN      ] ServiceFamilies/ServiceAsyncLifetimeTest.CompletedMetadataAndLogicalValueReleaseBackendWithoutACycle/0
+[       OK ] ServiceFamilies/ServiceAsyncLifetimeTest.CompletedMetadataAndLogicalValueReleaseBackendWithoutACycle/0 (0 ms)
+[ RUN      ] ServiceFamilies/ServiceAsyncLifetimeTest.CompletedMetadataAndLogicalValueReleaseBackendWithoutACycle/1
+[       OK ] ServiceFamilies/ServiceAsyncLifetimeTest.CompletedMetadataAndLogicalValueReleaseBackendWithoutACycle/1 (0 ms)
+[ RUN      ] ServiceFamilies/ServiceAsyncLifetimeTest.CompletedMetadataAndLogicalValueReleaseBackendWithoutACycle/2
+[       OK ] ServiceFamilies/ServiceAsyncLifetimeTest.CompletedMetadataAndLogicalValueReleaseBackendWithoutACycle/2 (0 ms)
+[ RUN      ] ServiceFamilies/ServiceAsyncLifetimeTest.CompletedMetadataAndLogicalValueReleaseBackendWithoutACycle/3
+[       OK ] ServiceFamilies/ServiceAsyncLifetimeTest.CompletedMetadataAndLogicalValueReleaseBackendWithoutACycle/3 (0 ms)
+[ RUN      ] ServiceFamilies/ServiceAsyncLifetimeTest.CompletedMetadataAndLogicalValueReleaseBackendWithoutACycle/4
+[       OK ] ServiceFamilies/ServiceAsyncLifetimeTest.CompletedMetadataAndLogicalValueReleaseBackendWithoutACycle/4 (0 ms)
+[ RUN      ] ServiceFamilies/ServiceAsyncLifetimeTest.PublicEndConsumesOnceOnUpdateOwnerAndKeepsMetadataAlive/0
+[       OK ] ServiceFamilies/ServiceAsyncLifetimeTest.PublicEndConsumesOnceOnUpdateOwnerAndKeepsMetadataAlive/0 (0 ms)
+[ RUN      ] ServiceFamilies/ServiceAsyncLifetimeTest.PublicEndConsumesOnceOnUpdateOwnerAndKeepsMetadataAlive/1
+[       OK ] ServiceFamilies/ServiceAsyncLifetimeTest.PublicEndConsumesOnceOnUpdateOwnerAndKeepsMetadataAlive/1 (0 ms)
+[ RUN      ] ServiceFamilies/ServiceAsyncLifetimeTest.PublicEndConsumesOnceOnUpdateOwnerAndKeepsMetadataAlive/2
+[       OK ] ServiceFamilies/ServiceAsyncLifetimeTest.PublicEndConsumesOnceOnUpdateOwnerAndKeepsMetadataAlive/2 (0 ms)
+[ RUN      ] ServiceFamilies/ServiceAsyncLifetimeTest.PublicEndConsumesOnceOnUpdateOwnerAndKeepsMetadataAlive/3
+[       OK ] ServiceFamilies/ServiceAsyncLifetimeTest.PublicEndConsumesOnceOnUpdateOwnerAndKeepsMetadataAlive/3 (0 ms)
+[ RUN      ] ServiceFamilies/ServiceAsyncLifetimeTest.PublicEndConsumesOnceOnUpdateOwnerAndKeepsMetadataAlive/4
+[       OK ] ServiceFamilies/ServiceAsyncLifetimeTest.PublicEndConsumesOnceOnUpdateOwnerAndKeepsMetadataAlive/4 (0 ms)
+[ RUN      ] ServiceFamilies/ServiceAsyncLifetimeTest.PendingEndPumpsRetainedOriginWithoutPublishingItsIdentityEvents/0
+[       OK ] ServiceFamilies/ServiceAsyncLifetimeTest.PendingEndPumpsRetainedOriginWithoutPublishingItsIdentityEvents/0 (0 ms)
+[ RUN      ] ServiceFamilies/ServiceAsyncLifetimeTest.PendingEndPumpsRetainedOriginWithoutPublishingItsIdentityEvents/1
+[       OK ] ServiceFamilies/ServiceAsyncLifetimeTest.PendingEndPumpsRetainedOriginWithoutPublishingItsIdentityEvents/1 (0 ms)
+[ RUN      ] ServiceFamilies/ServiceAsyncLifetimeTest.PendingEndPumpsRetainedOriginWithoutPublishingItsIdentityEvents/2
+[       OK ] ServiceFamilies/ServiceAsyncLifetimeTest.PendingEndPumpsRetainedOriginWithoutPublishingItsIdentityEvents/2 (0 ms)
+[ RUN      ] ServiceFamilies/ServiceAsyncLifetimeTest.PendingEndPumpsRetainedOriginWithoutPublishingItsIdentityEvents/3
+[       OK ] ServiceFamilies/ServiceAsyncLifetimeTest.PendingEndPumpsRetainedOriginWithoutPublishingItsIdentityEvents/3 (0 ms)
+[ RUN      ] ServiceFamilies/ServiceAsyncLifetimeTest.PendingEndPumpsRetainedOriginWithoutPublishingItsIdentityEvents/4
+[       OK ] ServiceFamilies/ServiceAsyncLifetimeTest.PendingEndPumpsRetainedOriginWithoutPublishingItsIdentityEvents/4 (0 ms)
+[ RUN      ] ServiceFamilies/ServiceAsyncLifetimeTest.EndClaimsConsumptionBeforePumpingReentrantCompletion/0
+[       OK ] ServiceFamilies/ServiceAsyncLifetimeTest.EndClaimsConsumptionBeforePumpingReentrantCompletion/0 (0 ms)
+[ RUN      ] ServiceFamilies/ServiceAsyncLifetimeTest.EndClaimsConsumptionBeforePumpingReentrantCompletion/1
+[       OK ] ServiceFamilies/ServiceAsyncLifetimeTest.EndClaimsConsumptionBeforePumpingReentrantCompletion/1 (0 ms)
+[ RUN      ] ServiceFamilies/ServiceAsyncLifetimeTest.EndClaimsConsumptionBeforePumpingReentrantCompletion/2
+[       OK ] ServiceFamilies/ServiceAsyncLifetimeTest.EndClaimsConsumptionBeforePumpingReentrantCompletion/2 (0 ms)
+[ RUN      ] ServiceFamilies/ServiceAsyncLifetimeTest.EndClaimsConsumptionBeforePumpingReentrantCompletion/3
+[       OK ] ServiceFamilies/ServiceAsyncLifetimeTest.EndClaimsConsumptionBeforePumpingReentrantCompletion/3 (0 ms)
+[ RUN      ] ServiceFamilies/ServiceAsyncLifetimeTest.EndClaimsConsumptionBeforePumpingReentrantCompletion/4
+[       OK ] ServiceFamilies/ServiceAsyncLifetimeTest.EndClaimsConsumptionBeforePumpingReentrantCompletion/4 (0 ms)
+[----------] 25 tests from ServiceFamilies/ServiceAsyncLifetimeTest (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 633 tests from 80 test suites ran. (21437 ms total)
+[  PASSED  ] 633 tests.

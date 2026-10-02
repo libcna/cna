@@ -1,0 +1,7 @@
+session-done 1072 checks
+session-done 1970 checks
+player public XNA NetworkSession: two CNA processes/four Guide-signed-in accounts, pending Begin/End with one owner-thread callback, property-filtered Find, complete GamerJoined replay, shared machines, Dana added with AddLocalGamer after the join,  six verified packets each way incl. 32KiB and in-order, host properties/join-in-progress and StartGame/EndGame observed remotely, per-machine EndGame leaderboard commits read back by both,  client leave -> GamerLeft
+session-done 1357 checks
+session-done 1644 checks
+ranked public XNA NetworkSession: two CNA processes/four Guide-signed-in accounts, pending Begin/End with one owner-thread callback, property-filtered Find, complete GamerJoined replay, shared machines, Dana added with AddLocalGamer after the join,  six verified packets each way incl. 32KiB and in-order, host properties/join-in-progress and StartGame/EndGame observed remotely, per-machine EndGame leaderboard commits read back by both, Ranked arbitrated rows from both machines resolved by agreement, host leave -> SessionEnded(HostEndedSession)
+Verified public PlayerMatch/Ranked NetworkSession over verified TLS/WSS relay on localhost.

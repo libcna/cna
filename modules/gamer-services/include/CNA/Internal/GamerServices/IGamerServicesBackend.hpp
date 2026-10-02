@@ -54,7 +54,7 @@ struct ServiceIdentity {
     bool purchaseContent = true;
     /** @brief GamerPrivileges.AllowPremiumContent. */
     bool premiumContent = true;
-    /** @brief Gamertags the signed-in account has blocked, as read at sign-in. */
+    /** @brief Gamertags the signed-in account has blocked, as refreshed at sign-in and heartbeat. */
     std::vector<std::string> blocked;
 };
 /** @brief One account's avatar as the service returns it to this client. */
@@ -237,7 +237,7 @@ struct ServiceArbitration {
 /** @brief Work completion applied at the dispatcher's controlled update boundary. */
 struct BackendEvent {
     /** @brief Event category. */
-    enum class Type { SignedIn, SignedOut, Failed, Completion };
+    enum class Type { SignedIn, SignedOut, Failed, Completion, PolicyChanged };
     /** @brief Event category. */
     Type type = Type::Failed;
     /** @brief Local player slot, zero through three. */

@@ -1,0 +1,84 @@
+run_gpu_tests_private: DISPLAY=:2 (private Xwayland), WAYLAND_DISPLAY=cna-weston-1690170 (private Weston)
+Internal ctest changing into directory: /rv/data/development/github.com/libcna/cna-gamer-services-server/build
+Test project /rv/data/development/github.com/libcna/cna-gamer-services-server/build
+      Start 18: service_relay_wss
+      Start  7: service_atomicity
+ 1/34 Test  #7: service_atomicity .................   Passed    9.19 sec
+      Start 21: service_cna_owned_enet
+ 2/34 Test #18: service_relay_wss .................   Passed   48.36 sec
+      Start 31: service_cna_session_host_crash
+ 3/34 Test #31: service_cna_session_host_crash ....***Skipped   0.04 sec
+      Start 22: service_cna_owned_enet_nat
+ 4/34 Test #22: service_cna_owned_enet_nat ........***Skipped   0.04 sec
+      Start 28: service_cna_session_restart
+ 5/34 Test #21: service_cna_owned_enet ............   Passed   53.41 sec
+      Start  5: service_privacy
+ 6/34 Test  #5: service_privacy ...................   Passed    3.15 sec
+      Start  3: service_benchmark_smoke
+ 7/34 Test #28: service_cna_session_restart .......   Passed   19.18 sec
+      Start 25: service_cna_invite
+ 8/34 Test  #3: service_benchmark_smoke ...........   Passed   11.71 sec
+      Start 30: service_cna_session_migration
+ 9/34 Test #25: service_cna_invite ................   Passed   17.69 sec
+      Start  1: service_unit
+10/34 Test #30: service_cna_session_migration .....   Passed    8.44 sec
+      Start  2: service_tls_e2e
+11/34 Test  #2: service_tls_e2e ...................   Passed    6.45 sec
+      Start 29: service_cna_session_restart_nat
+12/34 Test #29: service_cna_session_restart_nat ...***Skipped   0.04 sec
+      Start  4: service_ranked_migration
+13/34 Test  #4: service_ranked_migration ..........   Passed    0.90 sec
+      Start 33: service_picture_privacy
+14/34 Test #33: service_picture_privacy ...........   Passed    0.95 sec
+      Start 26: service_cna_invite_nat
+15/34 Test #26: service_cna_invite_nat ............***Skipped   0.05 sec
+      Start 27: service_cna_avatars
+16/34 Test  #1: service_unit ......................   Passed   16.59 sec
+      Start 32: service_cna_session_add_gamer
+17/34 Test #32: service_cna_session_add_gamer .....***Skipped   0.03 sec
+      Start 23: service_cna_session
+18/34 Test #27: service_cna_avatars ...............   Passed   12.27 sec
+      Start 10: service_avatars
+19/34 Test #10: service_avatars ...................   Passed    1.76 sec
+      Start 19: service_cna_relay
+20/34 Test #23: service_cna_session ...............   Passed    8.25 sec
+      Start 24: service_cna_session_nat
+21/34 Test #24: service_cna_session_nat ...........***Skipped   0.04 sec
+      Start 13: service_invitations
+22/34 Test #13: service_invitations ...............   Passed    2.34 sec
+      Start 12: service_social
+23/34 Test #12: service_social ....................   Passed    1.06 sec
+      Start 11: service_avatar_validation
+24/34 Test #11: service_avatar_validation .........   Passed    2.72 sec
+      Start 16: service_relay_authorization
+25/34 Test #19: service_cna_relay .................   Passed    8.14 sec
+      Start  8: service_directory
+26/34 Test #16: service_relay_authorization .......   Passed    1.96 sec
+      Start 14: service_cna_directory
+27/34 Test  #8: service_directory .................   Passed    2.40 sec
+      Start 20: service_cna_relay_nat
+28/34 Test #20: service_cna_relay_nat .............***Skipped   0.04 sec
+      Start  9: service_arbitration
+29/34 Test  #9: service_arbitration ...............   Passed    1.03 sec
+      Start  6: service_database_lock
+30/34 Test  #6: service_database_lock .............   Passed    0.02 sec
+      Start 17: service_relay_flow
+31/34 Test #17: service_relay_flow ................   Passed    0.03 sec
+      Start 15: service_relay_protocol
+32/34 Test #15: service_relay_protocol ............   Passed    0.05 sec
+      Start 34: service_numeric_persistence
+33/34 Test #34: service_numeric_persistence .......   Passed    0.67 sec
+34/34 Test #14: service_cna_directory .............   Passed    5.01 sec
+
+100% tests passed, 0 tests failed out of 34
+
+Total Test time (real) = 123.30 sec
+
+The following tests did not run:
+	 20 - service_cna_relay_nat (Skipped)
+	 22 - service_cna_owned_enet_nat (Skipped)
+	 24 - service_cna_session_nat (Skipped)
+	 26 - service_cna_invite_nat (Skipped)
+	 29 - service_cna_session_restart_nat (Skipped)
+	 31 - service_cna_session_host_crash (Skipped)
+	 32 - service_cna_session_add_gamer (Skipped)

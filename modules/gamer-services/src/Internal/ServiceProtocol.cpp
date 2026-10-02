@@ -36,7 +36,7 @@ int compareVersions(std::string_view a, std::string_view b) {
     }
     return 0;
 }
-Json parse(std::string_view bytes) {
+Json parse(std::string_view bytes, std::size_t maximumArrayItems) {
     if (bytes.empty() || bytes.size() > MaxMessageBytes) throw Error("LIMIT_EXCEEDED");
     struct Frame {bool array=false;std::size_t count=0;std::set<std::string> keys;};
     std::vector<Frame> frames;
@@ -45,7 +45,7 @@ Json parse(std::string_view bytes) {
             if (depth > 16) throw Error("LIMIT_EXCEEDED");
             using Event=Json::parse_event_t;
             if(event==Event::object_start||event==Event::array_start||event==Event::value) {
-                if(!frames.empty()&&frames.back().array&&++frames.back().count>256)throw Error("LIMIT_EXCEEDED");
+                if(!frames.empty()&&frames.back().array&&++frames.back().count>maximumArrayItems)throw Error("LIMIT_EXCEEDED");
             }
             if(event==Event::object_start||event==Event::array_start)frames.push_back({event==Event::array_start,0,{}});
             if(event==Event::key) {

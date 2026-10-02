@@ -1,0 +1,20 @@
+[ RUN      ] AvatarServiceTest.AFailedInstallLockCannotActivateOrDeleteStaging
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/ServiceAvatarTests.cpp:791: Failure
+Expected equality of these values:
+  Avatars::CatalogInstall::Failed
+    Which is: 1-byte object <03>
+  outcome
+    Which is: 1-byte object <00>
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/ServiceAvatarTests.cpp:792: Failure
+Expected equality of these values:
+  0
+  fetched
+    Which is: 2
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/ServiceAvatarTests.cpp:793: Failure
+Value of: Installed(root_)
+  Actual: true
+Expected: false
+
+[  FAILED  ] AvatarServiceTest.AFailedInstallLockCannotActivateOrDeleteStaging (413 ms)

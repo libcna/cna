@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/GamerServices/LocalProfiles.hpp"
+#include "CNA/Internal/GamerServices/LocalStoreLock.hpp"
 #include "CNA/Internal/GamerServices/AvatarDescriptionCodec.hpp"
 #include "CnaService/Protocol.hpp"
 #include "System/ArgumentException.hpp"
@@ -153,30 +154,6 @@ bool writeStore(const std::filesystem::path& path,const std::vector<LocalProfile
     return true;
 }
 
-// Serializes read-modify-write between processes sharing the store (two local players starting
-// at once would otherwise each keep only their own new profile).
-class StoreLock {
-public:
-    explicit StoreLock(const std::filesystem::path& path) {
-#if defined(__unix__) || defined(__APPLE__)
-        if(path.empty())return;
-        descriptor_=open((path.string()+".lock").c_str(),O_RDWR|O_CREAT|O_CLOEXEC|O_NOFOLLOW,0600);
-        if(descriptor_>=0&&flock(descriptor_,LOCK_EX)!=0){close(descriptor_);descriptor_=-1;}
-#else
-        (void)path;
-#endif
-    }
-    ~StoreLock() {
-#if defined(__unix__) || defined(__APPLE__)
-        if(descriptor_>=0)close(descriptor_);
-#endif
-    }
-    StoreLock(const StoreLock&)=delete;
-    StoreLock& operator=(const StoreLock&)=delete;
-private:
-    int descriptor_=-1;
-};
-
 bool prepareDirectory(const std::filesystem::path& path) {
     std::error_code error;
     const auto directory=path.parent_path();
@@ -194,7 +171,8 @@ LocalProfile openStored(const std::string& gamertag) {
         const auto path=localProfilesPath();
         // The directory must exist before the lock file can be taken in it.
         const bool writable=!path.empty()&&prepareDirectory(path);
-        StoreLock lock(writable?path:std::filesystem::path{});
+        std::optional<LocalStoreLock> lock;
+        if(writable)lock.emplace(path);
         auto stored=readStore(path);
         if(stored)for(const auto& profile:*stored)if(folded(profile.gamertag)==folded(gamertag)) {
             if(!profile.avatar.empty())return profile;
@@ -294,7 +272,7 @@ bool setLocalProfileAvatar(const std::string& gamertag,const std::vector<unsigne
     try {
         const auto path=localProfilesPath();
         if(path.empty()||!prepareDirectory(path))return false;
-        StoreLock lock(path);
+        const LocalStoreLock lock(path);
         auto stored=readStore(path);
         if(!stored)return false;
         for(auto& profile:*stored)

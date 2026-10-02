@@ -1,0 +1,71 @@
+[  7%] Building CXX object CMakeFiles/cna_service.dir/src/Privacy.cpp.o
+[  7%] Building CXX object CMakeFiles/cna_service.dir/src/RelayAuthorization.cpp.o
+[  7%] Building CXX object CMakeFiles/cna_service.dir/src/RelayProtocol.cpp.o
+[  7%] Building CXX object CMakeFiles/cna_service.dir/src/DatabaseLock.cpp.o
+[  9%] Building CXX object CMakeFiles/cna_service.dir/src/Protocol.cpp.o
+[ 11%] Building CXX object CMakeFiles/cna_service.dir/src/Store.cpp.o
+[ 12%] Building CXX object CMakeFiles/cna_service.dir/src/Service.cpp.o
+[ 14%] Building CXX object CMakeFiles/cna_service.dir/src/Leaderboards.cpp.o
+[ 16%] Building CXX object CMakeFiles/cna_service.dir/src/Authentication.cpp.o
+[ 18%] Building CXX object CMakeFiles/cna_service.dir/src/SessionDirectory.cpp.o
+[ 20%] Building CXX object CMakeFiles/cna_service.dir/src/Invitations.cpp.o
+[ 22%] Building CXX object CMakeFiles/cna_service.dir/src/Parties.cpp.o
+[ 24%] Building CXX object CMakeFiles/cna_service.dir/src/Avatars.cpp.o
+[ 25%] Building CXX object CMakeFiles/cna_service.dir/src/AvatarAssets.cpp.o
+[ 27%] Linking CXX static library libcna_service.a
+[ 27%] Built target cna_service
+[ 35%] Building CXX object CMakeFiles/service_tests.dir/tests/ServiceTests.cpp.o
+[ 35%] Building CXX object CMakeFiles/cna-gamer-services-admin.dir/src/Admin.cpp.o
+[ 35%] Building CXX object CMakeFiles/ranked_migration_tests.dir/tests/RankedMigrationTests.cpp.o
+[ 35%] Building CXX object CMakeFiles/cna-gamer-services-server.dir/src/Main.cpp.o
+[ 37%] Building CXX object CMakeFiles/cna-gamer-services-server.dir/src/Listener.cpp.o
+[ 38%] Linking CXX executable cna-gamer-services-admin
+[ 38%] Built target cna-gamer-services-admin
+[ 40%] Building CXX object CMakeFiles/privacy_tests.dir/tests/PrivacyTests.cpp.o
+[ 42%] Linking CXX executable ranked_migration_tests
+[ 42%] Built target ranked_migration_tests
+[ 44%] Building CXX object CMakeFiles/cna-gamer-services-server.dir/src/RelayListener.cpp.o
+[ 46%] Linking CXX executable service_tests
+[ 46%] Built target service_tests
+[ 48%] Building CXX object CMakeFiles/cna-gamer-services-server.dir/src/EventListener.cpp.o
+[ 50%] Linking CXX executable privacy_tests
+[ 50%] Built target privacy_tests
+[ 51%] Building CXX object CMakeFiles/database_lock_tests.dir/tests/DatabaseLockTests.cpp.o
+[ 53%] Linking CXX executable database_lock_tests
+[ 53%] Built target database_lock_tests
+[ 55%] Building CXX object CMakeFiles/atomicity_tests.dir/tests/AtomicityTests.cpp.o
+[ 57%] Linking CXX executable atomicity_tests
+[ 57%] Built target atomicity_tests
+[ 59%] Building CXX object CMakeFiles/directory_tests.dir/tests/DirectoryTests.cpp.o
+[ 61%] Linking CXX executable directory_tests
+[ 61%] Built target directory_tests
+[ 62%] Building CXX object CMakeFiles/arbitration_tests.dir/tests/ArbitrationTests.cpp.o
+[ 64%] Linking CXX executable arbitration_tests
+[ 64%] Built target arbitration_tests
+[ 66%] Building CXX object CMakeFiles/avatar_tests.dir/tests/AvatarTests.cpp.o
+[ 68%] Building CXX object CMakeFiles/avatar_validation_tests.dir/tests/AvatarValidationTests.cpp.o
+[ 70%] Linking CXX executable avatar_tests
+[ 70%] Built target avatar_tests
+[ 72%] Building CXX object CMakeFiles/social_tests.dir/tests/SocialTests.cpp.o
+[ 74%] Linking CXX executable avatar_validation_tests
+[ 74%] Built target avatar_validation_tests
+[ 75%] Building CXX object CMakeFiles/invitation_tests.dir/tests/InvitationTests.cpp.o
+[ 77%] Linking CXX executable social_tests
+[ 77%] Built target social_tests
+[ 79%] Building CXX object CMakeFiles/relay_protocol_tests.dir/tests/RelayProtocolTests.cpp.o
+[ 81%] Linking CXX executable invitation_tests
+[ 81%] Built target invitation_tests
+[ 83%] Building CXX object CMakeFiles/cna-gamer-services-server.dir/src/RelayFlow.cpp.o
+[ 85%] Linking CXX executable relay_protocol_tests
+[ 85%] Built target relay_protocol_tests
+[ 87%] Building CXX object CMakeFiles/cna-gamer-services-server.dir/src/RelayHub.cpp.o
+[ 88%] Building CXX object CMakeFiles/relay_authorization_tests.dir/tests/RelayAuthorizationTests.cpp.o
+[ 90%] Building CXX object CMakeFiles/relay_flow_tests.dir/tests/RelayFlowTests.cpp.o
+[ 92%] Linking CXX executable relay_authorization_tests
+[ 92%] Built target relay_authorization_tests
+[ 94%] Building CXX object CMakeFiles/relay_flow_tests.dir/src/RelayFlow.cpp.o
+[ 96%] Building CXX object CMakeFiles/relay_flow_tests.dir/src/RelayHub.cpp.o
+[ 98%] Linking CXX executable cna-gamer-services-server
+[ 98%] Built target cna-gamer-services-server
+[100%] Linking CXX executable relay_flow_tests
+[100%] Built target relay_flow_tests

@@ -1,0 +1,58 @@
+run_gpu_tests_private: DISPLAY=:2 (private Xwayland), WAYLAND_DISPLAY=cna-weston-2435276 (private Weston)
+Running main() from ../../../../vendor/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = OfflineConcurrencyTest.*:LocalProfileStoreTest.*:SignedInGamerTest.FailedOffline*:LeaderboardWriterTest.FailedOffline*:LeaderboardWriterTest.Offline*
+[==========] Running 18 tests from 4 test suites.
+[----------] Global test environment set-up.
+[----------] 5 tests from LeaderboardWriterTest
+[ RUN      ] LeaderboardWriterTest.FailedOfflineReplacementPreservesDiskAndInMemoryRating
+[       OK ] LeaderboardWriterTest.FailedOfflineReplacementPreservesDiskAndInMemoryRating (2 ms)
+[ RUN      ] LeaderboardWriterTest.OfflineSaveRefusesAnUncreatableParentDirectory
+[       OK ] LeaderboardWriterTest.OfflineSaveRefusesAnUncreatableParentDirectory (0 ms)
+[ RUN      ] LeaderboardWriterTest.OfflineWriteFailurePreservesPreviousRecord
+[       OK ] LeaderboardWriterTest.OfflineWriteFailurePreservesPreviousRecord (0 ms)
+[ RUN      ] LeaderboardWriterTest.OfflineIntegerBoundariesRoundTripExactly
+[       OK ] LeaderboardWriterTest.OfflineIntegerBoundariesRoundTripExactly (5 ms)
+[ RUN      ] LeaderboardWriterTest.OfflineLegacyNumbersRemainReadableAndInvalidIntegersAreSkipped
+[       OK ] LeaderboardWriterTest.OfflineLegacyNumbersRemainReadableAndInvalidIntegersAreSkipped (1 ms)
+[----------] 5 tests from LeaderboardWriterTest (11 ms total)
+
+[----------] 1 test from SignedInGamerTest
+[ RUN      ] SignedInGamerTest.FailedOfflineAwardDoesNotCompleteSuccessfullyAndCanBeRetried
+[INFO][APPLICATION] [TitleContainer] OpenStream requested: GamerServices/Achievements.json
+[INFO][APPLICATION] [TitleContainer] Resolved path: /rv/data/development/github.com/libcna/cnawork/cmake-build-debug/GamerServices/Achievements.json
+[       OK ] SignedInGamerTest.FailedOfflineAwardDoesNotCompleteSuccessfullyAndCanBeRetried (4 ms)
+[----------] 1 test from SignedInGamerTest (5 ms total)
+
+[----------] 4 tests from OfflineConcurrencyTest
+[ RUN      ] OfflineConcurrencyTest.AchievementThreadUpdatesKeepEveryKeyAndTimestamp
+[       OK ] OfflineConcurrencyTest.AchievementThreadUpdatesKeepEveryKeyAndTimestamp (460 ms)
+[ RUN      ] OfflineConcurrencyTest.LeaderboardThreadUpdatesKeepEveryGamerAndColumns
+[       OK ] OfflineConcurrencyTest.LeaderboardThreadUpdatesKeepEveryGamerAndColumns (891 ms)
+[ RUN      ] OfflineConcurrencyTest.AchievementProcessUpdatesKeepEveryKeyAndTimestamp
+[       OK ] OfflineConcurrencyTest.AchievementProcessUpdatesKeepEveryKeyAndTimestamp (73 ms)
+[ RUN      ] OfflineConcurrencyTest.LeaderboardProcessUpdatesKeepEveryGamerAndColumns
+[       OK ] OfflineConcurrencyTest.LeaderboardProcessUpdatesKeepEveryGamerAndColumns (145 ms)
+[----------] 4 tests from OfflineConcurrencyTest (1571 ms total)
+
+[----------] 8 tests from LocalProfileStoreTest
+[ RUN      ] LocalProfileStoreTest.NamesFollowGamertagRules
+[       OK ] LocalProfileStoreTest.NamesFollowGamertagRules (0 ms)
+[ RUN      ] LocalProfileStoreTest.OpeningCreatesAStoredProfileAndReusesItIgnoringCase
+[       OK ] LocalProfileStoreTest.OpeningCreatesAStoredProfileAndReusesItIgnoringCase (4 ms)
+[ RUN      ] LocalProfileStoreTest.AStoreThatCannotBeReadIsNeverOverwritten
+[       OK ] LocalProfileStoreTest.AStoreThatCannotBeReadIsNeverOverwritten (0 ms)
+[ RUN      ] LocalProfileStoreTest.MalformedEntriesAreSkippedAndALostAvatarIsReplaced
+[       OK ] LocalProfileStoreTest.MalformedEntriesAreSkippedAndALostAvatarIsReplaced (7 ms)
+[ RUN      ] LocalProfileStoreTest.AutomaticSignInNamesComeFromTheEnvironment
+[       OK ] LocalProfileStoreTest.AutomaticSignInNamesComeFromTheEnvironment (3 ms)
+[ RUN      ] LocalProfileStoreTest.AutomaticSignInOtherwiseUsesTheStoredFlags
+[       OK ] LocalProfileStoreTest.AutomaticSignInOtherwiseUsesTheStoredFlags (0 ms)
+[ RUN      ] LocalProfileStoreTest.ProcessesCreatingProfilesAtOnceKeepEveryProfile
+[       OK ] LocalProfileStoreTest.ProcessesCreatingProfilesAtOnceKeepEveryProfile (29 ms)
+[ RUN      ] LocalProfileStoreTest.FailedLockNeverWritesAnUnlockedProfileStore
+[       OK ] LocalProfileStoreTest.FailedLockNeverWritesAnUnlockedProfileStore (1 ms)
+[----------] 8 tests from LocalProfileStoreTest (48 ms total)
+
+[----------] Global test environment tear-down
+[==========] 18 tests from 4 test suites ran. (1636 ms total)
+[  PASSED  ] 18 tests.

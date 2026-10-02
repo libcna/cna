@@ -85,13 +85,17 @@ namespace CNA::Internal::GamerServices
 
     /**
      * @brief Records (or updates) one earned-achievement entry for the given gamertag and
-     * immediately persists it to disk.
+     * immediately replaces its local store after checked write, flush and close.
+     * Successful return provides OS-cache persistence, without a power-loss guarantee.
+     * An unreadable existing history is preserved and the update throws.
      *
      * @param gamertag The gamertag earning the achievement.
      * @param key The achievement's unique key.
      * @param earnedTicks The moment it was earned, as System::DateTime ticks.
+     * @param onlyIfUnearned Preserve the first completion when competing awards arrive.
+     * @return Whether a record was written.
      */
-    void SaveEarnedAchievementEXT(const std::string& gamertag, const std::string& key, long long earnedTicks);
+    bool SaveEarnedAchievementEXT(const std::string& gamertag, const std::string& key, long long earnedTicks, bool onlyIfUnearned = false);
 
     /** @brief One achievement a title defines for offline play, in the service catalog's format. */
     struct OfflineAchievementDefinition
@@ -142,7 +146,9 @@ namespace CNA::Internal::GamerServices
 
     /**
      * @brief Records (or updates) one gamer's entry on the given leaderboard and immediately
-     * persists it to disk.
+     * replaces its local store after checked write, flush and close.
+     * Successful return provides OS-cache persistence, without a power-loss guarantee.
+     * An unreadable existing history is preserved and the update throws.
      *
      * @param leaderboardFileKey A pre-sanitized, unique file-name key identifying the leaderboard.
      * @param entry The entry to upsert, keyed by Gamertag.

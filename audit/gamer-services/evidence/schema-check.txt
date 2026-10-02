@@ -1,0 +1,195 @@
+001_initial.sql: user_version=1
+002_assets.sql: user_version=2
+003_leaderboards.sql: user_version=3
+004_leaderboard_games.sql: user_version=4
+005_refresh_credentials.sql: user_version=5
+006_session_directory.sql: user_version=6
+007_session_invitations.sql: user_version=7
+008_relay_tickets.sql: user_version=8
+009_ranked_lobby_policy.sql: user_version=9
+010_ranked_arbitration.sql: user_version=10
+011_messages_reviews.sql: user_version=11
+012_avatars.sql: user_version=12
+013_session_removals.sql: user_version=13
+014_avatar_features.sql: user_version=14
+015_presence_status.sql: user_version=15
+016_host_migration.sql: user_version=16
+017_game_defaults.sql: user_version=17
+018_gamer_zone.sql: user_version=18
+019_title_version.sql: user_version=19
+020_parties.sql: user_version=20
+021_request_outcomes.sql: user_version=21
+022_privacy.sql: user_version=22
+023_friend_voice.sql: user_version=23
+foreign_keys=1
+foreign_key_check=[]
+integrity_check=[('ok',)]
+
+Schema after migrations:
+CREATE INDEX arbitration_round_pending ON arbitration_rounds(game_id,resolved,updated)
+CREATE INDEX arbitration_round_session ON arbitration_rounds(session_id,start_revision)
+CREATE INDEX avatar_catalog_asset_hash ON avatar_catalog_assets(hash)
+CREATE INDEX blocks_blocked ON blocks(blocked_id,user_id)
+CREATE INDEX directory_machine_session ON directory_machines(session_id)
+CREATE INDEX directory_title_search ON directory_sessions(game_id,kind,created,id)
+CREATE INDEX invite_inbox ON session_invitations(game_id,recipient_id,created,id)
+CREATE INDEX invite_sender_quota ON session_invitations(game_id,sender_id,created)
+CREATE INDEX messages_inbox ON messages(recipient_id,created,id)
+CREATE INDEX messages_sender ON messages(sender_id,created)
+CREATE INDEX party_invitation_inbox ON party_invitations(recipient_id,created)
+CREATE INDEX refresh_families_user ON refresh_families(user_id)
+CREATE INDEX relay_tickets_machine ON relay_tickets(machine_id)
+CREATE INDEX relay_tickets_title ON relay_tickets(game_id)
+CREATE INDEX sessions_refresh_family ON sessions(refresh_family)
+CREATE TABLE achievements(game_id TEXT NOT NULL REFERENCES titles(id), key TEXT NOT NULL, name TEXT NOT NULL,
+ description TEXT NOT NULL, how_to_earn TEXT NOT NULL, score INTEGER NOT NULL CHECK(score BETWEEN 0 AND 1000),
+ display INTEGER NOT NULL, picture TEXT NOT NULL DEFAULT '', PRIMARY KEY(game_id,key))
+CREATE TABLE arbitration_rounds (
+ id TEXT PRIMARY KEY, game_id TEXT NOT NULL REFERENCES titles(id) ON DELETE CASCADE,
+ session_id TEXT NOT NULL, start_revision INTEGER NOT NULL, end_revision INTEGER,
+ members TEXT NOT NULL, machines TEXT NOT NULL,
+ created INTEGER NOT NULL, updated INTEGER NOT NULL, resolved INTEGER NOT NULL DEFAULT 0 CHECK(resolved IN (0,1))
+)
+CREATE TABLE arbitration_submissions (
+ round_id TEXT NOT NULL REFERENCES arbitration_rounds(id) ON DELETE CASCADE,
+ machine_id TEXT NOT NULL, entries TEXT NOT NULL, digest TEXT NOT NULL,
+ PRIMARY KEY(round_id,machine_id)
+)
+CREATE TABLE assets(hash TEXT PRIMARY KEY CHECK(length(hash)=64), mime TEXT NOT NULL,
+ size INTEGER NOT NULL CHECK(size BETWEEN 1 AND 16777216), bytes BLOB NOT NULL)
+CREATE TABLE avatar_catalog_assets (
+ version INTEGER NOT NULL REFERENCES avatar_catalogs(version) ON DELETE CASCADE,
+ name TEXT NOT NULL, hash TEXT NOT NULL REFERENCES assets(hash), PRIMARY KEY(version,name)
+)
+CREATE TABLE "avatar_catalog_items" (
+ version INTEGER NOT NULL REFERENCES avatar_catalogs(version) ON DELETE CASCADE,
+ id INTEGER NOT NULL CHECK(id BETWEEN 1 AND 65535), slot INTEGER NOT NULL CHECK(slot BETWEEN 0 AND 6),
+ PRIMARY KEY(version,id)
+)
+CREATE TABLE avatar_catalogs (
+ version INTEGER PRIMARY KEY CHECK(version BETWEEN 1 AND 65535),
+ manifest TEXT NOT NULL, imported INTEGER NOT NULL
+)
+CREATE TABLE avatars (
+ user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ description BLOB NOT NULL CHECK(length(description)=1021),
+ revision INTEGER NOT NULL CHECK(revision>=1), updated INTEGER NOT NULL
+)
+CREATE TABLE blocks(user_id TEXT NOT NULL REFERENCES users(id), blocked_id TEXT NOT NULL REFERENCES users(id),
+ created INTEGER NOT NULL, PRIMARY KEY(user_id,blocked_id), CHECK(user_id!=blocked_id))
+CREATE TABLE directory_machines (
+ id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES directory_sessions(id) ON DELETE CASCADE,
+ owner_id TEXT NOT NULL REFERENCES users(id), expires INTEGER NOT NULL,
+ UNIQUE(session_id,owner_id)
+)
+CREATE TABLE directory_members (
+ session_id TEXT NOT NULL REFERENCES directory_sessions(id) ON DELETE CASCADE,
+ game_id TEXT NOT NULL REFERENCES titles(id), user_id TEXT NOT NULL REFERENCES users(id),
+ machine_id TEXT NOT NULL REFERENCES directory_machines(id) ON DELETE CASCADE,
+ private_slot INTEGER NOT NULL CHECK(private_slot IN (0,1)),
+ ordinal INTEGER NOT NULL CHECK(ordinal BETWEEN 0 AND 30),
+ PRIMARY KEY(session_id,user_id), UNIQUE(session_id,ordinal), UNIQUE(game_id,user_id)
+)
+CREATE TABLE directory_removals (
+ session_id TEXT NOT NULL REFERENCES directory_sessions(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ PRIMARY KEY(session_id,user_id)
+)
+CREATE TABLE directory_sessions (
+ id TEXT PRIMARY KEY, game_id TEXT NOT NULL REFERENCES titles(id),
+ host_id TEXT NOT NULL REFERENCES users(id), host_machine TEXT NOT NULL,
+ kind TEXT NOT NULL CHECK(kind IN ('player','ranked')),
+ state TEXT NOT NULL DEFAULT 'lobby' CHECK(state IN ('lobby','playing')),
+ max_gamers INTEGER NOT NULL CHECK(max_gamers BETWEEN 2 AND 31),
+ private_slots INTEGER NOT NULL CHECK(private_slots BETWEEN 0 AND max_gamers),
+ properties TEXT NOT NULL, allow_join INTEGER NOT NULL DEFAULT 0 CHECK(allow_join IN (0,1)),
+ revision INTEGER NOT NULL DEFAULT 1 CHECK(revision BETWEEN 1 AND 2147483647),
+ created INTEGER NOT NULL, expires INTEGER NOT NULL
+, allow_migration INTEGER NOT NULL DEFAULT 0 CHECK(allow_migration IN (0,1)))
+CREATE TABLE earned(user_id TEXT NOT NULL REFERENCES users(id), game_id TEXT NOT NULL, key TEXT NOT NULL,
+ ticks INTEGER NOT NULL, PRIMARY KEY(user_id,game_id,key),
+ FOREIGN KEY(game_id,key) REFERENCES achievements(game_id,key))
+CREATE TABLE friends(user_id TEXT NOT NULL REFERENCES users(id), friend_id TEXT NOT NULL REFERENCES users(id),
+ PRIMARY KEY(user_id,friend_id), CHECK(user_id != friend_id))
+CREATE TABLE invitation_send_limits (
+ game_id TEXT NOT NULL REFERENCES titles(id), user_id TEXT NOT NULL REFERENCES users(id),
+ window_start INTEGER NOT NULL, created_count INTEGER NOT NULL CHECK(created_count BETWEEN 1 AND 32),
+ PRIMARY KEY(game_id,user_id)
+)
+CREATE TABLE leaderboard_entries(game_id TEXT NOT NULL, key TEXT NOT NULL, mode INTEGER NOT NULL,
+ user_id TEXT NOT NULL REFERENCES users(id), rating INTEGER NOT NULL, columns TEXT NOT NULL,
+ updated INTEGER NOT NULL, PRIMARY KEY(game_id,key,mode,user_id),
+ FOREIGN KEY(game_id,key,mode) REFERENCES leaderboards(game_id,key,mode))
+CREATE TABLE leaderboard_game_members(gameplay_id TEXT NOT NULL REFERENCES leaderboard_games(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id), PRIMARY KEY(gameplay_id,user_id))
+CREATE TABLE leaderboard_games(id TEXT PRIMARY KEY, game_id TEXT NOT NULL REFERENCES titles(id),
+ owner_id TEXT NOT NULL REFERENCES users(id), kind TEXT NOT NULL, created INTEGER NOT NULL,
+ expires INTEGER NOT NULL, committed TEXT NOT NULL DEFAULT '')
+CREATE TABLE leaderboards(game_id TEXT NOT NULL REFERENCES titles(id), key TEXT NOT NULL,
+ mode INTEGER NOT NULL, ascending INTEGER NOT NULL, aggregation TEXT NOT NULL,
+ arbitrated INTEGER NOT NULL, columns TEXT NOT NULL, PRIMARY KEY(game_id,key,mode))
+CREATE TABLE messages (
+ id TEXT PRIMARY KEY, sender_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ recipient_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ text TEXT NOT NULL, created INTEGER NOT NULL, read INTEGER NOT NULL DEFAULT 0 CHECK(read IN (0,1))
+)
+CREATE TABLE parties (
+ id TEXT PRIMARY KEY, leader_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, created INTEGER NOT NULL
+)
+CREATE TABLE party_invitations (
+ party_id TEXT NOT NULL REFERENCES parties(id) ON DELETE CASCADE,
+ sender_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ recipient_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, created INTEGER NOT NULL,
+ PRIMARY KEY(party_id,recipient_id)
+)
+CREATE TABLE party_members (
+ party_id TEXT NOT NULL REFERENCES parties(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE, joined INTEGER NOT NULL,
+ PRIMARY KEY(party_id,user_id)
+)
+CREATE TABLE player_reviews (
+ reviewer_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ subject_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ rating TEXT NOT NULL CHECK(rating IN ('prefer','avoid')), updated INTEGER NOT NULL,
+ PRIMARY KEY(reviewer_id,subject_id)
+)
+CREATE TABLE presence(user_id TEXT NOT NULL REFERENCES users(id), game_id TEXT NOT NULL REFERENCES titles(id),
+ mode INTEGER NOT NULL DEFAULT 0, text TEXT NOT NULL DEFAULT '', PRIMARY KEY(user_id,game_id))
+CREATE TABLE refresh_credentials(hash TEXT PRIMARY KEY, family_id TEXT NOT NULL REFERENCES refresh_families(id) ON DELETE CASCADE,
+ used INTEGER NOT NULL DEFAULT 0)
+CREATE TABLE refresh_families(id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id),
+ game_id TEXT NOT NULL REFERENCES titles(id), expires INTEGER NOT NULL, revoked INTEGER NOT NULL DEFAULT 0,
+ rotations INTEGER NOT NULL DEFAULT 0)
+CREATE TABLE relay_ticket_members (
+ ticket_hash TEXT NOT NULL REFERENCES relay_tickets(hash) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id),
+ family_id TEXT NOT NULL REFERENCES refresh_families(id) ON DELETE CASCADE,
+ PRIMARY KEY(ticket_hash,user_id)
+)
+CREATE TABLE relay_tickets (
+ hash TEXT PRIMARY KEY, game_id TEXT NOT NULL REFERENCES titles(id),
+ session_id TEXT NOT NULL REFERENCES directory_sessions(id) ON DELETE CASCADE,
+ machine_id TEXT NOT NULL REFERENCES directory_machines(id) ON DELETE CASCADE,
+ owner_id TEXT NOT NULL REFERENCES users(id),
+ participants_count INTEGER NOT NULL CHECK(participants_count BETWEEN 1 AND 4),
+ created INTEGER NOT NULL, expires INTEGER NOT NULL, grant_expires INTEGER NOT NULL,
+ used INTEGER NOT NULL DEFAULT 0 CHECK(used IN (0,1))
+)
+CREATE TABLE request_ids(game_id TEXT NOT NULL REFERENCES titles(id), id TEXT NOT NULL, created INTEGER NOT NULL, user_id TEXT NOT NULL DEFAULT '', op TEXT NOT NULL DEFAULT '', outcome TEXT NOT NULL DEFAULT '', result TEXT,
+ PRIMARY KEY(game_id,id))
+CREATE TABLE session_invitations (
+ id TEXT PRIMARY KEY, game_id TEXT NOT NULL REFERENCES titles(id),
+ session_id TEXT NOT NULL REFERENCES directory_sessions(id) ON DELETE CASCADE,
+ sender_id TEXT NOT NULL REFERENCES users(id), recipient_id TEXT NOT NULL REFERENCES users(id),
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','accepted','dismissed','used')),
+ created INTEGER NOT NULL, expires INTEGER NOT NULL, accepted_at INTEGER NOT NULL DEFAULT 0,
+ used_machine TEXT NOT NULL DEFAULT ''
+, requested INTEGER NOT NULL DEFAULT 0 CHECK(requested IN (0,1)))
+CREATE TABLE sessions(hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id),
+ game_id TEXT NOT NULL REFERENCES titles(id), expires INTEGER NOT NULL, last_seen INTEGER NOT NULL, refresh_family TEXT REFERENCES refresh_families(id) ON DELETE CASCADE, voice INTEGER NOT NULL DEFAULT 0 CHECK(voice IN (0,1)))
+CREATE TABLE title_assets(game_id TEXT NOT NULL REFERENCES titles(id), hash TEXT NOT NULL REFERENCES assets(hash),
+ PRIMARY KEY(game_id,hash))
+CREATE TABLE titles(id TEXT PRIMARY KEY, name TEXT NOT NULL, minimum_version TEXT NOT NULL DEFAULT '')
+CREATE TABLE users(id TEXT PRIMARY KEY, username TEXT UNIQUE COLLATE NOCASE NOT NULL,
+ gamertag TEXT UNIQUE COLLATE NOCASE NOT NULL, salt TEXT NOT NULL, verifier TEXT NOT NULL,
+ motto TEXT NOT NULL DEFAULT '', region TEXT NOT NULL DEFAULT 'US', online_allowed INTEGER NOT NULL DEFAULT 1, picture TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'online' CHECK(status IN ('online','away','busy')), game_defaults TEXT NOT NULL DEFAULT '{}', gamer_zone TEXT NOT NULL DEFAULT 'unknown' CHECK(gamer_zone IN ('unknown','recreation','pro','family','underground')), privilege_communication TEXT NOT NULL DEFAULT 'everyone' CHECK(privilege_communication IN ('everyone','friends','blocked')), privilege_profile_viewing TEXT NOT NULL DEFAULT 'everyone' CHECK(privilege_profile_viewing IN ('everyone','friends','blocked')), privilege_user_content TEXT NOT NULL DEFAULT 'everyone' CHECK(privilege_user_content IN ('everyone','friends','blocked')), privilege_trade INTEGER NOT NULL DEFAULT 1 CHECK(privilege_trade IN (0,1)), privilege_purchase INTEGER NOT NULL DEFAULT 1 CHECK(privilege_purchase IN (0,1)), privilege_premium INTEGER NOT NULL DEFAULT 1 CHECK(privilege_premium IN (0,1)))

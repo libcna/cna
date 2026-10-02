@@ -1,0 +1,24 @@
+run_gpu_tests_private: DISPLAY=:2 (private Xwayland), WAYLAND_DISPLAY=cna-weston-2582573 (private Weston)
+Running main() from ../../../../vendor/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = ServiceRequestRetryTest.AFullServiceBlockListIsNotSilentlyDroppedAtSignIn
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from ServiceRequestRetryTest
+[ RUN      ] ServiceRequestRetryTest.AFullServiceBlockListIsNotSilentlyDroppedAtSignIn
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/ServiceRequestRetryTests.cpp:374: Failure
+Expected equality of these values:
+  1024u
+    Which is: 1024
+  person.blocked.size()
+    Which is: 0
+
+[  FAILED  ] ServiceRequestRetryTest.AFullServiceBlockListIsNotSilentlyDroppedAtSignIn (28 ms)
+[----------] 1 test from ServiceRequestRetryTest (29 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (29 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] ServiceRequestRetryTest.AFullServiceBlockListIsNotSilentlyDroppedAtSignIn
+
+ 1 FAILED TEST

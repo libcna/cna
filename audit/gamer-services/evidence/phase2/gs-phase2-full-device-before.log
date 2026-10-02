@@ -1,0 +1,57 @@
+run_gpu_tests_private: DISPLAY=:2 (private Xwayland), WAYLAND_DISPLAY=cna-weston-1669940 (private Weston)
+Running main() from ../../../../vendor/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = LeaderboardWriterTest.OfflineWriteFailurePreservesPreviousRecord
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from LeaderboardWriterTest
+[ RUN      ] LeaderboardWriterTest.OfflineWriteFailurePreservesPreviousRecord
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1234: Failure
+Expected: SaveLeaderboardEntryEXT("full", {"Alice", 99}, nullptr) throws an exception of type std::runtime_error.
+  Actual: it throws nothing.
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1237: Failure
+Value of: std::filesystem::is_symlink(target)
+  Actual: true
+Expected: false
+
+[  FAILED  ] LeaderboardWriterTest.OfflineWriteFailurePreservesPreviousRecord (0 ms)
+[----------] 1 test from LeaderboardWriterTest (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (0 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] LeaderboardWriterTest.OfflineWriteFailurePreservesPreviousRecord
+
+ 1 FAILED TEST
+--- weston log (last 30 lines) ---
+[21:49:40.669] GL ES 3.2 - renderer features:
+               read-back format: ARGB8888
+               glReadPixels supports y-flip: yes
+               glReadPixels supports PBO: yes
+               wl_shm 10 bpc formats: yes
+               wl_shm 16 bpc formats: yes
+               wl_shm half-float formats: yes
+               internal R and RG formats: yes
+               OES_EGL_image_external: yes
+[21:49:40.669] Using GL renderer
+[21:49:40.669] Registered plugin API 'weston_windowed_output_api_headless_v2' of size 16
+[21:49:40.669] Color manager: no-op
+                 protocol support: no
+[21:49:40.669] Output 'headless' attempts EOTF mode SDR and colorimetry mode default.
+[21:49:40.669] Output 'headless' using color profile: stock sRGB color profile
+[21:49:40.674] Output 'headless' enabled with head(s) headless
+[21:49:40.674] Compositor capabilities:
+               arbitrary surface rotation: yes
+               screen capture uses y-flip: yes
+               cursor planes: no
+               arbitrary resolutions: no
+               view mask clipping: yes
+               explicit sync: yes
+               color operations: yes
+               presentation clock: CLOCK_MONOTONIC_RAW, id 4
+               presentation clock resolution: 0.000000001 s
+[21:49:40.675] Loading module '/home/robertvokac/deps/weston/usr/lib/x86_64-linux-gnu/weston/desktop-shell.so'
+[21:49:40.675] launching '/home/robertvokac/deps/weston/usr/libexec/weston-desktop-shell'
+could not load cursor 'dnd-copy'
+could not load cursor 'dnd-none'

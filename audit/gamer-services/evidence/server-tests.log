@@ -1,0 +1,108 @@
+Internal ctest changing into directory: /tmp/cna-gs-audit-build
+Test project /tmp/cna-gs-audit-build
+      Start  1: service_unit
+      Start  2: service_tls_e2e
+ 1/32 Test  #2: service_tls_e2e ...................   Passed    9.40 sec
+      Start  3: service_benchmark_smoke
+ 2/32 Test  #1: service_unit ......................   Passed   20.33 sec
+      Start  4: service_ranked_migration
+ 3/32 Test  #3: service_benchmark_smoke ...........   Passed   11.68 sec
+      Start  5: service_privacy
+ 4/32 Test  #4: service_ranked_migration ..........   Passed    1.02 sec
+      Start  6: service_database_lock
+ 5/32 Test  #6: service_database_lock .............   Passed    0.01 sec
+      Start  7: service_atomicity
+ 6/32 Test  #5: service_privacy ...................   Passed    1.79 sec
+      Start  8: service_directory
+ 7/32 Test  #8: service_directory .................   Passed    2.10 sec
+      Start  9: service_arbitration
+ 8/32 Test  #9: service_arbitration ...............   Passed    1.06 sec
+      Start 10: service_avatars
+ 9/32 Test #10: service_avatars ...................   Passed    1.98 sec
+      Start 11: service_avatar_validation
+10/32 Test  #7: service_atomicity .................   Passed    9.02 sec
+      Start 12: service_social
+11/32 Test #11: service_avatar_validation .........   Passed    2.57 sec
+      Start 13: service_invitations
+12/32 Test #12: service_social ....................   Passed    1.13 sec
+      Start 14: service_cna_directory
+13/32 Test #13: service_invitations ...............   Passed    2.23 sec
+      Start 15: service_relay_protocol
+14/32 Test #15: service_relay_protocol ............   Passed    0.02 sec
+      Start 16: service_relay_authorization
+15/32 Test #16: service_relay_authorization .......   Passed    1.48 sec
+      Start 17: service_relay_flow
+16/32 Test #17: service_relay_flow ................   Passed    0.02 sec
+      Start 18: service_relay_wss
+17/32 Test #14: service_cna_directory .............   Passed    4.80 sec
+      Start 19: service_cna_relay
+18/32 Test #19: service_cna_relay .................   Passed    7.90 sec
+      Start 20: service_cna_relay_nat
+19/32 Test #20: service_cna_relay_nat .............***Skipped   0.04 sec
+      Start 21: service_cna_owned_enet
+20/32 Test #18: service_relay_wss .................   Passed   47.80 sec
+      Start 22: service_cna_owned_enet_nat
+21/32 Test #22: service_cna_owned_enet_nat ........***Skipped   0.03 sec
+      Start 23: service_cna_session
+22/32 Test #23: service_cna_session ...............***Failed   10.12 sec
+session-done 1169 checks
+session-done 1827 checks
+player public XNA NetworkSession: two CNA processes/four Guide-signed-in accounts, pending Begin/End with one owner-thread callback, property-filtered Find, complete GamerJoined replay, shared machines,   six verified packets each way incl. 32KiB and in-order, host properties/join-in-progress and StartGame/EndGame observed remotely, per-machine EndGame leaderboard commits read back by both,  client leave -> GamerLeft
+Traceback (most recent call last):
+  File "/rv/data/development/github.com/libcna/cna-gamer-services-server/tests/cna_session_e2e.py", line 177, in <module>
+    if __name__=="__main__":sys.exit(main())
+                                     ~~~~^^
+  File "/rv/data/development/github.com/libcna/cna-gamer-services-server/tests/cna_session_e2e.py", line 136, in main
+    assert set(exchanged)<=allowed,"verified deliveries each way: "+str(exchanged)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: verified deliveries each way: ('session-exchanged 5', 'session-exchanged 6')
+
+      Start 24: service_cna_session_nat
+23/32 Test #24: service_cna_session_nat ...........***Skipped   0.03 sec
+      Start 25: service_cna_invite
+24/32 Test #21: service_cna_owned_enet ............   Passed   52.54 sec
+      Start 26: service_cna_invite_nat
+25/32 Test #26: service_cna_invite_nat ............***Skipped   0.03 sec
+      Start 27: service_cna_avatars
+26/32 Test #27: service_cna_avatars ...............   Passed   12.90 sec
+      Start 28: service_cna_session_restart
+27/32 Test #25: service_cna_invite ................   Passed   17.92 sec
+      Start 29: service_cna_session_restart_nat
+28/32 Test #29: service_cna_session_restart_nat ...***Skipped   0.06 sec
+      Start 30: service_cna_session_migration
+29/32 Test #30: service_cna_session_migration .....***Failed   10.17 sec
+session-done 1387 checks
+session-done 1664 checks
+player public XNA NetworkSession: two CNA processes/four Guide-signed-in accounts, pending Begin/End with one owner-thread callback, property-filtered Find, complete GamerJoined replay, shared machines,   six verified packets each way incl. 32KiB and in-order, host properties/join-in-progress and StartGame/EndGame observed remotely, per-machine EndGame leaderboard commits read back by both,  host leave -> the joiner hosts (HostChanged)
+Traceback (most recent call last):
+  File "/rv/data/development/github.com/libcna/cna-gamer-services-server/tests/cna_session_e2e.py", line 177, in <module>
+    if __name__=="__main__":sys.exit(main())
+                                     ~~~~^^
+  File "/rv/data/development/github.com/libcna/cna-gamer-services-server/tests/cna_session_e2e.py", line 136, in main
+    assert set(exchanged)<=allowed,"verified deliveries each way: "+str(exchanged)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: verified deliveries each way: ('session-exchanged 5', 'session-exchanged 6')
+
+      Start 31: service_cna_session_host_crash
+30/32 Test #31: service_cna_session_host_crash ....***Skipped   0.03 sec
+      Start 32: service_cna_session_add_gamer
+31/32 Test #32: service_cna_session_add_gamer .....***Skipped   0.03 sec
+32/32 Test #28: service_cna_session_restart .......   Passed   18.66 sec
+
+94% tests passed, 2 tests failed out of 32
+
+Total Test time (real) = 128.39 sec
+
+The following tests did not run:
+	 20 - service_cna_relay_nat (Skipped)
+	 22 - service_cna_owned_enet_nat (Skipped)
+	 24 - service_cna_session_nat (Skipped)
+	 26 - service_cna_invite_nat (Skipped)
+	 29 - service_cna_session_restart_nat (Skipped)
+	 31 - service_cna_session_host_crash (Skipped)
+	 32 - service_cna_session_add_gamer (Skipped)
+
+The following tests FAILED:
+	 23 - service_cna_session (Failed)
+	 30 - service_cna_session_migration (Failed)
+Errors while running CTest

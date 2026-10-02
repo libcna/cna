@@ -1,0 +1,90 @@
+run_gpu_tests_private: DISPLAY=:2 (private Xwayland), WAYLAND_DISPLAY=cna-weston-2453039 (private Weston)
+Running main() from ../../../../vendor/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = AvatarServiceTest.*:AvatarCatalogProcessTest.*:OfflineConcurrencyTest.*:LocalProfileStoreTest.*
+[==========] Running 35 tests from 4 test suites.
+[----------] Global test environment set-up.
+[----------] 4 tests from OfflineConcurrencyTest
+[ RUN      ] OfflineConcurrencyTest.AchievementThreadUpdatesKeepEveryKeyAndTimestamp
+[       OK ] OfflineConcurrencyTest.AchievementThreadUpdatesKeepEveryKeyAndTimestamp (673 ms)
+[ RUN      ] OfflineConcurrencyTest.LeaderboardThreadUpdatesKeepEveryGamerAndColumns
+[       OK ] OfflineConcurrencyTest.LeaderboardThreadUpdatesKeepEveryGamerAndColumns (1278 ms)
+[ RUN      ] OfflineConcurrencyTest.AchievementProcessUpdatesKeepEveryKeyAndTimestamp
+[       OK ] OfflineConcurrencyTest.AchievementProcessUpdatesKeepEveryKeyAndTimestamp (132 ms)
+[ RUN      ] OfflineConcurrencyTest.LeaderboardProcessUpdatesKeepEveryGamerAndColumns
+[       OK ] OfflineConcurrencyTest.LeaderboardProcessUpdatesKeepEveryGamerAndColumns (248 ms)
+[----------] 4 tests from OfflineConcurrencyTest (2332 ms total)
+
+[----------] 8 tests from LocalProfileStoreTest
+[ RUN      ] LocalProfileStoreTest.NamesFollowGamertagRules
+[       OK ] LocalProfileStoreTest.NamesFollowGamertagRules (0 ms)
+[ RUN      ] LocalProfileStoreTest.OpeningCreatesAStoredProfileAndReusesItIgnoringCase
+[       OK ] LocalProfileStoreTest.OpeningCreatesAStoredProfileAndReusesItIgnoringCase (11 ms)
+[ RUN      ] LocalProfileStoreTest.AStoreThatCannotBeReadIsNeverOverwritten
+[       OK ] LocalProfileStoreTest.AStoreThatCannotBeReadIsNeverOverwritten (3 ms)
+[ RUN      ] LocalProfileStoreTest.MalformedEntriesAreSkippedAndALostAvatarIsReplaced
+[       OK ] LocalProfileStoreTest.MalformedEntriesAreSkippedAndALostAvatarIsReplaced (8 ms)
+[ RUN      ] LocalProfileStoreTest.AutomaticSignInNamesComeFromTheEnvironment
+[       OK ] LocalProfileStoreTest.AutomaticSignInNamesComeFromTheEnvironment (11 ms)
+[ RUN      ] LocalProfileStoreTest.AutomaticSignInOtherwiseUsesTheStoredFlags
+[       OK ] LocalProfileStoreTest.AutomaticSignInOtherwiseUsesTheStoredFlags (2 ms)
+[ RUN      ] LocalProfileStoreTest.ProcessesCreatingProfilesAtOnceKeepEveryProfile
+[       OK ] LocalProfileStoreTest.ProcessesCreatingProfilesAtOnceKeepEveryProfile (56 ms)
+[ RUN      ] LocalProfileStoreTest.FailedLockNeverWritesAnUnlockedProfileStore
+[       OK ] LocalProfileStoreTest.FailedLockNeverWritesAnUnlockedProfileStore (2 ms)
+[----------] 8 tests from LocalProfileStoreTest (97 ms total)
+
+[----------] 22 tests from AvatarServiceTest
+[ RUN      ] AvatarServiceTest.ASignedInGamersAvatarComesFromTheService
+[       OK ] AvatarServiceTest.ASignedInGamersAvatarComesFromTheService (2 ms)
+[ RUN      ] AvatarServiceTest.AGamerWithoutAnAvatarGetsAnInvalidDescription
+[       OK ] AvatarServiceTest.AGamerWithoutAnAvatarGetsAnInvalidDescription (0 ms)
+[ RUN      ] AvatarServiceTest.AGamerLookedUpByGamertagHasTheirAvatar
+[       OK ] AvatarServiceTest.AGamerLookedUpByGamertagHasTheirAvatar (0 ms)
+[ RUN      ] AvatarServiceTest.TheServiceAvatarRendersThroughTheStandardApi
+[       OK ] AvatarServiceTest.TheServiceAvatarRendersThroughTheStandardApi (94 ms)
+[ RUN      ] AvatarServiceTest.AWarmInstallationDrawsAServiceAvatarWithTheFileEndpointOff
+[       OK ] AvatarServiceTest.AWarmInstallationDrawsAServiceAvatarWithTheFileEndpointOff (64 ms)
+[ RUN      ] AvatarServiceTest.AMissingCatalogIsInstalledOnceAsOneValidatedPack
+[       OK ] AvatarServiceTest.AMissingCatalogIsInstalledOnceAsOneValidatedPack (660 ms)
+[ RUN      ] AvatarServiceTest.AnInterruptedInstallActivatesNothingAndARetryResumesIt
+[       OK ] AvatarServiceTest.AnInterruptedInstallActivatesNothingAndARetryResumesIt (831 ms)
+[ RUN      ] AvatarServiceTest.AMalformedManifestIsNeverActivated
+[       OK ] AvatarServiceTest.AMalformedManifestIsNeverActivated (130 ms)
+[ RUN      ] AvatarServiceTest.AFileWhoseBytesDoNotMatchTheManifestIsNeverActivated
+[       OK ] AvatarServiceTest.AFileWhoseBytesDoNotMatchTheManifestIsNeverActivated (149 ms)
+[ RUN      ] AvatarServiceTest.AnUnreadableModelIsNeverActivated
+[       OK ] AvatarServiceTest.AnUnreadableModelIsNeverActivated (468 ms)
+[ RUN      ] AvatarServiceTest.AModelOnAnotherSkeletonIsNeverActivated
+[       OK ] AvatarServiceTest.AModelOnAnotherSkeletonIsNeverActivated (442 ms)
+[ RUN      ] AvatarServiceTest.AnimationsWithoutEveryPresetAreNeverActivated
+[       OK ] AvatarServiceTest.AnimationsWithoutEveryPresetAreNeverActivated (413 ms)
+[ RUN      ] AvatarServiceTest.AnOversizedCatalogIsRefusedBeforeAnyDownload
+[       OK ] AvatarServiceTest.AnOversizedCatalogIsRefusedBeforeAnyDownload (145 ms)
+[ RUN      ] AvatarServiceTest.AClientThatDeclinesUpdatesDrawsTheDefaultAvatarAndReadsNoIds
+[       OK ] AvatarServiceTest.AClientThatDeclinesUpdatesDrawsTheDefaultAvatarAndReadsNoIds (740 ms)
+[ RUN      ] AvatarServiceTest.TwoClientsWithTheSameCatalogAndDescriptionBuildTheSameAvatar
+[       OK ] AvatarServiceTest.TwoClientsWithTheSameCatalogAndDescriptionBuildTheSameAvatar (1327 ms)
+[ RUN      ] AvatarServiceTest.ConcurrentRequestsForOnePackInstallItOnce
+[       OK ] AvatarServiceTest.ConcurrentRequestsForOnePackInstallItOnce (452 ms)
+[ RUN      ] AvatarServiceTest.ARestartedClientResumesItsStagingAndClearsAbandonedStaging
+[       OK ] AvatarServiceTest.ARestartedClientResumesItsStagingAndClearsAbandonedStaging (561 ms)
+[ RUN      ] AvatarServiceTest.AnUnavailableUpdateDrawsTheDefaultAvatarAndIsNotAskedAgainAtOnce
+[       OK ] AvatarServiceTest.AnUnavailableUpdateDrawsTheDefaultAvatarAndIsNotAskedAgainAtOnce (87 ms)
+[ RUN      ] AvatarServiceTest.APackClaimingAnotherVersionIsNeverSubstituted
+[       OK ] AvatarServiceTest.APackClaimingAnotherVersionIsNeverSubstituted (113 ms)
+[ RUN      ] AvatarServiceTest.InstallingANewCatalogDoesNotChangeOlderDescriptions
+[       OK ] AvatarServiceTest.InstallingANewCatalogDoesNotChangeOlderDescriptions (1265 ms)
+[ RUN      ] AvatarServiceTest.ADescriptionInAnUnknownFormatIsNotDrawnAsAnything
+[       OK ] AvatarServiceTest.ADescriptionInAnUnknownFormatIsNotDrawnAsAnything (6 ms)
+[ RUN      ] AvatarServiceTest.AFailedInstallLockCannotActivateOrDeleteStaging
+[       OK ] AvatarServiceTest.AFailedInstallLockCannotActivateOrDeleteStaging (23 ms)
+[----------] 22 tests from AvatarServiceTest (7985 ms total)
+
+[----------] 1 test from AvatarCatalogProcessTest
+[ RUN      ] AvatarCatalogProcessTest.TwoProcessesInstallingOnePackActivateItOnce
+[       OK ] AvatarCatalogProcessTest.TwoProcessesInstallingOnePackActivateItOnce (867 ms)
+[----------] 1 test from AvatarCatalogProcessTest (867 ms total)
+
+[----------] Global test environment tear-down
+[==========] 35 tests from 4 test suites ran. (11283 ms total)
+[  PASSED  ] 35 tests.

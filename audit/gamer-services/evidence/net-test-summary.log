@@ -1,0 +1,8 @@
+run_gpu_tests_private: DISPLAY=:5 (private Xwayland), WAYLAND_DISPLAY=cna-weston-1618849 (private Weston)
+Running main() from ../../../../vendor/googletest/googletest/src/gtest_main.cc
+[       OK ] ServiceRosterTest.TenThousandMutationsRejectSafelyOrCanonicalDecodeRoundTrip (219 ms)
+[----------] 7 tests from ServiceRosterTest (225 ms total)
+
+[----------] Global test environment tear-down
+[==========] 523 tests from 48 test suites ran. (43423 ms total)
+[  PASSED  ] 523 tests.

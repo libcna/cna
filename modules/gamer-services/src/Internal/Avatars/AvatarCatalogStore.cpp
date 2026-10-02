@@ -2,6 +2,7 @@
 // Installed avatar catalog packs (Layer B of docs/avatars.md): catalogs this release does not
 // compile in, installed whole, validated before use, and kept.
 #include "CNA/Internal/GamerServices/AvatarAssets.hpp"
+#include "CNA/Internal/GamerServices/LocalStoreLock.hpp"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <atomic>
@@ -13,6 +14,7 @@
 #include <mutex>
 #include <random>
 #include <stdexcept>
+#include <system_error>
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -42,42 +44,6 @@ fs::path rootOverride;
 std::map<std::uint16_t,std::shared_ptr<const CatalogManifest>> loaded;
 
 [[noreturn]] void invalid(const std::string& what){throw std::runtime_error("avatar catalog pack: "+what);}
-
-// One installer per catalog version at a time, across threads and processes: without it, the
-// installer that activates a pack removes the staging of another still writing the same pack.
-// The operating system releases the lock when its holder ends. Best effort: a lock file that
-// cannot be opened leaves the install unserialized.
-class InstallLock {
-public:
-    InstallLock(const fs::path& root,std::uint16_t version) {
-        const auto path=root/(".install-v"+std::to_string(version)+".lock");
-#if defined(_WIN32)
-        handle_=CreateFileW(path.wstring().c_str(),GENERIC_READ|GENERIC_WRITE,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
-        OVERLAPPED whole{};
-        if(handle_!=INVALID_HANDLE_VALUE&&!LockFileEx(handle_,LOCKFILE_EXCLUSIVE_LOCK,0,1,0,&whole)){CloseHandle(handle_);handle_=INVALID_HANDLE_VALUE;}
-#else
-        descriptor_=::open(path.c_str(),O_RDWR|O_CREAT|O_CLOEXEC,0600);
-        while(descriptor_>=0&&::flock(descriptor_,LOCK_EX)!=0) {
-            if(errno!=EINTR){::close(descriptor_);descriptor_=-1;}
-        }
-#endif
-    }
-    ~InstallLock() {
-#if defined(_WIN32)
-        if(handle_!=INVALID_HANDLE_VALUE){OVERLAPPED whole{};UnlockFileEx(handle_,0,1,0,&whole);CloseHandle(handle_);}
-#else
-        if(descriptor_>=0)::close(descriptor_);
-#endif
-    }
-    InstallLock(const InstallLock&)=delete;
-    InstallLock& operator=(const InstallLock&)=delete;
-private:
-#if defined(_WIN32)
-    HANDLE handle_=INVALID_HANDLE_VALUE;
-#else
-    int descriptor_=-1;
-#endif
-};
 
 bool isHash(std::string_view text)
 {
@@ -324,7 +290,9 @@ CatalogInstall installCatalogPack(const CatalogPack& pack,std::uint64_t maximumB
     std::error_code fsError;
     fs::create_directories(root,fsError);
     if(fsError)return fail(CatalogInstall::Failed,"the catalog directory cannot be created");
-    const InstallLock lock(root,pack.version);
+    std::optional<LocalStoreLock> lock;
+    try { lock.emplace(root/(".install-v"+std::to_string(pack.version))); }
+    catch(const std::system_error&) { return fail(CatalogInstall::Failed,"the catalog install lock cannot be acquired"); }
     // Whether a pack of this version is there is decided under the lock: an installer that waited
     // finds the one another installer just activated.
     if(fs::exists(final,fsError)) {

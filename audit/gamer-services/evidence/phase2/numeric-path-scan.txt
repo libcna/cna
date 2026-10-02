@@ -1,0 +1,39 @@
+../cna-gamer-services-server/src/Leaderboards.cpp:39:            const auto value=field["value"].get<double>();if(!std::isfinite(value)||(type=="single"&&std::abs(value)>std::numeric_limits<float>::max()))throw Error("INVALID_ARGUMENT");
+../cna-gamer-services-server/src/AvatarAssets.cpp:330:                    const double time=key[0].get<double>();
+../cna-gamer-services-server/src/Avatars.cpp:188:                        const double weight=item["random"].at(body).get<double>();
+../cna-gamer-services-server/src/Avatars.cpp:266:            const double weight=item.contains("random")?item["random"].at(bodyName).get<double>():1.0;
+modules/net/src/Internal/ENetDiscoveryService.cpp:75:            const double rate = static_cast<double>(lastIndex - firstIndex) * static_cast<double>(kQosProbeBytes) / seconds;
+modules/gamer-services/src/Internal/Avatars/AvatarEditor.cpp:23:    const int steps=static_cast<int>(std::lround((value-NeutralFaceParameter)/static_cast<double>(SliderStep)))+delta;
+modules/gamer-services/src/Internal/Avatars/AvatarEditor.cpp:277:        const int steps=static_cast<int>(std::lround((value-NeutralFaceParameter)/static_cast<double>(SliderStep)));
+modules/net/src/Internal/OnlineSessionBinding.cpp:277:            found->second->SetRoundtripTime(System::TimeSpan::FromMilliseconds(static_cast<double>(milliseconds)));
+modules/net/src/Internal/ENetBackend.cpp:406:                const double milliseconds = static_cast<double>(state.HostPeer->roundTripTime) +
+modules/gamer-services/src/Internal/GamerServicesBackend.cpp:79:        if(!j["reputation"].is_number()||j["reputation"].get<double>()<0.0||j["reputation"].get<double>()>5.0)throw CnaService::Error("INVALID_RESPONSE");
+modules/gamer-services/src/Internal/GamerServicesBackend.cpp:435:                    const auto number=field["value"].get<double>();if(!std::isfinite(number)||(column.type=="single"&&std::abs(number)>std::numeric_limits<float>::max()))throw Unavailable("Invalid leaderboard floating value.");column.value=number;
+modules/net/src/Internal/VoiceChat.cpp:73:                const double step = static_cast<double>(rate_) / VoiceSampleRate;
+modules/net/src/Internal/VoiceChat.cpp:230:                for (int index = 0; index < VoiceFrameSamples; ++index) sum += static_cast<double>(pcm[index]) * pcm[index];
+modules/gamer-services/src/Internal/LocalGamerServicesStore.cpp:153:            record.EarnedTicks = static_cast<long long>(earnedTicks->numberValue);
+modules/gamer-services/src/Internal/LocalGamerServicesStore.cpp:183:            entry.Set("earnedTicks", CNA::Internal::JsonValue::MakeNumber(static_cast<double>(record.EarnedTicks)));
+modules/gamer-services/src/Internal/LocalGamerServicesStore.cpp:217:                    entry.Set("value", CNA::Internal::JsonValue::MakeNumber(static_cast<double>(std::any_cast<long long>(value))));
+modules/gamer-services/src/Internal/LocalGamerServicesStore.cpp:227:                    entry.Set("value", CNA::Internal::JsonValue::MakeNumber(static_cast<double>(std::any_cast<float>(value))));
+modules/gamer-services/src/Internal/LocalGamerServicesStore.cpp:238:                        static_cast<double>(std::any_cast<System::DateTime>(value).getTicksProperty())));
+modules/gamer-services/src/Internal/LocalGamerServicesStore.cpp:244:                        static_cast<double>(std::any_cast<System::TimeSpan>(value).getTicksProperty())));
+modules/gamer-services/src/Internal/LocalGamerServicesStore.cpp:250:                        static_cast<double>(std::any_cast<LeaderboardOutcome>(value))));
+modules/gamer-services/src/Internal/LocalGamerServicesStore.cpp:280:                    outColumns.SetValue(key->stringValue, static_cast<int>(value->numberValue));
+modules/gamer-services/src/Internal/LocalGamerServicesStore.cpp:284:                    outColumns.SetValue(key->stringValue, static_cast<long long>(value->numberValue));
+modules/gamer-services/src/Internal/LocalGamerServicesStore.cpp:288:                    outColumns.SetValue(key->stringValue, value->numberValue);
+modules/gamer-services/src/Internal/LocalGamerServicesStore.cpp:292:                    outColumns.SetValue(key->stringValue, static_cast<float>(value->numberValue));
+modules/gamer-services/src/Internal/LocalGamerServicesStore.cpp:300:                    outColumns.SetValue(key->stringValue, System::DateTime(static_cast<SharpRuntime::longcs>(value->numberValue)));
+modules/gamer-services/src/Internal/LocalGamerServicesStore.cpp:304:                    outColumns.SetValue(key->stringValue, System::TimeSpan(static_cast<SharpRuntime::longcs>(value->numberValue)));
+modules/gamer-services/src/Internal/LocalGamerServicesStore.cpp:308:                    outColumns.SetValue(key->stringValue, static_cast<LeaderboardOutcome>(static_cast<int>(value->numberValue)));
+modules/gamer-services/src/Internal/LocalGamerServicesStore.cpp:340:            record.Rating = static_cast<long long>(rating->numberValue);
+modules/gamer-services/src/Internal/LocalGamerServicesStore.cpp:374:                existing.Set("rating", CNA::Internal::JsonValue::MakeNumber(static_cast<double>(entry.Rating)));
+modules/gamer-services/src/Internal/LocalGamerServicesStore.cpp:384:            newEntry.Set("rating", CNA::Internal::JsonValue::MakeNumber(static_cast<double>(entry.Rating)));
+modules/gamer-services/src/Internal/LocalGamerServicesStore.cpp:504:                if (score == nullptr || !score->IsNumber() || score->numberValue < 0 || score->numberValue > 1000 ||
+modules/gamer-services/src/Internal/LocalGamerServicesStore.cpp:505:                    score->numberValue != static_cast<double>(static_cast<int>(score->numberValue)))
+modules/gamer-services/src/Internal/LocalGamerServicesStore.cpp:507:                definition.Score = static_cast<int>(score->numberValue);
+modules/gamer-services/src/Internal/Guide/GuideSounds.cpp:29:            const double t=static_cast<double>(i)/Rate;
+modules/gamer-services/src/Internal/Guide/GuideSounds.cpp:39:        const double tail=std::min(1.0,static_cast<double>(samples-i)/(0.01*Rate));
+modules/gamer-services/src/Xna/LeaderboardWriter.cpp:107:                else if(auto* v=std::any_cast<float>(&value)){column.type="single";column.value=static_cast<double>(*v);}
+modules/gamer-services/src/Xna/AvatarAnimation.cpp:102:            const double seconds = static_cast<double>(currentPosition_.getTicksProperty()) / 1.0e7;
+modules/gamer-services/src/Xna/LeaderboardReader.cpp:177:                else if(column.type=="single")columns.SetValue(key,static_cast<float>(std::get<double>(column.value)));
+modules/gamer-services/src/Xna/LeaderboardReader.cpp:178:                else if(column.type=="double")columns.SetValue(key,std::get<double>(column.value));

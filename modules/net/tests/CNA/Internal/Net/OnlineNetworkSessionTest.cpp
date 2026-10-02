@@ -9,6 +9,7 @@
 #include <optional>
 #include "CNA/Internal/Net/VoiceChat.hpp"
 #include <cmath>
+#include "CNA/Internal/GamerServices/VoiceMutes.hpp"
 
 namespace {
 using namespace OnlineSessionTesting;
@@ -526,4 +527,31 @@ TEST_F(OnlineNetworkSessionTest, VoiceCrossesTheServiceSessionBothWays) {
     // A machine cannot speak for a gamer it does not own.
     reply.SenderWireId=1;
     EXPECT_THROW(peer->sendVoice(reply),Service::ServiceOperationError);
+}
+
+TEST_F(OnlineNetworkSessionTest, LiveBlockAndMuteSnapshotsSuppressSubsequentVoiceFrames) {
+    if(!voiceAvailable())GTEST_SKIP()<<"built without libopus";
+    auto probe=std::make_shared<OnlineVoiceProbe>();
+    setVoiceDevicesForTesting([probe]{return std::make_unique<OnlineTone>(probe);},[probe]{return std::make_unique<OnlineSpeaker>(probe);});
+    struct Restore{~Restore(){setVoiceDevicesForTesting({},{});Service::resetVoiceMutesForTesting();}}restore;
+    session=NetworkSession::Create(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(0)},6,0,properties());
+    privatePeer(true,sessionId("b"));
+    until([&]{return peer->ready()&&session->getRemoteGamersProperty().getCountProperty()==2;});
+    until([&]{return std::any_of(observed.begin(),observed.end(),[](const auto& value){return value.voice&&(value.voice->Flags&VoiceFlagTalking);});});
+    auto reply=*std::find_if(observed.begin(),observed.end(),[](const auto& value){return value.voice&&(value.voice->Flags&VoiceFlagTalking);})->voice;
+    auto* bob=session->getRemoteGamersProperty()[0];
+    ASSERT_EQ("Bob",bob->getGamertagProperty());
+    reply.SenderWireId=bob->getIdProperty();reply.TargetWireId=session->getLocalGamersProperty()[0]->getIdProperty();reply.Sequence=10;
+    peer->sendVoice(reply);until([&]{return probe->played>0;});
+    for(bool block : {true,false}) {
+        if(block) Service::setBlockedPlayers("Alice",{"Bob"});
+        else {Service::setBlockedPlayers("Alice",{});Service::setVoiceMuted("Alice","Bob",true);}
+        const auto played=probe->played;
+        for(int n=0;n<20;++n) {++reply.Sequence;peer->sendVoice(reply);tick();std::this_thread::sleep_for(std::chrono::milliseconds(2));}
+        EXPECT_EQ(played,probe->played);
+        EXPECT_TRUE(bob->getIsMutedByLocalUserProperty());
+    }
+    Service::setVoiceMuted("Alice","Bob",false);
+    ++reply.Sequence;peer->sendVoice(reply);const auto played=probe->played;
+    until([&]{return probe->played>played;});
 }

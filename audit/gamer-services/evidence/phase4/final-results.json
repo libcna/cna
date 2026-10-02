@@ -1,0 +1,35 @@
+{
+  "gamer": {
+    "tests": 649,
+    "failed": 0,
+    "skipped": 0,
+    "runtime_seconds": 60.018,
+    "passed": 649
+  },
+  "net": {
+    "tests": 524,
+    "failed": 0,
+    "skipped": 0,
+    "runtime_seconds": 47.059,
+    "passed": 524
+  },
+  "server": {
+    "registered": 40,
+    "passed": 33,
+    "failed": 0,
+    "skipped": 7,
+    "runtime_seconds": 204.18
+  },
+  "storage_repeat": {
+    "iterations": 10,
+    "passed": 70,
+    "failed": 0
+  },
+  "scope": "Linux Debug HEADLESS, private Weston/Xwayland, loopback HTTP/TLS/WSS/SQLite and synthetic Opus; no physical NAT/audio/Windows/macOS runtime qualification",
+  "task_clock": {
+    "first_tool_utc": "2026-10-02 08:10:24 UTC",
+    "final_qualification_record_utc": "2026-10-02 10:47:54 UTC",
+    "elapsed_seconds_through_record": 9450,
+    "note": "Wall clock includes the continuation gap; not an active CPU/work-time measurement. Suite runtimes above are executed durations."
+  }
+}

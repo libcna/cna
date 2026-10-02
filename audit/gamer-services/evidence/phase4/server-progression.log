@@ -1,0 +1,43 @@
+Internal ctest changing into directory: /rv/data/development/github.com/libcna/cna-gamer-services-server/build
+UpdateCTestConfiguration  from :/rv/data/development/github.com/libcna/cna-gamer-services-server/build/DartConfiguration.tcl
+UpdateCTestConfiguration  from :/rv/data/development/github.com/libcna/cna-gamer-services-server/build/DartConfiguration.tcl
+Test project /rv/data/development/github.com/libcna/cna-gamer-services-server/build
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 5
+    Start  5: service_privacy
+
+5: Test command: /rv/data/development/github.com/libcna/cna-gamer-services-server/build/privacy_tests
+5: Working Directory: /rv/data/development/github.com/libcna/cna-gamer-services-server/build
+5: Test timeout computed to be: 10000000
+5: 73 privacy checks passed
+1/3 Test  #5: service_privacy ..................   Passed    2.81 sec
+test 9
+    Start  9: service_arbitration
+
+9: Test command: /rv/data/development/github.com/libcna/cna-gamer-services-server/build/arbitration_tests
+9: Working Directory: /rv/data/development/github.com/libcna/cna-gamer-services-server/build
+9: Test timeout computed to be: 10000000
+9: arbitration 62 assertions passed
+2/3 Test  #9: service_arbitration ..............   Passed    2.18 sec
+test 37
+    Start 37: service_progress_trust
+
+37: Test command: /rv/data/development/github.com/libcna/cna-gamer-services-server/build/progress_trust_tests
+37: Working Directory: /rv/data/development/github.com/libcna/cna-gamer-services-server/build
+37: Test timeout computed to be: 10000000
+37: 111 progress trust checks passed
+3/3 Test #37: service_progress_trust ...........   Passed    1.55 sec
+
+The following tests passed:
+	service_privacy
+	service_arbitration
+	service_progress_trust
+
+100% tests passed, 0 tests failed out of 3
+
+Total Test time (real) =   6.55 sec

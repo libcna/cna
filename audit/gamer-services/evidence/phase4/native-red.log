@@ -1,0 +1,128 @@
+run_gpu_tests_private: DISPLAY=:2 (private Xwayland), WAYLAND_DISPLAY=cna-weston-2562480 (private Weston)
+Running main() from ../../../../vendor/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = OfflineDurabilityTest.*:ServiceRequestRetryTest.HeartbeatRefreshesPublishedPolicyWithoutReplacingTheGamer
+[==========] Running 3 tests from 2 test suites.
+[----------] Global test environment set-up.
+[----------] 2 tests from OfflineDurabilityTest
+[ RUN      ] OfflineDurabilityTest.CorruptProgressIsReadableAsEmptyButNeverOverwrittenByAnUpdate
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1399: Failure
+Expected: SaveEarnedAchievementEXT("broken", "first", 1) throws an exception of type std::runtime_error.
+  Actual: it throws nothing.
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1405: Failure
+Expected equality of these values:
+  bytes
+    Which is: "{interrupted"
+  std::string(std::istreambuf_iterator<char>(file), {})
+    Which is: "{\"achievements\":[{\"earnedTicks\":1,\"key\":\"first\"}]}"
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1399: Failure
+Expected: SaveEarnedAchievementEXT("broken", "first", 1) throws an exception of type std::runtime_error.
+  Actual: it throws nothing.
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1405: Failure
+Expected equality of these values:
+  bytes
+    Which is: "null"
+  std::string(std::istreambuf_iterator<char>(file), {})
+    Which is: "{\"achievements\":[{\"earnedTicks\":1,\"key\":\"first\"}]}"
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1399: Failure
+Expected: SaveEarnedAchievementEXT("broken", "first", 1) throws an exception of type std::runtime_error.
+  Actual: it throws nothing.
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1405: Failure
+Expected equality of these values:
+  bytes
+    Which is: "{}"
+  std::string(std::istreambuf_iterator<char>(file), {})
+    Which is: "{\"achievements\":[{\"earnedTicks\":1,\"key\":\"first\"}]}"
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1399: Failure
+Expected: SaveEarnedAchievementEXT("broken", "first", 1) throws an exception of type std::runtime_error.
+  Actual: it throws nothing.
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1405: Failure
+Expected equality of these values:
+  bytes
+    Which is: "{\"achievements\":0,\"entries\":0}"
+  std::string(std::istreambuf_iterator<char>(file), {})
+    Which is: "{\"achievements\":[{\"earnedTicks\":1,\"key\":\"first\"}]}"
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1402: Failure
+Expected: SaveLeaderboardEntryEXT("broken", {"Alice", 17}, nullptr) throws an exception of type std::runtime_error.
+  Actual: it throws nothing.
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1405: Failure
+Expected equality of these values:
+  bytes
+    Which is: "{interrupted"
+  std::string(std::istreambuf_iterator<char>(file), {})
+    Which is: "{\"entries\":[{\"columns\":[],\"gamertag\":\"Alice\",\"rating\":17}]}"
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1402: Failure
+Expected: SaveLeaderboardEntryEXT("broken", {"Alice", 17}, nullptr) throws an exception of type std::runtime_error.
+  Actual: it throws nothing.
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1405: Failure
+Expected equality of these values:
+  bytes
+    Which is: "null"
+  std::string(std::istreambuf_iterator<char>(file), {})
+    Which is: "{\"entries\":[{\"columns\":[],\"gamertag\":\"Alice\",\"rating\":17}]}"
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1402: Failure
+Expected: SaveLeaderboardEntryEXT("broken", {"Alice", 17}, nullptr) throws an exception of type std::runtime_error.
+  Actual: it throws nothing.
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1405: Failure
+Expected equality of these values:
+  bytes
+    Which is: "{}"
+  std::string(std::istreambuf_iterator<char>(file), {})
+    Which is: "{\"entries\":[{\"columns\":[],\"gamertag\":\"Alice\",\"rating\":17}]}"
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1402: Failure
+Expected: SaveLeaderboardEntryEXT("broken", {"Alice", 17}, nullptr) throws an exception of type std::runtime_error.
+  Actual: it throws nothing.
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp:1405: Failure
+Expected equality of these values:
+  bytes
+    Which is: "{\"achievements\":0,\"entries\":0}"
+  std::string(std::istreambuf_iterator<char>(file), {})
+    Which is: "{\"achievements\":0,\"entries\":[{\"columns\":[],\"gamertag\":\"Alice\",\"rating\":17}]}"
+
+[  FAILED  ] OfflineDurabilityTest.CorruptProgressIsReadableAsEmptyButNeverOverwrittenByAnUpdate (7 ms)
+[ RUN      ] OfflineDurabilityTest.InterruptedTemporaryFileIsIgnoredAndNextUpdateReplacesIt
+[       OK ] OfflineDurabilityTest.InterruptedTemporaryFileIsIgnoredAndNextUpdateReplacesIt (3 ms)
+[----------] 2 tests from OfflineDurabilityTest (11 ms total)
+
+[----------] 1 test from ServiceRequestRetryTest
+[ RUN      ] ServiceRequestRetryTest.HeartbeatRefreshesPublishedPolicyWithoutReplacingTheGamer
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/ServiceRequestRetryTests.cpp:329: Failure
+Value of: await([&]{return gamer->getPrivilegesProperty().getAllowCommunicationProperty()==GamerPrivilegeSetting::Blocked && Service::playerBlocked("Alice","Dave");})
+  Actual: false
+Expected: true
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/ServiceRequestRetryTests.cpp:330: Failure
+Value of: Service::playerBlocked("Alice","Bob")
+  Actual: true
+Expected: false
+
+../modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/ServiceRequestRetryTests.cpp:334: Failure
+Value of: await([&]{return gamer->getPrivilegesProperty().getAllowCommunicationProperty()==GamerPrivilegeSetting::Everyone && !Service::playerBlocked("Alice","Dave");})
+  Actual: false
+Expected: true
+
+[  FAILED  ] ServiceRequestRetryTest.HeartbeatRefreshesPublishedPolicyWithoutReplacingTheGamer (10516 ms)
+[----------] 1 test from ServiceRequestRetryTest (10516 ms total)
+
+[----------] Global test environment tear-down
+[==========] 3 tests from 2 test suites ran. (10528 ms total)
+[  PASSED  ] 1 test.
+[  FAILED  ] 2 tests, listed below:
+[  FAILED  ] OfflineDurabilityTest.CorruptProgressIsReadableAsEmptyButNeverOverwrittenByAnUpdate
+[  FAILED  ] ServiceRequestRetryTest.HeartbeatRefreshesPublishedPolicyWithoutReplacingTheGamer
+
+ 2 FAILED TESTS

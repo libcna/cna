@@ -1,0 +1,62 @@
+run_gpu_tests_private: DISPLAY=:5 (private Xwayland), WAYLAND_DISPLAY=cna-weston-2579400 (private Weston)
+Running main() from ../../../../vendor/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = ServiceRequestRetryTest.*:GuidePrivilegeTest.*:OfflineDurabilityTest.*:OfflineConcurrencyTest.*
+[==========] Running 21 tests from 4 test suites.
+[----------] Global test environment set-up.
+[----------] 4 tests from OfflineConcurrencyTest
+[ RUN      ] OfflineConcurrencyTest.AchievementThreadUpdatesKeepEveryKeyAndTimestamp
+[       OK ] OfflineConcurrencyTest.AchievementThreadUpdatesKeepEveryKeyAndTimestamp (720 ms)
+[ RUN      ] OfflineConcurrencyTest.LeaderboardThreadUpdatesKeepEveryGamerAndColumns
+[       OK ] OfflineConcurrencyTest.LeaderboardThreadUpdatesKeepEveryGamerAndColumns (1105 ms)
+[ RUN      ] OfflineConcurrencyTest.AchievementProcessUpdatesKeepEveryKeyAndTimestamp
+[       OK ] OfflineConcurrencyTest.AchievementProcessUpdatesKeepEveryKeyAndTimestamp (149 ms)
+[ RUN      ] OfflineConcurrencyTest.LeaderboardProcessUpdatesKeepEveryGamerAndColumns
+[       OK ] OfflineConcurrencyTest.LeaderboardProcessUpdatesKeepEveryGamerAndColumns (190 ms)
+[----------] 4 tests from OfflineConcurrencyTest (2166 ms total)
+
+[----------] 2 tests from OfflineDurabilityTest
+[ RUN      ] OfflineDurabilityTest.CorruptProgressIsReadableAsEmptyButNeverOverwrittenByAnUpdate
+[       OK ] OfflineDurabilityTest.CorruptProgressIsReadableAsEmptyButNeverOverwrittenByAnUpdate (2 ms)
+[ RUN      ] OfflineDurabilityTest.InterruptedTemporaryFileIsIgnoredAndNextUpdateReplacesIt
+[       OK ] OfflineDurabilityTest.InterruptedTemporaryFileIsIgnoredAndNextUpdateReplacesIt (2 ms)
+[----------] 2 tests from OfflineDurabilityTest (4 ms total)
+
+[----------] 4 tests from GuidePrivilegeTest
+[ RUN      ] GuidePrivilegeTest.TheAccountsPolicyBecomesItsGamerPrivileges
+[       OK ] GuidePrivilegeTest.TheAccountsPolicyBecomesItsGamerPrivileges (7 ms)
+[ RUN      ] GuidePrivilegeTest.BlockedPrivilegesRefuseTheGuideCallsXnaRefuses
+[       OK ] GuidePrivilegeTest.BlockedPrivilegesRefuseTheGuideCallsXnaRefuses (3 ms)
+[ RUN      ] GuidePrivilegeTest.TheBlockListReadAtSignInMutesVoice
+[       OK ] GuidePrivilegeTest.TheBlockListReadAtSignInMutesVoice (2 ms)
+[ RUN      ] GuidePrivilegeTest.AFriendHasVoiceWhileOnlineWithAClientThatCanTalk
+[       OK ] GuidePrivilegeTest.AFriendHasVoiceWhileOnlineWithAClientThatCanTalk (2 ms)
+[----------] 4 tests from GuidePrivilegeTest (16 ms total)
+
+[----------] 11 tests from ServiceRequestRetryTest
+[ RUN      ] ServiceRequestRetryTest.ALostResponseIsAskedForOnceMoreUnderTheSameRequestId
+[       OK ] ServiceRequestRetryTest.ALostResponseIsAskedForOnceMoreUnderTheSameRequestId (23 ms)
+[ RUN      ] ServiceRequestRetryTest.OnlyOnceThenTheServiceIsUnavailable
+[       OK ] ServiceRequestRetryTest.OnlyOnceThenTheServiceIsUnavailable (12 ms)
+[ RUN      ] ServiceRequestRetryTest.AServiceThatKeepsNoOutcomesIsNotAskedAgain
+[       OK ] ServiceRequestRetryTest.AServiceThatKeepsNoOutcomesIsNotAskedAgain (13 ms)
+[ RUN      ] ServiceRequestRetryTest.ASignInWhoseResultIsASecretIsNotAskedAgain
+[       OK ] ServiceRequestRetryTest.ASignInWhoseResultIsASecretIsNotAskedAgain (22 ms)
+[ RUN      ] ServiceRequestRetryTest.SignInCarriesTheAccountsPrivilegesAndBlockList
+[       OK ] ServiceRequestRetryTest.SignInCarriesTheAccountsPrivilegesAndBlockList (11 ms)
+[ RUN      ] ServiceRequestRetryTest.TheHeartbeatSaysWhetherThisMachineCanTalk
+[       OK ] ServiceRequestRetryTest.TheHeartbeatSaysWhetherThisMachineCanTalk (1206 ms)
+[ RUN      ] ServiceRequestRetryTest.CachedPictureRechecksPolicyAndDoesNotCacheDenial
+[       OK ] ServiceRequestRetryTest.CachedPictureRechecksPolicyAndDoesNotCacheDenial (18 ms)
+[ RUN      ] ServiceRequestRetryTest.AnotherBackendCannotUseCachedPictureWithoutCurrentAuthorization
+[       OK ] ServiceRequestRetryTest.AnotherBackendCannotUseCachedPictureWithoutCurrentAuthorization (26 ms)
+[ RUN      ] ServiceRequestRetryTest.InvalidatedTokenCannotReadCachedPicture
+[       OK ] ServiceRequestRetryTest.InvalidatedTokenCannotReadCachedPicture (13 ms)
+[ RUN      ] ServiceRequestRetryTest.HeartbeatRefreshesPublishedPolicyWithoutReplacingTheGamer
+[       OK ] ServiceRequestRetryTest.HeartbeatRefreshesPublishedPolicyWithoutReplacingTheGamer (1954 ms)
+[ RUN      ] ServiceRequestRetryTest.CredentialRenewalPublishesCurrentPrivilegesAndBlocks
+[       OK ] ServiceRequestRetryTest.CredentialRenewalPublishesCurrentPrivilegesAndBlocks (992 ms)
+[----------] 11 tests from ServiceRequestRetryTest (4297 ms total)
+
+[----------] Global test environment tear-down
+[==========] 21 tests from 4 test suites ran. (6486 ms total)
+[  PASSED  ] 21 tests.

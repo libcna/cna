@@ -1,0 +1,14 @@
+GamerServices
+[==========] Running 642 tests from 81 test suites.
+[==========] Running 1 test from 1 test suite.
+[==========] 1 test from 1 test suite ran. (9 ms total)
+[  PASSED  ] 1 test.
+[==========] Running 1 test from 1 test suite.
+[==========] 1 test from 1 test suite ran. (0 ms total)
+[  PASSED  ] 1 test.
+[==========] 642 tests from 81 test suites ran. (70396 ms total)
+[  PASSED  ] 642 tests.
+Net
+[==========] Running 523 tests from 48 test suites.
+[==========] 523 tests from 48 test suites ran. (44792 ms total)
+[  PASSED  ] 523 tests.
