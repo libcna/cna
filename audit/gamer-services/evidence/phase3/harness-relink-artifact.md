@@ -1,0 +1,7 @@
+# First full native run: harness/build overlap
+
+The first full GamerServices launch overlapped the final include-only rebuild/relink. It returned 641 passed, 1 failed: `AvatarCatalogProcessTest.TwoProcessesInstallingOnePackActivateItOnce` completed in 58 ms with zero child completion files (expected two), no installed catalog and no activation. The parent executable was replaced while running; its `/proc/self/exe` pathname acquired the Linux ` (deleted)` suffix and could not be used by this self-executing child harness. The run began at 09:17:15, the replacement binary mtime was 09:17:41, and this test ran near 09:18:06 (local CEST).
+
+This was a test orchestration error, not evidence of an install race. No expectation or production code was changed to make it pass. After builds finished, the entire suite passed 642/642, including this existing process test. The four new coordinated persistence cases also passed ten repeated runs (40/40). No product flakiness was observed in the completed-build qualification. Always finish linking before starting self-executing tests.
+
+A final stable-build Net rerun also passed 523/523 (44.792 s). Its first private-runner attempt inside the sandbox exited 77 before launching any test because the Weston Unix socket could not bind. Running the same private runner with the required sandbox exception succeeded. This was a launcher restriction, not a registered-test skip or product failure.

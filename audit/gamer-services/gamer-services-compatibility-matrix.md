@@ -1,6 +1,8 @@
 # GamerServices compatibility matrix
 
-**Phase 2 update:** fresh native suites 633 GamerServices / 523 Net; final fresh-client/server suite 27 pass, 0 fail, 7 skip. Original coverage labels below remain historical unless updated. See [Phase 2 handoff](gamer-services-handoff-phase2.md).
+**Phase 3 update:** 642 GamerServices / 523 Net pass, server 33 pass / 0 fail / 7 environment-required skips. Nine native and six server tests added. The focused Phase 3 table below supersedes historical limitations where explicitly resolved. [Handoff](gamer-services-handoff-phase3.md).
+
+**Historical Phase 2 update:** fresh native suites 633 GamerServices / 523 Net; final fresh-client/server suite 27 pass, 0 fail, 7 skip. Original coverage labels below remain historical unless updated. See [Phase 2 handoff](gamer-services-handoff-phase2.md).
 
 Snapshot and confidence definitions: [main audit](gamer-services-audit.md). `GS` = `modules/gamer-services`, `NET` = `modules/net`, `S` = sibling `cna-gamer-services-server`. Source suffixes below resolve under those modules. `U` = relevant cases in the executed 627-case GamerServices suite; `N` = executed 523-case Net suite; `S-test` = fresh-server tests. These are **not** per-method exhaustive coverage certifications. Fake and real service evidence are distinguished.
 
@@ -91,3 +93,20 @@ Fix reproduced BROKEN paths first, then resolve PARTIAL items needed by a concre
 | Guest identity | online guest membership | local IsGuest exists | filtered/refused before service request; guest has no account token | real SystemLink guest tests pass | no online guest account model | PARTIAL | ServiceLocalGamers; guest codec tests | authenticated extra local accounts work |
 | QoS | pre-join quality | property surface exists | LAN RTT + up/down packet-train estimates; online unavailable | full Net suite includes measured LAN and partial train tests | no online host-candidate probing | PARTIAL | ENetDiscoveryService.cpp; EndFind | no packet-loss percentage or NAT-class measurement |
 | Voice | capture/send/receive/mute/privileges | implemented, one owner/machine | real Opus codec + adapters + authorized packets | Opus-enabled synthetic capture/playback, real processes pass | relay forwards, no server audio storage | PARTIAL | VoiceChat.cpp; Net logs | physical microphone/speaker and Internet not tested |
+
+## Phase 3 focused qualification matrix
+
+| Area | Current behavior / compatibility | Status | Evidence / remaining limit |
+|---|---|---|---|
+| Offline achievements/boards | serialize complete read-modify-checked-replace; ticks/rating/columns survive distinct updates | FIXED on tested Linux paths | four coordinated races red→green, 40/40 repeated; no fsync/corrupt-history/Windows guarantee |
+| Local profiles/avatar packs | checked shared scoped lock; retain existing fallback/Failed semantics | FIXED | two deterministic lock-directory regressions; staging unchanged on refused install |
+| Cached pictures | current token/title/hash authorization before cached bytes; no negative authorization cache | FIXED | three OnlineBackend regressions; already returned streams remain snapshots |
+| Server profile/picture policy | current viewer/friend/block DB policy; no-store HTTP grants | FIXED / fresh-read bypass DISPROVED | live TLS transitions and logout, both picture routes; no owner-selected privacy feature |
+| Achievement/score authority | authenticated, typed/ranged/title-scoped client outcomes; server timestamps/ranks | ACCEPTED DESIGN, PARTIAL integrity | 54 checks; game-specific truth absent, ranked consensus not proof |
+| Membership/lifetime | last-slot serialization, deletion cascades, stale grant/session rejection | TESTED bounded cases | 22 checks; not every churn/interleaving |
+| Admission resource cap | 4,096 live minute buckets; refused admissions do not allocate | FIXED | 17,027 deterministic/concurrent checks |
+| Crash migration/AddLocalGamer | real PlayerMatch/Ranked CNA loopback gates | TESTED loopback | permanent two new CTest gates; seven original NAT gates remain ENVIRONMENT REQUIRED |
+| NAT/Internet/IPv6 | outbound WSS relay exists; no peer punch/direct online path | NEEDS DEVICE QUALIFICATION / PARTIAL | manual matrix; loopback never implies WAN/symmetric NAT |
+| Voice policy | local Guide muting works; cross-device privilege/block freshness unresolved | DEFERRED MEDIUM | snapshot/renewal source trace; third-controller synthetic qualification required |
+
+No public API, storage schema, protocol version, migration, dependency or language binding was added or redesigned in Phase 3.

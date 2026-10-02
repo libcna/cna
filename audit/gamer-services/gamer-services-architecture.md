@@ -1,6 +1,8 @@
 # Discovered GamerServices architecture
 
-Snapshot: CNA `9976f4909`, server `e45049abc`. `server/` below means `../cna-gamer-services-server`. This maps executable/source relationships, not an intended architecture from a README. The [tracked inventory](evidence/inventory.txt) lists 1,043 discovered files; it is not a claim that every file was fully reviewed.
+**Phase 3 current overlay:** native production end `2f95d29d71`, server `f627536ff6`; [handoff](gamer-services-handoff-phase3.md). The Phase 3 section below supersedes older snapshot limitations.
+
+Historical snapshot: CNA `9976f4909`, server `e45049abc`. `server/` below means `../cna-gamer-services-server`. This maps executable/source relationships, not an intended architecture from a README. The [tracked inventory](evidence/inventory.txt) lists 1,043 discovered files; it is not a claim that every file was fully reviewed.
 
 ## Repository archaeology / requested inventory
 
@@ -229,3 +231,51 @@ The unsigned asset-offset suspicion was disproved at the current JSON comparison
 | Offline achievements / boards | whole-file read/modify/replace; tests reset only | write errors and exact integer data fixed; fixed temp name, no interprocess lock/fsync, corrupt-read-as-empty remain. Stream omission/column-only durability unchanged |
 
 No database migrations changed. The new concurrency test uses the supported single Service instance, not several independent service processes. It cannot be extrapolated to clustered deployment.
+
+## Phase 3 concurrency, authority and lifetime overlay
+
+### Offline write boundaries
+
+`LocalGamerServicesStore` achievement and board saves now acquire a stable sibling lock **before reading**. The lock covers read → modify → serialize → checked temp write/flush/close → rename → return. `LocalProfiles` uses the same helper around its existing read/update/replace path, including avatar/profile/default metadata. Avatar pack installation holds its version lock before fetching/staging/activation; failure returns existing Failed status without deleting staging. POSIX flock and Win32 LockFileEx serialize cooperating threads/processes on the relevant file; native locking does not hold a global mutex during unrelated catalog downloads. Lock files persist, preventing production unlink/recreate inode races; close/process death releases the lock.
+
+Four tests use barriers (12 threads, four rounds) or coordinated pipes (eight processes), distinct intended updates and preseeded history. All four lost updates/collided before the fix and preserve keys/timestamps/rating/columns afterward. These are strongly reproducible scheduling races, not exact internal read-boundary hooks. The two lock-failure tests are deterministic. Readers see the old or replaced complete file on the tested local Linux filesystem. There is no production progress delete operation; reset helpers are test-only. No acknowledgement occurs before checked write completion, but no fsync or power-loss durability was added. Corrupt progress still reads as empty; corrupt profiles are preserved. Network filesystems, legacy unlocked writers, external lock deletion and Windows replace behavior are unqualified.
+
+Other storage paths: CredentialStore holds its endpoint/title process lease, serializes backend persistence, uses unique temporary names and checked native replacement; no shared progress read-modify-write path was found there. AssetDiskCache stores immutable hash-validated bytes using unique temporary prefixes and backend cache serialization; concurrent eviction is opportunistic, not a hard global disk quota. Gamer state/presence is server soft state or existing profile/progress metadata, not another offline shared progression file.
+
+### Progress trust map
+
+| Operation/family | Classification | Actual boundary |
+|---|---|---|
+| achievements.award | SERVER VALIDATED BUT CLIENT AUTHORED | token owner's configured title/key, idempotent insert; no gameplay proof or client timestamp/progress mutation |
+| leaderboard game commits/ranked reports | SERVER VALIDATED BUT CLIENT AUTHORED | owner/session/epoch/participants, definition/types/ranges/replay; full signed int64 legal; ranked reports require agreement, not truth |
+| Earned timestamps, stored-score ranks/profile achievement totals | SERVER VERIFIED relative to stored claims | server clock, sort and aggregates; not independent proof of earning |
+| Operator title definitions/catalog/reward metadata | SERVER VERIFIED within operator boundary | provisioned admin/store data; player has no definition mutation route |
+| profile.setGameDefaults/profile.setGamerZone | SERVER VALIDATED BUT CLIENT AUTHORED | own-account preferences/enums; not economic rewards |
+| reviews.submit | SERVER VALIDATED BUT CLIENT AUTHORED | authenticated bounded review of another player; reputation aggregate is derived |
+| avatars.set | SERVER VALIDATED BUT CLIENT AUTHORED | own layout/catalog IDs/CRC/revision; catalog is public, no ownership/unlock entitlement model |
+| Incremental achievement progress, challenge/reward unlock, session-result/skill/rating mutation | UNSUPPORTED (not UNKNOWN or CLIENT TRUSTED) | no such dispatch endpoint; WriteTrueSkill is an event, not a skill solver |
+
+Extra foreign user IDs and claimed completion ticks are ignored by the supported award operation. Arbitrary game scores are intended title inputs, so INT64_MIN/MAX and negative values are not evidence of cheating by themselves. Malformed numerics, overflows, duplicate/mixed invalid batches, stale epochs and changed-payload replays are rejected without partial writes. No implemented inspected progression family remained UNKNOWN. The accepted model requires a trusted title/client or an external title-specific authority; an untrusted competitive client can still submit plausible false outcomes.
+
+### Current authorization before data
+
+Fresh server reads execute current token and policy checks under Service serialization/DB transactions. Read request IDs do not reuse prior recorded authorization. ProfileViewing is the **requester's privilege**, not an owner's public/private setting. Friends/block changes, current presence and logout are exercised through real TLS. Avatar descriptions/catalog grants are intentionally available to signed-in title clients; shared asset hashes may have public or multiple-owner grants.
+
+OnlineBackend cache hits now call `assets.read` for one byte with the current token/title/hash, validate response identity/size/offset/MIME/byte, then return cached bytes. The byte cache may be shared, but an account-specific grant cannot be shared. Denials are not cached. Token revocation invalidates the slot. HTTP token-gated files retain no-store instead of advertising a year-long immutable grant. Authorization is evaluated per request, not a promise to revoke a previously returned stream, copied GamerProfile/Friend snapshot, OS-readable cache file or in-flight delivery after a later policy change.
+
+### Proven bounds and session lifetime
+
+| Structure | Creator / lifetime / bound | Phase 3 evidence |
+|---|---|---|
+| Admission rate map | socket-derived peer, preauth; one-minute buckets; 4,096 live entries | fixed insertion order/cap; no allocation for refused global256/per-peer32; exact expiry, reconnect, rate600/min and concurrent insertion checks |
+| RelayHub | authenticated session grants; weak channels and detach/prune; 1,024 channels | existing authorization/flow tests; bounded64-frame queues, 1 MB/s and512 messages/s |
+| EventHub | authenticated subscribers; disconnect cleanup; 4,096 total /8 per account | existing event/transport tests; not durable replay |
+| Relay tickets | authenticated machine/session; one-use60 seconds, grant up to1 hour; 8 per machine/8,192 per title | retained grant invalid after session deletion; repeated release safe |
+| Session/membership | authenticated account/title; 1,024 sessions/title,16 hosted/account,31 participants,4/machine,90-second lease | final-slot race exactly one wins; snapshot/delete serial outcomes; dead reconnect/leave refused |
+| Invitations | authenticated title participants; 64 incoming/account/title,32/hour sender,16,384/title,900-second expiry | session foreign-key cascade; dead-session invite refused |
+| Auth families/rotation/login | authenticated provisioning, token expiry;32 families/account,1,024 rotations; login history4,096 | existing auth/replay tests; no NAT/pending-auth map found |
+| download/request budget maps | provisioned authenticated accounts/titles; opportunistic stale pruning | no reproduced preauth unlimited growth here; authenticated cardinality/load remains DEFERRED |
+
+Service mutex plus SQLite transactions define serial outcomes within the supported single server process; independent competing servers on one database are prohibited. Added last-slot and session destruction tests verify roster/dependent tickets/invites/participants, retained relay authority and repeated release. They do not certify every social/admin/churn race. [Network status, timeouts and manual device qualification](evidence/phase3/manual-qualification.md).
+
+Existing voice consumers still use a signed-in gamer privilege snapshot and initial/local Guide block state. Backend renewal refreshes private identity state without updating already published privileges; a cross-device policy change is not qualified for ongoing voice. This source-qualified MEDIUM boundary requires a focused synthetic-voice/controller test, not a claim that fresh server profile authorization remains broken.

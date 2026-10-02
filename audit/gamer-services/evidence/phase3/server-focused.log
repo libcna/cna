@@ -1,0 +1,11 @@
+TLS cache policy and profile/picture/friend/block/presence/avatar/logout transitions passed
+Linux unshare/ip/slirp4netns required for NAT-isolated session test
+22 concurrency/lifetime checks passed
+17027 admission checks passed
+Linux unshare/ip/slirp4netns required for NAT-isolated relay test
+54 progress trust checks passed
+Linux unshare/ip/slirp4netns required for NAT-isolated session test
+Linux unshare/ip/slirp4netns required for NAT-isolated session test
+Linux unshare/ip/slirp4netns required for NAT-isolated session test
+Linux unshare/ip/slirp4netns required for NAT-isolated session test
+Linux unshare/ip/slirp4netns required for NAT-isolated relay test

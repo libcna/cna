@@ -1,0 +1,51 @@
+{
+  "native": {
+    "branch": "work",
+    "start": "cf9a38b1f3d632961fce6cdcbba8406cd319e965",
+    "production_end": "2f95d29d71eb9b05590ee5ed53242483025827e4",
+    "changed_files": [
+      "audit/gamer-services/evidence/phase3/avatar-lock-after.log",
+      "audit/gamer-services/evidence/phase3/avatar-lock-before.log",
+      "audit/gamer-services/evidence/phase3/cache-after.log",
+      "audit/gamer-services/evidence/phase3/cache-before.log",
+      "audit/gamer-services/evidence/phase3/offline-after.log",
+      "audit/gamer-services/evidence/phase3/offline-before.log",
+      "audit/gamer-services/gamer-services-issues.md",
+      "modules/gamer-services/include/CNA/Internal/GamerServices/LocalStoreLock.hpp",
+      "modules/gamer-services/src/Internal/Avatars/AvatarCatalogStore.cpp",
+      "modules/gamer-services/src/Internal/GamerServicesBackend.cpp",
+      "modules/gamer-services/src/Internal/LocalGamerServicesStore.cpp",
+      "modules/gamer-services/src/Internal/LocalProfiles.cpp",
+      "modules/gamer-services/src/Internal/LocalStoreLock.cpp",
+      "modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp",
+      "modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/LocalProfileTests.cpp",
+      "modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/ServiceAvatarTests.cpp",
+      "modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/ServiceRequestRetryTests.cpp"
+    ],
+    "commits": [
+      "3314ffb05cc2926b283e4b946e85ef95ddd039cd gamer-services(GS-AUDIT-P3): serialize offline read-modify-replace and refuse unlocked profile writes",
+      "b05851a47bbce979581d000d66ee38502c72ab6e gamer-services(GS-AUDIT-P3): revalidate authorization before serving cached assets",
+      "2f95d29d71eb9b05590ee5ed53242483025827e4 gamer-services(GS-AUDIT-P3): refuse avatar pack installation when storage locking fails"
+    ]
+  },
+  "server": {
+    "branch": "feature/gamer-services-server",
+    "start": "477fe6926026c0afa067bacbd82724a2b583bee6",
+    "production_end": "f627536ff6eb11f6d9232983b3b235665fb4dba4",
+    "changed_files": [
+      "CMakeLists.txt",
+      "src/Admission.cpp",
+      "src/Admission.hpp",
+      "src/Listener.cpp",
+      "tests/AdmissionTests.cpp",
+      "tests/ConcurrencyLifetimeTests.cpp",
+      "tests/ProgressTrustTests.cpp",
+      "tests/cache_authorization_e2e.py"
+    ],
+    "commits": [
+      "d5eeba01f7b653e5efa4589e704e554157fe5a45 fix(GS-AUDIT-P3): bound preauthentication address history and avoid refused allocations",
+      "a5252756ff1429328163c1210a9aebe0ddcb3257 fix(GS-AUDIT-P3): forbid HTTP grant reuse and qualify live privacy transitions",
+      "f627536ff6eb11f6d9232983b3b235665fb4dba4 test(GS-AUDIT-P3): qualify progression invariants, concurrent session lifetime and loopback recovery"
+    ]
+  }
+}

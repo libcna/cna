@@ -1,0 +1,42 @@
+{
+  "GamerServices": {
+    "tests": "642",
+    "failures": "0",
+    "disabled": "0",
+    "errors": "0",
+    "time": "70.396",
+    "timestamp": "2026-10-02T09:19:19.574",
+    "name": "AllTests",
+    "suites": 81,
+    "skipped": 0
+  },
+  "Net": {
+    "tests": "523",
+    "failures": "0",
+    "disabled": "0",
+    "errors": "0",
+    "time": "44.792",
+    "timestamp": "2026-10-02T09:43:24.838",
+    "name": "AllTests",
+    "suites": 48,
+    "skipped": 0
+  },
+  "server": {
+    "registered": 40,
+    "passed": 33,
+    "failed": 0,
+    "skipped": 7,
+    "seconds": 307.23
+  },
+  "new_tests": {
+    "GamerServices": 9,
+    "Net": 0,
+    "server_ctest": 6
+  },
+  "offline_repeat": {
+    "runs": 10,
+    "cases_per_run": 4,
+    "passed": 40,
+    "failed": 0
+  }
+}
