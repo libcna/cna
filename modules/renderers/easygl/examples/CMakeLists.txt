@@ -80,6 +80,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_House3D_SmokeTest COMMAND cna_house3d_demo --smoke 4 --depth-probe
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}" LABELS "GraphicsSmoke")
 
+        # BlendState on an OpenGL ES 3.0 context (WebGL 2's level) leaves no GL error behind; a
+        # glSampleMaski entry point resolving is not GLES 3.1 (Bubble Bound in a browser).
+        cna_easygl_test(cna_test_easygl_es30_sample_mask easygl_es30_sample_mask_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_Es30SampleMask COMMAND cna_test_easygl_es30_sample_mask
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};MESA_GLES_VERSION_OVERRIDE=3.0")
+
         # Task 86: textured quad pixel readback
         cna_easygl_test(cna_test_easygl_textured_quad
                         easygl_textured_quad_test.cpp)

@@ -5950,6 +5950,7 @@ if (ProfileUsesGlslEs100())
             maxSamplesCap = 1;
             maxMrtTargets_ = 1;
             supportsIndexedColorMasks_ = false;
+            supportsSampleMask_ = false;
             }
             else
             {
@@ -5975,6 +5976,16 @@ if (ProfileUsesGlslEs100())
                         ? capabilities.is_at_least(3, 2)
                         : capabilities.is_opengl() && capabilities.is_at_least(3, 0))
                 && metagl::IsFunctionAvailable("glColorMaski");
+            // The same question for the sample mask: Mesa and the WebGL layer both resolve a
+            // glSampleMaski entry point on an ES 3.0 context, where glEnable(GL_SAMPLE_MASK) then
+            // leaves GL_INVALID_ENUM pending and the next render-target bind fails on it (Bubble
+            // Bound in a browser). The context's API and version decide, as for glColorMaski.
+            supportsSampleMask_ =
+                !capabilities.is_webgl()
+                && (capabilities.is_opengles()
+                        ? capabilities.is_at_least(3, 1)
+                        : capabilities.is_opengl() && capabilities.is_at_least(3, 2))
+                && metagl::IsFunctionAvailable("glSampleMaski");
             }
             const AnisotropyLimits& anisoLimits = CurrentContextAnisotropyLimits();
             const bool hasAniso = anisoLimits.supported;
@@ -7987,7 +7998,7 @@ if (!ProfileIsEs2ApiGeneration())
         // GLES 3.1+ expose the exact operation; enable it even for all-ones so a later state change
         // cannot inherit an external/default mask. Older ES/WebGL profiles reject the
         // inexpressible non-default state instead of silently rendering every sample.
-        if (metagl::IsFunctionAvailable("glSampleMaski"))
+        if (supportsSampleMask_)
         {
             metagl::glEnable(metagl::Capability::SampleMask);
             metagl::glSampleMaski(

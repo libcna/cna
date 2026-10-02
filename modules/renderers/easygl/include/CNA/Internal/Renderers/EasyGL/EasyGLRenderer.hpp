@@ -1323,6 +1323,8 @@ namespace CNA::Internal::Renderers::EasyGL
         /// to All because XNA/FNA Clear ignores BlendState write masks.
         std::array<int, 4> currentColorWriteMasks_ = {15, 15, 15, 15};
         bool supportsIndexedColorMasks_ = false;
+        /// glEnable(GL_SAMPLE_MASK)/glSampleMaski exist: desktop GL 3.2+ or GLES 3.1+, never WebGL 2.
+        bool supportsSampleMask_ = false;
         void ApplyCurrentColorWriteMasks();
         void ForceAllColorWriteMasks();
         [[nodiscard]] bool HasRestrictedActiveColorWriteMask() const;
