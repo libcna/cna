@@ -1,7 +1,8 @@
 # Handoff — CNA C# compatibility campaign (cna-cs)
 
-Written 2026-10-02 at the end of a ~30-hour session. `/goal` remains authoritative; this file is the
-state it reached and how to continue. Nothing is pushed.
+Written 2026-10-02 at the end of a ~30-hour session; updated the same evening after games that start
+threads were made to run in a browser (§10). `/goal` remains authoritative; this file is the state it
+reached and how to continue. This session pushed nothing; the owner pushed cna `next` up to `0c79486cc` (13:22).
 
 ## 1. Campaign identity
 
@@ -41,13 +42,17 @@ state it reached and how to continue. Nothing is pushed.
   (CNA `ffb82bc0d`, 2026-10-02). Not interactive Chrome, not a hardware GPU, no browser audio (§10).
 - Android: all 84 rows build, run and draw on an **x86_64 emulator** (API 35) with touch, Back,
   pause/resume, relaunch. No physical device, no ARM, no audible audio (§11).
-- Real games: all 25 tried in the browser (21 reach title/play; HeliumBiker, Escape From Enceladus
-  and the Racing Game Kit start threads, Playing in Traffic plays a video) and on the Android
-  emulator (24 run; Playing in Traffic refuses its video).
-- CNA.WindowsFormsCompat: `Opacity`/`FormBorderStyle` are kept, not applied.
+- Real games: all 25 tried in the browser -- 24 reach title or play, the five that start threads as
+  multithreaded bundles (CSX-115..117, CNA CBIND-151), all but Playing in Traffic's video -- and on
+  the Android emulator (24 run; Playing in Traffic refuses its video).
+- Multithreaded browser bundles: a worker's WebGL calls are proxied to the page's thread, so a heavy
+  3D game is slow (the Racing Game Kit ~0.65 fps under SwiftShader); a game can start about three
+  threads per processor (.NET 11's thread-start fault, §10).
+- CNA.WindowsFormsCompat: `FormBorderStyle` is applied (`137f954`); `Opacity` is kept, not applied.
 
 **Investigated only / open**
-- 2 `EasyGLCompiledEffect*` ctests still fail on OPENGLES3 (§6); five more were fixed by FX-143.
+- 1 `EasyGLCompiledEffect*` ctest still fails on OPENGLES3 (vertex LOD bias, §6); FX-143 fixed five,
+  FX-144 the aborting one.
 - CSX-044 (remaining C API routes for GamerServices/Net extras) is `doing`, low priority.
 
 **Not proven (hypotheses)**
@@ -58,16 +63,16 @@ state it reached and how to continue. Nothing is pushed.
 
 | Repo | Path | Branch | HEAD | Working tree | Unpushed |
 |---|---|---|---|---|---|
-| cna | `/rv/data/development/github.com/libcna/cna` | `next` | the handoff commit (`docs: handoff ...`), parent `3c72165e6` (CBIND-150) | clean | 35 (`origin/next..next`): 32 fix/feature commits (CBIND-128 … CBIND-150) + 3 handoff commits |
+| cna | `/rv/data/development/github.com/libcna/cna` | `next` | the handoff commit (`docs: handoff ...`), parent `cde2251fa` (CBIND-151) | clean | 3 (`origin/next..next`): FX-144, CBIND-151, this handoff. `origin/next` is `0c79486cc` (the earlier handoff), pushed by the owner 2026-10-02 13:22 |
 | sharp-runtime | `../sharp-runtime` | `next` | `db86514c5bb86a5886d8015b8e2916d49be04ae8` | clean | none (untouched this campaign) |
-| cna-cs | `../cna-cs` | `develop` | `74b74f7d4b698a4d7faa4b4c2f2d402c2b64a243` | clean | 76 (`origin/develop..develop`) |
+| cna-cs | `../cna-cs` | `develop` | `6067de52be18385443f9b9d47feb8f2e09c60f64` | clean | 82 (`origin/develop..develop`) |
 | cna-cs-template | `../cna-cs-template` | `develop` | `2a763886cf7660ac10557163d680783dde5c01f3` | clean | 2 |
-| cna-cs-samples | `../cna-cs-samples` | `develop` | `671df07a36709f0555f364bea4c202fbf4510431` | clean | 82 |
+| cna-cs-samples | `../cna-cs-samples` | `develop` | `020da57030f6de1796c9f73eeda7d83320087016` | clean | 85 |
 | samples.libcna.com | `../samples.libcna.com` | `main` | `8e48825c003368dbc24bebd8f024d392379700d6` | clean | none (untouched) |
 
 There are no intentional uncommitted changes anywhere. In cna, `handoff.md` is committed by the
-commit right after `fb5cb3ba2` (`docs: handoff ...`), so cna's HEAD is that commit and its parent
-is `fb5cb3ba2`. Build trees and probe leftovers are gitignored or under `/rv/tmp`.
+commit right after `cde2251fa` (`docs: handoff ...`), so cna's HEAD is that commit and its parent
+is `cde2251fa`. Build trees and probe leftovers are gitignored or under `/rv/tmp`.
 
 ## 4. Commits
 
@@ -79,11 +84,12 @@ The important ones:
   CBIND-140 (title-relative content root), FX-140/141/142 (MojoShader), Task 1120 (SpriteBatch with
   a stock effect), CBIND-142 (video frame texture ownership), CBIND-144 (NoSuitableGraphicsDevice),
   CBIND-146 (ADPCM content sample rates), CBIND-147 (ClientBounds position), CBIND-148 (+ budget
-  follow-up `836b796ae`: SDL3 mouse reads the live pointer).
+  follow-up `836b796ae`: SDL3 mouse reads the live pointer), FX-142..144, CBIND-149/150 (WebGL 2),
+  CBIND-151 (a game thread that is a browser worker).
 - **cna-cs**: ABI migration 0.21→0.35→0.40 (CSX-010..014, -101, -111), facade behaviour fixes
   CSX-080..114, browser/Android heads (CSX-060..071), GamerServices/Avatar/Net (CSX-040..043),
   phone compat (CSX-045/094..098/103/106), interceptor generator (CSX-110), Windows Forms compat
-  (CSX-114).
+  (CSX-114), browser storage and threads (CSX-115..117).
 - **cna-cs-samples**: the gallery rows, browser/Android generators and requalify scripts, the
   `games/` corpus (25 running games), capture-harness fixes.
 - **cna-cs-template**: `ae6b906` (CSX-030 consumer verification), `2a76388` (CSX-031 browser and
@@ -137,13 +143,14 @@ The important ones:
 | FX-143 | `d9d599263` | MojoShader GLSL ES 3 preamble declares `precision highp sampler3D;` (ES 3.00 has no default for it), so shaders with volume samplers compile on OPENGLES3/WEBGL2; five failing compiled-effect tests pass. Static effect gallery rows pixel-identical; SpriteEffects moves ≤2/255 in one quadrant. |
 | CBIND-149 | `d459f42aa` | EasyGL enables `GL_SAMPLE_MASK`/`glSampleMaski` only on desktop GL 3.2+ / GLES 3.1+ (decided from the context, not from a resolving entry point); fixes a pending INVALID_ENUM on ES 3.0/WebGL 2. Test `EasyGL_Es30SampleMask` (forced ES 3.0). |
 | CBIND-150 | `3c72165e6` | EasyGL skips `GL_TEXTURE_SWIZZLE_*` on one-/two-channel render targets where the profile has none (WebGL, GLES 2); those channels read 0 there instead of D3D's 1 (recorded divergence). Test `EasyGLProfile.OnlyDesktopGlAndGles3SwizzleTextures`. |
+| FX-144 | `47b5f7665` | Test fix: `FlippedSourceRetainsFormatAndFullFloatPrecision` aborted because CnaTests' own static meta-gl copy was never initialised; it now initialises it from the renderer's loader. Compiled effects 685/686. |
+| CBIND-151 | `cde2251fa` | A game thread that is a browser worker (.NET's deputy in a threaded bundle): 64 MB initial memory for a shared-memory link; SDL patch `sdl-cbe3fbe9-0004` (Emscripten only) commits a proxied WebGL frame; the WEBGL_polygon_mode probes tolerate the worker's `GLctx` stand-in; `StorageDevice` asks the page's thread for the IDBFS flag. No ctest drives a threaded browser build; evidence is cna-cs CSX-116 (five games) and the 84/84 single-threaded requalification on the same CNA. |
 
 Unresolved native items (confirmed, pre-existing, not introduced here):
-- OPENGLES3 `EasyGLCompiledEffect*` after FX-143: 2 of 686 fail —
+- OPENGLES3 `EasyGLCompiledEffect*` after FX-143/144: 1 of 686 fails --
   `SharedVertexSamplerContract` at its vertex LOD-bias step ("vertex LOD-bias transition did not
   select mip one"; OpenGL ES 3 has no sampler LOD bias, so this needs emulation in the shader or a
-  recorded capability refusal) and `FlippedSourceRetainsFormatAndFullFloatPrecision` aborting
-  ("terminate called without an active exception"). Root causes not investigated.
+  recorded capability refusal).
 - Timing-sensitive C smoke tests under `-j8`: each run lost one to three *different* tests that pass
   alone (`RuntimeComponentsSmoke` stage 8 asserts one Update per fixed-timestep frame; audio smokes;
   one `DevicesSmoke` SIGSEGV). Suspected load flakiness, not reproduced in isolation (stress of 10
@@ -172,7 +179,11 @@ Unresolved native items (confirmed, pre-existing, not introduced here):
 - **Audio**: songs play from the `.ogg`/`.oga`/`.qoa` beside a `.wma` (CSX-105; `scripts/
   convert-xna-songs.sh` writes them); XACT via CNA; ADPCM rates via CNA CBIND-146.
 - **Storage**: one StorageDevice shared by several worker threads (CSX-109); IsolatedStorage in the
-  browser via `CNA.BrowserCompat` (CSX-108).
+  browser via `CNA.BrowserCompat` (CSX-108); XNA `StorageDevice` in a browser through CNA's IDBFS
+  pre-js, which the browser link never added before CSX-115.
+- **Browser threads** (CSX-116/117): a `WasmEnableThreads` bundle links CNA's shared-memory archive,
+  runs its frames from Emscripten's main loop on .NET's deputy thread (`BrowserGameLoop`), and its
+  default page preloads `max(16, 3 * processors + 8)` workers.
 - **Input**: phone titles get the mouse as a finger and Back on Escape (CSX-095/098); mouse position
   now live via CNA CBIND-148.
 - **.NET vs .NET Framework semantics**: `List<T>.ForEach` 4.0 semantics by a Roslyn interceptor
@@ -184,19 +195,19 @@ Unresolved native items (confirmed, pre-existing, not introduced here):
   draws, SystemLink loopback measured; 24/24 integration tests (isolated keyring/profiles).
 - **Opt-in assemblies**: `CNA.PhoneCompat` (Microsoft.Devices, Sensors.Accelerometer, Phone.Shell
   PhoneApplicationService), `CNA.BrowserCompat` (IsolatedStorage), `CNA.WindowsFormsCompat`
-  (CSX-114: `Control/Form.FromHandle` for the game window, `Opacity`/`FormBorderStyle` kept not
-  applied, `MessageBox` → stderr + first button). Opt in from cna-cs-samples with
+  (CSX-114: `Control/Form.FromHandle` for the game window, `FormBorderStyle` applied through
+  `GameWindow.IsBorderlessEXT`, `Opacity` kept not applied, `MessageBox` → stderr + first button). Opt in from cna-cs-samples with
   `<CnaPhoneCompat>` / `<CnaWindowsFormsCompat>`.
 - **Shaders/effects**: compiled XNA effects through CNA's MojoShader (FX-140/141/142).
 
-## 8. Exact final test state (2026-10-02, CNA `fb5cb3ba2`, cna-cs `ff08b93`+docs)
+## 8. Exact final test state (2026-10-02; managed suites rerun on CNA.NET `2f50b3b`, CNA `cde2251fa`'s tree)
 
 Native library: `cna/build-probe/modules/c-api/libcna_c_api.so` (Release, OPENGLES3,
 `CNA_EASYGL_COMPILED_EFFECTS=ON`, `CNA_BUILD_C_API=ON`).
 
 | Suite | Command (from the repo root) | Result |
 |---|---|---|
-| cna-cs integration | `CNA_NATIVE_LIBRARY=<lib> SDL_AUDIODRIVER=dummy ../cna/tools/platform/run_gpu_tests_private.sh --exec dotnet test tests/CNA.Integration.Tests/CNA.Integration.Tests.csproj` | **232/232** |
+| cna-cs integration | `CNA_NATIVE_LIBRARY=<lib> SDL_AUDIODRIVER=dummy ../cna/tools/platform/run_gpu_tests_private.sh --exec dotnet test tests/CNA.Integration.Tests/CNA.Integration.Tests.csproj` | **233/233** |
 | cna-cs Framework | `dotnet test tests/CNA.Framework.Tests/CNA.Framework.Tests.csproj` | **646/646** |
 | cna-cs XnaCompat | `dotnet test tests/CNA.XnaCompat.Tests/CNA.XnaCompat.Tests.csproj` | **297/297** |
 | cna-cs GamerServices | `../cna/tools/platform/run_gpu_tests_private.sh --exec <job>/run-gs.sh <lib>` (isolated `XDG_*`, `DBUS_SESSION_BUS_ADDRESS` unset; script body in §17) | **24/24** |
@@ -205,7 +216,7 @@ Native library: `cna/build-probe/modules/c-api/libcna_c_api.so` (Release, OPENGL
 | CNA doc gates | `ctest --test-dir build-probe -R '^CApi(CoverageMatrix\|Limitations\|ReleaseGate\|DocExportCounts\|AbiBaseline)$'` | 5/5 |
 | CNA runtime | `run_gpu_tests_private.sh --exec build-probe/CnaRuntimeTests` | 206 pass, 2 skipped (Headless/Terminal golden: platform cannot back this tree's GL renderer) |
 | CNA platform/mouse/window groups | `run_gpu_tests_private.sh build-probe -R '^(Sdl3\|Mouse\|GameWindow\|GameEventSemantics\|GameTest\|InputParity\|Platform)' -j8` and `-R 'Mouse\|ClientBounds\|Window\|Cursor\|^CApi'` | 417/417 (4 skips), 476/476 after rebuilding one stale example |
-| CNA compiled effects | `run_gpu_tests_private.sh build-probe -R 'EasyGLCompiledEffect' -j8` | **684/686** after FX-143 (was 679/686; the 7 were identical with FX-142 removed); the 2 left are §6 |
+| CNA compiled effects | `run_gpu_tests_private.sh build-probe -R 'EasyGLCompiledEffect' -j8` | **685/686** after FX-143/144 (was 679/686); the 1 left is §6 |
 | CNA SDL boundary gates | `python3 tools/platform/{sdl_inventory,sdl_classify,renderer_sdl_audit,sdl_ratchet}.py --check`, `hot_path_lint.py`, `nonproduction_sdl_audit.py --repo . --check` | all pass |
 
 Parallel-only flakiness: `^CApi` at `-j8` lost 1–3 different smokes per run (all pass alone and at
@@ -215,8 +226,8 @@ CSX-114 adds a project packed only under `CnaPackageAcceptance`, like PhoneCompa
 
 ## 9. samples.libcna.com gallery — Linux desktop
 
-Inventory regenerated 2026-10-02 (`python3 scripts/gallery-inventory.py --markdown <file>`; the
-checked-in `gallery-inventory.md` dates from 2026-10-01 and still shows the older ⬜ states):
+Inventory regenerated 2026-10-02 and committed (cna-cs-samples `815d36c`,
+`python3 scripts/gallery-inventory.py --markdown gallery-inventory.md`):
 
 - **84 gallery entries; 82 ✅** run on cna-cs with unchanged Microsoft source (hash-verified by the
   row tooling), XNB content from the C++ ports' evidence (official XNA pipeline output), Debug and
@@ -256,13 +267,33 @@ checked-in `gallery-inventory.md` dates from 2026-10-01 and still shows the olde
   `cna-cs-samples/build-consumer/browser/<Row>/`. Last full pass CNA `ffb82bc0d` (2026-10-02):
   77 on the first pass, 7 after CSX-108/CBIND-143/generator fixes; evidence
   `/rv/tmp/cs-samples/browser-requal-csx102-{a,b}`, `browser-requal-csx108`.
-- Games: 21 of 25 reach title or play. HeliumBiker, Escape From Enceladus and the Racing Game Kit
-  start threads (`new Thread(...).Start()` → `PlatformNotSupportedException` in single-threaded wasm);
-  Playing in Traffic plays a video (no browser video backend). The newest nine were measured on CNA
-  `3c72165e6` after CBIND-149/150 (WebGL 2 sample mask and texture swizzle) and the generator fix
-  for NuGet packages and `<CnaWindowsFormsCompat>` (cna-cs-samples `4994508`).
+- Single-threaded requalification again in one run on 2026-10-02: **84/84**
+  (`/rv/tmp/cs-samples/browser-requal-20261002-st/`, CNA with CBIND-151's changes); only animated rows
+  moved against the earlier passes; NetRumble, failing in the CSX-108 partial run, passes.
+- Games: **24 of 25** reach title or play; Playing in Traffic plays a video (no browser video
+  backend). Five start threads (`new Thread(...).Start()`, refused by a single-threaded bundle) and
+  run as **multithreaded bundles**: `scripts/browser-sample.sh games/<Game> --threads`
+  (`/rv/tmp/cs-samples/browser-threads/<Game>/`). Escape From Enceladus reaches its save slots (from
+  IndexedDB); HeliumBiker its CONNECT screen (as on the desktop); Resonance loads its level on its
+  thread (32 physics threads on 16 cores) and plays; Missile Command starts on Space; the Racing Game
+  Kit runs its attract mode at ~0.65 fps -- its menus test a press while drawing, and at that rate
+  XNA's fixed-step catch-up runs several updates per draw, so they never see one.
+- Threaded bundles, how they work (CNA.NET CSX-115/116/117, CNA CBIND-151): CNA built with
+  `cna-cs/scripts/Build-BrowserNative.sh --threads` (`cna/cmake-build-webgl2-threads`, SDL install
+  `.sdl-prebuilt-emscripten-dotnet11-pthreads`, staged in `cna-cs/build-consumer/cna-native-browser-wasm-threads`);
+  `Main` runs on .NET's deputy worker; WebGL is created there and proxied to the page
+  (`-sOFFSCREEN_FRAMEBUFFER`); frames come from `emscripten_set_main_loop_arg` on the deputy, so it
+  returns to its event loop between frames, which is the only way the page's input reaches SDL (a
+  blocking loop had no keyboard); the page must be cross-origin isolated (COOP/COEP).
+- **.NET 11 RC1 fault (upstream, not fixed here)**: a `Thread.Start` that needs a worker created
+  after `Main` never returns -- `getNewWorker` falls back to a worker still loading, and a thread
+  given one never runs. Probe with no CNA: `cna-cs-samples/build-consumer/browser/ThreadStartProbe`
+  (gitignored; 3 threads start on the default pool of 7, 12 on 16). Hence the page's preloaded pool.
+  Diagnosis recipe: pause every worker through CDP (`Target.setAutoAttach` flat, `Debugger.pause`
+  per worker) on a bundle relinked with `WasmNativeStrip=false WasmNativeDebugSymbols=true`.
 - **Not qualified**: interactive desktop Chrome, a hardware GPU, browser audio, other browsers,
-  the template's browser head beyond its own CSX-031 run, anything after CNA `ffb82bc0d`.
+  the template's browser head beyond its own CSX-031 run; threaded bundles beyond the six runs above
+  (no threaded gallery requalification).
 
 ## 11. Android
 
@@ -298,7 +329,7 @@ Web/Android columns: "—" = not tried.
 | Rookie Drivers | race screen, music | yes | yes | see README |
 | TIE Fighter Forever | menu, battle | yes | yes | — |
 | NePlus | plays (Farseer, Mercury, Tiled, Krypton) | yes (after generator fixes) | yes | see README |
-| HeliumBiker | waits on its CONNECT screen (Wii Remote only, as on Windows) | no: starts a thread | yes | — |
+| HeliumBiker | waits on its CONNECT screen (Wii Remote only, as on Windows) | CONNECT (threaded) | yes | — |
 | Zombie Smashers X | menu (Xbox gamepad only) | yes | yes | — |
 | Moto Trial Racer (WP) | menu, race | yes | yes | see README |
 | Solitaire (WP) | deals, plays by touch | yes | yes | see README |
@@ -309,16 +340,16 @@ Web/Android columns: "—" = not tried.
 | A Princess' Request | first map | yes (after generator fix) | yes | — |
 | My Big Head… | level with Box2D | yes | yes | — |
 | Playing in Traffic | splash video, menu | no: video | stops at video | see README |
-| Resonance | plays (threaded load) | menu only | yes | see README |
-| Escape From Enceladus | first room | no: threads | title, save slots | FX-141, CSX-109, CSX-110, CBIND-146 |
+| Resonance | plays (threaded load) | plays (threaded) | yes | CSX-117 |
+| Escape From Enceladus | first room | save slots (threaded) | title, save slots | FX-141, CSX-109, CSX-110, CBIND-146, CSX-115, CBIND-151 |
 | __Defense | menu, wave 1 | menu | menu | CBIND-145, CSX-111, CSX-112 |
-| Missile Command | plays | title | title | — |
+| Missile Command | plays | plays (threaded) | title | — |
 | Super Mario World (Sprint 4) | level 1 | title menu | title menu | — |
 | Zelda clone | first screen | title | title | — |
 | Bubble Bound | plays | title (after CBIND-149/150) | title | CBIND-149, CBIND-150 (browser) |
 | Spineless (GGJ13) | plays | plays | plays | CBIND-146 |
 | Mahjong (Jomata) | deals on click | menu | menu | CBIND-147, CBIND-148 |
-| XNA 4.0 Racing Game Kit | menu, a race on the Advanced track (§15) | no: threads | attract mode | CSX-113, CSX-114, FX-142 |
+| XNA 4.0 Racing Game Kit | menu, a race on the Advanced track (§15) | attract mode (threaded, ~0.65 fps) | attract mode | CSX-113, CSX-114, FX-142, CSX-116 |
 
 (The first 16 rows' Web/Android results are from CNA `ffb82bc0d`; per-row detail is in
 `games/README.md`. "yes" means reaches title or play. "see README": the fixes the first 16 games
@@ -335,8 +366,9 @@ Not running, each for a reason outside cna-cs (details and SHAs in `games/README
   (Vrinda), Divine Right (Parchment).
 - Dead server: Samurai (AppHarbor).
 - Silverlight / Windows Phone UI: Nu, Pogodi!, Drumkit.
-- Windows Forms beyond the CSX-114 subset: Mannux, infinecraft, Flux (with System.Drawing) — **not
-  re-tried after CSX-114**.
+- Windows Forms beyond the CSX-114 subset: Mannux (P/Invokes `winmm.dll`), infinecraft (a Neoforce
+  library its repository lacks), Flux (its fonts Fabada and Origin are not in its repository) --
+  re-checked after CSX-114, none unblocked.
 - .NET change, not XNA: Minor Destruction (`BitConverter.GetBytes(sbyte)` ambiguous since .NET 7).
 
 ## 14. Mahjong
@@ -393,11 +425,13 @@ repeats its window move until it holds (`eb005a4`); a quick `click` is too short
   xdotool: `keydown space sleep 2 keyup space sleep 4` ×4, then `sleep 45 keydown Up sleep 12`).
   SDL's "Time out elapsed after mode switch … reverting" on Xvfb is harmless. No CNA/CNA.NET change
   was needed for this (cna-cs-samples `409415e`, cna-cs `faf7470`).
+- Browser (threaded bundle) and Android: its attract mode. In the browser it first hung after frame 1
+  -- its loading thread's `Thread.Start` waited on a worker .NET never started (CSX-116, §10).
 - Not done: frame comparison with the C++ port (its references are OPENGL33,
   `cna-samples/racing_milestone*.md`) or with the XNA exe under Wine; a full lap/race end, other
-  tracks, sound audibility; browser and Android.
-- Known limitation from CSX-114: its form's `Opacity = 0`/`FormBorderStyle.None` are kept, not
-  applied, so the loading screen is visible and the window keeps its border.
+  tracks, sound audibility; its menus in a browser (frame rate, above).
+- Known limitation from CSX-114: its form's `Opacity = 0` is kept, not applied, so the loading
+  screen is visible; `FormBorderStyle.None` now removes the border (`137f954`).
 
 ## 16. Historical blockers retested and obsolete
 
@@ -414,7 +448,9 @@ repeats its window move until it holds (`eb005a4`); a quick `click` is too short
 
 - Desktop gallery: `/rv/tmp/cs-samples/requal-2026100{1*,2,2b,2c,2d}/` (+ `.log`), each with
   `requalification.md`; per-row `cpp/` captures of the C++ ports.
-- Browser: `/rv/tmp/cs-samples/browser-requal-*`; Android: `/rv/tmp/cs-samples/android-requal-*`.
+- Browser: `/rv/tmp/cs-samples/browser-requal-*` (last full single-threaded run
+  `browser-requal-20261002-st`), threaded games `/rv/tmp/cs-samples/browser-threads/<Game>/`; Android:
+  `/rv/tmp/cs-samples/android-requal-*`.
 - Games: `/rv/tmp/cs-samples/games-*` (e.g. `games-spineless-play`, `games-mahjong-play5-*`,
   `games-racing-final`); game checkouts `/rv/tmp/xna-games/*`, built content
   `/rv/tmp/xna-games-content/*`.
@@ -445,39 +481,36 @@ CNA desktop C API tree `cna/build-probe`: Release, `CNA_GRAPHICS_RENDERER=OPENGL
 ## 19. Remaining work (by value/risk)
 
 Genuine compatibility defects
-1. The two remaining OPENGLES3 compiled-effect failures (§6): vertex-texture LOD bias on GLES 3 and
-   the `FlippedSource…` abort.
-2. CSX-114 completeness: apply `FormBorderStyle.None` through CNA's existing
-   `cna_game_window_set_is_borderless_ext` and `MessageBox` through `cna_message_box_show_ext`
-   (new cna-cs imports; update import inventory/abi-verify).
+1. The remaining OPENGLES3 compiled-effect failure (§6): vertex-texture LOD bias on GLES 3.
+2. CSX-114 completeness: `MessageBox` through `cna_message_box_show_ext` (a new import; update the
+   import inventory and abi-verify); `Opacity` has no CNA window service.
+Performance
+3. Threaded browser bundles render through proxied WebGL (every GL call a round trip to the page's
+   thread). Running WebGL on the deputy itself needs an OffscreenCanvas handed to the thread .NET
+   creates; investigate whether .NET's runtime or the page can do that.
 Qualification
-3. Racing Game Kit: compare with the C++ port / the XNA exe under Wine; finish a race.
-4. Multithreaded WebAssembly (§20) so threaded games run in a browser.
-5. Re-try Mannux/infinecraft/Flux now that CSX-114 exists (only if they need nothing beyond it).
+4. Racing Game Kit: compare with the C++ port / the XNA exe under Wine; finish a race.
+5. A threaded requalification of the gallery (`browser-sample.sh --threads` per row) to show the
+   threaded path breaks none of the 84 rows; report the .NET 11 thread-start fault upstream (owner).
 Platform
 6. Interactive Chrome with a GPU, browser audio; a physical Android device / arm64.
 Hardening
 7. The `-j8` C smoke flakiness (`RuntimeComponentsSmoke` stage 8 is a timing assumption).
-8. Regenerate and commit `cna-cs-samples/gallery-inventory.md` (stale ⬜ states).
 External / not actionable
-9. Yacht (owner decision), PerformanceUtility (needs its C++ port first), games blocked by missing
+8. Yacht (owner decision), PerformanceUtility (needs its C++ port first), games blocked by missing
     content/fonts/servers.
 
 # Exact next action
 
-Make threaded XNA games run in a browser: a multithreaded WebAssembly build of CNA and CNA.NET.
-Three real games stop there today on `new Thread(...).Start()` (HeliumBiker, Escape From Enceladus,
-the Racing Game Kit; Resonance loads its levels on a thread too), and all of them run on the desktop
-and on Android. Steps: (1) check what .NET 11's browser runtime needs for threads
-(`<WasmEnableThreads>true</WasmEnableThreads>`, a `-pthread` Emscripten link, COOP/COEP headers so
-`SharedArrayBuffer` exists — the headless runner `cna-cs/scripts/Run-BrowserPage.mjs` must serve them);
-(2) build CNA's WebGL2 C API with `-pthread` in a separate build directory only if
-`cmake-build-webgl2` cannot carry both (prefer a configure option on the existing tree; never a new
-ad-hoc directory name), staged by `cna-cs/scripts/Build-BrowserNative.sh`; (3) verify CNA's
-game-thread rule still holds — WebGL contexts live on one thread and CBIND-141 already serves other
-threads' calls on the game thread; (4) run `scripts/browser-sample.sh games/RacingGame --seconds 180`
-and `games/Enceladus`, then the full `scripts/browser-requalify.sh` to show the threaded build
-breaks none of the 84 rows. Record it as a CSX task in `cna-cs/CAMPAIGN.md`.
+Qualify the threaded browser path on the gallery: give `cna-cs-samples/scripts/browser-requalify.sh`
+a `--threads` option that passes `--threads` to `browser-sample.sh` (work directories
+`build-consumer/browser/<Row>-threads`), run it over all 84 rows against
+`/rv/tmp/cs-samples/requal-20261002d`, and compare with `/rv/tmp/cs-samples/browser-requal-20261002-st/`.
+Expect the same pass column; a row that differs is either a CBIND-151-class defect of a worker game
+thread (fix it in CNA) or the proxied-WebGL frame rate (record it). The threaded archive is current
+(`cna-cs/scripts/Build-BrowserNative.sh --threads` rebuilds it incrementally); CNA.XnaCompat's Release
+build must be current, since the generated projects take CNA.Framework.dll from beside it. Record the
+result in `cna-cs/CAMPAIGN.md` under CSX-116.
 
 ## Appendix — campaign commits (oldest first)
 
@@ -518,10 +551,13 @@ d9d599263 fix(FX-143): a GLSL ES 3 shader may declare a volume sampler
 9265c6ca9 docs: handoff updated after FX-143 and the Racing Game Kit's race
 d459f42aa fix(CBIND-149): EasyGL applies the multisample mask only where the context has it
 3c72165e6 fix(CBIND-150): EasyGL swizzles a one- or two-channel render target only where the profile can
-(+ this handoff commit on top of 3c72165e6)
+0c79486cc docs: handoff updated: the nine newest games in a browser and on Android, CBIND-149/150
+47b5f7665 test(FX-144): the flipped-source compiled-effect test reads GL through an initialised meta-gl
+cde2251fa fix(CBIND-151): CNA runs a game whose thread is a browser worker
+(+ this handoff commit on top of cde2251fa)
 ```
 
-### cna-cs (76 commits)
+### cna-cs (82 commits)
 
 ```
 9e30519 feat(CSX-010..014): migrate the binding from CNA C ABI 0.21.0 to 0.35.0
@@ -600,9 +636,15 @@ b999ff1 docs(CSX-104): the Racing Game Kit to its attract mode, CSX-113/114 and 
 faf7470 docs(CSX-104): the Racing Game Kit races; its lost input was the capture harness's short key press
 324acac docs: CNA FX-143 (volume samplers on GLSL ES 3) recorded
 74b74f7 docs(CSX-104): the nine newest games in a browser and on Android, CNA CBIND-149/150 recorded
+137f954 feat(CSX-114): a Windows Forms game's FormBorderStyle reaches its window
+d8f79c5 docs: CSX-114's border style, CNA FX-144 and the Windows Forms games re-checked
+3dcad82 fix(CSX-115): XNA StorageDevice works in every browser bundle
+2f50b3b feat(CSX-116): a game that starts threads runs in a browser
+e550614 fix(CSX-117): a threaded bundle's worker pool scales with the processors
+6067de5 docs: CSX-115/116/117 and CNA CBIND-151, the games that start threads in a browser
 ```
 
-### cna-cs-samples (82 commits)
+### cna-cs-samples (85 commits)
 
 ```
 26d06c1 chore(CSX-052): point the samples at the current tree and the current rules
@@ -687,6 +729,9 @@ eb005a4 scripts: capture-sample repeats its window move until it holds
 409415e docs(CSX-104): the Racing Game Kit plays -- its menu and a race on the Advanced track
 4994508 scripts: the browser and Android generators carry a game's opt-in Windows Forms and its NuGet packages
 671df07 docs(CSX-104): the nine newest games in a browser and on Android
+815d36c docs: regenerate the gallery inventory (82 of 84 gallery samples run; Yacht held, PerformanceUtility without a C++ port)
+fe1d8d6 feat(CSX-116): browser-sample.sh builds a threaded bundle with --threads
+020da57 docs: the games that start threads, in a browser (CNA.NET CSX-115..117, CNA CBIND-151)
 ```
 
 ### cna-cs-template (2 commits)
