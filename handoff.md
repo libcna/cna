@@ -2,11 +2,12 @@
 
 Written 2026-10-02 at the end of a ~30-hour session; updated the same evening after games that start
 threads were made to run in a browser (§10) and five more Microsoft samples ran (§13, CBIND-152,
-CSX-118/119), and late that night after a batch of real games from GitHub (§13b: CBIND-153, ABI
-0.42.0; CSX-120..123). `/goal` remains authoritative; this file is the state it reached and how to
+CSX-118/119), late that night after a batch of real games from GitHub (§13b: CBIND-153, ABI
+0.42.0; CSX-120..123), and on 2026-10-03 after three more (§13b: CBIND-154/155, ABI 0.44.0;
+CSX-124/125). `/goal` remains authoritative; this file is the state it reached and how to
 continue. Everything up to `fb89c451a` (cna) was pushed on the owner's word; **the late-night
-commits are not pushed** (cna 1 + this handoff, cna-cs 5, cna-cs-samples 8, and the two
-`zelda-oracle*` side branches).
+and 2026-10-03 commits are not pushed** (see `git log @{u}..` in cna, cna-cs and cna-cs-samples,
+and the two `zelda-oracle*` side branches).
 
 ## 1. Campaign identity
 
@@ -32,7 +33,7 @@ commits are not pushed** (cna 1 + this handoff, cna-cs 5, cna-cs-samples 8, and 
 ## 2. Executive status
 
 **Completed and validated**
-- cna-cs binds CNA C ABI **0.42.0** (exact point policy; 0.41.0 retired). ABI verification,
+- cna-cs binds CNA C ABI **0.44.0** (exact point policy; 0.43.0 retired). ABI verification,
   api-compat (0 diagnostics vs XNA 4.0 Windows runtime metadata) and all managed suites green.
 - Desktop Linux (OPENGLES3, compiled effects ON): every checked-in gallery row builds Debug+Release,
   runs, captures and exits by its own exit path; 82 of the 84 gallery entries are covered
@@ -405,8 +406,16 @@ objects at once; CNA runs one game per process), Kodu Game Lab (Windows Forms ho
 five more on Windows sprite fonts, Jxqy HD and Tactile Engine on data/repositories they do not ship.
 Run recipes that are not obvious: SKraft reads its world from `<cwd>\Maps\Test` (copies under
 `/rv/tmp/cs-samples/skraft/`), the Forge sample runs from its output copied five levels below its
-`Assets` (`/rv/tmp/cs-samples/forge/1/2/3/4/5`). Browser and Android bundles still carry the 0.41.0
-native archives: rebuild CNA's archives before their next run.
+`Assets` (`/rv/tmp/cs-samples/forge/1/2/3/4/5`).
+
+2026-10-03: stpettersens/21's blackjack (CBIND-154: fire-and-forget `SoundEffect.Play` answers on
+any thread; its dealer's thread played while the game thread spun on it), Petzold's PhreeCell
+(CBIND-155: Activated/Deactivated handlers run in a callback scope with the device; CSX-125 also
+rethrows a game event handler's failure at the next Update), NeonVectorShooter, asvo and petriw's
+seven shader tutorials run. The 84-row desktop gallery requalified on 0.44.0 with no status change.
+Browser: Sonic 3, Disentanglement, HauntedHouse, and SKraft as a threaded bundle (archives at CNA
+`90b553dc1`, i.e. 0.42.0 -- rebuild them with `Build-BrowserNative.sh [--threads]` before the next
+browser run). Android: none of the GitHub games tried yet; its archive is older still.
 
 ## 14. Mahjong
 
