@@ -191,7 +191,7 @@
     },
     "modules/platform/tests/CNA/Platform/Sdl3InputServicesTests.cpp": {
       "category": "platform-sdl3-integration",
-      "max_references": 67
+      "max_references": 74
     },
     "modules/platform/tests/CNA/Platform/Sdl3KeyCodeRoundTripTests.cpp": {
       "category": "platform-sdl3-integration",

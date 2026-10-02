@@ -17,9 +17,11 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstring>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -565,7 +567,7 @@ TEST_F(Sdl3InputTest, MouseReadsThePointerBesideTheWindowAsXnaDoes)
     const auto settle = [&](const auto& done) {
         for (int attempt = 0; attempt < 100 && !done(); ++attempt)
         {
-            SDL_Delay(10);
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
             events.clear();
             platform_->PollEvents(events);
             mouse->Update();
@@ -574,14 +576,14 @@ TEST_F(Sdl3InputTest, MouseReadsThePointerBesideTheWindowAsXnaDoes)
 
     window->Sync();  // the requested placement, not the centred one SDL starts from
     const WindowBounds bounds = window->GetClientBounds();
-    ASSERT_TRUE(SDL_WarpMouseGlobal(static_cast<float>(bounds.x + 10),
-                                    static_cast<float>(bounds.y + 10)));
+    ASSERT_TRUE(mouse->SetGlobalPosition(static_cast<float>(bounds.x + 10),
+                                         static_cast<float>(bounds.y + 10)));
     settle([&] { return mouse->GetSnapshot().window == window->GetId(); });
     ASSERT_EQ(mouse->GetSnapshot().window, window->GetId()) << "the pointer never entered";
 
     const int besideX = bounds.width + 30;
-    ASSERT_TRUE(SDL_WarpMouseGlobal(static_cast<float>(bounds.x + besideX),
-                                    static_cast<float>(bounds.y + 20)));
+    ASSERT_TRUE(mouse->SetGlobalPosition(static_cast<float>(bounds.x + besideX),
+                                         static_cast<float>(bounds.y + 20)));
     settle([&] { return mouse->GetSnapshot().x == besideX; });
     EXPECT_EQ(mouse->GetSnapshot().window, window->GetId());
     EXPECT_EQ(mouse->GetSnapshot().x, besideX);
