@@ -157,11 +157,15 @@ public:
                 "The graphics-device output handle is null.");
         }
         *outGraphicsDevice = CNA_INVALID_HANDLE;
-        if (callbackDepth_ == 0U) {
+        // CBIND-153: before its run begins the game's device exists and nothing else drives it, as
+        // in XNA, whose ApplyChanges in a Game constructor creates the device the constructor then
+        // reads. A handle lent then lasts until the run's first callback returns.
+        if (callbackDepth_ == 0U && hasBegunRun_) {
             return Fail(
                 CNA_RESULT_INVALID_STATE,
                 CNA_ERROR_CATEGORY_STATE,
-                "The graphics device may be borrowed only during a game lifecycle callback.");
+                "The graphics device may be borrowed only during a game lifecycle callback or "
+                "before the game's run begins.");
         }
         if (borrowedGraphicsDeviceHandle_ != CNA_INVALID_HANDLE) {
             *outGraphicsDevice = borrowedGraphicsDeviceHandle_;
@@ -270,6 +274,7 @@ protected:
         // This mirrors the canonical C++ shape, where a subclass does its own work and *then* calls
         // base.Initialize(). The base initializes the components and loads their content, so the
         // scope covers it as well as the hook.
+        hasBegunRun_ = true;
         const CallbackScope scope(*this);
         Invoke(frameHooks_.initialize, nullptr, frameHooks_.context);
         Game::Initialize();
@@ -427,6 +432,7 @@ private:
     bool hasLoadedContent_;
     bool hasExited_;
     bool isShutDown_;
+    bool hasBegunRun_ = false;
     CNA_Handle borrowedGraphicsDeviceHandle_ = CNA_INVALID_HANDLE;
 };
 

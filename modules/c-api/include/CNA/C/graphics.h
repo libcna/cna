@@ -735,15 +735,18 @@ CNA_C_API CNA_Result cna_sprite_batch_submit_scaled_many(
     uint64_t command_count);
 
 /**
- * @brief Borrows the active graphics device during a game lifecycle callback.
+ * @brief Borrows the game's graphics device during a lifecycle callback, or before its run begins.
  *
- * @param game Callback-borrowed game handle received by the active lifecycle callback.
+ * @param game Callback-borrowed game handle received by the active lifecycle callback, or the
+ *        owned handle before the game's first run, step or tick.
  * @param out_graphics_device Receives a borrowed graphics-device handle on success.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` outside a lifecycle callback, or a
- * documented argument/handle/thread/native failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` outside a lifecycle callback once the
+ * run has begun, or a documented argument/handle/thread/native failure.
  *
- * The returned handle is valid only until the current callback returns. It must not be retained or
- * released by the caller.
+ * The returned handle is valid only until the current callback returns; one borrowed before the
+ * run begins, until the run's first callback returns. It must not be retained or released by the
+ * caller. Before the run, the device is the one XNA's `ApplyChanges` in a game's constructor
+ * creates (ABI 0.42.0).
  */
 CNA_C_API CNA_Result cna_game_get_graphics_device(
     CNA_Handle game,

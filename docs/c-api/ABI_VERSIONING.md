@@ -2,7 +2,17 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.41.0** (`CBIND-152`). It adds one route,
+The current experimental ABI is **0.42.0** (`CBIND-153`). No route, constant or structure
+changes; one rule does. `cna_game_get_graphics_device` also lends the device before the game's run
+begins -- its first run, frame step or tick -- on the thread that created the game, and that handle
+lasts until the run's first callback returns. XNA's `ApplyChanges` in a game's constructor creates
+the device, and games read it there (Kermit/SKraft sizes its menu from `Viewport`); CNA's game
+owns its device from creation, but no callback had lent it yet. Between frames, once the run has
+begun, the route still refuses with `CNA_RESULT_INVALID_STATE`. The export set did not change.
+
+### Previous ABI 0.41.0
+
+The ABI was **0.41.0** (`CBIND-152`). It adds one route,
 `cna_game_run_foreign_thread_calls_ext`: the game thread runs the calls other threads queued for it
 (`cna_game_set_foreign_thread_calls_ext`) now, rather than at the start of its next update or draw.
 XNA's loading screens start a thread that draws the loading animation and join it from `Update`

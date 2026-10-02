@@ -696,11 +696,18 @@ int main(void)
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS || game == CNA_INVALID_HANDLE) {
         return CNA_TEST_FAIL(1);
     }
+    /* CBIND-153: before its run the game lends its device, as XNA's ApplyChanges in a constructor
+     * created one the constructor could read; the handle lasts until the run's first callback. */
     CNA_Handle graphics_device = CNA_INVALID_HANDLE;
-    if (cna_game_get_graphics_device(game, &graphics_device) != CNA_RESULT_INVALID_STATE ||
-        graphics_device != CNA_INVALID_HANDLE) {
+    CNA_Viewport viewport;
+    memset(&viewport, 0, sizeof(viewport));
+    if (cna_game_get_graphics_device(game, &graphics_device) != CNA_RESULT_SUCCESS ||
+        graphics_device == CNA_INVALID_HANDLE ||
+        cna_graphics_device_get_viewport(graphics_device, &viewport) != CNA_RESULT_SUCCESS ||
+        viewport.width <= 0 || viewport.height <= 0) {
         return CNA_TEST_FAIL(2);
     }
+    const CNA_Handle constructor_graphics_device = graphics_device;
     WrongThreadState wrong_thread_state = {
         game, CNA_RESULT_SUCCESS, CNA_RESULT_SUCCESS
     };
@@ -725,8 +732,16 @@ int main(void)
     };
     if (cna_graphics_device_get_renderer_info(
             state.borrowed_graphics_device,
-            &stale_renderer_info) != CNA_RESULT_INVALID_HANDLE) {
+            &stale_renderer_info) != CNA_RESULT_INVALID_HANDLE ||
+        cna_graphics_device_get_viewport(constructor_graphics_device, &viewport) !=
+            CNA_RESULT_INVALID_HANDLE) {
         return CNA_TEST_FAIL(5);
+    }
+    /* Once the run has begun, outside a callback is between frames: refused. */
+    graphics_device = CNA_INVALID_HANDLE;
+    if (cna_game_get_graphics_device(game, &graphics_device) != CNA_RESULT_INVALID_STATE ||
+        graphics_device != CNA_INVALID_HANDLE) {
+        return CNA_TEST_FAIL(12);
     }
     CNA_Texture2DInfo live_texture_info = {
         sizeof(CNA_Texture2DInfo), UINT32_C(1), 0U, 0U, 0U, 0U
