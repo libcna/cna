@@ -76,6 +76,28 @@ struct SoundEffectInstanceResource final {
         "The owned SoundEffect handle is invalid for this call.");
 }
 
+// CBIND-154: fire-and-forget playback from any thread. XNA's SoundEffect.Play answered on every
+// thread, and games call it from their own (stpettersens/21's dealer plays its shuffle sound on the
+// thread it shuffles on while the game thread waits for that thread). Playing reads only the
+// effect's immutable audio and goes to the mixer, which both backends serialize; queueing it on
+// the game thread instead left such a game waiting on itself.
+[[nodiscard]] CNA_Result GetSoundEffectToPlay(
+    const CNA_Handle handle,
+    std::shared_ptr<SoundEffectResource>* const outSoundEffect)
+{
+    const CNA_Result result = GetRuntimeHandles().GetFromAnyThread(
+        handle,
+        ObjectKind::SoundEffect,
+        outSoundEffect);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        "The owned SoundEffect handle is invalid for this call.");
+}
+
 [[nodiscard]] CNA_Result GetSoundEffectInstance(
     const CNA_Handle handle,
     std::shared_ptr<SoundEffectInstanceResource>* const outInstance)
@@ -1007,7 +1029,7 @@ CNA_Result cna_sound_effect_play(const CNA_Handle soundEffectHandle, CNA_Bool* c
             return AudioInvalidInput("The playback output is null.");
         }
         std::shared_ptr<SoundEffectResource> soundEffect;
-        if (const CNA_Result result = GetSoundEffect(soundEffectHandle, &soundEffect);
+        if (const CNA_Result result = GetSoundEffectToPlay(soundEffectHandle, &soundEffect);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
@@ -1028,7 +1050,7 @@ CNA_Result cna_sound_effect_play_with_settings(
             return AudioInvalidInput("The playback output is null.");
         }
         std::shared_ptr<SoundEffectResource> soundEffect;
-        if (const CNA_Result result = GetSoundEffect(soundEffectHandle, &soundEffect);
+        if (const CNA_Result result = GetSoundEffectToPlay(soundEffectHandle, &soundEffect);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }

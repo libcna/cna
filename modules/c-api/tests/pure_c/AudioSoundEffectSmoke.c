@@ -5,6 +5,7 @@
 #include "CnaTestReport.h"
 
 #include <string.h>
+#include <threads.h>
 
 static CNA_StringView view(const char* const text)
 {
@@ -267,6 +268,38 @@ static int validate_effect(const CNA_Handle sound_effect)
         cna_sound_effect_instance_get_is_disposed(instance, &flag) == CNA_RESULT_INVALID_HANDLE;
 }
 
+/* CBIND-154: fire-and-forget playback answers on any thread, as XNA's Play did -- a game's own
+   thread plays its sounds -- while every other route keeps the creating-thread rule. */
+typedef struct OtherThreadPlay {
+    CNA_Handle sound_effect;
+    CNA_Result play;
+    CNA_Result play_with_settings;
+    CNA_Result is_disposed;
+} OtherThreadPlay;
+
+static int play_on_other_thread(void* const context)
+{
+    OtherThreadPlay* const state = (OtherThreadPlay*)context;
+    CNA_Bool flag = CNA_FALSE;
+    state->play = cna_sound_effect_play(state->sound_effect, &flag);
+    state->play_with_settings =
+        cna_sound_effect_play_with_settings(state->sound_effect, 0.5F, 0.0F, 0.25F, &flag);
+    state->is_disposed = cna_sound_effect_get_is_disposed(state->sound_effect, &flag);
+    return 0;
+}
+
+static int validate_other_thread_play(const CNA_Handle sound_effect)
+{
+    OtherThreadPlay state = {sound_effect, CNA_RESULT_INTERNAL, CNA_RESULT_INTERNAL, CNA_RESULT_INTERNAL};
+    thrd_t thread;
+    int thread_result = 1;
+    return thrd_create(&thread, play_on_other_thread, &state) == thrd_success &&
+        thrd_join(thread, &thread_result) == thrd_success && thread_result == 0 &&
+        state.play == CNA_RESULT_SUCCESS &&
+        state.play_with_settings == CNA_RESULT_SUCCESS &&
+        state.is_disposed == CNA_RESULT_THREAD;
+}
+
 int main(void)
 {
     CNA_GameCreateInfo game_info = {
@@ -295,6 +328,9 @@ int main(void)
     }
     if (!validate_effect(sound_effect)) {
         return CNA_TEST_FAIL(5);
+    }
+    if (!validate_other_thread_play(sound_effect)) {
+        return CNA_TEST_FAIL(8);
     }
     {
         /* Argument validation runs before handle validation everywhere in this ABI, so a stale

@@ -554,6 +554,32 @@ public:
         return CNA_RESULT_SUCCESS;
     }
 
+    /// The same lookup for a route its object serves from any thread (CBIND-154): the handle is
+    /// validated and kept alive as by Get, without the creating-thread rule.
+    template<typename TObject>
+    CNA_Result GetFromAnyThread(
+        const CNA_Handle handle,
+        const ObjectKind expectedKind,
+        std::shared_ptr<TObject>* const outObject) const
+    {
+        if (outObject == nullptr || expectedKind == ObjectKind::Unknown) {
+            return CNA_RESULT_INVALID_ARGUMENT;
+        }
+
+        std::lock_guard lock(mutex_);
+        Slot* slot = nullptr;
+        const CNA_Result result = FindSlotLocked(handle, &slot);
+        if (result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (slot->kind != expectedKind) {
+            return CNA_RESULT_INVALID_HANDLE;
+        }
+
+        *outObject = std::static_pointer_cast<TObject>(slot->object);
+        return CNA_RESULT_SUCCESS;
+    }
+
     CNA_Result Release(CNA_Handle handle);
 
 private:

@@ -479,6 +479,8 @@ CNA_C_API CNA_Result cna_sound_effect_set_speed_of_sound(CNA_Handle game, float 
  *         playing, or a documented argument/handle/thread/native failure.
  *
  * A disposed effect answers `CNA_FALSE` rather than failing, which is the canonical behavior.
+ * Callable from any thread, not only the one that created the effect, as XNA's `Play` was
+ * (ABI 0.42.0 -> 0.43.0); every other route on the effect keeps its creating-thread rule.
  */
 CNA_C_API CNA_Result cna_sound_effect_play(CNA_Handle sound_effect, CNA_Bool* out_played);
 
@@ -494,7 +496,8 @@ CNA_C_API CNA_Result cna_sound_effect_play(CNA_Handle sound_effect, CNA_Bool* ou
  *         `CNA_RESULT_INVALID_STATE` when too many instances are already playing, or a documented
  *         argument/handle/thread/native failure.
  *
- * The canonical asymmetry is preserved: **pan is range-checked and pitch is clamped**.
+ * The canonical asymmetry is preserved: **pan is range-checked and pitch is clamped**. Callable
+ * from any thread, as @ref cna_sound_effect_play is.
  */
 CNA_C_API CNA_Result cna_sound_effect_play_with_settings(
     CNA_Handle sound_effect,

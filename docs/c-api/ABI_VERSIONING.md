@@ -2,7 +2,19 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.42.0** (`CBIND-153`). No route, constant or structure
+The current experimental ABI is **0.43.0** (`CBIND-154`). No route, constant or structure
+changes; one rule does. `cna_sound_effect_play` and `cna_sound_effect_play_with_settings` answer on
+any thread, not only the one that created the effect, as XNA's `SoundEffect.Play` did: games play
+sounds from threads of their own (stpettersens/21's dealer plays its shuffle sound on the thread
+that shuffles while the game thread spins until that thread ends). Fire-and-forget playback reads
+only the effect's audio and goes to the mixer, which both backends serialize. With foreign-thread
+calls on, such a call was queued for the game thread, which a game busy-waiting on that thread
+never serviced. Every other route on a sound effect keeps the creating-thread rule. The export set
+did not change.
+
+### Previous ABI 0.42.0
+
+The ABI was **0.42.0** (`CBIND-153`). No route, constant or structure
 changes; one rule does. `cna_game_get_graphics_device` also lends the device before the game's run
 begins -- its first run, frame step or tick -- on the thread that created the game, and that handle
 lasts until the run's first callback returns. XNA's `ApplyChanges` in a game's constructor creates
