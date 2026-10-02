@@ -4745,6 +4745,13 @@ TEST(EasyGLCompiledEffectDrawTest, FlippedSourceRetainsFormatAndFullFloatPrecisi
     const ::easygl::Texture& corrected =
         renderer->AcquireCompiledEffectFlippedSourceEXT(1, *nativeSource);
 
+    // CnaTests links its own static copy of meta-gl, apart from the renderer's inside libcna.so
+    // (VKPAR-0017), and meta-gl terminates on any call through a table nobody initialised -- which
+    // is how this test aborted ("terminate called without an active exception"). Load this
+    // binary's copy from the renderer's own context before reading GL state directly.
+    if (!::metagl::IsInitialized())
+        ASSERT_TRUE(::metagl::Initialize(renderer->GetProcAddressLoaderEXT()));
+
     GLint previousReadFramebuffer = 0;
     ::metagl::glGetIntegerv(::metagl::GetParameter::ReadFramebufferBinding,
                             &previousReadFramebuffer);
