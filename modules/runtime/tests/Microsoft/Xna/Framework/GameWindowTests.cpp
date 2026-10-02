@@ -5,12 +5,12 @@
 
 #include "CNA/Platform/IPlatform.hpp"
 #include "CNA/Platform/IPlatformWindow.hpp"
-#include "CNA/Platform/PlatformException.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
 #include "CNA/Platform/WindowDescription.hpp"
 #include "CNA/TargetPlatform.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameWindow.hpp"
+#include "RuntimePlatformTestSupport.hpp"
 
 #include <memory>
 #include <string>
@@ -352,8 +352,10 @@ TEST(GameWindowPlatformTest, DelegatesStateAndGeometryToTheSelectedPlatformWindo
     {
         owner = std::make_unique<Game>();
     }
-    catch (const CNA::Platform::PlatformException& refusal)
+    catch (const Graphics::NoSuitableGraphicsDeviceException& refusal)
     {
+        if (!CNA::Runtime::Testing::IsPlatformRefusal(refusal))
+            throw;
         GTEST_SKIP() << "the selected platform cannot back this build's renderer: " << refusal.what();
     }
     Game& game = *owner;

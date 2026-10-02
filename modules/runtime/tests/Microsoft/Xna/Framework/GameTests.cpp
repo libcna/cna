@@ -10,10 +10,15 @@
 #include "Microsoft/Xna/Framework/GameTime.hpp"
 #include "Microsoft/Xna/Framework/DrawableGameComponent.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IGraphicsDeviceService.hpp"
+#include "Microsoft/Xna/Framework/Graphics/NoSuitableGraphicsDeviceException.hpp"
 #include "System/EventArgs.hpp"
 #include "CNA/Platform/IPlatform.hpp"
+#include "CNA/GraphicsRendererSelection.hpp"
+#include "CNA/GraphicsRendererType.hpp"
 #include "CNA/Platform/PlatformEvent.hpp"
+#include "CNA/Platform/PlatformException.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
 #include "CNA/Platform/PlatformTestDecorator.hpp"
 #include "RuntimePlatformTestSupport.hpp"
@@ -22,7 +27,9 @@
 
 #include <atomic>
 #include <chrono>
+#include <exception>
 #include <memory>
+#include <string>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -664,4 +671,73 @@ TEST(GameTest, ModalSystemOverlayOwnsActivityWithoutOverwritingWindowFocus)
     CNA::Internal::GameTestPeer::SetWindowActive(game, true);
     EXPECT_TRUE(game.getIsActiveProperty());
     game.getServicesProperty().RemoveService<CNA::Internal::Runtime::IGameOverlay>();
+}
+
+namespace
+{
+    // The platform of a machine that cannot give the renderer its window: on an X server without
+    // GLX, CreateWindow fails with exactly this.
+    class WindowRefusingPlatform final : public CNA::Platform::Testing::PlatformTestDecorator
+    {
+    public:
+        WindowRefusingPlatform() = default;
+
+        [[nodiscard]] std::unique_ptr<CNA::Platform::IPlatformWindow> CreateWindow(
+            const CNA::Platform::WindowDescription&) override
+        {
+            throw CNA::Platform::PlatformException("CreateWindow(test)", "GLX is not supported");
+        }
+    };
+}
+
+TEST(GameTest, AGameWhoseDeviceCannotBeCreatedThrowsNoSuitableGraphicsDeviceException)
+{
+    // XNA's GraphicsDeviceManager.CreateDevice (IL) turns any failure to create the game's device
+    // into NoSuitableGraphicsDeviceException("Unable to create the graphics device.", failure) --
+    // what a game catches to say the machine cannot run it. Before, the platform's own exception
+    // left the Game constructor. Without a display the platform fails one step earlier, acquiring
+    // video, and that failure is the one wrapped.
+    try
+    {
+        LifecycleTestGame game(std::make_unique<WindowRefusingPlatform>());
+        GTEST_SKIP() << "The selected renderer creates its device without a platform window.";
+    }
+    catch (const Graphics::NoSuitableGraphicsDeviceException& error)
+    {
+        ASSERT_TRUE(error.getInnerExceptionProperty()) << "the failure must travel inside it";
+        try
+        {
+            std::rethrow_exception(error.getInnerExceptionProperty());
+        }
+        catch (const CNA::Platform::PlatformException& failure)
+        {
+            EXPECT_EQ(error.getMessageProperty(),
+                std::string("Unable to create the graphics device. ") + failure.what());
+        }
+    }
+}
+
+TEST(GameTest, ANoSuitableGraphicsDeviceExceptionFromTheDeviceIsNotWrapped)
+{
+    // XNA rethrows the device's own NoSuitableGraphicsDeviceException as it is: its sentence names
+    // the requirement that failed. A reference device needs the SOFTWARE renderer.
+    if (CNA::GraphicsRendererSelection::IsAvailable(CNA::GraphicsRendererType::Software))
+        GTEST_SKIP() << "SOFTWARE is compiled in, so a reference device is not refused here.";
+
+    struct ResetFlag
+    {
+        ~ResetFlag() { Graphics::GraphicsAdapter::setUseReferenceDeviceProperty(false); }
+    } resetFlag;
+    Graphics::GraphicsAdapter::setUseReferenceDeviceProperty(true);
+    try
+    {
+        LifecycleTestGame game;
+        ADD_FAILURE() << "a reference device must be refused without the SOFTWARE renderer";
+    }
+    catch (const Graphics::NoSuitableGraphicsDeviceException& error)
+    {
+        EXPECT_EQ(std::string(error.what()).rfind("GraphicsAdapter.UseReferenceDevice", 0), 0u)
+            << error.what();
+        EXPECT_FALSE(error.getInnerExceptionProperty());
+    }
 }

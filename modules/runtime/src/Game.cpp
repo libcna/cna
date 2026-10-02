@@ -14,6 +14,8 @@
 #include "CNA/Platform/PlatformEvent.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
 #include "CNA/TargetPlatform.hpp"
+#include "Microsoft/Xna/Framework/Graphics/NoSuitableGraphicsDeviceException.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/Globalization/CultureInfo.hpp"
 #include "System/AppContext.hpp"
@@ -246,6 +248,37 @@ namespace Microsoft::Xna::Framework
                 CNA::Platform::SetCurrentPlatform(successor);
             }
         }
+
+        /// Creates the game's device as XNA's GraphicsDeviceManager.CreateDevice does (its IL): a
+        /// NoSuitableGraphicsDeviceException passes through, and any other failure becomes one,
+        /// with the failure inside -- an ArgumentException under XNA's Direct3DInvalidCreateParameters
+        /// sentence, everything else under Direct3DCreateError. A game catches it to say the
+        /// machine cannot run it. Constructing a GraphicsDevice directly keeps its own exceptions,
+        /// as XNA's does. Returned as a prvalue, so the device is built in the member itself.
+        [[nodiscard]] Graphics::GraphicsDevice CreateGameGraphicsDevice()
+        {
+            try
+            {
+                return Graphics::GraphicsDevice();
+            }
+            catch (const Graphics::NoSuitableGraphicsDeviceException&)
+            {
+                throw;
+            }
+            catch (const System::ArgumentException& failure)
+            {
+                throw Graphics::NoSuitableGraphicsDeviceException(
+                    "The device creation parameters contain invalid configuration options. " +
+                        failure.getMessageProperty(),
+                    std::current_exception());
+            }
+            catch (const std::exception& failure)
+            {
+                throw Graphics::NoSuitableGraphicsDeviceException(
+                    std::string("Unable to create the graphics device. ") + failure.what(),
+                    std::current_exception());
+            }
+        }
     }
 
     /// PLAT-46 follow-up: the scope guard that makes the ambient installation transactional.
@@ -335,7 +368,7 @@ namespace Microsoft::Xna::Framework
           platformCapabilities_(platform_->GetCapabilities()),
           eventBatch_(std::make_unique<PlatformEventBatch>()),
           Components_(),
-          GraphicsDevice_(),
+          GraphicsDevice_(CreateGameGraphicsDevice()),
           Content_(),
           Window_(),
           LaunchParameters_(),

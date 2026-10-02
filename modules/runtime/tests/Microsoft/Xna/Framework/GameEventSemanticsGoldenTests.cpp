@@ -22,7 +22,6 @@
 
 #include "CNA/Platform/CannedMouse.hpp"
 #include "CNA/Platform/PlatformEvent.hpp"
-#include "CNA/Platform/PlatformException.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
 #include "CNA/Platform/PlatformTestDecorator.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -31,6 +30,7 @@
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
 #include "Microsoft/Xna/Framework/Input/MouseState.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "RuntimePlatformTestSupport.hpp"
 
 #include <cstdlib>
 #include <filesystem>
@@ -237,8 +237,10 @@ TEST_P(GameEventSemanticsGoldenTest, ObservableEventSemanticsMatchTheCapturedBas
     {
         gameOwner = std::make_unique<TranscriptGame>(std::move(platform));
     }
-    catch (const Platform::PlatformException& refusal)
+    catch (const Graphics::NoSuitableGraphicsDeviceException& refusal)
     {
+        if (!CNA::Runtime::Testing::IsPlatformRefusal(refusal))
+            throw;
         GTEST_SKIP() << "the " << GetParam()
                      << " platform cannot back this build's renderer: " << refusal.what();
     }

@@ -3,9 +3,12 @@
 
 #include "CNA/Platform/IPlatform.hpp"
 #include "CNA/Platform/IPlatformWindow.hpp"
+#include "CNA/Platform/PlatformException.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
 #include "CNA/Platform/WindowDescription.hpp"
+#include "Microsoft/Xna/Framework/Graphics/NoSuitableGraphicsDeviceException.hpp"
 
+#include <exception>
 #include <memory>
 
 namespace CNA::Runtime::Testing
@@ -48,6 +51,29 @@ namespace CNA::Runtime::Testing
                     // A capability probe is boolean by contract; cleanup failure cannot escape it.
                 }
             }
+            return false;
+        }
+    }
+
+    /** True when a game's device could not be created because the platform refused what the
+        renderer needs: Game reports that as XNA does, with the platform's exception inside. */
+    inline bool IsPlatformRefusal(
+        const Microsoft::Xna::Framework::Graphics::NoSuitableGraphicsDeviceException& error)
+    {
+        if (!error.getInnerExceptionProperty())
+        {
+            return false;
+        }
+        try
+        {
+            std::rethrow_exception(error.getInnerExceptionProperty());
+        }
+        catch (const CNA::Platform::PlatformException&)
+        {
+            return true;
+        }
+        catch (...)
+        {
             return false;
         }
     }
