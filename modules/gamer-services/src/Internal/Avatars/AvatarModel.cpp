@@ -323,7 +323,21 @@ std::shared_ptr<const AvatarModel> buildAvatarModel(const AvatarDescriptor& desc
 
 namespace {
 // One shared loader thread: avatar assembly never blocks the game thread, and there is never
-// more than one worker however many renderers a game creates.
+// more than one worker however many renderers a game creates. A single-threaded browser has no
+// thread to give it, so there a job runs where it is submitted.
+#ifdef __EMSCRIPTEN__
+class Loader {
+public:
+    Loader()
+    {
+        (void)embeddedCatalogs();
+    }
+    void submit(const std::function<void()>& job)
+    {
+        job();
+    }
+};
+#else
 class Loader {
 public:
     Loader()
@@ -364,6 +378,7 @@ private:
     bool stopping_=false;
     std::thread worker_;
 };
+#endif
 
 std::mutex cacheLock;
 std::map<std::vector<std::uint8_t>,std::weak_ptr<const AvatarModel>> cache;
