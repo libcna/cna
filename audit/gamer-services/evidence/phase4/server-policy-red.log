@@ -1,0 +1,14 @@
+Internal ctest changing into directory: /rv/data/development/github.com/libcna/cna-gamer-services-server/build
+Test project /rv/data/development/github.com/libcna/cna-gamer-services-server/build
+    Start 5: service_privacy
+1/1 Test #5: service_privacy ..................***Failed    3.68 sec
+heartbeat carries current policy
+
+
+0% tests passed, 1 tests failed out of 1
+
+Total Test time (real) =   3.69 sec
+
+The following tests FAILED:
+	  5 - service_privacy (Failed)
+Errors while running CTest

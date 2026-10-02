@@ -1,6 +1,32 @@
 # GamerServices compatibility matrix
 
-**Phase 3 update:** 642 GamerServices / 523 Net pass, server 33 pass / 0 fail / 7 environment-required skips. Nine native and six server tests added. The focused Phase 3 table below supersedes historical limitations where explicitly resolved. [Handoff](gamer-services-handoff-phase3.md).
+## Final Phase 4 four-axis matrix
+
+**Current precedence:** this matrix supersedes old BROKEN/open qualifications below where resolved. GamerServices 649 pass, Net 524 pass, server 33 pass / 0 fail / 7 unchanged environment skips. [Handoff](gamer-services-handoff-phase4.md) and [final risks](gamer-services-issues.md). No compatibility percentage is inferred from suite counts.
+
+XNA API compatibility means the adapted public C++ surface, **not** CLR binary compatibility or complete overload certification. Behavioral compatibility describes observable semantics separately. CNA online implementation uses CNA accounts/services. Microsoft/Xbox interoperability is a fourth, independent axis: lack of Xbox interoperability does not erase API compatibility.
+
+| Major feature | XNA API COMPATIBILITY | XNA BEHAVIORAL COMPATIBILITY | CNA ONLINE SERVICE IMPLEMENTATION | MICROSOFT/XBOX INTEROPERABILITY |
+|---|---|---|---|---|
+| Gamer/component/dispatcher/collections | broadly matching names/property and async adaptations | working identity/update/collections; borrowed lifetimes and exact exception/timing limits | authenticated account/title, bounded tokens and update-thread publication | no Xbox account/service connection |
+| profiles/pictures/privileges | substantial original getter/lookup/async surface | close for supported fields; viewer privilege/privacy policy and snapshots CNA-specific | real profile/social aggregates, current picture authorization/cache; heartbeat/renewal now publishes current policy | CNA profiles/privileges, no Xbox profiles |
+| friends/presence/reviews | substantial collection/action/property shape | useful supported friendship/activity/review behavior; reputation not Xbox algorithm | persisted relationships/reviews, scoped presence and soft voice availability | no Xbox social graph/presence federation |
+| achievements | AwardAchievement/GetAchievements and async forms present | binary provisioned award; duplicate first completion preserved; no incremental mutation; title is reporter | token owner/provisioned key; server clock/transactions/replay, gameplay truth client authored | no Xbox achievement provisioning/unlocking |
+| leaderboard entries/reader/writer | substantial key/entry/typed columns/paging surface, Rating signed long adaptation | latest/best/sort/ties/replay qualified; Recent has no age window, offline stream/column-only limits | title/schema/epoch/participant validation; ranked majority reports, server-derived ranks | no Xbox leaderboard data or TrueSkill service |
+| local/SystemLink NetworkSession | substantial Create/Find/Join/roster/send/event API | lifecycle/packet/QoS paths exercised; LAN physical network still manual; combined Chat semantics partial | offline/local path; no service needed | no Xbox network session protocol |
+| online PlayerMatch/Ranked | substantial source surface and public harness calls | property/slot matching, migration/restart working on loopback; online guests/QoS/TrueSkill/Chat partial | actual directory/authenticated WSS ENet relay, invites/round history | no Xbox matchmaking/relay/title identity |
+| invitations | Guide acceptance and session join/event APIs present | working consent/title/session scope; cross-title Xbox launch not certified | real persisted expiry/recipient/session tickets and consumption | no Xbox invite/dashboard integration |
+| voice | HasVoice/IsTalking/mute/send controls present | real optional Opus pipeline; one local talker; mute/block/current policy gates; polling/queued audio limits | native endpoints enforce policy; membership-authorized opaque relay does not centrally inspect voice | no Xbox codecs/device/voice-service interoperability |
+| Guide | broad public calls and async UI forms | real custom in-game sign-in/keyboard/message/social/avatar UI; commerce/dashboard/update installation partial or refused | CNA social/invite/catalog actions where supported | no Xbox dashboard/payment/title-update ecosystem |
+| avatars/description/animation/renderer | substantial original names, skeleton/expression/Draw/matrix/light/lifecycle surface | 71 bones, real animation and standard Draw; headless tests do not certify pixels/Xbox art | custom codec/CRC/catalog/layout validation and account synchronization; no unlock ownership economy | no Xbox avatar byte/assets/entitlements |
+| offline profiles/progress | CNA-specific support around XNA-facing gamer/board APIs | checked locked writes, first duplicate preserved, malformed history protected; OS-CACHE-DURABLE ordinary restart | offline; not general cloud save | no Microsoft cloud/profile file interoperability |
+| partner tokens/commerce/skill/update | callable names may exist | unsupported or CNA UI/event behavior; not equivalent underlying services | no partner federation, payment, solver or update installer | unsupported, externally constrained |
+| browser online | relevant source headers do not establish runtime implementation | unavailable native transport explicitly refused | absent browser online service/Net path | unsupported |
+| C ABI/existing managed facade | separate wrapper surfaces; not this native-source certification | independent ABI/lifetime/overload qualification deferred by scope | wrappers may reach same backend; not executed here | no CLR binary or Xbox interoperability claim |
+
+**Closure:** SOFTWARE AUDIT CLOSED WITH DOCUMENTED LIMITATIONS. Detailed [progression](gamer-services-progression-phase4.md), [voice](gamer-services-voice-phase4.md), [storage](gamer-services-storage-phase4.md), and unexecuted [manual qualification](gamer-services-manual-qualification.md). No new language binding or unsupported feature was implemented.
+
+**Historical Phase 3 update:** 642 GamerServices / 523 Net pass, server 33 pass / 0 fail / 7 environment-required skips. Nine native and six server tests added. The focused Phase 3 table below supersedes historical limitations where explicitly resolved. [Handoff](gamer-services-handoff-phase3.md).
 
 **Historical Phase 2 update:** fresh native suites 633 GamerServices / 523 Net; final fresh-client/server suite 27 pass, 0 fail, 7 skip. Original coverage labels below remain historical unless updated. See [Phase 2 handoff](gamer-services-handoff-phase2.md).
 

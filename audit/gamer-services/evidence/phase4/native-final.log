@@ -1,0 +1,10 @@
+GAMER
+run_gpu_tests_private: DISPLAY=:2 (private Xwayland), WAYLAND_DISPLAY=cna-weston-2709801 (private Weston)
+[==========] 649 tests from 82 test suites ran. (60018 ms total)
+[  PASSED  ] 649 tests.
+NET
+run_gpu_tests_private: DISPLAY=:5 (private Xwayland), WAYLAND_DISPLAY=cna-weston-2709909 (private Weston)
+[==========] 524 tests from 48 test suites ran. (47059 ms total)
+[  PASSED  ] 524 tests.
+REPEATS
+10 iterations; 70 passed; 0 failure markers

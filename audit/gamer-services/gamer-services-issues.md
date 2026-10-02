@@ -1,5 +1,55 @@
 # GamerServices audit findings
 
+## Final Phase 4 dispositions — GS-AUDIT-P4, 2026-10-02
+
+**Current precedence:** this final table supersedes historical severities, next-action estimates and open/deferred descriptions below. **SOFTWARE AUDIT CLOSED WITH DOCUMENTED LIMITATIONS.** No unresolved software-only HIGH issue was found in the audited scope. No unexplained software-only MEDIUM defect remains. Accepted architectural risks and compatibility gaps retain their severity where relevant; closure is not an anti-cheat, physical-device or every-platform certification.
+
+| Finding | Final disposition | Evidence / residual boundary |
+|---|---|---|
+| GS-AUDIT-001 offline persistence | FIXED; ACCEPTED DESIGN; DEVICE QUALIFICATION REQUIRED | checked failure reporting (P2), locked read/modify/replace (P3), preserve malformed existing histories (P4 red→green). OS-CACHE-DURABLE normal application contract; no fsync/power-loss promise. Windows/macOS runtime outstanding |
+| 002 client-authored progression | ACCEPTED DESIGN | HIGH for independently verified competitive deployment. Complete mutation map; 111 progress checks and 62 arbitration assertions. Ownership/schema/range/epoch/replay validation passes; plausible gameplay truth remains title-authored |
+| 003 browser online transport | XNA COMPATIBILITY LIMITATION | browser online implementation absent; explicit refusal, no feature expansion authorized |
+| 004 Microsoft-dependent game paths | XNA COMPATIBILITY LIMITATION | partner tokens/commerce/Xbox federation/TrueSkill and Recent retention differ or absent; matching APIs do not imply proprietary service interoperability |
+| 005 int64/tick precision | FIXED | P2 integer encoding and legacy-safe reads; full regression suites pass. Previously rounded history cannot be reconstructed |
+| 006 offline stream/column persistence | ACCEPTED DESIGN; XNA COMPATIBILITY LIMITATION | scalar columns flush on rating assignment; column edits alone have no save acknowledgement; streams unsupported offline. Use online commits or title storage where required |
+| 007 picture privacy/cache/HTTP grants | FIXED | P2/P3 server + cache + no-store authorization regressions rerun. Previously returned bytes/objects remain materialized snapshots |
+| 008 admission-history bound | FIXED | P3 actual 4,096-entry cap and allocation refusal regressions rerun. Authenticated deployment-scale resource budgets are separate capacity qualification |
+| 009 unreliable delivery test expectation | FIXED | P2 oracle corrected; all five reliable packets still mandatory; final ordinary/migration/crash/add gates pass where environment exists |
+| 010 end-to-end environment gaps | DEVICE QUALIFICATION REQUIRED | exact seven NAT skips preserved; manual M01–M17 and M19 cover real network/audio/platform/GPU boundaries |
+| 011 guests/QoS/multiple talkers | XNA COMPATIBILITY LIMITATION; DEVICE QUALIFICATION REQUIRED | separately authenticated local accounts supported; online guests/pre-join QoS/multiple local capture owners incomplete |
+| 012 retained signed-out gamer objects | ACCEPTED DESIGN | LOW borrowed-pointer lifetime choice; process-lifetime retention/churn capacity documented; arbitrary concurrent dispatcher destruction not certified |
+| 013 obsolete website claims | FIXED | `libcna.com` commit df85d05d82abf8ffa39c5a02661eb2abb85946e3 corrects two exact features cards (online/voice/Guide/avatar); removes unsupported percentage; no deployment |
+| 014 avatar assets/encoding | XNA COMPATIBILITY LIMITATION; DEVICE QUALIFICATION REQUIRED | CNA 71-bone renderer and custom codec/catalog are real; no Xbox assets/bytes/visual certification; GPU/manual qualification remains |
+| 015 single-process/no general cloud/account self-service | ACCEPTED DESIGN | qualified native + single SQLite owner service; no distributed/commerce/general cloud subsystem added |
+| 016 combined Chat flags | XNA COMPATIBILITY LIMITATION | local XNA Flags reference permits 5/6/7 and separate chat ordering; CNA enum/path does not implement those semantics and online rejects unsupported values. No need for another audit phase to establish the mismatch; feature implementation outside Phase 4 |
+| 017 fail-open profile lock | FIXED | P3 refuses unlocked save, preserves documented in-memory fallback; full neighboring tests rerun |
+| 018 fail-open avatar installer lock | FIXED | P3 refuses download/activation before staging on failed lock; regressions rerun |
+| 019 stale published voice policy | FIXED; ACCEPTED DESIGN | P4 actual HTTP heartbeat/renewal republishes current policy to same gamer; synthetic ENet/Opus verifies subsequent mute/block suppression. Polling/outage/cooperative endpoint enforcement remains MEDIUM |
+| GS-AUDIT-020 full block list dropped (new MEDIUM) | FIXED | HTTP 1,024-tag response failed baseline sign-in publication. Explicit 1,024 response-array limit, default 256 request guard unchanged; regression and protocol-boundary checks pass |
+| GS-AUDIT-021 duplicate offline completion (new MEDIUM) | FIXED | coordinated eight-call red adapter showed eight overwrites. Insert-once under lock returns one success, preserves first completion; repeated ten times in 70-case storage run |
+
+Four P4 defects are documented with their reproducer/root cause/fix/regression in [storage](gamer-services-storage-phase4.md) and [voice](gamer-services-voice-phase4.md). [Progression qualification](gamer-services-progression-phase4.md) distinguishes binary completion, absent incremental/unlock/skill endpoints, latest rollback and legitimate historical-session reporting from actual invalid input. No inspected implemented mutation remains UNKNOWN or UNSAFE CLIENT TRUST. Absence of those classifications is not gameplay verification.
+
+### Final remaining-risk table
+
+| Severity | Area | Status | Impact | Qualification needed |
+|---|---|---|---|---|
+| HIGH, conditional | title-authored progression/ranked reports | ACCEPTED DESIGN | modified eligible clients/colluders can fabricate plausible outcomes; schema validity is not competitive truth | deployment must accept trusted title/client or separately select title-specific authority; no generic software audit fix |
+| HIGH, portability dependent | browser online service | XNA COMPATIBILITY LIMITATION | browser ports cannot use native service transport | target-specific implementation/product decision, not remaining qualification of implemented native path |
+| HIGH, title dependent | Xbox-dependent partner/commerce/skill services | XNA COMPATIBILITY LIMITATION | games requiring proprietary service behavior need adaptation; no interoperability | service/product/rights boundary; no false Xbox pass |
+| MEDIUM | voice polling, outages, older peers, opaque relay | ACCEPTED DESIGN; DEVICE QUALIFICATION REQUIRED | snapshot can outlive policy during outage/stopped Update; modified endpoints can bypass client policy; queued audio persists | M12–M15 real devices/third-controller latency; stronger central policy would be a separately selected architecture |
+| MEDIUM | offline durability/platform assumptions | ACCEPTED DESIGN; DEVICE QUALIFICATION REQUIRED | no OS crash/power-loss guarantee; ACL/sharing/Unicode/platform replacement may differ | M16–M17 NTFS/APFS/actual compiler runtime; no power-cut claim |
+| MEDIUM | offline stream/column-only saves | ACCEPTED DESIGN; XNA COMPATIBILITY LIMITATION | independent columns/streams not durable offline as service commits | title storage/use online; no acknowledgement incorrectly promised |
+| MEDIUM | NAT/WAN/IPv6 and host environments | DEVICE QUALIFICATION REQUIRED | no physical-network/platform pass established | M01–M11 + seven original namespace/slirp gates, actual separate machines/routes |
+| MEDIUM | online guests/QoS/multiple voice owners/Chat flags | XNA COMPATIBILITY LIMITATION | affected XNA ports require adaptation | product-specific feature decision; voice adapters/devices M12–M15 |
+| LOW | retained gamer lifetimes | ACCEPTED DESIGN | borrowed-pointer safety retains signed-out objects until process exit; no reclamation promise | optional long-churn M18 deployment acceptance |
+| MEDIUM, deployment dependent | authenticated resource budgets/long-running load | DEFERRED WITH JUSTIFICATION | enforced per-path caps/smoke tests do not establish total configured account/title cardinality or deployment RSS/latency | representative deployment-scale lab M18; not a reopened confirmed admission defect or a generic new audit |
+| INFO | avatar visuals/assets | XNA COMPATIBILITY LIMITATION; DEVICE QUALIFICATION REQUIRED | custom assets/codec, actual GPU visuals not certified | actual renderer lab/device image evidence; Xbox assets are not CNA data |
+| INFO | C ABI/existing managed facade and exact Xbox timing | DEFERRED WITH JUSTIFICATION | original UNKNOWN inventory is not a certification | independent ABI/overload/lifetime or reference-specific qualification outside authorized native progression/voice/storage scope; no new language-binding plans |
+| INFO | large migration/load/backup/account deletion matrix | DEFERRED WITH JUSTIFICATION | finite restart/atomicity/integrity tests do not certify every deployed database/load scenario | deployment acceptance/backup procedures using representative databases; no new broad audit |
+
+Disproved suspicions in tested scope: foreign-account award and unrelated-board mutation; NaN/Infinity/overflow acceptance; contradictory epoch replay; outsider/nonexistent ranked round reporting; best-score concurrent rollback. Legitimate latest-score decrease and result after session teardown are documented semantics, not defects. Windows existing-target replacement is source supported, not runtime qualified. Historical fixed regression areas were rerun, not reopened.
+
 Audit GS-AUDIT, 2026-10-01. Paths are relative to CNA unless prefixed `server/` (`../cna-gamer-services-server`) or another sibling. Findings are ordered by severity, then subsystem. Unsupported product capabilities are explicitly distinguished from defects. No CRITICAL issue was established. Estimates cover a narrowly scoped correction/feature, not full Xbox equivalence.
 
 ## Phase 3 dispositions (GS-AUDIT-P3, 2026-10-02)
@@ -16,7 +66,7 @@ Audit GS-AUDIT, 2026-10-01. Paths are relative to CNA unless prefixed `server/` 
 - **010 NAT gates DEFERRED / ENVIRONMENT REQUIRED:** seven original skips remain relevant and require Linux namespace/slirp tooling. Permanent loopback crash/add gates pass. [Per-test classification and network matrix](evidence/phase3/manual-qualification.md); real Internet/symmetric NAT/IPv6/devices still **NEEDS DEVICE QUALIFICATION**.
 - **GS-AUDIT-019 — live voice authorization freshness, DEFERRED MEDIUM (source-qualified):** initial/local Guide block state and existing gamer privilege snapshots drive voice. Renewal updates backend slots without republishing policy to existing gamers; external block/communication changes have no proven prompt effect on an ongoing session. Fresh server reads are protected. No end-to-end disclosure was reproduced; a controlled two-client/third-controller synthetic-voice test is required before a policy propagation fix. See manual qualification.
 
-**Current precedence:** Phase 3 dispositions above supersede historical headings and Phase 1/2 descriptions below. No newly confirmed HIGH runtime defect remains open. Client-authored competitive integrity and inherited HIGH compatibility limitations remain; MEDIUM durability/column, voice freshness, send-flag and device qualification gaps are not declared fixed.
+**Historical Phase 3 precedence (superseded by Phase 4):** Phase 3 dispositions above supersede historical headings and Phase 1/2 descriptions below. No newly confirmed HIGH runtime defect remains open. Client-authored competitive integrity and inherited HIGH compatibility limitations remain; MEDIUM durability/column, voice freshness, send-flag and device qualification gaps are not declared fixed.
 
 ## Phase 2 dispositions
 

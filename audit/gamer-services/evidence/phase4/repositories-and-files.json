@@ -1,0 +1,60 @@
+{
+  "native": {
+    "repository": "/rv/data/development/github.com/libcna/cnawork",
+    "branch": "work",
+    "starting_commit": "c889c94fcfa0deabb45fe1a57a85cd2811e90b28",
+    "ending_production_or_website_commit": "e3ad2798166ec4bc162883079a0e229e4a88e958",
+    "commits": [
+      "f9978d8bda9e6af758d4dba2246ba6720a110036 gamer-services(GS-AUDIT-P4): preserve corrupt histories and first offline achievement completions",
+      "e3ad2798166ec4bc162883079a0e229e4a88e958 gamer-services(GS-AUDIT-P4): publish current voice policy and preserve complete block lists"
+    ],
+    "files_changed_in_commits": [
+      "audit/gamer-services/gamer-services-storage-phase4.md",
+      "audit/gamer-services/gamer-services-voice-phase4.md",
+      "modules/gamer-services/include/CNA/Internal/GamerServices/IGamerServicesBackend.hpp",
+      "modules/gamer-services/include/CNA/Internal/GamerServices/LocalGamerServicesStore.hpp",
+      "modules/gamer-services/src/Internal/GamerServicesBackend.cpp",
+      "modules/gamer-services/src/Internal/LocalGamerServicesStore.cpp",
+      "modules/gamer-services/src/Internal/Protocol/CnaService/Protocol.hpp",
+      "modules/gamer-services/src/Internal/ServiceProtocol.cpp",
+      "modules/gamer-services/src/Xna/GamerServicesDispatcher.cpp",
+      "modules/gamer-services/src/Xna/SignedInGamer.cpp",
+      "modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/GamerServicesGamerTests.cpp",
+      "modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/ServiceProtocolTests.cpp",
+      "modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/ServiceRequestRetryTests.cpp",
+      "modules/net/tests/CNA/Internal/Net/OnlineNetworkSessionTest.cpp"
+    ]
+  },
+  "server": {
+    "repository": "/rv/data/development/github.com/libcna/cna-gamer-services-server",
+    "branch": "feature/gamer-services-server",
+    "starting_commit": "f627536ff6eb11f6d9232983b3b235665fb4dba4",
+    "ending_production_or_website_commit": "9bd5173341e32b40192738409425167b756cf0a8",
+    "commits": [
+      "42ccf4ec1f46a7e891cb5ab8e92e5f72191cc9b2 gamer-services(GS-AUDIT-P4): return fresh communication policy and support full block responses",
+      "9bd5173341e32b40192738409425167b756cf0a8 test(GS-AUDIT-P4): qualify score aggregation and historical ranked result ownership"
+    ],
+    "files_changed_in_commits": [
+      "README.md",
+      "protocol/include/CnaService/Protocol.hpp",
+      "src/Protocol.cpp",
+      "src/Service.cpp",
+      "tests/ArbitrationTests.cpp",
+      "tests/PrivacyTests.cpp",
+      "tests/ProgressTrustTests.cpp"
+    ]
+  },
+  "website": {
+    "repository": "/rv/data/development/github.com/libcna/libcna.com",
+    "branch": "develop",
+    "starting_commit": "f4b2212d56ba57533564443ed2b34526ad0b5426",
+    "ending_production_or_website_commit": "df85d05d82abf8ffa39c5a02661eb2abb85946e3",
+    "commits": [
+      "df85d05d82abf8ffa39c5a02661eb2abb85946e3 docs(GS-AUDIT-P4): correct verified GamerServices networking and avatar capability claims"
+    ],
+    "files_changed_in_commits": [
+      "features.html"
+    ]
+  },
+  "note": "Native final audit-only commit contains this evidence/handoff; identify it with git log -1 --format=%H -- audit/gamer-services/gamer-services-handoff-phase4.md. Server/website ending hashes are final."
+}

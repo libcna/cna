@@ -1,5 +1,35 @@
 # CNA GamerServices / Net / avatar / server audit
 
+## Final Phase 4 determination — GS-AUDIT-P4, 2026-10-02
+
+**SOFTWARE AUDIT CLOSED WITH DOCUMENTED LIMITATIONS.** Continued the completed Phase 3 baseline without restarting the broad audit. This section and the final [issue dispositions](gamer-services-issues.md) supersede all historical open/deferred descriptions below. No additional software phase is justified by the remaining evidence. [Phase 4 handoff](gamer-services-handoff-phase4.md), [manual qualification plan](gamer-services-manual-qualification.md).
+
+**Runtime worked:** Linux Debug/HEADLESS, private Weston/Xwayland, actual loopback HTTP/TLS/WSS/SQLite and native clients; genuine Opus with synthetic capture/playback. Final GamerServices **649 passed / 0 failed / 0 skipped** (60.018 s), Net **524 / 0 / 0** (47.059 s), server **33 / 0 / 7** (204.18 s; 40 registered). Seven unchanged NAT-isolation gates retain their prerequisites/assertions. Offline concurrency/durability repeat: **70/70**, ten iterations. Eight native cases were added; three existing server gates were extended. [Results and evidence](evidence/phase4/final-results.json).
+
+**Four confirmed defects fixed:** updates destroyed corrupt existing offline histories; competing duplicate offline awards rewrote the first completion; heartbeat/renewal did not publish communication policy to existing gamers; a valid 1,024-block response exceeded the native parser's default 256-array limit and was silently dropped. Each defect has failing-before evidence and a passing regression. The duplicate-award red test uses an adapter exposing the new option with the old overwrite logic, explicitly not an unchanged baseline binary.
+
+**No unresolved software-only HIGH issue was found in the audited scope.** No unexplained software-only MEDIUM defect remains. Accepted HIGH competitive trust and MEDIUM policy/storage/compatibility limitations remain explicit in the [final risk table](gamer-services-issues.md#final-remaining-risk-table); this is not a claim that an untrusted competitive public deployment is cheat resistant. Progression ownership/schema/replay suspicions were not confirmed as bypasses in tested cases. Valid historical ranked results after session deletion are intentional. The blanket claim that Windows rename cannot replace an existing file is disproved by the platform/library implementation, without claiming Windows runtime qualification.
+
+### Final GamerServices compatibility summary
+
+1. **Broad source compatibility:** the implemented Gamer, SignedInGamer, collections, profiles, achievements, leaderboard, Guide, component/dispatcher, session and avatar families preserve substantial XNA class/member shape using CNA C++ property/async conventions. This is adapted source compatibility, not CLR binary compatibility or a per-overload certification.
+2. **Behaviorally close:** identity/collections, async completion, provisioned binary awards, typed board entries, local/SystemLink session lifecycle, property-filtered online sessions and avatar animation/skeleton/rendering have meaningful working behavior and regression evidence. Exact Xbox exception ordering, thread timing and visuals are not comprehensively certified.
+3. **Partial:** online guests, pre-join online QoS, multiple local voice devices, combined Chat send flags/separate ordered chat traffic, Recent-board aging and TrueSkill/ranked skill semantics. Browser online service transport is absent. Offline stream columns and independent column-only persistence are limited.
+4. **Intentionally CNA-specific:** service accounts/operator provisioning, HTTP/JSON plus WSS relay, majority ranked reports, custom in-game Guide, offline profiles/JSON stores, avatar codec/catalog/assets/editor and capability negotiation.
+5. **Microsoft/Xbox interoperability:** no Xbox Live account/session endpoint, partner identity federation/token service, commerce/entitlements, dashboard/title-update infrastructure, Xbox avatar asset/byte pipeline or proprietary TrueSkill service interoperability. Absence of these services does not negate matching XNA API shapes.
+6. **Avatar APIs close to XNA:** descriptions, 71-bone skeleton, expression/animation and AvatarRenderer matrices/lights/standard Draw/loading/disposal are implemented and headless-tested. GPU pixels and physical platform rendering require qualification.
+7. **Avatar divergence:** CNA owns its description magic/version/CRC, catalog, meshes/textures and motions; a nonzero 1,021-byte Xbox buffer is not proof of CNA codec compatibility. There is no avatar ownership/unlock economy.
+8. **Guide:** working CNA in-game sign-in, keyboard/message/social/invite/avatar/notification flows; not Xbox dashboard or real payment/update installation. Narrow obsolete website claims were corrected, without deployment.
+9. **Achievements:** provisioned binary keys, authenticated own-account awards, server-generated first completion ticks and idempotent retrieval; offline duplicate first-write now atomic under the writer lock. No incremental progress endpoint. Title reporting matches the public XNA award shape, but gameplay truth is trusted.
+10. **Leaderboards:** title-scoped schemas, signed int64 rating, typed finite columns, owned gameplay epochs, latest/best aggregation, sorting/ties and immutable replay behavior qualify in software. Ranked historical participants report agreed values; no TrueSkill solver or game-specific truth validation.
+11. **Profiles/friends/presence:** actual service reads/mutations with current authentication and scoped privacy; profile/picture authorization regressions pass. Returned objects/bytes remain snapshots. Reputation/statistics aggregate accepted client claims, not independently observed play.
+12. **Online sessions:** real PlayerMatch/Ranked directory, membership, invitations, ready/play/end, relay, migration/crash/restart paths pass on loopback. Online uses outbound relay initially; direct Internet peers/STUN/ICE and browser online paths are unsupported.
+13. **Voice:** optional real capture→Opus→packet→session→decode→playback implementation; software tests use synthetic devices. Published privileges/blocks now refresh through heartbeat/renewal; local mute/block gates subsequent frames. Cooperative endpoint enforcement, polling/outage latency, one local talker and queued audio are documented limits.
+14. **Environment qualification:** seven isolated-network gates; real LAN/WAN/NAT/IPv6, Linux/Windows/macOS hosts, microphones/speakers and GPU avatar pixels. Windows/macOS storage replacement/sharing/encoding/locks are source reviewed, not runtime certified. See concrete manual tests, none claimed passed.
+15. **Untrusted competitive deployment:** valid but fabricated own achievements/scores and colluding ranked reports remain possible; relay membership authorization does not centrally enforce every opaque voice frame's bilateral privacy. Select trusted-title/authority and communications assumptions deliberately. No generic anti-cheat or unrelated subsystem was added.
+
+Detailed traces: [progression](gamer-services-progression-phase4.md), [voice freshness/transport](gamer-services-voice-phase4.md), [OS-CACHE-DURABLE storage](gamer-services-storage-phase4.md), [four-axis compatibility matrix](gamer-services-compatibility-matrix.md). Normal application persistence is established; OS crash/power-loss durability is not promised and no expensive universal fsync was introduced.
+
 Audit ID: **GS-AUDIT**, 2026-10-01. Native CNA `9976f4909a72a79e8d64ca4b3d15756f4696f5c9`; server `e45049abcbefcc8b31875c24b0f16c55f96def80`.
 
 ## Phase 3 qualification — 2026-10-02 (GS-AUDIT-P3)
@@ -22,7 +52,7 @@ Continued from audit commit **812db9656**, without regenerating the inventory. N
 
 **VERIFIED:** freshly built GamerServices **633/633**, Net **523/523**. Four offline failure tests first failed and then passed; two numeric/legacy tests pass. Server picture policy passes 42 checks; existing privacy coverage passes 66; numeric/restart/concurrency probe passes 47. Final fresh-client/server suite: **27 passed, 0 failed, 7 skipped**; additional loopback crash/add variants pass. Exact results are recorded in the handoff. No broad refactor, new dependency, protocol migration or push.
 
-## Executive answers
+## Historical Phase 1–3 executive answers (superseded by Phase 4 above)
 
 1. **How much is genuinely implemented?** A substantial CNA replacement exists: account sign-in, profiles, social operations, achievements, boards, directory matchmaking, online session transport, invitations, avatar descriptions/catalogs/editor and standard avatar drawing have executable implementations. **VERIFIED:** 642 GamerServices and 523 Net tests pass (Phase 3 builds); real server/client TLS, directory, relay, invitation, avatar and restart tests pass. These results establish meaningful working paths, not complete Xbox compatibility.
 2. **How much is API-only/stubbed?** This is not predominantly a stub subsystem. Clear unsupported surfaces include all three partner-token calls; marketplace has a custom catalog/test-purchase UI but no real commerce; TrueSkill events do not compute skill; online search QoS is unmeasured. Browser online transport is explicitly refused. Do not translate type/test counts into a compatibility percentage. See the per-area matrix.
@@ -124,7 +154,7 @@ These controls do not make game progress trustworthy: achievement awards accept 
 
 Historical plans explicitly labeled historical were not counted as false current claims. Repository documentation contains useful accurate limitations (SQLite/single process, no Microsoft services, format boundaries), but was treated as a hypothesis list, not proof. No website/docs outside this audit directory were modified.
 
-## Recommended order after Phase 2
+## Historical recommended order after Phase 2 (completed or disposed in Phase 4)
 
 1. Reproduce and address offline concurrent-write loss and cross-platform atomic replacement; checked writes and numeric encoding are now fixed.
 2. Establish the trust policy for competitive progress before calling it secure ranked service support.

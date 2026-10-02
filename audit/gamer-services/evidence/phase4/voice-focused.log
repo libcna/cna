@@ -1,0 +1,26 @@
+run_gpu_tests_private: DISPLAY=:2 (private Xwayland), WAYLAND_DISPLAY=cna-weston-2581608 (private Weston)
+Running main() from ../../../../vendor/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = OnlineNetworkSessionTest.*Voice*:ENetBackendTest.*Voice*:ENetBackendTest.*Mute*
+[==========] Running 6 tests from 2 test suites.
+[----------] Global test environment set-up.
+[----------] 4 tests from ENetBackendTest
+[ RUN      ] ENetBackendTest.VoiceFromTheMicrophoneOwnerReachesTheRemoteMachine
+[       OK ] ENetBackendTest.VoiceFromTheMicrophoneOwnerReachesTheRemoteMachine (61 ms)
+[ RUN      ] ENetBackendTest.RemoteVoiceMakesItsGamerTalkAndIsPlayed
+[       OK ] ENetBackendTest.RemoteVoiceMakesItsGamerTalkAndIsPlayed (364 ms)
+[ RUN      ] ENetBackendTest.EnableSendVoiceAndMuteStopSpeechButNotPresence
+[       OK ] ENetBackendTest.EnableSendVoiceAndMuteStopSpeechButNotPresence (3191 ms)
+[ RUN      ] ENetBackendTest.TheHostTakesVoiceOnlyFromItsSendersMachineAndRelaysIt
+[       OK ] ENetBackendTest.TheHostTakesVoiceOnlyFromItsSendersMachineAndRelaysIt (21 ms)
+[----------] 4 tests from ENetBackendTest (3639 ms total)
+
+[----------] 2 tests from OnlineNetworkSessionTest
+[ RUN      ] OnlineNetworkSessionTest.VoiceCrossesTheServiceSessionBothWays
+[       OK ] OnlineNetworkSessionTest.VoiceCrossesTheServiceSessionBothWays (511 ms)
+[ RUN      ] OnlineNetworkSessionTest.LiveBlockAndMuteSnapshotsSuppressSubsequentVoiceFrames
+[       OK ] OnlineNetworkSessionTest.LiveBlockAndMuteSnapshotsSuppressSubsequentVoiceFrames (641 ms)
+[----------] 2 tests from OnlineNetworkSessionTest (1153 ms total)
+
+[----------] Global test environment tear-down
+[==========] 6 tests from 2 test suites ran. (4792 ms total)
+[  PASSED  ] 6 tests.
