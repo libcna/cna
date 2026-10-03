@@ -59,10 +59,10 @@ else()
 endif()
 
 set(_cna_sdl_reasons "")
-if(CNA_PLATFORM STREQUAL "SDL3" OR CNA_PLATFORM STREQUAL "SDL2")
+if(CNA_PLATFORM STREQUAL "SDL3")
     list(APPEND _cna_sdl_reasons "CNA_PLATFORM=${CNA_PLATFORM}")
 endif()
-if(CNA_AUDIO_PLATFORM STREQUAL "SDL3" OR CNA_AUDIO_PLATFORM STREQUAL "SDL2")
+if(CNA_AUDIO_PLATFORM STREQUAL "SDL3")
     list(APPEND _cna_sdl_reasons "CNA_AUDIO_PLATFORM=${CNA_AUDIO_PLATFORM}")
 endif()
 foreach(_cna_sdl_renderer IN ITEMS SDL_RENDERER SDL_GPU FNA3D)
@@ -93,8 +93,7 @@ if(_cna_enable_sdl_normalized STREQUAL "OFF")
     # adding an SDL-linked executable to the default target of a CNA_ENABLE_SDL=OFF build. With
     # these set, an optional lookup anywhere in the tree finds nothing and a REQUIRED one fails
     # configure, naming the package.
-    foreach(_cna_sdl_package IN ITEMS SDL3 SDL3_image SDL3_mixer SDL3_ttf SDL3_net
-                                      SDL2 SDL2_image SDL2_mixer SDL2_ttf SDL2_net SDL)
+    foreach(_cna_sdl_package IN ITEMS SDL3 SDL3_image SDL3_mixer SDL3_ttf SDL3_net SDL)
         set(CMAKE_DISABLE_FIND_PACKAGE_${_cna_sdl_package} TRUE)
     endforeach()
     unset(_cna_sdl_package)

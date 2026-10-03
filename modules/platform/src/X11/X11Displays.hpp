@@ -32,8 +32,7 @@ namespace CNA::Platform::X11 {
      * ### Ids
      *
      * Display ids start at 1. Zero is reserved: `GraphicsAdapter` treats id 0 as "no display" and
-     * falls back to a default mode, so a display numbered 0 would be invisible to it. The SDL2
-     * backend offsets its dense index for the same reason.
+     * falls back to a default mode, so a display numbered 0 would be invisible to it.
      */
     class X11Displays final : public IPlatformDisplays
     {

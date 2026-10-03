@@ -3,15 +3,12 @@
 # direction; assigning it to runtime would create a runtime<->audio link cycle for nothing).
 file(GLOB_RECURSE CNA_AUDIO_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 # The independent audio selection owns its native edge. The portable NullAudioDevice is always
-# compiled so the default build can run cross-implementation conformance tests.  Native sources
-# and libraries must follow the selected backend; otherwise a nominal SDL2-only binary would
-# silently retain an SDL3/SDL3_mixer link through cna_audio.
+# compiled so the default build can run cross-implementation conformance tests. Native sources
+# and libraries must follow the selected backend so non-SDL3 selections do not retain an
+# SDL3/SDL3_mixer link through cna_audio.
 if(NOT CNA_AUDIO_PLATFORM STREQUAL "SDL3")
     list(FILTER CNA_AUDIO_SOURCES EXCLUDE REGEX ".*/src/Platform/Sdl3/.*\\.cpp$")
     list(FILTER CNA_AUDIO_SOURCES EXCLUDE REGEX ".*/src/Backend/Sdl3Mixer/.*\\.cpp$")
-endif()
-if(NOT CNA_AUDIO_PLATFORM STREQUAL "SDL2")
-    list(FILTER CNA_AUDIO_SOURCES EXCLUDE REGEX ".*/src/Platform/Sdl2/.*\\.cpp$")
 endif()
 # plans/plan_x11.md X11-0151: ALSA playback and CNA's own mixer, the SDL-free pair. The mixer is
 # the other implementation of MixerEngine.hpp, so it must never be compiled beside Sdl3Mixer.
@@ -38,8 +35,6 @@ target_link_libraries(cna_audio PRIVATE cna_platform)
 cna_link_sharp_runtime(cna_audio PUBLIC Core.Base IO Runtime)
 if(CNA_AUDIO_PLATFORM STREQUAL "SDL3")
     target_link_libraries(cna_audio PRIVATE SDL3::SDL3 SDL3_mixer::SDL3_mixer)
-elseif(CNA_AUDIO_PLATFORM STREQUAL "SDL2")
-    target_link_libraries(cna_audio PRIVATE SDL2::SDL2)
 elseif(CNA_AUDIO_PLATFORM STREQUAL "ALSA")
     target_include_directories(cna_audio PRIVATE ${ALSA_INCLUDE_DIR} ${CNA_SOURCE_DIR}/third_party/stb
         ${CNA_SOURCE_DIR}/third_party/dr_libs)

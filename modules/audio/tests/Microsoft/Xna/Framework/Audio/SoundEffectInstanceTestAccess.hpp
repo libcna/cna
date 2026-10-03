@@ -3,12 +3,12 @@
 
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 
-// plans/plan_platform.md PLAT-SDL2-8: the mixer header, and the one accessor that needs its type, are
-// behind SOUND_ENABLED. Everything else in this struct reaches CNA-side state and pure XNA math
+// The mixer header, and the one accessor that needs its type, are behind SOUND_ENABLED.
+// Everything else in this struct reaches CNA-side state and pure XNA math
 // that exist in every audio profile, and three suites outside the mixer's own coverage
 // (WaveBankTests, SoundEffectContentTypeReaderTests, MediaLibraryTestAccess) use only those.
 // Including the mixer header unconditionally made all three fail to compile under
-// CNA_AUDIO_PLATFORM=SDL2 and =NULL, where the engine is deliberately absent from the archive.
+// CNA_AUDIO_PLATFORM=NULL, where the engine is deliberately absent from the archive.
 #ifdef SOUND_ENABLED
 #include <SDL3_mixer/SDL_mixer.h>
 #endif

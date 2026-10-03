@@ -7,8 +7,8 @@
 # registry: GraphicsRendererType.hpp is the C++ side, CNA/C/graphics.h the C ABI side, and
 # scripts/check_renderer_identities.py holds all three to one canonical table.
 #
-# Included from the top-level CMakeLists.txt before anything reads CNA_GRAPHICS_RENDERER (the SDL2
-# gate and the SDL availability gate both do, well before cmake/RendererSelection.cmake), so a
+# Included from the top-level CMakeLists.txt before the SDL availability gate reads
+# CNA_GRAPHICS_RENDERER (well before cmake/RendererSelection.cmake), so a
 # refused selection fails before the vendored SDL sub-build is configured. It also runs standalone
 # under `cmake -P` (cmake/Tests/RendererRetiredIdentityCase.cmake).
 #

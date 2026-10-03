@@ -81,8 +81,6 @@ if(CNA_PLATFORM STREQUAL "WIN32")
     list(APPEND CNA_PLATFORM_SOURCE_GLOBS "${CNA_ROOT}/modules/platform/src/Win32/*.cpp")
 elseif(CNA_PLATFORM STREQUAL "SDL3")
     list(APPEND CNA_PLATFORM_SOURCE_GLOBS "${CNA_ROOT}/modules/platform/src/Sdl3/*.cpp")
-elseif(CNA_PLATFORM STREQUAL "SDL2")
-    list(APPEND CNA_PLATFORM_SOURCE_GLOBS "${CNA_ROOT}/modules/platform/src/Sdl2/*.cpp")
 endif()
 if(NOT WIN32)
     # Terminal is always compiled on POSIX, at the same cost and for the same reason as Headless:
@@ -106,7 +104,7 @@ if(CNA_PLATFORM STREQUAL "WIN32")
     # Operating-system import libraries only -- nothing to fetch or vendor. PRIVATE for the same
     # reason SDL is: an implementation detail must not become a usage requirement.
     target_link_libraries(cna_platform PRIVATE user32 gdi32 opengl32 ole32 shell32 uuid)
-elseif(CNA_PLATFORM STREQUAL "SDL3" OR CNA_PLATFORM STREQUAL "SDL2")
+elseif(CNA_PLATFORM STREQUAL "SDL3")
     # Resolved from the persistent vendored install the real configure maintains, so this harness
     # never launches a toolkit build of its own.
     #
@@ -127,13 +125,8 @@ elseif(CNA_PLATFORM STREQUAL "SDL3" OR CNA_PLATFORM STREQUAL "SDL2")
             endif()
         endforeach()
     endif()
-    if(CNA_PLATFORM STREQUAL "SDL3")
-        find_package(SDL3 REQUIRED)
-        target_link_libraries(cna_platform PRIVATE SDL3::SDL3)
-    else()
-        find_package(SDL2 REQUIRED)
-        target_link_libraries(cna_platform PRIVATE SDL2::SDL2)
-    endif()
+    find_package(SDL3 REQUIRED)
+    target_link_libraries(cna_platform PRIVATE SDL3::SDL3)
 endif()
 
 # --- the tests ---------------------------------------------------------------------------------
@@ -146,9 +139,6 @@ if(NOT CNA_PLATFORM STREQUAL "WIN32")
 endif()
 if(NOT CNA_PLATFORM STREQUAL "SDL3")
     list(FILTER CNA_PLATFORM_TEST_SOURCES EXCLUDE REGEX ".*/Sdl3.*\\.cpp$")
-endif()
-if(NOT CNA_PLATFORM STREQUAL "SDL2")
-    list(FILTER CNA_PLATFORM_TEST_SOURCES EXCLUDE REGEX ".*/Sdl2.*\\.cpp$")
 endif()
 # plans/plan_native_platforms_integration.md NPI-0015: this harness's filters were all written
 # before the X11 backend existed, so X11*.cpp fell through none of them and was compiled into
@@ -229,8 +219,6 @@ target_compile_options(cna_platform_tests PRIVATE ${CNA_HARNESS_WARNINGS})
 # reason.
 if(CNA_PLATFORM STREQUAL "SDL3")
     target_link_libraries(cna_platform_tests PRIVATE SDL3::SDL3)
-elseif(CNA_PLATFORM STREQUAL "SDL2")
-    target_link_libraries(cna_platform_tests PRIVATE SDL2::SDL2)
 endif()
 
 if(CNA_PLATFORM STREQUAL "WIN32")
@@ -287,12 +275,12 @@ endif()
 
 # --- the SDL runtime, for any Windows toolchain --------------------------------------------------
 # plans/plan_win32_native_validation.md WINNATIVE-0023: SDL3 is resolved from a prebuilt prefix
-# whose DLL is not next to the executables and not on PATH, so an SDL3 or SDL2 harness built with
+# whose DLL is not next to the executables and not on PATH, so an SDL3 harness built with
 # MSVC linked cleanly and then died at startup with 0xC0000135, STATUS_DLL_NOT_FOUND -- before
 # main(), so with no output to explain itself. The MinGW branch below already copied these; it was
 # the only branch that did.
 if(WIN32)
-    foreach(_cna_sdl_target IN ITEMS SDL3::SDL3 SDL2::SDL2)
+    foreach(_cna_sdl_target IN ITEMS SDL3::SDL3)
         if(TARGET ${_cna_sdl_target})
             get_target_property(_cna_sdl_type ${_cna_sdl_target} TYPE)
             if(_cna_sdl_type STREQUAL "SHARED_LIBRARY")

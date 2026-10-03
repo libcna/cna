@@ -23,8 +23,6 @@ frame API, not a drawing API. Audio selection is orthogonal and uses `CNA_AUDIO_
 
 ```sh
 cmake -S . -B build -DCNA_PLATFORM=SDL3
-cmake -S . -B build-sdl2 \
-  -DCNA_PLATFORM=SDL2 -DCNA_AUDIO_PLATFORM=SDL2 -DCNA_GRAPHICS_RENDERER=OPENGLES3
 cmake -S . -B build-x11 \
   -DCNA_PLATFORM=X11 -DCNA_AUDIO_PLATFORM=NULL \
   -DCNA_GRAPHICS_RENDERER=HEADLESS -DCNA_ENABLE_SDL=OFF
@@ -37,14 +35,12 @@ cmake -S . -B build-terminal \
   -DCNA_PLATFORM=TERMINAL -DCNA_GRAPHICS_RENDERER=HEADLESS
 ```
 
+SDL2 platform and audio support was retired on 2026-10-04. It is not a selectable implementation,
+and CNA provides no compatibility alias or forwarding backend for it.
+
 Headless is compiled in every build. Terminal is also compiled on POSIX. This lets the conformance
 suite exercise multiple implementations in one process; the selected value determines the
 default, not necessarily the only factory name present in the binary.
-
-`SDL2` is an independent backend written against SDL 2.30's own API, never `sdl2-compat` over
-SDL3, and it advertises a deliberately narrow capability profile. Its boundary, the renderers it
-can and cannot back, and its supported build/test commands are
-[`docs/platform-sdl2.md`](platform-sdl2.md).
 
 `X11` is a native backend that uses Xlib and the X extensions directly and contains no SDL at all.
 It is what makes an SDL-free CNA a configuration that exists rather than an argument:
@@ -76,15 +72,6 @@ produced and is unaffected by either of the above.
 An SDL-free build no longer has to be a silent one: `CNA_AUDIO_PLATFORM=ALSA` plays through ALSA
 (and so through PipeWire or PulseAudio on a desktop) with CNA's own mixer behind the same
 `MixerEngine.hpp` facade SDL3_mixer implements -- see [`docs/audio-alsa.md`](audio-alsa.md).
-
-**Two implementations of the same native library cannot share a process.** SDL2 and SDL3 export
-identically named entry points (`SDL_Init`, `SDL_GetError`, `SDL_PollEvent` and many more), so a
-binary linking both leaves one backend's calls bound to whichever library the loader reached
-first — and a conformance run over such a binary tests neither while reporting success.
-`cmake/Sdl2OnlyConfiguration.cmake` therefore publishes `CNA_SDL2_ONLY_CONFIGURATION` when
-`CNA_PLATFORM` and `CNA_AUDIO_PLATFORM` are both SDL2, and the test and harness targets consult it
-before adding an SDL3 link input. A future backend that wraps a library another backend also wraps
-needs the same treatment; one that wraps a distinct library does not.
 
 ## Contract rules
 
@@ -230,8 +217,9 @@ regression beyond it is investigated rather than waived.
 | `CNA_PLATFORM` | Implementation | Availability | Capability boundary |
 |---|---|---|---|
 | `SDL3` (default) | `CNA::Platform::Sdl3` | everywhere | the reference the conformance suite compares others against |
-| `SDL2` | `CNA::Platform::Sdl2` | everywhere | [`docs/platform-sdl2.md`](platform-sdl2.md) |
 | `WIN32` | `CNA::Platform::Win32` | Windows targets only | [`docs/platform-win32.md`](platform-win32.md) |
+| `X11` | `CNA::Platform::X11` | targets with X11 development libraries | [`docs/platform-x11.md`](platform-x11.md) |
+| `WAYLAND` | `CNA::Platform::Wayland` | targets with Wayland development libraries | [`docs/platform-wayland.md`](platform-wayland.md) |
 | `HEADLESS` | `CNA::Platform::Headless` | everywhere, and always compiled | no window, no display, no input; every refusal path |
 | `TERMINAL` | `CNA::Platform::Terminal` | POSIX targets only | [`docs/platform-terminal-analysis.md`](platform-terminal-analysis.md) |
 

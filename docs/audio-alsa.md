@@ -8,7 +8,7 @@ returned false, every instance was Stopped the moment it started, and a
 It is two pieces, both CNA's own:
 
 - **an ALSA playback device** (`modules/audio/src/Platform/Alsa/`), behind the same
-  `IAudioDevice` contract the SDL3, SDL2 and NULL devices implement;
+  `IAudioDevice` contract the SDL3 and NULL devices implement;
 - **a mixer** (`modules/audio/src/Backend/CnaMixer/`) behind `MixerEngine.hpp`, the facade the
   XNA audio classes were already written against — the one SDL3_mixer implements for SDL3 builds.
 

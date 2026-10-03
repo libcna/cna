@@ -58,12 +58,12 @@ namespace Microsoft::Xna::Framework::Audio
         float pan         = 0.0f;
     };
 
-    // plans/plan_platform.md PLAT-SDL2-8: these three are pure XNA math -- 2^pitch, the FAudio
+    // These three are pure XNA math -- 2^pitch, the FAudio
     // crossfeed matrix and the F3DAudio Doppler ratio -- and reference no mixer type at all. They
     // sit OUTSIDE the SOUND_ENABLED block on purpose: the public INTERNAL_calculate* shims that
     // forward to them are compiled in every profile, so leaving them behind the guard made
-    // SoundEffectInstance.cpp fail to compile under every non-SDL3 audio selection
-    // (CNA_AUDIO_PLATFORM=SDL2 and =NULL alike), which is how an entire configuration stopped
+    // SoundEffectInstance.cpp fail to compile under the non-SDL3 audio selection
+    // (CNA_AUDIO_PLATFORM=NULL), which is how an entire configuration stopped
     // building without any gate noticing.
     namespace
     {

@@ -208,7 +208,7 @@ include(cmake/TestDisplayPolicy.cmake)
 
 # Renderer identities (plans/plan_renderer_cleanup.md RRC-002): the public set, and the refusal of a
 # retired or unknown renderer name through any of CNA_GRAPHICS_RENDERER, CNA_GRAPHICS_RENDERERS or a
-# CNA_RENDERER_<X> switch. First, before the SDL2 and SDL availability gates read the selection, so
+# CNA_RENDERER_<X> switch. First, before the SDL availability gate reads the selection, so
 # a refused name fails before any dependency is configured instead of falling back to a default.
 include(cmake/RendererIdentities.cmake)
 
@@ -228,15 +228,7 @@ include(cmake/ApplePlatform.cmake)
 # includes and not one.
 include(cmake/PlatformSelection.cmake)
 
-# SDL2 is an independent platform edge, not an SDL3 compatibility layer. Configure it only after
-# selection, so a default build never downloads or compiles a second native toolkit.
-if(CNA_PLATFORM STREQUAL "SDL2")
-    include(cmake/ThirdPartySDL2.cmake)
-    cna_configure_sdl2()
-endif()
-
 include(cmake/AudioPlatformSelection.cmake)
-include(cmake/Sdl2OnlyConfiguration.cmake)
 
 include(cmake/SdlAvailability.cmake)
 include(cmake/ThirdPartySDL.cmake)

@@ -180,7 +180,7 @@ protected:
     GraphicsDevice gd;
 };
 
-// plans/plan_platform.md PLAT-SDL2-8: needs the decoder/mixer engine, which is the SDL3_mixer
+// Needs the decoder/mixer engine, which is the SDL3_mixer
 // implementation and is absent from the archive for every other CNA_AUDIO_PLATFORM value.
 // Without it a SoundEffect reports a zero duration and VideoPlayer opens no audio stream,
 // so this case is unobservable there rather than merely untested.

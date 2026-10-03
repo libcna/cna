@@ -137,8 +137,8 @@ TEST(VideoPlayerTest, PlayRealFixtureProducesATextureOfCorrectSize)
     EXPECT_EQ(texture->getHeightProperty(), 90);
 }
 
-// plans/plan_platform.md PLAT-SDL2-8: this case asserts on a real mixer playback stream, which only
-// exists under SOUND_ENABLED (the SDL3_mixer selection). Under CNA_AUDIO_PLATFORM=SDL2 or =NULL
+// This case asserts on a real mixer playback stream, which only exists under SOUND_ENABLED (the
+// SDL3_mixer selection). Under CNA_AUDIO_PLATFORM=NULL
 // VideoPlayer opens no stream at all, so the assertion would be vacuous rather than failing --
 // compiled out instead, while the rest of this suite's video coverage keeps running there.
 #ifdef SOUND_ENABLED
@@ -160,8 +160,8 @@ TEST(VideoPlayerTest, PlayGenuinelyResumesTheAudioStreamNotJustOpensIt)
 }
 #endif  // SOUND_ENABLED
 
-// plans/plan_platform.md PLAT-SDL2-8: this case asserts on a real mixer playback stream, which only
-// exists under SOUND_ENABLED (the SDL3_mixer selection). Under CNA_AUDIO_PLATFORM=SDL2 or =NULL
+// This case asserts on a real mixer playback stream, which only exists under SOUND_ENABLED (the
+// SDL3_mixer selection). Under CNA_AUDIO_PLATFORM=NULL
 // VideoPlayer opens no stream at all, so the assertion would be vacuous rather than failing --
 // compiled out instead, while the rest of this suite's video coverage keeps running there.
 #ifdef SOUND_ENABLED
@@ -209,7 +209,7 @@ TEST(VideoPlayerTest, NonLoopedVideoEventuallyStopsAfterItsDuration)
     EXPECT_TRUE(reachedStopped);
 }
 
-// plans/plan_platform.md PLAT-SDL2-8: needs the decoder/mixer engine, which is the SDL3_mixer
+// Needs the decoder/mixer engine, which is the SDL3_mixer
 // implementation and is absent from the archive for every other CNA_AUDIO_PLATFORM value.
 // Without it a SoundEffect reports a zero duration and VideoPlayer opens no audio stream,
 // so this case is unobservable there rather than merely untested.
@@ -383,7 +383,7 @@ TEST(VideoPlayerTest, SetAudioTrackEXTMidPlaybackActuallyChangesTheActiveSampleR
     EXPECT_EQ(VideoPlayerTestAccess::GetDecoderSampleRate(player), 44100); // track 1
 }
 
-// plans/plan_platform.md PLAT-SDL2-8: needs the decoder/mixer engine, which is the SDL3_mixer
+// Needs the decoder/mixer engine, which is the SDL3_mixer
 // implementation and is absent from the archive for every other CNA_AUDIO_PLATFORM value.
 // Without it a SoundEffect reports a zero duration and VideoPlayer opens no audio stream,
 // so this case is unobservable there rather than merely untested.
@@ -495,8 +495,8 @@ TEST(VideoPlayerTest, PlayOnAFirstFrameDecodeFailureLeavesThePlayerFullyClosedNo
     std::remove(corruptedPath.c_str());
 }
 
-// plans/plan_platform.md PLAT-SDL2-8: this case asserts on a real mixer playback stream, which only
-// exists under SOUND_ENABLED (the SDL3_mixer selection). Under CNA_AUDIO_PLATFORM=SDL2 or =NULL
+// This case asserts on a real mixer playback stream, which only exists under SOUND_ENABLED (the
+// SDL3_mixer selection). Under CNA_AUDIO_PLATFORM=NULL
 // VideoPlayer opens no stream at all, so the assertion would be vacuous rather than failing --
 // compiled out instead, while the rest of this suite's video coverage keeps running there.
 #ifdef SOUND_ENABLED
@@ -533,7 +533,7 @@ TEST(VideoPlayerTest, AudioBufferDoesNotAccumulateWithoutAnAudioDevice)
 }
 #endif  // SOUND_ENABLED
 
-// plans/plan_platform.md PLAT-SDL2-8: needs the decoder/mixer engine, which is the SDL3_mixer
+// Needs the decoder/mixer engine, which is the SDL3_mixer
 // implementation and is absent from the archive for every other CNA_AUDIO_PLATFORM value.
 // Without it a SoundEffect reports a zero duration and VideoPlayer opens no audio stream,
 // so this case is unobservable there rather than merely untested.
@@ -576,7 +576,7 @@ TEST(VideoPlayerTest, ReselectingTheSameVideoTrackDoesNotRecreateTheTexture)
     EXPECT_EQ(player.GetTexture(), before);
 }
 
-// plans/plan_platform.md PLAT-SDL2-8: needs the decoder/mixer engine, which is the SDL3_mixer
+// Needs the decoder/mixer engine, which is the SDL3_mixer
 // implementation and is absent from the archive for every other CNA_AUDIO_PLATFORM value.
 // Without it a SoundEffect reports a zero duration and VideoPlayer opens no audio stream,
 // so this case is unobservable there rather than merely untested.

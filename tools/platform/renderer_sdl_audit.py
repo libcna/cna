@@ -297,8 +297,8 @@ def render_markdown(rows: list[dict[str, object]], identities: dict[str, str]) -
             "   to get finished pixels onto the window, with letterbox scaling and vsync. The platform\n"
             "   contract as originally drafted had nowhere for this to go, which would have left them\n"
             "   permanently allowlisted for want of an interface. **Present a CPU pixel buffer to a\n"
-            "   window** is a genuine platform capability (SDL2 has it, SDL 1.2 has it as a software\n"
-            "   surface, Win32 has `StretchDIBits`), so it belongs in the contract.\n\n"
+            "   window** is a genuine platform capability (native window toolkits provide it, and\n"
+            "   Win32 has `StretchDIBits`), so it belongs in the contract.\n\n"
         )
     else:
         out.write(

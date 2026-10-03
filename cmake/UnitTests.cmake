@@ -92,14 +92,9 @@ if(CNA_BUILD_TESTS)
     if(NOT CNA_PLATFORM STREQUAL "SDL3")
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/Sdl3.*\\.cpp$")
     endif()
-    # SDL2 implementation tests include SDL2's real event structure and are meaningful only when
-    # the SDL2 backend was selected. Contract tests above remain parameterised over all builds.
-    if(NOT CNA_PLATFORM STREQUAL "SDL2")
-        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/Sdl2.*\\.cpp$")
-    endif()
     # plans/plan_x11.md X11-0005: the native X11 tests exercise CNA::Platform::X11, which is
-    # compiled only when CNA_PLATFORM=X11 -- the same rule, and the same reason, as the SDL3 and
-    # SDL2 lines above. The implementation-neutral suites (the contract, and the conformance suite
+    # compiled only when CNA_PLATFORM=X11 -- the same rule, and the same reason, as the SDL3 line
+    # above. The implementation-neutral suites (the contract, and the conformance suite
     # parameterised over every available implementation) always build.
     if(NOT CNA_PLATFORM STREQUAL "X11")
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/X11.*\\.cpp$")
@@ -116,14 +111,6 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/(Xkb|Freedesktop|Posix|Linux)[A-Za-z]*\\.cpp$")
     endif()
 
-    # The SDL2 native-queue mapper test must not share CnaTests with SDL3-native fixture tests:
-    # SDL deliberately makes both imported targets declare mutually exclusive SDL_VERSION
-    # interface requirements. It receives its own small executable below.
-    if(CNA_PLATFORM STREQUAL "SDL2")
-        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
-            ".*/modules/platform/tests/.*/Sdl2PlatformTests\\.cpp$")
-    endif()
-
     # plans/plan_platform.md PLAT-94: like the general platform implementation above, the native
     # SDL3 audio test directly exercises a private implementation compiled only for its selected
     # audio platform. Contract/selection tests remain implementation-neutral.
@@ -135,10 +122,9 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
             ".*/modules/audio/tests/.*/AudioMixerPlatformTests\\.cpp$")
         # These suites exercise the SDL3_mixer implementation itself, not the portable XNA
-        # facade.  The implementation is purposefully absent from SDL2/NULL link graphs.
-        #
-        # plans/plan_platform.md PLAT-SDL2-8 (2026-08-17): AudioCategoryTests and WaveBankTests were
-        # missing from this list. They assert on real XACT playback -- `cue->getIsPlayingProperty()`
+        # facade. The implementation is purposefully absent from NULL link graphs.
+        # AudioCategoryTests and WaveBankTests assert on real XACT playback --
+        # `cue->getIsPlayingProperty()`
         # is true after Play(), instance limits evict a *playing* cue, a wave-bank entry decodes to
         # an exact frame count -- all of which need the engine that this branch just excluded, so
         # they failed 12 times over. Invisible until now because no configuration ever ran the full
@@ -165,22 +151,11 @@ if(CNA_BUILD_TESTS)
                 ".*/modules/audio/tests/.*/${_cna_sdl3_mixer_test}\\.cpp$")
         endforeach()
     endif()
-    if(NOT CNA_AUDIO_PLATFORM STREQUAL "SDL2")
-        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
-            ".*/modules/audio/tests/.*/Sdl2AudioDeviceTests\\.cpp$")
-    else()
-        # SDL2 and SDL3 deliberately publish incompatible interface requirements.  The general
-        # CnaTests binary retains SDL3-native renderer fixtures, so keep the native SDL2 audio
-        # fixture in its own executable just like the SDL2 platform-event fixture above.
-        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
-            ".*/modules/audio/tests/.*/Sdl2AudioDeviceTests\\.cpp$")
-    endif()
-
     # plans/plan_win32.md WIN32-0004: the Win32 backend's own tests reach into
     # CNA::Platform::Win32 -- its message translator, its scan-code table, its window -- all of
     # which exist only when CNA_PLATFORM=WIN32 compiled src/Win32/. Under any other selection they
-    # would reference symbols that are not there and fail to link, exactly as the SDL3 and SDL2
-    # suites above would. The implementation-neutral suites (the contract, and the conformance
+    # would reference symbols that are not there and fail to link, exactly as the SDL3 suite above
+    # would. The implementation-neutral suites (the contract, and the conformance
     # suite parameterised over every available implementation) always build and pick Win32 up
     # automatically wherever it is present.
     if(NOT CNA_PLATFORM STREQUAL "WIN32")
@@ -306,11 +281,7 @@ if(CNA_BUILD_TESTS)
     # (posix_spawn, poll, sys/wait.h) to spawn tools/devices/shutdown_ordering_harness.cpp as an
     # independent OS process, for the same reason TwoProcessLoopbackTest.cpp needs one above.
     # Excluded on the same platforms and for the same reasons.
-    # plans/plan_platform.md PLAT-SDL2-6: also excluded for an SDL2-only selection, where its harness is
-    # not built at all. That harness exists to call the real SDL3 SDL_Quit() at process teardown,
-    # which is an ordering hazard this selection cannot reach -- and building it would put SDL3
-    # back on a link line the selection is defined by not having (cmake/Sdl2OnlyConfiguration.cmake).
-    if(WIN32 OR EMSCRIPTEN OR ANDROID OR CNA_APPLE_IOS OR CNA_SDL2_ONLY_CONFIGURATION)
+    if(WIN32 OR EMSCRIPTEN OR ANDROID OR CNA_APPLE_IOS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Microsoft/Devices/Detail/DevicesShutdownOrderingTests\\.cpp$")
     endif()
 
@@ -632,13 +603,9 @@ if(CNA_BUILD_TESTS)
         target_link_options(CnaTests PRIVATE -sJSPI=1)
     endif()
 
-    # plans/plan_platform.md PLAT-SDL2-6: SDL3 is a test-fixture dependency here (native renderer and
-    # audio fixtures), not a framework one -- CNA's own modules link their platform library
-    # privately and conditionally since PLAT-122. Under an SDL2-only selection every source that
-    # needs SDL3 has already been filtered out above, and linking it anyway would put two
-    # libraries exporting the same entry points into one process; see
-    # cmake/Sdl2OnlyConfiguration.cmake for why that silently invalidates the conformance run.
-    if(NOT CNA_SDL2_ONLY_CONFIGURATION AND CNA_ENABLE_SDL)
+    # SDL3 is a test-fixture dependency here (native renderer and audio fixtures), not a framework
+    # one -- CNA's own modules link their platform library privately and conditionally.
+    if(CNA_ENABLE_SDL)
         target_link_libraries(cna_test_build_config INTERFACE SDL3::SDL3)
     endif()
 
@@ -692,32 +659,6 @@ if(CNA_BUILD_TESTS)
     if(CNA_FFMPEG_AVAILABLE AND DEFINED CNA_TEST_OBJECT_TARGET_media)
         target_compile_definitions(${CNA_TEST_OBJECT_TARGET_media} PRIVATE
             CNA_TEST_HAS_AUDIO_DURATION_PROBE=1)
-    endif()
-
-    if(CNA_PLATFORM STREQUAL "SDL2")
-        add_executable(cna_platform_sdl2_tests
-            modules/platform/tests/CNA/Platform/Sdl2PlatformTests.cpp)
-        target_link_libraries(cna_platform_sdl2_tests PRIVATE
-            cna_platform
-            SDL2::SDL2
-            gtest_main)
-        add_test(NAME CnaSdl2PlatformTests COMMAND cna_platform_sdl2_tests)
-        set_tests_properties(CnaSdl2PlatformTests PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy")
-    endif()
-
-    if(CNA_AUDIO_PLATFORM STREQUAL "SDL2")
-        add_executable(cna_audio_sdl2_tests
-            modules/audio/tests/CNA/Audio/Platform/Sdl2AudioDeviceTests.cpp)
-        target_include_directories(cna_audio_sdl2_tests PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/modules/audio/src)
-        target_link_libraries(cna_audio_sdl2_tests PRIVATE
-            cna_audio
-            SDL2::SDL2
-            gtest_main)
-        add_test(NAME CnaSdl2AudioDeviceTests COMMAND cna_audio_sdl2_tests)
-        set_tests_properties(CnaSdl2AudioDeviceTests PROPERTIES
-            ENVIRONMENT "SDL_AUDIODRIVER=dummy")
     endif()
 
     # The metal policy suites deliberately compile on every renderer (see their own header
@@ -1422,7 +1363,7 @@ if(CNA_BUILD_TESTS)
     # contract visible as a dedicated CTest; the shared conformance suite runs every implementation
     # compiled into the selected build (SDL3 + NULL by default, NULL in the SDL-free build).
     cna_register_renderer_test(NAME CnaAudioPlatformTests
-        COMMAND CnaTests --gtest_filter=Audio*DeviceContractTests.*:*AudioDeviceConformanceTests.*:NullAudioDeviceTests.*:AudioPlatformSelectionCompileTests.*:Sdl2AudioDeviceTests.*:Sdl3AudioDeviceTests.*:Sdl3AudioRecordingDeviceTests.*:AudioMixerPlatformContractTests.* --gtest_shuffle --gtest_repeat=3
+        COMMAND CnaTests --gtest_filter=Audio*DeviceContractTests.*:*AudioDeviceConformanceTests.*:NullAudioDeviceTests.*:AudioPlatformSelectionCompileTests.*:Sdl3AudioDeviceTests.*:Sdl3AudioRecordingDeviceTests.*:AudioMixerPlatformContractTests.* --gtest_shuffle --gtest_repeat=3
         LABELS "audio;platform" ENVIRONMENT "SDL_AUDIODRIVER=dummy;CNA_AUDIO_DEVICE=null;CNA_AUDIO_RECORDING_DEVICE=null")
 
     # plans/plan_x11.md X11-0151: the ALSA device, CNA's own mixer, the XNA audio classes over the
@@ -1443,12 +1384,10 @@ if(CNA_BUILD_TESTS)
     # plans/plan_platform.md PLAT-93: test the cache default, every implemented value, every reserved
     # future identifier, and an unknown value without spawning six full nested project configs.
     # The selection file is intentionally script-mode-safe for exactly this validation path.
-    foreach(_cna_audio_selection_case IN ITEMS DEFAULT SDL3 SDL2 NULL OPENAL WASAPI ALSA BOGUS)
+    foreach(_cna_audio_selection_case IN ITEMS DEFAULT SDL3 NULL OPENAL WASAPI ALSA BOGUS)
         if(_cna_audio_selection_case STREQUAL "DEFAULT" OR
            _cna_audio_selection_case STREQUAL "SDL3")
             set(_cna_audio_selection_expected "Using SDL3 audio platform implementation")
-        elseif(_cna_audio_selection_case STREQUAL "SDL2")
-            set(_cna_audio_selection_expected "Using SDL2 audio platform implementation")
         elseif(_cna_audio_selection_case STREQUAL "NULL")
             set(_cna_audio_selection_expected "Using NULL audio platform implementation")
         elseif(_cna_audio_selection_case STREQUAL "ALSA")
@@ -1535,12 +1474,6 @@ if(CNA_BUILD_TESTS)
         set_tests_properties(CnaXnbPlanStatusConsistency
             PROPERTIES LABELS "content;xnb;documentation")
     endif()
-
-    add_test(NAME CnaSdl2OnlyRendererGate
-        COMMAND ${CMAKE_COMMAND}
-            -DCNA_SDL2_ONLY_GUARD_FILE=${CMAKE_SOURCE_DIR}/cmake/Sdl2OnlyConfiguration.cmake
-            -P ${CMAKE_SOURCE_DIR}/cmake/Tests/Sdl2OnlyRendererGate.cmake)
-    set_tests_properties(CnaSdl2OnlyRendererGate PROPERTIES LABELS "platform;configuration")
 
     # plans/plan_wayland.md WAYLAND-0023: the Wayland selection is offered where it can be built,
     # refuses loudly (naming the package) where it cannot, and changed no default. Runs everywhere,

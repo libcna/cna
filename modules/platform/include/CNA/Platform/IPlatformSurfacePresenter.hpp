@@ -60,8 +60,8 @@ namespace CNA::Platform {
      * dependence.
      *
      * "Present a pixel buffer to a window" is a genuine platform capability, not an SDL
-     * peculiarity: SDL2 provides it, SDL 1.2 provides it as a software surface, Win32 has
-     * `StretchDIBits`, and a terminal can satisfy it by quantising the buffer into a character
+     * peculiarity: native window toolkits provide it, Win32 has `StretchDIBits`, and a terminal
+     * can satisfy it by quantising the buffer into a character
      * grid — which is exactly how the Phase 10 terminal platform attaches without needing a
      * renderer of its own.
      *

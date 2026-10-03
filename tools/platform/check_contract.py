@@ -18,7 +18,7 @@ guarding properties that are easy to state and easy to let slip:
   doxygen   Every public member of every contract header carries a Doxygen block. CLAUDE.md
             requires this repo-wide; for this module it matters more than usual, because the
             documentation IS the specification a second implementation is written against. A
-            future SDL2, terminal or Win32 platform author has nothing else to work from.
+            future terminal, Win32 or other platform author has nothing else to work from.
 
 Both are heuristic in the same direction: they under-report rather than over-report, so a pass is
 not a proof of quality, but a failure is always a real omission.

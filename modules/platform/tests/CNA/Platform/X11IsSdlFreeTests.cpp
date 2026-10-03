@@ -80,8 +80,8 @@ TEST(X11IsSdlFree, TheBackendSourceTreeExistsWhereThisTestLooksForIt)
 /// Removes `//` and block comments, so the scan below reads code rather than prose.
 ///
 /// The distinction is the whole point. This backend's documentation names SDL repeatedly and
-/// should: it explains why the backend exists, and it cites a bug the SDL2 keyboard mapping made
-/// so the same mistake is not repeated here. A check that could not tell an explanation from a
+/// should: it explains why the backend exists and why earlier mappings made certain choices. A
+/// check that could not tell an explanation from a
 /// call would push that reasoning out of the source, which is a worse outcome than the one it
 /// prevents. `tools/platform/renderer_sdl_audit.py` draws the same line for the same reason.
 std::string StripComments(const std::string& source)

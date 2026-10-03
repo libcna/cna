@@ -75,8 +75,8 @@ TEST(MicrophoneTest, AllReflectsTheSelectedRecordingCapability)
     // plans/plan_x11.md X11-0162: ALSA captures. The test binaries point it at ALSA's `null`
     // device (CNA_AUDIO_RECORDING_DEVICE), never at the machine's microphone.
     EXPECT_FALSE(Microphone::getAllProperty().empty());
-#elif defined(CNA_AUDIO_PLATFORM_SDL2) || defined(CNA_AUDIO_PLATFORM_NULL)
-    // SDL2 and NULL advertise no recording provider and must never fall back to SDL3.
+#elif defined(CNA_AUDIO_PLATFORM_NULL)
+    // NULL advertises no recording provider and must never fall back to SDL3.
     EXPECT_TRUE(Microphone::getAllProperty().empty());
 #else
 #error "CNA audio platform selection did not define an implementation"
@@ -89,7 +89,7 @@ TEST(MicrophoneTest, AllReflectsTheSelectedRecordingCapability)
 // XNA runtime, and CLAUDE.md makes XNA the tie-break. No entry may carry that invented name.
 TEST(MicrophoneTest, AllContainsOnlyRealDevicesWithNoInventedDefaultEntry)
 {
-#if defined(CNA_AUDIO_PLATFORM_SDL2) || defined(CNA_AUDIO_PLATFORM_NULL)
+#if defined(CNA_AUDIO_PLATFORM_NULL)
     GTEST_SKIP() << "selected audio backend has no recording capability";
 #endif
     const auto& all = Microphone::getAllProperty();

@@ -19,7 +19,7 @@ namespace Microsoft::Xna::Framework::Media
 {
     namespace
     {
-        // plans/plan_platform.md PLAT-SDL2-8. The mixer engine is the SDL3_mixer implementation and is
+        // The mixer engine is the SDL3_mixer implementation and is
         // excluded from the archive for every other CNA_AUDIO_PLATFORM value, so this file linked
         // only under SDL3 audio -- and only ever got built at all where FFmpeg is present, which
         // is why no CI cell caught it. MediaPlayer.cpp already solved the same problem with
@@ -29,8 +29,8 @@ namespace Microsoft::Xna::Framework::Media
         //
         // Without the engine `OpenAudioStream` returns null, and every other operation is already
         // guarded by `if (audioStream_)` at its call site, so a video plays with its audio track
-        // silent -- exactly what MediaPlayer does in this profile, and exactly what
-        // docs/platform-sdl2.md documents. Video decoding and presentation are unaffected.
+        // silent, exactly what MediaPlayer does in this profile. Video decoding and presentation
+        // are unaffected.
 #ifdef SOUND_ENABLED
         using AudioStream = CNA::Internal::Audio::MixerStream;
 

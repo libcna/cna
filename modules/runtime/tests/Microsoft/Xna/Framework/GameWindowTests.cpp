@@ -400,16 +400,9 @@ TEST(GameWindowTest, SetSupportedOrientations_DefaultClearsThePlatformPreference
 
 TEST(GameWindowPlatformTest, DelegatesStateAndGeometryToTheSelectedPlatformWindow)
 {
-    // plans/plan_platform.md PLAT-SDL2-6: constructing a Game constructs a GraphicsDevice, and the
-    // selected platform may refuse to make a window this build's renderer can use. That is a
-    // legitimate refusal, not a GameWindow defect -- the same distinction PLAT-118's golden suite
-    // already draws -- and there is nothing to delegate to when it happens, so it skips.
-    //
-    // Found for real: this ctest entry pins the headless dummy video driver, which the SDL3
-    // backend accepts for an OpenGL window and the SDL2 backend does not -- it refuses, saying
-    // OpenGL is not available in the current video driver. Under CNA_PLATFORM=SDL2 with any GL
-    // renderer the refusal escaped the test body and reported as a failure, while the same binary
-    // on a real display skipped correctly.
+    // Constructing a Game constructs a GraphicsDevice, and the selected platform may refuse to
+    // make a window this build's renderer can use. That is a legitimate refusal, not a GameWindow
+    // defect, and there is nothing to delegate to when it happens, so the case skips.
     std::unique_ptr<Game> owner;
     try
     {

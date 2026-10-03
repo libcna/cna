@@ -9,9 +9,6 @@
 #if defined(CNA_PLATFORM_SDL3)
 #  include "Sdl3/Sdl3Platform.hpp"
 #endif
-#if defined(CNA_PLATFORM_SDL2)
-#  include "Sdl2/Sdl2Platform.hpp"
-#endif
 #if defined(CNA_PLATFORM_WIN32)
 #  include "Win32/Win32Platform.hpp"
 #endif
@@ -40,8 +37,6 @@ namespace CNA::Platform {
         const std::string kDefaultName = "Terminal";
 #elif defined(CNA_PLATFORM_WIN32)
         const std::string kDefaultName = "Win32";
-#elif defined(CNA_PLATFORM_SDL2)
-        const std::string kDefaultName = "SDL2";
 #elif defined(CNA_PLATFORM_X11)
         const std::string kDefaultName = "X11";
 #elif defined(CNA_PLATFORM_WAYLAND)
@@ -63,12 +58,6 @@ namespace CNA::Platform {
         if (name == "SDL3")
         {
             return std::make_unique<Sdl3::Sdl3Platform>();
-        }
-#endif
-#if defined(CNA_PLATFORM_SDL2)
-        if (name == "SDL2")
-        {
-            return std::make_unique<Sdl2::Sdl2Platform>();
         }
 #endif
 #if defined(CNA_PLATFORM_WIN32)
@@ -126,9 +115,6 @@ namespace CNA::Platform {
         std::vector<std::string> available;
 #if defined(CNA_PLATFORM_SDL3)
         available.emplace_back("SDL3");
-#endif
-#if defined(CNA_PLATFORM_SDL2)
-        available.emplace_back("SDL2");
 #endif
 #if defined(CNA_PLATFORM_WIN32)
         // Listing it here is also what enrols it in the implementation-neutral conformance suite:

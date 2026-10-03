@@ -6,7 +6,7 @@
 # (cmake/PlatformRatchet.cmake, PLAT-8) and, from PLAT-121, as a hard error.
 #
 # src/ is flat for the contract's own types; each implementation owns a subdirectory
-# (src/Sdl3/, src/Sdl2/, src/Win32/, src/X11/, src/Wayland/, src/Headless/, src/Terminal/), with
+# (src/Sdl3/, src/Win32/, src/X11/, src/Wayland/, src/Headless/, src/Terminal/), with
 # src/Common/ holding the portable pieces more than one of them shares and src/Xkb/,
 # src/Freedesktop/, src/Posix/ and src/Linux/ the ones only the Unix desktop backends share.
 file(GLOB CNA_PLATFORM_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
@@ -21,10 +21,6 @@ if(CNA_PLATFORM STREQUAL "SDL3")
     if(CNA_APPLE_IOS)
         list(APPEND CNA_PLATFORM_SOURCES "src/Sdl3/Sdl3AppleOrientation.mm")
     endif()
-endif()
-if(CNA_PLATFORM STREQUAL "SDL2")
-    file(GLOB CNA_PLATFORM_IMPL_SOURCES CONFIGURE_DEPENDS "src/Sdl2/*.cpp")
-    list(APPEND CNA_PLATFORM_SOURCES ${CNA_PLATFORM_IMPL_SOURCES})
 endif()
 # The native Win32 backend (plans/plan_win32.md). Unlike Headless and Terminal below it is NOT
 # compiled unconditionally: every translation unit in src/Win32/ includes <windows.h>, so on a
@@ -141,10 +137,6 @@ if(CNA_PLATFORM STREQUAL "SDL3")
         target_link_libraries(cna_platform PRIVATE "-framework UIKit")
     endif()
 endif()
-if(CNA_PLATFORM STREQUAL "SDL2")
-    target_link_libraries(cna_platform PRIVATE SDL2::SDL2)
-endif()
-
 # The Win32 backend's native libraries, PRIVATE for the same reason SDL is: an implementation
 # detail must not become a usage requirement of every consumer of CNA::Platform. None of these
 # is a third-party dependency -- they are the operating system's own import libraries, always

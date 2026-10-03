@@ -2,8 +2,8 @@
 
 #include <gtest/gtest.h>
 
-#if (defined(CNA_AUDIO_PLATFORM_SDL3) + defined(CNA_AUDIO_PLATFORM_SDL2) \
-     + defined(CNA_AUDIO_PLATFORM_NULL) + defined(CNA_AUDIO_PLATFORM_ALSA)) != 1
+#if (defined(CNA_AUDIO_PLATFORM_SDL3) + defined(CNA_AUDIO_PLATFORM_NULL) \
+     + defined(CNA_AUDIO_PLATFORM_ALSA)) != 1
 #  error "Exactly one CNA audio-platform implementation must be selected."
 #endif
 
@@ -13,8 +13,6 @@ TEST(AudioPlatformSelectionCompileTests, ExactlyOneImplementedBackendIsSelected)
 {
 #if defined(CNA_AUDIO_PLATFORM_SDL3)
     SUCCEED() << "CNA_AUDIO_PLATFORM=SDL3";
-#elif defined(CNA_AUDIO_PLATFORM_SDL2)
-    SUCCEED() << "CNA_AUDIO_PLATFORM=SDL2";
 #elif defined(CNA_AUDIO_PLATFORM_ALSA)
     SUCCEED() << "CNA_AUDIO_PLATFORM=ALSA";
 #else

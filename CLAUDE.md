@@ -498,10 +498,8 @@ individual task. Do not push unless the user explicitly asks to push.
 
 Platform, renderer and audio selection are three independent CMake axes:
 
-- `CNA_PLATFORM` selects windowing, events, input and host services (`SDL3`, `SDL2`, `X11`,
-  `WAYLAND`, `HEADLESS`, or `TERMINAL`; SDL12/WIN32/EMSCRIPTEN are reserved identifiers and fail
-  configuration). `SDL2` is an independent backend with its own deliberately narrow capability
-  profile -- never `sdl2-compat` over SDL3 -- see `docs/platform-sdl2.md`. `X11` is a native
+- `CNA_PLATFORM` selects windowing, events, input and host services (`SDL3`, `X11`, `WAYLAND`,
+  `HEADLESS`, `TERMINAL`, or host-conditional `WIN32`). `X11` is a native
   backend written against Xlib directly with no SDL in it at all, offered only where the X
   development environment exists; it is what makes an SDL-free CNA a configuration that exists
   rather than an argument -- see `docs/platform-x11.md` and `plans/plan_x11.md`. `WAYLAND` is the
@@ -514,17 +512,16 @@ Platform, renderer and audio selection are three independent CMake axes:
   refuses, at configure time, any platform/audio/renderer selection that genuinely needs SDL --
   naming which one. Nothing is ever silently substituted.
 - `CNA_GRAPHICS_RENDERER` selects the renderer.
-- `CNA_AUDIO_PLATFORM` selects playback/capture (`SDL3`, `SDL2`, `NULL` or `ALSA`). `SOUND_ENABLED`
+- `CNA_AUDIO_PLATFORM` selects playback/capture (`SDL3`, `NULL` or `ALSA`). `SOUND_ENABLED`
   means a mixer exists behind `MixerEngine.hpp`: SDL3_mixer for `SDL3`, CNA's own mixer
   (`modules/audio/src/Backend/CnaMixer/`) for `ALSA`, the SDL-free Linux backend -- see
-  `docs/audio-alsa.md`. `SDL2` and `NULL` have no mixer and do not define it.
+  `docs/audio-alsa.md`. `NULL` has no mixer and does not define it.
 
 New production code must use `CNA::Platform::IPlatform` and its narrow services. Do **not** include
 SDL or call an `SDL_*`/`MIX_*` function outside these intentional native edges:
 
-- `modules/platform/src/Sdl3/` and `modules/platform/src/Sdl2/`;
-- `modules/audio/src/Platform/Sdl3/`, `modules/audio/src/Platform/Sdl2/`, and the mixer
-  implementation isolated inside audio;
+- `modules/platform/src/Sdl3/`;
+- `modules/audio/src/Platform/Sdl3/` and the mixer implementation isolated inside audio;
 - renderer families `sdl-renderer`, `sdl-gpu`, and `fna3d`.
 
 `modules/platform/src/X11/` and `modules/platform/src/Wayland/` are inside the platform module and

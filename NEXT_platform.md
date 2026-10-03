@@ -8,8 +8,20 @@
 > for subsystem campaigns (`NEXTinput.md`, `NEXTaudio.md`, …).
 > **`NEXT.md` had no record of this campaign at all** until this file was added and cross-linked.
 
-**Branch:** `feature/platform`
-**Last updated:** 2026-08-13
+**Branch:** `next`
+**Last updated:** 2026-10-04
+
+---
+
+## Current checkpoint — SDL2 retired (2026-10-04)
+
+CNA now supports SDL3, not SDL2. The former platform and audio implementations, dependency fetch,
+selection values, process-mixing guard, dedicated tests, standalone-harness branches and CI lane
+were removed. `CNA_PLATFORM=SDL2` and `CNA_AUDIO_PLATFORM=SDL2` are ordinary unsupported values
+and fail in the normal selection validators; neither is reserved or forwarded to SDL3.
+
+The dated SDL2 implementation and verification records below remain as project history. They
+describe what existed when those checkpoints were written, not the current selectable backend set.
 
 ---
 

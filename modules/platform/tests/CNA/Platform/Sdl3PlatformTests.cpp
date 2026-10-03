@@ -588,7 +588,7 @@ TEST_F(Sdl3PlatformTest, UnknownPlatformNameRefusesAndListsWhatIsAvailable)
 {
     try
     {
-        (void)PlatformFactory::Create("SDL2");
+        (void)PlatformFactory::Create("DELIBERATELY_UNKNOWN_PLATFORM");
         FAIL() << "expected a refusal";
     }
     catch (const PlatformException& error)

@@ -13,9 +13,9 @@
 # =====================================================================================
 
 set(CNA_PLATFORM "SDL3" CACHE STRING
-        "Platform implementation (SDL3 | SDL2 | X11 | WAYLAND | HEADLESS | TERMINAL | WIN32)")
+        "Platform implementation (SDL3 | X11 | WAYLAND | HEADLESS | TERMINAL | WIN32)")
 
-# Implemented today. Two of the five are host-conditional, for symmetrical reasons:
+# Implemented today. Two are host-conditional, for symmetrical reasons:
 #
 #   TERMINAL is POSIX-only -- it is built on termios, and there is no Windows console path for it
 #   (plans/plan_platform.md Phase 10). Offering it on Windows would produce a configure that
@@ -24,7 +24,7 @@ set(CNA_PLATFORM "SDL3" CACHE STRING
 #   WIN32 is Windows-only -- it is built on user32/gdi32 and an HWND (plans/plan_win32.md). It is
 #   offered wherever the target is Windows, which includes a mingw-w64 cross-build from Linux,
 #   because that targets Windows even though the build host does not run it.
-set(_cna_platforms_available SDL3 SDL2 HEADLESS)
+set(_cna_platforms_available SDL3 HEADLESS)
 if(WIN32)
     list(APPEND _cna_platforms_available WIN32)
 else()

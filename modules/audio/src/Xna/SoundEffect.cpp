@@ -41,7 +41,7 @@ namespace Microsoft::Xna::Framework::Audio
         std::vector<SoundEffectInstance*> instances;
         // The length of the sample data and its rate, recorded in every build. Duration is a
         // property of the data rather than of an output device (FNA computes it from the sample
-        // count at creation), so a NULL or SDL2 audio build -- which has no mixer to ask -- must
+        // count at creation), so a NULL audio build -- which has no mixer to ask -- must
         // still report it (plans/plan_native_platform_validation.md NPV-0105).
         std::int64_t frames = 0;
         SharpRuntime::intcs frameRate = 0;

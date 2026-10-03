@@ -1545,8 +1545,7 @@ line-by-line Vulkan translation:
   the separate `sdl3webgpu` compatibility library. It does not require SDL at all: `WMG-0024`
   builds and runs this renderer with `CNA_ENABLE_SDL=OFF` on CNA's native Wayland and X11 backends,
   and `libcna.so`'s direct `NEEDED` list carries `libwayland-client`/`libxkbcommon` (or the Xlib
-  set) and `libwgpu_native`, with no `libSDL2`, `libSDL3` or `libSDL3_mixer` anywhere in the
-  closure.
+  set) and `libwgpu_native`, with no SDL library anywhere in the closure.
 
 The deliberate, collected departures from the Vulkan renderer — push constants → UBO, wireframe
 refusal, async → synchronous callback pumping, `Color` → `Unorm8x4` vertex format, and windowing

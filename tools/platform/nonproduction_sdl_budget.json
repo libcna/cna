@@ -9,10 +9,6 @@
       "category": "audio-native-integration",
       "max_references": 29
     },
-    "modules/audio/tests/CNA/Audio/Platform/Sdl2AudioDeviceTests.cpp": {
-      "category": "audio-native-integration",
-      "max_references": 1
-    },
     "modules/audio/tests/CNA/Audio/Platform/Sdl3AudioDeviceTests.cpp": {
       "category": "audio-native-integration",
       "max_references": 19
@@ -43,7 +39,7 @@
     },
     "modules/audio/tests/Microsoft/Xna/Framework/Audio/DynamicSoundEffectInstanceTests.cpp": {
       "category": "audio-native-integration",
-      "max_references": 35
+      "max_references": 30
     },
     "modules/audio/tests/Microsoft/Xna/Framework/Audio/MicrophoneTests.cpp": {
       "category": "audio-native-integration",
@@ -71,7 +67,7 @@
     },
     "modules/audio/tests/Microsoft/Xna/Framework/Audio/SoundEffectTests.cpp": {
       "category": "audio-native-integration",
-      "max_references": 35
+      "max_references": 34
     },
     "modules/audio/tests/Microsoft/Xna/Framework/Audio/WaveBankTests.cpp": {
       "category": "audio-native-integration",
@@ -176,10 +172,6 @@
     "modules/platform/tests/CNA/Platform/IPlatformTests.cpp": {
       "category": "containment-assertion",
       "max_references": 2
-    },
-    "modules/platform/tests/CNA/Platform/Sdl2PlatformTests.cpp": {
-      "category": "platform-sdl2-integration",
-      "max_references": 12
     },
     "modules/platform/tests/CNA/Platform/Sdl3EventMapperTests.cpp": {
       "category": "platform-sdl3-integration",
@@ -380,10 +372,6 @@
     "modules/renderers/sdl-gpu/examples/sdlgpu_smoke_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 10
-    },
-    "modules/renderers/sdl-gpu/examples/sdlgpu_storage_buffer_lifetime_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 23
     },
     "modules/renderers/sdl-gpu/examples/sdlgpu_swapchain_recovery_test.cpp": {
       "category": "renderer-integration-executable",

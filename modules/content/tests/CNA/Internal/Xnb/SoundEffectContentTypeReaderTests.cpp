@@ -22,13 +22,13 @@
 #include <fstream>
 #include <gtest/gtest.h>
 
-// plans/plan_platform.md PLAT-SDL2-8: fourteen cases below are wrapped in `#ifdef SOUND_ENABLED`.
+// Fourteen cases below are wrapped in `#ifdef SOUND_ENABLED`.
 //
 // They assert on what the reader DECODED -- a positive duration, exact consumed byte counts, loop
 // points expressed in decoded frames, and the two diagnostics that only fire once a decode has
 // produced a second duration to disagree with. The decoder is CNA's SDL3_mixer engine, which is
 // deliberately absent from the archive for every other CNA_AUDIO_PLATFORM value, so under
-// CNA_AUDIO_PLATFORM=SDL2 or =NULL those assertions are unobservable rather than merely untested.
+// CNA_AUDIO_PLATFORM=NULL those assertions are unobservable rather than merely untested.
 // Compiled out with the reason stated, not softened: `SoundEffect::getDurationProperty()` returns
 // zero there, so a relaxed assertion would pass while proving nothing.
 //

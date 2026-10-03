@@ -3,10 +3,10 @@
 
 #include <cstddef>
 
-// plans/plan_platform.md PLAT-SDL2-8: the mixer engine exists only under SOUND_ENABLED (the SDL3_mixer
-// selection). The two accessors that need it are guarded with it; the rest reach VideoPlayer's own
-// state and stay available in every audio profile, so a suite that only asks about the decoder or
-// the scratch buffer still builds under SDL2/NULL audio.
+// The mixer engine exists only under SOUND_ENABLED (the SDL3_mixer selection). The two accessors
+// that need it are guarded with it; the rest reach VideoPlayer's own state and stay available in
+// every audio profile, so a suite that only asks about the decoder or the scratch buffer still
+// builds under NULL audio.
 #ifdef SOUND_ENABLED
 #include "CNA/Internal/Audio/MixerEngine.hpp"
 #endif

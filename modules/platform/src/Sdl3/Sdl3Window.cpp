@@ -511,8 +511,8 @@ namespace CNA::Platform::Sdl3 {
         // every Present() regardless, so a missed sync costs at most one frame of stale size.
         //
         // This also brings SDL3 back in line with the rest of the contract: IPlatformWindow::
-        // Sync()'s own documentation promises only that it blocks, never that it throws; the SDL2
-        // implementation pumps events and cannot fail; and PlatformConformanceTests asserts
+        // Sync()'s own documentation promises only that it blocks, never that it throws; the
+        // other implementations cannot fail; and PlatformConformanceTests asserts
         // EXPECT_NO_THROW(window_->Sync()).
         (void)SDL_SyncWindow(window_);
     }

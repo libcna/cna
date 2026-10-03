@@ -3947,7 +3947,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // is false of every windowing platform -- SDL3, X11, Wayland and Win32 all offer a native
         // handle, so a CPU renderer stays exactly as off-screen on them as it has always been,
         // deliberately: giving one a window there is a feature decision, not this repair. HEADLESS,
-        // SDL2, and a TERMINAL whose stdout is a pipe report no presentation and take the early
+        // A TERMINAL whose stdout is a pipe reports no presentation and takes the early
         // return below unchanged.
         const bool presenterIsTheOnlyDisplay = [&]
         {

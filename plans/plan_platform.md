@@ -1,5 +1,9 @@
 # CNA Platform Abstraction (`IPlatform`) — Implementation Plan
 
+> **Retirement notice (2026-10-04):** Phase 11 is a historical record. SDL2 platform and audio
+> support has been removed from active CNA; the supported SDL implementation is SDL3. The former
+> SDL2 task rows remain below because they truthfully record completed work at the time.
+
 > **Status: COMPLETED AND RE-AUDITED — 162 of 163 decisions are implemented; PLAT-45 was
 > deliberately cut.** That total is two task sets read together, and they are deliberately not
 > merged into one number anywhere else in this document:
@@ -7,7 +11,7 @@
 > | Task set | Decisions | State |
 > |---|---:|---|
 > | Original PLAT campaign (Phases 0–10) — PLAT-1…PLAT-141 plus 14 lettered follow-ups | 155 | 154 implemented, PLAT-45 ❌ cut on measured evidence |
-> | SDL2 extension (Phase 11) — PLAT-SDL2-1…PLAT-SDL2-8 | 8 | 8 implemented |
+> | SDL2 extension (Phase 11) — PLAT-SDL2-1…PLAT-SDL2-8 | 8 | 8 historically implemented; backend retired 2026-10-04 |
 >
 > See the completion record, the 2026-08-13 post-completion audit and the **2026-08-17
 > post-merge re-audit** below. This plan turns [`cnaplatform.md`](../misc/cnaplatform.md) into an
@@ -21,9 +25,8 @@
 >
 > **Explicit scope boundary:** the completed original campaign delivered `Sdl3Platform` plus the
 > deliberately limited `HeadlessPlatform` and `TerminalPlatform` used to prove the contract.
-> Phase 11 adds an independent `Sdl2Platform` — its capability boundary and supported build are
-> [`docs/platform-sdl2.md`](../docs/platform-sdl2.md). SDL 1.2, native Win32 and other backends remain
-> future work in [§12 Possible future implementations](#12-possible-future-implementations-not-in-scope).
+> Phase 11 historically added an independent SDL2 backend; it was retired on 2026-10-04. Later
+> campaigns added native Win32, X11 and Wayland implementations.
 >
 > **A completed plan is not a finished one.** Work merged after 2026-08-13 reopened three of this
 > plan's guarantees without any row changing status: a renderer arrived holding a raw window
@@ -85,11 +88,11 @@ exclusions are worth 78 files that a naive `grep SDL_` misreports as coupling.
 
 | Metric | Value |
 |---|---|
-| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1098** |
-| Files referencing SDL (all) | **232** |
-| Production files (`src/` + `include/`) referencing SDL | **62** |
+| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1053** |
+| Files referencing SDL (all) | **223** |
+| Production files (`src/` + `include/`) referencing SDL | **55** |
 | …of which are renderer production files | **18** |
-| Test/example files referencing SDL | **170** |
+| Test/example files referencing SDL | **168** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **9** |
 | Renderer families reaching for `SDL_GL_*` directly | **0** |
 
@@ -97,8 +100,8 @@ Production SDL surface per module (`src/` + `include/` only):
 
 | Module | Files | Dominant concern |
 |---|---:|---|
-| `modules/platform` | 36 | - |
-| `modules/audio` | 8 | audio device/stream, mixer, microphone |
+| `modules/platform` | 31 | - |
+| `modules/audio` | 6 | audio device/stream, mixer, microphone |
 | `modules/renderers/*` | 18 | native window handle, GL context, Vulkan surface, SDL renderer/GPU (3 families) |
 
 The native-window properties actually consumed today — these define the minimum
@@ -141,8 +144,9 @@ Renderer families calling `SDL_GL_*` directly, freed as a group by one `IPlatfor
    XNA type (e.g. `GameWindow`), the XNA-side accessor is `CNAEXT`-tagged as usual.
 
 3. **Compile-time selection, runtime polymorphism.** `CNA_PLATFORM` is a CMake cache variable
-   with values `SDL3` (default), `SDL2`, `HEADLESS`, POSIX `TERMINAL` and Windows `WIN32`; `SDL12` is reserved
-   identifiers and configuring with them is a hard CMake error naming this plan. Only the
+   with values `SDL3` (default), `HEADLESS`, POSIX `TERMINAL`, native `X11`/`WAYLAND` where their
+   development dependencies exist, and Windows `WIN32`; `SDL12` is a reserved
+   identifier and configuring with it is a hard CMake error naming this plan. Only the
    selected implementation is compiled. `IPlatform` stays virtual anyway, because `HEADLESS` and
    the conformance suite need two implementations in one binary; the `using ActivePlatform = …`
    devirtualization sketched in `cnaplatform.md` is explicitly **not** adopted — it buys a

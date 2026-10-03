@@ -279,8 +279,7 @@ namespace CNA::Platform::Xkb {
 
         // Function keys are two ranges on BOTH sides. XKB's F1..F35 are contiguous, but Windows
         // virtual keys are not: F1..F12 are 0x70..0x7B and F13..F24 restart at 0x7C. A single
-        // range computed from F1 would report F13 as 0x7C+11 -- the mistake both the SDL2 backend
-        // and the terminal keyboard made independently, which is why it is split here.
+        // range computed from F1 would report F13 as 0x7C+11, which is why it is split here.
         if (keysym >= Sym::F1 && keysym <= Sym::F12)
         {
             return static_cast<KeyCode>(static_cast<std::uint16_t>(112 + (keysym - Sym::F1)));

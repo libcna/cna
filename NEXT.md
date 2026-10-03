@@ -1359,17 +1359,17 @@ task.
 
 > **Active campaign — CNA platform separation (`feature/platform`):** `plans/plan_platform.md` is the
 > authoritative task/evidence log, `docs/platform-abstraction.md` is the durable implementer's
-> guide, `docs/platform-sdl2.md` is the SDL2 backend's own boundary, and `NEXT_platform.md`
-> carries detailed continuity notes.
+> guide, and `NEXT_platform.md` carries detailed continuity notes.
 >
 > Platform, graphics and audio are independent build choices:
-> `CNA_PLATFORM={SDL3,SDL2,HEADLESS,TERMINAL}`, `CNA_GRAPHICS_RENDERER=<renderer>`, and
-> `CNA_AUDIO_PLATFORM={SDL3,SDL2,NULL}`. `CNA_PLATFORM` selects window/events/input/host services;
-> it does not imply a renderer or audio backend. Only `CNA_AUDIO_PLATFORM=SDL3` defines
-> `SOUND_ENABLED` — the high-level XNA decoder/mixer is an SDL3_mixer engine, so the other two
-> selections have a real playback transport and no decoder above it.
+> `CNA_PLATFORM={SDL3,X11,WAYLAND,WIN32,HEADLESS,TERMINAL}`,
+> `CNA_GRAPHICS_RENDERER=<renderer>`, and `CNA_AUDIO_PLATFORM={SDL3,ALSA,NULL}`.
+> `CNA_PLATFORM` selects window/events/input/host services;
+> it does not imply a renderer or audio backend. `CNA_AUDIO_PLATFORM=SDL3` uses SDL3_mixer and
+> `CNA_AUDIO_PLATFORM=ALSA` uses CNA's native mixer, so both define `SOUND_ENABLED`; `NULL` has a
+> playback transport but no decoder/mixer above it.
 >
-> **New production code must not include SDL or call `SDL_*`/`MIX_*` outside the platform SDL3/SDL2
+> **New production code must not include SDL or call `SDL_*`/`MIX_*` outside the platform SDL3
 > implementations, the isolated audio mixer implementation, and the three audited renderer
 > exceptions (`sdl-renderer`, `sdl-gpu`, `fna3d`).** (`freedirect` was a fourth until it was
 > retired on 2026-09-27.) Use `IPlatform` services,
@@ -1386,12 +1386,12 @@ task.
 > had been built and run. If you add a backend or a renderer, run the configuration end to end
 > rather than trusting the gates that ran on a different one.
 >
-> Existing reusable builds are `cmake-build-debug` (SDL3 default), `cmake-build-headless`,
-> `cmake-build-terminal` and `cmake-build-sdl2` (SDL2 platform + SDL2 audio + OPENGLES3); do not
+> Existing reusable builds are `cmake-build-debug` (SDL3 default), `cmake-build-headless`, and
+> `cmake-build-terminal`; do not
 > create another full tree without a distinct configuration need.
 > `CNA_DEVICES` defaults to OFF, so a devices change must be compiled with it explicitly enabled.
 > Run test suites against an Xvfb display, not the dummy video driver: the dummy driver silently
-> *skips* window-dependent cases, and on SDL2 it cannot provide an OpenGL window at all.
+> *skips* window-dependent cases.
 
 ## C BINDING / C ABI — CBIND-035 CLOSED (2026-08-15)
 

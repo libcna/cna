@@ -36,16 +36,6 @@ jobs:
             renderer: OPENGLES3
             audio: SDL3
             display: true
-          # Exercises the SDL2 implementation's real GL/ES context path, not sdl2-compat. Audio is
-          # SDL2 as well, deliberately: that pair is the one selection cmake/Sdl2OnlyConfiguration
-          # .cmake calls SDL2-only, and it is what keeps SDL3 off every link line in the build --
-          # including CnaTests', where linking both generations would put two libraries exporting
-          # SDL_Init/SDL_GetError into one process and quietly invalidate the conformance run.
-          - name: SDL2 + OpenGLES3
-            platform: SDL2
-            renderer: OPENGLES3
-            audio: SDL2
-            display: true
           - name: SDL3 + Vulkan
             platform: SDL3
             renderer: VULKAN
@@ -150,18 +140,11 @@ jobs:
       - name: Build the contract, consumer tests and 2D integration demo
         run: cmake --build build --target CnaTests cna_demo_2d --parallel 3
 
-      # PLAT-SDL2-6/PLAT-SDL2-8: both SDL2-native suites live in their own executables, because
-      # SDL2 and SDL3 publish mutually exclusive interface requirements and CnaTests still carries
-      # SDL3-native fixtures in every other selection.
-      - name: Build SDL2 native-queue platform and audio tests
-        if: matrix.platform == 'SDL2'
-        run: cmake --build build --target cna_platform_sdl2_tests cna_audio_sdl2_tests --parallel 3
-
       - name: Run platform CTest entries (graphical tuples)
         if: matrix.display
         env:
           SDL_AUDIODRIVER: dummy
-        run: ctest --test-dir build -R '^Cna(Platform(Tests|WindowTests)|Sdl2(Platform|AudioDevice)Tests)$' --output-on-failure
+        run: ctest --test-dir build -R '^CnaPlatform(Tests|WindowTests)$' --output-on-failure
 
       - name: Run platform CTest entries with no display (Headless tuple)
         if: matrix.display == false
@@ -371,7 +354,7 @@ jobs:
   # that never falls back to SDL), NULL audio, and HEADLESS as the renderer -- deliberately not a
   # renderer that needs a GPU context, because this cell's job is proving the platform/audio/
   # content axes stay SDL-free, not re-proving GL/Vulkan (the graphical matrix cells above already
-  # do that under SDL3/SDL2). cna_content is built and tested here specifically because
+  # do that under SDL3). cna_content is built and tested here specifically because
   # DecodeWavToPcm16 (modules/audio/src/Internal/WavDecoder.cpp) is the dependency this cell exists
   # to keep SDL-free -- see plans/plan_native_platforms_integration.md's WAV decoder section for
   # the history of why that mattered.
@@ -469,9 +452,9 @@ jobs:
       - name: Prove no SDL library was configured or linked
         run: |
           set -euo pipefail
-          if find build -iname '*SDL2*' -o -iname '*SDL3*' | grep -q .; then
+          if find build -iname '*SDL*' | grep -q .; then
             echo "::error::An SDL artifact exists in the SDL-free build directory." >&2
-            find build -iname '*SDL2*' -o -iname '*SDL3*'
+            find build -iname '*SDL*'
             exit 1
           fi
           for exe in build/CnaPlatformModuleTests build/CnaAudioTests build/CnaContentTests build/CnaContentPipelineTests; do

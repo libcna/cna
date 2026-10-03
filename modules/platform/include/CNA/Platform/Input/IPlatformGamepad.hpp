@@ -189,9 +189,9 @@ namespace CNA::Platform {
     /**
      * @brief Reads gamepads and drives their actuators.
      *
-     * Kept inside the platform contract rather than split into its own module. The SDL1
-     * joystick, SDL2 GameController and SDL3 Gamepad APIs differ considerably, but that
-     * difference is a *capability* difference, which `Gamepad`, `GamepadRumble` and
+     * Kept inside the platform contract rather than split into its own module. Native joystick
+     * and gamepad APIs differ considerably, but that difference is a *capability* difference,
+     * which `Gamepad`, `GamepadRumble` and
      * `GamepadSensors` already express. Splitting the seam is deferred until a second
      * implementation shows the capability model cannot carry it.
      */

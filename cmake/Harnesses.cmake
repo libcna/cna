@@ -61,13 +61,9 @@ endif()
 # sharing that binary. See tools/devices/shutdown_ordering_harness.cpp's own top-of-file comment
 # for the "--skip-shutdown-call" flag used to exercise the process-exit fallback when the normal
 # explicit coordinator call is omitted.
-# plans/plan_platform.md PLAT-SDL2-6: the whole point of this harness is to call the real SDL3
-# SDL_Quit(), so it is meaningful only where SDL3 is actually the selected edge. Under an
-# SDL2-only selection it would be the one remaining executable dragging SDL3 back in, to test an
-# ordering hazard that selection cannot reach.
 # plans/plan_x11.md X11-0090: and only where SDL3 is configured at all. This harness exists to
 # call the real SDL_Quit(); in a build that never configured SDL there is no such call to order.
-if(CNA_BUILD_TESTS AND NOT CNA_SDL2_ONLY_CONFIGURATION AND TARGET SDL3::SDL3)
+if(CNA_BUILD_TESTS AND TARGET SDL3::SDL3)
     add_executable(cna_devices_shutdown_ordering_harness
         tools/devices/shutdown_ordering_harness.cpp
     )
@@ -94,9 +90,9 @@ endif()
 # `SDL3/SDL.h: No such file or directory` failure under every cross-compile toolchain (Emscripten,
 # D3D9/D3D11 MinGW) that has no such fallback -- link SDL3::SDL3 explicitly instead of relying on
 # transitive propagation, matching cna_devices_shutdown_ordering_harness's own pattern above.
-# plans/plan_platform.md PLAT-SDL2-8: gated on the SDL3 audio selection because the harness calls
-# CNA::Internal::Audio::DestroyMixer() directly. That engine is the SDL3_mixer implementation and
-# is excluded from the archive for every other CNA_AUDIO_PLATFORM value, so under SDL2 or NULL
+# Gated on the SDL3 audio selection because the harness calls CNA::Internal::Audio::DestroyMixer()
+# directly. That engine is the SDL3_mixer implementation and
+# is excluded from the archive for every other CNA_AUDIO_PLATFORM value, so under NULL
 # audio this source cannot compile at all -- and the suite that spawns it (AudioMixerTests) is
 # already filtered out of CnaTests for the same selections.
 if(CNA_BUILD_TESTS AND CNA_AUDIO_PLATFORM STREQUAL "SDL3")
@@ -175,9 +171,7 @@ endif()
 if(CNA_BUILD_EXAMPLES AND NOT EMSCRIPTEN AND NOT ANDROID)
     add_executable(cna_reference_dump tools/cna-reference/CnaReferenceDump.cpp)
     target_link_libraries(cna_reference_dump PRIVATE CNA)
-    # plans/plan_platform.md PLAT-SDL2-6: SDL3main supplies an entry-point shim for the SDL3 selection
-    # only; an SDL2-only build must not acquire an SDL3 link input through it.
-    if(TARGET SDL3::SDL3main AND NOT CNA_SDL2_ONLY_CONFIGURATION)
+    if(TARGET SDL3::SDL3main)
         target_link_libraries(cna_reference_dump PRIVATE SDL3::SDL3main)
     endif()
 endif()

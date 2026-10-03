@@ -16,8 +16,8 @@ namespace CNA::Platform {
      * dependency. A renderer receives one of these and then talks to its own graphics API
      * directly; it never calls back through the platform to draw, and it never learns which
      * platform implementation created the window. That is what allows Vulkan, OpenGL or DirectX
-     * to work identically whether the window came from SDL3, a future SDL2 or native
-     * implementation, or no window system at all.
+     * to work identically whether the window came from SDL3, a native implementation, or no
+     * window system at all.
      *
      * The struct is trivially copyable and owns nothing. Its lifetime is the window's lifetime;
      * a renderer that stores it must not outlive the window it describes.
