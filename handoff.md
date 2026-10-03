@@ -467,7 +467,16 @@ same texture keeps 32 bits on this Mesa. Reference builds: TerrainDemo and LiSPS
 XNA's assemblies under Wine (`csc` from the prefix, XNA references copied from its GAC); TerrainDemo's
 floating sheets are the demo's own. Recorded as blocked: Rugby League (XNAFlixel fonts), The Lost
 Levels (Windows Forms editor), TestBench1 (Consolas). LilyPath and SharpMik run from older commits
-whose XNA projects still match their sources.
+whose XNA projects still match their sources. Then (CNA.NET `f356f4c`, cna-cs-samples `40d3d51`): cocos2d-x for
+XNA's test scenes (Windows Phone; the app never clears its frame, so scenes smear -- its own),
+BoneAnimation's example (protobuf-net binary), xna-camera-2d's Platformer (the starter kit's
+`.wma` sounds via `--official`), a UTS tower defence (its post-build event's XML copied and
+linked under Windows names) and *Windows Phone 7 Recipes*' three XNA recipes. CSX-137: a phone
+title's `Guide.IsTrialMode` is `SimulateTrialMode` (the phone's license check), not XNA-Windows'
+pre-dispatcher `true`. `build-xna-content.sh` compiles an extension mcs refuses with the prefix's
+Microsoft csc (Almirante's `enum x = 0.0f`); Almirante itself stays blocked (a Windows Forms engine
+control). More blocked: YCPU (kernel32 console), Xen Game Client (native PolyVox), xTile demo,
+XNAVERGE, Azmyth (fonts), DirtyGame (WPF). bschwind/Shading is an Xbox 360-only project (not tried).
 
 ## 14. Mahjong
 
