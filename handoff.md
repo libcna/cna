@@ -490,6 +490,14 @@ carry `Deterministic`/`AllowUnsafeBlocks` and set `DisableImplicitFrameworkDefin
 `ANDROID` switched on cocos2d's MonoGame code). Open: TerrainDemo draws only its clear colour in a
 browser (no WebGL error; the desktop draws it); MDTerrainDemo's thread-pool loading never runs in
 a threaded bundle (the .NET 11 worker fault).
+Afternoon (CNA.NET `c5e6950`, cna-cs-samples `c1e673d`): *XNA 4.0 Game Development by Example*'s
+four games (CSX-141: `BinaryFormatter` compiles and runs for code built against XNA -- desktop only,
+.NET 9 and later have no implementation, so Gemstone Hunter's levels do not load in a browser or on
+Android yet) and gearsvge's GearsDebug, Release to its title, Debug to its debugger menu and Radial
+Assault (CSX-142: what `UnloadContent` throws leaves `Game.Dispose`, as in XNA's IL; its
+`Thread.Abort` now ends the process with .NET's refusal instead of hanging on its foreground audio
+thread). Blocked: Quarx (its content project and Scurvy.Media are not in its repository), XNALara
+(Windows Forms around its XNA window).
 
 ## 14. Mahjong
 
@@ -627,12 +635,11 @@ External / not actionable
 Keep adding real XNA 4.0 software. The GitHub search results are in the session's job directory
 only; rerun `gh search code 'XnaFrameworkVersion>v4.0<' --extension csproj` (and
 `'XnaPlatform>Windows< XnaProfile>HiDef<'`) and take the next most-starred games not yet in
-`cna-cs-samples/games/README.md` (cloned and triaged, not yet run: ZaneDubya/YCPU's emulator
-display (`Source/YCPUXNA`, Reach, two effects, content built at
-`/rv/tmp/xna-games-content/ycpu`) and cocos2d/cocos2d-x-for-xna's `tests` (Windows Phone, 305 files,
-TMX/text/texture content through its `cocos2d.Content.Pipeline.Importers` extension); seen but not
-cloned: Jamedjo/BeatShift, ~1 GB; Bacon41/PantheonPrototype; andrecarlucci/gta2net, which needs
-GTA2's freeware data). Record each in
+`cna-cs-samples/games/README.md` (seen but not cloned: Jamedjo/BeatShift, ~1 GB;
+Bacon41/PantheonPrototype; andrecarlucci/gta2net, which needs GTA2's freeware data). Also open:
+`BinaryFormatter` in browser and Android builds (the out-of-band
+System.Runtime.Serialization.Formatters package), and the browser oddities in §13b (TerrainDemo's
+clear colour only, TiledTerrainDemo's Rgba64 on WebGL 2). Record each in
 `games/README.md` and `cna-cs/CAMPAIGN.md`. Push only on the owner's word.
 
 ## Appendix — campaign commits (oldest first)
