@@ -4,7 +4,7 @@ Written 2026-10-02 at the end of a ~30-hour session; updated the same evening af
 threads were made to run in a browser (§10) and five more Microsoft samples ran (§13, CBIND-152,
 CSX-118/119), late that night after a batch of real games from GitHub (§13b: CBIND-153, ABI
 0.42.0; CSX-120..123), and on 2026-10-03 after three more (§13b: CBIND-154/155, ABI 0.44.0;
-CSX-124/125) and then Project Mercury and Xen's starter kits (§13b: CSX-126..129, managed only). `/goal` remains authoritative; this file is the state it reached and how to
+CSX-124/125) and then Project Mercury, Xen's starter kits and Asteria's demos (§13b: CSX-126..130, managed only). `/goal` remains authoritative; this file is the state it reached and how to
 continue. Everything up to `fb89c451a` (cna) was pushed on the owner's word; **the late-night
 and 2026-10-03 commits are not pushed** (see `git log @{u}..` in cna, cna-cs and cna-cs-samples,
 and the two `zelda-oracle*` side branches).
@@ -417,9 +417,11 @@ Browser: Sonic 3, Disentanglement, HauntedHouse, and SKraft as a threaded bundle
 `90b553dc1`, i.e. 0.42.0 -- rebuild them with `Build-BrowserNative.sh [--threads]` before the next
 browser run). Android: none of the GitHub games tried yet; its archive is older still.
 
-2026-10-03 later (CNA.NET `1fd47b4`, cna-cs-samples `af93754`, CNA unchanged): the fourteen
-samples of *2D Graphics Programming for Games*, Project Mercury's particle test bench and
-raphaelmun/Xen's Platformer and twin-stick shooter kits run (45 games). Four managed repairs:
+2026-10-03 later (CNA.NET `8ddf304`, cna-cs-samples `0bc959f`, CNA unchanged): the fourteen
+samples of *2D Graphics Programming for Games*, Project Mercury's particle test bench,
+raphaelmun/Xen's Platformer and twin-stick shooter kits and Asteria's lighting and blend demos run
+(47 games; the lighting demo matches an XNA build under Wine to 2 of 300,000 pixels). CSX-130: an
+Immediate sprite batch submits each draw when given (it was held to `End`). Four more repairs:
 CSX-126 (a project naming `Range`/`Index`/`PriorityQueue` compiles against reference copies with
 .NET's types of those names internal), CSX-127 (a character missing from the font fails
 `DrawString` with XNA's exception, not `End`), CSX-128 (the game's culture prints `Infinity` and an
