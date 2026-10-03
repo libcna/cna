@@ -1,0 +1,16 @@
+diff --git a/profiles/mojoshader_profile_glsl.c b/profiles/mojoshader_profile_glsl.c
+--- a/profiles/mojoshader_profile_glsl.c
++++ b/profiles/mojoshader_profile_glsl.c
+@@ -672,6 +672,12 @@
+         // so a shader declaring a volume sampler without one fails to compile ("No precision
+         // specified in this scope for type `sampler3D'"). -CNA
+         output_line(ctx, "precision highp sampler3D;");
++        // Their default, though, is lowp, and a lookup returns its sampler's precision: Mesa
++        // then reads a Single or Vector2 texture at fp16, where Direct3D 9 sampled it at full
++        // 32 bits. A variance shadow map's two moments, depth and depth squared, differ in
++        // their fourth decimal place and the difference turns to noise (cna-cs CSX-136). -CNA
++        output_line(ctx, "precision highp sampler2D;");
++        output_line(ctx, "precision highp samplerCube;");
+         pop_output(ctx);
+     } // else if
+     #endif

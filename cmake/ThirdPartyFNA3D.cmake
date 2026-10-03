@@ -164,7 +164,8 @@ function(cna_configure_mojoshader)
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-sm3-scalar-outputs.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-shader-model-three-mixed-constant-absolute.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-sm1-color-input-not-centroid.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsles3-sampler3d-precision.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsles3-sampler3d-precision.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsles3-sampler-precision.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
 
