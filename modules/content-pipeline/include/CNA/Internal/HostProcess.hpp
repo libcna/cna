@@ -40,4 +40,18 @@ namespace CNA::Internal
      */
     [[nodiscard]] HostProcessResult RunHostProcess(const std::filesystem::path& executable,
                                                    const std::vector<std::string>& arguments);
+
+    /**
+     * @brief Spells host paths for a foreign compiler launched through Wine.
+     *
+     * Wine's own winepath supplies the mapping; other launchers and failed/incomplete mappings
+     * retain the native paths. No shell or hard-coded drive mapping is used.
+     *
+     * @param launcher The compiler launcher, or an empty path for direct execution.
+     * @param paths Host paths in their argument order.
+     * @return Paths in the same order, translated only when Wine supplies a complete answer.
+     */
+    [[nodiscard]] std::vector<std::string> SpellHostPathsForLauncher(
+        const std::filesystem::path& launcher, const std::vector<std::filesystem::path>& paths);
+
 }

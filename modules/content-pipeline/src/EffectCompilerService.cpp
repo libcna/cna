@@ -746,7 +746,7 @@ namespace CNA::Content::Pipeline
                 std::vector<std::filesystem::path> paths{output, request.source};
                 paths.insert(paths.end(), request.includeDirectories.begin(),
                              request.includeDirectories.end());
-                const std::vector<std::string> spelled = SpellForLauncher(paths);
+                const std::vector<std::string> spelled = CNA::Internal::SpellHostPathsForLauncher(launcher_, paths);
 
                 std::vector<std::string> arguments;
                 if (!launcher_.empty()) { arguments.push_back(CNA::Internal::PathToUtf8(executable_)); }
@@ -846,51 +846,6 @@ namespace CNA::Content::Pipeline
 
         private:
 
-            /**
-             * @brief The launcher's own spelling of each path.
-             *
-             * A compiler run through a launcher is a foreign program: `fxc.exe` under Wine reads
-             * `/tmp/build/effect.fxb` as an option, because a leading `/` is how a Windows command
-             * line begins one, and answers `Unknown or invalid option`. Wine can spell a host path
-             * the way the program it runs will read it, so ask it -- once per compile, for every
-             * path at once, which is what `winepath` accepts.
-             *
-             * Any other launcher gets the paths unchanged: a translation that has not been
-             * measured is a guess, and a guess here turns a working build into a puzzling one.
-             *
-             * @param paths The host paths, in order.
-             * @return The spellings, in the same order; the inputs unchanged when no translation
-             *         applies or the launcher could not answer.
-             */
-            [[nodiscard]] std::vector<std::string> SpellForLauncher(
-                const std::vector<std::filesystem::path>& paths) const
-            {
-                std::vector<std::string> spelled;
-                spelled.reserve(paths.size());
-                for (const std::filesystem::path& path : paths) { spelled.push_back(CNA::Internal::PathToUtf8(path)); }
-                if (!launcherTranslatesPaths_ || paths.empty()) { return spelled; }
-
-                std::vector<std::string> arguments{"winepath", "-w"};
-                for (const std::string& path : spelled) { arguments.push_back(path); }
-                const CNA::Internal::HostProcessResult process =
-                    CNA::Internal::RunHostProcess(launcher_, arguments);
-                if (!process.started || process.exitCode != 0) { return spelled; }
-
-                std::vector<std::string> lines;
-                std::istringstream stream(process.standardOutput);
-                std::string line;
-                while (std::getline(stream, line))
-                {
-                    while (!line.empty() && (line.back() == '\r' || line.back() == '\n'))
-                    {
-                        line.pop_back();
-                    }
-                    if (!line.empty()) { lines.push_back(line); }
-                }
-                // One line per path, or the answer is not the one that was asked for.
-                return lines.size() == spelled.size() ? lines : spelled;
-            }
-
             void Resolve(const ExternalEffectCompilerOptions& options)
             {
                 identity_.targetProfile = kTargetProfile;
@@ -903,11 +858,6 @@ namespace CNA::Content::Pipeline
                                     ? std::filesystem::path(ConfiguredLauncher())
                                     : std::filesystem::path(fromEnvironment);
                 }
-
-                // Wine is the launcher this project documents, and the only one whose path
-                // translation has been measured here.
-                const std::string launcherName = CNA::Internal::PathToUtf8(launcher_.filename());
-                launcherTranslatesPaths_ = launcherName.rfind("wine", 0) == 0;
 
                 executable_ = options.executable;
                 if (executable_.empty())
@@ -993,7 +943,6 @@ namespace CNA::Content::Pipeline
             std::filesystem::path executable_;
             std::filesystem::path launcher_;
             /** @brief Whether the launcher can spell a host path for the program it runs. */
-            bool launcherTranslatesPaths_ = false;
             EffectCompilerIdentity identity_;
             bool available_ = false;
             std::string reason_;

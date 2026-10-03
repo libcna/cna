@@ -207,6 +207,16 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             projects.push_back(absolute);
         }
 
+        std::string architecture;
+        if (targetPlatform_ == "Windows") architecture = "/WINDOWS";
+        else if (targetPlatform_ == "Xbox360") architecture = "/XBOX360";
+        else if (!targetPlatform_.empty())
+        {
+            LogError("BuildXact: unsupported TargetPlatform \"" + targetPlatform_ +
+                     "\"; XactBld3 supports Windows and Xbox360.");
+            return false;
+        }
+
         const std::string compiler = DiscoverXactCompiler(xactExecutable_);
         if (compiler.empty())
         {
@@ -227,17 +237,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         for (const std::filesystem::path& project : projects)
         {
             // XactBld3's own command line: the project, the output directory, and the platform.
+            const auto paths = CNA::Internal::SpellHostPathsForLauncher(
+                launcher, {compiler, project, outputDirectory_});
             std::vector<std::string> arguments;
-            if (!launcher.empty())
-            {
-                arguments.push_back(compiler);
-            }
-            arguments.push_back(CNA::Internal::PathToUtf8(project));
-            arguments.push_back(outputDirectory_);
-            if (!targetPlatform_.empty())
-            {
-                arguments.push_back("/X:" + targetPlatform_);
-            }
+            if (!launcher.empty()) arguments.push_back(paths[0]);
+            arguments.push_back(paths[1]);
+            arguments.push_back(paths[2]);
+            if (!architecture.empty()) arguments.push_back(architecture);
             if (rebuildAll_)
             {
                 arguments.emplace_back("/F");

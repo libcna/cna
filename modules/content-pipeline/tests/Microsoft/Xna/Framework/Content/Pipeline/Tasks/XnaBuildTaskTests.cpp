@@ -15,9 +15,12 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
+#include <iterator>
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Content/Pipeline/Tasks/BuildContent.hpp"
@@ -435,6 +438,130 @@ TEST(XnaBuildXact, ValidatesItsProjectsBeforeReportingThatTheCompilerIsAbsent)
         EXPECT_NE(task.ErrorsEXT().back().find("validated 1 XACT project"), std::string::npos);
     }
 }
+
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
+// The real SDK uses /WINDOWS and /XBOX360; /X:Windows instead means an invalid
+// exclusion switch and rejects even a valid XACT3 project before reading it.
+TEST(XnaBuildXact, PassesSupportedArchitectureSwitchesToTheCompiler)
+{
+    for (const auto& [platform, option] :
+         std::vector<std::pair<std::string, std::string>>{{"Windows", "/WINDOWS"},
+                                                          {"Xbox360", "/XBOX360"}})
+    {
+        Project project("xact_arguments_" + platform);
+        const std::string input = project.Write("Sounds with spaces.xap", "Signature = XACT3;\n");
+        const std::string compiler = project.Write("compiler with spaces.sh",
+            "printf '%s\\n' \"$@\" > \"$2/arguments.txt\"\n"
+            "printf xgs > \"$2/Sounds.xgs\"\n"
+            "printf xwb > \"$2/Wave Bank.xwb\"\n"
+            "printf xsb > \"$2/Sound Bank.xsb\"\n");
+        Tasks::BuildXact task;
+        task.setRootDirectoryProperty(project.Source().string());
+        task.setOutputDirectoryProperty(project.Output().string());
+        task.setTargetPlatformProperty(platform);
+        task.setRebuildAllProperty(true);
+        task.setXactProjectsProperty({Tasks::TaskItem(input)});
+        task.SetXactCompilerEXT(compiler, "/bin/sh");
+        ASSERT_TRUE(task.Execute());
+
+        std::ifstream arguments(project.Output() / "arguments.txt");
+        std::vector<std::string> actual;
+        for (std::string line; std::getline(arguments, line);)
+            actual.push_back(line);
+        EXPECT_EQ(actual, (std::vector<std::string>{input, project.Output().string(), option, "/F"}));
+        ASSERT_EQ(task.getOutputXactFilesProperty().size(), 3u);
+        EXPECT_EQ(task.getRebuiltXactFilesProperty().size(), 3u);
+        for (const auto& item : task.getOutputXactFilesProperty())
+            EXPECT_EQ(item.GetMetadata("SourceAsset"), input);
+    }
+}
+
+TEST(XnaBuildXact, SpellsCompilerAndContentPathsForWineLaunchers)
+{
+    Project project("xact_wine_paths");
+    const std::string input = project.Write("Sounds with spaces.xap", "Signature = XACT3;\n");
+    const std::string compiler = project.Write("compiler with spaces.exe", "compiler");
+    const std::string launcher = project.Write("wine-test-launcher.sh",
+        "if [ \"$1\" = winepath ]; then\n"
+        " shift 2\n"
+        " for path do printf 'WIN:%s\\r\\n' \"$path\"; done\n"
+        " exit 0\n"
+        "fi\n"
+        "printf '%s\\n' \"$@\" > \"" + project.Output().string() + "/arguments.txt\"\n");
+    std::filesystem::permissions(launcher, std::filesystem::perms::owner_exec,
+                                 std::filesystem::perm_options::add);
+    // A launcher is an executable, so it needs an interpreter on POSIX.
+    {
+        std::ifstream original(launcher);
+        const std::string body((std::istreambuf_iterator<char>(original)), {});
+        std::ofstream executable(launcher);
+        executable << "#!/bin/sh\n" << body;
+    }
+    Tasks::BuildXact task;
+    task.setRootDirectoryProperty(project.Source().string());
+    task.setOutputDirectoryProperty(project.Output().string());
+    task.setTargetPlatformProperty("Windows");
+    task.setXactProjectsProperty({Tasks::TaskItem(input)});
+    task.SetXactCompilerEXT(compiler, launcher);
+    ASSERT_TRUE(task.Execute());
+    std::ifstream arguments(project.Output() / "arguments.txt");
+    std::vector<std::string> actual;
+    for (std::string line; std::getline(arguments, line);)
+        actual.push_back(line);
+    EXPECT_EQ(actual, (std::vector<std::string>{"WIN:" + compiler, "WIN:" + input,
+                                              "WIN:" + project.Output().string(), "/WINDOWS"}));
+}
+
+// Optional genuine SDK gate; the caller supplies a complete unchanged .xap directory.
+TEST(XnaBuildXactGenuineInterop, BuildsProvidedProjectThroughTheSdkCompiler)
+{
+    const char* source = std::getenv("CNA_XACT_TEST_PROJECT");
+    if (source == nullptr || *source == '\0')
+        GTEST_SKIP() << "Set CNA_XACT_TEST_PROJECT and CNA_XACTBLD for the genuine SDK gate.";
+    Project project("xact_genuine_interop");
+    const std::filesystem::path upstream(source);
+    std::filesystem::copy(upstream.parent_path(), project.Source(),
+                           std::filesystem::copy_options::recursive |
+                           std::filesystem::copy_options::overwrite_existing);
+    const std::filesystem::path input = project.Source() / upstream.filename();
+    std::ifstream beforeFile(input, std::ios::binary);
+    const std::string before((std::istreambuf_iterator<char>(beforeFile)), {});
+    Tasks::BuildXact task;
+    task.setRootDirectoryProperty(project.Source().string());
+    task.setOutputDirectoryProperty(project.Output().string());
+    task.setTargetPlatformProperty("Windows");
+    task.setRebuildAllProperty(true);
+    task.setXactProjectsProperty({Tasks::TaskItem(input.string())});
+    ASSERT_TRUE(task.HasXactCompilerEXT());
+    ASSERT_TRUE(task.Execute()) << (task.ErrorsEXT().empty() ? "" : task.ErrorsEXT().back());
+    ASSERT_EQ(task.getOutputXactFilesProperty().size(), 3u);
+    EXPECT_EQ(task.getRebuiltXactFilesProperty().size(), 3u);
+    for (const auto& item : task.getOutputXactFilesProperty())
+    {
+        EXPECT_GT(std::filesystem::file_size(item.getItemSpecProperty()), 0u);
+        EXPECT_EQ(item.GetMetadata("SourceAsset"), input.string());
+    }
+    std::ifstream afterFile(input, std::ios::binary);
+    EXPECT_EQ(std::string((std::istreambuf_iterator<char>(afterFile)), {}), before);
+}
+
+TEST(XnaBuildXact, RejectsUnsupportedArchitecturesBeforeLaunchingTheCompiler)
+{
+    Project project("xact_unsupported_architecture");
+    const std::string compiler = project.Write("compiler.sh",
+        "printf launched > \"$2/launched.txt\"\n");
+    Tasks::BuildXact task;
+    task.setRootDirectoryProperty(project.Source().string());
+    task.setOutputDirectoryProperty(project.Output().string());
+    task.setTargetPlatformProperty("WindowsPhone");
+    task.setXactProjectsProperty({Tasks::TaskItem(project.Write("Sounds.xap", "Signature = XACT3;\n"))});
+    task.SetXactCompilerEXT(compiler, "/bin/sh");
+    EXPECT_FALSE(task.Execute());
+    EXPECT_FALSE(std::filesystem::exists(project.Output() / "launched.txt"));
+    ASSERT_FALSE(task.ErrorsEXT().empty());
+    EXPECT_NE(task.ErrorsEXT().back().find("WindowsPhone"), std::string::npos);
+}
+#endif
 
 TEST(XnaBuildXact, EveryPropertyRoundTrips)
 {

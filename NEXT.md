@@ -1,5 +1,12 @@
 # NEXT.md
 
+> **XACTBUILD-001 / SAMPLE-122 (2026-10-03):** BuildXact now sends genuine `/WINDOWS`/`/XBOX360`
+> switches and shares the effect compiler's Wine path spelling. Three invocation regressions fail
+> before correction; 45/45 focused task/effect cases and 2/2 genuine SDK gates pass. Unchanged
+> Catapult XACT2 source auto-imports into three modern version46 banks; this is not an authentic
+> XNA2 runtime or native/web sample qualification. See `plans/plan_xact_build_invocation.md`.
+
+
 > **GS-009h Guide rendering states (2026-10-03):** System Guide/toast SpriteBatch rendering
 > restores the title's blend, depth-stencil, rasterizer and sampler-zero reference payloads.
 > SAMPLE-094 sign-in had left LinearClamp active, flattening its wrap-textured ground. Baseline

@@ -9,9 +9,11 @@
 // passed through intact rather than re-split on its spaces.
 
 #include "CNA/Internal/HostProcess.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <array>
 #include <cstring>
+#include <sstream>
 
 #if defined(_WIN32)
 #include <thread>
@@ -304,4 +306,29 @@ namespace CNA::Internal
         return result;
 #endif
     }
+
+    std::vector<std::string> SpellHostPathsForLauncher(
+        const std::filesystem::path& launcher, const std::vector<std::filesystem::path>& paths)
+    {
+        std::vector<std::string> spelled;
+        spelled.reserve(paths.size());
+        for (const auto& path : paths) spelled.push_back(PathToUtf8(path));
+        if (paths.empty() || PathToUtf8(launcher.filename()).rfind("wine", 0) != 0)
+            return spelled;
+
+        std::vector<std::string> arguments{"winepath", "-w"};
+        arguments.insert(arguments.end(), spelled.begin(), spelled.end());
+        const HostProcessResult process = RunHostProcess(launcher, arguments);
+        if (!process.started || process.exitCode != 0) return spelled;
+
+        std::vector<std::string> translated;
+        std::istringstream stream(process.standardOutput);
+        for (std::string line; std::getline(stream, line);)
+        {
+            while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();
+            if (!line.empty()) translated.push_back(line);
+        }
+        return translated.size() == spelled.size() ? translated : spelled;
+    }
+
 }
