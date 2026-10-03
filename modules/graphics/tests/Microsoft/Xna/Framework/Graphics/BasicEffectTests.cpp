@@ -13,7 +13,9 @@
 #include <memory>
 #include <string>
 
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterClass.hpp"
@@ -28,8 +30,10 @@
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Vector4;
+using CNA::Internal::Renderers::GpuDrawParams;
 using Microsoft::Xna::Framework::Graphics::BasicEffect;
 using Microsoft::Xna::Framework::Graphics::DirectionalLight;
+using Microsoft::Xna::Framework::Graphics::DualTextureEffect;
 using Microsoft::Xna::Framework::Graphics::Effect;
 using Microsoft::Xna::Framework::Graphics::EffectParameter;
 using Microsoft::Xna::Framework::Graphics::EffectParameterClass;
@@ -509,4 +513,93 @@ TEST_F(BasicEffectDefaultsTest, CloneCopiesAllProperties)
 
     fx.setAlphaProperty(0.05f);
     EXPECT_FLOAT_EQ(clone->getAlphaProperty(), 0.9f);
+}
+
+// -----------------------------------------------------------------------
+// CSX-135: XNA's Apply binds a stock effect's texture to the device's sampler -- a null one
+// too -- and a draw samples what the slot holds by then, so a texture set on
+// GraphicsDevice.Textures after Apply is the one drawn. jaquadro/LilyPath's DrawBatch applies a
+// texture-enabled BasicEffect with no texture and then sets its brush texture on the device.
+
+TEST_F(BasicEffectDefaultsTest, ApplyBindsItsTextureToSamplerZero)
+{
+    Texture2D texture(gd, 1, 1);
+    fx.setTextureEnabledProperty(true);
+    fx.setTextureProperty(&texture);
+
+    fx.Apply();
+
+    EXPECT_EQ(gd.getTexturesProperty()[0], &texture);
+}
+
+TEST_F(BasicEffectDefaultsTest, ApplyBindsANullTextureOverTheDevicesEarlierOne)
+{
+    Texture2D earlier(gd, 1, 1);
+    gd.getTexturesProperty()(0, &earlier);
+    fx.setTextureEnabledProperty(true);
+
+    fx.Apply();
+
+    EXPECT_EQ(gd.getTexturesProperty()[0], nullptr);
+}
+
+TEST_F(BasicEffectDefaultsTest, ApplyWithoutTexturingLeavesTheSamplerAlone)
+{
+    Texture2D earlier(gd, 1, 1);
+    Texture2D own(gd, 1, 1);
+    gd.getTexturesProperty()(0, &earlier);
+    fx.setTextureProperty(&own);
+
+    fx.Apply();
+
+    EXPECT_EQ(gd.getTexturesProperty()[0], &earlier);
+}
+
+TEST_F(BasicEffectDefaultsTest, DrawSamplesTheTextureSetOnTheDeviceAfterApply)
+{
+    Texture2D own(gd, 1, 1);
+    Texture2D brush(gd, 1, 1);
+    fx.setTextureEnabledProperty(true);
+    fx.setTextureProperty(&own);
+
+    fx.Apply();
+    gd.getTexturesProperty()(0, &brush);
+    GpuDrawParams params;
+    fx.FillGpuDrawParams(params);
+
+    EXPECT_EQ(params.texture0, &brush.GetRenderer());
+}
+
+TEST_F(BasicEffectDefaultsTest, DrawParametersReadWithoutApplyUseTheEffectsOwnTexture)
+{
+    Texture2D own(gd, 1, 1);
+    Texture2D other(gd, 1, 1);
+    gd.getTexturesProperty()(0, &other);
+    fx.setTextureEnabledProperty(true);
+    fx.setTextureProperty(&own);
+
+    GpuDrawParams params;
+    fx.FillGpuDrawParams(params);
+
+    EXPECT_EQ(params.texture0, &own.GetRenderer());
+}
+
+TEST_F(BasicEffectDefaultsTest, DualTextureEffectBindsBothSamplersAndDrawsWhatTheDeviceHolds)
+{
+    Texture2D first(gd, 1, 1);
+    Texture2D second(gd, 1, 1);
+    Texture2D replacement(gd, 1, 1);
+    DualTextureEffect dual(gd);
+    dual.setTextureProperty(&first);
+    dual.setTexture2Property(&second);
+
+    dual.Apply();
+    EXPECT_EQ(gd.getTexturesProperty()[0], &first);
+    EXPECT_EQ(gd.getTexturesProperty()[1], &second);
+
+    gd.getTexturesProperty()(1, &replacement);
+    GpuDrawParams params;
+    dual.FillGpuDrawParams(params);
+    EXPECT_EQ(params.texture0, &first.GetRenderer());
+    EXPECT_EQ(params.texture1, &replacement.GetRenderer());
 }

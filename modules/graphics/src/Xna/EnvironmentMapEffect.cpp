@@ -286,6 +286,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void EnvironmentMapEffect::OnApply()
     {
+        BindStockTextureInternal(0, texture_);
+        BindStockTextureInternal(1, environmentMap_);
+
         // World * View * Projection and fog vector
         if ((dirtyFlags_ & DirtyWorldViewProj) != 0)
         {
@@ -405,8 +408,11 @@ namespace Microsoft::Xna::Framework::Graphics
         p.lightingEnabled    = true;
         p.vertexColorEnabled = false;
 
-        if (texture_)        p.texture0 = &texture_->GetRenderer();
-        if (environmentMap_) p.envMap   = &environmentMap_->GetRenderer();
+        if (auto* texture = dynamic_cast<Texture2D*>(SampledStockTextureInternal(0, texture_)))
+            p.texture0 = &texture->GetRenderer();
+        if (auto* environmentMap =
+                dynamic_cast<TextureCube*>(SampledStockTextureInternal(1, environmentMap_)))
+            p.envMap = &environmentMap->GetRenderer();
 
         p.envMapAmount      = environmentMapAmount_;
         p.envMapSpecular[0] = environmentMapSpecular_.X;

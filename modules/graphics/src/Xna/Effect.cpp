@@ -911,6 +911,19 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::ObjectDisposedException(getNameProperty());
     }
 
+    void Effect::BindStockTextureInternal(int slot, Texture* texture)
+    {
+        if (device_ != nullptr)
+            device_->getTexturesProperty()(slot, texture);
+    }
+
+    Texture* Effect::SampledStockTextureInternal(int slot, Texture* own) const
+    {
+        if (device_ == nullptr || device_->currentEffect_ != this)
+            return own;
+        return device_->getTexturesProperty()[slot];
+    }
+
     EffectTechnique* Effect::getCurrentTechniqueProperty() const { return currentTechnique_; }
 
     void Effect::setCurrentTechniqueProperty(EffectTechnique* value)

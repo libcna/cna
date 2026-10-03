@@ -186,6 +186,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void AlphaTestEffect::OnApply()
     {
+        BindStockTextureInternal(0, texture_);
+
         // Recompute world*view*projection and fog vector
         if ((dirtyFlags_ & DirtyWorldViewProj) != 0)
         {
@@ -323,8 +325,8 @@ namespace Microsoft::Xna::Framework::Graphics
         p.vertexColorEnabled = vertexColorEnabled_;
         p.lightingEnabled    = false;
 
-        if (texture_ != nullptr)
-            p.texture0 = &texture_->GetRenderer();
+        if (auto* texture = dynamic_cast<Texture2D*>(SampledStockTextureInternal(0, texture_)))
+            p.texture0 = &texture->GetRenderer();
 
         p.diffuseColor[0] = diffuseColor_.X * alpha_;
         p.diffuseColor[1] = diffuseColor_.Y * alpha_;

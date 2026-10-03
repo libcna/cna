@@ -396,7 +396,8 @@ namespace Microsoft::Xna::Framework::Graphics
         p.vertexColorEnabled = VertexColorEnabled;
         p.preferPerPixelLighting = preferPerPixelLighting_;
 
-        if (texture_) p.texture0 = &texture_->GetRenderer();
+        if (auto* texture = dynamic_cast<Texture2D*>(SampledStockTextureInternal(0, texture_)))
+            p.texture0 = &texture->GetRenderer();
 
         p.diffuseColor[0] = diffuseColor_.X * alpha_;
         p.diffuseColor[1] = diffuseColor_.Y * alpha_;
@@ -495,6 +496,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SkinnedEffect::OnApply()
     {
+        BindStockTextureInternal(0, texture_);
+
         // WorldViewProj and fog vector
         if ((dirtyFlags_ & DirtyWorldViewProj) != 0)
         {

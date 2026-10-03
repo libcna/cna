@@ -123,6 +123,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void BasicEffect::OnApply()
     {
+        // Only the textured shaders sample, so only they bind the sampler (CSX-135).
+        if (textureEnabled_) BindStockTextureInternal(0, getTextureProperty());
+
         Matrix worldView;
         Matrix worldViewProjection;
         Matrix::Multiply(World, View, worldView);
@@ -291,7 +294,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (p.textureEnabled)
         {
-            if (Texture2D* texture = getTextureProperty()) p.texture0 = &texture->GetRenderer();
+            if (auto* texture = dynamic_cast<Texture2D*>(
+                    SampledStockTextureInternal(0, getTextureProperty())))
+                p.texture0 = &texture->GetRenderer();
         }
 
         // FNA's EffectHelpers.SetMaterialColor: when lighting is disabled, ambient/directional

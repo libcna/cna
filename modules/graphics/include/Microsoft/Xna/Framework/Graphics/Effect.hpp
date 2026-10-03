@@ -26,6 +26,7 @@ namespace CNA::TestSupport
 namespace Microsoft::Xna::Framework::Graphics
 {
     class GraphicsDevice;
+    class Texture;
 
     /**
      * @brief Base class for an effect that contains shader programs and render-state parameters.
@@ -248,6 +249,31 @@ namespace Microsoft::Xna::Framework::Graphics
          * @throws System::ObjectDisposedException If this effect has been disposed.
          */
         CNAEXT void ThrowIfDisposedForCloneInternal() const;
+
+        /**
+         * @brief Binds a stock effect's texture to a device sampler slot, as XNA's Apply does.
+         *
+         * XNA's stock effects are compiled effects whose samplers name their texture
+         * parameters, so Apply sets each one on GraphicsDevice.Textures -- a null one too --
+         * and a draw samples what the slot holds by then: a texture a game sets on the
+         * device after Apply is the one drawn.
+         *
+         * @param slot The sampler slot.
+         * @param texture The effect's texture, or null.
+         */
+        CNAEXT void BindStockTextureInternal(int slot, Texture* texture);
+
+        /**
+         * @brief The texture a draw with this stock effect samples at a slot.
+         *
+         * The device's binding while this effect is the applied one; otherwise, as when
+         * draw parameters are read without an Apply, the effect's own texture.
+         *
+         * @param slot The sampler slot.
+         * @param own The effect's own texture for the slot.
+         * @return The texture to sample, or null.
+         */
+        CNAEXT [[nodiscard]] Texture* SampledStockTextureInternal(int slot, Texture* own) const;
 
         /**
          * @brief Constructs an effect that is a clone of @p cloneSource.
