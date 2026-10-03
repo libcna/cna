@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/AvatarRenderer.hpp"
 #include "CNA/Internal/GamerServices/AvatarAssets.hpp"
+#include "CNA/Internal/GamerServices/AvatarSpace.hpp"
 #include "CNA/Internal/GamerServices/DispatcherGraphics.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
@@ -257,7 +258,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         bindPoseArray_.clear();
         for (const auto& translation : resources_->model->bindTranslations)
         {
-            bindPoseArray_.push_back(Matrix::CreateTranslation(translation.X, translation.Y, translation.Z));
+            bindPoseArray_.push_back(Avatars::changeAvatarSpace(
+                Matrix::CreateTranslation(translation.X, translation.Y, translation.Z)));
         }
         state_ = AvatarRendererState::Ready;
     }
@@ -358,7 +360,8 @@ namespace Microsoft::Xna::Framework::GamerServices
             Vector3 scale;
             Vector3 translation;
             Quaternion rotation;
-            if (!bones[bone].Decompose(scale, rotation, translation))
+            // Callers supply XNA coordinates; skinning uses the catalog's frozen asset coordinates.
+            if (!Avatars::changeAvatarSpace(bones[bone]).Decompose(scale, rotation, translation))
             {
                 throw System::InvalidOperationException("Every avatar bone transform must be decomposable.");
             }
@@ -377,7 +380,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         auto& device = resources_->Bind();
         resources_->Upload();
         auto& effect = *resources_->effect;
-        effect.setWorldProperty(world_);
+        effect.setWorldProperty(Avatars::avatarSpaceBasis() * world_);
         effect.setViewProperty(view_);
         effect.setProjectionProperty(projection_);
         effect.SetBoneTransforms(skin);

@@ -4,6 +4,8 @@
 #include "Microsoft/Xna/Framework/GamerServices/AvatarAnimation.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarBone.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
+#include "CNA/Internal/GamerServices/AvatarAssets.hpp"
+#include "CNA/Internal/GamerServices/AvatarSpace.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 #include <algorithm>
@@ -72,10 +74,8 @@ TEST(AvatarAnimationTest, BonesMoveOverTime) {
 TEST(AvatarAnimationTest, BoneTransformsAreLocalToTheParent) {
     AvatarAnimation animation(AvatarAnimationPreset::Stand0);
     const Matrix head = Bone(animation, static_cast<int>(AvatarBone::Head));
-    // The head sits a few centimetres above the neck, not at its model-space height.
-    const float offset = head.getTranslationProperty().Length();
-    EXPECT_GT(offset, 0.02f);
-    EXPECT_LT(offset, 0.2f);
+    // Non-root animation matrices are deltas; BindPose supplies the joint offsets.
+    EXPECT_EQ(head.getTranslationProperty(), Microsoft::Xna::Framework::Vector3::Zero);
     // The root carries the whole avatar at the floor.
     EXPECT_LT(Bone(animation, 0).getTranslationProperty().Length(), 0.05f);
 }
@@ -213,7 +213,9 @@ std::array<Vector3, 71> JointPositions(const AvatarAnimation& animation) {
     std::array<Matrix, 71> world;
     std::array<Vector3, 71> out;
     for (int bone = 0; bone < 71; ++bone) {
-        world[bone] = parents[bone] < 0 ? bones[bone] : bones[bone] * world[parents[bone]];
+        const auto offset = CNA::Internal::GamerServices::Avatars::clipLibrary().bindTranslations[bone];
+        const Matrix local = bones[bone] * CNA::Internal::GamerServices::Avatars::changeAvatarSpace(Matrix::CreateTranslation(offset));
+        world[bone] = parents[bone] < 0 ? local : local * world[parents[bone]];
         out[bone] = world[bone].getTranslationProperty();
     }
     return out;
@@ -291,5 +293,34 @@ TEST(AvatarAnimationTest, PresetsMoveWithoutPops) {
         }
         // 12 cm in a sixtieth of a second is 7.2 m/s, far past anything the presets intend.
         EXPECT_LT(fastest, 0.12f) << "preset " << preset;
+    }
+}
+
+TEST(AvatarAnimationTest, PublicBonesUseXnaFacingMinusZCoordinates) {
+    namespace Assets = CNA::Internal::GamerServices::Avatars;
+    using Microsoft::Xna::Framework::Vector3;
+    using Microsoft::Xna::Framework::Quaternion;
+    const auto& library = Assets::clipLibrary();
+    for (int preset = 0; preset < static_cast<int>(library.clips.size()); ++preset) {
+        AvatarAnimation animation(static_cast<AvatarAnimationPreset>(preset));
+        for (double t : {0.0, 0.37, 1.1, 2.2}) {
+            animation.setCurrentPositionProperty(Seconds(t));
+            std::array<Quaternion, 71> rotations;
+            Vector3 root;
+            Assets::sampleClip(library.clips[preset], t, rotations, root);
+            const auto publicBones = animation.getBoneTransformsProperty();
+            for (int bone = 0; bone < 71; ++bone) {
+                const auto offset = bone == 0 ? root : Vector3::Zero;
+                const Matrix asset = Matrix::CreateFromQuaternion(rotations[bone]) * Matrix::CreateTranslation(offset);
+                // A point and its direction must describe the same movement after a Y half-turn.
+                for (const Vector3 p : {Vector3::Zero, Vector3(0.13f, -0.27f, 0.41f)}) {
+                    const auto expectedAsset = Vector3::Transform(p, asset);
+                    const auto actualXna = Vector3::Transform(Vector3(-p.X, p.Y, -p.Z), publicBones[bone]);
+                    EXPECT_NEAR(actualXna.X, -expectedAsset.X, 1e-5f) << preset << " bone " << bone;
+                    EXPECT_NEAR(actualXna.Y, expectedAsset.Y, 1e-5f);
+                    EXPECT_NEAR(actualXna.Z, -expectedAsset.Z, 1e-5f);
+                }
+            }
+        }
     }
 }

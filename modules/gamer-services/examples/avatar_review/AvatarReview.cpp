@@ -173,7 +173,7 @@ namespace
                     expression.setRightEyebrowProperty(static_cast<AvatarEyebrow>(e[4].get<int>()));
                 }
                 const auto& camera = job["camera"];
-                renderer.setWorldProperty(Matrix::CreateRotationY(job.value("yaw", 0.0f) * 3.14159265f / 180.0f));
+                renderer.setWorldProperty(Matrix::CreateRotationY(3.14159265f + job.value("yaw", 0.0f) * 3.14159265f / 180.0f));
                 renderer.setViewProperty(Matrix::CreateLookAt(Vec(camera["eye"]), Vec(camera["target"]), Vector3::Up));
                 renderer.setProjectionProperty(Matrix::CreatePerspectiveFieldOfView(camera["fov"].get<float>(), 1.0f, 0.05f, 20.0f));
                 if (job.contains("light"))

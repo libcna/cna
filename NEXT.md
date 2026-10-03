@@ -1,5 +1,12 @@
 # NEXT.md
 
+> **GS-009g avatar coordinates (2026-10-03):** Standard poses and BindPose now use XNA's -Z
+> front; the frozen +Z catalog is converted at the API/render boundary. Presets expose animation
+> deltas, avoiding doubled bind offsets in attached objects. Baseline 91/91 → 94/94 avatar tests;
+> catalog/model pins unchanged. Real SAMPLE-085 native/exact-gallery WEBGL2 consumer gates pass.
+> See `plans/plan_avatar_coordinate_space.md`.
+
+
 > **INPUT-EMU-002 keyboard GamePad (2026-10-03, complete):** Owner-requested
 > off-by-default GamePad keyboard opt-in for player one, approved layout, physical merge and honest
 > capabilities. The Guide remains on its own keyboard path; held emulated buttons cannot leak past

@@ -149,7 +149,9 @@ PNG of each step; with `CNA_GAMER_SERVICES_AUTO_SIGN_IN` naming a profile and
 
 Each of the 31 `AvatarAnimationPreset` values is an original CNA clip on the 71-bone skeleton,
 2.5 to 10 seconds long, with a keyed facial expression (idles blink). `BoneTransforms` holds 71
-local transforms at `CurrentPosition`. `Update` follows the reference exactly: negative time
+local animation deltas at `CurrentPosition`: non-root translations are zero, because the
+renderer's `BindPose` supplies the joint offsets. Thus `BoneTransforms[i] * BindPose[i] *
+parentWorld` computes the same joint as drawing that pose, including attachments. `Update` follows the reference exactly: negative time
 plays backward, looping wraps by the remainder of `Length` (a position equal to `Length` is kept),
 a non-looping animation clamps, and an overflowing step clamps to the nearer end. An undefined
 preset value is a zero-length bind pose.
@@ -197,7 +199,14 @@ Catalog v3 (the newest) has:
 - `catalog.json`, listing every file with its SHA-256.
 
 Every GLB uses the same canonical 71-joint rig in XNA's exact topology: meters, Y up, facing +Z,
-feet on y = 0, the avatar's left on +X. Joints XNA leaves unnamed are helpers named `SlotNN`,
+feet on y = 0, the avatar's left on +X. This is the **asset** space, not the standard API's
+space: XNA avatars face -Z and their left is -X. `AvatarAnimation.BoneTransforms` and
+`AvatarRenderer.BindPose` expose the half-turn about Y of the catalog transforms. The renderer
+converts caller bones back to asset space for skinning and applies the half-turn before the
+caller's `World`, so attachments computed from the public bones and bind pose agree with the
+drawn body. Released GLBs, manifests, assembled-model digests and descriptions stay unchanged.
+The Guide editor and GPU art-review utility orient their own camera view accordingly.
+Joints XNA leaves unnamed are helpers named `SlotNN`,
 never skinned or animated. Materials are a base color factor, an optional embedded base-color PNG
 (a near-white multiplier carrying shading and fabric detail) and a description color tint. The
 reader refuses anything outside that contract: external URIs, other rigs, non-identity bind

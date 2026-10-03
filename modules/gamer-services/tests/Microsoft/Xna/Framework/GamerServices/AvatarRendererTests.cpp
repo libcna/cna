@@ -10,6 +10,7 @@
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "CNA/Internal/GamerServices/AvatarDescriptionCodec.hpp"
+#include "CNA/Internal/GamerServices/AvatarAssets.hpp"
 #include "CNA/Internal/GamerServices/DispatcherGraphics.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarBone.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp"
@@ -141,9 +142,9 @@ TEST(AvatarRendererTest, TheBindPoseFollowsTheDescriptionHeight) {
     const float ratio = BindWorld(tallRenderer, static_cast<int>(AvatarBone::Neck)).Y /
                         BindWorld(shortRenderer, static_cast<int>(AvatarBone::Neck)).Y;
     EXPECT_NEAR(ratio, 2000.0f / 1500.0f, 1e-3f);
-    // A left bone is on the avatar's left (+X).
-    EXPECT_GT(BindWorld(tallRenderer, static_cast<int>(AvatarBone::WristLeft)).X, 0.1f);
-    EXPECT_LT(BindWorld(tallRenderer, static_cast<int>(AvatarBone::WristRight)).X, -0.1f);
+    // The XNA avatar faces -Z, so its left is -X (the catalogs are authored facing +Z).
+    EXPECT_LT(BindWorld(tallRenderer, static_cast<int>(AvatarBone::WristLeft)).X, -0.1f);
+    EXPECT_GT(BindWorld(tallRenderer, static_cast<int>(AvatarBone::WristRight)).X, 0.1f);
 }
 
 TEST(AvatarRendererTest, DrawRejectsANonDecomposableBoneOnceReady) {
@@ -300,4 +301,62 @@ TEST(AvatarRendererTest, DrawThrowsAfterDispose) {
     std::vector<Matrix> bones(71);
     AvatarExpression expression;
     EXPECT_THROW(renderer.Draw(bones, expression), System::ObjectDisposedException);
+}
+
+TEST(AvatarRendererTest, PublicBindPoseUsesTheSameSpaceAsPublicAnimations) {
+    namespace Assets = CNA::Internal::GamerServices::Avatars;
+    auto description = Describe(AvatarBodyType::Male, 1800);
+    AvatarRenderer renderer(&description);
+    ASSERT_EQ(WaitUntilLoaded(renderer), AvatarRendererState::Ready);
+    const auto descriptor = Assets::decode(description.getDescriptionProperty());
+    ASSERT_TRUE(descriptor.has_value());
+    const auto model = Assets::buildAvatarModel(*descriptor);
+    const auto pose = renderer.getBindPoseProperty();
+    for (int bone = 0; bone < 71; ++bone) {
+        const auto offset = pose[bone].getTranslationProperty();
+        EXPECT_FLOAT_EQ(offset.X, -model->bindTranslations[bone].X);
+        EXPECT_FLOAT_EQ(offset.Y, model->bindTranslations[bone].Y);
+        EXPECT_FLOAT_EQ(offset.Z, -model->bindTranslations[bone].Z);
+    }
+}
+
+TEST(AvatarRendererTest, AttachmentCompositionAgreesWithDrawnJointsForEveryPresetAndBody) {
+    namespace Assets = CNA::Internal::GamerServices::Avatars;
+    using Microsoft::Xna::Framework::Vector3;
+    using Microsoft::Xna::Framework::Quaternion;
+    const auto& library = Assets::clipLibrary();
+    const Matrix callerWorld = Matrix::CreateRotationY(0.73f) * Matrix::CreateTranslation(2.0f, -0.4f, 1.3f);
+    for (auto body : {AvatarBodyType::Male, AvatarBodyType::Female}) {
+        auto description = Describe(body, 1930);
+        AvatarRenderer renderer(&description);
+        ASSERT_EQ(WaitUntilLoaded(renderer), AvatarRendererState::Ready);
+        const auto model = Assets::buildAvatarModel(*Assets::decode(description.getDescriptionProperty()));
+        const auto bind = renderer.getBindPoseProperty();
+        const auto parents = renderer.getParentBonesProperty();
+        for (int preset = 0; preset < static_cast<int>(library.clips.size()); ++preset) {
+            AvatarAnimation animation(static_cast<AvatarAnimationPreset>(preset));
+            for (double t : {0.37, 1.1}) {
+                animation.setCurrentPositionProperty(System::TimeSpan::FromSeconds(t));
+                const auto bones = animation.getBoneTransformsProperty();
+                std::array<Quaternion, 71> rotations;
+                Vector3 root;
+                Assets::sampleClip(library.clips[preset], t, rotations, root);
+                std::array<Matrix, 71> attachment, drawn;
+                for (int bone = 0; bone < 71; ++bone) {
+                    const int parent = parents[bone];
+                    attachment[bone] = bones[bone] * bind[bone] * (parent < 0 ? callerWorld : attachment[parent]);
+                    const Matrix local = Matrix::CreateFromQuaternion(rotations[bone]) *
+                        Matrix::CreateTranslation(bone == 0 ? root : model->bindTranslations[bone]);
+                    drawn[bone] = parent < 0 ? local : local * drawn[parent];
+                    // Frozen catalog joints are turned about Y before the caller's World.
+                    const auto assetPoint = drawn[bone].getTranslationProperty();
+                    const auto expected = Vector3::Transform(Vector3(-assetPoint.X, assetPoint.Y, -assetPoint.Z), callerWorld);
+                    const auto actual = attachment[bone].getTranslationProperty();
+                    EXPECT_NEAR(actual.X, expected.X, 1e-4f) << preset << " bone " << bone;
+                    EXPECT_NEAR(actual.Y, expected.Y, 1e-4f);
+                    EXPECT_NEAR(actual.Z, expected.Z, 1e-4f);
+                }
+            }
+        }
+    }
 }

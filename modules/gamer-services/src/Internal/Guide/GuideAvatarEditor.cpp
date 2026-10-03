@@ -880,7 +880,7 @@ private:
     int stageWidth_=0,stageHeight_=0;
     bool stageDrawn_=false,cameraSet_=false;
     Xna::Vector3 cameraTarget_,cameraOffset_;
-    float cameraFov_=0.5f,yaw_=0.3f,zoom_=1.0f;
+    float cameraFov_=0.5f,yaw_=3.44159265f,zoom_=1.0f;
     Xna::Vector2 look_,floor_;
     float floorRadius_=0;
     double lastRender_=-1,lastDraw_=-1;

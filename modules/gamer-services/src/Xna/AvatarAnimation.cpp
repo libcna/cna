@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/GamerServices/AvatarAnimation.hpp"
 #include "CNA/Internal/GamerServices/AvatarAssets.hpp"
+#include "CNA/Internal/GamerServices/AvatarSpace.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "System/OverflowException.hpp"
@@ -108,9 +109,11 @@ namespace Microsoft::Xna::Framework::GamerServices
         }
         for (int bone = 0; bone < Avatars::BoneCount; ++bone)
         {
-            const auto translation = library.bindTranslations[bone] + (bone == 0 ? root : Microsoft::Xna::Framework::Vector3::Zero);
-            avatarBones_[bone] = Microsoft::Xna::Framework::Matrix::CreateFromQuaternion(rotations[bone]) *
-                Microsoft::Xna::Framework::Matrix::CreateTranslation(translation.X, translation.Y, translation.Z);
+            // Animation poses are deltas from BindPose, not a second copy of its offsets.
+            const auto translation = bone == 0 ? root : Microsoft::Xna::Framework::Vector3::Zero;
+            avatarBones_[bone] = Avatars::changeAvatarSpace(
+                Microsoft::Xna::Framework::Matrix::CreateFromQuaternion(rotations[bone]) *
+                Microsoft::Xna::Framework::Matrix::CreateTranslation(translation.X, translation.Y, translation.Z));
         }
         currentExpression_.setMouthProperty(static_cast<AvatarMouth>(expression.mouth));
         currentExpression_.setLeftEyeProperty(static_cast<AvatarEye>(expression.leftEye));
