@@ -4,7 +4,8 @@ Written 2026-10-02 at the end of a ~30-hour session; updated the same evening af
 threads were made to run in a browser (§10) and five more Microsoft samples ran (§13, CBIND-152,
 CSX-118/119), late that night after a batch of real games from GitHub (§13b: CBIND-153, ABI
 0.42.0; CSX-120..123), and on 2026-10-03 after three more (§13b: CBIND-154/155, ABI 0.44.0;
-CSX-124/125) and then Project Mercury, Xen's starter kits and Asteria's demos (§13b: CSX-126..130, managed only). `/goal` remains authoritative; this file is the state it reached and how to
+CSX-124/125) and then Project Mercury, Xen's starter kits and Asteria's demos (§13b: CSX-126..130, managed only),
+and that night a second GitHub search (§13b: CSX-131..133, managed only). `/goal` remains authoritative; this file is the state it reached and how to
 continue. Everything up to `fb89c451a` (cna) was pushed on the owner's word; **the late-night
 and 2026-10-03 commits are not pushed** (see `git log @{u}..` in cna, cna-cs and cna-cs-samples,
 and the two `zelda-oracle*` side branches).
@@ -430,6 +431,16 @@ ASCII minus as XNA's Windows did; ICU printed "∞"), CSX-129 (a `ContentManager
 `build-xna-content.sh` gained `--official SRC:XNB` (Microsoft's retained output for byte-identical
 `.wma` sources) and passes an extension's `DefineConstants`. Next candidates triaged: Asteria demos,
 XPF (Rx reference), Bullet XNA (Miriam font), Lin20 isosurface (alglib/MathNet absent).
+
+2026-10-03 night (CNA.NET `2ee15ab`, cna-cs-samples `7eb8c63`, CNA unchanged): a second GitHub
+search (146 repositories not tried before; the ranked list is `xna-repos-stars.tsv` in this job's
+tmp, recreate with `gh search code 'XnaFrameworkVersion>v4.0<' --extension csproj`) added 13 games,
+three 3D course projects and nineteen samples of Apress' *Windows Phone 7 Game Development* (61
+games in all). CSX-131: a `using` of a namespace .NET Framework 4 had and .NET lacks compiles
+(generator placeholder). CSX-132: CNA.PhoneCompat has `IsolatedStorageSettings`. CSX-133: a failed
+`Content.Load` is `ContentLoadException` with XNA's message. Browser archives rebuilt at
+`05b9a435d` (both single- and multi-threaded); `browser-sample.sh`/`android-sample.sh` handle
+nested game directories and libraries' own dependencies. Android: still none of the GitHub games.
 
 ## 14. Mahjong
 
