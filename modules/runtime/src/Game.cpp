@@ -2,6 +2,7 @@
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "CNA/Platform/Input/KeyboardAccelerometer.hpp"
+#include "CNA/Platform/Input/KeyboardGamepad.hpp"
 #include "CNA/Internal/Runtime/IGameOverlay.hpp"
 #include "CNA/Internal/Runtime/IModalFrames.hpp"
 
@@ -1603,11 +1604,13 @@ namespace Microsoft::Xna::Framework
             keyboard->Update();
             const auto& snapshot = keyboard->GetSnapshot();
             CNA::Platform::KeyboardAccelerometer::Update(snapshot, getIsActiveProperty());
+            CNA::Platform::KeyboardGamepad::Update(snapshot, getIsActiveProperty());
             Window_.updateKeyboardOrientation(snapshot, getIsActiveProperty());
         }
         else
         {
             CNA::Platform::KeyboardAccelerometer::Update({}, false);
+            CNA::Platform::KeyboardGamepad::Update({}, false);
             Window_.updateKeyboardOrientation({}, false);
         }
         if (CNA::Platform::IPlatformMouse* mouse = platform_->GetMouse())

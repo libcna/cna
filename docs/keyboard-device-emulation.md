@@ -1,6 +1,6 @@
 # Keyboard device emulation
 
-These are two independent, owner-requested CNA extensions, disabled by default. They use the
+These are three independent, owner-requested CNA extensions, disabled by default. They use the
 selected platform's once-per-frame keyboard snapshot and Game's event pump, before Update.
 They do not add sample-specific input branches or change physical-device availability when off.
 
@@ -56,6 +56,49 @@ parameters and orders min/max preferred dimensions for portrait or landscape. Or
 is raised once after the applied backbuffer is coherent; resize events preserve explicit
 LandscapeRight instead of re-deriving LandscapeLeft from width alone. Disabling returns to the
 ordinary platform/preferred-size policy. Constructor opt-ins do not create/reset a device early.
+
+## GamePad
+
+```cpp
+using Microsoft::Xna::Framework::Input::GamePad;
+GamePad::setKeyboardEmulationEnabledEXT(true);
+```
+
+`getKeyboardEmulationEnabledEXT()` reports the process-wide mode, initially false. It adds a
+connected software gamepad to the game's `PlayerIndex.One` state even without a physical pad or
+platform gamepad service. The other three player slots retain their physical behavior. Enable or
+disable at any time; a mode change clears held software input, while repeating the same setting
+does not. The source updates when Game pumps its keyboard snapshot, before the game's Update.
+Outside a pumped game it retains the last state, initially neutral.
+
+| GamePad control | Keyboard keys |
+|---|---|
+| Left thumbstick | W/A/S/D (W = positive Y) |
+| Right thumbstick | Arrow keys (Up = positive Y) |
+| D-pad | T/F/G/H (up/left/down/right) |
+| A/B/X/Y | K/L/J/I |
+| Left/right shoulder | Q/E |
+| Left/right trigger | Z/C (released 0, held 1) |
+| Left/right stick click | Left/Right Shift |
+| Start/Back | Enter/Escape |
+
+Opposite stick directions cancel; digital diagonals are normalized to unit length. Standard
+`GamePadDeadZone` processing and derived stick/trigger buttons still apply. Buttons are OR'ed with
+the physical pad's; each nonzero keyboard axis takes priority, otherwise the physical axis remains.
+The combined packet number changes only when this effective raw state changes. Capabilities report
+all mapped controls and preserve any real pad's extra features. BigButton, vibration, sensors,
+identity and other physical operations are not emulated; Home still opens CNA's Guide normally.
+
+Unfocused games supply neutral keyboard input. While the Guide owns input, game reads are connected
+and neutral through the ordinary system filter. The Guide's private GamePad read stays physical,
+because it already handles keyboard keys itself. Held emulated buttons at dismissal remain hidden
+from the game until released, including when the Guide made Game.IsActive false; Escape that closes
+a dialog therefore cannot immediately become Back in the game behind it.
+
+Keys are not consumed from `Keyboard.GetState`. Arrow keys can also drive independently enabled
+accelerometer/orientation emulation and a game's own keyboard controls. These conflicts are the
+application's opt-in choice. This software source does not inject a host input device or affect
+other processes. The mapped keyboard layout was approved by the owner on 2026-10-03 (INPUT-EMU-002).
 
 ## Cost and qualification
 

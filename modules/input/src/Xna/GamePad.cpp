@@ -7,6 +7,7 @@
 #include "CNA/Input/PowerState.hpp"
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/Input/IPlatformGamepad.hpp"
+#include "CNA/Platform/Input/KeyboardGamepad.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -108,6 +109,16 @@ namespace Microsoft::Xna::Framework::Input
         }
     }
 
+    void GamePad::setKeyboardEmulationEnabledEXT(bool enabled)
+    {
+        CNA::Platform::KeyboardGamepad::SetEnabled(enabled);
+    }
+
+    bool GamePad::getKeyboardEmulationEnabledEXT()
+    {
+        return CNA::Platform::KeyboardGamepad::IsEnabled();
+    }
+
     float GamePad::ExcludeAxisDeadZone(float value, float deadZone)
     {
         if (value < -deadZone)
@@ -123,12 +134,11 @@ namespace Microsoft::Xna::Framework::Input
     {
         int slot = -1;
         CNA::Platform::IPlatformGamepad* service = GetService(playerIndex, slot);
-        if (service == nullptr)
-        {
-            return {};
-        }
-
-        const CNA::Platform::GamepadCapabilities& source = service->GetCapabilities(slot);
+        auto source = service != nullptr ? service->GetCapabilities(slot)
+                                         : CNA::Platform::GamepadCapabilities{};
+        // Owner-requested software input augments only player one; other slots stay physical.
+        if (slot == 0 && CNA::Platform::KeyboardGamepad::IsEnabled())
+            source = CNA::Platform::KeyboardGamepad::MergeCapabilities(source);
         if (!source.connected)
         {
             return {};
@@ -189,11 +199,10 @@ namespace Microsoft::Xna::Framework::Input
     {
         int slot = -1;
         CNA::Platform::IPlatformGamepad* service = GetService(playerIndex, slot);
-        if (service == nullptr)
-        {
-            return {};
-        }
-        const CNA::Platform::GamepadSnapshot& raw = service->GetSnapshot(slot);
+        auto raw = service != nullptr ? service->GetSnapshot(slot) : CNA::Platform::GamepadSnapshot{};
+        // The Guide already handles keyboard input itself. Its private pad read stays physical.
+        if (game && slot == 0 && CNA::Platform::KeyboardGamepad::IsEnabled())
+            raw = CNA::Platform::KeyboardGamepad::MergeSnapshot(raw);
         if (!raw.connected)
         {
             return {};

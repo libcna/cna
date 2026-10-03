@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Input/SystemInput.hpp"
 #include "SystemInput.hpp"
+#include "CNA/Platform/Input/KeyboardGamepad.hpp"
 #include <array>
 
 namespace CNA::Internal::Input
@@ -30,6 +31,10 @@ namespace CNA::Internal::Input
                     if (pad.IsButtonDown(static_cast<Buttons>(1u << bit))) held |= 1u << bit;
                 maskedButtons[static_cast<std::size_t>(player)] = held;
             }
+            // The system's pad read deliberately excludes keyboard emulation. Still suppress
+            // held software buttons on dismissal, so Escape cannot immediately exit the game.
+            if (CNA::Platform::KeyboardGamepad::IsEnabled())
+                maskedButtons[0] |= CNA::Platform::KeyboardGamepad::GetHeldButtons();
             const auto mouse = systemMouseState();
             maskedMouse = (mouse.getLeftButtonProperty() == ButtonState::Pressed ? 0x01u : 0u)
                 | (mouse.getMiddleButtonProperty() == ButtonState::Pressed ? 0x02u : 0u)

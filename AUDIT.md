@@ -1,5 +1,13 @@
 # CNA XNA 4.0 API Audit
 
+> **INPUT-EMU-002 keyboard GamePad (2026-10-03, complete):** Owner-requested
+> off-by-default GamePad keyboard opt-in for player one, approved layout, physical merge and honest
+> capabilities. The Guide remains on its own keyboard path; held emulated buttons cannot leak past
+> dismissal. Input 560/560 and focused runtime 33/33 pass on private OPENGLES3 against baselines
+> 528/528 and 32/32. Real SAMPLE-085 native and exact-gallery WEBGL2 controls, animation, camera and Back gates pass. No Sharp Runtime/C ABI
+> change. See `plans/plan_keyboard_device_emulation.md` and `docs/keyboard-device-emulation.md`.
+
+
 > **Reading the GamerServices/Net entries (2026-09-30).** The dated `GS-*` quotes below are
 > checkpoints of 2026-09-28/29, kept as history: each describes the state on its date, and its
 > "remains unfinished" lists were closed later (GS-011, then the avatar-polish and Xbox-fidelity

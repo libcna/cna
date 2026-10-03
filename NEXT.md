@@ -1,5 +1,13 @@
 # NEXT.md
 
+> **INPUT-EMU-002 keyboard GamePad (2026-10-03, complete):** Owner-requested
+> off-by-default GamePad keyboard opt-in for player one, approved layout, physical merge and honest
+> capabilities. The Guide remains on its own keyboard path; held emulated buttons cannot leak past
+> dismissal. Input 560/560 and focused runtime 33/33 pass on private OPENGLES3 against baselines
+> 528/528 and 32/32. Real SAMPLE-085 native and exact-gallery WEBGL2 controls, animation, camera and Back gates pass. No Sharp Runtime/C ABI
+> change. See `plans/plan_keyboard_device_emulation.md` and `docs/keyboard-device-emulation.md`.
+
+
 > **GamerServices / Net / Avatar -- current state (2026-09-30).** GS-001..011, the avatar-polish
 > pass (GSP) and the Xbox-fidelity pass (GSX) are complete and merged into `next` (7d7141c6b):
 > service accounts and the console-style Guide, social features and push hints, achievements,

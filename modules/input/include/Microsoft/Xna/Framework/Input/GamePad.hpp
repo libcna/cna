@@ -38,6 +38,18 @@ namespace Microsoft::Xna::Framework::Input
         GamePad() = delete;
 
         /**
+         * @brief Enables process-wide keyboard emulation for PlayerIndex.One, off by default.
+         * @param enabled True to merge keyboard input into the game's first gamepad.
+         */
+        CNAEXT static void setKeyboardEmulationEnabledEXT(bool enabled);
+
+        /**
+         * @brief Gets whether keyboard gamepad emulation is enabled.
+         * @return True when the software gamepad is enabled.
+         */
+        CNAEXT [[nodiscard]] static bool getKeyboardEmulationEnabledEXT();
+
+        /**
          * @brief Returns the capabilities of the gamepad at the given player index.
          * @param playerIndex The player index to query.
          * @return The gamepad capabilities.

@@ -136,10 +136,12 @@ surface (`plans/plan_runtimerenderer.md`):
 
 ## Known acceptable C++ deviations from FNA/XNA
 
-Owner-requested keyboard device emulation (INPUT-EMU-001) is an explicit off-by-default CNAEXT
+Owner-requested keyboard device emulation (INPUT-EMU-001/002) is an explicit off-by-default CNAEXT
 addition: `Accelerometer::{get,set}KeyboardEmulationEnabledEXT` and
-`GameWindow::{get,set}KeyboardOrientationEmulationEnabledEXT`. It is independent of physical
-sensor support and follows normal sensor/device lifecycles. See
+`GameWindow::{get,set}KeyboardOrientationEmulationEnabledEXT`, and
+`GamePad::{get,set}KeyboardEmulationEnabledEXT` for player one. These are independent of physical
+sensor/controller support and follow normal sensor/device lifecycles. The software gamepad merges
+with physical input, keeps the Guide read path physical and applies the normal ownership/release filter. See
 `docs/keyboard-device-emulation.md` and `plans/plan_keyboard_device_emulation.md`.
 
 | Deviation | Reason |
