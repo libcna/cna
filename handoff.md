@@ -5,7 +5,7 @@ threads were made to run in a browser (§10) and five more Microsoft samples ran
 CSX-118/119), late that night after a batch of real games from GitHub (§13b: CBIND-153, ABI
 0.42.0; CSX-120..123), and on 2026-10-03 after three more (§13b: CBIND-154/155, ABI 0.44.0;
 CSX-124/125) and then Project Mercury, Xen's starter kits and Asteria's demos (§13b: CSX-126..130, managed only),
-and that night a second GitHub search (§13b: CSX-131..134, managed only). `/goal` remains authoritative; this file is the state it reached and how to
+and that night a second GitHub search (§13b: CSX-131..134, managed only). Early on 2026-10-03 (04:00-05:30) a third batch: §13b, CNA CBIND-156 and FX-145 (native, with tests), CSX-135/136. `/goal` remains authoritative; this file is the state it reached and how to
 continue. Everything up to `fb89c451a` (cna) was pushed on the owner's word; **the late-night
 and 2026-10-03 commits are not pushed** (see `git log @{u}..` in cna, cna-cs and cna-cs-samples,
 and the two `zelda-oracle*` side branches).
@@ -155,6 +155,8 @@ The important ones:
 | CBIND-151 | `cde2251fa` | A game thread that is a browser worker (.NET's deputy in a threaded bundle): 64 MB initial memory for a shared-memory link; SDL patch `sdl-cbe3fbe9-0004` (Emscripten only) commits a proxied WebGL frame; the WEBGL_polygon_mode probes tolerate the worker's `GLctx` stand-in; `StorageDevice` asks the page's thread for the IDBFS flag. No ctest drives a threaded browser build; evidence is cna-cs CSX-116 (five games) and the 84/84 single-threaded requalification on the same CNA. |
 | CBIND-152 | `c77f983b1` | ABI 0.41.0: `cna_game_run_foreign_thread_calls_ext` runs other threads' queued calls now, from the game thread; a binding calls it while the game thread waits (Network Game State Management's loading screen joins the thread drawing its animation from `Update`). `ForeignThreadCallsSmoke` fails without it. |
 | merge | `46d55fa26` | Branch `work` (GS-AUDIT P1-P4: GamerServices offline persistence, locking, authorization, history and block-list fixes) merged into `next` by a subagent; GamerServices 649/649, Net 524/524, the C API smokes and cna-cs GamerServices 24/24 passed. |
+| CBIND-156 | `6c278b21d` | A stock effect's draw samples the device's sampler slot: Apply binds its texture (a null one too), and a texture set on `GraphicsDevice.Textures` after Apply is the one drawn (LilyPath's DrawBatch). |
+| FX-145 | `26b477686` | Compiled effects sample float textures at highp on GLSL ES 3 (a pinned MojoShader patch; Mesa read lowp samplers' Vector2 textures at fp16 -- willcraftia's LiSPSM variance shadow). |
 
 Unresolved native items (confirmed, pre-existing, not introduced here):
 - OPENGLES3 `EasyGLCompiledEffect*` after FX-143/144: 1 of 686 fails --
@@ -165,6 +167,14 @@ Unresolved native items (confirmed, pre-existing, not introduced here):
   alone (`RuntimeComponentsSmoke` stage 8 asserts one Update per fixed-timestep frame; audio smokes;
   one `DevicesSmoke` SIGSEGV). Suspected load flakiness, not reproduced in isolation (stress of 10
   concurrent copies passed).
+- `CnaRendererTests` (build-probe) aborts at its first EasyGL test that constructs a
+  `GraphicsDevice` ("terminate called without an active exception" in `metagl::glGenFramebuffers`
+  [clone .cold] inside the test binary): the binary links its own static meta-gl whose `g_gl` table
+  is never loaded, and libcna's renderer binds to that copy -- the defect FX-144 fixed for one
+  `CnaTests` case. Pre-existing (same abort with CBIND-156/FX-145 stashed).
+- `CnaContentTests` `GltfRendererPbrFallbackPolicy.EveryPbrMapReachesTheShaderBindingIntendedByItsRenderer`
+  fails on its WebGPU source-text evidence (`texEntries[1].binding = 1; ...` no longer found in the
+  WebGPU renderer); pre-existing, nothing in this campaign touches WebGPU.
 - Stale example binaries in `build-probe` (built 2026-09-30) crash against today's `libcna.so`;
   rebuilding the target fixes it (seen with `EasyGL_RealWindowResize`).
 
@@ -443,6 +453,22 @@ games in all). CSX-131: a `using` of a namespace .NET Framework 4 had and .NET l
 nested game directories and libraries' own dependencies. Android (archive rebuilt at `05b9a435d`):
 12 GitHub games draw on the emulator. CSX-134 realigns 32-bit explicit layouts (BEPUphysics).
 
+2026-10-03 early morning (CNA `26b477686`, CNA.NET `ba8ab63`, cna-cs-samples `05c8967`): Mario3,
+Spelunky Tiles (its test places tiles only on held mouse presses), the Farseer 3.5 samples and a
+tile-engine tutorial (its own unchecked `TileMap` lookup throws off the map edge, as under XNA);
+then MP3Sharp's and SharpMik's players (`DynamicSoundEffectInstance`; SDL's disk driver captured
+the output -- `SDL_AUDIODRIVER=disk SDL_AUDIO_DISK_OUTPUT_FILE=...` -- and MP3Sharp's matches an
+ffmpeg decode), LilyPath's logo and willcraftia's seven TestXna demos. Two native defects, fixed in
+CNA with tests: CBIND-156 (stock effects ignored `GraphicsDevice.Textures` set after Apply;
+LilyPath drew black) and FX-145 (GLSL ES 3 `sampler2D` at lowp: Mesa read Vector2 textures at fp16;
+LiSPSM's variance shadow was noise). The FX-145 test needed the demo's own route (a SpriteBatch with
+a compiled pixel shader writing a Vector2 target): a point-sampled DrawUserPrimitives read of the
+same texture keeps 32 bits on this Mesa. Reference builds: TerrainDemo and LiSPSM compiled with
+XNA's assemblies under Wine (`csc` from the prefix, XNA references copied from its GAC); TerrainDemo's
+floating sheets are the demo's own. Recorded as blocked: Rugby League (XNAFlixel fonts), The Lost
+Levels (Windows Forms editor), TestBench1 (Consolas). LilyPath and SharpMik run from older commits
+whose XNA projects still match their sources.
+
 ## 14. Mahjong
 
 Runs (cna-cs-samples `347cc68`, games/Mahjong): 850×700 menu over its tile table; a held click on
@@ -579,8 +605,12 @@ External / not actionable
 Keep adding real XNA 4.0 software. The GitHub search results are in the session's job directory
 only; rerun `gh search code 'XnaFrameworkVersion>v4.0<' --extension csproj` (and
 `'XnaPlatform>Windows< XnaProfile>HiDef<'`) and take the next most-starred games not yet in
-`cna-cs-samples/games/README.md` (candidates seen but not cloned: Jamedjo/BeatShift, ~1 GB;
-Bacon41/PantheonPrototype; andrecarlucci/gta2net, which needs GTA2's freeware data). Record each in
+`cna-cs-samples/games/README.md` (cloned and triaged, not yet run: ZaneDubya/YCPU's emulator
+display (`Source/YCPUXNA`, Reach, two effects, content built at
+`/rv/tmp/xna-games-content/ycpu`) and cocos2d/cocos2d-x-for-xna's `tests` (Windows Phone, 305 files,
+TMX/text/texture content through its `cocos2d.Content.Pipeline.Importers` extension); seen but not
+cloned: Jamedjo/BeatShift, ~1 GB; Bacon41/PantheonPrototype; andrecarlucci/gta2net, which needs
+GTA2's freeware data). Record each in
 `games/README.md` and `cna-cs/CAMPAIGN.md`. Push only on the owner's word.
 
 ## Appendix — campaign commits (oldest first)
