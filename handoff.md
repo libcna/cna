@@ -476,7 +476,20 @@ title's `Guide.IsTrialMode` is `SimulateTrialMode` (the phone's license check), 
 pre-dispatcher `true`. `build-xna-content.sh` compiles an extension mcs refuses with the prefix's
 Microsoft csc (Almirante's `enum x = 0.0f`); Almirante itself stays blocked (a Windows Forms engine
 control). More blocked: YCPU (kernel32 console), Xen Game Client (native PolyVox), xTile demo,
-XNAVERGE, Azmyth (fonts), DirtyGame (WPF). bschwind/Shading is an Xbox 360-only project (not tried).
+XNAVERGE, Azmyth (fonts), DirtyGame (WPF). bschwind/Shading is Xbox 360 only (a `NORMAL0`
+pixel-shader input Windows' ps_2_0 refuses).
+Later that morning (CNA.NET `6174e60`, cna-cs-samples `72da721`): ExEn's Marblets, CatGirls and
+Orientation (CSX-138: a drawable component signals `VisibleChanged`/`DrawOrderChanged` only on a
+change; CSX-139: CSX-128's culture repair gives times their ASCII space before AM/PM, ICU has
+U+202F), 48 XNA samples of Petzold's *Programming Windows Phone 7* (`games/Petzold`, generator
+`<job tmp>/gen-petzold.py`), eight Windows Phone Pong demos and tiled-xna's example. Browser and
+Android archives rebuilt at CNA `c7b13c14d`; today's programs in headless Chromium and on the
+emulator (games/README.md has the list). CSX-140: browser and Android builds keep CoreLib whole
+(trimmer root) -- BoneAnimation's protobuf-net reflects over framework types. The generators now
+carry `Deterministic`/`AllowUnsafeBlocks` and set `DisableImplicitFrameworkDefines` (the SDK's
+`ANDROID` switched on cocos2d's MonoGame code). Open: TerrainDemo draws only its clear colour in a
+browser (no WebGL error; the desktop draws it); MDTerrainDemo's thread-pool loading never runs in
+a threaded bundle (the .NET 11 worker fault).
 
 ## 14. Mahjong
 
