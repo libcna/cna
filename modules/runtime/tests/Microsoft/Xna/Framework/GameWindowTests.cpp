@@ -205,6 +205,52 @@ TEST(GameWindowTest, ClientBoundsCarryTheClientAreasDesktopPosition)
     EXPECT_EQ(window.getClientBoundsProperty(), Rectangle(123, 45, 64, 64));
 }
 
+namespace
+{
+    // SetLogicalSizeProviderEXT is protected; GraphicsDeviceManager installs it as a friend.
+    class LogicalSizeGameWindow : public GameWindow
+    {
+    public:
+        using GameWindow::GameWindow;
+        using GameWindow::SetLogicalSizeProviderEXT;
+    };
+}
+
+TEST(GameWindowTest, FullscreenClientBoundsAreTheBackBuffersModeAsXnaSetsIt)
+{
+    // XNA's IsFullScreen switches the display to the back buffer's mode, so ClientBounds is the
+    // back buffer. A platform that keeps the desktop mode and letterboxes the back buffer must
+    // report the same, the size DisplayMode reports and Mouse.GetState is mapped into (Speedy
+    // Blupi maps its pointer by Viewport / ClientBounds). A window keeps its own size.
+    std::unique_ptr<CNA::Platform::IPlatform> platform =
+        CNA::Platform::PlatformFactory::Create("Headless");
+    CNA::Platform::WindowDescription description = MakeDescription("fullscreen-client-bounds");
+    description.centered = false;
+    description.width = 2048;
+    description.height = 1152;
+    std::unique_ptr<CNA::Platform::IPlatformWindow> platformWindow =
+        platform->CreateWindow(description);
+
+    LogicalSizeGameWindow window(platformWindow.get());
+    window.SetLogicalSizeProviderEXT([](int& width, int& height)
+    {
+        width = 800;
+        height = 480;
+        return true;
+    });
+
+    EXPECT_EQ(window.getClientBoundsProperty().Width, 2048);
+    EXPECT_EQ(window.getClientBoundsProperty().Height, 1152);
+
+    platformWindow->SetFullscreenMode(CNA::Platform::WindowFullscreenMode::ExclusiveFullscreen);
+    EXPECT_EQ(window.getClientBoundsProperty().Width, 800);
+    EXPECT_EQ(window.getClientBoundsProperty().Height, 480);
+
+    platformWindow->SetFullscreenMode(CNA::Platform::WindowFullscreenMode::Windowed);
+    EXPECT_EQ(window.getClientBoundsProperty().Width, 2048);
+    EXPECT_EQ(window.getClientBoundsProperty().Height, 1152);
+}
+
 TEST(GameWindowTest, NullWindow_EndScreenDeviceChangeOneArgIsSafe)
 {
     GameWindow window;

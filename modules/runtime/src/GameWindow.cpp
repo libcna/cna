@@ -473,7 +473,28 @@ namespace Microsoft::Xna::Framework
         // XNA's ClientBounds is the client area's place on the desktop: WindowsGameForm reads
         // PointToScreen(Point.Empty) and ClientSize. A platform with no desktop placement to
         // report (Wayland, a browser canvas) answers zero there, as FNA's does.
-        return Rectangle(bounds.x, bounds.y, bounds.width, bounds.height);
+        int width = bounds.width;
+        int height = bounds.height;
+
+        // XNA's IsFullScreen switches the display to the back buffer's mode, so the client area
+        // is the back buffer. Where the platform keeps the desktop mode and letterboxes the back
+        // buffer in it instead (Xwayland cannot switch modes), report the mode XNA would have set:
+        // the size GraphicsDevice.DisplayMode reports and Mouse.GetState is mapped into. Speedy
+        // Blupi maps its pointer by Viewport / ClientBounds and missed every button otherwise.
+        if (logicalSizeProvider_ &&
+            window_->GetFullscreenMode() != CNA::Platform::WindowFullscreenMode::Windowed)
+        {
+            int logicalWidth = 0;
+            int logicalHeight = 0;
+            if (logicalSizeProvider_(logicalWidth, logicalHeight) && logicalWidth > 0 &&
+                logicalHeight > 0)
+            {
+                width = logicalWidth;
+                height = logicalHeight;
+            }
+        }
+
+        return Rectangle(bounds.x, bounds.y, width, height);
     }
 
     GameWindow::String GameWindow::queryScreenDeviceNameFromPlatform() const
