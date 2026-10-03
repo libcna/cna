@@ -11,6 +11,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
@@ -29,6 +30,29 @@
 namespace CNA::Internal::GamerServices::GuideUi {
 namespace {
 using Clock=std::chrono::steady_clock;
+
+// System-owned SpriteBatch rendering runs after title Draw; the next title frame inherits its
+// device states. Retain the original reference payloads (copy construction would clone them).
+struct TitleRenderStates {
+    explicit TitleRenderStates(Xna::Graphics::GraphicsDevice& device):device(device) {
+        blend=device.getBlendStateProperty();
+        depth=device.getDepthStencilStateProperty();
+        rasterizer=device.getRasterizerStateProperty();
+        sampler=device.getSamplerStatesProperty()[0];
+    }
+    ~TitleRenderStates() {
+        device.setBlendStateProperty(blend);
+        device.setDepthStencilStateProperty(depth);
+        device.setRasterizerStateProperty(rasterizer);
+        device.getSamplerStatesProperty()[0]=sampler;
+    }
+    Xna::Graphics::GraphicsDevice& device;
+    Xna::Graphics::BlendState blend;
+    Xna::Graphics::DepthStencilState depth;
+    Xna::Graphics::RasterizerState rasterizer;
+    Xna::Graphics::SamplerState sampler;
+};
+
 namespace In=Microsoft::Xna::Framework::Input;
 namespace GS=Microsoft::Xna::Framework::GamerServices;
 
@@ -813,6 +837,7 @@ void draw(Xna::Graphics::GraphicsDevice& device)
     const auto toast=currentGuideToast();
     const bool dialogs=pendingMessageBox()||pendingKeyboard();
     if(s.stack.empty()&&!toast&&!dialogs){s.wasShowing=false;s.lastToast.clear();return;}
+    const TitleRenderStates titleStates(device);
     const auto viewport=device.getViewportProperty();
     const int width=viewport.getWidthProperty(),height=viewport.getHeightProperty();
     (void)styleFor(device,width,height);

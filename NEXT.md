@@ -1,5 +1,12 @@
 # NEXT.md
 
+> **GS-009h Guide rendering states (2026-10-03):** System Guide/toast SpriteBatch rendering
+> restores the title's blend, depth-stencil, rasterizer and sampler-zero reference payloads.
+> SAMPLE-094 sign-in had left LinearClamp active, flattening its wrap-textured ground. Baseline
+> Guide 34/34; both added regressions fail before correction; final Guide/avatar 130/130 pass.
+> Native and exact-gallery WEBGL2 consumer gates pass (walking ground 0→66,823 native pixels).
+> See `plans/plan_guide_render_states.md`. No public API or sample-side state workaround.
+
 > **GS-009g avatar coordinates (2026-10-03):** Standard poses and BindPose now use XNA's -Z
 > front; the frozen +Z catalog is converted at the API/render boundary. Presets expose animation
 > deltas, avoiding doubled bind offsets in attached objects. Baseline 91/91 → 94/94 avatar tests;
