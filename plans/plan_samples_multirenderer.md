@@ -40,6 +40,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-017 | **DONE** | Normalize legacy XNB SkinnedEffect declarations before WebGPU's stride-derived layout guard. |
 | MSR-018 | **DONE** | Allow WebGPU signed-normalized textures to receive complete authored mip chains. |
 | MSR-019 | **DONE** | Promote FNA3D's implemented signed-normalized Texture2D formats through its public format gate. |
+| MSR-020 | **DONE** | Remove the obsolete FNA3D lifetime-test archive rescan that duplicated CNA globals at shutdown. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -374,6 +375,18 @@ Regression evidence:
 - the first complete FNA3D gallery run was 85/91; these three focused repairs leave
   `AvatarAnimationBlending`, the truthful `LensFlare` query limit, and the renderer-independent
   `Yacht` gamer-services failure for the next full rerun.
+
+## MSR-020 — FNA3D lifetime-test link ownership
+
+`Fna3d_Device_Lifetime` retained an ELF archive-rescan workaround from the former static-link
+layout.  The current test already links the complete shared `libcna.so`, so rescanning
+`cna_input`, `cna_graphics_core` and `cna_renderer_fna3d` also copied their global objects into the
+executable.  Both copies registered teardown for the interposed `TouchPanel::gestures_` storage,
+and the otherwise successful test aborted during process exit with a double free.
+
+The test now uses the same `CNA` link contract as every other FNA3D executable.  Its symbol table
+no longer defines a second `TouchPanel::gestures_`; `Fna3d_Device_Lifetime` passes in isolation and
+the complete OpenGL-pinned FNA3D renderer suite passes 13/13 in the private GPU environment.
 
 ## Representative automated matrix
 
