@@ -15405,7 +15405,18 @@ namespace CNA::Internal::Renderers::Vulkan
                 else if (draw.usePbr)       shadowLayout = pipelineLayoutPbr3D_;
                 else if (draw.useSkinned)   shadowLayout = pipelineLayoutSkinned3D_;
                 else if (draw.useLitTextured) shadowLayout = pipelineLayoutLitTextured3D_;
-                if (shadowLayout != VK_NULL_HANDLE && draw.shadowDescSet != VK_NULL_HANDLE &&
+                // MSR-024: the stock family was inferred from the vertex layout before a
+                // compiled Effect replaced that family. Its shadow set must not then replace
+                // sets 1..3 of the compiled Effect's own four-set pipeline layout. A 32-byte
+                // Position/Normal/Texture declaration used to do exactly that here, leaving the
+                // pixel uniform set unbound and rendering ShadowMapping's grid black.
+                const bool ownsStockDescriptorLayout = !draw.useCustomEffect
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+                                                       && !draw.useCompiledEffect
+#endif
+                    ;
+                if (ownsStockDescriptorLayout && shadowLayout != VK_NULL_HANDLE &&
+                    draw.shadowDescSet != VK_NULL_HANDLE &&
                     shadowUBOPtr_[currentFrame_] != nullptr) {
                     const uint32_t slot = shadowUBOSlot++;
                     const uint32_t shadowOff = slot * kShadowUBOStride;

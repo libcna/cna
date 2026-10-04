@@ -1680,6 +1680,14 @@ TEST(Fna3dCompiledEffectDrawTest, SharedSamplerPixelContract)
     CNA::TestSupport::RunCompiledEffectSamplerPixelContract(device, options);
 }
 
+TEST(Fna3dCompiledEffectDrawTest, SharedStockLayoutIsolationContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectStockLayoutIsolationContract(device);
+}
+
 TEST(Fna3dCompiledEffectDrawTest, SharedPassSelectionContract)
 {
     GraphicsDevice device;

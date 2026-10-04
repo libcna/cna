@@ -131,6 +131,12 @@ TEST(DirectX11CompiledEffectDrawTest, SharedSamplerPixelContract)
     CNA::TestSupport::RunCompiledEffectSamplerPixelContract(device);
 }
 
+TEST(DirectX11CompiledEffectDrawTest, SharedStockLayoutIsolationContract)
+{
+    HiDefGraphicsDevice device;
+    CNA::TestSupport::RunCompiledEffectStockLayoutIsolationContract(device);
+}
+
 TEST(DirectX11CompiledEffectDrawTest, SharedPassSelectionContract)
 {
     HiDefGraphicsDevice device;

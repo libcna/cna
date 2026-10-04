@@ -4599,6 +4599,14 @@ TEST(EasyGLCompiledEffectDrawTest, SharedSamplerPixelContract)
     CNA::TestSupport::RunCompiledEffectSamplerPixelContract(device, options);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, SharedStockLayoutIsolationContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectStockLayoutIsolationContract(device);
+}
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9SamplerSourceSwizzlesSampleResult)
 {
     GraphicsDevice device;

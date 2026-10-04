@@ -44,6 +44,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-021 | **DONE** | Latch an avatar's Loading-to-Ready transition until its caller can update animation transforms. |
 | MSR-022 | **DONE** | Store compiled SpriteBatch projection matrices in the Effect Framework layout expected by every native backend. |
 | MSR-023 | **DONE** | Expand missing WebGPU texture channels to the XNA/D3D9 values in stock SpriteBatch sampling. |
+| MSR-024 | **DONE** | Keep Vulkan stock descriptor bindings from overwriting a compiled Effect's own pipeline layout. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -478,6 +479,39 @@ Regression evidence:
   those same WebGPU probes were `(255,0,0)`.  The full scene and its cast shadow remain visible;
 - the same rebuilt executable passes and retains the reference preview pixels with active
   OPENGLES3.  Evidence is in `matrix-results/msr-028-shadowmapping-{webgpu-fixed,gles3-regression}`.
+
+## MSR-024 — Vulkan compiled-effect descriptor ownership
+
+Vulkan chooses a provisional stock shader family from the vertex declaration before a compiled
+Effect supplies its own shaders and descriptor layout.  ShadowMapping's 32-byte
+Position/Normal/Texture grid consequently populated the stock lit-textured shadow set even though
+its compiled Effect owned a four-set pipeline.  Replay first bound the compiled Effect's sets 1–3,
+then rebound set 1 through the unrelated two-set stock layout.  Vulkan invalidated the Effect's
+pixel-uniform set 3, emitted `VUID-vkCmdDrawIndexed-None-08600`, and rendered the grid black.  The
+character used a different declaration stride and therefore did not trigger the leaked stock
+family.
+
+The stock shadow binding now runs only when the draw actually owns the stock descriptor layout.
+Compiled and custom effects retain their own bindings, with no renderer branch or workaround in
+the sample.
+
+Regression evidence:
+
+- the new shared `RunCompiledEffectStockLayoutIsolationContract` deliberately uses the same
+  32-byte Position/Normal/Texture declaration with a compiled shader that consumes only position
+  and texture coordinates.  Before the repair it reproduced the validation error and returned
+  alpha zero; afterward its red-pixel oracle passes;
+- the contract is registered for Vulkan, EasyGL, WebGPU, SDL_GPU, FNA3D and DirectX 9/11/12.  It
+  passes on the five Linux backends exercised so far; DirectX execution remains part of native
+  Windows qualification rather than being inferred from registration or cross-compilation;
+- the complete Vulkan compiled-effect selection is 28 passes plus one intentional Reach-profile
+  `Texture3D` skip, with no Vulkan validation message;
+- OPENGLES3 passes the new contract and all three sampled-channel regression cases; WebGPU,
+  SDL_GPU and FNA3D pass the same new shared contract through the private GPU runner;
+- the rebuilt, unchanged multi-renderer `ShadowMapping_cna_samples` executable reaches an
+  automated pass with active Vulkan.  Manual inspection confirms the checkerboard grid, character,
+  cast shadow and white shadow-map preview; the captured frame is byte-identical to the fixed
+  WebGPU frame.  Evidence is in `matrix-results/msr-029-shadowmapping-vulkan-fixed`.
 
 ## Representative automated matrix
 

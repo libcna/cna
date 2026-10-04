@@ -4123,6 +4123,77 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Contract: an unused stock-layout channel cannot change a compiled Effect draw.
+     *
+     * A compiled Effect owns its shaders and descriptor layout.  The declaration below is the
+     * XNA ModelProcessor's 32-byte Position/Normal/Texture shape, but the synthetic shader reads
+     * only Position and TextureCoordinate.  A renderer may ignore the extra Normal; it must not
+     * infer a stock lit-effect pipeline from the stride and apply any of that pipeline's bindings
+     * after the compiled Effect's own state.
+     *
+     * @param device Device whose renderer claims CompiledEffects.
+     */
+    inline void RunCompiledEffectStockLayoutIsolationContract(GraphicsDevice& device)
+    {
+        constexpr int kSize = 8;
+        const Color background(9, 19, 29, 255);
+        const Color red(255, 0, 0, 255);
+
+        struct LitSamplingVertex
+        {
+            float x, y, z;
+            float nx, ny, nz;
+            float u, v;
+        };
+        static_assert(sizeof(LitSamplingVertex) == 32);
+        const VertexDeclaration declaration(static_cast<int>(sizeof(LitSamplingVertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+            VertexElement(24, VertexElementFormat::Vector2,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const float corners[6][2] = {
+            {-1.0f, 1.0f}, {-1.0f, -1.0f}, {1.0f, -1.0f},
+            {-1.0f, 1.0f}, {1.0f, -1.0f}, {1.0f, 1.0f},
+        };
+        LitSamplingVertex quad[6];
+        for (int i = 0; i < 6; ++i)
+        {
+            quad[i] = LitSamplingVertex{
+                corners[i][0], corners[i][1], 0.0f,
+                0.0f, 1.0f, 0.0f,
+                0.5f, 0.5f};
+        }
+
+        Texture2D texture(device, 1, 1);
+        texture.SetData(&red, 1);
+        Effect effect(device, BuildSyntheticSamplingEffect({}));
+        auto& parameters = effect.getParametersProperty();
+        parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
+        parameters["Tint"]->SetValue(Vector4::One);
+        parameters["FxTexture"]->SetValue(&texture);
+
+        RenderTarget2D target(device, kSize, kSize);
+        device.SetRenderTarget(&target);
+        device.Clear(background);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        Color centre(0, 0, 0, 0);
+        const Rectangle probe(kSize / 2, kSize / 2, 1, 1);
+        target.GetData(0, &probe, &centre, 0, 1);
+        EXPECT_NEAR(centre.getRProperty(), red.getRProperty(), 3);
+        EXPECT_NEAR(centre.getGProperty(), red.getGProperty(), 3);
+        EXPECT_NEAR(centre.getBProperty(), red.getBProperty(), 3);
+        EXPECT_NEAR(centre.getAProperty(), red.getAProperty(), 3);
+    }
+
+    /**
      * @brief The three-component sibling of @ref SamplingQuadVertex. CNAEXT.
      *
      * plans/plan_fx.md FX-110. A cube sampler takes a direction and a volume sampler a 3D coordinate, so
@@ -5690,6 +5761,7 @@ namespace CNA::TestSupport
      * - `RunCompiledEffectRenderTargetSourceContract` -- a rendered source is sampled right way up
      * - `RunCompiledEffectSpriteBatchRenderTargetSourceContract` -- and through SpriteBatch too
      * - `RunCompiledEffectStockDrawIsolationContract` -- no state leaks into a later stock draw
+     * - `RunCompiledEffectStockLayoutIsolationContract` -- stock layout inference cannot alter it
      * - `RunCompiledEffectOrientationContract` -- compiled geometry lands where stock geometry does
      * - `RunCompiledEffectSwitchingContract` -- effects, clones and stock draws interleave cleanly
      * - `RunCompiledEffectManyDrawsContract` -- 600 draws in one frame keep their own uniforms

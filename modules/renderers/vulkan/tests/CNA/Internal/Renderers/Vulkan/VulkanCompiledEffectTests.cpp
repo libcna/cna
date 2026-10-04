@@ -383,6 +383,14 @@ TEST(VulkanCompiledEffectDrawTest, SharedSamplerPixelContract)
     CNA::TestSupport::RunCompiledEffectSamplerPixelContract(device, options);
 }
 
+TEST(VulkanCompiledEffectDrawTest, SharedStockLayoutIsolationContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectStockLayoutIsolationContract(device);
+}
+
 TEST(VulkanCompiledEffectDrawTest, SharedPassSelectionContract)
 {
     GraphicsDevice device;

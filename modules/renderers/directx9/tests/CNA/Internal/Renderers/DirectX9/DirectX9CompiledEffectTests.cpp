@@ -190,6 +190,12 @@ TEST(DirectX9CompiledEffectDrawTest, SharedSamplerPixelContract)
     CNA::TestSupport::RunCompiledEffectSamplerPixelContract(device);
 }
 
+TEST(DirectX9CompiledEffectDrawTest, SharedStockLayoutIsolationContract)
+{
+    GraphicsDevice device;
+    CNA::TestSupport::RunCompiledEffectStockLayoutIsolationContract(device);
+}
+
 TEST(DirectX9CompiledEffectDrawTest, SharedPassSelectionContract)
 {
     GraphicsDevice device;
