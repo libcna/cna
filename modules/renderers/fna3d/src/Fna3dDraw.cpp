@@ -3,6 +3,10 @@
 #include "CNA/Internal/Renderers/Fna3d/Fna3dRenderer.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dVertexLayouts.hpp"
 #include "CNA/Internal/Renderers/Common/VertexColourPbrSupport.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 
 #include <algorithm>
 #include <array>
@@ -43,6 +47,19 @@ namespace CNA::Internal::Renderers::Fna3d
             if (params.dualTexture)  return StockEffectKind::DualTexture;
             if (AlphaTestActive(params)) return StockEffectKind::AlphaTest;
             return StockEffectKind::Basic;
+        }
+
+        const Fna3dSampledTexture* GetSampledTexture(Texture* texture)
+        {
+            using namespace Microsoft::Xna::Framework::Graphics;
+            if (texture == nullptr) return nullptr;
+            if (auto* texture2D = dynamic_cast<Texture2D*>(texture))
+                return dynamic_cast<const Fna3dSampledTexture*>(&texture2D->GetRenderer());
+            if (auto* texture3D = dynamic_cast<Texture3D*>(texture))
+                return dynamic_cast<const Fna3dSampledTexture*>(&texture3D->GetRenderer());
+            if (auto* textureCube = dynamic_cast<TextureCube*>(texture))
+                return dynamic_cast<const Fna3dSampledTexture*>(&textureCube->GetRenderer());
+            return nullptr;
         }
     }
 
@@ -141,6 +158,13 @@ namespace CNA::Internal::Renderers::Fna3d
         if (params.compiledEffectRuntime == nullptr)
         {
             ApplyStockEffectEXT(world, view, projection, params);
+        }
+        else
+        {
+            // EffectPass.Apply may assign a texture, or a game may replace the public device slot
+            // afterward. Resolve the final XNA-visible slot at draw time, matching FNA's device
+            // state application instead of retaining the native binding from pass application.
+            BindCompiledPixelTexturesEXT(params);
         }
         ApplyVertexBindingsEXT(vb, params, baseVertex);
     }
@@ -277,6 +301,36 @@ namespace CNA::Internal::Renderers::Fna3d
         FNA3D_VerifySampler(device_, slot, native,
                             &samplerStates_[static_cast<std::size_t>(slot)]);
         boundPixelTextures_[static_cast<std::size_t>(slot)] = native;
+    }
+
+    void Fna3dRenderer::BindCompiledPixelTexturesEXT(const GpuDrawParams& params,
+                                                     FNA3D_Texture* spriteTexture0)
+    {
+        const auto* textures = params.compiledDeviceTextures;
+        if (textures == nullptr && spriteTexture0 == nullptr) return;
+
+        using Microsoft::Xna::Framework::Graphics::TextureCollection;
+        const int slotCount = std::min(
+            maxTextureSlots_ > 0 ? maxTextureSlots_ : TextureCollection::MaxTextures,
+            TextureCollection::MaxTextures);
+        for (int slot = 0; slot < slotCount; ++slot)
+        {
+            Texture* texture = textures != nullptr ? (*textures)[slot] : nullptr;
+            const Fna3dSampledTexture* sampled = GetSampledTexture(texture);
+            if (texture != nullptr &&
+                (sampled == nullptr || sampled->GetFna3dDeviceStateEXT() != deviceState_))
+            {
+                throw std::runtime_error(
+                    "FNA3D renderer: a compiled effect device texture was not created by this "
+                    "graphics device.");
+            }
+
+            FNA3D_Texture* native = sampled != nullptr ? sampled->GetFna3dTextureEXT() : nullptr;
+            if (slot == 0 && spriteTexture0 != nullptr) native = spriteTexture0;
+            FNA3D_VerifySampler(device_, slot, native,
+                                &samplerStates_[static_cast<std::size_t>(slot)]);
+            boundPixelTextures_[static_cast<std::size_t>(slot)] = native;
+        }
     }
 
     void Fna3dRenderer::ApplyStockEffectEXT(const Matrix& world, const Matrix& view,

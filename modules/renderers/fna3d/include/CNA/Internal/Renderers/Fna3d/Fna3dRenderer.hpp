@@ -1576,6 +1576,8 @@ namespace CNA::Internal::Renderers::Fna3d
 
         void ApplyCurrentBlendState();
         void ApplyCurrentDepthStencilState();
+        void BindCompiledPixelTexturesEXT(const GpuDrawParams& params,
+                                          FNA3D_Texture* spriteTexture0 = nullptr);
         void ClearInternal(FNA3D_ClearOptions options, const FNA3D_Vec4* color, float depth,
                            int stencil);
         void ProbeTexture3DReadbackSupport();

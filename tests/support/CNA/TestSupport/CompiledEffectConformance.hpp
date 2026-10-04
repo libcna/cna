@@ -4434,6 +4434,48 @@ namespace CNA::TestSupport
                         Color(0, 0, 255, 255), "FxTexture = blue");
         }
 
+        // --- An unassigned sampler follows GraphicsDevice.Textures at DRAW time ---------------
+        //
+        // EffectPass.Apply is not the last opportunity to select a device texture: XNA permits a
+        // game to replace GraphicsDevice.Textures[n] between Apply and Draw. Backends must resolve
+        // that public slot for the draw rather than retain an older native binding from Apply.
+        {
+            Texture2D red(device, 1, 1);
+            Texture2D blue(device, 1, 1);
+            const Color redPixel[1] = {Color(255, 0, 0, 255)};
+            const Color bluePixel[1] = {Color(0, 0, 255, 255)};
+            red.SetData(redPixel, 1);
+            blue.SetData(bluePixel, 1);
+
+            constexpr int kDeviceSlot = 1;
+            Effect effect(device, BuildSyntheticSamplingEffect(
+                statesFor(SamplerRequest{}), kDeviceSlot));
+            auto& parameters = effect.getParametersProperty();
+            parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
+            parameters["Tint"]->SetValue(Vector4::One);
+
+            SamplingQuadVertex quad[6];
+            FillSamplingQuad(quad, 0.5f, 0.5f);
+            RenderTarget2D target(device, kSize, kSize);
+            device.SetRenderTarget(&target);
+            device.Clear(background);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            device.getTexturesProperty()(kDeviceSlot, &red);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.getTexturesProperty()(kDeviceSlot, &blue);
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+            Color pixel(0, 0, 0, 0);
+            const Rectangle centre(kSize / 2, kSize / 2, 1, 1);
+            target.GetData(0, &centre, &pixel, 0, 1);
+            expectColor(pixel, Color(0, 0, 255, 255),
+                        "GraphicsDevice.Textures[1] replaced after EffectPass.Apply");
+        }
+
         // --- One effect, one pass, applied and drawn again and again ----------------------------
         //
         // plans/plan_fx.md FX-101. Every other section here builds a fresh Effect per draw, which is the

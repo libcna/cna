@@ -430,10 +430,11 @@ namespace CNA::Internal::Renderers::Fna3d
                      passIndex < technique->getPassesProperty().getCountProperty(); ++passIndex)
                 {
                     technique->getPassesProperty()[passIndex]->Apply();
+                    GpuDrawParams params{};
+                    customEffect->FillGpuDrawParams(params);
                     // XNA deliberately sets SpriteBatch's texture after EffectPass.Apply so a
                     // texture parameter inside the effect cannot steal slot zero from the sprite.
-                    FNA3D_VerifySampler(device_, 0, texture, &samplerStates_[0]);
-                    boundPixelTextures_[0] = texture;
+                    BindCompiledPixelTexturesEXT(params, texture);
                     bindVertices();
                     draw();
                 }

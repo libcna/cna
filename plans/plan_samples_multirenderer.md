@@ -34,6 +34,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-011 | **DONE** | Restore the FNA3D-only `CnaRendererTests` build after pointer-container and namespace API changes. |
 | MSR-012 | **DONE** | Correct stale FNA3D compiled-effect test profile, parameter-shape and exception assumptions. |
 | MSR-013 | **DONE** | Align the synthetic struct-default test with the pinned FNA/MojoShader contract and preserve the authentic FNA pixel oracle. |
+| MSR-014 | **DONE** | Resolve FNA3D compiled-effect device texture slots at draw time, including SpriteBatch's slot-zero override. |
 | MSR-015 | **DONE** | Keep focused renderer tests on libcna's single initialized EasyGL/meta-gl runtime copy. |
 
 ## MSR-001 — Color byte-transfer routing
@@ -184,8 +185,8 @@ exception type.
 
 All nine focused tests pass on the default FNA3D/SDL_GPU driver after these corrections.  The two
 remaining failures reproduced independently: the synthetic struct-default expectation was
-resolved by MSR-013, while a compiled SpriteBatch sampler that should read
-`GraphicsDevice.Textures[1]` remains renderer work.
+resolved by MSR-013, and MSR-014 repaired the compiled SpriteBatch sampler that should read
+`GraphicsDevice.Textures[1]`.
 
 ## MSR-013 — FNA/MojoShader struct-default contract
 
@@ -209,6 +210,34 @@ Regression evidence:
 - the complete SDL_GPU compiled-effect selection passes 46 tests with one existing configuration
   skip, including its authentic golden-pixel draw;
 - the discarded parser experiment was never committed.
+
+## MSR-014 — FNA3D compiled device texture slots
+
+FNA3D applies compiled-effect sampler bindings immediately in `EffectPass::Apply()`.  That native
+binding became stale when an application replaced `GraphicsDevice.Textures[n]` between Apply and
+Draw, and an effect sampler without its own texture assignment never acquired the public device
+slot at all.  The latter is Bloom's normal combine-pass pattern.  SpriteBatch had the same problem
+for nonzero slots even though it correctly replaced slot zero with the sprite texture.
+
+FNA3D compiled draws now resolve the current public pixel texture collection immediately before
+the native draw, validate that every non-null texture belongs to the same device, and bind it with
+the slot's current sampler state.  Compiled SpriteBatch fills the same draw snapshot after each
+pass application, resolves every public slot, then deliberately replaces only slot zero with the
+sprite texture.  This is renderer-level XNA device-state behavior; no sample-specific branch or
+fallback was added.
+
+Regression evidence:
+
+- the existing shared SpriteBatch device-slot contract reproduced the failure as a black pixel
+  instead of the expected green one before the repair;
+- the shared ordinary sampler contract now additionally assigns red to
+  `GraphicsDevice.Textures[1]`, applies the pass, replaces that slot with blue, and requires the
+  draw to sample blue;
+- both focused FNA3D contracts pass through its default SDL_GPU/Vulkan driver and its supplemental
+  OpenGL driver;
+- the complete FNA3D renderer selection passes 100 of 101 tests; the only skip is the existing
+  Reach-profile volume-texture contract;
+- the extended shared sampler contract also passes on OPENGLES3, Vulkan, WebGPU and SDL_GPU.
 
 ## MSR-015 — Focused renderer-test runtime identity
 
