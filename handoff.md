@@ -572,6 +572,9 @@ old `plan.md`/`NEXT.md` blockers are historical.
 
 - Desktop gallery: `/rv/tmp/cs-samples/requal-*`.
 - Browser: `/rv/tmp/cs-samples/browser-*` (games from 2026-10-03: `browser-20261003*`).
+- Final threaded browser qualification: `/rv/tmp/cs-samples/final-threaded-20261004/`. The archive
+  was rebuilt from CNA `28f8312f0` with Emscripten 6.0.3; its SHA-256 is
+  `ce8db116c3d9100f363864d355ad205c7334e5c5b630167c4fee1641c588b6c2`.
 - Android: `/rv/tmp/cs-samples/android-*`.
 - Games: `/rv/tmp/cs-samples/games-*`.
 - Game checkouts: `/rv/tmp/xna-games/*`. Built content: `/rv/tmp/xna-games-content/*`.
@@ -614,7 +617,11 @@ old `plan.md`/`NEXT.md` blockers are historical.
 **Qualification**
 8. **Done/classified (CSX-149):** Racing Game Kit matched the C++ port structurally through a real
    race; unchanged XNA under Wine is blocked by the defunct Games for Windows - LIVE dependency.
-9. A threaded gallery requalification.
+9. **Done (CSX-150):** a current threaded browser archive ran AimingSample with keyboard movement
+   and clean Escape shutdown. Unchanged Resonance, after rebuilding its 282 assets with XNA 4.0
+   BuildContent/XACT, loaded its level on its own thread, initialized its shipped BEPUphysics,
+   entered the 3D arena and reacted to movement. Both ran in headless Chromium/SwiftShader without
+   a CNA/CNA.NET exception; no new general defect was found.
 10. Interactive Chrome with a GPU; a physical arm64 Android device.
 
 **Hardening**
@@ -626,14 +633,12 @@ old `plan.md`/`NEXT.md` blockers are historical.
 
 ## 20. Exact next action
 
-Continue the loop in §0 with the next real XNA 4.0 programs:
-1. Rerun the GitHub search (§5).
-2. Skip anything already in `games/README.md`, its blocked list, or its "not XNA 4.0" line.
-3. Clone and triage, then bring each one up.
+Run the one final bounded external-application sweep from the owner's 2026-10-04 closure brief:
+select at most 10--20 substantial, diverse XNA 4.0 applications for diagnostic value, stop at the
+defined saturation condition, and do not turn it into another open-ended GitHub search. Candidates
+already seen include Jamedjo/BeatShift, Bacon41/PantheonPrototype and andrecarlucci/gta2net, but
+they are optional and gta2net needs external GTA2 data.
 
-Candidates seen but not tried: Jamedjo/BeatShift (~1 GB), Bacon41/PantheonPrototype, and
-andrecarlucci/gta2net (needs GTA2's freeware data).
-
-Alternate with §19.1 (BinaryFormatter in the browser and on Android) and §19.2 (TerrainDemo in
-the browser). Record every fix as a CSX/CBIND/FX row with a regression test, commit each task
-locally, and push only when the owner says so.
+Then perform the finite compatibility audit and stability pass, finish the migration guide and
+multi-language demo requested by the owner, and write the campaign-closure section. Record every
+fix with a regression test, commit each task locally, and push only when the owner says so.
