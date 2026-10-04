@@ -900,7 +900,8 @@ TEST(SdlGpuCompiledEffectDrawTest, SharedSpriteBatchTextureSlotContract)
 
 TEST(SdlGpuCompiledEffectDrawTest, SharedCubeAndVolumeSamplerContract)
 {
-    GraphicsDevice device;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectCubeAndVolumeSamplerContract(device);
@@ -908,7 +909,8 @@ TEST(SdlGpuCompiledEffectDrawTest, SharedCubeAndVolumeSamplerContract)
 
 TEST(SdlGpuCompiledEffectDrawTest, QueuedVolumeSamplerRetainsTextureUntilReplay)
 {
-    GraphicsDevice device;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
 
@@ -947,7 +949,7 @@ TEST(SdlGpuCompiledEffectDrawTest, QueuedVolumeSamplerRetainsTextureUntilReplay)
     device.setRasterizerStateProperty(RasterizerState::CullNone);
     device.setDepthStencilStateProperty(DepthStencilState::None);
     device.setBlendStateProperty(BlendState::Opaque);
-    effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+    effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
     device.DrawUserPrimitives(
         PrimitiveType::TriangleList, static_cast<const void*>(quad), 0, 2, declaration);
 
@@ -1000,7 +1002,7 @@ TEST(SdlGpuCompiledEffectDrawTest, QueuedDrawRetainsShadersAfterEffectDestructio
     device.setRasterizerStateProperty(RasterizerState::CullNone);
     device.setDepthStencilStateProperty(DepthStencilState::None);
     device.setBlendStateProperty(BlendState::Opaque);
-    effect->getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+    effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
     device.DrawUserPrimitives(
         PrimitiveType::TriangleList, static_cast<const void*>(quad), 0, 2, declaration);
 
@@ -1099,7 +1101,7 @@ TEST(SdlGpuCompiledEffectDrawTest, RecreatedEffectsReceiveDistinctStablePipeline
         auto effect = std::make_unique<Effect>(device, effectBytes);
         effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
         effect->getParametersProperty()["Tint"]->SetValue(tint);
-        effect->getTechniquesProperty()[0].getPassesProperty()[swizzled ? 0 : 1].Apply();
+        effect->getTechniquesProperty()[0]->getPassesProperty()[swizzled ? 0 : 1]->Apply();
 
         auto* runtime = dynamic_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect*>(
             effect->GetCompiledRuntimePtr());
@@ -1123,7 +1125,7 @@ TEST(SdlGpuCompiledEffectDrawTest, RecreatedEffectsReceiveDistinctStablePipeline
 
         // Applying and queueing the exact same pass again hits MojoShader's linker cache. Its
         // identity must remain the one already folded into this renderer's pipeline key.
-        effect->getTechniquesProperty()[0].getPassesProperty()[swizzled ? 0 : 1].Apply();
+        effect->getTechniquesProperty()[0]->getPassesProperty()[swizzled ? 0 : 1]->Apply();
         device.DrawUserPrimitives(
             PrimitiveType::TriangleList, static_cast<const void*>(quad), 0, 2, declaration);
         EXPECT_EQ(runtime->LinkedProgramIdentityEXT(), identity);
@@ -1208,7 +1210,7 @@ TEST(SdlGpuCompiledEffectDrawTest, AbandonedQueuedDrawReleasesShadersBeforeRende
         });
         RenderTarget2D target(device, 8, 8);
         device.SetRenderTarget(&target);
-        effect->getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+        effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
         device.DrawUserPrimitives(
             PrimitiveType::TriangleList, static_cast<const void*>(quad), 0, 2, declaration);
 

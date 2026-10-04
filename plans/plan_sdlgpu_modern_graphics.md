@@ -1427,3 +1427,33 @@ SMG-0035's validation messages by SMG-0040.
   `SdlGpuStorageTexture2DRenderer`/`SdlGpuComputeShaderRenderer` share the old
   `owner_->Device() != nullptr` destructor shape, harmless while nothing holds them past their
   renderer.
+
+## SMG-0043 — compiled-effect qualification build repair
+
+The native sample renderer campaign exposed a configuration-specific build break in the
+`SDL_GPU` renderer when `CNA_SDL_GPU_COMPILED_EFFECTS=ON`.  The compiled-effect draw path contained
+two stale `(void)` references to nonexistent local variables (`indirectArguments` and
+`indirectOffset`).  The actual indirect arguments for a queued command are obtained later from
+`pendingIndirectArgumentsEXT_`; removing the two dead references restores the intended code and
+does not change runtime behavior.
+
+The same previously unbuildable configuration exposed pointer-API drift in the SDL_GPU
+compiled-effect tests and MRT executable: `EffectTechniqueCollection` and `EffectPassCollection`
+return pointers.  Those call sites now use the current public API.  The two volume-sampler tests
+also construct a HiDef `GraphicsDevice`, because their `Texture3D` contract is intentionally not a
+Reach-profile feature; this replaces a dead-on-profile failure with execution of the assertions.
+
+Qualification on Linux, GCC 14.2, Debug, SDL_gpu's Vulkan driver, private Weston/Xwayland:
+
+- full `CNA_GRAPHICS_RENDERER=SDL_GPU`, `CNA_SDL_GPU_COMPILED_EFFECTS=ON` configuration builds;
+- the six-renderer representative cna-samples configuration builds the ten selected samples;
+- compiled-effect suite: **46/46 pass**, one optional ShaderCross case skipped, no
+  profile-dead tests;
+- classic executable suite (`-R '^SdlGpu_'`): **174/200 pass, 26 fail**.  The remaining failures
+  are the existing SDL_GPU parity backlog (including the recorded constructor-exception double
+  free), not failures in the repaired compiled-effect route.
+
+The build itself is the regression gate for the original production defect, while
+`SdlGpu_CompiledEffectRuntime` and the 45 discovered `SdlGpuCompiledEffect*` cases exercise the
+compiled-effect parser, draw routes, multistream input, instancing, SpriteBatch, render-target
+sampling, cube/volume sampling and deferred resource lifetimes.

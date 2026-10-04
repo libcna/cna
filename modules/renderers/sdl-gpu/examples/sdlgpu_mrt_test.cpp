@@ -390,7 +390,7 @@ class SdlGpuMrtTest : public Game
         Effect effect(dev, CNA::TestSupport::BuildSyntheticMrtDrawableEffect());
         auto& parameters = effect.getParametersProperty();
         parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
-        EffectPass& pass = effect.getTechniquesProperty()[0].getPassesProperty()[1];
+        EffectPass& pass = *effect.getTechniquesProperty()[0]->getPassesProperty()[1];
 
         struct ClipVertex { float x, y, z; };
         const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {

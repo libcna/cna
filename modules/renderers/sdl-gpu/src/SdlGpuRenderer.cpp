@@ -8568,8 +8568,6 @@ namespace CNA::Internal::Renderers::SdlGpu
         CompiledEffectDrawCommand command;
         command.binding = BuildCompiledEffectBindingEXT(*sdlGpuEffect, compiledStreams);
         command.instanceCount = static_cast<Uint32>(std::max(1, instanceCount));
-        (void) indirectArguments;
-        (void) indirectOffset;
         command.vertexStride = command.binding.vertexBuffers.empty()
             ? 0u : command.binding.vertexBuffers.front().pitch;
 
