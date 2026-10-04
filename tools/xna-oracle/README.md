@@ -141,6 +141,24 @@ python3 scripts/xna-diff.py xna_out.png cna_out.png --diff-out diff.png
 Requires Pillow (`pip install pillow`) — not previously a dependency of this project's other
 `scripts/*.py` tools, but the standard library has no PNG decoder.
 
+## Lifecycle failure oracle
+
+`LifecycleFailureOracle.cs` is a small non-rendering assertion that still constructs a real XNA
+game and graphics device. Its first `Update` throws; the program catches that exception, disposes
+the game, and verifies two otherwise easy-to-miss XNA cleanup rules: `UnloadContent` is still
+called exactly once, and `Content.Unload` precedes it. Build it with the same three XNA references
+shown above for `Oracle.cs`, then run it under Wine on a private display. The measured XNA 4.0
+output on 2026-10-04 is:
+
+```text
+RUN_RESULT=update failure
+UNLOAD_CONTENT_CALLS=1
+ORDER=Content.Unload,Game.UnloadContent
+```
+
+`modules/c-api/tests/pure_c/LifecycleSmoke.c` pins the corresponding CNA C ABI behavior without
+requiring Wine or Microsoft's runtime.
+
 ## Channel expansion
 
 `FormatExpansionOracle.cs` is a second, deliberately non-scene-driven measurement: what the real XNA

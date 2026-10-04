@@ -197,11 +197,15 @@ public:
 
         const CallbackScope scope(*this);
         NotifyExit();
-        if (hasLoadedContent_) {
-            Invoke(callbacks_.unload_content, nullptr);
-            hasLoadedContent_ = false;
-        }
         Dispose();
+        // A C game does not have to register an IGraphicsDeviceService. In that case canonical
+        // Game::Dispose cannot receive DeviceDisposing, so finish the same cleanup after it has
+        // disposed Content. Games with a manager reached the override below during Dispose and
+        // already cleared this flag. This preserves XNA's measured Content.Unload-before-
+        // Game.UnloadContent order in both shapes.
+        if (hasLoadedContent_) {
+            UnloadContent();
+        }
     }
 
 protected:
@@ -216,7 +220,10 @@ protected:
         if (!hasLoadedContent_) {
             return;
         }
-        Invoke(callbacks_.unload_content, nullptr);
+        // Real XNA 4.0 still invokes UnloadContent from Dispose after Update has thrown. A prior
+        // C callback failure stops later frame/event callbacks, but it must not suppress this
+        // cleanup callback.
+        Invoke(callbacks_.unload_content, nullptr, callbacks_.context, true);
         hasLoadedContent_ = false;
     }
 
@@ -387,9 +394,11 @@ private:
     void Invoke(
         const CNA_GameLifecycleCallback callback,
         const CNA_GameTime* const gameTime,
-        void* const context)
+        void* const context,
+        const bool runAfterFailure = false)
     {
-        if (callback == nullptr || callbackFailure_ != CNA_RESULT_SUCCESS) {
+        if (callback == nullptr ||
+            (!runAfterFailure && callbackFailure_ != CNA_RESULT_SUCCESS)) {
             return;
         }
 

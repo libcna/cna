@@ -25,6 +25,11 @@ typedef struct LifecycleState {
     int readback_validated;
 } LifecycleState;
 
+typedef struct CallbackFailureState {
+    int load_count;
+    int unload_count;
+} CallbackFailureState;
+
 /* CBIND-155: the game is activated as its run begins, and its handler can use the device there. */
 typedef struct ActivationState {
     CNA_Handle game;
@@ -639,6 +644,55 @@ static CNA_Result on_failing_load(
     return CNA_RESULT_INVALID_STATE;
 }
 
+static CNA_Result on_failure_test_load(
+    CNA_Handle game,
+    const CNA_GameTime* game_time,
+    void* context,
+    CNA_CallbackError* out_error)
+{
+    CallbackFailureState* const state = (CallbackFailureState*)context;
+    (void)game;
+    (void)out_error;
+    if (game_time != 0) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    ++state->load_count;
+    return CNA_RESULT_SUCCESS;
+}
+
+static CNA_Result on_failing_update(
+    CNA_Handle game,
+    const CNA_GameTime* game_time,
+    void* context,
+    CNA_CallbackError* out_error)
+{
+    static const char message[] = "update callback failure";
+    (void)game;
+    (void)context;
+    if (game_time == 0) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    out_error->message.data = message;
+    out_error->message.byte_length = sizeof(message) - 1U;
+    return CNA_RESULT_CALLBACK;
+}
+
+static CNA_Result on_unload_after_failure(
+    CNA_Handle game,
+    const CNA_GameTime* game_time,
+    void* context,
+    CNA_CallbackError* out_error)
+{
+    CallbackFailureState* const state = (CallbackFailureState*)context;
+    (void)game;
+    (void)out_error;
+    if (game_time != 0) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    ++state->unload_count;
+    return CNA_RESULT_SUCCESS;
+}
+
 static CNA_GameCreateInfo make_create_info(
     const CNA_GameCallbacks* callbacks,
     const char* title,
@@ -838,6 +892,22 @@ int main(void)
         message_bytes != 21U || memcmp(message, "test callback failure", 21U) != 0 ||
         cna_game_destroy(game) != CNA_RESULT_CALLBACK) {
         return CNA_TEST_FAIL(10);
+    }
+
+    CallbackFailureState callback_failure_state = {0};
+    callbacks.load_content = on_failure_test_load;
+    callbacks.update = on_failing_update;
+    callbacks.draw = 0;
+    callbacks.unload_content = on_unload_after_failure;
+    callbacks.exiting = 0;
+    callbacks.context = &callback_failure_state;
+    create_info = make_create_info(&callbacks, "", 0U);
+    if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
+        cna_game_run_one_frame(game) != CNA_RESULT_CALLBACK ||
+        callback_failure_state.load_count != 1 ||
+        cna_game_destroy(game) != CNA_RESULT_CALLBACK ||
+        callback_failure_state.unload_count != 1) {
+        return CNA_TEST_FAIL(15);
     }
 
     return 0;

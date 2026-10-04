@@ -305,21 +305,22 @@ Known native issues. None of them was introduced by this campaign:
   `CnaContentTests` also needs the repository root as its working directory.
 - At `-j8`, the C smoke tests lose 1–3 different tests per run (timing assumptions such as
   `RuntimeComponentsSmoke` stage 8). All of them pass alone.
-- **Observed in code, not yet tested:** once a callback fails in a run, `CGame::Invoke` skips
-  every later callback (`callbackFailure_`). So after an exception in `Update`, `UnloadContent` is
-  never called at Dispose, although XNA's `Dispose` would still call it. Two things are also
-  unverified: whether CNA runs `Content.Unload()` before `UnloadContent` (XNA's `DeviceDisposing`
-  does both, IL), and whether that order matters to any game.
+- CBIND-158 closed the former `callbackFailure_` suspicion. A checked-in oracle run against real
+  XNA 4.0 under Wine/DXVK proved that an Update exception leaves `Run`, then `Dispose` still calls
+  `UnloadContent` exactly once, after `Content.Unload`. CNA now does the same: only the cleanup
+  callback may run after an earlier failure; later frame/event callbacks remain suppressed.
 
 ## 8. cna-cs: what behaves like XNA now (by area; CSX row numbers in `CAMPAIGN.md`)
 
-- **Lifecycle** (CSX-082/084/086/088/090/125/142):
+- **Lifecycle** (CSX-082/084/086/088/090/125/142/146):
   - XNA's order of `Initialize`, `LoadContent`, `BeginRun`, `EndRun`, `Exiting` and `Disposed`.
   - Components are initialised inside `base.Initialize()`, once. `base.Update`/`base.Draw` drive
     the components at the call.
   - A callback's exception unwinds out of `Run` with its own type. A game event handler's exception
     leaves `Run` at the next `Update`.
   - What `UnloadContent` throws leaves `Dispose`, after the native game is released (CSX-142).
+  - An earlier Update callback failure does not suppress `UnloadContent`; content unloads first,
+    as measured on XNA 4.0 (CSX-146 / CBIND-158).
   - SIGTERM/SIGINT end the game through its own exit.
 - **Exceptions** (CSX-080/127/133): native refusals map to the exception XNA throws for the same
   call. Examples: `NoSuitableGraphicsDeviceException`; `ContentLoadException` with XNA's message;
@@ -582,8 +583,9 @@ old `plan.md`/`NEXT.md` blockers are historical.
    current raw pointer. Pure regression tests cover persistence, deltas, recentering, reset and
    invalid coordinates; unchanged TerrainDemo renders with deterministic headless input. The
    runner's default initial `(0,0)` remains a harness state, not an invented global auto-centre.
-3. **The native `callbackFailure_` observation in §7.** After a run failure, `UnloadContent` is
-   skipped at Dispose. Verify it against XNA and decide.
+3. **Resolved (CSX-146 / CBIND-158): the native `callbackFailure_` observation in §7.** Real XNA
+   calls `UnloadContent` during Dispose after an Update failure, with `Content.Unload` first; CNA
+   now matches it and carries native plus managed regressions.
 4. Vertex-texture LOD bias on GLES 3 (§7).
 5. A game blocked in a Guide `End*` wait does not see SIGTERM until the Guide closes.
 6. CSX-114 completeness: `MessageBox` through `cna_message_box_show_ext` (a new import, so update
