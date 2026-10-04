@@ -2022,6 +2022,11 @@ namespace CNA::TestSupport
         /// Adds an FxTexture parameter, an FxSampler parameter and a real Shader Model 2.0
         /// pixel-shader object, which is what makes MojoShader report sampler state registers.
         bool includeSampler = false;
+        /// Emits the private sampler parameter before its public texture parameter. Real XNA
+        /// effects may interleave private sampler/shader objects with reflected parameters, so a
+        /// renderer must preserve the native parameter index rather than compacting its storage
+        /// to the public reflection count.
+        bool samplerParameterPrecedesTexture = false;
         std::vector<SyntheticSamplerState> samplerStates;
         std::uint32_t samplerRegister = 0;
         /// Names a constant in the shader's constant table that no effect parameter declares.
@@ -9434,15 +9439,29 @@ namespace CNA::TestSupport
 
         if (options.includeSampler)
         {
-            AppendUInt32(bytes, textureType);
-            AppendUInt32(bytes, textureValue);
-            AppendUInt32(bytes, 0); // flags
-            AppendUInt32(bytes, 0); // annotations
+            const auto appendTextureParameter = [&]() {
+                AppendUInt32(bytes, textureType);
+                AppendUInt32(bytes, textureValue);
+                AppendUInt32(bytes, 0); // flags
+                AppendUInt32(bytes, 0); // annotations
+            };
+            const auto appendSamplerParameter = [&]() {
+                AppendUInt32(bytes, samplerType);
+                AppendUInt32(bytes, samplerValue);
+                AppendUInt32(bytes, 0); // flags
+                AppendUInt32(bytes, 0); // annotations
+            };
 
-            AppendUInt32(bytes, samplerType);
-            AppendUInt32(bytes, samplerValue);
-            AppendUInt32(bytes, 0); // flags
-            AppendUInt32(bytes, 0); // annotations
+            if (options.samplerParameterPrecedesTexture)
+            {
+                appendSamplerParameter();
+                appendTextureParameter();
+            }
+            else
+            {
+                appendTextureParameter();
+                appendSamplerParameter();
+            }
         }
 
         if (includeStreamMix)

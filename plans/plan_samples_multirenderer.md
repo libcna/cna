@@ -24,7 +24,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-001 | **DONE** | Route `SurfaceFormat::Color` byte/generic `TextureCube` and `Texture3D` transfers through the canonical RGBA8 renderer path. |
 | MSR-002 | **DONE** | Restore the `SDL_GPU` + compiled-XNA-effect build and its focused tests (`SMG-0043`). |
 | MSR-003 | **OPEN** | Repair compiled-effect passes that bind no shader pair, exposed by `BloomSample` on Vulkan, WebGPU and SDL_GPU. |
-| MSR-004 | **OPEN** | Repair compiled-effect texture-parameter indexing, exposed by `ShadowMapping` on Vulkan and WebGPU. |
+| MSR-004 | **DONE** | Repair compiled-effect texture-parameter indexing, exposed by `ShadowMapping` on Vulkan and WebGPU. |
 | MSR-005 | **OPEN** | Classify `LensFlare` occlusion-query limits truthfully for SDL_GPU and FNA3D's selected internal driver; never fabricate a query result. |
 | MSR-006 | **IN PROGRESS** | Complete single-renderer and six-renderer Linux CNA qualification. |
 | MSR-007 | **IN PROGRESS** | Qualify the representative sample set, then the complete 91-sample corpus. |
@@ -54,6 +54,28 @@ Regression evidence:
   OPENGLES3;
 - the same `ReachGraphicsDemo` executable now starts and remains stable on all six Linux target
   renderers, with the active renderer verified in each process.
+
+## MSR-004 — Native compiled-effect parameter indices
+
+Vulkan and WebGPU sized their texture-value arrays from the public XNA parameter description.
+That description intentionally omits sampler and shader-object parameters, while every
+`runtimeIndex` remains an index into MojoShader's complete native parameter table.  Authentic
+effects such as ShadowMapping's place a private sampler before a public texture, so the valid
+texture index exceeded the compact public count and was rejected during `EffectPass::Apply()`.
+
+Both backends now size native-indexed texture storage from `effectData_->param_count`, matching
+the already-correct EasyGL and SDL_GPU implementations.  The shared compiled-effect fixture can
+now place a sampler before its texture, and the common texture-binding contract exercises that
+shape through the public `EffectParameter::SetValue(Texture2D*)` path.
+
+Regression evidence:
+
+- the new shared contract failed before the fix on Vulkan and WebGPU with each backend's
+  “texture parameter index is out of range” exception;
+- the focused shared contract passes after the fix on Vulkan, WebGPU and SDL_GPU;
+- the same six-renderer `ShadowMapping` executable now remains stable with both Vulkan and WebGPU,
+  and each process logs the explicitly requested active renderer;
+- the OPENGLES3 launch of that same executable still passes after the framework change.
 
 ## Representative automated matrix
 

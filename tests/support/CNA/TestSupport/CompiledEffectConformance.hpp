@@ -487,6 +487,23 @@ namespace CNA::TestSupport
         effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
         EXPECT_EQ(device.getTexturesProperty()[0], &texture);
 
+        // A sampler is private reflection data but still occupies a native MojoShader parameter
+        // index. ShadowMapping's authentic effect places one before a public texture parameter;
+        // compacting renderer texture storage to the public parameter count then rejects that
+        // texture's valid native index.
+        SyntheticEffectOptions interleaved;
+        interleaved.includeSampler = true;
+        interleaved.samplerParameterPrecedesTexture = true;
+        interleaved.samplerStates = {{Fx::SampAddressU, Fx::AddressClamp}};
+        Effect interleavedEffect(device, BuildSyntheticEffect(interleaved));
+        EffectParameter* interleavedTexture =
+            interleavedEffect.getParametersProperty()["FxTexture"];
+        ASSERT_NE(interleavedTexture, nullptr);
+        EXPECT_NO_THROW(interleavedTexture->SetValue(&texture));
+        EXPECT_NO_THROW(
+            interleavedEffect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply());
+        EXPECT_EQ(device.getTexturesProperty()[0], &texture);
+
         // A pass that assigns no texture leaves the slot the game selected alone.
         Texture2D selected(device, 2, 2);
         selected.SetData(pixels, 4);

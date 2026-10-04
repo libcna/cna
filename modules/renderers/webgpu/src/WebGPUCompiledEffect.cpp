@@ -388,7 +388,10 @@ namespace CNA::Internal::Renderers::WebGPU
         MojoShaderEffect::ValidateNativeEffect(effectData_, "WebGPU compiled effect");
         description_ = MojoShaderEffect::BuildDescription(effectData_);
         samplerTextureParameters_ = MojoShaderEffect::BuildSamplerTextureParameterMap(effectData_);
-        textures_.assign(description_.parameters.size(), nullptr);
+        // Runtime indices refer to MojoShader's complete parameter table. Public XNA reflection
+        // omits sampler and shader-object parameters, so its compacted count cannot size native
+        // indexed storage when one of those private entries precedes a texture.
+        textures_.assign(static_cast<std::size_t>(effectData_->param_count), nullptr);
         boundSamplerTextures_.fill(nullptr);
         boundVertexSamplerTextures_.fill(nullptr);
     }
