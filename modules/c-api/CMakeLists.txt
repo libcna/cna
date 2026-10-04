@@ -1634,7 +1634,11 @@ if(CNA_BUILD_TESTS)
     add_test(NAME CApi_AudioStreamingSmoke COMMAND cna_c_api_audio_streaming_smoke)
     if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
         set_tests_properties(CApi_AudioStreamingSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy"
+        )
+    else()
+        set_tests_properties(CApi_AudioStreamingSmoke PROPERTIES
+            ENVIRONMENT "SDL_AUDIODRIVER=dummy"
         )
     endif()
 
@@ -1651,7 +1655,11 @@ if(CNA_BUILD_TESTS)
     add_test(NAME CApi_AudioSoundEffectSmoke COMMAND cna_c_api_audio_sound_effect_smoke)
     if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
         set_tests_properties(CApi_AudioSoundEffectSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy"
+        )
+    else()
+        set_tests_properties(CApi_AudioSoundEffectSmoke PROPERTIES
+            ENVIRONMENT "SDL_AUDIODRIVER=dummy"
         )
     endif()
 
@@ -1828,7 +1836,11 @@ if(CNA_BUILD_TESTS)
     add_test(NAME CApi_Audio3DSmoke COMMAND cna_c_api_audio_3d_smoke)
     if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
         set_tests_properties(CApi_Audio3DSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy"
+        )
+    else()
+        set_tests_properties(CApi_Audio3DSmoke PROPERTIES
+            ENVIRONMENT "SDL_AUDIODRIVER=dummy"
         )
     endif()
 
