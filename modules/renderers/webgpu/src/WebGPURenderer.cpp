@@ -13475,9 +13475,23 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             break;
         }
 
+        // MSR-017: SkinnedEffect owns a declaration-driven normalization path. In particular,
+        // stock XNA content commonly uses a 68-byte record with BLENDINDICES0 at offset 12; the
+        // same byte count also names CNA's canonical skinned-PBR record, whose indices live at 64.
+        // Running the stride-derived fidelity guard first therefore rejects a declaration that
+        // QueueSkinnedDraw can represent exactly. Keep the single-stream boundary truthful, then
+        // let that route validate and normalize the semantics before any fixed layout is selected.
+        if (params.skinned && !params.pbr)
+        {
+            RequireSingleStreamRouteEXT(params, route);
+            QueueSkinnedDraw(vb, ib, world, view, projection, primitive, primitiveCount, params,
+                             instanceCount, instanceStream);
+            return;
+        }
+
         // REMED-GFX-DECL-GUARD: the skinned and PBR families still select their attribute arrays
-        // from the byte stride, so they still need the guard that refuses a declaration those
-        // arrays would silently reinterpret. WEBGPU-155 deliberately did not convert them; the
+        // from the byte stride, so the PBR family still needs the guard that refuses a declaration
+        // those arrays would silently reinterpret. WEBGPU-155 deliberately did not convert it; the
         // check is here rather than at the top of the entry points so a converted family is
         // judged by its declaration instead.
         RequireFaithfulDeclarationEXT(vb, route);
@@ -13503,19 +13517,6 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                          instanceCount, instanceStream);
             return;
         }
-        // WEBGPU-177: no stride clause. A skinned effect is a skinned DRAW whatever byte layout the
-        // declaration chose -- `BLENDINDICES0` may be `Vector4` as well as `Byte4`, which is stride
-        // 64 rather than 52 -- and QueueSkinnedDraw is the one place that knows whether a given
-        // declaration can supply the five semantics it needs. Gating on the stride here sent a
-        // perfectly good stride-64 skinned vertex down to DrawColoredPrimitives, which refused it
-        // as "not a stride-16 VertexPositionColor buffer": a true statement about the wrong route.
-        if (params.skinned && !params.pbr)
-        {
-            QueueSkinnedDraw(vb, ib, world, view, projection, primitive, primitiveCount, params,
-                                instanceCount, instanceStream);
-            return;
-        }
-
         // An unsupported effect on a stride that carries no palette or tangent basis, or a buffer
         // with neither a declaration nor a canonical stride -- fall back exactly like
         // IGraphicsRenderer's own default implementation did, which throws for anything but a
@@ -15878,6 +15879,41 @@ namespace
         return true;
     }
 
+    /// MSR-017: whether a declared skinned stream already has the exact byte layout consumed by
+    /// the fixed WebGPU skinned pipelines. A matching byte stride is insufficient: 68 bytes can
+    /// mean either CNA's skinned-PBR record or the reordered XNA SkinnedEffect record emitted by
+    /// legacy content processors.
+    [[nodiscard]] static bool IsCanonicalSkinnedStreamEXT(
+        const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaredElements,
+        std::size_t sourceStride)
+    {
+        using CNA::Internal::Graphics::FindDeclaredSemanticEXT;
+        using Microsoft::Xna::Framework::Graphics::VertexElement;
+        using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+
+        if (sourceStride != 52 && sourceStride != 56) return false;
+        const auto matches = [&declaredElements](VertexElementUsage usage, int offset,
+                                                 VertexElementFormat format) {
+            const VertexElement* element =
+                FindDeclaredSemanticEXT(declaredElements, usage, 0);
+            return element != nullptr && element->getOffsetProperty() == offset &&
+                   element->getVertexElementFormatProperty() == format;
+        };
+        if (!matches(VertexElementUsage::Position, 0, VertexElementFormat::Vector3) ||
+            !matches(VertexElementUsage::Normal, 12, VertexElementFormat::Vector3) ||
+            !matches(VertexElementUsage::TextureCoordinate, 24, VertexElementFormat::Vector2) ||
+            !matches(VertexElementUsage::BlendWeight, 32, VertexElementFormat::Vector4) ||
+            !matches(VertexElementUsage::BlendIndices, 48, VertexElementFormat::Byte4))
+            return false;
+
+        const VertexElement* color =
+            FindDeclaredSemanticEXT(declaredElements, VertexElementUsage::Color, 0);
+        if (sourceStride == 52) return color == nullptr;
+        return color != nullptr && color->getOffsetProperty() == 52 &&
+               color->getVertexElementFormatProperty() == VertexElementFormat::Color;
+    }
+
     void WebGPURenderer::QueueSkinnedDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                                   PrimitiveType primitive, int primitiveCount,
@@ -15893,27 +15929,34 @@ namespace
         SkinnedDrawCommand command;
         // plans/plan_street_webgpu.md STREETW-0005: this draw's per-instance world matrices.
         CaptureInstanceStreamEXT(instanceStream, instanceCount, "SkinnedEffect", command.instance);
-        // WEBGPU-177: the canonical stride-52/56 record still takes the memcpy it always did, so
-        // nothing about the layout this renderer has always accepted changes. Any OTHER declaration
-        // that can supply the same five semantics is rewritten into that record instead of being
-        // refused -- see NormalizeSkinnedStreamEXT for why the rewrite happens here rather than in
-        // a second pair of shaders.
+        // WEBGPU-177/MSR-017: a canonical declared stride-52/56 record keeps its resident-buffer
+        // path. Any OTHER declaration that can supply the same five semantics is rewritten into
+        // that record instead of being refused. Testing the declaration as well as its byte count
+        // is essential: XNA content can reorder the fields while retaining a canonical byte count,
+        // and a 68-byte SkinnedEffect record collides with CNA's skinned-PBR stride.
         std::vector<std::uint8_t> normalized;
         std::size_t normalizedStride = 0;
         const std::vector<std::uint8_t>* stream = &webgpuVb.ShadowData();
         std::size_t sourceStride = stride;
-        if (stride != 52 && stride != 56)
+        const auto& declaredElements = webgpuVb.Declaration().GetElements();
+        if (!declaredElements.empty() &&
+            !IsCanonicalSkinnedStreamEXT(declaredElements, stride))
         {
-            if (!NormalizeSkinnedStreamEXT(webgpuVb.Declaration().GetElements(),
-                                           webgpuVb.ShadowData(), stride, normalized,
+            if (!NormalizeSkinnedStreamEXT(declaredElements, webgpuVb.ShadowData(), stride, normalized,
                                            normalizedStride))
                 throw std::invalid_argument(
                     "CNA WebGPU: QueueSkinnedDraw needs a vertex that declares POSITION0 "
                     "(Vector3), NORMAL0 (Vector3), TEXCOORD0 (Vector2), BLENDWEIGHT0 (Vector4) "
                     "and BLENDINDICES0 (Byte4 or Vector4), with an optional COLOR0 -- this "
-                    "declaration supplies none such, and its stride is neither 52 nor 56");
+                    "declaration supplies none such");
             stream = &normalized;
             sourceStride = normalizedStride;
+        }
+        else if (declaredElements.empty() && stride != 52 && stride != 56)
+        {
+            throw std::invalid_argument(
+                "CNA WebGPU: QueueSkinnedDraw received no VertexDeclaration and its stride is "
+                "neither the canonical 52 nor 56 bytes");
         }
         command.stride = sourceStride;
         const std::vector<std::uint8_t>& shadow = *stream;

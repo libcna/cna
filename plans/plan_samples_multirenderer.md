@@ -37,6 +37,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-014 | **DONE** | Resolve FNA3D compiled-effect device texture slots at draw time, including SpriteBatch's slot-zero override. |
 | MSR-015 | **DONE** | Keep focused renderer tests on libcna's single initialized EasyGL/meta-gl runtime copy. |
 | MSR-016 | **DONE** | Let Vulkan stock effects ignore declaration channels the active effect does not consume. |
+| MSR-017 | **DONE** | Normalize legacy XNB SkinnedEffect declarations before WebGPU's stride-derived layout guard. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -289,6 +290,35 @@ Regression evidence:
   passes on rerun; the three remaining failures are independent standing/configuration findings --
   the already documented `Vulkan_DrawRangeValidation`, a compiled-effects/HiDef-unaware capability
   snapshot, and `Vulkan_AvatarRenderer_Standard`'s `SkinnedEffect` rendering path.
+
+## MSR-017 — WebGPU legacy XNB skinned declarations
+
+`CPUSkinning`, `SkinnedModelExtensions` and `SkinningSample` use an authentic legacy XNA model
+vertex declaration ordered as `Position0 + BlendIndices0 + BlendWeight0 + Normal0 +
+TextureCoordinate0 + Tangent0`.  Its 68-byte record is a regular `SkinnedEffect` input, but the
+same byte count denotes CNA's canonical skinned-PBR record.  WebGPU selected the draw correctly as
+skinned, then ran the generic stride-derived declaration guard before its existing semantic
+normalizer; the guard consequently compared `BlendIndices0@12` with PBR's `BlendIndices0@64` and
+refused the draw.
+
+WebGPU now sends a non-PBR `SkinnedEffect` draw through its declaration-aware validation and
+normalization before any fixed-stride guard.  A canonical declared 52/56-byte stream retains the
+resident-buffer fast path; every other declared layout is normalized by semantics, including a
+reordered stream whose byte count happens to collide with another CNA layout.  Declaration-less
+low-level buffers still accept only the canonical 52/56-byte records, and the existing truthful
+single-stream boundary remains enforced.
+
+Regression evidence:
+
+- `WebGPU_Parity_skinned_terms` now contains the real reordered 68-byte declaration in addition to
+  the existing stride-64 `Vector4` blend-index case; all assertions pass;
+- the five focused WebGPU SkinnedEffect/Skinned3D tests pass 5/5 through the private GPU runner;
+- the corresponding EasyGL parity fixture passes unchanged;
+- the same multi-renderer executables for `CPUSkinning`, `SkinnedModelExtensions` and
+  `SkinningSample` pass 3/3 with active `WEBGPU` and 3/3 with active `OPENGLES3`;
+- the full WebGPU gallery result therefore advances from 86 to 89 automated technical passes;
+  `NormalMappingEffect` remains a separate signed-normalized mip-generation defect and `Yacht`
+  remains the renderer-independent gamer-services environment failure.
 
 ## Representative automated matrix
 

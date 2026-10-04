@@ -30,14 +30,16 @@
 // ubyte indices) and its stride-56 twin with a trailing ubyte4 colour for the `VertexColorEnabled`
 // cell.
 //
-// THE FIFTH COLUMN DECLARES ITS BLEND INDICES AS `Vector4`, not `Byte4`, at stride 64. XNA's
-// `VertexElementFormat` describes the BYTES in the buffer, not the register the semantic arrives
-// in, so a content processor may write either -- the stock `SkinnedModelProcessor` writes
-// `ConvertChannelContent<Vector4>("BlendIndices0")` and real XNA draws it (`plans/plan_fx.md`
-// FX-127). Both column-4 cells draw the SAME scene as the `Byte4` cell beside them and must land on
-// the same pixels: row 0 repeats the palette's last slot (index 71 as a float), row 1 repeats the
-// one-light shading. A renderer that read the float lane as raw bytes selects bone 0 and the quad
-// does not move; one that refused the declaration does not draw at all.
+// THE FIFTH COLUMN exercises two non-canonical declarations. Row 0 declares its blend indices as
+// `Vector4`, not `Byte4`, at stride 64. XNA's `VertexElementFormat` describes the BYTES in the
+// buffer, not the register the semantic arrives in, so a content processor may write either -- the
+// stock `SkinnedModelProcessor` writes `ConvertChannelContent<Vector4>("BlendIndices0")` and real
+// XNA draws it (`plans/plan_fx.md` FX-127). Row 1 uses the 68-byte layout found in legacy XNB model
+// content: POSITION, BLENDINDICES, BLENDWEIGHT, NORMAL, TEXCOORD, TANGENT. Its byte count collides
+// with CNA's canonical skinned-PBR record even though its declared semantics unambiguously describe
+// a regular SkinnedEffect vertex. Both cells draw the SAME scene as a canonical cell and must land
+// on the same pixels; refusing either declaration, or reading it through the colliding fixed layout,
+// leaves the cell blank or corrupted.
 
 #include "parity/ParityFixture.hpp"
 
@@ -158,6 +160,32 @@ namespace
             VertexElement(48, VertexElementFormat::Vector4, VertexElementUsage::BlendIndices, 0),
         });
     }
+
+    /// Legacy XNB SkinnedEffect layout whose 68-byte stride collides with CNA's skinned-PBR row.
+    struct ReorderedSkinnedVertex
+    {
+        float px, py, pz;
+        std::uint8_t i0, i1, i2, i3;
+        float w0, w1, w2, w3;
+        float nx, ny, nz;
+        float u, v;
+        float tx, ty, tz, tw;
+    };
+    static_assert(sizeof(ReorderedSkinnedVertex) == 68,
+                  "the reordered legacy skinned vertex is 68 bytes");
+
+    [[nodiscard]] VertexDeclaration ReorderedSkinnedDeclaration()
+    {
+        return VertexDeclaration(68, {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Byte4, VertexElementUsage::BlendIndices, 0),
+            VertexElement(16, VertexElementFormat::Vector4, VertexElementUsage::BlendWeight, 0),
+            VertexElement(32, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+            VertexElement(44, VertexElementFormat::Vector2,
+                          VertexElementUsage::TextureCoordinate, 0),
+            VertexElement(52, VertexElementFormat::Vector4, VertexElementUsage::Tangent, 0),
+        });
+    }
 }
 
 /// WEBGPU-177: identity/translation/blended bones, the palette's far end, lights, specular, colour.
@@ -200,24 +228,25 @@ protected:
             bool specular;
             bool vertexColor;
             bool floatIndices;   ///< Declare BLENDINDICES0 as Vector4 at stride 64.
+            bool reordered68;    ///< Use the legacy 68-byte XNB SkinnedEffect layout.
         };
         const std::array<Cell, kColumns * kRows> cells{{
             {"identity bones leave the quad where it was", BoneCase::Identity, 1, 1, false, false,
-             false},
-            {"one bone translating by d", BoneCase::TranslateOne, 1, 1, false, false, false},
-            {"two bones at 50/50: identity and 2d", BoneCase::BlendTwoHalves, 2, 1, false, false,
-             false},
-            {"bone index 71, the last slot XNA allows", BoneCase::LastPaletteSlot, 1, 1, false,
              false, false},
+            {"one bone translating by d", BoneCase::TranslateOne, 1, 1, false, false, false, false},
+            {"two bones at 50/50: identity and 2d", BoneCase::BlendTwoHalves, 2, 1, false, false,
+             false, false},
+            {"bone index 71, the last slot XNA allows", BoneCase::LastPaletteSlot, 1, 1, false,
+             false, false, false},
             {"bone index 71 declared Vector4, at stride 64", BoneCase::LastPaletteSlot, 1, 1, false,
-             false, true},
-            {"one directional light", BoneCase::Identity, 1, 1, false, false, false},
-            {"three directional lights", BoneCase::Identity, 1, 3, false, false, false},
-            {"specular highlight", BoneCase::Identity, 1, 1, true, false, false},
+             false, true, false},
+            {"one directional light", BoneCase::Identity, 1, 1, false, false, false, false},
+            {"three directional lights", BoneCase::Identity, 1, 3, false, false, false, false},
+            {"specular highlight", BoneCase::Identity, 1, 1, true, false, false, false},
             {"VertexColorEnabled on the stride-56 record", BoneCase::Identity, 1, 1, false, true,
-             false},
-            {"identity bones declared Vector4, at stride 64", BoneCase::Identity, 1, 1, false, false,
-             true},
+             false, false},
+            {"legacy reordered SkinnedEffect, at stride 68", BoneCase::Identity, 1, 1, false,
+             false, false, true},
         }};
 
         for (std::size_t index = 0; index < cells.size(); ++index)
@@ -307,7 +336,26 @@ protected:
                 makeVertex(cx + halfW, cy + halfH, 1.0f, 0.0f),
                 makeVertex(cx + halfW, cy - halfH, 1.0f, 1.0f)};
 
-            if (cell.floatIndices)
+            if (cell.reordered68)
+            {
+                std::array<ReorderedSkinnedVertex, 4> reordered{};
+                for (std::size_t i = 0; i < reordered.size(); ++i)
+                {
+                    const SkinnedVertex& v = verts[i];
+                    reordered[i] = ReorderedSkinnedVertex{
+                        v.px, v.py, v.pz, v.i0, v.i1, v.i2, v.i3,
+                        v.w0, v.w1, v.w2, v.w3, v.nx, v.ny, v.nz, v.u, v.v,
+                        1.0f, 0.0f, 0.0f, 1.0f};
+                }
+                VertexBuffer vb(device, ReorderedSkinnedDeclaration(),
+                                static_cast<int>(reordered.size()), BufferUsage::None);
+                vb.SetDataRaw(reordered.data(), static_cast<int>(reordered.size()), 68);
+                device.SetVertexBuffer(&vb);
+                effect.Apply();
+                device.DrawPrimitives(PrimitiveType::TriangleStrip, 0, 2);
+                device.SetVertexBuffer(nullptr);
+            }
+            else if (cell.floatIndices)
             {
                 std::array<FloatIndexSkinnedVertex, 4> floatIndexed{};
                 for (std::size_t i = 0; i < floatIndexed.size(); ++i)
@@ -431,8 +479,8 @@ protected:
         Require(painted(rightQuarter(4, 0)) && !painted(quadRect(4, 0)),
                 "and it really moved: a renderer reading the float lane as raw bytes would select "
                 "bone 0 and leave the quad on its resting strip");
-        ExpectSameRegion("and the same declaration shades identically once the bones are identity, "
-                         "so the rewrite carries position, normal, uv and weights unharmed",
+        ExpectSameRegion("and a reordered 68-byte legacy XNB declaration shades identically, so "
+                         "the SkinnedEffect rewrite wins over the colliding skinned-PBR stride",
                          quadRect(0, 1), quadRect(4, 1), 2);
     }
 };
