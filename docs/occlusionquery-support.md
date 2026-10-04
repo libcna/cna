@@ -42,8 +42,11 @@ profiles.
 
 | Renderer | Attaches to real GPU work? | Sequence validation | Pixel/query correctness | Status |
 |---|---|---|---|---|
-| **EasyGL** | ✅ Yes — `glBeginQuery`/`glEndQuery`, asking for `GL_SAMPLES_PASSED` and falling back to the boolean `GL_ANY_SAMPLES_PASSED` | Shared XNA validation (SOFTWARE-199) | ✅ Verified both directions (Tasks 445/446) **and count-vs-flag** (SAMPLE-041) | **Correct; the count is precise only where the driver has `GL_SAMPLES_PASSED`** |
+| **EasyGL** | ✅ Yes — `glBeginQuery`/`glEndQuery`, asking for `GL_SAMPLES_PASSED` and falling back to the boolean `GL_ANY_SAMPLES_PASSED` | Shared XNA validation (SOFTWARE-199) | ✅ Verified both directions (Tasks 445/446) **and count-vs-flag** (SAMPLE-041) | **Desktop GL is XNA-equivalent; GLES3 is truthfully boolean-only and cannot run coverage-ratio consumers faithfully** |
 | **Vulkan** | ✅ Yes (Task 447, 2026-07-10) — real per-draw-call tagging + `vkCmdBeginQuery`/`vkCmdEndQuery` recording | Shared XNA validation (SOFTWARE-199) | ✅ Verified both directions, multi-draw-span and generation-safe reuse (Task 854 / MSR-026) | **Fully correct** |
+| **WebGPU** | ✅ Yes — draw tagging, a real `WGPUQuerySet`, resolve and asynchronous readback | Shared XNA validation (SOFTWARE-199) | ✅ Exact count verified by `WebGPU_OcclusionQuery`; representative LensFlare visually matches OPENGL33 | **Correct for a contiguous render-pass segment; a query spanning segments records only its first segment** |
+| **SDL_GPU** | N/A — construction throws the documented SDL_gpu API limitation | N/A | N/A | **Correctly unsupported: SDL_gpu 3.5.0 exposes fences but no occlusion/query-pool commands** |
+| **FNA3D** | Driver-dependent — the selected internal driver must create a real FNA3D query | Shared XNA validation (SOFTWARE-199) | ✅ OpenGL driver verified by capability tests and LensFlare; default SDL_GPU driver has no query | **Truthfully selected at device creation; not a renderer-wide unconditional capability** |
 | **SDL_Renderer** | N/A — construction itself throws | N/A | N/A | **Correctly unsupported** (2D-only renderer, Task 727) |
 
 ### EasyGL — correct, with a precision boundary that depends on the profile
@@ -99,6 +102,16 @@ the WebGL registry has none either. Asking the driver for the enum answers the s
 full-viewport quad must report a real tally when the query claims precision and at most 1 when it
 does not, with back-buffer readbacks proving the quad genuinely covered the frame. Confirmed to
 fail when the precision claim is falsified.
+
+The native sample campaign supplies the visual consequence rather than treating the truthful flag
+as full XNA parity.  The unchanged `LensFlare` sample divides `PixelCount` by its 100x100 query
+area.  OPENGL33 renders its sun, glow and flare chain, while OPENGLES3 receives the valid boolean
+`1` and the chain is effectively invisible.  A faithful general emulation is not available in
+GLES3: counting arbitrary fragments after shader discard, depth/stencil and multisampling would
+require shader instrumentation or replay of arbitrary application draws, neither of which retains
+the query's semantics.  CNA therefore records OPENGLES3 LensFlare as an upstream API
+limitation/visual mismatch and does not multiply a boolean into a fabricated count.  Evidence is
+in the cna-samples result `matrix-results/msr-046-postfix-visual-representative`.
 
 ### Vulkan — fixed, all 3 design questions resolved (Task 447/854, 2026-07-10)
 
@@ -172,4 +185,7 @@ Since construction itself throws, `Begin()`/`End()` are unreachable — consiste
 | `Dispose()`/active-query-destruction safety | ✅ Verified safe on EasyGL via 50-iteration stress test (Task 449) |
 | EasyGL pixel/query correctness | ✅ Both directions (visible → positive, occluded → zero) pixel-verified (Tasks 445-446) |
 | Vulkan | ✅ Real per-draw-call query correlation implemented (Task 447/854, 2026-07-10); pixel/query correctness verified both directions, multi-draw-span and generation-safe reuse (MSR-026) |
+| WebGPU | ✅ Real exact-count query and representative LensFlare visual pass; cross-render-pass-span limitation remains explicit |
+| SDL_GPU | ⛔ Truthfully unsupported by the current public SDL_gpu API; no fake result |
+| FNA3D | ✅/⛔ Selected-driver dependent: OpenGL query and LensFlare pass; default SDL_GPU driver is truthfully unsupported |
 | SDL_Renderer | ✅ Correctly throws at construction (2D-only renderer, Task 727) |

@@ -49,6 +49,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-026 | **DONE** | Make reused Vulkan occlusion-query results generation-safe and monotonic. |
 | MSR-027 | **DONE** | Dispose copied texture wrappers before their owning renderer, including ContentManager/SpriteFont copies. |
 | MSR-028 | **DONE** | Keep compiled XNA effects valid under the GLSL ES 1.00 profile used by OPENGLES2. |
+| MSR-029 | **DONE** | Re-run and manually inspect the post-fix representative Linux visual matrix. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -664,6 +665,38 @@ Regression evidence:
 - the same rebuilt multi-renderer executables pass 4/4 across OPENGLES3 and OPENGL33 for
   `AccelerometerSample` and `ShatterEffect`, preserving the EasyGL full-profile baseline.  Evidence
   is in `matrix-results/msr-045-easygl-centroid-regression`.
+
+## MSR-029 — Post-fix representative visual matrix
+
+The ten-sample high-discrimination set was captured again after the framework repairs, using one
+multi-renderer executable per sample and a private 1280x720 GPU display.  The runner verified the
+requested active identity before every capture.  Manual review compared each sample across
+OPENGLES3, OPENGL33, Vulkan, WebGPU, SDL_GPU and FNA3D, with OPENGL33 and OPENGLES3 as the EasyGL
+references; normalized image MAE was used only as supporting evidence because camera/model and
+particle animation make several frames intentionally time-dependent.
+
+Fifty-seven of the 58 captured frames are manual visual passes.  They preserve the expected model
+geometry, textures, stock/custom effects, bloom and render-target orientation, normal mapping,
+instanced geometry, particle sprites and smoke, shadow map and projected character shadow,
+SpriteSheet transparency, text and Reach graphics.  Representative static comparisons are very
+close: Graphics3D is byte-identical between OPENGL33 and OPENGLES3 and differs by normalized MAE
+`0.00000554` on Vulkan/SDL_GPU; ShatterEffect ranges from `0.0010` to `0.0034`.  Larger differences
+in Bloom, InstancedModel and Particles3D correspond to visibly correct but differently advanced
+animation.
+
+The one captured mismatch is the already-documented GLES3 occlusion-query precision boundary:
+`LensFlare` is stable with active OPENGLES3, but its query can return only the real boolean value
+`1`; the authentic XNA sample divides the value by its 100x100 query area and the flare chain
+becomes effectively invisible.  OPENGL33, Vulkan and WebGPU render the expected terrain, sun,
+glow and flare chain.  This is recorded as an upstream API limitation/visual mismatch, not a pass;
+CNA does not fabricate a pixel count.  Direct SDL_GPU and FNA3D's default SDL_GPU driver correctly
+refuse query creation before capture.  A supplementary FNA3D run forced its real OpenGL driver and
+visually passed LensFlare, differing from the OPENGL33 reference by normalized MAE `0.00408196`.
+
+Primary evidence is in `matrix-results/msr-046-postfix-visual-representative`; the FNA3D/OpenGL
+supplement is in `matrix-results/msr-047-fna3d-opengl-lensflare-visual`.  Primary manual totals are
+9 PASS + 1 upstream visual mismatch on OPENGLES3, 10 PASS each on OPENGL33/Vulkan/WebGPU, and
+9 PASS + 1 upstream missing capability each on SDL_GPU and default FNA3D.
 
 ## Representative automated matrix
 
