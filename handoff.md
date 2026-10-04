@@ -577,8 +577,9 @@ These are resolved or irrelevant:
 - `CNA.Graphics.Experimental` (retired natively at ABI 0.30).
 - Compiled-effects concerns (work), and the `io_10_0` link failures (FX-142).
 
-Building CNA for wasm needs .NET 11, whose emscripten has `std::jthread`. `docs/native-behavior-blockers.md`,
-old `plan.md`/`NEXT.md` blockers are historical.
+Building CNA for wasm needs .NET 11, whose emscripten has `std::jthread`. Old `plan.md`/`NEXT.md`
+blockers are historical. `cna-cs/docs/native-behavior-blockers.md` is now the ABI-0.44 detailed
+history behind the finite classification in `cna-cs/docs/final-compatibility-audit.md`.
 
 ## 18. Evidence and artifacts
 
@@ -641,22 +642,28 @@ old `plan.md`/`NEXT.md` blockers are historical.
     unchanged successful runs and eight exclusively external/non-XNA constraints; no general
     defect was found. Saturation condition B is met. Do not select replacements or search for more
     games.
-11. Interactive Chrome with a GPU; a physical arm64 Android device.
+11. **Done/classified (CSX-152):** the finite strict-surface audit found zero executable
+    `NotImplementedException` sites, zero strict-facade TODO/FIXME sites, and accounted for all 24
+    static `NotSupportedException` sites. The Windows runtime profile remains 256/256 and the
+    GamerServices/Avatar/Net profile 75/75 with zero metadata diagnostics. The finite remainder and
+    platform matrix are in `cna-cs/docs/final-compatibility-audit.md`; the native blocker table now
+    verifies against C ABI 0.44.0 (`cna-cs` `076d128`).
+12. Interactive Chrome with a GPU; a physical arm64 Android device.
 
 **Hardening**
-12. The `-j8` C smoke flakiness.
+13. The `-j8` C smoke flakiness.
 
 **Not actionable here**
-13. Yacht (owner decision), PerformanceUtility (needs a C++ port), and games blocked by missing
+14. Yacht (owner decision), PerformanceUtility (needs a C++ port), and games blocked by missing
     content, fonts or servers.
 
 ## 20. Exact next action
 
 Do not search for another application: CSX-151 reached saturation condition B with the fixed final
-ten. Perform the finite CNA.NET compatibility-surface audit next: enumerate real stubs,
-`NotImplemented` paths, documented unsupported XNA members, metadata differences, lifetime/error
-semantics and platform-dependent TODOs, then classify each finite remainder. After that, run the
-final stability matrix, write the English source-build/migration guide and complete the requested
-C++/C/C# `cna-multi-language-3d-demo` qualification (the same C# source on FNA and CNA.NET), then
-write the campaign-closure section and enter maintenance mode. Commit each coherent task locally;
-do not push without the owner's instruction.
+ten, and CSX-152 completed the finite surface audit. Run the final stability matrix next: relevant
+native/C API tests, Game/Runtime and compiled-effect tests, every managed suite and metadata gate,
+then only the representative Linux/browser/Android runs justified by changed surface. Record every
+new failure and preserve documented flakes. After that, write the English source-build/migration
+guide and complete the requested C++/C/C# `cna-multi-language-3d-demo` qualification (the same C#
+source on FNA and CNA.NET), then write the campaign-closure section and enter maintenance mode.
+Commit each coherent task locally; do not push without the owner's instruction.
