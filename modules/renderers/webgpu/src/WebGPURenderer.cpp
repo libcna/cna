@@ -3456,7 +3456,9 @@ namespace CNA::Internal::Renderers::WebGPU
             0.0f, static_cast<float>(projectionWidth_),
             static_cast<float>(projectionHeight_), 0.0f, 0.0f, -1.0f);
         float values[16];
-        projection.ToColumnMajor(values);
+        // SetParameterValue receives Effect Framework storage, the same transposed layout that
+        // EffectParameter::SetValue(Matrix) writes. This low-level call does not transpose for us.
+        Matrix::Transpose(projection).ToColumnMajor(values);
         spriteCompiledEffect_->SetParameterValue(
             spriteMatrixParameterIndex_, values, sizeof(values));
         spriteCompiledEffect_->SetTechnique(0);

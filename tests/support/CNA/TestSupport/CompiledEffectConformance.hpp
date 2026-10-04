@@ -3296,29 +3296,60 @@ namespace CNA::TestSupport
      */
     inline void RunCompiledEffectSpriteBatchPixelOnlyContract(GraphicsDevice& device)
     {
+        SpriteBatch batch(device);
         Effect effect(device, BuildSyntheticPixelOnlySamplingEffect({}));
-        effect.getParametersProperty()["Tint"]->SetValue(
-            Vector4(0.25f, 0.5f, 0.75f, 1.0f));
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4::One);
 
-        Texture2D sprite(device, 1, 1);
-        const Color red[1] = {Color::Red};
-        sprite.SetData(red, 1);
-        RenderTarget2D target(device, 8, 8);
+        Texture2D white(device, 1, 1);
+        const Color whiteTexel[1] = {Color::White};
+        white.SetData(whiteTexel, 1);
+        constexpr int kSourceWidth = 800;
+        constexpr int kSourceHeight = 480;
+        constexpr int kTargetWidth = 400;
+        constexpr int kTargetHeight = 240;
+        RenderTarget2D sprite(device, kSourceWidth, kSourceHeight, false, SurfaceFormat::Color,
+                              Microsoft::Xna::Framework::Graphics::DepthFormat::Depth24Stencil8);
+        device.SetRenderTarget(&sprite);
+        device.Clear(Color::Black);
+        SpriteBatch painter(device);
+        painter.Begin(SpriteSortMode::Deferred, BlendState::Opaque);
+        painter.Draw(white, Rectangle(0, 0, kSourceWidth / 2, kSourceHeight / 2), Color::Red);
+        painter.Draw(white, Rectangle(kSourceWidth / 2, 0, kSourceWidth / 2,
+                                      kSourceHeight / 2), Color(0, 255, 0, 255));
+        painter.Draw(white, Rectangle(0, kSourceHeight / 2, kSourceWidth / 2,
+                                      kSourceHeight / 2), Color::Blue);
+        painter.Draw(white, Rectangle(kSourceWidth / 2, kSourceHeight / 2,
+                                      kSourceWidth / 2, kSourceHeight / 2), Color::White);
+        painter.End();
+
+        SamplerState linearClamp = SamplerState::LinearClamp;
+        RenderTarget2D target(device, kTargetWidth, kTargetHeight);
         device.SetRenderTarget(&target);
         device.Clear(Color::Black);
-        SpriteBatch batch(device);
-        batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, nullptr, nullptr, nullptr,
-                    &effect);
-        batch.Draw(sprite, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 1, 1), Color::White);
+        batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &linearClamp, nullptr,
+                    nullptr, &effect);
+        batch.Draw(sprite, Rectangle(0, 0, kTargetWidth, kTargetHeight),
+                   Rectangle(0, 0, kSourceWidth, kSourceHeight), Color::White);
         batch.End();
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
-        Color actual = Color::Transparent;
-        const Rectangle centre(4, 4, 1, 1);
-        target.GetData(0, &centre, &actual, 0, 1);
-        EXPECT_NEAR(actual.getRProperty(), 64, 3);
-        EXPECT_NEAR(actual.getGProperty(), 0, 3);
-        EXPECT_NEAR(actual.getBProperty(), 0, 3);
+        // A solid texture cannot reveal broken TEXCOORD linkage: every malformed coordinate still
+        // samples the same texel. The four quadrants make both triangles and interpolation visible.
+        const std::array<std::pair<Rectangle, Color>, 4> probes = {{
+            {Rectangle(10, 10, 1, 1), Color::Red},
+            {Rectangle(kTargetWidth - 11, 10, 1, 1), Color(0, 255, 0, 255)},
+            {Rectangle(10, kTargetHeight - 11, 1, 1), Color::Blue},
+            {Rectangle(kTargetWidth - 11, kTargetHeight - 11, 1, 1), Color::White},
+        }};
+        for (const auto& [probe, expected] : probes)
+        {
+            Color corner = Color::Transparent;
+            target.GetData(0, &probe, &corner, 0, 1);
+            EXPECT_NEAR(corner.getRProperty(), expected.getRProperty(), 3)
+                << "a pixel-only compiled SpriteBatch effect must preserve TEXCOORD0";
+            EXPECT_NEAR(corner.getGProperty(), expected.getGProperty(), 3);
+            EXPECT_NEAR(corner.getBProperty(), expected.getBProperty(), 3);
+        }
     }
 
     /**

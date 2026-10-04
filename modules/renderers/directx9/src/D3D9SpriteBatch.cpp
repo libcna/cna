@@ -366,7 +366,9 @@ namespace CNA::Internal::Renderers::DirectX9
 
         const Matrix combined = BuildMatrixTransformEXT(viewportWidth, viewportHeight);
         float values[16];
-        combined.ToColumnMajor(values);
+        // SetParameterValue receives Effect Framework storage, the same transposed layout that
+        // EffectParameter::SetValue(Matrix) writes. This low-level call does not transpose for us.
+        Matrix::Transpose(combined).ToColumnMajor(values);
         spriteCompiledEffect_->SetParameterValue(
             spriteMatrixParameterIndex_, values, sizeof(values));
         spriteCompiledEffect_->SetTechnique(0);
@@ -415,7 +417,7 @@ namespace CNA::Internal::Renderers::DirectX9
         GpuDrawParams params;
         for (int pass = 0; pass < passCount; ++pass)
         {
-            technique->getPassesProperty()[pass].Apply();
+            technique->getPassesProperty()[pass]->Apply();
             owner_->DrawCompiledEffectEXT(
                 vb_, &ib_, PrimitiveType::TriangleList,
                 static_cast<int>(pendingIndices_.size() / 3u), 1, params, *runtime,

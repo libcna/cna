@@ -334,6 +334,7 @@ renderer-specific. They are:
 | **multi-stream** | a shader consuming attributes from two bound buffers renders differently when the second stream's contents change, including with a different non-zero `VertexOffset` per stream |
 | **instancing** | a per-instance stream advances per instance, survives a non-zero `baseVertex`/`startIndex`/instance offset, and does not leave its divisor behind for the next ordinary draw |
 | **SpriteBatch** | `SpriteBatch.Begin(..., effect)` either runs the compiled shader or refuses by name |
+| **SpriteBatch inherited projection** | a pixel-only pass inherits the authentic stock vertex shader and receives its projection in Effect Framework matrix storage; four coloured source quadrants must reach all four target corners |
 | **SpriteBatch multi-pass** | the passes run at XNA's own batch granularity -- once per pass over the whole texture run, not once per sprite |
 | **SpriteBatch texture slot** | the sprite being drawn wins slot 0 over the effect's own texture parameter, and source rectangles and `SpriteEffects` reach the shader |
 | **sampler pixels** | the pass's texture binding, addressing, filter, `MaxMipLevel` and LOD bias are checked in the rendered pixel, not on a state object |

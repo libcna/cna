@@ -42,6 +42,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-019 | **DONE** | Promote FNA3D's implemented signed-normalized Texture2D formats through its public format gate. |
 | MSR-020 | **DONE** | Remove the obsolete FNA3D lifetime-test archive rescan that duplicated CNA globals at shutdown. |
 | MSR-021 | **DONE** | Latch an avatar's Loading-to-Ready transition until its caller can update animation transforms. |
+| MSR-022 | **DONE** | Store compiled SpriteBatch projection matrices in the Effect Framework layout expected by every native backend. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -95,8 +96,9 @@ Regression evidence:
 - the wider Vulkan run initially exposed separate multi-stream and instanced compiled-draw
   failures; MSR-010 repaired them, bringing the run to 26 passes and one Reach-profile skip;
 - the same single `BloomSample_cna_samples` executable reaches an automated pass with the requested
-  active renderer verified for OPENGLES3, OPENGL33, Vulkan, WebGPU, SDL_GPU and FNA3D.  Manual
-  visual confirmation remains required and is not implied by that automated result.
+  active renderer verified for OPENGLES3, OPENGL33, Vulkan, WebGPU, SDL_GPU and FNA3D.  That result
+  was startup/stability evidence only; MSR-022 later added the missing geometry-sensitive contract
+  and completed focused visual comparison for the affected backends.
 
 ## MSR-004 — Native compiled-effect parameter indices
 
@@ -410,6 +412,41 @@ Regression evidence:
 - the focused avatar animation/renderer suite passes 51/51 through the private FNA3D GPU lane;
 - the unchanged multi-renderer `AvatarAnimationBlending` executable passes with active `FNA3D`
   and active `OPENGLES3` in `matrix-results/msr-021-avatar-loading-latch`.
+
+## MSR-022 — Compiled SpriteBatch matrix storage
+
+The native Vulkan, WebGPU and SDL_GPU compiled SpriteBatch paths wrote their orthographic
+projection directly through `ICompiledEffectRuntime::SetParameterValue`.  That low-level entry
+point accepts the Effect Framework's stored matrix layout; unlike public
+`EffectParameter::SetValue(Matrix)`, it does not transpose a CNA `Matrix` for the caller.  Passing
+the untransposed field order produced malformed clip coordinates and clip W.  Full-screen Bloom
+passes could consequently render one diagonal triangle or nothing even though a former one-texel
+centre-pixel test passed.  The same latent mistake existed in the DirectX 9, 11 and 12 SpriteBatch
+implementations.
+
+All six backends now store `Transpose(projection).ToColumnMajor(...)` (DirectX 9 uses its combined
+SpriteBatch transform), exactly matching the public Effect parameter path.  The shared pixel-only
+SpriteBatch contract now paints an 800-by-480 four-quadrant source, scales it into a 400-by-240
+target through the compiled effect and probes all four corners.  This makes both triangles,
+interpolation and the inherited `TEXCOORD0` linkage observable; a solid 1-by-1 source sampled at
+the centre could not expose malformed geometry.
+
+Regression evidence:
+
+- deliberately restoring the old Vulkan write makes three of the four corner probes fail; the
+  corrected write passes them;
+- Vulkan's compiled-effect draw suite passes 18 tests with one intentional Reach-profile
+  `Texture3D` skip; the corresponding WebGPU, SDL_GPU and FNA3D suites pass 22+1 skip, 28+1
+  configuration skip and 17+1 Reach-profile skip respectively through the private GPU runner;
+- six relevant OPENGLES3/EasyGL SpriteBatch, orientation, switching and render-target-source
+  contracts pass after strengthening the shared test, preserving the reference renderer path;
+- the unchanged multi-renderer `BloomSample_cna_samples` executable passes with active Vulkan,
+  WebGPU and SDL_GPU in `matrix-results/msr-026-bloom-matrix-fixed`; the captured frames were
+  manually compared with the OPENGLES3 reference and the former black/diagonal output is gone;
+- the DirectX 9, 11 and 12 renderer libraries, with their respective compiled-effect paths
+  enabled, cross-build from Linux.  This also exposed and repaired a pre-existing DirectX 9
+  `EffectPass*` member-access compile failure.  This is cross-build evidence only, not native
+  Windows GPU qualification.
 
 ## Representative automated matrix
 
