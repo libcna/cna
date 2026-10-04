@@ -595,8 +595,10 @@ old `plan.md`/`NEXT.md` blockers are historical.
    CNA has no runtime-window/C ABI opacity operation, and remains an explicit platform limitation.
 
 **Performance**
-7. Threaded browser bundles proxy every GL call. Investigate an OffscreenCanvas handed to .NET's
-   thread.
+7. **Investigated/classified (CSX-148):** threaded browser bundles proxy every GL call. Emscripten
+   can transfer an OffscreenCanvas only as part of creating the owning pthread; .NET owns its deputy
+   thread creation and exposes no supported canvas-transfer hook. Keep the correct proxy path. A
+   direct worker canvas is a future .NET/browser-host platform optimization, not broad XNA work.
 
 **Qualification**
 8. Racing Game Kit against the C++ port or XNA under Wine.
