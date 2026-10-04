@@ -631,9 +631,9 @@ if(CNA_ENABLE_NET AND CNA_BUILD_TESTS AND EXISTS "${CNA_GAMER_SERVICES_SERVER_RO
 endif()
 
 if(CNA_ENABLE_NET)
-    find_package(nlohmann_json 3.11 REQUIRED)
     add_executable(cna_service_protocol_harness tools/net/service_protocol_harness.cpp)
-    target_link_libraries(cna_service_protocol_harness PRIVATE CNA_GamerServices nlohmann_json::nlohmann_json)
+    target_link_libraries(cna_service_protocol_harness PRIVATE CNA_GamerServices)
+    cna_link_json_headers(cna_service_protocol_harness)
     target_include_directories(cna_service_protocol_harness PRIVATE modules/gamer-services/src/Internal/Protocol)
     if(CNA_BUILD_TESTS)
         add_test(NAME GamerServices_ProtocolProperties COMMAND cna_service_protocol_harness

@@ -43,22 +43,12 @@ set(CNA_SHARP_RUNTIME_DEFAULT_COMPONENTS
 # ones for its target to exist at all. Header-only (INTERFACE), so selecting it costs a consumer
 # nothing until it includes that header.
 #
-# plans/plan_dx.md DX-250: it cannot be selected on a Windows target. SharpRuntime's
-# Xml.Serialization has a PUBLIC dependency on Xml, which has a PRIVATE dependency on
-# Diagnostics, whose System/Diagnostics/Process.cpp includes <poll.h> unconditionally -- outside
-# its own `#if !defined(_WIN32)` POSIX block. Neither MinGW-w64 nor the MSVC Windows SDK ships
-# that header, so selecting this component makes EVERY Windows build of CNA (the MinGW cross-build
-# this project's D3D11/D3D12 dev loop uses, and .github/workflows/d3d-windows-ci.yml's native-MSVC
-# job) fail to compile a dependency it never asked for. Excluding it here is the honest boundary:
-# the target does not exist on Windows, so the one CNA consumer of it (the math unit-test group,
-# see cmake/UnitTests.cmake) is Windows-excluded too, and nothing silently links a half-built
-# component. Remove this condition once sharp-runtime guards that include.
-if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
-    set(CNA_SHARP_RUNTIME_HAS_XML_SERIALIZATION OFF)
-else()
-    set(CNA_SHARP_RUNTIME_HAS_XML_SERIALIZATION ON)
-    list(APPEND CNA_SHARP_RUNTIME_DEFAULT_COMPONENTS Xml.Serialization)
-endif()
+# Xml.Serialization used to be excluded for Windows because an old sharp-runtime Process.cpp
+# included the POSIX-only <poll.h> header there. That dependency is now correctly platform-guarded,
+# so games and the shared XML contract tests can use the same serialization component on every
+# supported platform.
+set(CNA_SHARP_RUNTIME_HAS_XML_SERIALIZATION ON)
+list(APPEND CNA_SHARP_RUNTIME_DEFAULT_COMPONENTS Xml.Serialization)
 
 # The System::Xml stack is in the closure above so that it is instantiated: the build-time content
 # pipeline needs it (XNAPP-071, IntermediateSerializer) and a game may use XmlSerializer. No runtime
@@ -68,10 +58,7 @@ endif()
 # brings an XML parser of its own (MeshCraft, whose Mc3 links its own tinyxml2). Renderers link
 # CNA_SHARP_RUNTIME_RENDERER_COMPONENTS instead; the `CNA` umbrella adds the XML components back for
 # games (modules/CMakeLists.txt), and cna_content_pipeline names Xml itself.
-set(CNA_SHARP_RUNTIME_XML_COMPONENTS Xml)
-if(CNA_SHARP_RUNTIME_HAS_XML_SERIALIZATION)
-    list(APPEND CNA_SHARP_RUNTIME_XML_COMPONENTS Xml.Serialization)
-endif()
+set(CNA_SHARP_RUNTIME_XML_COMPONENTS Xml Xml.Serialization)
 set(CNA_SHARP_RUNTIME_RENDERER_COMPONENTS ${CNA_SHARP_RUNTIME_DEFAULT_COMPONENTS})
 list(REMOVE_ITEM CNA_SHARP_RUNTIME_RENDERER_COMPONENTS ${CNA_SHARP_RUNTIME_XML_COMPONENTS})
 

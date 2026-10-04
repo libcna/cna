@@ -10,6 +10,30 @@
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     find_package(Python3 COMPONENTS Interpreter QUIET)
 
+    add_test(NAME CnaHostPkgConfigPolicy
+        COMMAND ${CMAKE_COMMAND}
+            -DCNA_HOST_PKG_CONFIG_POLICY_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/HostPkgConfig.cmake
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Tests/HostPkgConfigPolicyCase.cmake)
+    set_tests_properties(CnaHostPkgConfigPolicy PROPERTIES LABELS "configuration;cross-build")
+
+    add_test(NAME CnaCrossJsonHeaders
+        COMMAND ${CMAKE_COMMAND}
+            -DCNA_CROSS_JSON_MODULE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/HeaderOnlyJson.cmake
+            -DCNA_CROSS_JSON_PROBE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/Tests/CrossJsonProbe
+            -DCNA_CROSS_JSON_WORKDIR=${CMAKE_CURRENT_BINARY_DIR}/cross-json-probe
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Tests/CrossJsonHeadersCase.cmake)
+    set_tests_properties(CnaCrossJsonHeaders PROPERTIES
+        TIMEOUT 30 LABELS "configuration;cross-build")
+
+    add_test(NAME CnaSdlRuntimeDeployment
+        COMMAND ${CMAKE_COMMAND}
+            -DCNA_SDL_RUNTIME_MODULE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/ThirdPartySDL.cmake
+            -DCNA_SDL_RUNTIME_PROBE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/Tests/SdlRuntimeProbe
+            -DCNA_SDL_RUNTIME_WORKDIR=${CMAKE_CURRENT_BINARY_DIR}/sdl-runtime-probe
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Tests/SdlRuntimeDeploymentCase.cmake)
+    set_tests_properties(CnaSdlRuntimeDeployment PROPERTIES
+        TIMEOUT 30 LABELS "configuration;runtime-deployment")
+
     function(cna_add_module_probe name module)
         add_executable(${name} tests/modules/${name}.cpp)
         target_link_libraries(${name} PRIVATE ${module})

@@ -28,7 +28,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-005 | **DONE** | Classify `LensFlare` occlusion-query limits truthfully for SDL_GPU and FNA3D's selected internal driver; never fabricate a query result. |
 | MSR-006 | **IN PROGRESS** | Complete single-renderer and six-renderer Linux CNA qualification. |
 | MSR-007 | **IN PROGRESS** | Qualify the representative sample set, then the complete 91-sample corpus. |
-| MSR-008 | **OPEN** | Prepare and cross-build the Windows renderer set; record Wine evidence separately from native qualification. |
+| MSR-008 | **IN PROGRESS** | Prepare and cross-build the Windows renderer set; record Wine evidence separately from native qualification. |
 | MSR-009 | **OPEN** | Prepare the macOS renderer set and exact Mac mini M4 qualification commands. |
 | MSR-010 | **DONE** | Stop Vulkan's stock-layout guards from rejecting compiled-effect multi-stream and instanced draws before their own shader linker runs. |
 | MSR-011 | **DONE** | Restore the FNA3D-only `CnaRendererTests` build after pointer-container and namespace API changes. |
@@ -50,6 +50,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-027 | **DONE** | Dispose copied texture wrappers before their owning renderer, including ContentManager/SpriteFont copies. |
 | MSR-028 | **DONE** | Keep compiled XNA effects valid under the GLSL ES 1.00 profile used by OPENGLES2. |
 | MSR-029 | **DONE** | Re-run and manually inspect the post-fix representative Linux visual matrix. |
+| MSR-030 | **DONE** | Repair target-aware dependency discovery, runtime deployment and sharp-runtime portability exposed by the seven-renderer Windows cross-build. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -697,6 +698,46 @@ Primary evidence is in `matrix-results/msr-046-postfix-visual-representative`; t
 supplement is in `matrix-results/msr-047-fna3d-opengl-lensflare-visual`.  Primary manual totals are
 9 PASS + 1 upstream visual mismatch on OPENGLES3, 10 PASS each on OPENGL33/Vulkan/WebGPU, and
 9 PASS + 1 upstream missing capability each on SDL_GPU and default FNA3D.
+
+## MSR-030 — Windows cross-build portability and runtime deployment
+
+The clean MinGW-w64 Release configuration compiles one executable per sample with `DIRECTX11` as
+the default and `DIRECTX9;DIRECTX11;DIRECTX12;VULKAN;WEBGPU;SDL_GPU;FNA3D` in the runtime-selected
+set.  The build enables each selected renderer's applicable compiled-XNA-effect implementation.
+The authoritative 89 gallery + 2 native-only corpus is complete; the wider repository build also
+produces 15 non-primary support, partial, server, test, retained-training and experimental
+executables.  This is Linux cross-build evidence only, not native Windows GPU qualification.
+
+The build exposed four general CNA integration defects.  An explicit wgpu-native package root was
+incorrectly re-rooted into the target sysroot; WebGPU discovery now bypasses find-root rewriting
+for that already-resolved package.  Cross builds looked for nlohmann JSON through the target
+sysroot even though it is a portable header-only dependency; the existing isolated-header route
+now covers every cross toolchain.  SDL imported targets created below CNA were not visible to the
+parent cna-samples directory, so runtime deployment now exports the resolved DLL paths rather than
+depending on directory-scoped target visibility.  Finally, CNA's optional Opus probe could import
+the host's `-lopus` into a target link; automatic host pkg-config probes are now disabled whenever
+`CMAKE_CROSSCOMPILING` is true.  Windows `Xml.Serialization` is enabled again because the old
+sharp-runtime `<poll.h>` blocker no longer exists.
+
+The same build exposed target-portability defects in sharp-runtime: pointer-sized unsigned
+Winsock handles were narrowed in `ServiceHost`, Winsock was not initialized, Socket teardown used
+the POSIX shutdown constant, and non-trivial inline TLS definitions in `Thread` and `CultureInfo`
+produced duplicate MinGW initializer symbols.  Those general fixes are committed in sharp-runtime
+as `21c06910` (`fix(MSR-030): repair Windows consumer portability`).
+
+Regression and integration evidence:
+
+- `WebGPU_CrossRootPackageDiscovery`, `CnaHostPkgConfigPolicy`, `CnaCrossJsonHeaders` and
+  `CnaSdlRuntimeDeployment` pass 4/4; the last test builds a consumer and verifies all three fake
+  SDL DLLs were copied beside it;
+- six existing XNA XML serialization contracts pass after making the Windows component
+  unconditional;
+- sharp-runtime's warning-free build and unchanged Yacht SOAP fixture pass 18,123/18,123 tests in
+  41 executables with zero failures/skips, at that repository's stricter two-job ceiling;
+- all 106 built `*_cna_samples.exe` outputs have `wgpu_native.dll`, SDL3/SDL3_image/SDL3_mixer and
+  the three required MinGW C++ runtime DLLs beside the executable;
+- the full 220-step final Windows relink completes successfully.  Native Windows execution
+  and visual qualification remain open, and no DirectX renderer is reported as natively passed.
 
 ## Representative automated matrix
 

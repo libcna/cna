@@ -48,6 +48,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         -P ${CMAKE_SOURCE_DIR}/cmake/tests/webgpu_cache_test.cmake
         TIMEOUT 30 LABELS "WebGPU")
 
+    # The official package can live outside a cross compiler's target sysroot. Verify that the
+    # explicit package root remains authoritative even when find-root modes are all ONLY.
+    cna_register_renderer_test(NAME WebGPU_CrossRootPackageDiscovery COMMAND ${CMAKE_COMMAND}
+        -DMODULE=${CMAKE_SOURCE_DIR}/cmake/ThirdPartyWebGPU.cmake
+        -DPROBE_SOURCE=${CMAKE_SOURCE_DIR}/cmake/tests/webgpu-discovery-probe
+        -DWORKDIR=${CMAKE_CURRENT_BINARY_DIR}/webgpu_discovery_tmp
+        -P ${CMAKE_SOURCE_DIR}/cmake/tests/webgpu_discovery_test.cmake
+        TIMEOUT 30 LABELS "WebGPU")
+
     # WEBGPU-91/92: pixel-asserted readback coverage -- registered the same way as
     # WebGPU_Native2D_Smoke (SKIP_REGULAR_EXPRESSION for a headless/no-display environment),
     # since ReadBackbuffer() needs a real GPU-backed surface exactly like the smoke test does.

@@ -420,10 +420,19 @@ function(cna_configure_vendored_sdl)
     if(WIN32)
         file(GLOB _cna_sdl_runtime_dlls "${_prefix}/bin/*.dll")
         if(_cna_sdl_runtime_dlls)
+            # Imported package targets are directory-scoped unless their package made them
+            # GLOBAL. Consumers that add CNA as a subdirectory therefore cannot reliably see
+            # SDL3::SDL3 from their own directory when they call cna_copy_sdl_runtime(). Export
+            # the resolved runtime files explicitly instead of making deployment depend on that
+            # target visibility.
+            set(CNA_SDL_RUNTIME_LIBRARIES "${_cna_sdl_runtime_dlls}" CACHE INTERNAL
+                "SDL runtime libraries deployed beside Windows executables" FORCE)
             file(COPY ${_cna_sdl_runtime_dlls} DESTINATION "${CMAKE_BINARY_DIR}")
             list(LENGTH _cna_sdl_runtime_dlls _cna_sdl_dll_count)
             message(STATUS "CNA: copied ${_cna_sdl_dll_count} SDL runtime DLL(s) next to the test executables")
         else()
+            set(CNA_SDL_RUNTIME_LIBRARIES "" CACHE INTERNAL
+                "SDL runtime libraries deployed beside Windows executables" FORCE)
             message(WARNING
                 "CNA: no SDL runtime DLLs found in ${_prefix}/bin -- Windows test executables "
                 "will fail to start if they link SDL.")
@@ -700,13 +709,25 @@ function(cna_copy_sdl_runtime target_name)
     if(EMSCRIPTEN OR ANDROID OR NOT WIN32)
         return()
     endif()
-    foreach(_dep_target IN ITEMS SDL3::SDL3 SDL3_image::SDL3_image SDL3_mixer::SDL3_mixer)
-        if(TARGET ${_dep_target})
+    if(CNA_SDL_RUNTIME_LIBRARIES)
+        foreach(_runtime_library IN LISTS CNA_SDL_RUNTIME_LIBRARIES)
             add_custom_command(TARGET ${target_name} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    $<TARGET_FILE:${_dep_target}>
+                    "${_runtime_library}"
                     $<TARGET_FILE_DIR:${target_name}>
                 VERBATIM)
-        endif()
-    endforeach()
+        endforeach()
+    else()
+        # Retain support for callers that provide SDL through visible package targets instead of
+        # cna_configure_vendored_sdl().
+        foreach(_dep_target IN ITEMS SDL3::SDL3 SDL3_image::SDL3_image SDL3_mixer::SDL3_mixer)
+            if(TARGET ${_dep_target})
+                add_custom_command(TARGET ${target_name} POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        $<TARGET_FILE:${_dep_target}>
+                        $<TARGET_FILE_DIR:${target_name}>
+                    VERBATIM)
+            endif()
+        endforeach()
+    endif()
 endfunction()

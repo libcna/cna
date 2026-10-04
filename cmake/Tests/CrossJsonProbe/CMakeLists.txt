@@ -1,0 +1,31 @@
+cmake_minimum_required(VERSION 3.20)
+
+project(CNACrossJsonProbe LANGUAGES CXX)
+
+foreach(_required IN ITEMS HEADER_ONLY_JSON UNRELATED_SYSROOT)
+    if(NOT DEFINED ${_required})
+        message(FATAL_ERROR "${_required} is required")
+    endif()
+endforeach()
+
+set(CMAKE_CROSSCOMPILING TRUE)
+set(CMAKE_FIND_ROOT_PATH "${UNRELATED_SYSROOT}")
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/main.cpp" "int main() { return 0; }\n")
+add_executable(cross_json_consumer "${CMAKE_CURRENT_BINARY_DIR}/main.cpp")
+include("${HEADER_ONLY_JSON}")
+cna_link_json_headers(cross_json_consumer)
+
+if(NOT TARGET CNA_JsonHeaders)
+    message(FATAL_ERROR "Cross JSON header target was not created")
+endif()
+get_target_property(_json_include CNA_JsonHeaders INTERFACE_INCLUDE_DIRECTORIES)
+if(NOT EXISTS "${_json_include}/nlohmann/json.hpp")
+    message(FATAL_ERROR "Isolated cross JSON include root is incomplete: '${_json_include}'")
+endif()
+if(_json_include MATCHES "^/usr/include/?$")
+    message(FATAL_ERROR "Cross consumer received the host libc include root")
+endif()

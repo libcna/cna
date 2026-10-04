@@ -22,17 +22,18 @@ target_include_directories(CNA_Net PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../gamer-
 include("${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/HeaderOnlyJson.cmake")
 cna_link_json_headers(CNA_Net)
 
-# Network voice encodes with Opus. AUTO carries voice when the system has libopus (pkg-config);
-# without it NetworkGamer.HasVoice stays false. Not vendored, so Windows, Emscripten and Android
-# builds carry voice only when a libopus is provided. The pkg-config probe is the host's, which is
-# why it is not asked on Emscripten or Android: it answered with the host's libopus, and the Android
-# link then failed on -lopus.
+# Network voice encodes with Opus. AUTO carries voice when a native build has libopus
+# (pkg-config); without it NetworkGamer.HasVoice stays false. Opus is not vendored. The plain
+# pkg-config probe describes the host and therefore cannot be used for any cross build: doing so
+# can compile successfully and then inject the host's `-lopus` into the target link command.
 set(CNA_ENABLE_VOICE "AUTO" CACHE STRING "Network voice through libopus: AUTO, ON or OFF")
 set_property(CACHE CNA_ENABLE_VOICE PROPERTY STRINGS AUTO ON OFF)
 # Decided by this configure's probe, not by CNA_OPUS_FOUND alone: pkg_check_modules caches that, so
 # a tree configured once with the probe would otherwise keep linking a target no longer defined.
 set(_cna_voice_opus FALSE)
-if(NOT CNA_ENABLE_VOICE STREQUAL "OFF" AND NOT EMSCRIPTEN AND NOT ANDROID)
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/HostPkgConfig.cmake")
+cna_can_probe_host_pkg_config(_cna_voice_can_probe_host)
+if(NOT CNA_ENABLE_VOICE STREQUAL "OFF" AND _cna_voice_can_probe_host)
     find_package(PkgConfig QUIET)
     if(PKG_CONFIG_FOUND)
         pkg_check_modules(CNA_OPUS QUIET IMPORTED_TARGET opus>=1.3)

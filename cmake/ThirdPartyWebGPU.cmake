@@ -130,26 +130,36 @@ function(cna_configure_webgpu)
 
     # Official release archives use include/webgpu/webgpu.h and lib/.
     # Older package layouts used include/webgpu-headers/webgpu.h; accept both.
+    # These are explicit, already-resolved package roots.  In a cross build CMake's
+    # CMAKE_FIND_ROOT_PATH_MODE_* policy must not prepend the target sysroot to them.
+    # Clear the find-command cache entries as well so changing CNA_WEBGPU_ROOT in an
+    # existing build tree cannot retain paths from the previous package.
+    unset(_webgpu_include_dir CACHE)
     find_path(_webgpu_include_dir
         NAMES webgpu/webgpu.h webgpu-headers/webgpu.h webgpu.h
         PATHS "${_root}" "${_root}/include"
         PATH_SUFFIXES include
-        NO_DEFAULT_PATH)
+        NO_DEFAULT_PATH
+        NO_CMAKE_FIND_ROOT_PATH)
     if(NOT _webgpu_include_dir)
         message(FATAL_ERROR "CNA WebGPU: webgpu.h was not found below '${_root}'.")
     endif()
 
     if(WIN32)
+        unset(_webgpu_import_library CACHE)
         find_library(_webgpu_import_library
             NAMES wgpu_native wgpu_native.dll libwgpu_native
             PATHS "${_root}" "${_root}/lib"
             PATH_SUFFIXES lib
-            NO_DEFAULT_PATH)
+            NO_DEFAULT_PATH
+            NO_CMAKE_FIND_ROOT_PATH)
+        unset(_webgpu_runtime_library CACHE)
         find_file(_webgpu_runtime_library
             NAMES wgpu_native.dll
             PATHS "${_root}" "${_root}/lib" "${_root}/bin"
             PATH_SUFFIXES lib bin
-            NO_DEFAULT_PATH)
+            NO_DEFAULT_PATH
+            NO_CMAKE_FIND_ROOT_PATH)
         if(NOT _webgpu_import_library)
             message(FATAL_ERROR "CNA WebGPU: wgpu-native import library was not found below '${_root}'.")
         endif()
@@ -162,11 +172,13 @@ function(cna_configure_webgpu)
             set(CNA_WEBGPU_RUNTIME_LIBRARY "${_webgpu_runtime_library}" CACHE INTERNAL "wgpu-native runtime library")
         endif()
     else()
+        unset(_webgpu_library CACHE)
         find_library(_webgpu_library
             NAMES wgpu_native libwgpu_native
             PATHS "${_root}" "${_root}/lib"
             PATH_SUFFIXES lib
-            NO_DEFAULT_PATH)
+            NO_DEFAULT_PATH
+            NO_CMAKE_FIND_ROOT_PATH)
         if(NOT _webgpu_library)
             message(FATAL_ERROR "CNA WebGPU: libwgpu_native was not found below '${_root}'.")
         endif()
