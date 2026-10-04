@@ -48,6 +48,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-025 | **DONE** | Capture WebGPU stock 3D colour-write and multisample masks per deferred draw. |
 | MSR-026 | **DONE** | Make reused Vulkan occlusion-query results generation-safe and monotonic. |
 | MSR-027 | **DONE** | Dispose copied texture wrappers before their owning renderer, including ContentManager/SpriteFont copies. |
+| MSR-028 | **DONE** | Keep compiled XNA effects valid under the GLSL ES 1.00 profile used by OPENGLES2. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -627,6 +628,42 @@ Regression evidence:
   inspection finds the complete menu, text, alpha and textures correct, and all four 1280x720 PNGs
   are byte-identical (SHA-256 `c263f1096e10ac6ed5e4e58eaa76293be75bf3654ee71eed3e419c40a0c24d8a`);
   evidence is in `matrix-results/msr-037-roleplaying-visual-parity`.
+
+## MSR-028 — GLSL ES 1.00 compiled-effect centroid declarations
+
+The first complete OPENGLES2 capability probe passed only 14/91 samples.  Seventy-six of its 77
+failures stopped while compiling an authentic XNA effect because MojoShader emitted `centroid
+varying` into a `#version 100` shader.  GLSL ES 1.00 has no centroid interpolation qualifier, so
+this was a common compiled-effect translation defect rather than an intended GLES2 capability
+limit.  The failure affected both explicit Shader Model centroid inputs and XNA's implicit
+centroid treatment of colour inputs.
+
+CNA's managed MojoShader patches now keep the dedicated vertex/pixel varying name and interface
+pair under GLSL ES 1.00 but omit its unsupported `centroid` keyword.  That is semantically safe for
+the OPENGLES2 profile because it exposes no multisampling; without multiple samples, centroid and
+ordinary interpolation select the same sole sample.  GLSL ES 3 keeps `centroid in`/`centroid out`,
+and desktop GLSL keeps `centroid varying`, so the full EasyGL profiles lose no behaviour.
+
+Regression evidence:
+
+- `cna_mojoshader_effect_probe` now includes the authentic `SpriteEffect.fxb`, separately parses
+  every contained D3D9 shader through the GLSL ES 1.00 profile and rejects either parser errors or
+  any generated `centroid` qualifier.  Its 46 shader-object run passes;
+- `EasyGLCompiledEffectTest.EveryCommittedStockEffectParses` passes on the private GPU display with
+  active `OPENGLES2`, covering SpriteEffect, BasicEffect, AlphaTestEffect, DualTextureEffect,
+  EnvironmentMapEffect and SkinnedEffect;
+- the unchanged `AccelerometerSample` and `Graphics3D` executables now pass with active
+  `OPENGLES2`; `BloomSample` and `ShadowMapping` advance past effect compilation and are refused at
+  the already-truthful GLES2 render-target-sampling boundary;
+- the complete OPENGLES2 rerun records 80 automated passes and 11 render failures.  Ten are the
+  intended profile boundary: five compiled-effect render-target-sampling users, three textures
+  using unsupported `NormalizedByte2`/`NormalizedByte4`, one hardware-instancing user and one
+  occlusion-query user.  `Yacht` is the same renderer-independent missing gamer-services failure
+  present in every full-gallery run.  Automated evidence is in
+  `matrix-results/msr-044-full-opengles2-current`;
+- the same rebuilt multi-renderer executables pass 4/4 across OPENGLES3 and OPENGL33 for
+  `AccelerometerSample` and `ShatterEffect`, preserving the EasyGL full-profile baseline.  Evidence
+  is in `matrix-results/msr-045-easygl-centroid-regression`.
 
 ## Representative automated matrix
 

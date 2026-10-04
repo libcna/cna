@@ -117,6 +117,7 @@ namespace
 
     unsigned int shadersSeen = 0;
     unsigned int shaderTokenBytes = 0;
+    unsigned int invalidGlslEs100Shaders = 0;
 
     // The parser will not run without a backend: MOJOSHADER_compileEffect refuses a null context
     // outright, and it calls compileShader for every shader object in the container. So this is
@@ -132,6 +133,26 @@ namespace
                              const MOJOSHADER_swizzle* swiz, const unsigned int swizcount,
                              const MOJOSHADER_samplerMap* smap, const unsigned int smapcount)
     {
+        const MOJOSHADER_parseData* glslEs100 = MOJOSHADER_parse(
+            MOJOSHADER_PROFILE_GLSLES, mainfn, tokenbuf, bufsize,
+            swiz, swizcount, smap, smapcount, nullptr, nullptr, nullptr);
+        bool glslEs100Valid = glslEs100 != nullptr && glslEs100->error_count == 0;
+        if (glslEs100Valid)
+        {
+            const std::string_view output(
+                glslEs100->output != nullptr ? glslEs100->output : "",
+                glslEs100->output_len > 0
+                    ? static_cast<std::size_t>(glslEs100->output_len) : 0u);
+            glslEs100Valid = output.find("centroid ") == std::string_view::npos;
+        }
+        if (!glslEs100Valid)
+        {
+            std::printf("GLSL ES 1.00 shader %u contains errors or an unsupported "
+                        "centroid qualifier\n", shadersSeen);
+            ++invalidGlslEs100Shaders;
+        }
+        if (glslEs100 != nullptr) MOJOSHADER_freeParseData(glslEs100);
+
         ProbeShader* shader = new ProbeShader();
         shader->tokenBytes = bufsize;
         shader->parseData = const_cast<MOJOSHADER_parseData*>(
@@ -383,6 +404,12 @@ int main(int argc, char** argv)
         failures += VerifyInvalidRenderStateRejected(argv[i], bytes, backend);
     }
 
+    if (invalidGlslEs100Shaders > 0)
+    {
+        std::printf("%u GLSL ES 1.00 shader translations were invalid\n",
+                    invalidGlslEs100Shaders);
+        failures += static_cast<int>(invalidGlslEs100Shaders);
+    }
     std::printf("%u shader objects, %u bytes of Shader Model bytecode handed to the backend\n",
                 shadersSeen, shaderTokenBytes);
     std::printf("%s\n", failures == 0

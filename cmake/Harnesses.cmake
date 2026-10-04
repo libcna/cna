@@ -406,6 +406,7 @@ if(CNA_BUILD_TESTS AND TARGET cna_mojoshader AND NOT EMSCRIPTEN AND NOT ANDROID)
     endif()
     add_test(NAME cna_mojoshader_effect_probe
              COMMAND cna_mojoshader_effect_probe
+                     "${CMAKE_CURRENT_SOURCE_DIR}/modules/renderers/fna3d/effects/SpriteEffect.fxb"
                      "${CMAKE_CURRENT_SOURCE_DIR}/modules/renderers/fna3d/effects/BasicEffect.fxb"
                      "${CMAKE_CURRENT_SOURCE_DIR}/modules/renderers/fna3d/effects/CnaConformanceEffect.fxb"
                      "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/compiled-effects/racing-shadow-map-xna4.fxb")
