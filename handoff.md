@@ -378,7 +378,7 @@ Known native issues. None of them was introduced by this campaign:
   button; `Opacity` is a documented platform/API limitation. Zelda Oracle's larger surface
   (CSX-120: `Icon`, `MinimumSize`, `Shown`) is only on the side branches.
 
-## 9. Test state (verified 2026-10-03 after CSX-142, CNA.NET `c5e6950`)
+## 9. Test state (verified 2026-10-04 by CSX-153)
 
 Native library: `cna/build-probe/modules/c-api/libcna_c_api.so`. Environment for the native-backed
 suites:
@@ -393,14 +393,28 @@ Alternatively, use `../cna/tools/platform/run_gpu_tests_private.sh --exec dotnet
 
 | Suite | Result | When |
 |---|---|---|
-| CNA.Framework.Tests | **653/653** | 2026-10-03 |
-| CNA.XnaCompat.Tests | **313/313** | 2026-10-03 |
-| CNA.Integration.Tests | **257/257** | 2026-10-03 |
-| CNA.GamerServices.IntegrationTests (isolated XDG, no session bus) | 24/24 | 2026-10-02 |
-| cna-cs api-compat (`XNA_REFERENCE_PATH=~/deps/xna40-windows-assemblies dotnet run --project tools/api-compat -c Release -- --format text`) | 0 diagnostics | 2026-10-02 |
-| CNA `^CApi` (`run_gpu_tests_private.sh build-probe -R '^CApi' -j4`) | 119/119; C API gates 9/9; `^(Game\|Runtime)` 297/297 | at CBIND-155 |
-| CNA compiled effects (`-R EasyGLCompiledEffect`) | **686/686** on isolated Mesa GLES 3.2 | 2026-10-04, FX-146 |
+| CNA.Framework.Tests | **653/653** in Release and Debug | 2026-10-04 |
+| CNA.XnaCompat.Tests | **319/319** in Release and Debug | 2026-10-04 |
+| CNA.BrowserCompat.Tests | **5/5** in Release and Debug | 2026-10-04 |
+| CNA.Integration.Tests | **260/260** in Release and Debug | 2026-10-04 |
+| CNA.GamerServices.IntegrationTests (isolated XDG, no session bus) | **24/24** in Release and Debug | 2026-10-04 |
+| cna-cs api-compat (Windows runtime; GamerServices/Avatar/Net) | **256/256; 75/75**, 0 diagnostics | 2026-10-04 |
+| cna-cs ABI verifier | 1,137 values; 1,419 imports/prototypes; 23 callbacks; 604 constants; 12/12 negative controls | 2026-10-04 |
+| CNA C API (`run_gpu_tests_private.sh build-probe -R '^CApi_' -j4`) | **107/107** | 2026-10-04 |
+| CNA Runtime/Game (`CnaRuntimeTests`) | **208 passed, 2 expected platform skips** | 2026-10-04 |
+| CNA compiled effects (selected CTest regex) | **710/710** on isolated Mesa GLES 3.2 | 2026-10-04 |
+| CNA.NET ownership stress | **100/100** game recreations; 3,000/3,000 releases | 2026-10-04 |
 | CNA SDL boundary gates (`tools/platform/*.py --check`) | pass | 2026-10-02 |
+
+The first C API run exposed three audio smoke tests whose CTest environment depended on a host
+sound server. All three passed immediately with SDL's dummy backend; CNA `8a7e13ff5` applies that
+deterministic backend for every renderer, and the complete 107-test set then passed at `-j4`. The
+two Runtime/Game skips are explicit: Headless and Terminal cannot back an EasyGL OPENGLES3 build.
+
+Representative unchanged applications also passed: Project Babsang and Ronald the Snake on the
+isolated Linux display, and Gemstone Hunter after a fresh browser publish and Android package build.
+The browser evidence is `/rv/tmp/cs-samples/final-stability-browser-20261004/`; the x86_64 emulator
+evidence is `/rv/tmp/cs-samples/final-stability-android-20261004/`.
 
 Not rerun recently: `scripts/Package-Acceptance.sh`, which last passed on ABI 0.40.0.
 
@@ -660,10 +674,8 @@ history behind the finite classification in `cna-cs/docs/final-compatibility-aud
 ## 20. Exact next action
 
 Do not search for another application: CSX-151 reached saturation condition B with the fixed final
-ten, and CSX-152 completed the finite surface audit. Run the final stability matrix next: relevant
-native/C API tests, Game/Runtime and compiled-effect tests, every managed suite and metadata gate,
-then only the representative Linux/browser/Android runs justified by changed surface. Record every
-new failure and preserve documented flakes. After that, write the English source-build/migration
-guide and complete the requested C++/C/C# `cna-multi-language-3d-demo` qualification (the same C#
-source on FNA and CNA.NET), then write the campaign-closure section and enter maintenance mode.
+ten, CSX-152 completed the finite surface audit, and CSX-153 completed the final stability matrix.
+Write the English source-build/migration guide next, then complete the requested C++/C/C#
+`cna-multi-language-3d-demo` qualification (the same C# source on FNA and CNA.NET). Finally write
+the campaign-closure section and enter maintenance mode.
 Commit each coherent task locally; do not push without the owner's instruction.
