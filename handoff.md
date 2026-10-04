@@ -498,6 +498,18 @@ runs unchanged:
 - **Book samples:** Petzold, Apress *Windows Phone 7 Game Development*, *Windows Phone 7 Recipes*,
   *2D Graphics Programming for Games*, *XNA 4.0 Game Development by Example*.
 
+The final bounded CSX-151 sweep is complete and must not be replenished. Exactly ten preselected
+projects were investigated. Unchanged Project Babsang ran from its shipped XNA content and
+Farseer/DebugView binaries. Unchanged Ronald the Snake ran through arcade gameplay with its custom
+content readers, tiled maps and four effects after authentic XNA 4.0 BuildContent produced all 56
+assets; its unavailable Palatino Linotype was the one recorded content substitution (Liberation
+Serif). Bamboozled, Voodoo Boy and Hunted omit source files named by their own projects. Project
+Heist and Adventure Time are MonoGame applications with non-XNA middleware. Pixel Blast is a
+Silverlight/Windows Phone XAML host. Engine Nine's required engine graph depends on
+System.Xaml/WPF/WinForms/Win32. MunchKlone requires System.Drawing plus unpublished card data from a
+hard-coded historical MySQL service. No general CNA/CNA.NET defect was found. Saturation condition
+B is reached; `cna-cs-samples/games/README.md` has the exact source revisions and outcomes.
+
 Run recipes that are not obvious:
 - **Racing Game Kit:** run from its own `bin/Release`, because its XACT paths are relative to the
   working directory (as on Windows).
@@ -575,6 +587,9 @@ old `plan.md`/`NEXT.md` blockers are historical.
 - Final threaded browser qualification: `/rv/tmp/cs-samples/final-threaded-20261004/`. The archive
   was rebuilt from CNA `28f8312f0` with Emscripten 6.0.3; its SHA-256 is
   `ce8db116c3d9100f363864d355ad205c7334e5c5b630167c4fee1641c588b6c2`.
+- Final bounded external sweep: `/rv/tmp/cs-samples/final-sweep-20261004/`; Ronald the Snake's
+  complete XNA 4.0 pipeline output and log are under
+  `/rv/tmp/xna-games-content/final-ronald-complete/`.
 - Android: `/rv/tmp/cs-samples/android-*`.
 - Games: `/rv/tmp/cs-samples/games-*`.
 - Game checkouts: `/rv/tmp/xna-games/*`. Built content: `/rv/tmp/xna-games-content/*`.
@@ -622,23 +637,26 @@ old `plan.md`/`NEXT.md` blockers are historical.
    BuildContent/XACT, loaded its level on its own thread, initialized its shipped BEPUphysics,
    entered the 3D arena and reacted to movement. Both ran in headless Chromium/SwiftShader without
    a CNA/CNA.NET exception; no new general defect was found.
-10. Interactive Chrome with a GPU; a physical arm64 Android device.
+10. **Done/classified (CSX-151):** the fixed ten-project final application sweep produced two
+    unchanged successful runs and eight exclusively external/non-XNA constraints; no general
+    defect was found. Saturation condition B is met. Do not select replacements or search for more
+    games.
+11. Interactive Chrome with a GPU; a physical arm64 Android device.
 
 **Hardening**
-11. The `-j8` C smoke flakiness.
+12. The `-j8` C smoke flakiness.
 
 **Not actionable here**
-12. Yacht (owner decision), PerformanceUtility (needs a C++ port), and games blocked by missing
+13. Yacht (owner decision), PerformanceUtility (needs a C++ port), and games blocked by missing
     content, fonts or servers.
 
 ## 20. Exact next action
 
-Run the one final bounded external-application sweep from the owner's 2026-10-04 closure brief:
-select at most 10--20 substantial, diverse XNA 4.0 applications for diagnostic value, stop at the
-defined saturation condition, and do not turn it into another open-ended GitHub search. Candidates
-already seen include Jamedjo/BeatShift, Bacon41/PantheonPrototype and andrecarlucci/gta2net, but
-they are optional and gta2net needs external GTA2 data.
-
-Then perform the finite compatibility audit and stability pass, finish the migration guide and
-multi-language demo requested by the owner, and write the campaign-closure section. Record every
-fix with a regression test, commit each task locally, and push only when the owner says so.
+Do not search for another application: CSX-151 reached saturation condition B with the fixed final
+ten. Perform the finite CNA.NET compatibility-surface audit next: enumerate real stubs,
+`NotImplemented` paths, documented unsupported XNA members, metadata differences, lifetime/error
+semantics and platform-dependent TODOs, then classify each finite remainder. After that, run the
+final stability matrix, write the English source-build/migration guide and complete the requested
+C++/C/C# `cna-multi-language-3d-demo` qualification (the same C# source on FNA and CNA.NET), then
+write the campaign-closure section and enter maintenance mode. Commit each coherent task locally;
+do not push without the owner's instruction.
