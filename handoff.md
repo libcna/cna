@@ -108,10 +108,12 @@ experimental side branches (`zelda-oracle-forms` in cna-cs, `zelda-oracle` in cn
   - WebGL calls are proxied to the page thread, so they are slow (the Racing Game Kit runs at ~0.65
     fps).
   - The .NET 11 thread-start fault caps how many threads a game can start.
-- `BinaryFormatter` (CSX-141) works on the desktop (.NET 8) only (§19).
+- `BinaryFormatter` works on desktop and, through the supported out-of-band compatibility package,
+  in the qualified browser and Android emulator runs (CSX-141/144; §19).
 - CNA.WindowsFormsCompat is a small subset: `Form.FromHandle`, `FormBorderStyle` and `MessageBox`
-  (MessageBox prints to stderr and answers with its first button). `Opacity` is kept but not
-  applied.
+  (`MessageBox` uses CNA's native dialog while a game is alive, with stderr as the no-service or
+  pre-game fallback). `Opacity` is kept but not applied because CNA exposes no window-opacity
+  operation.
 
 **Open**: §19.
 
@@ -372,8 +374,9 @@ Known native issues. None of them was introduced by this campaign:
 - **GamerServices/Avatar/Net/Guide** (CSX-040..043): 24/24 integration tests, SystemLink loopback.
   CSX-044 (remaining C routes for extras) is `doing`, low priority.
 - **Windows Forms** (CSX-114/120): `Form.FromHandle` returns the game window, and `FormBorderStyle`
-  is applied. Zelda Oracle's larger surface (CSX-120: `Icon`, `MinimumSize`, `Shown`) is only on
-  the side branches.
+  is applied. CSX-147 routes `MessageBox` to CNA's native dialog service and returns the selected
+  button; `Opacity` is a documented platform/API limitation. Zelda Oracle's larger surface
+  (CSX-120: `Icon`, `MinimumSize`, `Shown`) is only on the side branches.
 
 ## 9. Test state (verified 2026-10-03 after CSX-142, CNA.NET `c5e6950`)
 
@@ -584,10 +587,12 @@ old `plan.md`/`NEXT.md` blockers are historical.
 3. **Resolved (CSX-146 / CBIND-158): the native `callbackFailure_` observation in §7.** Real XNA
    calls `UnloadContent` during Dispose after an Update failure, with `Content.Unload` first; CNA
    now matches it and carries native plus managed regressions.
-4. Vertex-texture LOD bias on GLES 3 (§7).
+4. **Resolved (FX-146): vertex-texture LOD bias on GLES 3.** Compiled vertex `TEXLDL` applies a
+   per-sampler bias uniform in the GLSL ES 3 generated-code path; 686/686 compiled-effect tests pass.
 5. A game blocked in a Guide `End*` wait does not see SIGTERM until the Guide closes.
-6. CSX-114 completeness: `MessageBox` through `cna_message_box_show_ext` (a new import, so update
-   the import inventory and abi-verify), and `Opacity`.
+6. **Resolved/classified (CSX-147): Windows Forms.** `MessageBox` uses
+   `cna_message_box_show_ext`; 1419/1419 imports pass abi-verify. `Opacity` cannot be applied because
+   CNA has no runtime-window/C ABI opacity operation, and remains an explicit platform limitation.
 
 **Performance**
 7. Threaded browser bundles proxy every GL call. Investigate an OffscreenCanvas handed to .NET's
