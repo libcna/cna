@@ -332,7 +332,7 @@ TEST(Fna3dEffectPixelOracleTest, EveryCompilerProducedPassMatchesFnaPixels)
             {
                 ASSERT_LT(passIndex, technique->getPassesProperty().getCountProperty())
                     << effectEntry.key << " " << techniqueEntry.key;
-                EffectPass& pass = technique->getPassesProperty()[passIndex];
+                EffectPass& pass = *technique->getPassesProperty()[passIndex];
                 const std::string expectedName = pass.getNameProperty().empty()
                     ? "<unnamed:" + std::to_string(passIndex) + ">"
                     : pass.getNameProperty();

@@ -31,6 +31,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-008 | **OPEN** | Prepare and cross-build the Windows renderer set; record Wine evidence separately from native qualification. |
 | MSR-009 | **OPEN** | Prepare the macOS renderer set and exact Mac mini M4 qualification commands. |
 | MSR-010 | **DONE** | Stop Vulkan's stock-layout guards from rejecting compiled-effect multi-stream and instanced draws before their own shader linker runs. |
+| MSR-011 | **DONE** | Restore the FNA3D-only `CnaRendererTests` build after pointer-container and namespace API changes. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -156,6 +157,18 @@ Regression evidence:
 - the authentic `InstancedModel_cna_samples` executable reaches an automated pass with Vulkan,
   and the same executable still passes with OPENGLES3.  Manual visual confirmation remains
   separate.
+
+## MSR-011 — FNA3D renderer-test build
+
+The clean FNA3D-only configuration exposed two stale test-source assumptions that incremental and
+other renderer builds had not compiled: an effect pass pointer was bound directly to a reference,
+and one compiled-effect file used graphics types without importing their namespaces.  The tests
+now dereference the pointer-container result and include/import the XNA graphics types explicitly.
+
+The complete `CnaRendererTests` target builds successfully in `cmake-build-qual-fna3d` with 12
+parallel jobs.  Its first full FNA3D execution passes 89 tests and skips one Reach-incompatible
+volume-texture contract; the 11 runtime failures it exposed are tracked as subsequent renderer or
+test-profile qualification work rather than being hidden by this compile repair.
 
 ## Representative automated matrix
 
