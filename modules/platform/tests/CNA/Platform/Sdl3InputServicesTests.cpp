@@ -7,6 +7,7 @@
 // genuinely needs hardware is left to the input parity suites in Phase 5.
 
 #include "../../../src/Sdl3/Sdl3InputServices.hpp"
+#include "../../../src/Sdl3/BrowserMouseWarp.hpp"
 #include "../../../src/Sdl3/Sdl3JoystickControls.hpp"
 #include "../../../src/Sdl3/Sdl3TextInputTypes.hpp"
 
@@ -19,6 +20,7 @@
 #include <array>
 #include <chrono>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <string>
 #include <thread>
@@ -152,6 +154,67 @@ TEST_F(Sdl3InputTest, PositionWithNoWindowIsRecordedWithoutANativeWarp)
 TEST_F(Sdl3InputTest, PositionRefusesAnUnknownNonZeroWindowId)
 {
     EXPECT_THROW(platform_->GetMouse()->SetPosition(0xFFFFFFFFu, 12, 34), PlatformException);
+}
+
+TEST(BrowserMouseWarpTest, RequestedPositionPersistsUntilThePhysicalPointerMoves)
+{
+    CNA::Platform::Sdl3::Detail::BrowserMouseWarp warp;
+    warp.Anchor(17.5f, 23.25f, 640, 360);
+
+    int x = 0;
+    int y = 0;
+    warp.Apply(17.5f, 23.25f, x, y);
+    EXPECT_EQ(x, 640);
+    EXPECT_EQ(y, 360);
+
+    warp.Apply(24.5f, 20.25f, x, y);
+    EXPECT_EQ(x, 647);
+    EXPECT_EQ(y, 357);
+}
+
+TEST(BrowserMouseWarpTest, RecenteringUsesTheCurrentPhysicalPositionAsItsNewAnchor)
+{
+    CNA::Platform::Sdl3::Detail::BrowserMouseWarp warp;
+    warp.Anchor(10.0f, 20.0f, 400, 240);
+
+    int x = 0;
+    int y = 0;
+    warp.Apply(15.0f, 28.0f, x, y);
+    ASSERT_EQ(x, 405);
+    ASSERT_EQ(y, 248);
+
+    warp.Anchor(15.0f, 28.0f, 400, 240);
+    warp.Apply(15.0f, 28.0f, x, y);
+    EXPECT_EQ(x, 400);
+    EXPECT_EQ(y, 240);
+}
+
+TEST(BrowserMouseWarpTest, ResetRestoresRawWindowCoordinates)
+{
+    CNA::Platform::Sdl3::Detail::BrowserMouseWarp warp;
+    warp.Anchor(1.0f, 2.0f, 100, 200);
+    ASSERT_TRUE(warp.IsActive());
+    warp.Reset();
+    EXPECT_FALSE(warp.IsActive());
+
+    int x = 0;
+    int y = 0;
+    warp.Apply(31.0f, 42.0f, x, y);
+    EXPECT_EQ(x, 31);
+    EXPECT_EQ(y, 42);
+}
+
+TEST(BrowserMouseWarpTest, InvalidBrowserCoordinatesDoNotEscapeTheRequestedPosition)
+{
+    CNA::Platform::Sdl3::Detail::BrowserMouseWarp warp;
+    warp.Anchor(1.0f, 2.0f, 100, 200);
+
+    int x = 0;
+    int y = 0;
+    warp.Apply(std::numeric_limits<float>::quiet_NaN(),
+               std::numeric_limits<float>::infinity(), x, y);
+    EXPECT_EQ(x, 100);
+    EXPECT_EQ(y, 200);
 }
 
 TEST_F(Sdl3InputTest, CursorVisibilityCallsAreSafe)

@@ -430,16 +430,24 @@ Not rerun recently: `scripts/Package-Acceptance.sh`, which last passed on ABI 0.
 - Run with `scripts/browser-requalify.sh` (all rows) or `scripts/browser-sample.sh <Row|games/Game>
   [--threads]`. Generated projects go to `cna-cs-samples/build-consumer/browser/<Row>/`.
 - Gallery: **84/84** in a single run (`/rv/tmp/cs-samples/browser-requal-20261002-st/`).
-- Games: most were run (README paragraphs under the table). The archives were last rebuilt at CNA
-  `c7b13c14d`, which includes CBIND-156 and FX-145.
+- Games: most were run (README paragraphs under the table). The single-threaded archive was rebuilt
+  on 2026-10-04 after CSX-145; its staged `libcna_c_api.a` SHA-256 is
+  `8a74ac43981541b64f90d78add3043802e179285bd68ce666c6b61820f2f9f74`.
 - Not working in a browser:
   - Playing in Traffic: it plays a video, and the browser has no video backend.
   - Forge sample: its local UDP server.
   - TiledTerrainDemo: its `Rgba64` normal map needs `EXT_texture_norm16`, and CNA refuses it by
     name.
   - MDTerrainDemo: its thread-pool work items never run (the .NET fault below).
-  - TerrainDemo: draws only its clear colour (unexplained, §19).
-  - Gemstone Hunter: `BinaryFormatter`, which has no implementation on .NET 9+.
+- TerrainDemo is no longer a rendering failure (CSX-145). Unchanged original source draws its
+  instanced terrain in headless Chromium/SwiftShader when the headless harness supplies a
+  deterministic pointer position. Browsers cannot physically implement `Mouse.SetPosition`, so
+  SDL3 now preserves a requested position virtually and applies later physical deltas. The
+  no-action harness begins at `(0,0)`; TerrainDemo does not centre the pointer before its first
+  update and therefore legitimately turns its camera away. `move:600,350@2000` both avoids that
+  harness artefact and exercises the virtual recenter path.
+- Gemstone Hunter is no longer blocked (CSX-144): the supported out-of-band formatter package
+  restores trusted legacy-data compatibility on .NET 9+.
 - **Threaded bundles** (`--threads`; CSX-115..117, CBIND-151). Built with `Build-BrowserNative.sh
   --threads` (`cna/cmake-build-webgl2-threads`).
   - `Main` runs on .NET's deputy worker, which proxies WebGL to the page (`-sOFFSCREEN_FRAMEBUFFER`).
@@ -565,12 +573,15 @@ old `plan.md`/`NEXT.md` blockers are historical.
 ## 19. Open work, by value
 
 **Compatibility defects and gaps**
-1. **`BinaryFormatter` on .NET 9+** (browser/Android). Add the out-of-band
-   `System.Runtime.Serialization.Formatters` package for net9+ heads in `CNA.XnaCompat.targets`
-   (still behind `CnaBinaryFormatter`). Not cached locally yet. Verify with Gemstone Hunter in
-   `browser-sample.sh` and `android-sample.sh`.
-2. **TerrainDemo draws only its clear colour in a browser.** The desktop draws it, and there is no
-   WebGL error. Compare its effect and vertex formats with what WebGL 2 accepts.
+1. **Resolved (CSX-144): `BinaryFormatter` on .NET 9+** (browser/Android). The out-of-band
+   `System.Runtime.Serialization.Formatters` package is selected for net9+ heads, still behind
+   `CnaBinaryFormatter`; unchanged Gemstone Hunter runs in the browser and Android emulator.
+2. **Resolved (CSX-145): TerrainDemo's clear-only browser symptom.** This was input state, not
+   rendering: its mouse-look loop calls `Mouse.SetPosition` every frame, while a browser cannot
+   move the physical cursor. CNA's SDL3 browser mouse now exposes a virtual warp anchored to the
+   current raw pointer. Pure regression tests cover persistence, deltas, recentering, reset and
+   invalid coordinates; unchanged TerrainDemo renders with deterministic headless input. The
+   runner's default initial `(0,0)` remains a harness state, not an invented global auto-centre.
 3. **The native `callbackFailure_` observation in §7.** After a run failure, `UnloadContent` is
    skipped at Dispose. Verify it against XNA and decide.
 4. Vertex-texture LOD bias on GLES 3 (§7).

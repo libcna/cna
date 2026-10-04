@@ -212,8 +212,12 @@ namespace CNA::Platform::Sdl3 {
             y = desktopY - static_cast<float>(windowY);
         }
 
+#if defined(__EMSCRIPTEN__)
+        browserWarp_.Apply(x, y, snapshot_.x, snapshot_.y);
+#else
         snapshot_.x = static_cast<int>(x);
         snapshot_.y = static_cast<int>(y);
+#endif
 
         // Repacked into CNA's own bit order rather than passed through: SDL's mask is
         // 1-based-button-indexed, and leaking that convention would make every consumer depend
@@ -274,6 +278,13 @@ namespace CNA::Platform::Sdl3 {
         snapshot_.x = x;
         snapshot_.y = y;
 
+#if defined(__EMSCRIPTEN__)
+        float rawX = 0.0f;
+        float rawY = 0.0f;
+        (void)SDL_GetMouseState(&rawX, &rawY);
+        browserWarp_.Anchor(rawX, rawY, x, y);
+#endif
+
         if (window == 0)
         {
             return;
@@ -283,7 +294,9 @@ namespace CNA::Platform::Sdl3 {
         {
             throw PlatformException("Mouse::SetPosition", "window id is not owned by SDL3");
         }
+#if !defined(__EMSCRIPTEN__)
         SDL_WarpMouseInWindow(nativeWindow, static_cast<float>(x), static_cast<float>(y));
+#endif
     }
 
     void Sdl3Mouse::SetCursorVisible(const bool visible)
@@ -402,6 +415,7 @@ namespace CNA::Platform::Sdl3 {
         (void)SDL_GetRelativeMouseState(&ignoredX, &ignoredY);
         relativeDeltaX_ = 0.0f;
         relativeDeltaY_ = 0.0f;
+        browserWarp_.Reset();
         snapshot_.window = window;
         relativeMode_ = enabled;
     }
