@@ -71,10 +71,19 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Destructor. */
         CNAEXT ~TextureCube() override;
 
-        /** @brief Copy-constructs a value wrapper that shares the underlying texture resource. */
-        CNAEXT TextureCube(const TextureCube&) = default;
-        /** @brief Copy-assigns a value wrapper that shares the underlying texture resource. */
-        CNAEXT TextureCube& operator=(const TextureCube&) = default;
+        /**
+         * @brief Copy-constructs a value wrapper that shares the underlying texture resource.
+         *
+         * @param other Texture wrapper whose resource is shared.
+         */
+        CNAEXT TextureCube(const TextureCube& other);
+        /**
+         * @brief Copy-assigns a value wrapper that shares the underlying texture resource.
+         *
+         * @param other Texture wrapper whose resource is shared.
+         * @return This texture wrapper.
+         */
+        CNAEXT TextureCube& operator=(const TextureCube& other);
         /** @brief Movable — transfers ownership of the GPU renderer handle. */
         CNAEXT TextureCube(TextureCube&& other) noexcept;
         /** @brief Movable — transfers ownership of the GPU renderer handle. */

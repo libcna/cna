@@ -47,6 +47,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-024 | **DONE** | Keep Vulkan stock descriptor bindings from overwriting a compiled Effect's own pipeline layout. |
 | MSR-025 | **DONE** | Capture WebGPU stock 3D colour-write and multisample masks per deferred draw. |
 | MSR-026 | **DONE** | Make reused Vulkan occlusion-query results generation-safe and monotonic. |
+| MSR-027 | **DONE** | Dispose copied texture wrappers before their owning renderer, including ContentManager/SpriteFont copies. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -578,6 +579,54 @@ Regression evidence:
   rendering with no query polygon; its time-matched Vulkan capture differs from the OPENGL33
   reference by normalized MAE `0.0046027`.  Evidence is in
   `matrix-results/msr-031-lensflare-vulkan-fixed`.
+
+## MSR-027 — Copied-texture device lifetime ownership
+
+`Texture2D` and `TextureCube` are copyable CNA C++ wrappers around shared native texture objects.
+Their base `GraphicsResource` copy intentionally does not register a second wrapper, because the
+graphics-state classes use that base operation before joining one shared managed identity.  The
+texture classes had inherited that unregistered behaviour accidentally.  `ContentManager` caches
+assets through `std::any` copies and `SpriteFont` owns its atlas by value, so a copied atlas could
+be the last native-texture owner while remaining absent from `GraphicsDevice`'s disposal list.
+
+`RolePlayingGame` exposed both consequences at process shutdown.  WebGPU reached
+`Texture::Dispose` from a function-static `SpriteFont` after its raw device pointer was dead and
+segfaulted in `TextureCollection::RemoveDisposedTexture`.  SDL_GPU corrupted the heap on the same
+path.  A focused SDL_GPU ASan reproduction showed the earlier and more fundamental failure: the
+late `SdlGpuSampledTextureState` destructor dereferenced the already-freed `SdlGpuRenderer`, while
+Vulkan validation reported its image and views still alive at `vkDestroyDevice`.  A guard around
+the later texture-collection cleanup would therefore only have hidden the second symptom.
+
+Texture copy construction now registers every independent wrapper with its live owning device.
+Copy assignment retains one registration on the same device, transfers it between different
+devices, restores it when assigning into a disposed wrapper, and detaches old sampler bindings
+before leaving the old device.  The shared native texture and existing copy-on-write pixel
+semantics are unchanged.  Device disposal now resets every wrapper's backend while the renderer
+and its required graphics context are still alive; no sample-specific shutdown code was added.
+
+Regression evidence:
+
+- `GraphicsResourceTest.CopiedTexturesAreTrackedAndCanOutliveOwningDevice` covers both copyable
+  texture families, asserts all four wrappers are tracked, lets the device die first, then proves
+  the surviving wrappers were disposed and are safe to destroy;
+- `GraphicsResourceTest.CopyAssignedTexturesTransferDeviceTracking` covers cross-device transfer,
+  old sampler detachment, same-device reassignment without duplicate registration and assigning
+  into an explicitly disposed wrapper;
+- before the repair, the first test produced a deterministic SDL_GPU heap-use-after-free under
+  ASan in `SdlGpuSampledTextureState::~SdlGpuSampledTextureState`; afterward both tests pass 2/2
+  under the same ASan build with no recurrence of that memory finding or the Vulkan
+  object-lifetime errors.  The build's pre-existing UBSan static-initialization warning in
+  `Color.hpp` still prints before Google Test starts and is tracked separately rather than being
+  attributed to this repair;
+- the broader resource and texture-copy selection passes 18/18 on WebGPU, SDL_GPU and the
+  OPENGLES3 EasyGL regression baseline;
+- the unchanged, single multi-renderer `RolePlayingGame_cna_samples` executable now shuts down
+  cleanly with both active `WEBGPU` and active `SDL_GPU` in
+  `matrix-results/msr-036-roleplaying-lifetime-fixed`;
+- a four-renderer capture rerun passes with active OPENGLES3, OPENGL33, WebGPU and SDL_GPU.  Manual
+  inspection finds the complete menu, text, alpha and textures correct, and all four 1280x720 PNGs
+  are byte-identical (SHA-256 `c263f1096e10ac6ed5e4e58eaa76293be75bf3654ee71eed3e419c40a0c24d8a`);
+  evidence is in `matrix-results/msr-037-roleplaying-visual-parity`.
 
 ## Representative automated matrix
 

@@ -479,6 +479,59 @@ namespace Microsoft::Xna::Framework::Graphics
         Dispose(false);
     }
 
+    Texture2D::Texture2D(const Texture2D& other)
+        : Texture(other)
+        , renderer_(other.renderer_)
+        , width(other.width)
+        , height(other.height)
+        , cpuPixels_(other.cpuPixels_)
+        , extraMipLevels_(other.extraMipLevels_)
+        , gpuOnlyContent_(other.gpuOnlyContent_)
+    {
+        // GraphicsResource copies are normally unregistered because state-object aliases opt into
+        // a single shared identity. Texture copies instead own independent C++ wrappers around a
+        // shared native resource. Every live wrapper must be disposed before the renderer dies;
+        // ContentManager and SpriteFont routinely let such a copy outlive the original wrapper.
+        if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
+            graphicsDevice_->AddResourceReference(this);
+    }
+
+    Texture2D& Texture2D::operator=(const Texture2D& other)
+    {
+        if (this != &other)
+        {
+            GraphicsDevice* const previousDevice = graphicsDevice_;
+            const bool previousDeviceAlive =
+                previousDevice != nullptr && !graphicsDeviceLifetime_.expired();
+            GraphicsDevice* const incomingDevice = other.graphicsDevice_;
+            const bool incomingDeviceAlive =
+                incomingDevice != nullptr && !other.graphicsDeviceLifetime_.expired();
+            const bool keepRegistration =
+                previousDeviceAlive && !isDisposed_ && incomingDeviceAlive &&
+                previousDevice == incomingDevice;
+
+            const auto contextLease =
+                previousDeviceAlive ? LeaseRendererContext(previousDevice) : nullptr;
+            if (previousDeviceAlive && !keepRegistration)
+            {
+                previousDevice->DetachMovedTexture(this);
+                previousDevice->RemoveResourceReference(this);
+            }
+
+            Texture::operator=(other);
+            renderer_ = other.renderer_;
+            width = other.width;
+            height = other.height;
+            cpuPixels_ = other.cpuPixels_;
+            extraMipLevels_ = other.extraMipLevels_;
+            gpuOnlyContent_ = other.gpuOnlyContent_;
+
+            if (incomingDeviceAlive && !keepRegistration)
+                incomingDevice->AddResourceReference(this);
+        }
+        return *this;
+    }
+
     Texture2D::Texture2D(Texture2D&& other) noexcept
         : Texture(std::move(other))
         , renderer_(std::move(other.renderer_))

@@ -100,10 +100,18 @@ namespace Microsoft::Xna::Framework::Graphics
          * gives the writing handle a texture of its own and leaves the other with the pixels it
          * had, so a ContentManager's cached texture is not changed through a loaded copy
          * (REMED-GFX-223). A SetData of a rectangle updates the shared texture in place.
+         *
+         * @param other Texture wrapper whose resource is shared.
          */
-        CNAEXT Texture2D(const Texture2D&) = default;
-        /** @brief Copy-assigns a second handle to the same texture, with the copy constructor's semantics. */
-        CNAEXT Texture2D& operator=(const Texture2D&) = default;
+        CNAEXT Texture2D(const Texture2D& other);
+        /**
+         * @brief Copy-assigns a second handle to the same texture, with the copy constructor's
+         *        semantics.
+         *
+         * @param other Texture wrapper whose resource is shared.
+         * @return This texture wrapper.
+         */
+        CNAEXT Texture2D& operator=(const Texture2D& other);
         /** @brief Move-constructs a wrapper and transfers ownership of its renderer resource. */
         CNAEXT Texture2D(Texture2D&& other) noexcept;
         /** @brief Move-assigns a wrapper and transfers ownership of its renderer resource. */

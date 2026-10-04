@@ -15,6 +15,8 @@
 //     GraphicsResource through Texture).
 
 #include <gtest/gtest.h>
+#include <memory>
+#include <optional>
 #include <stdexcept>
 #include <vector>
 #include <string>
@@ -26,6 +28,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "System/InvalidOperationException.hpp"
 
@@ -36,6 +39,7 @@ using Microsoft::Xna::Framework::Graphics::IndexBuffer;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
+using Microsoft::Xna::Framework::Graphics::TextureCube;
 using Microsoft::Xna::Framework::Graphics::VertexBuffer;
 
 // -----------------------------------------------------------------------
@@ -241,6 +245,71 @@ TEST(GraphicsResourceTest, DisposeTwiceIsNoOp)
     tex.Dispose();
     EXPECT_NO_THROW(tex.Dispose());
     EXPECT_TRUE(tex.getIsDisposedProperty());
+}
+
+TEST(GraphicsResourceTest, CopiedTexturesAreTrackedAndCanOutliveOwningDevice)
+{
+    std::optional<Texture2D> survivingCopy;
+    std::optional<TextureCube> survivingCubeCopy;
+    {
+        auto device = std::make_unique<GraphicsDevice>();
+        const std::size_t baseline = device->GetTrackedResourceCount();
+        Texture2D original(*device, 1, 1);
+        survivingCopy.emplace(original);
+        TextureCube originalCube(*device, 1, false, SurfaceFormat::Color);
+        survivingCubeCopy.emplace(originalCube);
+
+        EXPECT_EQ(survivingCopy->getGraphicsDeviceProperty(), device.get());
+        EXPECT_FALSE(survivingCopy->getIsDisposedProperty());
+        EXPECT_EQ(survivingCubeCopy->getGraphicsDeviceProperty(), device.get());
+        EXPECT_FALSE(survivingCubeCopy->getIsDisposedProperty());
+        EXPECT_EQ(device->GetTrackedResourceCount(), baseline + 4);
+    }
+
+    EXPECT_TRUE(survivingCopy->getIsDisposedProperty());
+    EXPECT_TRUE(survivingCubeCopy->getIsDisposedProperty());
+    EXPECT_NO_THROW(survivingCopy.reset());
+    EXPECT_NO_THROW(survivingCubeCopy.reset());
+}
+
+TEST(GraphicsResourceTest, CopyAssignedTexturesTransferDeviceTracking)
+{
+    GraphicsDevice first;
+    GraphicsDevice second;
+    const std::size_t firstBaseline = first.GetTrackedResourceCount();
+    const std::size_t secondBaseline = second.GetTrackedResourceCount();
+
+    {
+        Texture2D destination(first, 1, 1);
+        Texture2D source(second, 2, 2);
+        TextureCube cubeDestination(first, 1, false, SurfaceFormat::Color);
+        TextureCube cubeSource(second, 1, false, SurfaceFormat::Color);
+        first.getTexturesProperty()(0, &destination);
+
+        EXPECT_EQ(first.GetTrackedResourceCount(), firstBaseline + 2);
+        EXPECT_EQ(second.GetTrackedResourceCount(), secondBaseline + 2);
+
+        destination = source;
+        EXPECT_EQ(first.getTexturesProperty()[0], nullptr);
+        EXPECT_EQ(first.GetTrackedResourceCount(), firstBaseline + 1);
+        EXPECT_EQ(second.GetTrackedResourceCount(), secondBaseline + 3);
+
+        cubeDestination = cubeSource;
+        EXPECT_EQ(first.GetTrackedResourceCount(), firstBaseline);
+        EXPECT_EQ(second.GetTrackedResourceCount(), secondBaseline + 4);
+
+        source = destination;
+        cubeSource = cubeDestination;
+        EXPECT_EQ(second.GetTrackedResourceCount(), secondBaseline + 4);
+
+        destination.Dispose();
+        EXPECT_EQ(second.GetTrackedResourceCount(), secondBaseline + 3);
+        destination = source;
+        EXPECT_EQ(second.GetTrackedResourceCount(), secondBaseline + 4);
+    }
+
+    EXPECT_EQ(first.GetTrackedResourceCount(), firstBaseline);
+    EXPECT_EQ(second.GetTrackedResourceCount(), secondBaseline);
 }
 
 TEST(GraphicsResourceTest, CrossDeviceMoveAssignmentTransfersTrackingAndDetachesOldBindings)

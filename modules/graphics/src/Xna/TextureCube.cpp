@@ -132,6 +132,49 @@ namespace Microsoft::Xna::Framework::Graphics
         Dispose(false);
     }
 
+    TextureCube::TextureCube(const TextureCube& other)
+        : Texture(other)
+        , size_(other.size_)
+        , renderer_(other.renderer_)
+        , cpuPixels_(other.cpuPixels_)
+    {
+        if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
+            graphicsDevice_->AddResourceReference(this);
+    }
+
+    TextureCube& TextureCube::operator=(const TextureCube& other)
+    {
+        if (this != &other)
+        {
+            GraphicsDevice* const previousDevice = graphicsDevice_;
+            const bool previousDeviceAlive =
+                previousDevice != nullptr && !graphicsDeviceLifetime_.expired();
+            GraphicsDevice* const incomingDevice = other.graphicsDevice_;
+            const bool incomingDeviceAlive =
+                incomingDevice != nullptr && !other.graphicsDeviceLifetime_.expired();
+            const bool keepRegistration =
+                previousDeviceAlive && !isDisposed_ && incomingDeviceAlive &&
+                previousDevice == incomingDevice;
+
+            const auto contextLease =
+                previousDeviceAlive ? LeaseRendererContext(previousDevice) : nullptr;
+            if (previousDeviceAlive && !keepRegistration)
+            {
+                previousDevice->DetachMovedTexture(this);
+                previousDevice->RemoveResourceReference(this);
+            }
+
+            Texture::operator=(other);
+            size_ = other.size_;
+            renderer_ = other.renderer_;
+            cpuPixels_ = other.cpuPixels_;
+
+            if (incomingDeviceAlive && !keepRegistration)
+                incomingDevice->AddResourceReference(this);
+        }
+        return *this;
+    }
+
     TextureCube::TextureCube(TextureCube&& other) noexcept
         : Texture(std::move(other))
         , size_(other.size_)
