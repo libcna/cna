@@ -30,7 +30,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-007 | **IN PROGRESS** | Qualify the representative sample set, then the complete 91-sample corpus. |
 | MSR-008 | **OPEN** | Prepare and cross-build the Windows renderer set; record Wine evidence separately from native qualification. |
 | MSR-009 | **OPEN** | Prepare the macOS renderer set and exact Mac mini M4 qualification commands. |
-| MSR-010 | **OPEN** | Repair the Vulkan compiled-effect multi-stream and instancing shared contracts exposed by the broader MSR-003 regression run. |
+| MSR-010 | **DONE** | Stop Vulkan's stock-layout guards from rejecting compiled-effect multi-stream and instanced draws before their own shader linker runs. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -81,8 +81,8 @@ Regression evidence:
   SDL_GPU on the Radeon 780M through the private GPU runner;
 - the wider WebGPU compiled-effect run passes 49 tests with one intentional Reach-profile skip;
   SDL_GPU passes 45 with one configuration skip;
-- the wider Vulkan run passes 24 with one Reach-profile skip and separately exposes two existing
-  shared-contract failures in multi-stream and instanced compiled draws, now tracked as MSR-010;
+- the wider Vulkan run initially exposed separate multi-stream and instanced compiled-draw
+  failures; MSR-010 repaired them, bringing the run to 26 passes and one Reach-profile skip;
 - the same single `BloomSample_cna_samples` executable reaches an automated pass with the requested
   active renderer verified for OPENGLES3, OPENGL33, Vulkan, WebGPU, SDL_GPU and FNA3D.  Manual
   visual confirmation remains required and is not implied by that automated result.
@@ -108,6 +108,29 @@ Regression evidence:
 - the same six-renderer `ShadowMapping` executable now remains stable with both Vulkan and WebGPU,
   and each process logs the explicitly requested active renderer;
 - the OPENGLES3 launch of that same executable still passes after the framework change.
+
+## MSR-010 — Vulkan compiled-effect stream validation
+
+Vulkan's ordinary indexed, non-indexed and instanced paths selected a stock shader family and
+validated the combined declaration against that stock shader before invoking the compiled-effect
+linker.  A valid Effect consuming `POSITION0` from one stream and `TEXCOORD0` from another was
+therefore rejected according to an unrelated stock input table.  Single-stream effects happened
+to avoid the unconditional multi-stream refusal.
+
+The three stock-layout guards now apply only to stock draws.  Compiled draws continue into their
+existing pass linker, which validates the actual selected shader against the per-vertex and
+per-instance declarations; no capability flag or input semantics changed.
+
+Regression evidence:
+
+- `VulkanCompiledEffectDrawTest.SharedMultiStreamDrawContract` and
+  `SharedInstancingDrawContract` both failed before the repair and pass afterward with pixel
+  readback on the Radeon 780M;
+- the complete non-interactive Vulkan compiled-effect selection passes 26 tests with one
+  intentional Reach-profile `Texture3D` skip;
+- the authentic `InstancedModel_cna_samples` executable reaches an automated pass with Vulkan,
+  and the same executable still passes with OPENGLES3.  Manual visual confirmation remains
+  separate.
 
 ## Representative automated matrix
 

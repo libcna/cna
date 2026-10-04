@@ -20889,7 +20889,10 @@ namespace CNA::Internal::Renderers::Vulkan
         // does -- the pipeline is keyed and built from the declaration's own offsets. Anything
         // else still goes through the guard unchanged, including a converted family whose
         // declaration left an input unsupplied.
-        if (!declaredLayout.IsComplete()) {
+        // A compiled Effect owns its vertex shader and links against the complete declaration
+        // below.  Judging that declaration against an unrelated stock program rejects valid
+        // multi-stream effects before their own linker can see them.
+        if (!declaredLayout.IsComplete() && params.compiledEffectRuntime == nullptr) {
             if (packsVertexStreams)
                 throw System::NotSupportedException(
                     "CNA Vulkan: the combined multi-stream declaration does not supply every "
@@ -21136,7 +21139,9 @@ namespace CNA::Internal::Renderers::Vulkan
         // does -- the pipeline is keyed and built from the declaration's own offsets. Anything
         // else still goes through the guard unchanged, including a converted family whose
         // declaration left an input unsupplied.
-        if (!declaredLayout.IsComplete()) {
+        // As in the non-indexed twin: the stock-layout guard has no authority over a compiled
+        // Effect, whose selected pass supplies the program and validates its own inputs.
+        if (!declaredLayout.IsComplete() && params.compiledEffectRuntime == nullptr) {
             if (packsVertexStreams)
                 throw System::NotSupportedException(
                     "CNA Vulkan: the combined multi-stream declaration does not supply every "
@@ -21621,7 +21626,9 @@ namespace CNA::Internal::Renderers::Vulkan
         // from the stride, and a declaration that supplied every per-vertex input of the program
         // it selected means this one no longer does. Everything else still goes through it
         // unchanged, including a declaration that left one of those two inputs unsupplied.
-        if (!instancedLayout.IsComplete()) {
+        // Compiled effects link their own per-vertex and per-instance declarations after the
+        // geometry snapshots are captured.  A stock-program layout must not veto that route.
+        if (!instancedLayout.IsComplete() && !compiledEffectDraw) {
             if (packsVertexStreams)
                 throw System::NotSupportedException(
                     "CNA Vulkan: the combined multi-stream declaration does not supply every "
