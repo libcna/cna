@@ -8604,35 +8604,40 @@ namespace CNA::Internal::Renderers::Vulkan
         return false;
     }
 
-    /// plan_vulkan.md VULKAN-199: is this declaration EXACTLY Position + Normal, and nothing else?
+    /// plan_vulkan.md VULKAN-199/MSR-016: can this draw use the Position+Normal vertex stage?
     ///
-    /// Asked as a whole-set question rather than as "names a Normal and no TextureCoordinate",
-    /// and the difference is a silent drop rather than a nicety. The layout builder's
-    /// `IsComplete()` means *every input the SHADER consumes was supplied* -- it says nothing
-    /// about a declared element the shader ignores. So a Position+Normal+**Colour** record would
-    /// satisfy the untextured lit program's two inputs, pass the fidelity guard, and render with
-    /// the vertex colour thrown away without a word. That is exactly the failure `FX-125` found on
-    /// EasyGL, and refusing such a record until `VULKAN-200` gives the lit family a colour input is
-    /// the honest state. EasyGL's own `positionNormal` test is stricter still (it pins the two
-    /// offsets as well); this is offset-flexible, because the declaration-driven layout carries the
-    /// offsets, and set-exact, because nothing else can.
-    static bool DeclarationIsPositionNormalOnlyEXT(
-        const CNA::Internal::Graphics::DeclaredVertexLayout& declared)
+    /// This is an active-semantic question, not a byte-layout question. A declaration may carry
+    /// channels the applied BasicEffect does not consume -- an untextured XNA Model commonly keeps
+    /// an imported UV channel, for example. EasyGL and GraphicsDevice already use
+    /// StockEffectUsesVertexSemantic for exactly this distinction. Ignoring an INACTIVE channel is
+    /// faithful; ignoring an active colour or texture is not. The explicit state gate prevents a
+    /// declaration with no TextureCoordinate0 from silently turning a textured BasicEffect into an
+    /// untextured one.
+    static bool DeclarationUsesPositionNormalStageEXT(
+        const CNA::Internal::Graphics::DeclaredVertexLayout& declared,
+        const GpuDrawParams& params)
     {
         using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+        if (params.textureEnabled || params.vertexColorEnabled) return false;
         bool sawPosition = false, sawNormal = false;
         for (const auto& e : declared.GetElements()) {
             const auto usage = e.getVertexElementUsageProperty();
-            if (e.getUsageIndexProperty() != 0) return false;
-            if (usage == VertexElementUsage::Position)    { sawPosition = true; continue; }
-            if (usage == VertexElementUsage::Normal)      { sawNormal   = true; continue; }
-            return false;
+            const int usageIndex = e.getUsageIndexProperty();
+            if (usage == VertexElementUsage::Position && usageIndex == 0) {
+                sawPosition = true;
+                continue;
+            }
+            if (usage == VertexElementUsage::Normal && usageIndex == 0) {
+                sawNormal = true;
+                continue;
+            }
+            if (StockEffectUsesVertexSemantic(params, usage, usageIndex)) return false;
         }
         return sawPosition && sawNormal;
     }
 
     /// plan_vulkan.md VULKAN-200: is this declaration EXACTLY Position + Normal + Colour +
-    /// TextureCoordinate? Set-exact for the reason DeclarationIsPositionNormalOnlyEXT states --
+    /// TextureCoordinate? Set-exact for the reason DeclarationUsesPositionNormalStageEXT states --
     /// `IsComplete()` cannot notice a declared element the shader ignores, so anything looser
     /// would render a fifth element's worth of meaning away in silence.
     static bool DeclarationIsPositionNormalColorTextureOnlyEXT(
@@ -20843,9 +20848,12 @@ namespace CNA::Internal::Renderers::Vulkan
         // which is exactly why the stride cannot decide this. Asked of the declaration only:
         // without one there is nothing to distinguish the two 24-byte meanings, so the stride's
         // historical answer stands. Set-exact rather than "has a Normal, has no UV" -- see
-        // DeclarationIsPositionNormalOnlyEXT for the silent drop the loose form would allow.
+        // DeclarationUsesPositionNormalStageEXT admits additional channels only when the active
+        // BasicEffect does not consume them. This is how an untextured imported XNA Model can keep
+        // its source UV channel without forcing a textured shader input.
         const bool needsLitUntextured = !declaredForDraw.IsEmpty() && !otherFamily
-                                      && DeclarationIsPositionNormalOnlyEXT(declaredForDraw);
+                                      && DeclarationUsesPositionNormalStageEXT(
+                                             declaredForDraw, params);
         // plan_vulkan.md VULKAN-200 (F-37): the stock ModelProcessor's colour-carrying mesh --
         // Position+Normal+Colour+TexCoord, 36 bytes -- which no lit program here could bind, so
         // the draw was refused outright. Set-exact for the same reason as its sibling above.
@@ -21093,9 +21101,12 @@ namespace CNA::Internal::Renderers::Vulkan
         // which is exactly why the stride cannot decide this. Asked of the declaration only:
         // without one there is nothing to distinguish the two 24-byte meanings, so the stride's
         // historical answer stands. Set-exact rather than "has a Normal, has no UV" -- see
-        // DeclarationIsPositionNormalOnlyEXT for the silent drop the loose form would allow.
+        // DeclarationUsesPositionNormalStageEXT admits additional channels only when the active
+        // BasicEffect does not consume them. This is how an untextured imported XNA Model can keep
+        // its source UV channel without forcing a textured shader input.
         const bool needsLitUntextured = !declaredForDraw.IsEmpty() && !otherFamily
-                                      && DeclarationIsPositionNormalOnlyEXT(declaredForDraw);
+                                      && DeclarationUsesPositionNormalStageEXT(
+                                             declaredForDraw, params);
         // plan_vulkan.md VULKAN-200 (F-37): the stock ModelProcessor's colour-carrying mesh --
         // Position+Normal+Colour+TexCoord, 36 bytes -- which no lit program here could bind, so
         // the draw was refused outright. Set-exact for the same reason as its sibling above.
@@ -21426,18 +21437,18 @@ namespace CNA::Internal::Renderers::Vulkan
         //
         // VULKAN-228: all THREE of that family's vertex shapes, not just the textured one. The
         // untextured and coloured predicates are the ORDINARY routes' own, called on the same
-        // declaration -- `DeclarationIsPositionNormalOnlyEXT` and
+        // declaration -- `DeclarationUsesPositionNormalStageEXT` and
         // `DeclarationIsPositionNormalColorTextureOnlyEXT` -- so an instanced draw and a
-        // non-instanced draw of the same buffer cannot land in different shapes. Both are
-        // set-exact for the reason those helpers state: `IsComplete()` cannot notice a declared
-        // element the shader ignores, so a looser test would silently drop one.
+        // non-instanced draw of the same buffer cannot land in different shapes. The first admits
+        // only elements the active effect does not consume; the coloured shape remains set-exact.
+        // In both cases an active semantic can therefore never be silently dropped.
         const auto& declaredForLit = declaredForDraw;
         const bool otherInstancedFamily =
             instancedAlphaTest || params.dualTexture || params.envMapping || params.skinned
             || params.pbr;
         const bool instancedLitUntextured =
             !otherInstancedFamily && !declaredForLit.IsEmpty()
-            && DeclarationIsPositionNormalOnlyEXT(declaredForLit);
+            && DeclarationUsesPositionNormalStageEXT(declaredForLit, params);
         const bool instancedLitColored =
             !otherInstancedFamily && !instancedLitUntextured && params.lightingEnabled
             && !declaredForLit.IsEmpty()

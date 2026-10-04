@@ -20,9 +20,11 @@
 // it describes was being changed three times. Fixing the shared predicate is a cross-renderer
 // change and belongs to `VULKAN-203`; this asserts the contract where it can be verified.
 //
-// The declaration used is Position + Normal + Tangent. Every stock family here either has no
-// `Normal` in its table or wants a texture coordinate with it, and the PBR tables that do name a
-// Tangent are reachable only for a PBR draw -- so no table can satisfy it and the guard fires.
+// The declaration used is Position + Normal + Tangent with texturing enabled. Every stock family
+// here either has no `Normal` in its table or requires the active TextureCoordinate0 input with it,
+// and the PBR tables that do name a Tangent are reachable only for a PBR draw -- so no table can
+// satisfy it and the guard fires. The texture state matters: MSR-016 correctly made an inactive
+// imported channel ignorable, so a refusal oracle must keep the missing shader input active.
 //
 //   A  a refused draw rasterizes NOTHING: the target still holds the clear colour, every pixel.
 //   B  the refusal says why, and names the element it could not bind.
@@ -128,10 +130,10 @@ class VulkanDeclarationRefusalContractTest final : public Game
         out[5] = { Vector3( 1.0f,  1.0f, 0.0f), n, t };
     }
 
-    void PrepareEffect(BasicEffect& fx)
+    void PrepareEffect(BasicEffect& fx, bool textureEnabled = false)
     {
         fx.setLightingEnabledProperty(false);
-        fx.setTextureEnabledProperty(false);
+        fx.setTextureEnabledProperty(textureEnabled);
         fx.setVertexColorEnabledProperty(false);
         fx.setWorldProperty(Matrix::getIdentityProperty());
         fx.setViewProperty(Matrix::getIdentityProperty());
@@ -188,7 +190,7 @@ protected:
             VertexBuffer vb(dev, RefusedDeclaration(), 6, BufferUsage::WriteOnly);
             vb.SetDataRaw(quad, 6, static_cast<int>(sizeof(PositionNormalTangent)));
             BasicEffect fx(dev);
-            PrepareEffect(fx);
+            PrepareEffect(fx, /*textureEnabled=*/true);
             try {
                 fx.Apply();
                 dev.SetVertexBuffer(&vb);
@@ -248,7 +250,7 @@ protected:
             IndexBuffer ib(dev, IndexElementSize::SixteenBits, 6, BufferUsage::WriteOnly);
             ib.SetData(idx, 0, 6);
             BasicEffect fx(dev);
-            PrepareEffect(fx);
+            PrepareEffect(fx, /*textureEnabled=*/true);
             try {
                 fx.Apply();
                 dev.SetVertexBuffer(&vb);

@@ -36,6 +36,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-013 | **DONE** | Align the synthetic struct-default test with the pinned FNA/MojoShader contract and preserve the authentic FNA pixel oracle. |
 | MSR-014 | **DONE** | Resolve FNA3D compiled-effect device texture slots at draw time, including SpriteBatch's slot-zero override. |
 | MSR-015 | **DONE** | Keep focused renderer tests on libcna's single initialized EasyGL/meta-gl runtime copy. |
+| MSR-016 | **DONE** | Let Vulkan stock effects ignore declaration channels the active effect does not consume. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -258,6 +259,36 @@ Regression evidence:
   `metagl::glGenFramebuffers` during the renderer's normalized render-target capability probe;
 - the same focused executable and test pass afterward on the private Radeon 780M GPU display and
   log `CNA: graphics renderer: OPENGLES3`.
+
+## MSR-016 — Vulkan inactive vertex semantics
+
+The official XNA `baseballbat.xnb` used by `ObjectPlacementOnAvatar` and
+`SkinnedModelExtensions` declares `Position0 + Normal0 + TextureCoordinate1` in a 32-byte record.
+Its `BasicEffect` has texturing disabled, so the imported UV channel is not consumed by the active
+shader.  EasyGL and the shared `GraphicsDevice` contract already distinguish active vertex
+semantics with `StockEffectUsesVertexSemantic`; Vulkan's Position+Normal selector instead required
+the declaration to contain exactly two elements and rejected both samples before recording a draw.
+
+Vulkan now selects its existing Position+Normal stage when every additional declaration element is
+inactive for the applied BasicEffect.  It still refuses a missing active input: a textured effect
+with no `TextureCoordinate0` remains covered by `Vulkan_DeclarationRefusalContract`.  The shared
+`BasicEffect_PositionNormal` pixel test adds the actual 32-byte declaration and asserts the same lit
+red output on Vulkan and OPENGLES3.
+
+Regression evidence:
+
+- `Vulkan_BasicEffect_PositionNormal` passes, including the new
+  `TextureCoordinate1`-while-untextured leg;
+- `EasyGL_BasicEffect_PositionNormal` passes unchanged;
+- `Vulkan_DeclarationRefusalContract` still passes after its deliberately invalid draw was made to
+  request the missing texture input actively;
+- the same six-renderer `ObjectPlacementOnAvatar_cna_samples` and
+  `SkinnedModelExtensions_cna_samples` executables both report active renderer `VULKAN` and
+  `AUTOMATED_PASS` in `matrix-results/msr-020-vulkan-unused-semantics`;
+- the full `^Vulkan_` run built and executed 372 tests: the changed refusal test was corrected and
+  passes on rerun; the three remaining failures are independent standing/configuration findings --
+  the already documented `Vulkan_DrawRangeValidation`, a compiled-effects/HiDef-unaware capability
+  snapshot, and `Vulkan_AvatarRenderer_Standard`'s `SkinnedEffect` rendering path.
 
 ## Representative automated matrix
 

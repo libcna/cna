@@ -12,6 +12,7 @@
 
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
@@ -42,6 +43,16 @@ namespace
     static_assert(sizeof(VertexPositionNormal) == 24);
     static_assert(std::is_trivially_copyable_v<VertexPositionNormal>);
 
+    struct VertexPositionNormalUv1
+    {
+        Vector3 Position;
+        Vector3 Normal;
+        Vector2 UnusedUv;
+    };
+
+    static_assert(sizeof(VertexPositionNormalUv1) == 32);
+    static_assert(std::is_trivially_copyable_v<VertexPositionNormalUv1>);
+
     VertexDeclaration PositionNormalDeclaration()
     {
         return VertexDeclaration(
@@ -51,6 +62,20 @@ namespace
                               VertexElementUsage::Position, 0),
                 VertexElement(12, VertexElementFormat::Vector3,
                               VertexElementUsage::Normal, 0),
+            });
+    }
+
+    VertexDeclaration PositionNormalUv1Declaration()
+    {
+        return VertexDeclaration(
+            32,
+            {
+                VertexElement(0, VertexElementFormat::Vector3,
+                              VertexElementUsage::Position, 0),
+                VertexElement(12, VertexElementFormat::Vector3,
+                              VertexElementUsage::Normal, 0),
+                VertexElement(24, VertexElementFormat::Vector2,
+                              VertexElementUsage::TextureCoordinate, 1),
             });
     }
 }
@@ -75,6 +100,8 @@ protected:
         effect.setViewProperty(Matrix::getIdentityProperty());
         effect.setProjectionProperty(Matrix::getIdentityProperty());
         effect.setLightingEnabledProperty(true);
+        effect.setTextureEnabledProperty(false);
+        effect.setVertexColorEnabledProperty(false);
         effect.setPreferPerPixelLightingProperty(false);
         effect.setAmbientLightColorProperty(Vector3::Zero);
         effect.setDiffuseColorProperty(Vector3(1.0f, 0.0f, 0.0f));
@@ -122,6 +149,34 @@ protected:
         Check(unlit.getRProperty() <= 8 && unlit.getGProperty() <= 8 &&
                   unlit.getBProperty() <= 8,
               "reversing the custom normal removes the directional contribution");
+
+        // MSR-016: an inactive imported channel remains part of the XNA declaration, but the
+        // applied BasicEffect does not consume it. This is the exact stock-model shape that the
+        // multi-renderer sample corpus exposed: Position0 + Normal0 + TextureCoordinate1.
+        VertexBuffer verticesWithUnusedUv(
+            device, PositionNormalUv1Declaration(), 4, BufferUsage::None);
+        const std::array<VertexPositionNormalUv1, 4> verticesWithUnusedUvData{{
+            {Vector3(-1.0f,  1.0f, 0.0f), Vector3(0.0f, 0.0f, 1.0f), Vector2(0.1f, 0.2f)},
+            {Vector3(-1.0f, -1.0f, 0.0f), Vector3(0.0f, 0.0f, 1.0f), Vector2(0.3f, 0.4f)},
+            {Vector3( 1.0f, -1.0f, 0.0f), Vector3(0.0f, 0.0f, 1.0f), Vector2(0.5f, 0.6f)},
+            {Vector3( 1.0f,  1.0f, 0.0f), Vector3(0.0f, 0.0f, 1.0f), Vector2(0.7f, 0.8f)},
+        }};
+        device.SetVertexBuffer(nullptr);
+        verticesWithUnusedUv.SetData(
+            verticesWithUnusedUvData.data(),
+            static_cast<int>(verticesWithUnusedUvData.size()));
+        device.SetVertexBuffer(&verticesWithUnusedUv);
+        device.Clear(Color(3, 7, 11, 255));
+        effect.Apply();
+        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2);
+
+        Color inactiveUvResult(0, 0, 0, 0);
+        const Rectangle centre(kSize / 2, kSize / 2, 1, 1);
+        device.GetBackBufferData(&centre, &inactiveUvResult, 0, 1);
+        Check(inactiveUvResult.getRProperty() >= 245 &&
+                  inactiveUvResult.getGProperty() <= 8 &&
+                  inactiveUvResult.getBProperty() <= 8,
+              "an untextured BasicEffect ignores a declared TextureCoordinate1 channel");
     }
 
 public:
