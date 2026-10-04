@@ -44,6 +44,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "System/NotSupportedException.hpp"
 
+#include <algorithm>
 #include <array>
 #include <memory>
 #include <stdexcept>
@@ -219,4 +220,73 @@ TEST(NormalizedByteFormat, ASampledNormalizedByte4IsSignedOnTheGpu)
         << "and a texel of +1 must reach the shader as +1";
     EXPECT_GT(pixels[1].getRProperty() - pixels[0].getRProperty(), 200)
         << "the two texels must be far apart -- an unsigned store puts them two units apart";
+}
+
+// MSR-018: XNA normal-map content commonly carries a complete authored NormalizedByte4 mip chain.
+// WebGPU's signed-normalized formats cannot be render attachments, but that only prevents its
+// render-pass mip GENERATOR; it does not prevent allocating the chain or uploading each level.
+TEST(NormalizedByteFormat, MipmappedNormalizedByte4SamplesAnAuthoredLevel)
+{
+    using Microsoft::Xna::Framework::Color;
+    using Microsoft::Xna::Framework::Rectangle;
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+    using Microsoft::Xna::Framework::Graphics::DepthFormat;
+    using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
+    using Microsoft::Xna::Framework::Graphics::RenderTargetUsage;
+    using Microsoft::Xna::Framework::Graphics::SamplerState;
+    using Microsoft::Xna::Framework::Graphics::SpriteBatch;
+    using Microsoft::Xna::Framework::Graphics::SpriteSortMode;
+    using Microsoft::Xna::Framework::Graphics::TextureAddressMode;
+    using Microsoft::Xna::Framework::Graphics::TextureFilter;
+
+    GraphicsDevice device;
+    const bool storesBaseFormat = RendererStores(
+        device, SurfaceFormat::NormalizedByte4, [&]() {
+            Texture2D probe(device, 1, 1, false, SurfaceFormat::NormalizedByte4);
+        });
+    if (!storesBaseFormat)
+        GTEST_SKIP() << "this renderer refuses NormalizedByte4 by name";
+
+    Texture2D texture(device, 4, 4, true, SurfaceFormat::NormalizedByte4);
+    ASSERT_EQ(texture.getLevelCountProperty(), 3);
+    const std::array<Vector4, 3> levelValues{
+        Vector4(1.0f, -1.0f, -1.0f, 1.0f),
+        Vector4(-1.0f, -1.0f, 1.0f, 1.0f),
+        Vector4(-1.0f, 1.0f, -1.0f, 1.0f),
+    };
+    for (int level = 0; level < 3; ++level)
+    {
+        const int extent = std::max(1, 4 >> level);
+        std::vector<NormalizedByte4> pixels(
+            static_cast<std::size_t>(extent) * extent,
+            NormalizedByte4(levelValues[static_cast<std::size_t>(level)]));
+        texture.SetData(level, nullptr, pixels.data(), 0, static_cast<int>(pixels.size()));
+    }
+
+    SamplerState authoredMip;
+    authoredMip.setFilterProperty(TextureFilter::Point);
+    authoredMip.setAddressUProperty(TextureAddressMode::Clamp);
+    authoredMip.setAddressVProperty(TextureAddressMode::Clamp);
+    authoredMip.setMaxMipLevelProperty(2);
+
+    RenderTarget2D target(device, 1, 1, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                          RenderTargetUsage::PreserveContents);
+    device.SetRenderTarget(&target);
+    device.Clear(Color(40, 40, 40, 255));
+    {
+        SpriteBatch batch(device);
+        batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &authoredMip,
+                    nullptr, nullptr);
+        batch.Draw(texture, Rectangle(0, 0, 1, 1), Color::White);
+        batch.End();
+    }
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    Color sampled;
+    target.GetData(&sampled, 1);
+    EXPECT_LE(sampled.getRProperty(), 8);
+    EXPECT_GE(sampled.getGProperty(), 247);
+    EXPECT_LE(sampled.getBProperty(), 8)
+        << "MaxMipLevel=2 must sample the explicitly uploaded green level, not level zero, an "
+           "undefined level, or a render-pass-generated substitute";
 }

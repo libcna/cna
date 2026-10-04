@@ -149,6 +149,16 @@ namespace CNA::Internal::Renderers::WebGPU
             }
         }
 
+        /// MSR-018: signed-normalized WebGPU formats are sampleable and filterable but cannot be
+        /// render attachments. They may still own and receive an explicitly-authored mip chain;
+        /// only the render-pass-based automatic mip generator is unavailable to them.
+        [[nodiscard]] constexpr bool IsSignedNormalizedTextureFormatEXT(
+            WGPUTextureFormat format) noexcept
+        {
+            return format == WGPUTextureFormat_RG8Snorm ||
+                   format == WGPUTextureFormat_RGBA8Snorm;
+        }
+
         // REMED-GFX-105: WebGPU enables primitive restart for indexed strip pipelines through
         // WGPUPrimitiveState::stripIndexFormat. It must match the format passed to
         // SetIndexBuffer for indexed line/triangle strips, and must remain Undefined for
@@ -1443,9 +1453,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // TextureUsages(RENDER_ATTACHMENT) are not allowed on a texture of type Rgba8Snorm", after
         // which every view and every write on it fails too. Dropping the flag is what makes the
         // format usable at all; the cost is that GenerateMips2D's render-pass blit cannot run on
-        // one, which is why a mip chain is refused for these formats below.
-        const bool renderable = !compressed_ && wgpuFormat_ != WGPUTextureFormat_RG8Snorm &&
-                                wgpuFormat_ != WGPUTextureFormat_RGBA8Snorm;
+        // one. MSR-018 still permits the resource's mip chain and explicit per-level uploads --
+        // the normal XNB content path -- without pretending an automatic generator exists.
+        const bool renderable = !compressed_ && !IsSignedNormalizedTextureFormatEXT(wgpuFormat_);
         // plans/plan_webgpu_modern_graphics.md WMG-0008: `rgba8unorm` is a core WebGPU storage
         // format, and a Texture2D in it is what `ComputeShader::bindImage` binds. Usage flags are
         // fixed at creation, so the flag is declared for exactly that format and no other -- asking
@@ -1455,18 +1465,6 @@ namespace CNA::Internal::Renderers::WebGPU
                            WGPUTextureUsage_CopySrc |
                            (storageCapable_ ? WGPUTextureUsage_StorageBinding : WGPUTextureUsage_None) |
                            (renderable ? WGPUTextureUsage_RenderAttachment : WGPUTextureUsage_None);
-        if (!renderable && !compressed_ && mipLevels_ > 1)
-        {
-            // Refused by name rather than silently handing back a one-level texture or a chain of
-            // undefined levels. XNA allows mipMap on a NormalizedByte texture; this renderer cannot
-            // GENERATE that chain, because generation goes through a render pass the format may not
-            // be the target of. A game that supplies every level itself is not what this rejects --
-            // it is the automatic generation that has nowhere to run.
-            throw System::NotSupportedException(
-                "CNA WebGPU: a mip-mapped NormalizedByte2/NormalizedByte4 Texture2D is not "
-                "supported -- WebGPU's signed-normalized formats are not renderable, so this "
-                "renderer's mip generation, which draws into each level, has no path for them");
-        }
         descriptor.dimension = WGPUTextureDimension_2D;
         descriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(width_), static_cast<std::uint32_t>(height_), 1};
         descriptor.format = wgpuFormat_;
@@ -1514,8 +1512,7 @@ namespace CNA::Internal::Renderers::WebGPU
         if (owner_ == nullptr || texture_ != nullptr) return;
         WGPUTextureDescriptor descriptor{};
         descriptor.label = StringView("CNA WebGPU Texture2D (recreated)");
-        const bool renderable = !compressed_ && wgpuFormat_ != WGPUTextureFormat_RG8Snorm &&
-                                wgpuFormat_ != WGPUTextureFormat_RGBA8Snorm;
+        const bool renderable = !compressed_ && !IsSignedNormalizedTextureFormatEXT(wgpuFormat_);
         // plans/plan_webgpu_modern_graphics.md WMG-0008: `rgba8unorm` is a core WebGPU storage
         // format, and a Texture2D in it is what `ComputeShader::bindImage` binds. Usage flags are
         // fixed at creation, so the flag is declared for exactly that format and no other -- asking
@@ -1611,7 +1608,10 @@ namespace CNA::Internal::Renderers::WebGPU
         // getMipBuffer()-backed whole-level re-upload) regenerates the mip chain again too,
         // consistent with WebGPUTextureCubeRenderer::SetData()'s identical per-level-0-write
         // trigger. A no-op when mipLevels_ == 1.
-        if (mipLevels_ > 1)
+        // MSR-018: RG8Snorm/RGBA8Snorm cannot be render attachments, so their mip levels are the
+        // explicit XNA levels supplied through UpdatePixelsLevel. This is the path compiled XNB
+        // normal maps use. A level-zero write does not invent or overwrite those authored levels.
+        if (mipLevels_ > 1 && !IsSignedNormalizedTextureFormatEXT(wgpuFormat_))
             owner_->GenerateMips2D(texture_, width_, height_, mipLevels_);
     }
 

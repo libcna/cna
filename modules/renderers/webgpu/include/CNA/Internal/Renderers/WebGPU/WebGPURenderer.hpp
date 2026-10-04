@@ -151,10 +151,10 @@ namespace CNA::Internal::Renderers::WebGPU
         /// WEBGPU-51: real CPU readback of an arbitrary Texture2D renderer, via the same staged
         /// MAP_READ-buffer/aligned-row/async-map-and-poll technique WEBGPU-91's ReadBackbuffer()
         /// and WebGPURenderTargetRenderer::GetData() already established -- copies the WHOLE
-        /// requested mip level to a temporary readback buffer (this texture is always
-        /// WGPUTextureFormat_RGBA8Unorm, so unlike the swapchain/RenderTarget2D there is never a
-        /// BGRA byte-swap to worry about), then extracts the @p x,@p y,@p w,@p h sub-rectangle
-        /// from the mapped memory on the CPU side.
+        /// requested mip level to a temporary readback buffer, then extracts the @p x,@p y,@p w,@p h
+        /// sub-rectangle from the mapped memory on the CPU side. Plain textures use RGBA8Unorm,
+        /// RG8Snorm/RGBA8Snorm, or native BC storage; none uses the swapchain's BGRA ordering, so
+        /// unlike swapchain/RenderTarget2D readback there is no channel swap.
         ///
         /// REMED-GFX-127: returns true only once the whole requested rectangle has been written.
         /// An empty request, a torn-down owner, an unmappable readback buffer or a destination too

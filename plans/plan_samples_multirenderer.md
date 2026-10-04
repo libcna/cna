@@ -38,6 +38,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-015 | **DONE** | Keep focused renderer tests on libcna's single initialized EasyGL/meta-gl runtime copy. |
 | MSR-016 | **DONE** | Let Vulkan stock effects ignore declaration channels the active effect does not consume. |
 | MSR-017 | **DONE** | Normalize legacy XNB SkinnedEffect declarations before WebGPU's stride-derived layout guard. |
+| MSR-018 | **DONE** | Allow WebGPU signed-normalized textures to receive complete authored mip chains. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -319,6 +320,31 @@ Regression evidence:
 - the full WebGPU gallery result therefore advances from 86 to 89 automated technical passes;
   `NormalMappingEffect` remains a separate signed-normalized mip-generation defect and `Yacht`
   remains the renderer-independent gamer-services environment failure.
+
+## MSR-018 — WebGPU authored signed-normalized mip chains
+
+WebGPU stores `NormalizedByte2` and `NormalizedByte4` natively as `rg8snorm` and `rgba8snorm`.
+Those core formats are sampleable and filterable but not render attachments.  CNA consequently
+excluded `RenderAttachment` usage correctly, then rejected every mipmapped signed-normalized
+texture because its optional automatic mip generator is a render pass.  That refusal also blocked
+the distinct and fully supported case where XNA content supplies every level itself.
+
+All three `NormalMappingEffect` normal maps are authentic `NormalizedByte4` XNB textures with
+complete mip chains: the two 1024x1024 assets carry 11 levels and the 16x16 eye map carries 5.
+WebGPU now allocates the requested chain and accepts explicit `UpdatePixelsLevel` uploads while
+continuing not to claim an automatic SNORM downsampler.  A level-zero write does not fabricate or
+overwrite authored higher levels.
+
+Regression evidence:
+
+- `NormalizedByteFormat.MipmappedNormalizedByte4SamplesAnAuthoredLevel` uploads three distinct
+  levels, forces level 2 with `SamplerState.MaxMipLevel`, and verifies the green level through a
+  real GPU sample rather than through `Texture2D`'s CPU shadow;
+- all five shared NormalizedByte contracts pass 5/5 on WEBGPU and 5/5 on OPENGLES3;
+- the same `NormalMappingEffect_cna_samples` executable reports `AUTOMATED_PASS` with active
+  `WEBGPU` and active `OPENGLES3` in `matrix-results/msr-018-normalized-byte-mips`;
+- WebGPU's full technical gallery result is now 90/91, with only `Yacht`'s renderer-independent
+  gamer-services environment failure remaining.
 
 ## Representative automated matrix
 

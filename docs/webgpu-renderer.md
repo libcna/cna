@@ -1103,10 +1103,13 @@ skinned shader.
 
 **`SurfaceFormat::NormalizedByte2`/`NormalizedByte4` are stored natively** as `rg8snorm`/`rgba8snorm`
 (`WEBGPU-184`). Neither is renderable in core WebGPU, so such a texture drops its `RenderAttachment`
-usage and a MIP-MAPPED one is refused by name — this renderer generates mips by drawing into each
-level, which a non-renderable format has no path for. `Bgr565`, `Bgra5551` and `Bgra4444` stay
-refused by name and `GetAdditionalLimitationsTextEXT()` says why: WebGPU has no 16-bit packed colour
-format, so accepting them would mean a texture reporting one format while the GPU holds another.
+usage. A mipmapped signed-normalized texture is valid and accepts an explicitly authored level
+chain (`MSR-018`); only WebGPU's optional automatic render-pass downsampler is unavailable for this
+format, so a level-zero write does not fabricate or overwrite higher levels. This is the path used
+by XNA normal-map XNB assets, including `NormalMappingEffect`'s complete 1024-to-1 and 16-to-1
+chains. `Bgr565`, `Bgra5551` and `Bgra4444` stay refused by name and
+`GetAdditionalLimitationsTextEXT()` says why: WebGPU has no 16-bit packed colour format, so
+accepting them would mean a texture reporting one format while the GPU holds another.
 
 **`SupportsCapability(MultiSampleAntiAliasing)` answers from the device probe** rather than the
 shared permissive default (`WEBGPU-195`), so it and `PickSampleCount()` are one answer instead of
