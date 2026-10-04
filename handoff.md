@@ -541,11 +541,22 @@ mouse was stale or clamped. Both were fixed natively with tests.
 - Fixes it caused: CSX-114 (Windows Forms), CSX-113 (directory case), FX-142 (centroid link),
   CSX-116 (browser threads).
 - Measured:
-  - Attract mode, and a race on the Advanced track (lap 1/3, HUD, post-processing). It was run
-    windowed at 1024×768 from a seeded `RacingGameSettings.xml`.
+  - Attract mode, main menu, car selection, Advanced-track selection and a race (lap 1/3, HUD,
+    shadows and post-processing). The final CSX-149 run used unchanged C# source, current CNA.NET
+    and CNA `16dce8d5a`/C ABI 0.44.0, windowed at 1024×768 from a seeded
+    `RacingGameSettings.xml`.
+  - The retained C++ port over CNA OPENGL33 ran the same six stages at the same size. Its scene,
+    models/materials, menu composition, track, post effects and HUD agree with CNA.NET; animation,
+    camera and elapsed time make this a structural rather than pixel-identity comparison.
+  - The authentic XNA-built `RacingGame.exe` was attempted unchanged under Wine. Without the XNA
+    SDK's `XnaLiveProxy.exe` it fails on that missing file; with the authentic proxy retained from
+    Microsoft's RolePlayingGame sample it fails to initialize the defunct Games for Windows - LIVE
+    service. RolePlayingGame independently has the same Wine failure. This is an external GFWL
+    oracle limitation, not a CNA defect, and the game was not patched to bypass it.
   - Space must be held 2–3 s, because the game polls slowly under llvmpipe.
   - Browser (threaded) and Android: attract mode.
-- Not done: comparison with the C++ port or the XNA exe under Wine; a full race; audibility.
+- Evidence: `/rv/tmp/cs-samples/final-racing-differential-20261004/`. No new general defect was
+  found. Audibility remains unqualified.
 
 ## 17. Historical blockers retested and obsolete
 
@@ -601,7 +612,8 @@ old `plan.md`/`NEXT.md` blockers are historical.
    direct worker canvas is a future .NET/browser-host platform optimization, not broad XNA work.
 
 **Qualification**
-8. Racing Game Kit against the C++ port or XNA under Wine.
+8. **Done/classified (CSX-149):** Racing Game Kit matched the C++ port structurally through a real
+   race; unchanged XNA under Wine is blocked by the defunct Games for Windows - LIVE dependency.
 9. A threaded gallery requalification.
 10. Interactive Chrome with a GPU; a physical arm64 Android device.
 
