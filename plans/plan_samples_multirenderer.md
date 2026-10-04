@@ -32,6 +32,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-009 | **OPEN** | Prepare the macOS renderer set and exact Mac mini M4 qualification commands. |
 | MSR-010 | **DONE** | Stop Vulkan's stock-layout guards from rejecting compiled-effect multi-stream and instanced draws before their own shader linker runs. |
 | MSR-011 | **DONE** | Restore the FNA3D-only `CnaRendererTests` build after pointer-container and namespace API changes. |
+| MSR-012 | **DONE** | Correct stale FNA3D compiled-effect test profile, parameter-shape and exception assumptions. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -169,6 +170,19 @@ The complete `CnaRendererTests` target builds successfully in `cmake-build-qual-
 parallel jobs.  Its first full FNA3D execution passes 89 tests and skips one Reach-incompatible
 volume-texture contract; the 11 runtime failures it exposed are tracked as subsequent renderer or
 test-profile qualification work rather than being hidden by this compile repair.
+
+## MSR-012 — FNA3D compiled-effect test contracts
+
+Nine of the first clean suite's failures were stale test assumptions rather than renderer defects.
+Tests reading the back buffer now construct an explicit HiDef device instead of the extension
+constructor's intentional Reach default.  Clone tests use the `float4` shape that the authentic
+`BasicEffect.fxb` reflection exposes for `DiffuseColor`, and the selected-effect disposal test
+catches CNA's XNA-compatible `InvalidOperationException` rather than an unrelated standard-library
+exception type.
+
+All nine focused tests pass on the default FNA3D/SDL_GPU driver after these corrections.  The two
+remaining failures reproduce independently: nested struct/array parameter storage and a compiled
+SpriteBatch sampler that should read `GraphicsDevice.Textures[1]`.
 
 ## Representative automated matrix
 

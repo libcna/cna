@@ -39,6 +39,7 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/Security/Cryptography/SHA256.hpp"
 #include "System/IO/BinaryWriter.hpp"
 #include "System/IO/MemoryStream.hpp"
@@ -1007,7 +1008,8 @@ TEST(Fna3dCompiledEffectTest, SyntheticBlendFactorStateMatchesFnaByteOrderingInP
     using namespace Microsoft::Xna::Framework;
     using namespace Microsoft::Xna::Framework::Graphics;
 
-    GraphicsDevice device;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
     Effect shader(device, LoadStockEffect("BasicEffect.fxb"));
     shader.getParametersProperty()["WorldViewProj"]->SetValue(Matrix::getIdentityProperty());
     shader.getParametersProperty()["DiffuseColor"]->SetValue(
@@ -1187,15 +1189,15 @@ TEST(Fna3dCompiledEffectTest, CloneHasIndependentParameterStorageAndNativeEffect
     Effect original(device, bytes);
     auto* originalParameter = original.getParametersProperty()["DiffuseColor"];
     ASSERT_NE(originalParameter, nullptr);
-    originalParameter->SetValue(Microsoft::Xna::Framework::Vector3(0.25f, 0.5f, 0.75f));
+    originalParameter->SetValue(Microsoft::Xna::Framework::Vector4(0.25f, 0.5f, 0.75f, 1.0f));
 
     std::unique_ptr<Effect> clone(original.Clone());
     auto* cloneParameter = clone->getParametersProperty()["DiffuseColor"];
     ASSERT_NE(cloneParameter, nullptr);
-    EXPECT_EQ(cloneParameter->GetValueVector3(), originalParameter->GetValueVector3());
+    EXPECT_EQ(cloneParameter->GetValueVector4(), originalParameter->GetValueVector4());
 
-    cloneParameter->SetValue(Microsoft::Xna::Framework::Vector3(1.0f, 0.0f, 0.0f));
-    EXPECT_NE(cloneParameter->GetValueVector3(), originalParameter->GetValueVector3());
+    cloneParameter->SetValue(Microsoft::Xna::Framework::Vector4(1.0f, 0.0f, 0.0f, 1.0f));
+    EXPECT_NE(cloneParameter->GetValueVector4(), originalParameter->GetValueVector4());
     EXPECT_NO_THROW(clone->getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply());
 }
 
@@ -1210,8 +1212,8 @@ TEST(Fna3dCompiledEffectTest, RepeatedClonesApplyAndDisposeIndependently)
     {
         std::unique_ptr<Effect> clone(original.Clone());
         clone->getParametersProperty()["DiffuseColor"]->SetValue(
-            Microsoft::Xna::Framework::Vector3(
-                static_cast<float>(i) / 31.0f, 0.5f, 1.0f));
+            Microsoft::Xna::Framework::Vector4(
+                static_cast<float>(i) / 31.0f, 0.5f, 1.0f, 1.0f));
         EXPECT_NO_THROW(clone->getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply());
         clone->Dispose();
         EXPECT_TRUE(clone->getIsDisposedProperty());
@@ -1239,7 +1241,7 @@ TEST(Fna3dCompiledEffectTest, DisposingSelectedEffectPreventsStaleDraw)
         device.DrawUserPrimitives(PrimitiveType::TriangleList, triangle, 0, 1);
         FAIL() << "disposing the selected effect must clear GraphicsDevice's raw selection";
     }
-    catch (const std::runtime_error& error)
+    catch (const System::InvalidOperationException& error)
     {
         EXPECT_NE(std::string(error.what()).find("no effect"), std::string::npos);
     }
@@ -1261,7 +1263,8 @@ TEST(Fna3dCompiledEffectTest, CompiledEffectSurvivesDeviceReset)
     using namespace Microsoft::Xna::Framework;
     using namespace Microsoft::Xna::Framework::Graphics;
 
-    GraphicsDevice device;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
     Effect effect(device, LoadStockEffect("BasicEffect.fxb"));
     effect.getParametersProperty()["WorldViewProj"]->SetValue(Matrix::getIdentityProperty());
     effect.getParametersProperty()["DiffuseColor"]->SetValue(Vector4(0.0f, 1.0f, 0.0f, 1.0f));
@@ -1456,7 +1459,8 @@ TEST(Fna3dCompiledEffectTest, ContentManagerLoadsXnbEffectAndRendersIt)
     using namespace Microsoft::Xna::Framework::Content;
     using namespace Microsoft::Xna::Framework::Graphics;
 
-    GraphicsDevice device;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
     BuiltInReaderScope readers;
     ScratchContentRoot contentRoot;
     const auto xnb = BuildEffectXnb(LoadStockEffect("BasicEffect.fxb"));
@@ -1539,7 +1543,8 @@ TEST(Fna3dCompiledEffectTest, CompiledBasicEffectRendersThroughDrawUserPrimitive
     using namespace Microsoft::Xna::Framework;
     using namespace Microsoft::Xna::Framework::Graphics;
 
-    GraphicsDevice device;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
     if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
 
@@ -1583,7 +1588,8 @@ TEST(Fna3dCompiledEffectTest, CompiledSpriteEffectRendersThroughDrawUserPrimitiv
     using namespace Microsoft::Xna::Framework;
     using namespace Microsoft::Xna::Framework::Graphics;
 
-    GraphicsDevice device;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
     if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     Effect effect(device, LoadStockEffect("SpriteEffect.fxb"));
@@ -1622,7 +1628,8 @@ TEST(Fna3dCompiledEffectTest, SpriteBatchExecutesCompiledEffectAndOverridesTextu
     using namespace Microsoft::Xna::Framework;
     using namespace Microsoft::Xna::Framework::Graphics;
 
-    GraphicsDevice device;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
     if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
 
