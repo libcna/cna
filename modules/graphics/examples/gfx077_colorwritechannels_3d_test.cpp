@@ -32,6 +32,9 @@
 //
 // A(Red)->B(Green)->A(Red) within one frame proves each draw selects its own pipeline/blend state
 // (no stale keyed pipeline / no last-wins).
+// A separate deferred-state leg queues a draw, changes the mask without drawing again, and only
+// then flushes the render target. This distinguishes state captured by the draw from renderer-global
+// state consulted later during replay.
 //
 // When GFX077_MULTISAMPLEMASK_SUPPORTED is defined (renderers whose native API exposes a functional
 // sample coverage mask), a 4x MSAA RenderTarget is used to prove MultiSampleMask=0 discards all
@@ -172,6 +175,27 @@ class Gfx077ColorWriteChannels3DTest : public Game
         return pix[static_cast<std::size_t>(kRtH / 2) * kRtW + kRtW / 2];
     }
 
+    Color RenderAfterLateStateChange(GraphicsDevice& dev, RenderTarget2D* target,
+                                     const BlendState& drawBlend, const BlendState& lateBlend)
+    {
+        dev.SetRenderTarget(target);
+        dev.Clear(D());
+        dev.SetDepthTestEnabled(false);
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
+        dev.setBlendStateProperty(drawBlend);
+        DrawQuad(dev);
+
+        // Deferred renderers must have captured drawBlend already.  Mutating the device state
+        // before the target switch flushes the draw is deliberately observable only when replay
+        // incorrectly consults a renderer-global write/coverage mask.
+        dev.setBlendStateProperty(lateBlend);
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        std::vector<Color> pix(static_cast<std::size_t>(kRtW) * kRtH, Color(0, 0, 0, 0));
+        target->GetData(0, nullptr, pix.data(), 0, static_cast<int>(pix.size()));
+        return pix[static_cast<std::size_t>(kRtH / 2) * kRtW + kRtW / 2];
+    }
+
 protected:
     void LoadContent() override
     {
@@ -239,8 +263,20 @@ protected:
             return;
         }
 
-#ifdef GFX077_MULTISAMPLEMASK_SUPPORTED
         if (frame_ == kNumCases + 2)
+        {
+            const Color delayed = RenderAfterLateStateChange(
+                dev, rt_.get(), MakeBlend(ColorWriteChannels::None),
+                MakeBlend(ColorWriteChannels::All));
+            check(Eq(delayed, dst_),
+                  "a queued ColorWriteChannels.None draw keeps its own mask after a later state "
+                  "change: expected " + Str(dst_) + ", got " + Str(delayed));
+            ++frame_;
+            return;
+        }
+
+#ifdef GFX077_MULTISAMPLEMASK_SUPPORTED
+        if (frame_ == kNumCases + 3)
         {
             try
             {
@@ -250,10 +286,16 @@ protected:
                 // Baselines on the MSAA target itself (its resolve colour space may differ from rt_).
                 const Color mAll = RenderCenter(dev, msaa.get(), MakeBlend(ColorWriteChannels::All, 0xFFFFFFFFu));
                 const Color m0   = RenderCenter(dev, msaa.get(), MakeBlend(ColorWriteChannels::All, 0u));
+                const Color delayedM0 = RenderAfterLateStateChange(
+                    dev, msaa.get(), MakeBlend(ColorWriteChannels::All, 0u),
+                    MakeBlend(ColorWriteChannels::All, 0xFFFFFFFFu));
                 check(Eq(mAll, src_),
                       "MSAA MultiSampleMask=all -> normal full-coverage resolve to src: " + Str(mAll));
                 check(Eq(m0, dst_),
                       "MSAA MultiSampleMask=0 -> no coverage written, resolves to clear dst: " + Str(m0));
+                check(Eq(delayedM0, m0),
+                      "a queued MultiSampleMask=0 draw keeps its own mask after a later state "
+                      "change: expected " + Str(m0) + ", got " + Str(delayedM0));
             }
             catch (const std::exception& e)
             {

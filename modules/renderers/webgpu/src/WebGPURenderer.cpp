@@ -5881,9 +5881,9 @@ namespace CNA::Internal::Renderers::WebGPU
     }
 
     // WEBGPU-29: the one WGPURenderPipelineDescriptor assembly shared by all 12 GetOrCreatePipeline*3D
-    // families. The colour target (surfaceFormat_ + CurrentWriteMask() + InitStockColorTargetsEXT MRT),
+    // families. The colour target (surface format + draw-owned write mask + InitStockColorTargetsEXT MRT),
     // vs/fs entry points, CCW front face, ToWGPUCullMode, the baked blend (WEBGPU-78), the
-    // renderer-global multisample state (WEBGPU-58), the depth-bias scale (WEBGPU-41/79) and the
+    // draw-owned multisample mask (WEBGPU-58/MSR-025), the depth-bias scale (WEBGPU-41/79) and the
     // depth-format + stencil gating (WEBGPU-39/83) were previously copy-pasted, character-for-character,
     // into each of the 12 functions; this is that block, verbatim, in one place. Only the per-family
     // vertex layout, shader module(s), pipeline layout and label are inputs (Pipeline3DDescEXT); the
@@ -5897,7 +5897,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // (no pass to match), where the backbuffer's own format is the right answer.
         target.format = replayColorFormat_ != WGPUTextureFormat_Undefined ? replayColorFormat_
                                                                           : surfaceFormat_;
-        target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
+        target.writeMask = static_cast<WGPUColorWriteMask>(d.blendParams.colorWriteMask & 0xF);
         WGPUFragmentState fragment{};
         fragment.module = d.fragmentModule;
         fragment.entryPoint = StringView("fs_main");
@@ -5927,7 +5927,7 @@ namespace CNA::Internal::Renderers::WebGPU
         pipeline.multisample.count = replaySampleCount_ != 0
                                          ? replaySampleCount_
                                          : static_cast<std::uint32_t>(std::max(1, sampleCount_));
-        pipeline.multisample.mask = CurrentSampleMask(); // REMED-GFX-077: BlendState.MultiSampleMask
+        pipeline.multisample.mask = d.blendParams.sampleMask;
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
 
@@ -5972,7 +5972,7 @@ namespace CNA::Internal::Renderers::WebGPU
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
+                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), blendParams.colorWriteMask, blendParams.sampleMask, replayColorAttachmentCount_, replayDepthFormat_,
                                                      replayColorFormat_, replaySampleCount_,
                                                      replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
@@ -6318,7 +6318,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
+                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), blendParams.colorWriteMask, blendParams.sampleMask, replayColorAttachmentCount_, replayDepthFormat_,
                                                      replayColorFormat_, replaySampleCount_,
                                                      replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
@@ -6371,7 +6371,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
+                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), blendParams.colorWriteMask, blendParams.sampleMask, replayColorAttachmentCount_, replayDepthFormat_,
                                                      replayColorFormat_, replaySampleCount_,
                                                      replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
@@ -6557,7 +6557,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
+                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), blendParams.colorWriteMask, blendParams.sampleMask, replayColorAttachmentCount_, replayDepthFormat_,
                                                      replayColorFormat_, replaySampleCount_,
                                                      replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
@@ -6609,7 +6609,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
+                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), blendParams.colorWriteMask, blendParams.sampleMask, replayColorAttachmentCount_, replayDepthFormat_,
                                                      replayColorFormat_, replaySampleCount_,
                                                      replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
@@ -6749,7 +6749,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias,
-                                                     CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
+                                                     CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), blendParams.colorWriteMask, blendParams.sampleMask, replayColorAttachmentCount_, replayDepthFormat_,
                                                      replayColorFormat_, replaySampleCount_,
                                                      replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
@@ -6932,7 +6932,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias,
-                                                     CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
+                                                     CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), blendParams.colorWriteMask, blendParams.sampleMask, replayColorAttachmentCount_, replayDepthFormat_,
                                                      replayColorFormat_, replaySampleCount_,
                                                      replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
@@ -7106,7 +7106,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
+                                                     depthBias, slopeScaleDepthBias, CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(vertexLayout), blendParams.colorWriteMask, blendParams.sampleMask, replayColorAttachmentCount_, replayDepthFormat_,
                                                      replayColorFormat_, replaySampleCount_,
                                                      replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
@@ -7454,7 +7454,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, salt, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
+                                                     depthBias, slopeScaleDepthBias, salt, blendParams.colorWriteMask, blendParams.sampleMask, replayColorAttachmentCount_, replayDepthFormat_,
                                                      replayColorFormat_, replaySampleCount_,
                                                      replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
@@ -11461,6 +11461,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // and the keyed SpriteBatch cache include the slot-0 mask.
         colorWriteMask_ = writeState.colorWriteChannels[0];
         sampleMask_ = writeState.multiSampleMask;
+        blendParams_.colorWriteMask = colorWriteMask_;
+        blendParams_.sampleMask = sampleMask_;
         // WEBGPU-143 MRT: keep the full per-slot ColorWriteChannels too, for a custom-effect MRT draw.
         for (int i = 0; i < 4; ++i)
             colorWriteChannels_[static_cast<std::size_t>(i)] = writeState.colorWriteChannels[i];
@@ -15095,7 +15097,7 @@ namespace
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
+                                                     depthBias, slopeScaleDepthBias, 0, blendParams.colorWriteMask, blendParams.sampleMask, replayColorAttachmentCount_, replayDepthFormat_,
                                                      replayColorFormat_, replaySampleCount_,
                                                      replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
@@ -15712,7 +15714,7 @@ namespace
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
+                                                     depthBias, slopeScaleDepthBias, 0, blendParams.colorWriteMask, blendParams.sampleMask, replayColorAttachmentCount_, replayDepthFormat_,
                                                      replayColorFormat_, replaySampleCount_,
                                                      replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
@@ -16363,7 +16365,7 @@ namespace
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_,
+                                                     depthBias, slopeScaleDepthBias, 0, blendParams.colorWriteMask, blendParams.sampleMask, replayColorAttachmentCount_, replayDepthFormat_,
                                                      replayColorFormat_, replaySampleCount_,
                                                      replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);

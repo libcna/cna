@@ -45,6 +45,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-022 | **DONE** | Store compiled SpriteBatch projection matrices in the Effect Framework layout expected by every native backend. |
 | MSR-023 | **DONE** | Expand missing WebGPU texture channels to the XNA/D3D9 values in stock SpriteBatch sampling. |
 | MSR-024 | **DONE** | Keep Vulkan stock descriptor bindings from overwriting a compiled Effect's own pipeline layout. |
+| MSR-025 | **DONE** | Capture WebGPU stock 3D colour-write and multisample masks per deferred draw. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -512,6 +513,36 @@ Regression evidence:
   automated pass with active Vulkan.  Manual inspection confirms the checkerboard grid, character,
   cast shadow and white shadow-map preview; the captured frame is byte-identical to the fixed
   WebGPU frame.  Evidence is in `matrix-results/msr-029-shadowmapping-vulkan-fixed`.
+
+## MSR-025 — WebGPU deferred write-mask ownership
+
+WebGPU queues every stock 3D draw and records the native render pass later.  Its draw commands
+captured blend factors and functions, but the pipeline builder still read `ColorWriteChannels` and
+`MultiSampleMask` from renderer-global state at replay time.  A later state change therefore
+retroactively altered earlier draws in the same pass.  `LensFlare` exposed the defect by queuing a
+100-by-100 BasicEffect polygon with colour writes disabled for an occlusion query, then starting a
+normal SpriteBatch before replay.  SpriteBatch restored an all-channel mask, so the supposedly
+invisible query polygon appeared as an opaque square.
+
+The existing per-draw WebGPU blend snapshot now also carries the write and coverage masks.  All
+twelve stock 3D pipeline families use those captured values for both pipeline identity and native
+pipeline construction.  SpriteBatch, custom effects and compiled effects retain their own existing
+state snapshots; no sample source changed.
+
+Regression evidence:
+
+- the renderer-neutral GFX-077 test now mutates the device blend state after a draw is queued but
+  before its render-target switch flushes it.  Before the repair both delayed checks failed: a
+  `ColorWriteChannels::None` draw and a `MultiSampleMask=0` draw each rendered with the later all-on
+  state.  After the repair the WebGPU test passes 11/11;
+- the strengthened shared test passes 8/8 on SDL_GPU, preserving the other deferred renderer path;
+- seven focused WebGPU BasicEffect, graphics-state, occlusion-query, SpriteBatch-blend, colour-write
+  and draw-order CTests pass through the private GPU runner;
+- the rebuilt, unchanged multi-renderer `LensFlare_cna_samples` executable passes with active
+  WebGPU and OPENGLES3.  Manual inspection confirms that the query square is gone while the glow,
+  flare chain and terrain remain intact.  The fixed WebGPU capture differs from the earlier
+  OPENGL33 reference by normalized MAE `0.000282384`; evidence is in
+  `matrix-results/msr-030-lensflare-webgpu-fixed`.
 
 ## Representative automated matrix
 

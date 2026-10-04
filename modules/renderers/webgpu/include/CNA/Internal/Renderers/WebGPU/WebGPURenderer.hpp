@@ -1265,6 +1265,8 @@ namespace CNA::Internal::Renderers::WebGPU
             int alphaDst = 1;
             int colorFunc = 0;  ///< BlendFunction::Add
             int alphaFunc = 0;
+            int colorWriteMask = 15;  ///< ColorWriteChannels for attachment zero.
+            std::uint32_t sampleMask = 0xFFFFFFFFu;  ///< MultiSampleMask coverage bits.
         };
 
         /// WEBGPU-83: the XNA stencil state baked into a pipeline's `WGPUDepthStencilState`, captured
@@ -3612,7 +3614,7 @@ namespace CNA::Internal::Renderers::WebGPU
             const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout);
 
         /// WEBGPU-29: the inputs that vary between the 12 GetOrCreatePipeline*3D families. Everything
-        /// else in a 3D WGPURenderPipelineDescriptor -- colour target (surfaceFormat_ + CurrentWriteMask
+        /// else in a 3D WGPURenderPipelineDescriptor -- colour target (surface format + the draw's write mask
         /// + MRT via InitStockColorTargetsEXT), fragment/vertex entry points, CCW front face,
         /// ToWGPUCullMode, the baked blend/multisample/depth-bias/stencil state and the depth-format
         /// gating -- is identical across all 12 and is assembled by Build3DPipelineEXT. The per-family
@@ -4086,10 +4088,6 @@ namespace CNA::Internal::Renderers::WebGPU
         /// its own `@location(0..N-1)`, so each slot honours its own mask here. XNA has one blend
         /// EQUATION for all targets, so only the write mask is per-slot.
         std::array<int, 4> colorWriteChannels_ = {15, 15, 15, 15};
-        /// XNA ColorWriteChannels (R=1,G=2,B=4,A=8) is bit-identical to WGPUColorWriteMask_*.
-        [[nodiscard]] WGPUColorWriteMask CurrentWriteMask() const
-        { return static_cast<WGPUColorWriteMask>(colorWriteMask_ & 0xF); }
-        [[nodiscard]] std::uint32_t CurrentSampleMask() const { return sampleMask_; }
         int cullMode_ = 0;                ///< XNA CullMode::None
         /// XNA FillMode::WireFrame, as last selected through ApplyRasterizerState. WEBGPU-115: this
         /// is the state the draw-time guard reads; no pipeline ever consumes it, because no draw
