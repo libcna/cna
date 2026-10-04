@@ -25,7 +25,16 @@ describe what existed when those checkpoints were written, not the current selec
 
 ---
 
-## 0a. Current checkpoint — a fourth backend, and CNA without SDL (2026-09-13)
+## Archived historical record — not current configuration
+
+> **Archive boundary:** Everything below this heading records earlier, dated repository states.
+> Present-tense statements such as “SDL2 is now ...” describe CNA at the time of their checkpoint;
+> they do not override the current retirement checkpoint above and must not be read as supported
+> or selectable configurations today.
+
+---
+
+## 0a. Historical checkpoint — a fourth backend, and CNA without SDL (2026-09-13)
 
 **`CNA_PLATFORM=X11` exists, and so does a CNA build with no SDL in it.**
 
@@ -76,7 +85,7 @@ true.
 
 ---
 
-## 0. Current checkpoint (supersedes stale counts below)
+## 0. Historical checkpoint (superseded; retained as evidence)
 
 **2026-09-13 — a fourth desktop implementation, on branch `win32`.** Read this first.
 
