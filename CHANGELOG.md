@@ -190,5 +190,5 @@ mechanism (a configure-time check against a recorded pin, or a submodule) is pla
 - Per-renderer bugs and gaps that are known and tracked are listed in `NEXT.md` §5.
 - `Content` has no general `.xnb` reader by design, and 14 of the `Media` types are shells.
 
-[Unreleased]: https://github.com/openeggbert/cna/compare/v0.1.0-alpha.1...HEAD
-[0.1.0-alpha.1]: https://github.com/openeggbert/cna/releases/tag/v0.1.0-alpha.1
+[Unreleased]: https://github.com/libcna/cna/compare/v0.1.0-alpha.1...HEAD
+[0.1.0-alpha.1]: https://github.com/libcna/cna/releases/tag/v0.1.0-alpha.1
