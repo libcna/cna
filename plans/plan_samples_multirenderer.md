@@ -33,6 +33,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-010 | **DONE** | Stop Vulkan's stock-layout guards from rejecting compiled-effect multi-stream and instanced draws before their own shader linker runs. |
 | MSR-011 | **DONE** | Restore the FNA3D-only `CnaRendererTests` build after pointer-container and namespace API changes. |
 | MSR-012 | **DONE** | Correct stale FNA3D compiled-effect test profile, parameter-shape and exception assumptions. |
+| MSR-013 | **DONE** | Align the synthetic struct-default test with the pinned FNA/MojoShader contract and preserve the authentic FNA pixel oracle. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -181,8 +182,32 @@ catches CNA's XNA-compatible `InvalidOperationException` rather than an unrelate
 exception type.
 
 All nine focused tests pass on the default FNA3D/SDL_GPU driver after these corrections.  The two
-remaining failures reproduce independently: nested struct/array parameter storage and a compiled
-SpriteBatch sampler that should read `GraphicsDevice.Textures[1]`.
+remaining failures reproduced independently: the synthetic struct-default expectation was
+resolved by MSR-013, while a compiled SpriteBatch sampler that should read
+`GraphicsDevice.Textures[1]` remains renderer work.
+
+## MSR-013 — FNA/MojoShader struct-default contract
+
+The clean FNA3D suite exposed a synthetic fixture that expected every source struct initializer to
+survive the pinned MojoShader parser.  A tentative parser change made that test pass, but also
+changed the authentic `CnaConformanceEffect.fxb` pixel from the established FNA-compatible value.
+The independent managed-FNA reflection and pixel oracles prove this is not an implementation gap
+that CNA may silently reinterpret: FNA 26.5 reads the same compiled bytes with the pinned parser's
+zero-element non-array behavior, and the project already documents CNA's one deliberate public
+member-offset divergence in `plans/plan_fx.md`.
+
+The parser change was therefore discarded.  The synthetic expectation and its misleading fixture
+comment now describe the existing FNA/MojoShader storage contract: `Intensity` is `0.5`, CNA's
+padded `Direction` view is `(0.6, 0, 0)`, and its padded `Thresholds` view is `(0, 0)`.  This is a
+test repair only; no runtime or authentic effect behavior changed.
+
+Regression evidence:
+
+- the synthetic reflection test, authentic FNA reflection oracle, and authentic FNA pixel oracle
+  pass together 3/3 on the clean FNA3D configuration;
+- the complete SDL_GPU compiled-effect selection passes 46 tests with one existing configuration
+  skip, including its authentic golden-pixel draw;
+- the discarded parser experiment was never committed.
 
 ## Representative automated matrix
 

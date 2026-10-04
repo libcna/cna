@@ -125,8 +125,9 @@ namespace CNA::TestSupport
         appendMember(EffectFormat::ClassVector, directionName, 0, 3, 1);
         appendMember(EffectFormat::ClassScalar, thresholdsName, 2, 1, 1);
 
-        // Struct defaults live immediately after the member metadata. MojoShader expands every
-        // member row to a float4 register while parsing this tight compiler representation.
+        // Struct defaults live immediately after the member metadata. This tight sequence mirrors
+        // fxc output; the pinned FNA/MojoShader parser's handling of it, including its established
+        // zero-element non-array behavior, is covered explicitly by the FNA3D reflection test.
         for (const float value : {0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f})
             AppendUInt32(bytes, FloatBits(value));
         return offset;
