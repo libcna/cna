@@ -156,6 +156,22 @@ TEST(AvatarRendererTest, DrawRejectsANonDecomposableBoneOnceReady) {
     EXPECT_THROW(renderer.Draw(bones, AvatarExpression()), System::InvalidOperationException);
 }
 
+TEST(AvatarRendererTest, ALoadCompletingInsideDrawWaitsUntilTheCallerCanUpdateItsAnimation) {
+    auto description = Describe(AvatarBodyType::Female, 1710);
+
+    // Keep an identical model alive in the cache so the renderer under test starts Loading with
+    // an already-complete asynchronous result. This deterministically places the Loading->Ready
+    // transition inside its first Draw rather than depending on a worker-thread race.
+    AvatarRenderer cachePrimer(&description, false);
+    ASSERT_EQ(WaitUntilLoaded(cachePrimer), AvatarRendererState::Ready);
+    AvatarRenderer renderer(&description, false);
+    std::vector<Matrix> notYetUpdated(71);
+
+    EXPECT_NO_THROW(renderer.Draw(notYetUpdated, AvatarExpression()));
+    ASSERT_EQ(renderer.getStateProperty(), AvatarRendererState::Ready);
+    EXPECT_THROW(renderer.Draw(notYetUpdated, AvatarExpression()), System::InvalidOperationException);
+}
+
 TEST(AvatarRendererTest, DrawingNeedsInitializedGamerServices) {
     if (GamerServicesDispatcher::getIsInitializedProperty()) {
         GTEST_SKIP() << "another test initialized gamer services in this process";

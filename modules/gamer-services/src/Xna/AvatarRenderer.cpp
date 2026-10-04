@@ -335,8 +335,14 @@ namespace Microsoft::Xna::Framework::GamerServices
         {
             throw System::ArgumentException("bones must contain exactly 71 entries.", "bones");
         }
+        const AvatarRendererState stateAtEntry = state_;
         Poll();
-        if (state_ == AvatarRendererState::Loading)
+        // A game commonly updates its animation only after observing State == Ready. If the
+        // background load finishes between that Update check and this Draw call, consuming the
+        // newly-ready model immediately would pair it with transforms the game has not had an
+        // opportunity to initialize yet. Complete the state transition now, but keep this final
+        // loading frame on the loading path; the next Update observes Ready before the next Draw.
+        if (stateAtEntry == AvatarRendererState::Loading)
         {
             if (useLoadingEffect_)
             {

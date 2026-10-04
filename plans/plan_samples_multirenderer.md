@@ -41,6 +41,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-018 | **DONE** | Allow WebGPU signed-normalized textures to receive complete authored mip chains. |
 | MSR-019 | **DONE** | Promote FNA3D's implemented signed-normalized Texture2D formats through its public format gate. |
 | MSR-020 | **DONE** | Remove the obsolete FNA3D lifetime-test archive rescan that duplicated CNA globals at shutdown. |
+| MSR-021 | **DONE** | Latch an avatar's Loading-to-Ready transition until its caller can update animation transforms. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -387,6 +388,28 @@ and the otherwise successful test aborted during process exit with a double free
 The test now uses the same `CNA` link contract as every other FNA3D executable.  Its symbol table
 no longer defines a second `TouchPanel::gestures_`; `Fna3d_Device_Lifetime` passes in isolation and
 the complete OpenGL-pinned FNA3D renderer suite passes 13/13 in the private GPU environment.
+
+## MSR-021 — Avatar loading-transition frame latch
+
+`AvatarRenderer::Draw` used to poll its asynchronous load and immediately consume the supplied
+bone transforms when that poll changed `Loading` to `Ready`.  A game following the normal XNA
+pattern — update its animation only after observing `State == Ready`, then always call `Draw` —
+could therefore see Loading during Update and be asked for ready-state transforms later in the
+same frame.  `AvatarAnimationBlending` exposed the race on FNA3D because its live blend array is
+intentionally zero-initialized until its first ready-state update.
+
+A draw that begins in Loading now completes and publishes the background transition but keeps
+that one call on the loading/no-op path.  The following Update observes Ready and initializes the
+animation before the following Draw.  The decomposability validation remains unchanged once a
+draw begins Ready.
+
+Regression evidence:
+
+- `AvatarRendererTest.ALoadCompletingInsideDrawWaitsUntilTheCallerCanUpdateItsAnimation` uses an
+  identical-description cache hit to force completion inside Draw without timing assumptions;
+- the focused avatar animation/renderer suite passes 51/51 through the private FNA3D GPU lane;
+- the unchanged multi-renderer `AvatarAnimationBlending` executable passes with active `FNA3D`
+  and active `OPENGLES3` in `matrix-results/msr-021-avatar-loading-latch`.
 
 ## Representative automated matrix
 

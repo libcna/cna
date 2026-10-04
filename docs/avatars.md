@@ -140,7 +140,8 @@ PNG of each step; with `CNA_GAMER_SERVICES_AUTO_SIGN_IN` naming a profile and
   the XNA AvatarShadows sample, work).
 - **Loading effect.** While loading, a renderer constructed with `useLoadingEffect` (the
   one-argument constructor's default) draws a softly pulsing translucent silhouette the height of
-  the avatar.
+  the avatar. If loading completes during a `Draw` call, that call remains on the loading path and
+  the next update observes `Ready` before the next draw consumes animation transforms.
 - **Device.** The graphics device comes from the `IGraphicsDeviceService` of the service provider
   given to the dispatcher (XNA's rule); drawing before gamer services are initialized throws
   `InvalidOperationException`.
