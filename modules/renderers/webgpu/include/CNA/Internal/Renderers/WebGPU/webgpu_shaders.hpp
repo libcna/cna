@@ -32,7 +32,10 @@ struct VertexOutput {
 @group(0) @binding(1) var spriteTexture: texture_2d<f32>;
 @group(0) @binding(2) var<uniform> spriteSamplerState: vec4f;
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
-    return textureSampleBias(spriteTexture, spriteSampler, input.uv, spriteSamplerState.x) * input.color;
+    let sampled = textureSampleBias(spriteTexture, spriteSampler, input.uv, spriteSamplerState.x);
+    let channelMask = vec4f(1.0, spriteSamplerState.yzw);
+    let expanded = sampled * channelMask + (vec4f(1.0) - channelMask);
+    return expanded * input.color;
 }
 )WGSL";
 

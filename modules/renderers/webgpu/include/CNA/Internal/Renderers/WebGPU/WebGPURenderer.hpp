@@ -119,6 +119,12 @@ namespace CNA::Internal::Renderers::WebGPU
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
+        /**
+         * @brief Returns the logical XNA surface format sampled from this texture.
+         *
+         * @return The `SurfaceFormat` ordinal supplied when the texture was created.
+         */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
 
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
@@ -244,6 +250,15 @@ namespace CNA::Internal::Renderers::WebGPU
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
+        /**
+         * @brief Returns the logical XNA surface format sampled from this render target.
+         *
+         * @return The `SurfaceFormat` ordinal supplied when the render target was created.
+         */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override
+        {
+            return requestedSurfaceFormat_;
+        }
 
         /// REMED-GFX-127: returns true only once the whole requested rectangle has been written;
         /// false for an empty request, a torn-down owner or a destination too small for it. The
@@ -1294,6 +1309,8 @@ namespace CNA::Internal::Renderers::WebGPU
             int maxMipLevel = 0;  ///< WEBGPU-161: SamplerState.MaxMipLevel.
             int maxAnisotropy = 4;
             float lodBias = 0.0f;
+            /// The logical XNA format whose missing sampled channels must expand to one.
+            int surfaceFormat = 0;
             /// WEBGPU-154: `RasterizerState.FillMode == WireFrame` at this sprite's own public
             /// Draw call, captured by value like every other per-sprite state. A wireframe sprite
             /// is drawn as a 12-index line list over its own six vertices rather than as two
@@ -4674,13 +4691,25 @@ namespace CNA::Internal::Renderers::WebGPU
         /// Releases both arenas' buffers (device loss and destruction).
         void ReleaseStreamArenasEXT();
         /// 1 MiB of uniform blocks is about four thousand 256-byte-aligned blocks per chunk.
-        /// WEBGPUPERF-0007: the stock sprite shader's sampler block -- the LOD bias, padded to a vec4.
+        /// WEBGPUPERF-0007: the stock sprite shader's sampler block -- LOD bias followed by the
+        /// green/blue/alpha channel masks, packed into one vec4.
         static constexpr std::size_t kSpriteSamplerBlockBytesEXT = 16;
-        /// WEBGPUPERF-0007: this flush's sprite sampler block for @p lodBias, appended to the uniform
-        /// arena the first time the flush meets that bias.
-        [[nodiscard]] ArenaSliceEXT SpriteSamplerBlockEXT(float lodBias);
-        /// The blocks SpriteSamplerBlockEXT appended this flush, by bias; cleared with the arena.
-        std::vector<std::pair<float, ArenaSliceEXT>> spriteSamplerBlocksEXT_;
+        /**
+         * @brief Returns this flush's stock-sprite sampler block for a bias and logical format.
+         *
+         * @param lodBias Mipmap level-of-detail bias.
+         * @param surfaceFormat Logical XNA `SurfaceFormat` ordinal.
+         * @return The uniform-arena slice containing the block.
+         */
+        [[nodiscard]] ArenaSliceEXT SpriteSamplerBlockEXT(float lodBias, int surfaceFormat);
+        /// One cached stock-sprite sampler block. Entries are cleared with the uniform arena.
+        struct SpriteSamplerBlockCacheEntryEXT
+        {
+            float lodBias = 0.0f;
+            int surfaceFormat = 0;
+            ArenaSliceEXT slice;
+        };
+        std::vector<SpriteSamplerBlockCacheEntryEXT> spriteSamplerBlocksEXT_;
         StreamArenaEXT uniformArenaEXT_{.usage = WGPUBufferUsage_Uniform, .chunkBytes = 1u << 20,
                                         .label = "CNA WebGPU Uniform Arena Chunk"};
         /// Per-instance streams; a draw with more than a chunk's worth uses its own buffer.

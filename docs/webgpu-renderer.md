@@ -1020,11 +1020,14 @@ refusing — is deliberately not implemented. It needs a second bind-group layou
 `UnfilterableFloat`/`NonFiltering` and cannot be verified on any adapter available here, so a named
 refusal a caller can act on was chosen over an unverifiable bind path.
 
-One divergence is recorded rather than encoded: EasyGL samples an `R16Float` target back as
-(255,255,255) and `RG16Float` as (255,0,255), where WebGPU gives (255,0,0) for both — GL broadcasting
-a one-channel texture against WGSL's `texture_2d<f32>` returning `(r, 0, 0, 1)`. The shared test
-asserts the red channel only, which every format in that family carries, so it bakes in neither
-renderer's swizzle. Which one XNA means is `WEBGPU-199`/`200`'s to settle.
+The sampled-channel rule is now explicit (`WEBGPU-209`). XNA/D3D9 expands channels absent from the
+stored format to one: `Single`/`HalfSingle` sample as `(R,1,1,1)`, and
+`Vector2`/`HalfVector2`/`NormalizedByte2`/`Rg32` as `(R,G,1,1)`. WebGPU natively supplies zero for
+the absent green/blue channels, so stock SpriteBatch carries the logical source format with the
+queued draw and applies the XNA mask/fill in its fragment shader. The renderer-neutral
+`SingleChannelExpansionTest` proves both one-channel values and that a four-channel `Color` texture
+is unchanged. ShadowMapping's `Single` preview consequently matches OPENGLES3 instead of rendering
+red. This is an XNA sampling rule, not a change to typed render-target readback bytes.
 
 ## Per-target MultiSampleCount (2026-09-05, `WEBGPU-165`)
 

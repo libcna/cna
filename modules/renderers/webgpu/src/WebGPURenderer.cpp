@@ -8010,6 +8010,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         command.maxAnisotropy = maxAnisotropy;
         command.maxMipLevel = maxMipLevel;
         command.lodBias = lodBias;
+        command.surfaceFormat = texture.GetSurfaceFormatEXT();
         command.blend = blendSnapshot;
         // WEBGPU-154: this sprite's OWN fill mode, captured for the same reason its viewport and
         // scissor are -- a RasterizerState set after the batch but before the flush must not
@@ -8398,10 +8399,11 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
         ApplyDrawScissor(pass, command.scissor);
         // plans/plan_webgpu_perf.md WEBGPUPERF-0007: the 16-byte sampler block, in the uniform arena
-        // once per distinct LOD bias per flush -- every sprite used to write its own, and build and
-        // release a group of its own, which a frame of a few thousand sprites paid thousands of
-        // times over.
-        const ArenaSliceEXT samplerBlock = SpriteSamplerBlockEXT(command.lodBias);
+        // once per distinct bias/format pair per flush -- every sprite used to write its own, and
+        // build and release a group of its own, which a frame of a few thousand sprites paid
+        // thousands of times over. The format selects XNA's sampled-channel expansion too.
+        const ArenaSliceEXT samplerBlock =
+            SpriteSamplerBlockEXT(command.lodBias, command.surfaceFormat);
 
         std::array<WGPUBindGroupEntry, 3> entries{};
         entries[0].binding = 0;
@@ -8456,17 +8458,44 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         }
     }
 
-    WebGPURenderer::ArenaSliceEXT WebGPURenderer::SpriteSamplerBlockEXT(const float lodBias)
+    WebGPURenderer::ArenaSliceEXT WebGPURenderer::SpriteSamplerBlockEXT(
+        const float lodBias, const int surfaceFormat)
     {
-        for (const auto& [bias, slice] : spriteSamplerBlocksEXT_)
-            if (bias == lodBias)
-                return slice;
-        const std::array<float, 4> block{{lodBias, 0.0f, 0.0f, 0.0f}};
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+
+        for (const SpriteSamplerBlockCacheEntryEXT& entry : spriteSamplerBlocksEXT_)
+            if (entry.lodBias == lodBias && entry.surfaceFormat == surfaceFormat)
+                return entry.slice;
+
+        // D3D9/XNA expands channels absent from the stored format to one. WebGPU texture sampling
+        // supplies zero for absent G/B channels, so the stock shader applies this mask and its
+        // one-minus-mask fill after sampling. Red always exists; alpha is listed for completeness
+        // even though WebGPU already supplies one for these formats.
+        float greenMask = 1.0f;
+        float blueMask = 1.0f;
+        float alphaMask = 1.0f;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Single:
+            case SurfaceFormat::HalfSingle:
+                greenMask = 0.0f;
+                [[fallthrough]];
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::NormalizedByte2:
+            case SurfaceFormat::Rg32:
+                blueMask = 0.0f;
+                alphaMask = 0.0f;
+                break;
+            default:
+                break;
+        }
+        const std::array<float, 4> block{{lodBias, greenMask, blueMask, alphaMask}};
         static_assert(sizeof(block) == kSpriteSamplerBlockBytesEXT);
         if (!ReserveArenaEXT(uniformArenaEXT_, sizeof(block)))
             throw std::runtime_error("CNA WebGPU: the sprite sampler block does not fit an arena chunk");
         const ArenaSliceEXT slice = AppendArenaEXT(uniformArenaEXT_, block.data(), sizeof(block));
-        spriteSamplerBlocksEXT_.emplace_back(lodBias, slice);
+        spriteSamplerBlocksEXT_.push_back({lodBias, surfaceFormat, slice});
         return slice;
     }
 

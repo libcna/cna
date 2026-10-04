@@ -43,6 +43,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-020 | **DONE** | Remove the obsolete FNA3D lifetime-test archive rescan that duplicated CNA globals at shutdown. |
 | MSR-021 | **DONE** | Latch an avatar's Loading-to-Ready transition until its caller can update animation transforms. |
 | MSR-022 | **DONE** | Store compiled SpriteBatch projection matrices in the Effect Framework layout expected by every native backend. |
+| MSR-023 | **DONE** | Expand missing WebGPU texture channels to the XNA/D3D9 values in stock SpriteBatch sampling. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -447,6 +448,36 @@ Regression evidence:
   enabled, cross-build from Linux.  This also exposed and repaired a pre-existing DirectX 9
   `EffectPass*` member-access compile failure.  This is cross-build evidence only, not native
   Windows GPU qualification.
+
+## MSR-023 — WebGPU sampled-channel expansion
+
+XNA/D3D9 samples channels absent from a stored texture format as one: a `Single` texture yields
+`(R, 1, 1, 1)` and a two-channel texture yields `(R, G, 1, 1)`.  WebGPU's native sampled value is
+`(R, 0, 0, 1)` or `(R, G, 0, 1)`.  The stock WebGPU SpriteBatch shader used that native value
+unchanged, which made ShadowMapping's on-screen `SurfaceFormat::Single` preview red while the
+OPENGLES3/OPENGL33 reference was white/cyan.
+
+WebGPU texture and render-target renderer objects now report their logical XNA surface format.
+Each queued stock sprite captures it, and the existing 16-byte sampler uniform block carries a
+green/blue/alpha mask alongside the LOD bias.  The fragment shader restores absent channels to one
+after sampling.  One- and two-channel XNA formats share the same rule as EasyGL, Vulkan, SDL_GPU
+and the DirectX SpriteBatch implementations; ordinary four-channel textures keep the identity
+mask.  Custom and compiled effects are not special-cased, and no sample source changed.
+
+Regression evidence:
+
+- after enabling WebGPU in the renderer-neutral `SingleChannelExpansionTest`, the two `Single`
+  cases failed before the repair with green and blue both zero; `ColorFormatIsLeftAlone` passed;
+- all three cases pass after the repair on WebGPU, Vulkan and SDL_GPU through the private GPU
+  runner.  FNA3D's selected SDL_GPU driver truthfully skips the two `Single` render-target cases
+  because it does not advertise that format, while its four-channel control passes;
+- twelve WebGPU shader-validation, SpriteBatch, render-target, viewport, blend, draw-order and
+  cross-renderer parity CTests pass after relinking against the repaired renderer;
+- the unchanged multi-renderer `ShadowMapping_cna_samples` executable now produces
+  `(255,255,255)` at the sampled preview probes on WebGPU, matching OPENGLES3; before the repair
+  those same WebGPU probes were `(255,0,0)`.  The full scene and its cast shadow remain visible;
+- the same rebuilt executable passes and retains the reference preview pixels with active
+  OPENGLES3.  Evidence is in `matrix-results/msr-028-shadowmapping-{webgpu-fixed,gles3-regression}`.
 
 ## Representative automated matrix
 
