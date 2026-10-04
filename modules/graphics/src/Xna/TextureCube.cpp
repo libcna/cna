@@ -419,9 +419,13 @@ namespace Microsoft::Xna::Framework::Graphics
         const int y = rect != nullptr ? rect->Y : 0;
         const int width = rect != nullptr ? rect->Width : levelSize;
         const int height = rect != nullptr ? rect->Height : levelSize;
-        if (!renderer_->SetDataBytesEXT(
-                static_cast<int>(face), level, x, y, width, height,
-                data, width * height * Texture::GetFormatSizeEXT(format_)))
+        const int dataLength = width * height * Texture::GetFormatSizeEXT(format_);
+        const bool stored = format_ == SurfaceFormat::Color
+            ? renderer_->SetData(static_cast<int>(face), level, x, y, width, height,
+                                 data, dataLength)
+            : renderer_->SetDataBytesEXT(static_cast<int>(face), level, x, y, width, height,
+                                         data, dataLength);
+        if (!stored)
         {
             throw System::NotSupportedException(
                 "TextureCube::SetData: the active renderer did not store the complete "
@@ -464,9 +468,13 @@ namespace Microsoft::Xna::Framework::Graphics
         const int y = rect != nullptr ? rect->Y : 0;
         const int width = rect != nullptr ? rect->Width : levelSize;
         const int height = rect != nullptr ? rect->Height : levelSize;
-        if (!renderer_->GetDataBytesEXT(
-                static_cast<int>(face), level, x, y, width, height,
-                data, width * height * Texture::GetFormatSizeEXT(format_)))
+        const int dataLength = width * height * Texture::GetFormatSizeEXT(format_);
+        const bool read = format_ == SurfaceFormat::Color
+            ? renderer_->GetData(static_cast<int>(face), level, x, y, width, height,
+                                 data, dataLength)
+            : renderer_->GetDataBytesEXT(static_cast<int>(face), level, x, y, width, height,
+                                         data, dataLength);
+        if (!read)
         {
             throw System::NotSupportedException(
                 "TextureCube::GetData: the active renderer did not return the complete "

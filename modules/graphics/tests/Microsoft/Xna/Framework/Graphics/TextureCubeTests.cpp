@@ -30,6 +30,7 @@
 
 // Lets CNA_RENDERER_IS name identities bare, matching the compile-time guards it replaced.
 using namespace CNA::Testing::Renderers;
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <iterator>
@@ -322,6 +323,43 @@ TEST_F(TextureCubeTest, ByteTransfersUseByteCountsAndCallerArrayWindowsForClassi
                             [](std::uint8_t value) { return value == 0xCDu; }));
     EXPECT_TRUE(std::all_of(destination.begin() + 7, destination.end(),
                             [](std::uint8_t value) { return value == 0xCDu; }));
+}
+
+// The XNB TextureCubeReader uploads each Color face and mip as a byte array. Keep that exact
+// repeated-upload shape covered: routing byte data through only the declared-format extension
+// made the reader fail on renderers whose canonical Color path is ITextureCubeRenderer::SetData.
+TEST_F(TextureCubeTest, ColorByteTransfersPopulateEveryFaceAndMipLikeTextureCubeReader)
+{
+    if (!CubeStorageSupported())
+        GTEST_SKIP() << "The active renderer creates no cube texture storage.";
+
+    TextureCube texture(gd, 4, true, SurfaceFormat::Color);
+    for (int face = 0; face < 6; ++face)
+    {
+        for (int level = 0; level < texture.getLevelCountProperty(); ++level)
+        {
+            const int size = std::max(1, texture.getSizeProperty() >> level);
+            std::vector<std::uint8_t> source(static_cast<std::size_t>(size * size * 4));
+            for (int texel = 0; texel < size * size; ++texel)
+            {
+                source[static_cast<std::size_t>(texel * 4 + 0)] =
+                    static_cast<std::uint8_t>(17 + face * 31 + level * 7);
+                source[static_cast<std::size_t>(texel * 4 + 1)] =
+                    static_cast<std::uint8_t>(23 + texel * 11);
+                source[static_cast<std::size_t>(texel * 4 + 2)] =
+                    static_cast<std::uint8_t>(211 - face * 13 - level * 5);
+                source[static_cast<std::size_t>(texel * 4 + 3)] =
+                    static_cast<std::uint8_t>(101 + texel * 3);
+            }
+
+            texture.SetData(static_cast<CubeMapFace>(face), level, nullptr,
+                            source.data(), 0, static_cast<int>(source.size()));
+            std::vector<std::uint8_t> destination(source.size(), 0xCDu);
+            texture.GetData(static_cast<CubeMapFace>(face), level, nullptr,
+                            destination.data(), 0, static_cast<int>(destination.size()));
+            EXPECT_EQ(destination, source) << "face=" << face << " level=" << level;
+        }
+    }
 }
 
 TEST_F(TextureCubeTest, GenericValueTypeRoundTripsAFaceMipRectangleAndCallerWindows)

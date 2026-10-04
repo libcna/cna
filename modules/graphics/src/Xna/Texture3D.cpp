@@ -260,9 +260,14 @@ namespace Microsoft::Xna::Framework::Graphics
                 "Texture3D::SetData: this renderer creates no volume texture resource");
         const int dataLength = (right - left) * (bottom - top) * (back - front) *
             Texture::GetFormatSizeEXT(format_);
-        if (!renderer_->SetDataBytesEXT(
-                level, left, top, front, right - left, bottom - top, back - front,
-                data, dataLength))
+        const bool stored = format_ == SurfaceFormat::Color
+            ? renderer_->SetData(level, left, top, front,
+                                 right - left, bottom - top, back - front,
+                                 data, dataLength)
+            : renderer_->SetDataBytesEXT(level, left, top, front,
+                                         right - left, bottom - top, back - front,
+                                         data, dataLength);
+        if (!stored)
         {
             throw System::NotSupportedException(
                 "Texture3D::SetData: the active renderer did not store the complete "
@@ -280,9 +285,14 @@ namespace Microsoft::Xna::Framework::Graphics
                 "Texture3D::GetData: this renderer creates no volume texture resource");
         const int dataLength = (right - left) * (bottom - top) * (back - front) *
             Texture::GetFormatSizeEXT(format_);
-        if (!renderer_->GetDataBytesEXT(
-                level, left, top, front, right - left, bottom - top, back - front,
-                data, dataLength))
+        const bool read = format_ == SurfaceFormat::Color
+            ? renderer_->GetData(level, left, top, front,
+                                 right - left, bottom - top, back - front,
+                                 data, dataLength)
+            : renderer_->GetDataBytesEXT(level, left, top, front,
+                                         right - left, bottom - top, back - front,
+                                         data, dataLength);
+        if (!read)
         {
             throw System::NotSupportedException(
                 "Texture3D::GetData: the active renderer did not return the complete "
