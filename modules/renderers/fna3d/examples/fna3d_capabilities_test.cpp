@@ -20,6 +20,7 @@
 // Check F -- an out-of-contract state ordinal is rejected rather than cast into an undefined
 //   FNA3D enumerator.
 // Check G -- the renderer reports a real back-buffer format/depth format and a sane MSAA count.
+// Check H -- Texture2D's public format gate exposes FNA3D's native signed-normalized storage.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs, 77 = skipped (no display).
 
@@ -50,6 +51,7 @@ using CNA::Internal::Renderers::Fna3d::Fna3dRenderer;
 using CNA::Internal::Renderers::Fna3d::Fna3dVertexBufferRenderer;
 using CNA::Internal::Renderers::GpuDrawParams;
 using CNA::Internal::Renderers::Fna3d::ToFna3dBlend;
+using CNA::Internal::Renderers::RendererFormatVerdict;
 
 class Fna3dCapabilitiesTest : public CNA::Examples::PixelTestGame
 {
@@ -189,6 +191,21 @@ public:
               "the back buffer reports a non-negative MSAA sample count");
         Check(renderer.GetMaxTextureDimension() >= 4096,
               "the maximum texture dimension is at least XNA HiDef's guarantee");
+
+        // Check H -- MSR-019. These exact formats are part of FNA3D's public enum and every
+        // current driver maps them to signed-normalized storage. The shared NormalizedByteFormat
+        // GPU tests verify the byte and shader-sampling semantics; this FNA3D-local assertion
+        // prevents that shared suite from silently skipping because the classifier regressed.
+        Check(renderer.ClassifySurfaceFormatEXT(
+                  static_cast<int>(SurfaceFormat::NormalizedByte2)) ==
+                  RendererFormatVerdict::Supported,
+              "NormalizedByte2 is exposed through the public Texture2D format gate");
+        Check(renderer.ClassifySurfaceFormatEXT(
+                  static_cast<int>(SurfaceFormat::NormalizedByte4)) ==
+                  RendererFormatVerdict::Supported,
+              "NormalizedByte4 is exposed through the public Texture2D format gate");
+        Check(renderer.ClassifySurfaceFormatEXT(99) == RendererFormatVerdict::Unsupported,
+              "an invalid SurfaceFormat ordinal is not advertised as native storage");
 
         // The device still works after all of that.
         device.Clear(Color(12, 34, 56, 255));

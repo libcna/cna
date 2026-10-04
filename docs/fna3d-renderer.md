@@ -121,7 +121,7 @@ fixed from the descriptor's own request.
 | `MultipleRenderTargets` | true | `FNA3D_SetRenderTargets` takes the whole ordered set |
 | `AnisotropicFiltering` | true | `FNA3D_SamplerState::maxAnisotropy` |
 | `WireFrame` | true | `FNA3D_FILLMODE_WIREFRAME` |
-| `OcclusionQuery` | true | `FNA3D_CreateQuery`/`QueryPixelCount` |
+| `OcclusionQuery` | device-dependent | Probed from a real query on OpenGL/D3D11; false for FNA3D's SDL_GPU driver, whose public API has no query route |
 | `Texture3D` | true | `FNA3D_CreateTexture3D` |
 | **`Instancing`** | device-dependent | `FNA3D_SupportsHardwareInstancing`; the draw additionally requires a compiled effect whose vertex shader consumes the instance stream. Stock effects are still rejected. |
 | `AdditiveBlending` | true | |
@@ -141,6 +141,9 @@ fixed from the descriptor's own request.
   expressed as the destination rectangle `FNA3D_SwapBuffers` already takes, plus the matching
   window↔logical coordinate transforms.
 - `Texture2D`, `Texture3D`, `TextureCube`: creation, mip levels, sub-rectangle upload and readback.
+  The public `Texture2D` format gate includes native signed-normalized `NormalizedByte2/4` storage;
+  byte round-trip, GPU sampling and authored mip levels are covered on both FNA3D OpenGL and
+  SDL_GPU drivers (`FNA3D-52` / `MSR-019`).
 - `RenderTarget2D` and `RenderTargetCube`: MSAA colour renderbuffers with resolve-on-unbind, mip
   generation, per-target depth/stencil renderbuffers, `PreserveContents`, MRT sets, readback.
 - Vertex and index buffers (16- and 32-bit) with `SetDataOptions` forwarded verbatim, growing the
@@ -200,10 +203,11 @@ would need a shared-contract change, so each is reported rather than faked:
 | `FNA3D_SetTextureDataYUV` | `IGraphicsRenderer` has no YUV texture route; `VideoDecoder` converts YUV→RGBA in the media module before any renderer sees a frame. |
 | `FNA3D_GetVertexBufferData` / `FNA3D_GetIndexBufferData` | The buffer renderer interfaces expose no readback; XNA's `GetData` on those buffers is served from the shared layer's own CPU shadow. |
 
-A public block-compressed `Texture2D` is blocked one level above this renderer as well: the shared
-`Texture::ValidateFormat` admits only `SurfaceFormat::Color` for every renderer. The
-renderer contract has no such restriction — an `ImageData` naming a compressed format reaches
-`CreateTexture` directly — and that is the layer `Fna3d_Compressed` measures.
+A public block-compressed `Texture2D` remains behind FNA3D's format classifier. The renderer
+contract itself can carry compressed `ImageData`, but the complete public XNA constructor,
+transfer, readback and content-loader route has not been promoted as one verified promise.
+`FNA3D-52` deliberately opened only the independently proven signed-normalized formats rather
+than using the sample failures as a reason to advertise every lower-level FNA3D format.
 
 ### Backbuffer readback quirk (upstream, worked around here)
 
@@ -230,9 +234,9 @@ Readback is already a full CPU/GPU sync point FNA3D documents as screenshot-only
 | Sanitizers (ASan + UBSan), renderer suite | **Performed** — the enlarged 13-test suite passes, including post-device lifetime and the >16-bit SpriteBatch path. Leak detection is disabled for the external graphics stack; UBSan still reports the pre-existing MojoShader decimal-parser signed overflow, but found no CNA-originating defect (FNA3D-47). |
 | Sanitizers for the new arbitrary compiled-effect path | **Partial** — all 31 targeted FX/XNB/capability tests pass in the ASan/UBSan build with no ASan finding. LeakSanitizer is unavailable under the managed ptrace environment; pinned upstream MojoShader still reports known UBSan findings in float formatting and zero-length clone copies, so the full `plans/plan_fx.md` production gate remains open. |
 | Existence-gate spikes | **Performed** — `fna3d-spike/` |
-| SDL_GPU driver | **Not exercised here**: this container has no Vulkan ICD, so FNA3D declines SDL_GPU and falls through to OpenGL. The code path is driver-agnostic; the gate is external. This is also the only driver on which compressed readback is expected to succeed, so that arm of `Fna3d_Compressed` is unexercised here. |
+| SDL_GPU driver | **Partially exercised on AMD Radeon 780M / RADV**: the native sample corpus selected FNA3D's SDL_GPU/Vulkan driver, and the five signed-normalized byte/storage/sampling/mip tests plus `Fna3d_Capabilities` pass directly on it. The full thirteen-test renderer suite still needs its SDL_GPU lane before FNA3D-34 can close. |
 | Direct3D 11 driver | **Not exercised here**: Windows-only (or DXVK-native). External gate. |
-| Driver matrix (`plans/plan_fna3d.md` FNA3D-34) | **Open.** This renderer is validated on FNA3D's **OpenGL driver**, not across the matrix. This lane has already found three driver-dependent behaviours (sub-rectangle readback origin, volume readback, compressed readback), so an OpenGL pass must not be read as validating SDL_GPU or Direct3D 11. |
+| Driver matrix (`plans/plan_fna3d.md` FNA3D-34) | **Open, with SDL_GPU coverage now in progress.** OpenGL owns the full thirteen-test suite; SDL_GPU owns the sample-corpus run and focused format/capability tests. Direct3D 11 remains unexecuted. Driver-dependent readback/query behaviour means none of those scopes may be conflated. |
 | macOS / iOS | Not exercised. External gate. |
 
 ## Tests

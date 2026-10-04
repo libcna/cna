@@ -39,6 +39,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-016 | **DONE** | Let Vulkan stock effects ignore declaration channels the active effect does not consume. |
 | MSR-017 | **DONE** | Normalize legacy XNB SkinnedEffect declarations before WebGPU's stride-derived layout guard. |
 | MSR-018 | **DONE** | Allow WebGPU signed-normalized textures to receive complete authored mip chains. |
+| MSR-019 | **DONE** | Promote FNA3D's implemented signed-normalized Texture2D formats through its public format gate. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -345,6 +346,34 @@ Regression evidence:
   `WEBGPU` and active `OPENGLES3` in `matrix-results/msr-018-normalized-byte-mips`;
 - WebGPU's full technical gallery result is now 90/91, with only `Yacht`'s renderer-independent
   gamer-services environment failure remaining.
+
+## MSR-019 — FNA3D signed-normalized Texture2D gate
+
+FNA3D's XNA-identical surface-format enum, `FNA3D_CreateTexture2D` path and SDL_GPU/OpenGL
+drivers already implement `NormalizedByte2` and `NormalizedByte4` as signed-normalized storage.
+Its format-aware transfer code also sizes two- and four-byte texels correctly.  The public
+`Texture2D` constructor nevertheless fell through the shared tri-state default because
+`Fna3dRenderer` supplied no `ClassifySurfaceFormatEXT` verdict, so authentic compiled-content
+normal maps were refused before the renderer could create them.
+
+The FNA3D classifier now promotes only `Color` and the two signed-normalized formats whose
+complete public storage, transfer and sampling contracts are proven.  Invalid ordinals are
+unsupported; compressed families still respect the running driver's feature query but defer to
+the existing public gate; every other unverified format also continues to defer.  This avoids
+turning three green sample cells into an untested claim about FNA3D's whole lower-level enum.
+
+Regression evidence:
+
+- `NormalizedByteFormat` passes 5/5 on FNA3D's default SDL_GPU/Vulkan driver and 5/5 on its
+  explicit OpenGL driver, including signed shader sampling and an explicitly authored mip level;
+- `Fna3d_Capabilities` asserts both promoted formats and an invalid-ordinal refusal, and passes on
+  the default SDL_GPU/Vulkan driver;
+- the same multi-renderer `DistortionSample`, `NormalMappingEffect` and `SpriteEffects`
+  executables pass 3/3 with active `FNA3D` and 3/3 with active `OPENGLES3` in
+  `matrix-results/msr-019b-fna3d-normalized-formats`;
+- the first complete FNA3D gallery run was 85/91; these three focused repairs leave
+  `AvatarAnimationBlending`, the truthful `LensFlare` query limit, and the renderer-independent
+  `Yacht` gamer-services failure for the next full rerun.
 
 ## Representative automated matrix
 

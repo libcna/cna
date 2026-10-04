@@ -1393,6 +1393,20 @@ namespace CNA::Internal::Renderers::Fna3d
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
         [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
 
+        /**
+         * @brief Classifies Texture2D formats backed by the selected FNA3D driver.
+         *
+         * FNA3D's surface-format enumeration is numerically identical to XNA's. This public gate
+         * promotes the formats whose complete CNA Texture2D transfer and GPU-sampling contracts
+         * are verified; formats implemented only below the public gate continue to defer.
+         *
+         * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal.
+         * @return Supported for Color and the verified signed-normalized formats, Unsupported for
+         *         an invalid ordinal or an unavailable compressed family, otherwise Defer.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(
+            int surfaceFormat) const override;
+
         /** @brief The largest single-axis texture dimension FNA3D guarantees. */
         [[nodiscard]] int GetMaxTextureDimension() const override;
 

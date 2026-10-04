@@ -339,6 +339,11 @@ namespace CNA::Internal::Renderers::Fna3d
     bool Fna3dRenderer::SupportsTextureFormatEXT(int surfaceFormat) const
     {
         using Xna = Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        if (surfaceFormat < static_cast<int>(Xna::Color) ||
+            surfaceFormat > static_cast<int>(Xna::UShortEXT))
+        {
+            return false;
+        }
         switch (static_cast<Xna>(surfaceFormat))
         {
             case Xna::Dxt1:
@@ -355,6 +360,42 @@ namespace CNA::Internal::Renderers::Fna3d
                 // Every uncompressed format FNA3D's enumeration has is a format its drivers
                 // create; only the compressed families are optional.
                 return true;
+        }
+    }
+
+    RendererFormatVerdict Fna3dRenderer::ClassifySurfaceFormatEXT(int surfaceFormat) const
+    {
+        // MSR-019: the public Texture2D gate must describe the exact storage already implemented
+        // by FNA3D_CreateTexture2D and Fna3dTextureRenderer. In particular, authentic XNA normal
+        // maps use NormalizedByte2/4, which FNA3D maps natively to signed-normalized storage.
+        using Xna = Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        if (surfaceFormat < static_cast<int>(Xna::Color) ||
+            surfaceFormat > static_cast<int>(Xna::UShortEXT))
+        {
+            return RendererFormatVerdict::Unsupported;
+        }
+        switch (static_cast<Xna>(surfaceFormat))
+        {
+            case Xna::Color:
+            case Xna::NormalizedByte2:
+            case Xna::NormalizedByte4:
+                return RendererFormatVerdict::Supported;
+
+            case Xna::Dxt1:
+            case Xna::Dxt3:
+            case Xna::Dxt5:
+            case Xna::Dxt5SrgbEXT:
+            case Xna::Bc7EXT:
+            case Xna::Bc7SrgbEXT:
+                return SupportsTextureFormatEXT(surfaceFormat)
+                         ? RendererFormatVerdict::Defer
+                         : RendererFormatVerdict::Unsupported;
+
+            default:
+                // The renderer layer has exact FNA3D enum/storage paths for the remaining
+                // formats, but their whole public XNA transfer + sampling contract has not yet
+                // been promoted. Preserve the existing shared gate rather than over-advertise.
+                return RendererFormatVerdict::Defer;
         }
     }
 
