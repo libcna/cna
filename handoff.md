@@ -675,7 +675,9 @@ history behind the finite classification in `cna-cs/docs/final-compatibility-aud
 
 Do not search for another application: CSX-151 reached saturation condition B with the fixed final
 ten, CSX-152 completed the finite surface audit, and CSX-153 completed the final stability matrix.
-Write the English source-build/migration guide next, then complete the requested C++/C/C#
-`cna-multi-language-3d-demo` qualification (the same C# source on FNA and CNA.NET). Finally write
-the campaign-closure section and enter maintenance mode.
+CSX-154 completed the English source-build/migration guide in cna-cs `719f80f` and linked it from
+the verified C# project template in cna-cs-template `008c3b1`; it explicitly records the beta,
+source-first distribution state and the evidence-based platform limits. Complete the requested
+C++/C/C# `cna-multi-language-3d-demo` qualification next (the same C# source on FNA and CNA.NET).
+Finally write the campaign-closure section and enter maintenance mode.
 Commit each coherent task locally; do not push without the owner's instruction.
