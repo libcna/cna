@@ -10,6 +10,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -17,6 +18,7 @@
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuModern.hpp"
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#include "Fna3dStockEffectBlobs.hpp"
 #include "CNA/Internal/Renderers/MojoShader/SpirvSamplerLodBias.hpp"
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffect.hpp"
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffectVertexLayout.hpp"
@@ -5898,7 +5900,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                              int maxMipLevel,
                                              float lodBias,
                                              SdlGpuEffectRenderer* customEffect,
-                                             ICompiledEffectRuntime* compiledEffect)
+                                             const GpuDrawParams* compiledParams)
     {
         if (destination.Width == 0 || destination.Height == 0 || source.Width == 0 || source.Height == 0)
             return;
@@ -6088,10 +6090,11 @@ namespace CNA::Internal::Renderers::SdlGpu
         // captured NOW for the same reason (SpriteCommand's own doc comment) and against the same
         // fixed SpriteVertex layout every sprite shares, since SpriteBatch's vertex data is CNA's
         // own generated geometry, never a caller-supplied VertexDeclaration.
-        if (compiledEffect != nullptr)
+        if (compiledParams != nullptr && compiledParams->compiledEffectRuntime != nullptr)
         {
             auto* sdlGpuEffect =
-                dynamic_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect*>(compiledEffect);
+                dynamic_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect*>(
+                    compiledParams->compiledEffectRuntime);
             if (sdlGpuEffect == nullptr)
             {
                 throw std::runtime_error(
@@ -6111,7 +6114,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 &kSpriteVertexDeclaration, static_cast<Uint32>(sizeof(SpriteVertex)),
                 SDL_GPU_VERTEXINPUTRATE_VERTEX}};
             command.compiledEffect = BuildCompiledEffectBindingEXT(
-                *sdlGpuEffect, streams, &nativeTexture);
+                *sdlGpuEffect, streams, compiledParams, &nativeTexture);
         }
 #endif
         const float rgba[4] = {
@@ -8334,6 +8337,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     SdlGpuRenderer::CompiledEffectBinding SdlGpuRenderer::BuildCompiledEffectBindingEXT(
         CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect& effect,
         const std::vector<SdlGpuCompiledEffectVertexStreamEXT>& streams,
+        const GpuDrawParams* params,
         const SdlGpuSampledTextureEXT* spriteTextureOverride)
     {
         CompiledEffectBinding binding;
@@ -8405,24 +8409,45 @@ namespace CNA::Internal::Renderers::SdlGpu
             bool samplerAssigned = false;
             effect.GetBoundSamplerEXT(slot, /*vertexStage=*/false, boundTexture, samplerState,
                                       &samplerAssigned);
+            if (boundTexture == nullptr && params != nullptr &&
+                params->compiledDeviceTextures != nullptr &&
+                slot < static_cast<unsigned int>(
+                           Microsoft::Xna::Framework::Graphics::TextureCollection::MaxTextures))
+            {
+                boundTexture =
+                    (*params->compiledDeviceTextures)[static_cast<int>(slot)];
+            }
+            if (!samplerAssigned && params != nullptr &&
+                params->compiledDeviceSamplerStates != nullptr &&
+                slot < static_cast<unsigned int>(SamplerStateCollection::MaxSamplers))
+            {
+                samplerState =
+                    (*params->compiledDeviceSamplerStates)[static_cast<int>(slot)];
+            }
+            if (slot == 0 && spriteTextureOverride != nullptr && *spriteTextureOverride)
+            {
+                if (reflectedSampler->type != MOJOSHADER_SAMPLER_2D)
+                {
+                    throw System::NotSupportedException(
+                        "CNA SDL_GPU: SpriteBatch texture slot 0 is Texture2D, but the compiled "
+                        "effect declares a different sampler dimension there.");
+                }
+                samplerBinding.texture = *spriteTextureOverride;
+                if (!samplerAssigned && slot < samplerSlots_.size())
+                {
+                    const SamplerSlotState& deviceSlot = samplerSlots_[slot];
+                    samplerBinding.filter = deviceSlot.filter;
+                    samplerBinding.addressU = deviceSlot.addressU;
+                    samplerBinding.addressV = deviceSlot.addressV;
+                    samplerBinding.maxAnisotropy = deviceSlot.maxAnisotropy;
+                    samplerBinding.maxMipLevel = deviceSlot.maxMipLevel;
+                    samplerBinding.lodBias = deviceSlot.lodBias;
+                    samplerBinding.addressW = deviceSlot.addressW;
+                }
+                continue;
+            }
             if (boundTexture == nullptr)
             {
-                if (slot == 0 && spriteTextureOverride != nullptr && *spriteTextureOverride)
-                {
-                    samplerBinding.texture = *spriteTextureOverride;
-                    if (slot < samplerSlots_.size())
-                    {
-                        const SamplerSlotState& deviceSlot = samplerSlots_[slot];
-                        samplerBinding.filter = deviceSlot.filter;
-                        samplerBinding.addressU = deviceSlot.addressU;
-                        samplerBinding.addressV = deviceSlot.addressV;
-                        samplerBinding.maxAnisotropy = deviceSlot.maxAnisotropy;
-                        samplerBinding.maxMipLevel = deviceSlot.maxMipLevel;
-                        samplerBinding.lodBias = deviceSlot.lodBias;
-                        samplerBinding.addressW = deviceSlot.addressW;
-                    }
-                    continue;
-                }
                 const char* name = reflectedSampler->name != nullptr ? reflectedSampler->name
                                                                       : "<unnamed>";
                 throw std::runtime_error(
@@ -8566,7 +8591,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         CompiledEffectDrawCommand command;
-        command.binding = BuildCompiledEffectBindingEXT(*sdlGpuEffect, compiledStreams);
+        command.binding = BuildCompiledEffectBindingEXT(
+            *sdlGpuEffect, compiledStreams, &params);
         command.instanceCount = static_cast<Uint32>(std::max(1, instanceCount));
         command.vertexStride = command.binding.vertexBuffers.empty()
             ? 0u : command.binding.vertexBuffers.front().pitch;
@@ -13446,6 +13472,25 @@ namespace CNA::Internal::Renderers::SdlGpu
     SdlGpuSpriteBatchRenderer::SdlGpuSpriteBatchRenderer(SdlGpuRenderer& owner)
         : owner_(&owner)
     {
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+        const auto& bytes =
+            CNA::Internal::Renderers::Fna3d::StockEffectBlobs::kSpriteEffectFxb;
+        spriteCompiledEffect_ = owner_->CreateCompiledEffect(bytes, sizeof(bytes));
+        if (spriteCompiledEffect_ == nullptr)
+            throw std::runtime_error(
+                "CNA SDL_GPU SpriteBatch could not create its embedded XNA SpriteEffect.");
+        const auto& parameters = spriteCompiledEffect_->GetDescription().parameters;
+        const auto matrix = std::find_if(
+            parameters.begin(), parameters.end(),
+            [](const CompiledEffectParameterDescription& parameter)
+            {
+                return parameter.name == "MatrixTransform";
+            });
+        if (matrix == parameters.end())
+            throw std::runtime_error(
+                "CNA SDL_GPU SpriteBatch embedded XNA SpriteEffect has no MatrixTransform parameter.");
+        spriteMatrixParameterIndex_ = matrix->runtimeIndex;
+#endif
     }
 
     void SdlGpuSpriteBatchRenderer::SetSamplerState(int textureFilter, int addressU, int addressV,
@@ -13470,6 +13515,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // Nothing else clears this, and a leftover sprite would be replayed into an unrelated batch
         // with that batch's transform and sampler.
         pendingSprites_.clear();
+        compiledSpriteStockApplied_ = false;
 #endif
         begun_ = true;
     }
@@ -13485,6 +13531,38 @@ namespace CNA::Internal::Renderers::SdlGpu
     }
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+    void SdlGpuSpriteBatchRenderer::ApplyCompiledSpriteVertexShaderEXT()
+    {
+        if (compiledSpriteStockApplied_)
+            return;
+        if (spriteCompiledEffect_ == nullptr || customEffect_ == nullptr ||
+            projectionWidth_ <= 0 || projectionHeight_ <= 0)
+        {
+            throw std::runtime_error(
+                "CNA SDL_GPU SpriteBatch compiled stock vertex effect is unavailable.");
+        }
+
+        const Matrix projection = Matrix::CreateOrthographicOffCenter(
+            0.0f, static_cast<float>(projectionWidth_),
+            static_cast<float>(projectionHeight_), 0.0f, 0.0f, -1.0f);
+        float values[16];
+        projection.ToColumnMajor(values);
+        spriteCompiledEffect_->SetParameterValue(
+            spriteMatrixParameterIndex_, values, sizeof(values));
+        spriteCompiledEffect_->SetTechnique(0);
+
+        auto& graphicsDevice = customEffect_->getGraphicsDeviceInternal();
+        CompiledEffectDeviceState state;
+        state.blend = &graphicsDevice.getBlendStateProperty();
+        state.depthStencil = &graphicsDevice.getDepthStencilStateProperty();
+        state.rasterizer = &graphicsDevice.getRasterizerStateProperty();
+        state.samplerStates = &graphicsDevice.getSamplerStatesProperty();
+        state.vertexSamplerStates = &graphicsDevice.getVertexSamplerStatesProperty();
+        CompiledEffectPassStateChanges ignored;
+        spriteCompiledEffect_->ApplyPass(0, state, ignored);
+        compiledSpriteStockApplied_ = true;
+    }
+
     void SdlGpuSpriteBatchRenderer::FlushPendingCompiledSpritesEXT()
     {
         if (pendingSprites_.empty()) return;
@@ -13516,7 +13594,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 "technique with at least one pass.");
         }
 
-        ICompiledEffectRuntime* runtime = customEffect_->GetCompiledRuntimePtr();
+        ApplyCompiledSpriteVertexShaderEXT();
         std::size_t runStart = 0;
         while (runStart < pendingSprites_.size())
         {
@@ -13529,6 +13607,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             for (int pass = 0; pass < passCount; ++pass)
             {
                 technique->getPassesProperty()[pass]->Apply();
+                GpuDrawParams params;
+                customEffect_->FillGpuDrawParams(params);
                 for (std::size_t i = runStart; i < runEnd; ++i)
                 {
                     const PendingSpriteEXT& sprite = pendingSprites_[i];
@@ -13536,7 +13616,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                         sprite.source, sprite.color, sprite.rotation, sprite.origin,
                                         sprite.effects, sprite.layerDepth, transform_,
                                         textureFilter_, addressU_, addressV_, addressW_,
-                                        maxAnisotropy_, maxMipLevel_, lodBias_, nullptr, runtime);
+                                        maxAnisotropy_, maxMipLevel_, lodBias_, nullptr, &params);
                 }
             }
             runStart = runEnd;
@@ -13631,15 +13711,18 @@ namespace CNA::Internal::Renderers::SdlGpu
                     rotation, origin, effects, layerDepth});
                 return;
             }
+            ApplyCompiledSpriteVertexShaderEXT();
             // Immediate: XNA's SpriteBatch flushes this one sprite now, so its run IS this sprite
             // and applying the passes around it here is the same order XNA produces.
             for (int pass = 0; pass < passCount; ++pass)
             {
                 technique->getPassesProperty()[pass]->Apply();
+                GpuDrawParams params;
+                customEffect_->FillGpuDrawParams(params);
                 owner_->QueueSprite(texture, nativeTexture, destinationRectangle, sourceRectangle,
                                     color, rotation, origin, effects, layerDepth, transform_,
                                     textureFilter_, addressU_, addressV_, addressW_, maxAnisotropy_,
-                                    maxMipLevel_, lodBias_, customEffectRenderer, compiledEffectRuntime);
+                                    maxMipLevel_, lodBias_, customEffectRenderer, &params);
             }
             return;
         }
@@ -13647,7 +13730,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         owner_->QueueSprite(texture, nativeTexture, destinationRectangle, sourceRectangle, color, rotation,
                             origin, effects, layerDepth, transform_, textureFilter_, addressU_, addressV_,
                             addressW_, maxAnisotropy_, maxMipLevel_, lodBias_, customEffectRenderer,
-                            compiledEffectRuntime);
+                            nullptr);
     }
 
 }

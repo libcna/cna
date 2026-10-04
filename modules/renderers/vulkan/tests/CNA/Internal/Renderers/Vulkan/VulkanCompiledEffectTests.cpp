@@ -342,6 +342,22 @@ TEST(VulkanCompiledEffectDrawTest, SharedSpriteBatchContract)
     CNA::TestSupport::RunCompiledEffectSpriteBatchContract(device);
 }
 
+TEST(VulkanCompiledEffectDrawTest, SharedSpriteBatchPixelOnlyContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSpriteBatchPixelOnlyContract(device);
+}
+
+TEST(VulkanCompiledEffectDrawTest, SharedSpriteBatchDeviceTextureSlotContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSpriteBatchDeviceTextureSlotContract(device);
+}
+
 TEST(VulkanCompiledEffectDrawTest, SharedOrientationContract)
 {
     GraphicsDevice device;

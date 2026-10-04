@@ -709,6 +709,22 @@ TEST(Fna3dCompiledEffectDrawTest, SharedSpriteBatchContract)
     CNA::TestSupport::RunCompiledEffectSpriteBatchContract(device);
 }
 
+TEST(Fna3dCompiledEffectDrawTest, SharedSpriteBatchPixelOnlyContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSpriteBatchPixelOnlyContract(device);
+}
+
+TEST(Fna3dCompiledEffectDrawTest, SharedSpriteBatchDeviceTextureSlotContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSpriteBatchDeviceTextureSlotContract(device);
+}
+
 TEST(Fna3dCompiledEffectDrawTest, SharedOrientationContract)
 {
     GraphicsDevice device;

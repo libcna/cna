@@ -2043,6 +2043,9 @@ namespace CNA::TestSupport
         /// full-target quad in the space `Transform` maps to NDC comes out exactly `Tint`, which
         /// no stock shader in any CNA renderer would produce for the same inputs.
         bool includeDrawableProgram = false;
+        /// Repeats the pixel program on every pass without adding a vertex shader. This models
+        /// SpriteBatch post-process effects whose complete technique is pixel-only.
+        bool repeatPixelProgramOnAllPasses = false;
         /// plans/plan_fx.md FX-084: the vertex shader additionally consumes TEXCOORD0, scaled by a new
         /// `StreamMix` float4 parameter that defaults to zero -- `oPos = mul(TEXCOORD0 * StreamMix
         /// + POSITION0, Transform)`. That is what makes a genuine multi-stream compiled-effect
@@ -9509,7 +9512,8 @@ namespace CNA::TestSupport
         // Only the drawable variant repeats the program on the other two passes: the sampler
         // fixture's own reflection and pass-state expectations are unchanged by this addition.
         const std::uint32_t otherPassStateCount =
-            options.includeDrawableProgram ? programStateCount : 0u;
+            (options.includeDrawableProgram || options.repeatPixelProgramOnAllPasses)
+                ? programStateCount : 0u;
 
         AppendUInt32(bytes, firstPass);
         AppendUInt32(bytes, 0); // annotations
@@ -9992,15 +9996,19 @@ namespace CNA::TestSupport
      * first, then a pixel-only user pass inherits the sprite vertex stage and MatrixTransform.
      *
      * @param samplerStates Sampler assignments applied by the pixel-shader pass.
+     * @param samplerRegister Pixel sampler register used by the synthetic shader.
      * @return Complete Effect Framework bytecode with a sampling pixel shader and no vertex shader.
      */
     inline std::vector<std::uint8_t> BuildSyntheticPixelOnlySamplingEffect(
-        const std::vector<SyntheticSamplerState>& samplerStates)
+        const std::vector<SyntheticSamplerState>& samplerStates,
+        std::uint32_t samplerRegister = 0)
     {
         SyntheticEffectOptions options;
         options.includeSampler = true;
         options.pixelShaderSamplesTexture = true;
         options.samplerStates = samplerStates;
+        options.samplerRegister = samplerRegister;
+        options.repeatPixelProgramOnAllPasses = true;
         return BuildSyntheticEffect(options);
     }
 

@@ -1510,6 +1510,11 @@ namespace CNA::Internal::Renderers::SdlGpu
         void End() override;
         void SetTransformMatrix(const Matrix& matrix) override { transform_ = matrix; }
         void SetCustomEffect(Effect* effect) override;
+        void SetViewportSizeEXT(int width, int height) override
+        {
+            projectionWidth_ = width;
+            projectionHeight_ = height;
+        }
         void SetSamplerFilter(int textureFilter) override { textureFilter_ = textureFilter; }
         void SetSamplerAddressMode(int addressU, int addressV) override { addressU_ = addressU; addressV_ = addressV; }
         /**
@@ -1565,6 +1570,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         /// object never retroactively change an already-queued sprite's rendered result.
         Effect* customEffect_ = nullptr;
         bool immediateMode_ = false;
+        int projectionWidth_ = 0;
+        int projectionHeight_ = 0;
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+        std::unique_ptr<ICompiledEffectRuntime> spriteCompiledEffect_;
+        std::uint32_t spriteMatrixParameterIndex_ = 0;
+        bool compiledSpriteStockApplied_ = false;
+        void ApplyCompiledSpriteVertexShaderEXT();
+#endif
 
         /**
          * @brief One deferred sprite, held until the batch flushes. CNAEXT.
@@ -3660,7 +3673,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                 int maxMipLevel,
                                 float lodBias,
                                 SdlGpuEffectRenderer* customEffect = nullptr,
-                                ICompiledEffectRuntime* compiledEffect = nullptr);
+                                const GpuDrawParams* compiledParams = nullptr);
 
         /** @brief Returns the underlying `SDL_GPUDevice`. CNAEXT — internal use only. */
         CNAEXT [[nodiscard]] SDL_GPUDevice* Device() const { return device_; }
@@ -4292,6 +4305,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         [[nodiscard]] CompiledEffectBinding BuildCompiledEffectBindingEXT(
             CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect& effect,
             const std::vector<SdlGpuCompiledEffectVertexStreamEXT>& streams,
+            const GpuDrawParams* params,
             const SdlGpuSampledTextureEXT* spriteTextureOverride = nullptr);
         void QueueCompiledEffectDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                      PrimitiveType primitive, int primitiveCount,

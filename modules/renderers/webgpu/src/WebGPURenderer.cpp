@@ -1,5 +1,6 @@
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+#include "Fna3dStockEffectBlobs.hpp"
 // WEBGPU-169: a compiled sampler can name any of the three public texture kinds, and sorting them
 // apart with dynamic_cast needs each complete type.
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -50,6 +51,7 @@
 
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"  // WEBGPU-142: Effect::GetEffectRendererPtr()
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"  // WEBGPU-144: BC format classify
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "CNA/Internal/Graphics/Bc7Util.hpp"
@@ -3389,7 +3391,28 @@ namespace CNA::Internal::Renderers::WebGPU
         indexCount_ = indexCount;
     }
 
-    WebGPUSpriteBatchRenderer::WebGPUSpriteBatchRenderer(WebGPURenderer& owner) : owner_(&owner) {}
+    WebGPUSpriteBatchRenderer::WebGPUSpriteBatchRenderer(WebGPURenderer& owner) : owner_(&owner)
+    {
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        const auto& bytes =
+            CNA::Internal::Renderers::Fna3d::StockEffectBlobs::kSpriteEffectFxb;
+        spriteCompiledEffect_ = owner_->CreateCompiledEffect(bytes, sizeof(bytes));
+        if (spriteCompiledEffect_ == nullptr)
+            throw std::runtime_error(
+                "CNA WebGPU SpriteBatch could not create its embedded XNA SpriteEffect.");
+        const auto& parameters = spriteCompiledEffect_->GetDescription().parameters;
+        const auto matrix = std::find_if(
+            parameters.begin(), parameters.end(),
+            [](const CompiledEffectParameterDescription& parameter)
+            {
+                return parameter.name == "MatrixTransform";
+            });
+        if (matrix == parameters.end())
+            throw std::runtime_error(
+                "CNA WebGPU SpriteBatch embedded XNA SpriteEffect has no MatrixTransform parameter.");
+        spriteMatrixParameterIndex_ = matrix->runtimeIndex;
+#endif
+    }
 
     void WebGPUSpriteBatchRenderer::Begin()
     {
@@ -3397,6 +3420,10 @@ namespace CNA::Internal::Renderers::WebGPU
             throw std::logic_error("CNA WebGPU SpriteBatch.Begin called twice without End");
         // Deferred SpriteBatch applies its BlendState at End(), just before forwarding Draw calls.
         // Capturing here would retain the preceding 3D draw's state (often Opaque) instead.
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        compiledSpriteStockApplied_ = false;
+        owner_->activeCompiledSpriteBatchRenderer_ = this;
+#endif
         begun_ = true;
     }
 
@@ -3408,9 +3435,45 @@ namespace CNA::Internal::Renderers::WebGPU
         // WEBGPU-170: the compiled route accumulates a same-texture run and draws it once per
         // pass, so End() is where the last run of the batch is submitted.
         owner_->FlushCompiledSpriteBatchEXT();
+        owner_->activeCompiledSpriteBatchRenderer_ = nullptr;
 #endif
         begun_ = false;
     }
+
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+    void WebGPUSpriteBatchRenderer::ApplyCompiledSpriteVertexShaderEXT()
+    {
+        if (compiledSpriteStockApplied_)
+            return;
+        if (spriteCompiledEffect_ == nullptr || owner_->activeSpriteCompiledEffect_ == nullptr ||
+            projectionWidth_ <= 0 || projectionHeight_ <= 0)
+        {
+            throw std::runtime_error(
+                "CNA WebGPU SpriteBatch compiled stock vertex effect is unavailable.");
+        }
+
+        const Matrix projection = Matrix::CreateOrthographicOffCenter(
+            0.0f, static_cast<float>(projectionWidth_),
+            static_cast<float>(projectionHeight_), 0.0f, 0.0f, -1.0f);
+        float values[16];
+        projection.ToColumnMajor(values);
+        spriteCompiledEffect_->SetParameterValue(
+            spriteMatrixParameterIndex_, values, sizeof(values));
+        spriteCompiledEffect_->SetTechnique(0);
+
+        auto& graphicsDevice =
+            owner_->activeSpriteCompiledEffect_->getGraphicsDeviceInternal();
+        CompiledEffectDeviceState state;
+        state.blend = &graphicsDevice.getBlendStateProperty();
+        state.depthStencil = &graphicsDevice.getDepthStencilStateProperty();
+        state.rasterizer = &graphicsDevice.getRasterizerStateProperty();
+        state.samplerStates = &graphicsDevice.getSamplerStatesProperty();
+        state.vertexSamplerStates = &graphicsDevice.getVertexSamplerStatesProperty();
+        CompiledEffectPassStateChanges ignored;
+        spriteCompiledEffect_->ApplyPass(0, state, ignored);
+        compiledSpriteStockApplied_ = true;
+    }
+#endif
 
     void WebGPUSpriteBatchRenderer::SetCustomEffect(Effect* effect)
     {
@@ -7919,8 +7982,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // stock route bakes just below.
         if (activeSpriteCompiledEffect_ != nullptr)
         {
-            QueueCompiledSprite(texture, samplable, points, uv, spriteRgba, textureFilter,
-                                addressU, addressV);
+            QueueCompiledSprite(texture, samplable, points, uv, spriteRgba, layerDepth,
+                                textureFilter, addressU, addressV);
             return;
         }
 #endif
@@ -10611,6 +10674,18 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             bool assigned = false;
             runtime->GetBoundSamplerEXT(sampler.slot, /*vertexStage=*/false, texture, state,
                                         &assigned);
+            if (texture == nullptr && params.compiledDeviceTextures != nullptr &&
+                sampler.slot < static_cast<std::uint32_t>(
+                                   Microsoft::Xna::Framework::Graphics::
+                                       TextureCollection::MaxTextures))
+            {
+                texture = (*params.compiledDeviceTextures)[static_cast<int>(sampler.slot)];
+            }
+            if (!assigned && params.compiledDeviceSamplerStates != nullptr &&
+                sampler.slot < static_cast<std::uint32_t>(SamplerStateCollection::MaxSamplers))
+            {
+                state = (*params.compiledDeviceSamplerStates)[static_cast<int>(sampler.slot)];
+            }
             CompiledEffectDrawCommand::SamplerBinding binding;
             binding.textureBinding = sampler.textureBinding;
             binding.samplerBinding = sampler.samplerBinding;
@@ -11057,6 +11132,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                              const std::array<Vector2, 4>& points,
                                              const std::array<Vector2, 4>& uv,
                                              const float (&rgba)[4],
+                                             float layerDepth,
                                              int textureFilter, int addressU, int addressV)
     {
         // XNA's SpriteBatch splits a batch into same-texture runs and applies the effect's passes
@@ -11078,6 +11154,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             CompiledSpriteVertexEXT vertex{};
             vertex.position[0] = points[static_cast<std::size_t>(corner)].X;
             vertex.position[1] = points[static_cast<std::size_t>(corner)].Y;
+            vertex.position[2] = layerDepth;
             vertex.uv[0] = uv[static_cast<std::size_t>(corner)].X;
             vertex.uv[1] = uv[static_cast<std::size_t>(corner)].Y;
             std::copy(std::begin(rgba), std::end(rgba), vertex.color);
@@ -11094,7 +11171,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             return;
         }
 
-        // The vertex this route builds: two floats of position in the sprite's own coordinate
+        // The vertex this route builds: three floats of position in the sprite's own coordinate
         // space, two of texture coordinate and four of colour, tightly packed. Declared rather
         // than derived from a stride, because that is what a compiled effect resolves against.
         static const VertexDeclaration kSpriteDeclaration(
@@ -11102,7 +11179,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             {
                 Microsoft::Xna::Framework::Graphics::VertexElement(
                     static_cast<int>(offsetof(CompiledSpriteVertexEXT, position)),
-                    VertexElementFormat::Vector2,
+                    VertexElementFormat::Vector3,
                     Microsoft::Xna::Framework::Graphics::VertexElementUsage::Position, 0),
                 Microsoft::Xna::Framework::Graphics::VertexElement(
                     static_cast<int>(offsetof(CompiledSpriteVertexEXT, uv)),
@@ -11145,12 +11222,17 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                 "with at least one pass.");
         }
 
+        if (activeCompiledSpriteBatchRenderer_ == nullptr)
+            throw System::InvalidOperationException(
+                "CNA WebGPU: compiled SpriteBatch has no active stock SpriteEffect owner.");
+        activeCompiledSpriteBatchRenderer_->ApplyCompiledSpriteVertexShaderEXT();
+
         const WebGPUSampledTextureEXT runTexture = pendingCompiledSpriteTexture_;
         for (int pass = 0; pass < passCount; ++pass)
         {
             technique->getPassesProperty()[pass]->Apply();
             GpuDrawParams params{};
-            params.compiledEffectRuntime = activeSpriteCompiledEffect_->GetCompiledRuntimePtr();
+            activeSpriteCompiledEffect_->FillGpuDrawParams(params);
             QueueCompiledEffectDraw(*compiledSpriteVertexBuffer_, nullptr,
                                     PrimitiveType::TriangleList, vertexCount / 3, 1, params,
                                     &runTexture);

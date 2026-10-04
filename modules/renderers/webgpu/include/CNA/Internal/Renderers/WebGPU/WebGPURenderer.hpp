@@ -1171,6 +1171,8 @@ namespace CNA::Internal::Renderers::WebGPU
 
     class WebGPUSpriteBatchRenderer final : public ISpriteBatchRenderer
     {
+        friend class WebGPURenderer;
+
     public:
         explicit WebGPUSpriteBatchRenderer(WebGPURenderer& owner);
         ~WebGPUSpriteBatchRenderer() override = default;
@@ -1179,6 +1181,11 @@ namespace CNA::Internal::Renderers::WebGPU
         void End() override;
         void SetTransformMatrix(const Matrix& matrix) override { transform_ = matrix; }
         void SetCustomEffect(Effect* effect) override;
+        void SetViewportSizeEXT(int width, int height) override
+        {
+            projectionWidth_ = width;
+            projectionHeight_ = height;
+        }
         void SetSamplerFilter(int textureFilter) override { textureFilter_ = textureFilter; }
         void SetSamplerAddressMode(int addressU, int addressV) override { addressU_ = addressU; addressV_ = addressV; }
         /**
@@ -1219,6 +1226,14 @@ namespace CNA::Internal::Renderers::WebGPU
         int maxAnisotropy_ = 4;
         int maxMipLevel_ = 0;
         float lodBias_ = 0.0f;
+        int projectionWidth_ = 0;
+        int projectionHeight_ = 0;
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        std::unique_ptr<ICompiledEffectRuntime> spriteCompiledEffect_;
+        std::uint32_t spriteMatrixParameterIndex_ = 0;
+        bool compiledSpriteStockApplied_ = false;
+        void ApplyCompiledSpriteVertexShaderEXT();
+#endif
     };
 
     class WebGPURenderer final : public IGraphicsRenderer
@@ -3035,10 +3050,12 @@ namespace CNA::Internal::Renderers::WebGPU
          */
         struct CompiledSpriteVertexEXT
         {
-            float position[2];
+            float position[3];
             float uv[2];
             float color[4];
         };
+        /// The SpriteBatch whose embedded SpriteEffect seeds missing custom-effect stages.
+        WebGPUSpriteBatchRenderer* activeCompiledSpriteBatchRenderer_ = nullptr;
         /// The compiled Effect bound by the currently-open `SpriteBatch.Begin`, or null.
         Microsoft::Xna::Framework::Graphics::Effect* activeSpriteCompiledEffect_ = nullptr;
         /// The sprites accumulated for the current same-texture run, six vertices each.
@@ -3064,6 +3081,7 @@ namespace CNA::Internal::Renderers::WebGPU
         void QueueCompiledSprite(const ITextureRenderer& texture, const IWebGPUSamplable& samplable,
                                  const std::array<Vector2, 4>& points,
                                  const std::array<Vector2, 4>& uv, const float (&rgba)[4],
+                                 float layerDepth,
                                  int textureFilter, int addressU, int addressV);
 #endif
         /**

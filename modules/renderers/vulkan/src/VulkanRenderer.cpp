@@ -5,12 +5,14 @@
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "CNA/Logger.hpp"
 #include "CNA/ShaderLanguageEXT.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
 #include "CNA/Internal/Renderers/Vulkan/VulkanCompiledEffect.hpp"
+#include "Fna3dStockEffectBlobs.hpp"
 namespace {
     /// plans/plan_fx.md FX-112: the stream descriptor is spelled often enough in this file that the
     /// fully-qualified nested name is noise.
@@ -2337,7 +2339,28 @@ namespace CNA::Internal::Renderers::Vulkan
     // =========================================================================
 
     VulkanSpriteBatchRenderer::VulkanSpriteBatchRenderer(VulkanRenderer* renderer)
-        : renderer_(renderer) {}
+        : renderer_(renderer)
+    {
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+        const auto& bytes =
+            CNA::Internal::Renderers::Fna3d::StockEffectBlobs::kSpriteEffectFxb;
+        spriteCompiledEffect_ = renderer_->CreateCompiledEffect(bytes, sizeof(bytes));
+        if (spriteCompiledEffect_ == nullptr)
+            throw std::runtime_error(
+                "CNA Vulkan SpriteBatch could not create its embedded XNA SpriteEffect.");
+        const auto& parameters = spriteCompiledEffect_->GetDescription().parameters;
+        const auto matrix = std::find_if(
+            parameters.begin(), parameters.end(),
+            [](const CompiledEffectParameterDescription& parameter)
+            {
+                return parameter.name == "MatrixTransform";
+            });
+        if (matrix == parameters.end())
+            throw std::runtime_error(
+                "CNA Vulkan SpriteBatch embedded XNA SpriteEffect has no MatrixTransform parameter.");
+        spriteMatrixParameterIndex_ = matrix->runtimeIndex;
+#endif
+    }
 
     void VulkanSpriteBatchRenderer::Begin()
     {
@@ -2348,6 +2371,7 @@ namespace CNA::Internal::Renderers::Vulkan
         currentTexture_  = nullptr;
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
         pendingCompiledSprites_.clear();
+        compiledSpriteStockApplied_ = false;
 #endif
         batchFirstIndex_ = 0;
         activeRT_        = renderer_->currentRT_;
@@ -2516,6 +2540,38 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
+    void VulkanSpriteBatchRenderer::ApplyCompiledSpriteVertexShaderEXT()
+    {
+        if (compiledSpriteStockApplied_)
+            return;
+        if (spriteCompiledEffect_ == nullptr || customEffect_ == nullptr ||
+            projectionWidth_ <= 0 || projectionHeight_ <= 0)
+        {
+            throw std::runtime_error(
+                "CNA Vulkan SpriteBatch compiled stock vertex effect is unavailable.");
+        }
+
+        const Matrix projection = Matrix::CreateOrthographicOffCenter(
+            0.0f, static_cast<float>(projectionWidth_),
+            static_cast<float>(projectionHeight_), 0.0f, 0.0f, -1.0f);
+        float values[16];
+        projection.ToColumnMajor(values);
+        spriteCompiledEffect_->SetParameterValue(
+            spriteMatrixParameterIndex_, values, sizeof(values));
+        spriteCompiledEffect_->SetTechnique(0);
+
+        auto& graphicsDevice = customEffect_->getGraphicsDeviceInternal();
+        CompiledEffectDeviceState state;
+        state.blend = &graphicsDevice.getBlendStateProperty();
+        state.depthStencil = &graphicsDevice.getDepthStencilStateProperty();
+        state.rasterizer = &graphicsDevice.getRasterizerStateProperty();
+        state.samplerStates = &graphicsDevice.getSamplerStatesProperty();
+        state.vertexSamplerStates = &graphicsDevice.getVertexSamplerStatesProperty();
+        CompiledEffectPassStateChanges ignored;
+        spriteCompiledEffect_->ApplyPass(0, state, ignored);
+        compiledSpriteStockApplied_ = true;
+    }
+
     void VulkanSpriteBatchRenderer::FlushPendingCompiledSpritesEXT()
     {
         // plans/plan_fx.md FX-102. XNA runs a compiled Effect's passes at FLUSH granularity over a whole
@@ -2537,6 +2593,8 @@ namespace CNA::Internal::Renderers::Vulkan
                 "CNA Vulkan: a compiled Effect used with SpriteBatch must have a current "
                 "technique with at least one pass.");
         }
+
+        ApplyCompiledSpriteVertexShaderEXT();
 
         std::size_t runStart = 0;
         while (runStart < pendingCompiledSprites_.size())
@@ -2608,18 +2666,21 @@ namespace CNA::Internal::Renderers::Vulkan
 
         // Six vertices rather than four plus indices: the compiled draw route is non-indexed, and
         // a quad is small enough that the duplication costs nothing worth an index buffer.
-        const Sprite2DVertex quad[6] = {
-            {c0.X, c0.Y, u1, v1, r, g, b, a},
-            {c1.X, c1.Y, u2, v1, r, g, b, a},
-            {c2.X, c2.Y, u2, v2, r, g, b, a},
-            {c2.X, c2.Y, u2, v2, r, g, b, a},
-            {c3.X, c3.Y, u1, v2, r, g, b, a},
-            {c0.X, c0.Y, u1, v1, r, g, b, a},
+        const CompiledSpriteVertexEXT quad[6] = {
+            {c0.X, c0.Y, sprite.layerDepth, u1, v1, r, g, b, a},
+            {c1.X, c1.Y, sprite.layerDepth, u2, v1, r, g, b, a},
+            {c2.X, c2.Y, sprite.layerDepth, u2, v2, r, g, b, a},
+            {c2.X, c2.Y, sprite.layerDepth, u2, v2, r, g, b, a},
+            {c3.X, c3.Y, sprite.layerDepth, u1, v2, r, g, b, a},
+            {c0.X, c0.Y, sprite.layerDepth, u1, v1, r, g, b, a},
         };
         const auto* samplable = dynamic_cast<const IVulkanSamplable*>(&texture);
         if (samplable == nullptr)
             throw std::runtime_error("Vulkan SpriteBatch: texture is not IVulkanSamplable");
-        renderer_->QueueCompiledEffectSpriteEXT(quad, samplable->GetVkImageView(), runtime);
+        GpuDrawParams params;
+        customEffect_->FillGpuDrawParams(params);
+        params.compiledEffectRuntime = runtime;
+        renderer_->QueueCompiledEffectSpriteEXT(quad, texture, params);
     }
 #endif  // CNA_VULKAN_COMPILED_EFFECTS
 
@@ -2644,7 +2705,7 @@ namespace CNA::Internal::Renderers::Vulkan
                                         const Rectangle& dest, const Rectangle& src,
                                         const Color& color, float rotation,
                                         const Vector2& origin, SpriteEffects effects,
-                                        float /*layerDepth*/)
+                                        float layerDepth)
     {
         if (!active_) throw std::runtime_error("Vulkan SpriteBatch: Draw called outside Begin/End");
 
@@ -2657,7 +2718,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 customEffect_ != nullptr ? customEffect_->GetCompiledRuntimePtr() : nullptr)
         {
             const PendingCompiledSpriteEXT sprite{&texture, dest, src, color,
-                                                  rotation, origin, effects};
+                                                  rotation, origin, effects, layerDepth};
             if (!immediateMode_)
             {
                 // Deferred and every sorted mode: XNA applies the passes when the batch FLUSHES,
@@ -2677,6 +2738,7 @@ namespace CNA::Internal::Renderers::Vulkan
                     "CNA Vulkan: a compiled Effect used with SpriteBatch must have a current "
                     "technique with at least one pass.");
             }
+            ApplyCompiledSpriteVertexShaderEXT();
             for (int pass = 0; pass < passCount; ++pass)
             {
                 technique->getPassesProperty()[pass]->Apply();
@@ -11636,21 +11698,22 @@ namespace CNA::Internal::Renderers::Vulkan
         }
         const std::vector<VkFxStreamEXT> streams{
             {&declaration.GetElements(), static_cast<std::uint32_t>(d.stride), false}};
-        PrepareCompiledEffectDrawEXT(d, streams, params.compiledEffectRuntime);
+        PrepareCompiledEffectDrawEXT(d, streams, params);
     }
 
     void VulkanRenderer::PrepareCompiledEffectDrawEXT(
         Pending3DDraw& d,
         const std::vector<CNA::Internal::Renderers::Vulkan::VulkanCompiledEffect::
                               CompiledVertexStreamEXT>& streams,
-        ICompiledEffectRuntime* runtime)
+        const GpuDrawParams& params,
+        const ITextureRenderer* spriteTextureOverride)
     {
         using Microsoft::Xna::Framework::Graphics::Texture2D;
         using Microsoft::Xna::Framework::Graphics::Texture3D;
         using Microsoft::Xna::Framework::Graphics::TextureCube;
         namespace VkFx = CNA::Internal::Renderers::Vulkan;
 
-        auto* effect = dynamic_cast<VkFx::VulkanCompiledEffect*>(runtime);
+        auto* effect = dynamic_cast<VkFx::VulkanCompiledEffect*>(params.compiledEffectRuntime);
         if (effect == nullptr)
         {
             throw std::runtime_error(
@@ -11706,7 +11769,38 @@ namespace CNA::Internal::Renderers::Vulkan
             bool samplerAssigned = false;
             effect->GetBoundSamplerEXT(static_cast<int>(slot), /*vertexStage=*/false, boundTexture,
                                        samplerState, &samplerAssigned);
-            if (boundTexture == nullptr)
+            if (boundTexture == nullptr && params.compiledDeviceTextures != nullptr &&
+                slot < static_cast<std::uint32_t>(
+                           Microsoft::Xna::Framework::Graphics::TextureCollection::MaxTextures))
+            {
+                boundTexture = (*params.compiledDeviceTextures)[static_cast<int>(slot)];
+            }
+            if (!samplerAssigned && params.compiledDeviceSamplerStates != nullptr &&
+                slot < static_cast<std::uint32_t>(SamplerStateCollection::MaxSamplers))
+            {
+                samplerState = (*params.compiledDeviceSamplerStates)[static_cast<int>(slot)];
+            }
+
+            VkImageView view = VK_NULL_HANDLE;
+            const ITextureRenderer* sampledSource = nullptr;
+            const bool usesSpriteOverride = slot == 0 && spriteTextureOverride != nullptr;
+            if (usesSpriteOverride)
+            {
+                if (reflected.type != MOJOSHADER_SAMPLER_2D)
+                {
+                    throw System::NotSupportedException(
+                        "CNA Vulkan: SpriteBatch texture slot 0 is Texture2D, but the compiled "
+                        "effect declares a different sampler dimension there.");
+                }
+                const auto* samplable =
+                    dynamic_cast<const IVulkanSamplable*>(spriteTextureOverride);
+                if (samplable != nullptr)
+                {
+                    view = samplable->GetVkImageView();
+                    sampledSource = spriteTextureOverride;
+                }
+            }
+            else if (boundTexture == nullptr)
             {
                 const char* name =
                     reflected.name != nullptr ? reflected.name : "<unnamed>";
@@ -11725,7 +11819,7 @@ namespace CNA::Internal::Renderers::Vulkan
             // plans/plan_fx.md FX-110: a VkImageView carries its own view type, so binding a cube view
             // where the shader declared sampler2D is undefined behaviour that a validation layer
             // catches and a release build renders. Named here instead of either.
-            if (reflected.type != boundKind)
+            if (!usesSpriteOverride && reflected.type != boundKind)
             {
                 throw System::NotSupportedException(
                     std::string("CNA Vulkan: this compiled effect's pixel shader declares ") +
@@ -11734,15 +11828,13 @@ namespace CNA::Internal::Renderers::Vulkan
                     ". The dimensions must match.");
             }
 
-            VkImageView view = VK_NULL_HANDLE;
-            const ITextureRenderer* sampledSource = nullptr;
-            if (textureCube != nullptr)
+            if (view == VK_NULL_HANDLE && textureCube != nullptr)
             {
                 const auto* cube =
                     dynamic_cast<const IVulkanCubeSamplable*>(&textureCube->GetRenderer());
                 if (cube != nullptr) view = cube->GetVkCubeImageView();
             }
-            else if (texture3D != nullptr)
+            else if (view == VK_NULL_HANDLE && texture3D != nullptr)
             {
                 // plans/plan_fx.md FX-110: VulkanTexture3DRenderer's image already carries
                 // VK_IMAGE_USAGE_SAMPLED_BIT and a VK_IMAGE_VIEW_TYPE_3D view, and SetData leaves
@@ -11752,7 +11844,7 @@ namespace CNA::Internal::Renderers::Vulkan
                     dynamic_cast<const IVulkanVolumeSamplable*>(&texture3D->GetRenderer());
                 if (volume != nullptr) view = volume->GetVkVolumeImageView();
             }
-            else if (texture2D != nullptr)
+            else if (view == VK_NULL_HANDLE && texture2D != nullptr)
             {
                 sampledSource = &texture2D->GetRenderer();
                 const auto* samplable = dynamic_cast<const IVulkanSamplable*>(sampledSource);
@@ -11804,27 +11896,27 @@ namespace CNA::Internal::Renderers::Vulkan
         d.useCompiledEffect = true;
     }
 
-    void VulkanRenderer::QueueCompiledEffectSpriteEXT(const Sprite2DVertex (&quad)[6],
-                                                      VkImageView spriteView,
-                                                      ICompiledEffectRuntime* runtime)
+    void VulkanRenderer::QueueCompiledEffectSpriteEXT(const CompiledSpriteVertexEXT (&quad)[6],
+                                                      const ITextureRenderer& spriteTexture,
+                                                      const GpuDrawParams& params)
     {
         using Microsoft::Xna::Framework::Graphics::VertexElement;
         using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
         using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
         // SpriteBatch geometry is this renderer's own, so its declaration is fixed rather than
-        // caller-supplied. It has to describe Sprite2DVertex exactly: the compiled vertex shader
+        // caller-supplied. It has to describe CompiledSpriteVertexEXT exactly: the compiled vertex shader
         // reads its inputs by semantic, and a mismatched offset here is a wrongly-drawn sprite.
         static const std::vector<VertexElement> kSpriteDeclaration = {
-            VertexElement(0,  VertexElementFormat::Vector2, VertexElementUsage::Position, 0),
-            VertexElement(8,  VertexElementFormat::Vector2,
+            VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector2,
                           VertexElementUsage::TextureCoordinate, 0),
-            VertexElement(16, VertexElementFormat::Vector4, VertexElementUsage::Color, 0),
+            VertexElement(20, VertexElementFormat::Vector4, VertexElementUsage::Color, 0),
         };
 
         Pending3DDraw d{};
         d.vbData.resize(sizeof(quad));
         std::memcpy(d.vbData.data(), quad, sizeof(quad));
-        d.stride = sizeof(Sprite2DVertex);
+        d.stride = sizeof(CompiledSpriteVertexEXT);
         d.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
         d.drawCount = 6;
         d.indexType = VK_INDEX_TYPE_UINT16;
@@ -11846,21 +11938,10 @@ namespace CNA::Internal::Renderers::Vulkan
         d.slopeScaleDepthBias = 0.0f;
         d.rt = currentRT_;
         const std::vector<VkFxStreamEXT> streams{
-            {&kSpriteDeclaration, static_cast<std::uint32_t>(sizeof(Sprite2DVertex)), false}};
-        PrepareCompiledEffectDrawEXT(d, streams, runtime);
-
-        // plans/plan_fx.md FX-103. FNA's SpriteBatch.DrawPrimitives sets GraphicsDevice.Textures[0] =
-        // texture immediately AFTER pass.Apply(), with the comment "Set this _after_ Apply,
-        // otherwise EffectParameters override it!". So the sprite being drawn wins slot 0
-        // unconditionally, whatever the effect's own texture parameter names -- a backend that
-        // binds the effect's texture instead renders a plausible image of the wrong thing. The
-        // sampler is NOT overridden: SpriteBatch.Begin's SamplerState is selected before Apply, so
-        // a pass that assigns slot 0's sampler_state still wins that half.
-        auto& compiled = d.compiledEffect;
-        for (std::size_t i = 0; i < compiled.samplerBindings.size(); ++i)
-        {
-            if (compiled.samplerBindings[i] == 0) compiled.samplerViews[i] = spriteView;
-        }
+            {&kSpriteDeclaration, static_cast<std::uint32_t>(sizeof(CompiledSpriteVertexEXT)), false}};
+        // FNA assigns the sprite texture to slot 0 after pass.Apply(), so the preparation step
+        // receives it as an explicit override rather than requiring an EffectParameter binding.
+        PrepareCompiledEffectDrawEXT(d, streams, params, &spriteTexture);
         PushPending3DDraw(std::move(d));
     }
 
@@ -21848,7 +21929,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 {&pvDeclaration.GetElements(), static_cast<std::uint32_t>(pvStride), false},
                 {&instDeclaration.GetElements(), static_cast<std::uint32_t>(instStride), true},
             };
-            PrepareCompiledEffectDrawEXT(d, streams, params.compiledEffectRuntime);
+            PrepareCompiledEffectDrawEXT(d, streams, params);
         }
 #endif
         PushPending3DDraw(std::move(d));

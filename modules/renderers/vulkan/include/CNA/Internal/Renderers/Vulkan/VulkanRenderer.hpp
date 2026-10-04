@@ -73,6 +73,9 @@ namespace CNA::Internal::Renderers::Vulkan
     // -------------------------------------------------------------------------
 
     struct Sprite2DVertex { float x, y, u, v, r, g, b, a; };
+#if defined(CNA_VULKAN_COMPILED_EFFECTS)
+    struct CompiledSpriteVertexEXT { float x, y, z, u, v, r, g, b, a; };
+#endif
 
     // -------------------------------------------------------------------------
     // VulkanRTSource — minimal interface used by RecordCommandBuffer
@@ -1406,9 +1409,14 @@ namespace CNA::Internal::Renderers::Vulkan
             float rotation = 0.0f;
             Vector2 origin;
             SpriteEffects effects = SpriteEffects::None;
+            float layerDepth = 0.0f;
         };
         std::vector<PendingCompiledSpriteEXT> pendingCompiledSprites_;
         bool immediateMode_ = false;
+        std::unique_ptr<ICompiledEffectRuntime> spriteCompiledEffect_;
+        std::uint32_t spriteMatrixParameterIndex_ = 0;
+        bool compiledSpriteStockApplied_ = false;
+        void ApplyCompiledSpriteVertexShaderEXT();
         /// Applies the current technique's passes over the whole pending run, pass-major, and
         /// queues each sprite's quad once per pass. Mirrors FNA's SpriteBatch.FlushBatch.
         void FlushPendingCompiledSpritesEXT();
@@ -5631,13 +5639,14 @@ namespace CNA::Internal::Renderers::Vulkan
         void PrepareCompiledEffectDrawEXT(
             Pending3DDraw& d,
             const std::vector<VulkanCompiledEffect::CompiledVertexStreamEXT>& streams,
-            ICompiledEffectRuntime* runtime);
+            const GpuDrawParams& params,
+            const ITextureRenderer* spriteTextureOverride = nullptr);
         /// Queues one SpriteBatch quad to be drawn with a compiled Effect, as a deferred 3D draw
         /// rather than through the stock sprite pipeline -- the compiled pass owns the whole
         /// program, including the projection the stock sprite shader would otherwise apply.
-        CNAEXT void QueueCompiledEffectSpriteEXT(const Sprite2DVertex (&quad)[6],
-                                                 VkImageView spriteView,
-                                                 ICompiledEffectRuntime* runtime);
+        CNAEXT void QueueCompiledEffectSpriteEXT(const CompiledSpriteVertexEXT (&quad)[6],
+                                                 const ITextureRenderer& spriteTexture,
+                                                 const GpuDrawParams& params);
         std::map<std::uint64_t, VkShaderModule> compiledEffectShaderModules_;
 
     public:

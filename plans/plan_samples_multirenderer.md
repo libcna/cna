@@ -23,13 +23,14 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 |---|---|---|
 | MSR-001 | **DONE** | Route `SurfaceFormat::Color` byte/generic `TextureCube` and `Texture3D` transfers through the canonical RGBA8 renderer path. |
 | MSR-002 | **DONE** | Restore the `SDL_GPU` + compiled-XNA-effect build and its focused tests (`SMG-0043`). |
-| MSR-003 | **OPEN** | Repair compiled-effect passes that bind no shader pair, exposed by `BloomSample` on Vulkan, WebGPU and SDL_GPU. |
+| MSR-003 | **DONE** | Restore SpriteBatch's stock vertex-stage inheritance and device texture-slot semantics for compiled effects, exposed by `BloomSample`. |
 | MSR-004 | **DONE** | Repair compiled-effect texture-parameter indexing, exposed by `ShadowMapping` on Vulkan and WebGPU. |
 | MSR-005 | **OPEN** | Classify `LensFlare` occlusion-query limits truthfully for SDL_GPU and FNA3D's selected internal driver; never fabricate a query result. |
 | MSR-006 | **IN PROGRESS** | Complete single-renderer and six-renderer Linux CNA qualification. |
 | MSR-007 | **IN PROGRESS** | Qualify the representative sample set, then the complete 91-sample corpus. |
 | MSR-008 | **OPEN** | Prepare and cross-build the Windows renderer set; record Wine evidence separately from native qualification. |
 | MSR-009 | **OPEN** | Prepare the macOS renderer set and exact Mac mini M4 qualification commands. |
+| MSR-010 | **OPEN** | Repair the Vulkan compiled-effect multi-stream and instancing shared contracts exposed by the broader MSR-003 regression run. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -54,6 +55,37 @@ Regression evidence:
   OPENGLES3;
 - the same `ReachGraphicsDemo` executable now starts and remains stable on all six Linux target
   renderers, with the active renderer verified in each process.
+
+## MSR-003 — SpriteBatch compiled-effect inheritance
+
+FNA applies its embedded compiled `SpriteEffect` before a custom SpriteBatch effect.  A custom pass
+may consequently replace only the pixel shader and inherit the stock vertex shader plus its
+`MatrixTransform`; Bloom's extraction and combine effects use exactly that normal Effect Framework
+pattern.  Vulkan, WebGPU and SDL_GPU previously tried to link the custom pass as a complete shader
+pair, so the pixel-only pass failed with “no shader pair bound”.
+
+Those three renderers now embed CNA's authentic `SpriteEffect.fxb` whenever their compiled-effect
+support is enabled, apply its projection before the custom passes, and feed a three-component
+sprite position including `layerDepth` to the inherited shader.  The same repair carries the full
+`GpuDrawParams` snapshot into compiled SpriteBatch draws: an effect sampler without its own texture
+assignment reads the matching `GraphicsDevice.Textures[n]` slot, while SpriteBatch still overrides
+slot 0 with the sprite after `EffectPass::Apply()` as XNA requires.  This fixed Bloom's second
+failure, where its combine pass binds the scene render target directly to slot 1.
+
+Regression evidence:
+
+- new shared contracts render and read back pixels for a pixel-only SpriteBatch effect and for a
+  sampler reading `GraphicsDevice.Textures[1]`; the contracts are registered for every compiled-
+  effect backend;
+- the pixel-only, device-slot and existing slot-0 override contracts pass 3/3 on Vulkan, WebGPU and
+  SDL_GPU on the Radeon 780M through the private GPU runner;
+- the wider WebGPU compiled-effect run passes 49 tests with one intentional Reach-profile skip;
+  SDL_GPU passes 45 with one configuration skip;
+- the wider Vulkan run passes 24 with one Reach-profile skip and separately exposes two existing
+  shared-contract failures in multi-stream and instanced compiled draws, now tracked as MSR-010;
+- the same single `BloomSample_cna_samples` executable reaches an automated pass with the requested
+  active renderer verified for OPENGLES3, OPENGL33, Vulkan, WebGPU, SDL_GPU and FNA3D.  Manual
+  visual confirmation remains required and is not implied by that automated result.
 
 ## MSR-004 — Native compiled-effect parameter indices
 

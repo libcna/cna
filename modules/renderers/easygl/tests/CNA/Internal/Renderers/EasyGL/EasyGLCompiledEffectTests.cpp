@@ -4422,6 +4422,22 @@ TEST(EasyGLCompiledEffectDrawTest, SharedSpriteBatchContract)
     CNA::TestSupport::RunCompiledEffectSpriteBatchContract(device);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, SharedSpriteBatchPixelOnlyContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSpriteBatchPixelOnlyContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedSpriteBatchDeviceTextureSlotContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSpriteBatchDeviceTextureSlotContract(device);
+}
+
 TEST(EasyGLCompiledEffectDrawTest, SpriteBatchInheritsStockVertexShaderForPixelOnlyEffect)
 {
     GraphicsDevice device;

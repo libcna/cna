@@ -181,6 +181,18 @@ TEST(DirectX12CompiledEffectDrawTest, SharedSpriteBatchContract)
     CNA::TestSupport::RunCompiledEffectSpriteBatchContract(device);
 }
 
+TEST(DirectX12CompiledEffectDrawTest, SharedSpriteBatchPixelOnlyContract)
+{
+    HiDefGraphicsDevice device;
+    CNA::TestSupport::RunCompiledEffectSpriteBatchPixelOnlyContract(device);
+}
+
+TEST(DirectX12CompiledEffectDrawTest, SharedSpriteBatchDeviceTextureSlotContract)
+{
+    HiDefGraphicsDevice device;
+    CNA::TestSupport::RunCompiledEffectSpriteBatchDeviceTextureSlotContract(device);
+}
+
 TEST(DirectX12CompiledEffectDrawTest, SharedSpriteBatchMultiPassContract)
 {
     HiDefGraphicsDevice device;

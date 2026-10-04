@@ -748,12 +748,14 @@ TEST(SdlGpuCompiledEffectDrawTest, DrawsASpriteWithACompiledEffect)
     const CNA::Internal::Renderers::SdlGpu::SdlGpuSampledTextureEXT nativeTexture =
         CNA::Internal::Renderers::SdlGpu::ResolveSampledTextureEXT(
             &white.GetRenderer(), "SpriteBatchCompiledEffectTest");
+    GpuDrawParams drawParams;
+    drawParams.compiledEffectRuntime = sdlGpuEffect;
     EXPECT_NO_THROW(renderer->QueueSprite(
         white.GetRenderer(), nativeTexture, Rectangle(0, 0, 1, 1), Rectangle(0, 0, 1, 1), Color::White,
         0.0f, Vector2::Zero, SpriteEffects::None, 0.0f, Matrix::getIdentityProperty(),
         /*textureFilter=*/0, /*addressU=*/1, /*addressV=*/1, /*addressW=*/1,
         /*maxAnisotropy=*/4, /*maxMipLevel=*/0, /*lodBias=*/0.0f,
-        /*customEffect=*/nullptr, /*compiledEffect=*/sdlGpuEffect));
+        /*customEffect=*/nullptr, /*compiledParams=*/&drawParams));
 
     EXPECT_NO_THROW(renderer->Present());
 }
@@ -823,6 +825,22 @@ TEST(SdlGpuCompiledEffectDrawTest, SharedSpriteBatchContract)
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectSpriteBatchContract(device);
+}
+
+TEST(SdlGpuCompiledEffectDrawTest, SharedSpriteBatchPixelOnlyContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSpriteBatchPixelOnlyContract(device);
+}
+
+TEST(SdlGpuCompiledEffectDrawTest, SharedSpriteBatchDeviceTextureSlotContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSpriteBatchDeviceTextureSlotContract(device);
 }
 
 TEST(SdlGpuCompiledEffectDrawTest, SharedOrientationContract)
