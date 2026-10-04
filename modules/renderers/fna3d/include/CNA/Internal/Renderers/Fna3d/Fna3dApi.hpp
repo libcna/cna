@@ -20,3 +20,4 @@
 #include <mojoshader.h>
 
 #include <FNA3D.h>
+#include <FNA3D_SysRenderer.h>

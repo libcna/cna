@@ -1096,6 +1096,10 @@ namespace CNA::Internal::Renderers::Fna3d
 
     std::unique_ptr<IOcclusionQueryRenderer> Fna3dRenderer::CreateOcclusionQuery()
     {
+        if (!supportsOcclusionQueries_)
+        {
+            return nullptr;
+        }
         return std::make_unique<Fna3dOcclusionQueryRenderer>(deviceState_);
     }
 

@@ -25,7 +25,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-002 | **DONE** | Restore the `SDL_GPU` + compiled-XNA-effect build and its focused tests (`SMG-0043`). |
 | MSR-003 | **DONE** | Restore SpriteBatch's stock vertex-stage inheritance and device texture-slot semantics for compiled effects, exposed by `BloomSample`. |
 | MSR-004 | **DONE** | Repair compiled-effect texture-parameter indexing, exposed by `ShadowMapping` on Vulkan and WebGPU. |
-| MSR-005 | **OPEN** | Classify `LensFlare` occlusion-query limits truthfully for SDL_GPU and FNA3D's selected internal driver; never fabricate a query result. |
+| MSR-005 | **DONE** | Classify `LensFlare` occlusion-query limits truthfully for SDL_GPU and FNA3D's selected internal driver; never fabricate a query result. |
 | MSR-006 | **IN PROGRESS** | Complete single-renderer and six-renderer Linux CNA qualification. |
 | MSR-007 | **IN PROGRESS** | Qualify the representative sample set, then the complete 91-sample corpus. |
 | MSR-008 | **OPEN** | Prepare and cross-build the Windows renderer set; record Wine evidence separately from native qualification. |
@@ -108,6 +108,31 @@ Regression evidence:
 - the same six-renderer `ShadowMapping` executable now remains stable with both Vulkan and WebGPU,
   and each process logs the explicitly requested active renderer;
 - the OPENGLES3 launch of that same executable still passes after the framework change.
+
+## MSR-005 — FNA3D occlusion-query capability
+
+FNA3D is both a CNA renderer and a dispatcher for its own internal graphics drivers.  CNA formerly
+reported `OcclusionQuery` unconditionally for the FNA3D renderer, even when FNA3D selected its
+SDL_GPU driver.  That upstream driver explicitly has no query-pool abstraction and returns null
+from `FNA3D_CreateQuery`, so `LensFlare` passed CNA's capability gate and failed only while creating
+the supposedly supported resource.
+
+The FNA3D renderer now discovers the selected internal driver and records whether a real query can
+be created.  Its known SDL_GPU driver is classified unsupported without invoking its deliberately
+unsupported entry point; current non-SDL_GPU drivers are tested with a narrow public FNA3D query
+allocation probe.  `SupportsCapability(OcclusionQuery)` and `CreateOcclusionQuery()` share that
+result.  No query result is fabricated, and direct CNA SDL_GPU remains truthfully unsupported.
+
+Regression evidence:
+
+- the clean single-renderer FNA3D capability test passes with the default SDL_GPU driver, reporting
+  `OcclusionQuery=false` and confirming that resource creation returns null;
+- the same test passes with `FNA3D_FORCE_DRIVER=OpenGL`, reporting a real supported query path;
+- the same `LensFlare_cna_samples` executable reaches automated passes on OPENGLES3, OPENGL33,
+  Vulkan and WebGPU;
+- direct SDL_GPU and default FNA3D/SDL_GPU fail at CNA's explicit capability gate and are recorded
+  as an upstream API limitation, while the supplementary FNA3D/OpenGL run reaches an automated
+  pass.  These automated results still require separate manual visual confirmation.
 
 ## MSR-010 — Vulkan compiled-effect stream validation
 

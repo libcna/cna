@@ -303,6 +303,22 @@ namespace CNA::Internal::Renderers::Fna3d
         supportsBc7_ = FNA3D_SupportsBC7(device_) != 0;
         supportsSrgbRenderTargets_ = FNA3D_SupportsSRGBRenderTargets(device_) != 0;
 
+        FNA3D_SysRendererEXT systemRenderer{};
+        systemRenderer.version = FNA3D_SYSRENDERER_VERSION_EXT;
+        FNA3D_GetSysRendererEXT(device_, &systemRenderer);
+        if (systemRenderer.rendererType != FNA3D_RENDERER_TYPE_SDL_GPU_EXT)
+        {
+            // FNA3D has no dedicated query-capability function. Its SDL_GPU driver is explicit
+            // that queries are unsupported; the other current drivers expose a real CreateQuery
+            // implementation, whose allocation is the narrowest public-API probe available.
+            FNA3D_Query* probe = FNA3D_CreateQuery(device_);
+            supportsOcclusionQueries_ = probe != nullptr;
+            if (probe != nullptr)
+            {
+                FNA3D_AddDisposeQuery(device_, probe);
+            }
+        }
+
         int32_t textureSlots = 0;
         int32_t vertexTextureSlots = 0;
         FNA3D_GetMaxTextureSlots(device_, &textureSlots, &vertexTextureSlots);
@@ -314,6 +330,7 @@ namespace CNA::Internal::Renderers::Fna3d
                 ", S3TC " + (supportsS3tc_ ? "yes" : "no") +
                 ", BC7 " + (supportsBc7_ ? "yes" : "no") +
                 ", sRGB render targets " + (supportsSrgbRenderTargets_ ? "yes" : "no") +
+                ", occlusion queries " + (supportsOcclusionQueries_ ? "yes" : "no") +
                 ", texture slots " + std::to_string(maxTextureSlots_) +
                 " (vertex " + std::to_string(maxVertexTextureSlots_) + ")",
             CNA::LogCategory::RENDER);
@@ -996,6 +1013,9 @@ namespace CNA::Internal::Renderers::Fna3d
 
             case CNA::GraphicsCapability::MultiSampleAntiAliasing:
                 return FNA3D_GetMaxMultiSampleCount(device_, presentation_.backBufferFormat, 4) > 1;
+
+            case CNA::GraphicsCapability::OcclusionQuery:
+                return supportsOcclusionQueries_;
 
             case CNA::GraphicsCapability::StencilBuffer:
                 return SupportsStencilBuffer();

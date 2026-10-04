@@ -1632,6 +1632,8 @@ namespace CNA::Internal::Renderers::Fna3d
         bool supportsS3tc_ = false;
         bool supportsBc7_ = false;
         bool supportsSrgbRenderTargets_ = false;
+        /// Whether the selected internal FNA3D driver creates real raster occlusion queries.
+        bool supportsOcclusionQueries_ = false;
         int maxTextureSlots_ = 0;
         int maxVertexTextureSlots_ = 0;
     };

@@ -86,9 +86,18 @@ public:
         Check(renderer.SupportsCapability(GraphicsCapability::WireFrame), "WireFrame is true");
         Check(renderer.SupportsCapability(GraphicsCapability::Texture3D), "Texture3D is true");
 
-        Check(renderer.SupportsCapability(GraphicsCapability::OcclusionQuery) ==
-                  (renderer.CreateOcclusionQuery() != nullptr),
+        const bool reportsOcclusionQueries =
+            renderer.SupportsCapability(GraphicsCapability::OcclusionQuery);
+        Check(reportsOcclusionQueries == (renderer.CreateOcclusionQuery() != nullptr),
               "the OcclusionQuery capability matches whether a query can be created");
+        FNA3D_SysRendererEXT systemRenderer{};
+        systemRenderer.version = FNA3D_SYSRENDERER_VERSION_EXT;
+        FNA3D_GetSysRendererEXT(fna3d->GetDeviceEXT(), &systemRenderer);
+        if (systemRenderer.rendererType == FNA3D_RENDERER_TYPE_SDL_GPU_EXT)
+        {
+            Check(!reportsOcclusionQueries,
+                  "the selected FNA3D SDL_GPU driver reports no occlusion queries");
+        }
         Check(renderer.SupportsCapability(GraphicsCapability::Texture3D) ==
                   (renderer.CreateTexture3D(4, 4, 4, false, 0) != nullptr),
               "the Texture3D capability matches whether a volume texture can be created");
