@@ -532,10 +532,20 @@ if(CNA_BUILD_TESTS)
         # twice in CI.
         add_executable(${_cna_focused_test_target} EXCLUDE_FROM_ALL
             "$<TARGET_OBJECTS:${_cna_test_object_target}>")
-        target_link_libraries(${_cna_focused_test_target} PRIVATE
-            cna_test_build_config
-            ${_cna_test_group_dependencies}
-            gtest_main)
+        # VKPAR-0017 applies to the focused renderer executable too: put CNA before the test
+        # support archives so direct EasyGL test references resolve to libcna's already-initialised
+        # easy-gl/meta-gl copy instead of pulling a second static copy into CnaRendererTests.
+        if(_cna_test_group STREQUAL "renderers")
+            target_link_libraries(${_cna_focused_test_target} PRIVATE
+                ${_cna_test_group_dependencies}
+                cna_test_build_config
+                gtest_main)
+        else()
+            target_link_libraries(${_cna_focused_test_target} PRIVATE
+                cna_test_build_config
+                ${_cna_test_group_dependencies}
+                gtest_main)
+        endif()
         list(APPEND CNA_FOCUSED_TEST_TARGETS "${_cna_focused_test_target}")
     endforeach()
     message(STATUS "CNA: focused unit-test targets: ${CNA_FOCUSED_TEST_TARGETS}")

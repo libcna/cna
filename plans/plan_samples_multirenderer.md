@@ -34,6 +34,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-011 | **DONE** | Restore the FNA3D-only `CnaRendererTests` build after pointer-container and namespace API changes. |
 | MSR-012 | **DONE** | Correct stale FNA3D compiled-effect test profile, parameter-shape and exception assumptions. |
 | MSR-013 | **DONE** | Align the synthetic struct-default test with the pinned FNA/MojoShader contract and preserve the authentic FNA pixel oracle. |
+| MSR-015 | **DONE** | Keep focused renderer tests on libcna's single initialized EasyGL/meta-gl runtime copy. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -208,6 +209,26 @@ Regression evidence:
 - the complete SDL_GPU compiled-effect selection passes 46 tests with one existing configuration
   skip, including its authentic golden-pixel draw;
 - the discarded parser experiment was never committed.
+
+## MSR-015 — Focused renderer-test runtime identity
+
+`CnaRendererTests` linked the test-support archives before `libcna.so`.  EasyGL tests directly
+reference easy-gl/meta-gl helpers, so that order pulled a second static meta-gl copy into the
+executable.  ELF executable-symbol preemption then redirected the renderer inside `libcna.so` to
+the test executable's uninitialized dispatch table.  Constructing an ordinary `GraphicsDevice`
+aborted in `metagl::glGenFramebuffers` before the test could run.
+
+The focused renderer target now follows the existing `CnaTests` VKPAR-0017 rule and links CNA
+before test-support archives.  Direct test references resolve to the same initialized runtime copy
+used by the renderer, without changing shipping linkage or renderer behavior.
+
+Regression evidence:
+
+- the OPENGLES3 shared sampler contract reproduced the abort twice before the link-order repair;
+- its debugger backtrace terminated in the uninitialized executable copy of
+  `metagl::glGenFramebuffers` during the renderer's normalized render-target capability probe;
+- the same focused executable and test pass afterward on the private Radeon 780M GPU display and
+  log `CNA: graphics renderer: OPENGLES3`.
 
 ## Representative automated matrix
 
