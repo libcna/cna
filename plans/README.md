@@ -15,7 +15,8 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 - [`plan_platform.md`](plan_platform.md) — platform abstraction.
 - [`plan_apple.md`](plan_apple.md) — macOS and iOS platform support.
 - [`plan_runtimerenderer.md`](plan_runtimerenderer.md) — runtime graphics-renderer selection.
-- [`plan_sdl3free.md`](plan_sdl3free.md) — SDL3-independent build paths.
+- [`plan_sdl3free.md`](plan_sdl3free.md) — historical SDL3-independent migration plan; its SDL2
+  route was superseded by native backends and retired on 2026-10-04.
 - [`plan_modern.md`](plan_modern.md) — the `CNA::Graphics` modern engine layer.
 - [`plan_diagnostics.md`](plan_diagnostics.md) — renderer-independent diagnostics, profiling,
   bounded recording, and the Inspector provider boundary.

@@ -365,4 +365,13 @@ TEST(PlatformFactoryTests, RefusesAnImplementationThatIsNotCompiledIn)
     EXPECT_THROW((void)PlatformFactory::Create("NoSuchPlatform"), PlatformException);
 }
 
+TEST(PlatformFactoryTests, RetiredSdl2ImplementationIsNeitherAdvertisedNorCreatable)
+{
+    for (const std::string& name : PlatformFactory::GetAvailable())
+    {
+        EXPECT_NE(name, "SDL2");
+    }
+    EXPECT_THROW((void)PlatformFactory::Create("SDL2"), PlatformException);
+}
+
 } // namespace

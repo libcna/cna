@@ -12,6 +12,10 @@
 # capability is known -- not silently tolerated until something dereferences null.
 # =====================================================================================
 
+# `cmake -P` does not inherit the project's cmake_minimum_required() policy set. Keep the same
+# IN_LIST semantics in the lightweight selection contract tests and in a normal project include.
+cmake_policy(SET CMP0057 NEW)
+
 set(CNA_PLATFORM "SDL3" CACHE STRING
         "Platform implementation (SDL3 | X11 | WAYLAND | HEADLESS | TERMINAL | WIN32)")
 

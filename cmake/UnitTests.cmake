@@ -1381,10 +1381,21 @@ if(CNA_BUILD_TESTS)
             ENVIRONMENT "CNA_AUDIO_DEVICE=file:FILE=${CMAKE_BINARY_DIR}/cna-alsa-recording.raw,FORMAT=raw")
     endif()
 
+    # SDL2 retirement contract: the former platform selector must stay unknown. This uses the
+    # production selection file in script mode, so accidentally restoring SDL2 to its available
+    # list fails CI even if no SDL2 source happens to compile in the default configuration.
+    add_test(NAME CnaPlatformSelection_SDL2
+        COMMAND ${CMAKE_COMMAND}
+            -DCNA_PLATFORM_SELECTION_FILE=${CMAKE_SOURCE_DIR}/cmake/PlatformSelection.cmake
+            -P ${CMAKE_SOURCE_DIR}/cmake/Tests/RetiredSdl2PlatformSelection.cmake)
+    set_tests_properties(CnaPlatformSelection_SDL2
+        PROPERTIES LABELS "platform;configuration;retirement")
+
     # plans/plan_platform.md PLAT-93: test the cache default, every implemented value, every reserved
-    # future identifier, and an unknown value without spawning six full nested project configs.
+    # future identifier, an unknown value, and the retired SDL2 value without spawning full nested
+    # project configs.
     # The selection file is intentionally script-mode-safe for exactly this validation path.
-    foreach(_cna_audio_selection_case IN ITEMS DEFAULT SDL3 NULL OPENAL WASAPI ALSA BOGUS)
+    foreach(_cna_audio_selection_case IN ITEMS DEFAULT SDL3 NULL OPENAL WASAPI ALSA SDL2 BOGUS)
         if(_cna_audio_selection_case STREQUAL "DEFAULT" OR
            _cna_audio_selection_case STREQUAL "SDL3")
             set(_cna_audio_selection_expected "Using SDL3 audio platform implementation")
@@ -1392,7 +1403,8 @@ if(CNA_BUILD_TESTS)
             set(_cna_audio_selection_expected "Using NULL audio platform implementation")
         elseif(_cna_audio_selection_case STREQUAL "ALSA")
             set(_cna_audio_selection_expected "Using ALSA audio platform implementation")
-        elseif(_cna_audio_selection_case STREQUAL "BOGUS")
+        elseif(_cna_audio_selection_case STREQUAL "SDL2" OR
+               _cna_audio_selection_case STREQUAL "BOGUS")
             set(_cna_audio_selection_expected "not a known audio platform")
         else()
             # CMake line-wraps the full diagnostic between "NOT" and "implemented" depending
@@ -1405,9 +1417,15 @@ if(CNA_BUILD_TESTS)
                 -DCNA_AUDIO_SELECTION_CASE=${_cna_audio_selection_case}
                 -DCNA_AUDIO_SELECTION_EXPECTED=${_cna_audio_selection_expected}
                 -P ${CMAKE_SOURCE_DIR}/cmake/Tests/AudioPlatformSelectionCase.cmake)
+        if(_cna_audio_selection_case STREQUAL "SDL2")
+            set(_cna_audio_selection_labels "audio;platform;configuration;retirement")
+        else()
+            set(_cna_audio_selection_labels "audio;platform")
+        endif()
         set_tests_properties(CnaAudioPlatformSelection_${_cna_audio_selection_case}
-            PROPERTIES LABELS "audio;platform")
+            PROPERTIES LABELS "${_cna_audio_selection_labels}")
     endforeach()
+    unset(_cna_audio_selection_labels)
 
     # plans/plan_xnapipeline.md XNAP-026: an independent, non-CNA implementation of the .xnb
     # reader side, run over the fixture corpus. CNA's own reader and writer were built together

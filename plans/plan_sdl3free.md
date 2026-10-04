@@ -1,17 +1,40 @@
 # SDL3-Free CNA Plan
 
-## Goal
+> **Status: superseded historical plan (2026-10-04).** SDL2 platform and audio support was
+> retired from CNA on 2026-10-04. `CNA_PLATFORM=SDL2` and `CNA_AUDIO_PLATFORM=SDL2` are unsupported
+> values, not compatibility aliases or migration routes. The original plan is retained below as a
+> record of the design path that led to CNA's SDL-free native backends; its present- and future-tense
+> statements describe proposals at the time and are not current instructions.
+
+## Current Outcome
+
+CNA's maintained SDL-free configurations now use real non-SDL backends: `HEADLESS`, `TERMINAL`,
+`X11`, `WAYLAND`, or `WIN32` as supported by the target; `NULL` or Linux `ALSA` audio; and a
+renderer that does not intrinsically require SDL3. `CNA_ENABLE_SDL=OFF` enforces that closure and
+prevents SDL from being downloaded, built, found, or linked. SDL3 remains the default platform and
+audio implementation. See [`docs/platform-abstraction.md`](../docs/platform-abstraction.md) for the
+current selector set and supported configuration examples.
+
+---
+
+## Archived Original Plan
+
+Everything below this boundary is the original planning text, not a live checklist. Individual
+outcomes may have been delivered by later work, but every SDL2 profile and SDL2 task below was
+superseded by the native SDL-free backends and then made impossible by SDL2's retirement.
+
+### Original Goal
 
 Make SDL3 and SDL3_mixer optional: a supported CNA application must be able to configure, build,
 link, and run without either dependency. SDL3 remains supported; this plan makes room for SDL4 or
 an entirely different toolkit through the existing platform and capability contracts.
 
-## Current Position
+### Position When This Plan Was Written
 
-`CNA_PLATFORM` already selects SDL3, SDL2, HEADLESS, or TERMINAL. Game code uses CNA platform
+At that time, `CNA_PLATFORM` selected SDL3, SDL2, HEADLESS, or TERMINAL. Game code used CNA platform
 services and capability queries rather than native SDL APIs.
 
-The current SDL2-only path proves part of the design:
+The then-current SDL2-only path proved part of the design:
 
 - SDL2 owns the window/input platform, and SDL2 audio owns a native callback playback device.
 - `cna_audio` links only SDL2 for `CNA_AUDIO_PLATFORM=SDL2`; it excludes SDL3 device and
@@ -21,7 +44,7 @@ The current SDL2-only path proves part of the design:
 - The high-level XNA mixer is SDL3_mixer based, so `SOUND_ENABLED` is deliberately off in this
   profile. Enabling it without a replacement would be a hidden SDL3 dependency.
 
-## Definition of Done
+### Definition of Done
 
 1. A supported application target has no SDL3 or SDL3_mixer in its final dependency closure.
 2. Selected audio either supports SoundEffect/dynamic audio/XACT/WaveBank/media semantics or
@@ -31,7 +54,7 @@ The current SDL2-only path proves part of the design:
 5. Core demos and test harnesses are platform-neutral; native fixtures are isolated.
 6. CI runs graphical and headless SDL3-free profiles and audits their final link dependencies.
 
-## First Supported Profiles
+### Proposed First Supported Profiles (Superseded)
 
 | Profile | Platform | Audio | Renderer |
 |---|---|---|---|
@@ -43,7 +66,7 @@ The current SDL2-only path proves part of the design:
 `SDL_RENDERER` and `SDL_GPU` cannot be SDL3-free by wrapping them: SDL is their implementation.
 An SDL3-free profile must select another renderer.
 
-## A. Replace the SDL3_mixer Engine
+### A. Replace the SDL3_mixer Engine
 
 **Problem:** SDL3_mixer currently implements decode, mixing, tracks, streams, callbacks, gain,
 looping, and native resource lifetime. A different output device alone cannot replace it.
@@ -64,7 +87,7 @@ media, lifecycle, and no-hardware suites without linking SDL3.
 
 **Estimate:** 120–250 hours; highest risk.
 
-## B. Remove Direct SDL3 Renderer Edges
+### B. Remove Direct SDL3 Renderer Edges
 
 **Tasks:**
 
@@ -80,7 +103,7 @@ SDL3/SDL3_mixer dependency.
 
 **Estimate:** 70–150 hours.
 
-## C. Make Third-Party Configuration Lazy
+### C. Make Third-Party Configuration Lazy
 
 **Tasks:**
 
@@ -94,7 +117,7 @@ SDL3/SDL3_mixer dependency.
 
 **Estimate:** 15–35 hours initially; 30–60 with broad CI coverage.
 
-## D. Make Demos and Tests Platform-Neutral
+### D. Make Demos and Tests Platform-Neutral
 
 **Tasks:**
 
@@ -109,7 +132,7 @@ SDL3/SDL3_mixer dependency.
 
 **Estimate:** 80–160 hours.
 
-## E. CI, Link Audits, and Documentation
+### E. CI, Link Audits, and Documentation
 
 **Tasks:**
 
@@ -120,7 +143,7 @@ SDL3/SDL3_mixer dependency.
 
 **Estimate:** 25–55 hours, overlapping other streams.
 
-## Recommended Order
+### Recommended Order
 
 1. Add dependency manifests and lazy CMake configuration.
 2. Freeze SDL2 + OpenGLES3 + NULL audio as the first complete SDL3-free profile.
@@ -133,7 +156,7 @@ SDL3/SDL3_mixer dependency.
 The NULL-audio milestone proves the platform, renderer, and demo path before undertaking the
 highest-risk mixer work.
 
-## Risks
+### Risks
 
 | Risk | Mitigation |
 |---|---|
@@ -143,7 +166,7 @@ highest-risk mixer work.
 | False confidence from SDL3-linked tests | Isolate native fixtures and audit every SDL3-free executable. |
 | Optional renderer scope grows | Deliver SDL2 + OpenGLES3 first; classify rather than promise parity. |
 
-## Effort Summary
+### Effort Summary
 
 | Delivery scope | Estimate |
 |---|---:|
