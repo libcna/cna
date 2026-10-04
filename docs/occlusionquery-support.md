@@ -43,7 +43,7 @@ profiles.
 | Renderer | Attaches to real GPU work? | Sequence validation | Pixel/query correctness | Status |
 |---|---|---|---|---|
 | **EasyGL** | ✅ Yes — `glBeginQuery`/`glEndQuery`, asking for `GL_SAMPLES_PASSED` and falling back to the boolean `GL_ANY_SAMPLES_PASSED` | Shared XNA validation (SOFTWARE-199) | ✅ Verified both directions (Tasks 445/446) **and count-vs-flag** (SAMPLE-041) | **Correct; the count is precise only where the driver has `GL_SAMPLES_PASSED`** |
-| **Vulkan** | ✅ Yes (Task 447, 2026-07-10) — real per-draw-call tagging + `vkCmdBeginQuery`/`vkCmdEndQuery` recording | Shared XNA validation (SOFTWARE-199) | ✅ Verified both directions plus multi-draw-span (Task 854) — genuinely discriminating in this sandbox (Mesa Lavapipe) | **Fully correct** |
+| **Vulkan** | ✅ Yes (Task 447, 2026-07-10) — real per-draw-call tagging + `vkCmdBeginQuery`/`vkCmdEndQuery` recording | Shared XNA validation (SOFTWARE-199) | ✅ Verified both directions, multi-draw-span and generation-safe reuse (Task 854 / MSR-026) | **Fully correct** |
 | **SDL_Renderer** | N/A — construction itself throws | N/A | N/A | **Correctly unsupported** (2D-only renderer, Task 727) |
 
 ### EasyGL — correct, with a precision boundary that depends on the profile
@@ -142,6 +142,22 @@ sandbox-limitation caveat needed. Verified via `git
 stash` revert-and-rebuild (reverting reproduced exactly the predicted failure, the 2
 query-correlation checks failing with `IsComplete()` never becoming true).
 
+#### Reused query pools publish only the submitted generation (MSR-026, 2026-10-04)
+
+A Vulkan query pool retains its available result until a queued `vkCmdResetQueryPool` executes.
+The renderer formerly polled the one-slot pool immediately after a new `Begin`/`End`, so a reused
+query could report the preceding generation as complete.  A second poll by `PixelCount` could then
+see the reset slot as unavailable, or both calls could silently consume the stale count.
+
+Recorded queries now retain the owning frame fence and submission generation, just as Vulkan GPU
+timers already do.  Results are not read until that submission completes; the explicit Vulkan
+availability word must be set; and the resulting count is cached until the next `Begin`, making a
+successful `IsComplete` observation monotonic.  `Vulkan_OcclusionQuery_ReuseGeneration` alternates
+32 exact 4096/2048-pixel generations on one query object.  It reproduced the stale 2048 result at
+cycle 16 before the repair, then passed 20 consecutive complete runs after it.  The existing
+precision, pixel-count and lifecycle-cycle tests pass alongside it, and the real `LensFlare`
+sample no longer intermittently throws between `IsComplete` and `PixelCount`.
+
 ### SDL_Renderer — correctly unsupported
 
 `CreateOcclusionQuery()` correctly calls `ThrowNo3D("CreateOcclusionQuery")` (Task 727), matching
@@ -155,5 +171,5 @@ Since construction itself throws, `Begin()`/`End()` are unreachable — consiste
 | XNA API surface + lifecycle/result state machine | ✅ Recovered XNA implementation audited and implemented renderer-neutrally; the prior FNA-only no-validation conclusion is superseded (SOFTWARE-199) |
 | `Dispose()`/active-query-destruction safety | ✅ Verified safe on EasyGL via 50-iteration stress test (Task 449) |
 | EasyGL pixel/query correctness | ✅ Both directions (visible → positive, occluded → zero) pixel-verified (Tasks 445-446) |
-| Vulkan | ✅ Real per-draw-call query correlation implemented (Task 447/854, 2026-07-10); pixel/query correctness verified both directions plus multi-draw-span, genuinely discriminating in this sandbox |
+| Vulkan | ✅ Real per-draw-call query correlation implemented (Task 447/854, 2026-07-10); pixel/query correctness verified both directions, multi-draw-span and generation-safe reuse (MSR-026) |
 | SDL_Renderer | ✅ Correctly throws at construction (2D-only renderer, Task 727) |

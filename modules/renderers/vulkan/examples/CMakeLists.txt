@@ -1639,6 +1639,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_occlusionquery_precision
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # MSR-026: query-pool reuse across frames must not expose the preceding generation while
+        # the newly submitted reset is still pending, and completion stays true through PixelCount.
+        cna_vulkan_test(cna_test_vulkan_occlusionquery_reuse_generation
+                        vulkan_occlusionquery_reuse_generation_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_OcclusionQuery_ReuseGeneration
+            COMMAND cna_test_vulkan_occlusionquery_reuse_generation
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plans/plan_vulkan.md VULKAN-250 (F-07/F-08): GetShaderDialectEXT() was unoverridden, so
         # the one query that exists to stop an application guessing the dialect answered Unknown on
         # a renderer whose ShaderEffect accepts nothing but SPIR-V words. Asserts the declaration,

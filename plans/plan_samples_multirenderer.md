@@ -46,6 +46,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-023 | **DONE** | Expand missing WebGPU texture channels to the XNA/D3D9 values in stock SpriteBatch sampling. |
 | MSR-024 | **DONE** | Keep Vulkan stock descriptor bindings from overwriting a compiled Effect's own pipeline layout. |
 | MSR-025 | **DONE** | Capture WebGPU stock 3D colour-write and multisample masks per deferred draw. |
+| MSR-026 | **DONE** | Make reused Vulkan occlusion-query results generation-safe and monotonic. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -543,6 +544,40 @@ Regression evidence:
   flare chain and terrain remain intact.  The fixed WebGPU capture differs from the earlier
   OPENGL33 reference by normalized MAE `0.000282384`; evidence is in
   `matrix-results/msr-030-lensflare-webgpu-fixed`.
+
+## MSR-026 — Vulkan occlusion-query generation ownership
+
+Vulkan resets a reused one-slot query pool inside the next submitted command buffer.  Until that
+queued reset executes, `vkGetQueryPoolResults` can still expose the preceding generation as
+available.  `LensFlare` intermittently observed that old availability in `IsComplete`, then found
+the slot unavailable when `PixelCount` polled it again and terminated with “The occlusion query has
+not completed”.  A stale count was equally possible even when both calls succeeded.
+
+Each recorded query now owns the frame fence and monotonically increasing submission generation
+that contain its reset/begin/end commands.  Polling is refused until that exact submission has
+completed, the Vulkan availability word must be set, and the count is cached until the next
+`Begin`, so a successful `IsComplete` remains true through the following `PixelCount`.  The
+render-target-only synchronous path is recorded as complete directly.  This follows the existing
+Vulkan GPU-timer ownership model and does not change the public XNA lifecycle state machine.
+
+Regression evidence:
+
+- the new `Vulkan_OcclusionQuery_ReuseGeneration` test reuses one object for 32 alternating
+  full-frame and half-frame exact queries.  Before the repair it failed at cycle 16 with the old
+  half-frame count `2048` where `4096` was required; afterward it passes 20 consecutive runs;
+- `Vulkan_OcclusionQuery_{Precision,ReuseGeneration,PixelCount,Cycle}` pass 4/4.  The precision
+  test now polls through ordinary game frames instead of recursively submitting frames from one
+  `Draw` callback, which became observable once completion was no longer falsely reported early;
+- the shared profile, lifecycle and pixel-count contracts pass 3/3 on Vulkan, while the unchanged
+  OPENGLES3 contracts pass 5/5;
+- the complete `^Vulkan_` renderer run passes 370/373.  The only failures are the same three
+  independent standing findings already recorded under MSR-016: draw-range forwarding,
+  compiled-effects-aware capability snapshot data and AvatarRenderer's SkinnedEffect path;
+- the rebuilt, unchanged multi-renderer `LensFlare_cna_samples` executable passes with active
+  Vulkan and OPENGLES3.  Manual inspection confirms correct terrain, depth, glow and flare-chain
+  rendering with no query polygon; its time-matched Vulkan capture differs from the OPENGL33
+  reference by normalized MAE `0.0046027`.  Evidence is in
+  `matrix-results/msr-031-lensflare-vulkan-fixed`.
 
 ## Representative automated matrix
 

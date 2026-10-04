@@ -48,6 +48,7 @@
 
 #include <chrono>
 #include <cstdio>
+#include <exception>
 #include <memory>
 #include <string>
 
@@ -61,13 +62,10 @@ namespace
     // The right half of the frame: the occluder takes the left half, and the queried quad covers
     // everything at a farther depth, so exactly this many fragments survive the LESS test.
     constexpr int kExpectedVisible = kSize * (kSize / 2);
-    // plan_vulkan.md VULKAN-182, second reading. The budget is a DEADLINE, not an iteration
-    // count, because this loop is not frame-paced: measured on RADV, 150 iterations of it go by in
-    // under a millisecond, so the old fixed 60 was a sub-millisecond wait dressed up as sixty
-    // frames. llvmpipe answered on iteration 0 -- a software rasterizer has finished by the time
-    // the submit returns -- and real hardware, needing a fraction of a millisecond, was reported
-    // as "never completed". The iteration cap stays as a stop for a genuinely stuck query.
-    constexpr int  kMaxPollFrames = 200000;
+    // plan_vulkan.md VULKAN-182, second reading. The deadline remains authoritative; the frame
+    // ceiling is only a second stop for a runaway game loop. Each poll now occurs in a real Game
+    // frame so the query submission can progress normally on hardware as well as llvmpipe.
+    constexpr int  kMaxPollFrames = 600;
     constexpr auto kPollDeadline  = std::chrono::seconds(5);
 
     // XNA depth range: z in [0,1] with 0 at the near plane. Both quads sit well inside it so
@@ -92,6 +90,12 @@ class VulkanOcclusionQueryPrecisionTest : public Game
     int  pass_ = 0;
     int  fail_ = 0;
     bool done_ = false;
+    bool submitted_ = false;
+    bool precise_ = true;
+    int polls_ = 0;
+    std::chrono::steady_clock::time_point pollStart_{};
+    std::unique_ptr<BasicEffect> effect_;
+    std::unique_ptr<OcclusionQuery> query_;
 
     void check(bool ok, const std::string& label, const std::string& detail)
     {
@@ -100,10 +104,18 @@ class VulkanOcclusionQueryPrecisionTest : public Game
     }
 
 protected:
+    void LoadContent() override
+    {
+        auto& dev = getGraphicsDeviceProperty();
+        effect_ = std::make_unique<BasicEffect>(dev);
+        effect_->VertexColorEnabled = true;
+        query_ = std::make_unique<OcclusionQuery>(dev);
+        precise_ = query_->isPixelCountPreciseEXT();
+    }
+
     void Draw(const GameTime&) override
     {
         if (done_) return;
-        done_ = true;
         auto& dev = getGraphicsDeviceProperty();
 
         dev.setBlendStateProperty(BlendState::Opaque);
@@ -111,71 +123,59 @@ protected:
         DepthStencilState dss;
         dss.setDepthBufferFunctionProperty(CompareFunction::Less);
         dev.setDepthStencilStateProperty(dss);
+        dev.Clear(Color(0, 0, 0, 255));
 
-        std::unique_ptr<OcclusionQuery> query;
-        int  counted  = -1;
-        bool complete = false;
-        bool precise  = true;
-
-        // plan_vulkan.md VULKAN-182: ONE query, recorded once and then polled across frames.
-        //
-        // This loop used to build a NEW OcclusionQuery every iteration and check it immediately
-        // after `EndDraw()`, so no query was ever polled more than once. On llvmpipe that works,
-        // because a software rasterizer has finished the frame by the time the submit returns. On
-        // real hardware it cannot: the result is not ready that instant, the next iteration throws
-        // the query away and makes another, and sixty frames later nothing has ever completed --
-        // measured on RADV, where leg A reported exactly that while the renderer was correct.
-        //
-        // Polling one query until it completes is also the XNA idiom this test claims to cover;
-        // a game does not discard and re-issue its query every frame.
+        // plan_vulkan.md VULKAN-182: queue ONE query once, then let ordinary Game frames submit
+        // and poll it. A tight loop that calls EndDraw repeatedly from inside one Draw callback is
+        // not frame progression and can recycle a fence before the public loop regains control.
+        if (!submitted_)
         {
-            BasicEffect fx(dev);
-            fx.VertexColorEnabled = true;
-            fx.Apply();
-
-            dev.Clear(Color(0, 0, 0, 255));
+            effect_->Apply();
             // Occluder: left half, nearer. Not queried.
             DrawQuad(dev, -1.0f, 0.0f, 0.25f, Color(255, 0, 0, 255));
-
-            query = std::make_unique<OcclusionQuery>(dev);
-            precise = query->isPixelCountPreciseEXT();
-            query->Begin();
+            query_->Begin();
             DrawQuad(dev, -1.0f, 1.0f, 0.75f, Color(0, 255, 0, 255));
-            query->End();
-
-            EndDraw();          // submit the frame the query was recorded in
+            query_->End();
+            submitted_ = true;
+            pollStart_ = std::chrono::steady_clock::now();
+            return;
         }
 
-        const auto pollStart = std::chrono::steady_clock::now();
-        int polls = 0;
-        for (int frame = 0; frame < kMaxPollFrames; ++frame)
+        ++polls_;
+        if (!query_->getIsCompleteProperty())
         {
-            polls = frame + 1;
-            if (query->getIsCompleteProperty()) {
-                complete = true;
-                counted  = query->getPixelCountProperty();
-                break;
-            }
-            if (std::chrono::steady_clock::now() - pollStart > kPollDeadline) break;
-            // An ordinary frame, with nothing tagged for the query: the renderer resets only the
-            // pools of queries tagged on a pending draw, so this keeps the device advancing
-            // without disturbing the result being waited for.
-            dev.Clear(Color(0, 0, 0, 255));
-            EndDraw();
+            if (polls_ < kMaxPollFrames &&
+                std::chrono::steady_clock::now() - pollStart_ <= kPollDeadline)
+                return;
+            const auto pollMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - pollStart_).count();
+            check(false, "A the query completes and the renderer states its precision",
+                  "never completed: " + std::to_string(polls_) + " polls over "
+                      + std::to_string(pollMs) + " ms");
+            Finish();
+            return;
         }
 
+        int counted = -1;
+        try
+        {
+            counted = query_->getPixelCountProperty();
+        }
+        catch (const std::exception& e)
+        {
+            check(false, "A the query completes and the renderer states its precision",
+                  std::string("PixelCount after IsComplete threw: ") + e.what());
+            Finish();
+            return;
+        }
         const auto pollMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - pollStart).count();
-        check(complete, "A the query completes and the renderer states its precision",
-              complete ? (std::string("precise=") + (precise ? "true" : "false")
-                          + ", PixelCount=" + std::to_string(counted) + ", after "
-                          + std::to_string(polls) + " polls / " + std::to_string(pollMs) + " ms")
-                       : ("never completed: " + std::to_string(polls) + " polls over "
-                          + std::to_string(pollMs) + " ms"));
+            std::chrono::steady_clock::now() - pollStart_).count();
+        check(true, "A the query completes and the renderer states its precision",
+              std::string("precise=") + (precise_ ? "true" : "false")
+                  + ", PixelCount=" + std::to_string(counted) + ", after "
+                  + std::to_string(polls_) + " polls / " + std::to_string(pollMs) + " ms");
 
-        if (!complete) { Finish(); return; }
-
-        if (precise) {
+        if (precise_) {
             check(counted == kExpectedVisible,
                   "B the count is the exact number of surviving fragments",
                   std::to_string(counted) + ", expected exactly "
@@ -207,6 +207,7 @@ protected:
 private:
     void Finish()
     {
+        done_ = true;
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);
         Exit();
     }

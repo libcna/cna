@@ -14914,12 +14914,30 @@ namespace CNA::Internal::Renderers::Vulkan
         // its draws in several calls, and a query left open by one slice must stay open across the
         // clear rather than being ended and re-begun on the same pool index, which is invalid usage.
         VulkanOcclusionQueryRenderer* openQuery3D = nullptr;
+        auto finishRecordedOcclusionQuery = [&](VulkanOcclusionQueryRenderer* query)
+        {
+            if (query == nullptr || query->pool_ == VK_NULL_HANDLE) return;
+            vkCmdEndQuery(cb, query->pool_, 0);
+            query->recordedThisFrame_ = true;
+            // MSR-026: do not poll this generation while the pool still exposes the previous
+            // generation's available result ahead of this submission's queued reset. This is the
+            // same frame-fence ownership rule used by VulkanGpuTimerRenderer below.
+            if (rtOnly)
+            {
+                query->completionFence_ = VK_NULL_HANDLE;
+                query->submissionGeneration_ = 0;
+                query->submissionComplete_ = true;
+            }
+            else
+            {
+                query->completionFence_ = inFlightFences_[currentFrame_];
+                query->submissionGeneration_ = frameGeneration_ + 1;
+                query->submissionComplete_ = false;
+            }
+        };
         auto closeOpenQuery3D = [&]()
         {
-            if (openQuery3D && openQuery3D->pool_ != VK_NULL_HANDLE) {
-                vkCmdEndQuery(cb, openQuery3D->pool_, 0);
-                openQuery3D->recordedThisFrame_ = true;
-            }
+            finishRecordedOcclusionQuery(openQuery3D);
             openQuery3D = nullptr;
         };
         // REMED-GFX-129: see drawSpritesFor for what afterOrder/beforeOrder mean.
@@ -14981,10 +14999,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 // in-flight result; this implements the approved "reject additional spans beyond
                 // the first contiguous run" policy.
                 if (draw.occlusionQuery != openQuery) {
-                    if (openQuery && openQuery->pool_ != VK_NULL_HANDLE) {
-                        vkCmdEndQuery(cb, openQuery->pool_, 0);
-                        openQuery->recordedThisFrame_ = true;
-                    }
+                    finishRecordedOcclusionQuery(openQuery);
                     openQuery = nullptr;
                     if (draw.occlusionQuery && draw.occlusionQuery->pool_ != VK_NULL_HANDLE
                         && !draw.occlusionQuery->recordedThisFrame_) {
@@ -23591,6 +23606,10 @@ namespace CNA::Internal::Renderers::Vulkan
         if (!owner_ || pool_ == VK_NULL_HANDLE) return;
         ended_ = false;
         taggedDraws_ = 0;
+        completionFence_ = VK_NULL_HANDLE;
+        submissionGeneration_ = 0;
+        submissionComplete_ = false;
+        resultCached_ = false;
         // Task 447/854: occlusion queries in Vulkan must be recorded inside a render pass, and
         // CNA's Vulkan renderer defers all draws to RecordCommandBuffer -- so Begin()/End() don't
         // inject any Vulkan commands directly. Instead, this marks the query "active": every
@@ -23616,24 +23635,43 @@ namespace CNA::Internal::Renderers::Vulkan
     bool VulkanOcclusionQueryRenderer::IsComplete() const
     {
         if (!owner_ || pool_ == VK_NULL_HANDLE || !ended_) return false;
+        if (resultCached_) return true;
         // VKPAR-0026: nothing was drawn between Begin() and End(), so nothing was recorded and
         // nothing will be -- the query is complete and counted no pixels, as XNA reports it.
         if (taggedDraws_ == 0)
         {
             pixelCount_ = 0;
+            resultCached_ = true;
             return true;
         }
-        uint64_t result = 0;
-        VkResult r = vkGetQueryPoolResults(owner_->device_, pool_, 0, 1,
-                                           sizeof(result), &result,
-                                           sizeof(result),
-                                           VK_QUERY_RESULT_64_BIT);
-        if (r == VK_SUCCESS)
+        if (!submissionComplete_)
         {
-            pixelCount_ = static_cast<int>(result);
-            return true;
+            if (submissionGeneration_ != 0 &&
+                owner_->completedFrameGeneration_ >= submissionGeneration_)
+            {
+                submissionComplete_ = true;
+            }
+            else if (completionFence_ != VK_NULL_HANDLE &&
+                     vkGetFenceStatus(owner_->device_, completionFence_) == VK_SUCCESS)
+            {
+                submissionComplete_ = true;
+            }
+            else
+            {
+                return false;
+            }
         }
-        return false; // VK_NOT_READY
+
+        std::array<std::uint64_t, 2> resultAndAvailability{};
+        const VkResult result = vkGetQueryPoolResults(
+            owner_->device_, pool_, 0, 1, sizeof(resultAndAvailability),
+            resultAndAvailability.data(), sizeof(resultAndAvailability),
+            VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
+        if (result != VK_SUCCESS || resultAndAvailability[1] == 0) return false;
+
+        pixelCount_ = static_cast<int>(resultAndAvailability[0]);
+        resultCached_ = true;
+        return true;
     }
 
     int VulkanOcclusionQueryRenderer::PixelCount() const { return pixelCount_; }
