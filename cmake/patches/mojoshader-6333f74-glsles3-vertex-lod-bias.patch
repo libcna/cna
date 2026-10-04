@@ -1,0 +1,139 @@
+diff --git a/mojoshader.h b/mojoshader.h
+--- a/mojoshader.h
++++ b/mojoshader.h
+@@ -1766,6 +1766,17 @@
+  */
+ DECLSPEC void MOJOSHADER_glProgramVFaceFlipInfo(int flip);
+ 
++/*
++ * Add one XNA vertex sampler's MipMapLevelOfDetailBias to explicit TEXLDL
++ * sampling on GLSL ES 3, whose sampler objects have no LOD-bias state.
++ * sampler must be in the XNA HiDef vertex range 0..3. Other GLSL profiles
++ * do not declare the generated uniform, so this is a harmless no-op there.
++ *
++ * This call is NOT thread safe and requires a current MOJOSHADER_glContext
++ * with a linked program bound.
++ */
++DECLSPEC void MOJOSHADER_glProgramVertexSamplerLodBiasInfo(int sampler, float bias);
++
+ 
+ /*
+  * Free the resources of a linked program. This will delete the GL object
+diff --git a/mojoshader_opengl.c b/mojoshader_opengl.c
+--- a/mojoshader_opengl.c
++++ b/mojoshader_opengl.c
+@@ -136,6 +136,8 @@
+     int current_vface_flip;
+     GLint vs_pixel_center_loc;
+     float current_pixel_center[2];
++    GLint vs_sampler_lod_bias_loc;
++    float current_vs_sampler_lod_bias[4];
+ #ifdef MOJOSHADER_FLIP_RENDERTARGET
+     GLint vs_flip_loc;
+     int current_flip;
+@@ -1188,6 +1190,8 @@
+     program->ps_vpos_flip_loc = glsl_uniform_loc(program, "vposFlip");
+     program->ps_vface_flip_loc = glsl_uniform_loc(program, "cnaVFaceFlip");
+     program->vs_pixel_center_loc = glsl_uniform_loc(program, "cnaPixelCenter");
++    program->vs_sampler_lod_bias_loc =
++        glsl_uniform_loc(program, "cnaVertexSamplerLodBias");
+ #ifdef MOJOSHADER_FLIP_RENDERTARGET
+     program->vs_flip_loc = glsl_uniform_loc(program, "vpFlip");
+ #endif
+@@ -2586,6 +2590,7 @@
+     memset(retval->vertex_attrib_loc, 0xFF, sizeof(retval->vertex_attrib_loc));
+     retval->vs_pixel_center_loc = -1;
+     retval->ps_vface_flip_loc = -1;
++    retval->vs_sampler_lod_bias_loc = -1;
+ 
+     numregs = 0;
+     if (vshader != NULL) numregs += vshader->parseData->uniform_count;
+@@ -3360,6 +3365,21 @@
+ } // MOJOSHADER_glProgramVFaceFlipInfo
+ 
+ 
++void MOJOSHADER_glProgramVertexSamplerLodBiasInfo(int sampler, float bias)
++{
++    MOJOSHADER_glProgram *program = ctx->bound_program;
++
++    if ((program == NULL) || (program->vs_sampler_lod_bias_loc == -1) ||
++        (sampler < 0) || (sampler >= 4) ||
++        (program->current_vs_sampler_lod_bias[sampler] == bias))
++        return;
++
++    program->current_vs_sampler_lod_bias[sampler] = bias;
++    ctx->glUniform4fv(program->vs_sampler_lod_bias_loc, 1,
++                      program->current_vs_sampler_lod_bias);
++} // MOJOSHADER_glProgramVertexSamplerLodBiasInfo
++
++
+ void MOJOSHADER_glDeleteProgram(MOJOSHADER_glProgram *program)
+ {
+     program_unref(program);
+diff --git a/profiles/mojoshader_profile_glsl.c b/profiles/mojoshader_profile_glsl.c
+--- a/profiles/mojoshader_profile_glsl.c
++++ b/profiles/mojoshader_profile_glsl.c
+@@ -678,6 +678,11 @@
+         // their fourth decimal place and the difference turns to noise (cna-cs CSX-136). -CNA
+         output_line(ctx, "precision highp sampler2D;");
+         output_line(ctx, "precision highp samplerCube;");
++        // OpenGL ES has no sampler LOD-bias state. Vertex TEXLDL already names an explicit
++        // level, so the OpenGL adapter supplies XNA's four per-sampler biases through this
++        // generated uniform and the instruction emitter adds the selected component. -CNA
++        if (shader_is_vertex(ctx))
++            output_line(ctx, "uniform vec4 cnaVertexSamplerLodBias;");
+         pop_output(ctx);
+     } // else if
+     #endif
+@@ -3153,6 +3158,8 @@
+     const SourceArgInfo *samp_arg = &ctx->source_args[1];
+     RegisterList *sreg = reglist_find(&ctx->samplers, REG_TYPE_SAMPLER,
+                                           samp_arg->regnum);
++    const int add_sampler_bias = support_glsles3(ctx) && shader_is_vertex(ctx);
++    const char *bias_component = "";
+     const char *pattern = NULL;
+     char src0[64];
+     char src1[64];
+@@ -3165,19 +3172,29 @@
+         return;
+     } // if
+ 
++    if (add_sampler_bias)
++    {
++        if ((samp_arg->regnum < 0) || (samp_arg->regnum >= 4))
++        {
++            fail(ctx, "TEXLDL vertex sampler is outside XNA's four-slot range");
++            return;
++        } // if
++        bias_component = (const char *[]) { ".x", ".y", ".z", ".w" }[samp_arg->regnum];
++    } // if
++
+     // HLSL tex2dlod accepts (sampler, uv.xyz, uv.w) where uv.w is the LOD
+     // GLSL seems to want the dimensionality to match the sampler (.xy vs .xyz)
+     //  so we vary the swizzle accordingly
+     switch ((const TextureType) sreg->index)
+     {
+         case TEXTURE_TYPE_2D:
+-            pattern = "texture2DLod(%s, %s.xy, %s.w)%s";
++            pattern = "texture2DLod(%s, %s.xy, %s.w%s%s)%s";
+             break;
+         case TEXTURE_TYPE_CUBE:
+-            pattern = "textureCubeLod(%s, %s.xyz, %s.w)%s";
++            pattern = "textureCubeLod(%s, %s.xyz, %s.w%s%s)%s";
+             break;
+         case TEXTURE_TYPE_VOLUME:
+-            pattern = "texture3DLod(%s, %s.xyz, %s.w)%s";
++            pattern = "texture3DLod(%s, %s.xyz, %s.w%s%s)%s";
+             break;
+         default:
+             fail(ctx, "unknown texture type");
+@@ -3191,7 +3208,8 @@
+ 
+     char code[128];
+     make_GLSL_destarg_assign(ctx, code, sizeof(code),
+-        pattern, src1, src0, src0, swiz_str);
++        pattern, src1, src0, src0,
++        add_sampler_bias ? " + cnaVertexSamplerLodBias" : "", bias_component, swiz_str);
+ 
+     prepend_glsl_texlod_extensions(ctx);
+     output_line(ctx, "%s", code);

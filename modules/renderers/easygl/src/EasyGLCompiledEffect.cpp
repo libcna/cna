@@ -1221,6 +1221,13 @@ namespace CNA::Internal::Renderers::EasyGL
                 ApplySamplerMipState(nativeUnit, samplerState.getMaxMipLevelProperty(),
                                      samplerState.getMipMapLevelOfDetailBiasProperty());
             }
+            // GLSL ES 3 has no sampler-object LOD-bias state. MojoShader's generated vertex
+            // TEXLDL expression therefore adds this per-register uniform to its explicit LOD.
+            // Desktop GLSL does not declare the uniform and keeps using GL_TEXTURE_LOD_BIAS, so
+            // this call is a no-op there and cannot double-apply the value.
+            MOJOSHADER_glProgramVertexSamplerLodBiasInfo(
+                sampler.index,
+                samplerAssigned ? samplerState.getMipMapLevelOfDetailBiasProperty() : 0.0f);
         }
 
         for (int i = 0; i < pixelParseData->sampler_count; ++i)

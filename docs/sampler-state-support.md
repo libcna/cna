@@ -118,7 +118,7 @@ change what the GPU samples. That was true of **every** renderer except FNA3D un
 |---|---|---|
 | FNA3D | `GL_TEXTURE_BASE_LEVEL` / SDL_GPU `min_lod`, whichever driver is active | desktop GL only; FNA3D's own GL driver skips it under ES |
 | SDL_GPU | **implemented** — `SDL_GPUSamplerCreateInfo::min_lod`, and part of the sampler cache key | **implemented on every ordinary stock/SpriteBatch and compiled-XNA-effect route** — SDLGPU-121/122 use SPIR-V's Bias operand because SDL documents native `mip_lod_bias` as a Metal no-op; Vulkan and D3D12 run the same shader emulation so the proof cannot pass through their working descriptor field |
-| EasyGL, ES 3 profiles (`OPENGLES3`, `WEBGL2`) | **implemented** — sampler-object `GL_TEXTURE_MIN_LOD` | **not representable**: OpenGL ES has no `GL_TEXTURE_LOD_BIAS` at all |
+| EasyGL, ES 3 profiles (`OPENGLES3`, `WEBGL2`) | **implemented** — sampler-object `GL_TEXTURE_MIN_LOD` | **not representable as sampler state**: OpenGL ES has no `GL_TEXTURE_LOD_BIAS`; compiled vertex `TEXLDL` is nevertheless implemented by shader emulation (`FX-146`) |
 | EasyGL, `OPENGL33` | **implemented** — `GL_TEXTURE_MIN_LOD` | **implemented** — `GL_TEXTURE_LOD_BIAS` |
 | EasyGL, ES 2 profiles (`OPENGLES2`, `WEBGL1`) | **not representable**: no sampler objects and no `GL_TEXTURE_MIN_LOD` | not representable |
 | EasyGL `AddressW` | **implemented on the ES 3 and desktop profiles** since FX-092 — sampler-object `GL_TEXTURE_WRAP_R`; not representable on the ES 2 profiles, which have neither sampler objects nor volume textures | — |
@@ -127,6 +127,16 @@ change what the GPU samples. That was true of **every** renderer except FNA3D un
 | Direct3D 11 | **implemented** — `D3D11_SAMPLER_DESC::MinLOD`; behaviorally proven by `SamplerLodAddressWContract` | **implemented** — `D3D11_SAMPLER_DESC::MipLODBias`; behaviorally proven by `SamplerLodAddressWContract` |
 | Direct3D 12 | **implemented** — `D3D12_SAMPLER_DESC::MinLOD`; behaviorally proven by `SamplerLodAddressWContract` | **implemented** — `D3D12_SAMPLER_DESC::MipLODBias`; behaviorally proven by `SamplerLodAddressWContract` |
 | every other renderer | default no-op | default no-op |
+
+**EasyGL compiled vertex sampling is the narrow ES exception since FX-146 (2026-10-04).** A
+`vs_3_0 TEXLDL` already supplies an explicit level in the coordinate's W component, so the GLSL
+ES 3 translation adds the selected one of four XNA vertex-sampler biases to that value. MojoShader's
+OpenGL adapter uploads the four values through a program uniform immediately before the draw.
+Desktop GLSL does not declare that uniform and continues to use `GL_TEXTURE_LOD_BIAS`, preventing a
+double application. This does not claim a general ES sampler-state solution: implicit pixel/stock
+sampling still has no equivalent state in EasyGL. The existing shared vertex-sampler transition
+test covers zero, +1, `MaxMipLevel=1`, reset, null and disposal and passes in the complete 686/686
+OPENGLES3 compiled-effect selection.
 
 ### WebGPU's LOD bias is a SHADER emulation, and its boundary is named
 

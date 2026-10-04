@@ -1815,11 +1815,10 @@ namespace CNA::Internal::Renderers::EasyGL
          * read-back pixel checks plus this renderer's golden-pixel test. The pass's declared
          * `sampler_state` block reaches the GPU.
          *
-         * Still refused explicitly rather than silently mishandled: a compiled effect's vertex
-         * shader sampling a texture, and a 3D/cube (not 2D) sampler binding. `AddressW` now reaches
-         * `GL_TEXTURE_WRAP_R` (plans/plan_fx.md FX-092), though the compiled route's own 2D-only sampling
-         * never observes it; `MipMapLevelOfDetailBias` remains unrepresentable on the OpenGL ES
-         * profiles, which have no such GL state -- see docs/sampler-state-support.md.
+         * Vertex-stage 2D/cube/volume sampling uses XNA's four independent public slots, and the
+         * generated GLSL ES 3 TEXLDL path adds `MipMapLevelOfDetailBias` to its explicit LOD because
+         * ES sampler objects have no corresponding state. Pixel-shader implicit sampling still
+         * cannot represent that property on the ES profiles; see docs/sampler-state-support.md.
          * @return true.
          */
         [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
@@ -2263,10 +2262,10 @@ namespace CNA::Internal::Renderers::EasyGL
          * driver instead writes `GL_TEXTURE_BASE_LEVEL` on the texture object, which is not
          * reachable from a per-slot sampler and would leak between two slots sampling one texture.
          *
-         * `MipMapLevelOfDetailBias` has no OpenGL ES equivalent at all -- `GL_TEXTURE_LOD_BIAS` is
-         * desktop-GL only, which is exactly why FNA3D's GL driver skips it under `useES3` -- so it
-         * is applied on the desktop profiles and documented as unrepresentable on the ES ones
-         * rather than silently approximated.
+         * `MipMapLevelOfDetailBias` has no OpenGL ES sampler-state equivalent at all --
+         * `GL_TEXTURE_LOD_BIAS` is desktop-GL only, which is exactly why FNA3D's GL driver skips it
+         * under `useES3` -- so ordinary/implicit ES sampling cannot consume it here. The compiled
+         * vertex TEXLDL path separately adds the value to its explicit LOD in generated GLSL ES 3.
          *
          * @param slot Sampler slot.
          * @param maxMipLevel Most detailed mip level the sampler may use.

@@ -294,11 +294,9 @@ comment. FNA's source is at `/rv/data/library/github.com/FNA-XNA/FNA`.
 | CBIND-155 | `ed885a8ae` | ABI 0.44.0: Activated/Deactivated handlers run in a callback scope with the device. |
 | CBIND-156 | `6c278b21d` | A stock effect's draw samples the device's sampler slot: Apply binds its texture (null too); a texture set on `GraphicsDevice.Textures` after Apply is drawn (LilyPath). |
 | FX-145 | `26b477686` | Compiled effects sample float textures at highp on GLSL ES 3 (MojoShader patch `mojoshader-6333f74-glsles3-sampler-precision.patch`; Mesa read lowp Vector2 textures at fp16 — LiSPSM's variance shadow). Fixture `tests/fixtures/compiled-effects/variance-moments-xna4.*`. |
+| FX-146 | this commit | GLSL ES 3 compiled vertex `TEXLDL` adds the live sampler's LOD bias in generated shader code; the full compiled-effect selection passes 686/686. |
 
 Known native issues. None of them was introduced by this campaign:
-- On OPENGLES3, 1 of 686 `EasyGLCompiledEffect*` tests fails: `SharedVertexSamplerContract`, at
-  its vertex LOD-bias step. GLES 3 has no sampler LOD bias, so the fix is either shader emulation or
-  a recorded capability refusal.
 - `CnaRendererTests` aborts at its first test that constructs a `GraphicsDevice`. The binary links
   its own static meta-gl copy, which is never loaded (the same defect FX-144 fixed for CnaTests).
 - In `CnaContentTests`, `GltfRendererPbrFallbackPolicy...` fails on WebGPU source-text evidence.
@@ -398,7 +396,7 @@ Alternatively, use `../cna/tools/platform/run_gpu_tests_private.sh --exec dotnet
 | CNA.GamerServices.IntegrationTests (isolated XDG, no session bus) | 24/24 | 2026-10-02 |
 | cna-cs api-compat (`XNA_REFERENCE_PATH=~/deps/xna40-windows-assemblies dotnet run --project tools/api-compat -c Release -- --format text`) | 0 diagnostics | 2026-10-02 |
 | CNA `^CApi` (`run_gpu_tests_private.sh build-probe -R '^CApi' -j4`) | 119/119; C API gates 9/9; `^(Game\|Runtime)` 297/297 | at CBIND-155 |
-| CNA compiled effects (`-R EasyGLCompiledEffect`) | 685/686 (the one in §7), plus the FX-145 test | at FX-145 |
+| CNA compiled effects (`-R EasyGLCompiledEffect`) | **686/686** on isolated Mesa GLES 3.2 | 2026-10-04, FX-146 |
 | CNA SDL boundary gates (`tools/platform/*.py --check`) | pass | 2026-10-02 |
 
 Not rerun recently: `scripts/Package-Acceptance.sh`, which last passed on ABI 0.40.0.

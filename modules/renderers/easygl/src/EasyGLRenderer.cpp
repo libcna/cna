@@ -8991,8 +8991,9 @@ else
 if (ProfileIsEs2ApiGeneration())
 {
         // GLES 2.0 / WebGL 1 have neither sampler objects nor GL_TEXTURE_MIN_LOD, so neither of
-        // these two states is representable. Documented in docs/sampler-state-support.md rather
-        // than approximated: silently applying a nearby state would be worse than not applying it.
+        // these two states is representable here. Documented in docs/sampler-state-support.md
+        // rather than approximated: silently applying a nearby state would be worse than not
+        // applying it. The compiled GLSL ES 3 vertex path's shader emulation is separate.
         (void) maxMipLevel;
         (void) lodBias;
         return;
@@ -9018,7 +9019,8 @@ else
             // Desktop-only: GL_TEXTURE_LOD_BIAS (0x8501) does not exist in OpenGL ES at all, which
             // is why FNA3D's own GL driver guards the identical write with !renderer->useES3. It
             // is spelled as its numeric token because the ES headers an ES-profile build compiles
-            // against do not declare the name, and this one translation unit serves both.
+            // against do not declare the name, and this one translation unit serves both. Compiled
+            // vertex TEXLDL uses its own GLSL ES 3 uniform instead of reaching this state.
             constexpr unsigned int kGlTextureLodBias = 0x8501u;
             WriteSamplerParameter(slot, SamplerShadowField::LodBias,
                                   static_cast<::easygl::SamplerParameter>(kGlTextureLodBias), lodBias);
