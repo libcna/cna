@@ -380,7 +380,7 @@ if(CNA_BUILD_TESTS)
     # The phone service adapts Game's lifecycle events, so its tests construct a Game.
     set(CNA_TEST_GROUP_DEPENDENCY_phone cna_phone cna_runtime)
     set(CNA_TEST_GROUP_DEPENDENCY_media cna_media)
-    if(EMSCRIPTEN)
+    if(CMAKE_CROSSCOMPILING)
         set(CNA_TEST_GROUP_DEPENDENCY_net CNA_Net CNA_JsonHeaders)
     else()
         set(CNA_TEST_GROUP_DEPENDENCY_net CNA_Net nlohmann_json::nlohmann_json)

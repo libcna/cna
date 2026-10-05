@@ -52,6 +52,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-029 | **DONE** | Re-run and manually inspect the post-fix representative Linux visual matrix. |
 | MSR-030 | **DONE** | Repair target-aware dependency discovery, runtime deployment and sharp-runtime portability exposed by the seven-renderer Windows cross-build. |
 | MSR-031 | **DONE** | Repair DirectX compiled-effect native parameter indexing, stage-sized sampler state and draw-time public texture bindings. |
+| MSR-032 | **DONE** | Keep the remaining test and service harness JSON consumers target-independent in cross builds. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -779,6 +780,16 @@ Regression and integration evidence:
   faults while creating the real HWND swap chain.  CNA's off-screen DirectX 12 suites pass, and
   the renderer already documents this Wine swap-chain limitation; the sample result is therefore
   `ENVIRONMENT BLOCKED`, not a renderer pass and not a silent fallback.
+
+## MSR-032 — Remaining cross-build JSON consumers
+
+The focused Windows DirectX test configurations found two consumers that still linked the host
+`nlohmann_json::nlohmann_json` imported target after MSR-030 had isolated the principal cross-build
+paths.  The Net test group now uses `CNA_JsonHeaders` for every cross toolchain, not only
+Emscripten, and the service relay harness uses the common `cna_link_json_headers()` helper.  Native
+builds retain their package target.  Clean MinGW DirectX 9, 11 and 12 test configurations generate
+and link `CnaRendererTests`; the full Windows multi-sample tree also regenerates and links after
+the change.
 
 ## Representative automated matrix
 
