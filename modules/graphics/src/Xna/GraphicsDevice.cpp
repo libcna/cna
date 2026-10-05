@@ -510,10 +510,12 @@ namespace Microsoft::Xna::Framework::Graphics
             // DepthStencilState.Default; RasterizerState = RasterizerState.CullCounterClockwise;") —
             // Task 896 ported only the 3rd line; this now ports the other 2 as well, matching FNA.
             setBlendStateProperty(BlendState::Opaque);
-            // A 2D-only renderer has no native depth/stencil state to initialize. Skipping this one
-            // constructor-time synchronization lets such a renderer reject every later public state
-            // assignment consistently, instead of needing a special first-call exception.
-            if (renderer_->SupportsDepthStencil())
+            // A 2D-only renderer has no native depth/stencil state to initialize. Test the
+            // renderer family's 3D contract rather than the current backbuffer attachment: a 3D
+            // renderer must retain DepthStencilState::Default even when the eager Game-owned
+            // device is first constructed with DepthFormat::None and a later
+            // GraphicsDeviceManager reset supplies Depth24.
+            if (renderer_->SupportsCapability(CNA::GraphicsCapability::ThreeD))
                 setDepthStencilStateProperty(DepthStencilState::Default);
             setRasterizerStateProperty(RasterizerState::CullCounterClockwise);
             restoreCallerGlBinding();

@@ -119,6 +119,42 @@ namespace
         return ReadCenter(device);
     }
 
+    Color RenderConstructorDefaultDepthWinner()
+    {
+        GraphicsDevice device(
+            GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+            BackbufferParameters(DepthFormat::Depth24));
+
+        RasterizerState rasterizer;
+        rasterizer.setCullModeProperty(CullMode::None);
+        device.setRasterizerStateProperty(rasterizer);
+
+        device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer,
+                     Color::Black, 1.0f, 0);
+        DrawFullScreen(device, Color::Red, 0.2f);
+        DrawFullScreen(device, Color::Green, 0.8f);
+        return ReadCenter(device);
+    }
+
+    Color RenderDepthlessConstructionResetDefaultDepthWinner()
+    {
+        GraphicsDevice device(
+            GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+            BackbufferParameters(DepthFormat::None));
+
+        device.Reset(BackbufferParameters(DepthFormat::Depth24));
+
+        RasterizerState rasterizer;
+        rasterizer.setCullModeProperty(CullMode::None);
+        device.setRasterizerStateProperty(rasterizer);
+
+        device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer,
+                     Color::Black, 1.0f, 0);
+        DrawFullScreen(device, Color::Red, 0.2f);
+        DrawFullScreen(device, Color::Green, 0.8f);
+        return ReadCenter(device);
+    }
+
     Color RenderStencilProbe(DepthFormat format, int samples)
     {
         GraphicsDevice device(
@@ -465,6 +501,30 @@ TEST(BackBufferDepthStencilContractTest, NoneAndDepth24SelectDepthFragmentAccept
     EXPECT_EQ(RenderDepthWinner(DepthFormat::Depth24), Color::Red);
 }
 
+// MSR-035: the public state cache starts on the XNA presets, so constructor-time setters must
+// still apply them to the native renderer before the first draw. SDL_GPU otherwise retained its
+// zero-initialized, depth-disabled native state until an application selected a different state.
+TEST(BackBufferDepthStencilContractTest, ConstructorAppliesDefaultDepthStateBeforeFirstDraw)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(
+        Software, OpenGL33, OpenGLES3, Vulkan, WebGPU, SdlGpu, Fna3d,
+        DirectX11, DirectX12);
+
+    EXPECT_EQ(RenderConstructorDefaultDepthWinner(), Color::Red);
+}
+
+// MSR-035: Game eagerly constructs its GraphicsDevice before GraphicsDeviceManager supplies the
+// requested presentation parameters. A capable 3D renderer must retain the default depth state
+// across the common None-at-construction, Depth24-at-reset sequence without a sample assigning it.
+TEST(BackBufferDepthStencilContractTest, DepthlessConstructionThenResetRetainsDefaultDepthState)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(
+        Software, OpenGL33, OpenGLES3, Vulkan, WebGPU, SdlGpu, Fna3d,
+        DirectX11, DirectX12);
+
+    EXPECT_EQ(RenderDepthlessConstructionResetDefaultDepthWinner(), Color::Red);
+}
+
 TEST(BackBufferDepthStencilContractTest, SingleSampleDepth24DoesNotExposeHiddenStencil)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
@@ -565,7 +625,8 @@ TEST(BackBufferDepthStencilContractTest, ExplicitMissingRenderTargetAttachmentsT
 
 TEST(BackBufferDepthStencilContractTest, SingleArgumentClearUsesOneInsteadOfViewportMaxDepth)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(
+        Software, OpenGL33, OpenGLES3, SdlGpu, DirectX11, DirectX12);
 
     GraphicsDevice device(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,

@@ -55,6 +55,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-032 | **DONE** | Keep the remaining test and service harness JSON consumers target-independent in cross builds. |
 | MSR-033 | **DONE** | Replace the stale sample-renderer assessment with the measured Linux matrix and exact native Windows/macOS follow-up procedures. |
 | MSR-034 | **DONE** | Preserve XNA integer pixel centres through FNA3D without shifting SpriteBatch, restoring `PrimitivesSample`'s one-pixel stars. |
+| MSR-035 | **DONE** | Apply XNA's default graphics states to every 3D renderer during `GraphicsDevice` construction, including the eager depthless `Game` device, restoring SDL_GPU compiled-model depth. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -842,6 +843,50 @@ Regression and integration evidence:
 - the seven-renderer Windows sample configuration cross-builds the same executable and compiles
   FNA3D's patched D3D11 driver.  That is compile evidence only; native Windows rasterization still
   requires the planned hardware run.
+
+## MSR-035 — Constructor-time default graphics state
+
+The full-gallery visual sweep found black triangular wedges across the direct SDL_GPU
+`CustomModelEffect` model while the same authentic compiled effect rendered correctly through
+OPENGL33 and FNA3D's SDL_GPU driver.  Shader binaries, packed uniforms, textures, vertex/index
+bytes and draw ranges were identical.  Pipeline comparison isolated the real difference: direct
+SDL_GPU had depth testing and writes disabled, while the FNA3D route used XNA's default
+`LessEqual` depth state.
+
+`GraphicsDevice` initialized its public state cache to `BlendState::Opaque`,
+`DepthStencilState::Default` and `RasterizerState::CullCounterClockwise`, then invoked the normal
+setters to apply those presets to the renderer.  Two common lifecycle mistakes defeated that
+intent.  First, the three corresponding dirty flags started false, so reference-equality
+short-circuiting treated the constructor-time setters as no-ops.  Second, the depth setter was
+guarded by `SupportsDepthStencil()`, which on SDL_GPU truthfully describes the *current backbuffer
+attachment*.  A `Game` eagerly constructs its device with `DepthFormat::None` before
+`GraphicsDeviceManager::CreateDevice()` resets it to `Depth24`, so this guard incorrectly treated a
+fully 3D-capable renderer as though it were a 2D-only family and never installed the default depth
+state.
+
+The flags now start dirty, and the constructor distinguishes a real 2D-only renderer through the
+existing `GraphicsCapability::ThreeD` contract instead of asking whether the initial backbuffer
+happens to own depth storage.  The normal renderer-independent state path therefore installs the
+XNA defaults before the later presentation reset.  This is a framework lifecycle repair; the
+sample and its compiled XNA effect remain unchanged.
+
+Regression and integration evidence:
+
+- `BackBufferDepthStencilContractTest.ConstructorAppliesDefaultDepthStateBeforeFirstDraw` draws
+  overlapping near/far geometry without explicitly assigning a depth state and verifies that the
+  first draw already observes `DepthStencilState::Default`;
+- `BackBufferDepthStencilContractTest.DepthlessConstructionThenResetRetainsDefaultDepthState`
+  reproduces the real `Game` lifecycle: construct with no depth attachment, reset to `Depth24`,
+  then draw without a sample-side state assignment;
+- all three focused depth/default-clear contracts pass on direct SDL_GPU and OPENGLES3 through the
+  private GPU runner;
+- the combined direct-SDL_GPU regression run completed 70 registrations: all 50 applicable
+  backbuffer/compiled-effect tests passed and 20 retained their existing renderer or optional-tool
+  skip conditions;
+- `matrix-results/msr-060-custom-model-depth-fix` records automated passes and fresh captures of
+  the unchanged `CustomModelEffect_cna_samples` executable on direct SDL_GPU and OPENGL33.  Manual
+  comparison shows the complete model without the pre-fix black wedges, with matching geometry,
+  depth ordering, material lighting and environment mapping.
 
 ## Current Linux corpus matrix
 
