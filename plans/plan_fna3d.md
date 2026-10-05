@@ -113,13 +113,13 @@ features that are already written.
 | FNA3D-31 | MRT: bind two or more real targets, draw into all of them, verify each one's contents independently | **done** — `Fna3d_RenderTarget_Advanced`; slot 1 genuinely receives the write and each target keeps its own storage |
 | FNA3D-32 | Render-target mipmaps: level count, base level after requesting mips, storage above level 0 | **done** — `Fna3d_RenderTarget_Advanced` |
 | FNA3D-33 | Sampler conformance: Point/Linear/Anisotropic, Wrap/Clamp/Mirror per axis, `MaxMipLevel`, LOD bias, `MaxAnisotropy` | **done** — `Fna3d_Sampler`; Point and Linear are distinguishable, all three address modes place the right texel past u=1, and the two axes are independent |
-| FNA3D-34 | Driver matrix: the same core conformance suite on OpenGL, Direct3D 11 and SDL_GPU | **open** — OpenGL owns the full suite; SDL_GPU/Vulkan now owns the 91-sample corpus plus focused format/capability tests on this host; its remaining renderer tests and native Windows D3D11 are not complete |
+| FNA3D-34 | Driver matrix: the same core conformance suite on OpenGL, Direct3D 11 and SDL_GPU | **open only on native Direct3D 11** — OpenGL and SDL_GPU/Vulkan each complete the same 66-test renderer/compiled-effect/oracle selection (65 pass plus one intentional Reach-profile skip); native Windows D3D11 is not complete |
 | FNA3D-35 | Negative suite: invalid regions and levels, disposed resources, draw-range validation, documented refusals, and resource-before-device teardown | **done** — `Fna3d_Lifetime`; post-device resource lifetime is covered separately by FNA3D-39 |
 
-FNA3D-26..33 and FNA3D-35 are closed. **FNA3D-34 remains open**: FNA3D's OpenGL driver owns the
-complete renderer suite, while its SDL_GPU/Vulkan driver now has sample-corpus and focused
-format/capability evidence on this host.  Do not widen that partial SDL_GPU evidence into a full
-driver pass, and do not describe Direct3D 11 as validated without native Windows execution.
+FNA3D-26..33 and FNA3D-35 are closed. **FNA3D-34 remains open only for native Direct3D 11**:
+FNA3D's OpenGL and SDL_GPU/Vulkan drivers each own the complete Linux renderer, compiled-effect
+and oracle selection on this host. Do not describe Direct3D 11 as validated without native
+Windows execution.
 
 ### Findings this phase produced
 
@@ -133,14 +133,14 @@ driver pass, and do not describe Direct3D 11 as validated without native Windows
 
 | Item | State |
 |---|---|
-| SDL_GPU driver | Partially exercised on AMD Radeon 780M / RADV during the sample multi-renderer campaign: the 91-sample startup/stability corpus ran with FNA3D's SDL_GPU/Vulkan driver, and `NormalizedByteFormat` 5/5 plus `Fna3d_Capabilities` pass directly on it. FNA3D-34 remains open until the complete thirteen-test renderer suite runs on this driver. |
+| SDL_GPU driver | Linux lane completed on AMD Radeon 780M / RADV: the 91-sample startup/stability corpus ran through FNA3D's SDL_GPU/Vulkan driver, and the same 66-test renderer/compiled-effect/oracle selection used for OpenGL completes with 65 passes plus one intentional Reach-profile skip. |
 | Direct3D 11 driver | Windows or DXVK-native only. External gate. The renderer code is driver-agnostic in the sense that it makes the same FNA3D calls; it is **not** established that the observable results match, and this lane has already found three driver-dependent behaviours (sub-rectangle readback origin, volume readback, compressed readback), so an OpenGL pass must not be read as validating the other drivers. |
 | macOS / iOS | Not exercised. External gate. |
 | Multiple simultaneous FNA3D devices on one thread | Not claimed. The OpenGL driver makes a context current at device creation but does not switch to the owning context around commands or teardown; a native two-live-device probe corrupts the second teardown. FNA3D-51 must either establish a one-device contract or add an upstream context-routing solution. |
 | Custom `ShaderEffect` | Blocked upstream by design (divergence 1). Would need FNA3D to gain a shader-source entry point, or CNA to ship a D3D9 effect compiler. |
 | Instanced drawing | Blocked by divergence 2, which is divergence 1 again. |
 | `DebugSimulateContextLoss` / `DebugRestoreContext` | Not implemented; FNA3D exposes no device-loss surface. |
-| Block-compressed readback | Implemented and measured, but FNA3D's OpenGL and Direct3D 11 drivers both refuse compressed `GetTextureData2D` outright. On those drivers `GetData` reports that it read nothing; on SDL_GPU it reads the blocks back. External gate: the "reads back" arm is unexercised here because no container has a working SDL_GPU stack. |
+| Block-compressed readback | Implemented and measured: FNA3D's OpenGL and Direct3D 11 drivers refuse compressed `GetTextureData2D`, so `GetData` reports that it read nothing; the qualified SDL_GPU/Vulkan lane reads the uploaded blocks back. |
 | Public compressed `Texture2D` | Still behind FNA3D's tri-state public format gate. The lower renderer contract is sized correctly for it (FNA3D-19), but the full public constructor/transfer/readback/content path is not yet promoted. FNA3D-52 opens only the separately verified `NormalizedByte2/4` formats rather than over-advertising every lower-level format. |
 | `FNA3D_SetTextureDataYUV` | Unreachable: `IGraphicsRenderer` has no YUV texture route, and `VideoDecoder` converts YUV→RGBA in the media module before any renderer sees it. Using it would need a shared-contract change. |
 | `FNA3D_GetVertexBufferData` / `FNA3D_GetIndexBufferData` | Unreachable: `IVertexBufferRenderer`/`IIndexBufferRenderer` expose no readback method, and XNA's `GetData` on those buffers is served from the shared layer's own CPU shadow. Would need a shared-contract change. |
@@ -169,15 +169,16 @@ is based on source inspection, not only on the older document's intended design.
 | FNA3D-45 | Restore the shared disposed-resource contract for `Texture2D` uploads and readbacks. | **done** — valid transfer entry points now throw `ObjectDisposedException`; generic graphics test coverage applies to every renderer |
 | FNA3D-46 | Clear sampler slot 1 when `EnvironmentMapEffect` has no environment map, and reject an environment map from another FNA3D device. | **done** — every apply verifies slot 1 with either the current cube or null; `Fna3d_Device_Lifetime` exercises a live→null transition and foreign-device rejection |
 | FNA3D-47 | Re-run ASan/UBSan over the enlarged 13-test FNA3D suite, including the post-device and >16-bit SpriteBatch paths added by this audit. | **done** — 13/13 pass with leak detection disabled for the external graphics stack; UBSan still reports the pre-existing MojoShader decimal-parser signed overflow, but no CNA-originating sanitizer defect was found |
-| FNA3D-48 | Make the documented OpenGL test-driver pin an actual CTest property for the entire FNA3D suite. | **done** — every registered `Fna3d_*` test receives `FNA3D_FORCE_DRIVER=OpenGL`; other drivers remain opt-in direct runs for FNA3D-34 |
+| FNA3D-48 | Make the documented OpenGL test-driver pin an actual CTest property for the entire FNA3D suite. | **done** — every registered `Fna3d_*` test receives the explicit `FNA3D_FORCE_DRIVER` selected by `CNA_FNA3D_TEST_DRIVER`, whose stable default remains OpenGL |
 | FNA3D-49 | Retain textures queued by deferred `SpriteBatch` until the renderer has completed `End`, instead of leaving raw wrapper/renderer pointers that may dangle between `Draw` and submission. | **done** — the shared SpriteBatch queue owns each `ITextureRenderer` through renderer `End`; `SpriteBatchSortModeTest.DeferredRetainsTextureRendererThroughEnd` pins the destruction order for every backend |
 | FNA3D-50 | Add deterministic native-allocation failure injection for device/effect/texture/render-target/buffer/query construction and buffer-growth rollback paths. | **open — test seam required** |
 | FNA3D-51 | Decide and enforce the device/thread/context contract: either document/reject a second live FNA3D device and cross-thread use, or contribute context switching to the upstream OpenGL driver and test concurrent creation/commands/teardown. | **open — upstream/contract decision** |
 | FNA3D-52 | Promote native `NormalizedByte2/4` Texture2D storage through the public tri-state format gate without advertising unverified formats. | **done** — `NormalizedByteFormat` 5/5 on FNA3D SDL_GPU and OpenGL, FNA3D-local classifier assertions, and `DistortionSample` / `NormalMappingEffect` / `SpriteEffects` 3/3 on FNA3D plus OPENGLES3 |
+| FNA3D-53 | Make the registered driver lane configurable and complete the full Linux SDL_GPU/Vulkan qualification without assuming every driver exposes occlusion queries. | **done** — `CNA_FNA3D_TEST_DRIVER` explicitly reaches all 13 renderer tests and every PRE_TEST-discovered compiled-effect case; both Vulkan and OpenGL complete the 66-test selection with 65 passes plus one intentional Reach-profile skip |
 
-After this reconciliation, the remaining work is explicit: FNA3D-34 needs the now-available
-SDL_GPU lane completed plus external Direct3D/macOS coverage, and FNA3D-50 needs a native
-failure-injection seam. FNA3D-51 needs an explicit
+After this reconciliation, the remaining work is explicit: FNA3D-34 needs external native
+Direct3D 11 coverage (and platform-specific SDL_GPU coverage where claimed), and FNA3D-50 needs a
+native failure-injection seam. FNA3D-51 needs an explicit
 one-device policy or an upstream OpenGL context solution. None is evidence that can be
 substituted by an ordinary OpenGL debug build.
 
@@ -193,6 +194,7 @@ substituted by an ordinary OpenGL debug build.
 | Render-target/effect/texture construction could leak already-created native objects when a later allocation threw or returned null. | **fixed** in FNA3D-43; deterministic native-failure injection remains FNA3D-50. |
 | A null environment map left the previous slot-1 cube bound, so effect state could leak between draws. | **fixed** in FNA3D-46 by explicitly verifying a null sampler binding. |
 | The FNA3D test CMake claimed every test pinned OpenGL, but only the oracle script actually set the hint. | **fixed** in FNA3D-48 by assigning the environment property to all tests in the module directory. |
+| The smoke and post-device lifetime tests unconditionally constructed/dereferenced an occlusion query, so the truthful SDL_GPU capability answer became a test crash instead of a supported driver outcome. | **fixed** in FNA3D-53: both fixtures require a real query only when advertised and otherwise verify deterministic refusal/null creation. |
 | Deferred `SpriteBatch` queued raw `Texture2D*` values and released the queue before the backend's `End`; destroying a texture after `Draw` could leave FNA3D's final texture group dangling. | **fixed** in FNA3D-49 by retaining renderer ownership until backend submission completes. |
 | FNA3D's exact `NormalizedByte2/4` storage and transfer implementation was unreachable from public `Texture2D`, because the renderer never supplied a tri-state format verdict and the shared fallback admitted only Color. | **fixed** in FNA3D-52 by promoting only the two verified SNORM formats; invalid ordinals and unverified formats remain refused/deferred. |
 
@@ -200,16 +202,16 @@ substituted by an ordinary OpenGL debug build.
 
 The FNA3D renderer is feature-complete for the currently supported single-device OpenGL route.
 Its 13-test native suite, XNA oracle corpus, focused unit regressions, and ASan/UBSan run pass on
-OpenGL. The SDL_GPU/Vulkan route now has real sample-corpus and focused SNORM/capability evidence,
-but not yet the whole thirteen-test lane. The audit's CNA-originating correctness and lifetime
-defects are fixed.
+OpenGL. The SDL_GPU/Vulkan route now passes the same complete 66-test renderer/compiled-effect/
+oracle selection on AMD Radeon 780M / RADV and has full sample-corpus stability evidence. The
+audit's CNA-originating correctness and lifetime defects are fixed.
 
 The remaining FNA3D work is deliberately limited to these explicit tasks:
 
 1. **FNA3D-34 — complete the driver and platform matrix.** Run the full native conformance suite
-   on the now-working SDL_GPU/Vulkan backend, then on Direct3D 11 under Windows and the relevant
-   macOS/iOS configurations. Focused/sample coverage does not establish identical behaviour for
-   the remaining contracts or drivers.
+   on Direct3D 11 under Windows and the relevant macOS/iOS configurations. Linux OpenGL and
+   SDL_GPU/Vulkan are complete; they do not establish identical behaviour for the unexecuted
+   platform drivers.
 2. **FNA3D-50 — add deterministic native-allocation failure injection.** Provide a test seam for
    device, effect, texture, render-target, buffer, query, and buffer-growth failures, then prove
    that every partially constructed native object is rolled back without leaks or stale state.

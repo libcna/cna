@@ -40,7 +40,7 @@ at all three params-carrying draw entry points but has never executed here.
 | License | zlib |
 | Vendored submodule | MojoShader (`icculus/mojoshader`, `6333f74`), built from FNA3D's own CMake |
 | Dependencies | **SDL 3.2.0 or newer, and nothing else** — the very SDL3 CNA already vendors |
-| Integration | `cmake/ThirdPartyFNA3D.cmake`, FetchContent at the pin, built as a static archive |
+| Integration | `cmake/ThirdPartyFNA3D.cmake`, FetchContent at the pin, built as a static archive with CNA's revision-specific conformance patches applied idempotently |
 | Offline builds | `-DFETCHCONTENT_SOURCE_DIR_FNA3D=/path/to/FNA3D` (checkout must have its MojoShader submodule initialized) |
 
 FNA3D's own API design is XNA 4.0: `FNA3D_DrawIndexedPrimitives`, `FNA3D_SetBlendState`,
@@ -61,9 +61,21 @@ CNA game code
 
 FNA3D tries its drivers in the order **SDL_GPU, Direct3D 11, OpenGL** and reports the SDL window
 flags the chosen driver needs. Pin a driver with the `FNA3D_FORCE_DRIVER` SDL hint
-(`OpenGL`, `SDL_GPU`, and the aliases `Vulkan`/`D3D12`/`Metal`, which FNA3D maps onto SDL_GPU
-backends). CNA's own tests set `FNA3D_FORCE_DRIVER=OpenGL` so a machine with a partially
-functional Vulkan stack cannot silently change which driver the assertions were written against.
+(`OpenGL`, `D3D11`, `SDLGPU`, or the aliases `Vulkan`/`D3D12`/`Metal`, which FNA3D maps onto
+SDL_GPU backends). CNA's registered tests default `CNA_FNA3D_TEST_DRIVER` to `OpenGL` so a
+machine with a partially functional Vulkan stack cannot silently change the validation target.
+Set that CMake cache variable to `Vulkan` to run the same registered suite through SDL_GPU's
+Vulkan driver; the resulting CTest environment records the requested driver explicitly.
+
+```bash
+cmake -S . -B cmake-build-qual-fna3d \
+  -DCNA_GRAPHICS_RENDERER=FNA3D \
+  -DCNA_BUILD_TESTS=ON \
+  -DCNA_FNA3D_TEST_DRIVER=Vulkan
+cmake --build cmake-build-qual-fna3d --parallel 12
+tools/platform/run_gpu_tests_private.sh cmake-build-qual-fna3d \
+  -R '^(Fna3d_|Fna3dCompiledEffect|Fna3dEffect)' -j1 --output-on-failure
+```
 
 Driver selection happens *before* the window exists, because
 `FNA3D_PrepareWindowAttributes()` also primes the GL attributes the window's visual is chosen
@@ -152,6 +164,9 @@ fixed from the descriptor's own request.
   only for the internal routes that bind no public buffer (SpriteBatch, `DrawUser*`).
 - Blend / depth-stencil / rasterizer / sampler state, colour write masks, multisample mask, blend
   factor, standalone reference stencil, scissor and viewport.
+- XNA/D3D9 integer pixel centres for ordinary single-sample triangle draws across FNA3D's
+  OpenGL, SDL_GPU and D3D11 drivers. SpriteBatch explicitly keeps its own projection convention;
+  point, line and multisample draws remain unshifted (`MSR-034`).
 - 2D `SpriteBatch` through the stock `SpriteEffect` or every pass of a compiled custom effect:
   tint, source rectangles, rotation about a scaled origin, both flips, layer depth, sampler filter
   and address modes, Immediate flushing; large batches are split at 16,384 quads before their
@@ -234,16 +249,16 @@ Readback is already a full CPU/GPU sync point FNA3D documents as screenshot-only
 | Sanitizers (ASan + UBSan), renderer suite | **Performed** — the enlarged 13-test suite passes, including post-device lifetime and the >16-bit SpriteBatch path. Leak detection is disabled for the external graphics stack; UBSan still reports the pre-existing MojoShader decimal-parser signed overflow, but found no CNA-originating defect (FNA3D-47). |
 | Sanitizers for the new arbitrary compiled-effect path | **Partial** — all 31 targeted FX/XNB/capability tests pass in the ASan/UBSan build with no ASan finding. LeakSanitizer is unavailable under the managed ptrace environment; pinned upstream MojoShader still reports known UBSan findings in float formatting and zero-length clone copies, so the full `plans/plan_fx.md` production gate remains open. |
 | Existence-gate spikes | **Performed** — `fna3d-spike/` |
-| SDL_GPU driver | **Partially exercised on AMD Radeon 780M / RADV**: the native sample corpus selected FNA3D's SDL_GPU/Vulkan driver, and the five signed-normalized byte/storage/sampling/mip tests plus `Fna3d_Capabilities` pass directly on it. The full thirteen-test renderer suite still needs its SDL_GPU lane before FNA3D-34 can close. |
-| Direct3D 11 driver | **Not exercised here**: Windows-only (or DXVK-native). External gate. |
-| Driver matrix (`plans/plan_fna3d.md` FNA3D-34) | **Open, with SDL_GPU coverage now in progress.** OpenGL owns the full thirteen-test suite; SDL_GPU owns the sample-corpus run and focused format/capability tests. Direct3D 11 remains unexecuted. Driver-dependent readback/query behaviour means none of those scopes may be conflated. |
+| SDL_GPU driver | **Exercised on AMD Radeon 780M / RADV**: the 13 registered FNA3D renderer executables, compiled-effect contracts and XNA oracle complete as a 66-test selection with 65 passes plus one intentional Reach-profile skip. The Linux sample corpus and focused pixel-centre/SpriteBatch contracts also run through this default driver. |
+| Direct3D 11 driver | **Cross-build only**: the patched driver and seven-renderer sample executable compile with MinGW-w64. No native Windows GPU execution has occurred, so runtime qualification remains an external gate. |
+| Driver matrix (`plans/plan_fna3d.md` FNA3D-34) | **Open only on native D3D11 execution.** OpenGL and SDL_GPU each complete the same 66-test renderer/compiled-effect/oracle selection (65 pass plus one intentional profile skip), and each visually restores `PrimitivesSample`'s one-pixel geometry. Driver-dependent readback/query behaviour still must not be conflated. |
 | macOS / iOS | Not exercised. External gate. |
 
 ## Tests
 
 | CTest name | What it proves |
 |---|---|
-| `Fna3d_Smoke` | Identity, device creation, clear + readback at three points, repeated frames, texture upload/readback through the renderer (not the CPU shadow), buffer counts, occlusion query |
+| `Fna3d_Smoke` | Identity, device creation, clear + readback at three points, repeated frames, texture upload/readback through the renderer (not the CPU shadow), buffer counts, and either a real occlusion query or the truthful unsupported-resource refusal selected by the running driver |
 | `Fna3d_2D` | SpriteBatch placement, non-bleed on all four sides, tint, source rectangles, flips, rotation, point-sampling texel edges, and the first sprite beyond one 16-bit-index batch |
 | `Fna3d_3D` | BasicEffect vertex-colour/diffuse/textured variants, indexed route, depth test both orders, AlphaTestEffect discard and keep, wireframe |
 | `Fna3d_RenderTarget` | Target clear/readback, geometry placement inside a target, unbind restores the backbuffer, sampling a rendered target, depth/stencil reporting, MSAA resolve, `PreserveContents` |

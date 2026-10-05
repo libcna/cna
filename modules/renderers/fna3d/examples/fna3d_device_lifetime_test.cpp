@@ -8,6 +8,7 @@
 // sequential because FNA3D's OpenGL driver owns one current context per thread and does not make a
 // device's context current around arbitrary commands or teardown.
 
+#include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dRenderer.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dWindowFlags.hpp"
 
@@ -108,8 +109,12 @@ int main()
         auto volumeA = rendererA->CreateTexture3D(2, 2, 2, false, 0);
         auto vertexA = rendererA->CreateVertexBuffer(3);
         auto indexA = rendererA->CreateIndexBuffer16(3);
+        const bool supportsOcclusionQuery =
+            rendererA->SupportsCapability(CNA::GraphicsCapability::OcclusionQuery);
         auto queryA = rendererA->CreateOcclusionQuery();
         auto spritesA = rendererA->CreateSpriteBatch();
+        Check((queryA != nullptr) == supportsOcclusionQuery,
+              "occlusion-query allocation matches the selected driver's capability");
 
         Check(ThrewContaining(
                   [&] { (void) rendererA->CreateVertexBuffer(std::numeric_limits<int>::max()); },
@@ -139,8 +144,16 @@ int main()
         const std::uint16_t oneIndex = 0;
         Check(ThrewDeviceError([&] { indexA->SetData16(&oneIndex, 1); }),
               "index-buffer upload after device destruction raises a deterministic error");
-        Check(ThrewDeviceError([&] { queryA->Begin(); }),
-              "occlusion-query use after device destruction raises a deterministic error");
+        if (queryA != nullptr)
+        {
+            Check(ThrewDeviceError([&] { queryA->Begin(); }),
+                  "occlusion-query use after device destruction raises a deterministic error");
+        }
+        else
+        {
+            Check(!supportsOcclusionQuery,
+                  "an incapable driver creates no occlusion-query wrapper to outlive the device");
+        }
         Check(ThrewDeviceError([&] { spritesA->Begin(); }),
               "SpriteBatch use after device destruction raises a deterministic error");
 

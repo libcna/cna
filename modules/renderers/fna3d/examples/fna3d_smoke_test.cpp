@@ -12,7 +12,8 @@
 //   FNA3D_Texture (upload and readback, not a CPU shadow: the renderer keeps none).
 // Check E -- VertexBuffer/IndexBuffer report back the counts they were given after a real upload
 //   into FNA3D buffer objects.
-// Check F -- an OcclusionQuery completes and reports a sample count.
+// Check F -- a driver that exposes occlusion queries completes one and reports a sample count;
+//   a driver without them refuses the public resource through its truthful capability contract.
 // Check G -- the renderer's own device pointer exists (the FNA3D device was really created).
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs, 77 = skipped (no display).
@@ -31,8 +32,10 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
+#include "CNA/GraphicsCapability.hpp"
 #include "CNA/GraphicsRendererType.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dRenderer.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -153,20 +156,40 @@ public:
         Check(indexBuffer.getIndexCountProperty() == 3,
               "IndexBuffer reports the index count it was given");
 
-        // Check F -- a real hardware occlusion query.
-        OcclusionQuery query(device);
-        query.Begin();
-        query.End();
-        int spins = 0;
-        while (!query.getIsCompleteProperty() && spins < 100000)
+        // Check F -- FNA3D's running driver decides whether a real query exists. Its OpenGL and
+        // D3D11 drivers expose one; the SDL_GPU public API currently has no query abstraction and
+        // FNA3D consequently reports the capability false. Both outcomes are part of the smoke
+        // contract: never fake a count and never require a feature this driver truthfully lacks.
+        if (device.SupportsCapability(CNA::GraphicsCapability::OcclusionQuery))
         {
-            ++spins;
+            OcclusionQuery query(device);
+            query.Begin();
+            query.End();
+            int spins = 0;
+            while (!query.getIsCompleteProperty() && spins < 100000)
+            {
+                ++spins;
+            }
+            Check(query.getIsCompleteProperty(), "OcclusionQuery completes when advertised");
+            if (query.getIsCompleteProperty())
+            {
+                Check(query.getPixelCountProperty() >= 0,
+                      "OcclusionQuery reports a non-negative sample count");
+            }
         }
-        Check(query.getIsCompleteProperty(), "OcclusionQuery completes");
-        if (query.getIsCompleteProperty())
+        else
         {
-            Check(query.getPixelCountProperty() >= 0,
-                  "OcclusionQuery reports a non-negative sample count");
+            bool refused = false;
+            try
+            {
+                OcclusionQuery query(device);
+            }
+            catch (const System::NotSupportedException&)
+            {
+                refused = true;
+            }
+            Check(refused,
+                  "OcclusionQuery is rejected when the running driver reports it unsupported");
         }
     }
 };

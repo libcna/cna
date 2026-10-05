@@ -1,10 +1,11 @@
 # FNA3D renderer example/test registration (module-local, following the module-examples
 # convention every other renderer family uses).
 #
-# The FNA3D driver order is SDL_GPU, Direct3D 11, OpenGL. Every test below pins
-# FNA3D_FORCE_DRIVER=OpenGL so a CI machine with a partially functional Vulkan/SDL_GPU stack
-# cannot silently change which driver the assertions were written against; a developer can still
-# exercise another driver by setting the hint before running the binary directly.
+# The FNA3D driver order is SDL_GPU, Direct3D 11, OpenGL. Every test below defaults to an explicit
+# OpenGL pin so a CI machine with a partially functional Vulkan/SDL_GPU stack cannot silently
+# change the validation target. A qualification build can select another FNA3D driver for the
+# whole registered suite through CNA_FNA3D_TEST_DRIVER; FNA3D's aliases Vulkan/D3D12/Metal select
+# the corresponding SDL_GPU native driver, while D3D11 and SDLGPU are its direct driver names.
 
 # Example/test executables historically live at the build root (scripts, docs and
 # the golden-image working-directory conventions rely on it); keep them there.
@@ -15,6 +16,11 @@ include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
 
 if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
     enable_testing()
+
+    set(CNA_FNA3D_TEST_DRIVER "OpenGL" CACHE STRING
+        "FNA3D runtime driver used by the registered FNA3D renderer tests")
+    set_property(CACHE CNA_FNA3D_TEST_DRIVER PROPERTY STRINGS
+        OpenGL Vulkan D3D12 Metal D3D11 SDLGPU)
 
     macro(cna_fna3d_test target src)
         add_executable(${target} ${src})
@@ -91,12 +97,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
         TIMEOUT 120 LABELS "Fna3d")
 
     # Keep the stated validation target executable, not merely documentary: every CTest in this
-    # directory must exercise the OpenGL arm unless a developer runs a binary directly with a
-    # different hint. The oracle script has the same default, but an explicit test property keeps
-    # `ctest -L Fna3d` uniform and visible in `ctest -V`.
+    # directory must exercise the configured arm. The oracle script has its own OpenGL default,
+    # but this explicit property overrides it and keeps `ctest -L Fna3d` uniform and visible in
+    # `ctest -V` for every qualification lane.
     get_property(_cna_fna3d_tests DIRECTORY PROPERTY TESTS)
     set_tests_properties(${_cna_fna3d_tests} PROPERTIES
-        ENVIRONMENT "FNA3D_FORCE_DRIVER=OpenGL")
+        ENVIRONMENT "FNA3D_FORCE_DRIVER=${CNA_FNA3D_TEST_DRIVER}")
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot

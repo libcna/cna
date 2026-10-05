@@ -1250,6 +1250,14 @@ if(CNA_BUILD_TESTS)
     if(CNA_AUDIO_PLATFORM STREQUAL "ALSA")
         list(APPEND _cna_unit_tests_environment "CNA_AUDIO_DEVICE=null" "CNA_AUDIO_RECORDING_DEVICE=null")
     endif()
+    # plans/plan_fna3d.md FNA3D-53: the module-local renderer examples receive this selection
+    # directly in their own directory, but PRE_TEST-discovered CnaTests cases do not exist yet and
+    # cannot inherit those properties. Give the compiled-effect/unit lane the same explicit FNA3D
+    # driver so a 66-test qualification cannot silently exercise a different internal backend.
+    if(CNA_GRAPHICS_RENDERER STREQUAL "FNA3D" AND DEFINED CNA_FNA3D_TEST_DRIVER)
+        list(APPEND _cna_unit_tests_environment
+            "FNA3D_FORCE_DRIVER=${CNA_FNA3D_TEST_DRIVER}")
+    endif()
     # plans/plan_x11.md X11-0169: an X11 platform asks the session bus for the desktop portal, and
     # no test may reach the portal of the desktop it runs on -- a file chooser would open there.
     # The test binary says the same on its own (X11DesktopPortalTests.cpp).
