@@ -26,10 +26,10 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-003 | **DONE** | Restore SpriteBatch's stock vertex-stage inheritance and device texture-slot semantics for compiled effects, exposed by `BloomSample`. |
 | MSR-004 | **DONE** | Repair compiled-effect texture-parameter indexing, exposed by `ShadowMapping` on Vulkan and WebGPU. |
 | MSR-005 | **DONE** | Classify `LensFlare` occlusion-query limits truthfully for SDL_GPU and FNA3D's selected internal driver; never fabricate a query result. |
-| MSR-006 | **IN PROGRESS** | Complete single-renderer and six-renderer Linux CNA qualification. |
-| MSR-007 | **IN PROGRESS** | Qualify the representative sample set, then the complete 91-sample corpus. |
-| MSR-008 | **IN PROGRESS** | Prepare and cross-build the Windows renderer set; record Wine evidence separately from native qualification. |
-| MSR-009 | **OPEN** | Prepare the macOS renderer set and exact Mac mini M4 qualification commands. |
+| MSR-006 | **DONE** | Complete single-renderer and six-renderer Linux CNA qualification. |
+| MSR-007 | **DONE** | Qualify the representative sample set, then the complete 91-sample corpus. |
+| MSR-008 | **DONE** | Prepare and cross-build the Windows renderer set; record Wine evidence separately from native qualification. |
+| MSR-009 | **DONE** | Prepare the macOS renderer set and exact Mac mini M4 qualification commands; native execution remains an external gate. |
 | MSR-010 | **DONE** | Stop Vulkan's stock-layout guards from rejecting compiled-effect multi-stream and instanced draws before their own shader linker runs. |
 | MSR-011 | **DONE** | Restore the FNA3D-only `CnaRendererTests` build after pointer-container and namespace API changes. |
 | MSR-012 | **DONE** | Correct stale FNA3D compiled-effect test profile, parameter-shape and exception assumptions. |
@@ -53,6 +53,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-030 | **DONE** | Repair target-aware dependency discovery, runtime deployment and sharp-runtime portability exposed by the seven-renderer Windows cross-build. |
 | MSR-031 | **DONE** | Repair DirectX compiled-effect native parameter indexing, stage-sized sampler state and draw-time public texture bindings. |
 | MSR-032 | **DONE** | Keep the remaining test and service harness JSON consumers target-independent in cross builds. |
+| MSR-033 | **DONE** | Replace the stale sample-renderer assessment with the measured Linux matrix and exact native Windows/macOS follow-up procedures. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -791,20 +792,45 @@ builds retain their package target.  Clean MinGW DirectX 9, 11 and 12 test confi
 and link `CnaRendererTests`; the full Windows multi-sample tree also regenerates and links after
 the change.
 
-## Representative automated matrix
+## MSR-033 — Platform handoff and measured sample documentation
 
-This is startup/active-renderer/stability evidence, not a manual visual pass.  Before `MSR-001`,
-the ten-sample matrix was:
+The cna-samples renderer document now replaces its obsolete pre-campaign candidate assessment with
+the measured 91-sample Linux matrix, the 10-sample manual visual matrix, the separate OPENGLES2
+profile result, and the exact one-executable runtime-selection architecture.  It removes the
+retired OPENGL4 recommendation and distinguishes automatic stability, manual visual review,
+cross-compilation, Wine smoke and native qualification.
 
-| Renderer | Automated pass | Render fail |
-|---|---:|---:|
-| OPENGLES3 | 10 | 0 |
-| OPENGL33 | 10 | 0 |
-| VULKAN | 8 | 2 |
-| WEBGPU | 7 | 3 |
-| SDL_GPU | 7 | 3 |
-| FNA3D | 8 | 2 |
+The same handoff records reproducible 12-job Linux, native Windows and native macOS commands.  The
+Windows recipe keeps DirectX 11 as its default so the D3D common family is configured while all
+seven requested identities are registered.  The macOS recipe keeps Metal as its default so the
+Objective-C++ family is configured, then requests OPENGLES3, OPENGL33, WebGPU, SDL_GPU and FNA3D
+in the same runtime-selected binary.  It explicitly preserves Metal's current compiled-effect,
+query, multi-stream and instancing gaps and requires actual Mac mini M4 evidence before any native
+claim.  The existing WebGL pipeline is unchanged.
 
-After `MSR-001`, `ReachGraphicsDemo` moves from failure to automated pass on FNA3D, WebGPU and
-SDL_GPU.  The full ten-sample matrix will be regenerated after the remaining compiled-effect
-repairs so intermediate evidence is not mistaken for final qualification.
+## Current Linux corpus matrix
+
+The primary corpus has 89 gallery executables and two native-only executables.  Every row below
+uses the same multi-renderer binary for a given sample and verifies the requested active identity
+from CNA's startup log.  `AUTOMATED_PASS` establishes initialization and stable execution through
+the observation interval; it is not a claim that all 91 frames were manually inspected.
+
+| Renderer | Automated pass | Render fail | Classified failure |
+|---|---:|---:|---|
+| OPENGLES3 | 90 | 1 | `Yacht`: renderer-independent unavailable gamer-services transport. |
+| OPENGL33 | 90 | 1 | `Yacht`: renderer-independent unavailable gamer-services transport. |
+| VULKAN | 90 | 1 | `Yacht`: renderer-independent unavailable gamer-services transport. |
+| WEBGPU | 90 | 1 | `Yacht`: renderer-independent unavailable gamer-services transport. |
+| SDL_GPU | 89 | 2 | `LensFlare`: upstream SDL_GPU has no occlusion-query API; `Yacht` as above. |
+| FNA3D (default SDL_GPU driver) | 89 | 2 | `LensFlare`: selected internal driver has no occlusion query; `Yacht` as above. |
+
+The representative visual set has 57 manually accepted captures out of 58 captured frames.  Its
+per-renderer totals are 9 pass plus the truthful boolean-query mismatch on OPENGLES3, 10 pass on
+OPENGL33/Vulkan/WebGPU, and 9 pass plus the missing-query capability on SDL_GPU and default FNA3D.
+The two missing-capability launches produce no frame and therefore are not part of the 58 captured
+images.  A supplemental FNA3D run using its OpenGL driver gives LensFlare a real count query and
+passes manual comparison.
+
+OPENGLES2 is recorded separately: 80 automated passes and 11 render failures.  Ten are the intended
+Reach-style profile boundary (compiled-effect render-target sampling, unsupported normalized
+formats, instancing or occlusion query); `Yacht` is the same renderer-independent failure.
