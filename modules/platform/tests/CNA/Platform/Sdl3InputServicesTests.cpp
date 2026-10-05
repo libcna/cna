@@ -7,7 +7,7 @@
 // genuinely needs hardware is left to the input parity suites in Phase 5.
 
 #include "../../../src/Sdl3/Sdl3InputServices.hpp"
-#include "../../../src/Sdl3/BrowserMouseWarp.hpp"
+#include "../../../src/Sdl3/VirtualMouseWarp.hpp"
 #include "../../../src/Sdl3/Sdl3JoystickControls.hpp"
 #include "../../../src/Sdl3/Sdl3TextInputTypes.hpp"
 
@@ -156,9 +156,55 @@ TEST_F(Sdl3InputTest, PositionRefusesAnUnknownNonZeroWindowId)
     EXPECT_THROW(platform_->GetMouse()->SetPosition(0xFFFFFFFFu, 12, 34), PlatformException);
 }
 
-TEST(BrowserMouseWarpTest, RequestedPositionPersistsUntilThePhysicalPointerMoves)
+TEST_F(Sdl3InputTest, WaylandRecenteringSurvivesACompositorThatCannotWarpThePointer)
 {
-    CNA::Platform::Sdl3::Detail::BrowserMouseWarp warp;
+    SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "wayland");
+    try
+    {
+        platform_->AcquireSubsystem(PlatformSubsystem::Video);
+    }
+    catch (const std::exception& error)
+    {
+        SDL_ResetHint(SDL_HINT_VIDEO_DRIVER);
+        GTEST_SKIP() << "no Wayland video subsystem: " << error.what();
+    }
+    SDL_ResetHint(SDL_HINT_VIDEO_DRIVER);
+    const char* driver = SDL_GetCurrentVideoDriver();
+    if (driver == nullptr || std::strcmp(driver, "wayland") != 0)
+    {
+        platform_->ReleaseSubsystem(PlatformSubsystem::Video);
+        GTEST_SKIP() << "video is already up on another driver in this process";
+    }
+
+    WindowDescription description;
+    description.title = "Sdl3WaylandMouseWarpTest";
+    description.width = 1280;
+    description.height = 720;
+    std::unique_ptr<IPlatformWindow> window;
+    try
+    {
+        window = platform_->CreateWindow(description);
+    }
+    catch (const std::exception& error)
+    {
+        platform_->ReleaseSubsystem(PlatformSubsystem::Video);
+        GTEST_SKIP() << "no Wayland window: " << error.what();
+    }
+
+    IPlatformMouse* mouse = platform_->GetMouse();
+    mouse->SetPosition(window->GetId(), 640, 360);
+    mouse->Update();
+    EXPECT_EQ(mouse->GetSnapshot().window, window->GetId());
+    EXPECT_EQ(mouse->GetSnapshot().x, 640);
+    EXPECT_EQ(mouse->GetSnapshot().y, 360);
+
+    window.reset();
+    platform_->ReleaseSubsystem(PlatformSubsystem::Video);
+}
+
+TEST(VirtualMouseWarpTest, RequestedPositionPersistsUntilThePhysicalPointerMoves)
+{
+    CNA::Platform::Sdl3::Detail::VirtualMouseWarp warp;
     warp.Anchor(17.5f, 23.25f, 640, 360);
 
     int x = 0;
@@ -172,9 +218,9 @@ TEST(BrowserMouseWarpTest, RequestedPositionPersistsUntilThePhysicalPointerMoves
     EXPECT_EQ(y, 357);
 }
 
-TEST(BrowserMouseWarpTest, RecenteringUsesTheCurrentPhysicalPositionAsItsNewAnchor)
+TEST(VirtualMouseWarpTest, RecenteringUsesTheCurrentPhysicalPositionAsItsNewAnchor)
 {
-    CNA::Platform::Sdl3::Detail::BrowserMouseWarp warp;
+    CNA::Platform::Sdl3::Detail::VirtualMouseWarp warp;
     warp.Anchor(10.0f, 20.0f, 400, 240);
 
     int x = 0;
@@ -189,9 +235,9 @@ TEST(BrowserMouseWarpTest, RecenteringUsesTheCurrentPhysicalPositionAsItsNewAnch
     EXPECT_EQ(y, 240);
 }
 
-TEST(BrowserMouseWarpTest, ResetRestoresRawWindowCoordinates)
+TEST(VirtualMouseWarpTest, ResetRestoresRawWindowCoordinates)
 {
-    CNA::Platform::Sdl3::Detail::BrowserMouseWarp warp;
+    CNA::Platform::Sdl3::Detail::VirtualMouseWarp warp;
     warp.Anchor(1.0f, 2.0f, 100, 200);
     ASSERT_TRUE(warp.IsActive());
     warp.Reset();
@@ -204,9 +250,9 @@ TEST(BrowserMouseWarpTest, ResetRestoresRawWindowCoordinates)
     EXPECT_EQ(y, 42);
 }
 
-TEST(BrowserMouseWarpTest, InvalidBrowserCoordinatesDoNotEscapeTheRequestedPosition)
+TEST(VirtualMouseWarpTest, InvalidPlatformCoordinatesDoNotEscapeTheRequestedPosition)
 {
-    CNA::Platform::Sdl3::Detail::BrowserMouseWarp warp;
+    CNA::Platform::Sdl3::Detail::VirtualMouseWarp warp;
     warp.Anchor(1.0f, 2.0f, 100, 200);
 
     int x = 0;

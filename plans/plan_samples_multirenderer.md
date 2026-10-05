@@ -60,6 +60,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-037 | **DONE** | Capture composed Linux sample frames instead of stale Xwayland backing pixmaps. |
 | MSR-038 | **DONE** | Keep malformed-effect assertions non-interactive in focused test executables as well as the aggregate suite. |
 | MSR-039 | **DONE** | Capture and manually review the complete frame-producing Linux corpus across all six native renderers. |
+| MSR-040 | **DONE** | Preserve XNA mouse-recentering coordinates when SDL's native Wayland driver cannot physically warp the pointer. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -1002,6 +1003,39 @@ Linux cell, not pixel-perfect equivalence, input-path coverage, temporal/animati
 audio validation or exhaustive gameplay interaction.  Evidence is retained in
 `matrix-results/msr-038-composed-full-visual` and
 `matrix-results/msr-039-opengles3-early-exit-rerun` in the cna-samples worktree.
+
+## MSR-040 — SDL3 Wayland mouse recentering
+
+Interactive RacingGame qualification found a renderer-independent control failure after the race
+started: the car received full left steering on OPENGLES3, OPENGL33, Vulkan, WebGPU, SDL_GPU and
+FNA3D.  The unchanged XNA input loop reads the window-local mouse coordinate and recentres it every
+frame.  SDL's native Wayland driver may reject the physical warp, emulate it only after a
+timing-sensitive sequence, or have no pointer seat in a private compositor.  CNA nevertheless
+cached the requested centre and then replaced it with SDL's unchanged raw coordinate on the next
+update.  A raw x of zero therefore became a repeated `-640` steering delta in a 1280-wide window.
+
+The former browser-only virtual-warp helper is now a general window-local mapping used by both
+Emscripten and native SDL Wayland.  `SetPosition` still attempts SDL's real warp, then anchors the
+requested XNA coordinate to the raw position SDL reports after that attempt.  A later update
+returns the requested coordinate while the physical pointer is idle and translates real pointer
+movement relative to that anchor.  Successful synchronous warps, rejected warps and SDL's own
+emulation consequently have the same XNA-visible result.  Explicit relative mode clears the
+mapping, and X11, Windows and Cocoa keep their existing real/global-coordinate paths.
+
+Regression and integration evidence:
+
+- four deterministic `VirtualMouseWarpTest` cases cover persistence, repeated recentering, reset
+  and invalid/saturating coordinates;
+- `Sdl3InputTest.WaylandRecenteringSurvivesACompositorThatCannotWarpThePointer` creates a real
+  native-Wayland window in the private Weston runner and verifies that a centre warp survives the
+  next platform update even with no pointer seat;
+- the RacingGame desktop-driving input probe reproduced 414 unwanted negative-mouse frames before
+  the fix and reports zero unwanted mouse, keyboard or gamepad steering after it;
+- the same turbo-capable RacingGame multi-renderer executable passes that forced-Wayland probe on
+  all six Linux renderers, with every process logging the requested active renderer;
+- the owner subsequently played the rebuilt game in the ambient native-Wayland session and
+  confirmed that the car no longer turns left and drives correctly.  This is interactive gameplay
+  evidence; it does not broaden MSR-039's static-frame visual claims.
 
 ## Current Linux corpus matrix
 

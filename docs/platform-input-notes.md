@@ -29,11 +29,14 @@ See also [`docs/input-backend.md`](input-backend.md) (architecture) and
   ambient session; forcing `SDL_VIDEODRIVER=x11`/XWayland restores real values). This is a Wayland
   platform restriction, **not** a CNA bug. CNA's `Mouse::GetState()` reports *window-local* logical
   coordinates from motion events, which are unaffected.
-- **Absolute cursor warp is constrained.** Wayland only lets an application move the pointer under
-  specific conditions (e.g. pointer lock / relative mode, or a focused surface). `SetPosition` may
-  therefore be a no-op or clamped when the surface isn't focused. **Relative mouse mode**
+- **The operating-system cursor still cannot be warped reliably.** Wayland only lets an
+  application move the pointer under compositor-defined conditions, so the SDL request may be
+  rejected, clamped or emulated. CNA preserves XNA's window-local `Mouse::SetPosition` contract
+  with a virtual anchor: an idle pointer reads back at the requested position, and later physical
+  movement is translated relative to it. This supports authentic XNA recenter-every-frame input
+  loops without pretending that the compositor moved the visible cursor. **Relative mouse mode**
   (`IsRelativeMouseModeEXT`, backed by `SDL_SetWindowRelativeMouseMode` → Wayland pointer lock)
-  works and is the correct approach for FPS-style mouse-look on Wayland.
+  remains the appropriate explicit pointer-lock path and clears the virtual anchor.
 
 ## Windows
 
@@ -165,7 +168,7 @@ US OEM key still map to that OEM key (e.g. the codepoints for `æ`/`ø` resolve 
 | Platform | `SetPosition` warp | Global pos (`SDL_GetGlobalMouseState`) | Warp-landing readback | Relative mode |
 |----------|--------------------|----------------------------------------|-----------------------|---------------|
 | Linux / X11 (incl. XWayland) | ✅ works | ✅ real values | ✅ testable | ✅ warp no-op |
-| Linux / Wayland | ⚠️ focus-gated / clamped | ❌ returns `(0,0)` | ❌ not readable | ✅ pointer-lock |
+| Linux / Wayland | ✅ virtual XNA coordinate; OS cursor remains compositor-controlled | ❌ returns `(0,0)` | ❌ not readable | ✅ pointer-lock |
 | Windows | ✅ works | ✅ real values | ✅ (manual) | ✅ |
 | macOS | ✅ works | ✅ real values | ✅ (manual) | ✅ |
 | Android / iOS | n/a (touch, no cursor) | n/a | n/a | n/a |

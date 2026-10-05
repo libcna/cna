@@ -59,8 +59,10 @@ available). They are **not** claimed as fully verified:
 - **Wayland-specific** (task 853): `SDL_GetGlobalMouseState` returns `(0,0)` under this Wayland
   session (compositor security policy, confirmed task 783), so the OS-cursor *landing* pixel for
   `SetPosition` on a letterboxed window could not be read back here; the conversion itself is
-  unit-tested and the basic warp was pixel-exact under X11/XWayland. Absolute cursor warp on native
-  Wayland is compositor-constrained; **relative mouse mode (pointer lock) is the supported path**.
+  unit-tested and the basic warp was pixel-exact under X11/XWayland. Absolute operating-system
+  cursor warp on native Wayland remains compositor-constrained. MSR-040 now preserves the XNA
+  window-local `Mouse::SetPosition` coordinate through a virtual anchor, while relative mouse mode
+  remains the explicit pointer-lock path.
 - **Touch** hardware, **four simultaneous controllers**, and the demo's **interactive** input
   (key highlighting, live gamepad panels) — no touch device / controllers / human present.
 
@@ -133,7 +135,8 @@ cell(s). Never mark a cell ✅ without a dated row backing it.
 ## Supported-OS checklist (INP-0224)
 
 - [ ] Linux / X11 (or Xvfb) — cursor warp landing, relative capture, global mouse position. *(automated subset green here)*
-- [ ] Linux / Wayland — relative mode (pointer lock); `SDL_GetGlobalMouseState` returns (0,0); warp focus-gated.
+- [ ] Linux / Wayland — virtual XNA recentering and relative mode (pointer lock);
+  `SDL_GetGlobalMouseState` returns (0,0), and the visible OS cursor remains compositor-controlled.
 - [ ] Windows — XInput `GetGUIDEXT`=`xinput`, IME composition window, rumble/trigger-rumble/light-bar.
 - [ ] macOS — Cocoa warp + global position; relative mode.
 - [ ] Android — touch primary (device seen after first touch); on-screen keyboard; attached-HW gamepad.

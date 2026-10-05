@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
-#include "BrowserMouseWarp.hpp"
+#include "VirtualMouseWarp.hpp"
 
 #include <cmath>
 #include <limits>
@@ -21,7 +21,7 @@ namespace CNA::Platform::Sdl3::Detail {
         }
     }
 
-    void BrowserMouseWarp::Anchor(const float rawX, const float rawY,
+    void VirtualMouseWarp::Anchor(const float rawX, const float rawY,
                                   const int targetX, const int targetY)
     {
         rawAnchorX_ = rawX;
@@ -31,7 +31,7 @@ namespace CNA::Platform::Sdl3::Detail {
         active_ = true;
     }
 
-    void BrowserMouseWarp::Apply(const float rawX, const float rawY, int& x, int& y) const
+    void VirtualMouseWarp::Apply(const float rawX, const float rawY, int& x, int& y) const
     {
         if (!active_)
         {
@@ -44,8 +44,8 @@ namespace CNA::Platform::Sdl3::Detail {
         y = SaturatingCoordinate(targetY_, rawY - rawAnchorY_);
     }
 
-    void BrowserMouseWarp::Reset() { active_ = false; }
+    void VirtualMouseWarp::Reset() { active_ = false; }
 
-    bool BrowserMouseWarp::IsActive() const { return active_; }
+    bool VirtualMouseWarp::IsActive() const { return active_; }
 
 } // namespace CNA::Platform::Sdl3::Detail

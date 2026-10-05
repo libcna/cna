@@ -47,6 +47,16 @@ namespace CNA::Platform::Sdl3 {
                     std::strcmp(driver, "cocoa") == 0);
         }
 
+        bool NeedsVirtualMouseWarp()
+        {
+#if defined(__EMSCRIPTEN__)
+            return true;
+#else
+            const char* driver = SDL_GetCurrentVideoDriver();
+            return driver != nullptr && std::strcmp(driver, "wayland") == 0;
+#endif
+        }
+
         SDL_SystemCursor ToSdlCursor(const SystemCursor cursor)
         {
             switch (cursor)
@@ -212,12 +222,15 @@ namespace CNA::Platform::Sdl3 {
             y = desktopY - static_cast<float>(windowY);
         }
 
-#if defined(__EMSCRIPTEN__)
-        browserWarp_.Apply(x, y, snapshot_.x, snapshot_.y);
-#else
-        snapshot_.x = static_cast<int>(x);
-        snapshot_.y = static_cast<int>(y);
-#endif
+        if (NeedsVirtualMouseWarp())
+        {
+            virtualWarp_.Apply(x, y, snapshot_.x, snapshot_.y);
+        }
+        else
+        {
+            snapshot_.x = static_cast<int>(x);
+            snapshot_.y = static_cast<int>(y);
+        }
 
         // Repacked into CNA's own bit order rather than passed through: SDL's mask is
         // 1-based-button-indexed, and leaking that convention would make every consumer depend
@@ -282,7 +295,12 @@ namespace CNA::Platform::Sdl3 {
         float rawX = 0.0f;
         float rawY = 0.0f;
         (void)SDL_GetMouseState(&rawX, &rawY);
-        browserWarp_.Anchor(rawX, rawY, x, y);
+        virtualWarp_.Anchor(rawX, rawY, x, y);
+#else
+        if (!NeedsVirtualMouseWarp())
+        {
+            virtualWarp_.Reset();
+        }
 #endif
 
         if (window == 0)
@@ -296,6 +314,19 @@ namespace CNA::Platform::Sdl3 {
         }
 #if !defined(__EMSCRIPTEN__)
         SDL_WarpMouseInWindow(nativeWindow, static_cast<float>(x), static_cast<float>(y));
+
+        // Wayland and the other local-coordinate-only SDL drivers may refuse a real cursor warp,
+        // emulate it through relative mode, or have no pointer seat at all. Anchor after SDL's
+        // attempt: successful synchronous warps report the target here, while refused ones retain
+        // their physical coordinate. In both cases subsequent physical motion is measured from
+        // the right origin and an idle recenter remains at the requested position.
+        if (NeedsVirtualMouseWarp())
+        {
+            float rawX = 0.0f;
+            float rawY = 0.0f;
+            (void)SDL_GetMouseState(&rawX, &rawY);
+            virtualWarp_.Anchor(rawX, rawY, x, y);
+        }
 #endif
     }
 
@@ -415,7 +446,7 @@ namespace CNA::Platform::Sdl3 {
         (void)SDL_GetRelativeMouseState(&ignoredX, &ignoredY);
         relativeDeltaX_ = 0.0f;
         relativeDeltaY_ = 0.0f;
-        browserWarp_.Reset();
+        virtualWarp_.Reset();
         snapshot_.window = window;
         relativeMode_ = enabled;
     }

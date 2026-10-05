@@ -8,7 +8,7 @@
 #include "CNA/Platform/Input/IPlatformMouse.hpp"
 #include "CNA/Platform/Input/IPlatformTextInput.hpp"
 
-#include "BrowserMouseWarp.hpp"
+#include "VirtualMouseWarp.hpp"
 
 #include <array>
 #include <map>
@@ -117,7 +117,7 @@ namespace CNA::Platform::Sdl3 {
         float relativeDeltaY_ = 0.0f;
         void* activeCursor_ = nullptr;
         bool relativeMode_ = false;
-        Detail::BrowserMouseWarp browserWarp_;
+        Detail::VirtualMouseWarp virtualWarp_;
 
         void InstallCursor(void* cursor);
     };
