@@ -9,13 +9,13 @@
 // and the run stops there with no output about which test did it (plans/plan_fx.md FX-065).
 //
 // The policy is selected through SDL's own `SDL_ASSERT` environment hint rather than through
-// `SDL_SetAssertionHandler`, deliberately. This translation unit is compiled into CnaTests for
-// EVERY platform and renderer combination, including the ones that link no SDL at all (HEADLESS,
-// TERMINAL); calling the native function would make the whole suite depend on a library that most
-// configurations have no other reason to link. The hint is read by SDL itself at the first
-// assertion, so a build that does link SDL gets the behaviour and a build that does not is
-// unaffected. Nothing here includes an SDL header or references an SDL symbol -- the name below is
-// an environment variable, spelled as text.
+// `SDL_SetAssertionHandler`, deliberately. This translation unit is compiled into CnaTests and
+// every focused test executable for EVERY platform and renderer combination, including the ones
+// that link no SDL at all (HEADLESS, TERMINAL); calling the native function would make the whole
+// suite depend on a library that most configurations have no other reason to link. The hint is
+// read by SDL itself at the first assertion, so a build that does link SDL gets the behaviour and
+// a build that does not is unaffected. Nothing here includes an SDL header or references an SDL
+// symbol -- the name below is an environment variable, spelled as text.
 //
 // It cannot hide a CNA assertion, and that is a checkable fact rather than an intention: no
 // production translation unit in this repository uses `SDL_assert`, `SDL_TriggerBreakpoint` or

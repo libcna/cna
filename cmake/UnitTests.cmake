@@ -46,6 +46,16 @@ if(CNA_BUILD_TESTS)
             "tests/*.cpp"
     )
 
+    # plans/plan_fx.md FX-111 and plans/plan_samples_multirenderer.md MSR-038: this is test-harness
+    # policy, not an integration-test case.  Keep it out of the module grouping below and compile
+    # it into every test executable.  Otherwise only CnaTests/CnaIntegrationTests receive the
+    # non-interactive SDL assertion policy, while a focused executable such as CnaRendererTests
+    # can block indefinitely in SDL's zenity assertion dialog.
+    set(CNA_TEST_HARNESS_SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/HarnessAssertionPolicy.cpp")
+    list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
+        ".*/tests/HarnessAssertionPolicy\\.cpp$")
+
     # The minimal-link module probes (tests/modules/*.cpp, cmake/Tests/ModuleProbes.cmake) are
     # standalone executables with their own main(), not GTest translation units.
     list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/tests/modules/.*\\.cpp$")
@@ -431,7 +441,7 @@ if(CNA_BUILD_TESTS)
     list(REMOVE_DUPLICATES _cna_test_groups)
     list(SORT _cna_test_groups)
 
-    add_executable(CnaTests)
+    add_executable(CnaTests ${CNA_TEST_HARNESS_SOURCES})
 
     # plans/plan_win32_native_validation.md WINNATIVE-0014. Windows reserves 1 MB of stack for a
     # thread; Linux reserves 8. This binary links every module's tests into one process, and the
@@ -519,7 +529,8 @@ if(CNA_BUILD_TESTS)
         # the full CnaTests discovery remains the single default suite and is therefore not run
         # twice in CI.
         add_executable(${_cna_focused_test_target} EXCLUDE_FROM_ALL
-            "$<TARGET_OBJECTS:${_cna_test_object_target}>")
+            "$<TARGET_OBJECTS:${_cna_test_object_target}>"
+            ${CNA_TEST_HARNESS_SOURCES})
         # VKPAR-0017 applies to the focused renderer executable too: put CNA before the test
         # support archives so direct EasyGL test references resolve to libcna's already-initialised
         # easy-gl/meta-gl copy instead of pulling a second static copy into CnaRendererTests.

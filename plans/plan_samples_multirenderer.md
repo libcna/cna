@@ -58,6 +58,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-035 | **DONE** | Apply XNA's default graphics states to every 3D renderer during `GraphicsDevice` construction, including the eager depthless `Game` device, restoring SDL_GPU compiled-model depth. |
 | MSR-036 | **DONE** | Preserve packed XNA vertex-colour channel order in Vulkan compiled-effect pipelines, restoring `TexturesAndColors` parity. |
 | MSR-037 | **DONE** | Capture composed Linux sample frames instead of stale Xwayland backing pixmaps. |
+| MSR-038 | **DONE** | Keep malformed-effect assertions non-interactive in focused test executables as well as the aggregate suite. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -939,6 +940,30 @@ Regression and integration evidence:
 - `matrix-results/msr-037-composited-capture-smoke` records active Vulkan and an automated pass;
 - its composed crop is exactly 800x480, includes the technique caption and complete scene, and is
   byte-identical to the independently validated post-fix `TexturesAndColors` frame.
+
+## MSR-038 — Focused-test assertion policy
+
+An interactive `CnaRendererTests` run was observed blocked for 12 hours 49 minutes behind a
+zenity assertion dialog at MojoShader `mojoshader_effects.c:430` (`readvalue`).  The process and
+dialog were explicitly terminated; the interrupted run is not counted as test evidence.  The
+same malformed-effect case was then reproduced safely with `SDL_ASSERT=abort`: it reached the
+same assertion and aborted in 0.92 seconds.
+
+`tests/HarnessAssertionPolicy.cpp` already selected SDL's non-interactive `always_ignore` policy,
+but CMake's source grouping classified that top-level file as an integration-test object.  The
+aggregate `CnaTests` therefore received it while the focused `CnaRendererTests` executable did
+not.  `cmake/UnitTests.cmake` now treats the policy as test-harness source and compiles it into the
+aggregate and every focused test executable.  An explicit caller-provided `SDL_ASSERT` still wins,
+and production binaries are unchanged.
+
+Regression evidence on the Radeon 780M/RADV private GPU runner:
+
+- the exact focused `CnaRendererTests` malformed-bytecode case reaches and logs `readvalue:430`
+  plus `readsmallobjects:933`, rejects the corrupt input, and passes in 310 ms without a dialog;
+- all 30 `VulkanCompiledEffectTest.*` and `VulkanCompiledEffectDrawTest.*` registrations complete
+  in 1.936 seconds: 29 pass and the existing Reach-profile cube/volume contract skips explicitly;
+- both `CnaRendererTests` and aggregate `CnaTests` build with the shared harness source, and no
+  `CnaRendererTests` or zenity process remains after execution.
 
 ## Current Linux corpus matrix
 
