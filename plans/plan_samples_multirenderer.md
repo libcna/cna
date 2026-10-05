@@ -57,6 +57,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-034 | **DONE** | Preserve XNA integer pixel centres through FNA3D without shifting SpriteBatch, restoring `PrimitivesSample`'s one-pixel stars. |
 | MSR-035 | **DONE** | Apply XNA's default graphics states to every 3D renderer during `GraphicsDevice` construction, including the eager depthless `Game` device, restoring SDL_GPU compiled-model depth. |
 | MSR-036 | **DONE** | Preserve packed XNA vertex-colour channel order in Vulkan compiled-effect pipelines, restoring `TexturesAndColors` parity. |
+| MSR-037 | **DONE** | Capture composed Linux sample frames instead of stale Xwayland backing pixmaps. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -916,6 +917,28 @@ Regression and integration evidence:
   multi-renderer `TexturesAndColors_cna_samples` executable with active Vulkan;
 - the fresh four-second capture restores the same green/blue texture and lighting seen in the
   OPENGLES3 reference, and also contains the expected technique caption.
+
+## MSR-037 — Composed Linux sample captures
+
+The full-gallery visual review exposed two different false mismatches in early
+`TexturesAndColors` captures.  A one-second delay from renderer selection could precede content
+loading, while ImageMagick's direct `-window` path intermittently read an incomplete Vulkan
+Xwayland backing pixmap even when the compositor displayed the complete HUD.  API traces and a
+root-window frame recording proved the supposedly missing draw was submitted and visible.
+
+The cna-samples matrix runner now asks `xdotool` for the selected sample window's root-relative
+geometry, captures the compositor root, and crops that image to the exact window rectangle.  It
+continues to label every image `MANUAL_REQUIRED`; this change makes the evidence reliable rather
+than turning it into a pixel oracle.  Documentation recommends a four-second post-selection delay
+for gallery review so ordinary content loading has completed.
+
+Regression and integration evidence:
+
+- all 16 matrix-runner unit tests pass, including malformed geometry, negative coordinates and
+  the exact compositor-root crop command;
+- `matrix-results/msr-037-composited-capture-smoke` records active Vulkan and an automated pass;
+- its composed crop is exactly 800x480, includes the technique caption and complete scene, and is
+  byte-identical to the independently validated post-fix `TexturesAndColors` frame.
 
 ## Current Linux corpus matrix
 
