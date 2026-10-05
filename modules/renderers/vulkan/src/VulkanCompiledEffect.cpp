@@ -8,6 +8,7 @@
 #include "CNA/Internal/Renderers/Vulkan/VulkanCompiledEffect.hpp"
 
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
+#include "CNA/Internal/Renderers/Vulkan/VulkanVertexFormatHelper.hpp"
 #include "CNA/Internal/Renderers/MojoShader/EffectTranslation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
@@ -209,26 +210,10 @@ namespace CNA::Internal::Renderers::Vulkan
         /// XNA vertex formats to the Vulkan attribute formats the pipeline declares.
         [[nodiscard]] VkFormat ToVkVertexFormat(VertexElementFormat format)
         {
-            switch (format)
-            {
-                case VertexElementFormat::Single:  return VK_FORMAT_R32_SFLOAT;
-                case VertexElementFormat::Vector2: return VK_FORMAT_R32G32_SFLOAT;
-                case VertexElementFormat::Vector3: return VK_FORMAT_R32G32B32_SFLOAT;
-                case VertexElementFormat::Vector4: return VK_FORMAT_R32G32B32A32_SFLOAT;
-                // XNA's Color is BGRA in memory; the shader wants RGBA, and the swizzle is what
-                // VK_FORMAT_B8G8R8A8_UNORM expresses without a shader-side fixup.
-                case VertexElementFormat::Color:   return VK_FORMAT_B8G8R8A8_UNORM;
-                case VertexElementFormat::Byte4:   return VK_FORMAT_R8G8B8A8_UINT;
-                case VertexElementFormat::Short2:  return VK_FORMAT_R16G16_SINT;
-                case VertexElementFormat::Short4:  return VK_FORMAT_R16G16B16A16_SINT;
-                case VertexElementFormat::NormalizedShort2: return VK_FORMAT_R16G16_SNORM;
-                case VertexElementFormat::NormalizedShort4: return VK_FORMAT_R16G16B16A16_SNORM;
-                case VertexElementFormat::HalfVector2: return VK_FORMAT_R16G16_SFLOAT;
-                case VertexElementFormat::HalfVector4: return VK_FORMAT_R16G16B16A16_SFLOAT;
-            }
-            throw std::invalid_argument(
-                "CNA Vulkan: unrecognized VertexElementFormat ordinal " +
-                std::to_string(static_cast<int>(format)));
+            const VkFormat result = VertexElementFormatToVk(format);
+            if (result != VK_FORMAT_UNDEFINED) return result;
+            throw std::invalid_argument("CNA Vulkan: unrecognized VertexElementFormat ordinal " +
+                                        std::to_string(static_cast<int>(format)));
         }
 
         /// Packs one shader's declared uniforms into MojoShader's own SPIR-V uniform-block layout.

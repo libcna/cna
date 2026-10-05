@@ -588,6 +588,14 @@ TEST(EasyGLCompiledEffectDrawTest, SharedDrawMatrixContract)
     CNA::TestSupport::RunCompiledEffectDrawContract(device);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, SharedPackedVertexColorContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectPackedVertexColorContract(device);
+}
+
 TEST(EasyGLCompiledEffectDrawTest, UnsupportedNativeWireframeRefusesCompiledOrdinaryDraw)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,

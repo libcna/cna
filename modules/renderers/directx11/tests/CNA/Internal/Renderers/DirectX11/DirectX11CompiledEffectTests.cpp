@@ -83,6 +83,12 @@ TEST(DirectX11CompiledEffectDrawTest, SharedDrawMatrixContract)
     CNA::TestSupport::RunCompiledEffectDrawContract(device);
 }
 
+TEST(DirectX11CompiledEffectDrawTest, SharedPackedVertexColorContract)
+{
+    HiDefGraphicsDevice device;
+    CNA::TestSupport::RunCompiledEffectPackedVertexColorContract(device);
+}
+
 TEST(DirectX11CompiledEffectDrawTest, SharedMultiStreamDrawContract)
 {
     HiDefGraphicsDevice device;

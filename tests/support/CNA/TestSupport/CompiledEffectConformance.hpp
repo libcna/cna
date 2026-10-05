@@ -1236,6 +1236,52 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Contract: compiled effects preserve XNA's packed COLOR0 channel ordering.
+     *
+     * The vertex shader multiplies clip-space coverage by COLOR0.x. `Color::Red` must therefore
+     * fill the target; a renderer that interprets the little-endian AABBGGRR value as BGRA sees
+     * blue's zero in X and collapses the geometry.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectPackedVertexColorContract(GraphicsDevice& device)
+    {
+        Effect effect(device, BuildSyntheticPackedVertexColorEffect());
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4(1.0f));
+
+        struct ClipVertex
+        {
+            float x, y, z;
+            std::uint32_t color;
+        };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0),
+        });
+        const std::uint32_t red = Color::Red.getPackedValueProperty();
+        const ClipVertex quad[6] = {
+            {-1,  1, 0, red}, {-1, -1, 0, red}, { 1, -1, 0, red},
+            {-1,  1, 0, red}, { 1, -1, 0, red}, { 1,  1, 0, red},
+        };
+
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color centre = Color::Transparent;
+        const Rectangle probe(2, 2, 1, 1);
+        target.GetData(0, &probe, &centre, 0, 1);
+        EXPECT_EQ(centre, Color::White);
+    }
+
+    /**
      * @brief Contract: Shader Model 1.1 `EXPP` emits its legacy four-part approximation tuple.
      *
      * The vertex program compares `EXPP(3.25)` with `(9,.5,10,2)` and preserves the submitted

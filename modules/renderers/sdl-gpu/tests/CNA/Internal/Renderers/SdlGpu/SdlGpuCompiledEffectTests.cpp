@@ -803,6 +803,14 @@ TEST(SdlGpuCompiledEffectDrawTest, SharedDrawMatrixContract)
     CNA::TestSupport::RunCompiledEffectDrawContract(device);
 }
 
+TEST(SdlGpuCompiledEffectDrawTest, SharedPackedVertexColorContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectPackedVertexColorContract(device);
+}
+
 TEST(SdlGpuCompiledEffectDrawTest, SharedMultiStreamDrawContract)
 {
     GraphicsDevice device;

@@ -112,6 +112,12 @@ TEST(DirectX9CompiledEffectDrawTest, SharedDrawMatrixContract)
     CNA::TestSupport::RunCompiledEffectDrawContract(device);
 }
 
+TEST(DirectX9CompiledEffectDrawTest, SharedPackedVertexColorContract)
+{
+    GraphicsDevice device;
+    CNA::TestSupport::RunCompiledEffectPackedVertexColorContract(device);
+}
+
 TEST(DirectX9CompiledEffectDrawTest, SharedMultiStreamDrawContract)
 {
     GraphicsDevice device;

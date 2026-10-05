@@ -2054,6 +2054,10 @@ namespace CNA::TestSupport
         /// with it set the geometry moves by exactly the second stream's own values, so binding
         /// that stream from the wrong buffer, stride or offset changes the pixels.
         bool vertexShaderReadsSecondStream = false;
+        /// Makes the drawable vertex shader consume COLOR0 and multiply clip-space coverage by
+        /// its red component. A packed red XNA Color therefore draws while an R/B-reversed
+        /// attribute collapses the geometry.
+        bool vertexShaderReadsPackedColor = false;
         /// Emits a Shader Model 3 vertex program that loads its clip-space POSITION0 from the
         /// declared sampler with TEXLDL. The sampler belongs to VertexTextures/VertexSamplerStates,
         /// independently from the pixel-stage collections. Requires @ref includeSampler.
@@ -6806,11 +6810,13 @@ namespace CNA::TestSupport
      * sibling above.
      *
      * @param readsSecondStream Whether the shader declares and consumes a TEXCOORD0 input.
+     * @param readsPackedColor Whether the shader declares COLOR0 and uses its red component.
      * @param forwardsTexCoord plans/plan_fx.md FX-093: whether the shader also declares TEXCOORD0 and
      *        writes it to `oT0`, which is what a sampling pixel shader reads.
      * @return The complete vertex-shader token buffer.
      */
     inline std::vector<std::uint8_t> BuildSyntheticVertexShader(bool readsSecondStream,
+                                                                bool readsPackedColor,
                                                                 bool forwardsTexCoord = false,
                                                                 bool forwardsThreeComponents = false,
                                                                 bool usesPredication = false,
@@ -7556,6 +7562,12 @@ namespace CNA::TestSupport
                              SyntheticDeclarationModifierProbe::Vertex30InputSaturate
                          ? 0x00100000u
                          : 0u));
+        }
+        if (readsPackedColor)
+        {
+            AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_color0 v1
+            AppendUInt32(shader, 0x80000000u | 10u);
+            AppendUInt32(shader, destination(regInput, 1));
         }
         if (probesVertex20DeclarationDuplicate)
         {
@@ -8510,6 +8522,17 @@ namespace CNA::TestSupport
             AppendUInt32(shader, destination(regRastOut, 0));
             AppendUInt32(shader, source(regInput, 0));
             AppendUInt32(shader, source(regConst, 0));
+        }
+        else if (readsPackedColor)
+        {
+            AppendUInt32(shader, 0x00000014u | (3u << 24)); // m4x4 r2, v0, c0
+            AppendUInt32(shader, destination(regTemp, 2));
+            AppendUInt32(shader, source(regInput, 0));
+            AppendUInt32(shader, source(regConst, 0));
+            AppendUInt32(shader, 0x00000005u | (3u << 24)); // mul oPos, r2, v1.x
+            AppendUInt32(shader, destination(regRastOut, 0));
+            AppendUInt32(shader, source(regTemp, 2));
+            AppendUInt32(shader, source(regInput, 1, 0x00u));
         }
         else if (probesVertex30LoopRepOperand)
         {
@@ -9692,6 +9715,7 @@ namespace CNA::TestSupport
         {
             const std::vector<std::uint8_t> vertexShader = BuildSyntheticVertexShader(
                 options.vertexShaderReadsSecondStream,
+                options.vertexShaderReadsPackedColor,
                 options.vertexShaderSamplesTexture || options.pixelShaderSamplesTexture ||
                     options.pixelShaderUsesTextureGradients ||
                     (options.textureInstructionProfileProbe >=
@@ -9879,6 +9903,19 @@ namespace CNA::TestSupport
         SyntheticEffectOptions options;
         options.includeDrawableProgram = true;
         options.vertexShaderReadsSecondStream = readsSecondStream;
+        return BuildSyntheticEffect(options);
+    }
+
+    /**
+     * @brief Builds a drawable effect whose vertex shader consumes a packed COLOR0 attribute.
+     *
+     * @return Complete Effect Framework bytecode with explicit POSITION0 and COLOR0 inputs.
+     */
+    inline std::vector<std::uint8_t> BuildSyntheticPackedVertexColorEffect()
+    {
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.vertexShaderReadsPackedColor = true;
         return BuildSyntheticEffect(options);
     }
 

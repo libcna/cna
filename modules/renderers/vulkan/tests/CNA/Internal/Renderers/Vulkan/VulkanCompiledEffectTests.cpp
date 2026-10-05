@@ -318,6 +318,14 @@ TEST(VulkanCompiledEffectDrawTest, SharedDrawMatrixContract)
     CNA::TestSupport::RunCompiledEffectDrawContract(device);
 }
 
+TEST(VulkanCompiledEffectDrawTest, PackedColorVertexAttributePreservesRedChannel)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectPackedVertexColorContract(device);
+}
+
 TEST(VulkanCompiledEffectDrawTest, SharedMultiStreamDrawContract)
 {
     GraphicsDevice device;

@@ -56,6 +56,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-033 | **DONE** | Replace the stale sample-renderer assessment with the measured Linux matrix and exact native Windows/macOS follow-up procedures. |
 | MSR-034 | **DONE** | Preserve XNA integer pixel centres through FNA3D without shifting SpriteBatch, restoring `PrimitivesSample`'s one-pixel stars. |
 | MSR-035 | **DONE** | Apply XNA's default graphics states to every 3D renderer during `GraphicsDevice` construction, including the eager depthless `Game` device, restoring SDL_GPU compiled-model depth. |
+| MSR-036 | **DONE** | Preserve packed XNA vertex-colour channel order in Vulkan compiled-effect pipelines, restoring `TexturesAndColors` parity. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -887,6 +888,34 @@ Regression and integration evidence:
   the unchanged `CustomModelEffect_cna_samples` executable on direct SDL_GPU and OPENGL33.  Manual
   comparison shows the complete model without the pre-fix black wedges, with matching geometry,
   depth ordering, material lighting and environment mapping.
+
+## MSR-036 — Vulkan compiled-effect packed vertex colours
+
+The full-gallery visual sweep found `TexturesAndColors` stable on Vulkan but with a cyan/blue cube
+where OPENGLES3, OPENGL33, WebGPU, SDL_GPU and FNA3D rendered the intended green/blue material.
+The authentic XNA effect's light and ambient parameters arrived unchanged; the mismatch followed
+the model's packed COLOR0 vertex channel.  Vulkan's stock pipelines already mapped XNA
+`VertexElementFormat::Color` to `VK_FORMAT_R8G8B8A8_UNORM`, matching the little-endian bytes of
+XNA's AABBGGRR packed value.  The compiled-effect path carried a private duplicate table that
+incorrectly selected `VK_FORMAT_B8G8R8A8_UNORM` and reversed red and blue.
+
+The compiled-effect pipeline now calls the common Vulkan vertex-format helper instead of
+maintaining a second mapping.  A shared renderer contract draws an explicit Shader Model 2 effect
+with a 16-byte `float3 + packed Color` vertex.  Its coverage depends on the red component of
+`Color::Red`, so an R/B reversal deterministically leaves the magenta clear colour.  The contract
+is registered for every compiled-effect backend; Vulkan additionally names the sample-exposed
+regression in its test suite.
+
+Regression and integration evidence:
+
+- the focused Vulkan packed-colour test passes on the Radeon 780M through the private GPU runner;
+- the complete Vulkan compiled-effect selection completes with 29 passes and its one existing
+  explicit cube/volume sampler skip;
+- the same shared contract passes on OPENGLES3, preserving the EasyGL baseline;
+- `matrix-results/msr-036-textures-vulkan-fixed` records an automated pass for the unchanged
+  multi-renderer `TexturesAndColors_cna_samples` executable with active Vulkan;
+- the fresh four-second capture restores the same green/blue texture and lighting seen in the
+  OPENGLES3 reference, and also contains the expected technique caption.
 
 ## Current Linux corpus matrix
 
