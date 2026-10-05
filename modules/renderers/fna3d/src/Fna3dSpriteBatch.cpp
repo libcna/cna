@@ -285,6 +285,10 @@ namespace CNA::Internal::Renderers::Fna3d
             return;
         }
 
+        // SpriteBatch's projection and vertex coordinates already implement XNA's sprite pixel
+        // placement. Keep the general 3D pixel-centre correction out of this draw route.
+        FNA3D_SetXnaPixelCenterEXT(device_, 0);
+
         if (spriteVertexBuffer_ == nullptr)
         {
             spriteVertexBuffer_ =

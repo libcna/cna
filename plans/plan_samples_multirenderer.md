@@ -54,6 +54,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-031 | **DONE** | Repair DirectX compiled-effect native parameter indexing, stage-sized sampler state and draw-time public texture bindings. |
 | MSR-032 | **DONE** | Keep the remaining test and service harness JSON consumers target-independent in cross builds. |
 | MSR-033 | **DONE** | Replace the stale sample-renderer assessment with the measured Linux matrix and exact native Windows/macOS follow-up procedures. |
+| MSR-034 | **DONE** | Preserve XNA integer pixel centres through FNA3D without shifting SpriteBatch, restoring `PrimitivesSample`'s one-pixel stars. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -807,6 +808,40 @@ Objective-C++ family is configured, then requests OPENGLES3, OPENGL33, WebGPU, S
 in the same runtime-selected binary.  It explicitly preserves Metal's current compiled-effect,
 query, multi-stream and instancing gaps and requires actual Mac mini M4 evidence before any native
 claim.  The existing WebGL pipeline is unchanged.
+
+## MSR-034 — FNA3D XNA pixel-centre convention
+
+The full-gallery visual sweep found a failure that an automated stability run could not detect:
+`PrimitivesSample` initialized and ran with active FNA3D, but every one-pixel star was missing.
+The authentic sample emits each star as a one-pixel clockwise triangle in a top-left orthographic
+projection.  FNA3D exposed its selected modern driver's half-integer pixel-centre convention,
+placing the only candidate sample exactly on the fill edge; larger triangles and the sample's line
+geometry hid the mismatch.
+
+CNA's pinned FNA3D now carries an explicit `FNA3D_SetXnaPixelCenterEXT` state.  Ordinary CNA 3D
+draws enable it and SpriteBatch disables it because the latter owns its own XNA sprite projection.
+The FNA3D OpenGL driver applies CNA's existing MojoShader clip-space correction; its SDL_GPU and
+D3D11 drivers apply the equivalent 63/128-pixel fractional viewport origin.  The correction is
+limited to filled triangles and single-sample destinations: lines and points have no triangle fill
+rule, while multisample positions already provide the required edge coverage.  This is a general
+rasterization contract, not a sample or shader special case.
+
+Regression and integration evidence:
+
+- the focused one-pixel contract reproduced 0 covered pixels on both FNA3D SDL_GPU and OpenGL
+  drivers before the repair, even with culling disabled; the larger winding case already passed;
+- its three cases now pass on OPENGLES3, OPENGL33, Vulkan, WebGPU, SDL_GPU and FNA3D, and on both
+  of FNA3D's Linux drivers;
+- all eleven `SpriteBatchRasterizationTest` cases were promoted to FNA3D and pass together with the
+  three pixel-centre cases on both FNA3D drivers (14/14), proving the 2D route was not shifted;
+- the 66-test FNA3D renderer/compiled-effect/oracle selection completes on both internal drivers
+  with 65 passes and the one existing intentional Reach-profile cube/volume sampler skip;
+- fresh private-display captures show the stars restored in the unchanged multi-renderer
+  `PrimitivesSample_cna_samples` executable through both internal drivers, visually matching the
+  OPENGL33 reference where the pre-fix FNA3D frame contained no stars;
+- the seven-renderer Windows sample configuration cross-builds the same executable and compiles
+  FNA3D's patched D3D11 driver.  That is compile evidence only; native Windows rasterization still
+  requires the planned hardware run.
 
 ## Current Linux corpus matrix
 

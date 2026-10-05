@@ -4,8 +4,8 @@
 # repository at a pinned tag, in the same spirit as the WEBGPU integration. FNA3D is a real
 # multi-file C library (not a single-header drop-in), so this actually builds a static archive; it carries MojoShader as a git submodule, which the fetch must recurse into
 # because FNA3D's own CMakeLists.txt compiles MojoShader's translation units directly. CNA carries
-# a narrow compatibility/conformance patch series for that exact submodule revision; the
-# fetch/configure path applies it automatically and idempotently.
+# a narrow compatibility/conformance patch series for that exact FNA3D and submodule revision;
+# the fetch/configure path applies it automatically and idempotently.
 #
 # FNA3D's only dependency is SDL 3.2.0 or newer -- exactly the SDL3 CNA already vendors -- so the
 # fetched project resolves SDL3::SDL3 from CNA's own already-configured imported target
@@ -169,6 +169,10 @@ function(cna_configure_mojoshader)
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsles3-vertex-lod-bias.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
+    set(_cna_fna3d_source_patch
+        "${CMAKE_CURRENT_LIST_DIR}/patches/fna3d-3240147-xna-pixel-center.patch")
+    set(_cna_fna3d_patch_script
+        "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-patches.cmake")
 
     # MojoShader itself has two standard-library routes -- SDL's (MOJOSHADER_USE_SDL_STDLIB, which
     # FNA3D's build selects) and the C library's.
@@ -202,7 +206,9 @@ function(cna_configure_mojoshader)
         UPDATE_DISCONNECTED TRUE
         PATCH_COMMAND  "${CMAKE_COMMAND}"
                        "-DCNA_FNA3D_MOJOSHADER_PATCH_FILE=${_cna_fna3d_mojoshader_patch}"
-                       -P "${_cna_fna3d_mojoshader_patch_script}"
+                       "-DCNA_FNA3D_MOJOSHADER_PATCH_SCRIPT=${_cna_fna3d_mojoshader_patch_script}"
+                       "-DCNA_FNA3D_SOURCE_PATCH_FILE=${_cna_fna3d_source_patch}"
+                       -P "${_cna_fna3d_patch_script}"
     )
 
     # FNA3D defaults to a shared library. CNA links every renderer's dependencies statically into
@@ -221,12 +227,14 @@ function(cna_configure_mojoshader)
     execute_process(
         COMMAND "${CMAKE_COMMAND}"
                 "-DCNA_FNA3D_MOJOSHADER_PATCH_FILE=${_cna_fna3d_mojoshader_patch}"
-                -P "${_cna_fna3d_mojoshader_patch_script}"
+                "-DCNA_FNA3D_MOJOSHADER_PATCH_SCRIPT=${_cna_fna3d_mojoshader_patch_script}"
+                "-DCNA_FNA3D_SOURCE_PATCH_FILE=${_cna_fna3d_source_patch}"
+                -P "${_cna_fna3d_patch_script}"
         WORKING_DIRECTORY "${fna3d_SOURCE_DIR}"
-        RESULT_VARIABLE _cna_fna3d_mojoshader_patch_result)
-    if(NOT _cna_fna3d_mojoshader_patch_result EQUAL 0)
+        RESULT_VARIABLE _cna_fna3d_patch_result)
+    if(NOT _cna_fna3d_patch_result EQUAL 0)
         message(FATAL_ERROR
-            "CNA: failed to ensure the required MojoShader patches are applied in "
+            "CNA: failed to ensure the required FNA3D and MojoShader patches are applied in "
             "${fna3d_SOURCE_DIR}.")
     endif()
 

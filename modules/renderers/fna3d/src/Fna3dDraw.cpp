@@ -155,6 +155,10 @@ namespace CNA::Internal::Renderers::Fna3d
                                        const Matrix& view, const Matrix& projection,
                                        const GpuDrawParams& params, int baseVertex)
     {
+        // XNA's D3D9 rasterization convention uses integer pixel centres. FNA3D normally exposes
+        // the host driver's convention, so ask CNA's pinned FNA3D extension to apply the same
+        // correction used by the other CNA 3D renderers. SpriteBatch explicitly disables it.
+        FNA3D_SetXnaPixelCenterEXT(device_, 1);
         if (params.compiledEffectRuntime == nullptr)
         {
             ApplyStockEffectEXT(world, view, projection, params);

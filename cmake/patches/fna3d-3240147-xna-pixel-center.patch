@@ -1,0 +1,361 @@
+diff --git a/include/FNA3D.h b/include/FNA3D.h
+index bc3ba5a..352adac 100644
+--- a/include/FNA3D.h
++++ b/include/FNA3D.h
+@@ -646,6 +646,11 @@ FNA3DAPI void FNA3D_DrawPrimitives(
+  */
+ FNA3DAPI void FNA3D_SetViewport(FNA3D_Device *device, FNA3D_Viewport *viewport);
+ 
++/* CNA extension: selects XNA/D3D9 integer pixel centers for ordinary 3D draws.
++ * SpriteBatch already supplies its own half-pixel convention and must disable this mode.
++ */
++FNA3DAPI void FNA3D_SetXnaPixelCenterEXT(FNA3D_Device *device, uint8_t enabled);
++
+ /* Sets the scissor box for rendering, relative to the active render target.
+  * It is required to call this at least once after calling SetRenderTargets, as
+  * the renderer may need to adjust these dimensions to fit the backend's
+diff --git a/src/FNA3D.c b/src/FNA3D.c
+index b70bcbb..f9438ef 100644
+--- a/src/FNA3D.c
++++ b/src/FNA3D.c
+@@ -376,6 +376,15 @@ void FNA3D_SetViewport(FNA3D_Device *device, FNA3D_Viewport *viewport)
+ 	device->SetViewport(device->driverData, viewport);
+ }
+ 
++void FNA3D_SetXnaPixelCenterEXT(FNA3D_Device *device, uint8_t enabled)
++{
++	if (device == NULL)
++	{
++		return;
++	}
++	device->SetXnaPixelCenterEXT(device->driverData, enabled);
++}
++
+ void FNA3D_SetScissorRect(FNA3D_Device *device, FNA3D_Rect *scissor)
+ {
+ 	TRACE_SETSCISSORRECT
+diff --git a/src/FNA3D_Driver.h b/src/FNA3D_Driver.h
+index 14e92cc..d81faf0 100644
+--- a/src/FNA3D_Driver.h
++++ b/src/FNA3D_Driver.h
+@@ -354,6 +354,7 @@ struct FNA3D_Device
+ 	/* Mutable Render States */
+ 
+ 	void (*SetViewport)(FNA3D_Renderer *driverData, FNA3D_Viewport *viewport);
++	void (*SetXnaPixelCenterEXT)(FNA3D_Renderer *driverData, uint8_t enabled);
+ 	void (*SetScissorRect)(FNA3D_Renderer *driverData, FNA3D_Rect *scissor);
+ 
+ 	void (*GetBlendFactor)(
+@@ -750,6 +751,7 @@ struct FNA3D_Device
+ 	ASSIGN_DRIVER_FUNC(DrawInstancedPrimitives, name) \
+ 	ASSIGN_DRIVER_FUNC(DrawPrimitives, name) \
+ 	ASSIGN_DRIVER_FUNC(SetViewport, name) \
++	ASSIGN_DRIVER_FUNC(SetXnaPixelCenterEXT, name) \
+ 	ASSIGN_DRIVER_FUNC(SetScissorRect, name) \
+ 	ASSIGN_DRIVER_FUNC(GetBlendFactor, name) \
+ 	ASSIGN_DRIVER_FUNC(SetBlendFactor, name) \
+diff --git a/src/FNA3D_Driver_D3D11.c b/src/FNA3D_Driver_D3D11.c
+index 3db1a57..72c1675 100644
+--- a/src/FNA3D_Driver_D3D11.c
++++ b/src/FNA3D_Driver_D3D11.c
+@@ -266,6 +266,7 @@ typedef struct D3D11Renderer /* Cast FNA3D_Renderer* to this! */
+ 	/* Rasterizer State */
+ 	FNA3D_Viewport viewport;
+ 	FNA3D_Rect scissorRect;
++	uint8_t xnaPixelCenterEnabled;
+ 	ID3D11RasterizerState *rasterizerState;
+ 
+ 	/* Textures */
+@@ -290,6 +291,7 @@ typedef struct D3D11Renderer /* Cast FNA3D_Renderer* to this! */
+ 
+ 	/* Render Targets */
+ 	int32_t numRenderTargets;
++	int32_t renderTargetMultiSampleCount;
+ 	ID3D11RenderTargetView *renderTargetViews[MAX_RENDERTARGET_BINDINGS];
+ 	ID3D11DepthStencilView *depthStencilView;
+ 	FNA3D_DepthFormat currentDepthFormat;
+@@ -1700,6 +1702,29 @@ static void D3D11_Clear(
+ 	SDL_UnlockMutex(renderer->ctxLock);
+ }
+ 
++static void D3D11_ApplyXnaPixelCenter(
++	D3D11Renderer *renderer,
++	FNA3D_PrimitiveType primitiveType
++) {
++	/* CNA asks for XNA/D3D9 integer pixel centres on ordinary triangle draws. A modern viewport
++	 * starts at a half-integer pixel centre, so 63/128 moves geometry just under half a pixel and
++	 * avoids the opposite fill-rule tie. MSAA has its own sample positions and must stay unshifted. */
++	const uint8_t correct = renderer->xnaPixelCenterEnabled &&
++		(primitiveType == FNA3D_PRIMITIVETYPE_TRIANGLELIST ||
++		 primitiveType == FNA3D_PRIMITIVETYPE_TRIANGLESTRIP) &&
++		renderer->renderTargetMultiSampleCount <= 1;
++	D3D11_VIEWPORT viewport =
++	{
++		(float) renderer->viewport.x + (correct ? 63.0f / 128.0f : 0.0f),
++		(float) renderer->viewport.y + (correct ? 63.0f / 128.0f : 0.0f),
++		(float) renderer->viewport.w,
++		(float) renderer->viewport.h,
++		renderer->viewport.minDepth,
++		renderer->viewport.maxDepth
++	};
++	ID3D11DeviceContext_RSSetViewports(renderer->context, 1, &viewport);
++}
++
+ static void D3D11_DrawIndexedPrimitives(
+ 	FNA3D_Renderer *driverData,
+ 	FNA3D_PrimitiveType primitiveType,
+@@ -1715,6 +1740,7 @@ static void D3D11_DrawIndexedPrimitives(
+ 	D3D11Buffer *d3dIndices = (D3D11Buffer*) indices;
+ 
+ 	SDL_LockMutex(renderer->ctxLock);
++	D3D11_ApplyXnaPixelCenter(renderer, primitiveType);
+ 
+ 	/* Bind index buffer */
+ 	if (	renderer->indexBuffer != d3dIndices->handle ||
+@@ -1767,6 +1793,7 @@ static void D3D11_DrawInstancedPrimitives(
+ 	D3D11Buffer *d3dIndices = (D3D11Buffer*) indices;
+ 
+ 	SDL_LockMutex(renderer->ctxLock);
++	D3D11_ApplyXnaPixelCenter(renderer, primitiveType);
+ 
+ 	/* Bind index buffer */
+ 	if (	renderer->indexBuffer != d3dIndices->handle ||
+@@ -1814,6 +1841,7 @@ static void D3D11_DrawPrimitives(
+ 	D3D11Renderer *renderer = (D3D11Renderer*) driverData;
+ 
+ 	SDL_LockMutex(renderer->ctxLock);
++	D3D11_ApplyXnaPixelCenter(renderer, primitiveType);
+ 
+ 	/* Bind draw state */
+ 	if (renderer->topology != primitiveType)
+@@ -1868,6 +1896,12 @@ static void D3D11_SetViewport(FNA3D_Renderer *driverData, FNA3D_Viewport *viewpo
+ 	}
+ }
+ 
++static void D3D11_SetXnaPixelCenterEXT(FNA3D_Renderer *driverData, uint8_t enabled)
++{
++	/* SpriteBatch disables this: its projection already owns XNA's sprite placement convention. */
++	((D3D11Renderer*) driverData)->xnaPixelCenterEnabled = enabled;
++}
++
+ static void D3D11_SetScissorRect(FNA3D_Renderer *driverData, FNA3D_Rect *scissor)
+ {
+ 	D3D11Renderer *renderer = (D3D11Renderer*) driverData;
+@@ -2457,6 +2491,7 @@ static void D3D11_SetRenderTargets(
+ 			renderer->renderTargetViews[i] = NULL;
+ 		}
+ 		renderer->numRenderTargets = 1;
++		renderer->renderTargetMultiSampleCount = renderer->backbuffer->multiSampleCount;
+ 		return;
+ 	}
+ 
+@@ -2515,6 +2550,9 @@ static void D3D11_SetRenderTargets(
+ 	/* Remember color attachments */
+ 	SDL_memcpy(renderer->renderTargetViews, views, sizeof(views));
+ 	renderer->numRenderTargets = numRenderTargets;
++	renderer->renderTargetMultiSampleCount =
++		renderTargets[0].colorBuffer != NULL ?
++			((D3D11Renderbuffer*) renderTargets[0].colorBuffer)->multiSampleCount : 0;
+ }
+ 
+ static void D3D11_ResolveTarget(
+diff --git a/src/FNA3D_Driver_OpenGL.c b/src/FNA3D_Driver_OpenGL.c
+index a847c3a..e12b798 100644
+--- a/src/FNA3D_Driver_OpenGL.c
++++ b/src/FNA3D_Driver_OpenGL.c
+@@ -119,6 +119,7 @@ struct OpenGLRenderbuffer /* Cast from FNA3D_Renderbuffer* */
+ {
+ 	GLuint handle;
+ 	FNA3D_SurfaceFormat format;
++	int32_t multiSampleCount;
+ 	OpenGLRenderbuffer *next; /* linked list */
+ };
+ 
+@@ -242,6 +243,7 @@ typedef struct OpenGLRenderer /* Cast from FNA3D_Renderer* */
+ 	/* Viewport */
+ 	FNA3D_Viewport viewport;
+ 	FNA3D_Rect scissorRect;
++	uint8_t xnaPixelCenterEnabled;
+ 	float depthRangeMin;
+ 	float depthRangeMax;
+ 
+@@ -294,6 +296,7 @@ typedef struct OpenGLRenderer /* Cast from FNA3D_Renderer* */
+ 	const MOJOSHADER_effectTechnique *currentTechnique;
+ 	uint32_t currentPass;
+ 	uint8_t renderTargetBound;
++	int32_t renderTargetMultiSampleCount;
+ 	uint8_t effectApplied;
+ 
+ 	/* Point Sprite Toggle */
+@@ -1466,6 +1469,27 @@ static void OPENGL_SwapBuffers(
+ 
+ /* Drawing */
+ 
++static void OPENGL_ApplyXnaPixelCenter(
++	OpenGLRenderer *renderer,
++	FNA3D_PrimitiveType primitiveType
++) {
++	/* CNA asks for XNA/D3D9 integer pixel centres on ordinary triangle draws. 63/64 in clip space
++	 * is 63/128 of a viewport pixel: just under the half-pixel correction, avoiding the opposite
++	 * fill-rule tie. MSAA has its own sample positions and must stay unshifted. */
++	const uint8_t triangle =
++		primitiveType == FNA3D_PRIMITIVETYPE_TRIANGLELIST ||
++		primitiveType == FNA3D_PRIMITIVETYPE_TRIANGLESTRIP;
++	const int32_t samples = renderer->renderTargetBound ?
++		renderer->renderTargetMultiSampleCount : renderer->backbuffer->multiSampleCount;
++	const uint8_t correct = renderer->xnaPixelCenterEnabled && triangle && samples <= 1 &&
++		renderer->viewport.w > 0 && renderer->viewport.h > 0;
++
++	MOJOSHADER_glProgramPixelCenterInfo(
++		correct ? (63.0f / 64.0f) / renderer->viewport.w : 0.0f,
++		correct ? -(63.0f / 64.0f) / renderer->viewport.h : 0.0f
++	);
++}
++
+ static void OPENGL_Clear(
+ 	FNA3D_Renderer *driverData,
+ 	FNA3D_ClearOptions options,
+@@ -1591,6 +1615,7 @@ static void OPENGL_DrawIndexedPrimitives(
+ 	uint8_t tps;
+ 	OpenGLRenderer *renderer = (OpenGLRenderer*) driverData;
+ 	OpenGLBuffer *buffer = (OpenGLBuffer*) indices;
++	OPENGL_ApplyXnaPixelCenter(renderer, primitiveType);
+ 
+ 	BindIndexBuffer(renderer, buffer->handle);
+ 
+@@ -1651,6 +1676,7 @@ static void OPENGL_DrawInstancedPrimitives(
+ 	uint8_t tps;
+ 	OpenGLRenderer *renderer = (OpenGLRenderer*) driverData;
+ 	OpenGLBuffer *buffer = (OpenGLBuffer*) indices;
++	OPENGL_ApplyXnaPixelCenter(renderer, primitiveType);
+ 
+ 	SDL_assert(renderer->supports_ARB_draw_instanced);
+ 
+@@ -1702,6 +1728,7 @@ static void OPENGL_DrawPrimitives(
+ ) {
+ 	uint8_t tps;
+ 	OpenGLRenderer *renderer = (OpenGLRenderer*) driverData;
++	OPENGL_ApplyXnaPixelCenter(renderer, primitiveType);
+ 
+ 	tps = (	renderer->togglePointSprite &&
+ 		primitiveType == FNA3D_PRIMITIVETYPE_POINTLIST_EXT	);
+@@ -1777,6 +1804,12 @@ static void OPENGL_SetViewport(FNA3D_Renderer *driverData, FNA3D_Viewport *viewp
+ 	}
+ }
+ 
++static void OPENGL_SetXnaPixelCenterEXT(FNA3D_Renderer *driverData, uint8_t enabled)
++{
++	/* SpriteBatch disables this: its projection already owns XNA's sprite placement convention. */
++	((OpenGLRenderer*) driverData)->xnaPixelCenterEnabled = enabled;
++}
++
+ static void OPENGL_SetScissorRect(FNA3D_Renderer *driverData, FNA3D_Rect *scissor)
+ {
+ 	OpenGLRenderer *renderer = (OpenGLRenderer*) driverData;
+@@ -2596,6 +2629,7 @@ static void OPENGL_SetRenderTargets(
+ 				renderer->realBackbufferFBO
+ 		);
+ 		renderer->renderTargetBound = 0;
++		renderer->renderTargetMultiSampleCount = 0;
+ 		ApplySRGBFlag(renderer, renderer->backbuffer->isSrgb);
+ 		return;
+ 	}
+@@ -2603,6 +2637,9 @@ static void OPENGL_SetRenderTargets(
+ 	{
+ 		BindFramebuffer(renderer, renderer->targetFramebuffer);
+ 		renderer->renderTargetBound = 1;
++		renderer->renderTargetMultiSampleCount =
++			renderTargets[0].colorBuffer != NULL ?
++				((OpenGLRenderbuffer*) renderTargets[0].colorBuffer)->multiSampleCount : 0;
+ 	}
+ 
+ 	for (i = 0; i < numRenderTargets; i += 1)
+@@ -4401,6 +4438,7 @@ static FNA3D_Renderbuffer* OPENGL_GenColorRenderbuffer(
+ 	);
+ 	renderbuffer->next = NULL;
+ 	renderbuffer->format = format;
++	renderbuffer->multiSampleCount = multiSampleCount;
+ 
+ 	renderer->glGenRenderbuffers(1, &renderbuffer->handle);
+ 	renderer->glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer->handle);
+diff --git a/src/FNA3D_Driver_SDL.c b/src/FNA3D_Driver_SDL.c
+index 5a54ac5..a020647 100644
+--- a/src/FNA3D_Driver_SDL.c
++++ b/src/FNA3D_Driver_SDL.c
+@@ -557,6 +557,7 @@ typedef struct SDLGPU_Renderer
+ 	PackedVertexBufferBindingsArray vertexBufferBindingsCache;
+ 
+ 	FNA3D_Viewport viewport;
++	uint8_t xnaPixelCenterEnabled;
+ 
+ 	/* Vertex buffer bind settings */
+ 	uint32_t numVertexBindings;
+@@ -780,7 +781,10 @@ static void SDLGPU_INTERNAL_EndRenderPass(
+ 	renderer->currentStencilReference = 0;
+ }
+ 
+-static void SDLGPU_INTERNAL_UpdateViewport(SDLGPU_Renderer *renderer)
++static void SDLGPU_INTERNAL_UpdateViewport(
++	SDLGPU_Renderer *renderer,
++	uint8_t correctXnaPixelCenter
++)
+ {
+ 	/* commandLock should be acquired by this point */
+ 
+@@ -793,6 +797,13 @@ static void SDLGPU_INTERNAL_UpdateViewport(SDLGPU_Renderer *renderer)
+ 	gpuViewport.h = (float) renderer->viewport.h;
+ 	gpuViewport.min_depth = renderer->viewport.minDepth;
+ 	gpuViewport.max_depth = renderer->viewport.maxDepth;
++	if (correctXnaPixelCenter)
++	{
++		/* XNA/D3D9 uses integer pixel centres. 63/128 moves modern half-integer centres just
++		 * inside the triangle without landing exactly on the opposite fill-rule tie. */
++		gpuViewport.x += 63.0f / 128.0f;
++		gpuViewport.y += 63.0f / 128.0f;
++	}
+ 
+ 	SDL_SetGPUViewport(
+ 		renderer->renderPass,
+@@ -945,7 +956,7 @@ static void SDLGPU_INTERNAL_BeginRenderPass(
+ 		renderer->nextRenderPassDepthStencilAttachment != NULL ? &depthStencilAttachmentInfo : NULL
+ 	);
+ 
+-	SDLGPU_INTERNAL_UpdateViewport(renderer);
++	SDLGPU_INTERNAL_UpdateViewport(renderer, 0);
+ 
+ 	renderer->shouldClearColorOnBeginPass = 0;
+ 	renderer->shouldClearDepthOnBeginPass = 0;
+@@ -2119,12 +2130,18 @@ static void SDLGPU_SetViewport(
+ 		if (renderer->renderPass != NULL)
+ 		{
+ 			SDL_LockMutex(renderer->commandLock);
+-			SDLGPU_INTERNAL_UpdateViewport(renderer);
++			SDLGPU_INTERNAL_UpdateViewport(renderer, 0);
+ 			SDL_UnlockMutex(renderer->commandLock);
+ 		}
+ 	}
+ }
+ 
++static void SDLGPU_SetXnaPixelCenterEXT(FNA3D_Renderer *driverData, uint8_t enabled)
++{
++	/* SpriteBatch disables this: its projection already owns XNA's sprite placement convention. */
++	((SDLGPU_Renderer*) driverData)->xnaPixelCenterEnabled = enabled;
++}
++
+ static void SDLGPU_SetScissorRect(
+ 	FNA3D_Renderer *driverData,
+ 	FNA3D_Rect *scissor
+@@ -2373,6 +2390,13 @@ static void SDLGPU_INTERNAL_BindDeferredState(
+ 	}
+ 
+ 	SDLGPU_INTERNAL_BeginRenderPass(renderer);
++	SDLGPU_INTERNAL_UpdateViewport(
++		renderer,
++		renderer->xnaPixelCenterEnabled &&
++		(primitiveType == FNA3D_PRIMITIVETYPE_TRIANGLELIST ||
++		 primitiveType == FNA3D_PRIMITIVETYPE_TRIANGLESTRIP) &&
++		renderer->nextRenderPassMultisampleCount == SDL_GPU_SAMPLECOUNT_1
++	);
+ 
+ 	SDLGPU_INTERNAL_BindGraphicsPipeline(renderer);
+ 
