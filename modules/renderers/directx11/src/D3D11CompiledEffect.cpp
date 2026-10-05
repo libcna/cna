@@ -566,6 +566,11 @@ namespace CNA::Internal::Renderers::DirectX11
         ICompiledEffectRuntime& runtime, const ITextureRenderer* spriteBatchSlotZeroTexture,
         const Microsoft::Xna::Framework::Graphics::TextureCollection* spriteBatchTextures)
     {
+        if (spriteBatchSlotZeroTexture == nullptr)
+            spriteBatchSlotZeroTexture = params.compiledSpriteTexture0;
+        if (spriteBatchTextures == nullptr)
+            spriteBatchTextures = params.compiledDeviceTextures;
+
         auto* effect = dynamic_cast<D3D11CompiledEffect*>(&runtime);
         if (effect == nullptr || effect->context_ != mojoShaderContext_)
         {

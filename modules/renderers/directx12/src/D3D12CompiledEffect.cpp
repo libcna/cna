@@ -560,7 +560,10 @@ namespace CNA::Internal::Renderers::DirectX12
             description_ = MojoShaderEffect::BuildDescription(effectData_);
             samplerTextureParameters_ =
                 MojoShaderEffect::BuildSamplerTextureParameterMap(effectData_);
-            textures_.assign(description_.parameters.size(), nullptr);
+            // Runtime indices address MojoShader's complete parameter table. Public XNA
+            // reflection omits sampler and shader-object parameters, so its compacted count
+            // cannot size storage when a private entry precedes a public texture.
+            textures_.assign(static_cast<std::size_t>(effectData_->param_count), nullptr);
             MOJOSHADER_effectSetTechnique(effectData_, &effectData_->techniques[0]);
         }
         catch (...)
@@ -896,6 +899,11 @@ namespace CNA::Internal::Renderers::DirectX12
         const Microsoft::Xna::Framework::Graphics::TextureCollection* spriteBatchTextures,
         ID3D12Resource* indirectArguments, UINT64 indirectByteOffset)
     {
+        if (spriteBatchSlotZeroTexture == nullptr)
+            spriteBatchSlotZeroTexture = params.compiledSpriteTexture0;
+        if (spriteBatchTextures == nullptr)
+            spriteBatchTextures = params.compiledDeviceTextures;
+
         auto* effect = dynamic_cast<D3D12CompiledEffect*>(&runtime);
         if (effect == nullptr || effect->context_ != mojoShaderContext_.get())
             throw System::NotSupportedException(

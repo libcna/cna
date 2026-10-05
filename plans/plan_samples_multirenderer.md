@@ -51,6 +51,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-028 | **DONE** | Keep compiled XNA effects valid under the GLSL ES 1.00 profile used by OPENGLES2. |
 | MSR-029 | **DONE** | Re-run and manually inspect the post-fix representative Linux visual matrix. |
 | MSR-030 | **DONE** | Repair target-aware dependency discovery, runtime deployment and sharp-runtime portability exposed by the seven-renderer Windows cross-build. |
+| MSR-031 | **DONE** | Repair DirectX compiled-effect native parameter indexing, stage-sized sampler state and draw-time public texture bindings. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -738,6 +739,46 @@ Regression and integration evidence:
   the three required MinGW C++ runtime DLLs beside the executable;
 - the full 220-step final Windows relink completes successfully.  Native Windows execution
   and visual qualification remain open, and no DirectX renderer is reported as natively passed.
+
+## MSR-031 — DirectX compiled-effect state and indexing
+
+The first real `ShadowMapping` launch through the Windows multi-renderer executable selected
+DirectX 9 correctly, then rejected its authentic effect because a valid texture parameter index
+was outside the renderer's storage.  DirectX 9 and 12 had repeated the compact-reflection mistake
+already repaired for Vulkan and WebGPU in MSR-004: public XNA reflection omits private sampler and
+shader-object parameters, but runtime indices address MojoShader's complete parameter table.
+Both backends now size texture storage from `effectData_->param_count`.
+
+The same clean DirectX 9 run exposed two independent state defects.  It iterated all sixteen pixel
+sampler slots through XNA's four-slot vertex sampler collection, and ordinary compiled draws did
+not consult the current public texture collection after `EffectPass::Apply()`.  DirectX 9 now
+keeps separate sixteen-slot pixel and four-slot vertex arrays.  DirectX 9, 11 and 12 binders use
+the `GpuDrawParams` public texture snapshot when no explicit SpriteBatch override was supplied, so
+replacing `GraphicsDevice.Textures[n]` between apply and draw has XNA semantics on every DirectX
+backend.  The DirectX 9 compiled-effect fixture now constructs a HiDef device, matching the shared
+contract it claims to exercise instead of silently running most cases under Reach.
+
+Capability tracing also confirmed that DirectX 9 must continue to report
+`MultiStreamVertexInput=false`: its hardware instancing and compiled-effect paths bind native
+multiple streams, but its ordinary stock-effect paths still bind stream zero only.  Advertising a
+global capability now would let public stock-effect draws through with false semantics.  The
+focused multi-stream contract therefore remains one explicit truthful skip; no flag was flipped.
+
+Regression and integration evidence:
+
+- DirectX 9 compiled effects pass 23/24 through Wine/DXVK; the sole skip is the truthful global
+  multi-stream capability boundary.  Before the repairs the run had 16 failures under the stale
+  Reach fixture, then one sampler pixel failure and the texture-index exception;
+- DirectX 11 passes all 21 compiled-effect tests through Wine/DXVK, and DirectX 12 passes all 23
+  through Wine/vkd3d-proton; the separate DirectX 12 compiled-effect probe also passes;
+- the rebuilt seven-renderer Windows sample corpus links successfully, and the unchanged
+  `ShadowMapping_cna_samples.exe` selects DirectX 9 and DirectX 11 and remains stable until the
+  deliberate private-runner timeout.  This is supplemental Wine evidence, not native Windows
+  qualification;
+- the same executable reaches vkd3d-proton 3.1 device creation with DirectX 12 but that Wine path
+  faults while creating the real HWND swap chain.  CNA's off-screen DirectX 12 suites pass, and
+  the renderer already documents this Wine swap-chain limitation; the sample result is therefore
+  `ENVIRONMENT BLOCKED`, not a renderer pass and not a silent fallback.
 
 ## Representative automated matrix
 

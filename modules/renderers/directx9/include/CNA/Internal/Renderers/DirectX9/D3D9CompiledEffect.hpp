@@ -163,16 +163,17 @@ namespace CNA::Internal::Renderers::DirectX9
         std::map<std::vector<std::uint64_t>,
                  Microsoft::WRL::ComPtr<IDirect3DVertexDeclaration9>> declarations_;
 
-        static constexpr std::size_t kSamplerSlots =
+        static constexpr std::size_t kPixelSamplerSlots =
             Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers;
-        std::array<TextureBinding, kSamplerSlots> boundTextures_{};
-        std::array<TextureBinding, kSamplerSlots> boundVertexTextures_{};
-        std::array<Microsoft::Xna::Framework::Graphics::SamplerState, kSamplerSlots>
+        static constexpr std::size_t kVertexSamplerSlots = 4;
+        std::array<TextureBinding, kPixelSamplerSlots> boundTextures_{};
+        std::array<TextureBinding, kVertexSamplerSlots> boundVertexTextures_{};
+        std::array<Microsoft::Xna::Framework::Graphics::SamplerState, kPixelSamplerSlots>
             boundSamplers_{};
-        std::array<Microsoft::Xna::Framework::Graphics::SamplerState, kSamplerSlots>
+        std::array<Microsoft::Xna::Framework::Graphics::SamplerState, kVertexSamplerSlots>
             boundVertexSamplers_{};
-        std::array<bool, kSamplerSlots> samplerAssigned_{};
-        std::array<bool, kSamplerSlots> vertexSamplerAssigned_{};
+        std::array<bool, kPixelSamplerSlots> samplerAssigned_{};
+        std::array<bool, kVertexSamplerSlots> vertexSamplerAssigned_{};
     };
 }
 

@@ -32,8 +32,6 @@ namespace CNA::Internal::Renderers::DirectX9
     {
         constexpr std::size_t kMaximumReflectedItems = 64u * 1024u;
         constexpr std::size_t kMaximumCompiledEffectBytes = 64u * 1024u * 1024u;
-        constexpr int kD3D9VertexSamplerCount = 4;
-
         std::string FormatHr(HRESULT result)
         {
             char buffer[32];
@@ -542,7 +540,10 @@ namespace CNA::Internal::Renderers::DirectX9
             description_ = MojoShaderEffect::BuildDescription(effectData_);
             samplerTextureParameters_ =
                 MojoShaderEffect::BuildSamplerTextureParameterMap(effectData_);
-            textures_.assign(description_.parameters.size(), nullptr);
+            // Runtime indices address MojoShader's complete parameter table. Public XNA
+            // reflection omits sampler and shader-object parameters, so its compacted count
+            // cannot size storage when a private entry precedes a public texture.
+            textures_.assign(static_cast<std::size_t>(effectData_->param_count), nullptr);
             MOJOSHADER_effectSetTechnique(effectData_, &effectData_->techniques[0]);
         }
         catch (...)
@@ -660,13 +661,13 @@ namespace CNA::Internal::Renderers::DirectX9
 
         if (deviceState.samplerStates != nullptr)
         {
-            for (std::size_t slot = 0; slot < kSamplerSlots; ++slot)
+            for (std::size_t slot = 0; slot < kPixelSamplerSlots; ++slot)
                 if (!samplerAssigned_[slot])
                     boundSamplers_[slot] = (*deviceState.samplerStates)[static_cast<int>(slot)];
         }
         if (deviceState.vertexSamplerStates != nullptr)
         {
-            for (std::size_t slot = 0; slot < kSamplerSlots; ++slot)
+            for (std::size_t slot = 0; slot < kVertexSamplerSlots; ++slot)
                 if (!vertexSamplerAssigned_[slot])
                     boundVertexSamplers_[slot] =
                         (*deviceState.vertexSamplerStates)[static_cast<int>(slot)];
@@ -693,18 +694,20 @@ namespace CNA::Internal::Renderers::DirectX9
         MojoShaderEffect::TranslateRenderStates(stateChanges_, deviceState, changes);
         MojoShaderEffect::TranslateSamplers(
             stateChanges_.sampler_state_changes, stateChanges_.sampler_state_change_count,
-            false, kSamplerSlots, samplerTextureParameters_, textures_, deviceState, changes);
+            false, kPixelSamplerSlots, samplerTextureParameters_, textures_, deviceState, changes);
         MojoShaderEffect::TranslateSamplers(
             stateChanges_.vertex_sampler_state_changes,
             stateChanges_.vertex_sampler_state_change_count,
-            true, kSamplerSlots, samplerTextureParameters_, textures_, deviceState, changes);
+            true, kVertexSamplerSlots, samplerTextureParameters_, textures_, deviceState, changes);
         MojoShaderEffect::TranslateLegacySamplerAssignments(
-            effectData_, stateChanges_, kSamplerSlots, samplerTextureParameters_, textures_,
+            effectData_, stateChanges_, kPixelSamplerSlots, samplerTextureParameters_, textures_,
             deviceState, changes);
 
         for (const CompiledEffectSamplerChange& change : changes.samplers)
         {
-            if (change.slot >= kSamplerSlots) continue;
+            const std::size_t stageSlots =
+                change.vertexStage ? kVertexSamplerSlots : kPixelSamplerSlots;
+            if (change.slot >= stageSlots) continue;
             TextureBinding& binding = change.vertexStage
                 ? boundVertexTextures_[change.slot] : boundTextures_[change.slot];
             auto& sampler = change.vertexStage
@@ -771,6 +774,11 @@ namespace CNA::Internal::Renderers::DirectX9
         const ITextureRenderer* spriteBatchSlotZeroTexture,
         const Microsoft::Xna::Framework::Graphics::TextureCollection* spriteBatchTextures)
     {
+        if (spriteBatchSlotZeroTexture == nullptr)
+            spriteBatchSlotZeroTexture = params.compiledSpriteTexture0;
+        if (spriteBatchTextures == nullptr)
+            spriteBatchTextures = params.compiledDeviceTextures;
+
         auto* effect = dynamic_cast<D3D9CompiledEffect*>(&runtime);
         if (effect == nullptr || effect->context_ != mojoShaderContext_.get() ||
             effect->context_ == nullptr || effect->context_->device.Get() != device_.Get())
@@ -911,8 +919,8 @@ namespace CNA::Internal::Renderers::DirectX9
             {
                 const MOJOSHADER_sampler& reflected = parseData->samplers[index];
                 const int stageLimit = vertexStage
-                    ? kD3D9VertexSamplerCount
-                    : std::min<int>(static_cast<int>(D3D9CompiledEffect::kSamplerSlots),
+                    ? static_cast<int>(D3D9CompiledEffect::kVertexSamplerSlots)
+                    : std::min<int>(static_cast<int>(D3D9CompiledEffect::kPixelSamplerSlots),
                                     static_cast<int>(caps_.MaxSimultaneousTextures));
                 if (reflected.index < 0 || reflected.index >= stageLimit)
                     throw System::NotSupportedException(

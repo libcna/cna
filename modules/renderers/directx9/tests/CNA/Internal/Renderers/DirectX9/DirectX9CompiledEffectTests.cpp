@@ -23,9 +23,19 @@ namespace
 {
     using CNA::Internal::Renderers::DirectX9::DirectX9Renderer;
     using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
-    using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
     using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
     using Microsoft::Xna::Framework::Graphics::PresentationParameters;
+
+    struct GraphicsDevice final
+        : Microsoft::Xna::Framework::Graphics::GraphicsDevice
+    {
+        GraphicsDevice()
+            : Microsoft::Xna::Framework::Graphics::GraphicsDevice(
+                  GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                  PresentationParameters()) {}
+
+        using Microsoft::Xna::Framework::Graphics::GraphicsDevice::GraphicsDevice;
+    };
 
     std::vector<std::uint8_t> LoadEffect(const char* name)
     {
@@ -137,7 +147,7 @@ TEST(DirectX9CompiledEffectDrawTest, SpriteBatchInheritsStockVertexShaderForPixe
     using namespace Microsoft::Xna::Framework;
     using namespace Microsoft::Xna::Framework::Graphics;
 
-    GraphicsDevice device;
+    ::GraphicsDevice device;
     CNA::TestSupport::SyntheticEffectOptions options;
     options.includeSampler = true;
     options.pixelShaderSamplesTexture = true;
