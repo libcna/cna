@@ -59,6 +59,7 @@ All compilation in this campaign uses at most 12 parallel jobs.  GPU/window exec
 | MSR-036 | **DONE** | Preserve packed XNA vertex-colour channel order in Vulkan compiled-effect pipelines, restoring `TexturesAndColors` parity. |
 | MSR-037 | **DONE** | Capture composed Linux sample frames instead of stale Xwayland backing pixmaps. |
 | MSR-038 | **DONE** | Keep malformed-effect assertions non-interactive in focused test executables as well as the aggregate suite. |
+| MSR-039 | **DONE** | Capture and manually review the complete frame-producing Linux corpus across all six native renderers. |
 
 ## MSR-001 — Color byte-transfer routing
 
@@ -963,14 +964,52 @@ Regression evidence on the Radeon 780M/RADV private GPU runner:
 - all 30 `VulkanCompiledEffectTest.*` and `VulkanCompiledEffectDrawTest.*` registrations complete
   in 1.936 seconds: 29 pass and the existing Reach-profile cube/volume contract skips explicitly;
 - both `CnaRendererTests` and aggregate `CnaTests` build with the shared harness source, and no
-  `CnaRendererTests` or zenity process remains after execution.
+  `CnaRendererTests` or zenity process remains after execution;
+- MinGW DIRECTX9, DIRECTX11 and DIRECTX12 configurations each compile
+  `tests/HarnessAssertionPolicy.cpp` into and successfully link `CnaRendererTests.exe`, confirming
+  that the focused-target CMake repair is portable at cross-build time.  This is not native
+  Windows execution evidence.
+
+## MSR-039 — Full composed static-frame review
+
+The post-fix six-renderer sweep produced 538 composed window captures from the 90 samples that
+reached a drawable frame.  The count is exact: OPENGLES3, OPENGL33, Vulkan and WebGPU each
+produced 90 captures; SDL_GPU and FNA3D's default SDL_GPU driver each produced 89.  `Yacht`
+fails before rendering on all six identities because its gamer-services transport is unavailable,
+and `LensFlare` correctly fails its capability gate on SDL_GPU and the selected FNA3D driver, so
+those eight launches cannot produce images.
+
+All 538 captures were arranged by sample and renderer into 12 contact sheets and manually
+inspected against the OPENGLES3/OPENGL33 references.  The static-frame result is 537 accepted
+captures and one known upstream/API precision mismatch: OPENGLES3 `LensFlare` has only the real
+`GL_ANY_SAMPLES_PASSED` boolean and therefore renders an almost invisible flare where the
+authentic sample expects an exact pixel count.  OPENGL33, Vulkan and WebGPU render the expected
+flare; SDL_GPU and default-driver FNA3D remain truthful missing-capability results rather than
+inventing a count.  No additional renderer defect was found in the final 12-sheet review.
+
+The sweep also confirmed the three rendering defects found and repaired during the review:
+FNA3D one-pixel primitive centres (MSR-034), constructor-time default depth state for SDL_GPU
+compiled models (MSR-035), and Vulkan packed XNA vertex-colour order (MSR-036).  The composed
+capture repair from MSR-037 eliminated stale Xwayland backing-pixmap false mismatches.  Nine
+OPENGLES3 processes that had exited cleanly before the original observation interval were rerun
+after the matrix classifier learned the `EARLY_EXIT` state; all nine survived the full interval,
+logged OPENGLES3 as active and produced frames used in this review.
+
+Dynamic animation, particles and generated layouts naturally differ in time between columns, and
+three rerun samples used a different but valid window size; their content and rendering paths
+remain consistent.  This is complete manual coverage of one stable static frame per drawable
+Linux cell, not pixel-perfect equivalence, input-path coverage, temporal/animation validation,
+audio validation or exhaustive gameplay interaction.  Evidence is retained in
+`matrix-results/msr-038-composed-full-visual` and
+`matrix-results/msr-039-opengles3-early-exit-rerun` in the cna-samples worktree.
 
 ## Current Linux corpus matrix
 
 The primary corpus has 89 gallery executables and two native-only executables.  Every row below
 uses the same multi-renderer binary for a given sample and verifies the requested active identity
 from CNA's startup log.  `AUTOMATED_PASS` establishes initialization and stable execution through
-the observation interval; it is not a claim that all 91 frames were manually inspected.
+the observation interval.  It remains distinct from the one-frame manual review above and is not
+a claim of complete interactive or temporal correctness.
 
 | Renderer | Automated pass | Render fail | Classified failure |
 |---|---:|---:|---|
@@ -981,12 +1020,12 @@ the observation interval; it is not a claim that all 91 frames were manually ins
 | SDL_GPU | 89 | 2 | `LensFlare`: upstream SDL_GPU has no occlusion-query API; `Yacht` as above. |
 | FNA3D (default SDL_GPU driver) | 89 | 2 | `LensFlare`: selected internal driver has no occlusion query; `Yacht` as above. |
 
-The representative visual set has 57 manually accepted captures out of 58 captured frames.  Its
-per-renderer totals are 9 pass plus the truthful boolean-query mismatch on OPENGLES3, 10 pass on
-OPENGL33/Vulkan/WebGPU, and 9 pass plus the missing-query capability on SDL_GPU and default FNA3D.
-The two missing-capability launches produce no frame and therefore are not part of the 58 captured
-images.  A supplemental FNA3D run using its OpenGL driver gives LensFlare a real count query and
-passes manual comparison.
+The full static-frame review has 537 manually accepted captures out of 538 captured frames.  Its
+per-renderer totals are 89 pass plus the truthful boolean-query mismatch on OPENGLES3, 90 pass on
+OPENGL33/Vulkan/WebGPU, and 89 pass plus the missing-query capability on SDL_GPU and default FNA3D.
+The representative ten-sample subset remains useful as the higher-discrimination regression set,
+and a supplemental FNA3D run using its OpenGL driver gives LensFlare a real count query and passes
+manual comparison.
 
 OPENGLES2 is recorded separately: 80 automated passes and 11 render failures.  Ten are the intended
 Reach-style profile boundary (compiled-effect render-target sampling, unsupported normalized
