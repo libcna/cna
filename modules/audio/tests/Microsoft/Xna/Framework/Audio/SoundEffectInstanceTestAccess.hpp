@@ -3,13 +3,15 @@
 
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 
-// The mixer header, and the one accessor that needs its type, are behind SOUND_ENABLED.
-// Everything else in this struct reaches CNA-side state and pure XNA math
-// that exist in every audio profile, and three suites outside the mixer's own coverage
-// (WaveBankTests, SoundEffectContentTypeReaderTests, MediaLibraryTestAccess) use only those.
-// Including the mixer header unconditionally made all three fail to compile under
-// CNA_AUDIO_PLATFORM=NULL, where the engine is deliberately absent from the archive.
-#ifdef SOUND_ENABLED
+// The mixer header, and the one accessor that needs its type, exist only where SDL3_mixer is the
+// engine: SOUND_ENABLED alone is not enough, because CNA_AUDIO_PLATFORM=ALSA defines it for CNA's
+// own mixer, where there is no SDL3_mixer header to include. Everything else in this struct
+// reaches CNA-side state and pure XNA math that exist in every audio profile, and three suites
+// outside the mixer's own coverage (WaveBankTests, SoundEffectContentTypeReaderTests,
+// MediaLibraryTestAccess) use only those. Including the mixer header unconditionally made all
+// three fail to compile under CNA_AUDIO_PLATFORM=NULL, and including it for every SOUND_ENABLED
+// build did the same to SoundEffectContentTypeReaderTests under ALSA.
+#if defined(SOUND_ENABLED) && defined(CNA_AUDIO_PLATFORM_SDL3)
 #include <SDL3_mixer/SDL_mixer.h>
 #endif
 
@@ -21,7 +23,7 @@ namespace Microsoft::Xna::Framework::Audio
     // public API for it (see the friend declaration in SoundEffectInstance.hpp).
     struct SoundEffectInstanceTestAccess
     {
-#ifdef SOUND_ENABLED
+#if defined(SOUND_ENABLED) && defined(CNA_AUDIO_PLATFORM_SDL3)
         static MIX_Track* GetTrack(const SoundEffectInstance& instance)
         {
             return static_cast<MIX_Track*>(instance.track_);
