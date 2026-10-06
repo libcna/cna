@@ -43,7 +43,7 @@ What a renderer needs from the window system still reaches it unchanged.
 
 | Host | SDL video driver | `NativeWindowSystem` and handles | Consumed directly by |
 |---|---|---|---|
-| Windows | `windows` | `Win32`: `HWND` | Direct3D 9/11/12, WebGPU |
+| Windows | `windows` | `Win32`: `HWND` | Direct3D 9/11, WebGPU |
 | Linux, X11 | `x11` | `X11`: `Display*` + `Window` XID | WebGPU |
 | Linux, Wayland | `wayland` | `Wayland`: `wl_display*` + `wl_surface*` | WebGPU |
 | macOS | `cocoa` | `Cocoa`: `NSWindow*` | Metal, WebGPU |

@@ -13,7 +13,6 @@ rigid and skinned fragment variants where a renderer stores them separately.
 |---|---|
 | DirectX 9 | sampler registers `s0 / s1 / s2 / s3 / s4` |
 | DirectX 11 | SRV/sampler register pairs `t0/s0` through `t4/s4` |
-| DirectX 12 | five separate SRV tables `t0..t4` followed by five sampler tables `s0..s4` |
 | EasyGL | GL texture units `0 / 1 / 2 / 3 / 4`, explicitly written into the five sampler uniforms |
 | Metal | fragment texture/sampler indices `0 / 1 / 2 / 3 / 4` |
 | OpenGL 4 | GL texture units `0 / 1 / 2 / 3 / 4`, explicitly written into the five sampler uniforms |
@@ -23,7 +22,7 @@ rigid and skinned fragment variants where a renderer stores them separately.
 
 The executable audit is deliberately source-based as well as runtime-based. It discovers the PBR
 renderer inventory, so a further implementation cannot silently sit outside the table. It then
-requires every mapping fragment above and checks the separately stored D3D9, shared D3D11/12 and
+requires every mapping fragment above and checks the separately stored D3D9, D3D11 and
 Vulkan rigid/skinned shader files independently; the two inline EasyGL/WebGPU variants must each
 contain their complete declaration set.
 
@@ -65,8 +64,8 @@ renderer-specific carriers are:
 | Renderer | Base decode / emissive decode / output encode carrier | Focused evidence |
 |---|---|---|
 | DirectX 9 | existing pixel constants `c1.w / c2.w / c12.w` | Microsoft `ps_3_0` compile plus WineD3D diagnostic 12/12; no DXVK prefix was available |
-| DirectX 11 / 12 | shared `PbrMapScales.z / .w`, `FogColor.w`; constant-buffer sizes unchanged | Microsoft `ps_5_0` compile and both MinGW frontends; D3D11 WineD3D diagnostic 12/12, D3D12 executable build-only because its Wine swap-chain gate remains unavailable |
-| EasyGL | `uSrgb.x / .y / .z` | `EasyGL_Pbr_SrgbTransfer`, exact rigid/skinned cases on OPENGLES2 and OPENGLES3 |
+| DirectX 11 | `PbrMapScales.z / .w`, `FogColor.w`; constant-buffer sizes unchanged | Microsoft `ps_5_0` compile and both MinGW frontends; D3D11 WineD3D diagnostic 12/12 |
+| EasyGL | `uSrgb.x / .y / .z` | `EasyGL_Pbr_SrgbTransfer`, exact rigid/skinned cases on OPENGLES3 |
 | Metal | `PbrUniforms::srgbFlags.x / .y / .z` | MSL source/ABI tests on Linux; real-device execution remains platform-owned |
 | OpenGL 4 | `uSrgb.x / .y / .z` | its registered `Pbr_SrgbTransfer` executable |
 | SDL GPU | third `PbrParams` vec4, `.x / .y / .z` | `SdlGpu_Pbr_SrgbTransfer` |
@@ -94,7 +93,6 @@ them to the three colour-factor expressions in one renderer-wide inventory:
 |---|---|---|---:|
 | DirectX 9 | `DiffuseColor.rgb / .a` | `EmissiveColor.xyz` | 2 |
 | DirectX 11 | `DiffuseColor.rgb / .a` | `EmissiveRoughness.xyz` | 2 |
-| DirectX 12 | `DiffuseColor.rgb / .a` | `EmissiveRoughness.xyz` | 2 |
 | EasyGL | `uDiffuseColor.rgb / .a` | `uEmissiveColor` | 2 |
 | Metal | `pu.diffuseColor.rgb / .a` | `pu.emissiveColor.xyz` | 1 |
 | OpenGL 4 | `uDiffuseColor.rgb / .a` | `uEmissiveColor` | 1 |
@@ -143,7 +141,6 @@ cross-renderer audit locks the native endpoint and PBR route of that contract:
 |---|---|
 | DirectX 9 | device `D3DRS_CULLMODE` → `D3DCULL_NONE`; both PBR variants share `DrawPbrEffectEXT` |
 | DirectX 11 | bound rasterizer state → `D3D11_CULL_NONE`; PBR does not replace it |
-| DirectX 12 | `currentCullMode_` → PBR PSO key/descriptor → `D3D12_CULL_MODE_NONE` |
 | EasyGL | GL cull-face enable; `CullNone` disables it before either selected PBR program |
 | Metal | tracked `MTLCullModeNone`, rebound on the encoder used by rigid/skinned PBR |
 | OpenGL 4 | `GL_CULL_FACE` disabled before the rigid/skinned PBR draw |
@@ -154,7 +151,7 @@ cross-renderer audit locks the native endpoint and PBR route of that contract:
 The immutable Vulkan and WebGPU rigid/skinned pipeline owners are scoped separately in the test;
 a correct generic pipeline cannot mask a PBR hardcode. The discriminating runtime witness remains
 `EasyGL_Gltf_AlphaBlend`: the ordinary single-sided state culls a deliberately reversed face, then
-the imported `doubleSided` property selects `CullNone` and renders the same face on OPENGLES2 and
+the imported `doubleSided` property selects `CullNone` and renders the same face on
 OPENGLES3. This proves the property is consumed without changing the architectural boundary.
 
 ## Skinned palette and influence count (`GLTF-258`, `GLTF-263`, `GLTF-379`)
@@ -169,7 +166,6 @@ and stale tail values must not silently contribute. The per-renderer carriers ar
 |---|---|---|
 | DirectX 9 | `Bones` vertex constants | `FogParams.w` |
 | DirectX 11 | PBR skinned `Bones` constant buffer | `EyePosWeights.w` |
-| DirectX 12 | PBR skinned `Bones` constant buffer | `EyePosWeights.w` |
 | EasyGL | `uBones[72]` | `uWeightsPerVertex` |
 | Metal | vertex bone buffer | `SkinnedPbrTransform::skinParams.x` |
 | OpenGL 4 | `uBones[72]` | `uWeightsPerVertex` |
@@ -194,8 +190,8 @@ normal-incidence image looked correct.
 | Renderer | Native F0/F90 carrier | Focused evidence |
 |---|---|---|
 | DirectX 9 | pixel constant `c13` | Microsoft `ps_3_0` compile/disassembly plus WineD3D diagnostic |
-| DirectX 11 / 12 | `D3DPbrPerDrawConstants::DielectricFresnel` at byte 208; textured specular inputs at bytes 400–495 | Microsoft `ps_5_0` compile and both MinGW frontends; D3D11 WineD3D diagnostic |
-| EasyGL | `uDielectricFresnel` | OPENGLES2/3 analytic rigid/skinned pixel test |
+| DirectX 11 | `D3DPbrPerDrawConstants::DielectricFresnel` at byte 208; textured specular inputs at bytes 400–495 | Microsoft `ps_5_0` compile and both MinGW frontends; D3D11 WineD3D diagnostic |
+| EasyGL | `uDielectricFresnel` | OPENGLES3 analytic rigid/skinned pixel test |
 | Metal | `PbrUniforms::dielectricFresnel` | MSL source/ABI unit tests on Linux; device execution remains platform-owned |
 | OpenGL 4 | `uDielectricFresnel` | its rigid/skinned pixel test |
 | SDL GPU | fourth `PbrParams` vec4 | regenerated SPIR-V and rigid/skinned pixel test |
@@ -208,7 +204,7 @@ authored extension factors. A grazing pair holds F0 at `.04` and changes only F9
 yielding bytes 33 and 15. `EveryPbrShaderHonorsTransportedFresnelEndpoints` separately inventories
 every CPU upload, dielectric/metal endpoint mix and Schlick expression, with explicit counts
 for separately stored rigid/skinned shader sources. The optional `specularTexture` and
-`specularColorTexture` are not part of this factor-only slice. EasyGL, DirectX9/11/12,
+`specularColorTexture` are not part of this factor-only slice. EasyGL, DirectX9/11,
 SDL GPU and Vulkan now consume both; the remaining renderer bindings remain the named `GLTF-344`
 limit. DirectX9's two ps_3_0 variants use 7 texture and 271 arithmetic instruction slots (278 total of the 512-slot
 limit), with compiler-extracted c24–c29 constants and s5/s6 samplers.
@@ -230,15 +226,15 @@ within tolerance `y` of `x`), otherwise component `w`, and discards when the sel
 negative. A masked PBR draw must remain on the PBR path: routing it to a generic alpha-test effect
 loses the PBR material and, on some APIs, selects a vertex layout that does not match the PBR buffer.
 
-The first cross-renderer pass found both kinds of deviation. DirectX 11/12, OpenGL 4, SDL GPU,
-Vulkan and WebGPU did not consume the vector in their PBR fragment program (DirectX 11/12
-are two renderers sharing one shader source). DirectX 11/12, SDL GPU, Vulkan and WebGPU additionally
-gave their generic alpha-test path priority over PBR. The corrected per-renderer transport is:
+The first cross-renderer pass found both kinds of deviation. DirectX 11, OpenGL 4, SDL GPU,
+Vulkan and WebGPU did not consume the vector in their PBR fragment program. DirectX 11, SDL GPU,
+Vulkan and WebGPU additionally gave their generic alpha-test path priority over PBR. The corrected
+per-renderer transport is:
 
 | Renderer | PBR alpha-test transport and consumption |
 |---|---|
 | DirectX 9 | existing pixel constant `c11` and fragment discard |
-| DirectX 11 / 12 | `D3DPbrPerDrawConstants::AlphaTest` at byte 176 (`b0`), consumed by both rigid and skinned PBR fragments; PBR wins effect selection |
+| DirectX 11 | `D3DPbrPerDrawConstants::AlphaTest` at byte 176 (`b0`), consumed by both rigid and skinned PBR fragments; PBR wins effect selection |
 | EasyGL | existing `uAlphaTest` uniform and fragment discard |
 | Metal | existing `PbrUniforms::alphaTest` and fragment discard |
 | OpenGL 4 | `uAlphaTest` uniform uploaded by the PBR bind path and consumed by its fragment shader |
@@ -251,7 +247,7 @@ source-based inventory gate over every renderer implementation, including separa
 and skinned variants. Vulkan adds four real-pixel cases (discarding and surviving texels, each rigid
 and skinned) to its ten texture-slot cases. Those cases pass on llvmpipe. The changed shader
 sources also compile in the native OpenGL 4, SDL GPU, Vulkan and WebGPU backend targets and in
-the MinGW DirectX 11/12 targets. These checks
+the MinGW DirectX 11 target. These checks
 prove this alpha-coverage slice of `GLTF-379`; other §21.1 rows keep that broader audit open.
 
 ## PBR map scalars (`GLTF-224`, `GLTF-225`, `GLTF-379`)
@@ -294,8 +290,8 @@ other skinned PBR implementation still applied the palette 3x3 directly. The cor
 | Renderer | Skinned-normal transform |
 |---|---|
 | DirectX 9 | HLSL row-vector cofactor helper, then the existing world inverse transpose |
-| DirectX 11 / 12 | shared HLSL row-vector cofactor helper, then the per-draw normal matrix |
-| EasyGL | existing GLSL ES 1.00-compatible cofactor helper for stock and PBR programs |
+| DirectX 11 | HLSL row-vector cofactor helper, then the per-draw normal matrix |
+| EasyGL | existing GLSL cofactor helper for stock and PBR programs |
 | Metal | MSL cofactor helper plus three newly transported world-normal columns |
 | OpenGL 4 | cofactor helper followed by the existing world normal matrix |
 | SDL GPU | GLSL cofactor helper followed by the world normal matrix |
@@ -338,7 +334,7 @@ local `N=+Z`, `T=+X`, `w=+1` and a tangent-space approximately-`+Y` normal map. 
 the rigid case and the only joint in the skinned case must both reconstruct world `B=+Y`; each
 renders byte 79 under `L=+Y`, while omitting the relevant determinant makes it black. The focused
 Vulkan executable is 8/8. EasyGL retains the fixture-driven mirror witness at byte 151 for both
-placements. Vulkan/SDL SPIR-V, D3D9 SM3 and shared D3D11/12 SM5
+placements. Vulkan/SDL SPIR-V, D3D9 SM3 and D3D11 SM5
 bytecode were regenerated from the edited sources; WebGPU's rigid/skinned runtime suites remain
 5/5 each and D3D9 remains 6/6. Metal's MSL
 path remains source-audited on this Linux host.
@@ -372,7 +368,6 @@ ordinary `CnaTests`/glTF conformance run even on a host that cannot build that b
 | Vulkan | flat normal + white, rigid and skinned | `Vulkan_Pbr_TextureSlots`, `Vulkan_PbrEffect_HandDerived` |
 | DirectX 9 | flat normal + white, rigid and skinned | `DirectX9_Pbr` |
 | DirectX 11 | flat normal + white, rigid and skinned | `DirectX11_Pbr_VertexColor` (emissive/no-map route) |
-| DirectX 12 | flat normal + white, rigid and skinned | source-policy lock; no dedicated PBR pixel executable yet |
 | SDL GPU | flat normal + white, rigid and skinned | `SdlGpu_PbrEffect`, `SdlGpu_SkinnedPbrEffect` |
 | WebGPU | flat normal + white, rigid and skinned | `WebGPU_Pbr3D`, `WebGPU_SkinnedPbr3D` |
 | Metal | named slot policy: normal→flat, all others→white | `MetalTextureBindingPolicy` unit matrix; real-device pixel gate remains platform-owned |
@@ -412,12 +407,11 @@ Three dispositions, all machine-checked — read the tests, not this table, whic
 
 | Renderer | Stride 60 | Stride 80 | `COLOR_0` in the base-colour product (RGB **and** alpha) |
 |---|---|---|---|
-| EasyGL (OPENGLES2/3, OPENGL33, WEBGL1/2) | yes | yes | **applies** — `uVertexColorEnabled` gates `albedo *= cnaVertexColor.rgb` and `alpha *= cnaVertexColor.a` in both the rigid and the skinned program |
+| EasyGL (OPENGLES3, OPENGL33, WEBGL2) | yes | yes | **applies** — `uVertexColorEnabled` gates `albedo *= cnaVertexColor.rgb` and `alpha *= cnaVertexColor.a` in both the rigid and the skinned program |
 | Software | yes | yes | **applies** — the interpolated vertex colour *is* the start of the CPU product, alpha included |
 | OpenGL 4 | yes (`GLTF-462` added the row; `GLTF-465` fixed the skinned program selection) | yes | **applies** |
 | Vulkan | yes | yes (its own SPIR-V variant, since stride 76 has no colour slot to bind) | **applies** |
-| DirectX 11 | yes | yes | **applies** — one shared HLSL pair and one shared `VertexColorFlags` constant serve both D3D families |
-| DirectX 12 | yes | yes | **applies** — same shared HLSL and constant as DirectX 11 |
+| DirectX 11 | yes | yes | **applies** — one HLSL pair and one `VertexColorFlags` constant |
 | DirectX 9 | yes (`GLTF-465`) | yes (`GLTF-465`) | **applies** — offline `vs_3_0`/`ps_3_0` bytecode, so the `.hlsl` is the source. Two extra vertex entry points (`VSPbr3DColor`, `VSPbrSkinned3DColor`) rather than a `#define`, because a `vs_3_0` input with no stream behind it reads **undefined**, so each declaration gets the program its layout satisfies; both write the `COLOR0` interpolant, authored or opaque white, so one pixel stage serves all four. `D3DDECLTYPE_D3DCOLOR` at offset 56/76 is D3D9's own normalized four-byte colour element. `VertexColorFlags` took `c13`, the one free pixel constant register. **The recorded blocker was stale**: the pinned `d3dcompiler_47.dll` was already in `~/.cache/winetricks`, SHA-256-identical to the value the generator pins, so the prefix only needed creating — and regenerating the *unchanged* shaders first reproduced the committed bytecode **byte for byte**, which is what proves this is the same compiler and not a lookalike |
 | Metal | no layout | refuses | **refuses** (`GLTF-465`): no stride-60/80 pipeline, and Metal cannot be built or run on this host |
 | SDL GPU | yes (`GLTF-465` added the layout **and** the pipeline axis; **`GLTF-472` made it reachable**) | yes (same) | **applies** — its PC block already carried the flag, commented "unused -- PbrEffect has no vertex-color path"; the shaders are compiled offline with libshaderc, so the colour-carrying variants are two more entries in the same list. `GLTF-465` left `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` selecting the PBR queue for `stride == 48`/`68` only, so none of that was reachable: a stride-60/80 draw matched no branch and was refused by the stride-16 coloured path. `GLTF-472` fixed the dispatch and gave sampler slot 0 the neutral-white fallback slots 1..6 already had, without which a factor-only material (both `COLOR_0` fixtures) is still refused |
@@ -484,13 +478,10 @@ only one that says the shader is *reachable*, and it is the only one that could 
 route defect — which had a complete layout row, a complete shader and a
 passing source audit.
 
-*Source-verified only* — **DirectX 12**, which shares its HLSL, its constant buffer and its
-input-element table with DirectX 11 and is therefore covered transitively by a pixel-proven pair;
-and **DirectX 9**, whose offline blobs this host can rebuild but whose draw it cannot run — its
-blobs are produced by the real
-Microsoft compiler under Wine, and regenerating the unchanged shaders reproduces the committed
-bytecode byte for byte, so the toolchain is proven even though no D3D9 device exists here to draw
-with.
+*Source-verified only* — **DirectX 9**, whose offline blobs this host can rebuild but whose draw it
+cannot run — its blobs are produced by the real Microsoft compiler under Wine, and regenerating the
+unchanged shaders reproduces the committed bytecode byte for byte, so the toolchain is proven even
+though no D3D9 device exists here to draw with.
 
 **The lesson, stated so the next renderer does not repeat it.** Every audit in this document reads
 *declarations* — a layout row, a shader expression, a guard call. None of them can see whether the

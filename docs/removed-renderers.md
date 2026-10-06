@@ -32,9 +32,13 @@ and in `scripts/check_renderer_identities.py` (which fails if a value or a name 
 
 | Value | Identity | Removed |
 |---:|---|---|
+| 2 | `OPENGLES2` | 2026-10-06 |
+| 5 | `WEBGL1` | 2026-10-06 |
 | 7 | `BGFX` | 2026-09-17 |
 | 10 | `MAGNUM` | 2026-09-17 |
+| 15 | `DIRECTX12` | 2026-10-06 |
 | 16 | `DIRECT2D` | 2026-09-27 |
+| 17 | `CANVAS` | 2026-10-06 |
 | 18 | `HTML_DOM` | 2026-09-28 |
 | 19 | `SKIA` | 2026-08-30 |
 | 20 | `BLEND2D` | 2026-09-17 |
@@ -66,8 +70,54 @@ and in `scripts/check_renderer_identities.py` (which fails if a value or a name 
 | 50 | `NANOVG` | 2026-09-17 |
 | 51 | `RLGL` | 2026-09-17 |
 
-The C ABI went to `0.28.0` for the 2026-09-17 retirement, to `0.31.0` for the 2026-09-27 one and
-to `0.33.0` for the 2026-09-28 one (`docs/c-api/ABI_VERSIONING.md`).
+The C ABI went to `0.28.0` for the 2026-09-17 retirement, to `0.31.0` for the 2026-09-27 one, to
+`0.33.0` for the 2026-09-28 one and to `0.45.0` for the 2026-10-06 one
+(`docs/c-api/ABI_VERSIONING.md`).
+
+## The 2026-10-06 retirement
+
+An owner decision to reduce CNA's renderer scope and maintenance burden: `DIRECTX12`, `CANVAS`,
+`OPENGLES2` and `WEBGL1` were removed (`RRC-018`). None is replaced and none is aliased to a
+surviving identity: each name is refused at configure time, by name and with its value, and at run
+time like any unknown name. CNA keeps 14 public renderer identities over 12 implementation
+families; EasyGL implements three of them (`OPENGLES3`, `OPENGL33`, `WEBGL2`).
+
+| Identity | C ABI | Reason | Coverage that remains |
+|---|---:|---|---|
+| `DIRECTX12` | 15 | A second modern Direct3D renderer next to `DIRECTX11`, never validated beyond WARP and vkd3d-proton. | `DIRECTX11` (and `DIRECTX9`) for Windows; `SDL_GPU` and `FNA3D` reach Direct3D 12 through their own drivers. |
+| `CANVAS` | 17 | A GPU-free browser 2D path (`canvas.getContext('2d')`), 2D only. | `WEBGL2` and `WEBGPU` in the browser. |
+| `OPENGLES2` | 2 | The GLSL ES 1.00 / ES 2.0 API generation of EasyGL. | `OPENGLES3` and `OPENGL33`. |
+| `WEBGL1` | 5 | The browser form of the same ES 2.0 generation. | `WEBGL2`. |
+
+**What went with them.** `modules/renderers/{directx12,canvas}`; the D3D12-only parts of
+`D3DCommon` (the D3D12 input-layout tables and the second debug-layer API, so the debug-layer gate
+now knows only Direct3D 11); the D3D12 legs of `cmake/DirectXParityTests.cmake` and of the Windows
+MSVC workflow; `scripts/run-proton-vkd3d.sh` and the D3D12 WARP spike. EasyGL lost its two ES 2.0
+profiles and every path that existed only for them: the GLSL ES 3.00 to 1.00 shader lowering, the
+texture-object sampler emulation and mip-level registry, the no-VAO, unsized-format, combined
+framebuffer and single-sample fallbacks, and the capability refusals they implied; its stock shaders
+compile byte-for-byte as before on the three remaining profiles. The Emscripten multi-renderer CI
+bundle is now `WEBGL2`+`WEBGPU`.
+
+**Kept on purpose.** `D3DCommon` itself (Direct3D 11 uses every header); the
+`scripts/run-wine-vkd3d*.sh` launchers, which SDL_GPU's cross-compiled Direct3D 12 lane uses; the
+GLSL ES 1.00-era shader forms (cross-product inverse transpose, literal PCF loop bounds,
+`uShadowTexel`), which are valid GLSL ES 3.00 and kept so pixels do not move; the sibling `easy-gl`
+library, which is not modified.
+
+**Validation** (Linux x86-64, 2026-10-06). The identity, combination, descriptor, discipline,
+target, removed-API and platform boundary gates pass; each of the four names is refused by name and
+value on the selector, set and option routes (`CnaRendererRetired_*`) and by `SetPreferred()` at run
+time. `cmake-build-multi` (`OPENGLES3` default with `OPENGL33`, `VULKAN`, `WEBGPU`, `SDL_RENDERER`,
+`SOFTWARE`, `HEADLESS`, `STUB`) was run on the private display beside the parent commit built in the
+identical configuration: the full corpus (12,077 tests) fails exactly the parent's tests apart from
+load-sensitive cases that pass alone, and every family's own suite, run with that family selected
+at run time, has the same failure set before and after. A MinGW-w64 build (`DIRECTX9`,
+`DIRECTX11`, `SOFTWARE`, `HEADLESS`) passes the 58 DirectX11 tests whose shared sources this change
+edited under Wine+DXVK, and its benchmark runs under `DIRECTX11`, `DIRECTX9` and `SOFTWARE`
+selected at run time. The `WEBGL2`+`WEBGPU` wasm bundle builds and runs the benchmark in headless
+Chrome under each (`WEBGPU` needs `-sASYNCIFY_STACK_SIZE=1048576`). **Not run:** native Windows or
+MSVC, macOS (`METAL`), the complete DirectX11 parity corpus, a real OpenGL ES 3.0 device.
 
 ## The 2026-09-28 retirement
 

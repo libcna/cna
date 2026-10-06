@@ -61,7 +61,7 @@ every lit file would be far worse than the approximation.
 | `KHR_materials_pbrSpecularGlossiness` | **APPROXIMATED_AND_REPORTED** | no | Archived by Khronos but present in older assets, so converted rather than refused: diffuse becomes the base colour, metallic 0, roughness 1 - glossiness. Not claimed, because specularFactor -- a coloured specular reflection -- has no metallic-roughness equivalent, so a file REQUIRING the extension is asking for something the conversion cannot deliver. | `GLTF-349` |
 | `KHR_materials_variants` | **IMPLEMENTED_AND_TESTED** | yes | The source-order variant table and sparse primitive mappings are preserved. Model's CNAEXT selection API swaps the complete material-dependent part state, including effect, vertex layout, textures and samplers, on both direct glTF and offline .cnj paths while leaving the default mapping unchanged. | `GLTF-341` |
 | `KHR_materials_ior` | **IMPLEMENTED_AND_TESTED** | yes | IOR is converted to dielectric F0/F90 and consumed by rigid and skinned PBR shaders on every PBR renderer. Analytic factor-only and grazing pixel witnesses cover the core default and authored endpoints. | `GLTF-343` |
-| `KHR_materials_specular` | **IMPLEMENTED_WITH_A_NAMED_LIMIT** | no | Factor and colour are consumed by every PBR renderer. Both optional texture inputs survive direct import and offline `.cnj`, including independent UV, transform, sampler and colour-space state; EasyGL, DirectX9/11/12, SDL GPU and Vulkan sample them, while the remaining PBR renderer bindings remain pending. Required use therefore remains refused and optional use is warned by name. | `GLTF-344` |
+| `KHR_materials_specular` | **IMPLEMENTED_WITH_A_NAMED_LIMIT** | no | Factor and colour are consumed by every PBR renderer. Both optional texture inputs survive direct import and offline `.cnj`, including independent UV, transform, sampler and colour-space state; EasyGL, DirectX9/11, SDL GPU and Vulkan sample them, while the remaining PBR renderer bindings remain pending. Required use therefore remains refused and optional use is warned by name. | `GLTF-344` |
 | `KHR_materials_clearcoat` | **PARSED_BUT_IGNORED** | no | A second specular lobe -- a large shader change. | `GLTF-345` |
 | `KHR_materials_sheen` | **PARSED_BUT_IGNORED** | no | A third BRDF lobe, same shape of change as clearcoat. | `GLTF-346` |
 | `KHR_materials_volume` | **PARSED_BUT_IGNORED** | no | Meaningless without a real transmission pass, which CNA does not have. | `GLTF-347` |
@@ -129,9 +129,9 @@ downgrade CNA performs names itself in one place. `CNA/Internal/Graphics/VertexD
 `KHR_materials_specular`'s optional `specularTexture` and `specularColorTexture` now have dedicated
 PBR-effect and `GpuDrawParams` slots. Direct and offline import retain each map's independent UV,
 transform and sampler; the colour map also retains its sRGB declaration. EasyGL,
-DirectX9/11/12, SDL GPU and Vulkan apply the extension's multiply-before-clamp
+DirectX9/11, SDL GPU and Vulkan apply the extension's multiply-before-clamp
 Fresnel equation.
-The modern DirectX pair additionally uses white t5/t6 fallbacks and its stride-60/76 dual-UV
+DirectX 11 additionally uses white t5/t6 fallbacks and its stride-60/76 dual-UV
 variants, with every HLSL variant regenerated through Microsoft's D3D compiler.
 SDL GPU regenerates a seven-sampler SPIR-V fragment and keeps each imported sampler state distinct;
 its rigid, skinned and analytic Fresnel pixel witnesses pass under Xvfb. Vulkan carries seven
@@ -152,8 +152,8 @@ transparent sort order.
 
 | State | Where it lives | Required application action | Task |
 |---|---|---|---|
-| `alphaMode: BLEND` | `PbrEffect::getAlphaModeEXTProperty()` | Select `BlendState::NonPremultiplied` and issue transparent parts back-to-front. CNA does not sort by default. `EasyGL_Gltf_AlphaBlend` proves the real imported material against Opaque and premultiplied controls on OPENGLES2/3. | `GLTF-230` |
-| `doubleSided` | `PbrEffect::getDoubleSidedEXTProperty()` | Select `RasterizerState::CullNone`; otherwise keep the glTF front-face state (reversed for mirrored placement). The same test proves a back-facing imported triangle is culled by the single-sided control and visible under the property-derived state on OPENGLES2/3. | `GLTF-231`, `GLTF-230` |
+| `alphaMode: BLEND` | `PbrEffect::getAlphaModeEXTProperty()` | Select `BlendState::NonPremultiplied` and issue transparent parts back-to-front. CNA does not sort by default. `EasyGL_Gltf_AlphaBlend` proves the real imported material against Opaque and premultiplied controls on OPENGLES3. | `GLTF-230` |
+| `doubleSided` | `PbrEffect::getDoubleSidedEXTProperty()` | Select `RasterizerState::CullNone`; otherwise keep the glTF front-face state (reversed for mirrored placement). The same test proves a back-facing imported triangle is culled by the single-sided control and visible under the property-derived state on OPENGLES3. | `GLTF-231`, `GLTF-230` |
 
 `alphaMode: MASK` **used** to be in this table and is not any more: the cutoff is fragment-program
 work rather than device state. `GLTF-372` wired it into `GpuDrawParams::alphaTest`; the subsequent

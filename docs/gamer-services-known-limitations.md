@@ -82,7 +82,7 @@ or sealed with DPAPI (Windows), and serialized avatar catalog installs.
 | 30 | Guide system sounds heard by a person | Hardware-unverified | None | Yes, with a listener |
 | 31 | Public Internet deployment | Deployment limitation (unqualified) | None for a LAN/NAT test; unknown in production | Yes |
 | 32 | Console-only rules read from Windows IL | Historically unknown Xbox behaviour | Unknown, believed minor | Only with console traces |
-| 33 | `AvatarRenderer` on renderers needing Windows/macOS (and OpenGL ES 2, FNA3D) | Platform limitation (unverified) | Unknown; none on the five measured | Yes |
+| 33 | `AvatarRenderer` on renderers needing Windows/macOS (and FNA3D) | Platform limitation (unverified) | Unknown; none on the five measured | Yes |
 | 34 | Single server process, SQLite writer, in-memory hubs | Deployment limitation | None | Yes, with coordination work |
 | 35 | SQLite as the only database | Deployment limitation | None | Yes |
 | 36 | No cluster or horizontal scale | Deployment limitation | None | Yes, substantial |
@@ -658,8 +658,8 @@ claim about how Xbox LIVE decided.
   SDL_GPU (Vulkan backend) and WebGPU, one multi-renderer build, each renderer confirmed by its log.
   Against OpenGL 3.3 the mean absolute pixel difference is at most 0.10/255 and silhouette overlap at
   least 0.9995 in every frame; sheets inspected by eye agree. The XNA AvatarShadows sample runs on
-  OpenGL ES 3 (Mesa software). HEADLESS runs the API tests. Not measured: OpenGL ES 2, the DirectX
-  and Metal renderers (no Windows or macOS host), FNA3D and SDL_RENDERER.
+  OpenGL ES 3 (Mesa software). HEADLESS runs the API tests. Not measured: the DirectX and Metal
+  renderers (no Windows or macOS host), FNA3D and SDL_RENDERER.
 - **Reason:** the remaining renderers need another host or a separate build.
 - **Observable impact:** unknown on those; none found on the five measured.
 - **Porting impact:** none known.

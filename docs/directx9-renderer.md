@@ -3,7 +3,7 @@
 ## What this renderer is for (and isn't)
 
 XNA 4.0 ran on Direct3D 9. Every other CNA graphics renderer (`EasyGL`, `Vulkan`, `D3D11`,
-`D3D12`, `SDL_Renderer`, `WebGPU`, `Headless`, `Software`) targets **feature parity** — the same
+`SDL_Renderer`, `WebGPU`, `Headless`, `Software`) targets **feature parity** — the same
 XNA-shaped surface, reimplemented against a modern API. `D3D9` targets something narrower and
 harder: **pixel-for-pixel indistinguishability from the original XNA 4.0 runtime itself**, not
 just "renders plausibly." It runs **Microsoft's own XNA 4.0 Stock Effects HLSL** (`BasicEffect.fx`
@@ -35,7 +35,7 @@ cmake -S . -B cmake-build-d3d9 \
 cmake --build cmake-build-d3d9 -j
 ```
 
-`D3D9`, like `D3D11`/`D3D12`, is hard-gated to Windows cross-compilation (or native Windows) at
+`D3D9`, like `D3D11`, is hard-gated to Windows cross-compilation (or native Windows) at
 configure time.
 
 ## What's real

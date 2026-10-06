@@ -1,8 +1,7 @@
 # WEBGL2 (Emscripten, GLES 3.0 → WebGL 2.0) Renderer — Status
 
-`WEBGL2` is one of the public GL-family `CNA_GRAPHICS_RENDERER` values (the original 4 were
-introduced by `plans/plan_glbackends.md`; the Phase-2 expansion later added `OPENGLES2`) — it shares
-its entire implementation with `OPENGLES2`/`OPENGLES3`/`OPENGL33`/`WEBGL1`
+`WEBGL2` is one of the three public GL-family `CNA_GRAPHICS_RENDERER` values (introduced by
+`plans/plan_glbackends.md`) — it shares its entire implementation with `OPENGLES3`/`OPENGL33`
 (`modules/renderers/easygl/`, on top of the sibling `easy-gl` library), distinguished at
 compile time by the `CNA_GL_PROFILE_WEBGL2` definition. Unlike `OPENGLES3`/`OPENGL33` (native
 desktop/mobile), `WEBGL2` only builds for Emscripten and requests the same GLES 3.0 context
@@ -23,10 +22,9 @@ plan gave it its own public name.
   flag only matters for a GLES-emulation-shim code path SDL3 doesn't use here). **Correction found
   later the same night**: `cna_house3d_demo`'s own Emscripten *link* options (a separate, per-target
   CMake setting, not SDL3's context creation) did hardcode `-sMIN_WEBGL_VERSION`/
-  `-sMAX_WEBGL_VERSION` — happened to already be the correct value (`2`/`2`) for this profile, but
-  was wrong for `WEBGL1` (see `docs/webgl1-renderer.md`'s GLB-9-revisited note). The policy now
-  lives in one renderer-aware helper shared by the examples, benchmark and `cna_c_api_wasm`:
-  WEBGL2 is exact 2/2, WEBGL1 is exact 1/1, and non-WebGL renderers receive neither flag.
+  `-sMAX_WEBGL_VERSION` — happened to already be the correct value (`2`/`2`) for this profile.
+  The policy now lives in one renderer-aware helper shared by the examples, benchmark and
+  `cna_c_api_wasm`: WEBGL2 is exact 2/2, and non-WebGL renderers receive neither flag.
 - ✅ **Real `emcmake`/`emcc` build** — this sandbox has a working Emscripten SDK at `~/emsdk` (not
   on `PATH` by default — source `~/emsdk/emsdk_env.sh` and additionally add
   `~/emsdk/upstream/emscripten` and `~/emsdk/node/*/bin` to `PATH`). `emcmake cmake
@@ -42,12 +40,8 @@ plan gave it its own public name.
   (`node cna_house3d_demo.js`) executes real compiled C++ through `SDL_Init`/window-creation before
   hitting `ReferenceError: window is not defined` — a genuine, expected browser-only DOM API gap
   (Node has no `window`/`document`; SDL3's Emscripten renderer touches `window.matchMedia` for
-  system dark-mode detection during init). This is the same category of limitation the `CANVAS`
-  renderer already documents (no DOM under Node), not something specific to `WEBGL2` or a
-  regression.
-- ✅ **No regression to a previously-working Emscripten configuration** — rebuilt `cna_demo_2d`
-  under `CANVAS` (Emscripten, unrelated to the GL family) after the `GLB-39` exception-flag change;
-  still builds and links cleanly.
+  system dark-mode detection during init). This is Node having no DOM, not something specific to
+  `WEBGL2` or a regression.
 
 ## What's not yet done
 
@@ -55,20 +49,18 @@ plan gave it its own public name.
   real WebGL 2.0 context in Chrome and completes 5-, 60- and 600-frame externally driven runs with
   exact Update/Draw counts, CNA clear/present work, BigInt handles, no page errors and clean teardown.
 - ⬜ **`CnaTests` under Emscripten** — attempted and fails with `'SDL3/SDL.h' file not found`
-  regardless of GL-family renderer (also reproduces under `CANVAS`). Not a regression from this
-  plan: the project's own `web` CMake preset already sets `CNA_BUILD_TESTS=OFF`, so a GTest build
-  under Emscripten was never a supported/exercised configuration to begin with.
+  regardless of GL-family renderer. Not a regression from this plan: the project's own `web` CMake
+  preset already sets `CNA_BUILD_TESTS=OFF`, so a GTest build under Emscripten was never a
+  supported/exercised configuration to begin with.
 - ⬜ **CI/CTest identity** (`plans/plan_glbackends.md` GLB-25) — no dedicated `WEBGL2`-only CTest
   registration distinguishing it from `OPENGLES3`/`OPENGL33` runs.
 - ⬜ **Pixel-level golden-image verification** — unlike `OPENGL33` (verified pixel-identical to
   `OPENGLES3` via a real desktop GL context), no pixel-comparison test has run against a real WebGL
   2 context (browser or otherwise) for `WEBGL2`.
 
-## Relationship to the other 3 GL-family renderers
+## Relationship to the other GL-family renderers
 
 See `plans/plan_glbackends.md` §2's table and `docs/opengl33-renderer.md`'s own version of this section.
 In short: `OPENGLES3` is today's original `EasyGL` public renderer renamed (GLES 3.0, unchanged
 behavior, native/desktop); `WEBGL2` is the same GLES 3.0 path, but under Emscripten instead of
-native; `OPENGL33` is a new desktop GL 3.3 core-profile variant; `WEBGL1` (GLES 2.0 / Emscripten)
-needs a real GLSL ES 1.00 shader-body rewrite before it can build at all, tracked as
-`plans/plan_glbackends.md` GLB-36.
+native; `OPENGL33` is a new desktop GL 3.3 core-profile variant.

@@ -75,13 +75,12 @@ these flags itself:
 
 | Renderer | Effective Emscripten link contract |
 | --- | --- |
-| `WEBGL1` | `MIN_WEBGL_VERSION=1`, `MAX_WEBGL_VERSION=1` |
 | `WEBGL2` | `MIN_WEBGL_VERSION=2`, `MAX_WEBGL_VERSION=2` |
-| Canvas/DOM/WebGPU and other non-WebGL renderers | no WebGL version flags imposed |
+| `WEBGPU` and other non-WebGL renderers | no WebGL version flags imposed |
 
 Measured in clean builds: `CApi_WasmBrowserProbe` created a real C-owned Game, cleared and
-presented five frames, and reported WebGL 1.0 for `WEBGL1` and WebGL 2.0 for `WEBGL2`. The WEBGL2
-artifact also completed 60- and 600-frame canaries without a shader-version failure.
+presented five frames, and reported WebGL 2.0 for `WEBGL2`. The WEBGL2 artifact also completed
+60- and 600-frame canaries without a shader-version failure.
 
 **Caveat worth having:** reading the default framebuffer with `gl.readPixels` after a frame returns
 zeros unless the context was created with `preserveDrawingBuffer`. That looks exactly like "nothing
@@ -148,7 +147,7 @@ not something a manifest generator may claim about itself.
 
 ## What this artifact is not
 
-The clean WEBGL1 and WEBGL2 builds, module smokes, link-contract tests and real Chrome frame probes
+The clean WEBGL2 builds, module smokes, link-contract tests and real Chrome frame probes
 qualify the CNA artifact behavior described here. They do not certify every browser, GPU, renderer,
 threading mode or downstream binding; those remain separate platform/consumer qualifications.
 

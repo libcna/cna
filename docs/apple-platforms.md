@@ -151,7 +151,7 @@ time with a readable message instead of somewhere deep inside a dependency build
 |---|---|
 | `SDL_RENDERER` | Allowed. SDL3's own 2D renderer, Metal-backed on iOS. It is the only renderer built and final-linked by Apple CI. |
 | `SDL_GPU` | Refused by default. Its build currently requires a target-compatible shaderc dependency that the iOS workflow does not provide. |
-| `OPENGLES2`, `OPENGLES3` | Refused by default. They require the sibling `easy-gl` and `meta-gl` repositories, which the iOS workflow does not provide or validate. |
+| `OPENGLES3` | Refused by default. It requires the sibling `easy-gl` and `meta-gl` repositories, which the iOS workflow does not provide or validate. |
 | `HEADLESS`, `SOFTWARE`, `STUB` | Refused by default. They may be useful for experiments, but they are not final-linked by Apple CI and therefore are not advertised as supported iOS configurations. |
 | `METAL` | Refused by default. The renderer's supported contract covers macOS only. |
 | Everything else | Refused. Desktop APIs cannot exist on iOS; other third-party-backed renderers have not been configured for an iOS sysroot. |

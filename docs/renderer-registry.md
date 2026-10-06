@@ -1,28 +1,26 @@
 # CNA renderer registry
 
-CNA exposes exactly **18 public renderer identities** over 14 implementation families. EasyGL is an
-internal implementation shared by five public GL profiles and does not add a public identity.
+CNA exposes exactly **14 public renderer identities** over 12 implementation families. EasyGL is an
+internal implementation shared by three public GL profiles and does not add a public identity.
 Internal renderer/API choices made by an abstraction such as FNA3D likewise do not add CNA
 identities.
 
 CNA intentionally maintains a curated renderer set. A new renderer is added only when it provides
 meaningful platform coverage, compatibility value, architectural value, or a capability not
-reasonably covered by the existing set; renderer count is not a goal in itself, and thirty-three
+reasonably covered by the existing set; renderer count is not a goal in itself, and thirty-seven
 identities have been retired (`docs/removed-renderers.md`).
 
 The C++ enum is dense. The "C ABI value" column below is intentionally **not** dense: a retired
-identity's value is permanently reserved and never reassigned, so the range has gaps at 7, 10, 16,
-18–21, 23–30, 32–41 and 44–51. The next new identity takes value 52.
+identity's value is permanently reserved and never reassigned, so the range has gaps at 2, 5, 7,
+10, 15–21, 23–30, 32–41 and 44–51. The next new identity takes value 52.
 
 ## Canonical public identities
 
 | C ABI value | Enum | Selector | Compile definition | Implementation / factory | Primary gate |
 |---:|---|---|---|---|---|
 | 1 | `SdlRenderer` | `SDL_RENDERER` | `CNA_RENDERER_SDL_RENDERER` | SDL Renderer / `SdlRenderer` | none |
-| 2 | `OpenGLES2` | `OPENGLES2` | `CNA_RENDERER_EASYGL` + `CNA_GL_PROFILE_OPENGLES2` | shared EasyGL factory | non-Emscripten |
 | 3 | `OpenGLES3` | `OPENGLES3` | `CNA_RENDERER_EASYGL` + `CNA_GL_PROFILE_OPENGLES3` | EasyGL / `EasyGLRenderer` | non-Emscripten |
 | 4 | `OpenGL33` | `OPENGL33` | `CNA_RENDERER_EASYGL` + `CNA_GL_PROFILE_OPENGL33` | shared EasyGL factory | non-Emscripten |
-| 5 | `WebGL1` | `WEBGL1` | `CNA_RENDERER_EASYGL` + `CNA_GL_PROFILE_WEBGL1` | shared EasyGL factory | Emscripten |
 | 6 | `WebGL2` | `WEBGL2` | `CNA_RENDERER_EASYGL` + `CNA_GL_PROFILE_WEBGL2` | shared EasyGL factory | Emscripten |
 | 8 | `Vulkan` | `VULKAN` | `CNA_RENDERER_VULKAN` | Vulkan / `VulkanRenderer` | Vulkan SDK/runtime |
 | 9 | `WebGPU` | `WEBGPU` | `CNA_RENDERER_WEBGPU` | wgpu-native / `WebGPURenderer` | wgpu-native |
@@ -30,15 +28,13 @@ identity's value is permanently reserved and never reassigned, so the range has 
 | 12 | `Software` | `SOFTWARE` | `CNA_RENDERER_SOFTWARE` | Software / `SoftwareRenderer` | none |
 | 13 | `Stub` | `STUB` | `CNA_RENDERER_STUB` | Stub / `StubRenderer` | none |
 | 14 | `DirectX11` | `DIRECTX11` | `CNA_RENDERER_DIRECTX11` | Direct3D 11 / `DirectX11Renderer` | Windows |
-| 15 | `DirectX12` | `DIRECTX12` | `CNA_RENDERER_DIRECTX12` | Direct3D 12 / `DirectX12Renderer` | Windows |
-| 17 | `Canvas` | `CANVAS` | `CNA_RENDERER_CANVAS` | Canvas / `CanvasRenderer` | Emscripten |
 | 22 | `DirectX9` | `DIRECTX9` | `CNA_RENDERER_DIRECTX9` | Direct3D 9 / `DirectX9Renderer` | Windows |
 | 31 | `SdlGpu` | `SDL_GPU` | `CNA_RENDERER_SDL_GPU` | SDL GPU / `SdlGpuRenderer` | SDL GPU runtime |
 | 42 | `Metal` | `METAL` | `CNA_RENDERER_METAL` | Metal / `MetalRenderer` | macOS/Darwin |
 | 43 | `Fna3d` | `FNA3D` | `CNA_RENDERER_FNA3D` | FNA3D / `Fna3dRenderer` | FNA3D dependency |
 
-The five GL profiles share one implementation target, macro, and factory, so 18 public identities
-map to 14 concrete implementation factories. Their public contracts remain distinct because the
+The three GL profiles share one implementation target, macro, and factory, so 14 public identities
+map to 12 concrete implementation factories. Their public contracts remain distinct because the
 selected context, shader language/profile, and supported platform differ. `EASYGL` is not
 an accepted selector, and neither is any retired name: `cmake/RendererIdentities.cmake` refuses a
 retired selector by name, with its reserved value, rather than falling back to a default.
@@ -47,12 +43,10 @@ retired selector by name, with its reserved value, rather than falling back to a
 
 - **No renderer:** `STUB` is a no-op; `HEADLESS` is validation/trace-oriented and makes no pixel
   fidelity claim.
-- **2D-oriented:** `SDL_RENDERER` and `CANVAS`.
+- **2D-oriented:** `SDL_RENDERER`.
 - **CPU bounded 3D:** `SOFTWARE`.
-- **Programmable/modern, with renderer-specific limits:** `OPENGLES2` (deliberately the
-  narrowest of the GL family -- shader-based but bounded by core OpenGL ES 2.0, see
-  `docs/opengles2-renderer.md`), `OPENGLES3`, `OPENGL33`, `WEBGL1`, `WEBGL2`, `VULKAN`, `WEBGPU`,
-  `DIRECTX9`, `DIRECTX11`, `DIRECTX12`, `SDL_GPU`, and `METAL`.
+- **Programmable/modern, with renderer-specific limits:** `OPENGLES3`, `OPENGL33`, `WEBGL2`,
+  `VULKAN`, `WEBGPU`, `DIRECTX9`, `DIRECTX11`, `SDL_GPU`, and `METAL`.
 - **Abstraction layer:** `FNA3D` selects SDL_GPU, Direct3D 11 or OpenGL at runtime; that internal
   choice is not another CNA identity.
 

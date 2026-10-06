@@ -70,7 +70,7 @@ Two XNA-specific conversions are measured rather than guessed. XNA's stock 3D pa
 integer pixel centers while SpriteBatch follows half-integer centers (`DX-253`), so D3DCommon
 applies the viewport-derived correction only to stock/instanced 3D matrices. XNA `DepthBias` is a
 normalized depth offset (`DX-256`), converted to the active D16/D24 native integer units. Both
-contracts pass on D3D11, D3D12 and EasyGL. `DX-244` additionally proves 16 consecutive loss/restore
+contracts pass on D3D11 and EasyGL. `DX-244` additionally proves 16 consecutive loss/restore
 cycles preserve the same public texture, vertex/index buffers, render target and loaded model.
 
 **What it is not yet**: verified against a genuine device-removal event or a vendor Windows driver.
@@ -121,7 +121,7 @@ complete D3D11 label through the appropriate DXVK wrapper.
 ## Writing a D3D11 test
 
 Renderer-neutral behavior belongs in a public `Game`/`GraphicsDevice` fixture and is declared once
-with `cna_d3d_parity_fixture()` in `cmake/DirectXParityTests.cmake`; it then runs on D3D11 and D3D12.
+with `cna_d3d_parity_fixture()` in `cmake/DirectXParityTests.cmake`; it then runs on D3D11.
 A one-renderer exception requires a human-readable reason. Use a native D3D11 executable only for
 an invariant that cannot be observed through the public API, such as input-layout or state-object
 cache identity. `DirectX11_Smoke` is intentionally limited to those internals and
@@ -171,9 +171,8 @@ stdout and to `CNA_D3D_DEBUG_REPORT`, which `tools/platform/win32_gtest_shards.p
 - **Compiled XNA `Effect` bytecode is an opt-in.** With
   `CNA_DIRECTX11_COMPILED_EFFECTS=ON`, `SupportsCompiledEffects()` is true and the complete
   `FX-063` public-path suite passes. With it off, the renderer keeps the explicit unsupported
-  capability/refusal and does not build MojoShader. D3D12's separate implementation owner is
-  `plans/plan_fx.md` `FX-134`. Runtime-source `ShaderEffect` and every stock effect remain separate
-  working paths.
+  capability/refusal and does not build MojoShader. Runtime-source `ShaderEffect` and every stock
+  effect remain separate working paths.
 - **`SetDataOptions` is implemented and differentially proven.** D3D11 maps `Discard` and
   `NoOverwrite` to the matching D3D11 map modes. The renderer-neutral 62-frame dynamic-buffer
   oracle passes all 187 checks on D3D11 and EasyGL and distinguishes all three options without

@@ -170,7 +170,7 @@ Other accepted textures in the historical renderers below remain RGBA8 unorm.
 | **Dxt3** | 1 | ⚠️ | ⚠️ | ⚠️ | Same as Dxt1 |
 | **Dxt5** | 1 | ⚠️ | ⚠️ | ⚠️ | Same as Dxt1 |
 | NormalizedByte2 | 2 | ❌ | ❌ | ❌ | Signed 8-bit per channel; no signed GL/Vk format used |
-| NormalizedByte4 | 4 | ✅ GL_RGBA8_SNORM (ES 3-class profiles) | ❌ | ❌ | Signed bytes upload and sample in [-1,1]; ES 2/WebGL 1 reject clearly |
+| NormalizedByte4 | 4 | ✅ GL_RGBA8_SNORM (ES 3-class profiles) | ❌ | ❌ | Signed bytes upload and sample in [-1,1] |
 | Rgba1010102 | 4 | ❌ | ❌ | ❌ | 10-bit per channel; requires GL_RGB10_A2 / VK_FORMAT_A2B10G10R10_UNORM_PACK32 |
 | Rg32 | 4 | ❌ | ❌ | — | 16-bit per channel RG; requires GL_RG16 / VK_FORMAT_R16G16_UNORM |
 | Rgba64 | 8 | ❌ | ❌ | — | 16-bit per channel RGBA; requires GL_RGBA16 / VK_FORMAT_R16G16B16A16_UNORM |

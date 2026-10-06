@@ -240,7 +240,7 @@ output is exactly `F0/(4π)`: both PBR programs produce `(11,11,11)` for core an
 fixture factors. A grazing pair holds F0 at `.04` while changing only F90 from 1 to `.3`, producing
 `(33,33,33)` versus `(15,15,15)`. The same test now runs across backend harnesses; platform-only
 shader paths are compiler-verified. Section 1.4b now transports both texture inputs; EasyGL,
-OpenGL4, DirectX9/11/12, SDL GPU and Vulkan sample them, and the remaining
+OpenGL4, DirectX9/11, SDL GPU and Vulkan sample them, and the remaining
 renderer bindings stay explicitly open.
 
 ---
@@ -301,8 +301,8 @@ properties and the two named specular properties; no existing index changes mean
 selector bits 5/6, the separate four affine extension rows and colour-space state. Import and direct/offline parity use
 independent texture views, UV selectors, transforms and samplers. Renderer source-policy tests pin
 both samples and their Khronos channel/colour-space equations. EasyGL supplies the official
-Khronos `SpecularTest.glb` direct/offline pixel witness. OpenGL4 compiles natively; DirectX11/12
-cross-compile after all rigid/skinned and single/dual-UV HLSL variants pass D3DCompile. DirectX9's
+Khronos `SpecularTest.glb` direct/offline pixel witness. OpenGL4 compiles natively; DirectX11
+cross-compiles after all rigid/skinned and single/dual-UV HLSL variants pass D3DCompile. DirectX9's
 rigid/skinned ps_3_0 programs use seven samplers and 278 of 512 instruction slots; their 5,588-byte
 bytecode, exact c24–c29 register layout and MinGW renderer build are regenerated and verified.
 SDL GPU likewise binds white identity maps plus the separately imported sampler states at bindings
@@ -480,7 +480,7 @@ be a subtle brightness error rather than a crash.
 
 **Compatibility.** Additive on every renderer: the fields are new, so a renderer that does not read
 them behaves exactly as it did before — the established accepted-and-ignored pattern. Adoption is
-therefore per renderer rather than a flag day. `EasyGLRenderer` implements it (and with it the five
+therefore per renderer rather than a flag day. `EasyGLRenderer` implements it (and with it the
 GL profiles it backs); the other renderers are unchanged and still show the old behaviour.
 
 **A boundary this review names rather than hides.** The output encode is applied *by the PBR
@@ -578,7 +578,7 @@ slot immediately before drawing; automatic binding would also override every non
 whose compatible default carries no origin flag. `EasyGL_Gltf_SamplerWrap` exercises precisely
 that public boundary on the three generated `uv-out-of-range-*` fixtures. At one shared authored UV,
 CLAMP, REPEAT and MIRRORED_REPEAT produce the reference image's yellow, blue and green quadrants
-respectively on both OPENGLES2 and OPENGLES3. Thus the raw-enum table, real-file import, per-part
+respectively on OPENGLES3. Thus the raw-enum table, real-file import, per-part
 transport and GPU addressing are all distinct assertions; only corpus-wide L7 orchestration remains
 under `GLTF-009`.
 

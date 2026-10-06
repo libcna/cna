@@ -163,8 +163,8 @@ tangent.w'= tangent.w * sign(det(S₃ₓ₃))
 Tangents are directions, then PBR re-orthogonalises them against `normal'` before constructing the
 TBN basis. Normals are plane covectors: multiplying one directly by `S₃ₓ₃` is correct for rotation
 or uniform scale, but `skin-nonuniform-joint-scale`'s `S=[1,2,1]` separates the two directions by
-about 51 degrees. EasyGL evaluates the inverse transpose through cofactors so the GLSL ES 1.00
-profiles do not require a matrix `inverse()` intrinsic; determinant sign is retained for mirrors,
+about 51 degrees. EasyGL evaluates the inverse transpose through cofactors rather than a matrix
+`inverse()` intrinsic; determinant sign is retained for mirrors,
 and a nearly singular blend takes the established finite fallback instead of producing NaN.
 EasyGL's PBR tangent path likewise uses a scalar triple product rather than a GLSL `determinant()`
 intrinsic and combines the world, optional instance and blended-skin signs. A zero determinant keeps

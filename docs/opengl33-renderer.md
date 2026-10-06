@@ -1,8 +1,7 @@
 # OPENGL33 (desktop OpenGL 3.3 core profile) Renderer — Status
 
-`OPENGL33` is one of the public GL-family `CNA_GRAPHICS_RENDERER` values (the original 4 were
-introduced by `plans/plan_glbackends.md`; the Phase-2 expansion later added `OPENGLES2`) — it shares
-its entire implementation with `OPENGLES2`/`OPENGLES3`/`WEBGL1`/`WEBGL2`
+`OPENGL33` is one of the three public GL-family `CNA_GRAPHICS_RENDERER` values (introduced by
+`plans/plan_glbackends.md`) — it shares its entire implementation with `OPENGLES3`/`WEBGL2`
 (`modules/renderers/easygl/`, on top of the sibling `easy-gl` library), distinguished at
 compile time by the `CNA_GL_PROFILE_OPENGL33` definition. Unlike the other profiles (all
 OpenGL ES / WebGL, GLSL ES syntax), `OPENGL33` requests a real desktop `SDL_GL_CONTEXT_PROFILE_CORE`
@@ -70,14 +69,11 @@ context, GL 3.3.
   3.3 core-profile drivers (especially older/proprietary NVIDIA/AMD Windows drivers, which are
   historically stricter about GLSL core-profile syntax than Mesa) have not been checked.
 
-## Relationship to the other 3 GL-family renderers
+## Relationship to the other GL-family renderers
 
 See `plans/plan_glbackends.md` §2's table. In short: `OPENGLES3` is today's original `EasyGL` public
 renderer renamed (GLES 3.0, unchanged behavior); `WEBGL2` is the same GLES 3.0 path under
-Emscripten; `WEBGL1` (GLES 2.0 / Emscripten) has a real GLSL ES 1.00 shader rewrite implemented and
-verified as far as this sandbox can go, including `SkinnedEffect`/`SkinnedPbrEffect` (see
-`docs/webgl1-renderer.md`) — no real browser-level driver verification exists for any of the 4
-profiles in this sandbox.
+Emscripten.
 
 ## Graphics resources on other threads (all GL profiles)
 
@@ -101,6 +97,5 @@ reports for a frame after a resize, a minimize or a fullscreen change, or when a
 binds it between frames (cna-killer KF-6). With multisampling on the offscreen buffer is
 multisampled and the blit resolves it. `GetBackBufferData` reads it at the back buffer's own size:
 when the presentation rectangle is not the logical size (Letterbox bars, Stretch, a display scale
-of 2), each back-buffer pixel is read from the pixel it is presented on. The ES 2.0 generation
-(OPENGLES2, WEBGL1) has no framebuffer blit and keeps drawing into the window's surface, and so
-does the web, whose canvas CNA sizes itself.
+of 2), each back-buffer pixel is read from the pixel it is presented on. The web keeps drawing into
+the window's surface, whose canvas CNA sizes itself.

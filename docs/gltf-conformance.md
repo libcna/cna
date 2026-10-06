@@ -948,14 +948,14 @@ strengths lock its interpolation formula, and three normal scales lock `rgb*2-1`
 scaling before TBN transformation. The same test now also locks the skinned-PBR joint normal under
 `S=[1,2,1]` at byte 93 instead of the old direct-matrix result 139; the stock-effect companion
 locks the manifest's exact `(0,.351123,.936329)` direction in both per-pixel and per-vertex programs
-as byte 90 instead of 212. Both focused oracles pass on OPENGLES2 and OPENGLES3. The byte-93 case
+as byte 90 instead of 212. Both focused oracles pass on OPENGLES3. The byte-93 case
 also has the first fixture-driven pilot: `EasyGL_Gltf_SkinnedPbrNonUniformJoint` loads the committed
 `skin-nonuniform-joint-scale.gltf`, verifies its stride-selected effect and non-identity bind palette,
 then renders it through `Model::Draw` twice. Thus L1-L6 and focused framebuffer evidence now meet on
 one generated asset rather than only on equivalent hand-built geometry. A second pilot,
 `EasyGL_Gltf_BaseColorFactorTexture`, does the same for the generated
 `mat-basecolor-factor-times-texture.gltf`: it verifies the imported texture and factor remain
-independent, then obtains analytic byte 92 twice on OPENGLES2 and OPENGLES3.
+independent, then obtains analytic byte 92 twice on OPENGLES3.
 `EasyGL_Gltf_SamplerWrap` adds three more generated assets with byte-identical geometry and image:
 their common out-of-range UV resolves to the authored yellow, blue and green quadrants under
 CLAMP, REPEAT and MIRRORED_REPEAT respectively, after the application selects each part's public
@@ -982,7 +982,7 @@ authors `KHR_materials_transmission=0.5`. Glass-first hides the later dial and p
 visible at `(83,38,127)` on both EasyGL profiles.
 `EasyGL_Gltf_TextureTransformPerMap` adds the generated `texture-transform-per-map` witness: one
 authored UV stream drives base-colour and normal maps through deliberately different affine rows,
-and both OPENGLES2 and OPENGLES3 select the expected blue base texel and +Z normal texel. The first
+and OPENGLES3 selects the expected blue base texel and +Z normal texel. The first
 complete viewer retake after the affine rows reached every PBR shader remained 146/146: all 138
 accepted assets were byte-identical between their two new processes and all eight rejections kept
 their diagnostic. Ten texture-bearing goldens were deliberately rebaselined. The target fixture is

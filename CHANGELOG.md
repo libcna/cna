@@ -102,7 +102,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
   error that names `SDL3` as the replacement; there is no alias. `CNA_ENABLE_SDL=OFF` remains, as a
   windowless configuration (`HEADLESS`/`TERMINAL`, `NULL` or `ALSA` audio). New `CnaPlatformSdl3X11Tests`
   and `CnaPlatformSdl3WaylandTests` run SDL3 on a private Xvfb and a private headless Weston, and
-  the Direct3D 11/12 window stress fixtures now drive the `HWND` of an SDL3 window.
+  the Direct3D 11 window stress fixtures now drive the `HWND` of an SDL3 window.
+- **Four more renderer identities**, `DIRECTX12`, `CANVAS`, `OPENGLES2` and `WEBGL1`, leaving 14
+  public identities over 12 implementation families (`RRC-018`,
+  [`docs/removed-renderers.md`](docs/removed-renderers.md)). None is replaced or aliased:
+  `DIRECTX11` and `DIRECTX9` cover Windows, `WEBGL2` and `WEBGPU` the browser, and EasyGL keeps
+  `OPENGLES3`, `OPENGL33` and `WEBGL2` without its ES 2.0 profiles and GLSL ES 1.00 lowering. Their
+  C ABI values 2, 5, 15 and 17 are permanently reserved and the experimental C ABI goes to
+  `0.45.0`; no surviving identity is renumbered.
 
 ### Changed
 

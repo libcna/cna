@@ -105,9 +105,9 @@ bug. Opening the generated HTML directly from disk is not a valid threaded-Wasm 
   test in this codebase depend on real unwinding working end-to-end.
 - **Final graphics targets share one renderer-aware WebGL contract.** `cna_demo_2d`,
   `cna_house3d_demo`, the graphics benchmark and `cna_c_api_wasm` all use the same helper:
-  `WEBGL1` pins `MIN/MAX_WEBGL_VERSION=1/1`, `WEBGL2` pins `2/2`, and non-WebGL renderers receive no
-  irrelevant WebGL requirement. Both C-API variants were clean-built and exercised in Chrome with
-  the expected real context version.
+  `WEBGL2` pins `MIN/MAX_WEBGL_VERSION=2/2`, and non-WebGL renderers receive no irrelevant WebGL
+  requirement. The C-API build was clean-built and exercised in Chrome with the expected real
+  context version.
 - **`cna_demo_xact` is excluded on Emscripten** (and Android) — XACT audio is a Windows/Xbox-specific
   content pipeline with no web equivalent, unrelated to the graphics renderer itself.
 
@@ -163,9 +163,8 @@ format, extension, shader path, or context-loss transition:
   own `SurfaceFormat::Color`-only constraint (Task 176, already enforced identically on every
   renderer) means this is currently a non-issue in practice for the same reason as above.
 - **`WEBGL2` deliberately has no implicit WebGL 1 fallback.** Its exact 2/2 link contract prevents
-  Emscripten from selecting a context that cannot compile its GLSL ES 3.00 shaders. Applications
-  targeting WebGL-1-class browsers must build the distinct `WEBGL1` renderer, whose exact 1/1
-  contract and five-frame C-API browser probe are verified separately.
+  Emscripten from selecting a context that cannot compile its GLSL ES 3.00 shaders. CNA has no
+  WebGL 1 renderer ([`removed-renderers.md`](removed-renderers.md)).
 
 ## Canvas-as-display model
 

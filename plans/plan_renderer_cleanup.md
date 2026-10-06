@@ -34,6 +34,7 @@ renderer count is not a goal.
 | RRC-016 | Remove `CNA_SOFTWARE_2D_ONLY`, the reduced Software build that existed only for `GDI` | ✅ |
 | RRC-017 | Remove the four renderers' documents, plans and handoffs; one retirement record | ✅ |
 | RRC-018 | Retire `DIRECTX12`, `CANVAS`, `OPENGLES2` and `WEBGL1`: remove their families, EasyGL's ES 2.0 profiles and every integration that existed only for them | ✅ |
+| RRC-019 | Remove the four renderers' documents and plans; one retirement record; correct every current-state document | ✅ |
 
 **2026-09-19 owner decision (`RRC-011`).** Retired renderer probes and the rejected Three.js
 candidate probe no longer belong in the current `spikes/` tree. The earlier archive-retention

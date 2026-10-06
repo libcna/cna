@@ -28,7 +28,7 @@ on it) rather than assuming either way.
   seven-layout audit and automated evidence across STUB, HEADLESS, OpenGL ES 3 and Vulkan.
 - **[`gltf-renderer-pbr-fallbacks.md`](gltf-renderer-pbr-fallbacks.md)** — five-map native binding
   ABIs and semantic neutral textures, audited across every PBR-capable renderer implementation.
-- **[`renderer-registry.md`](renderer-registry.md)** — the canonical list of the **50** public
+- **[`renderer-registry.md`](renderer-registry.md)** — the canonical list of the public
   renderer identities (enum, CMake selector, compile definition, factory, platform/dependency
   gate). Start here for "which renderers does CNA have."
 - **[`cnaext-engine-layer.md`](cnaext-engine-layer.md)** — current standalone ASCII, CRT,
@@ -39,9 +39,6 @@ on it) rather than assuming either way.
   catalog only: it authorizes nothing, exactly like `../FUTURE.md`.
 - **[`webgpu-renderer.md`](webgpu-renderer.md)** — current status, build instructions and explicit
   limitations for the experimental fifth renderer; detailed remaining work is in `../plans/plan_webgpu.md`.
-- **[`canvas-renderer.md`](canvas-renderer.md)** — current status for the Emscripten-only HTML Canvas
-  2D renderer, incl. a manual browser verification checklist (this dev loop has no real browser DOM
-  to pixel-verify against); detailed task breakdown is in `../plans/plan_canvas.md`.
 - **[`xna-4-runtime-member-coverage.md`](xna-4-runtime-member-coverage.md)** — current
   Microsoft-reference runtime type and member census, with every missing declaration listed;
   the separate [Content Pipeline parity report](xna-content-pipeline-parity-report.md) covers build-time APIs.
@@ -127,9 +124,6 @@ Kept for their investigation methodology and root-cause detail, not as current s
   in the simulator, but still lacks physical-device and feature evidence). Task breakdown is in
   `../plans/plan_apple.md`.
 - `sdl-renderer-2d-completeness.md` — SDL_Renderer's own full Phase 70 2D audit.
-- `canvas-renderer.md` — the CANVAS (HTML Canvas 2D) renderer's own completeness status; unlike the
-  others here, its ✅ marks mean "implemented and structurally reviewed," not "pixel-verified" — see
-  the doc's own caveat.
 - **[`ascii-post-process-effect.md`](ascii-post-process-effect.md)** — `CNA::Graphics::AsciiPostProcessEffect`,
   the renderer-neutral ASCII/glyph-grid post-process effect (`modules/graphics-ext/`) that replaced
   the former `ASCII` graphics-renderer identity.

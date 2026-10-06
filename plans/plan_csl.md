@@ -984,7 +984,7 @@ one backend. This is the first vertical slice: CSL → CSIR → GLSL → a real 
 | CSL-1003 | `glsles-310` coverage including compute | ⬜ | Compute cases run and read back. |
 | CSL-1004 | `glsles-100` coverage with its full legalization stack | ⬜ | Runs the Core-tier corpus; every case it cannot run is refused with a named capability, and the count of refusals is recorded rather than hidden. |
 | CSL-1005 | `glsl-120` coverage | ⬜ | Same, under the OPENGL2 identity. |
-| CSL-1006 | The ES 1.00 refusal list is complete and matches the existing hand-written rewriter's limits | ⬜ | Compared against `TransformGlslEs300BodyToEs100`'s documented limits (`plan_glbackends.md` GLB-36): no `textureLod`, no dynamic uniform-array indexing, statically countable loops only, no integer vertex attributes. Any difference is either a CSL bug or a finding about the existing path, and the row says which. |
+| CSL-1006 | The ES 1.00 refusal list is complete and matches the existing hand-written rewriter's limits | ⛔ | Withdrawn 2026-10-06: the hand-written ES 3.00 → 1.00 rewriter it compares against was removed with `OPENGLES2` and `WEBGL1` (`docs/removed-renderers.md`). |
 | CSL-1007 | Golden GLSL for every corpus shader × every profile | ⬜ | Committed under `tests/csl-corpus/golden/glsl-*/`; a diff in review shows exactly what a compiler change did to every target. |
 | CSL-1008 | Emitted GLSL compiles on the real driver for every corpus case | ⬜ | A ctest that compiles every generated shader through the live GL context and reports the driver log on failure; this is the row that catches "valid by our rules, rejected by Mesa". |
 | CSL-1009 | Optional `glslangValidator` oracle | ⬜ | When present, every emitted shader is validated; when absent the test SKIPs with a message naming the tool (D2). |
@@ -1098,7 +1098,7 @@ real API.
 | CSL-1174 | Optional `fxc`/`dxc` oracle | ⬜ | When either is found (`CNA_FXC_EXECUTABLE` already exists as a mechanism, `plan_xnapipeline.md` XNAP-A5), every artifact is compiled and the log reported; absent → SKIP. The row records what the first real run found. |
 | CSL-1175 | Interpreter differential for the HLSL path | ⬜ | Since the generated HLSL cannot run here, the *CSIR* it was generated from is run in the interpreter, and the golden HLSL is reviewed against it by structural assertions (e.g. every `mul()` argument order asserted programmatically from the IR). This is what "verifiable without the API" concretely means. |
 | CSL-1176 | D3D11 renderer consumption path, wired but 🟨 | ⬜ | The renderer declares `hlsl-sm5` and the load path is complete; the row stays 🟨 with "cannot be built or run on this machine" until a Windows CI run exists. **Milestone 3 is reached when this row and `CSL-1177` are ✅ on such a machine.** |
-| CSL-1177 | D3D12 renderer consumption path, wired but 🟨 | ⬜ | Same, for `hlsl-sm6`/DXIL, with the DXIL step delegated to `dxc` as an external *build-time* tool rather than implemented (emitting DXIL is explicitly out of scope, and the row says so). |
+| CSL-1177 | D3D12 renderer consumption path, wired but 🟨 | ⛔ | Withdrawn 2026-10-06: the `DIRECTX12` renderer it was to wire is retired (`docs/removed-renderers.md`). |
 | CSL-1178 | D3D9 (`hlsl-sm2`/`sm3`) is deliberately not a CSL target | ⬜ | ⛔ with the reason: the existing compiled-`.fx`/MojoShader path already serves D3D9 (`plan_fx.md`), and a Shader Model 2 profile would need instruction-count-aware register allocation that this plan does not contain. The FX frontend (Phase 21) is how a D3D9-era effect reaches CSIR, not a `sm2` backend. |
 
 ---
@@ -1413,9 +1413,9 @@ name and is not a gap. No row in this phase may add a compiler to a renderer (D3
 | CSL-1766 | `OPENGLES3` (EasyGL) | ⬜ | Declares `glsles-300`; full Core + Extended corpus passes; the repository's default test renderer, so this row's pass count is the baseline every other GL row is compared against. |
 | CSL-1767 | `OPENGL33` (EasyGL) | ⬜ | Declares `glsl-330`, then `glsles-300`; Core + Extended pass. |
 | CSL-1768 | `OPENGL4` | ⛔ | Withdrawn 2026-09-28: the `OPENGL4` identity is retired (`docs/removed-renderers.md`). |
-| CSL-1769 | `OPENGLES2` (EasyGL) | ⬜ | Declares `glsles-100`; Core passes; every Extended case refuses by capability with a named message, and the refusal list is recorded rather than counted as failure. |
+| CSL-1769 | `OPENGLES2` (EasyGL) | ⛔ | Withdrawn 2026-10-06: the `OPENGLES2` identity is retired (`docs/removed-renderers.md`). |
 | CSL-1770 | `WEBGL2` (EasyGL) | ⬜ | Declares `glsles-300`; Core + Extended under Emscripten, verified in a real browser through the existing browser-test harness or 🟨 with the reason. |
-| CSL-1771 | `WEBGL1` (EasyGL) | ⬜ | Declares `glsles-100`; same shape as `OPENGLES2`. |
+| CSL-1771 | `WEBGL1` (EasyGL) | ⛔ | Withdrawn 2026-10-06: the `WEBGL1` identity is retired (`docs/removed-renderers.md`). |
 | CSL-1772 | `OPENGL2` | ⬜ | Declares `glsl-120`; Core subset passes; the legalization stack (`CSL-925`–`CSL-928`) gets its hardest real workout here. |
 | CSL-1773 | `OPENGL1` | ⬜ | Expected outcome "none": OpenGL 1.x has no programmable pipeline (§33's own example). The row records that as the answer, with `plan_opengl1.md`'s boundary as the evidence. |
 | CSL-1774 | `OPENGLES1` | ⬜ | Same expected outcome; recorded against `plan_opengles1.md`. |
@@ -1442,7 +1442,7 @@ name and is not a gap. No row in this phase may add a compiler to a renderer (D3
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
 | CSL-1792 | `DIRECTX11` | ⬜ | Declares `hlsl-sm5`; load path complete; 🟨 until a Windows machine runs it (D12), with the exact blocker named. |
-| CSL-1793 | `DIRECTX12` | ⬜ | Declares `hlsl-sm6`; same, plus the DXIL step's external-tool dependency stated. |
+| CSL-1793 | `DIRECTX12` | ⛔ | Withdrawn 2026-10-06: the `DIRECTX12` identity is retired (`docs/removed-renderers.md`). |
 | CSL-1794 | `DIRECTX10` | ⬜ | Declares `hlsl-sm4`; same. |
 | CSL-1795 | `DIRECTX9` | ⬜ | "none" for CSL (→ `CSL-1178`); the compiled-`.fx` route stays. Recorded with the reason. |
 | CSL-1796 | `DIRECTX8`, `DIRECTX7`, `DIRECTX6`, `DIRECTX5`, `DIRECTX3`, `DIRECTX2`, `DIRECTX1` | ⬜ | Seven identities, one row: all "none" — these are fixed-function or pre-shader APIs and `plan_dxold.md` already establishes their boundary. The row lists all seven explicitly so none is silently forgotten. |
@@ -1459,7 +1459,7 @@ name and is not a gap. No row in this phase may add a compiler to a renderer (D3
 | CSL-1804 | `SOFTWARE` | ⬜ | **Owner decision Q1: no for v1.** SOFTWARE could run CSIR-L through the interpreter and become the first renderer whose shaders are genuinely CSL; the owner decided against it for v1, so it answers "none" and takes the same honest-skip behaviour as `HEADLESS` — a conformance run SKIPs and never reports a pass. The row records the decision and its reason (an interpreter written for correctness is not a rasterizer's shading core until measured otherwise); `CSL-2744` re-decides on the `CSL-1385` number. |
 | CSL-1805 | `STUB` | ⬜ | "none"; the no-op renderer, recorded. |
 | CSL-1806 | `SKIA` | ⬜ | CPU-raster 2D with no custom effects: "none", recorded against `docs/skia-renderer.md`. |
-| CSL-1807 | `CANVAS` | ⬜ | The browser 2D identity: "none", listed with its boundary document so the matrix has no blanks. (The other 2D identities this row once listed are all retired, `docs/removed-renderers.md`.) |
+| CSL-1807 | `CANVAS` | ⛔ | Withdrawn 2026-10-06: the `CANVAS` identity is retired (`docs/removed-renderers.md`). |
 | CSL-1808 | `SDL_RENDERER` | ⬜ | SDL's 2D renderer: "none" unless SDL3's own shader hook applies; the row states which. |
 | CSL-1809 | `GLIDE` | ⬜ | Pre-shader 3D API: "none", recorded against `plan_glide.md`. |
 

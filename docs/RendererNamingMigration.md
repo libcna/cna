@@ -2,10 +2,10 @@
 
 > **Historical campaign record.** This document describes the 2026-08 normalization as it stood
 > then. Twenty-five renderer identities were retired on 2026-09-17, `DIRECT2D`, `FREEDIRECT` and
-> `PORTABLEGL` on 2026-09-27, and `SKIA` in 2026-08; the names below that belong to them are kept as
-> the record of what the campaign renamed, tagged where they first appear in each section, and are
-> refused by name at configure time today with their C ABI values permanently reserved. CNA now
-> carries 22 public renderer identities over 18 implementation families — `cmake/RendererIdentities.cmake` is the live registry and
+> `PORTABLEGL` on 2026-09-27, four more on each of 2026-09-28 and 2026-10-06, and `SKIA` in 2026-08;
+> the names below that belong to them are kept as the record of what the campaign renamed and are
+> refused by name at configure time today with their C ABI values permanently reserved.
+> `cmake/RendererIdentities.cmake` is the live registry and
 > [`removed-renderers.md`](removed-renderers.md) records every retirement.
 
 The owner-directed terminology + renderer-identity normalization performed on
@@ -120,8 +120,8 @@ Linux default), `CNA_RENDERER_OPENGLES3` option, `CNA_GL_PROFILE_OPENGLES3`
 profile define. `OPENGLES1` (retired 2026-09-17) is unchanged; **OPENGLES2 did not exist yet at
 migration time** — the future expansion was reserved to add it so the family
 reads OPENGLES1/OPENGLES2/OPENGLES3. (Since realized: the Phase-2 expansion
-added `OPENGLES2` on 2026-08-10 on exactly that reserved name — see
-`plans/plan_opengles2.md` / `docs/opengles2-renderer.md`.)
+added `OPENGLES2` on 2026-08-10 on exactly that reserved name; it was retired on
+2026-10-06, see [`removed-renderers.md`](removed-renderers.md).)
 EasyGL remains the internal shared implementation of the GL profiles (four at
 migration time, five since the `OPENGLES2` addition:
 `CNA_RENDERER_EASYGL`, `cna_renderer_easygl`, `EasyGLRenderer`) and is still not

@@ -203,7 +203,7 @@ backend.
 sudo apt-get install -y dxvk-wine64
 ```
 
-Only needed if you're working on the `D3D11`/`D3D12` graphics backend plan (`plans/plan_dx.md`, not yet
+Only needed if you're working on the `D3D11` graphics backend plan (`plans/plan_dx.md`, not yet
 implemented as of this writing — Phase DX1 only). Not needed for any other backend or task in this
 repo. Builds on §8 (`mingw-w64`) — this is the piece that lets a cross-compiled `D3D11` `.exe`
 actually be *run and pixel-tested* on this Debian machine instead of only compiled.
@@ -216,7 +216,7 @@ actually be *run and pixel-tested* on this Debian machine instead of only compil
   the unneeded 32-bit build: `sudo apt-get install -y --no-install-recommends dxvk-wine64`.
 - Wine itself (`wine`/`wine64`/`libwine` packages) does **not** need a separate install command here
   — it's already covered by whatever installed `wine`/`winetricks` on this machine previously (not
-  itself part of this project's build requirements list, since only the `D3D11`/`D3D12` plan needs
+  itself part of this project's build requirements list, since only the `D3D11` plan needs
   it). **Real environment finding**: this Debian's Wine 10.0 packaging has **no separate `wine64`
   command** — only `wine`, which auto-detects a PE32 vs. PE32+ (32/64-bit) executable and runs it
   correctly either way. Scripts/docs written against older Wine docs that assume `wine64` exists as

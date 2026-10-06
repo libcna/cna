@@ -15,7 +15,7 @@
 > them were **retired on 2026-09-17** when CNA curated its renderer set down to 25 identities, and
 > their implementations, plans' live status and per-renderer documents were removed
 > (`plans/plan_renderer_cleanup.md`, `docs/removed-renderers.md`). CNA's Direct3D identities today
-> are `DIRECTX9`, `DIRECTX11` and `DIRECTX12`. `FREEDIRECT`, the DirectDraw-based renderer that held
+> are `DIRECTX9` and `DIRECTX11`. `FREEDIRECT`, the DirectDraw-based renderer that held
 > the name `DIRECTX3` before 2026-08-04, survived that curation but was itself retired on 2026-09-27
 > together with `DIRECT2D`; `docs/freedirect-renderer.md`, cited below, exists only in git history
 > now. No legacy-lineage renderer remains. This analysis is kept as the survey that informed those

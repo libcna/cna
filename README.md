@@ -40,16 +40,14 @@ own version from `CNA::getVersionString()` in `CNA/Version.hpp`.
   runtime `.fx` source compilation remain separate formats/projects. See
   [`docs/shader-effect-vs-fx-bytecode.md`](docs/shader-effect-vs-fx-bytecode.md).
 - **`SDL_RENDERER` renderer:** Implemented path focused on practical 2D rendering workflows; 2D-only by design (3D calls throw).
-- **`OPENGLES2`/`OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2` renderers:** the most mature GL-family public renderers overall — one shared internal implementation (`EasyGL`, on top of `easy-gl`) driven by a GL profile choice, not five separate implementations. `OPENGLES3` (desktop/mobile GLES 3.0) and `WEBGL2` (Emscripten, GLES 3.0 → WebGL 2.0) have full 2D+3D pixel-verified coverage — this is what was previously the single `EASYGL` public renderer, split into its real public identities. `OPENGL33` (desktop GL 3.3 core) and `WEBGL1` (Emscripten, GLES 2.0 → WebGL 1.0) are newer and still landing — see `plans/plan_glbackends.md` for current per-profile status. `OPENGLES2` (native GLES 2.0, GLSL ES 1.00, Phase-2 expansion) carries a deliberately narrower ES 2.0 capability boundary — see [`docs/opengles2-renderer.md`](docs/opengles2-renderer.md).
+- **`OPENGLES3`/`OPENGL33`/`WEBGL2` renderers:** the most mature GL-family public renderers overall — one shared internal implementation (`EasyGL`, on top of `easy-gl`) driven by a GL profile choice, not three separate implementations. `OPENGLES3` (desktop/mobile GLES 3.0) and `WEBGL2` (Emscripten, GLES 3.0 → WebGL 2.0) have full 2D+3D pixel-verified coverage — this is what was previously the single `EASYGL` public renderer, split into its real public identities. `OPENGL33` (desktop GL 3.3 core) is newer and still landing — see `plans/plan_glbackends.md` for current per-profile status.
 - **`VULKAN` renderer:** Real, working 3D rendering (all 5 stock effects, render targets, depth/stencil state, `BlendState`, `OcclusionQuery`) — second-most mature renderer; the one remaining named gap is an isolated `RasterizerState.DepthBias` sub-case. See `docs/xna-4-api-coverage.md`'s per-renderer table for current detail.
 - **`WEBGPU` renderer:** Experimental renderer using native `wgpu-native` (v29.0.1.1) and, since 2026-08-26, Emscripten's emdawnwebgpu port for a real in-browser path. Well past a 2D baseline: device/surface setup, clear/present, `Texture2D`/`TextureCube`/`Texture3D`, vertex/index uploads, a pixel-verified WGSL `SpriteBatch`, full 3D with every stock effect (`BasicEffect` incl. per-pixel/per-vertex lighting, `AlphaTestEffect`, `DualTextureEffect`, `SkinnedEffect` 72-bone palette, `EnvironmentMapEffect` — all with FNA fog parity, `WEBGPU-145`–`148`; plus `PbrEffect`/`SkinnedPbrEffect`), real instancing, `RenderTarget2D`/`RenderTargetCube`, MSAA, GPU occlusion queries, MRT (2-4 targets), custom WGSL `ShaderEffect`s (3D and `SpriteBatch`), full stencil state, and GPU-native block-compressed textures (DXT/BC7). `RenderTargetCube` mip regeneration/MSAA and a few narrow items remain — see the status summary in `plans/plan_webgpu.md` and [`docs/webgpu-renderer.md`](docs/webgpu-renderer.md).
 - **`DIRECTX9` renderer:** Windows-only native Direct3D 9 renderer targeting real **XNA 4.0 pixel authenticity**, not just feature parity — it runs Microsoft's own vendored Stock Effects HLSL bytecode, cross-compiled via MinGW-w64 and verified through Wine+DXVK on a real GPU (14 CTest binaries). A checked-in 31-scene oracle corpus diffs CNA's render against the **real XNA 4.0 runtime's own render** of the same scene at `--tolerance 0`: **0/31 scenes currently diverge.** `GraphicsProfile.Reach`/`.HiDef` enforcement is real (the only CNA renderer where it is). Render targets sampled as textures, non-`Color` `SurfaceFormat`, and real-Windows hardware verification are still open. See [`docs/directx9-renderer.md`](docs/directx9-renderer.md), [`docs/d3d9-divergence-report.md`](docs/d3d9-divergence-report.md), and `plans/plan_dx9.md`.
 - **`DIRECTX11` renderer:** Windows-only native Direct3D 11 renderer, cross-compiled via MinGW-w64 and verified through Wine+DXVK on a real GPU (6 CTest binaries, 96+ checks) — all 10 stock HLSL shader variants (`BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`), textures/render targets (MRT/MSAA/occlusion queries), state objects, SpriteBatch, and a runtime-`D3DCompile()` custom `ShaderEffect` path are real and pixel-verified. Real-Windows hardware verification (device-lost recovery, WARP fallback, driver-specific parity) is still open. See [`docs/directx11-renderer.md`](docs/directx11-renderer.md) and `plans/plan_dx.md`.
-- **`DIRECTX12` renderer:** Windows-only native Direct3D 12 renderer, cross-compiled via MinGW-w64 and verified through Wine+vkd3d-proton on a real GPU, **off-screen only** (`DirectX12_Smoke` CTest, 80/80 checks) — device/queue/heaps/command-lists/fences/barriers/PSOs/root-signatures are real, all 10 stock HLSL shader variants (same DXBC as `DIRECTX11`) and a real `SpriteBatch` are pixel-verified off-screen, and device-removed recovery is real and functionally proven. Swap-chain presentation is a known, real, unresolved gap on this dev loop (genuine Wine/vkd3d-proton `dxgi.dll` architecture mismatch, not a CNA bug); runtime-settable blend/depth-stencil/rasterizer state, per-slot `SamplerState`, render targets, `Texture3D`, occlusion queries, and real-Windows hardware verification are all still open. See [`docs/directx12-renderer.md`](docs/directx12-renderer.md) and `plans/plan_dx.md`.
-- **`CANVAS` renderer:** Emscripten-only HTML Canvas 2D renderer (`SpriteBatch`/`Texture2D`/`SpriteFont`/`RenderTarget2D` only, 2D-only by design like `SDL_RENDERER`) — `SpriteBatch` (incl. rotation/origin/flip/tint/transform), textures/render targets, `BlendState`/`SamplerState` mapping, and `SpriteFont` are all implemented and structurally reviewed, verified via a real `emcmake`/`emcc` 6.0.2 configure+build (`CnaTests` links and a renderer-agnostic GTest suite genuinely passes under `node`). **Not yet pixel-verified in a real browser** — this dev loop has no DOM/`CanvasRenderingContext2D` at all (`node` has none; `SDL_Init(SDL_INIT_VIDEO)` itself throws under Emscripten/`node`). See [`docs/canvas-renderer.md`](docs/canvas-renderer.md) (incl. a manual browser verification checklist) and `plans/plan_canvas.md`.
 - **`METAL` renderer (macOS only, experimental):** Direct native `MTLDevice`/`CAMetalLayer` rendering with runtime-compiled MSL shaders. Its supported and evidence-backed boundary is documented in [`docs/metal-renderer.md`](docs/metal-renderer.md) and `plans/plan_metal.md`; iOS and tvOS remain unvalidated and are not claimed.
 - **Verification methodology:** differential testing against a real, running `FNA.dll` reference implementation (`tools/fna-reference/`), disputed behavior settled against genuine XNA 4.0 on a Windows 7 VM, and a compile-time `CNAEXT` purity check (a dedicated CMake build option that turns every non-XNA-tagged declaration into a `[[deprecated]]` warning under `-Werror`) — see `CHECKLIST.md`'s "CNAEXT markers" section and `CMakeLists.txt`.
-- **Automatic CI is partial** (see `.github/workflows/`): Linux workflows run the `Input` and `Devices`/`Sensors` gtest suites, not the full ~4,370-test unit suite or the complete GPU pixel matrix. A dedicated macOS 14 workflow builds the native Metal renderer and runs only its supported contract tests; a separate manual-dispatch Windows MSVC workflow covers D3D11/D3D12 renderer CTests. There is no automatic Windows or Android gate, and the macOS gate does not establish support for the Metal paths documented as unsupported.
+- **Automatic CI is partial** (see `.github/workflows/`): Linux workflows run the `Input` and `Devices`/`Sensors` gtest suites, not the full ~4,370-test unit suite or the complete GPU pixel matrix. A dedicated macOS 14 workflow builds the native Metal renderer and runs only its supported contract tests; a separate manual-dispatch Windows MSVC workflow covers D3D11 renderer CTests. There is no automatic Windows or Android gate, and the macOS gate does not establish support for the Metal paths documented as unsupported.
 
 ## 2. 🎯 Goals
 
@@ -201,10 +199,10 @@ EasyGL, Vulkan, and the other selected paths.
 
 ## 6. 🔌 Renderer System
 
-CNA exposes **18 public renderer identities** through `CNA_GRAPHICS_RENDERER` (choose one per build
+CNA exposes **14 public renderer identities** through `CNA_GRAPHICS_RENDERER` (choose one per build
 configuration). The set is curated: a renderer is added only when it provides meaningful platform
 coverage, compatibility value, architectural value, or a capability the existing set does not
-reasonably cover, and thirty-three identities have been retired
+reasonably cover, and thirty-seven identities have been retired
 ([`docs/removed-renderers.md`](docs/removed-renderers.md)). The canonical registration, implementation-sharing, capability, and platform-gate
 inventory is [`docs/renderer-registry.md`](docs/renderer-registry.md).
 
@@ -227,10 +225,8 @@ effect, `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`), usabl
 
 - `SDL_RENDERER`
 - `SDL_GPU`
-- `OPENGLES2` (native OpenGL ES 2.0, GLSL ES 1.00; internal implementation: EasyGL -- see [`docs/opengles2-renderer.md`](docs/opengles2-renderer.md))
 - `OPENGLES3` (internal implementation: EasyGL)
 - `OPENGL33` (internal implementation: EasyGL)
-- `WEBGL1` (Emscripten only; internal implementation: EasyGL)
 - `WEBGL2` (Emscripten only; internal implementation: EasyGL)
 - `VULKAN`
 - `WEBGPU`
@@ -239,8 +235,6 @@ effect, `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`), usabl
 - `STUB`
 - `DIRECTX9` (Windows-only; native Direct3D 9 running Microsoft's own vendored Stock Effects HLSL bytecode)
 - `DIRECTX11` (Windows-only)
-- `DIRECTX12` (Windows-only)
-- `CANVAS` (Emscripten only)
 - `METAL` (macOS only, experimental — see [`docs/metal-renderer.md`](docs/metal-renderer.md))
 - `FNA3D` (FNA's own XNA-shaped graphics library; picks SDL_GPU/Direct3D 11/OpenGL at runtime, and executes XNA's actual stock effects — see [`docs/fna3d-renderer.md`](docs/fna3d-renderer.md))
 
@@ -319,7 +313,7 @@ Beyond graphics, CNA ports the XNA 4.0 `GamerServices` and `Net` namespaces (and
 - **Language:** C++23
 - **Core platform/runtime library:** SDL3 (vendored via Git submodule at `third_party/SDL`)
 - **Media integration:** `SDL3_image`, `SDL3_mixer` (vendored via Git submodules)
-- **Graphics dependency:** `easy-gl` (for the `OPENGLES2`/`OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2` renderers),
+- **Graphics dependency:** `easy-gl` (for the `OPENGLES3`/`OPENGL33`/`WEBGL2` renderers),
   resolved from the canonical `../easy-gl` sibling; EasyGL in turn resolves `../meta-gl`
 - **Networking:** [ENet](http://enet.bespin.org/) (vendored directly at `third_party/enet`) —
   the realtime transport of every `Microsoft::Xna::Framework::Net` session (UDP on the LAN, carried
@@ -337,8 +331,8 @@ Beyond graphics, CNA ports the XNA 4.0 `GamerServices` and `Net` namespaces (and
 - C++23-capable compiler (GCC 12+ or Clang 15+)
 - Dependency directories available to CMake:
     - `../sharp-runtime`
-    - `../easy-gl` and `../meta-gl` (needed for the `OPENGLES2`/`OPENGLES3`/`OPENGL33`/
-      `WEBGL1`/`WEBGL2` renderers)
+    - `../easy-gl` and `../meta-gl` (needed for the `OPENGLES3`/`OPENGL33`/`WEBGL2`
+      renderers)
 - SDL3, SDL3_image, and SDL3_mixer are built from vendored submodules by default — no system SDL packages required,
   but building them needs the X11, OpenGL and audio development headers listed in
   [programs.md](programs.md) §2.
@@ -472,14 +466,14 @@ cmake -S . -B build -DCNA_GRAPHICS_RENDERER=VULKAN
 ### Build (Windows cross-compilation — D3D9 renderer)
 
 A native Direct3D 9 renderer, Windows-only (hard-`FATAL_ERROR`-gated at configure time, same as
-`D3D11`/`D3D12`), targeting real XNA 4.0 pixel authenticity rather than just feature parity —
+`D3D11`), targeting real XNA 4.0 pixel authenticity rather than just feature parity —
 see [`docs/directx9-renderer.md`](docs/directx9-renderer.md) for what that means and why. Developed and
 verified on this repo's own Debian dev machine via the same MinGW-w64 cross toolchain the other
 Windows renderers use, tested locally through Wine + DXVK (`scripts/run-wine-dxvk9.sh`). See
 [`docs/directx9-renderer.md`](docs/directx9-renderer.md) and [`plans/plan_dx9.md`](plans/plan_dx9.md) for full detail.
 
 ```bash
-# Install cross toolchain (same package D3D11/D3D12/SDL_RENDERER's own Windows cross-build uses)
+# Install cross toolchain (same package D3D11/SDL_RENDERER's own Windows cross-build uses)
 sudo apt install mingw-w64
 
 git submodule update --init --recursive
@@ -524,35 +518,6 @@ steps); CTest wires this in automatically:
 ctest --test-dir cmake-build-d3d11 -R D3D11 --output-on-failure
 ```
 
-### Build (Windows cross-compilation — D3D12 renderer)
-
-A native Direct3D 12 renderer, Windows-only (hard-`FATAL_ERROR`-gated at configure time, same as
-`D3D11`). Also developed and verified on this repo's own Debian dev machine via the same MinGW-w64
-cross toolchain, but tested locally through Wine + **vkd3d-proton** (`scripts/run-wine-vkd3d.sh`),
-not DXVK — D3D12 needs a different Windows-D3D-to-Vulkan translation layer than D3D11, with its own
-dedicated Wine prefix. Every check currently runs **off-screen only** — swap-chain presentation is
-a known, real, unresolved gap on this dev loop (see `docs/directx12-renderer.md`). See
-[`docs/directx12-renderer.md`](docs/directx12-renderer.md) and [`plans/plan_dx.md`](plans/plan_dx.md) for full detail.
-
-```bash
-# Install cross toolchain (same package D3D11/SDL_RENDERER's own Windows cross-build uses)
-sudo apt install mingw-w64
-
-git submodule update --init --recursive
-cmake -S . -B cmake-build-d3d12 \
-      -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
-      -DCNA_GRAPHICS_RENDERER=D3D12 \
-      -DCNA_BUILD_TESTS=ON
-cmake --build cmake-build-d3d12 --target CnaTests --parallel
-```
-
-Running the resulting `.exe`s needs a Wine + vkd3d-proton dev-loop, in a prefix separate from
-D3D11's own (`docs/directx12-renderer.md` has full setup steps); CTest wires this in automatically:
-
-```bash
-ctest --test-dir cmake-build-d3d12 -R D3D12 --output-on-failure
-```
-
 ### Run Demo / Verification
 
 This repository intentionally prioritizes framework/runtime development over shipping a bundled game demo executable.
@@ -575,7 +540,6 @@ cmake --build build --target hello-triangle-sdl
 | Linux → Windows (cross) | MinGW-w64 | SDL_RENDERER | ✅ verified building + full test suite under Wine |
 | Linux → Windows (cross) | MinGW-w64 | D3D9 | ✅ verified building + `D3D9` CTest suite (14 tests) under Wine+DXVK on a real GPU — 0/31 oracle scenes diverge from real XNA 4.0 at `--tolerance 0`; real Windows hardware verification still open, see `docs/directx9-renderer.md` |
 | Linux → Windows (cross) | MinGW-w64 | D3D11 | ✅ verified building + `D3D11` CTest suite (6 tests, 96+ checks) under Wine+DXVK on a real GPU — real Windows hardware verification still open, see `docs/directx11-renderer.md` |
-| Linux → Windows (cross) | MinGW-w64 | D3D12 | ✅ verified building + `D3D12` CTest suite (1 test, 80/80 checks, off-screen only) under Wine+vkd3d-proton on a real GPU — swap-chain presentation and real Windows hardware verification both still open, see `docs/directx12-renderer.md` |
 | Web (Emscripten) | emcc/Clang (emsdk) | WEBGL2 | ✅ verified building + running under Node.js (as `EASYGL`, prior to the `plans/plan_glbackends.md` rename — not yet re-verified under its new `WEBGL2` name/build flags) |
 | Android (NDK) | Clang (NDK 29/30) | OPENGLES3 | ✅ verified building + running on a real x86_64 emulator (as `EASYGL`, prior to the `plans/plan_glbackends.md` rename) |
 

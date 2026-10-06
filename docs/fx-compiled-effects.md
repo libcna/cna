@@ -256,19 +256,18 @@ shared.
 |---|---|---|---|
 | `FNA3D` | **true** | always on | Owns the MojoShader Effect Framework runtime; passes the full shared contract including the draw matrix |
 | `SDL_GPU` | **true** | `CNA_SDL_GPU_COMPILED_EFFECTS` (off by default) | MojoShader's SDL_GPU adapter; passes the shared contract, multi-stream and instanced draws excepted -- it advertises neither capability, so `GraphicsDevice` refuses them before submission |
-| EasyGL family (`OPENGLES2`, `OPENGLES3`, `OPENGL33`, `WEBGL1`, `WEBGL2`) | **true** | `CNA_EASYGL_COMPILED_EFFECTS` (off by default) | MojoShader's OpenGL adapter; passes the full shared contract, including multi-stream and instanced draws |
+| EasyGL family (`OPENGLES3`, `OPENGL33`, `WEBGL2`) | **true** | `CNA_EASYGL_COMPILED_EFFECTS` (off by default) | MojoShader's OpenGL adapter; passes the full shared contract, including multi-stream and instanced draws |
 | `VULKAN` | **true** | `CNA_VULKAN_COMPILED_EFFECTS` (off by default) | CNA's MojoShader SPIR-V binding; passes every applicable shared section, with multi-stream input refused renderer-wide |
 | `DIRECTX11` | **true** | `CNA_DIRECTX11_COMPILED_EFFECTS` (off by default) | MojoShader's D3D11 adapter; all 18 shared/public-path tests pass, including multi-stream, instancing, SpriteBatch, and 2D/cube/volume sampling |
-| `DIRECTX12` | **true** | `CNA_DIRECTX12_COMPILED_EFFECTS` (off by default) | CNA's MojoShader HLSL/D3DCompile binding; all 19 focused/shared tests pass, including multi-stream, instancing, SpriteBatch, 2D/cube/volume sampling and post-device teardown |
 | every other renderer identity | false | — | No compiled-effect runtime yet, or no programmable shader target at all |
 
 EasyGL selects the MojoShader source dialect from the renderer instance that owns the GL context:
-desktop `OPENGL33` uses `glsl120`, the ES 2/WebGL 1 identities use `glsles`, and the ES 3/WebGL 2
-identities use `glsles3`. It deliberately does not accept `MOJOSHADER_glBestProfile` choosing
-`glspirv` on a newer desktop driver: that adapter assumes a complete vertex/pixel pair, while an
-XNA Effect pass may validly assign only one stage and inherit the other at draw time.
+desktop `OPENGL33` uses `glsl120`, and the ES 3/WebGL 2 identities use `glsles3`. It deliberately
+does not accept `MOJOSHADER_glBestProfile` choosing `glspirv` on a newer desktop driver: that
+adapter assumes a complete vertex/pixel pair, while an XNA Effect pass may validly assign only one
+stage and inherit the other at draw time.
 
-The five opt-in options exist because MojoShader is a fetched dependency those renderers do not
+The opt-in options exist because MojoShader is a fetched dependency those renderers do not
 otherwise need. With the option off the renderer reports `CompiledEffects == false` and refuses a
 compiled `Effect` exactly like any unsupported backend -- the capability never claims more than the
 build actually contains.
@@ -286,8 +285,7 @@ the public vertex-texture surface, for example, reaches no CNA renderer, so a co
 not expected to invent that renderer capability. A **compiled-Effect-specific** limitation is one
 the renderer supports elsewhere but this draw route cannot preserve. `plans/plan_fx.md` section
 10.5 is the authoritative per-renderer table. In particular, cube sampling is no longer a
-limitation: FNA3D, SDL_GPU, EasyGL, Vulkan, DirectX 11, and DirectX 12 all pass the compiled cube-sampler
-contract.
+limitation: FNA3D, SDL_GPU, EasyGL, Vulkan, and DirectX 11 all pass the compiled cube-sampler contract.
 
 Vulkan joined the supported set on 2026-08-18 (`CNA_VULKAN_COMPILED_EFFECTS=ON`). It is the one
 backend with no MojoShader-provided adapter -- there is no `mojoshader_vulkan.c` -- so the
@@ -304,11 +302,9 @@ that path.
 
 DirectX 11 joined the supported set on 2026-09-09 through MojoShader's native D3D11 adapter. Its
 opt-in route passes the shared public-path suite through Wine+DXVK on a private headless display,
-including multi-stream, instancing, SpriteBatch, and 2D/cube/volume sampling. DirectX 12 joined on
-2026-09-10 through CNA's own nine-function MojoShader HLSL backend and `D3DCompile`; its opt-in
-route passes the same public paths through Wine+vkd3d-proton. DirectX 9 and Metal are the remaining
-planned waves; each becomes true only after the same executed quality gate. Fixed-function, 2D-only
-and CPU renderers stay intentionally unsupported. `plans/plan_fx.md`
+including multi-stream, instancing, SpriteBatch, and 2D/cube/volume sampling. DirectX 9 and Metal
+are the remaining planned waves; each becomes true only after the same executed quality gate.
+Fixed-function, 2D-only and CPU renderers stay intentionally unsupported. `plans/plan_fx.md`
 Phase G tracks the rollout, and its own section 10.3 -- not the one below, which belongs to this
 page -- classifies every renderer identity.
 
@@ -398,9 +394,8 @@ only one of the two that can correct a slot the sprite quad does not own, such a
 fullscreen `SpriteBatch` quads reading each other's render targets; getting it wrong turns the
 frame upside down while leaving the intermediate buffers individually correct.
 
-The copy costs a `glBlitFramebuffer` per bottom-up slot per flush, and is refused by name on
-the ES 2 profiles, which have no `glBlitFramebuffer`, and when the source is the target
-currently being drawn into.
+The copy costs a `glBlitFramebuffer` per bottom-up slot per flush, and is refused by name when the
+source is the target currently being drawn into.
 
 Found on `BloomSample_4_0`. `RunCompiledEffectSpriteBatchRenderTargetSourceContract` pins it —
 one hop, two hops, and a plain `Texture2D` that must stay untouched.
@@ -435,10 +430,7 @@ pixel changes.
 
 CNA therefore translates fragment shaders at `highp`
 (`cmake/patches/mojoshader-6333f74-fragment-precision.patch`). GLSL ES 3.00 requires fragment
-`highp`, so `WEBGL2`, `OPENGLES3` and the desktop GL profiles get it unconditionally. GLSL ES
-1.00 makes it optional, so on `OPENGLES2`/`WEBGL1` it is guarded by `GL_FRAGMENT_PRECISION_HIGH`
-and falls back to `mediump` — where the range limit is the hardware's, not a translation choice,
-and a shader on that scale has to be authored around it.
+`highp`, so `WEBGL2`, `OPENGLES3` and the desktop GL profile get it unconditionally.
 
 Found on `NormalMappingSample_4_0` (`plans/plan_fx.md` FX-121).
 
@@ -486,7 +478,6 @@ green matched the original exactly and only blue differed, and only where blue w
 | `Vertex-stage texture sampling is not implemented in this renderer at all, by any draw route.` | `NotSupportedException` | Renderer-wide, not FX-specific (`plans/plan_fx.md` FX-109) |
 | `...cannot run after the GL context was recreated...` | `NotSupportedException` | EasyGL only: MojoShader's context and its linked programs died with the old GL context; recreate the `Effect` from its bytecode (`plans/plan_fx.md` FX-107) |
 | `...cannot sample the RenderTarget2D it is drawing into.` | `NotSupportedException` | EasyGL only: reading and writing one target in a single draw, which is undefined in XNA too |
-| `...cannot sample a RenderTarget2D on the OpenGL ES 2.0 / WebGL 1 profiles...` | `NotSupportedException` | Correcting a render target's row order needs `glBlitFramebuffer`, which those profiles do not have |
 | Any of the above while loading an asset | `ContentLoadException` | Same cause, wrapped with the asset name |
 
 Malformed content and an unsupported backend are deliberately distinguishable: `ArgumentException`

@@ -544,19 +544,19 @@ See `docs/platform-abstraction.md` for the contract and implementation checklist
 task/evidence log is `plans/plan_platform.md`.
 
 Renderer selection is compile-time via `CNA_GRAPHICS_RENDERER` CMake option
-(`SDL_RENDERER` | `OPENGLES2` | `OPENGLES3` | `OPENGL33` | `WEBGL1` | `WEBGL2` | `VULKAN` | `WEBGPU` |
-`HEADLESS` | `SOFTWARE` | `STUB` | `DIRECTX11` | `DIRECTX12` | `CANVAS` | `DIRECTX9` | `SDL_GPU` |
-`METAL` | `FNA3D`). These are exactly **18 public identities** over 14 implementation families;
-EasyGL remains an internal implementation shared by five GL profiles. The canonical list lives in
+(`SDL_RENDERER` | `OPENGLES3` | `OPENGL33` | `WEBGL2` | `VULKAN` | `WEBGPU` | `HEADLESS` |
+`SOFTWARE` | `STUB` | `DIRECTX11` | `DIRECTX9` | `SDL_GPU` | `METAL` | `FNA3D`). These are exactly
+**14 public identities** over 12 implementation families; EasyGL remains an internal
+implementation shared by three GL profiles. The canonical list lives in
 `cmake/RendererIdentities.cmake` and is pinned by `scripts/check_renderer_identities.py`.
 
 CNA intentionally maintains a curated renderer set. A new renderer is added only when it provides
 meaningful platform coverage, compatibility value, architectural value, or a capability not
-reasonably covered by the existing set -- never because the count would grow. Thirty-three identities
-are retired (`BGFX`, `MAGNUM`, `SKIA`, `BLEND2D`, `DIRECTX1`/`2`/`3`/`5`/`6`/`7`/`8`/`10`,
-`OPENGLES1`, `OPENGL1`, `OPENGL2`, `WICKED`, `SOKOL`, `DILIGENT`, `GLIDE`, `LLGL`, `OPENVG`,
-`TINYGL`, `IGL`, `PIXIJS`, `NANOVG`, `RLGL`, `DIRECT2D`, `FREEDIRECT`, `PORTABLEGL`, `GDI`,
-`HTML_DOM`, `SVG_DOM`, `OPENGL4`), and the
+reasonably covered by the existing set -- never because the count would grow. Thirty-seven identities
+are retired (`BGFX`, `MAGNUM`, `SKIA`, `BLEND2D`, `DIRECTX1`/`2`/`3`/`5`/`6`/`7`/`8`/`10`/`12`,
+`OPENGLES1`, `OPENGLES2`, `OPENGL1`, `OPENGL2`, `WEBGL1`, `WICKED`, `SOKOL`, `DILIGENT`, `GLIDE`,
+`LLGL`, `OPENVG`, `TINYGL`, `IGL`, `PIXIJS`, `NANOVG`, `RLGL`, `DIRECT2D`, `FREEDIRECT`,
+`PORTABLEGL`, `GDI`, `HTML_DOM`, `SVG_DOM`, `OPENGL4`, `CANVAS`), and the
 former `ASCII` identity was replaced by the renderer-neutral `CNA::Graphics::AsciiPostProcessEffect`
 (`modules/graphics-ext/`, see `docs/ascii-post-process-effect.md`). A retired selector is refused at configure time, by name and
 with its permanently reserved C ABI value; its number is never reassigned. Do not resurrect one
@@ -603,10 +603,9 @@ Two house rules that differ from the XNA layer, because there is no XNA name to 
   `EXT` suffix marks a type that names an XNA concept CNA extended (`DirectionalLightEXT`), not
   everything in the layer.
 - **Shader profile.** Every engine-layer shader is written to **GLSL ES 3.00**, and the compute
-  shaders to **GLSL ES 3.10**. `ShaderEffect` owns the `#version` line and the down-level
-  transformations, so a pass never writes one; what a pass author must respect is the floor
-  itself — see `docs/cnaext-engine-layer.md` for what ES 1.00 costs a shader that has to run
-  there.
+  shaders to **GLSL ES 3.10**. `ShaderEffect` owns the `#version` line, so a pass never writes
+  one; what a pass author must respect is the GLSL ES 3.00 floor itself — see
+  `docs/cnaext-engine-layer.md`.
 
 **Asking a renderer what it will actually do.** `GraphicsCapability::CustomEffects` means the
 renderer *accepts* an effect, not that it runs your shader source: SOFTWARE and HEADLESS accept any
@@ -653,7 +652,7 @@ sudo apt-get install -y libavcodec-dev libavformat-dev libavutil-dev libswresamp
 # CNA implements YUV→RGBA conversion internally and does NOT depend on libswscale headers.
 
 # Desktop OpenGL and X11 development headers -- needed by the desktop GL renderers (OPENGL33,
-# OPENGLES2/3) and by the vendored SDL3's x11 video driver. SDL3's wayland driver additionally
+# OPENGLES3) and by the vendored SDL3's x11 video driver. SDL3's wayland driver additionally
 # needs libwayland-dev, wayland-protocols, libxkbcommon-dev and libdecor-0-dev
 # (cmake/ThirdPartySDL.cmake names them when they are missing).
 sudo apt-get install -y libgl1-mesa-dev libglx-dev libx11-dev
