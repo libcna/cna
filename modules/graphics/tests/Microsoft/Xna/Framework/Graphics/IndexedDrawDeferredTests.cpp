@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -43,6 +44,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "System/Environment.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
@@ -566,10 +568,18 @@ namespace
     // EasyGL on a driver whose vertex attribute queries cannot be trusted -- the Android emulator --
     // rebases a base-vertex draw's indices on the CPU, widened to 32 bits. The switch makes every
     // driver take that path; it is read when the device's context is set up, so it is set first.
+    // Through System::Environment rather than POSIX setenv, which MSVC does not have: it writes
+    // the CRT's copy too, which the renderer's std::getenv reads.
     struct CpuBaseVertexSwitch
     {
-        CpuBaseVertexSwitch() { ::setenv("CNA_EASYGL_CPU_BASE_VERTEX", "1", 1); }
-        ~CpuBaseVertexSwitch() { ::unsetenv("CNA_EASYGL_CPU_BASE_VERTEX"); }
+        CpuBaseVertexSwitch()
+        {
+            System::Environment::SetEnvironmentVariable("CNA_EASYGL_CPU_BASE_VERTEX", "1");
+        }
+        ~CpuBaseVertexSwitch()
+        {
+            System::Environment::SetEnvironmentVariable("CNA_EASYGL_CPU_BASE_VERTEX", std::nullopt);
+        }
     };
 
     class CpuRebasedBaseVertexTest : public ::testing::Test
