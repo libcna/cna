@@ -73,25 +73,37 @@ def main() -> int:
         build_compiler_tool(tool_exe)
 
         failures = []
-        for filename, entry, profile, cname in SHADERS:
+        for shader in SHADERS:
+            # The canonical list's own shape: a variant names the preprocessor symbols it is built
+            # with after its C array name, and compile_shaders_hlsl.py prepends them as #defines to
+            # a copy of the source. Unpacking exactly four fields raised on the first variant
+            # (lit_textured3d.vert.hlsl with CNA_LIT_VERTEX_COLOR_INPUT), so the step had never
+            # verified a single variant shader.
+            filename, entry, profile, cname, *defines = shader
+            label = filename + (f" +{','.join(defines)}" if defines else "")
             hlsl_path = SHADERS_DIR / filename
-            out_dxbc = tmp_dir / (filename + ".dxbc")
+            compile_path = hlsl_path
+            if defines:
+                compile_path = tmp_dir / (cname + ".hlsl")
+                define_lines = "".join(f"#define {define} 1\n" for define in defines)
+                compile_path.write_text(define_lines + hlsl_path.read_text())
+            out_dxbc = tmp_dir / (cname + ".dxbc")
             result = subprocess.run(
-                [str(tool_exe), str(hlsl_path), entry, profile, str(out_dxbc)],
+                [str(tool_exe), str(compile_path), entry, profile, str(out_dxbc)],
                 capture_output=True, text=True,
             )
             if result.returncode != 0 or not out_dxbc.exists():
-                failures.append(filename)
-                print(f"[FAIL] {filename} [{entry}/{profile}]")
+                failures.append(label)
+                print(f"[FAIL] {label} [{entry}/{profile}]")
                 sys.stderr.write(result.stdout)
                 sys.stderr.write(result.stderr)
                 continue
             blob = out_dxbc.read_bytes()
             if blob[:4] != b"DXBC":
-                failures.append(filename)
-                print(f"[FAIL] {filename}: output does not start with the DXBC magic bytes")
+                failures.append(label)
+                print(f"[FAIL] {label}: output does not start with the DXBC magic bytes")
                 continue
-            print(f"[PASS] {filename} [{entry}/{profile}] -> {len(blob)} bytes, real DXBC")
+            print(f"[PASS] {label} [{entry}/{profile}] -> {len(blob)} bytes, real DXBC")
 
         print()
         if failures:
