@@ -19,7 +19,7 @@
 #     + a rootful Xwayland on a display number the X server picks itself (-displayfd), which has
 #       DRI3 and therefore presents Vulkan on the real GPU -- Xvfb cannot (no DRI3)
 #     + ctest --test-dir <build-dir> (or the --exec command) with DISPLAY pointing at that
-#       Xwayland, and WAYLAND_DISPLAY at the private compositor for the native Wayland backend
+#       Xwayland, and WAYLAND_DISPLAY at the private compositor for SDL3's wayland driver
 #
 # Nothing appears on the owner's desktop. It refuses a build tree whose tests force a DISPLAY of
 # their own (CNA_TEST_DISPLAY), because ctest would override the private one with it

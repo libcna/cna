@@ -44,8 +44,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
   (or `DIRECTX12`) is a supported configuration with no SDL in it at all. The platform and
   renderer axes stay independent: DirectX receives the window through the existing generic
   `NativeWindowHandle`, and no renderer changed. See
-  [`docs/platform-win32.md`](docs/platform-win32.md) for the capability boundary and
   [`plans/plan_win32.md`](plans/plan_win32.md) for the task log.
+  **Retired before this release**, with CNA's direct X11 and Wayland platforms (see Removed); the
+  entry is kept as the record of what `next` carried in between.
 
 ### Removed
 
@@ -87,6 +88,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
   into the Software suite. `ColorMatrixEffect` is now documented as a `SOFTWARE` extension. Their C
   ABI values 18, 33, 40 and 44 are permanently reserved, `CNA_GRAPHICS_RENDERER_MAXIMUM` moves to
   43 (`FNA3D`), and the experimental C ABI goes to `0.33.0`; no surviving identity is renumbered.
+- **CNA's direct `WIN32`, `X11` and `WAYLAND` platform implementations**, with the code only they
+  used (XKB key tables, the freedesktop.org D-Bus/portal services, Linux evdev controllers, POSIX
+  helpers), their tests, desktop-validation harnesses, the standalone platform harness (broken since
+  2026-09-28 and used only by the Win32 lanes), Windows validation scripts, CMake discovery
+  modules (`cmake/PlatformX11.cmake`, `cmake/PlatformWayland.cmake`), CI cells, spikes and
+  capability documents (`plans/plan_platform.md` §11c, PLAT-142). **Windows, X11 and Wayland remain
+  supported, through SDL3**: SDL3 is CNA's one graphical platform, reaching each window system
+  through SDL's own `windows`, `x11` and `wayland` video drivers, and `IPlatformWindow::
+  GetNativeHandle()` still hands renderers the `HWND`, `Display*` + XID or `wl_display*` +
+  `wl_surface*` (`NativeWindowSystem::Win32/X11/Wayland`, `TryGetWin32/X11/Wayland` unchanged). No
+  renderer and no contract header changed. `CNA_PLATFORM=WIN32|X11|WAYLAND` is now a configure
+  error that names `SDL3` as the replacement; there is no alias. `CNA_ENABLE_SDL=OFF` remains, as a
+  windowless configuration (`HEADLESS`/`TERMINAL`, `NULL` or `ALSA` audio). New `CnaPlatformSdl3X11Tests`
+  and `CnaPlatformSdl3WaylandTests` run SDL3 on a private Xvfb and a private headless Weston, and
+  the Direct3D 11/12 window stress fixtures now drive the `HWND` of an SDL3 window.
 
 ### Changed
 

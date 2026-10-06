@@ -1547,11 +1547,12 @@ line-by-line Vulkan translation:
   `Build3DPipelineEXT(Pipeline3DDescEXT)` (`WEBGPU-29`): each family passes only its vertex layout,
   shader module(s), pipeline layout and label, and keeps its own cache key/map. The SpriteBatch and
   MipBlit pipelines keep their own builders (not 3D families).
-- Native surface creation is performed directly from SDL3 window properties; CNA does not require
-  the separate `sdl3webgpu` compatibility library. It does not require SDL at all: `WMG-0024`
-  builds and runs this renderer with `CNA_ENABLE_SDL=OFF` on CNA's native Wayland and X11 backends,
-  and `libcna.so`'s direct `NEEDED` list carries `libwayland-client`/`libxkbcommon` (or the Xlib
-  set) and `libwgpu_native`, with no SDL library anywhere in the closure.
+- Native surface creation is performed directly from the platform window's native handle
+  (`TryGetWin32`/`TryGetX11`/`TryGetWayland`/`TryGetCocoa`/`TryGetAndroid` over the `HWND`,
+  `Display*` + XID, `wl_display*` + `wl_surface*`, ... that SDL3's video driver owns); CNA does not
+  require the separate `sdl3webgpu` compatibility library, and the renderer itself includes no SDL
+  header. (`WMG-0024` once built it with `CNA_ENABLE_SDL=OFF` on CNA's own Wayland and X11
+  platforms; those were retired on 2026-10-06, and a windowed WebGPU build now runs on SDL3.)
 
 The deliberate, collected departures from the Vulkan renderer — push constants → UBO, wireframe
 refusal, async → synchronous callback pumping, `Color` → `Unorm8x4` vertex format, and windowing

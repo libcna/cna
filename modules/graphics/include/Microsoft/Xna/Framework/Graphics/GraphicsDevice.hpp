@@ -2326,8 +2326,8 @@ namespace Microsoft::Xna::Framework::Graphics
         // pump -- and GameWindow is a friend above precisely because that call is internal. The
         // test reached it directly, which compiled only for an SDL3 selection (where its own
         // `#if` skips the body) and was a hard error under every other platform. Found by
-        // building the suite with CNA_PLATFORM=X11; reproduced identically with
-        // CNA_PLATFORM=HEADLESS, so the defect is the test's access, not the X11 backend.
+        // building the suite with the since-retired CNA_PLATFORM=X11; reproduced identically with
+        // CNA_PLATFORM=HEADLESS, so the defect was the test's access, not that backend.
         friend class CNA::Internal::GraphicsDevicePlatformWindowTestPeer;
     };
 }

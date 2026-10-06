@@ -15,8 +15,8 @@
 #
 # CNA applications define `main()`. That is a deliberate, documented decision rather than an
 # accident -- see `modules/platform/include/CNA/Platform/Entrypoint.hpp`, which states that the
-# Win32 backend takes nothing over from the entry point, because doing so "would be a cost with no
-# benefit, and would break a console or test host that has its own". So the fix belongs in the
+# platform takes nothing over from the entry point on Windows, because doing so "would be a cost
+# with no benefit, and would break a console or test host that has its own". So the fix belongs in the
 # build, not in the sources: naming the standard console entry point keeps `main()` **and** keeps
 # the GUI subsystem, which is the combination the property was asked for in the first place.
 #

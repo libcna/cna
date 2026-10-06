@@ -219,7 +219,7 @@ include(cmake/ApplePlatform.cmake)
 
 # Platform, audio and renderer selection must be settled BEFORE the vendored SDL sub-build is
 # decided, because whether SDL is needed at all is a consequence of those three choices
-# (plans/plan_x11.md X11-0090). Until the X11 backend landed, cna_configure_vendored_sdl() ran
+# (plans/plan_x11.md X11-0090). Before that task, cna_configure_vendored_sdl() ran
 # unconditionally here and made SDL an existential dependency of CNA: a configuration referencing
 # no SDL symbol anywhere still could not be configured without it.
 #

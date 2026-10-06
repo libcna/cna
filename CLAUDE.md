@@ -498,19 +498,19 @@ individual task. Do not push unless the user explicitly asks to push.
 
 Platform, renderer and audio selection are three independent CMake axes:
 
-- `CNA_PLATFORM` selects windowing, events, input and host services (`SDL3`, `X11`, `WAYLAND`,
-  `HEADLESS`, `TERMINAL`, or host-conditional `WIN32`). `X11` is a native
-  backend written against Xlib directly with no SDL in it at all, offered only where the X
-  development environment exists; it is what makes an SDL-free CNA a configuration that exists
-  rather than an argument -- see `docs/platform-x11.md` and `plans/plan_x11.md`. `WAYLAND` is the
-  second native Unix backend: a genuine Wayland client (libwayland-client, xdg-shell, xkbcommon,
-  EGL, VK_KHR_wayland_surface, wl_shm) with no SDL and no X11 library in it -- not SDL's Wayland
-  driver, not Xwayland -- offered where the Wayland development environment exists; see
-  `docs/platform-wayland.md` and `plans/plan_wayland.md`.
+- `CNA_PLATFORM` selects windowing, events, input and host services (`SDL3`, `HEADLESS`, or
+  POSIX-only `TERMINAL`). **SDL3 is CNA's one graphical platform**: Windows, X11, Wayland, macOS,
+  iOS, Android and the browser are reached through SDL's own video drivers, and a renderer still
+  receives the native `HWND`, `Display*` + XID or `wl_display*` + `wl_surface*` through
+  `IPlatformWindow::GetNativeHandle()` (`NativeWindowSystem::Win32/X11/Wayland`). CNA's own direct
+  `WIN32`, `X11` and `WAYLAND` implementations were retired on 2026-10-06 and are refused at
+  configure time, naming SDL3; do not reintroduce a CNA-owned backend for a window system SDL3
+  already drives -- see `docs/platform-abstraction.md`.
 - `CNA_ENABLE_SDL` (`AUTO` by default, and `AUTO` is byte-for-byte the historical behaviour)
   decides whether the vendored SDL3 sub-build is configured at all. `OFF` skips it entirely and
   refuses, at configure time, any platform/audio/renderer selection that genuinely needs SDL --
-  naming which one. Nothing is ever silently substituted.
+  naming which one. Nothing is ever silently substituted. An SDL-free build is a windowless one
+  (HEADLESS/TERMINAL).
 - `CNA_GRAPHICS_RENDERER` selects the renderer.
 - `CNA_AUDIO_PLATFORM` selects playback/capture (`SDL3`, `NULL` or `ALSA`). `SOUND_ENABLED`
   means a mixer exists behind `MixerEngine.hpp`: SDL3_mixer for `SDL3`, CNA's own mixer
@@ -523,16 +523,6 @@ SDL or call an `SDL_*`/`MIX_*` function outside these intentional native edges:
 - `modules/platform/src/Sdl3/`;
 - `modules/audio/src/Platform/Sdl3/` and the mixer implementation isolated inside audio;
 - renderer families `sdl-renderer`, `sdl-gpu`, and `fna3d`.
-
-`modules/platform/src/X11/` and `modules/platform/src/Wayland/` are inside the platform module and
-are deliberately **not** among those edges: they are the backends that exist to prove CNA does not
-need SDL, so `sdl_ratchet.py` denylists them (with the shared `Xkb/`, `Freedesktop/`, `Posix/` and
-`Linux/` directories) from the module-wide exemption and counts any SDL reference there as a
-boundary regression. X11's own X headers are confined the same way -- `<X11/...>` is included only
-through `modules/platform/src/X11/X11Headers.hpp`, which also undefines the `None`, `Bool` and
-`Status` macros that collide with CNA enumerators and with GoogleTest -- and the Wayland backend
-includes no X header at all: `WaylandIsSdlFreeTests` fails the build's tests if one appears, and
-`CnaWaylandLinkClosure` fails if any binary links SDL, X11, xcb or GLX.
 
 A genuinely backend-specific test belongs with the platform implementation it exercises. Consumer tests use
 canned platform services or the parameterized conformance suite, not native event injection.
@@ -663,7 +653,9 @@ sudo apt-get install -y libavcodec-dev libavformat-dev libavutil-dev libswresamp
 # CNA implements YUV→RGBA conversion internally and does NOT depend on libswscale headers.
 
 # Desktop OpenGL and X11 development headers -- needed by the desktop GL renderers (OPENGL33,
-# OPENGLES2/3) and by the X11 platform backend.
+# OPENGLES2/3) and by the vendored SDL3's x11 video driver. SDL3's wayland driver additionally
+# needs libwayland-dev, wayland-protocols, libxkbcommon-dev and libdecor-0-dev
+# (cmake/ThirdPartySDL.cmake names them when they are missing).
 sudo apt-get install -y libgl1-mesa-dev libglx-dev libx11-dev
 
 # Draco — optional, enables KHR_draco_mesh_compression decoding in GltfImportCore

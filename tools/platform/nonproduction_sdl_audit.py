@@ -84,12 +84,6 @@ def classify(record: FileRecord) -> str | None:
         "modules/input/tests/Microsoft/Xna/Framework/Input/PublicApiInputCompileTests.cpp",
         "modules/input/tests/Microsoft/Xna/Framework/Input/PublicApiInputSignatureFreezeTests.cpp",
         "modules/platform/tests/CNA/Platform/ContractIsSdlFreeTests.cpp",
-        # plans/plan_x11.md X11-0091: the same shape as the contract probe above, one layer in.
-        # It asserts that the native X11 backend contains no SDL, so every SDL token in it is
-        # either a `#error` sentinel or a string the source scan searches for.
-        "modules/platform/tests/CNA/Platform/X11IsSdlFreeTests.cpp",
-        # plans/plan_wayland.md WAYLAND-0115: the same assertion for the native Wayland backend.
-        "modules/platform/tests/CNA/Platform/WaylandIsSdlFreeTests.cpp",
         "modules/platform/tests/CNA/Platform/IPlatformTests.cpp",
         "modules/platform/tests/CNA/Platform/TerminalPresenterTests.cpp",
     }:
@@ -106,11 +100,6 @@ def classify(record: FileRecord) -> str | None:
     if path in {
         "modules/content/tests/CNA/Internal/GltfImport/GltfFixtureCorpusTests.cpp",
         "modules/content/tests/CNA/Internal/GltfImport/GltfRendererPbrFallbackPolicyTests.cpp",
-        # plans/plan_win32.md WIN32-0061. Reads the native Win32 backend's own sources and asserts
-        # that none of them references SDL. The only SDL tokens in it are the needles it searches
-        # for, which is what this category exists for -- and a test that enforces the absence of a
-        # dependency is the last place the manifest should push someone to weaken.
-        "modules/platform/tests/CNA/Platform/Win32NoSdlTests.cpp",
     }:
         return "text-evidence-assertion"
 

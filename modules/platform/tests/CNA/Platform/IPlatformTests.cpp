@@ -365,13 +365,19 @@ TEST(PlatformFactoryTests, RefusesAnImplementationThatIsNotCompiledIn)
     EXPECT_THROW((void)PlatformFactory::Create("NoSuchPlatform"), PlatformException);
 }
 
-TEST(PlatformFactoryTests, RetiredSdl2ImplementationIsNeitherAdvertisedNorCreatable)
+TEST(PlatformFactoryTests, RetiredImplementationsAreNeitherAdvertisedNorCreatable)
 {
-    for (const std::string& name : PlatformFactory::GetAvailable())
+    // SDL2 was retired on 2026-10-04; the direct Win32, X11 and Wayland implementations on
+    // 2026-10-06. Those three window systems are reached through SDL3 now, and their names
+    // survive only as NativeWindowSystem values -- never as factory names.
+    for (const char* retired : {"SDL2", "Win32", "X11", "Wayland"})
     {
-        EXPECT_NE(name, "SDL2");
+        for (const std::string& name : PlatformFactory::GetAvailable())
+        {
+            EXPECT_NE(name, retired);
+        }
+        EXPECT_THROW((void)PlatformFactory::Create(retired), PlatformException) << retired;
     }
-    EXPECT_THROW((void)PlatformFactory::Create("SDL2"), PlatformException);
 }
 
 } // namespace

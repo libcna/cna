@@ -1,5 +1,13 @@
 # Native Platform Validation Plan (X11 real desktop + Win32 on Debian/Wine)
 
+> **Retired 2026-10-06 — historical plan.** CNA's direct `WIN32`, `X11` and `WAYLAND` platform
+> implementations were removed (`plans/plan_platform.md` §11c, PLAT-142); SDL3 is CNA's one
+> graphical platform, and Windows, X11 and Wayland are reached through SDL's video drivers. This
+> plan is kept as the record of the work. Its backend file paths, test names, ctest entries and
+> documents refer to git history, and none of it describes a selectable configuration. Work it
+> recorded that outlived the backends -- `CNA_ENABLE_SDL`, ALSA audio, the private X server
+> launcher, generic Windows portability fixes -- is still in the tree.
+
 ## Status summary (top of file is source of truth)
 
 The integrated Win32 + X11 tree (plans/plan_native_platforms_integration.md) was validated on a

@@ -1218,8 +1218,8 @@ supplies the portable skybox without changing Vulkan's shader dialect.
 caller-provided source text. Indirect execution is the additional device-gated path described above.
 
 **Modern API on real hardware (`plans/plan_vulkan_modern_graphics.md`).** Re-measured on the
-Radeon 780M (RADV) through the private runner, on native Wayland and native X11 without SDL: the
-engine layer's shared suite, all 35 CNAEXT example oracles and the renderer-neutral
+Radeon 780M (RADV) through the private runner, on CNA's since-retired SDL-free Wayland and X11
+platforms: the engine layer's shared suite, all 35 CNAEXT example oracles and the renderer-neutral
 `ModernGpuConformance` suite run on Vulkan with 0 validation messages, and synchronization validation
 over them found one renderer hazard — an MRT pass's depth transition unordered against the previous
 pass's depth writes — fixed in `GetOrCreateMRTRenderPass` (VMG-0013).

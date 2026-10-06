@@ -16,7 +16,8 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 - [`plan_apple.md`](plan_apple.md) — macOS and iOS platform support.
 - [`plan_runtimerenderer.md`](plan_runtimerenderer.md) — runtime graphics-renderer selection.
 - [`plan_sdl3free.md`](plan_sdl3free.md) — historical SDL3-independent migration plan; its SDL2
-  route was superseded by native backends and retired on 2026-10-04.
+  route was superseded by native backends and retired on 2026-10-04, and those native backends
+  were retired in turn on 2026-10-06.
 - [`plan_modern.md`](plan_modern.md) — the `CNA::Graphics` modern engine layer.
 - [`plan_diagnostics.md`](plan_diagnostics.md) — renderer-independent diagnostics, profiling,
   bounded recording, and the Inspector provider boundary.
@@ -113,6 +114,23 @@ history are their record.
   authorized).
 - [`plan_tinygl.md`](plan_tinygl.md) — TinyGL.
 - [`plan_wicked.md`](plan_wicked.md) — Wicked Engine.
+
+### Retired platform implementations — historical plans
+
+CNA's direct Win32, X11 and Wayland platform implementations were retired on 2026-10-06
+(`plan_platform.md` §11c, PLAT-142); SDL3 is CNA's one graphical platform. These plans are kept as
+the record of the work, each with a retired banner. Their code, tests, harnesses, spikes and
+capability documents are in Git history.
+
+- [`plan_win32.md`](plan_win32.md) — the direct Win32 backend.
+- [`plan_win32_native_validation.md`](plan_win32_native_validation.md) — its validation on real
+  Windows (also the origin of several generic Windows fixes and tools that remain).
+- [`plan_x11.md`](plan_x11.md) — the direct X11 backend, `CNA_ENABLE_SDL` and the ALSA audio
+  backend (which remains).
+- [`plan_wayland.md`](plan_wayland.md) — the direct Wayland backend.
+- [`plan_native_platforms_integration.md`](plan_native_platforms_integration.md) and
+  [`plan_native_platform_validation.md`](plan_native_platform_validation.md) — integrating and
+  validating the direct backends.
 
 ## Archived plans
 

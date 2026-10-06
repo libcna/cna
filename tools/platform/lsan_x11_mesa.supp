@@ -1,8 +1,7 @@
-# LeakSanitizer suppressions for Mesa under the native platform suites -- first written for X11
-# (plans/plan_native_platform_validation.md NPV-0004), then extended to EGL. Every entry names a
-# leak that was REPRODUCED
-# WITHOUT ANY CNA CODE, with the program and the byte count that proved it; an entry without that
-# evidence does not belong here.
+# LeakSanitizer suppressions for Mesa under X11 and Wayland, whichever way CNA reaches the window
+# system -- first written for X11 (plans/plan_native_platform_validation.md NPV-0004), then
+# extended to EGL. Every entry names a leak that was REPRODUCED WITHOUT ANY CNA CODE, with the
+# program and the byte count that proved it; an entry without that evidence does not belong here.
 #
 # Use:  LSAN_OPTIONS=suppressions=tools/platform/lsan_x11_mesa.supp
 #

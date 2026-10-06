@@ -3,10 +3,10 @@
 #
 # plans/plan_x11.md X11-0101/X11-0102: run a command against a private X server.
 #
-# The X11 backend's integration tests need a real X connection, and a build machine usually has
-# no display. This starts an isolated `Xvfb`, optionally a window manager, runs the command, and
-# takes both down again -- so the tests neither depend on a developer's own session nor leave
-# anything behind on it.
+# A test that talks to X11 -- SDL3's x11 video driver, its clipboard and primary selection, the
+# Xlib error-handler regression -- needs a real X connection, and a build machine usually has no
+# display. This starts an isolated `Xvfb`, runs the command, and takes it down again -- so the
+# tests neither depend on a developer's own session nor leave anything behind on it.
 #
 # Two deliberate choices:
 #
@@ -14,66 +14,22 @@
 #     ctest job, with a developer's own scratch server, and with CI runners that already use it --
 #     and the collision looks like a flaky test rather than like what it is.
 #   * A missing Xvfb EXITS 77, ctest's skip code, rather than failing. A machine with no virtual
-#     X server has not broken the backend; it simply cannot exercise this part of it, and the
-#     suite records that rather than reporting red.
+#     X server has not broken anything; it simply cannot exercise this part of it, and the suite
+#     records that rather than reporting red.
 #
 # Usage:
-#   tools/platform/x11_test_server.sh [--require-window-manager] [--with-ibus] <command> [args...]
-#
-# `--with-ibus` also starts a private ibus input method with its XIM server on the private display
-# (plans/plan_x11.md X11-0152): its own socket, its own config and cache directories, the plain
-# US-English engine, nothing shared with a developer's own ibus -- whose address is keyed by the
-# display, so it is never reached. The command sees XMODIFIERS=@im=ibus and IBUS_ADDRESS, and it
-# skips (77) where ibus or its XIM server is not installed.
-#
-# `--require-window-manager` CHECKS for a window manager binary and skips without one; it does not
-# start one. Starting it here would be the obvious thing and is wrong: the window-manager suite's
-# own fixture starts and stops `openbox` per test, because a test that needs a window manager also
-# needs to know when it became ready. Two instances raced -- the fixture's `openbox --replace`
-# displaced the launcher's mid-run and a window left fullscreen stopped being noticed -- which is
-# exactly the kind of failure that reads as flakiness. So the launcher owns the server and the
-# fixture owns the window manager, with no overlap.
+#   tools/platform/x11_test_server.sh <command> [args...]
 
 set -u
 
-REQUIRE_WINDOW_MANAGER=0
-WITH_IBUS=0
-while [ $# -gt 0 ]; do
-    case "$1" in
-        --require-window-manager) REQUIRE_WINDOW_MANAGER=1; shift ;;
-        --with-ibus) WITH_IBUS=1; shift ;;
-        *) break ;;
-    esac
-done
-
 if [ $# -eq 0 ]; then
-    echo "usage: $0 [--require-window-manager] [--with-ibus] <command> [args...]" >&2
+    echo "usage: $0 <command> [args...]" >&2
     exit 2
 fi
 
 if ! command -v Xvfb >/dev/null 2>&1; then
     echo "SKIP: Xvfb is not installed; the X11 integration tests need a virtual X server" >&2
     exit 77
-fi
-
-if [ "$REQUIRE_WINDOW_MANAGER" -eq 1 ] && ! command -v openbox >/dev/null 2>&1; then
-    echo "SKIP: openbox is not installed; EWMH window-state transitions have no window manager" >&2
-    exit 77
-fi
-
-if [ "$WITH_IBUS" -eq 1 ]; then
-    IBUS_XIM_SERVER=""
-    for candidate in /usr/libexec/ibus-x11 /usr/lib/ibus/ibus-x11 /usr/lib64/ibus/ibus-x11; do
-        if [ -x "$candidate" ]; then
-            IBUS_XIM_SERVER="$candidate"
-            break
-        fi
-    done
-    if ! command -v ibus-daemon >/dev/null 2>&1 || ! command -v ibus >/dev/null 2>&1 \
-        || ! command -v dbus-run-session >/dev/null 2>&1 || [ -z "$IBUS_XIM_SERVER" ]; then
-        echo "SKIP: ibus, its XIM server or dbus-run-session is not installed" >&2
-        exit 77
-    fi
 fi
 
 DISPLAY_NUMBER=""
@@ -95,31 +51,13 @@ fi
 #
 # -noreset: without it an X server regenerates itself every time its LAST client disconnects,
 # and a connection arriving during that regeneration is reset (XOpenDisplay fails with
-# ECONNRESET). Every X11Live test closes its connection in TearDown and the next test opens a new
-# one moments later, so on a loaded machine alternate tests were skipping as "cannot reach the X
+# ECONNRESET). A window test closes its connection in TearDown and the next test opens a new one
+# moments later, so on a loaded machine alternate tests were skipping as "cannot reach the X
 # server" -- which ctest reports as a pass (plans/plan_native_platform_validation.md NPV-0108).
 Xvfb ":$DISPLAY_NUMBER" -screen 0 1280x1024x24 -nolisten tcp -noreset >/dev/null 2>&1 &
 XVFB_PID=$!
 
-IBUS_DIRECTORY=""
-IBUS_GROUP=""
 cleanup() {
-    if [ -n "$IBUS_DIRECTORY" ]; then
-        # The whole private ibus stack is one process group of its own (setsid below): the
-        # daemon, its XIM server, dbus-run-session's bus and whatever that bus activated (gvfsd).
-        # Killing only the daemon by its socket path used to take dbus-run-session with it
-        # before it could stop its bus, leaving a dbus-daemon and a gvfsd behind on every run.
-        if [ -n "$IBUS_GROUP" ]; then
-            kill -TERM "-$IBUS_GROUP" 2>/dev/null
-            WAITED=0
-            while kill -0 "-$IBUS_GROUP" 2>/dev/null && [ "$WAITED" -lt 30 ]; do
-                sleep 0.1
-                WAITED=$((WAITED + 1))
-            done
-            kill -KILL "-$IBUS_GROUP" 2>/dev/null
-        fi
-        rm -rf "$IBUS_DIRECTORY"
-    fi
     kill "$XVFB_PID" 2>/dev/null
     wait "$XVFB_PID" 2>/dev/null
     rm -f "/tmp/.X$DISPLAY_NUMBER-lock"
@@ -148,41 +86,9 @@ export DISPLAY
 CNA_X11_PRIVATE_TEST_SERVER=1
 export CNA_X11_PRIVATE_TEST_SERVER
 
-if [ "$WITH_IBUS" -eq 1 ]; then
-    # A short path: a Unix socket's path is limited to 108 bytes, and ibus reports a longer one as
-    # "address already in use".
-    IBUS_DIRECTORY="${XDG_RUNTIME_DIR:-/tmp}/cna-ibus-$$"
-    mkdir -p "$IBUS_DIRECTORY/config" "$IBUS_DIRECTORY/cache"
-    IBUS_ADDRESS="unix:path=$IBUS_DIRECTORY/ibus.sock"
-    export IBUS_ADDRESS
-    XDG_CONFIG_HOME="$IBUS_DIRECTORY/config" XDG_CACHE_HOME="$IBUS_DIRECTORY/cache" GIO_USE_VFS=local \
-        setsid dbus-run-session -- ibus-daemon --xim --single --panel disable --emoji-extension disable \
-        --config disable --cache none --address "$IBUS_ADDRESS" >/dev/null 2>&1 &
-    # setsid made it the leader of a new process group (a background job of this non-interactive
-    # shell is not a group leader, so setsid does not fork): its pid is the group's id.
-    IBUS_GROUP=$!
-    WAITED=0
-    while [ "$WAITED" -lt 100 ]; do
-        if xprop -root XIM_SERVERS 2>/dev/null | grep -q "@server=ibus"; then
-            break
-        fi
-        sleep 0.1
-        WAITED=$((WAITED + 1))
-    done
-    if ! xprop -root XIM_SERVERS 2>/dev/null | grep -q "@server=ibus"; then
-        echo "SKIP: the private ibus did not register its XIM server on :$DISPLAY_NUMBER" >&2
-        exit 77
-    fi
-    XDG_CONFIG_HOME="$IBUS_DIRECTORY/config" ibus engine xkb:us::eng >/dev/null 2>&1
-    XMODIFIERS="@im=ibus"
-    export XMODIFIERS
-    CNA_X11_TEST_IBUS=1
-    export CNA_X11_TEST_IBUS
-fi
-
-# plans/plan_x11.md X11-0169: the X11 platform asks the session bus for the desktop portal, and a
-# file chooser opened there would open on the desktop of whoever runs the tests. The command gets
-# no session bus at all; a test that wants a portal starts a private bus, and a portal, of its own.
+# plans/plan_x11.md X11-0169: a platform asks the session bus for the desktop portal (SDL3's file
+# dialogs do), and a file chooser opened there would open on the desktop of whoever runs the tests.
+# The command gets no session bus at all.
 DBUS_SESSION_BUS_ADDRESS="unix:path=/nonexistent/cna-x11-test-no-session-bus"
 export DBUS_SESSION_BUS_ADDRESS
 

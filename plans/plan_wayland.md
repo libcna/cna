@@ -1,5 +1,13 @@
 # CNA native Wayland platform (`CNA_PLATFORM=WAYLAND`) — implementation plan and ledger
 
+> **Retired 2026-10-06 — historical plan.** CNA's direct `WIN32`, `X11` and `WAYLAND` platform
+> implementations were removed (`plans/plan_platform.md` §11c, PLAT-142); SDL3 is CNA's one
+> graphical platform, and Windows, X11 and Wayland are reached through SDL's video drivers. This
+> plan is kept as the record of the work. Its backend file paths, test names, ctest entries and
+> documents refer to git history, and none of it describes a selectable configuration. Work it
+> recorded that outlived the backends -- `CNA_ENABLE_SDL`, ALSA audio, the private X server
+> launcher, generic Windows portability fixes -- is still in the tree.
+
 > **Purpose.** Give CNA a genuine, first-class, native Wayland platform backend: a direct
 > Wayland client that talks `wl_*`, `xdg-shell`, `xkbcommon`, EGL, `VK_KHR_wayland_surface` and
 > `wl_shm` itself -- with no SDL and no X11 library anywhere in it -- standing beside Win32 and X11

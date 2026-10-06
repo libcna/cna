@@ -9,11 +9,42 @@
 > **`NEXT.md` had no record of this campaign at all** until this file was added and cross-linked.
 
 **Branch:** `next`
-**Last updated:** 2026-10-04
+**Last updated:** 2026-10-06
 
 ---
 
-## Current checkpoint — SDL2 retired (2026-10-04)
+## Current checkpoint — direct Win32, X11 and Wayland platforms retired (2026-10-06)
+
+SDL3 is CNA's one graphical platform. The direct `WIN32`, `X11` and `WAYLAND` implementations
+(`modules/platform/src/Win32/`, `X11/`, `Wayland/`) and the code only they used (`Xkb/`,
+`Freedesktop/`, `Linux/`, `Posix/`, `Common/SurfaceFrameFitting`) were removed with their tests,
+harnesses, CMake discovery (`cmake/PlatformX11.cmake`, `cmake/PlatformWayland.cmake`), CI cells,
+spikes and capability documents. `CNA_PLATFORM=WIN32|X11|WAYLAND` now fails at configure time,
+naming `SDL3` as the replacement; there is no alias. `PLAT-142` in `plans/plan_platform.md` records
+the change and its measurements.
+
+What did **not** change: Windows, X11 and Wayland are all still supported -- through SDL's
+`windows`, `x11` and `wayland` video drivers -- and `NativeWindowSystem::Win32/X11/Wayland` with
+`TryGetWin32`/`TryGetX11`/`TryGetWayland` still carry the `HWND`, `Display*` + XID and
+`wl_display*` + `wl_surface*` to the renderers that need them (Direct3D 9/11/12, WebGPU). No
+renderer and no contract header changed. `CNA_ENABLE_SDL=OFF` remains, as a windowless
+configuration (HEADLESS/TERMINAL, NULL or ALSA audio).
+
+New coverage of SDL3 on the real window systems, each on a server private to the run:
+`CnaPlatformSdl3X11Tests` (Xvfb) and `CnaPlatformSdl3WaylandTests` (headless Weston) run the SDL3
+window suite and the window conformance suite with the driver forced, and
+`Sdl3WindowTest.NativeHandleMatchesTheVideoDriver` asserts the handle each driver yields;
+`CnaPlatformExitOrderTests`/`CnaPlatformExitOrderX11Tests` keep NPV-0102's process-exit harness
+running against SDL3; `DirectX11_Win32HardwareSmoke` and `cna_stress_directx12_win32_present` now
+drive the HWND of an SDL3 window.
+
+**Next starting point:** run `d3d-windows-ci.yml` and `platform-ci.yml`'s `sdl3-windows` job (both
+`workflow_dispatch`) -- the SDL3 + Direct3D path on real Windows was compile-checked from Linux in
+this change, not executed.
+
+---
+
+## Previous checkpoint — SDL2 retired (2026-10-04)
 
 CNA now supports SDL3, not SDL2. The former platform and audio implementations, dependency fetch,
 selection values, process-mixing guard, dedicated tests, standalone-harness branches and CI lane
@@ -46,7 +77,8 @@ configuration referencing no SDL symbol anywhere — still failed to configure w
 submodules and still spent minutes building three libraries nothing would link.
 
 A native X11 backend is what made the question answerable. Its plan, ledger and evidence are
-`plans/plan_x11.md`; its capability boundary is `docs/platform-x11.md`. The measured result:
+`plans/plan_x11.md`; its capability boundary was `docs/platform-x11.md` (removed with the backend
+on 2026-10-06). The measured result:
 
 ```
 $ ldd  cmake-build-x11-nosdl/CnaPlatformModuleTests | grep -ci sdl   ->  0
@@ -93,7 +125,8 @@ true.
 (`modules/platform/src/Win32/`) now implements the whole contract on user32/gdi32/opengl32/
 ole32/shell32 with no SDL of any kind, and joins the conformance suite automatically through
 `PlatformFactory::GetAvailable()`. Its task log is **`plans/plan_win32.md`**; its capability
-boundary is **`docs/platform-win32.md`**. This campaign's own ledger is unchanged — no PLAT row
+boundary was **`docs/platform-win32.md`** (removed with the backend on 2026-10-06). This
+campaign's own ledger is unchanged — no PLAT row
 moved — because the point is what did *not* have to change:
 
 * **no contract header was touched.** Not one interface, enum or struct needed adjusting to fit a

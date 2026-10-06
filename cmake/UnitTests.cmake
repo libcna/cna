@@ -90,25 +90,6 @@ if(CNA_BUILD_TESTS)
     if(NOT CNA_PLATFORM STREQUAL "SDL3")
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/Sdl3.*\\.cpp$")
     endif()
-    # plans/plan_x11.md X11-0005: the native X11 tests exercise CNA::Platform::X11, which is
-    # compiled only when CNA_PLATFORM=X11 -- the same rule, and the same reason, as the SDL3 line
-    # above. The implementation-neutral suites (the contract, and the conformance suite
-    # parameterised over every available implementation) always build.
-    if(NOT CNA_PLATFORM STREQUAL "X11")
-        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/X11.*\\.cpp$")
-    endif()
-    # plans/plan_wayland.md WAYLAND-0110: the native Wayland tests exercise CNA::Platform::Wayland,
-    # compiled only when CNA_PLATFORM=WAYLAND -- the X11 rule above, for the same reason.
-    if(NOT CNA_PLATFORM STREQUAL "WAYLAND")
-        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/Wayland[A-Za-z]*\\.(cpp|hpp)$")
-    endif()
-    # plans/plan_wayland.md Phase B: the code the X11 and Wayland backends share (src/Xkb/,
-    # src/Freedesktop/, src/Posix/, src/Linux/) is compiled only for those two selections, and so
-    # are its tests -- in both, which is how one suite proves the same behaviour under either.
-    if(NOT CNA_PLATFORM STREQUAL "X11" AND NOT CNA_PLATFORM STREQUAL "WAYLAND")
-        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/(Xkb|Freedesktop|Posix|Linux)[A-Za-z]*\\.cpp$")
-    endif()
-
     # plans/plan_platform.md PLAT-94: like the general platform implementation above, the native
     # SDL3 audio test directly exercises a private implementation compiled only for its selected
     # audio platform. Contract/selection tests remain implementation-neutral.
@@ -149,17 +130,6 @@ if(CNA_BUILD_TESTS)
                 ".*/modules/audio/tests/.*/${_cna_sdl3_mixer_test}\\.cpp$")
         endforeach()
     endif()
-    # plans/plan_win32.md WIN32-0004: the Win32 backend's own tests reach into
-    # CNA::Platform::Win32 -- its message translator, its scan-code table, its window -- all of
-    # which exist only when CNA_PLATFORM=WIN32 compiled src/Win32/. Under any other selection they
-    # would reference symbols that are not there and fail to link, exactly as the SDL3 suite above
-    # would. The implementation-neutral suites (the contract, and the conformance
-    # suite parameterised over every available implementation) always build and pick Win32 up
-    # automatically wherever it is present.
-    if(NOT CNA_PLATFORM STREQUAL "WIN32")
-        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/Win32.*\\.cpp$")
-    endif()
-
     # plans/plan_win32_native_validation.md WINNATIVE-0014: HttpNotificationChannelTests stands up
     # a listening socket with <arpa/inet.h>, <netinet/in.h> and <sys/socket.h> to receive what the
     # channel sends. Those are POSIX headers; Winsock is a different API, not a spelling. The
@@ -618,37 +588,6 @@ if(CNA_BUILD_TESTS)
         target_link_libraries(cna_test_build_config INTERFACE SDL3::SDL3)
     endif()
 
-    # plans/plan_x11.md X11-0005: the native X11 tests include this backend's own translation
-    # tables (X11Keyboard.hpp, X11EventMapper.hpp) and therefore need the X headers, the
-    # CNA_X11_HAVE_* definitions that decide which extension code those headers expose, and the X
-    # libraries. Exactly the same arrangement as the SDL3 line above, and like it, only for the
-    # selection whose sources are compiled.
-    if(CNA_PLATFORM STREQUAL "X11")
-        if(CNA_X11_INCLUDE_DIRS)
-            target_include_directories(cna_test_build_config INTERFACE ${CNA_X11_INCLUDE_DIRS})
-        endif()
-        if(CNA_X11_DEFINITIONS)
-            target_compile_definitions(cna_test_build_config INTERFACE ${CNA_X11_DEFINITIONS})
-        endif()
-        target_link_libraries(cna_test_build_config INTERFACE ${CNA_X11_LIBRARIES} ${CMAKE_DL_LIBS})
-    endif()
-    # plans/plan_wayland.md WAYLAND-0110/0111: the Wayland tests include the backend's own headers
-    # (and so its generated protocol headers and CNA_WAYLAND_HAVE_* definitions), and the in-process
-    # test compositor is a libwayland-server program: libwayland-server is linked into the test
-    # binary only, never into cna_platform.
-    if(CNA_PLATFORM STREQUAL "WAYLAND")
-        get_property(_cna_wayland_protocol_dir GLOBAL PROPERTY CNA_WAYLAND_PROTOCOL_DIR)
-        target_include_directories(cna_test_build_config INTERFACE ${CNA_WAYLAND_INCLUDE_DIRS} ${_cna_wayland_protocol_dir})
-        if(CNA_WAYLAND_DEFINITIONS)
-            target_compile_definitions(cna_test_build_config INTERFACE ${CNA_WAYLAND_DEFINITIONS})
-        endif()
-        target_link_libraries(cna_test_build_config INTERFACE ${CNA_WAYLAND_LIBRARIES}
-                              ${CNA_WAYLAND_SERVER_LIBRARIES} ${CMAKE_DL_LIBS})
-        if(CNA_WAYLAND_SERVER_LIBRARIES)
-            target_compile_definitions(cna_test_build_config INTERFACE CNA_WAYLAND_HAVE_TEST_COMPOSITOR=1)
-        endif()
-    endif()
-
     # The Draco corpus owns one test-only encoder oracle: it recreates the committed compressed
     # streams with CNA's pinned dependency and byte-compares them, so the otherwise standard-
     # library-only Python generator never needs to execute a native tool. Production content code
@@ -1094,26 +1033,6 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
-    if(CNA_PLATFORM STREQUAL "WIN32" AND TARGET ${CNA_TEST_OBJECT_TARGET_platform})
-        # plans/plan_win32.md WIN32-0061: Win32NoSdlTests reads the backend's own sources and
-        # asserts that none of them mentions SDL, carries no unrecorded TODO, and reaches
-        # <windows.h> only through the module's one guarded entry point. It needs to be told where
-        # that tree is; without the path it skips rather than passing vacuously.
-        #
-        # Under a mingw-w64 cross-build the produced .exe runs through Wine, which reaches the
-        # host filesystem as the Z: drive -- a bare POSIX path would simply not open. The native
-        # Windows build needs no such prefix.
-        if(CMAKE_CROSSCOMPILING)
-            set(_cna_win32_source_root "Z:${CMAKE_SOURCE_DIR}/modules/platform/src/Win32")
-        else()
-            set(_cna_win32_source_root "${CMAKE_SOURCE_DIR}/modules/platform/src/Win32")
-        endif()
-        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_platform} PRIVATE
-            CNA_WIN32_SOURCE_ROOT="${_cna_win32_source_root}"
-        )
-        unset(_cna_win32_source_root)
-    endif()
-
     if(TARGET cna_platform_terminal_restoration_harness)
         # plans/plan_platform.md PLAT-131: same reasoning as cna_net_two_process_harness above, and more
         # sharply -- four of the five exit paths TerminalSession must restore on destroy the
@@ -1122,43 +1041,6 @@ if(CNA_BUILD_TESTS)
         target_compile_definitions(${CNA_TEST_OBJECT_TARGET_platform} PRIVATE
             CNA_PLATFORM_TERMINAL_RESTORATION_HARNESS_PATH="$<TARGET_FILE:cna_platform_terminal_restoration_harness>"
         )
-    endif()
-
-    if(TARGET cna_platform_x11_exit_harness)
-        # plans/plan_native_platform_validation.md NPV-0102: see cmake/Harnesses.cmake.
-        add_dependencies(${CNA_TEST_OBJECT_TARGET_platform} cna_platform_x11_exit_harness)
-        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_platform} PRIVATE
-            CNA_PLATFORM_X11_EXIT_HARNESS_PATH="$<TARGET_FILE:cna_platform_x11_exit_harness>"
-        )
-    endif()
-
-    if(CNA_PLATFORM STREQUAL "WAYLAND")
-        # plans/plan_wayland.md WAYLAND-0115: WaylandIsSdlFreeTests scans the backend's own sources,
-        # from an absolute path for the reason NPV-0122 records for X11 below.
-        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_platform} PRIVATE
-            CNA_WAYLAND_BACKEND_SOURCE_DIR="${CMAKE_SOURCE_DIR}/modules/platform/src/Wayland"
-        )
-        get_property(_cna_have_evdev GLOBAL PROPERTY CNA_PLATFORM_HAVE_EVDEV)
-        if(_cna_have_evdev)
-            target_compile_definitions(${CNA_TEST_OBJECT_TARGET_platform} PRIVATE
-                CNA_PLATFORM_HAVE_EVDEV=1)
-        endif()
-    endif()
-    if(CNA_PLATFORM STREQUAL "X11")
-        # plans/plan_native_platform_validation.md NPV-0122: X11IsSdlFreeTests scans the backend's
-        # own sources. __FILE__ is not an absolute path in this project -- CCACHE_BASEDIR makes
-        # the compiler see sources relative to the build directory -- so the scan found its
-        # directory only when run from there, and failed when ctest ran it from the source root.
-        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_platform} PRIVATE
-            CNA_X11_BACKEND_SOURCE_DIR="${CMAKE_SOURCE_DIR}/modules/platform/src/X11"
-        )
-        # plans/plan_x11.md X11-0150: the evdev controller tests include src/Linux/ and exist only
-        # where the platform compiled it (modules/platform/CMakeLists.txt).
-        get_property(_cna_have_evdev GLOBAL PROPERTY CNA_PLATFORM_HAVE_EVDEV)
-        if(_cna_have_evdev)
-            target_compile_definitions(${CNA_TEST_OBJECT_TARGET_platform} PRIVATE
-                CNA_PLATFORM_HAVE_EVDEV=1)
-        endif()
     endif()
 
     if(TARGET cna_platform_terminal_resize_harness)
@@ -1233,24 +1115,6 @@ if(CNA_BUILD_TESTS)
     # whole-suite inventory found all 20 of its messages here, in MetalResourceHealth's own
     # device-outliving test. gtest_discover_tests(PROPERTIES ...) is the only hook that reaches
     # them, and it is applied only where a VkDevice can exist at all.
-    # plans/plan_native_platform_validation.md NPV-0120: the X11 suites that need an X server of
-    # their own run through CnaX11IntegrationTests and CnaX11WindowManagerTests below, each on a
-    # private server. Discovered one by one they ran a second time, eight at a time, on whatever
-    # DISPLAY the shell had -- a shared Xvfb, or a developer's own desktop -- taking its clipboard,
-    # its focus and its window manager from each other: a paste test waited forever on an INCR
-    # transfer another test had interrupted.
-    # plans/plan_x11.md X11-0150: the uinput suite likewise runs once, through CnaX11EvdevTests;
-    # discovered as well it would plug every one of its virtual pads in a second time.
-    # plans/plan_x11.md X11-0153: the exclusive-fullscreen suite changes display modes and runs
-    # only through CnaX11ExclusiveFullscreenTests, on the launcher's private server; X11-0154's
-    # drag-and-drop suite runs through CnaX11IntegrationTests, where its drag source has a server;
-    # so do X11-0156's content scale and X11-0157's selections, which change the server's
-    # resources and take its selections.
-    set(_cna_unit_tests_discovery_filter)
-    if(CNA_PLATFORM STREQUAL "X11" AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.22)
-        set(_cna_unit_tests_discovery_filter
-            TEST_FILTER "-X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*:X11WithWindowManager.*:X11EvdevVirtualDevice.*:X11InputMethod.*:X11ExclusiveFullscreen*:X11DragAndDropLive.*:X11DragSource.*:X11TouchSelection.*:X11Touchscreen.*:X11ContentScaleLive.*:X11SelectionLive.*:X11SelectionPeer.*:X11InputDevicesLive.*:X11MessageBoxLive.*:X11DesktopPortalBus.*:X11DesktopPortalLive.*:X11ScreenSaverLive.*:X11ScreenSaverDesktopLive.*:X11ScreenSaverPeer.*:X11TrayLive.*")
-    endif()
     # plans/plan_x11.md X11-0151: an ALSA build's tests play to ALSA's silent `null` device, never
     # to the machine's speakers -- and, since X11-0162, record from its `null` device, never from
     # the machine's microphone. The test binary defaults to both on its own as well (see
@@ -1268,12 +1132,6 @@ if(CNA_BUILD_TESTS)
     if(CNA_GRAPHICS_RENDERER STREQUAL "FNA3D" AND DEFINED CNA_FNA3D_TEST_DRIVER)
         list(APPEND _cna_unit_tests_environment
             "FNA3D_FORCE_DRIVER=${CNA_FNA3D_TEST_DRIVER}")
-    endif()
-    # plans/plan_x11.md X11-0169: an X11 platform asks the session bus for the desktop portal, and
-    # no test may reach the portal of the desktop it runs on -- a file chooser would open there.
-    # The test binary says the same on its own (X11DesktopPortalTests.cpp).
-    if(CNA_PLATFORM STREQUAL "X11" OR CNA_PLATFORM STREQUAL "WAYLAND")
-        list(APPEND _cna_unit_tests_environment "DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent/cna-test-no-session-bus")
     endif()
     if(_cna_unit_tests_environment)
         set(_cna_unit_tests_audio_environment ENVIRONMENT "${_cna_unit_tests_environment}")
@@ -1295,16 +1153,13 @@ if(CNA_BUILD_TESTS)
     if(_cna_unit_tests_output_gate)
         gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-            ${_cna_unit_tests_discovery_filter}
             PROPERTIES FAIL_REGULAR_EXPRESSION "${_cna_unit_tests_output_gate}"
                        ${_cna_unit_tests_audio_environment})
     else()
         gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-            ${_cna_unit_tests_discovery_filter}
             ${_cna_unit_tests_audio_properties})
     endif()
-    unset(_cna_unit_tests_discovery_filter)
 
     # INPUT-BUILD-003: canonical Input-test selector — SINGLE SOURCE OF TRUTH.
     # The input subset used to be selected by a long --gtest_filter string copy-pasted across the docs
@@ -1398,14 +1253,16 @@ if(CNA_BUILD_TESTS)
             ENVIRONMENT "CNA_AUDIO_DEVICE=file:FILE=${CMAKE_BINARY_DIR}/cna-alsa-recording.raw,FORMAT=raw")
     endif()
 
-    # SDL2 retirement contract: the former platform selector must stay unknown. This uses the
-    # production selection file in script mode, so accidentally restoring SDL2 to its available
-    # list fails CI even if no SDL2 source happens to compile in the default configuration.
-    add_test(NAME CnaPlatformSelection_SDL2
+    # Platform retirement contract: SDL2 (2026-10-04) must stay unknown, and the direct WIN32, X11
+    # and WAYLAND backends (2026-10-06) must stay refused by name, pointing at SDL3. This uses the
+    # production selection file in script mode, on a Windows and a non-Windows host, so
+    # accidentally restoring a retired value to the available list fails CI even if no source for
+    # it happens to compile in the default configuration.
+    add_test(NAME CnaPlatformSelection_Retired
         COMMAND ${CMAKE_COMMAND}
             -DCNA_PLATFORM_SELECTION_FILE=${CMAKE_SOURCE_DIR}/cmake/PlatformSelection.cmake
-            -P ${CMAKE_SOURCE_DIR}/cmake/Tests/RetiredSdl2PlatformSelection.cmake)
-    set_tests_properties(CnaPlatformSelection_SDL2
+            -P ${CMAKE_SOURCE_DIR}/cmake/Tests/RetiredPlatformSelection.cmake)
+    set_tests_properties(CnaPlatformSelection_Retired
         PROPERTIES LABELS "platform;configuration;retirement")
 
     # plans/plan_platform.md PLAT-93: test the cache default, every implemented value, every reserved
@@ -1510,17 +1367,6 @@ if(CNA_BUILD_TESTS)
             PROPERTIES LABELS "content;xnb;documentation")
     endif()
 
-    # plans/plan_wayland.md WAYLAND-0023: the Wayland selection is offered where it can be built,
-    # refuses loudly (naming the package) where it cannot, and changed no default. Runs everywhere,
-    # including where Wayland is absent: the refusal is what it checks.
-    add_test(NAME CnaWaylandPlatformSelection
-        COMMAND ${CMAKE_COMMAND}
-            -DCNA_SOURCE_DIR=${CMAKE_SOURCE_DIR}
-            -DCNA_WORK_DIR=${CMAKE_BINARY_DIR}/CnaWaylandPlatformSelection
-            "-DCNA_GENERATOR=${CMAKE_GENERATOR}"
-            -P ${CMAKE_SOURCE_DIR}/cmake/Tests/WaylandPlatformSelection.cmake)
-    set_tests_properties(CnaWaylandPlatformSelection PROPERTIES LABELS "platform;configuration" TIMEOUT 300)
-
     add_test(NAME CnaSdlOffFindsNoSdlPackage
         COMMAND ${CMAKE_COMMAND}
             -DCNA_SOURCE_DIR=${CMAKE_SOURCE_DIR}
@@ -1540,13 +1386,13 @@ if(CNA_BUILD_TESTS)
     set_tests_properties(CnaSdlPrebuiltFingerprint PROPERTIES LABELS "platform;configuration")
 
     # plans/plan_native_platform_validation.md NPV-0131: which test binary the platform ctest
-    # entries below (CnaPlatform*, CnaX11*) run. CnaTests by default. A build that compiles only
-    # the platform module's tests -- CI's SDL-free X11 cell builds the focused
-    # CnaPlatformModuleTests, which is not part of `all` -- names it here instead; the entries then
-    # run every platform-module suite their filters name, and a suite that lives in another module
+    # entries below (CnaPlatform*) run. CnaTests by default. A build that compiles only the
+    # platform module's tests -- CI's SDL-free cell builds the focused CnaPlatformModuleTests,
+    # which is not part of `all` -- names it here instead; the entries then run every
+    # platform-module suite their filters name, and a suite that lives in another module
     # (GraphicsDevicePlatformWindowTests, GameWindowPlatformTest) simply is not in that binary.
     set(CNA_PLATFORM_CTEST_BINARY "CnaTests" CACHE STRING
-        "Test executable the CnaPlatform*/CnaX11* ctest entries run (CnaTests or CnaPlatformModuleTests)")
+        "Test executable the CnaPlatform* ctest entries run (CnaTests or CnaPlatformModuleTests)")
     set_property(CACHE CNA_PLATFORM_CTEST_BINARY PROPERTY STRINGS CnaTests CnaPlatformModuleTests)
     if(NOT CNA_PLATFORM_CTEST_BINARY STREQUAL "CnaTests"
        AND NOT CNA_PLATFORM_CTEST_BINARY STREQUAL "CnaPlatformModuleTests")
@@ -1587,161 +1433,47 @@ if(CNA_BUILD_TESTS)
                 --gtest_shuffle --gtest_repeat=3
         LABELS "platform" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 
-    # plans/plan_x11.md X11-0100/X11-0101/X11-0102: the native X11 backend's three suites, split
-    # by what each one actually needs.
-    #
-    # The split is not organisational tidiness. A bare Xvfb has no window manager, so maximise,
-    # minimise, restore, EWMH fullscreen and focus do not happen there at all -- asserting them
-    # against one would test the environment rather than the backend. And the translation tables
-    # need no server whatsoever, so they must keep running on a machine that has none.
-    if(CNA_PLATFORM STREQUAL "X11")
-        # No display needed: the keyboard/wheel/focus/auto-repeat tables and the SDL-containment
-        # scan are pure functions over committed source.
-        cna_register_renderer_test(NAME CnaX11MappingTests
-            COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=X11ScancodeMapping.*:X11KeyCodeMapping.*:X11ModifierMapping.*:X11ButtonMapping.*:X11FocusFiltering.*:X11AutoRepeat.*:X11IsSdlFree.*:X11PixelPacking.*:X11KeyCodeTable.*:LinuxEvdevLayout.*:LinuxEvdevHub.*:X11ExclusiveModeChoice.*:X11ScreenPlan.*:X11ModeGuardianWire.*:FreedesktopDropTarget.*:FreedesktopUriList.*:FreedesktopDropText.*:X11TouchMath.*:X11ContentScaleParsing.*:X11TextEncoding.*:LinuxEvdevMapping.*:LinuxSystemInfo.*:X11InputDeviceClassification.*:X11MessageBoxGeometry.*:LinuxEvdevHapticEffect.*:X11PortalRequest.*:X11ScreenSaverName.*:XkbKeyMapping.*
-            LABELS "platform" TIMEOUT 120)
-
-        # plans/plan_x11.md X11-0150: controllers the kernel really creates, through uinput. No
-        # display either -- controllers are not an X facility -- but a writable /dev/uinput and
-        # readable event nodes; each test skips where the machine grants neither.
-        get_property(_cna_have_evdev GLOBAL PROPERTY CNA_PLATFORM_HAVE_EVDEV)
-        if(_cna_have_evdev)
-            cna_register_renderer_test(NAME CnaX11EvdevTests
-                COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=X11EvdevVirtualDevice.*
-                LABELS "platform" TIMEOUT 120)
-        endif()
-
-        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/x11_test_server.sh")
-            # A private Xvfb per run, on a display number the launcher searches for rather than
-            # one hardcoded: a fixed :99 collides with a parallel ctest job and the collision
-            # looks like flakiness. The launcher exits 77 (ctest's skip code) where Xvfb or
-            # openbox is absent, so a machine without them records a skip rather than a failure.
-            cna_register_renderer_test(NAME CnaX11IntegrationTests
-                COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/x11_test_server.sh"
-                        $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}>
-                        --gtest_filter=X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*:X11DragAndDropLive.*:X11TouchSelection.*:X11ContentScaleLive.*:X11SelectionLive.*:X11InputDevicesLive.*:X11MessageBoxLive.*:X11DesktopPortalBus.*:X11DesktopPortalLive.*:X11ScreenSaverLive.*:X11ScreenSaverDesktopLive.*:X11TrayLive.*
-                LABELS "platform" TIMEOUT 300)
-
-            cna_register_renderer_test(NAME CnaX11WindowManagerTests
-                COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/x11_test_server.sh"
-                        --require-window-manager
-                        $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}>
-                        --gtest_filter=X11WithWindowManager.*
-                LABELS "platform" TIMEOUT 300)
-
-            # plans/plan_x11.md X11-0152: input-method composition against a private ibus on the
-            # private server; skips (77) where ibus or its XIM server is not installed.
-            cna_register_renderer_test(NAME CnaX11InputMethodTests
-                COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/x11_test_server.sh"
-                        --with-ibus
-                        $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}>
-                        --gtest_filter=X11InputMethod.*
-                LABELS "platform" TIMEOUT 300)
-
-            # plans/plan_x11.md X11-0155: real touchscreen contacts, through a uinput touchscreen a
-            # private rootless Xorg takes EXCLUSIVELY -- the suite verifies the grab before it
-            # injects anything, so nothing reaches the desktop's own compositor. Opt-in by this
-            # entry's environment; skips where uinput, Xorg or its dummy/evdev drivers are missing
-            # (CNA_X11_XORG_MODULE_PATH adds module directories).
-            cna_register_renderer_test(NAME CnaX11TouchscreenTests
-                COMMAND ${CMAKE_COMMAND} -E env CNA_X11_TEST_TOUCHSCREEN=1
-                        $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}>
-                        --gtest_filter=X11Touchscreen.*
-                LABELS "platform" TIMEOUT 300)
-
-            # plans/plan_x11.md X11-0153: exclusive fullscreen changes the display mode, so it
-            # runs only here -- on the launcher's own server, with a window manager -- and never
-            # on a desktop; the suite skips anywhere CNA_X11_PRIVATE_TEST_SERVER is not set.
-            cna_register_renderer_test(NAME CnaX11ExclusiveFullscreenTests
-                COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/x11_test_server.sh"
-                        --require-window-manager
-                        $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}>
-                        --gtest_filter=X11ExclusiveFullscreen.*
-                LABELS "platform" TIMEOUT 300)
-        endif()
+    # SDL3 on the window systems it drives, each on a server private to the run -- never the
+    # desktop's. The suites above run SDL's dummy driver, which answers NativeWindowSystem::Headless
+    # and owns no clipboard, so these are where the native handle a renderer receives
+    # (NativeWindowHandleMatchesTheVideoDriver: a Display* and an XID through SDL's x11 driver, a
+    # wl_display* and a wl_surface* through its wayland driver), the platform-window conformance
+    # suite and the desktop's real selections are exercised. Each launcher exits 77 (skip) where its
+    # server -- Xvfb, or headless Weston -- is not installed.
+    if(CNA_PLATFORM STREQUAL "SDL3" AND NOT (WIN32 OR APPLE OR ANDROID OR EMSCRIPTEN))
+        set(_cna_sdl3_window_system_filter
+            "Sdl3WindowTest.*:EveryImplementation/PlatformWindowConformance.*/SDL3")
+        cna_register_renderer_test(NAME CnaPlatformSdl3X11Tests
+            COMMAND sh "${CMAKE_SOURCE_DIR}/tools/platform/x11_test_server.sh"
+                    $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}>
+                    "--gtest_filter=${_cna_sdl3_window_system_filter}:Sdl3DisplayTest.*"
+            LABELS "platform" TIMEOUT 300
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;SDL_AUDIODRIVER=dummy;CNA_TEST_EXPECT_NATIVE_WINDOW_SYSTEM=X11")
+        cna_register_renderer_test(NAME CnaPlatformSdl3WaylandTests
+            COMMAND sh "${CMAKE_SOURCE_DIR}/tools/platform/wayland_test_server.sh" --compositor weston
+                    $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}>
+                    "--gtest_filter=${_cna_sdl3_window_system_filter}"
+            LABELS "platform" TIMEOUT 300
+            ENVIRONMENT "SDL_VIDEODRIVER=wayland;SDL_AUDIODRIVER=dummy;CNA_TEST_EXPECT_NATIVE_WINDOW_SYSTEM=Wayland")
+        unset(_cna_sdl3_window_system_filter)
     endif()
 
-    # plans/plan_wayland.md WAYLAND-0110..0113: the native Wayland backend's suites, split by what
-    # each needs, as X11's are. Neither of the first two needs a compositor of any kind: the
-    # mapping suite is pure functions and source scans, and the protocol suite brings its own
-    # compositor inside the test process (WaylandTestCompositor, reached through WAYLAND_SOCKET).
-    # No Wayland test ever reaches the desktop it runs on: WaylandTestEnvironment.cpp points
-    # WAYLAND_DISPLAY and the session bus at nothing before any test runs.
-    if(CNA_PLATFORM STREQUAL "WAYLAND")
-        cna_register_renderer_test(NAME CnaWaylandMappingTests
-            COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=WaylandVersionNegotiation.*:WaylandScaling.*:WaylandToplevelStates.*:WaylandConfigureSize.*:WaylandOutputScale.*:WaylandFrameHitTest.*:WaylandButtonMapping.*:WaylandWheelMapping.*:WaylandModifierMapping.*:WaylandCommittedText.*:WaylandTextInputMath.*:WaylandMimeTypes.*:WaylandTransferWrite.*:WaylandShmFile.*:WaylandIsSdlFree.*:WaylandTestEnvironment.*:XkbKeyMapping.*:FreedesktopDropTarget.*:FreedesktopUriList.*:FreedesktopDropText.*:LinuxEvdevLayout.*:LinuxEvdevHub.*:LinuxEvdevMapping.*:LinuxSystemInfo.*:LinuxEvdevHapticEffect.*
-            LABELS "platform" TIMEOUT 120)
-        cna_register_renderer_test(NAME CnaWaylandProtocolTests
-            COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=WaylandProtocol.*
-            LABELS "platform" TIMEOUT 300)
-
-        # plans/plan_wayland.md WAYLAND-0091: the desktop portal, with the parent window
-        # xdg-foreign names. Its own entry because it needs a private dbus-daemon as well as the
-        # in-process compositor, and skips itself where libdbus or dbus-daemon is missing. Like
-        # every other test here it reaches no bus but the one it started.
-        cna_register_renderer_test(NAME CnaWaylandPortalTests
-            COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=WaylandPortal.*
-            LABELS "platform" TIMEOUT 300)
-
-        # A real compositor, private to the run: headless Weston through the launcher, which exits
-        # 77 (skip) where Weston is not installed. Once with the software renderer -- shm only,
-        # EGL skips -- once with Weston's GL renderer, where EGL and Vulkan hand the compositor
-        # dmabufs from the real GPU, and once at output scale 2. The conformance suite runs here
-        # too: in the plain unit-test environment the Wayland platform has no compositor at all.
-        set(_cna_wayland_live_filter
-            "--gtest_filter=WaylandLive.*:EveryImplementation/Platform*Conformance.*/Wayland")
-        cna_register_renderer_test(NAME CnaWaylandWestonTests
-            COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/wayland_test_server.sh" --compositor weston
-                    $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}> ${_cna_wayland_live_filter}
-            LABELS "platform" TIMEOUT 300)
-        cna_register_renderer_test(NAME CnaWaylandWestonGpuTests
-            COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/wayland_test_server.sh" --compositor weston
-                    --renderer gl $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}> ${_cna_wayland_live_filter}
-            LABELS "platform" TIMEOUT 300)
-        # GNOME's own compositor, headless on a private session bus, with real input from its
-        # RemoteDesktop API on that bus -- and once more with a Czech keymap. Skips (77) where
-        # gnome-shell or dbus-daemon is not installed.
-        cna_register_renderer_test(NAME CnaWaylandMutterTests
-            COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/wayland_test_server.sh" --compositor mutter
-                    $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}>
-                    "--gtest_filter=WaylandMutter.*:WaylandLive.*:EveryImplementation/Platform*Conformance.*/Wayland"
-            LABELS "platform" TIMEOUT 600)
-        cna_register_renderer_test(NAME CnaWaylandMutterCzechTests
-            COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/wayland_test_server.sh" --compositor mutter
-                    --layout cz $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}> --gtest_filter=WaylandMutter.*
-            LABELS "platform" TIMEOUT 600)
-        # plans/plan_wayland.md WAYLAND-0054: a real input method. Under Wayland the IME belongs to
-        # the compositor, so this runs gnome-shell with ibus and the Korean engine as its input
-        # source and types into a CNA window: a composition that is not the keys typed, a commit
-        # that is, and keys still reaching a game that asked for no text. Skips (77) where
-        # gnome-shell, ibus or that engine is not installed.
-        cna_register_renderer_test(NAME CnaWaylandIbusTests
-            COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/wayland_test_server.sh" --compositor mutter
-                    --with-ibus hangul $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}> --gtest_filter=WaylandIme.*
-            LABELS "platform" TIMEOUT 600)
-        # plans/plan_wayland.md WAYLAND-0123: the binaries, not only the sources, are SDL- and
-        # X11-free (cmake/Tests/WaylandLinkClosure.cmake).
-        find_program(CNA_READELF_PROGRAM NAMES readelf)
-        find_program(CNA_LDD_PROGRAM NAMES ldd)
-        if(CNA_READELF_PROGRAM AND TARGET cna_wayland_desktop_validation)
-            set(_cna_wayland_linked "")
-            if(TARGET cna_demo_2d)
-                list(APPEND _cna_wayland_linked "$<TARGET_FILE:cna_demo_2d>")
-            endif()
-            add_test(NAME CnaWaylandLinkClosure
-                COMMAND ${CMAKE_COMMAND}
-                    "-DREADELF=${CNA_READELF_PROGRAM}" "-DLDD=${CNA_LDD_PROGRAM}" "-DNM=${CMAKE_NM}"
-                    "-DPLATFORM_ONLY=$<TARGET_FILE:cna_wayland_desktop_validation>"
-                    "-DOTHERS=${_cna_wayland_linked}"
-                    "-DTEST_BINARY=$<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}>"
-                    "-DARCHIVE=$<TARGET_FILE:cna_platform>"
-                    -P "${CMAKE_SOURCE_DIR}/cmake/Tests/WaylandLinkClosure.cmake")
-            set_tests_properties(CnaWaylandLinkClosure PROPERTIES LABELS "platform;configuration")
+    # plans/plan_native_platform_validation.md NPV-0102: a process that returns from main() with
+    # the lazily created platform still open must exit cleanly (cmake/Harnesses.cmake). Once on
+    # SDL's dummy driver, which every host has, and once on a private X server.
+    if(TARGET cna_platform_exit_harness)
+        add_test(NAME CnaPlatformExitOrderTests COMMAND cna_platform_exit_harness)
+        set_tests_properties(CnaPlatformExitOrderTests PROPERTIES
+            LABELS "platform" TIMEOUT 60
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy")
+        if(NOT WIN32)
+            add_test(NAME CnaPlatformExitOrderX11Tests
+                COMMAND sh "${CMAKE_SOURCE_DIR}/tools/platform/x11_test_server.sh"
+                        $<TARGET_FILE:cna_platform_exit_harness>)
+            set_tests_properties(CnaPlatformExitOrderX11Tests PROPERTIES
+                LABELS "platform" TIMEOUT 60
+                ENVIRONMENT "SDL_VIDEODRIVER=x11;SDL_AUDIODRIVER=dummy")
         endif()
-        cna_register_renderer_test(NAME CnaWaylandWestonScaledTests
-            COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/wayland_test_server.sh" --compositor weston
-                    --scale 2 $<TARGET_FILE:${CNA_PLATFORM_CTEST_BINARY}> --gtest_filter=WaylandLive.*
-            LABELS "platform" TIMEOUT 300)
     endif()
 
     if(MINGW)

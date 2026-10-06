@@ -12,7 +12,7 @@
 #
 # Usage (in the guest):
 #   Set-ExecutionPolicy -Scope Process Bypass -Force
-#   & C:\src\cna\tools\platform\win32_gtest_shards.ps1 -Exe C:\cna\build\full-win32-d3d12-nosdl\CnaTests.exe `
+#   & C:\src\cna\tools\platform\win32_gtest_shards.ps1 -Exe C:\cna\build\full-sdl3-d3d12\CnaTests.exe `
 #       -Shards 27 -Parallel 2 -OutDir C:\cna\report\dx12-round1 -WorkingDirectory C:\src\cna `
 #       -Environment 'CNA_D3D12_ADAPTER=warp'
 #

@@ -9,15 +9,6 @@
 #if defined(CNA_PLATFORM_SDL3)
 #  include "Sdl3/Sdl3Platform.hpp"
 #endif
-#if defined(CNA_PLATFORM_WIN32)
-#  include "Win32/Win32Platform.hpp"
-#endif
-#if defined(CNA_PLATFORM_X11)
-#  include "X11/X11Platform.hpp"
-#endif
-#if defined(CNA_PLATFORM_WAYLAND)
-#  include "Wayland/WaylandPlatform.hpp"
-#endif
 
 // Compiled on every POSIX target regardless of the selection -- see the module's CMakeLists for
 // why, and _WIN32 for why not there.
@@ -35,12 +26,6 @@ namespace CNA::Platform {
         const std::string kDefaultName = "Headless";
 #elif defined(CNA_PLATFORM_TERMINAL)
         const std::string kDefaultName = "Terminal";
-#elif defined(CNA_PLATFORM_WIN32)
-        const std::string kDefaultName = "Win32";
-#elif defined(CNA_PLATFORM_X11)
-        const std::string kDefaultName = "X11";
-#elif defined(CNA_PLATFORM_WAYLAND)
-        const std::string kDefaultName = "Wayland";
 #else
         const std::string kDefaultName = "SDL3";
 #endif
@@ -58,24 +43,6 @@ namespace CNA::Platform {
         if (name == "SDL3")
         {
             return std::make_unique<Sdl3::Sdl3Platform>();
-        }
-#endif
-#if defined(CNA_PLATFORM_WIN32)
-        if (name == "Win32")
-        {
-            return std::make_unique<Win32::Win32Platform>();
-        }
-#endif
-#if defined(CNA_PLATFORM_X11)
-        if (name == "X11")
-        {
-            return std::make_unique<X11::X11Platform>();
-        }
-#endif
-#if defined(CNA_PLATFORM_WAYLAND)
-        if (name == "Wayland")
-        {
-            return std::make_unique<Wayland::WaylandPlatform>();
         }
 #endif
 
@@ -115,17 +82,6 @@ namespace CNA::Platform {
         std::vector<std::string> available;
 #if defined(CNA_PLATFORM_SDL3)
         available.emplace_back("SDL3");
-#endif
-#if defined(CNA_PLATFORM_WIN32)
-        // Listing it here is also what enrols it in the implementation-neutral conformance suite:
-        // PlatformConformanceTests is parameterised over exactly this list.
-        available.emplace_back("Win32");
-#endif
-#if defined(CNA_PLATFORM_X11)
-        available.emplace_back("X11");
-#endif
-#if defined(CNA_PLATFORM_WAYLAND)
-        available.emplace_back("Wayland");
 #endif
         available.emplace_back("Headless");
 #if !defined(_WIN32)

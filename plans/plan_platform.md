@@ -1,5 +1,10 @@
 # CNA Platform Abstraction (`IPlatform`) — Implementation Plan
 
+> **Retirement notice (2026-10-06):** the direct `WIN32`, `X11` and `WAYLAND` implementations that
+> later campaigns added are retired (§11c, PLAT-142). SDL3 is CNA's one graphical platform; Windows,
+> X11 and Wayland are reached through SDL's video drivers, and the native handles a renderer needs
+> still arrive through `NativeWindowHandle`.
+
 > **Retirement notice (2026-10-04):** Phase 11 is a historical record. SDL2 platform and audio
 > support has been removed from active CNA; the supported SDL implementation is SDL3. The former
 > SDL2 task rows remain below because they truthfully record completed work at the time.
@@ -26,7 +31,8 @@
 > **Explicit scope boundary:** the completed original campaign delivered `Sdl3Platform` plus the
 > deliberately limited `HeadlessPlatform` and `TerminalPlatform` used to prove the contract.
 > Phase 11 historically added an independent SDL2 backend; it was retired on 2026-10-04. Later
-> campaigns added native Win32, X11 and Wayland implementations.
+> campaigns added native Win32, X11 and Wayland implementations; they were retired on 2026-10-06
+> (§11c).
 >
 > **A completed plan is not a finished one.** Work merged after 2026-08-13 reopened three of this
 > plan's guarantees without any row changing status: a renderer arrived holding a raw window
@@ -88,11 +94,11 @@ exclusions are worth 78 files that a naive `grep SDL_` misreports as coupling.
 
 | Metric | Value |
 |---|---|
-| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1053** |
-| Files referencing SDL (all) | **223** |
-| Production files (`src/` + `include/`) referencing SDL | **55** |
+| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1051** |
+| Files referencing SDL (all) | **219** |
+| Production files (`src/` + `include/`) referencing SDL | **54** |
 | …of which are renderer production files | **18** |
-| Test/example files referencing SDL | **168** |
+| Test/example files referencing SDL | **165** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **9** |
 | Renderer families reaching for `SDL_GL_*` directly | **0** |
 
@@ -100,7 +106,7 @@ Production SDL surface per module (`src/` + `include/` only):
 
 | Module | Files | Dominant concern |
 |---|---:|---|
-| `modules/platform` | 31 | - |
+| `modules/platform` | 30 | - |
 | `modules/audio` | 6 | audio device/stream, mixer, microphone |
 | `modules/renderers/*` | 18 | native window handle, GL context, Vulkan surface, SDL renderer/GPU (3 families) |
 
@@ -144,8 +150,8 @@ Renderer families calling `SDL_GL_*` directly, freed as a group by one `IPlatfor
    XNA type (e.g. `GameWindow`), the XNA-side accessor is `CNAEXT`-tagged as usual.
 
 3. **Compile-time selection, runtime polymorphism.** `CNA_PLATFORM` is a CMake cache variable
-   with values `SDL3` (default), `HEADLESS`, POSIX `TERMINAL`, native `X11`/`WAYLAND` where their
-   development dependencies exist, and Windows `WIN32`; `SDL12` is a reserved
+   with values `SDL3` (default), `HEADLESS` and POSIX `TERMINAL` (the direct `X11`, `WAYLAND` and
+   `WIN32` backends existed from 2026-09 until their retirement on 2026-10-06); `SDL12` is a reserved
    identifier and configuring with it is a hard CMake error naming this plan. Only the
    selected implementation is compiled. `IPlatform` stays virtual anyway, because `HEADLESS` and
    the conformance suite need two implementations in one binary; the `using ActivePlatform = …`
@@ -803,6 +809,9 @@ SDL2 bugs; SDL2 was the first configuration that asked the questions.
 
 ## 11b. X11 platform implementation (separate workstream)
 
+> **Retired 2026-10-06 (§11c).** Kept as the record of what the direct backend demonstrated; the
+> files it names are gone from the tree and live in git history.
+
 A fourth implementation landed after this plan closed: **`CNA_PLATFORM=X11`**, a native backend
 written against Xlib and the X extensions with no SDL in it at all. It is not a step of this
 campaign and does not renumber anything here; its own plan, task ledger and evidence are
@@ -827,6 +836,20 @@ Two things about it matter to *this* plan, because they change claims made above
 
 ---
 
+## 11c. Retirement of the direct Win32, X11 and Wayland implementations (2026-10-06)
+
+SDL3 is CNA's one graphical platform. The three direct backends were complete and well tested; they
+were retired because each was a full second copy of what SDL3 already does on its window system --
+window management, input translation, clipboard and selections, IME, DPI, controllers, dialogs --
+and keeping three of them correct cost more than the SDL independence they bought. Windows, X11
+and Wayland stay supported, through SDL's `windows`, `x11` and `wayland` video drivers.
+
+| ID | Task | Status | Evidence |
+|---|---|---|---|
+| PLAT-142 | Remove `CNA_PLATFORM=WIN32/X11/WAYLAND`; route every window system through SDL3 | ✅ | **Removed:** `modules/platform/src/Win32/`, `X11/`, `Wayland/` and the code only they used (`Xkb/`, `Freedesktop/`, `Linux/`, `Posix/`, `Common/SurfaceFrameFitting`); their 52 dedicated test files; `cmake/PlatformX11.cmake`, `cmake/PlatformWayland.cmake` and their two configuration tests; the X11/Wayland desktop-validation harnesses, the Win32 standalone probes and the Win32-only validation scripts; the X11 House3D/exclusive-fullscreen ctests; four CI jobs; `spikes/win32-spike`, `spikes/wayland-spike`; five capability/testing documents. `PlatformFactory` knows SDL3, Headless and Terminal only. **Refused, not aliased:** `cmake/PlatformSelection.cmake` fails `WIN32`, `X11` and `WAYLAND` by name, pointing at `SDL3`; `CnaPlatformSelection_Retired` (with SDL2) and `PlatformFactoryTests.RetiredImplementationsAreNeitherAdvertisedNorCreatable` lock that. **Kept unchanged:** `NativeWindowSystem::Win32/X11/Wayland`, `NativeWindowHandle`, `TryGetWin32/X11/Wayland`, the C API's `CNA_NATIVE_WINDOW_SYSTEM_*`, and `Sdl3Window::GetNativeHandle()`, which fills them from SDL's window properties; no renderer and no contract header changed. `CNA_ENABLE_SDL=OFF` remains as the windowless configuration. **Migrated rather than deleted:** NPV-0102's process-exit harness (`tools/platform/platform_exit_harness.cpp`, `CnaPlatformExitOrderTests`/`CnaPlatformExitOrderX11Tests`); the private Xvfb and headless-Weston launchers, trimmed to what SDL3 tests use; `win32_unicode_paths.ps1`'s source step, which now configures the real tree; the Direct3D 11 hardware smoke and Direct3D 12 present stress, which now take the `HWND` from `GetNativeWindowHandleEXT()` of an SDL3 window; and new `CnaPlatformSdl3X11Tests`/`CnaPlatformSdl3WaylandTests` with `Sdl3WindowTest.NativeHandleMatchesTheVideoDriver`, which run SDL3 on a private Xvfb and a private headless Weston and assert the `Display*` + XID and the `wl_display*` + `wl_surface*` a renderer receives. **Also deleted, not migrated:** `tools/platform/standalone_tests/` with `win32_standalone_suite.ps1` and `win32_build_sdl_prebuilt.ps1`. The harness had failed to compile for every selection since `31a560af9` (2026-09-28: `KeyboardAccelerometer.cpp` includes a SharpRuntime header, and `cna_platform` links SharpRuntime `Core.Base`), so its premise -- the platform module without SharpRuntime -- no longer held, and its only live users were the Win32 CI and validation removed here. CI: `win32-cross`, `win32-native`, `x11-sdl-free` and `x11-sdl-free-gpu` replaced by SDL3-on-X11/Wayland steps in the SDL3 cells, an `sdl3-windows` MSVC job (real configure, `CnaPlatformModuleTests`) and an SDL-free Headless + ALSA job. **Validated 2026-10-06 (Linux x86-64, Radeon 780M):** `build-probe` (SDL3 + OPENGLES3) builds; the whole ctest suite through `run_gpu_tests_private.sh`, 12 085 entries, 38 failures, 24 of which pass when re-run serially and 14 of which are renderer/content results on code this change does not compile differently (EasyGL ES limits incl. `misc/known_bugs.md` §3, a WebGPU source-scan, C API coverage, content-pipeline and glTF/XNB corpus gates); `CnaPlatformSdl3X11Tests` 38 passed, `CnaPlatformSdl3WaylandTests` 30 passed, none skipped; seven renderers (OPENGLES3, OPENGL33, VULKAN, WEBGPU, SDL_GPU, FNA3D, SOFTWARE) × `cna_house3d_demo`/`cna_demo_2d` × SDL `x11`/`wayland` all exit 0; the SDL-free Headless tree's `CnaPlatformModuleTests` 310 passed / 1 skipped with no SDL in `ldd`; a mingw-w64 SDL3 cross-build of the platform suite, exit harness, `cna_demo_2d` and the Direct3D 11 hardware smoke links, the Direct3D 12 stress passes a syntax check, and under Wine + DXVK the SDL3 window suite passes (30, `NativeHandleMatchesTheVideoDriver` = Win32) and the Direct3D 11 smoke presents into, and resizes, the HWND of an SDL3 window. Not run: anything on real Windows. **Measured** (tracked files, before → after): platform production C/C++ 63 327 → 20 837 lines (241 → 105 files); platform tests 42 166 → 12 763 lines (102 → 50 files); `tools/platform/` 18 658 → 5 513 lines (64 → 26 files); `cmake/*.cmake` 11 670 → 10 662 lines and `CMakeLists.txt` files 18 891 → 18 399; tracked files 10 874 → 10 632; the change as a whole 747 insertions, 89 195 deletions. |
+
+---
+
 ## 12. Possible future implementations (NOT in scope)
 
 **None of the following is implemented by this plan.** They are recorded because they are the
@@ -839,12 +862,14 @@ need its own plan file.
 > row out once it lands would erase the evidence that the design held. `TerminalPlatform` was
 > promoted into Phase 10 of this plan; `Win32Platform` was implemented by
 > [`plans/plan_win32.md`](plan_win32.md) and needed **no change to any contract header** to fit,
-> which is the strongest statement this section can make about the abstraction.
+> which is the strongest statement this section can make about the abstraction. It was retired
+> again on 2026-10-06 (§11c) -- not because the contract failed it, but because a second copy of
+> what SDL3 already does on Windows was not worth its upkeep.
 
 | Candidate | Rationale | Expected capability profile | Status |
 |---|---|---|---|
 | `Sdl12Platform` | Genuinely historical systems. SDL 1.2 is deprecated upstream (last release 1.2.15) and would be CNA-owned indefinitely. | Limited profile: basic window, keyboard/mouse, old joystick API, timing, basic audio, GL or software surface, basic fullscreen. Clipboard, text input, gamepad, HiDPI largely unsupported — declared unsupported, never emulated with unsafe hacks. | Future — not started |
-| `Win32Platform` | A native platform with no SDL at all, pairing naturally with the `DIRECTX*` renderers and CPU `SOFTWARE` presentation. | Windows-only; no cross-platform pretence. | ✅ **Implemented** — [`plans/plan_win32.md`](plan_win32.md), [`docs/platform-win32.md`](../docs/platform-win32.md). `CNA_PLATFORM=WIN32` is a first-class selection on Windows targets and a loud refusal everywhere else. Built on user32/gdi32/opengl32/ole32/shell32 with zero SDL; joins the conformance suite through `PlatformFactory::GetAvailable()`. It also closed the last place SDL was still CNA's substrate rather than a backend: the root configure no longer *builds* vendored SDL3 for a configuration nothing in which uses it. |
+| `Win32Platform` | A native platform with no SDL at all, pairing naturally with the `DIRECTX*` renderers and CPU `SOFTWARE` presentation. | Windows-only; no cross-platform pretence. | 🗄️ **Implemented, then retired 2026-10-06 (§11c)** — [`plans/plan_win32.md`](plan_win32.md); its capability document `docs/platform-win32.md` is in git history. While it existed, `CNA_PLATFORM=WIN32` was a first-class selection on Windows targets and a loud refusal everywhere else. Built on user32/gdi32/opengl32/ole32/shell32 with zero SDL; joins the conformance suite through `PlatformFactory::GetAvailable()`. It also closed the last place SDL was still CNA's substrate rather than a backend: the root configure no longer *builds* vendored SDL3 for a configuration nothing in which uses it. |
 | `EmscriptenPlatform` | A direct browser platform for the web renderers. | Web-shaped: no multiple windows, no native dialogs. | Future — not started |
 | `TerminalPlatform` | Runs a game in a TTY — over SSH, in CI, in `tmux`, on any machine with no display server. **Not listed here as future work: it was analysed and promoted to Phase 10**, because it is the strongest available proof the contract is not SDL-shaped. | Cells not pixels; mouse at cell granularity; exact keyboard only under the Kitty protocol; no gamepad. | **Analysed — Phase 10** |
 | Separate gamepad module | If a second implementation shows the capability model cannot express the SDL1-joystick vs SDL2-GameController vs SDL3-Gamepad gap (design decision 8), the gamepad seam is split out then — on evidence, not in advance. | — | Future — revisit after a second implementation exists |

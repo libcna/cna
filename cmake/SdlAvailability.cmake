@@ -17,9 +17,11 @@
 #                   that genuinely needs it is rejected at configure time, naming which one --
 #                   never silently substituted.
 #
-# The point is not to remove SDL. SDL3 remains CNA's default platform and an excellent one.
-# The point is that "CNA without SDL" must be a configuration that exists, because a framework
-# whose abstraction layer cannot be built without the thing it abstracts has not abstracted it.
+# The point is not to remove SDL. SDL3 is CNA's windowing platform -- the one implementation
+# that opens a window, on every desktop and mobile target. The point is that "CNA without SDL"
+# must be a configuration that exists -- a headless server, a test runner, a terminal game --
+# because a framework whose abstraction layer cannot be built without the thing it abstracts has
+# not abstracted it.
 # =====================================================================================
 
 include_guard(GLOBAL)
@@ -80,9 +82,12 @@ if(_cna_enable_sdl_normalized STREQUAL "OFF" AND _cna_sdl_reasons)
         "${_cna_sdl_reason_text}.\n"
         "Nothing is substituted for it, deliberately -- silently swapping in another backend "
         "would build something other than what you asked for.\n"
-        "For an SDL-free build select a native platform, audio and renderer, for example:\n"
-        "  -DCNA_PLATFORM=X11 -DCNA_AUDIO_PLATFORM=NULL -DCNA_GRAPHICS_RENDERER=HEADLESS\n"
-        "See docs/platform-x11.md.")
+        "An SDL-free build has no window: select a windowless platform, audio and renderer, "
+        "for example:\n"
+        "  -DCNA_PLATFORM=HEADLESS -DCNA_AUDIO_PLATFORM=NULL -DCNA_GRAPHICS_RENDERER=HEADLESS\n"
+        "(TERMINAL, SOFTWARE and Linux ALSA audio are SDL-free too). A windowed build -- on "
+        "Windows, X11 or Wayland alike -- needs CNA_PLATFORM=SDL3.\n"
+        "See docs/platform-abstraction.md.")
 endif()
 
 if(_cna_enable_sdl_normalized STREQUAL "OFF")

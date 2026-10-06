@@ -66,8 +66,9 @@ not installed as system packages (`README.md` §9 already covers this) — but b
 source* still needs the underlying platform dev headers SDL3 probes for at CMake-configure time.
 This project always drives tests with `SDL_VIDEODRIVER=x11` (see `NEXT.md` §7), so the X11 dev
 headers are the load-bearing ones. SDL3 builds without the Wayland dev headers (it just won't offer
-that video driver); CNA's own `WAYLAND` platform backend needs the packages listed in
-[`docs/platform-wayland.md`](docs/platform-wayland.md).
+that video driver); for SDL3 to run as a native Wayland client install `libwayland-dev`,
+`wayland-protocols`, `libxkbcommon-dev` and `libdecor-0-dev` as well (`cmake/ThirdPartySDL.cmake`
+warns when a Wayland session is about to run through Xwayland for want of them).
 
 - **X11 libs** (`libx11-dev` + `libxext-dev`/`libxrandr-dev`/`libxinerama-dev`/`libxcursor-dev`/
   `libxi-dev`/`libxfixes-dev`/`libxss-dev`/`libxtst-dev`) — SDL3's X11 video backend. XTest is not

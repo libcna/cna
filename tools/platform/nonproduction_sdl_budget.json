@@ -205,18 +205,6 @@
       "category": "containment-assertion",
       "max_references": 1
     },
-    "modules/platform/tests/CNA/Platform/WaylandIsSdlFreeTests.cpp": {
-      "category": "containment-assertion",
-      "max_references": 5
-    },
-    "modules/platform/tests/CNA/Platform/Win32NoSdlTests.cpp": {
-      "category": "text-evidence-assertion",
-      "max_references": 2
-    },
-    "modules/platform/tests/CNA/Platform/X11IsSdlFreeTests.cpp": {
-      "category": "containment-assertion",
-      "max_references": 12
-    },
     "modules/renderers/canvas/examples/canvas_smoke_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 9

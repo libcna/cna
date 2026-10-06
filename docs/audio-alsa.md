@@ -1,7 +1,7 @@
 # ALSA audio and CNA's own mixer (`CNA_AUDIO_PLATFORM=ALSA`)
 
 `CNA_AUDIO_PLATFORM=ALSA` is sound for a CNA build that has no SDL in it. Before it, an SDL-free
-build (`CNA_ENABLE_SDL=OFF`, `CNA_PLATFORM=X11`) could only select `NULL` audio: `SoundEffect.Play()`
+build (`CNA_ENABLE_SDL=OFF`) could only select `NULL` audio: `SoundEffect.Play()`
 returned false, every instance was Stopped the moment it started, and a
 `DynamicSoundEffectInstance` stopped asking for buffers after its third. Now it plays.
 
@@ -19,21 +19,28 @@ The plan and the evidence are `plans/plan_x11.md` X11-0151.
 ## Selecting it
 
 ```sh
+# SDL-free: no window, sound through ALSA and CNA's mixer
 cmake -S . -B build -G Ninja \
       -DCNA_ENABLE_SDL=OFF \
-      -DCNA_PLATFORM=X11 \
+      -DCNA_PLATFORM=HEADLESS \
+      -DCNA_AUDIO_PLATFORM=ALSA \
+      -DCNA_GRAPHICS_RENDERER=HEADLESS
+
+# a windowed game on SDL3 whose sound still goes through ALSA and CNA's mixer
+cmake -S . -B build -G Ninja \
+      -DCNA_PLATFORM=SDL3 \
       -DCNA_AUDIO_PLATFORM=ALSA \
       -DCNA_GRAPHICS_RENDERER=OPENGL33
 ```
 
 Linux only, and it needs the ALSA **headers** at build time (Debian/Ubuntu `libasound2-dev`,
 Fedora `alsa-lib-devel`); asking for it without them is a configure error naming the package.
-`libasound.so.2` itself is **loaded at run time**, not linked — the way the X11 platform loads GLX
-— so a machine without it still starts the program; opening the device then fails with the reason,
+`libasound.so.2` itself is **loaded at run time**, not linked — so a machine without it still
+starts the program; opening the device then fails with the reason,
 which the XNA layer reports as `NoAudioHardwareException`, exactly as it does on SDL3.
 
 `CNA_AUDIO_PLATFORM` stays independent of `CNA_PLATFORM`: ALSA audio works with any platform
-backend on Linux, not only X11.
+implementation on Linux -- SDL3, HEADLESS or TERMINAL.
 
 ## Why ALSA and not PipeWire or PulseAudio
 

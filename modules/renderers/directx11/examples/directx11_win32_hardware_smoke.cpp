@@ -2,6 +2,7 @@
 
 #include "CNA/Internal/Renderers/D3DCommon/D3DDebugLayerLog.hpp"
 #include "CNA/Internal/Renderers/DirectX11/DirectX11Renderer.hpp"
+#include "CNA/Platform/NativeWindowHandle.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -189,7 +190,16 @@ namespace
                 ++drawChecks_;
             }
 
-            HWND window = reinterpret_cast<HWND>(getWindowProperty().getHandleProperty());
+            // GameWindow::Handle is the platform's own window token (SDL3's own window pointer,
+            // as in FNA); the HWND the renderer presents into comes back as the native handle.
+            CNA::Platform::Win32NativeWindow native;
+            if (!CNA::Platform::TryGetWin32(getWindowProperty().GetNativeWindowHandleEXT(), native))
+            {
+                Check(false, "the window is a Win32 window");
+                Exit();
+                return;
+            }
+            HWND window = static_cast<HWND>(native.hwnd);
             if (frames_ == 3 ||
                 (frameTarget_ > 10 && frames_ > 10 && frames_ % 150 == 0))
             {

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 // plans/plan_directx12_parity.md DX12-0007: the foundational DirectX 12 presentation stress on a real
-// CNA Win32 window.
+// CNA window on Windows.
 //
-// A real Game -- Win32Platform window, GraphicsDeviceManager, DirectX12Renderer, DXGI flip-model swap
-// chain -- runs for thousands of frames while this program does to its window what a user does:
+// A real Game -- an SDL3 platform window and its HWND, GraphicsDeviceManager, DirectX12Renderer, DXGI
+// flip-model swap chain -- runs for thousands of frames while this program does to its window what a
+// user does:
 // SetWindowPos to a new client size (WM_SIZE -> platform -> renderer -> ResizeBuffers), minimize and
 // restore. Every frame clears and draws a sprite; on a schedule it also creates, renders into, reads back
 // and disposes render targets, textures and dynamic vertex buffers. It checks:
@@ -22,6 +23,7 @@
 #if defined(_WIN32)
 
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
+#include "CNA/Platform/NativeWindowHandle.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
@@ -135,7 +137,15 @@ namespace
                 std::printf("[FAIL] %s\n", message.c_str());
         }
 
-        HWND Window() { return reinterpret_cast<HWND>(getWindowProperty().getHandleProperty()); }
+        // GameWindow::Handle is the platform's own window token (SDL3's own window pointer, as in
+        // FNA); the HWND the swap chain presents into comes back as the native handle.
+        HWND Window()
+        {
+            CNA::Platform::Win32NativeWindow native;
+            return CNA::Platform::TryGetWin32(getWindowProperty().GetNativeWindowHandleEXT(), native)
+                ? static_cast<HWND>(native.hwnd)
+                : nullptr;
+        }
 
         void DrawFrame()
         {

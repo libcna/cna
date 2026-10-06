@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: MS-PL
 //
 // plans/plan_native_platform_validation.md NPV-0102: a process that exits while CNA's current
-// platform -- and so its X connection -- is still open.
+// platform -- and so its window-system connection -- is still open.
 //
 // That is the ordinary end of every application written against the XNA API: CurrentPlatform
 // creates the default platform lazily into a function-local static, nothing destroys it before
-// main() returns, and exit() tears it down among the static destructors. It used to run after the
-// X11 error policy's own statics had been destroyed, so ~X11Connection unregistered itself from a
-// freed vector through a freed mutex. Silent in an ordinary build; AddressSanitizer reports it, and
-// its non-zero exit status is what X11Live.AProcessExitingWithTheCurrentPlatformOpenTearsDownCleanly
-// asserts on.
+// main() returns, and exit() tears it down among the static destructors. NPV-0102 found the
+// platform's teardown running after statics it still used had been destroyed -- silent in an
+// ordinary build, reported by AddressSanitizer. This process is run through SDL3's dummy driver
+// and, where a private X server is available, through its x11 driver; the non-zero exit status a
+// teardown defect produces under a sanitizer is what CnaPlatformExitOrder* asserts on.
 //
 // It cannot be a test inside CnaTests: the defect lives in static destruction order at process
 // exit, and a test binary's statics were constructed long before any one test runs.
 //
-// Exit status: 0 on a clean exit, 77 (ctest's skip code) when there is no X server to reach.
+// Exit status: 0 on a clean exit, 77 (ctest's skip code) when there is no video subsystem to reach.
 
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/IPlatform.hpp"
@@ -34,7 +34,7 @@ int main()
     }
     catch (const PlatformException& error)
     {
-        std::fprintf(stderr, "SKIP: no X server: %s\n", error.what());
+        std::fprintf(stderr, "SKIP: no video subsystem: %s\n", error.what());
         return 77;
     }
 

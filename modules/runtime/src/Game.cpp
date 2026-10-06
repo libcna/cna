@@ -175,9 +175,9 @@ namespace Microsoft::Xna::Framework
         // the case that actually goes wrong.
         //
         // Both holders are deliberately IMMORTAL -- allocated once and never destroyed -- for the
-        // same reason X11Error.cpp's are (plans/plan_native_platform_validation.md NPV-0102): a
-        // Game can be destroyed at ANY point of process teardown, so a registry it unregisters
-        // itself from has to stay valid for longer than any ordinary static.
+        // reason plans/plan_native_platform_validation.md NPV-0102 records: a Game can be
+        // destroyed at ANY point of process teardown, so a registry it unregisters itself from has
+        // to stay valid for longer than any ordinary static.
         //
         // The owner that proved it is the C API. Its handle registry owns each C-created Game
         // through a shared_ptr in a function-local static, and that static is constructed on the

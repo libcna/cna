@@ -504,79 +504,17 @@ if(CNA_BUILD_TESTS AND NOT WIN32)
     )
 endif()
 
-# --- plans/plan_native_platform_validation.md NPV-0102: X11 exit-order harness ---
-# A process that returns from main() while CurrentPlatform's lazily created X11 platform is still
-# open -- the ordinary end of every XNA-API application. The defect it guards against lives in
-# static destruction order at process exit, which no test inside a long-running test binary can
-# reach; X11PlatformIntegrationTests.cpp spawns this and asserts on its exit status.
-if(CNA_BUILD_TESTS AND CNA_PLATFORM STREQUAL "X11")
-    add_executable(cna_platform_x11_exit_harness tools/platform/x11_exit_harness.cpp)
-    target_link_libraries(cna_platform_x11_exit_harness PRIVATE cna_platform)
-endif()
-
-# --- plans/plan_native_platform_validation.md: real-desktop X11 validation harness ---
-# A standalone (non-GTest) program that drives the native X11 backend against whatever X server
-# $DISPLAY names -- a developer's real desktop, a real GPU, a real window manager -- and checks
-# the results over an independent X connection. Most of what it measures needs a person-sized
-# amount of time or hardware no CI runner has, which is why it is a tool and not a ctest.
-# docs/testing-x11-desktop.md describes every scenario.
-if(CNA_BUILD_TESTS AND CNA_PLATFORM STREQUAL "X11")
-    file(GLOB _cna_x11_validation_sources CONFIGURE_DEPENDS
-        "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/x11_desktop_validation/*.cpp")
-    add_executable(cna_x11_desktop_validation ${_cna_x11_validation_sources})
-    target_link_libraries(cna_x11_desktop_validation
-        PRIVATE
-        cna_platform
-        ${CNA_X11_LIBRARIES}
-        ${CMAKE_DL_LIBS}
-    )
-    if(CNA_X11_INCLUDE_DIRS)
-        target_include_directories(cna_x11_desktop_validation PRIVATE ${CNA_X11_INCLUDE_DIRS})
-    endif()
-    if(CNA_X11_DEFINITIONS)
-        target_compile_definitions(cna_x11_desktop_validation PRIVATE ${CNA_X11_DEFINITIONS})
-    endif()
-    # Optional verification helpers: X-Resource counts a client's server-side resources (leak
-    # detection) and XTest is the X-server-level injection path. Each is used only when present.
-    find_library(CNA_X11_VALIDATION_XRES_LIBRARY NAMES XRes)
-    find_path(CNA_X11_VALIDATION_XRES_INCLUDE X11/extensions/XRes.h)
-    if(CNA_X11_VALIDATION_XRES_LIBRARY AND CNA_X11_VALIDATION_XRES_INCLUDE)
-        target_link_libraries(cna_x11_desktop_validation PRIVATE ${CNA_X11_VALIDATION_XRES_LIBRARY})
-        target_compile_definitions(cna_x11_desktop_validation PRIVATE CNA_X11_VALIDATION_HAVE_XRES)
-    endif()
-    find_library(CNA_X11_VALIDATION_XTEST_LIBRARY NAMES Xtst)
-    find_path(CNA_X11_VALIDATION_XTEST_INCLUDE X11/extensions/XTest.h)
-    if(CNA_X11_VALIDATION_XTEST_LIBRARY AND CNA_X11_VALIDATION_XTEST_INCLUDE)
-        target_link_libraries(cna_x11_desktop_validation PRIVATE ${CNA_X11_VALIDATION_XTEST_LIBRARY})
-        target_compile_definitions(cna_x11_desktop_validation PRIVATE CNA_X11_VALIDATION_HAVE_XTEST)
-    endif()
-    # Vulkan is headers-only here, as it is in the backend: the loader is dlopen()ed at run time.
-    find_path(CNA_X11_VALIDATION_VULKAN_INCLUDE vulkan/vulkan.h)
-    if(CNA_X11_VALIDATION_VULKAN_INCLUDE)
-        target_include_directories(cna_x11_desktop_validation PRIVATE ${CNA_X11_VALIDATION_VULKAN_INCLUDE})
-        target_compile_definitions(cna_x11_desktop_validation PRIVATE CNA_X11_VALIDATION_HAVE_VULKAN)
-    endif()
-endif()
-
-# --- plans/plan_wayland.md WAYLAND-0114: real-desktop Wayland validation harness ---
-# A standalone (non-GTest) program that drives the native Wayland backend against whatever
-# compositor WAYLAND_DISPLAY names -- a real desktop, a real GPU, real outputs at a real fractional
-# scale -- and reports one PASS/FAIL/SKIP line per check. It injects no input (an ordinary Wayland
-# client cannot); what needs hands is its `interactive` scenario, for a person.
-# docs/platform-wayland.md describes every scenario.
-if(CNA_BUILD_TESTS AND CNA_PLATFORM STREQUAL "WAYLAND")
-    file(GLOB _cna_wayland_validation_sources CONFIGURE_DEPENDS
-        "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/wayland_desktop_validation/*.cpp")
-    add_executable(cna_wayland_desktop_validation ${_cna_wayland_validation_sources})
-    get_property(_cna_wayland_protocol_dir GLOBAL PROPERTY CNA_WAYLAND_PROTOCOL_DIR)
-    target_link_libraries(cna_wayland_desktop_validation PRIVATE cna_platform ${CNA_WAYLAND_LIBRARIES} ${CMAKE_DL_LIBS})
-    target_include_directories(cna_wayland_desktop_validation PRIVATE ${CNA_WAYLAND_INCLUDE_DIRS} ${_cna_wayland_protocol_dir})
-    if(CNA_WAYLAND_DEFINITIONS)
-        target_compile_definitions(cna_wayland_desktop_validation PRIVATE ${CNA_WAYLAND_DEFINITIONS})
-    endif()
-    # Vulkan is headers-only here, as it is in the backend: the loader is dlopen()ed at run time.
-    if("CNA_WAYLAND_HAVE_VULKAN_HEADERS=1" IN_LIST CNA_WAYLAND_DEFINITIONS)
-        target_compile_definitions(cna_wayland_desktop_validation PRIVATE CNA_WAYLAND_VALIDATION_HAVE_VULKAN)
+# --- plans/plan_native_platform_validation.md NPV-0102: platform exit-order harness ---
+# A process that returns from main() while CurrentPlatform's lazily created platform still has a
+# window system open -- the ordinary end of every XNA-API application. The defect class it guards
+# against lives in static destruction order at process exit, which no test inside a long-running
+# test binary can reach; cmake/UnitTests.cmake runs it as CnaPlatformExitOrder* and asserts on its
+# exit status.
+if(CNA_BUILD_TESTS AND CNA_PLATFORM STREQUAL "SDL3" AND NOT (EMSCRIPTEN OR ANDROID OR CNA_APPLE_IOS))
+    add_executable(cna_platform_exit_harness tools/platform/platform_exit_harness.cpp)
+    target_link_libraries(cna_platform_exit_harness PRIVATE cna_platform)
+    if(WIN32)
+        cna_copy_sdl_runtime(cna_platform_exit_harness)
     endif()
 endif()
 

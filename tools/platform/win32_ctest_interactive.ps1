@@ -11,7 +11,7 @@
 #
 # Usage (in the guest):
 #   Set-ExecutionPolicy -Scope Process Bypass -Force
-#   & C:\src\cna\tools\platform\win32_ctest_interactive.ps1 -BuildDir C:\cna\build\full-win32-d3d12-nosdl `
+#   & C:\src\cna\tools\platform\win32_ctest_interactive.ps1 -BuildDir C:\cna\build\full-sdl3-d3d12 `
 #       -Label DIRECTX12 -OutDir C:\cna\report\dx12-parity-1 -Environment 'CNA_D3D12_ADAPTER=warp'
 #
 # Output: <OutDir>\ctest-junit.xml, <OutDir>\ctest.out.txt, <OutDir>\summary.txt and summary.json.

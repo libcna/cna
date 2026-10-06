@@ -10,6 +10,11 @@
 # combinations are invalid (a GPU renderer needs a native window handle, which the
 # headless and terminal platforms do not provide), and those are rejected where the
 # capability is known -- not silently tolerated until something dereferences null.
+#
+# SDL3 is the one windowing implementation. Windows, X11, Wayland, macOS, iOS, Android and the
+# browser are reached through SDL's own video drivers, and the native handle a renderer needs
+# (HWND, Display* + XID, wl_display* + wl_surface*, ...) comes back through
+# IPlatformWindow::GetNativeHandle() as NativeWindowSystem::Win32/X11/Wayland/....
 # =====================================================================================
 
 # `cmake -P` does not inherit the project's cmake_minimum_required() policy set. Keep the same
@@ -17,65 +22,14 @@
 cmake_policy(SET CMP0057 NEW)
 
 set(CNA_PLATFORM "SDL3" CACHE STRING
-        "Platform implementation (SDL3 | X11 | WAYLAND | HEADLESS | TERMINAL | WIN32)")
+        "Platform implementation (SDL3 | HEADLESS | TERMINAL)")
 
-# Implemented today. Two are host-conditional, for symmetrical reasons:
-#
-#   TERMINAL is POSIX-only -- it is built on termios, and there is no Windows console path for it
-#   (plans/plan_platform.md Phase 10). Offering it on Windows would produce a configure that
-#   succeeds and a build that does not.
-#
-#   WIN32 is Windows-only -- it is built on user32/gdi32 and an HWND (plans/plan_win32.md). It is
-#   offered wherever the target is Windows, which includes a mingw-w64 cross-build from Linux,
-#   because that targets Windows even though the build host does not run it.
+# Implemented today. TERMINAL is host-conditional: it is built on termios, and there is no
+# Windows console path for it (plans/plan_platform.md Phase 10). Offering it on Windows would
+# produce a configure that succeeds and a build that does not.
 set(_cna_platforms_available SDL3 HEADLESS)
-if(WIN32)
-    list(APPEND _cna_platforms_available WIN32)
-else()
+if(NOT WIN32)
     list(APPEND _cna_platforms_available TERMINAL)
-endif()
-
-# X11 is a native backend that talks to Xlib directly, with no SDL anywhere in it
-# (plans/plan_x11.md). It is offered only where the X development environment actually exists,
-# for the same reason TERMINAL is offered only on POSIX -- but the two cases differ in one way
-# that matters: termios is libc and is either there or not by target, while the X client
-# libraries are an installable package. So when X11 is requested and unavailable the diagnostic
-# below names what to install, and the configure fails rather than falling back to SDL3.
-include("${CMAKE_CURRENT_LIST_DIR}/PlatformX11.cmake")
-cna_detect_x11()
-if(CNA_X11_AVAILABLE)
-    list(APPEND _cna_platforms_available X11)
-endif()
-
-if(CNA_PLATFORM STREQUAL "X11" AND NOT CNA_X11_AVAILABLE)
-    message(FATAL_ERROR
-        "CNA: CNA_PLATFORM=X11 was requested but this machine cannot build it.\n"
-        "Reason: ${CNA_X11_UNAVAILABLE_REASON}\n"
-        "The X11 backend is native -- it uses Xlib directly and never falls back to SDL, so "
-        "there is nothing to degrade to. Install the X development packages, or select one of "
-        "${_cna_platforms_available}.\n"
-        "See docs/platform-x11.md for the full dependency table.")
-endif()
-
-# WAYLAND is the native Wayland backend (plans/plan_wayland.md): a direct Wayland client, with no
-# SDL and no X11 library in it. Offered where the Wayland development environment exists, and --
-# like X11 -- refused with the packages to install when it is requested and absent, never replaced
-# by SDL3 or X11: a Wayland session can run either through Xwayland, but that is not what was
-# asked for.
-include("${CMAKE_CURRENT_LIST_DIR}/PlatformWayland.cmake")
-cna_detect_wayland()
-if(CNA_WAYLAND_AVAILABLE)
-    list(APPEND _cna_platforms_available WAYLAND)
-endif()
-
-if(CNA_PLATFORM STREQUAL "WAYLAND" AND NOT CNA_WAYLAND_AVAILABLE)
-    message(FATAL_ERROR
-        "CNA: CNA_PLATFORM=WAYLAND was requested but this machine cannot build it.\n"
-        "Reason: ${CNA_WAYLAND_UNAVAILABLE_REASON}\n"
-        "The Wayland backend is native -- it talks to the compositor directly and never falls "
-        "back to SDL3 or to X11 through Xwayland, so there is nothing to degrade to. Install the "
-        "Wayland development packages, or select one of ${_cna_platforms_available}.\n"
-        "See docs/platform-wayland.md for the full dependency table.")
 endif()
 
 # Reserved-but-unimplemented. These are recognised so that configuring with one fails
@@ -89,11 +43,27 @@ endif()
 set(_cna_platforms_reserved SDL12 EMSCRIPTEN)
 if(WIN32)
     list(APPEND _cna_platforms_reserved TERMINAL)
-else()
-    list(APPEND _cna_platforms_reserved WIN32)
 endif()
 
+# Retired on 2026-10-06: CNA's own direct Win32, X11 and Wayland implementations. The window
+# systems are still supported -- through SDL3 -- so the refusal says which value to use instead.
+# Deliberately not an alias: CNA_PLATFORM=X11 meaning SDL3 would build something other than what
+# the value names.
+set(_cna_platforms_retired WIN32 X11 WAYLAND)
+
 set_property(CACHE CNA_PLATFORM PROPERTY STRINGS ${_cna_platforms_available})
+
+if(CNA_PLATFORM IN_LIST _cna_platforms_retired)
+    message(FATAL_ERROR
+        "CNA: CNA_PLATFORM=${CNA_PLATFORM} was removed on 2026-10-06.\n"
+        "CNA no longer carries its own direct Win32, X11 or Wayland platform implementation. "
+        "Those window systems are supported through SDL3: configure with -DCNA_PLATFORM=SDL3 and "
+        "SDL picks its windows, x11 or wayland video driver at run time (SDL_VIDEODRIVER selects "
+        "one explicitly). Renderers still receive the native HWND, Display*/Window or "
+        "wl_display*/wl_surface* through IPlatformWindow::GetNativeHandle().\n"
+        "Available: ${_cna_platforms_available}\n"
+        "See docs/platform-abstraction.md.")
+endif()
 
 if(CNA_PLATFORM IN_LIST _cna_platforms_reserved)
     message(FATAL_ERROR
@@ -103,9 +73,6 @@ if(CNA_PLATFORM IN_LIST _cna_platforms_reserved)
         "\"Possible future implementations (NOT in scope)\".\n"
         "TERMINAL exists (plans/plan_platform.md Phase 10) but is POSIX-only: it is built on "
         "termios and has no Windows console path.\n"
-        "WIN32 exists (plans/plan_win32.md) but is Windows-only: it is built on user32/gdi32 and "
-        "an HWND. Select it with a Windows toolchain -- natively, or from Linux with "
-        "-DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake.\n"
         "This is a hard error on purpose: falling back to SDL3 would build something other "
         "than what you asked for.")
 endif()
@@ -118,16 +85,6 @@ if(NOT CNA_PLATFORM IN_LIST _cna_platforms_available)
 endif()
 
 message(STATUS "CNA: Using ${CNA_PLATFORM} platform implementation")
-if(CNA_PLATFORM STREQUAL "X11")
-    message(STATUS "CNA: X11 platform dependencies -- ${CNA_X11_SUMMARY}")
-endif()
-if(CNA_PLATFORM STREQUAL "WAYLAND")
-    message(STATUS "CNA: Wayland platform dependencies -- ${CNA_WAYLAND_SUMMARY}")
-    # wayland-scanner writes the protocol bindings as C: a C++ translation unit would give the
-    # interface tables internal linkage (a namespace-scope `const`). Enabled here, at the top
-    # level, because the tables end up in every executable that links the platform.
-    enable_language(C)
-endif()
 
 # The compile definition an implementation's own sources and the entrypoint header key
 # off. Named CNA_PLATFORM_<NAME> to match the CNA_RENDERER_<NAME> convention. The directory

@@ -4,7 +4,7 @@
     Native Windows validation for CNA under non-ASCII filesystem paths.
 
 .DESCRIPTION
-    plans/plan_windows_portability.md WINPORT-0012..0014 and 0018. Four things that a build under
+    plans/plan_windows_portability.md WINPORT-0012..0014 and 0018. Three things that a build under
     C:\src\cna cannot tell you, each of which is a different way for a path to reach CNA:
 
       temp      the whole test suite with TEMP and TMP pointed at a non-ASCII directory, so every
@@ -14,8 +14,6 @@
                 paths rather than runtime code
       app        a real CNA application and its content copied under a non-ASCII directory and run
                 from there
-      nosdl      the PE import table of that binary, so the Unicode work is shown not to have
-                reintroduced SDL
 
     Everything it creates, it removes. Nothing is asserted from rendered text: a name is proved by
     reading a known payload back out of the file, by SHA-256, or by asking the wide Win32 API --
@@ -24,6 +22,10 @@
 .PARAMETER SourceDir
     The CNA checkout to take the worktree from. Default C:\src\cna.
 
+.PARAMETER SharpRuntimeDir
+    The sharp-runtime checkout the source step's configure uses (CNA_SHARP_RUNTIME_ROOT), since a
+    worktree has no sibling of its own. Default C:\src\sharp-runtime.
+
 .PARAMETER BuildRoot
     Where builds go. Default C:\cna\build.
 
@@ -31,10 +33,10 @@
     Where the report and any XML land.
 
 .PARAMETER Steps
-    Any of: temp, source, app, nosdl, all. Default all.
+    Any of: temp, source, app, all. Default all.
 
 .PARAMETER CnaTests
-    An already-built CnaTests.exe to reuse for the temp step, rather than building one.
+    An already-built CnaTests.exe for the temp step. Default <BuildRoot>/CnaTests.exe.
 
 .PARAMETER KeepWorktree
     Leave the Unicode worktree in place for inspection. Off by default; it is ~1 GiB built.
@@ -42,6 +44,7 @@
 [CmdletBinding()]
 param(
     [string]   $SourceDir = 'C:/src/cna',
+    [string]   $SharpRuntimeDir = 'C:/src/sharp-runtime',
     [string]   $BuildRoot = 'C:/cna/build',
     [string]   $OutDir    = 'C:/cna/report/unicode',
     [string[]] $Steps     = @('all'),
@@ -177,7 +180,7 @@ try {
 # =================================================================================================
 if (Want 'temp') {
     $exe = $CnaTests
-    if (-not $exe) { $exe = Join-Path $BuildRoot 'full-win32-d3d11-nosdl/CnaTests.exe' }
+    if (-not $exe) { $exe = Join-Path $BuildRoot 'CnaTests.exe' }
     if (-not (Test-Path $exe)) {
         Add-Result 'unicode.temp' 'NOT-RUN' "$exe was not built"
     } else {
@@ -247,13 +250,14 @@ if (Want 'temp') {
 # Step "source" — configure and build from a worktree whose full path is non-ASCII.
 #
 # This is the one that catches what runtime code cannot: CMake's own assumptions, compiler response
-# files, generated-file paths, custom commands and the Python tooling. The standalone platform
-# configuration is used rather than the whole framework because it is a few hundred megabytes
-# instead of several gigabytes and exercises exactly the same toolchain machinery.
+# files, generated-file paths, custom commands and the Python tooling. The real configure is used,
+# windowless and SDL-free so nothing is fetched, and only the platform module's focused test binary
+# is built: a few hundred megabytes instead of several gigabytes, through exactly the same
+# toolchain machinery.
 # =================================================================================================
 $worktree = ''
 $uniBuild = ''
-if (Want 'source' -or (Want 'app') -or (Want 'nosdl')) {
+if (Want 'source' -or (Want 'app')) {
     $srcRoot  = New-UnicodeRoot 'src'
     $worktree = Join-Path $srcRoot "CNA-$Japanese"
     try {
@@ -292,15 +296,18 @@ if (Want 'source' -or (Want 'app') -or (Want 'nosdl')) {
                     Add-Result 'unicode.source.build' 'NOT-RUN' 'no MSVC environment'
                 } else {
                     $uniBuild = Join-Path $worktree 'cmake-build-unicode'
-                    $cfg = & cmake -S (Join-Path $worktree 'tools/platform/standalone_tests') `
-                                   -B $uniBuild -G Ninja `
-                                   -DCNA_PLATFORM=WIN32 -DCMAKE_BUILD_TYPE=Debug 2>&1
+                    $cfg = & cmake -S $worktree -B $uniBuild -G Ninja `
+                                   -DCMAKE_BUILD_TYPE=Debug "-DCNA_SHARP_RUNTIME_ROOT=$SharpRuntimeDir" `
+                                   -DCNA_PLATFORM=HEADLESS -DCNA_GRAPHICS_RENDERER=HEADLESS `
+                                   -DCNA_AUDIO_PLATFORM=NULL -DCNA_ENABLE_SDL=OFF -DCNA_BUILD_TESTS=ON `
+                                   -DCNA_BUILD_EXAMPLES=OFF -DCNA_ENABLE_NET=OFF -DCNA_ENABLE_DRACO=OFF `
+                                   -DCNA_ENABLE_VIDEO=OFF 2>&1
                     if ($LASTEXITCODE -ne 0) {
                         ($cfg | Select-Object -Last 20) | Out-File (Join-Path $OutDir 'unicode-configure.log')
                         Add-Result 'unicode.source.configure' 'FAIL' 'cmake configure refused a non-ASCII source path'
                     } else {
                         Add-Result 'unicode.source.configure' 'PASS' 'cmake configured from a non-ASCII source path'
-                        $bld = & cmake --build $uniBuild --parallel 2>&1
+                        $bld = & cmake --build $uniBuild --target CnaPlatformModuleTests --parallel 2>&1
                         if ($LASTEXITCODE -ne 0) {
                             ($bld | Select-Object -Last 30) | Out-File (Join-Path $OutDir 'unicode-build.log')
                             Add-Result 'unicode.source.build' 'FAIL' 'MSVC build failed from a non-ASCII source path'
@@ -323,15 +330,8 @@ if (Want 'app') {
     $harness = ''
     $candidates = @()
     if (-not [string]::IsNullOrWhiteSpace($uniBuild)) {
-        $candidates += (Join-Path $uniBuild 'cna_win32_platform_tests.exe')
-        $candidates += (Join-Path $uniBuild 'cna_platform_tests.exe')
+        $candidates += (Join-Path $uniBuild 'CnaPlatformModuleTests.exe')
     }
-    $candidates += (Join-Path $BuildRoot 'standalone-win32/cna_win32_platform_tests.exe')
-    # The name the standalone harness actually produces. Without it, running this step on its own
-    # -- against an existing standalone build rather than a fresh Unicode worktree -- found no
-    # binary and reported NOT-RUN, which reads like "there was nothing to test" rather than "the
-    # candidate list is spelled wrong".
-    $candidates += (Join-Path $BuildRoot 'standalone-win32/cna_platform_tests.exe')
     foreach ($candidate in $candidates) {
         if ($candidate -and (Test-Path $candidate)) { $harness = $candidate; break }
     }
@@ -390,24 +390,6 @@ if (Want 'app') {
         } catch {
             Add-Result 'unicode.app' 'FAIL' $_.Exception.Message
         } finally { Remove-Tree $appRoot }
-    }
-}
-
-# =================================================================================================
-# Step "nosdl" — the Unicode work must not have reintroduced SDL.
-# =================================================================================================
-if (Want 'nosdl') {
-    $exe = Join-Path $BuildRoot 'full-win32-d3d11-nosdl/CnaTests.exe'
-    if (-not (Test-Path $exe)) {
-        Add-Result 'unicode.nosdl' 'NOT-RUN' "$exe was not built"
-    } elseif (-not (Enter-MsvcEnvironment)) {
-        Add-Result 'unicode.nosdl' 'NOT-RUN' 'no MSVC environment for dumpbin'
-    } else {
-        $imports = & dumpbin /imports $exe 2>&1 | Out-String
-        $sdl = [regex]::Matches($imports, '(?im)^\s*(SDL[0-9_]*\.dll)') |
-               ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique
-        Add-Result 'unicode.nosdl' $(if ($sdl.Count -eq 0) { 'PASS' } else { 'FAIL' }) `
-            $(if ($sdl.Count -eq 0) { 'the PE import table names no SDL DLL' } else { "imports $($sdl -join ', ')" })
     }
 }
 

@@ -14,8 +14,9 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 # because its test macro named SDL3::SDL3 unconditionally. No example source here includes SDL; the
 # one SDL use left is common/PixelTestGame.hpp's display probe, which CNA_EXAMPLES_NO_SDL turns off
 # (plans/plan_directx12_parity.md DX12-0005). plans/plan_vulkan_modern_graphics.md VMG-0003: the
-# macro below links SDL only where it exists, so a CNA_ENABLE_SDL=OFF build runs the classic and
-# modern Vulkan oracles on the native X11 and Wayland platforms instead of dropping them.
+# macro below links SDL only where it exists. That once let a CNA_ENABLE_SDL=OFF build run these
+# oracles on CNA's direct X11 and Wayland platforms; those were retired on 2026-10-06, and a
+# windowed Vulkan build now always reaches its window through SDL3.
 
 # Shared example-support headers ("common/PixelTestGame.hpp", ...) are owned by
 # the graphics module's examples directory.

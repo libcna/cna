@@ -351,6 +351,53 @@ TEST_F(Sdl3WindowTest, NativeHandleIsStableAcrossCalls)
     EXPECT_EQ(first.windowId, second.windowId);
 }
 
+TEST_F(Sdl3WindowTest, NativeHandleMatchesTheVideoDriver)
+{
+    // SDL3 is CNA's one windowing implementation, so this is where a renderer's native window
+    // comes from on every desktop: an HWND through SDL's windows driver, a Display* and an XID
+    // through x11, a wl_display* and a wl_surface* through wayland. The ctest entries that pick a
+    // driver (CnaPlatformSdl3X11Tests, CnaPlatformSdl3WaylandTests) name the system it must yield;
+    // under SDL's dummy driver there is nothing to check.
+    const char* expected = std::getenv("CNA_TEST_EXPECT_NATIVE_WINDOW_SYSTEM");
+    if (expected == nullptr || *expected == '\0')
+    {
+        GTEST_SKIP() << "CNA_TEST_EXPECT_NATIVE_WINDOW_SYSTEM is not set";
+    }
+
+    const NativeWindowHandle handle = window_->GetNativeHandle();
+    ASSERT_EQ(ToString(handle.system), expected) << Describe(handle);
+    EXPECT_TRUE(HasNativeWindow(handle)) << Describe(handle);
+
+    switch (handle.system)
+    {
+        case NativeWindowSystem::Win32:
+        {
+            Win32NativeWindow out;
+            EXPECT_TRUE(TryGetWin32(handle, out));
+            break;
+        }
+        case NativeWindowSystem::X11:
+        {
+            X11NativeWindow out;
+            ASSERT_TRUE(TryGetX11(handle, out));
+            EXPECT_NE(out.display, nullptr);
+            EXPECT_NE(out.window, 0u);
+            break;
+        }
+        case NativeWindowSystem::Wayland:
+        {
+            WaylandNativeWindow out;
+            ASSERT_TRUE(TryGetWayland(handle, out));
+            EXPECT_NE(out.display, nullptr);
+            EXPECT_NE(out.surface, nullptr);
+            break;
+        }
+        default:
+            ADD_FAILURE() << "no native-window expectation is defined for " << expected;
+            break;
+    }
+}
+
 TEST_F(Sdl3WindowTest, DescribeReportsTheSystemWithoutLeakingAddresses)
 {
     const std::string described = Describe(window_->GetNativeHandle());

@@ -22,54 +22,69 @@ frame API, not a drawing API. Audio selection is orthogonal and uses `CNA_AUDIO_
 `CNA_PLATFORM` selects the default implementation created by `PlatformFactory::Create()`:
 
 ```sh
-cmake -S . -B build -DCNA_PLATFORM=SDL3
-cmake -S . -B build-x11 \
-  -DCNA_PLATFORM=X11 -DCNA_AUDIO_PLATFORM=NULL \
-  -DCNA_GRAPHICS_RENDERER=HEADLESS -DCNA_ENABLE_SDL=OFF
-cmake -S . -B build-win32 \
-  -DCNA_PLATFORM=WIN32 -DCNA_AUDIO_PLATFORM=NULL \
-  -DCNA_GRAPHICS_RENDERER=DIRECTX11 -DCNA_ENABLE_SDL=OFF
+cmake -S . -B build -DCNA_PLATFORM=SDL3          # the default: every windowed target
 cmake -S . -B build-headless \
   -DCNA_PLATFORM=HEADLESS -DCNA_GRAPHICS_RENDERER=HEADLESS
 cmake -S . -B build-terminal \
-  -DCNA_PLATFORM=TERMINAL -DCNA_GRAPHICS_RENDERER=HEADLESS
+  -DCNA_PLATFORM=TERMINAL -DCNA_GRAPHICS_RENDERER=SOFTWARE
 ```
 
-SDL2 platform and audio support was retired on 2026-10-04. It is not a selectable implementation,
-and CNA provides no compatibility alias or forwarding backend for it.
+**SDL3 is CNA's graphical platform layer.** It is the one implementation that opens a window, and
+it does so on every desktop and mobile target: Windows, X11, Wayland, macOS, iOS, Android and the
+browser are each reached through SDL's own video driver, not through code of CNA's. SDL chooses the
+driver at run time from what it was built with and what the session offers;
+`SDL_VIDEODRIVER=windows|x11|wayland` selects one explicitly. Window-system specifics -- the X
+selections, Wayland's scale, Windows' per-monitor DPI -- are SDL's to implement, and CNA consumes
+them through the same `IPlatform` services everywhere.
+
+What a renderer needs from the window system still reaches it unchanged.
+`IPlatformWindow::GetNativeHandle()` reports which system SDL's driver is and the handles it owns
+(see [Native window handles](#native-window-handles)):
+
+| Host | SDL video driver | `NativeWindowSystem` and handles | Consumed directly by |
+|---|---|---|---|
+| Windows | `windows` | `Win32`: `HWND` | Direct3D 9/11/12, WebGPU |
+| Linux, X11 | `x11` | `X11`: `Display*` + `Window` XID | WebGPU |
+| Linux, Wayland | `wayland` | `Wayland`: `wl_display*` + `wl_surface*` | WebGPU |
+| macOS | `cocoa` | `Cocoa`: `NSWindow*` | Metal, WebGPU |
+| Android | `android` | `Android`: `ANativeWindow*` | WebGPU |
+
+The other renderers do not read the handle themselves: Vulkan asks `IPlatformVulkanSurface` and
+the OpenGL/OpenGL ES (EasyGL) family asks `IPlatformGlContext`, both implemented over SDL by the
+SDL3 platform for the same window, and `SDL_RENDERER`, `SDL_GPU` and `FNA3D` are handed the SDL
+window itself.
+
+CNA's own direct `WIN32`, `X11` and `WAYLAND` platform implementations were retired on 2026-10-06,
+and SDL2 platform and audio support on 2026-10-04. None of them is a selectable value any more, and
+CNA provides no compatibility alias or forwarding backend for them: configuring with one fails,
+naming `SDL3` as the replacement. Their designs and measurements stay in the history -- the plans
+`plans/plan_x11.md`, `plans/plan_wayland.md`, `plans/plan_win32.md` and
+`plans/plan_win32_native_validation.md`, and the commits that removed them.
 
 Headless is compiled in every build. Terminal is also compiled on POSIX. This lets the conformance
 suite exercise multiple implementations in one process; the selected value determines the
 default, not necessarily the only factory name present in the binary.
 
-`X11` is a native backend that uses Xlib and the X extensions directly and contains no SDL at all.
-It is what makes an SDL-free CNA a configuration that exists rather than an argument:
-`CNA_ENABLE_SDL=OFF` skips the vendored SDL sub-build entirely and refuses any selection that
-genuinely needs it. Its capability boundary, dependency table, DPI policy and the host state it
-deliberately does not seize are [`docs/platform-x11.md`](platform-x11.md).
-
-`WIN32` is the equivalent native backend on Windows: built directly on
-user32/gdi32/opengl32/ole32/shell32 with no SDL anywhere in it, offered only where the target is
-Windows (including a mingw-w64 cross-build from Linux). Together with `X11`, it is what makes
-`CNA_ENABLE_SDL=OFF` a maintained configuration on both desktop platform families CNA supports
-natively, not just one of them. See [`docs/platform-win32.md`](platform-win32.md) for its
-capability boundary and [`plans/plan_win32.md`](../plans/plan_win32.md) for the task log.
+**`CNA_ENABLE_SDL=OFF` is a windowless configuration.** It skips the vendored SDL sub-build entirely
+and refuses any selection that genuinely needs SDL, naming which. What remains is the HEADLESS
+and TERMINAL platforms, the HEADLESS/SOFTWARE/STUB renderers and `NULL` or Linux `ALSA` audio --
+a server, a test runner, a terminal game. A build that opens a window needs SDL3.
 
 **Platform independence, the audio backend and content WAV decoding are three separate axes, and
-"SDL-free" only means something once all three agree.** `CNA_PLATFORM=X11`/`WIN32` removes SDL from
-windowing/events/input; `CNA_AUDIO_PLATFORM=NULL` removes it from playback/capture; but until
-`plans/plan_native_platforms_integration.md` NPI-0007..0011, `cna_content` still could not finish
-linking in that combination, because `DecodeWavToPcm16` — used to decode a WAV-wrapped
-`SoundEffect`/XACT `WaveBank` entry to PCM16, independent of whether anything is ever played back —
-was implemented only via `SDL_LoadWAV_IO`/`SDL_ConvertAudioSamples` and excluded from the build
-whenever `CNA_AUDIO_PLATFORM` was not `SDL3`. It is now a CNA-owned implementation
-(`modules/audio/src/Internal/WavDecoder.cpp`, on top of the pre-existing SDL-free RIFF/WAVE chunk
-reader) covering PCM 8/16/24/32-bit, IEEE float 32/64-bit (including via
+"SDL-free" only means something once all three agree.** `CNA_PLATFORM=HEADLESS`/`TERMINAL`
+removes SDL from windowing/events/input; `CNA_AUDIO_PLATFORM=NULL` or `ALSA` removes it from
+playback/capture; but until `plans/plan_native_platforms_integration.md` NPI-0007..0011,
+`cna_content` still could not finish linking in that combination, because `DecodeWavToPcm16` --
+used to decode a WAV-wrapped `SoundEffect`/XACT `WaveBank` entry to PCM16, independent of whether
+anything is ever played back -- was implemented only via `SDL_LoadWAV_IO`/`SDL_ConvertAudioSamples`
+and excluded from the build whenever `CNA_AUDIO_PLATFORM` was not `SDL3`. It is now a CNA-owned
+implementation (`modules/audio/src/Internal/WavDecoder.cpp`, on top of the pre-existing SDL-free
+RIFF/WAVE chunk reader) covering PCM 8/16/24/32-bit, IEEE float 32/64-bit (including via
 `WAVE_FORMAT_EXTENSIBLE`), MS-ADPCM and IMA-ADPCM, compiled unconditionally regardless of
 `CNA_AUDIO_PLATFORM`. A renderer choice is the third axis again: it decides how pixels are
 produced and is unaffected by either of the above.
 
-An SDL-free build no longer has to be a silent one: `CNA_AUDIO_PLATFORM=ALSA` plays through ALSA
+An SDL-free build does not have to be a silent one: `CNA_AUDIO_PLATFORM=ALSA` plays through ALSA
 (and so through PipeWire or PulseAudio on a desktop) with CNA's own mixer behind the same
 `MixerEngine.hpp` facade SDL3_mixer implements -- see [`docs/audio-alsa.md`](audio-alsa.md).
 
@@ -216,19 +231,28 @@ regression beyond it is investigated rather than waived.
 
 | `CNA_PLATFORM` | Implementation | Availability | Capability boundary |
 |---|---|---|---|
-| `SDL3` (default) | `CNA::Platform::Sdl3` | everywhere | the reference the conformance suite compares others against |
-| `WIN32` | `CNA::Platform::Win32` | Windows targets only | [`docs/platform-win32.md`](platform-win32.md) |
-| `X11` | `CNA::Platform::X11` | targets with X11 development libraries | [`docs/platform-x11.md`](platform-x11.md) |
-| `WAYLAND` | `CNA::Platform::Wayland` | targets with Wayland development libraries | [`docs/platform-wayland.md`](platform-wayland.md) |
+| `SDL3` (default) | `CNA::Platform::Sdl3` | everywhere | every window system SDL3 drives; the reference the conformance suite compares others against |
 | `HEADLESS` | `CNA::Platform::Headless` | everywhere, and always compiled | no window, no display, no input; every refusal path |
 | `TERMINAL` | `CNA::Platform::Terminal` | POSIX targets only | [`docs/platform-terminal-analysis.md`](platform-terminal-analysis.md) |
 
 `HEADLESS` is compiled into every binary whatever the selection says, and `TERMINAL` into every
 POSIX one, because the conformance suite needs more than one implementation live in one process to
-be worth anything. `WIN32` is compiled only when selected: every one of its translation units
-includes `<windows.h>`, so there is nothing to compile it against elsewhere.
+be worth anything.
+
+SDL3 on a real window system is tested on servers private to the run, never on the desktop:
+`CnaPlatformSdl3X11Tests` (a private Xvfb, `tools/platform/x11_test_server.sh`) and
+`CnaPlatformSdl3WaylandTests` (a private headless Weston, `tools/platform/wayland_test_server.sh`)
+run the SDL3 window suite and the window conformance suite with `SDL_VIDEODRIVER` forced, and
+`Sdl3WindowTest.NativeHandleMatchesTheVideoDriver` asserts the native handle each driver hands a
+renderer. Each skips (77) where its server is not installed.
 
 ## Adding an implementation
+
+A new implementation is for a host SDL3 cannot reach -- the way Headless and Terminal serve hosts
+with no window system at all -- not a second route to a window system SDL3 already drives. CNA
+carried direct Win32, X11 and Wayland implementations alongside SDL3 until 2026-10-06 and retired
+them: three copies of window management, input translation, clipboard, IME and DPI handling cost
+more to keep correct than the independence from SDL they bought.
 
 1. Add `modules/platform/src/<Name>/` and implement the entire `IPlatform` surface. Share only
    genuinely portable pieces through `src/Common/`; do not subclass the SDL3 implementation.

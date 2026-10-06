@@ -28,12 +28,6 @@ namespace CNA::Inspector
         {
 #if defined(CNA_PLATFORM_SDL3)
             return "SDL3";
-#elif defined(CNA_PLATFORM_WIN32)
-            return "WIN32";
-#elif defined(CNA_PLATFORM_X11)
-            return "X11";
-#elif defined(CNA_PLATFORM_WAYLAND)
-            return "WAYLAND";
 #elif defined(CNA_PLATFORM_HEADLESS)
             return "HEADLESS";
 #elif defined(CNA_PLATFORM_TERMINAL)

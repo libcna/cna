@@ -305,10 +305,9 @@ target_compile_options(cna_project_options INTERFACE
 # This never appeared in the MinGW cross-builds because mingw-w64's libstdc++ defines NOMINMAX for
 # you in os_defines.h. The Microsoft toolchain does not, so the first native-MSVC build of the
 # DirectX 11 renderer failed on it in four files. Declared once, here, beside /utf-8, rather than
-# in each renderer that happens to include a Windows header: modules/platform already centralises
-# the same decision for the platform backend in src/Win32/Win32Common.hpp, and the reasoning is
-# identical. WIN32_LEAN_AND_MEAN is deliberately NOT set -- it removes whole headers rather than
-# two macros, and some CNA code legitimately wants what it excludes.
+# in each renderer that happens to include a Windows header. WIN32_LEAN_AND_MEAN is deliberately
+# NOT set -- it removes whole headers rather than two macros, and some CNA code legitimately wants
+# what it excludes.
 target_compile_definitions(cna_project_options INTERFACE "$<$<PLATFORM_ID:Windows>:NOMINMAX>")
 
 # Defines one CNA module: a STATIC library named cna_<name> with alias CNA::<Alias>, the

@@ -15,13 +15,13 @@ namespace CNA::Platform {
     namespace {
 
         // Every holder below that owns a destructor is deliberately IMMORTAL -- allocated once and
-        // never destroyed -- for the reason X11Error.cpp records
-        // (plans/plan_native_platform_validation.md NPV-0102) and the C API handle registry proved
-        // again: whatever installed or pinned a platform can be destroyed at ANY point of process
-        // teardown, including from a later static's destructor, and must still find this state
-        // alive. ~Game reaches all of it through SetCurrentPlatform on its way out
-        // (plans/plan_capi_smoke_stability.md CSS-2). Explicit teardown is unaffected --
-        // ResetCurrentPlatform still destroys the lazily created default deterministically; what
+        // never destroyed -- for the reason plans/plan_native_platform_validation.md NPV-0102
+        // records and the C API handle registry proved again: whatever installed or pinned a
+        // platform can be destroyed at ANY point of process teardown, including from a later
+        // static's destructor, and must still find this state alive. ~Game reaches all of it
+        // through SetCurrentPlatform on its way out (plans/plan_capi_smoke_stability.md CSS-2).
+        // Explicit teardown is unaffected -- ResetCurrentPlatform still destroys the lazily
+        // created default deterministically; what
         // goes away is only the implicit destruction of one never-reset default at process exit,
         // which no caller could have observed and which is exactly the destruction that was
         // reaching into already-dead state.

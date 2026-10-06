@@ -444,8 +444,8 @@ namespace CNA::Platform {
      * **Every path on this interface is UTF-8, in both directions.** That is CNA's path text
      * encoding (`docs/filesystem-path-model.md`), and declaring it here is what makes the
      * implementations agree: the SDL3 backend was already UTF-8 because SDL's own IO layer is,
-     * while the Win32 and portable backends narrowed through the process ANSI code page, so the
-     * same string meant two different files depending on which backend answered. An
+     * while the portable std::filesystem one narrowed through the process ANSI code page on
+     * Windows, so the same string meant two different files depending on which backend answered. An
      * implementation converts with `CNA::Internal::PathFromUtf8()` / `PathToUtf8()` rather than
      * with `std::filesystem::path`'s narrow constructor or `path::string()`.
      */

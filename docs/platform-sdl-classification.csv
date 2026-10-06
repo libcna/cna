@@ -1,7 +1,7 @@
 symbol,area,owning_interface,task,occurrences,files,note
 SDL_AUDIODRIVER,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,98,19,audio driver selection env var; becomes audio configuration
 SDL_AudioSpec,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,39,11,audio device/stream
-SDL_mixer,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,26,15,SDL header include
+SDL_mixer,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,25,14,SDL header include
 SDL_AUDIO_S16LE,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,22,2,audio device/stream
 SDL_AudioStream,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,17,6,audio device/stream
 SDL_AUDIO_F32,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,11,7,audio device/stream
@@ -31,7 +31,7 @@ SDL_SetAudioStreamGain,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,1,1,
 SDL_UnlockAudioStream,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,1,1,audio device/stream
 SDL_audiocvt,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,1,1,SDL header include
 SDL_DisplayID,display,IPlatformDisplays,PLAT-43,8,3,display/video
-SDL_GetCurrentVideoDriver,display,IPlatformDisplays,PLAT-43,6,6,display/video
+SDL_GetCurrentVideoDriver,display,IPlatformDisplays,PLAT-43,8,6,display/video
 SDL_DisplayMode,display,IPlatformDisplays,PLAT-43,4,2,display/video
 SDL_GetDisplayForWindow,display,IPlatformDisplays,PLAT-43,3,2,display/video
 SDL_GetClosestFullscreenDisplayMode,display,IPlatformDisplays,PLAT-43,2,1,display/video
@@ -233,6 +233,7 @@ SDL_GAMEPAD_BUTTON_WEST,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,gamep
 SDL_GamepadHasSensor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,1,gamepad
 SDL_GetGamepads,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,1,gamepad
 SDL_GetHaptics,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,haptics
+SDL_GetMouseState,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,1,mouse/cursor
 SDL_HAPTIC_LEFTRIGHT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,1,haptics
 SDL_HAT_RIGHTDOWN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,joystick hat
 SDL_JOYSTICK_TYPE_UNKNOWN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,3,joystick
@@ -385,7 +386,6 @@ SDL_GetMaxHapticEffectsPlaying,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,
 SDL_GetModState,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,keyboard/text input
 SDL_GetMouseFocus,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse/cursor
 SDL_GetMouseNameForID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse/cursor
-SDL_GetMouseState,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse/cursor
 SDL_GetNumHapticAxes,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
 SDL_GetNumJoystickAxes,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,input device API
 SDL_GetNumJoystickBalls,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,input device API
@@ -479,12 +479,12 @@ SDL_UpdateHapticEffect,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptic
 SDL_WarpMouseGlobal,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse/cursor
 SDL_WarpMouseInWindow,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse/cursor
 SDL_gamepad,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,SDL header include
-SDL_INIT_VIDEO,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,28,15,init flag
+SDL_INIT_VIDEO,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,26,13,init flag
 SDL_INIT_AUDIO,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,24,8,init flag
-SDL_Init,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,20,12,subsystem lifecycle
 SDL_InitSubSystem,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,16,8,subsystem lifecycle
 SDL_Quit,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,16,11,subsystem lifecycle
 SDL_QuitSubSystem,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,16,7,subsystem lifecycle
+SDL_Init,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,13,10,subsystem lifecycle
 SDL_WasInit,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,11,8,subsystem lifecycle
 SDL_VIDEODRIVER,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,5,3,video driver selection env var; becomes platform configuration
 SDL_INIT_CAMERA,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,4,1,init flag
@@ -529,17 +529,15 @@ SDL_PROP_WINDOW_UIKIT_WINDOW_POINTER,native-handle,NativeWindowHandle,PLAT-13/PL
 SDL_SetBooleanProperty,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,1,1,property access
 SDL_SetPointerPropertyWithCleanup,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,1,1,property access
 SDL_free,none,-,-,23,8,allocator/string/math shim
-SDL_MAJOR_VERSION,none,-,-,7,6,version/assert macros
 SDL_GetEnvironment,none,-,-,5,2,environment: C++/CNA config path is used instead
-SDL_h_,none,-,-,5,5,SDL header include with no CNA contract
+SDL_MAJOR_VERSION,none,-,-,5,4,version/assert macros
 SDL_SetEnvironmentVariable,none,-,-,4,2,environment: C++/CNA config path is used instead
 SDL_stdinc,none,-,-,4,4,SDL header include with no CNA contract
+SDL_h_,none,-,-,3,3,SDL header include with no CNA contract
 SDL_strcmp,none,-,-,3,1,allocator/string/math shim
-SDL_H,none,-,-,2,2,GUID/endian/CRC helper
 SDL_MICRO_VERSION,none,-,-,2,1,version/assert macros
 SDL_MINOR_VERSION,none,-,-,2,1,version/assert macros
 SDL_PLATFORM_ANDROID,none,-,-,2,2,SDL OS-detection macro; CNA uses its own build-system detection
-SDL_VERSION_ATLEAST,none,-,-,2,2,version/assert macros
 SDL_aligned_free,none,-,-,2,2,SDL-internal allocator/object bookkeeping
 SDL_error,none,-,-,2,2,SDL header include with no CNA contract
 SDL_FUNCTION,none,-,-,1,1,allocator/string/math shim
@@ -919,7 +917,9 @@ SDL_TEXTUREACCESS_STATIC,sdl-renderer-specific,"allowlisted renderers (SDL_RENDE
 SDL_WaitForGPUIdle,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU API
 SDL_render,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL header include
 SDL_HINT_JOYSTICK_LINUX_CLASSIC,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,9,2,SDL hint (becomes CNA configuration)
-SDL_SetHint,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,7,4,SDL hint (becomes CNA configuration)
+SDL_SetHint,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,8,4,SDL hint (becomes CNA configuration)
+SDL_ResetHint,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,7,3,SDL hint (becomes CNA configuration)
+SDL_HINT_VIDEO_DRIVER,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,6,1,SDL hint (becomes CNA configuration)
 SDL_CameraID,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,5,1,camera
 SDL_CameraSpec,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,5,1,camera
 SDL_GetHint,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,5,2,SDL hint (becomes CNA configuration)
@@ -928,12 +928,10 @@ SDL_POWERSTATE_CHARGING,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Po
 SDL_POWERSTATE_NO_BATTERY,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,5,5,power state
 SDL_POWERSTATE_ON_BATTERY,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,5,5,power state
 SDL_POWERSTATE_UNKNOWN,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,5,5,power state
-SDL_ResetHint,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,5,3,SDL hint (becomes CNA configuration)
 SDL_Camera,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,4,1,camera
 SDL_HINT_ORIENTATIONS,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,4,2,SDL hint (becomes CNA configuration)
 SDL_POWERSTATE_ERROR,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,4,4,power state
 SDL_DialogFileFilter,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,3,1,file dialog
-SDL_HINT_VIDEO_DRIVER,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,3,1,SDL hint (becomes CNA configuration)
 SDL_MessageBoxButtonData,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,3,1,message box
 SDL_PowerState,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,3,3,power state
 SDL_SetClipboardData,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,3,2,clipboard
@@ -942,7 +940,6 @@ SDL_DestroyTray,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Loca
 SDL_GetCameras,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,1,camera
 SDL_MESSAGEBOX_INFORMATION,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,1,message box
 SDL_OpenCamera,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,1,camera
-SDL_SetClipboardText,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,2,clipboard
 SDL_AcquireCameraFrame,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,camera
 SDL_CAMERA_PERMISSION_STATE_APPROVED,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,camera
 SDL_CAMERA_PERMISSION_STATE_DENIED,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,camera
@@ -986,6 +983,7 @@ SDL_MessageBoxData,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/L
 SDL_MessageBoxFlags,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,message box
 SDL_OpenURL,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,URL launcher
 SDL_ReleaseCameraFrame,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,camera
+SDL_SetClipboardText,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,clipboard
 SDL_SetPrimarySelectionText,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,clipboard
 SDL_SetTrayEntryCallback,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,tray
 SDL_SetTrayEntryChecked,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,tray

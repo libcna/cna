@@ -257,7 +257,8 @@ TEST_F(GraphicsDeviceWindowDescriptionTest,
 //
 // The precondition these tests actually have is an SDL-free platform selection (so the traced
 // platform below is the one `GraphicsDevice` talks to) AND a renderer that genuinely creates a
-// window. Stated that way round, verified under CNA_PLATFORM=X11 with a window-requiring renderer.
+// window. Stated that way round, verified under the since-retired CNA_PLATFORM=X11 with a
+// window-requiring renderer.
 TEST(GraphicsDevicePlatformWindowTests,
      OwnsThePlatformWindowAndReleasesVideoAfterItsDestruction)
 {

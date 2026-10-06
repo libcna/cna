@@ -12,12 +12,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
     macro(cna_directx12_test target src)
         add_executable(${target} ${src})
         target_link_libraries(${target} PRIVATE CNA)
-        # plans/plan_win32_native_validation.md WINNATIVE-0015: SDL3 is linked here because it used
-        # to be the only platform CNA had, and these fixtures still use it where it is configured.
+        # plans/plan_win32_native_validation.md WINNATIVE-0015: SDL3 is linked here because these
+        # fixtures use it directly where it is configured.
         # With CNA_ENABLE_SDL=OFF the target does not exist -- which is the whole point of that
-        # option -- so an unconditional link made
-        #     CNA_PLATFORM=WIN32 + CNA_ENABLE_SDL=OFF + DIRECTX11 + tests
-        # impossible to configure at all. Same idiom as the headless renderer's examples.
+        # option -- so an unconditional link made any CNA_ENABLE_SDL=OFF + Direct3D + tests
+        # configuration (then on the since-retired WIN32 platform) impossible to configure at all.
+        # Same idiom as the headless renderer's examples.
         if(TARGET SDL3::SDL3)
             target_link_libraries(${target} PRIVATE SDL3::SDL3)
         else()
@@ -85,10 +85,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
         cna_directx12_test(cna_diag_d3d12_swapchain directx12_swapchain_diag.cpp)
     endif()
 
-    # plans/plan_directx12_parity.md DX12-0007: presentation, resize, minimize and resource churn on a
-    # real CNA Win32 window. Not a CTest: it drives the desktop's window manager and takes minutes on
-    # WARP; tools/platform/win32_run_interactive.ps1 runs it with CNA_D3D12_ADAPTER=warp.
-    if(CNA_PLATFORM STREQUAL "WIN32")
+    # plans/plan_directx12_parity.md DX12-0007: presentation, resize, minimize and resource churn on the
+    # HWND of a real CNA (SDL3) window. Not a CTest: it drives the desktop's window manager and takes
+    # minutes on WARP; tools/platform/win32_run_interactive.ps1 runs it with CNA_D3D12_ADAPTER=warp.
+    if(CNA_PLATFORM STREQUAL "SDL3")
         cna_directx12_test(cna_stress_directx12_win32_present directx12_win32_present_stress.cpp)
         target_link_libraries(cna_stress_directx12_win32_present PRIVATE psapi)
     endif()

@@ -19,9 +19,9 @@ namespace CNA::Audio::Platform::Alsa {
      * device is PipeWire (pipewire-alsa), on a PulseAudio one it is PulseAudio (alsa-plugins),
      * and on a bare system it is the sound card through dmix. So one backend reaches all three.
      *
-     * `libasound.so.2` is loaded at run time rather than linked, the way the X11 platform loads
-     * GLX: a machine without it still starts the program, and the device then fails to open with
-     * a message saying why -- which the XNA layer reports as NoAudioHardwareException.
+     * `libasound.so.2` is loaded at run time rather than linked: a machine without it still
+     * starts the program, and the device then fails to open with a message saying why -- which
+     * the XNA layer reports as NoAudioHardwareException.
      *
      * The device opened is `default`, or the ALSA PCM named by the `CNA_AUDIO_DEVICE` environment
      * variable -- `null` for a silent device, `file:FILE=out.raw,FORMAT=raw` to record exactly what
