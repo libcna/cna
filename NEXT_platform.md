@@ -38,9 +38,14 @@ window suite and the window conformance suite with the driver forced, and
 running against SDL3; `DirectX11_Win32HardwareSmoke` and `cna_stress_directx12_win32_present` now
 drive the HWND of an SDL3 window.
 
-**Next starting point:** run `d3d-windows-ci.yml` and `platform-ci.yml`'s `sdl3-windows` job (both
-`workflow_dispatch`) -- the SDL3 + Direct3D path on real Windows was compile-checked from Linux in
-this change, not executed.
+On real Windows (GitHub `windows-latest`, native MSVC) `platform-ci.yml`'s `sdl3-windows` job and
+`d3d-windows-ci.yml`'s `DIRECTX11` job pass: 300/300 Direct3D 11 ctest entries, the SDL3 HWND
+smoke skipped only because the runner has no GPU, and all 58 HLSL shaders compiled by a real
+`D3DCOMPILER_47.dll`. The fixes that took are listed in PLAT-142.
+
+**Next starting point:** `DirectX12_TextureFilterMipContract` is the one red test left in
+`d3d-windows-ci.yml` (the negative-`MaxMipLevel` mapping fixed for Direct3D 11); it goes away
+with the planned DIRECTX12 retirement.
 
 ---
 
