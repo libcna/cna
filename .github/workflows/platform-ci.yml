@@ -369,9 +369,14 @@ jobs:
       - name: Prove no SDL was found, built or linked
         run: |
           set -euo pipefail
-          if find build -iname '*SDL*' | grep -q .; then
-            echo "::error::An SDL artifact exists in the SDL-free build directory." >&2
-            find build -iname '*SDL*'
+          # CNA's own sources carry "Sdl" in their names (SdlInputBridge, ContractIsSdlFreeTests,
+          # the renderer descriptor gate's sdl-gpu directory), so what is looked for is SDL itself:
+          # a vendored SDL prefix, an SDL library or an SDL CMake package.
+          sdl_artifacts="$( { find . -maxdepth 1 -name '.sdl-prebuilt-*'; \
+            find build \( -name 'libSDL*' -o -name 'SDL3*.dll' -o -name 'SDL*Config.cmake' \); } )"
+          if [ -n "$sdl_artifacts" ]; then
+            echo "::error::SDL was built or installed by the SDL-free configuration:" >&2
+            printf '%s\n' "$sdl_artifacts" >&2
             exit 1
           fi
           if grep -E '^SDL[23]_DIR:PATH=' build/CMakeCache.txt | grep -v NOTFOUND; then
