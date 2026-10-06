@@ -32,7 +32,9 @@ jobs:
   msvc-build-and-test:
     name: ${{ matrix.renderer }} (native MSVC, windows-latest)
     runs-on: windows-latest
-    timeout-minutes: 60
+    # Measured 2026-10-06: two jobs of a cold MSVC build reach ~1950 of ~2160 steps in 55 minutes,
+    # so the former 60-minute limit cancelled the build before any test ran.
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
