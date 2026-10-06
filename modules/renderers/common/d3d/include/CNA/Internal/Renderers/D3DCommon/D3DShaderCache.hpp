@@ -95,7 +95,7 @@ namespace CNA::Internal::Renderers::D3DCommon
         /// layerDepth) through MatrixTransform = transform * orthographic, so depth and W survive.
         /// Its pixel shader is sprite2d's plus Direct3D 9's one/two-channel expansion
         /// (WINCLOSE-0019), which reads a ChannelExpansion constant buffer at PS b0. Appended last
-        /// so no existing value, and no D3D12 pipeline key built from one, moves.
+        /// so no existing value moves.
         Sprite3d,
         /// WINCLOSE-0015: Colored3d over a declaration with POSITION0 and no COLOR0 -- BasicEffect
         /// with VertexColorEnabled off, which XNA draws in DiffuseColor. Reuses Colored3d's pixel

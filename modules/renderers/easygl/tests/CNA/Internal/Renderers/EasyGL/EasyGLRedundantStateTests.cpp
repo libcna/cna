@@ -67,8 +67,6 @@ namespace
 
         void SetUp() override
         {
-            // Sampler objects are an ES 3.0-generation feature; the ES 2.0 profiles write sampling
-            // state onto textures instead and are not covered here.
             if (!CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2))
                 GTEST_SKIP() << "the selected renderer has no EasyGL sampler objects";
 

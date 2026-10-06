@@ -4,17 +4,15 @@
 #
 # Why sharded: plans/plan_windows_portability_closeout.md measured that one CnaTests process cannot be a
 # result on the VirtualBox guest -- the virtual GPU driver leaks per device (F24), so everything after the
-# first exhaustion is noise. WARP does not leak, but a DirectX 12 run keeps the same shape so the DX11 and
-# DX12 numbers are measured the same way (plans/plan_directx12_parity.md DX12-0006).
+# first exhaustion is noise.
 #
 # Why interactive: every shard goes through win32_run_interactive.ps1, because an SSH session is session 0,
 # where windows, DXGI swap chains and the clipboard do not behave as they do on a desktop.
 #
 # Usage (in the guest):
 #   Set-ExecutionPolicy -Scope Process Bypass -Force
-#   & C:\src\cna\tools\platform\win32_gtest_shards.ps1 -Exe C:\cna\build\full-sdl3-d3d12\CnaTests.exe `
-#       -Shards 27 -Parallel 2 -OutDir C:\cna\report\dx12-round1 -WorkingDirectory C:\src\cna `
-#       -Environment 'CNA_D3D12_ADAPTER=warp'
+#   & C:\src\cna\tools\platform\win32_gtest_shards.ps1 -Exe C:\cna\build\full-sdl3-d3d11\CnaTests.exe `
+#       -Shards 27 -Parallel 2 -OutDir C:\cna\report\dx11-round1 -WorkingDirectory C:\src\cna
 #
 # Output: <OutDir>\shardNN.xml per shard, <OutDir>\summary.txt and <OutDir>\summary.json. A shard that
 # wrote no XML (a crash, a deadline) is reported with its exit code and the end of its output rather than
@@ -56,9 +54,9 @@ function Start-Shard([int] $index) {
     $arguments = @("--gtest_output=xml:$xml")
     if ($Filter) { $arguments += "--gtest_filter=$Filter" }
     $shardEnv = @("GTEST_TOTAL_SHARDS=$Shards", "GTEST_SHARD_INDEX=$index") + $Environment
-    # plans/plan_graphics_shared_cleanup.md GSC-0006: either Direct3D debug layer; the listener fails a test
-    # on a fatal message and writes its report lines here.
-    if (($Environment | Where-Object { $_ -match '^CNA_D3D(11_DEBUG_LAYER|12_DEBUG_LAYER|12_GPU_VALIDATION)=1$' })) {
+    # plans/plan_graphics_shared_cleanup.md GSC-0006: the Direct3D 11 debug layer; the listener fails a
+    # test on a fatal message and writes its report lines here.
+    if (($Environment | Where-Object { $_ -match '^CNA_D3D11_DEBUG_LAYER=1$' })) {
         $shardEnv += "CNA_D3D_DEBUG_REPORT=$(Join-Path $OutDir "$tag.debuglayer.txt")"
     }
     Start-Job -ScriptBlock {

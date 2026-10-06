@@ -94,7 +94,7 @@ cmake -P "${script}" 2>&1 | grep -q "PROBE-OK escape-hatch" || {
 #     an iOS libshaderc and EasyGL needs two additional sibling repositories, neither of which is
 #     currently supplied by that workflow; accepting them would only postpone a known failure.
 # ---------------------------------------------------------------------------
-for renderer in SDL_GPU OPENGLES2 OPENGLES3 HEADLESS SOFTWARE STUB; do
+for renderer in SDL_GPU OPENGLES3 HEADLESS SOFTWARE STUB; do
     cat > "${script}" <<EOF
 set(CMAKE_SOURCE_DIR "${repo_root}")
 include("${repo_root}/cmake/ApplePlatform.cmake")

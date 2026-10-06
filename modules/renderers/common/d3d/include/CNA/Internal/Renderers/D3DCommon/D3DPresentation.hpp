@@ -25,7 +25,7 @@ namespace CNA::Internal::Renderers::D3DCommon
     };
 
     /**
-     * @brief Computes the common D3D11/D3D12 presentation geometry.
+     * @brief Computes the D3D11 presentation geometry.
      *
      * @param physicalWidth Current back-buffer width in drawable pixels.
      * @param physicalHeight Current back-buffer height in drawable pixels.

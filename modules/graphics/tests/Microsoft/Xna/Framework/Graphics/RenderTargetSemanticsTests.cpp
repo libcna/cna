@@ -133,7 +133,7 @@ TEST(RenderTargetSemantics, DiscardContentsDoesNotKeepIt)
            "discarding anything";
 }
 
-// plans/plan_directx12_parity.md DX12-0023: a target destroyed while it is still bound. Its explicit
+// DX12-0023: a target destroyed while it is still bound. Its explicit
 // Dispose() refuses that, but a C++ object can simply go out of scope. The device must drop the binding
 // -- SetRenderTargets returns early for an unchanged binding set, compared by address (SOFTWARE-222), so
 // a stale binding made binding the NEXT target constructed at the same address a silent no-op, and
@@ -333,7 +333,7 @@ TEST(RenderTargetSemantics, EachRenderTargetCubeFaceKeepsItsOwnContent)
     }
 }
 
-#if defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_DIRECTX12)
+#if defined(CNA_RENDERER_DIRECTX11)
 TEST(RenderTargetSemantics, DirectXPluralTargetsAcceptCubeFacesInEitherSlot)
 {
     Microsoft::Xna::Framework::Graphics::PresentationParameters parameters;

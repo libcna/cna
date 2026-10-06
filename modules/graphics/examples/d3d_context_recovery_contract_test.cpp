@@ -22,9 +22,6 @@
 #if defined(CNA_RENDERER_DIRECTX11)
 #include "CNA/Internal/Renderers/DirectX11/DirectX11Renderer.hpp"
 using ActiveRenderer = CNA::Internal::Renderers::DirectX11::DirectX11Renderer;
-#elif defined(CNA_RENDERER_DIRECTX12)
-#include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
-using ActiveRenderer = CNA::Internal::Renderers::DirectX12::DirectX12Renderer;
 #else
 #error This contract is for the DirectX renderer family.
 #endif

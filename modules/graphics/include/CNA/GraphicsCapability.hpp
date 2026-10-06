@@ -15,8 +15,8 @@ namespace CNA
     {
         /**
          * @brief The 3D pipeline as a whole (vertex/index buffers, 3D draw calls, depth/stencil
-         * clears and state). Some renderers, such as the native 2D renderer and Canvas, are
-         * intentionally 2D-only and lack this entirely. Query the selected renderer rather than
+         * clears and state). Some renderers, such as the native 2D renderer, are intentionally
+         * 2D-only and lack this entirely. Query the selected renderer rather than
          * inferring support from its name.
          */
         ThreeD,
@@ -165,7 +165,7 @@ namespace CNA
         /**
          * @brief Compute shaders and the storage buffers they read and write.
          *
-         * GL ES 3.1 / desktop GL 4.3 and later, Vulkan, D3D11 and D3D12 can express this; every
+         * GL ES 3.1 / desktop GL 4.3 and later, Vulkan and D3D11 can express this; every
          * fixed-function and 2D-only renderer cannot, and neither can the GL profiles below 3.1
          * that several CNA renderers target.
          *

@@ -15,10 +15,8 @@ unset(_cna_public_renderer_text)
 set_property(CACHE CNA_GRAPHICS_RENDERER PROPERTY STRINGS ${CNA_RENDERER_PUBLIC_IDENTITIES})
 
 option(CNA_RENDERER_SDL_RENDERER "Enable SDL_Renderer graphics renderer" OFF)
-option(CNA_RENDERER_OPENGLES2 "Enable OpenGL ES 2.0 graphics renderer (internally: EasyGL)" OFF)
 option(CNA_RENDERER_OPENGLES3 "Enable OpenGL ES graphics renderer (internally: EasyGL)" OFF)
 option(CNA_RENDERER_OPENGL33 "Enable desktop OpenGL 3.3 core graphics renderer (internally: EasyGL)" OFF)
-option(CNA_RENDERER_WEBGL1 "Enable WebGL 1 graphics renderer, Emscripten only (internally: EasyGL)" OFF)
 option(CNA_RENDERER_WEBGL2 "Enable WebGL 2 graphics renderer, Emscripten only (internally: EasyGL)" OFF)
 option(CNA_RENDERER_VULKAN "Enable Vulkan graphics renderer" OFF)
 option(CNA_RENDERER_WEBGPU "Enable WebGPU graphics renderer (wgpu-native)" OFF)
@@ -30,10 +28,6 @@ option(CNA_RENDERER_SOFTWARE "Enable Software (CPU rasterizer) graphics renderer
 # avoid colliding with the <cstddef>/<cstdlib> NULL macro (see plans/plan_stub.md's naming section).
 option(CNA_RENDERER_STUB "Enable Stub (no-op) graphics renderer" OFF)
 option(CNA_RENDERER_DIRECTX11 "Enable Direct3D 11 graphics renderer (Windows only)" OFF)
-option(CNA_RENDERER_DIRECTX12 "Enable Direct3D 12 graphics renderer (Windows only)" OFF)
-# plans/plan_canvas.md: HTML Canvas 2D renderer -- Emscripten-only (design decision 1), a browser-native,
-# GPU-free 2D-only renderer using canvas.getContext('2d') instead of WEBGL2's WebGL context.
-option(CNA_RENDERER_CANVAS "Enable HTML Canvas 2D graphics renderer (Emscripten only)" OFF)
 option(CNA_RENDERER_DIRECTX9 "Enable Direct3D 9 graphics renderer (Windows only)" OFF)
 option(CNA_RENDERER_SDL_GPU "Enable SDL_gpu graphics renderer" OFF)
 
@@ -121,11 +115,11 @@ if(CNA_PLATFORM STREQUAL "TERMINAL" AND NOT CNA_GRAPHICS_RENDERER IN_LIST _cna_t
         "Choose a CPU renderer: ${_cna_terminal_renderers_text}.")
 endif()
 
-# plans/plan_dx.md design decision 2: DIRECTX11/DIRECTX12 genuinely cannot build anywhere but Windows (native or
-# MinGW/MSVC cross-compile) -- d3d11.h/d3d12.h/dxgi.h do not exist elsewhere, so this is a hard
+# plans/plan_dx.md design decision 2: DIRECTX11 genuinely cannot build anywhere but Windows (native or
+# MinGW/MSVC cross-compile) -- d3d11.h/dxgi.h do not exist elsewhere, so this is a hard
 # FATAL_ERROR. plans/plan_dx9.md design decision 1 extends this same gate to DIRECTX9 (d3d9.h is
 # equally Windows-only).
-if((CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
+if((CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
         AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
     message(FATAL_ERROR
         "CNA: ${CNA_GRAPHICS_RENDERER} renderer only builds when targeting Windows. Either build "
@@ -155,41 +149,25 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "METAL" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Da
     endif()
 endif()
 
-# plans/plan_canvas.md design decision 1: HTML Canvas 2D is a browser DOM API and cannot exist outside
-# an Emscripten/WebAssembly build -- same hard-gate shape as the DIRECTX11/DIRECTX12 Windows-only check
-# above, new condition.
-if(CNA_GRAPHICS_RENDERER STREQUAL "CANVAS" AND NOT EMSCRIPTEN)
-    message(FATAL_ERROR
-        "CNA: CANVAS renderer only builds when targeting Emscripten (HTML Canvas is a browser DOM "
-        "API). Configure with -DCMAKE_TOOLCHAIN_FILE=\$EMSDK/upstream/emscripten/cmake/Modules/"
-        "Platform/Emscripten.cmake (or use emcmake).")
-endif()
-
-# plans/plan_glbackends.md Phase A/GLB-7: all 5 GL-family public renderers (OPENGLES2/OPENGLES3/OPENGL33
-# desktop, WEBGL1/WEBGL2 Emscripten) share one internal implementation (EasyGL, on top of the
-# sibling easy-gl library) -- this block sets it up once regardless of which of the 5 was selected.
-#
-# GLB-38 done: the WebGL1 work (GLB-30..35) landed on easy-gl develop, so this builds against
-# the canonical '../easy-gl' sibling checkout again; the temporary '../easy-glrvc' (branch
-# 'rvc') redirect from GLB-7 is retired.
-if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
-        OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33"
-        OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL1" OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2")
-    if((CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
-            OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33") AND EMSCRIPTEN)
+# plans/plan_glbackends.md Phase A/GLB-7: the 3 GL-family public renderers (OPENGLES3/OPENGL33
+# desktop, WEBGL2 Emscripten) share one internal implementation (EasyGL, on top of the sibling
+# easy-gl library) -- this block sets it up once regardless of which of the 3 was selected.
+if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33"
+        OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2")
+    if((CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33")
+            AND EMSCRIPTEN)
         message(FATAL_ERROR
             "CNA: ${CNA_GRAPHICS_RENDERER} is a desktop/mobile GL renderer and cannot target "
-            "Emscripten -- use WEBGL1 or WEBGL2 instead.")
+            "Emscripten -- use WEBGL2 instead.")
     endif()
-    if((CNA_GRAPHICS_RENDERER STREQUAL "WEBGL1" OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2") AND NOT EMSCRIPTEN)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2" AND NOT EMSCRIPTEN)
         message(FATAL_ERROR
             "CNA: ${CNA_GRAPHICS_RENDERER} only builds when targeting Emscripten (WebGL is a "
             "browser API). Configure with -DCMAKE_TOOLCHAIN_FILE=\$EMSDK/upstream/emscripten/"
-            "cmake/Modules/Platform/Emscripten.cmake (or use emcmake), or use OPENGLES2/OPENGLES3/"
-            "OPENGL33 for a native desktop/mobile GL build.")
+            "cmake/Modules/Platform/Emscripten.cmake (or use emcmake), or use OPENGLES3/OPENGL33 "
+            "for a native desktop/mobile GL build.")
     endif()
-    if((CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3")
-            AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
         message(WARNING "CNA: ${CNA_GRAPHICS_RENDERER} renderer is primarily tested on Linux. Other platforms may require additional setup.")
     endif()
     # easy-gl is a SIBLING repository checkout, not a git submodule of this
@@ -226,15 +204,14 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
     set(RENDERER_TARGET "cna_renderer_sdl_renderer")
     list(APPEND _cna_identity_defines CNA_RENDERER_SDL_RENDERER)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_SDL_RENDERER")
-elseif(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
-        OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33"
-        OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL1" OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2")
+elseif(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33"
+        OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2")
     message(STATUS "CNA: Using ${CNA_GRAPHICS_RENDERER} graphics renderer (internal implementation: EasyGL)")
     set(RENDERER_DIR "modules/renderers/easygl")
     set(RENDERER_TARGET "cna_renderer_easygl")
     # CNA_RENDERER_EASYGL is the internal implementation identity -- existing #ifdef
     # CNA_RENDERER_EASYGL guards elsewhere in the codebase keep working unmodified regardless of
-    # which of the 5 public GL profiles below was selected (plans/plan_glbackends.md GLB-3).
+    # which of the 3 public GL profiles below was selected (plans/plan_glbackends.md GLB-3).
     list(APPEND _cna_identity_defines CNA_RENDERER_EASYGL)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_EASYGL")
     # CNA_GL_PROFILE_* selects the GL context/shader profile within the shared EasyGL
@@ -346,27 +323,6 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
         cna_configure_mojoshader()
         add_compile_definitions(CNA_DIRECTX11_COMPILED_EFFECTS)
     endif()
-elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
-    message(STATUS "CNA: Using DIRECTX12 graphics renderer")
-    set(RENDERER_DIR "modules/renderers/directx12")
-    set(RENDERER_TARGET "cna_renderer_directx12")
-    list(APPEND _cna_identity_defines CNA_RENDERER_DIRECTX12)
-    set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX12")
-    # plans/plan_fx.md FX-134: D3D12 has no MojoShader adapter, so CNA supplies the backend while
-    # keeping the dependency absent from ordinary D3D12 builds.
-    option(CNA_DIRECTX12_COMPILED_EFFECTS
-           "Build DirectX 12 support for compiled XNA Effect bytecode (plans/plan_fx.md FX-134)" OFF)
-    if(CNA_DIRECTX12_COMPILED_EFFECTS)
-        include(cmake/ThirdPartyFNA3D.cmake)
-        cna_configure_mojoshader()
-        add_compile_definitions(CNA_DIRECTX12_COMPILED_EFFECTS)
-    endif()
-elseif(CNA_GRAPHICS_RENDERER STREQUAL "CANVAS")
-    message(STATUS "CNA: Using CANVAS (HTML Canvas 2D) graphics renderer")
-    set(RENDERER_DIR "modules/renderers/canvas")
-    set(RENDERER_TARGET "cna_renderer_canvas")
-    list(APPEND _cna_identity_defines CNA_RENDERER_CANVAS)
-    set(CNA_RENDERER_DEFINE "CNA_RENDERER_CANVAS")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     message(STATUS "CNA: Using DIRECTX9 graphics renderer")
     set(RENDERER_DIR "modules/renderers/directx9")
@@ -474,21 +430,14 @@ list(GET CNA_RENDERER_DIRS 0 RENDERER_DIR)
 list(GET CNA_RENDERER_DEFINES 0 CNA_RENDERER_DEFINE)
 
 # Applies the browser-context contract of the selected public renderer to a final Emscripten link.
-# WebGL profiles must be exact: accepting Emscripten's WebGL 1 default for WEBGL2 makes EasyGL emit
-# GLSL ES 3.00 into a WebGL 1 context, while forcing version 2 for WEBGL1 defeats that deliberately
-# separate renderer. Canvas/DOM/WebGPU and other renderer families do not inherit irrelevant GL
-# requirements from this helper.
+# The WebGL version must be exact: accepting Emscripten's WebGL 1 default for WEBGL2 makes EasyGL
+# emit GLSL ES 3.00 into a WebGL 1 context. WebGPU and the other renderer families do not inherit
+# irrelevant GL requirements from this helper.
 function(cna_apply_emscripten_renderer_link_contract target)
-    if(NOT EMSCRIPTEN)
+    if(NOT EMSCRIPTEN OR NOT CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2")
         return()
     endif()
-    if(CNA_GRAPHICS_RENDERER STREQUAL "WEBGL1")
-        set(_cna_webgl_version 1)
-    elseif(CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2")
-        set(_cna_webgl_version 2)
-    else()
-        return()
-    endif()
+    set(_cna_webgl_version 2)
     target_link_options("${target}" PRIVATE
         "-sMIN_WEBGL_VERSION=${_cna_webgl_version}"
         "-sMAX_WEBGL_VERSION=${_cna_webgl_version}")

@@ -191,13 +191,11 @@ using ConditionalLoggerRoute = void (*)(std::string_view, bool);
 
 // Every public renderer identity, paired explicitly so neither side depends on the other's
 // declaration order.
-constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererType>, 18>
+constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererType>, 14>
     RendererIdentities{{
         {CNA_GRAPHICS_RENDERER_SDL_RENDERER, CNA::GraphicsRendererType::SdlRenderer},
-        {CNA_GRAPHICS_RENDERER_OPENGLES2, CNA::GraphicsRendererType::OpenGLES2},
         {CNA_GRAPHICS_RENDERER_OPENGLES3, CNA::GraphicsRendererType::OpenGLES3},
         {CNA_GRAPHICS_RENDERER_OPENGL33, CNA::GraphicsRendererType::OpenGL33},
-        {CNA_GRAPHICS_RENDERER_WEBGL1, CNA::GraphicsRendererType::WebGL1},
         {CNA_GRAPHICS_RENDERER_WEBGL2, CNA::GraphicsRendererType::WebGL2},
         {CNA_GRAPHICS_RENDERER_VULKAN, CNA::GraphicsRendererType::Vulkan},
         {CNA_GRAPHICS_RENDERER_WEBGPU, CNA::GraphicsRendererType::WebGPU},
@@ -205,8 +203,6 @@ constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererTy
         {CNA_GRAPHICS_RENDERER_SOFTWARE, CNA::GraphicsRendererType::Software},
         {CNA_GRAPHICS_RENDERER_STUB, CNA::GraphicsRendererType::Stub},
         {CNA_GRAPHICS_RENDERER_DIRECTX11, CNA::GraphicsRendererType::DirectX11},
-        {CNA_GRAPHICS_RENDERER_DIRECTX12, CNA::GraphicsRendererType::DirectX12},
-        {CNA_GRAPHICS_RENDERER_CANVAS, CNA::GraphicsRendererType::Canvas},
         {CNA_GRAPHICS_RENDERER_DIRECTX9, CNA::GraphicsRendererType::DirectX9},
         {CNA_GRAPHICS_RENDERER_SDL_GPU, CNA::GraphicsRendererType::SdlGpu},
         {CNA_GRAPHICS_RENDERER_METAL, CNA::GraphicsRendererType::Metal},

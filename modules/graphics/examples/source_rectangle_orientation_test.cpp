@@ -67,10 +67,6 @@ namespace
     constexpr const char* kRendererName = "DIRECTX11";
     constexpr bool kRasterizes = true;
     constexpr bool kBackbufferReadbackRequired = true;
-#elif defined(CNA_RENDERER_DIRECTX12)
-    constexpr const char* kRendererName = "DIRECTX12";
-    constexpr bool kRasterizes = true;
-    constexpr bool kBackbufferReadbackRequired = true;
 #elif defined(CNA_RENDERER_WEBGPU)
     constexpr const char* kRendererName = "WEBGPU";
     constexpr bool kRasterizes = true;

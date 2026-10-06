@@ -137,13 +137,6 @@ protected:
         zeroDrawQuery.Begin();
         zeroDrawQuery.End();
 
-#if defined(CNA_RENDERER_DIRECTX12)
-        check(!oneDrawQuery.getIsCompleteProperty() &&
-                  !twoDrawQuery.getIsCompleteProperty() &&
-                  !zeroDrawQuery.getIsCompleteProperty(),
-              "D3D12 queries remain incomplete before their frame fence is submitted");
-#endif
-
         // Force the GL driver to synchronize/flush pending commands (GetBackBufferData reads back
         // via glReadPixels) so the occlusion query's result has a chance to become available;
         // bounded retry loop in case one readback isn't enough on this driver.

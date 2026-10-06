@@ -123,7 +123,7 @@ namespace
      * @brief The exact policy used when an application requests a 2D mip chain.
      *
      * Declared, not probed, for the same reason as RtContract: SDL_Renderer documents that its 2D
-     * texture API has no mip chain, and Canvas the same. Most still create a mipmapped resource and reject
+     * texture API has no mip chain. Most still create a mipmapped resource and reject
      * `SetData(level=1, ...)`. SKIA-127 now implements that upload/readback path after SKIA-126
      * opened construction. These honest policies must not be conflated by a test that terminates
      * before reporting them.
@@ -173,14 +173,6 @@ namespace
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "DIRECTX11";
     constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
-#elif defined(CNA_RENDERER_DIRECTX12)
-    constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kRendererName = "DIRECTX12";
-    constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
-#elif defined(CNA_RENDERER_CANVAS)
-    constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kRendererName = "CANVAS";
-    constexpr MipPolicy kMipPolicy = MipPolicy::RejectUpload;
 #else
 #error "REMED-GFX-149: this renderer has no declared Texture2D::GetData render-target contract."
 #endif

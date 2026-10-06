@@ -48,7 +48,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "System/IO/FileStream.hpp"
 
-// plans/plan_directx12_parity.md DX12-0005: SDL is used here for one thing -- probing whether a
+// DX12-0005: SDL is used here for one thing -- probing whether a
 // display exists before a Game is constructed. A target built without SDL (a CNA_ENABLE_SDL=OFF
 // configuration's Direct3D fixtures) defines CNA_EXAMPLES_NO_SDL, and the probe is then left to the
 // platform the build selected: its own window creation is the probe, and a failure there surfaces

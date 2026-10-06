@@ -1591,7 +1591,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * current runtime device/driver) supports the given CNA::GraphicsCapability.
          *
          * Query this before relying on a feature that isn't universally supported (e.g. 3D on
-         * the 2D-only SDL_RENDERER and CANVAS renderers), instead of calling it and handling the
+         * the 2D-only SDL_RENDERER renderer), instead of calling it and handling the
          * resulting exception. MultipleRenderTargets and Texture3D also answer for this device's
          * GraphicsProfile: Reach binds one render target and has no volume textures.
          *
@@ -1957,7 +1957,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         std::vector<RenderTargetBinding> currentRenderTargets_;
         bool renderTargetBound_ = false;
-        // plans/plan_directx12_parity.md DX12-0023: a bound target was destroyed. Its binding is gone
+        // DX12-0023: a bound target was destroyed. Its binding is gone
         // (no dangling pointer to compare or dereference) but the device stays bound until the next
         // SetRenderTargets, which is therefore never skipped as unchanged.
         bool boundRenderTargetDestroyed_ = false;
@@ -2006,7 +2006,7 @@ namespace Microsoft::Xna::Framework::Graphics
         void DetachDestroyedVertexBuffer(const VertexBuffer* vertexBuffer) noexcept;
         void DetachDestroyedIndexBuffer(const IndexBuffer* indexBuffer) noexcept;
         void DetachMovedTexture(const Texture* texture) noexcept;
-        // plans/plan_directx12_parity.md DX12-0023: called by a render target's destruction while its
+        // DX12-0023: called by a render target's destruction while its
         // backend still exists. A binding that names it is dropped and the renderer returns to the back
         // buffer; the device stays bound (see boundRenderTargetDestroyed_).
         void DetachDestroyedRenderTarget(const Texture* texture) noexcept;

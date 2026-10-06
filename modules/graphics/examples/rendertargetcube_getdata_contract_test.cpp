@@ -153,14 +153,6 @@ namespace
     // and exposes exact top-first upload/readback from the same storage the rasterizer writes.
     constexpr Contract kContract{"SOFTWARE", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, true, false, true};
-#elif defined(CNA_RENDERER_EASYGL) && defined(CNA_GL_PROFILE_OPENGLES2)
-    // The OPENGLES2 GL profile of the EasyGL family: identical to the EASYGL contract below
-    // except MSAA -- core OpenGL ES 2.0 has no multisample renderbuffers/blit
-    // (docs/opengles2-renderer.md), so a multisampled cube request degrades to single-sample
-    // (applied 0, `msaaCubeTargets` false) and the "multisampled" readback probe reads the same
-    // ordinary single-sample face exactly.
-    constexpr Contract kContract{"EASYGL(OPENGLES2)", true, Support::Exact, Support::Exact,
-                                 true, false, Support::Exact, MipTargets::Real, true, true, true, false, false};
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, true, false, false};
@@ -200,9 +192,6 @@ namespace
     // 2D-only by design: CreateRenderTargetCube keeps IGraphicsRenderer's nullptr default.
     constexpr Contract kContract{"SDL_RENDERER", false, Support::Unsupported, Support::Unsupported,
                                  true, false, Support::Unsupported, MipTargets::Real, true, false, false, false, false};
-#elif defined(CNA_RENDERER_CANVAS)
-    constexpr Contract kContract{"CANVAS", false, Support::Unsupported, Support::Unsupported,
-                                 true, false, Support::Unsupported, MipTargets::Real, true, false, false, false, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
     // D3D9RenderTargetCubeRenderer reports GetMultiSampleCount() == 0 unconditionally and its
     // Recreate() allocates exactly ONE level whatever `mipMap` asked for, so this target is
@@ -213,12 +202,6 @@ namespace
                                  true, false, Support::Exact, MipTargets::LevelsWithoutStorage, true, true, false, false, true};
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr Contract kContract{"DIRECTX11", true, Support::Exact, Support::Exact,
-                                 true, true, Support::Exact, MipTargets::Real, true, true, true, false, false};
-#elif defined(CNA_RENDERER_DIRECTX12)
-    // `rtCubeSetData` true since plans/plan_directx12_parity.md DX12-0014: D3D12RenderTargetCubeRenderer
-    // uploads SetData into its sampleable cube instead of inheriting the interface's refusal, and an
-    // uploaded face reads back in the same row order (`rtCubeUploadMirrored` false).
-    constexpr Contract kContract{"DIRECTX12", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, true, false, false};
 #else
 #error "REMED-GFX-134: this renderer has no declared RenderTargetCube GetData contract."

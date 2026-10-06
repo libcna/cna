@@ -88,7 +88,7 @@ TEST(SpriteBatchRasterizationTest, AnOpaqueSpriteActuallyChangesThePixelsItCover
     // Gated to the renderers that actually rasterize and can hand a pixel back. The list
     // deliberately includes DirectX11, which every existing readback suite omits -- which is
     // why a D3D11 SpriteBatch that draws nothing has never failed a test here.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12, Fna3d);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Fna3d);
 
     GraphicsDevice device = MakeDevice();
     Texture2D texture = MakeWhiteTexture(device);
@@ -114,7 +114,7 @@ TEST(SpriteBatchRasterizationTest, TheDestinationRectangleBoundsWhatIsDrawn)
     // Gated to the renderers that actually rasterize and can hand a pixel back. The list
     // deliberately includes DirectX11, which every existing readback suite omits -- which is
     // why a D3D11 SpriteBatch that draws nothing has never failed a test here.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12, Fna3d);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Fna3d);
 
     GraphicsDevice device = MakeDevice();
     Texture2D texture = MakeWhiteTexture(device);
@@ -137,7 +137,7 @@ TEST(SpriteBatchRasterizationTest, TheDestinationRectangleBoundsWhatIsDrawn)
 // draws, nothing about SpriteBatch is implicated.
 TEST(SpriteBatchRasterizationTest, APlainPrimitiveDrawAlsoReachesTheBackBuffer)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12, Fna3d);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Fna3d);
 
     GraphicsDevice device = MakeDevice();
     device.Clear(Color::Black);
@@ -175,7 +175,7 @@ TEST(SpriteBatchRasterizationTest, APlainPrimitiveDrawAlsoReachesTheBackBuffer)
 // the other. If the sprite appears with CullNone and not without it, that is the whole defect.
 TEST(SpriteBatchRasterizationTest, TheDefaultRasterizerStateDoesNotCullTheSprite)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12, Fna3d);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Fna3d);
 
     GraphicsDevice device = MakeDevice();
     Texture2D texture = MakeWhiteTexture(device);
@@ -206,7 +206,7 @@ TEST(SpriteBatchRasterizationTest, TheDefaultRasterizerStateDoesNotCullTheSprite
 // samples as (0,0,0,0) is invisible, which collapses the third outcome back into the first.
 TEST(SpriteBatchRasterizationTest, ASpriteThatDrawsNothingIsToldApartFromOneThatDrawsBlack)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12, Fna3d);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Fna3d);
 
     GraphicsDevice device = MakeDevice();
     Texture2D texture = MakeWhiteTexture(device);
@@ -231,7 +231,7 @@ TEST(SpriteBatchRasterizationTest, ASpriteThatDrawsNothingIsToldApartFromOneThat
 // can see a sprite path that leaves depth testing to whatever state the context happens to hold.
 TEST(SpriteBatchRasterizationTest, ASpriteStillRasterizesWhenTheBackBufferHasADepthBuffer)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12, Fna3d);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Fna3d);
 
     GraphicsDevice device = MakeDevice(DepthFormat::Depth24Stencil8);
     Texture2D texture = MakeWhiteTexture(device);
@@ -250,7 +250,7 @@ TEST(SpriteBatchRasterizationTest, ASpriteStillRasterizesWhenTheBackBufferHasADe
 // scales by destination/source. The cases above use neither.
 TEST(SpriteBatchRasterizationTest, ARotatedSpriteWithACentreOriginLandsWhereXnaPutsIt)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12, Fna3d);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Fna3d);
 
     GraphicsDevice device = MakeDevice();
     Texture2D texture = MakeWhiteTexture(device, 64);
@@ -278,7 +278,7 @@ TEST(SpriteBatchRasterizationTest, ARotatedSpriteWithACentreOriginLandsWhereXnaP
 // second frame onward. That is precisely what cna_demo_2d shows on DirectX11.
 TEST(SpriteBatchRasterizationTest, ASpriteStillRasterizesInTheFrameAfterAPresent)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12, Fna3d);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Fna3d);
 
     GraphicsDevice device = MakeDevice();
     Texture2D texture = MakeWhiteTexture(device);
@@ -306,7 +306,7 @@ TEST(SpriteBatchRasterizationTest, ASpriteStillRasterizesInTheFrameAfterAPresent
 // if this fails too, it is not SpriteBatch's defect but the renderer's frame loop.
 TEST(SpriteBatchRasterizationTest, APlainPrimitiveStillReachesTheBackBufferAfterAPresent)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12, Fna3d);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Fna3d);
 
     GraphicsDevice device = MakeDevice();
     device.Clear(Color::Black);
@@ -343,7 +343,7 @@ TEST(SpriteBatchRasterizationTest, APlainPrimitiveStillReachesTheBackBufferAfter
 // top-right quadrant.
 TEST(SpriteBatchRasterizationTest, AStockEffectInBeginPlacesTheSpritesByItsMatrices)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12, Fna3d);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Fna3d);
 
     GraphicsDevice device = MakeDevice();
     Texture2D texture = MakeWhiteTexture(device);
@@ -369,7 +369,7 @@ TEST(SpriteBatchRasterizationTest, AStockEffectInBeginPlacesTheSpritesByItsMatri
 // sprite into the bottom-right quadrant, so World is applied and not only Projection.
 TEST(SpriteBatchRasterizationTest, AStockBasicEffectAppliesItsWorldToTheSprites)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12, Fna3d);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Fna3d);
 
     GraphicsDevice device = MakeDevice();
     Texture2D texture = MakeWhiteTexture(device);

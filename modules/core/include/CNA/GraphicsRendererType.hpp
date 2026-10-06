@@ -18,17 +18,11 @@ namespace CNA
         /** @brief SDL's native 2D renderer (2D-only). */
         SdlRenderer,
 
-        /** @brief OpenGL ES 2.0 (desktop/mobile, GLSL ES 1.00), internally implemented by EasyGL. */
-        OpenGLES2,
-
         /** @brief OpenGL ES (desktop/mobile GLES 3.0), internally implemented by EasyGL. */
         OpenGLES3,
 
         /** @brief Desktop OpenGL 3.3 core profile, internally implemented by EasyGL. */
         OpenGL33,
-
-        /** @brief WebGL 1 (Emscripten only, GLES 2.0), internally implemented by EasyGL. */
-        WebGL1,
 
         /** @brief WebGL 2 (Emscripten only, GLES 3.0), internally implemented by EasyGL. */
         WebGL2,
@@ -51,12 +45,6 @@ namespace CNA
         /** @brief Direct3D 11. */
         DirectX11,
 
-        /** @brief Direct3D 12. */
-        DirectX12,
-
-        /** @brief HTML Canvas 2D (Emscripten). */
-        Canvas,
-
         /** @brief Direct3D 9. */
         DirectX9,
 
@@ -78,9 +66,9 @@ namespace CNA
      * sets per renderer, so this is a compile-time constant -- usable in a constant expression
      * (e.g. static_assert(CNA::getCurrentGraphicsRendererType() == CNA::GraphicsRendererType::OpenGLES3)).
      *
-     * The 5 GL-family public renderers (OPENGLES2/OPENGLES3/OPENGL33/WEBGL1/WEBGL2) all share the
-     * internal CNA_RENDERER_EASYGL identity (see plans/plan_glbackends.md) -- the CNA_GL_PROFILE_*
-     * compile definition set alongside it distinguishes which of the 5 public names was selected.
+     * The 3 GL-family public renderers (OPENGLES3/OPENGL33/WEBGL2) all share the internal
+     * CNA_RENDERER_EASYGL identity (see plans/plan_glbackends.md) -- the CNA_GL_PROFILE_*
+     * compile definition set alongside it distinguishes which of the 3 public names was selected.
      *
      * @return The active GraphicsRendererType, determined at compile time by CNA_GRAPHICS_RENDERER.
      */
@@ -91,12 +79,8 @@ namespace CNA
 #elif defined(CNA_RENDERER_EASYGL)
 #if defined(CNA_GL_PROFILE_OPENGL33)
         return GraphicsRendererType::OpenGL33;
-#elif defined(CNA_GL_PROFILE_WEBGL1)
-        return GraphicsRendererType::WebGL1;
 #elif defined(CNA_GL_PROFILE_WEBGL2)
         return GraphicsRendererType::WebGL2;
-#elif defined(CNA_GL_PROFILE_OPENGLES2)
-        return GraphicsRendererType::OpenGLES2;
 #else // CNA_GL_PROFILE_OPENGLES3 (default within CNA_RENDERER_EASYGL)
         return GraphicsRendererType::OpenGLES3;
 #endif
@@ -112,10 +96,6 @@ namespace CNA
         return GraphicsRendererType::Stub;
 #elif defined(CNA_RENDERER_DIRECTX11)
         return GraphicsRendererType::DirectX11;
-#elif defined(CNA_RENDERER_DIRECTX12)
-        return GraphicsRendererType::DirectX12;
-#elif defined(CNA_RENDERER_CANVAS)
-        return GraphicsRendererType::Canvas;
 #elif defined(CNA_RENDERER_DIRECTX9)
         return GraphicsRendererType::DirectX9;
 #elif defined(CNA_RENDERER_SDL_GPU)
@@ -149,10 +129,8 @@ namespace CNA
         switch (type)
         {
             case GraphicsRendererType::SdlRenderer: return "SDL_RENDERER";
-            case GraphicsRendererType::OpenGLES2:    return "OPENGLES2";
             case GraphicsRendererType::OpenGLES3:    return "OPENGLES3";
             case GraphicsRendererType::OpenGL33:    return "OPENGL33";
-            case GraphicsRendererType::WebGL1:       return "WEBGL1";
             case GraphicsRendererType::WebGL2:       return "WEBGL2";
             case GraphicsRendererType::Vulkan:       return "VULKAN";
             case GraphicsRendererType::WebGPU:       return "WEBGPU";
@@ -160,8 +138,6 @@ namespace CNA
             case GraphicsRendererType::Software:     return "SOFTWARE";
             case GraphicsRendererType::Stub:          return "STUB";
             case GraphicsRendererType::DirectX11:        return "DIRECTX11";
-            case GraphicsRendererType::DirectX12:        return "DIRECTX12";
-            case GraphicsRendererType::Canvas:       return "CANVAS";
             case GraphicsRendererType::DirectX9:          return "DIRECTX9";
             case GraphicsRendererType::SdlGpu:        return "SDL_GPU";
             case GraphicsRendererType::Metal:          return "METAL";

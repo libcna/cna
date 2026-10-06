@@ -57,18 +57,14 @@ namespace CnaTest::WireFrameOracle
     /** @brief Whether the active renderer rasterizes and reads back, so pixels can be asserted. */
     [[nodiscard]] inline bool HasPixelOracle()
     {
-        return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Software, Vulkan, WebGPU, SdlGpu,
-                               DirectX9, DirectX11, DirectX12);
+        return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software, Vulkan, WebGPU, SdlGpu,
+                               DirectX9, DirectX11);
     }
 
-    // The subset actually measured. D3D12 is excluded because no D3D12 runtime exists in this
-    // environment: its device creation aborts under Wine for every device test in this file,
-    // including the untouched `SupportsThreeD`, so calling it clean would be a fabrication. It
-    // still compiles the oracle, and gains its reading the day a D3D12 runtime is available.
     /** @brief Whether the active renderer's wireframe behaviour has actually been measured. */
     [[nodiscard]] inline bool IsMeasured()
     {
-        return HasPixelOracle() && !CNA_RENDERER_IS(DirectX12);
+        return HasPixelOracle();
     }
 
     // Measured to render a genuine wireframe: edges lit, interior empty. The answer is a runtime

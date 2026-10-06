@@ -72,8 +72,7 @@ namespace
             // renderers still binding white here, and it now binds the measured opaque black.
             // plans/plan_webgpu_modern_graphics.md WMG-0025 adds WebGPU, which had no null-texture
             // handling at all until it gained the same 1x1 opaque-black 2D and cube.
-            if (!CNA_RENDERER_IS(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12, Vulkan,
-                                 WebGPU))
+            if (!CNA_RENDERER_IS(Software, OpenGL33, OpenGLES3, DirectX11, Vulkan, WebGPU))
                 GTEST_SKIP() << "needs a stock-effect raster path whose missing slots are pinned";
 
             PresentationParameters parameters;

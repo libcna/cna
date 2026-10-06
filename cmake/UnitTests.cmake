@@ -269,7 +269,7 @@ if(CNA_BUILD_TESTS)
     # therefore produced a CnaTests that could not compile, which is what blocked the SDL_GPU
     # classic baseline this closeout exists to measure. Found by configuring SDL_GPU, exactly as
     # WMG-0028's twin was found by configuring Vulkan.
-    set(_cna_gl_identities OPENGLES2 OPENGLES3 OPENGL33 WEBGL1 WEBGL2)
+    set(_cna_gl_identities OPENGLES3 OPENGL33 WEBGL2)
     set(_cna_have_gl_identity FALSE)
     foreach(_cna_gl IN LISTS _cna_gl_identities)
         if("${_cna_gl}" IN_LIST CNA_RENDERER_IDENTITIES)
@@ -521,8 +521,7 @@ if(CNA_BUILD_TESTS)
 
     if(MINGW AND
        ((CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9" AND CNA_DIRECTX9_COMPILED_EFFECTS) OR
-        (CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11" AND CNA_DIRECTX11_COMPILED_EFFECTS) OR
-        (CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12" AND CNA_DIRECTX12_COMPILED_EFFECTS)))
+        (CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11" AND CNA_DIRECTX11_COMPILED_EFFECTS)))
         target_link_options(CnaRendererTests PRIVATE
             -static-libgcc -static-libstdc++ -Wl,--allow-multiple-definition)
         cna_copy_mingw_runtime(CnaRendererTests)
@@ -1072,19 +1071,19 @@ if(CNA_BUILD_TESTS)
     endif()
 
     # plans/plan_dx.md DX-15 follow-up + plans/plan_dx9.md D9-123 follow-up (merge-reconciled 2026-07-16):
-    # now that CnaTests.exe genuinely builds under the D3D9/D3D11/D3D12 MinGW cross-targets,
+    # now that CnaTests.exe genuinely builds under the D3D9/D3D11 MinGW cross-targets,
     # gtest_discover_tests(DISCOVERY_MODE PRE_TEST) below executes it directly to enumerate tests
     # -- and any add_test(COMMAND CnaTests ...) test (e.g. CnaInputTests, further below) does the
-    # same at run time. All three need the same Wine wrapper DirectX9_Smoke/DirectX11_Smoke/DirectX12_Smoke
+    # same at run time. Both need the same Wine wrapper DirectX9_Smoke/DirectX11_Smoke
     # already use, or every ctest invocation in this build tree fails outright trying to exec a
     # Windows PE natively on the Linux host. *_SKIP_*_GATE=1 because a bare --gtest_list_tests (or
-    # most individual unit tests) never creates a real graphics device, so the DXVK/vkd3d-presence
+    # most individual unit tests) never creates a real graphics device, so the DXVK-presence
     # gate those wrappers normally enforce would misfire here. MUST be set before
     # gtest_discover_tests() below -- it reads this property immediately at configure time, not
     # lazily at generate/test time. `CMAKE_CROSSCOMPILING` is used as the outer guard (equivalent
-    # to `MINGW` for every real build configuration this project uses, since these three renderers
+    # to `MINGW` for every real build configuration this project uses, since these two renderers
     # are only ever built via the MinGW cross-toolchain) so a D3D9 branch could be added without
-    # touching D3D11/D3D12's own already-working invocation style.
+    # touching D3D11's own already-working invocation style.
     if(CMAKE_CROSSCOMPILING)
         if(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
             # D9-123: this renderer's own wrapper takes a simpler `env;VAR=1;script` form (no
@@ -1095,9 +1094,6 @@ if(CNA_BUILD_TESTS)
         elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D11_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh")
-        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
-            set_target_properties(CnaTests PROPERTIES
-                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D12_SKIP_VKD3D_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-vkd3d.sh")
         endif()
     endif()
 

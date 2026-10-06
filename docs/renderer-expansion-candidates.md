@@ -28,24 +28,25 @@ Authoritative companions:
 
 ## 1. What CNA supports today
 
-**18 public renderer identities**, mechanically verified by `scripts/check_renderer_identities.py`
+**14 public renderer identities**, mechanically verified by `scripts/check_renderer_identities.py`
 against `modules/core/include/CNA/GraphicsRendererType.hpp`, `cmake/RendererIdentities.cmake`, the
 runtime registry and the C ABI. Selected at configure time via `-DCNA_GRAPHICS_RENDERER=<selector>`;
 implementations live in `modules/renderers/<family>/`. Twenty-five former identities were retired on
 2026-09-17, three more (`DIRECT2D`, `FREEDIRECT`, `PORTABLEGL`) on 2026-09-27 and four more
-(`GDI`, `HTML_DOM`, `SVG_DOM`, `OPENGL4`) on 2026-09-28 (`docs/removed-renderers.md`).
+(`GDI`, `HTML_DOM`, `SVG_DOM`, `OPENGL4`) on 2026-09-28 and four more (`DIRECTX12`, `CANVAS`,
+`OPENGLES2`, `WEBGL1`) on 2026-10-06 (`docs/removed-renderers.md`).
 
-The five GL profiles (`OPENGLES2`, `OPENGLES3`, `OPENGL33`, `WEBGL1`, `WEBGL2`) share the internal
+The three GL profiles (`OPENGLES3`, `OPENGL33`, `WEBGL2`) share the internal
 EasyGL implementation while keeping distinct public contracts (context, shader profile, platform).
 
 | Class | Identities | Count |
 |---|---|---:|
 | No pixels (validation/no-op) | `HEADLESS`, `STUB` | 2 |
-| 2D-oriented | `SDL_RENDERER`, `CANVAS` | 2 |
+| 2D-oriented | `SDL_RENDERER` | 1 |
 | CPU 3D | `SOFTWARE` | 1 |
-| Programmable / modern | `OPENGLES2`, `OPENGLES3`, `OPENGL33`, `WEBGL1`, `WEBGL2`, `VULKAN`, `WEBGPU`, `METAL`, `DIRECTX9`, `DIRECTX11`, `DIRECTX12`, `SDL_GPU` | 12 |
+| Programmable / modern | `OPENGLES3`, `OPENGL33`, `WEBGL2`, `VULKAN`, `WEBGPU`, `METAL`, `DIRECTX9`, `DIRECTX11`, `SDL_GPU` | 9 |
 | Abstraction layer | `FNA3D` | 1 |
-| **Total** | | **18** |
+| **Total** | | **14** |
 
 Notes that must not be misstated anywhere: `WEBGPU` is experimental with a bounded verified
 surface; the `ASCII` identity was **removed** in favour of the renderer-neutral
@@ -172,18 +173,16 @@ dishonestly. Recorded here so the question does not have to be re-litigated.
 
 | Thing | Correct treatment |
 |---|---|
-| ANGLE | A GLES **driver**; `OPENGLES2`/`OPENGLES3` already run on it. At most a documented runtime option. |
+| ANGLE | A GLES **driver**; `OPENGLES3` already runs on it. At most a documented runtime option. |
 | llvmpipe / lavapipe | Software **drivers** behind `OPENGL*`/`VULKAN`. Note `SWIFTSHADER` (A3) is proposed as an identity only because it is a distinct, separately-selected stack — if that argument fails at spike time, it becomes an option too. |
 | MoltenVK | A Vulkan implementation on Metal; `VULKAN` on macOS, not a new name. |
 | Zink | GL-on-Vulkan driver. |
 | Dawn | A second native WebGPU implementation → a **profile** of `WEBGPU`, like the GL profiles. |
 | Skia Ganesh / Graphite | GPU backends of Skia, whose CNA identity was retired in 2026-08. Were Skia ever revisited, they would be backends of one identity, not two. |
 | EGL/GBM headless GL | A context-creation mode of the GL identities. |
-| OffscreenCanvas / worker canvas | A presentation mode of `CANVAS`. |
-| Canvas `ImageData` CPU path | A `SOFTWARE`-style sink for `CANVAS`, not an identity. |
 | PNG/PPM frame dump | A **present sink** any renderer can gain; not a renderer. |
 | SDL 1.2 | Superseded; CNA targets SDL3. |
-| `DIRECTX4` | Never shipped publicly. Moot since 2026-09-17: the legacy series was retired and CNA's Direct3D identities are now `DIRECTX9`, `DIRECTX11` and `DIRECTX12` only. |
+| `DIRECTX4` | Never shipped publicly. Moot since 2026-09-17: the legacy series was retired and CNA's Direct3D identities are now `DIRECTX9` and `DIRECTX11` only. |
 | Terminal ASCII/glyph output | Already solved renderer-neutrally by `AsciiPostProcessEffect`. Only true-pixel terminal transports (A10) are identity-worthy. |
 
 ## 5. Requirements any candidate must satisfy before it counts
@@ -228,11 +227,11 @@ The earlier edition of this section added the live identities, the Phase 2 list 
 into a "97 theoretical ceiling". **That arithmetic is deleted, not updated.** Summing a support
 matrix with a research list produces a number that looks like an ambition, and CNA has since
 established the opposite policy: the set is curated, and on 2026-09-17 it went *down* by 25, on
-2026-09-27 by three more, and on 2026-09-28 by four more.
+2026-09-27 by three more, on 2026-09-28 by four more, and on 2026-10-06 by four more.
 
 The only renderer count that may be published anywhere is the one
-`scripts/check_renderer_identities.py` prints for the actual tree — today, **18 public identities
-over 14 implementation families**. Thirty-three identities are retired, their ABI values permanently
+`scripts/check_renderer_identities.py` prints for the actual tree — today, **14 public identities
+over 12 implementation families**. Thirty-seven identities are retired, their ABI values permanently
 reserved (`docs/removed-renderers.md`).
 
 For the record of what this catalog has actually produced since 2026-08-13: three candidates built

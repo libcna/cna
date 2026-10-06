@@ -374,7 +374,7 @@ namespace
 
 TEST(Texture2DTest, SetDataSourceWindowOverloadCoversLogicalAndRawValueTypes)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
 
     GraphicsDevice device;
 
@@ -760,7 +760,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
     // Software retains the signed values in its canonical CPU sampling plane.
     // DirectX11 stores it as DXGI_FORMAT_R8G8_SNORM, x in the low byte -- CNA's own packing, and
     // FNA3D's D3D11 mapping (WINCLOSE-0013).
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software, DirectX11, DirectX12))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software, DirectX11))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2));
     }
@@ -774,7 +774,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 {
     // plan_vulkan.md VULKAN-174: and on Vulkan, as VK_FORMAT_R8G8B8A8_SNORM; DirectX11 as
     // DXGI_FORMAT_R8G8B8A8_SNORM (WINCLOSE-0013).
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software, DirectX11, DirectX12))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Software, DirectX11))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4));
     }
@@ -792,7 +792,7 @@ TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
     // sampled draw (Vulkan_Packed16Format), not by a readback, which Texture2D serves from a CPU
     // copy and which therefore cannot see a wrong channel order.
     // DirectX11: DXGI_FORMAT_B5G5R5A1_UNORM, a<<15|r<<10|g<<5|b field for field (WINCLOSE-0013).
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan, SdlGpu, Software, DirectX11, DirectX12))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan, SdlGpu, Software, DirectX11))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551));
     }
@@ -804,7 +804,7 @@ TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, Packed16FullPartialAndMipTransfersAreExact)
 {
-    if (!CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software, DirectX11, DirectX12))
+    if (!CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software, DirectX11))
         GTEST_SKIP() << "The active renderer has not promoted packed-16 Texture2D storage";
 
     using namespace Microsoft::Xna::Framework::Graphics::PackedVector;
@@ -812,7 +812,7 @@ TEST_F(UnsupportedFormatConstructionTest, Packed16FullPartialAndMipTransfersAreE
     ExpectPacked16TransferContract<Bgra5551>(gd, SurfaceFormat::Bgra5551);
     // WINCLOSE-0016: on DirectX11, B4G4R4A4_UNORM is optional and verified per device; a device
     // that does not keep its texels refuses the format at construction instead.
-    if (CNA_RENDERER_IS(DirectX11, DirectX12) &&
+    if (CNA_RENDERER_IS(DirectX11) &&
         gd.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::Bgra4444)) ==
             CNA::Internal::Renderers::RendererFormatVerdict::Unsupported)
         EXPECT_THROW(Texture2D(gd, 4, 4, true, SurfaceFormat::Bgra4444), std::runtime_error);
@@ -1180,9 +1180,9 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         // above, and kept separate because its set is its own. Bgra4444 is the device-dependent
         // one here too: B4G4R4A4_UNORM is optional on D3D11 hardware, so it is asked of the
         // renderer below, which now asks the device.
-        const bool d3d11Packed16AndSignedNormalized = CNA_RENDERER_IS(DirectX11, DirectX12);
+        const bool d3d11Packed16AndSignedNormalized = CNA_RENDERER_IS(DirectX11);
         const bool vulkanA4R4G4B4 =
-            CNA_RENDERER_IS(Vulkan, SdlGpu, DirectX11, DirectX12) &&
+            CNA_RENDERER_IS(Vulkan, SdlGpu, DirectX11) &&
             gd.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::Bgra4444)) ==
                 CNA::Internal::Renderers::RendererFormatVerdict::Supported;
         // REMED-GFX-242: this fixture's device is Reach, and a format the profile excludes is
@@ -1219,7 +1219,7 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
             // REMED-GFX-244: block-compressed content is accepted on every EasyGL profile, since
             // the decode fallback needs no extension -- unlike the packed formats one line up,
             // whose sized storage is ES 3.
-            || (CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Software)
+            || (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software)
             // plan_vulkan.md VULKAN-172: and on Vulkan, natively as BC1/BC2/BC3 rather than
             // through a decode -- conditional on VkPhysicalDeviceFeatures.textureCompressionBC,
             // so derived from the renderer for the same reason Bgra4444 is. Verified by a real

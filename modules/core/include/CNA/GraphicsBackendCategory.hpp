@@ -65,12 +65,10 @@ namespace CNA
     {
         switch (type)
         {
-            case GraphicsRendererType::OpenGLES2:
             case GraphicsRendererType::OpenGLES3:
             case GraphicsRendererType::OpenGL33:
             case GraphicsRendererType::Vulkan:
             case GraphicsRendererType::DirectX11:
-            case GraphicsRendererType::DirectX12:
             case GraphicsRendererType::DirectX9:
             case GraphicsRendererType::Metal:
                 return GraphicsBackendCategory::Native;
@@ -84,9 +82,7 @@ namespace CNA
             case GraphicsRendererType::Software:
                 return GraphicsBackendCategory::Software;
 
-            case GraphicsRendererType::WebGL1:
             case GraphicsRendererType::WebGL2:
-            case GraphicsRendererType::Canvas:
                 return GraphicsBackendCategory::Web;
 
             case GraphicsRendererType::Headless:

@@ -162,7 +162,9 @@ TEST_F(GraphicsRendererSelectionTest, SetPreferredRejectsARetiredIdentityInstead
 {
     // docs/removed-renderers.md: a retired identity is not a renderer name any more, in any
     // spelling, so asking for one is refused like an unknown name -- never quietly replaced.
-    for (const char* retired : {"GDI", "HTML_DOM", "SVG_DOM", "OPENGL4", "gdi", "OpenGL4"})
+    for (const char* retired : {"GDI", "HTML_DOM", "SVG_DOM", "OPENGL4", "gdi", "OpenGL4",
+                                "DIRECTX12", "CANVAS", "OPENGLES2", "WEBGL1", "DirectX12", "canvas",
+                                "OpenGLES2", "WebGL1"})
     {
         SCOPED_TRACE(retired);
         EXPECT_THROW(GraphicsRendererSelection::SetPreferred(retired), System::ArgumentException);

@@ -80,7 +80,7 @@ namespace CNA::Internal::Renderers::DirectX9
         }
 
         /// D9-82/GLTF-394: XNA's four topologies plus CNAEXT PointListEXT map explicitly --
-        /// unlike D3D11/Vulkan/D3D12's own per-renderer VertexCountForPrimitives() precedent, D3D9's
+        /// unlike D3D11/Vulkan's own per-renderer VertexCountForPrimitives() precedent, D3D9's
         /// DrawPrimitive/DrawIndexedPrimitive already take a PrimitiveCount directly (not a raw
         /// vertex/index count), so no equivalent conversion helper is needed here.
         D3DPRIMITIVETYPE ToD3D9Topology(PrimitiveType pt)
@@ -936,7 +936,7 @@ namespace CNA::Internal::Renderers::DirectX9
     // D9-64 fix: these were silent-throw stubs left over from D9-11's skeleton, never wired up by
     // D9-61/D9-82 (which only ever push depth/stencil state through the multi-field
     // ApplyDepthStencilState() path). GraphicsDevice::SetDepthTestEnabled()/SetDepthWriteEnabled()
-    // are real public (CNAEXT) API that EasyGL honours and D3D11/D3D12 both wire up -- a game (or,
+    // are real public (CNAEXT) API that EasyGL honours and D3D11 wires up -- a game (or,
     // as found here, the reused easygl_blendstate_opaque_test.cpp CTest) calling
     // dev.SetDepthTestEnabled(false) on D3D9 threw instead of taking effect. Unlike D3D11 (which
     // must rebuild a whole cached ID3D11DepthStencilState object from tracked fields), D3D9's
@@ -948,7 +948,7 @@ namespace CNA::Internal::Renderers::DirectX9
                                  kUnsafeDepthState, "SetDepthTestEnabled(D3DRS_ZENABLE)");
     }
 
-    // Deliberate no-op, matching D3D11's/D3D12's own identical choice: a bare "enable blending" has
+    // Deliberate no-op, matching D3D11's own identical choice: a bare "enable blending" has
     // no defined blend factors in XNA -- real blend configuration always arrives via
     // ApplyBlendState(), which already unconditionally enables blending (D3DRS_ALPHABLENDENABLE)
     // whenever it's called.
@@ -1465,7 +1465,7 @@ namespace CNA::Internal::Renderers::DirectX9
 
     void DirectX9Renderer::SetSwapInterval(int interval)
     {
-        // Unlike D3D11/D3D12 (DXGI's Present() takes a sync-interval argument directly, applied
+        // Unlike D3D11 (DXGI's Present() takes a sync-interval argument directly, applied
         // ad hoc per frame), D3D9 has no such per-Present() knob -- PresentationInterval only
         // exists as a D3DPRESENT_PARAMETERS field, settable solely through CreateDevice/Reset().
         // So this must go through the same presentationDirty_/EnsureDeviceSize() reset path as

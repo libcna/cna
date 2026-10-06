@@ -38,7 +38,7 @@
 // TextureEnabled switch and always samples its texture, and Microsoft XNA samples a null one as
 // opaque black (SOFTWARE-303, measured). This fixture predates that measurement and relied on the
 // retired white-null convention, so on a renderer with XNA's rule it read black and half-fogged
-// black instead of the material (plans/plan_directx12_parity.md DX12-0021). Its subject is fog, so
+// black instead of the material (DX12-0021). Its subject is fog, so
 // the texture is now stated rather than implied, with the TEXCOORD0 every AlphaTestEffect vertex shader
 // reads (XNA refuses a declaration without it, and so do both D3D renderers once a texture is bound).
 //

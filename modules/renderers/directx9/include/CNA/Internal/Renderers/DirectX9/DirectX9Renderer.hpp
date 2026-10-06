@@ -4,7 +4,7 @@
 // ReadBackbuffer. Windows-only (see CMakeLists.txt's FATAL_ERROR guard for non-Windows
 // CNA_GRAPHICS_RENDERER=D3D9).
 //
-// Unlike D3D11/D3D12, this renderer does not use D3DCommon (plans/plan_dx9.md design decision 12 --
+// Unlike D3D11, this renderer does not use D3DCommon (plans/plan_dx9.md design decision 12 --
 // D3DFORMAT is a different enum space from DXGI_FORMAT, and D3D9 has no state objects at all).
 // Unlike D3D11, D3D9 has no separate device/swap-chain split -- CreateDevice() creates the
 // implicit swap chain (back buffer + optional depth-stencil) in the same call.
@@ -218,7 +218,7 @@ namespace CNA::Internal::Renderers::DirectX9
         /// D9-54: real MRT via SetRenderTarget(i, surface), i=0..count-1, capped and validated
         /// against the real D3DCAPS9::NumSimultaneousRTs (design decision 13: an over-request
         /// THROWS a named error rather than silently degrading to fewer targets -- the exact
-        /// invisible-capability trap this project's own D3D11/D3D12 precedent accepts but this
+        /// invisible-capability trap this project's own D3D11 precedent accepts but this
         /// authenticity-focused renderer deliberately does not). All CNA render targets are
         /// D3DFMT_A8B8G8R8 (RGBA8-storage-only, D9-50's own simplification), so design decision
         /// 13's "same bit depth" requirement is always trivially satisfied -- nothing to actively

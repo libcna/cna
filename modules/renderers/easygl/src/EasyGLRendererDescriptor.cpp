@@ -1,9 +1,9 @@
 // plans/plan_runtimerenderer.md RTR-P1-D02: the EasyGL family's pre-construction contract.
 //
-// EasyGL is the one family serving MORE than one public identity: OPENGLES2, OPENGLES3, OPENGL33
-// (desktop/mobile) and WEBGL1, WEBGL2 (Emscripten) all compile into this same archive, told apart
+// EasyGL is the one family serving MORE than one public identity: OPENGLES3, OPENGL33
+// (desktop/mobile) and WEBGL2 (Emscripten) all compile into this same archive, told apart
 // by the CNA_GL_PROFILE_* compile definition (plans/plan_glbackends.md). getCurrentGraphicsRendererType()
-// already resolves that to the right one of the five, so the descriptor's identity follows it
+// already resolves that to the right one of the three, so the descriptor's identity follows it
 // rather than being hardcoded here. Making the profile itself a RUNTIME choice -- which is what
 // would let two GL profiles coexist in one binary -- is plans/plan_runtimerenderer.md phase P11, not
 // this task.
@@ -40,7 +40,7 @@ namespace CNA::Internal::Renderers::EasyGL
      * CreateGraphicsRenderer, which is this with the build's default profile.
      *
      * @param args Construction arguments.
-     * @param profile Which of the five GL profiles to create.
+     * @param profile Which of the three GL profiles to create.
      * @return The new renderer.
      */
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRendererForProfile(
@@ -75,7 +75,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
         /// plans/plan_runtimerenderer.md P11: one descriptor per public GL identity, all served by the
         /// same EasyGL archive. Each pins its own GlProfile, which the renderer publishes as the
-        /// thread's active profile on construction -- that is what lets several of the five be
+        /// thread's active profile on construction -- that is what lets several of the three be
         /// compiled in at once, where before the choice was a compile definition.
         template <CNA::GraphicsRendererType Identity>
         const GraphicsRendererDescriptor& DescriptorFor()
@@ -99,12 +99,6 @@ namespace CNA::Internal::Renderers::EasyGL
         }
     }
 
-    /** @brief Descriptor for the OPENGLES2 identity (native GLES 2.0 context, GLSL ES 1.00). */
-    const GraphicsRendererDescriptor& GetDescriptorOpenGLES2()
-    {
-        return DescriptorFor<CNA::GraphicsRendererType::OpenGLES2>();
-    }
-
     /** @brief Descriptor for the OPENGLES3 identity (native GLES 3.0 context, GLSL ES 3.00). */
     const GraphicsRendererDescriptor& GetDescriptorOpenGLES3()
     {
@@ -115,12 +109,6 @@ namespace CNA::Internal::Renderers::EasyGL
     const GraphicsRendererDescriptor& GetDescriptorOpenGL33()
     {
         return DescriptorFor<CNA::GraphicsRendererType::OpenGL33>();
-    }
-
-    /** @brief Descriptor for the WEBGL1 identity (browser WebGL 1, GLSL ES 1.00). */
-    const GraphicsRendererDescriptor& GetDescriptorWebGL1()
-    {
-        return DescriptorFor<CNA::GraphicsRendererType::WebGL1>();
     }
 
     /** @brief Descriptor for the WEBGL2 identity (browser WebGL 2, GLSL ES 3.00). */

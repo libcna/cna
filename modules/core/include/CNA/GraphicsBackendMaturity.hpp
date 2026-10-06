@@ -68,20 +68,16 @@ namespace CNA
         switch (type)
         {
             case GraphicsRendererType::SdlRenderer:
-            case GraphicsRendererType::OpenGLES2:
             case GraphicsRendererType::OpenGLES3:
             case GraphicsRendererType::OpenGL33:
             case GraphicsRendererType::Vulkan:
             case GraphicsRendererType::DirectX9:
             case GraphicsRendererType::DirectX11:
-            case GraphicsRendererType::DirectX12:
                 return GraphicsBackendMaturity::Production;
 
-            case GraphicsRendererType::WebGL1:
             case GraphicsRendererType::WebGL2:
             case GraphicsRendererType::Headless:
             case GraphicsRendererType::Stub:
-            case GraphicsRendererType::Canvas:
             case GraphicsRendererType::SdlGpu:
             case GraphicsRendererType::Metal:
                 return GraphicsBackendMaturity::Supported;

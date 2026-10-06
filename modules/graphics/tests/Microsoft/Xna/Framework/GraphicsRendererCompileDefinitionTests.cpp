@@ -30,13 +30,7 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
 #ifdef CNA_RENDERER_STUB
     ++enabled;
 #endif
-#ifdef CNA_RENDERER_CANVAS
-    ++enabled;
-#endif
 #ifdef CNA_RENDERER_DIRECTX11
-    ++enabled;
-#endif
-#ifdef CNA_RENDERER_DIRECTX12
     ++enabled;
 #endif
     // A genuine, previously-uncaught gap in the D3D9 branch (feature/dx9): no commit in this

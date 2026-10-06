@@ -69,7 +69,7 @@ using Microsoft::Xna::Framework::Graphics::TextureCube;
 // written, so it keeps the shared nullptr CreateTextureCube default, v1 scope being 2D-only.
 [[nodiscard]] inline bool CubeStorageSupported()
 {
-    return !CNA_RENDERER_IS(SdlRenderer, Canvas, Headless);
+    return !CNA_RENDERER_IS(SdlRenderer, Headless);
 }
 
 [[nodiscard]] inline bool CubeLevel0ReadbackSupported() { return CubeStorageSupported(); }
@@ -167,7 +167,7 @@ namespace
     [[nodiscard]] bool DeviceRefusesOptionalPackedFormat(
         SurfaceFormat format, CNA::Internal::Renderers::RendererFormatVerdict verdict)
     {
-        return CNA_RENDERER_IS(DirectX11, DirectX12) && format == SurfaceFormat::Bgra4444 &&
+        return CNA_RENDERER_IS(DirectX11) && format == SurfaceFormat::Bgra4444 &&
                verdict == CNA::Internal::Renderers::RendererFormatVerdict::Unsupported;
     }
 
@@ -314,7 +314,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest,
        TextureCubeReaderPreservesEveryClassicUncompressedFormatAndExactBytes)
 {
     // plans/plan_vulkan_parity.md VKPAR-0021: Vulkan's cube now stores every classic format.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, DirectX12, Vulkan);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, Vulkan);
 
     constexpr std::array<SurfaceFormat, 15> formats{{
         SurfaceFormat::Color,
@@ -374,7 +374,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest,
        TextureCubeReaderPreservesEveryClassicCompressedFormatAndExactBlocks)
 {
     // plans/plan_vulkan_parity.md VKPAR-0021: Vulkan's cube now stores every classic format.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, DirectX12, Vulkan);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, Vulkan);
 
     constexpr std::array<SurfaceFormat, 3> formats{{
         SurfaceFormat::Dxt1, SurfaceFormat::Dxt3, SurfaceFormat::Dxt5,
@@ -546,7 +546,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest,
        Texture3DReaderPreservesEveryClassicVolumeFormatAndExactBytes)
 {
     // plans/plan_vulkan_parity.md VKPAR-0029: Vulkan's volume now stores every classic format.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, DirectX12, Vulkan);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, Vulkan);
 
     struct FormatCase
     {
@@ -607,7 +607,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest,
        Texture3DReaderAcceptsDepthDominantMipChainAndPreservesEveryLevel)
 {
     // plans/plan_vulkan_parity.md VKPAR-0029: Vulkan's volume now stores every classic format.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, DirectX12, Vulkan);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, Vulkan);
 
     const std::vector<std::vector<std::uint8_t>> expected{
         {0x10u, 0x11u, 0x12u, 0x13u, 0x14u, 0x15u, 0x16u, 0x17u},

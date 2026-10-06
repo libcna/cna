@@ -134,8 +134,7 @@ using Microsoft::Xna::Framework::Graphics::Viewport;
 /// plans/plan_runtimerenderer.md RTR-P9-5: the binding-offset oracle set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool InstancedBindingOffsetOracle()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                           DirectX11, DirectX12, Vulkan, WebGPU, Software);
+    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, DirectX11, Vulkan, WebGPU, Software);
 }
 
 namespace
@@ -664,9 +663,7 @@ namespace
         // Hardware instancing is this whole file's subject and needs BOTH a 3D pipeline and an
         // instancing path, so both capabilities are gated: a renderer with no 3D pipeline at all
         // (e.g. SDL_RENDERER) and a renderer whose profile reports GraphicsCapability::Instancing =
-        // false (e.g. OPENGLES2 -- core OpenGL ES 2.0 has no glDrawElementsInstanced/
-        // glVertexAttribDivisor, see docs/opengles2-renderer.md) each skip every leg here up
-        // front.
+        // false each skip every leg here up front.
         void SetUp() override
         {
             device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
@@ -912,7 +909,6 @@ namespace
     defined(CNA_RENDERER_DIRECTX9) || \
     defined(CNA_RENDERER_EASYGL) || \
     defined(CNA_RENDERER_DIRECTX11) || \
-    defined(CNA_RENDERER_DIRECTX12) || \
     defined(CNA_RENDERER_SOFTWARE)
 
 // Zero-offset control. Identical state, buffers and instance stream to every case below, with
@@ -1998,7 +1994,7 @@ TEST_F(InstancedDrawRangeTest, DisposingAfterQueuedInstancedDrawsIsSafe)
 // decoy range 4..6, while applying it twice underflows the vertex buffer.
 TEST_F(InstancedDrawRangeTest, InstancedDrawAcceptsCompensatedNegativeBaseVertex)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, Software, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, Software, DirectX11);
     RequireInstancedRendering();
 
     const GridLayout layout = BackbufferLayout();
@@ -2048,7 +2044,7 @@ TEST_F(InstancedDrawRangeTest, InstancedDrawAcceptsCompensatedNegativeBaseVertex
 TEST_F(InstancedDrawRangeTest, EasyGLHonorsBindingOffsetsAndInstanceFrequency)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: this pin belongs to the EasyGL family specifically.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2);
     RunBindingOffsetAndFrequencyOracle();
 }
 
@@ -2060,13 +2056,13 @@ TEST_F(InstancedDrawRangeTest, EasyGLHonorsBindingOffsetsAndInstanceFrequency)
 TEST_F(InstancedDrawRangeTest, D3DHonorsBindingOffsetsAndInstanceFrequency)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: the same contract, pinned on the two D3D renderers.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11);
     RunBindingOffsetAndFrequencyOracle();
 }
 
 TEST_F(InstancedDrawRangeTest, D3DBaseInstanceSelectsAbsoluteInstanceRecords)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11);
     ASSERT_TRUE(device.SupportsRendererFeatureEXT(CNA::RendererFeature::BaseInstanceDrawing));
     RequireInstancedRendering();
 
@@ -2130,7 +2126,7 @@ TEST_F(InstancedDrawRangeTest, D3DBaseInstanceSelectsAbsoluteInstanceRecords)
 
 TEST_F(InstancedDrawRangeTest, D3DBaseInstanceReachesCustomShaderInstanceId)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11);
     ASSERT_TRUE(device.SupportsRendererFeatureEXT(CNA::RendererFeature::BaseInstanceDrawing));
     RequireInstancedRendering();
 
@@ -2186,7 +2182,7 @@ TEST_F(InstancedDrawRangeTest, D3DBaseInstanceReachesCustomShaderInstanceId)
 
 TEST_F(InstancedDrawRangeTest, D3DBaseInstanceCombinesShaderIdAndDividedStream)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11);
     ASSERT_TRUE(device.SupportsRendererFeatureEXT(CNA::RendererFeature::BaseInstanceDrawing));
     RequireInstancedRendering();
 
@@ -2267,7 +2263,7 @@ TEST_F(InstancedDrawRangeTest, D3DBaseInstanceCombinesShaderIdAndDividedStream)
 
 TEST_F(InstancedDrawRangeTest, D3DBaseInstanceWithoutInstanceStreamRepeatsTheDraw)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11);
     ASSERT_TRUE(device.SupportsRendererFeatureEXT(CNA::RendererFeature::BaseInstanceDrawing));
     RequireInstancedRendering();
 

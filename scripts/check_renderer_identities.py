@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Renderer-identity registry gate (plans/MODULARIZATION_PLAN.md §2.3).
 
-CNA has exactly 18 public renderer identities (docs/removed-renderers.md). This check mechanically compares
+CNA has exactly 14 public renderer identities (docs/removed-renderers.md). This check mechanically compares
 the authoritative registries -- the public GraphicsRendererType enum, the
 CNA_GRAPHICS_RENDERER cmake selection list, and the runtime renderer registry --
 against the canonical identity table below. Any addition, removal or rename of a
@@ -92,7 +92,7 @@ COUNTED_DOCUMENTS = {
 IDENTITY_COUNT = re.compile(r"(?<![-\w])(\d+)\s+public\s+(?:renderer\s+)?identities")
 FAMILY_COUNT = re.compile(r"(?<![-\w])(\d+)\s+implementation\s+families\b")
 
-# Canonical public identities: (cmake selection name, enum name, C ABI value). 18 entries.
+# Canonical public identities: (cmake selection name, enum name, C ABI value). 14 entries.
 #
 # The C ABI value is the ONLY stable numeric identity contract CNA publishes. The C++ enum's
 # ordinals are not one and never were: they are dense and were renumbered when SKIA was retired in
@@ -101,10 +101,8 @@ FAMILY_COUNT = re.compile(r"(?<![-\w])(\d+)\s+implementation\s+families\b")
 # cannot catch a renumbering, which is the single most damaging thing that can happen to this file.
 IDENTITIES = [
     ("SDL_RENDERER", "SdlRenderer", 1),
-    ("OPENGLES2", "OpenGLES2", 2),
     ("OPENGLES3", "OpenGLES3", 3),
     ("OPENGL33", "OpenGL33", 4),
-    ("WEBGL1", "WebGL1", 5),
     ("WEBGL2", "WebGL2", 6),
     ("VULKAN", "Vulkan", 8),
     ("WEBGPU", "WebGPU", 9),
@@ -112,8 +110,6 @@ IDENTITIES = [
     ("SOFTWARE", "Software", 12),
     ("STUB", "Stub", 13),
     ("DIRECTX11", "DirectX11", 14),
-    ("DIRECTX12", "DirectX12", 15),
-    ("CANVAS", "Canvas", 17),
     ("DIRECTX9", "DirectX9", 22),
     ("SDL_GPU", "SdlGpu", 31),
     ("METAL", "Metal", 42),
@@ -124,7 +120,8 @@ IDENTITIES = [
 # reassigned -- not to a new renderer, and not to the same renderer if it is ever restored with
 # different semantics -- so this table only ever grows. SKIA (19) was retired in 2026-08; twenty-five
 # more on 2026-09-17, DIRECT2D (16), FREEDIRECT (21) and PORTABLEGL (46) on 2026-09-27, and
-# HTML_DOM (18), OPENGL4 (33), GDI (40) and SVG_DOM (44) on 2026-09-28 (docs/removed-renderers.md).
+# HTML_DOM (18), OPENGL4 (33), GDI (40) and SVG_DOM (44) on 2026-09-28, and OPENGLES2 (2),
+# WEBGL1 (5), DIRECTX12 (15) and CANVAS (17) on 2026-10-06 (docs/removed-renderers.md).
 #
 # It is pinned here as well as in cmake/RendererIdentities.cmake on purpose. The CMake list exists
 # to REFUSE a retired selector at configure time; this one exists to make the refusal itself
@@ -132,7 +129,8 @@ IDENTITIES = [
 # precedent is concrete: eleven identities were retired on 2026-08-30 and restored on 2026-09-04,
 # and nothing mechanical would have stopped that restoration from taking different numbers.
 RETIRED_IDENTITIES = {
-    "BGFX": 7, "MAGNUM": 10, "DIRECT2D": 16, "HTML_DOM": 18, "SKIA": 19, "BLEND2D": 20,
+    "OPENGLES2": 2, "WEBGL1": 5, "BGFX": 7, "MAGNUM": 10, "DIRECTX12": 15, "DIRECT2D": 16,
+    "CANVAS": 17, "HTML_DOM": 18, "SKIA": 19, "BLEND2D": 20,
     "FREEDIRECT": 21, "DIRECTX1": 23, "DIRECTX2": 24, "DIRECTX3": 25, "DIRECTX5": 26,
     "DIRECTX6": 27, "DIRECTX7": 28, "DIRECTX8": 29, "DIRECTX10": 30, "OPENGLES1": 32,
     "OPENGL4": 33, "OPENGL1": 34, "OPENGL2": 35, "WICKED": 36, "SOKOL": 37, "DILIGENT": 38,

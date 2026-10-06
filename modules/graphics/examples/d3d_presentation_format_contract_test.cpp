@@ -2,8 +2,8 @@
 // DX-213: public DirectX presentation reporting must match the actual default resources.
 //
 // plans/plan_graphics_shared_cleanup.md GSC-0005: the depth half of this contract predated the back
-// buffer honouring PresentationParameters.DepthStencilFormat (WINCLOSE-0012 on DirectX11, DX12-0019 on
-// DirectX12) and demanded DX-213's fixed Depth24Stencil8 whatever was requested. The rule now checked:
+// buffer honouring PresentationParameters.DepthStencilFormat (WINCLOSE-0012) and demanded DX-213's
+// fixed Depth24Stencil8 whatever was requested. The rule now checked:
 //   * a Reset applies and reports the requested depth format, and the native depth resource is its DXGI
 //     format (Depth24 and Depth24Stencil8 share D24_UNORM_S8_UINT; None allocates no depth resource);
 //   * GraphicsDeviceManager's default request is XNA's Depth24;
@@ -21,8 +21,6 @@
 
 #if defined(CNA_RENDERER_DIRECTX11)
 #include "CNA/Internal/Renderers/DirectX11/DirectX11Renderer.hpp"
-#elif defined(CNA_RENDERER_DIRECTX12)
-#include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
 #else
 #error This contract is for the DirectX renderer family.
 #endif
@@ -38,8 +36,6 @@ namespace
 {
 #if defined(CNA_RENDERER_DIRECTX11)
     using ActiveRenderer = CNA::Internal::Renderers::DirectX11::DirectX11Renderer;
-#else
-    using ActiveRenderer = CNA::Internal::Renderers::DirectX12::DirectX12Renderer;
 #endif
 
     struct NativeDefaultSurface
@@ -89,20 +85,6 @@ namespace
             if (FAILED(depthResource.As(&depthTexture))) return result;
             D3D11_TEXTURE2D_DESC depthDesc{};
             depthTexture->GetDesc(&depthDesc);
-            result.depthFormat = depthDesc.Format;
-            result.depthSamples = depthDesc.SampleDesc.Count;
-        }
-#else
-        ID3D12Resource* const colorResource = renderer.GetBoundColorResourceEXT();
-        ID3D12Resource* const depthResource = renderer.GetDefaultDepthStencilResourceEXT();
-        if (colorResource == nullptr) return result;
-
-        const D3D12_RESOURCE_DESC colorDesc = colorResource->GetDesc();
-        result.colorFormat = colorDesc.Format;
-        result.colorSamples = colorDesc.SampleDesc.Count;
-        if (depthResource != nullptr)
-        {
-            const D3D12_RESOURCE_DESC depthDesc = depthResource->GetDesc();
             result.depthFormat = depthDesc.Format;
             result.depthSamples = depthDesc.SampleDesc.Count;
         }

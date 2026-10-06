@@ -1,20 +1,7 @@
 #pragma once
 
 // plans/plan_dx.md Phase DIRECTX3 (DX-12-state): XNA Blend/BlendFunction/CompareFunction/CullMode/FillMode/
-// TextureAddressMode/TextureFilter -> D3D11_* equivalents, shared between D3D11 and D3D12 (design
-// decision 4).
-//
-// design decision 4's own caveat: D3D11 and D3D12 use numerically identical enum values for most
-// of these (D3D12 reused D3D11's own constants) -- VERIFIED, not assumed, by direct inspection of
-// both SDK headers on this machine (d3d11.h vs d3d12.h): D3D11_BLEND/D3D12_BLEND,
-// D3D11_BLEND_OP/D3D12_BLEND_OP, D3D11_COMPARISON_FUNC/D3D12_COMPARISON_FUNC,
-// D3D11_CULL_MODE/D3D12_CULL_MODE, D3D11_FILL_MODE/D3D12_FILL_MODE, and
-// D3D11_TEXTURE_ADDRESS_MODE/D3D12_TEXTURE_ADDRESS_MODE all share identical enumerator values one
-// for one. D3D11_FILTER/D3D12_FILTER also match. This header therefore returns the D3D11-prefixed
-// enum types; a future D3D12 consumer (Phase DX12) can `static_cast` directly rather than needing
-// a second, duplicate table -- re-verify this claim against whatever SDK/MinGW header versions
-// Phase DX12 actually builds against before relying on the static_cast, per this plan's own
-// Boundaries section.
+// TextureAddressMode/TextureFilter -> D3D11_* equivalents (design decision 4).
 
 #include <d3d11.h>
 
@@ -58,8 +45,8 @@ namespace CNA::Internal::Renderers::D3DCommon
     /**
      * @brief Converts XNA's normalized constant depth bias to a native D3D integer bias.
      *
-     * XNA/D3D9 stores `RasterizerState.DepthBias` as a normalized depth offset. D3D11 and
-     * D3D12 instead store an integer count of the active depth format's least-resolvable value.
+     * XNA/D3D9 stores `RasterizerState.DepthBias` as a normalized depth offset. D3D11 instead
+     * stores an integer count of the active depth format's least-resolvable value.
      *
      * @param depthBias XNA normalized depth offset.
      * @param depthFormat Native format of the active depth-stencil view.
@@ -72,7 +59,6 @@ namespace CNA::Internal::Renderers::D3DCommon
     /// to D3D11_STENCIL_OP_INCR/DECR; XNA's IncrementSaturation/DecrementSaturation (clamping) map
     /// to D3D11_STENCIL_OP_INCR_SAT/DECR_SAT -- these are two genuinely distinct D3D11 ops, not
     /// interchangeable. Returns D3D11_STENCIL_OP_KEEP for an unrecognized ordinal (Phase DIRECTX7,
-    /// DX-51 -- used by Phase DIRECTX3's D3D12 consumer too, design decision 4: D3D11_STENCIL_OP and
-    /// D3D12_STENCIL_OP share identical enumerator values, verified against both SDK headers).
+    /// DX-51).
     D3D11_STENCIL_OP StencilOperationToD3D11(int stencilOperation);
 }

@@ -88,7 +88,7 @@ namespace
 
         void SetUp() override
         {
-            if (!CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2))
+            if (!CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2))
                 GTEST_SKIP() << "the selected renderer is not in the EasyGL family";
 
             device = std::make_unique<GraphicsDevice>(

@@ -234,17 +234,11 @@ namespace
 #elif defined(CNA_RENDERER_SDL_RENDERER)
     constexpr Contract kContract{"SDL_RENDERER", Support::Exact, true, Support::Exact,
                                  false, true, true, true, true, false, false, true, false, false};
-#elif defined(CNA_RENDERER_CANVAS)
-    constexpr Contract kContract{"CANVAS", Support::Exact, true, Support::Exact,
-                                 false, true, true, true, true, true, true, true, true, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr Contract kContract{"DIRECTX9", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, true};
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr Contract kContract{"DIRECTX11", Support::Exact, true, Support::Exact,
-                                 true, true, true, true, true, true, true, true, true, true};
-#elif defined(CNA_RENDERER_DIRECTX12)
-    constexpr Contract kContract{"DIRECTX12", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, true};
 #else
 #error "REMED-GFX-143: this renderer has no declared backbuffer command-order contract."

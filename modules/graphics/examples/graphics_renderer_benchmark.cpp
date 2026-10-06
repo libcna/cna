@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 //
 // CNAEXT. A renderer-agnostic workload written against the public XNA API so the identical source
-// produces a genuine like-for-like comparison. The D3D12 build additionally reads internal
-// synchronization counters after the workload; that diagnostic does not alter what is drawn.
-// In browsers it reports for CANVAS and the EasyGL WebGL profiles. On native hosts it is also the
+// produces a genuine like-for-like comparison.
+// In browsers it reports for the EasyGL WebGL profile and WebGPU. On native hosts it is also the
 // PLAT-7/PLAT-120 fixed scene: build the target once per selected renderer and compare its raw
 // per-frame JSON samples.
 //
@@ -29,9 +28,8 @@
 // WEBGL_debug_renderer_info UNMASKED_RENDERER_WEBGL query -- via a throwaway canvas unrelated to
 // whichever renderer actually built this binary, since any WebGL context in the same browser
 // session reports the same renderer string -- so a hardware GPU result is never silently compared
-// against a software (SwiftShader) one without saying so. Harmless, informational-only for
-// CANVAS (which creates no WebGL context of its own at all); genuinely load-bearing for EASYGL,
-// whose own canvas IS exactly what this ends up querying.
+// against a software (SwiftShader) one without saying so. Informational-only for WebGPU;
+// genuinely load-bearing for EASYGL, whose own canvas IS exactly what this ends up querying.
 //
 // Publishes raw per-frame samples (window.__cnaBenchSamples, a JSON array) alongside the averaged
 // numbers, so a result is independently reproducible/re-analysable rather than only the single
@@ -60,10 +58,6 @@
 // source -- nothing about it changes per renderer except which CNA_GRAPHICS_RENDERER the CMake
 // configure step that builds it selected.
 #include "CNA/GraphicsRendererType.hpp"
-
-#if defined(CNA_RENDERER_DIRECTX12)
-#include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
-#endif
 
 #include <array>
 #include <cmath>
@@ -150,7 +144,7 @@ namespace
         // unrelated to whichever CNA renderer actually built this binary -- any WebGL context in
         // the same browser session reports the same renderer string, so this works identically
         // for EASYGL (whose OWN canvas is exactly this) and is simply extra, harmless information
-        // for CANVAS (which never creates a WebGL context of its own at all).
+        // for WebGPU.
         window.__cnaBenchWebglRenderer = (function () {
             try {
                 const c = document.createElement('canvas');
@@ -218,9 +212,6 @@ class GraphicsRendererBenchmark : public Game
     const int meshDrawCount_ = MeshDrawCount();
     int frame_ = 0;
     double lastFrameStart_ = -1.0;
-#if defined(CNA_RENDERER_DIRECTX12)
-    std::uint64_t uploadResourceBaseline_ = 0;
-#endif
 
     double stableSubmissionTotalMs_ = 0.0;
     double stableEndToEndTotalMs_ = 0.0;
@@ -233,18 +224,6 @@ class GraphicsRendererBenchmark : public Game
     int churnFramesTimed_ = 0;
     std::vector<double> churnSubmissionSamples_;
     std::vector<double> churnEndToEndSamples_;
-
-#if defined(CNA_RENDERER_DIRECTX12)
-    CNA::Internal::Renderers::DirectX12::DirectX12Renderer& GetD3D12Renderer()
-    {
-        auto* renderer = dynamic_cast<CNA::Internal::Renderers::DirectX12::DirectX12Renderer*>(
-            &getGraphicsDeviceProperty().GetRenderer());
-        if (renderer == nullptr)
-            throw std::runtime_error("DIRECTX12 benchmark did not receive DirectX12Renderer");
-        return *renderer;
-    }
-#endif
-
 
     // Draws kSpriteCount sprites, all moving every frame. `churnTint` selects which of the two
     // workloads this call belongs to: false = "stable tint" (per-sprite colour is a pure function of
@@ -329,15 +308,6 @@ protected:
         const bool inStablePhase = frame_ > kWarmupFrames && frame_ <= stableEnd;
         const bool inChurnPhase = frame_ > stableEnd && frame_ <= churnEnd;
 
-#if defined(CNA_RENDERER_DIRECTX12)
-        if (frame_ == kWarmupFrames + 1)
-        {
-            auto& renderer = GetD3D12Renderer();
-            renderer.ResetSynchronizationCountersEXT();
-            uploadResourceBaseline_ = renderer.GetUploadResourceCreationCountEXT();
-        }
-#endif
-
         const double subT0 = (inStablePhase || inChurnPhase) ? JsNow() : 0.0;
         DrawSprites(/*churnTint=*/inChurnPhase);
         DrawMeshes();
@@ -398,29 +368,6 @@ protected:
                         "= wall-clock gap between successive Draw calls, including the host "
                         "loop's event/update/present work)\n");
 
-#if defined(CNA_RENDERER_DIRECTX12)
-            auto& renderer = GetD3D12Renderer();
-            const std::uint64_t measuredFrames = static_cast<std::uint64_t>(2 * phaseFrames_);
-            const std::uint64_t frameWaits = renderer.GetFrameFenceWaitCountEXT();
-            const std::uint64_t uploadResources =
-                renderer.GetUploadResourceCreationCountEXT() - uploadResourceBaseline_;
-            std::printf("    D3D12 sync  : frame_waits=%llu gpu_waits=%llu frame_submissions=%llu "
-                        "immediate_submissions=%llu upload_resources=%llu upload_allocations=%llu "
-                        "measured_frames=%llu\n",
-                        static_cast<unsigned long long>(frameWaits),
-                        static_cast<unsigned long long>(renderer.GetGpuWaitCountEXT()),
-                        static_cast<unsigned long long>(renderer.GetFrameSubmissionCountEXT()),
-                        static_cast<unsigned long long>(renderer.GetImmediateSubmissionCountEXT()),
-                        static_cast<unsigned long long>(uploadResources),
-                        static_cast<unsigned long long>(renderer.GetUploadAllocationCountEXT()),
-                        static_cast<unsigned long long>(measuredFrames));
-            if (meshDrawCount_ >= 50 && frameWaits > measuredFrames)
-                throw std::runtime_error(
-                    "DX-237 failed: more than one frame-fence wait per measured frame");
-            if (meshDrawCount_ >= 50 && uploadResources != 0)
-                throw std::runtime_error(
-                    "DX-238 failed: upload ring created a resource after warm-up");
-#endif
             std::fflush(stdout);
 
             const std::string rendererNameStr(rendererName);

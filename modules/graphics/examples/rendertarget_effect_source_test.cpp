@@ -189,8 +189,6 @@ namespace
     constexpr const char* kRendererName = "DIRECTX9";
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr const char* kRendererName = "DIRECTX11";
-#elif defined(CNA_RENDERER_DIRECTX12)
-    constexpr const char* kRendererName = "DIRECTX12";
 #else
 #error "REMED-GFX-152: this renderer has no declared render-target effect-source contract."
 #endif

@@ -462,9 +462,7 @@ TEST_F(GraphicsAdapterTest, QueryRenderTargetFormatDoesNotPromiseRgba64OnGles)
 {
     const CNA::GraphicsRendererType renderer =
         CNA::getCurrentGraphicsRendererType();
-    if (renderer != CNA::GraphicsRendererType::OpenGLES2 &&
-        renderer != CNA::GraphicsRendererType::OpenGLES3 &&
-        renderer != CNA::GraphicsRendererType::WebGL1 &&
+    if (renderer != CNA::GraphicsRendererType::OpenGLES3 &&
         renderer != CNA::GraphicsRendererType::WebGL2)
     {
         GTEST_SKIP() << "this regression applies to GLES/WebGL adapter contracts";

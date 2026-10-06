@@ -8,15 +8,11 @@
 // (D3DDebugLayerPolicyTests.cpp); D3DDebugLayerListener.cpp applies them on Windows.
 //
 //   * CORRUPTION and ERROR always fail. Nothing can allowlist them.
-//   * WARNING fails unless one entry of kAllowedWarnings names its API, its message id and the test it
+//   * WARNING fails unless one entry of kAllowedWarnings names its message id and the test it
 //     was investigated in. An entry is added only for a warning whose behaviour was measured to be
 //     valid, with the reason written next to it -- matched by id, never by description text.
-//   * INFO and MESSAGE never fail; both renderers also deny them at the info queue's storage filter.
+//   * INFO and MESSAGE never fail; the renderer also denies them at the info queue's storage filter.
 //   * An unknown severity fails: a message the policy cannot place is not a pass.
-//
-// DirectX12 additionally drops CLEARRENDERTARGETVIEW/CLEARDEPTHSTENCILVIEW_MISMATCHINGCLEARVALUE at its
-// queue (DX12-0003): performance hints about optimized clear values that XNA's arbitrary clear colours
-// always trigger. They never reach this policy.
 
 #include <cstddef>
 #include <string>
@@ -25,16 +21,7 @@
 
 namespace CNA::Testing::D3DDebugLayer
 {
-    /** @brief The debug layer a message came from; ids are only unique within one. */
-    enum class Api
-    {
-        /** @brief D3D11_MESSAGE_ID. */
-        Direct3D11,
-        /** @brief D3D12_MESSAGE_ID. */
-        Direct3D12,
-    };
-
-    /** @brief D3D11_MESSAGE_SEVERITY / D3D12_MESSAGE_SEVERITY, which share their ordinals. */
+    /** @brief D3D11_MESSAGE_SEVERITY. */
     enum Severity : int
     {
         /** @brief Corruption. */
@@ -63,9 +50,7 @@ namespace CNA::Testing::D3DDebugLayer
     /** @brief One investigated warning that is valid behaviour in the test it names. */
     struct AllowedWarning
     {
-        /** @brief The debug layer. */
-        Api api;
-        /** @brief The message id. */
+        /** @brief The D3D11_MESSAGE_ID. */
         int id;
         /** @brief The id's enumerator name, for the report. */
         const char* idName;
@@ -77,17 +62,13 @@ namespace CNA::Testing::D3DDebugLayer
 
     /** @brief The complete allowlist. Every entry is a WARNING; errors cannot be listed. */
     inline constexpr AllowedWarning kAllowedWarnings[] = {
-        {Api::Direct3D12, 245, "CREATEINPUTLAYOUT_TYPE_MISMATCH",
+        {391, "CREATEINPUTLAYOUT_TYPE_MISMATCH",
          "DrawRouteValidation.EveryVertexElementFormatIsBoundOrRefusedByName",
-         "The test binds every XNA VertexElementFormat, including Byte4 read by a float TEXCOORD input. "
-         "The layer itself states the conversion is well defined, and XNA's declarations allow it "
-         "(plans/plan_directx12_parity.md evidence runs, round H)."},
-        {Api::Direct3D11, 391, "CREATEINPUTLAYOUT_TYPE_MISMATCH",
-         "DrawRouteValidation.EveryVertexElementFormatIsBoundOrRefusedByName",
-         "The Direct3D 11 form of the D3D12 entry above, in the same test: Byte4, Short2 and Short4 read by a "
-         "float TEXCOORD input. The layer says \"this is not an error, since behavior is well defined\" "
-         "(plans/plan_graphics_shared_cleanup.md GSC-0006, first DirectX11 debug-layer round)."},
-        {Api::Direct3D11, 408, "QUERY_BEGIN_ABANDONING_PREVIOUS_RESULTS",
+         "The test binds every XNA VertexElementFormat, including Byte4, Short2 and Short4 read by a "
+         "float TEXCOORD input, which XNA's declarations allow. The layer says \"this is not an error, "
+         "since behavior is well defined\" (plans/plan_graphics_shared_cleanup.md GSC-0006, first "
+         "DirectX11 debug-layer round)."},
+        {408, "QUERY_BEGIN_ABANDONING_PREVIOUS_RESULTS",
          "OcclusionQueryPixelCountPrecisionTest.XnaLifecycleRejectsUnavailableAndInvalidSequences",
          "The test reads IsComplete before the result is ready and then calls Begin again -- the sequence "
          "Microsoft XNA's OcclusionQuery state machine permits (SOFTWARE-199). The layer calls abandoning the "
@@ -111,13 +92,12 @@ namespace CNA::Testing::D3DDebugLayer
     /**
      * @brief Classifies one message.
      *
-     * @param api       The debug layer.
      * @param severity  Its severity ordinal.
      * @param id        Its message id.
      * @param testName  The running test's "Suite.Test" name; empty outside a test.
      * @return The verdict.
      */
-    [[nodiscard]] inline Verdict Classify(Api api, int severity, int id, std::string_view testName)
+    [[nodiscard]] inline Verdict Classify(int severity, int id, std::string_view testName)
     {
         switch (severity)
         {
@@ -127,7 +107,7 @@ namespace CNA::Testing::D3DDebugLayer
             case Warning:
                 for (const AllowedWarning& entry : kAllowedWarnings)
                 {
-                    if (entry.api == api && entry.id == id && InScope(entry.testScope, testName))
+                    if (entry.id == id && InScope(entry.testScope, testName))
                         return Verdict::Allowed;
                 }
                 return Verdict::Fatal;
@@ -179,19 +159,18 @@ namespace CNA::Testing::D3DDebugLayer
         /**
          * @brief Classifies and records one message.
          *
-         * @param api         The debug layer.
          * @param severity    Its severity ordinal.
          * @param id          Its message id.
          * @param description The layer's text.
          */
-        void Observe(Api api, int severity, int id, const std::string& description)
+        void Observe(int severity, int id, const std::string& description)
         {
             Outcome& outcome = inTest_ ? current_ : outside_;
-            switch (Classify(api, severity, id, outcome.testName))
+            switch (Classify(severity, id, outcome.testName))
             {
                 case Verdict::Fatal:
                     if (outcome.fatal.size() < kRetainedFatal)
-                        outcome.fatal.push_back(Format(api, severity, id, description));
+                        outcome.fatal.push_back(Format(severity, id, description));
                     ++outcome.fatalCount;
                     break;
                 case Verdict::Allowed:
@@ -228,23 +207,21 @@ namespace CNA::Testing::D3DDebugLayer
         }
 
         /**
-         * @brief One report line per message: API, severity, id and text.
+         * @brief One report line per message: severity, id and text.
          *
-         * @param api         The debug layer.
          * @param severity    Its severity ordinal.
          * @param id          Its message id.
          * @param description The layer's text.
          * @return The formatted line.
          */
-        [[nodiscard]] static std::string Format(Api api, int severity, int id,
-                                                const std::string& description)
+        [[nodiscard]] static std::string Format(int severity, int id, const std::string& description)
         {
             static constexpr const char* kSeverities[] = {"CORRUPTION", "ERROR", "WARNING", "INFO",
                                                           "MESSAGE"};
             const std::string severityName = severity >= 0 && severity <= Message
                 ? kSeverities[severity]
                 : "severity " + std::to_string(severity);
-            return std::string(api == Api::Direct3D11 ? "D3D11 " : "D3D12 ") + severityName +
+            return "D3D11 " + severityName +
                    " id " + std::to_string(id) + ": " + description;
         }
 

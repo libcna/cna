@@ -33,6 +33,7 @@ renderer count is not a goal.
 | RRC-015 | Retire `GDI`, `HTML_DOM`, `SVG_DOM` and `OPENGL4`: remove their families and every integration that existed only for them | ✅ |
 | RRC-016 | Remove `CNA_SOFTWARE_2D_ONLY`, the reduced Software build that existed only for `GDI` | ✅ |
 | RRC-017 | Remove the four renderers' documents, plans and handoffs; one retirement record | ✅ |
+| RRC-018 | Retire `DIRECTX12`, `CANVAS`, `OPENGLES2` and `WEBGL1`: remove their families, EasyGL's ES 2.0 profiles and every integration that existed only for them | ✅ |
 
 **2026-09-19 owner decision (`RRC-011`).** Retired renderer probes and the rejected Three.js
 candidate probe no longer belong in the current `spikes/` tree. The earlier archive-retention
@@ -1043,3 +1044,48 @@ retrospectives, `integration/`, `modularization/`, `remediation/` -- is left as 
   `tests/assets/media/video/video_xnb_object_fixture.xnb`; the renderer benchmark's banner names
   the compile-time default rather than the runtime renderer; `check_renderer_configure_sweep.sh`
   parses identities from a STRINGS line that no longer lists them literally.
+
+## RRC-018 — Retire `DIRECTX12`, `CANVAS`, `OPENGLES2` and `WEBGL1`
+
+An owner decision (2026-10-06) to reduce renderer scope and maintenance burden. None of the four is
+replaced or aliased. Result: **14 public renderer identities over 12 implementation families**;
+EasyGL serves `OPENGLES3`, `OPENGL33` and `WEBGL2`. The record is `docs/removed-renderers.md`.
+
+- **Identity/ABI:** the names move to `CNA_RENDERER_RETIRED_IDENTITIES` (`OPENGLES2=2`, `WEBGL1=5`,
+  `DIRECTX12=15`, `CANVAS=17`) and are refused by name on every configure route and, at run time,
+  by `SetPreferred()` in any spelling. The four C constants are gone, the values reserved,
+  `CNA_GRAPHICS_RENDERER_MAXIMUM` stays `43`, the next value stays `52`, C ABI `0.45.0`.
+- **Removed families:** `modules/renderers/{directx12,canvas}`, the Canvas host-test target, the
+  D3D12 arms of `cmake/DirectXParityTests.cmake` (now a DirectX11-only inventory, same 264 fixtures
+  in the same order), `scripts/run-proton-vkd3d.sh`, `spikes/d3d12-warp-spike`, the D3D12 MSVC CI
+  leg. `D3DCommon` lost its D3D12 input-layout tables and the second debug-layer API.
+- **EasyGL:** `GlProfile` has three values; `UsesGlslEs100`/`UsesEs2ApiGeneration` and every
+  branch they guarded are gone (shader lowering to GLSL ES 1.00, texture-object sampler emulation
+  and level registry, no-VAO paths, unsized RGBA, combined-framebuffer readback, single-sample
+  pins, ES 2.0 context request, capability refusals). The stock shader text each remaining profile
+  compiles is unchanged.
+- **Kept:** `D3DCommon`; `scripts/run-wine-vkd3d*.sh` (SDL_GPU's Direct3D 12 lane); the easy-gl
+  sibling, which still contains WebGL 1 support CNA no longer selects.
+
+**Verified** (Linux x86-64, 2026-10-06). The identity, combination, descriptor, discipline,
+target, removed-API and platform boundary gates pass; each of the four names is refused by name and
+value on the selector, set and option routes (`CnaRendererRetired_*`) and by `SetPreferred()` at run
+time. `cmake-build-multi` (`OPENGLES3` default with `OPENGL33`, `VULKAN`, `WEBGPU`, `SDL_RENDERER`,
+`SOFTWARE`, `HEADLESS`, `STUB`) was run on the private display beside the parent commit built in the
+identical configuration: the full corpus (12,077 tests) fails exactly the parent's tests apart from
+load-sensitive cases that pass alone, and every family's own suite, run with that family selected
+at run time, has the same failure set before and after. A MinGW-w64 build (`DIRECTX9`,
+`DIRECTX11`, `SOFTWARE`, `HEADLESS`) passes the 58 DirectX11 tests whose shared sources this change
+edited under Wine+DXVK, and its benchmark runs under `DIRECTX11`, `DIRECTX9` and `SOFTWARE`
+selected at run time. The `WEBGL2`+`WEBGPU` wasm bundle builds and runs the benchmark in headless
+Chrome under each (`WEBGPU` needs `-sASYNCIFY_STACK_SIZE=1048576`). **Not run:** native Windows or
+MSVC, macOS (`METAL`), the complete DirectX11 parity corpus, a real OpenGL ES 3.0 device.
+
+Found, not fixed (pre-existing, outside scope): in a multi-renderer tree the per-family example
+suites register for every compiled-in family but assert the default renderer's compile-time
+contract (two Vulkan example sources even `#error`); `Fna3dSurfaceFormatTests` does not compile
+when FNA3D is compiled in but not the default; `CApi_InstalledConsumer` cannot link an installed
+consumer against an external `wgpu_native`; the C API coverage and limitations generators stop on
+the `texture-cube-value-copy` rule; `scripts/check_cnaext_matrix.py` misses a heading in
+`docs/cnaext-engine-layer.md`; the shared parity-fixture registration gives cross-compiled DirectX11
+executables no Wine emulator.

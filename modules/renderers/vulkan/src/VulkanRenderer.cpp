@@ -24076,7 +24076,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // all six faces, on depthImage_'s "only one face is ever rendered into at a time"
         // reasoning. That is true while PRODUCING a face and false the moment a face is RELOADED:
         // a PreserveContents face rebound for a partial update loaded whichever face had been
-        // rendered last. Six layers is what D3D11 and D3D12 have always allocated (a six-slice
+        // rendered last. Six layers is what D3D11 has always allocated (a six-slice
         // multisampled array with one per-slice RTV) and it is what makes all six faces
         // simultaneously live. No cube-compatible flag: this image is never sampled, only
         // rendered into and resolved from, one layer at a time.

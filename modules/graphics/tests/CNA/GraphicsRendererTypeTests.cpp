@@ -14,8 +14,8 @@ static_assert(!getCurrentGraphicsRendererName().empty());
 constexpr GraphicsRendererType kCompileTimeType = getCurrentGraphicsRendererType();
 constexpr std::string_view kCompileTimeName = getCurrentGraphicsRendererName();
 constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::Fna3d) + 1;
-static_assert(kPublicRendererCount == 18,
-              "GraphicsRendererType must expose all 18 public renderer identities");
+static_assert(kPublicRendererCount == 14,
+              "GraphicsRendererType must expose all 14 public renderer identities");
 
 TEST(GraphicsRendererTypeTest, GetCurrentGraphicsRendererTypeDoesNotThrow)
 {
@@ -51,18 +51,14 @@ namespace
         switch (type)
         {
             case GraphicsRendererType::SdlRenderer: return "SDL_RENDERER";
-            case GraphicsRendererType::OpenGLES2:   return "OPENGLES2";
             case GraphicsRendererType::OpenGLES3:    return "OPENGLES3";
             case GraphicsRendererType::OpenGL33:    return "OPENGL33";
-            case GraphicsRendererType::WebGL1:      return "WEBGL1";
             case GraphicsRendererType::WebGL2:      return "WEBGL2";
             case GraphicsRendererType::Vulkan:      return "VULKAN";
             case GraphicsRendererType::WebGPU:      return "WEBGPU";
             case GraphicsRendererType::Headless:    return "HEADLESS";
             case GraphicsRendererType::Software:    return "SOFTWARE";
             case GraphicsRendererType::DirectX11:       return "DIRECTX11";
-            case GraphicsRendererType::DirectX12:       return "DIRECTX12";
-            case GraphicsRendererType::Canvas:      return "CANVAS";
             case GraphicsRendererType::Stub:        return "STUB";
             case GraphicsRendererType::DirectX9:        return "DIRECTX9";
             case GraphicsRendererType::SdlGpu:      return "SDL_GPU";

@@ -166,7 +166,7 @@ TEST(RenderTargetUsageTest, DefaultIsDiscardContents)
 // EasyGL is the one renderer that overrides it with a real upload into the shared GL cube texture.
 //
 // Constructing a RenderTargetCube can legitimately fail on a renderer that has no cube-map render
-// target at all (Software, native 2D, ASCII, Canvas, DIRECTX3 keep CreateRenderTargetCube's nullptr
+// target at all (Software and native 2D keep CreateRenderTargetCube's nullptr
 // default); that is not what is under test, so it is skipped rather than asserted either way.
 // -----------------------------------------------------------------------
 
@@ -223,8 +223,7 @@ namespace
         // TextureCube's own UpdateSubresource path; the exact round trip is asserted below.
         // plans/plan_vulkan_parity.md VKPAR-0027: Vulkan uploads into the face through the same
         // per-face flush its readback uses; the exact round trip is asserted below.
-        return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                               Software, DirectX11, DirectX12, Vulkan);
+        return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software, DirectX11, Vulkan);
     }
 }
 
@@ -282,7 +281,7 @@ TEST(RenderTargetCubeSetDataContractTest, StoresTheFaceOrRefusesButNeverSilently
 // their round trip in their own suites.
 TEST(RenderTargetCubeSetDataContractTest, SeededFacesAndRegionsReadBackExactly)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, DirectX11, DirectX12, Vulkan);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, DirectX11, Vulkan);
 
     GraphicsDevice gd;
     RenderTargetCube rt(gd, 4, false, SurfaceFormat::Color, DepthFormat::None, 0,

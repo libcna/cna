@@ -182,11 +182,6 @@ namespace
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = false;
     constexpr const char* kRendererName = "SDL_RENDERER";
-#elif defined(CNA_RENDERER_CANVAS)
-    constexpr bool kRasterizes = true;
-    constexpr bool kReadsBackbuffer = true;
-    constexpr bool kDraws3D = true;
-    constexpr const char* kRendererName = "CANVAS";
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;
@@ -197,11 +192,6 @@ namespace
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
     constexpr const char* kRendererName = "DIRECTX11";
-#elif defined(CNA_RENDERER_DIRECTX12)
-    constexpr bool kRasterizes = true;
-    constexpr bool kReadsBackbuffer = true;
-    constexpr bool kDraws3D = true;
-    constexpr const char* kRendererName = "DIRECTX12";
 #else
 #error "REMED-GFX-157: this renderer has no declared SpriteBatch/3D ordering contract."
 #endif

@@ -3,8 +3,8 @@
 # physical modules).
 #
 # From the root CMakeLists.txt include site:
-# plans/plan_dx9.md D9-23: D3D9 CTest registration, mirroring D3D11's/D3D12's own cna_directx11_test/
-# cna_directx12_test macros (design decision: mirror the shape, don't invent a new pattern). Uses the
+# plans/plan_dx9.md D9-23: D3D9 CTest registration, mirroring D3D11's own cna_directx11_test
+# macro (design decision: mirror the shape, don't invent a new pattern). Uses the
 # new scripts/run-wine-dxvk9.sh (D9-5), not the shared run-wine-dxvk.sh (cold-start Sec.4).
 
 # Example/test executables historically live at the build root (scripts, docs and

@@ -97,7 +97,7 @@ namespace
     ///
     /// CustomEffects says a renderer ACCEPTS an effect; ExecutesShaderEffectSourceEXT says the
     /// source decides the pixels; GetShaderDialectEXT says which source. A renderer that executes
-    /// declared HLSL (DirectX11, DirectX12) refuses GLSL at compile time, and one that accepts any
+    /// declared HLSL (DirectX11) refuses GLSL at compile time, and one that accepts any
     /// source and keeps its own fixed path (Software, Headless: no dialect, not executed) may call
     /// the effect valid -- this test used to demand invalid there, and Software failed it.
     [[nodiscard]] GlslEffectValidity ExpectedGlslEffectValidity(const GraphicsDevice& gd)

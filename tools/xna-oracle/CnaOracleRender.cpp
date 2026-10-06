@@ -99,8 +99,6 @@ namespace
         return "VULKAN";
 #elif defined(CNA_RENDERER_DIRECTX11)
         return "D3D11";
-#elif defined(CNA_RENDERER_DIRECTX12)
-        return "D3D12";
 #elif defined(CNA_RENDERER_WEBGPU)
         return "WEBGPU";
 #elif defined(CNA_RENDERER_SOFTWARE)

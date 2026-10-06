@@ -29,17 +29,12 @@ namespace CNA::Internal::Renderers::D3DCommon
             static LogState state;
             return state;
         }
-
-        const char* ApiName(D3DDebugLayerApi api)
-        {
-            return api == D3DDebugLayerApi::Direct3D11 ? "D3D11" : "D3D12";
-        }
     }
 
     void D3DDebugLayerLog::Record(D3DDebugLayerMessage message)
     {
         LogState& state = State();
-        const std::string text = std::string(ApiName(message.api)) + " debug layer [severity " +
+        const std::string text = std::string("D3D11 debug layer [severity ") +
                                  std::to_string(message.severity) + ", id " +
                                  std::to_string(message.id) + "]: " + message.description;
         Observer observer;

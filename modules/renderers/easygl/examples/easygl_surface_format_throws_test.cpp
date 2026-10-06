@@ -129,9 +129,8 @@ protected:
         expectNoThrow("Texture2D Color", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Color);
         });
-        // Texture3D legs are capability-conditional: a profile without real volume storage
-        // (e.g. OPENGLES2 -- core OpenGL ES 2.0 has no 3D textures,
-        // docs/opengles2-renderer.md) refuses construction before format validation can run.
+        // Texture3D legs are capability-conditional: a renderer without real volume storage
+        // refuses construction before format validation can run.
         const bool hasTexture3D = dev.SupportsCapability(CNA::GraphicsCapability::Texture3D);
         if (hasTexture3D)
         {
@@ -209,13 +208,12 @@ protected:
 
 #if 1
         // REMED-GFX-244: the packed 16-bit formats are ES 3 sized-internal-format storage, so they
-        // take the same guard the signed-normalized pair does -- promoted off the ES 2 generation,
-        // refused on it rather than falling back to an unsized layout the driver picks.
+        // take the same guard the signed-normalized pair does.
         expectPerRendererClaim(dev, "Texture2D Bgra5551", SurfaceFormat::Bgra5551, [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgra5551);
         });
         // The two signed-normalized byte formats stand or fall together: EasyGL classifies them in
-        // one predicate ("Both signed-normalized byte formats need the ES 3 sized-internal-format
+        // one predicate ("Both signed-normalized byte formats use the ES 3 sized-internal-format
         // set"), so NormalizedByte2 belongs under the same guard NormalizedByte4 already had.
         // Splitting them was this file's own bug, not a renderer asymmetry.
         //

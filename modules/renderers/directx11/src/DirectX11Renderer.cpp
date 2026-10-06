@@ -498,8 +498,8 @@ namespace CNA::Internal::Renderers::DirectX11
         flags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
         // plans/plan_graphics_shared_cleanup.md GSC-0006: CNA_D3D11_DEBUG_LAYER=1 enables the layer in any
-        // build type and =0 disables it in a Debug build -- the explicit switch validation runs use, as
-        // CNA_D3D12_DEBUG_LAYER is for DirectX12. Unset keeps the build type's default.
+        // build type and =0 disables it in a Debug build -- the explicit switch validation runs use.
+        // Unset keeps the build type's default.
         if (const char* debugLayer = std::getenv("CNA_D3D11_DEBUG_LAYER"); debugLayer != nullptr)
         {
             if (std::strcmp(debugLayer, "1") == 0)
@@ -541,7 +541,7 @@ namespace CNA::Internal::Renderers::DirectX11
         if (debugLayerEnabled_ && SUCCEEDED(device_.As(&infoQueue_)))
         {
             // Informational messages carry no verdict and arrive by the thousand (state object
-            // creation, every shader); they are dropped at the queue, as DirectX12 does.
+            // creation, every shader); they are dropped at the queue.
             D3D11_MESSAGE_SEVERITY deniedSeverities[] = {
                 D3D11_MESSAGE_SEVERITY_INFO, D3D11_MESSAGE_SEVERITY_MESSAGE};
             D3D11_INFO_QUEUE_FILTER filter{};
@@ -810,13 +810,12 @@ namespace CNA::Internal::Renderers::DirectX11
             auto* message = reinterpret_cast<D3D11_MESSAGE*>(storage.data());
             if (FAILED(infoQueue_->GetMessage(i, message, &length)))
                 continue;
-            // Stored before the filter was pushed (device creation), like DirectX12's startup notices.
+            // Stored before the filter was pushed (device creation).
             if (message->Severity == D3D11_MESSAGE_SEVERITY_INFO ||
                 message->Severity == D3D11_MESSAGE_SEVERITY_MESSAGE)
                 continue;
             D3DCommon::D3DDebugLayerLog::Record(
-                {D3DCommon::D3DDebugLayerApi::Direct3D11, static_cast<int>(message->Severity),
-                 static_cast<int>(message->ID),
+                {static_cast<int>(message->Severity), static_cast<int>(message->ID),
                  message->pDescription != nullptr ? std::string(message->pDescription) : std::string()});
         }
         infoQueue_->ClearStoredMessages();
@@ -1282,8 +1281,7 @@ namespace CNA::Internal::Renderers::DirectX11
     // These carry a single bool each, so they rebuild the tracked depth-stencil state with just that
     // one field changed (see the ds*_ fields' own comment). They were silent no-ops before: a game
     // calling GraphicsDevice::SetDepthTestEnabled(true) on D3D11 got no depth test at all, while
-    // EasyGL honoured it -- a real, silent cross-renderer behavior divergence, found while wiring
-    // D3D12's own equivalents (which were worse still: they threw).
+    // EasyGL honoured it -- a real, silent cross-renderer behavior divergence.
     void DirectX11Renderer::SetDepthTestEnabled(bool enabled)
     {
         if (dsDepthEnable_ == enabled) return;
@@ -1298,7 +1296,7 @@ namespace CNA::Internal::Renderers::DirectX11
         RebindDepthStencilState();
     }
 
-    // Deliberate no-op, matching D3D12's own equivalent: a bare "enable blending" has no defined
+    // Deliberate no-op: a bare "enable blending" has no defined
     // blend factors in XNA -- real blend configuration always arrives via ApplyBlendState().
     void DirectX11Renderer::SetBlendEnabled(bool enabled) { (void)enabled; }
 
@@ -3314,7 +3312,7 @@ namespace CNA::Internal::Renderers::DirectX11
         }
         else if (needsAlphaTest)
         {
-            // plans/plan_directx12_parity.md DX12-0021: XNA samples an unbound AlphaTestEffect texture
+            // DX12-0021: XNA samples an unbound AlphaTestEffect texture
             // as opaque black; a null SRV here sampled as the diffuse colour's untextured result.
             srvs[0] = params.texture0 ? GetSrvForTextureEXT(params.texture0)
                                       : GetOrCreateDefaultOpaqueBlackSrvEXT();

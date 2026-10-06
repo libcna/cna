@@ -205,14 +205,6 @@
       "category": "containment-assertion",
       "max_references": 1
     },
-    "modules/renderers/canvas/examples/canvas_smoke_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 9
-    },
-    "modules/renderers/directx12/examples/directx12_swapchain_diag.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 19
-    },
     "modules/renderers/directx9/examples/directx9_hresult_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 12

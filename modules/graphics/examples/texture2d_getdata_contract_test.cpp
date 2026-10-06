@@ -118,12 +118,6 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "DIRECTX11";
-#elif defined(CNA_RENDERER_DIRECTX12)
-    constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kRendererName = "DIRECTX12";
-#elif defined(CNA_RENDERER_CANVAS)
-    constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kRendererName = "CANVAS";
 #else
 #error "REMED-GFX-127: this renderer has no declared Texture2D::GetData render-target contract."
 #endif

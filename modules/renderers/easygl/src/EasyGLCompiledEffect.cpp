@@ -49,9 +49,6 @@ namespace CNA::Internal::Renderers::EasyGL
         {
             switch (profile)
             {
-                case GlProfile::OpenGLES2:
-                case GlProfile::WebGL1:
-                    return MOJOSHADER_PROFILE_GLSLES;
                 case GlProfile::OpenGLES3:
                 case GlProfile::WebGL2:
                     return MOJOSHADER_PROFILE_GLSLES3;

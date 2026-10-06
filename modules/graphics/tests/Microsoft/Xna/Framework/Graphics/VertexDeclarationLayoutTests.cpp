@@ -123,17 +123,17 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// describes the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool DeclarationLayout()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, Software, SdlGpu,
-                            DirectX9, DirectX11, DirectX12);
+    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, Software, SdlGpu, DirectX9,
+                            DirectX11);
 }
 
-// The renderers measured on a real display here. D3D9/D3D11/D3D12 stay outside it because no D3D
+// The renderers measured on a real display here. D3D9/D3D11 stay outside it because no D3D
 // display is reachable in this environment; every leg still PRINTS its reading there.
 /// plans/plan_runtimerenderer.md RTR-P9-6: the same set, evaluated at runtime.
 [[nodiscard]] inline bool DeclarationLayoutMeasured()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                           Vulkan, WebGPU, Software, SdlGpu, DirectX11, DirectX12);
+    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan, WebGPU, Software, SdlGpu,
+                           DirectX11);
 }
 
 /// REMED-GFX-234: does this renderer derive its native layout from the DECLARATION?
@@ -172,11 +172,10 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// RequireFaithfulDeclarationEXT. This predicate was not updated when that landed, so DirectX11 was
 /// still expected to refuse the colliding declarations it now renders -- ten failures on native
 /// Windows that were the test's, not the renderer's (plans/plan_windows_portability_closeout.md
-/// WINCLOSE-0013). DirectX12 lost its guard in the same change but has not been measured here.
+/// WINCLOSE-0013).
 [[nodiscard]] inline bool TranslatesDeclarations()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan,
-                           Software, DirectX11, DirectX12);
+    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, Software, DirectX11);
 }
 
 
@@ -1171,7 +1170,7 @@ TEST_F(DeclarationGuardTest, TheTranslatingRendererStillRendersEveryCollidingDec
 TEST_F(DeclarationGuardTest, CustomShaderEffectKeepsItsElementIndexConvention)
 {
     // plans/plan_runtimerenderer.md RTR-P9-6: EasyGL's own convention, asked of the active renderer.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2);
     // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";

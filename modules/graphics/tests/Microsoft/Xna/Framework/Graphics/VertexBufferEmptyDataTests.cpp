@@ -53,10 +53,9 @@ using namespace CNA::Testing::Renderers;
 // it stays a COMPILE-time guard -- no runtime predicate can make a type exist. What changes is the
 // condition: only the DEFAULT renderer's CNA_RENDERER_<X> is defined project-wide, so in a
 // multi-renderer build this block compiled to nothing even when EasyGL was in the binary. The
-// PRESENT_ defines say "compiled in", and EasyGL is a family of five public identities.
-#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_PRESENT_OPENGLES2) || \
-    defined(CNA_RENDERER_PRESENT_OPENGLES3) || defined(CNA_RENDERER_PRESENT_OPENGL33) || \
-    defined(CNA_RENDERER_PRESENT_WEBGL1) || defined(CNA_RENDERER_PRESENT_WEBGL2)
+// PRESENT_ defines say "compiled in", and EasyGL is a family of three public identities.
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_PRESENT_OPENGLES3) || \
+    defined(CNA_RENDERER_PRESENT_OPENGL33) || defined(CNA_RENDERER_PRESENT_WEBGL2)
 #define CNA_TEST_EASYGL_AVAILABLE 1
 #endif
 
@@ -682,7 +681,7 @@ TEST_F(VertexBufferEmptyDataTest, RawDeclarationsAcceptPaddedAndFullLayouts)
 #ifdef CNA_TEST_EASYGL_AVAILABLE
     // Compiled whenever EasyGL is in the build; asserted only when it is the ACTIVE renderer --
     // otherwise the dynamic_cast below is a null check against a different renderer's object.
-    if (CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2))
     {
     auto* paddedEasy =
         dynamic_cast<CNA::Internal::Renderers::EasyGL::EasyGLVertexBufferRenderer*>(

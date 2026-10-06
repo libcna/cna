@@ -29,10 +29,10 @@ target_include_directories(cna_graphics_core PRIVATE ${CNA_SOURCE_DIR}/third_par
 target_link_libraries(cna_graphics_core PRIVATE cna_input)
 # plans/plan_dx.md DX-252: CMake repeats a declared static-archive cycle twice by default, which is
 # exactly enough while the cycle is two archives deep. The DirectX families make it deeper --
-# cna_renderer_d3dcommon is a PUBLIC dependency of cna_renderer_directx11/directx12 and itself
+# cna_renderer_d3dcommon is a PUBLIC dependency of cna_renderer_directx11 and itself
 # reaches back into cna_graphics_core -- so an executable could pull GraphicsDevice.cpp.obj out of
 # the LAST repetition of libcna_graphics_core.a, with no libcna_input.a left after it, and fail on
-# TouchPanel/Mouse/TextInputEXT (found for real: cna_test_directx12_descriptor_allocator.exe). One
+# TouchPanel/Mouse/TextInputEXT (found for real in a Direct3D test executable). One
 # more repetition closes it; it costs nothing but a slightly longer link line, and it is CMake's own
 # documented lever for exactly this.
 set_target_properties(cna_graphics_core PROPERTIES LINK_INTERFACE_MULTIPLICITY 3)

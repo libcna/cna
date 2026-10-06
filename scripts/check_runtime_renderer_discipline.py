@@ -202,7 +202,7 @@ def check_factory_namespacing():
         scopes = namespace_scopes(text)
         for match in FACTORY.finditer(text):
             if match.group(1):
-                continue  # written qualified, e.g. `Canvas::CreateGraphicsRenderer`
+                continue  # written qualified, e.g. `EasyGL::CreateGraphicsRenderer`
             if not _is_definition(text, match.end() - 1):
                 continue  # a declaration; the descriptor unit legitimately carries one
             enclosing = ""

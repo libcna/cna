@@ -58,12 +58,10 @@ namespace
 {
 #if defined(CNA_RENDERER_DIRECTX11)
     constexpr const char* kRendererName = "D3D11";
-#elif defined(CNA_RENDERER_DIRECTX12)
-    constexpr const char* kRendererName = "D3D12";
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr const char* kRendererName = "EasyGL";
 #else
-#error "ShaderEffect reflection contract requires EasyGL, DirectX 11, or DirectX 12"
+#error "ShaderEffect reflection contract requires EasyGL or DirectX 11"
 #endif
 
     constexpr int kSize = 32;

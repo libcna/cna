@@ -132,8 +132,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// describes the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool InstancedDiffuse()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan,
-                           DirectX9, DirectX11, DirectX12, SdlGpu, Software);
+    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11,
+                           SdlGpu, Software);
 }
 
 // The renderers whose instanced route this file has MEASURED on a GPU-backed display. D3D11 and
@@ -147,8 +147,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// plans/plan_runtimerenderer.md RTR-P9-5: the measured set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool InstancedDiffuseMeasured()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Vulkan, WebGPU,
-                           DirectX11, DirectX12, SdlGpu, Software);
+    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan, WebGPU, DirectX11, SdlGpu,
+                           Software);
 }
 
 
@@ -637,9 +637,8 @@ protected:
     /// GTEST_SKIP() only suppresses the remaining TEST BODY when raised from SetUp() --
     /// raised inside a helper the body calls, it merely returns from the helper (the exact
     /// reason the multi-stream skip is a macro). Hardware instancing is this whole file's
-    /// subject, so a renderer profile reporting GraphicsCapability::Instancing = false
-    /// (e.g. OPENGLES2 -- core OpenGL ES 2.0 has no glDrawElementsInstanced/
-    /// glVertexAttribDivisor, docs/opengles2-renderer.md) skips every leg here up front.
+    /// subject, so a renderer profile reporting GraphicsCapability::Instancing = false skips
+    /// every leg here up front.
     void SetUp() override
     {
         if (!device.SupportsCapability(GraphicsCapability::Instancing))

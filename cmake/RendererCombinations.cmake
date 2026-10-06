@@ -13,15 +13,15 @@
 # Identities served by one implementation family. Two of them in one binary would mean compiling
 # that family twice with different profile defines -- an ODR violation, not merely a name clash.
 # Lifting this is plans/plan_runtimerenderer.md phase P11 (EasyGL's profile becomes a runtime choice).
-set(CNA_RENDERER_SHARED_EASYGL OPENGLES2 OPENGLES3 OPENGL33 WEBGL1 WEBGL2)
+set(CNA_RENDERER_SHARED_EASYGL OPENGLES3 OPENGL33 WEBGL2)
 
 # Platform partitions. A combination spanning two of these can never build: the toolchain targets
 # one of them at a time.
-set(CNA_RENDERER_WINDOWS_ONLY DIRECTX9 DIRECTX11 DIRECTX12)
-# Listing the browser renderers here is what makes the PAIRWISE rule state the reason -- a
-# CANVAS + DIRECTX11 request should be refused as "two platforms, one toolchain", not left to
+set(CNA_RENDERER_WINDOWS_ONLY DIRECTX9 DIRECTX11)
+# Listing the browser renderer here is what makes the PAIRWISE rule state the reason -- a
+# WEBGL2 + DIRECTX11 request should be refused as "two platforms, one toolchain", not left to
 # whichever per-identity gate in RendererSelection.cmake happens to fire first.
-set(CNA_RENDERER_EMSCRIPTEN_ONLY WEBGL1 WEBGL2 CANVAS)
+set(CNA_RENDERER_EMSCRIPTEN_ONLY WEBGL2)
 set(CNA_RENDERER_MACOS_ONLY METAL)
 
 # Rejects an unbuildable combination with a specific, actionable reason.
@@ -72,9 +72,9 @@ function(cna_validate_renderer_combination)
             # plans/plan_runtimerenderer.md phase P11 REMOVED the rule that used to sit here: two
             # identities served by the shared EasyGL implementation could not coexist, because its
             # GL profile was a compile definition and the same translation units would have had to
-            # be compiled twice. The profile is now a runtime value, so OPENGLES2, OPENGLES3,
-            # OPENGL33, WEBGL1 and WEBGL2 can share one binary -- subject only to the platform
-            # partition below, which still separates the WEBGL pair from the rest.
+            # be compiled twice. The profile is now a runtime value, so OPENGLES3, OPENGL33 and
+            # WEBGL2 can share one binary -- subject only to the platform partition below, which
+            # still separates WEBGL2 from the rest.
 
             # Cross-platform pairs.
             _cna_renderer_platform("${_first}" _first_platform)

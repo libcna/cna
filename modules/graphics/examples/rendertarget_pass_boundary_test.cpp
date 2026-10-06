@@ -218,17 +218,11 @@ namespace
 #elif defined(CNA_RENDERER_SDL_RENDERER)
     constexpr Contract kContract{"SDL_RENDERER", true, Support::Exact, false, Support::Unsupported,
                                  true, true, false, true, false, true, true, false};
-#elif defined(CNA_RENDERER_CANVAS)
-    constexpr Contract kContract{"CANVAS", true, Support::Exact, false, Support::Unsupported,
-                                 true, true, false, true, true, true, true, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr Contract kContract{"DIRECTX9", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, true, true, true, true};
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr Contract kContract{"DIRECTX11", true, Support::Exact, true, Support::Exact,
-                                 true, true, false, true, true, true, true, true};
-#elif defined(CNA_RENDERER_DIRECTX12)
-    constexpr Contract kContract{"DIRECTX12", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, true, true, true, true};
 #else
 #error "REMED-GFX-140: this renderer has no declared render-target pass-boundary contract."

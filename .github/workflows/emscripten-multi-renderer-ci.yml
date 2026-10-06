@@ -5,14 +5,11 @@
 # before start through Module.cnaPreferredRenderer (RTR-P10-23) -- is where runtime selection stops
 # being a convenience and becomes the only way to serve a mixed audience from one download.
 #
-# The set is WEBGL2 + WEBGL1 + CANVAS: a GPU renderer and one that needs no GPU at all, which is the
-# fallback shape a real page wants. WEBGL2 and WEBGL1 are two identities of the one EasyGL family,
-# so the bundle also proves a multi-identity family registers each identity it serves. (A bundle
-# that holds WEBGL2 links with MIN_WEBGL_VERSION=2, so its WEBGL1 profile runs on a WebGL 2
-# context; a page that must reach WebGL-1-only browsers needs a WEBGL1-only bundle.)
+# The set is WEBGL2 + WEBGPU, the two browser renderers CNA has: a page uses WebGPU where the
+# browser offers it and WebGL 2 where it does not.
 #
 # What this job proves and what it does not:
-#   * it PROVES the three identities link into one bundle and that the JS selection surface is
+#   * it PROVES the two identities link into one bundle and that the JS selection surface is
 #     present in it -- the failure this guards against is a combination that only breaks when built
 #     together
 #   * it does NOT run the bundle in a browser; runtime behaviour in a page is covered by
@@ -39,7 +36,7 @@ concurrency:
 
 jobs:
   emscripten-multi:
-    name: One wasm bundle, three renderers (WEBGL2 + WEBGL1 + CANVAS)
+    name: One wasm bundle, two renderers (WEBGL2 + WEBGPU)
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
@@ -109,14 +106,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ccache python3
 
-      - name: Configure one bundle with all three renderers
+      - name: Configure one bundle with both renderers
         run: |
           set -euo pipefail
           source ~/emsdk/emsdk_env.sh
           emcmake cmake -S . -B cmake-build-wasm-multi -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCNA_GRAPHICS_RENDERER=WEBGL2 \
-            -DCNA_GRAPHICS_RENDERERS="WEBGL2;WEBGL1;CANVAS" \
+            -DCNA_GRAPHICS_RENDERERS="WEBGL2;WEBGPU" \
             -DCNA_SHARP_RUNTIME_ROOT="${GITHUB_WORKSPACE}/.ci-deps/sharp-runtime" \
             -DCNA_ENABLE_DRACO=OFF \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
@@ -128,9 +125,9 @@ jobs:
           source ~/emsdk/emsdk_env.sh
           cmake --build cmake-build-wasm-multi -j"$(nproc)"
 
-      # The point of the set is that all three are actually IN the artifact. A configure that
-      # quietly dropped one, or a renderer whose sources never reached the link, would otherwise
-      # pass this job by building two renderers and calling it three.
+      # The point of the set is that both are actually IN the artifact. A configure that quietly
+      # dropped one, or a renderer whose sources never reached the link, would otherwise pass this
+      # job by building one renderer and calling it two.
       - name: Assert every renderer and the JS selection surface are in the bundle
         run: |
           set -euo pipefail
@@ -148,13 +145,13 @@ jobs:
           done
 
           # Each renderer family must have produced its own archive. The names are the FAMILY's,
-          # not the identity's: WEBGL2 is one of the five public identities of the EasyGL family, so
+          # not the identity's: WEBGL2 is one of the three public identities of the EasyGL family, so
           # it builds libcna_renderer_easygl.a. Asserting libcna_renderer_webgl2.a would fail on a
           # perfectly good bundle -- verified against a real local wasm configure before this job
           # was written.
           missing=0
           for archive in libcna_renderer_easygl.a \
-                         libcna_renderer_canvas.a; do
+                         libcna_renderer_webgpu.a; do
             if ! find cmake-build-wasm-multi -name "${archive}" | grep -q .; then
               echo "missing renderer archive: ${archive}" >&2
               missing=1
@@ -176,8 +173,8 @@ jobs:
           registered=$(grep -cE "::GetDescriptor[A-Za-z0-9]*\(\)," "$registry" || true)
           echo "registered renderers: ${registered}"
           grep -oE "[A-Za-z]+::GetDescriptor[A-Za-z0-9]*\(\)" "$registry" | sort -u | sed "s/^/  /"
-          if [ "${registered}" -ne 3 ]; then
-            echo "expected 3 registered renderers, found ${registered}" >&2
+          if [ "${registered}" -ne 2 ]; then
+            echo "expected 2 registered renderers, found ${registered}" >&2
             exit 1
           fi
 

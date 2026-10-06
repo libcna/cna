@@ -73,16 +73,6 @@ struct CapabilityExpectation
     using CNA::GraphicsRendererType;
     switch (CNA::GraphicsRendererSelection::GetSelected())
     {
-        // The GLSL ES 1.00 profiles of the EasyGL family truthfully refuse the ES 3.0-level
-        // features: core ES 2.0 has no draw-buffers MRT and no query objects. CustomEffects stays
-        // true -- the ShaderEffect mechanism works; the game's GLSL source must be ES 1.00 under
-        // these profiles (docs/opengles2-renderer.md), exactly as it must be ES 3.00-compatible
-        // elsewhere. The family's other three profiles take the default arm below, which is what
-        // the `CNA_GL_PROFILE_*` half of the old condition expressed.
-        case GraphicsRendererType::OpenGLES2:
-        case GraphicsRendererType::WebGL1:
-            return {false, false, true};
-
         // plans/plan_fna3d.md: FNA3D's only shader entry point is FNA3D_CreateEffect, which takes a
         // *compiled* Direct3D 9 Effect Framework binary and runs it through MojoShader; nothing in
         // the library compiles a GLSL/HLSL source string, which is what
@@ -107,12 +97,11 @@ struct CapabilityExpectation
 
 // FNA3D has no separate compiled-effects opt-in: MojoShader is already its own graphics
 // dependency, so support is unconditional whenever this renderer is selected at all. SDL_GPU,
-// EasyGL, Vulkan, WebGPU and DirectX 9/11/12 all pull MojoShader in only as an extra,
+// EasyGL, Vulkan, WebGPU and DirectX 9/11 all pull MojoShader in only as an extra,
 // off-by-default dependency none of them otherwise needs (CNA_SDL_GPU_COMPILED_EFFECTS /
 // CNA_EASYGL_COMPILED_EFFECTS / CNA_VULKAN_COMPILED_EFFECTS / CNA_WEBGPU_COMPILED_EFFECTS /
-// CNA_DIRECTX9_COMPILED_EFFECTS / CNA_DIRECTX11_COMPILED_EFFECTS /
-// CNA_DIRECTX12_COMPILED_EFFECTS) -- selecting the renderer alone is not enough to expect the
-// capability true for any of those seven.
+// CNA_DIRECTX9_COMPILED_EFFECTS / CNA_DIRECTX11_COMPILED_EFFECTS) -- selecting the renderer alone
+// is not enough to expect the capability true for any of those six.
 //
 // plans/plan_webgpu.md WEBGPU-171 added the WebGPU arm. Its route is MojoShader's SPIR-V profile
 // plus the combined-image-sampler rewrite WGSL's shading model requires. WEBGPU-203 removed the
@@ -126,8 +115,7 @@ struct CapabilityExpectation
     (defined(CNA_RENDERER_VULKAN) && defined(CNA_VULKAN_COMPILED_EFFECTS)) || \
     (defined(CNA_RENDERER_WEBGPU) && defined(CNA_WEBGPU_COMPILED_EFFECTS)) || \
     (defined(CNA_RENDERER_DIRECTX9) && defined(CNA_DIRECTX9_COMPILED_EFFECTS)) || \
-    (defined(CNA_RENDERER_DIRECTX11) && defined(CNA_DIRECTX11_COMPILED_EFFECTS)) || \
-    (defined(CNA_RENDERER_DIRECTX12) && defined(CNA_DIRECTX12_COMPILED_EFFECTS))
+    (defined(CNA_RENDERER_DIRECTX11) && defined(CNA_DIRECTX11_COMPILED_EFFECTS))
 constexpr bool kExpectCompiledEffects = true;
 #else
 constexpr bool kExpectCompiledEffects = false;
@@ -343,8 +331,6 @@ TEST(GraphicsDeviceCapabilityTest, GetMaxTextureDimensionReturnsSanePositiveValu
 //   EasyGL GLES/WebGL without polygon-mode ext     report false, refuse (SOFTWARE-178)
 //   WebGPU                                        reports FALSE, refuses the draw (WEBGPU-115)
 //   Headless                                      reports true, rasterizes nothing at all
-//   D3D12                                         maps FILL_WIREFRAME through the shared
-//                                                 D3DCommon table; no runtime in this environment
 //
 // So there is no universal answer in either direction. What replaces the old assertion is three
 // honest shapes:
@@ -421,7 +407,7 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
            "fallen back to IGraphicsRenderer's default true, which no no-op renderer can back";
 #else
     // Every other renderer in this file answers true, either because it renders a real wireframe
-    // (Software, Vulkan, SDL_GPU, D3D9, D3D11, D3D12, asserted by the pixel oracle below) or
+    // (Software, Vulkan, SDL_GPU, D3D9, D3D11, asserted by the pixel oracle below) or
     // because it inherits IGraphicsRenderer's default (Headless, which rasterizes nothing at all).
     EXPECT_TRUE(reported);
 #endif

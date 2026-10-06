@@ -493,7 +493,7 @@ namespace CNA::Internal::Renderers::EasyGL
          * `cubeTex_` layer still held the right content (which is why a full redraw and an
          * immediate readback both passed). `BindAsRenderTargetFace` now re-attaches this face's
          * own renderbuffer, exactly as the non-MSAA path already re-attaches this face's own
-         * cube-texture image. Six is what D3D11/D3D12 have always allocated (a six-slice
+         * cube-texture image. Six is what D3D11 has always allocated (a six-slice
          * multisampled array); the cost is `size * size * samples * 4 * 6` bytes per cube target,
          * paid once at construction -- never per bind, and with no full-face copy anywhere.
          */
@@ -588,7 +588,7 @@ namespace CNA::Internal::Renderers::EasyGL
     public:
         EasyGLTextureCubeRenderer(int size, bool mipMap, int surfaceFormat,
                                   std::shared_ptr<::easygl::ResourceRegistry> registry);
-        /** @brief Releases the GL cube texture (and, under OPENGLES2, its level-registry entry). */
+        /** @brief Releases the GL cube texture. */
         ~EasyGLTextureCubeRenderer() override;
 
         /// REMED-GFX-135: true only once the requested face/mip rectangle has been uploaded into a
@@ -1373,7 +1373,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
         bool contextRecoveryEnabled_ = true;
         int swapInterval_ = 1;
-        /// plans/plan_runtimerenderer.md P11: which of EasyGL's five GL identities this instance serves.
+        /// plans/plan_runtimerenderer.md P11: which of EasyGL's three GL identities this instance serves.
         GlProfile profile_ = kCompileTimeGlProfile;
         /// Clip-space multiplier for XNA's slightly-less-than-half-pixel center correction.
         float xnaPixelCenterScale_ = 63.0f / 64.0f;
@@ -1745,7 +1745,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
     public:
         /**
-         * @brief Constructs the renderer for one of EasyGL's five GL profiles.
+         * @brief Constructs the renderer for one of EasyGL's three GL profiles.
          *
          * plans/plan_runtimerenderer.md phase P11: the profile is a constructor argument rather than a
          * compile definition, which is what lets two GL identities coexist in one binary. It
@@ -2098,8 +2098,9 @@ namespace CNA::Internal::Renderers::EasyGL
          * @brief Reports texture storage support for the active EasyGL profile.
          *
          * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal.
-         * @return `Supported` for Color and ES 3-class `NormalizedByte4`, `Unsupported` for
-         *         `NormalizedByte4` on ES 2-class profiles, or `Defer` for other formats.
+         * @return `Supported` for the formats every EasyGL profile stores natively (Color,
+         *         `NormalizedByte4`, ...), a capability-probed answer for the norm16 formats, or
+         *         `Defer` for other formats.
         */
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
         /**
@@ -2130,8 +2131,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /// format defers to the framework rule, unchanged.
         [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetFormatEXT(int surfaceFormat) const override;
         /// plans/plan_modern.md MOD-123: half-float texture filtering. Core from OpenGL ES 3.0 and
-        /// desktop GL 3.0 onward; on the ES 2.0 API generation it needs an extension that this
-        /// renderer does not rely on, so it is reported false there.
+        /// desktop GL 3.0 onward, so every profile this renderer serves reports true.
         [[nodiscard]] bool SupportsHalfFloatTextureLinearFilteringEXT() const override;
 
         /**
@@ -2284,10 +2284,6 @@ namespace CNA::Internal::Renderers::EasyGL
          * `GraphicsDevice::applySamplerStatesToRenderer` follows it with this call before every
          * draw, so the real W mode is what stands.
          *
-         * OpenGL ES 2.0 / WebGL 1 have neither sampler objects nor `GL_TEXTURE_WRAP_R` (they have
-         * no volume textures at all), so the axis stays unrepresentable there rather than
-         * approximated -- see docs/sampler-state-support.md.
-         *
          * @param slot Sampler slot.
          * @param addressW Raw `TextureAddressMode` ordinal for W.
          */
@@ -2392,8 +2388,8 @@ namespace CNA::Internal::Renderers::EasyGL
     /**
      * @brief Creates an EasyGL renderer for an explicit GL profile.
      *
-     * plans/plan_runtimerenderer.md P11: each of the five public GL identities this family serves reaches
-     * this with its own profile, which is what lets all five be compiled into one binary.
+     * plans/plan_runtimerenderer.md P11: each of the three public GL identities this family serves
+     * reaches this with its own profile, which is what lets all three be compiled into one binary.
      *
      * @param args Construction arguments.
      * @param profile The GL profile to create the context and shaders for.

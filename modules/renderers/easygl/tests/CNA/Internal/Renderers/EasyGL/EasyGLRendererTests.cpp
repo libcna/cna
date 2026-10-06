@@ -4,10 +4,8 @@
 
 // EasyGL is a FAMILY, not a public identity: cmake emits one PRESENT_ macro per PUBLIC IDENTITY, so
 // CNA_RENDERER_PRESENT_EASYGL is never defined and a guard naming it is dead (see 0bb99795e).
-#if defined(CNA_RENDERER_EASYGL) \
-    || defined(CNA_RENDERER_PRESENT_OPENGLES2) || defined(CNA_RENDERER_PRESENT_OPENGLES3) \
-    || defined(CNA_RENDERER_PRESENT_OPENGL33) \
-    || defined(CNA_RENDERER_PRESENT_WEBGL1) || defined(CNA_RENDERER_PRESENT_WEBGL2)
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_PRESENT_OPENGLES3) \
+    || defined(CNA_RENDERER_PRESENT_OPENGL33) || defined(CNA_RENDERER_PRESENT_WEBGL2)
 // plans/plan_runtimerenderer.md RTR-P9-9: PRESENT_, not the identity macro. This suite is
 // device-free policy coverage for its own renderer, so it is worth compiling and running
 // whenever that renderer is COMPILED IN -- in a multi-renderer build it need not be the
@@ -16,7 +14,7 @@
 // (CNA_RENDERER_IDENTITIES). Naming the family here made the guard dead, so this suite still
 // compiled only for the default renderer: exactly the gap RTR-P9-9 existed to close, reintroduced
 // by the fix for it. Verified against a real multi build, whose build.ninja defines PRESENT_ only
-// for the identities in the set. The five public identities this family serves are named instead.
+// for the identities in the set. The three public identities this family serves are named instead.
 #include <stdexcept>
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/EasyGL/EasyGLRenderer.hpp"
@@ -33,7 +31,6 @@ using CNA::Internal::Renderers::EasyGL::EasyGLRenderer;
 using CNA::Internal::Renderers::EasyGL::EasyGLSurfaceState;
 using CNA::Internal::Renderers::EasyGL::HasTextureSwizzle;
 using CNA::Internal::Renderers::EasyGL::RequiresBaseVertexPointerRebase;
-using CNA::Internal::Renderers::EasyGL::UsesEs2ApiGeneration;
 using EasyGlProfile = CNA::Internal::Renderers::EasyGL::GlProfile;
 using namespace CNA::Platform;
 
@@ -105,15 +102,6 @@ RendererSurfaceInfo Surface(const WindowId id = 42, const int width = 64,
     return result;
 }
 
-TEST(EasyGLProfile, Es2ApiGenerationIncludesWebGl1)
-{
-    EXPECT_TRUE(UsesEs2ApiGeneration(EasyGlProfile::OpenGLES2));
-    EXPECT_TRUE(UsesEs2ApiGeneration(EasyGlProfile::WebGL1));
-    EXPECT_FALSE(UsesEs2ApiGeneration(EasyGlProfile::OpenGLES3));
-    EXPECT_FALSE(UsesEs2ApiGeneration(EasyGlProfile::OpenGL33));
-    EXPECT_FALSE(UsesEs2ApiGeneration(EasyGlProfile::WebGL2));
-}
-
 TEST(EasyGLProfile, OnlyDesktopGlAndGles3SwizzleTextures)
 {
     // WebGL 2 rejects GL_TEXTURE_SWIZZLE_* with INVALID_ENUM; setting it for a Single render
@@ -121,15 +109,11 @@ TEST(EasyGLProfile, OnlyDesktopGlAndGles3SwizzleTextures)
     EXPECT_TRUE(HasTextureSwizzle(EasyGlProfile::OpenGL33));
     EXPECT_TRUE(HasTextureSwizzle(EasyGlProfile::OpenGLES3));
     EXPECT_FALSE(HasTextureSwizzle(EasyGlProfile::WebGL2));
-    EXPECT_FALSE(HasTextureSwizzle(EasyGlProfile::WebGL1));
-    EXPECT_FALSE(HasTextureSwizzle(EasyGlProfile::OpenGLES2));
 }
 
 TEST(EasyGLProfile, BaseVertexEntryPointIsUsedOnlyByDesktopCore)
 {
-    EXPECT_TRUE(RequiresBaseVertexPointerRebase(EasyGlProfile::OpenGLES2));
     EXPECT_TRUE(RequiresBaseVertexPointerRebase(EasyGlProfile::OpenGLES3));
-    EXPECT_TRUE(RequiresBaseVertexPointerRebase(EasyGlProfile::WebGL1));
     EXPECT_TRUE(RequiresBaseVertexPointerRebase(EasyGlProfile::WebGL2));
     EXPECT_FALSE(RequiresBaseVertexPointerRebase(EasyGlProfile::OpenGL33));
 }
@@ -179,10 +163,6 @@ TEST(EasyGLRendererConstructor, RequestsTheSelectedProfileBeforeContextCreation)
     EXPECT_EQ(context.requested.majorVersion, 3);
     EXPECT_EQ(context.requested.minorVersion, 3);
     EXPECT_EQ(context.requested.profile, GlProfile::Core);
-#elif defined(CNA_GL_PROFILE_WEBGL1) || defined(CNA_GL_PROFILE_OPENGLES2)
-    EXPECT_EQ(context.requested.majorVersion, 2);
-    EXPECT_EQ(context.requested.minorVersion, 0);
-    EXPECT_EQ(context.requested.profile, GlProfile::Es);
 #else
     EXPECT_EQ(context.requested.majorVersion, 3);
     EXPECT_EQ(context.requested.minorVersion, 0);

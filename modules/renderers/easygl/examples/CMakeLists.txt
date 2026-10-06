@@ -32,8 +32,8 @@ include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
 # CNA_BUILD_EXAMPLES=ON, unlike every other renderer's test block. Preserved verbatim here as its
 # own self-contained condition rather than silently dropped during the file split.
 # plans/plan_glbackends.md GLB-6: widened to the non-Emscripten public GL profiles
-# (OPENGLES2/OPENGLES3/OPENGL33) -- WEBGL1/WEBGL2 are already excluded by the NOT EMSCRIPTEN
-# guard below, matching their Emscripten-only gate in RendererSelection.cmake.
+# (OPENGLES3/OPENGL33) -- WEBGL2 is already excluded by the NOT EMSCRIPTEN guard below, matching
+# its Emscripten-only gate in RendererSelection.cmake.
 #
 # plans/plan_vulkan_parity.md VKPAR-0016: the GL profile must be the build's DEFAULT renderer, not
 # merely one of CNA_GRAPHICS_RENDERERS. These tests assert EasyGL's contracts but run whatever
@@ -44,7 +44,7 @@ include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
 # executables, 36 GB, every one of which ran Vulkan at runtime while asserting EasyGL, and all of
 # which relinked on every Vulkan renderer edit. Same rule as the shader_effect_reflection and
 # headless gates (VKPAR-0003): a block of tests that runs against the default asks the default.
-set(_cna_easygl_default_profiles OPENGLES2 OPENGLES3 OPENGL33)
+set(_cna_easygl_default_profiles OPENGLES3 OPENGL33)
 if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
    AND _cna_default_renderer_identity IN_LIST _cna_easygl_default_profiles)
 
@@ -423,16 +423,10 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 337: RenderTarget2D MSAA resolve genuinely anti-aliases (not just solid-fill safe)
-        # OPENGLES2 (docs/opengles2-renderer.md): this test exists to exercise an ES 3.0-level
-        # feature the profile truthfully refuses (SupportsCapability answers false), so it is not
-        # registered there -- the refusal contract itself is covered by the shared capability and
-        # lifecycle tests.
-        if(NOT CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2")
-            cna_easygl_test(cna_test_easygl_rendertarget2d_msaa
-                            easygl_rendertarget2d_msaa_test.cpp)
-            cna_register_renderer_test(NAME EasyGL_RenderTarget2D_MsaaResolve COMMAND cna_test_easygl_rendertarget2d_msaa
-                TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-        endif()
+        cna_easygl_test(cna_test_easygl_rendertarget2d_msaa
+                        easygl_rendertarget2d_msaa_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_RenderTarget2D_MsaaResolve COMMAND cna_test_easygl_rendertarget2d_msaa
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 338: SetRenderTarget(nullptr) resets Viewport/ScissorRectangle to the backbuffer
         cna_easygl_test(cna_test_easygl_rendertarget_viewport_scissor_reset
@@ -471,28 +465,16 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 445: Pixel/query test -- fully visible quad returns a positive occlusion-query pixel count.
-        # OPENGLES2 (docs/opengles2-renderer.md): this test exists to exercise an ES 3.0-level
-        # feature the profile truthfully refuses (SupportsCapability answers false), so it is not
-        # registered there -- the refusal contract itself is covered by the shared capability and
-        # lifecycle tests.
-        if(NOT CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2")
-            cna_easygl_test(cna_test_easygl_occlusion_query_visible_quad
-                            easygl_occlusion_query_visible_quad_test.cpp)
-            cna_register_renderer_test(NAME EasyGL_OcclusionQuery_VisibleQuad COMMAND cna_test_easygl_occlusion_query_visible_quad
-                TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-        endif()
+        cna_easygl_test(cna_test_easygl_occlusion_query_visible_quad
+                        easygl_occlusion_query_visible_quad_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_OcclusionQuery_VisibleQuad COMMAND cna_test_easygl_occlusion_query_visible_quad
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 446: Pixel/query test -- fully occluded quad returns a zero occlusion-query pixel count.
-        # OPENGLES2 (docs/opengles2-renderer.md): this test exists to exercise an ES 3.0-level
-        # feature the profile truthfully refuses (SupportsCapability answers false), so it is not
-        # registered there -- the refusal contract itself is covered by the shared capability and
-        # lifecycle tests.
-        if(NOT CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2")
-            cna_easygl_test(cna_test_easygl_occlusion_query_occluded_quad
-                            easygl_occlusion_query_occluded_quad_test.cpp)
-            cna_register_renderer_test(NAME EasyGL_OcclusionQuery_OccludedQuad COMMAND cna_test_easygl_occlusion_query_occluded_quad
-                TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-        endif()
+        cna_easygl_test(cna_test_easygl_occlusion_query_occluded_quad
+                        easygl_occlusion_query_occluded_quad_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_OcclusionQuery_OccludedQuad COMMAND cna_test_easygl_occlusion_query_occluded_quad
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 122: AlphaTestEffect GPU alpha cutout + pixel readback
         cna_easygl_test(cna_test_alpha_test_integration
@@ -709,8 +691,8 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         #
         # plans/plan_vulkan_parity.md VKPAR-0003, the RTR-P9-13 rule this file's own header states:
         # this TU names itself from the PROJECT-WIDE CNA_RENDERER_<X> macro -- which is defined for
-        # the build's DEFAULT renderer only -- and #errors for anything but EasyGL, DirectX11 or
-        # DirectX12. The CNA_GRAPHICS_RENDERER this block guards on is not that: modules/renderers/
+        # the build's DEFAULT renderer only -- and #errors for anything but EasyGL or DirectX11. The
+        # CNA_GRAPHICS_RENDERER this block guards on is not that: modules/renderers/
         # CMakeLists.txt re-points it to the identity of the family being ENTERED, so a
         # multi-renderer build with -DCNA_GRAPHICS_RENDERERS="VULKAN;OPENGL33" enters this block
         # for OPENGL33 while the macro says VULKAN, and the target exists but cannot compile.
@@ -782,16 +764,10 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # ShaderEffect::SetTexture(int, Texture3D&)/IEffectRenderer::BindTexture3D() let a custom
         # shader sample a real sampler3D uniform -- same shape as Task 1081's TextureCube proof
         # above, adapted to a volume texture.
-        # OPENGLES2 (docs/opengles2-renderer.md): this test exists to exercise an ES 3.0-level
-        # feature the profile truthfully refuses (SupportsCapability answers false), so it is not
-        # registered there -- the refusal contract itself is covered by the shared capability and
-        # lifecycle tests.
-        if(NOT CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2")
-            cna_easygl_test(cna_test_easygl_shadereffect_texture3d
-                            easygl_shadereffect_texture3d_test.cpp)
-            cna_register_renderer_test(NAME EasyGL_ShaderEffect_Texture3D COMMAND cna_test_easygl_shadereffect_texture3d
-                TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-        endif()
+        cna_easygl_test(cna_test_easygl_shadereffect_texture3d
+                        easygl_shadereffect_texture3d_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_ShaderEffect_Texture3D COMMAND cna_test_easygl_shadereffect_texture3d
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947: ShipGame's own NormalMapping.fx (3 techniques: PlainMapping/NormalMapping/
         # ViewMapping) -- 3 of ShipGame's 4 distinct custom shaders now ported. Uses Task 1081's
@@ -811,16 +787,10 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # Task 947 (final sample) + Task 1082: InstancedModel.fx's HardwareInstancing technique --
         # proves real GPU hardware instancing (glVertexAttribDivisor-based per-instance vertex
         # stream through a custom ShaderEffect), completing Task 947 at 13/13.
-        # OPENGLES2 (docs/opengles2-renderer.md): this test exists to exercise an ES 3.0-level
-        # feature the profile truthfully refuses (SupportsCapability answers false), so it is not
-        # registered there -- the refusal contract itself is covered by the shared capability and
-        # lifecycle tests.
-        if(NOT CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2")
-            cna_easygl_test(cna_test_easygl_instancedmodel_shader
-                            easygl_instancedmodel_shader_test.cpp)
-            cna_register_renderer_test(NAME EasyGL_InstancedModel_Shader COMMAND cna_test_easygl_instancedmodel_shader
-                TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-        endif()
+        cna_easygl_test(cna_test_easygl_instancedmodel_shader
+                        easygl_instancedmodel_shader_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_InstancedModel_Shader COMMAND cna_test_easygl_instancedmodel_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 133: DualTextureEffect — magenta×yellow→red pixel readback
         cna_easygl_test(cna_test_easygl_dual_texture
@@ -1129,16 +1099,10 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 145: MRT — SetRenderTargets({rt0,rt1}), draw green to attachment0, verify left=green right=blue
-        # OPENGLES2 (docs/opengles2-renderer.md): this test exists to exercise an ES 3.0-level
-        # feature the profile truthfully refuses (SupportsCapability answers false), so it is not
-        # registered there -- the refusal contract itself is covered by the shared capability and
-        # lifecycle tests.
-        if(NOT CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2")
-            cna_easygl_test(cna_test_easygl_mrt
-                            easygl_mrt_test.cpp)
-            cna_register_renderer_test(NAME EasyGL_MRT_TwoAttachments COMMAND cna_test_easygl_mrt
-                TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-        endif()
+        cna_easygl_test(cna_test_easygl_mrt
+                        easygl_mrt_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_MRT_TwoAttachments COMMAND cna_test_easygl_mrt
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 146: MSAA 4× — multisampled renderbuffer + resolve on Present
         cna_easygl_test(cna_test_easygl_msaa
@@ -1293,52 +1257,28 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 173: Texture3D z-slice SetData/GetData round-trip
-        # OPENGLES2 (docs/opengles2-renderer.md): this test exists to exercise an ES 3.0-level
-        # feature the profile truthfully refuses (SupportsCapability answers false), so it is not
-        # registered there -- the refusal contract itself is covered by the shared capability and
-        # lifecycle tests.
-        if(NOT CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2")
-            cna_easygl_test(cna_test_easygl_texture3d_slices
-                            easygl_texture3d_slices_test.cpp)
-            cna_register_renderer_test(NAME EasyGL_Texture3D_Slices_RoundTrip COMMAND cna_test_easygl_texture3d_slices
-                TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-        endif()
+        cna_easygl_test(cna_test_easygl_texture3d_slices
+                        easygl_texture3d_slices_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_Texture3D_Slices_RoundTrip COMMAND cna_test_easygl_texture3d_slices
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 862: Texture3D mip-level SetData/GetData round-trip
-        # OPENGLES2 (docs/opengles2-renderer.md): this test exists to exercise an ES 3.0-level
-        # feature the profile truthfully refuses (SupportsCapability answers false), so it is not
-        # registered there -- the refusal contract itself is covered by the shared capability and
-        # lifecycle tests.
-        if(NOT CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2")
-            cna_easygl_test(cna_test_easygl_texture3d_mip
-                            easygl_texture3d_mip_test.cpp)
-            cna_register_renderer_test(NAME EasyGL_Texture3D_Mip_RoundTrip COMMAND cna_test_easygl_texture3d_mip
-                TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-        endif()
+        cna_easygl_test(cna_test_easygl_texture3d_mip
+                        easygl_texture3d_mip_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_Texture3D_Mip_RoundTrip COMMAND cna_test_easygl_texture3d_mip
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 273: Texture3D partial box (x/y/z region) SetData/GetData round-trip
-        # OPENGLES2 (docs/opengles2-renderer.md): this test exists to exercise an ES 3.0-level
-        # feature the profile truthfully refuses (SupportsCapability answers false), so it is not
-        # registered there -- the refusal contract itself is covered by the shared capability and
-        # lifecycle tests.
-        if(NOT CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2")
-            cna_easygl_test(cna_test_easygl_texture3d_partial_box
-                            easygl_texture3d_partial_box_test.cpp)
-            cna_register_renderer_test(NAME EasyGL_Texture3D_PartialBox_RoundTrip COMMAND cna_test_easygl_texture3d_partial_box
-                TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-        endif()
+        cna_easygl_test(cna_test_easygl_texture3d_partial_box
+                        easygl_texture3d_partial_box_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_Texture3D_PartialBox_RoundTrip COMMAND cna_test_easygl_texture3d_partial_box
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 274: Texture3D partial box (x/y/z region) GetData readback
-        # OPENGLES2 (docs/opengles2-renderer.md): this test exists to exercise an ES 3.0-level
-        # feature the profile truthfully refuses (SupportsCapability answers false), so it is not
-        # registered there -- the refusal contract itself is covered by the shared capability and
-        # lifecycle tests.
-        if(NOT CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2")
-            cna_easygl_test(cna_test_easygl_texture3d_partial_box_readback
-                            easygl_texture3d_partial_box_readback_test.cpp)
-            cna_register_renderer_test(NAME EasyGL_Texture3D_PartialBox_Readback COMMAND cna_test_easygl_texture3d_partial_box_readback
-                TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-        endif()
+        cna_easygl_test(cna_test_easygl_texture3d_partial_box_readback
+                        easygl_texture3d_partial_box_readback_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_Texture3D_PartialBox_Readback COMMAND cna_test_easygl_texture3d_partial_box_readback
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 176: SurfaceFormat validation — unsupported formats throw
         cna_easygl_test(cna_test_easygl_surface_format_throws
@@ -2506,37 +2446,25 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # REMED-GFX-164: active-target MSAA resolve and exact public alpha delivery.  This is the
         # ticket's dedicated fixture; it keeps the bound-vs-unbound stage discriminating and also
         # covers raw RGBA transfer, target sampling, guarded rectangles, repetition and teardown.
-        # OPENGLES2 (docs/opengles2-renderer.md): this test exists to exercise an ES 3.0-level
-        # feature the profile truthfully refuses (SupportsCapability answers false), so it is not
-        # registered there -- the refusal contract itself is covered by the shared capability and
-        # lifecycle tests.
-        if(NOT CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2")
-            cna_easygl_test(cna_test_easygl_gfx164_bound_msaa_alpha
-                easygl_gfx164_bound_msaa_alpha_test.cpp)
-            cna_register_renderer_test(NAME EasyGL_GFX164_BoundMsaaAlpha
-                COMMAND cna_test_easygl_gfx164_bound_msaa_alpha
-                TIMEOUT 900 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_easygl_test(cna_test_easygl_gfx164_bound_msaa_alpha
+            easygl_gfx164_bound_msaa_alpha_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_GFX164_BoundMsaaAlpha
+            COMMAND cna_test_easygl_gfx164_bound_msaa_alpha
+            TIMEOUT 900 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-            cna_easygl_test(cna_test_easygl_active_msaa_readback
-                ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_active_msaa_readback_test.cpp)
-            cna_register_renderer_test(NAME EasyGL_RenderTarget_ActiveMsaaReadback
-                COMMAND cna_test_easygl_active_msaa_readback
-                TIMEOUT 900 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-        endif()
+        cna_easygl_test(cna_test_easygl_active_msaa_readback
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_active_msaa_readback_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_RenderTarget_ActiveMsaaReadback
+            COMMAND cna_test_easygl_active_msaa_readback
+            TIMEOUT 900 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # REMED-GFX-186 cross-renderer control: the same PUBLIC generated-mip readback contract on this
         # renderer. The SIGSEGV was SDL_GPU-only and only SDL_GPU production changed; running the
         # identical fixture here is what makes that claim falsifiable rather than asserted.
-        # OPENGLES2 (docs/opengles2-renderer.md): this test exists to exercise an ES 3.0-level
-        # feature the profile truthfully refuses (SupportsCapability answers false), so it is not
-        # registered there -- the refusal contract itself is covered by the shared capability and
-        # lifecycle tests.
-        if(NOT CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2")
-            cna_easygl_test(cna_test_easygl_msaa_mip_readback
-                ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_msaa_mip_readback_test.cpp)
-            cna_register_renderer_test(NAME EasyGL_MsaaMipReadback COMMAND cna_test_easygl_msaa_mip_readback
-                TIMEOUT 1200 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-        endif()
+        cna_easygl_test(cna_test_easygl_msaa_mip_readback
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_msaa_mip_readback_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_MsaaMipReadback COMMAND cna_test_easygl_msaa_mip_readback
+            TIMEOUT 1200 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # REMED-GFX-189 cross-renderer control: the same PUBLIC invalid-mip-level contract on this
         # renderer. The fabrication was Vulkan-only and only Vulkan production changed; running the
@@ -2662,16 +2590,10 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # and volume GetData paths converted their own zero-initialized scratch buffer for the caller
         # regardless of whether the renderer read anything back, so an unimplemented readback returned
         # a complete, uniformly transparent-black face/volume instead of rejecting the request.
-        # OPENGLES2 (docs/opengles2-renderer.md): this test exists to exercise an ES 3.0-level
-        # feature the profile truthfully refuses (SupportsCapability answers false), so it is not
-        # registered there -- the refusal contract itself is covered by the shared capability and
-        # lifecycle tests.
-        if(NOT CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2")
-            cna_easygl_test(cna_test_easygl_cube_volume_getdata_contract
-                            ${CNA_GRAPHICS_EXAMPLES_DIR}/texturecube_texture3d_getdata_contract_test.cpp)
-            cna_register_renderer_test(NAME EasyGL_CubeVolume_GetDataContract COMMAND cna_test_easygl_cube_volume_getdata_contract
-                TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-        endif()
+        cna_easygl_test(cna_test_easygl_cube_volume_getdata_contract
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/texturecube_texture3d_getdata_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_CubeVolume_GetDataContract COMMAND cna_test_easygl_cube_volume_getdata_contract
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # REMED-GFX-134: `RenderTargetCube::GetData` must return the face that was really rendered or
         # reject the request deterministically. REMED-GFX-130 made the reporting honest but left the
@@ -2701,16 +2623,10 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # a small partial update -- with no readback, Present or flush in between -- and reads the whole of
         # A: the resolved single-sample layer still held the correct A, which is why a full redraw and an
         # immediate read both passed before this.
-        # OPENGLES2 (docs/opengles2-renderer.md): this test exists to exercise an ES 3.0-level
-        # feature the profile truthfully refuses (SupportsCapability answers false), so it is not
-        # registered there -- the refusal contract itself is covered by the shared capability and
-        # lifecycle tests.
-        if(NOT CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2")
-            cna_easygl_test(cna_test_easygl_rendertargetcube_msaa_face
-                            ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertargetcube_msaa_face_test.cpp)
-            cna_register_renderer_test(NAME EasyGL_RenderTargetCube_MsaaFace COMMAND cna_test_easygl_rendertargetcube_msaa_face
-                TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-        endif()
+        cna_easygl_test(cna_test_easygl_rendertargetcube_msaa_face
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertargetcube_msaa_face_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_RenderTargetCube_MsaaFace COMMAND cna_test_easygl_rendertargetcube_msaa_face
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # REMED-GFX-142: RenderTargetUsage's DEPTH and STENCIL half. FNA3D's own header documents
         # `preserveTargetContents` as storing the "color/depth/stencil" contents, and FNA's DiscardContents
@@ -2777,16 +2693,10 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # REMED-GFX-135: the WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
         # kept the pre-REMED-GFX-127 shape -- a `void` renderer method behind `if (renderer_)` -- so an
         # upload that stored nothing, or only part of the requested region, still returned normally.
-        # OPENGLES2 (docs/opengles2-renderer.md): this test exists to exercise an ES 3.0-level
-        # feature the profile truthfully refuses (SupportsCapability answers false), so it is not
-        # registered there -- the refusal contract itself is covered by the shared capability and
-        # lifecycle tests.
-        if(NOT CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2")
-            cna_easygl_test(cna_test_easygl_cube_volume_setdata_contract
-                            ${CNA_GRAPHICS_EXAMPLES_DIR}/texturecube_texture3d_setdata_contract_test.cpp)
-            cna_register_renderer_test(NAME EasyGL_CubeVolume_SetDataContract COMMAND cna_test_easygl_cube_volume_setdata_contract
-                TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-        endif()
+        cna_easygl_test(cna_test_easygl_cube_volume_setdata_contract
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/texturecube_texture3d_setdata_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_CubeVolume_SetDataContract COMMAND cna_test_easygl_cube_volume_setdata_contract
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
 
         # plans/plan_webgpu.md WEBGPU-207: the shared cross-renderer behavioural parity fixtures.

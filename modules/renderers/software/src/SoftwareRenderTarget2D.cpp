@@ -284,8 +284,8 @@ namespace CNA::Internal::Renderers::Software
                 destination.resize(static_cast<std::size_t>(destinationWidth) *
                                    static_cast<std::size_t>(destinationHeight) * 4u);
 
-                // Match the CPU box-filter convention used by the D3D12 render-target renderer: a
-                // 2x2 average with the second source coordinate clamped for odd dimensions.
+                // CPU box filter: a 2x2 average with the second source coordinate clamped for odd
+                // dimensions.
                 for (int y = 0; y < destinationHeight; ++y)
                 {
                     const int sy0 = std::min(sourceHeight - 1, y * 2);

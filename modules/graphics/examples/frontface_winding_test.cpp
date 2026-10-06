@@ -153,11 +153,6 @@ namespace
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
     constexpr const char* kRendererName = "DIRECTX11";
-#elif defined(CNA_RENDERER_DIRECTX12)
-    constexpr bool kRasterizes = true;
-    constexpr bool kReadsBackbuffer = true;
-    constexpr bool kDraws3D = true;
-    constexpr const char* kRendererName = "DIRECTX12";
 #else
 #error "REMED-GFX-160: this renderer has no declared winding contract."
 #endif

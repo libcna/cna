@@ -157,12 +157,6 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "DIRECTX11";
-#elif defined(CNA_RENDERER_DIRECTX12)
-    constexpr bool kRasterizes = true;
-    constexpr const char* kRendererName = "DIRECTX12";
-#elif defined(CNA_RENDERER_CANVAS)
-    constexpr bool kRasterizes = true;
-    constexpr const char* kRendererName = "CANVAS";
 #else
 #error "REMED-GFX-158: this renderer has no declared first-use contract."
 #endif

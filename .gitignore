@@ -23,8 +23,6 @@ cmake-build-headless/*
 cmake-build-software/*
 cmake-build-stub/*
 cmake-build-d3d11/*
-cmake-build-d3d12/*
-cmake-build-canvas/*
 cmake-build-ascii/*
 cmake-build-d3d9/*
 cmake-build-sdlgpu/*
@@ -46,10 +44,6 @@ cmake-build-tests/*
 cmake-build-ubsan/*
 spikes/d3d11-vsync-spike/*.exe
 spikes/d3d11-vsync-spike/*.obj
-spikes/d3d12-warp-spike/*.exe
-spikes/d3d12-warp-spike/*.obj
-spikes/d3d12-warp-spike/*.pdb
-spikes/d3d12-warp-spike/*.ilk
 spikes/mingw-cnaext-spike/*.exe
 spikes/mingw-cnaext-spike/*.o
 __pycache__/
@@ -60,7 +54,7 @@ __pycache__/
 tools/fna-reference/bin/
 tools/fna-reference/obj/
 
-# DXVK shader/pipeline state cache, written next to wherever a D3D9/D3D11/D3D12 test .exe was
+# DXVK shader/pipeline state cache, written next to wherever a D3D9/D3D11 test .exe was
 # invoked from (e.g. running a CTest binary directly from the repo root) -- runtime artifact, not
 # source.
 *.dxvk-cache

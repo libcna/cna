@@ -155,8 +155,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// plans/plan_runtimerenderer.md RTR-P9-5: the same set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool MultiStreamOracle()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan,
-                           DirectX9, DirectX11, DirectX12, SdlGpu, Software);
+    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11,
+                           SdlGpu, Software);
 }
 
 // The renderers whose instanced path was corrected to consume VertexBufferBinding.VertexOffset AND
@@ -175,8 +175,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// plans/plan_runtimerenderer.md RTR-P9-5: the same set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool BindingOffsetOracle()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX11, DirectX12,
-                           Vulkan, WebGPU, SdlGpu, Software);
+    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, DirectX11, Vulkan, WebGPU, SdlGpu,
+                           Software);
 }
 
 namespace
@@ -697,9 +697,8 @@ namespace
         /// reason the multi-stream skip is a macro). Hardware instancing is this whole file's
         /// subject and needs BOTH a 3D pipeline and an instancing path, so both capabilities
         /// are gated here: a renderer with no 3D pipeline at all (e.g. OPENVG) and a renderer
-        /// whose profile reports GraphicsCapability::Instancing = false (e.g. OPENGLES2 -- core
-        /// OpenGL ES 2.0 has no glDrawElementsInstanced/glVertexAttribDivisor, see
-        /// docs/opengles2-renderer.md) each skip every leg here up front.
+        /// whose profile reports GraphicsCapability::Instancing = false each skip every leg here
+        /// up front.
         void SetUp() override
         {
             device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
@@ -2246,8 +2245,7 @@ TEST_F(InstancedDrawMultiStreamTest, OrdinaryAndInstancedRoutesAgreeOnVertexColo
         << "VertexColorEnabled = true with a bound COLOR0 stream and a white DiffuseColor must "
            "produce the stream's own colour on the ORDINARY route";
 
-    if (CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Vulkan, WebGPU,
-                        DirectX11, DirectX12))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan, WebGPU, DirectX11))
     {
         // EasyGL and bgfx always honoured it; Vulkan and WebGPU were corrected by REMED-GFX-212, which
         // is why the measured-defect arm this leg used to carry for those two is gone. It carried one

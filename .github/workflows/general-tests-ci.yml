@@ -1,6 +1,6 @@
 # REMED-BUILD-004: the general/default CnaTests suite has never once run in any CI workflow this
 # project has had. d3d-windows-ci.yml / devices-tests.yml / input-ci.yml each select a label or
-# --gtest_filter scoped to their own subsystem (D3D9/D3D11/D3D12, the Devices/Sensors suite, the
+# --gtest_filter scoped to their own subsystem (D3D9/D3D11, the Devices/Sensors suite, the
 # `input` label) -- none of them ever runs `ctest` unfiltered. Combined with REMED-BUILD-001 (fixed:
 # gtest_discover_tests(CnaTests) previously had no WORKING_DIRECTORY, so ~220 of these tests failed
 # under ctest even when it WAS invoked), this meant ~220 tests covering Media, audio-tag parsing, the

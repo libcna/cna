@@ -129,9 +129,6 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "DIRECTX11";
-#elif defined(CNA_RENDERER_DIRECTX12)
-    constexpr bool kRasterizes = true;
-    constexpr const char* kRendererName = "DIRECTX12";
 #else
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "UNKNOWN";
@@ -989,11 +986,8 @@ class DescriptorCapacityContractTest : public Game
     // of resources acquired, used, and released together, over and over. 320 textures are created
     // across the rounds, five times D3D12's starting capacity, but only 40 are ever live.
     //
-    // No Present() here on purpose. A public frame boundary is not portable in this fixture's
-    // environment -- the D3D12 renderer has no swap chain under this dev loop (DX-100/DX-102) and
-    // throws from Present -- and the property being measured is reclamation between rounds, which
-    // does not need one. The fence-gated, submission-crossing half of that property is measured
-    // natively instead, in examples/directx12_descriptor_allocator_test.cpp's own frame leg.
+    // No Present() here on purpose: the property being measured is reclamation between rounds,
+    // which does not need a public frame boundary.
 
     void RunK(GraphicsDevice& dev)
     {

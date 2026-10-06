@@ -197,18 +197,6 @@ namespace
     constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
     constexpr const char* kRendererName = "DIRECTX11";
-#elif defined(CNA_RENDERER_DIRECTX12)
-    constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr bool kCubeSupported = true;
-    constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
-    constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
-    constexpr const char* kRendererName = "DIRECTX12";
-#elif defined(CNA_RENDERER_CANVAS)
-    constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr bool kCubeSupported = false;
-    constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
-    constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
-    constexpr const char* kRendererName = "CANVAS";
 #else
 #error "REMED-GFX-131: this renderer has no declared mid-tone colour contract."
 #endif

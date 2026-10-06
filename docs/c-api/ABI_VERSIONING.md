@@ -2,7 +2,20 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.44.0** (`CBIND-155`). No route, constant or structure
+The current experimental ABI is **0.45.0** (`RRC-018`). It **retires four public renderer
+identities** -- `OPENGLES2` (`2`), `WEBGL1` (`5`), `DIRECTX12` (`15`) and `CANVAS` (`17`) -- together
+with the four `CNA_GRAPHICS_RENDERER_*` constants that named them. CNA now has 14 public renderer
+identities (`docs/removed-renderers.md`). `CNA_GRAPHICS_RENDERER_MAXIMUM` stays `43` (`FNA3D`); no
+route, structure, field, capability bit or exported symbol changes, and no surviving identity is
+renumbered. What breaks is a binding that names one of the four removed constants (it no longer
+compiles) or passes one of their integers (every route now refuses it with
+`CNA_RESULT_INVALID_ARGUMENT`). The four values join the permanently reserved set, which is now
+`2`, `5`, `7`, `10`, `15`--`21`, `23`--`30`, `32`--`41` and `44`--`51`; a future identity still takes
+**`52`**.
+
+### Previous ABI 0.44.0
+
+The ABI was **0.44.0** (`CBIND-155`). No route, constant or structure
 changes; one rule does. The activated and deactivated handlers (`cna_game_subscribe`) run inside a
 callback scope, so they can borrow the game's device, and the activation that begins every run
 holds the game thread's context. They were raised as the run began and while a frame pumped window

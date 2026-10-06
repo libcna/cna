@@ -60,9 +60,6 @@ namespace
 #if defined(CNA_RENDERER_DIRECTX11)
     constexpr const char* kRendererName = "D3D11";
     constexpr bool kLodBiasIsRepresentable = true;
-#elif defined(CNA_RENDERER_DIRECTX12)
-    constexpr const char* kRendererName = "D3D12";
-    constexpr bool kLodBiasIsRepresentable = true;
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr const char* kRendererName = "EasyGL";
 #  if defined(CNA_GL_PROFILE_OPENGL33)

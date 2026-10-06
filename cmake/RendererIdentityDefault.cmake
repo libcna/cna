@@ -15,8 +15,8 @@
 # spent working out why an SDL-free configuration stopped being SDL-free when the default moved.
 #
 # plans/plan_glbackends.md: EasyGL is an internal implementation family, not a public renderer
-# name. It is selected publicly via one of 5 GL-profile names -- OPENGLES2/OPENGLES3/OPENGL33
-# (desktop/mobile, non-Emscripten) and WEBGL1/WEBGL2 (Emscripten only). OPENGLES3 on Linux is the
+# name. It is selected publicly via one of 3 GL-profile names -- OPENGLES3/OPENGL33
+# (desktop/mobile, non-Emscripten) and WEBGL2 (Emscripten only). OPENGLES3 on Linux is the
 # default GL-family choice; WEBGL2 is the default under Emscripten. Other platforms default to
 # SDL_RENDERER.
 # =====================================================================================

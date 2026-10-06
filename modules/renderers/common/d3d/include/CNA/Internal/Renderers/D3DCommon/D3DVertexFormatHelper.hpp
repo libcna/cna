@@ -8,7 +8,6 @@
 // project's own stock-effect shader semantics (Phase DIRECTX8).
 
 #include <d3d11.h>
-#include <d3d12.h>
 #include <array>
 #include <cstddef>
 #include <vector>
@@ -50,21 +49,10 @@ namespace CNA::Internal::Renderers::D3DCommon
         const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& elements,
         std::vector<D3D11_INPUT_ELEMENT_DESC>& output);
 
-    /// Translates a caller-provided XNA vertex declaration to D3D12 input elements.
-    /// Returns false if an element carries an invalid format, usage or negative offset/index.
-    bool InputElementsForDeclarationD3D12(
-        const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& elements,
-        std::vector<D3D12_INPUT_ELEMENT_DESC>& output);
-
     /// Translates an explicitly slotted layout to D3D11 input elements.
     bool InputElementsForLayout(
         const std::vector<D3DVertexInputElement>& elements,
         std::vector<D3D11_INPUT_ELEMENT_DESC>& output);
-
-    /// Translates an explicitly slotted layout to D3D12 input elements.
-    bool InputElementsForLayoutD3D12(
-        const std::vector<D3DVertexInputElement>& elements,
-        std::vector<D3D12_INPUT_ELEMENT_DESC>& output);
 
     /// Returns whether the declaration contains the requested semantic and usage index.
     bool DeclarationHasElement(
@@ -94,18 +82,4 @@ namespace CNA::Internal::Renderers::D3DCommon
     ///   68: stride-48 layout above + BLENDWEIGHT0 (R32G32B32A32_FLOAT, 48), BLENDINDICES0
     ///       (R8G8B8A8_UINT, 64)
     const D3D11_INPUT_ELEMENT_DESC* InputElementsForStride(std::size_t strideInBytes, UINT& count);
-
-    /// plans/plan_dx.md Phase DX12 (DX-107): D3D12 counterpart of InputElementsForStride() above, same
-    /// stride-keyed layouts (16/20/24/32/48/52/56/68 -- the last three added by the D3D12 PBR/
-    /// skinned-vertex-color reconciliation follow-up, additive-only: D3D11's own InputElementsForStride()
-    /// already covered them), same byte offsets/semantic names -- D3D11_INPUT_ELEMENT_DESC and
-    /// D3D12_INPUT_ELEMENT_DESC are identical in field shape (verified: same field order/types,
-    /// only the struct/enum names carry D3D11_/D3D12_ prefixes -- D3D11_INPUT_PER_VERTEX_DATA == 0
-    /// == D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, checked against both SDK headers on this
-    /// machine, same "verify, don't assume" discipline design decision 4/DX-12-state already used).
-    /// Unlike D3D11 (DX-32's own ID3D11InputLayout cache), D3D12 has no separate input-layout COM
-    /// object at all -- this array is baked directly into a D3D12_GRAPHICS_PIPELINE_STATE_DESC's
-    /// InputLayout field at PSO-creation time (DX-107), so this function is a pure data lookup, not
-    /// a cache.
-    const D3D12_INPUT_ELEMENT_DESC* InputElementsForStrideD3D12(std::size_t strideInBytes, UINT& count);
 }

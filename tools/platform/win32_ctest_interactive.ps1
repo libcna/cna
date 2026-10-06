@@ -7,12 +7,12 @@
 # CreateSwapChainForHwnd with DXGI_ERROR_NOT_CURRENTLY_AVAILABLE. This wraps ctest in
 # win32_run_interactive.ps1, passes the environment through -Environment (the task does not inherit
 # this session's variables), and reads ctest's JUnit report into one summary
-# (plans/plan_directx12_parity.md DX12-0008).
+# (DX12-0008).
 #
 # Usage (in the guest):
 #   Set-ExecutionPolicy -Scope Process Bypass -Force
-#   & C:\src\cna\tools\platform\win32_ctest_interactive.ps1 -BuildDir C:\cna\build\full-sdl3-d3d12 `
-#       -Label DIRECTX12 -OutDir C:\cna\report\dx12-parity-1 -Environment 'CNA_D3D12_ADAPTER=warp'
+#   & C:\src\cna\tools\platform\win32_ctest_interactive.ps1 -BuildDir C:\cna\build\full-sdl3-d3d11 `
+#       -Label DIRECTX11 -OutDir C:\cna\report\dx11-parity-1
 #
 # Output: <OutDir>\ctest-junit.xml, <OutDir>\ctest.out.txt, <OutDir>\summary.txt and summary.json.
 

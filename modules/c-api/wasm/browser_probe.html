@@ -178,17 +178,12 @@ try {
             rendererResult = cna._cna_graphics_renderer_get_current_type(rendererOut);
             rendererType = cna.HEAPU32[rendererOut >> 2];
         } finally { cna._free(rendererOut); }
-        const expectedWebglVersion = rendererType === 5 ? 1 : (rendererType === 6 ? 2 : 0);
-        const gl = expectedWebglVersion === 1
-            ? canvas.getContext('webgl')
-            : canvas.getContext('webgl2');
+        // CNA_GRAPHICS_RENDERER_WEBGL2 is 6, the one WebGL renderer identity.
+        const gl = rendererType === 6 ? canvas.getContext('webgl2') : null;
         check('the renderer obtains its required WebGL context version',
-              rendererResult === 0 && expectedWebglVersion !== 0 && gl !== null &&
-                  (expectedWebglVersion === 1
-                      ? !(gl instanceof WebGL2RenderingContext)
-                      : gl instanceof WebGL2RenderingContext),
+              rendererResult === 0 && gl !== null && gl instanceof WebGL2RenderingContext,
               gl ? `renderer=${rendererType} ${gl.getParameter(gl.VERSION)}`
-                 : `renderer=${rendererType} no WebGL ${expectedWebglVersion} context`);
+                 : `renderer=${rendererType} no WebGL 2 context`);
         check('every externally requested frame completes exactly once',
               frameResults.length === requestedFrames && frameResults.every((value) => value === 0) &&
                   updates === requestedFrames && draws === requestedFrames && clearFailures === 0,

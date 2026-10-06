@@ -79,10 +79,6 @@ namespace
     constexpr const char* kRendererName = "DIRECTX11";
     constexpr bool kRasterizes = true;
     constexpr bool kBackbufferReadback = true;
-#elif defined(CNA_RENDERER_DIRECTX12)
-    constexpr const char* kRendererName = "DIRECTX12";
-    constexpr bool kRasterizes = true;
-    constexpr bool kBackbufferReadback = true;
 #elif defined(CNA_RENDERER_HEADLESS)
     constexpr const char* kRendererName = "HEADLESS";
     constexpr bool kRasterizes = false;

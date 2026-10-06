@@ -13,7 +13,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 # plans/plan_native_platform_validation.md NPV-0106 used to skip this whole suite without SDL,
 # because its test macro named SDL3::SDL3 unconditionally. No example source here includes SDL; the
 # one SDL use left is common/PixelTestGame.hpp's display probe, which CNA_EXAMPLES_NO_SDL turns off
-# (plans/plan_directx12_parity.md DX12-0005). plans/plan_vulkan_modern_graphics.md VMG-0003: the
+# (DX12-0005). plans/plan_vulkan_modern_graphics.md VMG-0003: the
 # macro below links SDL only where it exists. That once let a CNA_ENABLE_SDL=OFF build run these
 # oracles on CNA's direct X11 and Wayland platforms; those were retired on 2026-10-06, and a
 # windowed Vulkan build now always reaches its window through SDL3.

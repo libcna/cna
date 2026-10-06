@@ -20,7 +20,7 @@
 // "this renderer creates no cube/volume resource at all" into a successful-looking call. Three
 // distinct silent-discard routes are reachable through the public API today:
 //
-//   * NO RESOURCE -- SDL_Renderer, Canvas and DIRECTX3 keep IGraphicsRenderer::CreateTextureCube's
+//   * NO RESOURCE -- SDL_Renderer keeps IGraphicsRenderer::CreateTextureCube's
 //     nullptr default, so `renderer_` is null and the upload is dropped by the `if` itself;
 //   * NO STORAGE -- Headless's cube renderer validates its arguments, records a trace entry and
 //     stores nothing, and RenderTargetCube renderers without an explicit upload override inherit
@@ -188,10 +188,6 @@ namespace
     constexpr Contract kContract{"SDL_RENDERER", false, Support::Unsupported, Support::Unsupported,
                                  false, Support::Unsupported, Support::Unsupported,
                                  Support::Unsupported, false};
-#elif defined(CNA_RENDERER_CANVAS)
-    constexpr Contract kContract{"CANVAS", false, Support::Unsupported, Support::Unsupported,
-                                 false, Support::Unsupported, Support::Unsupported,
-                                 Support::Unsupported, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
     // plans/plan_dx9.md D9-100: GraphicsProfile.Reach does not support volume textures at all, so the
     // Texture3D half of this file needs a HiDef device to have anything to measure.
@@ -200,12 +196,6 @@ namespace
                                  Support::Unsupported, true};
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr Contract kContract{"DIRECTX11", true, Support::Exact, Support::Exact,
-                                 true, Support::Exact, Support::Exact,
-                                 Support::Exact, true};
-#elif defined(CNA_RENDERER_DIRECTX12)
-    // DX-260: D3D12 allocates the complete cube mip chain and supports exact per-level transfers,
-    // matching its Texture3D path and the public TextureCube LevelCount contract.
-    constexpr Contract kContract{"DIRECTX12", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
                                  Support::Exact, true};
 #else

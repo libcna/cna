@@ -133,8 +133,8 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 /// describes the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool OrdinaryBindingOffset()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11,
-                            DirectX12, Software, SdlGpu);
+    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11,
+                            Software, SdlGpu);
 }
 
 // REMED-GFX-113's renderer set: the above, minus the renderers without backbuffer readback.
@@ -142,7 +142,7 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 /// describes the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool OrdinaryBindingOffsetBackbuffer()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, DirectX12,
+    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11,
                             Software);
 }
 
@@ -152,8 +152,8 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 /// the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool OrdinaryBindingOffsetInstancedTransition()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan,
-                           DirectX9, DirectX11, DirectX12, Software);
+    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11,
+                           Software);
 }
 
 // The renderers whose INSTANCED route consumes VertexBufferBinding.VertexOffset; Software joins
@@ -162,8 +162,7 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 /// describes the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool OrdinaryBindingOffsetInstancedOffset()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX11, DirectX12,
-                           Software);
+    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, DirectX11, Software);
 }
 
 namespace
@@ -1268,8 +1267,7 @@ TEST_F(OrdinaryDrawBindingOffsetTest, OrdinaryInstancedOrdinaryTransitionsKeepEa
         GTEST_SKIP() << "this renderer\'s instanced route does not render the geometry";
     RequireOrdinaryRendering();
     // The middle leg of this transition is a hardware-instanced draw -- unavailable on a
-    // renderer profile that reports GraphicsCapability::Instancing = false (e.g. the OPENGLES2
-    // GL profile; core OpenGL ES 2.0 has no instancing entry points). The pure-ordinary legs of
+    // renderer profile that reports GraphicsCapability::Instancing = false. The pure-ordinary legs of
     // this file keep running there; only this mixed-route test skips.
     if (!device.SupportsCapability(GraphicsCapability::Instancing))
         GTEST_SKIP() << "Renderer reports GraphicsCapability::Instancing = false: the instanced "

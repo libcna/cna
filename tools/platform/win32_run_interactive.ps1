@@ -35,7 +35,7 @@
 #
 # -Environment exists because the task runs with the logged-on user's environment, not this
 # session's: a variable set here never reaches the program. Each entry becomes a `set` line in the
-# wrapper, ahead of the program (plans/plan_directx12_parity.md DX12-0006: CNA_D3D12_ADAPTER=warp).
+# wrapper, ahead of the program.
 #
 # stdout and stderr land in <OutDir>\<Name>.out.txt / .err.txt and are echoed here; the exit code of
 # the program becomes the exit code of this script. 124 means it outlived its deadline.
@@ -69,7 +69,7 @@ Remove-Item $stdout, $stderr, $rcFile -Force -ErrorAction SilentlyContinue
 # code and the two streams on the far side, where nothing of this session survives.
 # The line is read by cmd.exe, not by a shell that leaves arguments alone: `& | < > ^ ( )` are operators
 # or escapes outside double quotes (a ctest -R alternation became a pipe and the run ended in 20 s with
-# no report, plans/plan_directx12_parity.md DX12-0030), and a batch file expands `%` even inside quotes,
+# no report, DX12-0030), and a batch file expands `%` even inside quotes,
 # so it is doubled.
 $quoted = ($Arguments | ForEach-Object {
     $argument = $_ -replace '%', '%%'

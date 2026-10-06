@@ -75,8 +75,8 @@ namespace CNA::Internal::Renderers
             "including its alpha. This renderer does not evaluate it yet (plans/plan_gltf.md GLTF-465), so "
             "the draw is refused rather than rendered with the opaque-white identity, which would be "
             "a visibly wrong surface reported as a successful draw. Use a renderer that implements it "
-            "(EasyGL: OPENGLES2/OPENGLES3/OPENGL33/WEBGL1/WEBGL2, SOFTWARE, VULKAN, "
-            "DIRECTX9, DIRECTX11, DIRECTX12, SDL_GPU, WEBGPU), or "
+            "(EasyGL: OPENGLES3/OPENGL33/WEBGL2, SOFTWARE, VULKAN, "
+            "DIRECTX9, DIRECTX11, SDL_GPU, WEBGPU), or "
             "set "
             "VertexColorEnabledEXT=false on the effect to accept "
             "the identity deliberately.");
@@ -114,8 +114,8 @@ namespace CNA::Internal::Renderers
             "metallic-roughness, emissive or occlusion maps. Shading it with the nearest stock "
             "effect would present a visibly different material as a successful draw, so the draw is "
             "refused instead (plans/plan_gltf.md GLTF-477). Use a renderer that implements the model "
-            "(EasyGL: OPENGLES2/OPENGLES3/OPENGL33/WEBGL1/WEBGL2, VULKAN, SDL_GPU, WEBGPU, "
-            "DIRECTX9/11/12), or a reduced one whose "
+            "(EasyGL: OPENGLES3/OPENGL33/WEBGL2, VULKAN, SDL_GPU, WEBGPU, "
+            "DIRECTX9/11), or a reduced one whose "
             "boundary is documented (SOFTWARE).");
     }
 }

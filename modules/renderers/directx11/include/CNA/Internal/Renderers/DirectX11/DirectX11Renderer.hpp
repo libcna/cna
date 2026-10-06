@@ -398,8 +398,7 @@ namespace CNA::Internal::Renderers::DirectX11
         /**
          * @brief Moves every message the debug layer stored since the last drain into the process log.
          *
-         * plans/plan_graphics_shared_cleanup.md GSC-0006: the Direct3D 11 counterpart of
-         * DirectX12Renderer::DrainDebugMessagesEXT, feeding D3DCommon::D3DDebugLayerLog. Runs at
+         * plans/plan_graphics_shared_cleanup.md GSC-0006: feeds D3DCommon::D3DDebugLayerLog. Runs at
          * Present, device loss and teardown; a no-op when the debug layer is not enabled.
          */
         void DrainDebugMessagesEXT();
@@ -927,8 +926,8 @@ namespace CNA::Internal::Renderers::DirectX11
         // The full depth-stencil parameter set currently applied. Tracked field-by-field (not just
         // as the finished ID3D11DepthStencilState above) so SetDepthTestEnabled()/
         // SetDepthWriteEnabled() -- which each carry only ONE bool -- can rebuild the state with
-        // just that field changed instead of silently doing nothing. Mirrors D3D12's own
-        // current*_ tracking. Defaults match XNA's DepthStencilState.Default.
+        // just that field changed instead of silently doing nothing. Defaults match XNA's
+        // DepthStencilState.Default.
         bool dsDepthEnable_ = true;
         bool dsDepthWriteEnable_ = true;
         int dsDepthFunc_ = 3;            // CompareFunction::LessEqual

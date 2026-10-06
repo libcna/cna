@@ -42,7 +42,7 @@ INC=(
 BASE=(-DCNA_CNAEXT -DSHARP_RUNTIME_HAS_NATIVE_INT128=1 -DXNA5 -DCNA_GL_PROFILE_OPENGLES3)
 
 fail=0
-for renderer in DIRECTX11 DIRECTX12 DIRECTX9; do
+for renderer in DIRECTX11 DIRECTX9; do
     echo "== CNA_RENDERER_$renderer =="
     for src in "$REPO"/modules/graphics-ext/src/*.cpp; do
         if ! $LAUNCHER "$CXX" -std=c++23 -fsyntax-only -Wall -Wextra -Wno-unused-parameter \

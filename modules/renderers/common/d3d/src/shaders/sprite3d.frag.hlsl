@@ -7,8 +7,8 @@
 // ramp XNA shows. The mask/fill pair per format is EasyGL's (EasyGLSpriteBatchRenderer::
 // ApplyChannelExpansion); a format that stores four channels takes the identity pair.
 //
-// A separate shader rather than an edit to sprite2d.frag.hlsl: that DXBC is also Direct3D 12's
-// sprite pixel shader, whose root signature binds no pixel-stage constant buffer.
+// A separate shader rather than an edit to sprite2d.frag.hlsl, which binds no pixel-stage
+// constant buffer.
 
 Texture2D    texSampler        : register(t0);
 SamplerState texSamplerSampler : register(s0);

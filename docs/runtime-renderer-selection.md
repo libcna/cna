@@ -25,8 +25,8 @@ linked in and the concrete one is chosen at runtime, before CNA is started.
 |---|---|
 | Descriptor / registry value types | ✅ present (`GraphicsRendererDescriptor`, `GraphicsRendererRegistry`, `GraphicsRendererFallbackRecord`) |
 | Pre-window contract extracted from `GraphicsDevice` | ✅ window flags, `SDL_INIT_VIDEO`, the no-window branch and per-family GL context attributes are all descriptor-driven |
-| Per-family descriptors | ✅ all 14 implementation families / 18 public renderer identities; guarded by `scripts/check_runtime_renderer_discipline.py` |
-| Namespaced factories / generated registry | ✅ all 14 factories namespaced; `cmake/RendererRegistry.cmake` emits the table, and the discipline gate checks every identity reaches it |
+| Per-family descriptors | ✅ all 12 implementation families / 14 public renderer identities; guarded by `scripts/check_runtime_renderer_discipline.py` |
+| Namespaced factories / generated registry | ✅ all 12 factories namespaced; `cmake/RendererRegistry.cmake` emits the table, and the discipline gate checks every identity reaches it |
 | `GraphicsRendererSelection` API | ✅ selection, latch, env var, availability; 20 tests |
 | Fallback chain | ✅ resolution, recording, logging and exhaustion; cross-window-kind recreation verified with `SDL_RENDERER;OPENGLES3;HEADLESS` and `OPENGLES3;VULKAN;SOFTWARE;HEADLESS;STUB` multi builds |
 | Multi-renderer CMake mode | ✅ `CNA_GRAPHICS_RENDERERS`, configure-time combination rules, CI job |
@@ -225,20 +225,20 @@ configure time, not merely to exist.
 
 | Combination | Why it is refused |
 |---|---|
-| Renderers from different **platform** partitions | Windows-only (`DIRECTX9`, `DIRECTX11`, `DIRECTX12`), Emscripten-only (`WEBGL1`, `WEBGL2`, `CANVAS`) and macOS-only (`METAL`) cannot be targeted by one toolchain. |
+| Renderers from different **platform** partitions | Windows-only (`DIRECTX9`, `DIRECTX11`), Emscripten-only (`WEBGL2`) and macOS-only (`METAL`) cannot be targeted by one toolchain. |
 
 ### Verified combinations
 
 | Set | Status |
 |---|---|
 | `HEADLESS;SOFTWARE;STUB` | ✅ builds, full test suite green, all three selectable at runtime, real fallback between them verified |
-| `WEBGL2;WEBGL1;CANVAS` (Emscripten) | ✅ **one wasm bundle carries all three.** In headless Chrome (2026-09-28, emsdk 6.0.9) the renderer benchmark ran to completion under each one preferred through `Module.cnaPreferredRenderer`, each reported as selected at runtime. In a bundle that holds `WEBGL2` the `WEBGL1` profile runs on a WebGL 2 context (`MIN_WEBGL_VERSION=2`). Not automated in CI |
 | `SDL_RENDERER;OPENGLES3;SOFTWARE;HEADLESS;STUB` | ✅ builds, all five selectable at runtime, window recreation across window kinds verified. Its 16 test failures are identical to a single-renderer `SDL_RENDERER` build's — pre-existing renderer boundaries, none caused by multi-renderer mode |
-| `OPENGLES3;OPENGLES2;OPENGL33;SOFTWARE;HEADLESS` | ✅ **6385 passed, 0 failed.** Three EasyGL GL profiles in one binary — `OPENGL33` really does get a desktop core context (`OpenGL 4.6 (Core Profile)`) while the ES profiles get an ES context |
 | `OPENGLES3;VULKAN;SOFTWARE;HEADLESS;STUB` | ✅ **6385 passed, 0 failed.** Two different GPU APIs in one binary, both selectable at runtime, including the `SDL_WINDOW_OPENGL` ↔ `SDL_WINDOW_VULKAN` crossing |
+| `OPENGLES3;OPENGL33;VULKAN;WEBGPU;SDL_RENDERER;SOFTWARE;HEADLESS;STUB` | ✅ builds (`RRC-018`, 2026-10-06). Its full CTest corpus (12,077 tests) and every family's own suite run with that family selected at runtime fail exactly the tests the parent commit fails in the same configuration, apart from load-sensitive cases that pass alone |
+| `WEBGL2;WEBGPU` (Emscripten) | ✅ one wasm bundle carries both. In headless Chrome (2026-10-06, emsdk 6.0.9) the renderer benchmark ran to completion under each, selected at runtime. `WEBGPU` needed `-sASYNCIFY_STACK_SIZE=1048576` at link time; with the default stack it aborts with `unreachable` |
 
-Combinations whose evidence involved a renderer retired on 2026-09-17, 2026-09-27 or 2026-09-28
-are no longer listed: they cannot be configured any more, so the measurement is not reproducible. Those rows are in
+Combinations whose evidence involved a renderer retired on 2026-09-17, 2026-09-27, 2026-09-28 or
+2026-10-06 are no longer listed: they cannot be configured any more, so the measurement is not reproducible. Those rows are in
 git history (`docs/removed-renderers.md` names the renderers).
 
 ### What a multi-renderer build makes newly testable
@@ -367,7 +367,7 @@ Build the bundle with several renderers as usual:
 ```bash
 emcmake cmake -S . -B cmake-build-wasm-multi -G Ninja \
       -DCNA_GRAPHICS_RENDERER=WEBGL2 \
-      -DCNA_GRAPHICS_RENDERERS="WEBGL2;WEBGL1;CANVAS"
+      -DCNA_GRAPHICS_RENDERERS="WEBGL2;WEBGPU"
 ```
 
 Then have the page state its preference on the `Module` object, before the module starts:
@@ -376,7 +376,7 @@ Then have the page state its preference on the `Module` object, before the modul
 <script>
   var Module = {
     // Any public renderer identity, in the CNA_GRAPHICS_RENDERER spelling, case-insensitive.
-    cnaPreferredRenderer: "CANVAS",
+    cnaPreferredRenderer: "WEBGPU",
   };
 </script>
 <script src="cna_app.js"></script>
@@ -387,14 +387,14 @@ A page that wants to decide from feature detection can do so in the same place:
 ```js
 var Module = {
   cnaPreferredRenderer:
-    document.createElement("canvas").getContext("webgl2") ? "WEBGL2" : "CANVAS",
+    "gpu" in navigator ? "WEBGPU" : "WEBGL2",
 };
 ```
 
 There is also a direct export for pages that already drive the module themselves:
 
 ```js
-Module.ccall("cna_set_preferred_renderer", "number", ["string"], ["WEBGL1"]);  // 1 = accepted
+Module.ccall("cna_set_preferred_renderer", "number", ["string"], ["WEBGL2"]);  // 1 = accepted
 ```
 
 ### Where this sits in the resolution order

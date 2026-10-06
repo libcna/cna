@@ -597,8 +597,8 @@ TEST_F(BuiltInVertexLayoutTest, PositionColorObjectsWithTheirOwnStaticDeclaratio
     // exist and reported nothing. It must sit in the test BODY: GTEST_SKIP() returns from the
     // function it appears in, so a skip inside a shared helper marks the test skipped and then
     // lets the caller run on to fail anyway.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                                    WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, DirectX9,
+                                    DirectX11, Software);
     RequireLayoutRendering();
     const SlotLayout layout = BackbufferLayout();
     const std::array<Color, kSlotCount> colors = SlotColors();
@@ -632,8 +632,8 @@ TEST_F(BuiltInVertexLayoutTest, PackedPodControlMatchesTheObjectArrayResult)
     // exist and reported nothing. It must sit in the test BODY: GTEST_SKIP() returns from the
     // function it appears in, so a skip inside a shared helper marks the test skipped and then
     // lets the caller run on to fail anyway.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                                    WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, DirectX9,
+                                    DirectX11, Software);
     RequireLayoutRendering();
     const SlotLayout layout = BackbufferLayout();
     const std::array<Color, kSlotCount> colors = SlotColors();
@@ -666,8 +666,8 @@ TEST_F(BuiltInVertexLayoutTest, InferredAndExplicitDeclarationsAgree)
     // exist and reported nothing. It must sit in the test BODY: GTEST_SKIP() returns from the
     // function it appears in, so a skip inside a shared helper marks the test skipped and then
     // lets the caller run on to fail anyway.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                                    WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, DirectX9,
+                                    DirectX11, Software);
     RequireLayoutRendering();
     const SlotLayout layout = BackbufferLayout();
     const std::array<Color, kSlotCount> colors = SlotColors();
@@ -708,8 +708,8 @@ TEST_F(BuiltInVertexLayoutTest, ExplicitDeclarationIndexed16HonorsBothOffsets)
     // exist and reported nothing. It must sit in the test BODY: GTEST_SKIP() returns from the
     // function it appears in, so a skip inside a shared helper marks the test skipped and then
     // lets the caller run on to fail anyway.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                                    WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, DirectX9,
+                                    DirectX11, Software);
     RequireLayoutRendering();
     const SlotLayout layout = BackbufferLayout();
     const std::array<Color, kSlotCount> colors = SlotColors();
@@ -744,8 +744,8 @@ TEST_F(BuiltInVertexLayoutTest, ExplicitDeclarationIndexed32HonorsBothOffsets)
     // exist and reported nothing. It must sit in the test BODY: GTEST_SKIP() returns from the
     // function it appears in, so a skip inside a shared helper marks the test skipped and then
     // lets the caller run on to fail anyway.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                                    WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, DirectX9,
+                                    DirectX11, Software);
     RequireLayoutRendering();
     const SlotLayout layout = BackbufferLayout();
     const std::array<Color, kSlotCount> colors = SlotColors();
@@ -781,8 +781,8 @@ TEST_F(BuiltInVertexLayoutTest, PositionColorTextureObjectsWithTheirOwnStaticDec
     // exist and reported nothing. It must sit in the test BODY: GTEST_SKIP() returns from the
     // function it appears in, so a skip inside a shared helper marks the test skipped and then
     // lets the caller run on to fail anyway.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                                    WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, DirectX9,
+                                    DirectX11, Software);
     RequireLayoutRendering();
     const SlotLayout layout = BackbufferLayout();
     const std::array<Color, kSlotCount> colors = SlotColors();
@@ -824,8 +824,8 @@ TEST_F(BuiltInVertexLayoutTest, PositionTextureObjectsWithTheirOwnStaticDeclarat
     // exist and reported nothing. It must sit in the test BODY: GTEST_SKIP() returns from the
     // function it appears in, so a skip inside a shared helper marks the test skipped and then
     // lets the caller run on to fail anyway.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                                    WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, DirectX9,
+                                    DirectX11, Software);
     RequireLayoutRendering();
     const SlotLayout layout = BackbufferLayout();
 
@@ -862,8 +862,8 @@ TEST_F(BuiltInVertexLayoutTest, PositionNormalTextureObjectsWithTheirOwnStaticDe
     // exist and reported nothing. It must sit in the test BODY: GTEST_SKIP() returns from the
     // function it appears in, so a skip inside a shared helper marks the test skipped and then
     // lets the caller run on to fail anyway.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                                    WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, DirectX9,
+                                    DirectX11, Software);
     RequireLayoutRendering();
     const SlotLayout layout = BackbufferLayout();
 
@@ -909,8 +909,8 @@ TEST_F(BuiltInVertexLayoutTest, ExplicitDeclarationIndexedRendersEveryTexturedFa
     // exist and reported nothing. It must sit in the test BODY: GTEST_SKIP() returns from the
     // function it appears in, so a skip inside a shared helper marks the test skipped and then
     // lets the caller run on to fail anyway.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                                    WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, DirectX9,
+                                    DirectX11, Software);
     RequireLayoutRendering();
     const SlotLayout layout = BackbufferLayout();
     const std::array<Color, kSlotCount> colors = SlotColors();
@@ -988,8 +988,8 @@ TEST_F(BuiltInVertexLayoutTest, PackedPodControlMatchesTheObjectArrayResultWhenI
     // exist and reported nothing. It must sit in the test BODY: GTEST_SKIP() returns from the
     // function it appears in, so a skip inside a shared helper marks the test skipped and then
     // lets the caller run on to fail anyway.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                                    WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, DirectX9,
+                                    DirectX11, Software);
     RequireLayoutRendering();
     const SlotLayout layout = BackbufferLayout();
     const std::array<Color, kSlotCount> colors = SlotColors();
@@ -1039,8 +1039,8 @@ TEST_F(BuiltInVertexLayoutTest, VertexBufferPathIsUnchangedByTheCorrectedDeclara
     // exist and reported nothing. It must sit in the test BODY: GTEST_SKIP() returns from the
     // function it appears in, so a skip inside a shared helper marks the test skipped and then
     // lets the caller run on to fail anyway.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                                    WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, DirectX9,
+                                    DirectX11, Software);
     RequireLayoutRendering();
     const SlotLayout layout = BackbufferLayout();
     const std::array<Color, kSlotCount> colors = SlotColors();
@@ -1081,8 +1081,8 @@ TEST_F(BuiltInVertexLayoutTest, SdlGpuObjectArrayWithStaticDeclarationRendersInt
     // exist and reported nothing. It must sit in the test BODY: GTEST_SKIP() returns from the
     // function it appears in, so a skip inside a shared helper marks the test skipped and then
     // lets the caller run on to fail anyway.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                                    WebGPU, Vulkan, DirectX9, DirectX11, DirectX12, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, DirectX9,
+                                    DirectX11, Software);
     // plans/plan_runtimerenderer.md RTR-P9-5: SDL_GPU's own render-target oracle.
     CNA_SKIP_IF_RENDERER_IS_NOT(SdlGpu);
     RequireLayoutRendering();

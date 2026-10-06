@@ -7,9 +7,8 @@
 // (not re-derived/guessed), and each buffer's total size is a 16-byte multiple, as D3D11 requires
 // for a constant buffer's ByteWidth.
 //
-// Header-only, no .cpp: these are pure data-layout structs shared (design decision 4) with a
-// future D3D12 consumer, which reads the same DXBC-compiled cbuffer byte layout via a different
-// (root-signature/CBV) binding model -- nothing here depends on the D3D11 API itself.
+// Header-only, no .cpp: these are pure data-layout structs -- nothing here depends on the D3D11
+// API itself.
 
 #include <cstddef>
 
@@ -57,7 +56,7 @@ namespace CNA::Internal::Renderers::D3DCommon
         float FogColor[4];   ///< offset 0: xyz = FogColor, w = reserved padding
         float FogVector[4];  ///< offset 16: CPU-prepared FNA view-space fog vector
         /// WINCLOSE-0026: Direct3D 9 channel expansion of the sampled texture, sample * mask + fill.
-        /// Identity by default, so a renderer that never sets it (DirectX12) samples as before.
+        /// Identity by default, so a draw that never sets it samples as before.
         /// The Texture1 pair is read only by dual_texture3d's second sampler.
         float Texture0ChannelMask[4] = {1.0f, 1.0f, 1.0f, 1.0f}; ///< offset 32
         float Texture0ChannelFill[4] = {0.0f, 0.0f, 0.0f, 0.0f}; ///< offset 48
@@ -95,7 +94,7 @@ namespace CNA::Internal::Renderers::D3DCommon
         float FogColor[4];            ///< offset 224: xyz = FogColor, w = reserved padding
         float FogVector[4];           ///< offset 240: CPU-prepared FNA view-space fog vector
         /// WINCLOSE-0026: Direct3D 9 channel expansion of the sampled texture, sample * mask + fill.
-        /// Identity by default, so a renderer that never sets it (DirectX12) samples as before.
+        /// Identity by default, so a draw that never sets it samples as before.
         float Texture0ChannelMask[4] = {1.0f, 1.0f, 1.0f, 1.0f}; ///< offset 256
         float Texture0ChannelFill[4] = {0.0f, 0.0f, 0.0f, 0.0f}; ///< offset 272
     };
@@ -129,7 +128,7 @@ namespace CNA::Internal::Renderers::D3DCommon
         float FogColor[3];          ///< offset 112
         float VertexColorEnabled;   ///< offset 124: moved here from 96 (only alpha_test_colored3d's VS reads it)
         /// WINCLOSE-0026: Direct3D 9 channel expansion of the sampled texture, sample * mask + fill.
-        /// Identity by default, so a renderer that never sets it (DirectX12) samples as before.
+        /// Identity by default, so a draw that never sets it samples as before.
         float Texture0ChannelMask[4] = {1.0f, 1.0f, 1.0f, 1.0f}; ///< offset 128
         float Texture0ChannelFill[4] = {0.0f, 0.0f, 0.0f, 0.0f}; ///< offset 144
     };
@@ -179,7 +178,7 @@ namespace CNA::Internal::Renderers::D3DCommon
         float Light2Specular[4];       ///< offset 224
         float EmissiveColor[4];        ///< offset 240: REMED-GFX-008 pre-folded (emissive + ambient*diffuse)*alpha
         /// WINCLOSE-0026: Direct3D 9 channel expansion of the sampled texture, sample * mask + fill.
-        /// Identity by default, so a renderer that never sets it (DirectX12) samples as before.
+        /// Identity by default, so a draw that never sets it samples as before.
         float Texture0ChannelMask[4] = {1.0f, 1.0f, 1.0f, 1.0f}; ///< offset 256
         float Texture0ChannelFill[4] = {0.0f, 0.0f, 0.0f, 0.0f}; ///< offset 272
     };
@@ -227,12 +226,12 @@ namespace CNA::Internal::Renderers::D3DCommon
         float Light2Dir[4];          ///< offset 160: xyz + pad
         float Light2Diffuse[4];      ///< offset 176
         /// offset 192: WINCLOSE-0022 Direct3D 9 channel expansion of the environment map sample,
-        /// sample * mask + fill. Identity by default, so a renderer that never sets it (DirectX12)
-        /// samples exactly as before.
+        /// sample * mask + fill. Identity by default, so a draw that never sets it samples exactly
+        /// as before.
         float EnvMapChannelMask[4] = {1.0f, 1.0f, 1.0f, 1.0f};
         float EnvMapChannelFill[4] = {0.0f, 0.0f, 0.0f, 0.0f}; ///< offset 208
         /// WINCLOSE-0026: Direct3D 9 channel expansion of the sampled texture, sample * mask + fill.
-        /// Identity by default, so a renderer that never sets it (DirectX12) samples as before.
+        /// Identity by default, so a draw that never sets it samples as before.
         float Texture0ChannelMask[4] = {1.0f, 1.0f, 1.0f, 1.0f}; ///< offset 224
         float Texture0ChannelFill[4] = {0.0f, 0.0f, 0.0f, 0.0f}; ///< offset 240
     };

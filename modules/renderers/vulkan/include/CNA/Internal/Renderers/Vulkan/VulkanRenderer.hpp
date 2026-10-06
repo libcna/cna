@@ -2528,7 +2528,7 @@ namespace CNA::Internal::Renderers::Vulkan
          * while a face is being PRODUCED and breaks the moment one is RELOADED: a multisample image
          * carries no face identity, so a `PreserveContents` face rebound for a partial update read
          * back whichever face was rendered last -- or, since `GetOrCreateRTRenderPassMsaa` had no
-         * `LOAD` variant at all, the clear colour. Six layers matches what D3D11/D3D12 have always
+         * `LOAD` variant at all, the clear colour. Six layers matches what D3D11 has always
          * allocated. Memory cost is `size * size * samples * 4 * 6` bytes per cube target, paid
          * once at construction; there is no per-bind allocation and no full-face copy.
          *

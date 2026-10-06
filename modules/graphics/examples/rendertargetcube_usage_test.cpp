@@ -142,13 +142,6 @@ namespace
 #elif defined(CNA_RENDERER_SOFTWARE)
     constexpr Contract kContract{"SOFTWARE", true, Support::Exact, true, true,
                                  true, Support::Exact, true, true, false};
-#elif defined(CNA_RENDERER_EASYGL) && defined(CNA_GL_PROFILE_OPENGLES2)
-    // The OPENGLES2 GL profile: identical to the EASYGL contract below except MSAA -- core
-    // OpenGL ES 2.0 has no multisample renderbuffers/blit (docs/opengles2-renderer.md), so a
-    // multisampled cube request degrades to single-sample (applied 0, `msaaCubeTargets` false,
-    // same declaration shape as SKIA's truthful clamp) and `msaaPreserves` is never consulted.
-    constexpr Contract kContract{"EASYGL(OPENGLES2)", true, Support::Exact, true, true,
-                                 false, Support::Exact, false, true, false};
 #elif defined(CNA_RENDERER_EASYGL)
     // `msaaPreserves` was false here, measured: this renderer allocated ONE multisample colour
     // renderbuffer shared by all six faces (the same allocation choice Vulkan and SdlGpu made), so
@@ -187,9 +180,6 @@ namespace
 #elif defined(CNA_RENDERER_SDL_RENDERER)
     constexpr Contract kContract{"SDL_RENDERER", false, Support::Unsupported, false, false,
                                  false, Support::Unsupported, false, true, false};
-#elif defined(CNA_RENDERER_CANVAS)
-    constexpr Contract kContract{"CANVAS", false, Support::Unsupported, false, false,
-                                 false, Support::Unsupported, false, true, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
     // `mipMapCubeTargets` true only in the sense that construction and level-0 rendering work:
     // D3D9RenderTargetCubeRenderer::Recreate() allocates ONE level whatever mipMap asked for
@@ -198,9 +188,6 @@ namespace
                                  false, Support::Exact, false, true, true};
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr Contract kContract{"DIRECTX11", true, Support::Exact, true, true,
-                                 true, Support::Exact, true, true, false};
-#elif defined(CNA_RENDERER_DIRECTX12)
-    constexpr Contract kContract{"DIRECTX12", true, Support::Exact, true, true,
                                  true, Support::Exact, true, true, false};
 #else
 #error "REMED-GFX-136: this renderer has no declared RenderTargetCube usage contract."

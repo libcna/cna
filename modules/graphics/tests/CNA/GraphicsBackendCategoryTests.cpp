@@ -17,8 +17,8 @@ static_assert(getCurrentGraphicsBackendCategory() == getCurrentGraphicsBackendCa
 static_assert(!toStringView(getCurrentGraphicsBackendCategory()).empty());
 constexpr GraphicsBackendCategory kCompileTimeCategory = getCurrentGraphicsBackendCategory();
 constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::Fna3d) + 1;
-static_assert(kPublicRendererCount == 18,
-              "GraphicsRendererType must expose all 18 public renderer identities");
+static_assert(kPublicRendererCount == 14,
+              "GraphicsRendererType must expose all 14 public renderer identities");
 
 TEST(GraphicsBackendCategoryTest, GetCurrentGraphicsBackendCategoryDoesNotThrow)
 {
@@ -44,12 +44,10 @@ namespace
     {
         switch (type)
         {
-            case GraphicsRendererType::OpenGLES2:
             case GraphicsRendererType::OpenGLES3:
             case GraphicsRendererType::OpenGL33:
             case GraphicsRendererType::Vulkan:
             case GraphicsRendererType::DirectX11:
-            case GraphicsRendererType::DirectX12:
             case GraphicsRendererType::DirectX9:
             case GraphicsRendererType::Metal:
                 return GraphicsBackendCategory::Native;
@@ -63,9 +61,7 @@ namespace
             case GraphicsRendererType::Software:
                 return GraphicsBackendCategory::Software;
 
-            case GraphicsRendererType::WebGL1:
             case GraphicsRendererType::WebGL2:
-            case GraphicsRendererType::Canvas:
                 return GraphicsBackendCategory::Web;
 
             case GraphicsRendererType::Headless:

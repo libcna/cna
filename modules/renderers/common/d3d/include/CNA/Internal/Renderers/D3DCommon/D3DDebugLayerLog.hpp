@@ -8,29 +8,12 @@
 
 namespace CNA::Internal::Renderers::D3DCommon
 {
-    /** @brief Which Direct3D debug layer reported a message. */
-    enum class D3DDebugLayerApi
-    {
-        /** @brief ID3D11InfoQueue. */
-        Direct3D11,
-        /** @brief ID3D12InfoQueue. */
-        Direct3D12,
-    };
-
-    /**
-     * @brief One message a Direct3D debug layer stored.
-     *
-     * The severity ordinals of D3D11_MESSAGE_SEVERITY and D3D12_MESSAGE_SEVERITY are identical, and the
-     * id is the API's own D3D11_MESSAGE_ID or D3D12_MESSAGE_ID, so a message is only meaningful together
-     * with its api.
-     */
+    /** @brief One message the Direct3D 11 debug layer (ID3D11InfoQueue) stored. */
     struct D3DDebugLayerMessage
     {
-        /** @brief The debug layer that stored the message. */
-        D3DDebugLayerApi api = D3DDebugLayerApi::Direct3D12;
-        /** @brief 0 corruption, 1 error, 2 warning, 3 info, 4 message. */
+        /** @brief D3D11_MESSAGE_SEVERITY: 0 corruption, 1 error, 2 warning, 3 info, 4 message. */
         int severity = 0;
-        /** @brief D3D11_MESSAGE_ID or D3D12_MESSAGE_ID. */
+        /** @brief D3D11_MESSAGE_ID. */
         int id = 0;
         /** @brief The layer's description text. */
         std::string description;
@@ -48,9 +31,9 @@ namespace CNA::Internal::Renderers::D3DCommon
     };
 
     /**
-     * @brief The one process-wide record of what the Direct3D 11 and 12 debug layers reported.
+     * @brief The one process-wide record of what the Direct3D 11 debug layer reported.
      *
-     * plans/plan_graphics_shared_cleanup.md GSC-0006. Each renderer drains its info queue into this log
+     * plans/plan_graphics_shared_cleanup.md GSC-0006. The renderer drains its info queue into this log
      * (at Present, device loss and teardown) and registers that drain while its device lives, so a test
      * harness can observe every message as it is recorded and force a drain of every live device at the
      * end of a test -- which is what lets a debug-layer error fail the test that caused it rather than be

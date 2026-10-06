@@ -114,8 +114,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// describes the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool InstancedVertexColor()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan,
-                           DirectX9, DirectX11, DirectX12, SdlGpu, Software);
+    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11,
+                           SdlGpu, Software);
 }
 
 // The renderers whose instanced route this file has measured, and which therefore carry a contract
@@ -124,8 +124,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// plans/plan_runtimerenderer.md RTR-P9-5: the measured set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool InstancedVertexColorMeasured()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Vulkan, WebGPU,
-                           DirectX11, DirectX12, SdlGpu, Software);
+    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan, WebGPU, DirectX11, SdlGpu,
+                           Software);
 }
 
 // The renderers whose instanced route was measured obeying the PUBLIC CONTRACT: EasyGL always did,
@@ -147,8 +147,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// plans/plan_runtimerenderer.md RTR-P9-5: the public-contract set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool InstancedVertexColorContract()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Vulkan, WebGPU,
-                           DirectX11, DirectX12, SdlGpu, Software);
+    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan, WebGPU, DirectX11, SdlGpu,
+                           Software);
 }
 
 
@@ -541,9 +541,8 @@ protected:
     /// reason the multi-stream skip is a macro). Hardware instancing is this whole file's
     /// subject and needs BOTH a 3D pipeline and an instancing path, so both capabilities
     /// are gated here: a renderer with no 3D pipeline at all (e.g. OPENVG) and a renderer
-    /// whose profile reports GraphicsCapability::Instancing = false (e.g. OPENGLES2 -- core
-    /// OpenGL ES 2.0 has no glDrawElementsInstanced/glVertexAttribDivisor, see
-    /// docs/opengles2-renderer.md) each skip every leg here up front.
+    /// whose profile reports GraphicsCapability::Instancing = false each skip every leg here up
+    /// front.
     void SetUp() override
     {
         device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);

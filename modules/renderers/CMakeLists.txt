@@ -63,7 +63,7 @@ function(cna_renderer_common_setup target)
     # becomes part of the renderer or framework include contract; every other family is SDL-free.
     target_include_directories(${RENDERER_TARGET} PRIVATE
         "${CNA_SOURCE_DIR}/modules/platform/src")
-    # D3D11's/D3D12's SpriteBatch renderer (plans/plan_dx.md DX-70/DX-71) calls back into
+    # D3D11's SpriteBatch renderer (plans/plan_dx.md DX-70/DX-71) calls back into
     # Microsoft::Xna::Framework::Graphics::Effect::Apply() for SpriteBatch::Begin(effect)'s
     # custom-Effect path -- a genuine, honest circular dependency between the renderer static
     # library and the CNA graphics core (the renderer needs a CNA-defined symbol, while CNA needs
@@ -122,9 +122,9 @@ endforeach()
 # policy headers must stay reachable in every configuration.
 add_subdirectory(metal)
 
-# plans/plan_dx.md design decision 4: D3DCommon shared core, consumed by the directx11 and directx12
-# families only -- DIRECTX9 is confirmed independent (design decision 12).
-if(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
+# plans/plan_dx.md design decision 4: D3DCommon shared core, consumed by the directx11 family
+# only -- DIRECTX9 is confirmed independent (design decision 12).
+if(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
     add_subdirectory(common/d3d)
 endif()
 
@@ -189,27 +189,3 @@ set(CNA_GRAPHICS_RENDERER "${_cna_saved_graphics_renderer}")
 # registered renderer's pre-construction contract can rot unseen between the rare builds that
 # select it (cmake/RendererDescriptorGate.cmake).
 cna_add_renderer_descriptor_gate()
-
-# CANVAS is an Emscripten-only selection, but its implementation-independent contract tests
-# deliberately compile on a native host with EM_JS bodies excluded. Register that opt-in host
-# target here, outside selected-renderer dispatch, so it remains reachable without weakening the
-# renderer's platform gate.
-option(CNA_BUILD_CANVAS_HOST_TESTS
-    "Build native host-side Canvas renderer contract tests" OFF)
-if(CNA_BUILD_TESTS AND CNA_BUILD_CANVAS_HOST_TESTS AND NOT EMSCRIPTEN)
-    add_executable(cna_test_canvas_host
-        ${CMAKE_CURRENT_SOURCE_DIR}/canvas/tests/CNA/Internal/Renderers/Canvas/CanvasRendererTests.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/canvas/src/CanvasRenderer.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/canvas/src/CanvasRenderTargetRenderer.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/canvas/src/CanvasSpriteBatchRenderer.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/canvas/src/CanvasTextureRenderer.cpp)
-    target_include_directories(cna_test_canvas_host PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/canvas/include)
-    target_compile_definitions(cna_test_canvas_host PRIVATE CNA_CANVAS_HOST_TESTS=1)
-    target_link_libraries(cna_test_canvas_host PRIVATE
-        cna_graphics_core cna_core cna_math gtest_main)
-    cna_link_sharp_runtime(cna_test_canvas_host PRIVATE)
-    add_test(NAME CanvasHostContracts COMMAND cna_test_canvas_host)
-    set_tests_properties(CanvasHostContracts PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
-    set_tests_properties(CanvasHostContracts PROPERTIES LABELS "CANVAS;host-only")
-endif()

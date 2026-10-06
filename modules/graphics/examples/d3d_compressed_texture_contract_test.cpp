@@ -18,11 +18,6 @@
 #if defined(CNA_RENDERER_DIRECTX11)
 #include "CNA/Internal/Renderers/DirectX11/D3D11Textures.hpp"
 #include "CNA/Internal/Renderers/DirectX11/DirectX11Renderer.hpp"
-#elif defined(CNA_RENDERER_DIRECTX12)
-#include "CNA/Internal/Renderers/DirectX12/D3D12Texture3D.hpp"
-#include "CNA/Internal/Renderers/DirectX12/D3D12TextureCube.hpp"
-#include "CNA/Internal/Renderers/DirectX12/D3D12Textures.hpp"
-#include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
 #else
 #error This contract is for the DirectX renderer family.
 #endif
@@ -113,29 +108,6 @@ namespace
         UINT support = 0;
         const HRESULT hr = renderer.GetDeviceEXT()->CheckFormatSupport(format, &support);
         return {SUCCEEDED(hr), (support & D3D11_FORMAT_SUPPORT_TEXTURE3D) != 0};
-    }
-#else
-    using ActiveRenderer = CNA::Internal::Renderers::DirectX12::DirectX12Renderer;
-    using NativeTexture2D = CNA::Internal::Renderers::DirectX12::D3D12TextureRenderer;
-    using NativeTextureCube = CNA::Internal::Renderers::DirectX12::D3D12TextureCubeRenderer;
-
-    DXGI_FORMAT NativeFormat(const NativeTexture2D& texture)
-    {
-        return texture.GetResourceEXT()->GetDesc().Format;
-    }
-
-    DXGI_FORMAT NativeFormat(const NativeTextureCube& texture)
-    {
-        return texture.GetResourceEXT()->GetDesc().Format;
-    }
-
-    std::pair<bool, bool> QueryTexture3DSupport(ActiveRenderer& renderer, DXGI_FORMAT format)
-    {
-        D3D12_FEATURE_DATA_FORMAT_SUPPORT support{};
-        support.Format = format;
-        const HRESULT hr = renderer.GetDeviceEXT()->CheckFeatureSupport(
-            D3D12_FEATURE_FORMAT_SUPPORT, &support, sizeof(support));
-        return {SUCCEEDED(hr), (support.Support1 & D3D12_FORMAT_SUPPORT1_TEXTURE3D) != 0};
     }
 #endif
 }

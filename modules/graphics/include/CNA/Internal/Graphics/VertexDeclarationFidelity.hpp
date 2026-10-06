@@ -15,8 +15,8 @@
  * @file
  * @brief REMED-GFX-DECL-GUARD -- the declaration-fidelity safety boundary.
  *
- * REMED-GFX-217 records that seven rasterizing renderers (Vulkan, Software, WebGPU, SDL_GPU, D3D9,
- * D3D11, D3D12) do not translate a `VertexDeclaration` at all: they select a native input layout
+ * REMED-GFX-217 records that the rasterizing renderers then measured (Vulkan, Software, WebGPU,
+ * SDL_GPU, D3D9, D3D11 and the since-retired D3D12) did not translate a `VertexDeclaration` at all: they select a native input layout
  * from a canonical byte-stride table and discard everything else the declaration states. A stride
  * does not determine element composition, so two declarations that share a stride share a native
  * layout, and the one that does not match it is read from the wrong bytes -- accepted, submitted,
@@ -103,7 +103,7 @@ namespace CNA::Internal::Graphics
         /**
          * @brief The renderer refuses the stride itself, before any native work.
          *
-         * Software, WebGPU's ordinary route and D3D9/D3D11/D3D12 all throw on an out-of-table
+         * Software, WebGPU's ordinary route and D3D9/D3D11 all throw on an out-of-table
          * stride today. The guard abstains and leaves that rejection exactly as it is.
          */
         RendererRefusesIt,

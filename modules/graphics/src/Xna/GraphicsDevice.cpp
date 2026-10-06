@@ -1488,7 +1488,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!bound)
             return;
 
-        // plans/plan_directx12_parity.md DX12-0023: RenderTarget2D/RenderTargetCube::Dispose refuse a
+        // DX12-0023: RenderTarget2D/RenderTargetCube::Dispose refuse a
         // bound target, but their destructors cannot, so this is only reached by an object destroyed
         // while bound, and before its backend is released. The renderer is moved to the back buffer
         // now, while the backend still exists: not every renderer detaches a dying backend itself
@@ -3967,7 +3967,7 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         // Runtime opt-in, same effect as the descriptor check above. Only renderers that can
-        // genuinely run without a swap chain support this (D3D12 today) -- see
+        // genuinely run without a swap chain support this (SDL GPU today) -- see
         // PresentationParameters::getHeadlessEXTProperty()'s own doc comment. A renderer that cannot
         // (D3D11's constructor always creates a swap chain; EasyGL's GL context is bound to a
         // window) will throw from its own constructor, which is the honest outcome: it is a real
@@ -4302,7 +4302,7 @@ namespace Microsoft::Xna::Framework::Graphics
             {
                 // PresentationParameters::HeadlessEXT is the runtime opt-in equivalent of the
                 // descriptor's own needsVideoSubsystem: a renderer that normally wants a window
-                // (D3D12) can be asked for a genuinely off-screen device instead. Skipping
+                // (SDL GPU) can be asked for a genuinely off-screen device instead. Skipping
                 // the video subsystem is the point -- it is what lets such a device run
                 // with no display server at all, not merely without a visible window.
                 //

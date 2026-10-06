@@ -94,11 +94,11 @@ exclusions are worth 78 files that a naive `grep SDL_` misreports as coupling.
 
 | Metric | Value |
 |---|---|
-| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1051** |
-| Files referencing SDL (all) | **219** |
+| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1050** |
+| Files referencing SDL (all) | **217** |
 | Production files (`src/` + `include/`) referencing SDL | **54** |
 | …of which are renderer production files | **18** |
-| Test/example files referencing SDL | **165** |
+| Test/example files referencing SDL | **163** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **9** |
 | Renderer families reaching for `SDL_GL_*` directly | **0** |
 
@@ -267,12 +267,13 @@ renderers/{sdl-renderer,sdl-gpu,fna3d} ──▶ SDL3   (allowlisted, by design)
    per-frame is a review rejection.
 5. **Every public renderer identity keeps working throughout.** No task may reduce renderer
    coverage. Every renderer migration task names the exact renderer(s) it touches and rebuilds
-   them. There are **18 public renderer identities** over **14 implementation families** today;
+   them. There are **14 public renderer identities** over **12 implementation families** today;
    the plan was written against 46 identities, which grew to 50 and then shrank to 25 when
    `plans/plan_renderer_cleanup.md` retired 25 of them (the `ASCII` identity had already been
    withdrawn in favour of a renderer-neutral post-process effect), to 22 when `RRC-012`
-   retired `DIRECT2D`, `FREEDIRECT` and `PORTABLEGL`, and to 18 when `RRC-015` retired `GDI`,
-   `HTML_DOM`, `SVG_DOM` and `OPENGL4`. Both numbers are
+   retired `DIRECT2D`, `FREEDIRECT` and `PORTABLEGL`, to 18 when `RRC-015` retired `GDI`,
+   `HTML_DOM`, `SVG_DOM` and `OPENGL4`, and to 14 when `RRC-018` retired `DIRECTX12`, `CANVAS`,
+   `OPENGLES2` and `WEBGL1`. Both numbers are
    checked against the registry by `scripts/check_renderer_identities.py`, which is why they are
    phrased in the exact words it looks for — a count stated in prose is a fact with no owner, and
    this rule read "46" for three identities after the count moved. A renderer added *after* a

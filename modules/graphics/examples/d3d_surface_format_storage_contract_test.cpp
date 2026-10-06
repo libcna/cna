@@ -17,11 +17,6 @@
 #if defined(CNA_RENDERER_DIRECTX11)
 #include "CNA/Internal/Renderers/DirectX11/D3D11RenderTargets.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11Textures.hpp"
-#elif defined(CNA_RENDERER_DIRECTX12)
-#include "CNA/Internal/Renderers/DirectX12/D3D12RenderTargets.hpp"
-#include "CNA/Internal/Renderers/DirectX12/D3D12Texture3D.hpp"
-#include "CNA/Internal/Renderers/DirectX12/D3D12TextureCube.hpp"
-#include "CNA/Internal/Renderers/DirectX12/D3D12Textures.hpp"
 #else
 #error This contract is for the DirectX renderer family.
 #endif
@@ -115,37 +110,6 @@ namespace
         D3D11_TEXTURE2D_DESC desc{};
         target.GetSampleableTextureEXT()->GetDesc(&desc);
         return desc.Format;
-    }
-#else
-    using NativeTexture2D = CNA::Internal::Renderers::DirectX12::D3D12TextureRenderer;
-    using NativeTextureCube = CNA::Internal::Renderers::DirectX12::D3D12TextureCubeRenderer;
-    using NativeTexture3D = CNA::Internal::Renderers::DirectX12::D3D12Texture3DRenderer;
-    using NativeRenderTarget2D = CNA::Internal::Renderers::DirectX12::D3D12RenderTargetRenderer;
-    using NativeRenderTargetCube = CNA::Internal::Renderers::DirectX12::D3D12RenderTargetCubeRenderer;
-
-    DXGI_FORMAT NativeFormat(const NativeTexture2D& texture)
-    {
-        return texture.GetResourceEXT()->GetDesc().Format;
-    }
-
-    DXGI_FORMAT NativeFormat(const NativeTextureCube& texture)
-    {
-        return texture.GetResourceEXT()->GetDesc().Format;
-    }
-
-    DXGI_FORMAT NativeFormat(const NativeTexture3D& texture)
-    {
-        return texture.GetResourceEXT()->GetDesc().Format;
-    }
-
-    DXGI_FORMAT NativeFormat(const NativeRenderTarget2D& target)
-    {
-        return target.GetSampleableColorResourceEXT()->GetDesc().Format;
-    }
-
-    DXGI_FORMAT NativeFormat(const NativeRenderTargetCube& target)
-    {
-        return target.GetSampleableColorResourceEXT()->GetDesc().Format;
     }
 #endif
 }

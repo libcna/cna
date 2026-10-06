@@ -77,7 +77,7 @@ namespace CNA::Internal::Renderers
      * renderer's existing factor/function→native mapping is untouched; only this genuinely-new
      * output state is added. `colorWriteChannels[i]` holds the raw XNA `ColorWriteChannels` int
      * (bit0=R, bit1=G, bit2=B, bit3=A; 15 = All) — a bit layout identical to the native colour
-     * masks of Vulkan/D3D9/D3D11/D3D12/WebGPU/SDL_GPU, so the value is usable directly on
+     * masks of Vulkan/D3D9/D3D11/WebGPU/SDL_GPU, so the value is usable directly on
      * mask-capable renderers and via the ColorWriteHas* helpers on boolean renderers.
      */
     struct BlendWriteState
@@ -1097,7 +1097,7 @@ namespace CNA::Internal::Renderers
         // System::NotSupportedException (REMED-GFX-130).
         //
         // REMED-GFX-134 implemented it on every renderer that owned a rendered cube resource at
-        // the time (Bgfx, named below, was retired on 2026-09-17):
+        // the time (Bgfx and D3D12, named below, were retired on 2026-09-17 and 2026-10-06):
         // EasyGL, Vulkan, Bgfx, D3D9, D3D11 and D3D12 joined SdlGpu and WebGPU, each reusing the
         // mechanism its plain-TextureCube sibling already uses in the same file plus that
         // renderer's own rendered-face specifics -- REMED-GFX-067's `originBottomLeft` row
@@ -1106,7 +1106,7 @@ namespace CNA::Internal::Renderers
         // is the one `RenderTarget2D::GetData` already established: top row first.
         //
         // Headless keeps the inherited refusal because it rasterizes nothing, and the renderers
-        // that create no cube render target at all (native 2D, Canvas)
+        // that create no cube render target at all (native 2D)
         // never reach this class -- `GraphicsDevice::SetRenderTargets` refuses to bind one and
         // `TextureCube::GetData` refuses a null renderer one step earlier. Every remaining boundary
         // (a multisampled or mipped cube target on bgfx, a mip level D3D9 never allocated, WebGPU's
@@ -1592,7 +1592,7 @@ namespace CNA::Internal::Renderers
     struct GpuVertexStreamBinding
     {
         /// Public binding slot -- the stream's index in the `SetVertexBuffers` array. Also the
-        /// native input slot on every API that has one (D3D11/D3D12 `InputSlot`, Vulkan
+        /// native input slot on every API that has one (D3D11 `InputSlot`, Vulkan
         /// `binding`, WebGPU vertex-buffer index, SDL_GPU `slot`).
         int slot = 0;
 
@@ -1780,7 +1780,7 @@ namespace CNA::Internal::Renderers
         /// Divergence 1 / D9-81 item 1). When true, XNA selects a per-pixel-lit shader
         /// (`VSBasicPixelLighting*`/`PSBasicPixelLighting*`); when false (XNA's own default),
         /// it selects a per-vertex-lit shader instead. Renderers that generate both lighting
-        /// families honour this (D3D9, D3D11, D3D12, WebGPU, Vulkan, EasyGL);
+        /// families honour this (D3D9, D3D11, WebGPU, Vulkan, EasyGL);
         /// fixed-function renderers evaluate lighting per vertex by construction; a
         /// renderer with neither renders per-pixel regardless of its value -- a known, tracked
         /// divergence from XNA's default, not fixed by adding this field alone. Only meaningful
@@ -3819,7 +3819,7 @@ namespace CNA::Internal::Renderers
         /// REMED-CONTENT-001: returns this renderer's real maximum single-axis texture dimension
         /// (width or height), used by shared content-reading code to reject an XNB-declared size
         /// before any renderer-specific texture creation is attempted. Default of 16384 matches the
-        /// guaranteed ceiling on every native API this project targets (D3D11/D3D12 feature level
+        /// guaranteed ceiling on every native API this project targets (D3D11 feature level
         /// 11_0's REQ_TEXTURE2D_U_OR_V_DIMENSION, and the value real-world Vulkan/Metal/GL
         /// implementations report) -- no renderer currently needs a tighter or looser override.
         /// D3D9's own narrower Reach/HiDef profile ceiling (2048/4096) is enforced separately by

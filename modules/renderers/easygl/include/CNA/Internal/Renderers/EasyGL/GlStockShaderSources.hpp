@@ -6,7 +6,7 @@
 // Every stock program EasyGL draws BasicEffect, AlphaTestEffect, DualTextureEffect,
 // EnvironmentMapEffect, SkinnedEffect, PbrEffect, SkinnedPbrEffect and SpriteBatch with is
 // authored here once, in GLSL ES 3.00, and adapted per profile when it is compiled (to GLSL 3.30
-// core, GLSL ES 1.00, or left as ES 3.00). It is the most-corrected statement of XNA's stock-effect
+// core, or left as ES 3.00). It is the most-corrected statement of XNA's stock-effect
 // semantics in CNA (null texture, fog, saturation, render-target orientation, shadow reception,
 // image-based lighting).
 //
@@ -48,8 +48,9 @@
 #define CNA_GL_SRGB_TRANSFER_DECL CNA_GLSL_SRGB_TRANSFER
 
 // plans/plan_gltf.md GLTF-264: a normal follows the inverse transpose of the blended skin matrix.
-// All EasyGL profiles, including GLSL ES 1.00, support cross/dot but ES 1.00 has no inverse() for
-// matrices. The three cross products are the columns of det(m)*inverseTranspose(m). Normalisation
+// It is written with cross/dot rather than inverse(), a form kept from the former GLSL ES 1.00
+// floor so the pixels do not move. The three cross products are the columns of
+// det(m)*inverseTranspose(m). Normalisation
 // cancels abs(det); multiplying by sign(det) retains the orientation under a mirrored joint. A
 // nearly singular blend falls back to the historical direct transform, after which each caller's
 // existing zero-length guard prevents a NaN from poisoning the lighting calculation.
@@ -63,9 +64,10 @@
 "}\n"
 
 // plans/plan_gltf.md GLTF-176: a tangent frame changes orientation under a negative-determinant
-// direction transform. GLSL ES 1.00 has no determinant(mat3), so compute the scalar triple product
-// shared by both PBR vertex programs. A singular transform has no meaningful tangent frame; +1 is
-// the stable fallback and, unlike sign(0), does not erase an otherwise valid authored sign.
+// direction transform. The scalar triple product (rather than determinant(), a form kept from the
+// former GLSL ES 1.00 floor) is shared by both PBR vertex programs. A singular transform has no
+// meaningful tangent frame; +1 is the stable fallback and, unlike sign(0), does not erase an
+// otherwise valid authored sign.
 #define CNA_GL_DIRECTION_HANDEDNESS_DECL \
 "float cnaDirectionHandedness(mat3 m){\n" \
 "    float det=dot(m[0],cross(m[1],m[2]));\n" \
@@ -95,10 +97,8 @@
 // attachment as a texture on every renderer, so a shadow-map producer writes distance into an
 // ordinary colour target and this reads it back like any other texture.
 //
-// uShadowTexel carries 1/size rather than the shader calling textureSize(): that function is GLSL
-// ES 3.00 only, and these shaders are also transformed to ES 1.00 for the WebGL1/GLES2 profiles
-// (TransformGlslEs300BodyToEs100), which would reject it. The loop bounds are literal for the same
-// reason -- ES 1.00 requires a statically countable loop -- so the kernel is always 5x5 and
+// uShadowTexel carries 1/size rather than the shader calling textureSize(), and the loop bounds are
+// literal, both forms kept from the former GLSL ES 1.00 floor -- so the kernel is always 5x5 and
 // uShadowPcfRadius decides how much of it counts. Radius 0 is a single tap.
 //
 // Returns 1 where the surface is lit and 0 where a caster is fully in front of it, with the
@@ -106,9 +106,9 @@
 // every shadow-map resolution.
 // Cascades (MOD-905/906/909/910) share the same code path: a single map is simply the case where
 // uCascadeCount is 0, and everything below it is skipped. Two shapes of restriction shape the
-// code more than taste does -- the ES 1.00 form these shaders are also compiled in forbids
-// dynamically indexing a uniform array in a fragment shader, so the cascade's matrix is selected
-// by four constant-index comparisons rather than by uCascadeMatrices[index]; and the cascades
+// code more than taste does -- the cascade's matrix is selected by four constant-index comparisons
+// rather than by uCascadeMatrices[index], a form kept from the former GLSL ES 1.00 floor (which
+// forbade dynamically indexing a uniform array in a fragment shader); and the cascades
 // share one atlas, so every lookup is clamped to its own slice or a PCF tap at the seam would
 // read the neighbouring cascade's texels.
 //
@@ -292,21 +292,13 @@ namespace CNA::Internal::Renderers::GlStockShaders
     // whose mip IS the roughness, and the BRDF table that says how much of the reflection survives at
     // this angle and roughness.
     //
-    // A function rather than another CNA_GL_*_DECL macro, because one line of it depends on the
-    // profile: selecting a mip explicitly needs textureLod, which GLSL ES 1.00 fragment shaders do not
-    // have. Those profiles read the cube's base level instead, so a rough surface reflects a sharp
-    // environment -- wrong, visibly so on a rough metal, and the honest alternative to silently
-    // compiling nothing at all. Every other profile gets the real roughness ramp.
-    //
     // The Fresnel term uses max(1-roughness, F0) rather than plain F0: at grazing angles a rough
     // surface must not reflect as hard as a mirror, and the plain Schlick form makes it do exactly
     // that. Diffuse and specular are then weighted so they do not both claim the same energy, and
     // metals get no diffuse at all.
-    [[nodiscard]] inline std::string CnaGlIblDecl(const bool explicitLodAvailable)
+    [[nodiscard]] inline std::string CnaGlIblDecl()
     {
-        const char* const prefilteredSample = explicitLodAvailable
-            ? "textureLod(uIblSpecular,R,lod)"
-            : "texture(uIblSpecular,R)";
+        const char* const prefilteredSample = "textureLod(uIblSpecular,R,lod)";
         return std::string(
     "uniform samplerCube uIblIrradiance;\n"
     "uniform samplerCube uIblSpecular;\n"
@@ -574,8 +566,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // PreferPerPixelLighting the frame agreed with real XNA on 90.62% of pixels within 8 levels at
 // mediump and 99.99% at highp, the signed error over the model going from -20 levels to -0.01.
 // Mesa does honour the qualifier here. GLSL ES 3.00 requires fragment highp, so it is asked for
-// unconditionally; the GLSL ES 1.00 profiles get the GL_FRAGMENT_PRECISION_HIGH guard from
-// TransformGlslEs300BodyToEs100, where 1.00 makes highp optional. FX-121 is the same defect in
+// unconditionally. FX-121 is the same defect in
 // MojoShader's compiled-effect path; this is the built-in effect path.
 "precision highp float;\n"
 "in vec3 vNormal;\n"
@@ -1099,8 +1090,7 @@ CNA_GL_SKIN_NORMAL_DECL
 // PreferPerPixelLighting the frame agreed with real XNA on 90.62% of pixels within 8 levels at
 // mediump and 99.99% at highp, the signed error over the model going from -20 levels to -0.01.
 // Mesa does honour the qualifier here. GLSL ES 3.00 requires fragment highp, so it is asked for
-// unconditionally; the GLSL ES 1.00 profiles get the GL_FRAGMENT_PRECISION_HIGH guard from
-// TransformGlslEs300BodyToEs100, where 1.00 makes highp optional. FX-121 is the same defect in
+// unconditionally. FX-121 is the same defect in
 // MojoShader's compiled-effect path; this is the built-in effect path.
 "precision highp float;\n"
 "in vec3 vNormal;\n"
@@ -1308,11 +1298,10 @@ CNA_GL_RT_SAMPLE_UV_DECL
      * @brief Returns the GLSL ES 3.00 sources of one stock program -- pbr3d: PbrEffect (glTF metallic-roughness), single- or dual-UV record.
      *
      * @param dualUv True for the record carrying a second UV set and a colour (stride 60 / 76 / 80).
-     * @param explicitLodAvailable True when the fragment dialect has textureLod (every profile but GLSL ES 1.00).
      *
      * @return The vertex and fragment sources, before any profile adaptation.
      */
-    [[nodiscard]] inline GlStockProgramSource PbrSource(const bool dualUv, const bool explicitLodAvailable)
+    [[nodiscard]] inline GlStockProgramSource PbrSource(const bool dualUv)
     {
         const std::string vsrc =
 std::string("#version 300 es\n") +
@@ -1379,8 +1368,7 @@ std::string("#version 300 es\n") +
 // PreferPerPixelLighting the frame agreed with real XNA on 90.62% of pixels within 8 levels at
 // mediump and 99.99% at highp, the signed error over the model going from -20 levels to -0.01.
 // Mesa does honour the qualifier here. GLSL ES 3.00 requires fragment highp, so it is asked for
-// unconditionally; the GLSL ES 1.00 profiles get the GL_FRAGMENT_PRECISION_HIGH guard from
-// TransformGlslEs300BodyToEs100, where 1.00 makes highp optional. FX-121 is the same defect in
+// unconditionally. FX-121 is the same defect in
 // MojoShader's compiled-effect path; this is the built-in effect path.
 "precision highp float;\n"
 "in vec3 vNormal;\n"
@@ -1459,7 +1447,7 @@ CNA_GL_RT_SAMPLE_UV_HI_DECL
 CNA_GL_RT_SAMPLE_UV_DECL
 CNA_GL_SHADOW_DECL
 CNA_GL_PUNCTUAL_DECL
-+ CnaGlIblDecl(explicitLodAvailable) +
++ CnaGlIblDecl() +
 + (dualUv ? "vec2 cnaPbrUV(float setIndex){return setIndex<0.5?vUV:vUV1;}\n" : "") +
 "vec2 cnaPbrTransformUV(vec2 uv,int slot){\n"
 "    vec3 value=vec3(uv,1.0);\n"
@@ -1556,11 +1544,10 @@ CNA_GL_PUNCTUAL_DECL
      * @brief Returns the GLSL ES 3.00 sources of one stock program -- pbr_skinned3d: SkinnedPbrEffect, single- or dual-UV record.
      *
      * @param dualUv True for the record carrying a second UV set and a colour (stride 60 / 76 / 80).
-     * @param explicitLodAvailable True when the fragment dialect has textureLod (every profile but GLSL ES 1.00).
      *
      * @return The vertex and fragment sources, before any profile adaptation.
      */
-    [[nodiscard]] inline GlStockProgramSource PbrSkinnedSource(const bool dualUv, const bool explicitLodAvailable)
+    [[nodiscard]] inline GlStockProgramSource PbrSkinnedSource(const bool dualUv)
     {
         const std::string vsrc =
 std::string("#version 300 es\n") +
@@ -1641,8 +1628,7 @@ std::string("#version 300 es\n") +
 // PreferPerPixelLighting the frame agreed with real XNA on 90.62% of pixels within 8 levels at
 // mediump and 99.99% at highp, the signed error over the model going from -20 levels to -0.01.
 // Mesa does honour the qualifier here. GLSL ES 3.00 requires fragment highp, so it is asked for
-// unconditionally; the GLSL ES 1.00 profiles get the GL_FRAGMENT_PRECISION_HIGH guard from
-// TransformGlslEs300BodyToEs100, where 1.00 makes highp optional. FX-121 is the same defect in
+// unconditionally. FX-121 is the same defect in
 // MojoShader's compiled-effect path; this is the built-in effect path.
 "precision highp float;\n"
 "in vec3 vNormal;\n"
@@ -1714,7 +1700,7 @@ CNA_GL_RT_SAMPLE_UV_HI_DECL
 CNA_GL_RT_SAMPLE_UV_DECL
 CNA_GL_SHADOW_DECL
 CNA_GL_PUNCTUAL_DECL
-+ CnaGlIblDecl(explicitLodAvailable) +
++ CnaGlIblDecl() +
 + (dualUv ? "vec2 cnaPbrUV(float setIndex){return setIndex<0.5?vUV:vUV1;}\n" : "") +
 "vec2 cnaPbrTransformUV(vec2 uv,int slot){\n"
 "    vec3 value=vec3(uv,1.0);\n"

@@ -222,10 +222,6 @@ namespace
     constexpr Contract kContract{"DIRECTX11", true, true, true, true, true,
                                  true, true, true,
                                  true, true, true, true, false, true, true};
-#elif defined(CNA_RENDERER_DIRECTX12)
-    constexpr Contract kContract{"DIRECTX12", true, true, true, true, true,
-                                 true, true, true,
-                                 true, true, true, true, false, true, true};
 #else
 #error "REMED-GFX-129: this renderer has no declared ordered-Clear contract."
 #endif

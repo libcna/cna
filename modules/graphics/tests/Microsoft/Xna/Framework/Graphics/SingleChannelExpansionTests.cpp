@@ -65,7 +65,7 @@ namespace
     {
         // WINCLOSE-0019: DirectX11's stock sprite pixel shader applies the same expansion.
         return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan, WebGPU, SdlGpu, Fna3d,
-                               Software, DirectX11, DirectX12);
+                               Software, DirectX11);
     }
 
     class SingleChannelExpansionTest : public ::testing::Test

@@ -3,13 +3,13 @@
 **Generated** by `tools/platform/renderer_sdl_audit.py`. Regenerate with `--out`, gate with
 `--check` (PLAT-76). Do not hand-edit.
 
-18 renderer identities over 14 module families.
+14 renderer identities over 12 module families.
 
 | Verdict | Families | Meaning |
 |---|---:|---|
 | `sdl-native` | 2 | Identity **is** an SDL3 API. Permanently allowlisted. |
 | `sdl-upstream` | 1 | Own sources are effectively SDL-free; the wrapped third-party library links SDL3. Allowlisted for a dependency reason. |
-| `sdl-free` | 11 | No SDL references at all. |
+| `sdl-free` | 9 | No SDL references at all. |
 
 ## Per-family detail
 
@@ -18,11 +18,9 @@
 | `sdl-gpu` | SDL_GPU | `sdl-native` | 2651 / 2331 | `window`, `display` | — |
 | `sdl-renderer` | SDL_RENDERER | `sdl-native` | 310 / 205 | `window` | `SDL_CreateRenderer`, `SDL_CreateTexture`, `SDL_DestroyRenderer`, `SDL_DestroyTexture`, `SDL_GetRenderLogicalPresentationRect`, `SDL_GetRenderOutputSize`, `SDL_RenderClear`, `SDL_RenderPresent`, `SDL_RenderReadPixels`, `SDL_RenderTexture`, `SDL_SetRenderClipRect`, `SDL_SetRenderDrawColor`, `SDL_SetRenderLogicalPresentation`, `SDL_SetRenderTarget`, `SDL_SetRenderVSync`, `SDL_SetTextureBlendMode`, `SDL_SetTextureScaleMode`, `SDL_UpdateTexture` |
 | `fna3d` | FNA3D | `sdl-upstream` | 13 / 10 | `window` | — |
-| `canvas` | CANVAS | `sdl-free` | 0 / 0 | — | — |
 | `directx11` | DIRECTX11 | `sdl-free` | 0 / 0 | — | — |
-| `directx12` | DIRECTX12 | `sdl-free` | 0 / 0 | — | — |
 | `directx9` | DIRECTX9 | `sdl-free` | 0 / 0 | — | — |
-| `easygl` | OPENGL33 OPENGLES2 OPENGLES3 WEBGL1 WEBGL2 | `sdl-free` | 0 / 0 | — | — |
+| `easygl` | OPENGL33 OPENGLES3 WEBGL2 | `sdl-free` | 0 / 0 | — | — |
 | `headless` | HEADLESS | `sdl-free` | 0 / 0 | — | — |
 | `metal` | METAL | `sdl-free` | 0 / 0 | — | — |
 | `software` | SOFTWARE | `sdl-free` | 0 / 0 | — | — |

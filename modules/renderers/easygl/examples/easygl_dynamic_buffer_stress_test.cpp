@@ -34,10 +34,6 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 
-#if defined(CNA_RENDERER_DIRECTX12)
-#include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
-#endif
-
 #include <array>
 #include <cstdint>
 #include <cstdio>
@@ -93,9 +89,6 @@ class DynamicBufferStressTest : public Game
     int fail_ = 0;
     int frameCount_ = 0;
     int measuredFrames_ = kDefaultMeasuredFrames;
-#if defined(CNA_RENDERER_DIRECTX12)
-    std::uint64_t uploadResourceBaseline_ = 0;
-#endif
 
     void check(bool ok, const char* label)
     {
@@ -161,15 +154,6 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         dev.SetDepthTestEnabled(false);
         dev.setBlendStateProperty(BlendState::Opaque);
-
-#if defined(CNA_RENDERER_DIRECTX12)
-        if (frameCount_ == kWarmupFrames) {
-            auto& renderer = dynamic_cast<CNA::Internal::Renderers::DirectX12::DirectX12Renderer&>(
-                dev.GetRenderer());
-            renderer.ResetSynchronizationCountersEXT();
-            uploadResourceBaseline_ = renderer.GetUploadResourceCreationCountEXT();
-        }
-#endif
 
         dev.Clear(Color(0, 0, 0, 255));
         BasicEffect fx(dev);
@@ -241,17 +225,6 @@ protected:
 
         ++frameCount_;
         if (frameCount_ >= kWarmupFrames + measuredFrames_) {
-#if defined(CNA_RENDERER_DIRECTX12)
-            auto& renderer = dynamic_cast<CNA::Internal::Renderers::DirectX12::DirectX12Renderer&>(
-                dev.GetRenderer());
-            check(renderer.GetUploadResourceCreationCountEXT() == uploadResourceBaseline_,
-                  "D3D12 upload ring creates no resources after warm-up");
-            check(renderer.GetGpuWaitCountEXT() <= static_cast<std::uint64_t>(measuredFrames_),
-                  "D3D12 performs at most one actual GPU wait per measured frame");
-            check(renderer.GetUploadAllocationCountEXT() >=
-                      static_cast<std::uint64_t>(2 * measuredFrames_),
-                  "D3D12 vertex/index updates allocate distinct frame-ring ranges");
-#endif
             std::printf("=== %d/%d PASS (%d frames) ===\n", pass_, pass_ + fail_,
                         kWarmupFrames + measuredFrames_);
             Exit();

@@ -139,8 +139,6 @@ namespace
     constexpr const char* kRendererName = "SDL_GPU";
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr const char* kRendererName = "DIRECTX11";
-#elif defined(CNA_RENDERER_DIRECTX12)
-    constexpr const char* kRendererName = "DIRECTX12";
 #else
 #error "REMED-GFX-189: this renderer has no declared invalid-mip-level contract."
 #endif

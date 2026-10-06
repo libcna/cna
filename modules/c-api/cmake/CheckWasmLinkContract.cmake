@@ -17,32 +17,19 @@ if(_cna_wasm_javascript MATCHES "var[ \t]+Asyncify|Asyncify[ \t]*=[ \t]*\\{")
         "cna_c_api_wasm contains the Asyncify runtime; RunOneFrame exports must be synchronous.")
 endif()
 
-if(CNA_C_API_WASM_RENDERER STREQUAL "WEBGL1")
-    set(_cna_expected_webgl_version 1)
-elseif(CNA_C_API_WASM_RENDERER STREQUAL "WEBGL2")
+if(CNA_C_API_WASM_RENDERER STREQUAL "WEBGL2")
     set(_cna_expected_webgl_version 2)
-else()
-    set(_cna_expected_webgl_version 0)
-endif()
-
-if(_cna_expected_webgl_version GREATER 0)
-    if(NOT _cna_wasm_javascript MATCHES
-       "majorVersion[ \t]*:[ \t]*${_cna_expected_webgl_version}([^0-9]|$)")
+    if(NOT _cna_wasm_javascript MATCHES "majorVersion[ \t]*:[ \t]*2([^0-9]|$)")
         message(FATAL_ERROR
-            "cna_c_api_wasm does not request WebGL ${_cna_expected_webgl_version} for "
-            "${CNA_C_API_WASM_RENDERER}.")
+            "cna_c_api_wasm does not request WebGL 2 for ${CNA_C_API_WASM_RENDERER}.")
     endif()
-    if(_cna_expected_webgl_version EQUAL 1)
-        set(_cna_wrong_webgl_version 2)
-    else()
-        set(_cna_wrong_webgl_version 1)
-    endif()
-    if(_cna_wasm_javascript MATCHES
-       "majorVersion[ \t]*:[ \t]*${_cna_wrong_webgl_version}([^0-9]|$)")
+    if(_cna_wasm_javascript MATCHES "majorVersion[ \t]*:[ \t]*1([^0-9]|$)")
         message(FATAL_ERROR
-            "cna_c_api_wasm also contains a WebGL ${_cna_wrong_webgl_version} context request; "
+            "cna_c_api_wasm also contains a WebGL 1 context request; "
             "the renderer contract must be exact.")
     endif()
+else()
+    set(_cna_expected_webgl_version 0)
 endif()
 
 message(STATUS

@@ -1,6 +1,6 @@
 # plans/plan_dx9.md Phase D9-11 (D9-110/D9-111), design decision 16: D3D9EffectRenderer.cpp calls
 # D3DCompile() (the custom-ShaderEffect runtime compile path), which needs d3dcompiler -- but the
-# stock D3D9 pipeline must stay d3dcompiler-free (unlike D3D11/D3D12, which link it into their
+# stock D3D9 pipeline must stay d3dcompiler-free (unlike D3D11, which links it into its
 # whole renderer target unconditionally, DX-58/DX-121). Excluded from the main glob and built as its
 # own isolated static library instead, with d3dcompiler linked ONLY there (D9-111's own "on this
 # target only"). D3D9ConstantTable.cpp (D9-110's CTAB parser) moves here too -- it has no consumer

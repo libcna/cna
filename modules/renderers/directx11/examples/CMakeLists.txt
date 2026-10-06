@@ -21,13 +21,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
         if(TARGET SDL3::SDL3)
             target_link_libraries(${target} PRIVATE SDL3::SDL3)
         else()
-            # plans/plan_directx12_parity.md DX12-0005: PixelTestGame.hpp's display probe is the
+            # DX12-0005: PixelTestGame.hpp's display probe is the
             # only SDL use the shared fixtures have; this tells it there is no SDL to probe with.
             target_compile_definitions(${target} PRIVATE CNA_EXAMPLES_NO_SDL)
         endif()
         cna_link_sharp_runtime(${target} PRIVATE)
         if(MSVC)
-            # plans/plan_directx12_parity.md DX12-0008: this macro builds the whole Direct3D parity
+            # DX12-0008: this macro builds the whole Direct3D parity
             # corpus -- ~265 executables. RelWithDebInfo's /INCREMENTAL state and full PDB are about
             # 150 MB per executable, ~40 GB per build tree, which filled the validation VM's disk.
             # FASTLINK keeps them debuggable through the object files at a few MB each.
@@ -85,7 +85,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
     endif()
 
     include(${CMAKE_SOURCE_DIR}/cmake/DirectXParityTests.cmake)
-    # plans/plan_directx12_parity.md DX12-0005: registered in every configuration. The corpus used to
+    # DX12-0005: registered in every configuration. The corpus used to
     # be dropped whole when SDL was off (WINNATIVE-0015), because PixelTestGame.hpp probed for a
     # display with SDL; measured, 4 of its 265 sources call SDL at all, 26 reached it only through
     # that probe, and 235 never include it. The probe is now SDL-free where SDL is absent, and the

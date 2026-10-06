@@ -3,27 +3,27 @@
 # usefully cover -- it is NOT a substitute for DX-90/DX-114 themselves, which need real swap-chain/
 # tearing/device-lost/driver-parity verification on a machine with a real display and a real GPU
 # driver (a typical CI runner doesn't reliably provide either). What this job DOES provide is
-# genuinely new, real information no amount of Wine+DXVK/vkd3d-proton testing could: the D3D11/
-# D3D12 renderers have, until now, only ever been built with MinGW-w64 g++ and run through Wine's
-# translation layers. This job builds with native MSVC (a completely different compiler) and runs
-# the renderer's off-screen smoke/common CTest suites directly against real Windows D3D11/D3D12
-# runtime DLLs (no Wine involved at all). The D3D legs also recompile every checked-in HLSL shader
+# genuinely new, real information no amount of Wine+DXVK testing could: the D3D11 renderer had,
+# until then, only ever been built with MinGW-w64 g++ and run through Wine's translation layers.
+# This job builds with native MSVC (a completely different compiler) and runs the renderer's
+# off-screen smoke/common CTest suites directly against real Windows D3D11 runtime DLLs (no Wine
+# involved at all). The D3D legs also recompile every checked-in HLSL shader
 # against a real D3DCOMPILER_47.dll.
 #
 # Deliberately workflow_dispatch-only (manual): Windows GitHub-hosted runners are slower and more
 # expensive than this project's existing Linux CI (devices-tests.yml/input-ci.yml). This workflow
 # itself is a narrow, project-owner-approved exception to this project's general "no CI
-# automation" stance, scoped specifically to D3D11/D3D12 MSVC verification -- not a precedent for
+# automation" stance, scoped specifically to D3D11 MSVC verification -- not a precedent for
 # broader automatic-trigger CI elsewhere in this project.
 #
 # CnaTests (the full gtest suite) is a KNOWN, pre-existing, deliberately out-of-scope gap on any
 # Windows toolchain, MSVC included -- roughly 10 test files call POSIX-only ::setenv(), which MSVC
 # also lacks (see plan_dx.md DX-15's own row; fixing this project-wide is a separate, much larger
-# task, not attempted here). This job does not build or run CnaTests -- only the D3D11/D3D12
-# renderers' own self-contained smoke/common CTest executables (registered by the cna_directx11_test()/
-# cna_directx12_test() CMake macros), which do not depend on CnaTests at all.
+# task, not attempted here). This job does not build or run CnaTests -- only the D3D11 renderer's
+# own self-contained smoke/common CTest executables (registered by the cna_directx11_test() CMake
+# macro), which do not depend on CnaTests at all.
 
-name: Windows graphics CI (D3D11/D3D12, MSVC)
+name: Windows graphics CI (D3D11, MSVC)
 
 on:
   workflow_dispatch: {}
@@ -38,7 +38,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        renderer: [DIRECTX11, DIRECTX12]
+        renderer: [DIRECTX11]
     defaults:
       run:
         shell: bash
@@ -87,9 +87,9 @@ jobs:
           key: sdl-prebuilt-windows-msvc-${{ steps.sdlsha.outputs.sha }}
 
       # CNA_BUILD_EXAMPLES=OFF / CNA_ENABLE_NET=OFF: keeps this job scoped to exactly what it's
-      # meant to verify (CNA core + the D3D11/D3D12 renderer + their own CTest executables) --
+      # meant to verify (CNA core + the D3D11 renderer + its own CTest executables) --
       # demos/tools (cna_reference_dump, cna_demo_2d, ...) and networking are real, separate parts
-      # of this project not relevant to a D3D11/D3D12 MSVC-verification job, and needlessly widen
+      # of this project not relevant to a D3D11 MSVC-verification job, and needlessly widen
       # the surface a first-ever native-MSVC configure could fail on for unrelated reasons.
       - name: Configure (native MSVC, ${{ matrix.renderer }})
         working-directory: cna_graphics

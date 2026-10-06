@@ -51,24 +51,11 @@ namespace CNA::Internal::Renderers::EasyGL
         // CNA_GL_PROFILE_* preprocessor guards. Argument-less on purpose -- they read the active
         // profile themselves, so a guard converts to a one-line condition with no plumbing through
         // the many free helpers this file is built from.
-        //
-        // The runtime-renderer audit found that ProfileIsEs2ApiGeneration() must cover OPENGLES2
-        // AND WEBGL1.
-        //
-        // It used to reproduce `#if defined(CNA_GL_PROFILE_OPENGLES2)` exactly, excluding WEBGL1 --
-        // faithful to the compile-time guards, and wrong. Every remaining use guards an ES 2.0
-        // API-GENERATION limitation, not a shading-language difference where the two profiles could
-        // legitimately diverge, and WebGL 1 is an ES 2.0-class API with the same limitation in each
-        // case. Excluding it meant a WEBGL1 build took the ES 3.0 path and called entry points its
-        // context does not have.
         [[nodiscard]] inline bool ProfileIsDesktopCore()  { return IsDesktopCoreProfile(ActiveGlProfile()); }
-        [[nodiscard]] inline bool ProfileUsesGlslEs100()  { return UsesGlslEs100(ActiveGlProfile()); }
-        [[nodiscard]] inline bool ProfileIsEs2ApiGeneration() { return UsesEs2ApiGeneration(ActiveGlProfile()); }
         [[nodiscard]] inline bool ProfileRequiresBaseVertexPointerRebase()
         {
             return RequiresBaseVertexPointerRebase(ActiveGlProfile());
         }
-        [[nodiscard]] inline bool ProfileIs(GlProfile expected) { return ActiveGlProfile() == expected; }
 
         // cna-killer KF-6: the back buffer is an offscreen framebuffer of the drawable size CNA
         // reports, and the window's surface only receives it at Present -- XNA's back buffer is an
@@ -76,15 +63,14 @@ namespace CNA::Internal::Renderers::EasyGL
         // drawing and GetBackBufferData depend on a buffer the windowing system sizes: on Wayland it
         // lags CNA's size for a frame after a resize, minimize or fullscreen change, or when a
         // loading thread binds the surface between frames. Multisampling always worked this way
-        // (msaaFbo_); this makes it the rule wherever the profile can blit to the window. The ES 2.0
-        // generation cannot, and the web canvas is sized by CNA itself, so both keep drawing into
-        // framebuffer 0.
-        [[nodiscard]] inline bool OffscreenBackBuffer(int sampleCount)
+        // (msaaFbo_); this makes it the rule on every native profile. The web canvas is sized by
+        // CNA itself, so WebGL keeps drawing into framebuffer 0.
+        [[nodiscard]] inline bool OffscreenBackBuffer([[maybe_unused]] int sampleCount)
         {
 #if defined(__EMSCRIPTEN__)
             return sampleCount > 1;
 #else
-            return sampleCount > 1 || !ProfileIsEs2ApiGeneration();
+            return true;
 #endif
         }
 
@@ -186,7 +172,7 @@ namespace CNA::Internal::Renderers::EasyGL
 EM_JS(void, CNA_DebugLoseWebGLContext, (), {
     const canvas = Module['canvas'] || document.querySelector('canvas');
     if (!canvas) { console.error('[CNA] loseContext: canvas not found'); return; }
-    const gl = Module['ctx'] || canvas.getContext('webgl2') || canvas.getContext('webgl');
+    const gl = Module['ctx'] || canvas.getContext('webgl2');
     if (!gl) { console.error('[CNA] loseContext: WebGL context not found'); return; }
     const ext = gl.getExtension('WEBGL_lose_context');
     if (!ext) { console.error('[CNA] WEBGL_lose_context extension not available'); return; }
@@ -197,7 +183,7 @@ EM_JS(void, CNA_DebugLoseWebGLContext, (), {
 EM_JS(void, CNA_DebugRestoreWebGLContext, (), {
     const canvas = Module['canvas'] || document.querySelector('canvas');
     if (!canvas) { console.error('[CNA] restoreContext: canvas not found'); return; }
-    const gl = Module['ctx'] || canvas.getContext('webgl2') || canvas.getContext('webgl');
+    const gl = Module['ctx'] || canvas.getContext('webgl2');
     if (!gl) { console.error('[CNA] restoreContext: WebGL context not found'); return; }
     const ext = gl.getExtension('WEBGL_lose_context');
     if (!ext) { console.error('[CNA] WEBGL_lose_context extension not available'); return; }
@@ -237,7 +223,7 @@ namespace CNA::Internal::Renderers::EasyGL
         // MERGE (plans/plan_platform.md PLAT-* x plans/plan_runtimerenderer.md P11): the version/profile the
         // platform is asked for is DATA, so it is computed from the runtime profile rather than
         // from `#if defined(CNA_GL_PROFILE_*)`. The compile-time form could only ever describe one
-        // profile, which is exactly what P11 removed: a single binary may hold up to five, and the
+        // profile, which is exactly what P11 removed: a single binary may hold up to three, and the
         // one in force is known only when the renderer is constructed.
         //
         // The profile is a parameter rather than a read of ActiveGlProfile() on purpose: this is
@@ -251,12 +237,6 @@ namespace CNA::Internal::Renderers::EasyGL
                 description.majorVersion = 3;
                 description.minorVersion = 3;
                 description.profile = CNA::Platform::GlProfile::Core;
-            }
-            else if (UsesGlslEs100(profile))
-            {
-                description.majorVersion = 2;
-                description.minorVersion = 0;
-                description.profile = CNA::Platform::GlProfile::Es;
             }
             else
             {
@@ -664,209 +644,13 @@ namespace CNA::Internal::Renderers::EasyGL
     // (in/out, texture(), no varying/attribute) is shared with desktop GLSL 3.30 core -- only
     // the "#version ...\nprecision ... float;\n" header two lines differ, so OPENGL33 does not
     // need a second copy of every shader, just a header rewrite performed here at first-use time.
-    enum class GlShaderStageKind { Vertex, Fragment };
-
-    namespace
+    static std::string AdaptGlslEs300ForActiveProfile(const char* es300Source)
     {
-        // plans/plan_glbackends.md GLB-36 helper: true whole-word replace (identifiers only), used for
-        // rewriting FragColor -> gl_FragColor in fragment shader bodies without touching
-        // substrings inside longer identifiers.
-        std::string ReplaceWholeWord(std::string text, const std::string& word, const std::string& replacement)
-        {
-            size_t pos = 0;
-            while ((pos = text.find(word, pos)) != std::string::npos)
-            {
-                const bool leftOk = (pos == 0) ||
-                    !(std::isalnum(static_cast<unsigned char>(text[pos - 1])) || text[pos - 1] == '_');
-                const size_t after = pos + word.size();
-                const bool rightOk = (after >= text.size()) ||
-                    !(std::isalnum(static_cast<unsigned char>(text[after])) || text[after] == '_');
-                if (leftOk && rightOk)
-                {
-                    text.replace(pos, word.size(), replacement);
-                    pos += replacement.size();
-                }
-                else
-                {
-                    pos += word.size();
-                }
-            }
-            return text;
-        }
-
-        // plans/plan_glbackends.md GLB-36 helper: GLSL ES 1.00 has no unified texture() overload set --
-        // callers must use texture2D()/textureCube() depending on the sampler's declared type.
-        // Scans the ORIGINAL ES 3.00 source for "uniform samplerCube NAME;" declarations first
-        // (the only non-sampler2D case any shader in this file uses, confirmed by a full survey
-        // during GLB-36), then rewrites every texture(NAME, ...) call using that set.
-        std::string RewriteTextureCallsForEs100(std::string line, const std::set<std::string>& cubeSamplerNames)
-        {
-            size_t pos = 0;
-            while ((pos = line.find("texture(", pos)) != std::string::npos)
-            {
-                const size_t argStart = pos + 8;
-                const size_t argEnd = line.find(',', argStart);
-                if (argEnd == std::string::npos) { pos += 8; continue; }
-                std::string samplerName = line.substr(argStart, argEnd - argStart);
-                while (!samplerName.empty() && std::isspace(static_cast<unsigned char>(samplerName.front())))
-                    samplerName.erase(samplerName.begin());
-                while (!samplerName.empty() && std::isspace(static_cast<unsigned char>(samplerName.back())))
-                    samplerName.pop_back();
-                const bool isCube = cubeSamplerNames.count(samplerName) > 0;
-                const std::string replacement = isCube ? "textureCube(" : "texture2D(";
-                line.replace(pos, 8, replacement);
-                pos += replacement.size();
-            }
-            return line;
-        }
-
-        // plans/plan_glbackends.md GLB-36: rewrites a GLSL ES 3.00 shader body to GLSL ES 1.00
-        // (WebGL 1). Real syntax differences handled, confirmed exhaustive by a full survey of
-        // every shader in this file during GLB-36 (no texelFetch/textureSize/derivatives/
-        // gl_FragDepth/flat/#extension/MRT usage anywhere):
-        //   - "layout(location=N) in TYPE NAME;" (vertex attributes) -> "attribute TYPE NAME;"
-        //     (the layout qualifier itself is not valid GLSL ES 1.00 -- the caller is expected to
-        //     have already extracted the (location, name) pairs via ExtractVertexAttribLocations()
-        //     from the ORIGINAL source and rebind them with Program::bind_attrib_location() before
-        //     linking, since ES 1.00 has no way to request a specific location from shader text).
-        //   - "out TYPE NAME;" varyings (vertex) / "in TYPE NAME;" varyings (fragment) ->
-        //     "varying TYPE NAME;" (the same varying keyword serves both directions in ES 1.00).
-        //   - "out vec4 FragColor;" (the single fragment color output every shader in this file
-        //     uses -- no MRT) is dropped entirely and every reference to the identifier
-        //     "FragColor" in the body is replaced with the ES 1.00 built-in "gl_FragColor".
-        //   - "texture(sampler, ...)" -> "texture2D(...)"/"textureCube(...)" depending on the
-        //     sampler's declared type (see RewriteTextureCallsForEs100 above).
-        //   - "#version 300 es" -> "#version 100"; the following "precision ... float;" line is
-        //     kept as-is (valid, and required, GLSL ES 1.00 syntax too).
-        std::string TransformGlslEs300BodyToEs100(const std::string& es300Body, GlShaderStageKind stage)
-        {
-            std::set<std::string> cubeSamplerNames;
-            {
-                const std::string marker = "uniform samplerCube ";
-                size_t pos = 0;
-                while ((pos = es300Body.find(marker, pos)) != std::string::npos)
-                {
-                    const size_t nameStart = pos + marker.size();
-                    const size_t nameEnd = es300Body.find(';', nameStart);
-                    if (nameEnd == std::string::npos) break;
-                    cubeSamplerNames.insert(es300Body.substr(nameStart, nameEnd - nameStart));
-                    pos = nameEnd;
-                }
-            }
-
-            std::istringstream iss(es300Body);
-            std::string line;
-            std::string out;
-            while (std::getline(iss, line))
-            {
-                size_t firstNonSpace = line.find_first_not_of(" \t");
-                const std::string trimmed = (firstNonSpace == std::string::npos)
-                    ? std::string() : line.substr(firstNonSpace);
-
-                // plans/plan_fx.md FX-124: GLSL ES 3.00 REQUIRES fragment highp, so the shaders in
-                // this file ask for it unconditionally. GLSL ES 1.00 makes it optional, and an
-                // implementation that lacks it fails to compile a shader that demands it -- so
-                // down here the request becomes a guarded one, exactly as FX-121 did for
-                // MojoShader's own GLSL ES 1.00 output. A fragment shader that only ever handles
-                // [0,1] colours is left at mediump by its own source and is untouched by this.
-                if (stage == GlShaderStageKind::Fragment && trimmed == "precision highp float;")
-                {
-                    out += "#ifdef GL_FRAGMENT_PRECISION_HIGH\n"
-                           "precision highp float;\n"
-                           "#else\n"
-                           "precision mediump float;\n"
-                           "#endif\n";
-                    continue;
-                }
-                if (trimmed.rfind("layout(location", 0) == 0)
-                {
-                    // "layout(location=N) in TYPE NAME;" or "layout(location = N) in TYPE NAME;"
-                    const size_t inPos = trimmed.find(" in ");
-                    if (inPos != std::string::npos)
-                    {
-                        out += "attribute " + trimmed.substr(inPos + 4) + "\n";
-                        continue;
-                    }
-                }
-                if (stage == GlShaderStageKind::Vertex && trimmed.rfind("in ", 0) == 0)
-                {
-                    out += "attribute " + trimmed.substr(3) + "\n";
-                    continue;
-                }
-                if (stage == GlShaderStageKind::Vertex && trimmed.rfind("out ", 0) == 0)
-                {
-                    out += "varying " + trimmed.substr(4) + "\n";
-                    continue;
-                }
-                if (stage == GlShaderStageKind::Fragment && trimmed.rfind("in ", 0) == 0)
-                {
-                    out += "varying " + trimmed.substr(3) + "\n";
-                    continue;
-                }
-                if (stage == GlShaderStageKind::Fragment && trimmed == "out vec4 FragColor;")
-                {
-                    // No declaration needed -- gl_FragColor is an ES 1.00 built-in.
-                    continue;
-                }
-
-                std::string rewritten = RewriteTextureCallsForEs100(line, cubeSamplerNames);
-                if (stage == GlShaderStageKind::Fragment)
-                {
-                    rewritten = ReplaceWholeWord(rewritten, "FragColor", "gl_FragColor");
-                }
-                out += rewritten + "\n";
-            }
-            // Applied to the whole assembled output, not per-line, since it must also see the
-            // "attribute vec4 aBoneIndices;" declaration line produced by the
-            // layout(location=N) branch above (which `continue`s past the per-line pipeline).
-            return out;
-        }
-    }
-
-    // plans/plan_glbackends.md GLB-36: extracts (location, name) pairs from
-    // "layout(location=N) in TYPE NAME;" declarations in the ORIGINAL (unmodified) ES 3.00 vertex
-    // shader source, so the caller can rebind the same numeric locations via
-    // Program::bind_attrib_location() before linking on WEBGL1/OPENGLES2 (where the layout
-    // qualifier itself is stripped out of the shader text -- see TransformGlslEs300BodyToEs100).
-    // This is what lets every existing VertexArray/VAO attribute-binding call site in this file
-    // (all of which use hardcoded numeric indices matching these same layout(location=N) values)
-    // keep working completely unmodified regardless of which of the 5 GL profiles is active.
-    static std::vector<std::pair<int, std::string>> ExtractVertexAttribLocations(const std::string& es300VertexSource)
-    {
-        std::vector<std::pair<int, std::string>> result;
-        const std::string marker = "layout(location";
-        size_t pos = 0;
-        while ((pos = es300VertexSource.find(marker, pos)) != std::string::npos)
-        {
-            const size_t eq = es300VertexSource.find('=', pos);
-            const size_t closeParen = es300VertexSource.find(')', pos);
-            if (eq == std::string::npos || closeParen == std::string::npos || eq > closeParen) break;
-            const int location = std::stoi(es300VertexSource.substr(eq + 1, closeParen - eq - 1));
-
-            const size_t inPos = es300VertexSource.find(" in ", closeParen);
-            if (inPos == std::string::npos) break;
-            const size_t typeStart = inPos + 4;
-            const size_t typeEnd = es300VertexSource.find(' ', typeStart);
-            if (typeEnd == std::string::npos) break;
-            const size_t nameStart = typeEnd + 1;
-            const size_t nameEnd = es300VertexSource.find(';', nameStart);
-            if (nameEnd == std::string::npos) break;
-            result.emplace_back(location, es300VertexSource.substr(nameStart, nameEnd - nameStart));
-            pos = nameEnd;
-        }
-        return result;
-    }
-
-    // WEBGL1 and OPENGLES2 (both GLSL ES 1.00): see TransformGlslEs300BodyToEs100 above for the
-    // real syntax differences handled, and the one known-unconverted gap (integer vertex
-    // attributes). WEBGL1 reaches GLSL ES 1.00 through a browser WebGL 1 context; OPENGLES2
-    // reaches the exact same dialect through a native OpenGL ES 2.0 context -- the shader text is
-    // identical, so the two profiles share one transform branch.
-    static std::string AdaptGlslEs300ForActiveProfile(const char* es300Source, GlShaderStageKind stage)
-    {
-if (ProfileIsDesktopCore())
-{
         std::string src(es300Source);
+        // OPENGLES3 / WEBGL2: the stored source is already GLSL ES 3.00.
+        if (!ProfileIsDesktopCore())
+            return src;
+
         const std::string versionLine = "#version 300 es\n";
         const auto versionPos = src.find(versionLine);
         if (versionPos == std::string::npos)
@@ -890,36 +674,6 @@ if (ProfileIsDesktopCore())
             }
         }
         return src;
-        }
-        if (ProfileUsesGlslEs100())
-        {
-        std::string src(es300Source);
-        const std::string versionLine = "#version 300 es\n";
-        const auto versionPos = src.find(versionLine);
-        if (versionPos == std::string::npos) return src;
-        src.replace(versionPos, versionLine.size(), "#version 100\n");
-        std::string transformed = TransformGlslEs300BodyToEs100(src, stage);
-        // No shader in this file declares an integer vertex attribute any more: the skinned
-        // programs' bone indices are a float vec4 on every profile (FX-127). This check is a
-        // defensive safety net for any FUTURE shader that introduces one the transform cannot
-        // handle --
-        // fail loudly rather than let an invalid shader reach the driver with only an opaque
-        // compile-error log as the symptom.
-        if (transformed.find("uvec4") != std::string::npos || transformed.find("ivec") != std::string::npos)
-        {
-            std::cerr << "[CNA EasyGL GLSL ES 1.00] shader uses an integer vertex attribute type "
-                          "(uvec4/ivecN) that TransformGlslEs300BodyToEs100 doesn't know how to "
-                          "convert, which has no GLSL ES 1.00 equivalent -- this shader is not "
-                          "supported under the WEBGL1/OPENGLES2 profiles (see EasyGLRenderer.cpp's "
-                          "GLSL ES 1.00 shader adaptation code)."
-                       << std::endl;
-        }
-        return transformed;
-        }
-
-        // OPENGLES3 / WEBGL2: the stored source is already GLSL ES 3.00.
-        (void)stage;
-        return std::string(es300Source);
     }
 
     // plans/plan_runtimerenderer.md P11: always compiled now; the call site is runtime-gated on the
@@ -964,54 +718,6 @@ if (ProfileIsDesktopCore())
             static_cast<GLenum>(::easygl::TextureUnit::Texture0) + unit);
     }
 
-    // =============================================================================================
-    // OPENGLES2 profile support (plans/plan_opengles2.md)
-    //
-    // The OPENGLES2 public profile drives this same renderer through a NATIVE OpenGL ES 2.0
-    // context request combined with WEBGL1's GLSL ES 1.00 shader dialect (see
-    // AdaptGlslEs300ForActiveProfile above). OpenGL ES 2.0 predates several entry points the
-    // ES 3.0-class profiles use freely, so the profile-gated helpers below supply genuine
-    // ES 2.0 mechanics instead of calling functions the API level does not define:
-    //   - sampler objects do not exist (glGenSamplers is ES 3.0): sampling state is written onto
-    //     the texture objects themselves (the Es2* sampler helpers);
-    //   - GL_TEXTURE_MAX_LEVEL does not exist: mipmap completeness is kept by demoting the mip
-    //     term of the requested min filter for textures without a full chain (the level-count
-    //     registry below tracks which textures allocated complete chains);
-    //   - glDrawElementsBaseVertex does not exist (it is ES 3.2): baseVertex draws re-offset every
-    //     enabled attribute pointer by baseVertex elements of its own stride instead. The helper
-    //     is shared with WebGL and the ES 3.0 floor for the same API limitation;
-    //   - GL_READ_FRAMEBUFFER does not exist (ES 3.0): readbacks bind GL_FRAMEBUFFER, whose single
-    //     color attachment is the implicit read source (ReadbackFramebufferTarget() below).
-    // =============================================================================================
-
-    /// Framebuffer binding point used by the non-MSAA texture/render-target readback paths.
-    /// GLES 2.0 has only the combined GL_FRAMEBUFFER target (GL_READ_FRAMEBUFFER is ES 3.0);
-    /// reads then come from the bound framebuffer's single color attachment implicitly. The MSAA
-    /// resolve paths keep their separate READ/DRAW targets -- they are unreachable under
-    /// OPENGLES2, which forces every sample count to 1.
-    /// plans/plan_runtimerenderer.md P11: was a profile-selected constant, now a profile-selected value.
-    [[nodiscard]] inline ::easygl::FramebufferTarget ReadbackFramebufferTarget()
-    {
-        // GL_READ_FRAMEBUFFER is ES 3.0; WebGL 1, like ES 2.0, has only the combined target.
-        return UsesEs2ApiGeneration(ActiveGlProfile())
-            ? ::easygl::FramebufferTarget::Framebuffer
-            : ::easygl::FramebufferTarget::ReadFramebuffer;
-    }
-
-    /// Internal format for the explicit-internal-format RGBA8 texture allocations in this file
-    /// (render-target color storage and cube-map faces). GLES 2.0's glTexImage2D accepts only
-    /// UNSIZED internal formats (sized RGBA8 arrived with ES 3.0 / GL_OES_required_internalformat),
-    /// so the OPENGLES2 profile allocates GL_RGBA; every other profile keeps the sized RGBA8
-    /// allocation unchanged.
-    /// plans/plan_runtimerenderer.md P11: was a profile-selected constant, now a profile-selected value.
-    [[nodiscard]] inline ::metagl::InternalFormat RgbaTexImageInternalFormat()
-    {
-        // The sized internal format RGBA8 is ES 3.0; WebGL 1, like ES 2.0, needs the unsized one.
-        return UsesEs2ApiGeneration(ActiveGlProfile())
-            ? ::metagl::InternalFormat::Rgba
-            : ::metagl::InternalFormat::Rgba8;
-    }
-
     /// GL_EXT_texture_norm16 promotes normalized RG16/RGBA16 storage to GLES/WebGL; desktop core
     /// has it without an extension. Otherwise XNA's sixteen-bit channels must be refused rather
     /// than silently narrowed to RGBA8.
@@ -1045,97 +751,15 @@ if (ProfileIsDesktopCore())
     }
 
     /// Attaches a render target's depth (or packed depth+stencil) renderbuffer to the bound FBO.
-    /// GLES 2.0 has no GL_DEPTH_STENCIL_ATTACHMENT (the combined point is ES 3.0) -- a packed
-    /// GL_DEPTH24_STENCIL8 renderbuffer (GL_OES_packed_depth_stencil) is attached to the DEPTH
-    /// and STENCIL points separately there; every other profile keeps the single combined attach.
     static void AttachDepthRenderbufferToBoundFbo(::easygl::Framebuffer& fbo,
                                                   ::metagl::FramebufferAttachment attachment,
                                                   ::easygl::Renderbuffer& rbo)
     {
-if (ProfileIsEs2ApiGeneration())
-{
-        if (attachment == ::metagl::FramebufferAttachment::DepthStencil)
-        {
-            fbo.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
-                                    ::metagl::FramebufferAttachment::Depth, rbo);
-            fbo.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
-                                    ::metagl::FramebufferAttachment::Stencil, rbo);
-            return;
-        }
-}
         fbo.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer, attachment, rbo);
     }
 
-    // plans/plan_runtimerenderer.md P11: always compiled now. Every entry point below is called only
-    // from a runtime-gated path, so an ES 3.0 profile simply never reaches this bookkeeping.
     namespace
     {
-        /// One recorded XNA sampler-state request (raw ordinals, exactly as ApplySamplerState
-        /// receives them).
-        struct Es2SamplerDesc
-        {
-            int filter        = 0;  ///< TextureFilter::Linear
-            int addressU      = 1;  ///< TextureAddressMode::Clamp
-            int addressV      = 1;  ///< TextureAddressMode::Clamp
-            int maxAnisotropy = 4;  ///< SamplerState default MaxAnisotropy
-        };
-
-        // Reach/ES2 has no XNA vertex texture slots, so only the sixteen pixel units participate
-        // in this profile-specific texture-object fallback.
-        constexpr int kEs2MaxSamplerSlots = 16;
-
-        /// Last sampler state requested per slot. GL texture-unit count and sampler slots share
-        /// the same indexing here, exactly like the sampler-object path's samplers_[slot].
-        Es2SamplerDesc (&Es2PendingSamplers())[kEs2MaxSamplerSlots]
-        {
-            static Es2SamplerDesc pending[kEs2MaxSamplerSlots];
-            return pending;
-        }
-
-        /// GL texture name -> allocated mip level count. GLES 2.0 has no GL_TEXTURE_MAX_LEVEL, so
-        /// completeness under a mip-carrying min filter demands a FULL chain -- this registry is
-        /// what lets Es2ApplyPendingSamplerToUnit keep the mip term for textures that allocated
-        /// one and demote it for single-level textures (which would otherwise sample as opaque
-        /// black, the exact REMED-GFX-174/Task 924 failure MAX_LEVEL clamping prevents on ES 3.0).
-        /// A name not present is treated as single-level (demote -- the safe direction).
-        std::unordered_map<unsigned int, int>& Es2TextureLevelCounts()
-        {
-            static std::unordered_map<unsigned int, int> levels;
-            return levels;
-        }
-
-        void Es2RegisterTextureLevels(unsigned int glName, int levelCount)
-        {
-            if (glName != 0) Es2TextureLevelCounts()[glName] = levelCount;
-        }
-
-        void Es2UnregisterTexture(unsigned int glName)
-        {
-            if (glName != 0) Es2TextureLevelCounts().erase(glName);
-        }
-
-        [[nodiscard]] bool Es2TextureHasFullMipChain(unsigned int glName)
-        {
-            const auto& levels = Es2TextureLevelCounts();
-            const auto it = levels.find(glName);
-            return it != levels.end() && it->second > 1;
-        }
-
-        /// GL_TEXTURE_MAX_ANISOTROPY_EXT is an extension constant meta-gl exposes only for
-        /// SAMPLER objects (SamplerParameter::MaxAnisotropy) -- ES 2.0 has no sampler objects, so
-        /// the per-TEXTURE parameter is written through a runtime-loaded glTexParameterf,
-        /// following EnableVertexProgramPointSize's identical meta-gl-gap precedent (OPENGL33).
-        /// Callers gate on GL_EXT_texture_filter_anisotropic being genuinely advertised.
-        void Es2SetTextureMaxAnisotropy(::easygl::TextureTarget target, float value)
-        {
-            using GlTexParameterfFn = void (*)(unsigned int, unsigned int, float);
-            static const auto glTexParameterfFn =
-                reinterpret_cast<GlTexParameterfFn>(LoadEasyGlProcAddress("glTexParameterf"));
-            constexpr unsigned int kGlTextureMaxAnisotropyExt = 0x84FE;  // GL_TEXTURE_MAX_ANISOTROPY_EXT
-            if (glTexParameterfFn)
-                glTexParameterfFn(static_cast<unsigned int>(target), kGlTextureMaxAnisotropyExt, value);
-        }
-
         struct AnisotropyLimits
         {
             bool supported = false;
@@ -1179,134 +803,9 @@ if (ProfileIsEs2ApiGeneration())
             return clamped;
         }
 
-        /// Writes @p desc onto whatever texture object(s) are bound to @p unit right now.
-        ///
-        /// Keeps the SAME ordinal -> min/mag/mip decomposition table as ApplySamplerState's
-        /// sampler-object path (REMED-GFX-175) -- the two switches must stay in sync, mirroring
-        /// how the stride-52 layout is deliberately duplicated per renderer (Task 11.10 note in
-        /// ApplyLayout). The only ES 2.0 delta: a texture without a full mip chain gets the mip
-        /// term of its min filter dropped (Linear*Mipmap* -> Linear, Nearest*Mipmap* -> Nearest),
-        /// which is exactly the effective filtering a complete single-level chain produces on the
-        /// ES 3.0 profiles via MAX_LEVEL clamping.
-        void Es2ApplyPendingSamplerToUnit(int unit)
-        {
-            if (unit < 0 || unit >= kEs2MaxSamplerSlots) return;
-            const Es2SamplerDesc& desc = Es2PendingSamplers()[unit];
-
-            ::easygl::TextureMinFilter minF;
-            ::easygl::TextureMagFilter magF;
-            switch (desc.filter)
-            {
-            case 1: // Point
-                minF = ::easygl::TextureMinFilter::NearestMipmapNearest;
-                magF = ::easygl::TextureMagFilter::Nearest;
-                break;
-            case 2: // Anisotropic
-                minF = ::easygl::TextureMinFilter::LinearMipmapLinear;
-                magF = ::easygl::TextureMagFilter::Linear;
-                break;
-            case 3: // LinearMipPoint
-                minF = ::easygl::TextureMinFilter::LinearMipmapNearest;
-                magF = ::easygl::TextureMagFilter::Linear;
-                break;
-            case 4: // PointMipLinear
-                minF = ::easygl::TextureMinFilter::NearestMipmapLinear;
-                magF = ::easygl::TextureMagFilter::Nearest;
-                break;
-            case 5: // MinLinearMagPointMipLinear
-                minF = ::easygl::TextureMinFilter::LinearMipmapLinear;
-                magF = ::easygl::TextureMagFilter::Nearest;
-                break;
-            case 6: // MinLinearMagPointMipPoint
-                minF = ::easygl::TextureMinFilter::LinearMipmapNearest;
-                magF = ::easygl::TextureMagFilter::Nearest;
-                break;
-            case 7: // MinPointMagLinearMipLinear
-                minF = ::easygl::TextureMinFilter::NearestMipmapLinear;
-                magF = ::easygl::TextureMagFilter::Linear;
-                break;
-            case 8: // MinPointMagLinearMipPoint
-                minF = ::easygl::TextureMinFilter::NearestMipmapNearest;
-                magF = ::easygl::TextureMagFilter::Linear;
-                break;
-            default: // Linear
-                minF = ::easygl::TextureMinFilter::LinearMipmapLinear;
-                magF = ::easygl::TextureMagFilter::Linear;
-                break;
-            }
-
-            const auto demote = [](::easygl::TextureMinFilter f) -> int {
-                switch (f)
-                {
-                case ::easygl::TextureMinFilter::NearestMipmapNearest:
-                case ::easygl::TextureMinFilter::NearestMipmapLinear:
-                    return static_cast<int>(::easygl::TextureMinFilter::Nearest);
-                case ::easygl::TextureMinFilter::LinearMipmapNearest:
-                case ::easygl::TextureMinFilter::LinearMipmapLinear:
-                    return static_cast<int>(::easygl::TextureMinFilter::Linear);
-                default:
-                    return static_cast<int>(f);
-                }
-            };
-
-            const auto toWrap = [](int mode) -> int {
-                switch (mode)
-                {
-                case 1:  return static_cast<int>(::easygl::TextureWrapMode::ClampToEdge);
-                case 2:  return static_cast<int>(::easygl::TextureWrapMode::MirroredRepeat);
-                default: return static_cast<int>(::easygl::TextureWrapMode::Repeat);
-                }
-            };
-
-            const AnisotropyLimits& aniso = CurrentContextAnisotropyLimits();
-            const bool hasAniso = aniso.supported;
-            float anisoValue = 1.0f;
-            if (hasAniso && desc.filter == 2)
-                anisoValue = ClampedMaxAnisotropy(desc.maxAnisotropy, aniso);
-
-            ::metagl::glActiveTexture(ToTextureUnit(unit));
-
-            const struct
-            {
-                ::metagl::GetParameter binding;
-                ::easygl::TextureTarget target;
-            } kTargets[] = {
-                { ::metagl::GetParameter::TextureBinding2D,      ::easygl::TextureTarget::Texture2D },
-                { ::metagl::GetParameter::TextureBindingCubeMap, ::easygl::TextureTarget::TextureCubeMap },
-            };
-            for (const auto& entry : kTargets)
-            {
-                GLint boundName = 0;
-                ::metagl::glGetIntegerv(entry.binding, &boundName);
-                if (boundName == 0) continue;
-
-                const bool fullChain =
-                    Es2TextureHasFullMipChain(static_cast<unsigned int>(boundName));
-                const int effectiveMin =
-                    fullChain ? static_cast<int>(minF) : demote(minF);
-                ::metagl::glTexParameteri(entry.target,
-                                          ::easygl::TextureParameterSetter::MinFilter, effectiveMin);
-                ::metagl::glTexParameteri(entry.target,
-                                          ::easygl::TextureParameterSetter::MagFilter,
-                                          static_cast<int>(magF));
-                ::metagl::glTexParameteri(entry.target,
-                                          ::easygl::TextureParameterSetter::WrapS, toWrap(desc.addressU));
-                ::metagl::glTexParameteri(entry.target,
-                                          ::easygl::TextureParameterSetter::WrapT, toWrap(desc.addressV));
-                // REMED-GFX-174: anisotropy is a component of the ordinal, written on every
-                // application (see the sampler-object path's identical reasoning) -- here onto the
-                // texture object, the only per-sampling state ES 2.0 offers.
-                if (hasAniso)
-                    Es2SetTextureMaxAnisotropy(entry.target, anisoValue);
-            }
-
-            // Leave unit 0 active, matching every texture-binding site in this file.
-            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
-        }
-
         /// Bytes per component for the vertex-attribute types this renderer binds. Used only to
         /// resolve the effective stride of a tightly-packed (stride 0) attribute.
-        [[nodiscard]] int Es2AttribComponentBytes(GLenum type)
+        [[nodiscard]] int AttribComponentBytes(GLenum type)
         {
             switch (type)
             {
@@ -1361,9 +860,9 @@ if (ProfileIsEs2ApiGeneration())
         /// Re-offsets every enabled per-vertex attribute pointer by @p baseVertex elements of its
         /// own stride and returns what it moved, for RestoreAttribPointers. Must run while the
         /// draw's VAO is bound. This is FNA3D's no-base-vertex fallback shape and serves every CNA
-        /// profile whose guaranteed API floor lacks glDrawElementsBaseVertex: GLES 2/3 and both
-        /// WebGL generations. ES 3-class profiles can also have per-instance attributes enabled;
-        /// those are identified by a nonzero divisor and deliberately left unchanged.
+        /// profile whose guaranteed API floor lacks glDrawElementsBaseVertex: GLES 3 and WebGL 2.
+        /// Those profiles can also have per-instance attributes enabled; those are identified by a
+        /// nonzero divisor and deliberately left unchanged.
         ///
         /// The restore writes back what was read here instead of reading the shifted pointers
         /// again. The Android emulator's GLES encoder answers glGetVertexAttribPointerv with the
@@ -1390,13 +889,10 @@ if (ProfileIsEs2ApiGeneration())
                                               ::metagl::VertexAttribParameter::ArrayEnabled, &enabled);
                 if (enabled == 0) continue;
 
-                if (!ProfileIsEs2ApiGeneration())
-                {
-                    GLint divisor = 0;
-                    ::metagl::glGetVertexAttribiv(
-                        location, ::metagl::VertexAttribParameter::ArrayDivisor, &divisor);
-                    if (divisor != 0) continue;
-                }
+                GLint divisor = 0;
+                ::metagl::glGetVertexAttribiv(
+                    location, ::metagl::VertexAttribParameter::ArrayDivisor, &divisor);
+                if (divisor != 0) continue;
 
                 ShiftedAttribPointers::Pointer saved;
                 saved.location = static_cast<GLuint>(i);
@@ -1406,9 +902,8 @@ if (ProfileIsEs2ApiGeneration())
                                               ::metagl::VertexAttribParameter::ArrayType, &saved.type);
                 ::metagl::glGetVertexAttribiv(location,
                                               ::metagl::VertexAttribParameter::ArrayNormalized, &saved.normalized);
-                if (!ProfileIsEs2ApiGeneration())
-                    ::metagl::glGetVertexAttribiv(
-                        location, ::metagl::VertexAttribParameter::ArrayInteger, &saved.integer);
+                ::metagl::glGetVertexAttribiv(
+                    location, ::metagl::VertexAttribParameter::ArrayInteger, &saved.integer);
                 ::metagl::glGetVertexAttribiv(location,
                                               ::metagl::VertexAttribParameter::ArrayStride, &saved.stride);
                 ::metagl::glGetVertexAttribiv(location,
@@ -1421,7 +916,7 @@ if (ProfileIsEs2ApiGeneration())
                 const std::intptr_t effectiveStride =
                     saved.stride != 0 ? saved.stride
                                       : static_cast<std::intptr_t>(saved.size) *
-                                            Es2AttribComponentBytes(static_cast<GLenum>(saved.type));
+                                            AttribComponentBytes(static_cast<GLenum>(saved.type));
                 SetAttribPointer(saved, static_cast<std::intptr_t>(baseVertex) * effectiveStride);
                 shifted.pointers[static_cast<std::size_t>(shifted.count++)] = saved;
             }
@@ -1470,7 +965,7 @@ if (ProfileIsEs2ApiGeneration())
         const void* pixels, bool wholeLevel)
     {
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
-        ::easygl::InternalFormat internalFormat = RgbaTexImageInternalFormat();
+        ::easygl::InternalFormat internalFormat = ::metagl::InternalFormat::Rgba8;
         ::easygl::PixelFormat pixelFormat = ::easygl::PixelFormat::Rgba;
         ::easygl::PixelType pixelType = ::easygl::PixelType::UnsignedByte;
         int unpackAlignment = 4;
@@ -1800,7 +1295,7 @@ if (ProfileIsEs2ApiGeneration())
         const void* pixels, bool wholeLevel)
     {
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
-        ::easygl::InternalFormat internalFormat = RgbaTexImageInternalFormat();
+        ::easygl::InternalFormat internalFormat = ::metagl::InternalFormat::Rgba8;
         ::easygl::PixelFormat pixelFormat = ::easygl::PixelFormat::Rgba;
         ::easygl::PixelType pixelType = ::easygl::PixelType::UnsignedByte;
         int unpackAlignment = 4;
@@ -2058,19 +1553,10 @@ if (ProfileIsEs2ApiGeneration())
                 levelSize = std::max(1, levelSize / 2);
             }
         }
-if (ProfileIsEs2ApiGeneration())
-{
-        // GLES 2.0 has no GL_TEXTURE_MAX_LEVEL -- completeness is instead handled by
-        // Es2ApplyPendingSamplerToUnit's mip-term demotion, driven by this registration.
-        Es2RegisterTextureLevels(tex_.native_handle(), levelCount_);
-}
-else
-{
         // REMED-GFX-174: see EasyGLRenderTargetRenderer's identical clamp -- a cube sampled through
         // EnvironmentMapEffect's slot-1 sampler faces exactly the same completeness rule.
         tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::easygl::TextureParameterSetter::MaxLevel,
                            levelCount_ - 1);
-}
         tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::easygl::TextureParameterSetter::MinFilter, kTexLinear);
         tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::easygl::TextureParameterSetter::MagFilter, kTexLinear);
         tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::easygl::TextureParameterSetter::WrapS, kTexClampToEdge);
@@ -2131,11 +1617,6 @@ else
     EasyGLTextureCubeRenderer::~EasyGLTextureCubeRenderer()
     {
         if (auto registry = registry_.lock()) registry->remove(this);
-if (ProfileIsEs2ApiGeneration())
-{
-        // GL reuses deleted names; drop the level registration before tex_'s destructor frees it.
-        Es2UnregisterTexture(tex_.native_handle());
-}
     }
 
     void EasyGLTextureCubeRenderer::ShareCpuPixels(
@@ -2793,12 +2274,6 @@ if (ProfileIsEs2ApiGeneration())
         texture->BindGL(unit);
         TraceBoundTextureUnit("bind-texture-3d", unit);
         ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
-if (ProfileIsEs2ApiGeneration())
-{
-        // ES 2.0 keeps sampling state on the texture object, so a texture bound AFTER the
-        // GraphicsDevice applied this slot's SamplerState must receive that state now.
-        Es2ApplyPendingSamplerToUnit(unit);
-}
 
         // REMED-GFX-147: a custom ShaderEffect's GLSL belongs to the game, so this renderer cannot
         // rewrite its sampling for it -- but it can tell it what it is sampling. A user shader that
@@ -2830,11 +2305,6 @@ if (ProfileIsEs2ApiGeneration())
         if (!texture) return;
         texture->BindGL(unit);
         ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
-if (ProfileIsEs2ApiGeneration())
-{
-        // See BindTexture just above -- same ES 2.0 texture-object sampling-state rule.
-        Es2ApplyPendingSamplerToUnit(unit);
-}
     }
 
     // plans/plan_graphics.md Task 863: same shape as BindTextureCube(), but for a sampler3D --
@@ -2852,15 +2322,7 @@ if (ProfileIsEs2ApiGeneration())
     EasyGLOcclusionQueryRenderer::EasyGLOcclusionQueryRenderer(std::shared_ptr<::easygl::ResourceRegistry> registry)
         : registry_(registry)
     {
-if (!ProfileIsEs2ApiGeneration())
-{
-        // GLES 2.0 has no query objects (glGenQueries is ES 3.0), and
-        // SupportsCapability(OcclusionQuery) reports false under that profile -- never creating
-        // the GL query there makes every method below take its existing !is_created() no-op
-        // path, honest and crash-free on any ES 2.0 driver (IsComplete stays false,
-        // PixelCount stays 0).
         query_.create();
-}
         if (auto reg = registry_.lock()) reg->add(this);
     }
 
@@ -2942,11 +2404,7 @@ if (!ProfileIsEs2ApiGeneration())
 
     void EasyGLOcclusionQueryRenderer::recreate_gl_resource()
     {
-if (!ProfileIsEs2ApiGeneration())
-{
-        // See the constructor -- no GL query objects exist under the OPENGLES2 profile.
         query_.create();
-}
     }
 
     // --- EasyGLGpuTimerRenderer ---
@@ -3129,22 +2587,12 @@ if (!ProfileIsEs2ApiGeneration())
         UploadLevel(0, width, height,
                     dxt ? compressedLevels_[0].data() : data.pixels.data());
         AllocateDeclaredLevels();
-if (ProfileIsEs2ApiGeneration())
-{
-        // GLES 2.0 has no GL_TEXTURE_MAX_LEVEL, so Task 924's clamp cannot exist there --
-        // completeness under mip-carrying filters is instead handled by
-        // Es2ApplyPendingSamplerToUnit's mip-term demotion, driven by this registration.
-        Es2RegisterTextureLevels(texture.native_handle(), mipLevels_);
-}
-else
-{
         // Task 924: clamp GL_TEXTURE_MAX_LEVEL to the real level count -- otherwise a mipmap-
         // requiring TextureFilter (e.g. Anisotropic) treats this as an incomplete mipmap chain
         // (GL's own default max level is 1000) and renders solid black, even for an ordinary
         // single-level (mipLevels_==1) texture that never uploads any level beyond 0.
         texture.set_parameter(::easygl::TextureTarget::Texture2D, ::easygl::TextureParameterSetter::MaxLevel,
                                mipLevels_ - 1);
-}
         if (auto reg = registry_.lock()) reg->add(this);
     }
 
@@ -3342,7 +2790,7 @@ else
             }
             texture.bind(::easygl::TextureTarget::Texture2D);
             texture.set_image_2d(::easygl::TextureTarget::Texture2D, level,
-                                 RgbaTexImageInternalFormat(), levelWidth, levelHeight,
+                                 ::metagl::InternalFormat::Rgba8, levelWidth, levelHeight,
                                  ::easygl::PixelFormat::Rgba,
                                  ::easygl::PixelType::UnsignedByte, upload);
             SetOrdinaryTextureDefaults(texture);
@@ -3505,22 +2953,11 @@ else
 
     EasyGLTextureRenderer::~EasyGLTextureRenderer()
     {
-if (ProfileIsEs2ApiGeneration())
-{
-        // GL reuses deleted names; drop the level registration before texture's destructor frees it.
-        Es2UnregisterTexture(texture.native_handle());
-}
         if (auto reg = registry_.lock()) reg->remove(this);
     }
 
     void EasyGLTextureRenderer::release_gl_handle_only()
     {
-if (ProfileIsEs2ApiGeneration())
-{
-        // Context loss: the name dies with the old context (and the new one may re-issue it), so
-        // the registration must go BEFORE the handle is zeroed; recreate_gl_resource re-registers.
-        Es2UnregisterTexture(texture.native_handle());
-}
         texture.reset_handle_no_gl();
     }
 
@@ -3553,18 +2990,10 @@ if (ProfileIsEs2ApiGeneration())
         // chain has to be re-allocated here too or the texture comes back from a context loss
         // mipmap-incomplete and samples black under every mip-filtering ordinal.
         AllocateDeclaredLevels();
-if (ProfileIsEs2ApiGeneration())
-{
-        // See the constructor: the fresh name replaces whatever release_gl_handle_only dropped.
-        Es2RegisterTextureLevels(texture.native_handle(), mipLevels_);
-}
-else
-{
         // Task 924: the fresh GL texture object defaults GL_TEXTURE_MAX_LEVEL back to 1000 --
         // reapply the same clamp the constructor set, matching this texture's real level count.
         texture.set_parameter(::easygl::TextureTarget::Texture2D, ::easygl::TextureParameterSetter::MaxLevel,
                                mipLevels_ - 1);
-}
     }
 
     void EasyGLTextureRenderer::BindGL(int unit) const
@@ -3734,7 +3163,7 @@ else
         switch (static_cast<SurfaceFormat>(surfaceFormat))
         {
         case SurfaceFormat::Color:
-            out = {RgbaTexImageInternalFormat(), ::metagl::PixelFormat::Rgba,
+            out = {::metagl::InternalFormat::Rgba8, ::metagl::PixelFormat::Rgba,
                    ::metagl::PixelType::UnsignedByte, false, false, 4};
             return true;
         case SurfaceFormat::Rgba1010102:
@@ -3793,7 +3222,7 @@ else
                                 format == SurfaceFormat::Rg32;
         if (!oneChannel && !twoChannel)
             return;
-        // WebGL (and GLES 2.0) cannot swizzle: there the channels a one- or two-channel target does
+        // WebGL cannot swizzle: there the channels a one- or two-channel target does
         // not store read as GL's 0 rather than Direct3D's 1 -- a recorded divergence, where setting
         // the parameter anyway left INVALID_ENUM pending and failed the next MRT bind (Bubble Bound
         // in a browser).
@@ -3902,7 +3331,7 @@ else
     [[nodiscard]] static int ClampRenderTargetSamples(
         const RenderTargetColorStorage& storage, int requested, bool cubeTarget)
     {
-        if (requested <= 1 || ProfileIsEs2ApiGeneration())
+        if (requested <= 1)
             return 0;
         std::array<GLint, 16> supported{};
         ::metagl::glGetInternalformativ(
@@ -3987,11 +3416,6 @@ else
     {
         TargetTrace("rt2d.destroy", this, TraceNativeDetailEXT());
         DetachFromBindingEXT();
-if (ProfileIsEs2ApiGeneration())
-{
-        // GL reuses deleted names; drop the level registration before colorTex_ is freed.
-        Es2UnregisterTexture(colorTex_.native_handle());
-}
         if (auto reg = registry_.lock()) reg->remove(this);
     }
 
@@ -4059,15 +3483,6 @@ if (ProfileIsEs2ApiGeneration())
     void EasyGLRenderTargetRenderer::CreateResources()
     {
         const FramebufferBindingPreserved restoreBinding;
-if (ProfileIsEs2ApiGeneration())
-{
-        // GLES 2.0 has no multisample renderbuffers and no blit to resolve them
-        // (glRenderbufferStorageMultisample/glBlitFramebuffer are ES 3.0), so the requested
-        // preference degrades to single-sample -- the same silent clamp the GL_MAX_SAMPLES limit
-        // applies on the ES 3.0 profiles, taken to this profile's real ceiling of 1.
-        // GetMultiSampleCount() then reports 0, keeping the public applied count truthful.
-        multiSampleCount_ = 0;
-}
         // plans/plan_modern.md MOD-115: the colour storage this target's SurfaceFormat calls for. The
         // request is validated before construction (EasyGLRenderer::CreateRenderTarget2DEXT refuses
         // a format this context cannot render to), so an unmapped ordinal here would be a caller
@@ -4104,15 +3519,6 @@ if (ProfileIsEs2ApiGeneration())
         }
         ApplyRenderTargetChannelSwizzle(
             colorTex_, ::easygl::TextureTarget::Texture2D, surfaceFormat_);
-if (ProfileIsEs2ApiGeneration())
-{
-        // GLES 2.0 has no GL_TEXTURE_MAX_LEVEL -- the same completeness problem REMED-GFX-174
-        // describes is handled by Es2ApplyPendingSamplerToUnit's mip-term demotion instead,
-        // driven by this registration.
-        Es2RegisterTextureLevels(colorTex_.native_handle(), levelCount_);
-}
-else
-{
         // REMED-GFX-174: clamp GL_TEXTURE_MAX_LEVEL to the real level count, exactly as Task 924
         // already does for an ordinary Texture2D. GL evaluates mipmap completeness over
         // [BASE_LEVEL, MAX_LEVEL] and GL's own default MAX_LEVEL is 1000, so a render target with
@@ -4128,7 +3534,6 @@ else
         colorTex_.set_parameter(::easygl::TextureTarget::Texture2D,
                                 ::easygl::TextureParameterSetter::MaxLevel,
                                 levelCount_ - 1);
-}
         // REMED-GFX-175: this is the texture object's OWN default min filter, which every draw's
         // sampler object overrides, so it decides nothing about how a game's TextureFilter samples
         // this target -- the level-range clamp above is what keeps it complete under any of them.
@@ -4327,42 +3732,26 @@ else
             }
         }
 
-GLint previousFramebuffer = 0;  // plans/plan_runtimerenderer.md P11: hoisted -- read by a separate runtime-gated block below
-if (ProfileIsEs2ApiGeneration())
-{
-        // GLES 2.0 has only the combined GL_FRAMEBUFFER binding (ReadbackFramebufferTarget()), so
-        // selecting a read source below also redirects draws; remember the current binding and
-        // restore it afterwards, preserving the ES 3.0 paths' read-only semantics.
-        ::metagl::glGetIntegerv(::metagl::GetParameter::FramebufferBinding, &previousFramebuffer);
-}
         ::easygl::Framebuffer mipFbo;
         if (level == 0)
         {
             if (multiSampleCount_ > 0)
                 resolveFbo_.bind(::easygl::FramebufferTarget::ReadFramebuffer);
             else
-                fbo_.bind(ReadbackFramebufferTarget());
+                fbo_.bind(::easygl::FramebufferTarget::ReadFramebuffer);
         }
         else
         {
-            // Attaching a level above 0 needs GL_OES_fbo_render_mipmap on a real ES 2.0 context
-            // (core ES 2.0 restricts glFramebufferTexture2D to level 0) -- universally shipped
-            // wherever mip chains exist at all, and advertised by Mesa.
             mipFbo.create();
-            mipFbo.bind(ReadbackFramebufferTarget());
+            mipFbo.bind(::easygl::FramebufferTarget::ReadFramebuffer);
             mipFbo.attach_texture_2d(
-                ReadbackFramebufferTarget(),
+                ::easygl::FramebufferTarget::ReadFramebuffer,
                 ::metagl::to_framebuffer_attachment(
                     ::metagl::ColorAttachment::Color0),
                 ::easygl::TextureTarget::Texture2D, colorTex_, level);
         }
-if (!ProfileIsEs2ApiGeneration())
-{
-        // GLES 2.0 has no glReadBuffer; the bound framebuffer's single color attachment is the
-        // implicit read source there.
         ::metagl::glReadBuffer(
             ::metagl::to_read_buffer(::metagl::ColorAttachment::Color0));
-}
         if (!ReadRenderTargetPixels(surfaceFormat_, colorStorage,
                                     x, levelHeight - y - h, w, h, data))
             throw std::runtime_error(
@@ -4379,16 +3768,8 @@ if (!ProfileIsEs2ApiGeneration())
             std::copy(bottom, bottom + rowBytes, top);
             std::copy(row.begin(), row.end(), bottom);
         }
-if (ProfileIsEs2ApiGeneration())
-{
-        ::metagl::glBindFramebuffer(::metagl::FramebufferTarget::Framebuffer,
-                                    ::metagl::FramebufferId{static_cast<GLuint>(previousFramebuffer)});
-}
-else
-{
         ::easygl::Framebuffer::unbind(
             ::easygl::FramebufferTarget::ReadFramebuffer);
-}
         return true;
     }
 
@@ -4496,11 +3877,6 @@ else
 
     void EasyGLRenderTargetRenderer::release_gl_handle_only()
     {
-if (ProfileIsEs2ApiGeneration())
-{
-        // Context loss: unregister before the handle is zeroed; recreate_gl_resource re-registers.
-        Es2UnregisterTexture(colorTex_.native_handle());
-}
         fbo_.reset_handle_no_gl();
         resolveFbo_.reset_handle_no_gl();
         colorTex_.reset_handle_no_gl();
@@ -4532,11 +3908,6 @@ if (ProfileIsEs2ApiGeneration())
     {
         TargetTrace("cube.destroy", this, TraceNativeDetailEXT());
         DetachFromBindingEXT();
-if (ProfileIsEs2ApiGeneration())
-{
-        // GL reuses deleted names; drop the level registration before cubeTex_ is freed.
-        Es2UnregisterTexture(cubeTex_.native_handle());
-}
         if (auto reg = registry_.lock()) reg->remove(this);
     }
 
@@ -4598,12 +3969,6 @@ if (ProfileIsEs2ApiGeneration())
     void EasyGLRenderTargetCubeRenderer::CreateResources()
     {
         const FramebufferBindingPreserved restoreBinding;
-if (ProfileIsEs2ApiGeneration())
-{
-        // See EasyGLRenderTargetRenderer::CreateResources -- GLES 2.0 has no multisample
-        // renderbuffers/blit, so the requested preference degrades to single-sample.
-        multiSampleCount_ = 0;
-}
         // plans/plan_modern.md MOD-107: the same storage description the 2D targets use, so a float cube
         // face and a float 2D target cannot end up with different GL formats.
         RenderTargetColorStorage cubeStorage{};
@@ -4641,18 +4006,10 @@ if (ProfileIsEs2ApiGeneration())
         }
         ApplyRenderTargetChannelSwizzle(
             cubeTex_, ::easygl::TextureTarget::TextureCubeMap, surfaceFormat_);
-if (ProfileIsEs2ApiGeneration())
-{
-        // GLES 2.0 has no GL_TEXTURE_MAX_LEVEL -- see EasyGLRenderTargetRenderer::CreateResources.
-        Es2RegisterTextureLevels(cubeTex_.native_handle(), levelCount_);
-}
-else
-{
         // REMED-GFX-174: see EasyGLRenderTargetRenderer's identical clamp.
         cubeTex_.set_parameter(::easygl::TextureTarget::TextureCubeMap,
                                ::easygl::TextureParameterSetter::MaxLevel,
                                levelCount_ - 1);
-}
         cubeTex_.set_parameter(::easygl::TextureTarget::TextureCubeMap,
                                ::easygl::TextureParameterSetter::MinFilter,
                                static_cast<int>(::metagl::TextureMagFilter::Linear));
@@ -4920,28 +4277,16 @@ else
         const int rowBytes = w * storage.bytesPerPixel;
         if (dataLength < rowBytes * h) return false;
 
-GLint previousFramebuffer = 0;  // plans/plan_runtimerenderer.md P11: hoisted -- read by a separate runtime-gated block below
-if (ProfileIsEs2ApiGeneration())
-{
-        // See EasyGLRenderTargetRenderer::GetData -- the combined GL_FRAMEBUFFER binding must be
-        // restored so a read here cannot redirect subsequent draws.
-        ::metagl::glGetIntegerv(::metagl::GetParameter::FramebufferBinding, &previousFramebuffer);
-}
         ::easygl::Framebuffer fbo;
         fbo.create();
-        fbo.bind(ReadbackFramebufferTarget());
-        fbo.attach_texture_2d(ReadbackFramebufferTarget(),
+        fbo.bind(::easygl::FramebufferTarget::ReadFramebuffer);
+        fbo.attach_texture_2d(::easygl::FramebufferTarget::ReadFramebuffer,
                               ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
                               kCubeFaceTargets[face],
                               cubeTex_, level);
-if (!ProfileIsEs2ApiGeneration())
-{
-        // GLES 2.0 has no glReadBuffer; the bound framebuffer's single color attachment is the
-        // implicit read source there.
         fbo.set_read_buffer(::metagl::to_read_buffer(::metagl::ColorAttachment::Color0));
-}
 
-        const bool complete = fbo.is_complete(ReadbackFramebufferTarget());
+        const bool complete = fbo.is_complete(::easygl::FramebufferTarget::ReadFramebuffer);
         bool readSucceeded = complete;
         if (readSucceeded)
         {
@@ -4962,25 +4307,12 @@ if (!ProfileIsEs2ApiGeneration())
             }
         }
 
-if (ProfileIsEs2ApiGeneration())
-{
-        ::metagl::glBindFramebuffer(::metagl::FramebufferTarget::Framebuffer,
-                                    ::metagl::FramebufferId{static_cast<GLuint>(previousFramebuffer)});
-}
-else
-{
         ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::ReadFramebuffer);
-}
         return readSucceeded;
     }
 
     void EasyGLRenderTargetCubeRenderer::release_gl_handle_only()
     {
-if (ProfileIsEs2ApiGeneration())
-{
-        // Context loss: unregister before the handle is zeroed; recreate_gl_resource re-registers.
-        Es2UnregisterTexture(cubeTex_.native_handle());
-}
         fbo_.reset_handle_no_gl();
         resolveFbo_.reset_handle_no_gl();
         cubeTex_.reset_handle_no_gl();
@@ -5092,9 +4424,9 @@ if (ProfileIsEs2ApiGeneration())
         const char* fragmentShaderSource = spriteSource.fragment.c_str();
 
         const std::string adaptedVertexSource =
-            AdaptGlslEs300ForActiveProfile(vertexShaderSource, GlShaderStageKind::Vertex);
+            AdaptGlslEs300ForActiveProfile(vertexShaderSource);
         const std::string adaptedFragmentSource =
-            AdaptGlslEs300ForActiveProfile(fragmentShaderSource, GlShaderStageKind::Fragment);
+            AdaptGlslEs300ForActiveProfile(fragmentShaderSource);
 
         ::easygl::Shader vertexShader(::easygl::ShaderType::Vertex);
         vertexShader.create();
@@ -5117,17 +4449,6 @@ if (ProfileIsEs2ApiGeneration())
         program_.create();
         program_.attach(vertexShader);
         program_.attach(fragmentShader);
-if (ProfileUsesGlslEs100())
-{
-        // plans/plan_glbackends.md GLB-36: see CompileAndLink's identical comment -- rebind the same
-        // numeric attribute locations the ES 3.00 source's layout(location=N) qualifiers
-        // specified, since the GLSL ES 1.00 shader text these profiles compile has no
-        // layout(location=N) at all.
-        for (const auto& [location, name] : ExtractVertexAttribLocations(vertexShaderSource))
-        {
-            program_.bind_attrib_location(static_cast<unsigned int>(location), name);
-        }
-}
         program_.link();
 
         if (!program_.is_linked())
@@ -5144,32 +4465,25 @@ if (ProfileUsesGlslEs100())
 
         vbo_.create();
         ibo_.create();
-        if (!ProfileIsEs2ApiGeneration())
-        {
-            vao_.create();
-            vao_.bind();
-        }
+        vao_.create();
+        vao_.bind();
         vbo_.bind(::easygl::BufferTarget::Array);
 
-        if (!ProfileIsEs2ApiGeneration())
-        {
-            // Position (0), TexCoord (1), Color (2). WebGL 1 / GLES 2 has no core VAO;
-            // that path reapplies the same default-array attributes immediately before drawing.
-            vao_.enable_attribute(0);
-            vao_.set_attribute_pointer(0, 3, ::easygl::DataType::Float, false,
-                                       9 * sizeof(float), (void*)0);
+        // Position (0), TexCoord (1), Color (2).
+        vao_.enable_attribute(0);
+        vao_.set_attribute_pointer(0, 3, ::easygl::DataType::Float, false,
+                                   9 * sizeof(float), (void*)0);
 
-            vao_.enable_attribute(1);
-            vao_.set_attribute_pointer(1, 2, ::easygl::DataType::Float, false,
-                                       9 * sizeof(float), (void*)(3 * sizeof(float)));
+        vao_.enable_attribute(1);
+        vao_.set_attribute_pointer(1, 2, ::easygl::DataType::Float, false,
+                                   9 * sizeof(float), (void*)(3 * sizeof(float)));
 
-            vao_.enable_attribute(2);
-            vao_.set_attribute_pointer(2, 4, ::easygl::DataType::Float, false,
-                                       9 * sizeof(float), (void*)(5 * sizeof(float)));
+        vao_.enable_attribute(2);
+        vao_.set_attribute_pointer(2, 4, ::easygl::DataType::Float, false,
+                                   9 * sizeof(float), (void*)(5 * sizeof(float)));
 
-            ibo_.bind(::easygl::BufferTarget::ElementArray);
-            vao_.unbind();
-        }
+        ibo_.bind(::easygl::BufferTarget::ElementArray);
+        vao_.unbind();
     }
 
     void EasyGLSpriteBatchRenderer::Begin()
@@ -5451,30 +4765,7 @@ if (ProfileUsesGlslEs100())
                       pending_vertices_.data(),
                       pending_vertices_.size() * sizeof(Vertex));
 
-        if (ProfileIsEs2ApiGeneration())
-        {
-            // Vertex attribute state is global in the GLES 2 / WebGL 1 core API. Other draws may
-            // have changed it since the previous batch, so restore SpriteBatch's complete layout
-            // after binding this batch's VBO instead of pretending a core VAO exists.
-            metagl::glEnableVertexAttribArray(metagl::AttribLocation{0});
-            metagl::glVertexAttribPointer(metagl::AttribLocation{0}, 3,
-                                          metagl::DataType::Float, 0,
-                                          static_cast<metagl::GLsizei>(9 * sizeof(float)), (void*)0);
-            metagl::glEnableVertexAttribArray(metagl::AttribLocation{1});
-            metagl::glVertexAttribPointer(metagl::AttribLocation{1}, 2,
-                                          metagl::DataType::Float, 0,
-                                          static_cast<metagl::GLsizei>(9 * sizeof(float)),
-                                          (void*)(3 * sizeof(float)));
-            metagl::glEnableVertexAttribArray(metagl::AttribLocation{2});
-            metagl::glVertexAttribPointer(metagl::AttribLocation{2}, 4,
-                                          metagl::DataType::Float, 0,
-                                          static_cast<metagl::GLsizei>(9 * sizeof(float)),
-                                          (void*)(5 * sizeof(float)));
-        }
-        else
-        {
-            vao_.bind();
-        }
+        vao_.bind();
 
         ibo_.bind(::easygl::BufferTarget::ElementArray);
         ibo_.set_data(::easygl::BufferTarget::ElementArray,
@@ -5492,8 +4783,7 @@ if (ProfileUsesGlslEs100())
             nullptr
         );
 
-        if (!ProfileIsEs2ApiGeneration())
-            vao_.unbind();
+        vao_.unbind();
 
         pending_vertices_.clear();
         pending_indices_.clear();
@@ -5889,24 +5179,11 @@ if (ProfileUsesGlslEs100())
         bound_->depthFormat = backBufferDepthFormat_;
 
         // MERGE: next guarded the blocks below with #if defined(CNA_GL_PROFILE_<X>). P11 made the
-        // profile a RUNTIME value so all five identities can be compiled in at once, so each guard
+        // profile a RUNTIME value so all three identities can be compiled in at once, so each guard
         // becomes the equivalent runtime question about the profile in hand.
-        if (ProfileIsEs2ApiGeneration())
-        {
-        // GLES 2.0 has no multisample renderbuffers and no blit to resolve them
-        // (glRenderbufferStorageMultisample/glBlitFramebuffer are ES 3.0), so the requested
-        // backbuffer MultiSampleCount preference degrades to single-sample -- the profile's real
-        // ceiling. GetMultiSampleCount() then reports 0, keeping the applied count truthful.
-            sampleCount_ = 1;
-        }
 
-        // plans/plan_glbackends.md GLB-8: context attributes depend on which of the 5 public GL
-        // profiles this translation unit was compiled for (see cmake/RendererSelection.cmake).
-        // OPENGLES3/WEBGL2 request GLES 3.0 (today's original, unchanged behavior); WEBGL1
-        // requests GLES 2.0 (Emscripten maps this to a real WebGL 1 context); OPENGLES2 requests
-        // the same GLES 2.0 attributes through the NATIVE (EGL/GLX) path -- the driver may
-        // legally return any ES context backward-compatible with 2.0, which is the same
-        // version-floor semantic every other profile's request already has; OPENGL33 requests a
+        // plans/plan_glbackends.md GLB-8: context attributes depend on which of the 3 public GL
+        // profiles this renderer serves. OPENGLES3/WEBGL2 request GLES 3.0; OPENGL33 requests a
         // desktop GL 3.3 core profile context instead of an ES profile.
         // RequestedGlContext() carries those version/profile requirements together with the
         // depth/stencil/double-buffer attributes to the platform before context creation.
@@ -5947,22 +5224,6 @@ if (ProfileUsesGlslEs100())
             GLint maxSamplesCap = 0;
             GLint maxDrawBuffers = 1;
             GLint maxColorAttachments = 1;
-            if (ProfileIsEs2ApiGeneration())
-            {
-            // GLES 2.0 defines none of GL_MAX_SAMPLES / GL_MAX_DRAW_BUFFERS /
-            // GL_MAX_COLOR_ATTACHMENTS (all ES 3.0) -- querying them on a strict ES 2.0 context
-            // raises GL_INVALID_ENUM, and a driver that generously returned a
-            // backward-compatible higher-version context would report ES 3.0 numbers this
-            // profile must not act on. Pin the ES 2.0 truth instead: one sample, one color
-            // attachment, no indexed color masks -- regardless of what the runtime context
-            // could additionally do.
-            maxSamplesCap = 1;
-            maxMrtTargets_ = 1;
-            supportsIndexedColorMasks_ = false;
-            supportsSampleMask_ = false;
-            }
-            else
-            {
             metagl::glGetIntegerv(::metagl::GetParameter::MaxSamples, &maxSamplesCap);
             metagl::glGetIntegerv(
                 ::metagl::GetParameter::MaxDrawBuffers, &maxDrawBuffers);
@@ -5995,7 +5256,6 @@ if (ProfileUsesGlslEs100())
                         ? capabilities.is_at_least(3, 1)
                         : capabilities.is_opengl() && capabilities.is_at_least(3, 2))
                 && metagl::IsFunctionAvailable("glSampleMaski");
-            }
             const AnisotropyLimits& anisoLimits = CurrentContextAnisotropyLimits();
             const bool hasAniso = anisoLimits.supported;
             const float maxAnisoCap = anisoLimits.maxAnisotropy;
@@ -6017,13 +5277,11 @@ if (ProfileUsesGlslEs100())
                       << (hasAniso ? ("supported (Task 918, up to " + std::to_string(static_cast<int>(maxAnisoCap)) + "x)")
                                    : std::string("NOT supported (falls back to trilinear)"))
                       << "; texture SurfaceFormat: Color"
-                      << (ProfileIsEs2ApiGeneration()
-                              ? " + Alpha8"
-                              : " + NormalizedByte4/2 (RGBA8_SNORM)"
-                                " + Bgr565/Bgra5551/Bgra4444"
-                                " + Rgba1010102 + Alpha8"
-                                " + Single/Vector2/Vector4"
-                                " + HalfSingle/HalfVector2/HalfVector4/HdrBlendable")
+                      << " + NormalizedByte4/2 (RGBA8_SNORM)"
+                         " + Bgr565/Bgra5551/Bgra4444"
+                         " + Rgba1010102 + Alpha8"
+                         " + Single/Vector2/Vector4"
+                         " + HalfSingle/HalfVector2/HalfVector4/HdrBlendable"
                       << (ContextHasTextureNorm16EXT() ? " + Rg32/Rgba64" : "")
                       << (ContextHasS3tcEXT()
                               ? " + Dxt1/Dxt3/Dxt5 (S3TC blocks)"
@@ -6068,7 +5326,7 @@ if (ProfileUsesGlslEs100())
 #endif
 
         // Register last, after every fallible step above has succeeded (matches
-        // WebGPU/Canvas/SdlGpu) -- a constructor that throws never runs its destructor, so
+        // WebGPU/SdlGpu) -- a constructor that throws never runs its destructor, so
         // registering earlier would leave a dangling entry in IGraphicsRenderer's static window
         // registry, later dereferenced unconditionally by SdlInputBridge.cpp/Mouse.cpp.
         IGraphicsRenderer::RegisterForWindow(surfaceState_.GetWindowId(), this);
@@ -6139,7 +5397,7 @@ if (ProfileUsesGlslEs100())
         if (metagl::IsContextLost()) return GetMultiSampleCount();
 
         int newSampleCount = 1;
-        if (!ProfileIsEs2ApiGeneration() && requestedMultiSampleCount > 1)
+        if (requestedMultiSampleCount > 1)
         {
             GLint maxSamples = 0;
             metagl::glGetIntegerv(::metagl::GetParameter::MaxSamples, &maxSamples);
@@ -6294,8 +5552,6 @@ if (ProfileUsesGlslEs100())
         probedHalfFloatRenderable_.reset();
         probedNormalizedRenderTargets_.fill(std::nullopt);
 
-        if (ProfileIsEs2ApiGeneration())
-            Es2TextureLevelCounts().clear();
     }
 
     void EasyGLRenderer::recreate_gl_resource()
@@ -6320,20 +5576,9 @@ if (ProfileUsesGlslEs100())
         {
             case CNA::GraphicsCapability::MultiSampleAntiAliasing:
             {
-if (ProfileIsEs2ApiGeneration())
-{
-                // GLES 2.0 has no multisample renderbuffers/blit (both ES 3.0), and GL_MAX_SAMPLES
-                // itself is undefined there -- reported false regardless of what a generously
-                // higher-versioned runtime context could do, matching the profile's forced
-                // single-sample surfaces.
-                return false;
-}
-else
-{
                 GLint maxSamplesCap = 0;
                 metagl::glGetIntegerv(::metagl::GetParameter::MaxSamples, &maxSamplesCap);
                 return maxSamplesCap > 1;
-}
             }
             case CNA::GraphicsCapability::AnisotropicFiltering:
                 return metagl::HasExtension("GL_EXT_texture_filter_anisotropic");
@@ -6346,56 +5591,7 @@ else
                 // REMED-GFX-201: implemented -- Draw*PrimitivesEx binds every per-vertex stream
                 // into the VAO at locations continuing after the previous stream's, each with its
                 // own VBO, stride and byte offset, and restores the single-stream layout after.
-if (ProfileUsesGlslEs100())
-{
-                // WebGL 1 / GLES 2.0 lack the attrib-divisor entry points the Ex routes bind
-                // through; claiming support would fail inside GL instead of being refused up front.
-                return false;
-}
-else
-{
                 return true;
-}
-            case CNA::GraphicsCapability::MultipleRenderTargets:
-if (ProfileUsesGlslEs100())
-{
-                // WebGL 1 / GLES 2.0 core have no draw-buffers MRT.
-                return false;
-}
-else
-{
-                return true;
-}
-            case CNA::GraphicsCapability::OcclusionQuery:
-if (ProfileUsesGlslEs100())
-{
-                // WebGL 1 / GLES 2.0 have no query objects.
-                return false;
-}
-else
-{
-                return true;
-}
-            case CNA::GraphicsCapability::Texture3D:
-if (ProfileUsesGlslEs100())
-{
-                // WebGL 1 / GLES 2.0 have no 3D textures at all.
-                return false;
-}
-else
-{
-                return true;
-}
-            case CNA::GraphicsCapability::Instancing:
-if (ProfileUsesGlslEs100())
-{
-                // WebGL 1 / GLES 2.0 core have no glDrawElementsInstanced/glVertexAttribDivisor.
-                return false;
-}
-else
-{
-                return true;
-}
             default:
                 return true;
         }
@@ -6578,14 +5774,8 @@ else
         }
         else if (bound_->height == 0)
         {
-if (!ProfileIsEs2ApiGeneration())
-{
-            // GLES 2.0 has no glReadBuffer at all -- there the default framebuffer's color buffer
-            // is the one and only read source, so the explicit GL_BACK selection this comment
-            // block describes for EGL/GLES3 contexts neither exists nor is needed.
             ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::ReadFramebuffer);
             device.set_read_buffer(::easygl::ReadBuffer::Back);
-}
         }
 
         // Use the render target's own height when one is bound and the drawable's
@@ -6909,26 +6099,21 @@ if (!ProfileIsEs2ApiGeneration())
             return RendererFormatVerdict::Supported;
         if (format == SurfaceFormat::Alpha8)
             return RendererFormatVerdict::Supported;
-        // Both signed-normalized byte formats need the ES 3 sized-internal-format set.
+        // Both signed-normalized byte formats use the ES 3 sized-internal-format set.
         if (format == SurfaceFormat::NormalizedByte4 || format == SurfaceFormat::NormalizedByte2)
         {
-            return ProfileIsEs2ApiGeneration()
-                ? RendererFormatVerdict::Unsupported
-                : RendererFormatVerdict::Supported;
+            return RendererFormatVerdict::Supported;
         }
-        // REMED-GFX-244: the packed 16-bit formats GraphicsProfile.Reach permits. Sized
-        // GL_RGB565/GL_RGB5_A1/GL_RGBA4 storage is ES 3, so the ES 2 generation keeps refusing them
-        // rather than falling back to an unsized guess whose layout the driver chooses.
+        // REMED-GFX-244: the packed 16-bit formats GraphicsProfile.Reach permits, stored as sized
+        // GL_RGB565/GL_RGB5_A1/GL_RGBA4.
         if (format == SurfaceFormat::Bgr565 || format == SurfaceFormat::Bgra5551 ||
             format == SurfaceFormat::Bgra4444)
         {
-            return ProfileIsEs2ApiGeneration()
-                ? RendererFormatVerdict::Unsupported
-                : RendererFormatVerdict::Supported;
+            return RendererFormatVerdict::Supported;
         }
         // REMED-GFX-244: block-compressed content is supported on every profile, because the
-        // decode fallback needs no extension and no ES 3 storage -- the driver decides only whether
-        // the blocks stay compressed.
+        // decode fallback needs no extension -- the driver decides only whether the blocks stay
+        // compressed.
         if (format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
             format == SurfaceFormat::Dxt5)
         {
@@ -6946,9 +6131,7 @@ if (!ProfileIsEs2ApiGeneration())
             format == SurfaceFormat::HalfVector2 || format == SurfaceFormat::HalfVector4 ||
             format == SurfaceFormat::HdrBlendable)
         {
-            return ProfileIsEs2ApiGeneration()
-                ? RendererFormatVerdict::Unsupported
-                : RendererFormatVerdict::Supported;
+            return RendererFormatVerdict::Supported;
         }
         return RendererFormatVerdict::Defer;
     }
@@ -6970,9 +6153,7 @@ if (!ProfileIsEs2ApiGeneration())
             case SurfaceFormat::Bgra5551:
             case SurfaceFormat::Bgra4444:
             case SurfaceFormat::Rgba1010102:
-                return ProfileIsEs2ApiGeneration()
-                    ? RendererFormatVerdict::Unsupported
-                    : RendererFormatVerdict::Supported;
+                return RendererFormatVerdict::Supported;
             case SurfaceFormat::Rg32:
             case SurfaceFormat::Rgba64:
                 return ContextHasTextureNorm16EXT()
@@ -6988,9 +6169,7 @@ if (!ProfileIsEs2ApiGeneration())
             case SurfaceFormat::HalfVector2:
             case SurfaceFormat::HalfVector4:
             case SurfaceFormat::HdrBlendable:
-                return ProfileIsEs2ApiGeneration()
-                    ? RendererFormatVerdict::Unsupported
-                    : RendererFormatVerdict::Supported;
+                return RendererFormatVerdict::Supported;
             default:
                 return RendererFormatVerdict::Defer;
         }
@@ -7010,9 +6189,7 @@ if (!ProfileIsEs2ApiGeneration())
             case SurfaceFormat::Bgra5551:
             case SurfaceFormat::Bgra4444:
             case SurfaceFormat::Rgba1010102:
-                return ProfileIsEs2ApiGeneration()
-                    ? RendererFormatVerdict::Unsupported
-                    : RendererFormatVerdict::Supported;
+                return RendererFormatVerdict::Supported;
             case SurfaceFormat::Rg32:
             case SurfaceFormat::Rgba64:
                 return ContextHasTextureNorm16EXT()
@@ -7025,9 +6202,7 @@ if (!ProfileIsEs2ApiGeneration())
             case SurfaceFormat::HalfVector2:
             case SurfaceFormat::HalfVector4:
             case SurfaceFormat::HdrBlendable:
-                return ProfileIsEs2ApiGeneration()
-                    ? RendererFormatVerdict::Unsupported
-                    : RendererFormatVerdict::Supported;
+                return RendererFormatVerdict::Supported;
             case SurfaceFormat::Dxt1:
             case SurfaceFormat::Dxt3:
             case SurfaceFormat::Dxt5:
@@ -7079,8 +6254,6 @@ if (!ProfileIsEs2ApiGeneration())
             return RendererFormatVerdict::Supported;
         if (!storage.isFloat)
         {
-            if (ProfileIsEs2ApiGeneration())
-                return RendererFormatVerdict::Unsupported;
             if ((format == SurfaceFormat::Rg32 || format == SurfaceFormat::Rgba64) &&
                 !ContextHasTextureNorm16EXT())
                 return RendererFormatVerdict::Unsupported;
@@ -7232,8 +6405,7 @@ if (!ProfileIsEs2ApiGeneration())
     {
         const auto& capabilities = device.capabilities();
         const bool available = capabilities.is_webgl()
-            ? ProfileIs(GlProfile::WebGL2)
-            : (capabilities.is_opengles()
+            || (capabilities.is_opengles()
                 ? capabilities.is_at_least(3, 0)
                 : capabilities.is_opengl() && capabilities.is_at_least(3, 1));
         if (!available) return 0;
@@ -7339,11 +6511,7 @@ if (!ProfileIsEs2ApiGeneration())
     bool EasyGLRenderer::SupportsHalfFloatTextureLinearFilteringEXT() const
     {
         // Half-float texture filtering is core in the ES 3.0 API generation and in desktop GL 3.0+,
-        // which is every profile this renderer builds for except the ES 2.0 generation. There it
-        // would need GL_OES_texture_half_float_linear, and nothing in CNA asks for it, so the
-        // honest answer is no rather than a probe for a path that is never taken.
-        if (ProfileIsEs2ApiGeneration())
-            return metagl::HasExtension("GL_OES_texture_half_float_linear");
+        // which is every profile this renderer builds for.
         return true;
     }
 
@@ -7362,14 +6530,6 @@ if (!ProfileIsEs2ApiGeneration())
         auto& cache = fullFloat ? probedFullFloatRenderable_ : probedHalfFloatRenderable_;
         if (cache.has_value())
             return *cache;
-
-        if (ProfileIsEs2ApiGeneration())
-        {
-            // The float internal formats used here (R/RG/RGBA 16F/32F) are sized formats that do
-            // not exist in the ES 2.0 / WebGL 1 API generation at all.
-            cache = false;
-            return false;
-        }
 
         using ::Microsoft::Xna::Framework::Graphics::SurfaceFormat;
         RenderTargetColorStorage storage{};
@@ -7422,9 +6582,8 @@ if (!ProfileIsEs2ApiGeneration())
         auto& cache = probedNormalizedRenderTargets_[cacheIndex];
         if (cache.has_value())
             return *cache;
-        if (ProfileIsEs2ApiGeneration() ||
-            ((format == SurfaceFormat::Rg32 || format == SurfaceFormat::Rgba64) &&
-             !ContextHasTextureNorm16EXT()))
+        if ((format == SurfaceFormat::Rg32 || format == SurfaceFormat::Rgba64) &&
+            !ContextHasTextureNorm16EXT())
         {
             cache = false;
             return false;
@@ -7662,10 +6821,6 @@ if (!ProfileIsEs2ApiGeneration())
                 SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
             return;
         }
-        // Under the OPENGLES2 profile maxMrtTargets_ is pinned to 1 at construction (core ES 2.0
-        // has no glDrawBuffers), so every multi-target set is refused right here through the
-        // family's own established over-the-ceiling refusal -- the boundary this renderer's
-        // lifecycle/diagnostic tests already record and catch (std::runtime_error).
         if (count > maxMrtTargets_)
             throw std::runtime_error(
                 "EasyGL SetRenderTargets: requested " + std::to_string(count)
@@ -8803,21 +7958,6 @@ if (!ProfileIsEs2ApiGeneration())
         if (metagl::IsContextLost()) return;
         if (slot < 0 || slot >= kMaxSamplerSlots) return;
 
-if (ProfileIsEs2ApiGeneration())
-{
-        // GLES 2.0 has no sampler objects (glGenSamplers/glBindSampler are ES 3.0) -- sampling
-        // state lives on the texture object itself, the same shape FNA3D's pre-3.0 GL path used.
-        // The request is recorded per slot and written onto whatever texture(s) are bound to this
-        // unit now AND onto any texture bound to it later (Es2ApplyPendingSamplerToUnit's other
-        // call sites), covering both call orders CNA uses: SpriteBatch binds then applies;
-        // GraphicsDevice applies state first and the draw binds afterwards. samplers_[slot] and
-        // the sampler-object body below stay untouched -- and unreachable -- under this profile.
-        Es2PendingSamplers()[slot] = { filter, addressU, addressV, maxAnisotropy };
-        Es2ApplyPendingSamplerToUnit(slot);
-        return;
-}
-else
-{
         ::easygl::Sampler& s = AcquireSampler(slot);
 
         // TextureFilter → min/mag filter
@@ -8981,25 +8121,12 @@ else
                << " minUsesMipChain=" << (GlMinFilterUsesMipChain(gotMin) ? 1 : 0);
             SamplerTrace("apply-sampler", os.str());
         }
-}
     }
 
     void EasyGLRenderer::ApplySamplerMipState(int slot, int maxMipLevel, float lodBias)
     {
         if (metagl::IsContextLost()) return;
         if (slot < 0 || slot >= kMaxSamplerSlots) return;
-if (ProfileIsEs2ApiGeneration())
-{
-        // GLES 2.0 / WebGL 1 have neither sampler objects nor GL_TEXTURE_MIN_LOD, so neither of
-        // these two states is representable here. Documented in docs/sampler-state-support.md
-        // rather than approximated: silently applying a nearby state would be worse than not
-        // applying it. The compiled GLSL ES 3 vertex path's shader emulation is separate.
-        (void) maxMipLevel;
-        (void) lodBias;
-        return;
-}
-else
-{
         AcquireSampler(slot);
         // XNA's MaxMipLevel is the most detailed level the sampler may use, which is a lower bound
         // on the computed level of detail -- GL_TEXTURE_MIN_LOD, the same mapping FNA3D's SDL_GPU
@@ -9026,7 +8153,6 @@ else
                                   static_cast<::easygl::SamplerParameter>(kGlTextureLodBias), lodBias);
         }
         BindSamplerToOwnUnit(slot);
-}
     }
 
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
@@ -9035,15 +8161,6 @@ else
     {
         // plans/plan_fx.md FX-099. See the declaration for why the correction is applied to the pixels
         // rather than to the sampling coordinate.
-        if (ProfileIsEs2ApiGeneration())
-        {
-            // glBlitFramebuffer is OpenGL ES 3.0. Refused by name rather than served upside down,
-            // which is the whole point of this function existing.
-            throw System::NotSupportedException(
-                "CNA EasyGL: a compiled Effect cannot sample a RenderTarget2D on the OpenGL ES 2.0 "
-                "/ WebGL 1 profiles -- correcting the target's row order needs glBlitFramebuffer, "
-                "which those profiles do not have.");
-        }
         if (slot < 0 || slot >= kMaxSamplerSlots)
         {
             throw System::NotSupportedException(
@@ -9214,16 +8331,6 @@ else
     {
         if (metagl::IsContextLost()) return;
         if (slot < 0 || slot >= kMaxSamplerSlots) return;
-if (ProfileIsEs2ApiGeneration())
-{
-        // OpenGL ES 2.0 / WebGL 1 have neither sampler objects nor GL_TEXTURE_WRAP_R, and no
-        // volume textures for the axis to address. Documented as unrepresentable rather than
-        // approximated, exactly like ApplySamplerMipState's own ES 2 branch above.
-        (void) addressW;
-        return;
-}
-else
-{
         AcquireSampler(slot);
         // Same TextureAddressMode -> GL wrap table ApplySamplerState uses for S and T.
         int wrap = static_cast<int>(::easygl::TextureWrapMode::Repeat);
@@ -9232,7 +8339,6 @@ else
         WriteSamplerParameter(slot, SamplerShadowField::WrapR,
                               ::easygl::SamplerParameter::WrapR, wrap);
         BindSamplerToOwnUnit(slot);
-}
     }
 
     ::easygl::Sampler& EasyGLRenderer::AcquireSampler(int slot)
@@ -9290,8 +8396,7 @@ else
     void EasyGLVertexBufferRenderer::InitializeLayout()
     {
         vbo.create();
-        if (!ProfileIsEs2ApiGeneration())
-            vao.create();
+        vao.create();
         // Attribute layout is configured lazily in ApplyLayout() once stride is known.
     }
 
@@ -9574,8 +8679,7 @@ else
     void EasyGLVertexBufferRenderer::ApplyLayout(std::size_t stride)
     {
         const int s = static_cast<int>(stride);
-        if (!ProfileIsEs2ApiGeneration())
-            vao.bind();
+        vao.bind();
         vbo.bind(::easygl::BufferTarget::Array);
 
         if (!declarationElements_.empty())
@@ -9602,8 +8706,7 @@ else
                     vao.set_attribute_pointer(location, desc.componentCount, desc.type,
                                               desc.normalized, s, offset);
             }
-            if (!ProfileIsEs2ApiGeneration())
-                vao.unbind();
+            vao.unbind();
             return;
         }
 
@@ -9794,37 +8897,24 @@ else
             // Treating every unknown record as position-only left the other locations in stale
             // VAO state and rendered normals, UVs or skin weights from unrelated buffers. Refuse
             // it loudly; a genuinely custom layout reaches the generic declaration path above.
-            if (!ProfileIsEs2ApiGeneration())
-                vao.unbind();
+            vao.unbind();
             throw System::NotSupportedException(
                 "EasyGLRenderer::ApplyLayout: unsupported vertex stride " +
                 std::to_string(stride) +
                 " without a VertexDeclaration; the upload is refused rather than bound as "
                 "position-only.");
         }
-        if (!ProfileIsEs2ApiGeneration())
-            vao.unbind();
+        vao.unbind();
     }
 
     void EasyGLVertexBufferRenderer::BindForDraw() const
     {
-        if (ProfileIsEs2ApiGeneration())
-        {
-            // ES 2.0/WebGL 1 keeps attribute pointers in context state rather than
-            // a core VAO. SpriteBatch and 3D draws share that state, so restore
-            // this buffer's layout immediately before every draw.
-            const_cast<EasyGLVertexBufferRenderer*>(this)->ApplyLayout(stride_in_bytes_);
-        }
-        else
-        {
-            vao.bind();
-        }
+        vao.bind();
     }
 
     void EasyGLVertexBufferRenderer::UnbindAfterDraw() const
     {
-        if (!ProfileIsEs2ApiGeneration())
-            vao.unbind();
+        vao.unbind();
     }
 
     EasyGLVertexBufferRenderer::EasyGLVertexBufferRenderer(int vertex_capacity, std::shared_ptr<::easygl::ResourceRegistry> registry)
@@ -10053,8 +9143,8 @@ else
         {
             const std::string definedVsrc = GlStockShaders::AdaptStockVertexShaderForOpenGL(vsrc);
             const std::string adaptedVsrc =
-                AdaptGlslEs300ForActiveProfile(definedVsrc.c_str(), GlShaderStageKind::Vertex);
-            const std::string adaptedFsrc = AdaptGlslEs300ForActiveProfile(fsrc, GlShaderStageKind::Fragment);
+                AdaptGlslEs300ForActiveProfile(definedVsrc.c_str());
+            const std::string adaptedFsrc = AdaptGlslEs300ForActiveProfile(fsrc);
 
             ::easygl::Shader vs(::easygl::ShaderType::Vertex);
             vs.create();
@@ -10071,18 +9161,6 @@ else
             prog.create();
             prog.attach(vs);
             prog.attach(fs);
-if (ProfileUsesGlslEs100())
-{
-            // plans/plan_glbackends.md GLB-36: these profiles' GLSL ES 1.00 shader text has no
-            // layout(location=N) (GLSL ES 1.00 doesn't support it) -- rebind the SAME numeric
-            // locations here, extracted from the ORIGINAL ES 3.00 source, so every
-            // VertexArray/VAO attribute-binding call site elsewhere in this file (all hardcoded
-            // numeric indices) keeps working unchanged.
-            for (const auto& [location, name] : ExtractVertexAttribLocations(vsrc))
-            {
-                prog.bind_attrib_location(static_cast<unsigned int>(location), name);
-            }
-}
             prog.link();
             if (!prog.is_linked())
                 std::cerr << "[CNA EasyGL 3D] " << label << " link failed:\n" << prog.info_log() << "\n";
@@ -10439,7 +9517,7 @@ if (ProfileUsesGlslEs100())
         Prog3D& program = dualUv ? prog_pbr_dual_uv_ : prog_pbr_;
         if (program.ready) return;
 
-        const GlStockShaders::GlStockProgramSource source = GlStockShaders::PbrSource(dualUv, !ProfileUsesGlslEs100());
+        const GlStockShaders::GlStockProgramSource source = GlStockShaders::PbrSource(dualUv);
         const std::string& vsrc = source.vertex;
         const std::string& fsrc = source.fragment;
 
@@ -10514,7 +9592,7 @@ if (ProfileUsesGlslEs100())
         Prog3D& program = dualUv ? prog_pbr_skinned_dual_uv_ : prog_pbr_skinned_;
         if (program.ready) return;
 
-        const GlStockShaders::GlStockProgramSource source = GlStockShaders::PbrSkinnedSource(dualUv, !ProfileUsesGlslEs100());
+        const GlStockShaders::GlStockProgramSource source = GlStockShaders::PbrSkinnedSource(dualUv);
         const std::string& vsrc = source.vertex;
         const std::string& fsrc = source.fragment;
 
@@ -10947,7 +10025,7 @@ if (ProfileUsesGlslEs100())
             break;
         }
 
-        if (!ProfileIsEs2ApiGeneration()) buffer.vao.bind();
+        buffer.vao.bind();
         for (std::size_t location = 0; location < count; ++location)
         {
             buffer.vao.disable_attribute(static_cast<unsigned int>(location));
@@ -11041,13 +10119,13 @@ if (ProfileUsesGlslEs100())
 
     void EasyGLRenderer::RestoreDeclarationLayoutEXT(EasyGLVertexBufferRenderer& buffer)
     {
-        if (!ProfileIsEs2ApiGeneration()) buffer.vao.bind();
+        buffer.vao.bind();
         for (unsigned int location = 0; location < 16; ++location)
         {
             buffer.vao.disable_attribute(location);
             buffer.vao.set_attribute_divisor(location, 0);
         }
-        if (!ProfileIsEs2ApiGeneration()) buffer.vao.unbind();
+        buffer.vao.unbind();
         buffer.ApplyLayout(buffer.GetStride());
     }
 
@@ -11557,16 +10635,6 @@ if (ProfileUsesGlslEs100())
             TraceBoundTextureUnit("stock3d-texture0", 0);
         }
 
-if (ProfileIsEs2ApiGeneration())
-{
-        // ES 2.0 keeps sampling state on the texture objects -- re-apply each unit's recorded
-        // SamplerState onto whatever this draw just bound above (GraphicsDevice applies sampler
-        // state BEFORE the draw binds its textures on this route, so the bind is what must pull
-        // the state in). Units 0-6 are the stock effects' complete sampling range.
-        for (int unit = 0; unit < 7; ++unit)
-            Es2ApplyPendingSamplerToUnit(unit);
-}
-
         // Shadow map (MOD-835). Unit 7, past the stock effects' 0-6 range, so attaching one
         // cannot displace a texture an effect is already sampling. Every uniform is uploaded even
         // when shadows are off: leaving a stale uLightViewProj behind would make the first
@@ -11587,8 +10655,8 @@ if (ProfileIsEs2ApiGeneration())
             }
             if (p.loc_shadow_texel >= 0)
             {
-                // 1/size per axis, because textureSize() does not exist in the ES 1.00 form these
-                // shaders are also compiled in. Two components rather than one because a cascade
+                // 1/size per axis (GlStockShaderSources.hpp keeps the shaders free of textureSize()).
+                // Two components rather than one because a cascade
                 // atlas is N times wider than it is tall, and a single scalar would step the PCF
                 // taps N times too far in X and smear each cascade into its neighbour.
                 const int width  = haveShadow ? params.shadowMap->GetWidth() : 1;
@@ -12610,20 +11678,6 @@ if (ProfileIsEs2ApiGeneration())
     {
         if (metagl::IsContextLost()) return;
         ApplyStencilPrimitiveTopology(primitive);
-if (ProfileIsEs2ApiGeneration())
-{
-        // GLES 2.0 core has no glDrawElementsInstanced/glVertexAttribDivisor, and this profile
-        // deliberately claims no instancing extension either -- SupportsCapability(Instancing)
-        // answers false, so take the shared base-class refusal (the exact route OPENGLES1 keeps
-        // for the same reason) rather than let the draw fail inside GL. This also preserves the
-        // Unsupported3DGraphicsCallBehavior::WarnAndStub handling the base refusal implements.
-        IGraphicsRenderer::DrawInstancedPrimitivesEx(vb_in, ib_in, world, view, projection,
-                                                     primitive, primitiveCount, instanceCount,
-                                                     params);
-        return;
-}
-else
-{
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         // plans/plan_fx.md FX-082: an instanced draw recognizes a compiled effect exactly as the other
         // two routes do. Before this branch existed the compiled runtime was ignored here and the
@@ -12804,7 +11858,6 @@ else
         vao.unbind();
         if (semanticLayout)
             RestoreDeclarationLayoutEXT(const_cast<EasyGLVertexBufferRenderer&>(vb));
-}
     }
 
     void EasyGLRenderer::IssueIndirectDrawEXT(const IVertexBufferRenderer& vb_in,

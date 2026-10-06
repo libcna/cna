@@ -14,8 +14,8 @@ It uses `ccache` when present, same as the native builds.
 ## What it checks, and why each half exists
 
 **1. Every `modules/graphics-ext/src/*.cpp` cross-compiles** (`-fsyntax-only -Wall -Wextra`) under
-`x86_64-w64-mingw32-g++`, three times: once each with `CNA_RENDERER_DIRECTX11`, `DIRECTX12` and
-`DIRECTX9` defined. That is the plain half — it catches a Linux-only libstdc++ assumption, a
+`x86_64-w64-mingw32-g++`, twice: once each with `CNA_RENDERER_DIRECTX11` and `DIRECTX9`
+defined. That is the plain half — it catches a Linux-only libstdc++ assumption, a
 `long`-is-64-bits assumption, a POSIX header slipping into the layer.
 
 **2. `windows_header_collisions.cpp`** is the half that is actually about D3D. A D3D translation

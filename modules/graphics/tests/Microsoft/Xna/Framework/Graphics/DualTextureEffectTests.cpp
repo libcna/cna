@@ -406,8 +406,7 @@ namespace
             // WINCLOSE-0018: DirectX11 binds an opaque-black texel for an unbound slot.
             // VKPAR-0004: Vulkan joins the list -- dual_texture3d.frag samples both units
             // unconditionally and both now fall back to XNA's opaque black.
-            if (!CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                                 Software, DirectX11, DirectX12, Vulkan))
+            if (!CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software, DirectX11, Vulkan))
                 GTEST_SKIP() << "requires a stock-effect raster path that samples a missing slot";
         }
 

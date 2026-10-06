@@ -400,8 +400,7 @@ protected:
             const std::string name = factorNames[i];
             expectState((name + " color-source").c_str(), factors[i], Blend::Zero,
                         BlendFunction::Add, Blend::One, Blend::Zero, BlendFunction::Add);
-            const bool directX = device.GetGraphicsRendererName() == "DIRECTX11" ||
-                                 device.GetGraphicsRendererName() == "DIRECTX12";
+            const bool directX = device.GetGraphicsRendererName() == "DIRECTX11";
             if (directX && factors[i] == Blend::SourceAlphaSaturation)
             {
                 bool rejected = false;

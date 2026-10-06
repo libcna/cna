@@ -161,7 +161,7 @@ TEST(GraphicsDeviceValidationTest, ScissorRejectsInvalidValuesWithoutChangingSta
 
 TEST(GraphicsDeviceValidationTest, ViewportAndScissorUseActiveRenderTargetBounds)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
     GraphicsDevice gd;
     RenderTarget2D target(gd, 8, 6);
     gd.SetRenderTarget(&target);
@@ -181,7 +181,7 @@ TEST(GraphicsDeviceValidationTest, ViewportAndScissorUseActiveRenderTargetBounds
 
 TEST(GraphicsDeviceLifecycleTest, ResetUnbindsActiveRenderTargets)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
     GraphicsDevice gd;
     RenderTarget2D target(gd, 8, 6);
     gd.SetRenderTarget(&target);
@@ -425,7 +425,7 @@ TEST(TextureCollectionValidationTest, OwnedCollectionsRespectProfileSlotCounts)
 
 TEST(TextureCollectionValidationTest, VertexTextureFormatAndValidationOrderMatchXna)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
     GraphicsDevice gd;
     gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     Texture2D color(gd, 1, 1, false, SurfaceFormat::Color);
@@ -513,17 +513,6 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // false success for a target it cannot honour.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
     }
-    else if (CNA_RENDERER_IS(OpenGLES2))
-    {
-    // docs/opengles2-renderer.md: single-colour-attachment refusal -- core OpenGL ES 2.0 has no
-    // glDrawBuffers, a single RenderTarget2D binds normally through
-    // the family's FBO path, and SupportsCapability(MultipleRenderTargets) reports false. The
-    // exception TYPE deliberately stays the EasyGL family's own established over-the-ceiling
-    // std::runtime_error (the profile pins the ceiling to 1), which the family's
-    // lifecycle/diagnostic tests already catch as the recorded MRT boundary -- not
-    // System::NotSupportedException.
-    EXPECT_THROW(gd.SetRenderTargets(bindings), std::runtime_error);
-    }
     else
     {
         EXPECT_NO_THROW(gd.SetRenderTargets(bindings));
@@ -586,7 +575,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_Empty_DoesNotThrow)
 
 TEST(GraphicsDeviceValidationTest, IdenticalRenderTargetBindingsAreNoOps)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
     GraphicsDevice gd;
     RenderTarget2D target(gd, 8, 8);
     gd.SetRenderTarget(&target);
@@ -617,7 +606,7 @@ TEST(GraphicsDeviceValidationTest, IdenticalRenderTargetBindingsAreNoOps)
 
 TEST(GraphicsDeviceValidationTest, CubeFaceParticipatesInRenderTargetBindingIdentity)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
     GraphicsDevice gd;
     RenderTargetCube target(
         gd, 8, false, Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color,
@@ -705,7 +694,7 @@ TEST(GraphicsDeviceValidationTest, SetVertexBuffers_EmptyClearsSingularBinding)
 {
     GraphicsDevice gd;
     // VertexBuffer/DrawPrimitives are inherently 3D concepts -- a permanently 2D-only renderer
-    // (SDL_RENDERER, Canvas, ... if this test is ever run against them) has no real
+    // (SDL_RENDERER, ... if this test is ever run against them) has no real
     // vertex-buffer factory to construct one at all, so there is no "empty vertex-buffer state
     // DrawPrimitives should reject" to observe. Found running this file for the first time against
     // a native, CI-runnable 2D-only renderer -- this test was previously ungated and
@@ -733,7 +722,7 @@ TEST(GraphicsDeviceValidationTest, SetVertexBuffers_EmptyClearsSingularBinding)
 
 TEST(GraphicsDeviceValidationTest, ForeignBuffersAreRejectedTransactionally)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
     GraphicsDevice receiving;
     GraphicsDevice owner;
     receiving.SetGraphicsProfileEXT(
@@ -765,7 +754,7 @@ TEST(GraphicsDeviceValidationTest, ForeignBuffersAreRejectedTransactionally)
 
 TEST(GraphicsDeviceValidationTest, ForeignTexturesAreRejectedTransactionally)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
     GraphicsDevice receiving;
     GraphicsDevice owner;
     receiving.SetGraphicsProfileEXT(
@@ -790,7 +779,7 @@ TEST(GraphicsDeviceValidationTest, ForeignTexturesAreRejectedTransactionally)
 
 TEST(GraphicsDeviceDrawValidationTest, NumericArgumentsPrecedeMissingShaderAndData)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
     GraphicsDevice gd;
     const std::array<VertexPositionColor, 3> vertices{};
     const std::array<std::uint16_t, 3> indices{0, 1, 2};
@@ -817,7 +806,7 @@ TEST(GraphicsDeviceDrawValidationTest, NumericArgumentsPrecedeMissingShaderAndDa
 
 TEST(GraphicsDeviceDrawValidationTest, MissingShaderUsesInvalidOperationAcrossClassicDrawFamilies)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
     GraphicsDevice gd;
     const std::array<VertexPositionColor, 3> vertices{};
     const std::array<std::uint16_t, 3> indices{0, 1, 2};
@@ -844,7 +833,7 @@ TEST(GraphicsDeviceDrawValidationTest, MissingShaderUsesInvalidOperationAcrossCl
 
 TEST(GraphicsDeviceDrawValidationTest, ValidationPrecedenceMatchesRecoveredXna)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, DirectX12);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11);
     GraphicsDevice gd;
     const std::array<VertexPositionColor, 3> vertices{};
 

@@ -16,8 +16,8 @@
 // face B's samples, or a cycled/cleared scratch, in the storage the load action reads. The
 // single-sample cube layer still holds the correct A, which is why a full redraw and an immediate
 // readback both pass -- the defect only appears when a face is revisited for a PARTIAL update after
-// another face has been rendered. D3D11 and D3D12, whose multisampled cube resource is a real
-// six-slice array with one per-slice view, preserve exactly.
+// another face has been rendered. D3D11, whose multisampled cube resource is a real six-slice array
+// with one per-slice view, preserves exactly.
 //
 // This file is the oracle for that. It reuses REMED-GFX-134/136's asymmetric five-region face
 // producer verbatim -- drawn geometry, never Clear(), a 0/255-only palette that is an exact fixed
@@ -114,7 +114,7 @@ namespace
          * A `multiSampleCount = 4` RenderTargetCube really reports an applied count > 0 here.
          * False is a declared capability boundary, not a defect: WebGPU ignores the parameter
          * (WEBGPU-114's own scope), D3D9's cube target allocates no multisampling at all, and
-         * Software/SDL_Renderer/Canvas/DIRECTX3 have no cube target to multisample.
+         * Software/SDL_Renderer have no cube target to multisample.
          */
         bool    msaaEngages;
         /**
@@ -171,9 +171,6 @@ namespace
 #elif defined(CNA_RENDERER_SDL_RENDERER)
     constexpr Contract kContract{"SDL_RENDERER", false, Support::Unsupported, false,
                                  Support::Unsupported, false, false};
-#elif defined(CNA_RENDERER_CANVAS)
-    constexpr Contract kContract{"CANVAS", false, Support::Unsupported, false,
-                                 Support::Unsupported, false, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
     // `msaaEngages` false: D3D9RenderTargetCubeRenderer::Recreate() allocates a plain
     // D3DUSAGE_RENDERTARGET cube texture and GetMultiSampleCount() reports 0 by construction.
@@ -182,11 +179,6 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX11)
     // Already correct: a six-slice DXGI_SAMPLE_DESC array with one Texture2DMSArray RTV per slice.
     constexpr Contract kContract{"DIRECTX11", true, Support::Exact, true,
-                                 Support::Exact, false, false};
-#elif defined(CNA_RENDERER_DIRECTX12)
-    // Already correct: DepthOrArraySize = 6 at the requested sample count, one
-    // D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY view per face.
-    constexpr Contract kContract{"DIRECTX12", true, Support::Exact, true,
                                  Support::Exact, false, false};
 #else
 #error "REMED-GFX-141: this renderer has no declared multisampled RenderTargetCube contract."

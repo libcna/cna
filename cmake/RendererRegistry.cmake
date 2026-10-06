@@ -23,15 +23,13 @@
 # accessor defaults to GetDescriptor.
 #
 # EasyGL is the one family serving several identities (plans/plan_glbackends.md), and since
-# plans/plan_runtimerenderer.md phase P11 made its GL profile a runtime value, all five can be compiled in
+# plans/plan_runtimerenderer.md phase P11 made its GL profile a runtime value, all three can be compiled in
 # at once -- each reached through its own accessor on the single EasyGL target.
 function(_cna_renderer_identity_map out_var)
     set(_map
         SDL_RENDERER SdlRenderer
-        OPENGLES2    EasyGL|GetDescriptorOpenGLES2
         OPENGLES3    EasyGL|GetDescriptorOpenGLES3
         OPENGL33     EasyGL|GetDescriptorOpenGL33
-        WEBGL1       EasyGL|GetDescriptorWebGL1
         WEBGL2       EasyGL|GetDescriptorWebGL2
         VULKAN       Vulkan
         WEBGPU       WebGPU
@@ -39,8 +37,6 @@ function(_cna_renderer_identity_map out_var)
         SOFTWARE     Software
         STUB         Stub
         DIRECTX11    DirectX11
-        DIRECTX12    DirectX12
-        CANVAS       Canvas
         DIRECTX9     DirectX9
         SDL_GPU      SdlGpu
         METAL        Metal
@@ -118,7 +114,7 @@ function(cna_generate_renderer_registry out_var)
         cna_renderer_identity_to_namespace("${_identity}" _entry)
         _cna_split_renderer_entry("${_entry}" _namespace _accessor)
 
-        # Two identities may share a NAMESPACE (EasyGL serves five), but never an accessor -- that
+        # Two identities may share a NAMESPACE (EasyGL serves three), but never an accessor -- that
         # would mean two registry entries describing the same renderer.
         if("${_namespace}::${_accessor}" IN_LIST _accessors)
             message(FATAL_ERROR

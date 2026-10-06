@@ -16,14 +16,10 @@ typedef uint32_t CNA_GraphicsRendererType;
 #define CNA_GRAPHICS_RENDERER_UNKNOWN UINT32_C(0)
 /** @brief Identifies SDL's own 2D renderer backend. */
 #define CNA_GRAPHICS_RENDERER_SDL_RENDERER UINT32_C(1)
-/** @brief Identifies the OpenGL ES 2 backend. */
-#define CNA_GRAPHICS_RENDERER_OPENGLES2 UINT32_C(2)
 /** @brief Identifies the OpenGL ES 3 backend. */
 #define CNA_GRAPHICS_RENDERER_OPENGLES3 UINT32_C(3)
 /** @brief Identifies the desktop OpenGL 3.3 backend. */
 #define CNA_GRAPHICS_RENDERER_OPENGL33 UINT32_C(4)
-/** @brief Identifies the WebGL 1 backend. */
-#define CNA_GRAPHICS_RENDERER_WEBGL1 UINT32_C(5)
 /** @brief Identifies the WebGL 2 backend. */
 #define CNA_GRAPHICS_RENDERER_WEBGL2 UINT32_C(6)
 /** @brief Identifies the Vulkan backend. */
@@ -38,10 +34,6 @@ typedef uint32_t CNA_GraphicsRendererType;
 #define CNA_GRAPHICS_RENDERER_STUB UINT32_C(13)
 /** @brief Identifies the Direct3D 11 backend. */
 #define CNA_GRAPHICS_RENDERER_DIRECTX11 UINT32_C(14)
-/** @brief Identifies the Direct3D 12 backend. */
-#define CNA_GRAPHICS_RENDERER_DIRECTX12 UINT32_C(15)
-/** @brief Identifies the HTML Canvas backend. */
-#define CNA_GRAPHICS_RENDERER_CANVAS UINT32_C(17)
 /** @brief Identifies the Direct3D 9 backend. */
 #define CNA_GRAPHICS_RENDERER_DIRECTX9 UINT32_C(22)
 /** @brief Identifies the SDL_GPU backend. */
@@ -60,8 +52,9 @@ typedef uint32_t CNA_GraphicsRendererType;
  * Every value above @ref CNA_GRAPHICS_RENDERER_MAXIMUM is refused by every route that takes a
  * @ref CNA_GraphicsRendererType, as is any retired value within the range.
  *
- * Retired values, permanently reserved and never assigned to another renderer: 7 (BGFX),
- * 10 (MAGNUM), 16 (DIRECT2D), 18 (HTML_DOM), 19 (SKIA), 20 (BLEND2D), 21 (FREEDIRECT),
+ * Retired values, permanently reserved and never assigned to another renderer: 2 (OPENGLES2),
+ * 5 (WEBGL1), 7 (BGFX), 10 (MAGNUM), 15 (DIRECTX12), 16 (DIRECT2D), 17 (CANVAS), 18 (HTML_DOM),
+ * 19 (SKIA), 20 (BLEND2D), 21 (FREEDIRECT),
  * 23 (DIRECTX1), 24 (DIRECTX2), 25 (DIRECTX3), 26 (DIRECTX5), 27 (DIRECTX6), 28 (DIRECTX7),
  * 29 (DIRECTX8), 30 (DIRECTX10), 32 (OPENGLES1), 33 (OPENGL4), 34 (OPENGL1), 35 (OPENGL2),
  * 36 (WICKED), 37 (SOKOL), 38 (DILIGENT), 39 (GLIDE), 40 (GDI), 41 (LLGL), 44 (SVG_DOM),

@@ -5,8 +5,8 @@
 // (Task 465/417) -- a 100x100 texture (top-left 20x20 = Red marker, rest = Blue) drawn rotated
 // 90 degrees around its own bottom-right corner -- and saves the resulting backbuffer to a real
 // PNG file on disk, proving a real screenshot can be produced under Xvfb. 2D-only renderers can't
-// run the SOFTWARE-renderer screenshot demo's raw-VertexBuffer 3D scene (SDL_Renderer/CANVAS/ASCII
-// all throw on CreateVertexBuffer), so this demo uses SpriteBatch instead.
+// run the SOFTWARE-renderer screenshot demo's raw-VertexBuffer 3D scene (SDL_Renderer throws on
+// CreateVertexBuffer), so this demo uses SpriteBatch instead.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"

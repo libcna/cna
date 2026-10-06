@@ -89,7 +89,7 @@ def identity_defines() -> dict[str, list[str]]:
     announces its own implementation define, which its sources guard on.
     """
     text = (REPO / "cmake" / "RendererSelection.cmake").read_text(encoding="utf-8")
-    # An arm may name several identities (`OPENGLES2 OR OPENGLES3 OR ...` -- EasyGL serves five
+    # An arm may name several identities (`OPENGLES3 OR OPENGL33 OR ...` -- EasyGL serves three
     # public GL profiles from one directory), so an arm is opened by the FIRST STREQUAL of a
     # condition and closed by the next arm's.
     arms = [(m.start(), m.group(1)) for m in re.finditer(

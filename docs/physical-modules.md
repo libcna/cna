@@ -60,8 +60,8 @@ runtime-literal paths) and the cross-module minimal-link probes (`tests/modules`
 
 ## Renderer modules — modules/renderers/
 
-14 implementation families carry the 18 public renderer identities (the easygl family
-implements the five GL-profile identities OPENGLES2/OPENGLES3/OPENGL33/WEBGL1/WEBGL2).
+12 implementation families carry the 14 public renderer identities (the easygl family
+implements the three GL-profile identities OPENGLES3/OPENGL33/WEBGL2).
 Identities are
 pinned by `scripts/check_renderer_identities.py` over `CNA/GraphicsRendererType.hpp` (core
 module) + `cmake/RendererSelection.cmake`; family directories are implementation structure,
@@ -69,13 +69,13 @@ not identities. Exactly one family's `${RENDERER_TARGET}` is configured per buil
 (`RENDERER_DIR = modules/renderers/<family>`); each family's `CMakeLists.txt` owns its
 specific SDK links, carried over branch-for-branch from the former central manifest.
 
-canvas, directx9, directx11, directx12, easygl, fna3d, headless, metal, sdl-gpu,
-sdl-renderer, software, stub, vulkan, webgpu.
+directx9, directx11, easygl, fna3d, headless, metal, sdl-gpu, sdl-renderer, software,
+stub, vulkan, webgpu.
 
 Common helper targets (deliberate sharing, not public identities):
 
 - **modules/renderers/common/d3d** — `cna_renderer_d3dcommon`, consumed by the d3d11
-  and d3d12 families only. D3D9 is independent (its own format/state mapping;
+  family only. D3D9 is independent (its own format/state mapping;
   verified mechanically by include and link audit during the physical move).
 - **d3d9 effect sub-target** — `cna_renderer_d3d9_effect` (the isolated
   d3dcompiler-carrying custom-ShaderEffect path) lives inside modules/renderers/directx9.
@@ -102,7 +102,7 @@ implemented on `feature/module-examples` and promoted to `develop` on 2026-08-10
   (the Microsoft.Xna.Framework.Net demo fleet incl. demo_net_avatar_sync).
 - **Renderer examples** live with their implementation family under
   `modules/renderers/<family>/examples/`, ownership following the implementation, not the
-  public profile (the easygl family's suite serves OPENGLES3/OPENGL33/WEBGL1/WEBGL2; the
+  public profile (the easygl family's suite serves OPENGLES3/OPENGL33/WEBGL2; the
   profile stays visible in target/ctest names).
 - **Extension examples** live with their extension module:
   `modules/graphics-ext/examples/` (ASCII oracles and depth/CRT effect demos — all
@@ -158,4 +158,4 @@ miscellaneous dumping ground again.
   composition umbrella and net, with per-probe link-closure gates
   (`scripts/check_module_link_closure.py`) and the HEADLESS native-SDK-free /
   VULKAN closure configuration gates.
-- `scripts/check_renderer_identities.py` — pins the 18 public renderer identities.
+- `scripts/check_renderer_identities.py` — pins the 14 public renderer identities.

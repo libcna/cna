@@ -176,9 +176,8 @@ class PresentationModeContractTest final : public Game
             static_cast<std::size_t>(physicalWidth) * physicalHeight * 4u, 0);
 #if defined(CNA_RENDERER_DIRECTX11)
         ReadPhysicalBackbuffer(renderer, physicalWidth, physicalHeight, pixels.data());
-#elif defined(CNA_RENDERER_DIRECTX12) || defined(CNA_RENDERER_EASYGL)
-        // DX12's and EasyGL's ReadBackbuffer sample logical coordinates (EasyGL since cna-killer
-        // KF-6). Select identity presentation geometry for this fixture's physical-surface
+#elif defined(CNA_RENDERER_EASYGL)
+        // EasyGL's ReadBackbuffer samples logical coordinates (since cna-killer KF-6). Select identity presentation geometry for this fixture's physical-surface
         // observation, then restore the mode.
         renderer.SetPresentationMode(static_cast<int>(CnaPresentationMode::NativeBackBuffer));
         try
