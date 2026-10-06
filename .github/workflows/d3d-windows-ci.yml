@@ -42,31 +42,22 @@ jobs:
         shell: bash
     steps:
       # Sibling repos (sharp-runtime, easy-gl, meta-gl) are plain sibling checkouts referenced via
-      # add_subdirectory(../x) in CMakeLists.txt, not git submodules of this repo -- same pattern
-      # devices-tests.yml/input-ci.yml already use.
+      # add_subdirectory(../x) in CMakeLists.txt, not git submodules of this repo. They are cloned
+      # at the branch matching this run (scripts/ci/clone_siblings.sh, as every other workflow
+      # does), not at their default branches: a default-branch sharp-runtime lacked the
+      # `Resources` component CNA has required since 2026-09-20, and this job failed at configure.
       - name: Checkout cna_graphics
         uses: actions/checkout@v4
         with:
           path: cna_graphics
           submodules: true
 
-      - name: Checkout sharp-runtime
-        uses: actions/checkout@v4
-        with:
-          repository: openeggbert/sharp-runtime
-          path: sharp-runtime
-
-      - name: Checkout easy-gl
-        uses: actions/checkout@v4
-        with:
-          repository: openeggbert/easy-gl
-          path: easy-gl
-
-      - name: Checkout meta-gl
-        uses: actions/checkout@v4
-        with:
-          repository: openeggbert/meta-gl
-          path: meta-gl
+      - name: Clone public sibling repositories
+        run: |
+          set -euo pipefail
+          # The script clones beside the CNA checkout it is handed, i.e. into the workspace root.
+          GITHUB_WORKSPACE="${GITHUB_WORKSPACE}/cna_graphics" bash cna_graphics/scripts/ci/clone_siblings.sh \
+            "${{ github.head_ref }} ${{ github.base_ref }} ${{ github.ref_name }}" sharp-runtime easy-gl meta-gl
 
       # Sets up cl.exe/link.exe/nmake (and D3DCOMPILER_47.dll's own import lib, d3dcompiler.lib)
       # on PATH for every later step in this job, not just one -- writes to GITHUB_PATH/GITHUB_ENV.
