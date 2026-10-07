@@ -72,6 +72,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         if(TARGET SDL3::SDL3main)
             target_link_libraries(${target} PRIVATE SDL3::SDL3main)
         endif()
+        # plans/plan_apple_m4.md AM4-041: the fixtures include <SDL3/SDL.h> (PixelTestGame.hpp) and
+        # the renderer's own headers, which need wgpu-native's webgpu.h. Their include paths come
+        # from these targets; on macOS neither lives in a directory the compiler searches anyway.
+        if(TARGET SDL3::SDL3)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3)
+        endif()
+        target_link_libraries(${target} PRIVATE WebGPU::WebGPU)
         if(CNA_WEBGPU_RUNTIME_LIBRARY)
             add_custom_command(TARGET ${target} POST_BUILD
                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
