@@ -73,8 +73,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
     # (AM4-025) none of them could observe a pixel. Each declares Metal's contract in its own
     # renderer table, so a feature Metal reports unsupported (MSAA, MRT, RenderTargetCube upload,
     # custom effects) is asserted as a refusal, not assumed. Not registered: the two
-    # cross_renderer_* dump tools (no pass/fail of their own, as on EasyGL) and the instancing and
-    # occlusion-query fixtures, whose features Metal reports false (docs/metal-renderer.md).
+    # cross_renderer_* dump tools (no pass/fail of their own, as on EasyGL) and the instancing
+    # fixture, whose feature Metal reports false (docs/metal-renderer.md).
     macro(cna_metal_test target src)
         add_executable(${target} ${src})
         target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME)
@@ -115,6 +115,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
         graphicsdevice_default_state_occlusion_test
         graphicsdevice_depth_contract_test
         graphicsdevice_ordered_clear_test
+        occlusion_query_test
         point_sampling_contract_test
         present_lifecycle_contract_test
         rasterizerstate_cullmode_camera_test

@@ -44,7 +44,7 @@ protected:
         check(!dev.SupportsCapability(GraphicsCapability::MultipleRenderTargets), "MultipleRenderTargets unsupported");
         check(dev.SupportsCapability(GraphicsCapability::AnisotropicFiltering), "AnisotropicFiltering supported");
         check(dev.SupportsCapability(GraphicsCapability::WireFrame), "WireFrame supported");
-        check(!dev.SupportsCapability(GraphicsCapability::OcclusionQuery), "OcclusionQuery unsupported");
+        check(dev.SupportsCapability(GraphicsCapability::OcclusionQuery), "OcclusionQuery supported");
         check(!dev.SupportsCapability(GraphicsCapability::CustomEffects), "CustomEffects unsupported");
         // The renderer's contract, asked of the renderer: the device's answer also folds in the
         // graphics profile (BINDFIX-037), and Reach -- the default here -- has no volume textures.

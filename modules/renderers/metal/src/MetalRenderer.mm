@@ -1438,6 +1438,7 @@ class MetalRenderTargetRenderer;
 // for the cube-map analog -- Impl needs a non-owning pointer to whichever RenderTargetCube face is
 // currently bound.
 class MetalRenderTargetCubeRenderer;
+class MetalOcclusionQueryRenderer;
 
 // plans/plan_metal.md Phase 10: a previously-rendered-to RenderTarget2D used as an ordinary texture in a
 // later draw (post-processing, portals, mirrors, etc.) is a real, common XNA pattern --
@@ -1609,6 +1610,24 @@ struct MetalRenderer::Impl
     static constexpr int kMaxOcclusionQuerySlots = 1024;
     id<MTLBuffer> visibilityBuffer=nil;
     int nextQuerySlot=0;
+    // plans/plan_apple_m4.md AM4-038 (closing METAL-266): slots are recycled, and the query between
+    // Begin and End -- Metal counts into one offset per encoder -- is re-armed on every encoder that
+    // starts while it is open (a Clear, a render-target switch or a readback all start one), each
+    // encoder counting into a slot of its own that PixelCount sums.
+    std::vector<int> freeQuerySlots;
+    MetalOcclusionQueryRenderer* activeQuery=nullptr;
+    int allocateQuerySlot()
+    {
+        int slot;
+        if(!freeQuerySlots.empty()) { slot=freeQuerySlots.back(); freeQuerySlots.pop_back(); }
+        else if(nextQuerySlot<kMaxOcclusionQuerySlots) slot=nextQuerySlot++;
+        else throw std::runtime_error("Metal: every occlusion-query visibility slot is in use");
+        static_cast<std::uint64_t*>([visibilityBuffer contents])[slot]=0;
+        return slot;
+    }
+    void releaseQuerySlot(int slot) { freeQuerySlots.push_back(slot); }
+    // Defined after MetalOcclusionQueryRenderer, which it needs complete.
+    void rearmActiveOcclusionQuery();
 
     // plans/plan_metal.md Phase 10 (METAL-98/107): non-owning pointer to whichever RenderTarget2D is
     // currently bound; nullptr means "drawing to the backbuffer" (the default). Ownership lives in
@@ -1688,6 +1707,7 @@ struct MetalRenderer::Impl
         [encoder setDepthBias:depthBias slopeScale:slopeBias clamp:0]; [encoder setDepthStencilState:depthState];
         [encoder setStencilReferenceValue:(uint32_t)refStencil];
         [encoder setBlendColorRed:blendColor[0] green:blendColor[1] blue:blendColor[2] alpha:blendColor[3]];
+        rearmActiveOcclusionQuery();
     }
 
     // plans/plan_metal.md Phase 10 (METAL-98/100/107): resolves the color+depth textures for whatever's
@@ -2505,45 +2525,86 @@ private: MetalRenderer& b_; bool begun_=false; int filter_=0; int addressU_=1; i
 // that must outlive this object's own Begin()/End() call stack -- a std::shared_ptr keeps it alive
 // exactly as long as either this object or the in-flight block still needs it.
 //
-// Documented scope limitation, not a hidden bug: Begin() registers its completion handler against
-// whichever command buffer is active at that moment. If a Clear() call (which commits+waits
-// synchronously, starting a fresh command buffer) happens between Begin() and End(), the
-// visibility write ends up split across two command buffers and this simple single-handler
-// design will not track completion correctly. Real game code's Begin()/End() pairs tightly
-// bracket a small set of draws with no Clear() in between, so this is a real but narrow gap, not
-// silently ignored -- flagged here rather than solved with a bigger multi-command-buffer design
-// this pass didn't attempt.
+// plans/plan_apple_m4.md AM4-038: the split described by METAL-266 is handled -- every encoder
+// the query spans gets a slot of its own and a completion handler on its own command buffer, and the
+// query is complete once End was called and every one of those command buffers has completed.
+// Metal counts visibility per encoder and has one active offset, so one query at a time can be
+// between Begin and End; a second Begin is refused rather than silently merged.
 class MetalOcclusionQueryRenderer final : public IOcclusionQueryRenderer
 {
 public:
-    MetalOcclusionQueryRenderer(MetalRenderer::Impl& owner, int slot) : owner_(owner), slot_(slot) {}
+    explicit MetalOcclusionQueryRenderer(MetalRenderer::Impl& owner) : owner_(owner) {}
+    ~MetalOcclusionQueryRenderer() override
+    {
+        if (owner_.activeQuery==this) {
+            if (owner_.encoder) [owner_.encoder setVisibilityResultMode:MTLVisibilityResultModeDisabled offset:0];
+            owner_.activeQuery=nullptr;
+        }
+        releaseSlots();
+    }
     void Begin() override
     {
-        if(!owner_.ensureFrame()) return;
-        [owner_.encoder setVisibilityResultMode:MTLVisibilityResultModeCounting offset:(NSUInteger)(slot_*8)];
-        completed_ = std::make_shared<std::atomic<bool>>(false);
-        auto flag = completed_;
-        [owner_.command addCompletedHandler:^(id<MTLCommandBuffer> cb) { flag->store(true); }];
+        if (owner_.activeQuery && owner_.activeQuery!=this)
+            throw System::NotSupportedException(
+                "Metal counts visibility into one offset at a time: end the open OcclusionQuery before beginning another.");
+        // XNA requires IsComplete to have been observed before a re-Begin, so the previous
+        // results are final and their slots can be reused.
+        releaseSlots();
+        state_=std::make_shared<State>();
+        owner_.activeQuery=this;
+        if (owner_.encoder) armOnCurrentEncoder();
     }
     void End() override
     {
-        // MTLVisibilityResultModeDisabled's offset argument is ignored by Metal but still
-        // required by the method signature; 0 is the conventional value other Apple sample code
-        // uses for the disable call.
+        if (owner_.activeQuery!=this) return;
         if (owner_.encoder) [owner_.encoder setVisibilityResultMode:MTLVisibilityResultModeDisabled offset:0];
+        owner_.activeQuery=nullptr;
+        state_->ended.store(true);
     }
-    bool IsComplete() const override { return completed_ && completed_->load(); }
+    bool IsComplete() const override
+    {
+        return state_ && state_->ended.load() && state_->pendingCommands.load()==0;
+    }
     int PixelCount() const override
     {
         if (!IsComplete()) return 0;
-        const auto* data = static_cast<const uint64_t*>([owner_.visibilityBuffer contents]);
-        return (int)data[slot_];
+        const auto* data = static_cast<const std::uint64_t*>([owner_.visibilityBuffer contents]);
+        std::uint64_t total=0;
+        for (const int slot : slots_) total+=data[slot];
+        return total>static_cast<std::uint64_t>(std::numeric_limits<int>::max())
+                   ? std::numeric_limits<int>::max() : static_cast<int>(total);
+    }
+    // Called for every encoder that starts while this query is open, including the one Begin
+    // finds already running.
+    void armOnCurrentEncoder()
+    {
+        const int slot=owner_.allocateQuerySlot();
+        slots_.push_back(slot);
+        [owner_.encoder setVisibilityResultMode:MTLVisibilityResultModeCounting offset:(NSUInteger)(slot*8)];
+        auto state=state_;
+        state->pendingCommands.fetch_add(1);
+        [owner_.command addCompletedHandler:^(id<MTLCommandBuffer>) { state->pendingCommands.fetch_sub(1); }];
     }
 private:
+    struct State
+    {
+        std::atomic<bool> ended{false};
+        std::atomic<int> pendingCommands{0};
+    };
+    void releaseSlots()
+    {
+        for (const int slot : slots_) owner_.releaseQuerySlot(slot);
+        slots_.clear();
+    }
     MetalRenderer::Impl& owner_;
-    int slot_;
-    std::shared_ptr<std::atomic<bool>> completed_;
+    std::vector<int> slots_;
+    std::shared_ptr<State> state_;
 };
+
+void MetalRenderer::Impl::rearmActiveOcclusionQuery()
+{
+    if (activeQuery && encoder) activeQuery->armOnCurrentEncoder();
+}
 
 // plans/plan_metal.md METAL-131/122/125: shared blit-to-staging-buffer readback helper, used by
 // MetalRenderTargetRenderer/MetalRenderTargetCubeRenderer/MetalTextureCube/MetalTexture3D's
@@ -3352,9 +3413,11 @@ MetalRenderer::MetalRenderer(const GraphicsRendererCreateArgs& args):impl_(std::
     sd.sAddressMode=MTLSamplerAddressModeClampToEdge;sd.tAddressMode=MTLSamplerAddressModeClampToEdge;
     p.sampler=[p.device newSamplerStateWithDescriptor:sd];[sd release];
     if(!p.sampler) throw std::runtime_error("Metal: failed to create default sampler state");
-    // METAL-266: occlusion queries remain dormant and capability-false, so no visibility buffer
-    // is allocated or attached as supported state.
-    p.visibilityBuffer=nil;
+    // plans/plan_apple_m4.md AM4-038: one 8-byte counter per occlusion-query slot, attached to every
+    // render pass ensureFrame()/clear() build.
+    p.visibilityBuffer=[p.device newBufferWithLength:sizeof(std::uint64_t)*MetalRenderer::Impl::kMaxOcclusionQuerySlots
+                                             options:MTLResourceStorageModeShared];
+    if(!p.visibilityBuffer) throw std::runtime_error("Metal: failed to allocate the occlusion-query visibility buffer");
     // plans/plan_metal.md METAL-87: PbrEffect's 4 optional-map fallback textures (see Impl's own field
     // comment for why these exact 2 colors).
     {
@@ -3545,9 +3608,8 @@ std::unique_ptr<IEffectRenderer> MetalRenderer::CreateEffectRenderer(const std::
 }
 std::unique_ptr<IOcclusionQueryRenderer> MetalRenderer::CreateOcclusionQuery()
 {
-    throw System::NotSupportedException(
-        "Metal OcclusionQuery is disabled until command-boundary completion and slot recycling "
-        "have adapted macOS proof.");
+    impl_->throwPendingCommandFailure();
+    return std::make_unique<MetalOcclusionQueryRenderer>(*impl_);
 }
 std::unique_ptr<ITexture3DRenderer> MetalRenderer::CreateTexture3D(int w,int h,int depth,bool mipMap,int surfaceFormat)
 {

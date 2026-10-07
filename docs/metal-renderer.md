@@ -72,7 +72,7 @@ These IDs continue the existing `plans/plan_metal.md` sequence without changing 
 | `METAL-263` — fixed-stride draws ignored declaration meaning | High | All native routes selected descriptors only by stride, so same-stride semantic/offset/format mismatches could silently reinterpret bytes. | Then: every route called the shared declaration-fidelity oracle before submission. Superseded by `AM4-035`: the descriptor is now built from the declaration, so the meaning is bound rather than refused. |
 | `METAL-264` — cube/3D transfers were unchecked, tightly pitched, and mutated in flight | High | Face/mip/range/length arithmetic was incomplete, buffer blits used tight rows, and SetData mutated resources prior draws could still sample. | Overflow-safe transfer layouts use a macOS-safe 256-byte staging-row alignment; readback de-pads; SetData preserves untouched subresources and swaps a completed replacement. Native pixel proof remains pending. |
 | `METAL-265` — Clear/encoder recreation lost viewport and scissor | High | Attachment setup overwrote requested state and fresh encoders omitted effective scissor state. | Requested state is separate from extent and preserved across encoders; the requested viewport is applied unchanged, while the enabled scissor is intersected with the attachment and rasterizer enable toggles apply immediately. |
-| `METAL-266` — OcclusionQuery overclaimed split/exhausting code | High | Clear split query commands and slots were never recycled. | Capability false, factory throws, visibility allocation omitted. |
+| `METAL-266` — OcclusionQuery overclaimed split/exhausting code | High | Clear split query commands and slots were never recycled. | Then: capability false, factory throws. Fixed by `AM4-038` (per-encoder slots and completion, slot recycling). |
 | `METAL-267` — BGRA targets returned swapped RGBA channels | High | Raw BGRA target bytes were copied into CNA RGBA Color storage. | Format-aware padded-row conversion swizzles target data; RGBA cube/3D remains unchanged. |
 | `METAL-268` — RenderTarget2D uploads silently no-op'd | High | Public inherited Texture2D.SetData reached inherited empty void hooks. | RGBA→BGRA reallocate/copy/swap uploads are implemented; invalid input rejects before mutation. |
 | `METAL-269` — missing stock textures carried stale encoder bindings | High | Null slots were not rebound, making output draw-order dependent. | Every used slot binds native or owned white/flat-normal/white-cube fallback; foreign non-null resources reject. |
@@ -101,7 +101,7 @@ Every current `CNA::GraphicsCapability` is handled explicitly. There is no permi
 | `MultipleRenderTargets` | false | More than one descriptor is rejected before binding state changes. |
 | `AnisotropicFiltering` | true | Native sampler-state mapping. |
 | `WireFrame` | true | `FillMode::WireFrame` maps to `MTLTriangleFillModeLines`. |
-| `OcclusionQuery` | false | Creation throws until command-boundary completion and slot recycling are fixed. |
+| `OcclusionQuery` | true | `AM4-038`: one counting slot per encoder the query spans, summed; slots recycled; one query open at a time (a second `Begin` is refused). |
 | `CustomEffects` | false | Effect creation and non-null SpriteBatch custom effects throw. |
 | `Texture3D` | true | Color-format native 3D textures. |
 | `MultiStreamVertexInput` | false | More than one per-vertex stream is rejected. |
