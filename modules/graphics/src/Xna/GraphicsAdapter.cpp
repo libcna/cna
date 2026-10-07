@@ -124,10 +124,12 @@ namespace Microsoft::Xna::Framework::Graphics
         /// The adapter cache is process-wide and rebuilt in place; devices created on several
         /// threads enumerated it at once and freed each other's entries (RUST-UPSTREAM-023).
         /// Locked after a device's own lifecycle lock and before SDL's, never the other way round.
+        /// Never destroyed, for the reason NativeDeviceLifecycleMutex gives (AM4-073): a device
+        /// disposed during exit still releases its adapter pin under it.
         std::recursive_mutex& AdapterCacheMutex()
         {
-            static std::recursive_mutex mutex;
-            return mutex;
+            static auto* const mutex = new std::recursive_mutex();
+            return *mutex;
         }
     }
 

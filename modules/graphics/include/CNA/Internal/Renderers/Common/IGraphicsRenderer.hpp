@@ -3929,10 +3929,15 @@ namespace CNA::Internal::Renderers
             CNA::Unsupported3DGraphicsCallBehavior::Throw;
         mutable std::unordered_set<std::string> warnedUnsupported3DCalls_;
 
+        // Deliberately never destroyed -- process-lifetime bookkeeping whose clients can be destroyed
+        // at any point of teardown (plans/plan_capi_smoke_stability.md CSS-3). A game the C API
+        // still holds at exit is disposed from its runtime state's static destructor, after this
+        // function-local static, first used later, was destroyed: ~SdlRenderer then erased from a
+        // freed table (SEGFAULT on macOS, plans/plan_apple_m4.md AM4-073).
         static std::unordered_map<CNA::Platform::WindowId, IGraphicsRenderer*>& windowRegistry()
         {
-            static std::unordered_map<CNA::Platform::WindowId, IGraphicsRenderer*> reg;
-            return reg;
+            static auto* const reg = new std::unordered_map<CNA::Platform::WindowId, IGraphicsRenderer*>();
+            return *reg;
         }
     };
 

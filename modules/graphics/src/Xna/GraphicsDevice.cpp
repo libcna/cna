@@ -66,10 +66,16 @@ namespace Microsoft::Xna::Framework::Graphics
         /// Devices created on several threads at once overlapped SDL window creation with another
         /// device's GL context work on the same X connection and aborted or stalled inside SDL/Xlib
         /// (RUST-UPSTREAM-023). Recursive: a fallback chain rebuilds within one construction.
+        ///
+        /// Deliberately never destroyed, as GraphicsResource's identity mutex (AM4-022): a device
+        /// still alive when the process exits -- the C API's runtime state releases its undestroyed
+        /// handles from a static destructor -- is disposed after this function-local static, first
+        /// used later, has already been destroyed. glibc tolerates locking it; Darwin reports EINVAL
+        /// and libc++ throws from ~GraphicsDevice (plans/plan_apple_m4.md AM4-073).
         std::recursive_mutex& NativeDeviceLifecycleMutex()
         {
-            static std::recursive_mutex mutex;
-            return mutex;
+            static auto* const mutex = new std::recursive_mutex();
+            return *mutex;
         }
 
 #if CNA_DIAGNOSTICS_LEVEL >= 1
