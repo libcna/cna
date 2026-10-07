@@ -18,6 +18,13 @@
 #include <stdexcept>
 #include <thread>
 
+#if defined(__APPLE__)
+#include <ifaddrs.h>
+#include <net/if.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#endif
+
 namespace CNA::Internal::Net
 {
     using Microsoft::Xna::Framework::Net::LocalNetworkGamer;
@@ -254,6 +261,17 @@ namespace CNA::Internal::Net
             // handled case rather than an error - the correct mitigation for that arbitrariness,
             // not a workaround for a bug.
             enet_socket_set_option(sock, ENET_SOCKOPT_REUSEADDR, 1);
+#if defined(__APPLE__)
+            // Darwin keeps BSD's rule: SO_REUSEADDR alone lets a second UDP socket share a port
+            // only for a multicast address, so the second process's bind of kDiscoveryPort failed
+            // with EADDRINUSE and a client could never search while a host on the same Mac was
+            // registered. SO_REUSEPORT on every sharer is BSD's spelling of what Linux grants
+            // through SO_REUSEADDR; broadcast datagrams still reach every sharer.
+            {
+                const int reusePort = 1;
+                (void)setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, &reusePort, sizeof(reusePort));
+            }
+#endif
             enet_socket_set_option(sock, ENET_SOCKOPT_BROADCAST, 1);
             enet_socket_set_option(sock, ENET_SOCKOPT_NONBLOCK, 1);
 
@@ -487,6 +505,71 @@ namespace CNA::Internal::Net
             CurrentResultsGuard& operator=(const CurrentResultsGuard&) = delete;
         };
 
+#if defined(__APPLE__)
+        // Darwin keeps neither half of the arrangement FindSessions relies on elsewhere. A send to
+        // the limited broadcast address 255.255.255.255 fails with EHOSTUNREACH, so the query never
+        // left the machine; and a unicast datagram for a port several sockets share goes to the
+        // socket that bound it FIRST, so a host on this Mac that bound kDiscoveryPort before the
+        // querier received its own reply. A search therefore sends from a socket of its own, on a
+        // port nobody shares, to every interface's own broadcast address as well, and the replies --
+        // which go back to wherever the query came from -- arrive at that socket alone.
+        class SearchSocket
+        {
+        public:
+            SearchSocket()
+            {
+                socket_ = enet_socket_create(ENET_SOCKET_TYPE_DATAGRAM);
+                if (socket_ == ENET_SOCKET_NULL)
+                {
+                    return;
+                }
+                ENetAddress address{};
+                address.host = ENET_HOST_ANY;
+                address.port = 0;
+                if (enet_socket_set_option(socket_, ENET_SOCKOPT_BROADCAST, 1) != 0 ||
+                    enet_socket_set_option(socket_, ENET_SOCKOPT_NONBLOCK, 1) != 0 ||
+                    enet_socket_bind(socket_, &address) != 0)
+                {
+                    enet_socket_destroy(socket_);
+                    socket_ = ENET_SOCKET_NULL;
+                }
+            }
+            ~SearchSocket()
+            {
+                if (socket_ != ENET_SOCKET_NULL) enet_socket_destroy(socket_);
+            }
+            SearchSocket(const SearchSocket&) = delete;
+            SearchSocket& operator=(const SearchSocket&) = delete;
+            ENetSocket Get() const { return socket_; }
+
+        private:
+            ENetSocket socket_ = ENET_SOCKET_NULL;
+        };
+
+        void SendToEveryInterfaceBroadcast(ENetSocket sock, const std::vector<SharpRuntime::bytecs>& bytes)
+        {
+            ifaddrs* interfaces = nullptr;
+            if (getifaddrs(&interfaces) != 0)
+            {
+                return;
+            }
+            for (const ifaddrs* each = interfaces; each != nullptr; each = each->ifa_next)
+            {
+                if (each->ifa_addr == nullptr || each->ifa_addr->sa_family != AF_INET ||
+                    each->ifa_broadaddr == nullptr || (each->ifa_flags & IFF_UP) == 0 ||
+                    (each->ifa_flags & IFF_BROADCAST) == 0)
+                {
+                    continue;
+                }
+                ENetAddress address{};
+                address.host = reinterpret_cast<const sockaddr_in*>(each->ifa_broadaddr)->sin_addr.s_addr;
+                address.port = kDiscoveryPort;
+                SendTo(sock, address, bytes);
+            }
+            freeifaddrs(interfaces);
+        }
+#endif
+
         // Waits up to timeoutMs for one datagram and processes it. Returns true if a message was
         // handled (so Poll()'s drain loop can keep going without waiting), false on timeout.
         bool PollOnce(ENetSocket sock, uint32_t timeoutMs)
@@ -564,15 +647,24 @@ namespace CNA::Internal::Net
 
         queryStartTime_ = std::chrono::steady_clock::now(); // Task 4.2
 
+#if defined(__APPLE__)
+        // See SearchSocket. Should it fail to open, the search falls back to the shared socket.
+        const SearchSocket search;
+        const ENetSocket replies = search.Get() != ENET_SOCKET_NULL ? search.Get() : sock;
+        SendToEveryInterfaceBroadcast(replies, bytes);
+#else
+        const ENetSocket replies = sock;
+#endif
+
         ENetAddress broadcastAddress;
         broadcastAddress.host = ENET_HOST_BROADCAST;
         broadcastAddress.port = kDiscoveryPort;
-        SendTo(sock, broadcastAddress, bytes);
+        SendTo(replies, broadcastAddress, bytes);
 
         ENetAddress loopbackAddress{};
         enet_address_set_host_ip(&loopbackAddress, "127.0.0.1");
         loopbackAddress.port = kDiscoveryPort;
-        SendTo(sock, loopbackAddress, bytes);
+        SendTo(replies, loopbackAddress, bytes);
 
         std::vector<Found> found;
         std::vector<std::pair<uint16_t, std::chrono::steady_clock::time_point>> early;
@@ -588,6 +680,15 @@ namespace CNA::Internal::Net
                 break;
             }
             auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now).count();
+#if defined(__APPLE__)
+            if (replies != sock)
+            {
+                // The shared socket still answers other machines' queries while this one waits.
+                PollOnce(replies, static_cast<uint32_t>(std::min<long long>(remaining, 5)));
+                while (PollOnce(sock, 0)) { }
+                continue;
+            }
+#endif
             PollOnce(sock, static_cast<uint32_t>(remaining));
         }
 
