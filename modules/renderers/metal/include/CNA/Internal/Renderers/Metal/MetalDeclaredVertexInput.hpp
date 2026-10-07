@@ -47,7 +47,7 @@ namespace CNA::Internal::Renderers::Metal
     struct MetalPipelineVertexInputs
     {
         /** @brief Semantic read by attribute `i`. */
-        std::array<MetalVertexSemantic, 6> semantics{};
+        std::array<MetalVertexSemantic, 7> semantics{};
         /** @brief Number of attributes in use. */
         std::size_t count = 0;
     };
@@ -77,8 +77,9 @@ namespace CNA::Internal::Renderers::Metal
             case K::Skinned52VertexLit: return {{S::Position, S::Normal, S::TexCoord0, S::BlendWeight, S::BlendIndices}, 5};
             case K::Skinned56:
             case K::Skinned56VertexLit: return {{S::Position, S::Normal, S::TexCoord0, S::BlendWeight, S::BlendIndices, S::Color}, 6};
-            case K::Pbr48:              return {{S::Position, S::Normal, S::Tangent, S::TexCoord0}, 4};
-            case K::SkinnedPbr68:       return {{S::Position, S::Normal, S::Tangent, S::TexCoord0, S::BlendWeight, S::BlendIndices}, 6};
+            // plans/plan_apple_m4.md AM4-084: the PBR functions read glTF's COLOR_0 as well.
+            case K::Pbr48:              return {{S::Position, S::Normal, S::Tangent, S::TexCoord0, S::Color}, 5};
+            case K::SkinnedPbr68:       return {{S::Position, S::Normal, S::Tangent, S::TexCoord0, S::BlendWeight, S::BlendIndices, S::Color}, 7};
             case K::Sprite2D:           return {};
         }
         return {};
@@ -337,6 +338,19 @@ namespace CNA::Internal::Renderers::Metal
             const auto* element = Find(elements, semantic);
             if (!element && semantic == MetalVertexSemantic::TexCoord1)
                 element = Find(elements, MetalVertexSemantic::TexCoord0);
+            // plans/plan_apple_m4.md AM4-084: glTF 2.0 3.9.2 makes COLOR_0 a linear multiplier on PBR
+            // base colour. The record's colour is read only when the effect's VertexColorEnabledEXT
+            // asks for it; otherwise -- and for a record without one, glTF's absent COLOR_0 -- the
+            // multiplier is the identity, the constant block's opaque white.
+            if (semantic == MetalVertexSemantic::Color &&
+                (kind == MetalPipelineKind::Pbr48 || kind == MetalPipelineKind::SkinnedPbr68) &&
+                !(params != nullptr && params->vertexColorEnabled && element != nullptr))
+            {
+                input.attributes.push_back(MetalDeclaredAttribute{
+                    static_cast<int>(location), MetalVertexAttribKind::Float4,
+                    kMetalConstantAttributeOneOffset, true});
+                continue;
+            }
             if (!element && params != nullptr)
             {
                 Microsoft::Xna::Framework::Graphics::VertexElementUsage usage{};
@@ -442,6 +456,46 @@ namespace CNA::Internal::Renderers::Metal
                 return {};
         }
         return {};
+    }
+
+    /**
+     * @brief The canonical elements for an undeclared buffer of a given stride.
+     *
+     * plans/plan_apple_m4.md AM4-084: the PBR kinds each serve more than one record. Stride 60 is
+     * the stride-48 record with TEXCOORD_1 and a packed COLOR_0 appended (GLTF-182/462), stride 76
+     * the stride-68 record with TEXCOORD_1 (GLTF-386), and stride 80 that with COLOR_0 as well
+     * (GLTF-463) -- the layouts every other renderer binds for those strides.
+     *
+     * @param kind Pipeline kind the draw selected.
+     * @param stride The undeclared buffer's stride.
+     * @return The canonical elements; empty for Sprite2D.
+     */
+    [[nodiscard]] inline std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>
+    MetalCanonicalElementsFor(MetalPipelineKind kind, std::size_t stride)
+    {
+        using Microsoft::Xna::Framework::Graphics::VertexElement;
+        using F = Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+        using U = Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+        auto elements = MetalCanonicalElementsFor(kind);
+        if (kind != MetalPipelineKind::Pbr48 && kind != MetalPipelineKind::SkinnedPbr68)
+            return elements;
+        switch (stride)
+        {
+            case 60:
+                elements.push_back(VertexElement(48, F::Vector2, U::TextureCoordinate, 1));
+                elements.push_back(VertexElement(56, F::Color, U::Color, 0));
+                break;
+            case 76:
+                elements.push_back(VertexElement(68, F::Vector2, U::TextureCoordinate, 1));
+                break;
+            case 80:
+                elements.push_back(VertexElement(68, F::Vector2, U::TextureCoordinate, 1));
+                elements.push_back(VertexElement(76, F::Color, U::Color, 0));
+                break;
+            default:
+                break;
+        }
+        return elements;
     }
 
     /**

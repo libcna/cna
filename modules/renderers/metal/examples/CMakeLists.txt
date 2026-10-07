@@ -85,6 +85,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
         COMMAND cna_test_metal_untextured_declaration
         TIMEOUT 60 LABELS "Metal"
         ENVIRONMENT "MTL_DEBUG_LAYER=1;MTL_SHADER_VALIDATION=1")
+    # plans/plan_apple_m4.md AM4-084: glTF COLOR_0 in the metallic-roughness product.
+    add_executable(cna_test_metal_pbr_vertex_colour metal_pbr_vertex_colour_test.cpp)
+    target_link_libraries(cna_test_metal_pbr_vertex_colour PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_metal_pbr_vertex_colour PRIVATE SDL3::SDL3main)
+    endif()
+    cna_register_renderer_test(NAME Metal_PbrVertexColour
+        COMMAND cna_test_metal_pbr_vertex_colour
+        TIMEOUT 60 LABELS "Metal"
+        ENVIRONMENT "MTL_DEBUG_LAYER=1;MTL_SHADER_VALIDATION=1")
 
     cna_register_renderer_test(NAME Metal_SpriteBatch_CustomEffect
         COMMAND cna_test_metal_spritebatch_customeffect

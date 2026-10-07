@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/Metal/MetalRenderer.hpp"
 #include "CNA/ShaderLanguageEXT.hpp"
-#include "CNA/Internal/Renderers/Common/VertexColourPbrSupport.hpp"
 #include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 #include "CNA/Internal/Renderers/Metal/MetalPipelineKey.hpp"
 #include "CNA/Internal/Renderers/Metal/MetalCommandFailure.hpp"
@@ -569,8 +568,10 @@ struct PbrUniforms {
     float4 dielectricFresnel;  // xyz=dielectric F0, w=dielectric F90
     float4 textureTransformRows[10];
 };
-struct VPbrIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float4 tangent [[attribute(2)]]; float2 uv [[attribute(3)]]; };
-struct VPbrOut { float4 position [[position]]; float3 normal; float3 tangent; float bitangentSign; float2 uv; float fogFactor; float3 worldPos; };
+// plans/plan_apple_m4.md AM4-084: `color` is glTF's COLOR_0 when the effect enables it and the record
+// carries one, else constant opaque white (BuildMetalDeclaredVertexInput).
+struct VPbrIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float4 tangent [[attribute(2)]]; float2 uv [[attribute(3)]]; float4 color [[attribute(4)]]; };
+struct VPbrOut { float4 position [[position]]; float3 normal; float3 tangent; float bitangentSign; float2 uv; float fogFactor; float3 worldPos; float4 color; };
 float cna_direction_handedness(float3x3 m) {
     return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
 }
@@ -585,6 +586,7 @@ vertex VPbrOut cna_v3d_pbr(VPbrIn in [[stage_in]], constant PbrTransform& t [[bu
     o.uv = in.uv;
     o.worldPos = (t.world * float4(in.position, 1.0)).xyz;
     o.fogFactor = 1.0 - clamp(dot(float4(in.position, 1.0), pu.fogVector), 0.0, 1.0);
+    o.color = in.color;
     return o;
 }
 inline float3 cna_pbr_light(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, float3 F0, float3 F90, float roughness, float metallic) {
@@ -629,8 +631,10 @@ fragment float4 cna_f3d_pbr(VPbrOut in [[stage_in]],
 {
     float4 baseColorTex = tex.sample(smp, cna_pbr_transform_uv(in.uv, 0, pu));
     float3 baseColor = mix(baseColorTex.rgb, cna_srgb_to_linear(baseColorTex.rgb), pu.srgbFlags.x);
-    float3 albedo = baseColor * pu.diffuseColor.rgb;
-    float alpha = baseColorTex.a * pu.diffuseColor.a;
+    // glTF 2.0 3.9.2: COLOR_0 multiplies the base colour, alpha included.
+    float4 cnaVertexColor = in.color;
+    float3 albedo = baseColor * pu.diffuseColor.rgb * cnaVertexColor.rgb;
+    float alpha = baseColorTex.a * pu.diffuseColor.a * cnaVertexColor.a;
     float3 N = normalize(in.normal);
     float3 T = normalize(in.tangent - N*dot(N, in.tangent));
     float3 B = cross(N, T) * in.bitangentSign;
@@ -667,7 +671,7 @@ fragment float4 cna_f3d_pbr(VPbrOut in [[stage_in]],
 // interpolants as cna_v3d_pbr. Normals use inverse-transpose joint and world matrices while
 // tangents remain ordinary directions.
 struct SkinnedPbrTransform { float4x4 wvp; float4x4 world; float4 normalCol0; float4 normalCol1; float4 normalCol2; float4 skinParams; }; // skinParams.x = weightsPerVertex
-struct VSkinnedPbrIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float4 tangent [[attribute(2)]]; float2 uv [[attribute(3)]]; float4 boneWeights [[attribute(4)]]; uchar4 boneIndices [[attribute(5)]]; };
+struct VSkinnedPbrIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float4 tangent [[attribute(2)]]; float2 uv [[attribute(3)]]; float4 boneWeights [[attribute(4)]]; uchar4 boneIndices [[attribute(5)]]; float4 color [[attribute(6)]]; };
 float3 cna_skin_normal(float3x3 m, float3 n) {
     float3 c0=m[0], c1=m[1], c2=m[2];
     float3 co0=cross(c1,c2), co1=cross(c2,c0), co2=cross(c0,c1);
@@ -699,6 +703,7 @@ vertex VPbrOut cna_v3d_skinned_pbr(VSkinnedPbrIn in [[stage_in]], constant Skinn
     o.uv = in.uv;
     o.worldPos = (t.world * skinnedPos).xyz;
     o.fogFactor = 1.0 - clamp(dot(skinnedPos, pu.fogVector), 0.0, 1.0);
+    o.color = in.color;
     return o;
 }
 
@@ -3953,14 +3958,15 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
     const PipelineKind kind = selectPipelineKind(selectionStride, params);
     // plans/plan_apple_m4.md AM4-081: a buffer with no declaration is the canonical XNA type its stride
     // names, none of which a lit draw takes colour from, so its colour is the constant white, as the
-    // lit functions read none before.
+    // lit functions read none before. The PBR records are the exception (AM4-084): stride 60 and 80
+    // carry glTF's COLOR_0, which the effect's own switch gates.
     std::optional<GpuDrawParams> canonicalParams;
-    if (declared.IsEmpty() && params) {
+    if (declared.IsEmpty() && params && !params->pbr) {
         canonicalParams.emplace(*params);
         canonicalParams->vertexColorEnabled=false;
     }
     const MetalDeclaredVertexInput vertexInput = BuildMetalDeclaredVertexInput(
-        kind, declared.IsEmpty() ? MetalCanonicalElementsFor(kind) : declared.GetElements(),
+        kind, declared.IsEmpty() ? MetalCanonicalElementsFor(kind, drawStride) : declared.GetElements(),
         static_cast<int>(drawStride), canonicalParams ? &*canonicalParams : params);
     if(!vertexInput.IsComplete())
         throw System::NotSupportedException("Metal: this VertexDeclaration cannot feed the selected stock effect: " +
@@ -4226,10 +4232,6 @@ void MetalRenderer::DrawPrimitivesEx(const IVertexBufferRenderer& v,const Matrix
     const auto* vb=dynamic_cast<const MetalVertexBuffer*>(&v);
     if(!vb) throw std::runtime_error("Metal: foreign vertex buffer");
     ValidateMetalDrawParams(gp,*vb);
-    // plans/plan_gltf.md GLTF-465: Metal has no stride-60/80 pipeline, so such a draw already fails in
-    // pipeline selection -- but as "unsupported vertex stride", which does not say that the missing
-    // piece is glTF's COLOR_0 base-colour product. Refuse it here with that reason instead.
-    RequireVertexColourPbrSupportEXT(gp,vb->stride(),"METAL");
     drawMetal3D(*impl_,*vb,nullptr,w,vi,p,pt,pc,&gp);
 }
 
@@ -4243,10 +4245,6 @@ void MetalRenderer::DrawIndexedPrimitivesEx(const IVertexBufferRenderer& v,
     const auto* ib=dynamic_cast<const MetalIndexBuffer*>(&i);
     if(!vb||!ib) throw std::runtime_error("Metal: foreign buffer");
     ValidateMetalDrawParams(gp,*vb);
-    // plans/plan_gltf.md GLTF-465: Metal has no stride-60/80 pipeline, so such a draw already fails in
-    // pipeline selection -- but as "unsupported vertex stride", which does not say that the missing
-    // piece is glTF's COLOR_0 base-colour product. Refuse it here with that reason instead.
-    RequireVertexColourPbrSupportEXT(gp,vb->stride(),"METAL");
     drawMetal3D(*impl_,*vb,ib,w,vi,p,pt,pc,&gp);
 }
 void MetalRenderer::SetStringMarkerEXT(const char* m)

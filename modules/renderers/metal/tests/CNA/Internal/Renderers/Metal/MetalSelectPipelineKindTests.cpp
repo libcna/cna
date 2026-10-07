@@ -138,18 +138,25 @@ TEST(MetalSelectPipelineKind, SkinnedTakesPrecedenceOverEnvironmentMapDualTextur
     EXPECT_EQ(SelectMetalPipelineKind(52, &p), MetalPipelineKind::Skinned52);
 }
 
-TEST(MetalSelectPipelineKind, PbrUnskinnedRequiresStride48)
+// plans/plan_apple_m4.md AM4-084: stride 60 is the rigid record with TEXCOORD_1 and COLOR_0.
+TEST(MetalSelectPipelineKind, PbrUnskinnedRequiresStride48Or60)
 {
     GpuDrawParams p; p.pbr = true;
     EXPECT_EQ(SelectMetalPipelineKind(48, &p), MetalPipelineKind::Pbr48);
+    EXPECT_EQ(SelectMetalPipelineKind(60, &p), MetalPipelineKind::Pbr48);
     EXPECT_THROW((void)SelectMetalPipelineKind(52, &p), std::runtime_error);
+    EXPECT_THROW((void)SelectMetalPipelineKind(56, &p), std::runtime_error);
 }
 
-TEST(MetalSelectPipelineKind, PbrSkinnedRequiresStride68)
+// Stride 76 adds TEXCOORD_1 to the skinned record and stride 80 COLOR_0 as well.
+TEST(MetalSelectPipelineKind, PbrSkinnedRequiresStride68Or76Or80)
 {
     GpuDrawParams p; p.pbr = true; p.skinned = true;
     EXPECT_EQ(SelectMetalPipelineKind(68, &p), MetalPipelineKind::SkinnedPbr68);
+    EXPECT_EQ(SelectMetalPipelineKind(76, &p), MetalPipelineKind::SkinnedPbr68);
+    EXPECT_EQ(SelectMetalPipelineKind(80, &p), MetalPipelineKind::SkinnedPbr68);
     EXPECT_THROW((void)SelectMetalPipelineKind(52, &p), std::runtime_error);
+    EXPECT_THROW((void)SelectMetalPipelineKind(72, &p), std::runtime_error);
 }
 
 TEST(MetalSelectPipelineKind, PbrTakesPrecedenceOverEverythingElseIncludingSkinnedAloneCheck)

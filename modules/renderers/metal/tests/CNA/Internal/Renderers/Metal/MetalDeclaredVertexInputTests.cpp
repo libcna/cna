@@ -43,8 +43,10 @@ TEST(MetalDeclaredVertexInput, CanonicalLayoutsMatchTheFixedStrideTable)
     EXPECT_EQ(Canonical(K::LitTex32, 32).attributes,
               Attrs({{0, A::Float3, 0}, {1, A::Float3, 12}, {2, A::Float2, 24},
                      {3, A::Float4, kMetalConstantAttributeOneOffset, true}}));
+    // AM4-084: the PBR functions read COLOR_0, which the stride-48 and stride-68 records lack.
     EXPECT_EQ(Canonical(K::Pbr48, 48).attributes,
-              Attrs({{0, A::Float3, 0}, {1, A::Float3, 12}, {2, A::Float4, 24}, {3, A::Float2, 40}}));
+              Attrs({{0, A::Float3, 0}, {1, A::Float3, 12}, {2, A::Float4, 24}, {3, A::Float2, 40},
+                     {4, A::Float4, kMetalConstantAttributeOneOffset, true}}));
     EXPECT_EQ(Canonical(K::Skinned52, 52).attributes,
               Attrs({{0, A::Float3, 0}, {1, A::Float3, 12}, {2, A::Float2, 24}, {3, A::Float4, 32},
                      {4, A::UChar4, 48}}));
@@ -53,7 +55,8 @@ TEST(MetalDeclaredVertexInput, CanonicalLayoutsMatchTheFixedStrideTable)
                      {4, A::UChar4, 48}, {5, A::UChar4Normalized, 52}}));
     EXPECT_EQ(Canonical(K::SkinnedPbr68, 68).attributes,
               Attrs({{0, A::Float3, 0}, {1, A::Float3, 12}, {2, A::Float4, 24}, {3, A::Float2, 40},
-                     {4, A::Float4, 48}, {5, A::UChar4, 64}}));
+                     {4, A::Float4, 48}, {5, A::UChar4, 64},
+                     {6, A::Float4, kMetalConstantAttributeOneOffset, true}}));
 }
 
 TEST(MetalDeclaredVertexInput, DualTextureWithOneCoordinateSetFeedsItToBothSamplers)
@@ -260,4 +263,63 @@ TEST(MetalDeclaredVertexInput, AnUnusedColourIsOpaqueWhiteAndAUsedOneRefuses)
     GpuDrawParams colour{};
     colour.vertexColorEnabled = true;
     EXPECT_FALSE(BuildMetalDeclaredVertexInput(K::Colored16, positionOnly, 12, &colour).IsComplete());
+}
+
+// plans/plan_apple_m4.md AM4-084: the glTF PBR records other renderers bind for an undeclared buffer.
+TEST(MetalDeclaredVertexInput, ThePbrKindsCarryTheGltfRecordsOfTheirOtherStrides)
+{
+    const auto pbr48 = MetalCanonicalElementsFor(K::Pbr48);
+    auto pbr60 = pbr48;
+    pbr60.push_back(VertexElement(48, F::Vector2, U::TextureCoordinate, 1));
+    pbr60.push_back(VertexElement(56, F::Color, U::Color, 0));
+    EXPECT_EQ(MetalCanonicalElementsFor(K::Pbr48, 48), pbr48);
+    EXPECT_EQ(MetalCanonicalElementsFor(K::Pbr48, 60), pbr60);
+
+    const auto skinned68 = MetalCanonicalElementsFor(K::SkinnedPbr68);
+    auto skinned76 = skinned68;
+    skinned76.push_back(VertexElement(68, F::Vector2, U::TextureCoordinate, 1));
+    auto skinned80 = skinned76;
+    skinned80.push_back(VertexElement(76, F::Color, U::Color, 0));
+    EXPECT_EQ(MetalCanonicalElementsFor(K::SkinnedPbr68, 68), skinned68);
+    EXPECT_EQ(MetalCanonicalElementsFor(K::SkinnedPbr68, 76), skinned76);
+    EXPECT_EQ(MetalCanonicalElementsFor(K::SkinnedPbr68, 80), skinned80);
+
+    // The stride says nothing more for any other kind.
+    EXPECT_EQ(MetalCanonicalElementsFor(K::LitTex32, 60), MetalCanonicalElementsFor(K::LitTex32));
+}
+
+// glTF 2.0 3.9.2: COLOR_0 multiplies PBR base colour when the effect enables it, and is the identity
+// otherwise -- never a refusal, because PbrEffect's flag is what separates an authored colour from the
+// importer's opaque-white filler.
+TEST(MetalDeclaredVertexInput, APbrDrawReadsColour0OnlyWhenTheEffectEnablesIt)
+{
+    GpuDrawParams enabled{};
+    enabled.pbr = true;
+    enabled.vertexColorEnabled = true;
+    GpuDrawParams disabled = enabled;
+    disabled.vertexColorEnabled = false;
+    const MetalDeclaredAttribute white{4, A::Float4, kMetalConstantAttributeOneOffset, true};
+
+    const auto rigid60 = MetalCanonicalElementsFor(K::Pbr48, 60);
+    const auto read = BuildMetalDeclaredVertexInput(K::Pbr48, rigid60, 60, &enabled);
+    ASSERT_TRUE(read.IsComplete()) << read.refusal;
+    EXPECT_EQ(read.attributes.back(), (MetalDeclaredAttribute{4, A::UChar4Normalized, 56}));
+    EXPECT_EQ(BuildMetalDeclaredVertexInput(K::Pbr48, rigid60, 60, &disabled).attributes.back(), white);
+    EXPECT_EQ(BuildMetalDeclaredVertexInput(K::Pbr48, rigid60, 60).attributes.back(), white);
+    // A record without COLOR_0 is glTF's absent colour, whatever the switch says.
+    const auto rigid48 = BuildMetalDeclaredVertexInput(K::Pbr48, MetalCanonicalElementsFor(K::Pbr48), 48, &enabled);
+    ASSERT_TRUE(rigid48.IsComplete()) << rigid48.refusal;
+    EXPECT_EQ(rigid48.attributes.back(), white);
+    EXPECT_NE(read.LayoutKey(), BuildMetalDeclaredVertexInput(K::Pbr48, rigid60, 60, &disabled).LayoutKey());
+
+    GpuDrawParams skinned = enabled;
+    skinned.skinned = true;
+    const auto skin80 = BuildMetalDeclaredVertexInput(
+        K::SkinnedPbr68, MetalCanonicalElementsFor(K::SkinnedPbr68, 80), 80, &skinned);
+    ASSERT_TRUE(skin80.IsComplete()) << skin80.refusal;
+    EXPECT_EQ(skin80.attributes.back(), (MetalDeclaredAttribute{6, A::UChar4Normalized, 76}));
+    const auto skin76 = BuildMetalDeclaredVertexInput(
+        K::SkinnedPbr68, MetalCanonicalElementsFor(K::SkinnedPbr68, 76), 76, &skinned);
+    ASSERT_TRUE(skin76.IsComplete()) << skin76.refusal;
+    EXPECT_EQ(skin76.attributes.back(), (MetalDeclaredAttribute{6, A::Float4, kMetalConstantAttributeOneOffset, true}));
 }

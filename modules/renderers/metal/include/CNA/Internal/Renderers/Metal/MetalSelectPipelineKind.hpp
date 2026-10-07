@@ -48,11 +48,15 @@ namespace CNA::Internal::Renderers::Metal
         const bool envMapping = params && params->envMapping;
         const bool dual = params && params->dualTexture;
         if (pbr) {
+            // plans/plan_apple_m4.md AM4-084: one pipeline per family serves its glTF records -- 60
+            // and 80 add a packed COLOR_0 the shader multiplies in, 76 a TEXCOORD_1 it does not read.
             if (skinned) {
-                if (stride != 68) throw std::runtime_error("Metal: SkinnedPbrEffect requires stride 68 (position+normal+tangent+uv+boneWeights+boneIndices)");
+                if (stride != 68 && stride != 76 && stride != 80)
+                    throw std::runtime_error("Metal: SkinnedPbrEffect requires stride 68, 76 or 80 (position+normal+tangent+uv+boneWeights+boneIndices, then TEXCOORD_1 and COLOR_0)");
                 return PipelineKind::SkinnedPbr68;
             }
-            if (stride != 48) throw std::runtime_error("Metal: PbrEffect requires stride 48 (position+normal+tangent+uv)");
+            if (stride != 48 && stride != 60)
+                throw std::runtime_error("Metal: PbrEffect requires stride 48 or 60 (position+normal+tangent+uv, then TEXCOORD_1 and COLOR_0)");
             return PipelineKind::Pbr48;
         }
         if (skinned) {

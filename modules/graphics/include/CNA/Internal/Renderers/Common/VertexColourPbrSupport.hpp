@@ -76,7 +76,7 @@ namespace CNA::Internal::Renderers
             "the draw is refused rather than rendered with the opaque-white identity, which would be "
             "a visibly wrong surface reported as a successful draw. Use a renderer that implements it "
             "(EasyGL: OPENGLES3/OPENGL33/WEBGL2, SOFTWARE, VULKAN, "
-            "DIRECTX9, DIRECTX11, SDL_GPU, WEBGPU), or "
+            "DIRECTX9, DIRECTX11, SDL_GPU, WEBGPU, METAL), or "
             "set "
             "VertexColorEnabledEXT=false on the effect to accept "
             "the identity deliberately.");
